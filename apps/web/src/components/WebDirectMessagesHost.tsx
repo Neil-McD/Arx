@@ -75,9 +75,25 @@ export type DirectMessageOpenRequest = {
   communityId: string;
 } | null;
 
+export type DirectMessageOpenConversationRequest = {
+  requestId: number;
+  conversationId: string;
+} | null;
+
+export type IncomingDirectMessageEvent = {
+  conversationId: string;
+  peerDisplayName: string;
+  peerAvatarUrl: string | null;
+  previewText: string;
+  lastSeq: number;
+};
+
+export type DirectMessageNotificationsUiState = "hidden" | "on" | "off" | "blocked";
+
 type WebDirectMessagesHostProps<SessionT> = {
   isOpen: boolean;
   openRequest: DirectMessageOpenRequest;
+  openConversationRequest?: DirectMessageOpenConversationRequest;
   session: SessionT | null;
   ensureSession?: (session?: SessionT | null, source?: string) => Promise<SessionT | null>;
   sessionUserId: string | null;
@@ -87,6 +103,9 @@ type WebDirectMessagesHostProps<SessionT> = {
   requireSignIn?: () => void;
   showAppToastMessage?: (message: string) => void;
   onUnreadCountChange?: (count: number) => void;
+  onIncomingDirectMessage?: (event: IncomingDirectMessageEvent) => void;
+  notificationsState?: DirectMessageNotificationsUiState;
+  onToggleNotifications?: () => void;
   onClose: () => void;
 };
 
@@ -444,6 +463,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const {
     isOpen,
     openRequest,
+    openConversationRequest,
     session,
     ensureSession,
     sessionUserId,
@@ -453,6 +473,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     requireSignIn,
     showAppToastMessage,
     onUnreadCountChange,
+    onIncomingDirectMessage,
+    notificationsState,
+    onToggleNotifications,
     onClose,
   } = props;
   const [conversations, setConversations] = useState<DirectMessageConversation[]>([]);
@@ -477,6 +500,11 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const echoesByConversationRef = useRef<Record<string, DirectMessageLocalEcho[]>>({});
   const virtualToRealConversationIdRef = useRef<Record<string, string>>({});
   const directMessagePanelRef = useRef<DirectMessagePanelState | null>(null);
+  const inboxLastSeqByConversationRef = useRef<Record<string, number>>({});
+  const hasSeededInboxSeqRef = useRef(false);
+  const isOpenRef = useRef(isOpen);
+  const onIncomingDirectMessageRef = useRef(onIncomingDirectMessage);
+  const openConversationRequestHandledRef = useRef(0);
   const typingInputHadTextRef = useRef(false);
   const sessionRef = useRef<SessionT | null>(session);
   const directMessageInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -858,6 +886,14 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   }, [directMessagePanel]);
 
   useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  useEffect(() => {
+    onIncomingDirectMessageRef.current = onIncomingDirectMessage;
+  }, [onIncomingDirectMessage]);
+
+  useEffect(() => {
     const panel = directMessagePanel;
     if (!panel) return;
     const conversationId = panel.conversation.id;
@@ -1021,6 +1057,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
 
   useEffect(() => {
     hasInboxLiveSubscriptionRef.current = false;
+    hasSeededInboxSeqRef.current = false;
+    inboxLastSeqByConversationRef.current = {};
     if (!session) {
       setConversations([]);
       setIsLoadingInbox(false);
@@ -1059,6 +1097,46 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           limit: 30,
           onUpdate: (rows) => {
             if (isDisposed) return;
+            const previousSeqByConversation = inboxLastSeqByConversationRef.current;
+            const isFirstSnapshot = !hasSeededInboxSeqRef.current;
+            const nextSeqByConversation: Record<string, number> = {};
+            for (const row of rows) {
+              nextSeqByConversation[row.id] = Math.max(0, Math.floor(Number(row.last_seq ?? 0)));
+            }
+            // The first snapshot is history, not news — seed silently.
+            if (!isFirstSnapshot && onIncomingDirectMessageRef.current) {
+              for (const row of rows) {
+                const seq = nextSeqByConversation[row.id] ?? 0;
+                const previousSeq = previousSeqByConversation[row.id] ?? 0;
+                if (seq <= previousSeq) continue;
+                if (row.last_message_from_viewer) continue;
+                const isReadingThread =
+                  isOpenRef.current &&
+                  directMessagePanelRef.current?.conversation.id === row.id &&
+                  typeof document !== "undefined" &&
+                  document.visibilityState === "visible" &&
+                  document.hasFocus();
+                if (isReadingThread) continue;
+                const peer =
+                  row.participants.find(
+                    (participant) =>
+                      participant.status === "active" &&
+                      participant.participant_type === "user" &&
+                      participant.user_id &&
+                      participant.user_id !== sessionUserId,
+                  ) ?? null;
+                onIncomingDirectMessageRef.current({
+                  conversationId: row.id,
+                  peerDisplayName:
+                    String(peer?.display_name ?? "").trim() || "New message",
+                  peerAvatarUrl: peer?.avatar_url ?? null,
+                  previewText: String(row.last_message_preview ?? "").trim() || "New message",
+                  lastSeq: seq,
+                });
+              }
+            }
+            inboxLastSeqByConversationRef.current = nextSeqByConversation;
+            hasSeededInboxSeqRef.current = true;
             setConversations(rows);
             setIsLoadingInbox(false);
             setInboxError(null);
@@ -1274,6 +1352,23 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     },
     [openPanelForConversation],
   );
+
+  useEffect(() => {
+    const request = openConversationRequest;
+    if (!request || request.requestId === openConversationRequestHandledRef.current) return;
+    const conversation = conversations.find((row) => row.id === request.conversationId);
+    if (conversation) {
+      openConversationRequestHandledRef.current = request.requestId;
+      openPanelForConversation(conversation);
+      return;
+    }
+    // Inbox delivered and the conversation isn't in the loaded window: land on
+    // the inbox instead of retrying forever.
+    if (hasSeededInboxSeqRef.current) {
+      openConversationRequestHandledRef.current = request.requestId;
+      setDirectMessagePanel(null);
+    }
+  }, [conversations, openConversationRequest, openPanelForConversation]);
 
   const openExistingConversationWithPerson = useCallback(
     async (person: DirectMessageNetworkPerson) => {
@@ -1943,6 +2038,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           hasMorePeople={hasMorePeople}
           onLoadMorePeople={loadMoreNetworkPeople}
           peerPresenceByUserId={peerPresenceByUserId}
+          notificationsState={notificationsState}
+          onToggleNotifications={onToggleNotifications}
           canBrowsePeople={Boolean(session)}
           sessionUserId={sessionUserId}
           getInitials={getInitials}

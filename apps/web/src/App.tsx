@@ -539,8 +539,10 @@ import {
 import { WebShellChromeHost } from "./components/WebShellChromeHost";
 import {
   WebDirectMessagesHost,
+  type DirectMessageOpenConversationRequest,
   type DirectMessageOpenRequest,
 } from "./components/WebDirectMessagesHost";
+import { useDirectMessageWebNotifications } from "./controllers/useDirectMessageWebNotifications";
 import { WebWorkspaceShellPanelsHost } from "./components/WebWorkspaceShellPanelsHost";
 import type { MobileOverlay, MobileRootPage } from "./components/webShellChromeShared";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
@@ -1443,9 +1445,22 @@ export default function App() {
   const [isDirectMessagesOpen, setIsDirectMessagesOpen] = useState(false);
   const [directMessageOpenRequest, setDirectMessageOpenRequest] =
     useState<DirectMessageOpenRequest>(null);
+  const [directMessageOpenConversationRequest, setDirectMessageOpenConversationRequest] =
+    useState<DirectMessageOpenConversationRequest>(null);
   const [directMessagesUnreadCount, setDirectMessagesUnreadCount] = useState(0);
   const accountGraphHydrationRunIdRef = useRef(0);
   const directMessageOpenRequestIdRef = useRef(0);
+  const handleOpenDirectConversationById = useCallback((conversationId: string) => {
+    const normalizedConversationId = String(conversationId ?? "").trim();
+    if (!normalizedConversationId) return;
+    directMessageOpenRequestIdRef.current += 1;
+    setDirectMessageOpenRequest(null);
+    setDirectMessageOpenConversationRequest({
+      requestId: directMessageOpenRequestIdRef.current,
+      conversationId: normalizedConversationId,
+    });
+    setIsDirectMessagesOpen(true);
+  }, []);
   const handleToggleDirectMessages = useCallback(() => {
     setDirectMessageOpenRequest(null);
     setIsDirectMessagesOpen((current) => !current);
@@ -11092,6 +11107,11 @@ export default function App() {
       ) : null}
     </button>
   ) : null;
+  const directMessageWebNotifications = useDirectMessageWebNotifications({
+    isEnabled: Boolean(session),
+    unreadCount: directMessagesUnreadCount,
+    onOpenConversation: handleOpenDirectConversationById,
+  });
   const directMessagesUnreadLabel =
     directMessagesUnreadCount > 0 ? `${directMessagesUnreadCount} unread` : null;
   const directMessagesButton = session ? (
@@ -11857,6 +11877,7 @@ export default function App() {
       <WebDirectMessagesHost
         isOpen={isDirectMessagesOpen}
         openRequest={directMessageOpenRequest}
+        openConversationRequest={directMessageOpenConversationRequest}
         session={session}
         ensureSession={ensureUsableAuthSession}
         sessionUserId={canonicalSessionUserId}
@@ -11866,6 +11887,9 @@ export default function App() {
         requireSignIn={() => requireSignIn()}
         showAppToastMessage={showAppToastMessage}
         onUnreadCountChange={setDirectMessagesUnreadCount}
+        onIncomingDirectMessage={directMessageWebNotifications.notifyIncoming}
+        notificationsState={directMessageWebNotifications.notificationsState}
+        onToggleNotifications={directMessageWebNotifications.toggleNotifications}
         onClose={handleCloseDirectMessages}
       />
       <WebCommunityLaunchSetupModal

@@ -741,6 +741,10 @@ async function mapDirectConversation(
     unread_count: unreadCount,
     has_unread: unreadCount > 0,
     viewer_has_blocked_peer: viewerHasBlockedPeer,
+    last_message_from_viewer:
+      Boolean(viewerUserKey) &&
+      Boolean(lastMessage?.senderUserId) &&
+      normalizeIdValue(lastMessage?.senderUserId) === viewerUserKey,
     last_message_preview: (() => {
       const preview = lastMessage ? readDirectMessageTextPreview(lastMessage.contentJson) : null;
       if (!preview) return null;

@@ -1,4 +1,4 @@
-import { MessageCircle, Search, UsersRound } from "lucide-react";
+import { Bell, BellOff, MessageCircle, Search, UsersRound } from "lucide-react";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
 import type {
@@ -20,6 +20,8 @@ type WebDirectMessageInboxPanelProps = {
   hasMorePeople?: boolean;
   onLoadMorePeople?: () => void | Promise<void>;
   peerPresenceByUserId?: Record<string, string | null>;
+  notificationsState?: "hidden" | "on" | "off" | "blocked";
+  onToggleNotifications?: () => void;
   canBrowsePeople: boolean;
   sessionUserId: string | null;
   getInitials: (value: string) => string;
@@ -112,6 +114,32 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
           <div className="community-dm-inbox-title">Messages</div>
           <div className="community-dm-inbox-subtitle">People from your communities</div>
         </div>
+        {props.notificationsState && props.notificationsState !== "hidden" && props.onToggleNotifications ? (
+          <button
+            className="community-dm-inbox-icon-button"
+            type="button"
+            onClick={props.onToggleNotifications}
+            aria-pressed={props.notificationsState !== "off"}
+            aria-label={
+              props.notificationsState === "off"
+                ? "Turn on message notifications"
+                : "Turn off message notifications"
+            }
+            title={
+              props.notificationsState === "off"
+                ? "Notifications off"
+                : props.notificationsState === "blocked"
+                  ? "Sound on — browser is blocking banners"
+                  : "Notifications on"
+            }
+          >
+            {props.notificationsState === "off" ? (
+              <BellOff aria-hidden="true" />
+            ) : (
+              <Bell aria-hidden="true" />
+            )}
+          </button>
+        ) : null}
       </div>
 
       {props.canBrowsePeople ? (

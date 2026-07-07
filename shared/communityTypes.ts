@@ -89,6 +89,7 @@ export type DirectMessageConversation = {
   has_unread: boolean;
   last_message_preview: string | null;
   last_message_at: string | null;
+  last_message_from_viewer?: boolean;
   viewer_has_blocked_peer?: boolean;
   created_at: string;
   updated_at: string;
