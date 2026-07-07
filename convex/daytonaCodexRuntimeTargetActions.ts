@@ -1367,15 +1367,11 @@ export const executeDaytonaWorkspaceToolInternal = internalAction({
           buildDaytonaSafePathPrelude(relPath),
           'if [ ! -d "$REAL_PATH" ]; then echo "workspace_path_not_directory" >&2; exit 44; fi',
           'cd -- "$REAL_PATH"',
-          "find . -mindepth 1 -maxdepth 2 -print",
-          "| sed 's#^\\./##'",
-          "| while IFS= read -r path; do",
+          "find . -mindepth 1 -maxdepth 2 -print | sed 's#^\\./##' | while IFS= read -r path; do",
           '  [ -n "$path" ] || continue;',
           '  if [ -d "$path" ]; then printf "dir\\t%s\\n" "$path";',
           '  elif [ -f "$path" ]; then printf "file\\t%s\\n" "$path"; fi;',
-          "done",
-          "| LC_ALL=C sort",
-          "| head -n 200",
+          "done | LC_ALL=C sort | head -n 200",
         ].join("\n");
         const result = await runDaytonaWorkspaceToolCommand({
           sandbox: target.sandbox,
@@ -1452,10 +1448,7 @@ export const executeDaytonaWorkspaceToolInternal = internalAction({
             ? [
                 buildDaytonaSafePathPrelude(relPath),
                 'cd -- "$REAL_PATH"',
-                `find . -mindepth 1 \\( -type f -o -type d \\) -path ${shellQuote(`./${pattern}`)} -print`,
-                "| sed 's#^\\./##'",
-                "| LC_ALL=C sort",
-                "| head -n 200",
+                `find . -mindepth 1 \\( -type f -o -type d \\) -path ${shellQuote(`./${pattern}`)} -print | sed 's#^\\./##' | LC_ALL=C sort | head -n 200`,
               ].join("\n")
             : toolName === "grep"
               ? [

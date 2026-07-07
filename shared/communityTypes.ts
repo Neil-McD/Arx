@@ -113,6 +113,11 @@ export type DirectMessageNetworkPerson = DirectMessageRecipient & {
   last_active_at: string | null;
 };
 
+export type DirectMessagePeerPresence = {
+  user_id: string;
+  last_active_at: string | null;
+};
+
 export type DirectMessageNetworkPeopleBundle = {
   people: DirectMessageNetworkPerson[];
   source_community_count: number;

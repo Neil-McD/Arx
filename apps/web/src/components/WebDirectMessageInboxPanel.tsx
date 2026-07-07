@@ -19,6 +19,7 @@ type WebDirectMessageInboxPanelProps = {
   sourceCommunityCount: number | null;
   hasMorePeople?: boolean;
   onLoadMorePeople?: () => void | Promise<void>;
+  peerPresenceByUserId?: Record<string, string | null>;
   canBrowsePeople: boolean;
   sessionUserId: string | null;
   getInitials: (value: string) => string;
@@ -160,6 +161,13 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
           const timeLabel = formatInboxTime(conversation.last_message_at ?? conversation.updated_at);
           const unreadCount = Math.max(0, Math.floor(Number(conversation.unread_count ?? 0)));
           const hasUnread = Boolean(conversation.has_unread || unreadCount > 0);
+          const peerUserId = String(peer?.user_id ?? "").trim();
+          const peerPresenceKnown = Boolean(
+            peerUserId && props.peerPresenceByUserId && peerUserId in props.peerPresenceByUserId,
+          );
+          const peerLastActiveAt = peerPresenceKnown
+            ? props.peerPresenceByUserId?.[peerUserId] ?? null
+            : null;
           return (
             <button
               key={conversation.id}
@@ -168,18 +176,26 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
               aria-label={`${peerLabel}, ${hasUnread ? "unread, " : ""}${previewText}`}
               onClick={() => props.onSelectConversation(conversation)}
             >
-              <UserAvatar
-                className="community-dm-inbox-avatar"
-                readyClassName="has-image"
-                name={peerLabel}
-                imageUrl={peer?.avatar_url ?? null}
-                focusX={peer?.avatar_focus_x ?? 0.5}
-                focusY={peer?.avatar_focus_y ?? 0.5}
-                zoom={peer?.avatar_zoom ?? 1}
-                alt={peerLabel}
-                fallback={<span>{props.getInitials(peerLabel)}</span>}
-                fallbackStyle={{ backgroundColor: props.getAvatarColor(peerAvatarSeed) }}
-              />
+              <span className="community-dm-inbox-avatar-wrap">
+                <UserAvatar
+                  className="community-dm-inbox-avatar"
+                  readyClassName="has-image"
+                  name={peerLabel}
+                  imageUrl={peer?.avatar_url ?? null}
+                  focusX={peer?.avatar_focus_x ?? 0.5}
+                  focusY={peer?.avatar_focus_y ?? 0.5}
+                  zoom={peer?.avatar_zoom ?? 1}
+                  alt={peerLabel}
+                  fallback={<span>{props.getInitials(peerLabel)}</span>}
+                  fallbackStyle={{ backgroundColor: props.getAvatarColor(peerAvatarSeed) }}
+                />
+                {peerPresenceKnown ? (
+                  <span
+                    className={`community-dm-inbox-presence-dot${isActiveNow(peerLastActiveAt) ? " is-active-now" : ""}`}
+                    aria-hidden="true"
+                  />
+                ) : null}
+              </span>
               <span className="community-dm-inbox-row-body">
                 <span className="community-dm-inbox-row-top">
                   <span className="community-dm-inbox-row-name-line">

@@ -6,6 +6,7 @@ import type {
   DirectMessageConversation,
   DirectMessageNetworkPeopleBundle,
   DirectMessageNetworkPerson,
+  DirectMessagePeerPresence,
   DirectMessageRecipient,
   DirectMessageTypingPresenceBundle,
 } from "./communityTypes";
@@ -257,6 +258,24 @@ export async function sendCloudDirectMessageToUser<SessionT>(
     conversation: payload.conversation,
     message: payload.message,
   };
+}
+
+export async function listCloudDirectMessagePeerPresence<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    targetUserIds: readonly string[];
+  },
+): Promise<DirectMessagePeerPresence[]> {
+  const targetUserIds = params.targetUserIds
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 50);
+  if (targetUserIds.length === 0) return [];
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.query("directMessages:listDirectMessagePeerPresenceForViewer" as any, {
+    authSubject,
+    targetUserIds,
+  })) as { peers?: DirectMessagePeerPresence[] } | null;
+  return Array.isArray(payload?.peers) ? payload.peers : [];
 }
 
 export async function markCloudDirectConversationRead<SessionT>(

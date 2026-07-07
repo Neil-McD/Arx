@@ -1,6 +1,6 @@
 import { ArrowLeft, Ban, MessageCircle, Paperclip, RotateCcw } from "lucide-react";
 import type { ChangeEvent, ComponentProps, DragEvent, FormEvent, MutableRefObject, ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   DirectMessage,
   DirectMessageAttachment,
@@ -8,6 +8,7 @@ import type {
   DirectMessageParticipant,
   DirectMessageTypingPresenceBundle,
 } from "../../../../shared/communityTypes";
+import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import { AttachmentChipButton } from "../../../../shared/AttachmentChipButton";
 import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGrid";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
@@ -43,6 +44,7 @@ type WebDirectMessagePanelProps = {
   isPeerBlocked?: boolean;
   showBlockAction?: boolean;
   onToggleBlockPeer?: () => void | Promise<void>;
+  peerLastActiveAt?: string | null;
   sessionUserId: string | null;
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
@@ -62,6 +64,47 @@ type WebDirectMessagePanelProps = {
 };
 
 const DM_AUTO_SCROLL_THRESHOLD_PX = 96;
+const DM_CLUSTER_GAP_MS = 5 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function startOfLocalDayMs(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function formatDirectMessageDayLabel(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const dayMs = startOfLocalDayMs(date);
+  const todayMs = startOfLocalDayMs(now);
+  if (dayMs === todayMs) return "Today";
+  if (dayMs === todayMs - DAY_MS) return "Yesterday";
+  return date.toLocaleDateString(
+    [],
+    date.getFullYear() === now.getFullYear()
+      ? { month: "short", day: "numeric" }
+      : { month: "short", day: "numeric", year: "numeric" },
+  );
+}
+
+function formatDirectMessageClusterTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function directMessageSenderKey(message: WebDirectMessagePanelMessage): string {
+  return `${message.sender_type}:${String(message.sender_user_id ?? "")}`;
+}
+
+const DM_PRESENCE_ACTIVE_NOW_WINDOW_MS = 5 * 60 * 1000;
+
+function isDirectPeerActiveNow(lastActiveAt: string | null | undefined): boolean {
+  const normalized = String(lastActiveAt ?? "").trim();
+  if (!normalized) return false;
+  const ms = new Date(normalized).getTime();
+  return Number.isFinite(ms) && Date.now() - ms <= DM_PRESENCE_ACTIVE_NOW_WINDOW_MS;
+}
 
 function getMessageText(message: DirectMessage): string {
   const content = message.content_json;
@@ -308,12 +351,47 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const previousConversationIdRef = useRef<string | null>(null);
   const previousLastMessageIdRef = useRef<string | null>(null);
   const [isAttachmentDragOver, setIsAttachmentDragOver] = useState(false);
+  const threadEntries = useMemo(() => {
+    type ThreadEntry = {
+      message: WebDirectMessagePanelMessage;
+      isNewDay: boolean;
+      isClusterStart: boolean;
+      isClusterEnd: boolean;
+    };
+    const renderable = props.messages.filter(
+      (message) => getMessageText(message).length > 0 || getMessageAttachments(message).length > 0,
+    );
+    const entries: ThreadEntry[] = renderable.map((message, index) => {
+      const previous = renderable[index - 1] ?? null;
+      const createdMs = new Date(message.created_at).getTime();
+      const previousMs = previous ? new Date(previous.created_at).getTime() : Number.NaN;
+      const isNewDay =
+        !previous ||
+        Number.isNaN(createdMs) ||
+        Number.isNaN(previousMs) ||
+        startOfLocalDayMs(new Date(createdMs)) !== startOfLocalDayMs(new Date(previousMs));
+      const isClusterStart =
+        isNewDay ||
+        !previous ||
+        directMessageSenderKey(previous) !== directMessageSenderKey(message) ||
+        !Number.isFinite(createdMs - previousMs) ||
+        createdMs - previousMs > DM_CLUSTER_GAP_MS;
+      return { message, isNewDay, isClusterStart, isClusterEnd: false };
+    });
+    for (const [index, entry] of entries.entries()) {
+      entry.isClusterEnd = index === entries.length - 1 || entries[index + 1]!.isClusterStart;
+    }
+    return entries;
+  }, [props.messages]);
   const [isConfirmingBlock, setIsConfirmingBlock] = useState(false);
   const confirmBlockTimeoutRef = useRef<number | null>(null);
   const peer = resolveDirectMessagePeer(props.conversation, props.sessionUserId);
   const peerLabel = String(peer?.display_name ?? peer?.user_id ?? "Direct message").trim() || "Direct message";
   const peerAvatarSeed = peer?.user_id ?? peerLabel;
   const communityName = props.conversation.created_from_community?.name ?? "shared community";
+  const peerLastActiveAt = props.peerLastActiveAt;
+  const peerPresenceKnown = peerLastActiveAt !== undefined;
+  const peerActiveNow = isDirectPeerActiveNow(peerLastActiveAt);
   const lastMessage = props.messages[props.messages.length - 1] ?? null;
   const lastMessageId = lastMessage?.id ?? null;
   const lastMessageSeq = Math.max(0, Math.floor(Number(lastMessage?.seq ?? 0)));
@@ -474,24 +552,41 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             <ArrowLeft aria-hidden="true" />
           </button>
         ) : null}
-        <UserAvatar
-          className="community-dm-panel-avatar"
-          readyClassName="has-image"
-          name={peerLabel}
-          imageUrl={peer?.avatar_url ?? null}
-          focusX={peer?.avatar_focus_x ?? 0.5}
-          focusY={peer?.avatar_focus_y ?? 0.5}
-          zoom={peer?.avatar_zoom ?? 1}
-          alt={peerLabel}
-          fallback={<span>{props.getInitials(peerLabel)}</span>}
-          fallbackStyle={{ backgroundColor: props.getAvatarColor(peerAvatarSeed) }}
-        />
+        <span className="community-dm-panel-avatar-wrap">
+          <UserAvatar
+            className="community-dm-panel-avatar"
+            readyClassName="has-image"
+            name={peerLabel}
+            imageUrl={peer?.avatar_url ?? null}
+            focusX={peer?.avatar_focus_x ?? 0.5}
+            focusY={peer?.avatar_focus_y ?? 0.5}
+            zoom={peer?.avatar_zoom ?? 1}
+            alt={peerLabel}
+            fallback={<span>{props.getInitials(peerLabel)}</span>}
+            fallbackStyle={{ backgroundColor: props.getAvatarColor(peerAvatarSeed) }}
+          />
+          {peerPresenceKnown ? (
+            <span
+              className={`community-dm-inbox-presence-dot${peerActiveNow ? " is-active-now" : ""}`}
+              aria-hidden="true"
+            />
+          ) : null}
+        </span>
         <div className="community-dm-panel-title-block">
           <div className="community-dm-panel-title-row">
             <div className="community-dm-panel-title">{peerLabel}</div>
             <PremiumMemberBadge badge={peer?.premium_badge ?? null} />
           </div>
-          <div className="community-dm-panel-context">From {communityName}</div>
+          {peerPresenceKnown && peerLastActiveAt ? (
+            <div className={`community-dm-panel-context is-presence${peerActiveNow ? " is-active-now" : ""}`}>
+              {peerActiveNow
+                ? "Active now"
+                : `Active ${formatRelativeTimeFromIso(peerLastActiveAt)}`}
+              {` · ${communityName}`}
+            </div>
+          ) : (
+            <div className="community-dm-panel-context">From {communityName}</div>
+          )}
         </div>
         {props.showBlockAction && props.onToggleBlockPeer ? (
           <button
@@ -535,7 +630,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             <span>Start a direct message from this shared community.</span>
           </div>
         ) : (
-          props.messages.map((message) => {
+          threadEntries.map(({ message, isNewDay, isClusterStart, isClusterEnd }) => {
             const isOwn = message.sender_user_id === props.sessionUserId;
             const text = getMessageText(message);
             const attachments = getMessageAttachments(message);
@@ -546,11 +641,17 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             const isSendingEcho = message.local_status === "sending";
             const isFailedEcho = message.local_status === "failed";
             const echoLocalId = String(message.local_id ?? "").trim();
-            if (!hasText && !hasAttachments) return null;
+            const clusterTimeLabel =
+              isClusterEnd && !isFailedEcho ? formatDirectMessageClusterTime(message.created_at) : "";
             return (
+              <Fragment key={message.id}>
+              {isNewDay ? (
+                <div className="community-dm-day" role="separator">
+                  <span>{formatDirectMessageDayLabel(message.created_at)}</span>
+                </div>
+              ) : null}
               <div
-                key={message.id}
-                className={`community-dm-panel-message${isOwn ? " is-own" : ""}${isMediaOnly ? " is-media-only" : ""}${isSendingEcho ? " is-sending" : ""}${isFailedEcho ? " is-send-failed" : ""}`}
+                className={`community-dm-panel-message${isOwn ? " is-own" : ""}${isMediaOnly ? " is-media-only" : ""}${isSendingEcho ? " is-sending" : ""}${isFailedEcho ? " is-send-failed" : ""}${isClusterStart ? " is-cluster-start" : ""}${isClusterEnd ? " is-cluster-end" : ""}`}
               >
                 {isMediaOnly ? (
                   <div className="community-dm-panel-media-only">
@@ -586,7 +687,11 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                     ) : null}
                   </div>
                 ) : null}
+                {clusterTimeLabel ? (
+                  <div className="community-dm-panel-message-time">{clusterTimeLabel}</div>
+                ) : null}
               </div>
+              </Fragment>
             );
           })
         )}

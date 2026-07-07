@@ -16,6 +16,7 @@ import {
   clearCloudDirectTyping,
   createCloudDirectMessagesLiveClient,
   ensureCloudDirectConversationFromCommunity,
+  listCloudDirectMessagePeerPresence,
   listCloudNetworkPeople,
   unblockCloudDirectMessageUser,
   listCloudDirectConversations,
@@ -240,6 +241,20 @@ function buildVirtualConversationForPerson(
   };
 }
 
+function findConversationPeerUserId(
+  conversation: DirectMessageConversation,
+  sessionUserId: string | null,
+): string {
+  const peer = conversation.participants.find(
+    (participant) =>
+      participant.status === "active" &&
+      participant.participant_type === "user" &&
+      participant.user_id &&
+      participant.user_id !== sessionUserId,
+  );
+  return String(peer?.user_id ?? "").trim();
+}
+
 function buildLocalEchoContentJson(
   text: string,
   attachments: DirectMessageAttachmentDraft[],
@@ -451,6 +466,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const [sourceCommunityCount, setSourceCommunityCount] = useState<number | null>(null);
   const [hasMorePeople, setHasMorePeople] = useState(false);
   const isLoadingMorePeopleRef = useRef(false);
+  const [peerPresenceByUserId, setPeerPresenceByUserId] = useState<Record<string, string | null>>({});
+  const peerPresenceFetchRef = useRef<{ key: string; atMs: number }>({ key: "", atMs: 0 });
   const inboxLoadRequestRef = useRef(0);
   const peopleLoadRequestRef = useRef(0);
   const hasInboxLiveSubscriptionRef = useRef(false);
@@ -731,6 +748,68 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     },
     [ensureSession, session],
   );
+
+  useEffect(() => {
+    if (networkPeople.length === 0) return;
+    setPeerPresenceByUserId((previous) => {
+      const next = { ...previous };
+      for (const person of networkPeople) {
+        const userId = String(person.user_id ?? "").trim();
+        if (userId) next[userId] = person.last_active_at ?? null;
+      }
+      return next;
+    });
+  }, [networkPeople]);
+
+  useEffect(() => {
+    if (!isOpen || !session) return;
+    const peerUserIds = Array.from(
+      new Set(
+        conversations
+          .map((conversation) => findConversationPeerUserId(conversation, sessionUserId))
+          .filter(Boolean),
+      ),
+    ).slice(0, 50);
+    if (peerUserIds.length === 0) return;
+    const fetchKey = [...peerUserIds].sort().join(",");
+    const nowMs = Date.now();
+    if (
+      peerPresenceFetchRef.current.key === fetchKey &&
+      nowMs - peerPresenceFetchRef.current.atMs < 60_000
+    ) {
+      return;
+    }
+    peerPresenceFetchRef.current = { key: fetchKey, atMs: nowMs };
+
+    let isDisposed = false;
+    void (async () => {
+      try {
+        const usableSession = await resolveDirectMessageSession(
+          session,
+          ensureSession,
+          "direct_messages_peer_presence",
+        );
+        if (!usableSession || isDisposed) return;
+        const peers = await listCloudDirectMessagePeerPresence({
+          session: usableSession,
+          targetUserIds: peerUserIds,
+        });
+        if (isDisposed) return;
+        setPeerPresenceByUserId((previous) => {
+          const next = { ...previous };
+          for (const peer of peers) {
+            next[peer.user_id] = peer.last_active_at;
+          }
+          return next;
+        });
+      } catch {
+        // Presence is decorative; rows fall back to no dot.
+      }
+    })();
+    return () => {
+      isDisposed = true;
+    };
+  }, [conversations, ensureSession, isOpen, session, sessionUserId]);
 
   const loadMoreNetworkPeople = useCallback(async () => {
     if (!session || !hasMorePeople || searchValue.trim()) return;
@@ -1790,6 +1869,14 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           isPeerBlocked={Boolean(directMessagePanel.conversation.viewer_has_blocked_peer)}
           showBlockAction={!isVirtualDirectConversationId(directMessagePanel.conversation.id)}
           onToggleBlockPeer={toggleBlockForActivePeer}
+          peerLastActiveAt={
+            (() => {
+              const peerUserId = findConversationPeerUserId(directMessagePanel.conversation, sessionUserId);
+              return peerUserId && peerUserId in peerPresenceByUserId
+                ? peerPresenceByUserId[peerUserId]
+                : undefined;
+            })()
+          }
           sessionUserId={sessionUserId}
           getInitials={getInitials}
           getAvatarColor={getAvatarColor}
@@ -1855,6 +1942,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           sourceCommunityCount={sourceCommunityCount}
           hasMorePeople={hasMorePeople}
           onLoadMorePeople={loadMoreNetworkPeople}
+          peerPresenceByUserId={peerPresenceByUserId}
           canBrowsePeople={Boolean(session)}
           sessionUserId={sessionUserId}
           getInitials={getInitials}

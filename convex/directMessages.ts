@@ -99,6 +99,8 @@ const MAX_DM_GLOBAL_RECIPIENT_CANDIDATE_ROWS = 150;
 const MAX_DM_NETWORK_PEOPLE_ROWS = 30;
 const MAX_DM_NETWORK_PRESENCE_ROWS_PER_COMMUNITY = 40;
 const MAX_DM_NETWORK_EXCLUDE_USER_IDS = 200;
+const MAX_DM_PEER_PRESENCE_TARGETS = 50;
+const MAX_DM_PEER_PRESENCE_ROWS_PER_USER = 8;
 const MAX_DM_CLIENT_MESSAGE_ID_CHARS = 64;
 const MAX_DM_BLOCK_SCAN_ROWS = 200;
 const DM_MESSAGE_RATE_LIMIT = 25;
@@ -738,7 +740,15 @@ async function mapDirectConversation(
     unread_count: unreadCount,
     has_unread: unreadCount > 0,
     viewer_has_blocked_peer: viewerHasBlockedPeer,
-    last_message_preview: lastMessage ? readDirectMessageTextPreview(lastMessage.contentJson) : null,
+    last_message_preview: (() => {
+      const preview = lastMessage ? readDirectMessageTextPreview(lastMessage.contentJson) : null;
+      if (!preview) return null;
+      const lastMessageIsViewer =
+        Boolean(viewerUserKey) &&
+        Boolean(lastMessage?.senderUserId) &&
+        normalizeIdValue(lastMessage?.senderUserId) === viewerUserKey;
+      return lastMessageIsViewer ? `You: ${preview}` : preview;
+    })(),
     last_message_at:
       typeof row.lastMessageAt === "number" && Number.isFinite(row.lastMessageAt)
         ? toIsoString(row.lastMessageAt)
@@ -1320,6 +1330,49 @@ export const listMyDirectConversations = query({
         mapDirectConversation(ctx, row.conversation, { viewerUserId }),
       ),
     );
+  },
+});
+
+// Presence is only revealed for users the viewer shares a DM conversation
+// with; people-zone presence flows through the mutual-community-gated
+// listNetworkPeopleForViewer instead. Deliberately a point query — subscribing
+// would re-run on every peer heartbeat.
+export const listDirectMessagePeerPresenceForViewer = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    targetUserIds: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const targetPublicUserIds = Array.from(
+      new Set(args.targetUserIds.map((value) => String(value ?? "").trim()).filter(Boolean)),
+    ).slice(0, MAX_DM_PEER_PRESENCE_TARGETS);
+
+    const peers: Array<{ user_id: string; last_active_at: string | null }> = [];
+    for (const publicUserId of targetPublicUserIds) {
+      const targetUser = await findUserByPublicId(ctx, publicUserId);
+      if (!targetUser) continue;
+      if (normalizeIdValue(targetUser._id) === normalizeIdValue(viewerUserId)) continue;
+      const conversation = await findDirectConversationByUsers(ctx, viewerUserId, targetUser._id);
+      if (!conversation) continue;
+      const presenceRows = (await ctx.db
+        .query("communityPresence" as any)
+        .withIndex("by_user", (q: any) => q.eq("userId", targetUser._id))
+        .take(MAX_DM_PEER_PRESENCE_ROWS_PER_USER)) as CommunityPresenceLike[];
+      let lastSeenAtMs = 0;
+      for (const row of presenceRows) {
+        const value = Number(row.lastSeenAt ?? 0);
+        if (Number.isFinite(value) && value > lastSeenAtMs) lastSeenAtMs = value;
+      }
+      peers.push({
+        user_id: publicUserId,
+        last_active_at: lastSeenAtMs > 0 ? toIsoString(lastSeenAtMs) : null,
+      });
+    }
+    return { peers };
   },
 });
 
