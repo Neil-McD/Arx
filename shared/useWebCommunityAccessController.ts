@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } fr
 
 import { listCloudCommunityMembershipRows } from "./cloudCommunityMembershipGateway";
 import { listCloudProfileRowsByUserIds } from "./cloudProfilesGateway";
+import { mergeUserProfileEntries } from "./userProfileMerge";
 import { preloadImageUrls } from "./preloadImageUrls";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { formatWorkspaceRestoreErrorMessage } from "./appErrorMappings";
@@ -132,13 +133,7 @@ export function useWebCommunityAccessController<
         profiles.map((profile: any) => profile?.avatar_url ?? null),
         { maxUrls: profiles.length, timeoutMs: 1200 },
       );
-      current.setProfilesByUserId((prev) => {
-        const next = { ...prev };
-        for (const profile of profiles) {
-          next[profile.user_id] = profile;
-        }
-        return next;
-      });
+      current.setProfilesByUserId((prev) => mergeUserProfileEntries(prev, profiles));
     } catch {
       // ignore
     }

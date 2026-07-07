@@ -2,6 +2,7 @@ import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStat
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { resolveAuthSubject } from "./authSession";
 import { formatProfileMutationError } from "./profileMutationErrors";
+import { mergeUserProfileEntry } from "./userProfileMerge";
 import type { SocialProfileLinks } from "./socialProfileLinks";
 import {
   type AnalyticsMetricSeriesLike,
@@ -118,7 +119,7 @@ export function useCommunityAdminController<
       current.setCloudProfile(row);
       current.setProfilesByUserId((prev) => ({
         ...prev,
-        [row.user_id]: {
+        [row.user_id]: mergeUserProfileEntry(prev[row.user_id], {
           user_id: row.user_id,
           display_name: row.display_name,
           handle: row.handle ?? null,
@@ -128,7 +129,7 @@ export function useCommunityAdminController<
           avatar_focus_x: row.avatar_focus_x ?? 0.5,
           avatar_focus_y: row.avatar_focus_y ?? 0.5,
           avatar_zoom: row.avatar_zoom ?? 1,
-        } as UserProfileT,
+        } as UserProfileT),
       }));
       current.applyLoadedProfileToLocal?.(row);
     } catch {
@@ -192,7 +193,7 @@ export function useCommunityAdminController<
       current.setCloudProfile(saved);
       current.setProfilesByUserId((prev) => ({
         ...prev,
-        [saved.user_id]: {
+        [saved.user_id]: mergeUserProfileEntry(prev[saved.user_id], {
           user_id: saved.user_id,
           display_name: saved.display_name,
           handle: saved.handle ?? null,
@@ -202,7 +203,7 @@ export function useCommunityAdminController<
           avatar_focus_x: saved.avatar_focus_x ?? 0.5,
           avatar_focus_y: saved.avatar_focus_y ?? 0.5,
           avatar_zoom: saved.avatar_zoom ?? 1,
-        } as UserProfileT,
+        } as UserProfileT),
       }));
       current.setProfileName(saved.display_name ?? "");
       current.setProfileHandle(saved.handle ?? "");

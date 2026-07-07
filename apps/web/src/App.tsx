@@ -543,6 +543,7 @@ import {
   type DirectMessageOpenRequest,
 } from "./components/WebDirectMessagesHost";
 import { useDirectMessageWebNotifications } from "./controllers/useDirectMessageWebNotifications";
+import { mergeUserProfileEntry } from "../../../shared/userProfileMerge";
 import { WebWorkspaceShellPanelsHost } from "./components/WebWorkspaceShellPanelsHost";
 import type { MobileOverlay, MobileRootPage } from "./components/webShellChromeShared";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
@@ -6351,11 +6352,13 @@ export default function App() {
 
   const savedProfilesByUserId = useMemo(() => {
     if (!canonicalSessionUserId || !cloudProfile) return profilesByUserId;
-    const existingDisplayProfile = profilesByUserId[canonicalSessionUserId] ?? null;
+    const existingDisplayProfile = profilesByUserId[canonicalSessionUserId] ?? undefined;
     const cloudHasProfileAvatar = Boolean(cloudProfile.avatar_storage_id || cloudProfile.avatar_url);
+    // Merge instead of rebuilding: fields the self-profile payload doesn't
+    // carry (e.g. premium_badge) keep their bulk-hydrated values.
     return {
       ...profilesByUserId,
-      [canonicalSessionUserId]: {
+      [canonicalSessionUserId]: mergeUserProfileEntry<UserProfile>(existingDisplayProfile, {
         user_id: canonicalSessionUserId,
         display_name: cloudProfile.display_name ?? existingDisplayProfile?.display_name ?? null,
         handle: cloudProfile.handle ?? null,
@@ -6376,8 +6379,8 @@ export default function App() {
         premium_badge:
           (cloudProfile as { premium_badge?: UserProfile["premium_badge"] }).premium_badge ??
           existingDisplayProfile?.premium_badge ??
-          null,
-      },
+          undefined,
+      }),
     } satisfies Record<string, UserProfile>;
   }, [canonicalSessionUserId, cloudProfile, profilesByUserId]);
 

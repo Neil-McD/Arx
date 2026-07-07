@@ -24,6 +24,10 @@ const memberSettings = read("apps/web/src/components/CommunityMemberSettingsDial
 const mentionAutocomplete = read("apps/web/src/components/communityMentionAutocomplete.tsx");
 const interactionFeed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const interactionProjection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
+const profileMerge = read("shared/userProfileMerge.ts");
+const accessController = read("shared/useWebCommunityAccessController.ts");
+const adminController = read("shared/useCommunityAdminController.ts");
+const appTsx = read("apps/web/src/App.tsx");
 const dmInboxPanel = read("apps/web/src/components/WebDirectMessageInboxPanel.tsx");
 const dmPanel = read("apps/web/src/components/WebDirectMessagePanel.tsx");
 const baseCss = read("apps/web/src/base.css");
@@ -166,6 +170,29 @@ for (const [label, pattern] of [
 ] as const) {
   assert.match(communityTypes, pattern, `${label} must expose public premium_badge`);
 }
+
+// Profile-map writers must merge, never rebuild entries: a writer that
+// doesn't carry premium_badge must not be able to erase it (flicker class).
+assert.match(
+  profileMerge,
+  /export function mergeUserProfileEntry[\s\S]*export function mergeUserProfileEntries/,
+  "shared profile merge helper must exist",
+);
+assert.match(
+  accessController,
+  /setProfilesByUserId\(\(prev\) => mergeUserProfileEntries\(prev, profiles\)\)/,
+  "bulk profile hydration must merge into the profile map",
+);
+const adminMergeWrites = adminController.match(/mergeUserProfileEntry\(prev\[/g) ?? [];
+assert.ok(
+  adminMergeWrites.length >= 2,
+  "self-profile load and save must merge into the profile map",
+);
+assert.match(
+  appTsx,
+  /mergeUserProfileEntry<UserProfile>\(existingDisplayProfile/,
+  "self-profile overlay must merge, preserving bulk-hydrated fields",
+);
 
 assert.match(baseCss, /\.premium-member-badge[\s\S]*\.premium-member-badge-label/);
 assert.doesNotMatch(baseCss, /nav-premium-badge/, "orphan nav-premium-badge scaffold should be removed");
