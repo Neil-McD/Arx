@@ -11949,6 +11949,40 @@ button.community-launch-knowledge-integration-chip:disabled {
   white-space: pre-wrap;
 }
 
+.chat-inline-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 1px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.chat-inline-code-block {
+  display: block;
+  margin: 6px 0 2px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.32);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+.community-dm-panel-message.is-own .community-dm-panel-message-bubble .chat-inline-code {
+  border-color: rgba(11, 11, 15, 0.16);
+  background: rgba(11, 11, 15, 0.08);
+}
+
+.community-dm-panel-message.is-own .community-dm-panel-message-bubble .chat-inline-code-block {
+  border-color: rgba(11, 11, 15, 0.16);
+  background: rgba(11, 11, 15, 0.06);
+}
+
 .community-dm-panel-message-text + .chat-media-grid,
 .community-dm-panel-message-text + .attachments-preview,
 .community-dm-panel-message-text + .community-dm-attachments-preview {

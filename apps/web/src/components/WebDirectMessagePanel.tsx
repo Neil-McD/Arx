@@ -9,6 +9,7 @@ import type {
   DirectMessageTypingPresenceBundle,
 } from "../../../../shared/communityTypes";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
+import { renderChatInlineMarkdown } from "../../../../shared/chatInlineMarkdownUi";
 import { AttachmentChipButton } from "../../../../shared/AttachmentChipButton";
 import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGrid";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
@@ -721,7 +722,9 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                 ) : shouldSeparateAttachments ? (
                   <div className="community-dm-panel-message-stack">
                     <div className="community-dm-panel-message-bubble">
-                      <div className="community-dm-panel-message-text">{props.renderTextWithLinks(text)}</div>
+                      <div className="community-dm-panel-message-text">
+                        {renderChatInlineMarkdown(text, { renderTextRun: props.renderTextWithLinks })}
+                      </div>
                     </div>
                     <div className="community-dm-panel-media-only">
                       <DirectMessageAttachmentViews attachments={attachments} />
@@ -729,7 +732,11 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                   </div>
                 ) : (
                   <div className="community-dm-panel-message-bubble">
-                    {hasText ? <div className="community-dm-panel-message-text">{props.renderTextWithLinks(text)}</div> : null}
+                    {hasText ? (
+                      <div className="community-dm-panel-message-text">
+                        {renderChatInlineMarkdown(text, { renderTextRun: props.renderTextWithLinks })}
+                      </div>
+                    ) : null}
                     <DirectMessageAttachmentViews attachments={attachments} />
                   </div>
                 )}

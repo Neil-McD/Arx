@@ -20,6 +20,7 @@ import {
   splitBodyIntoMentionSegments,
   type ResolvedMentionForRendering,
 } from "../../../../shared/communityMentionRendering";
+import { renderChatInlineMarkdown } from "../../../../shared/chatInlineMarkdownUi";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
@@ -705,9 +706,11 @@ export function InteractionBody(props: {
     props.mentionContext && props.mentionContext.mentions.length > 0
       ? resolveMentionsForRendering(props.mentionContext)
       : [];
+  const renderTextSegment = (segment: string): ReactNode =>
+    renderChatInlineMarkdown(segment, { renderTextRun: props.renderTextWithLinks });
   const renderPart = (part: string): ReactNode => {
     if (resolvedMentions.length === 0 || !props.mentionContext) {
-      return props.renderTextWithLinks(part);
+      return renderTextSegment(part);
     }
     const segments = splitBodyIntoMentionSegments(part, resolvedMentions);
     return segments.map((segment, index) =>
@@ -719,7 +722,7 @@ export function InteractionBody(props: {
           context={props.mentionContext!}
         />
       ) : (
-        <Fragment key={`t:${index}`}>{props.renderTextWithLinks(segment.text)}</Fragment>
+        <Fragment key={`t:${index}`}>{renderTextSegment(segment.text)}</Fragment>
       ),
     );
   };

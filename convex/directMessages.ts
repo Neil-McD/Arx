@@ -13,6 +13,7 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
 import { resolveViewerDirectMessageRelationship } from "./profileRelationshipCore";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
+import { stripChatInlineMarkdown } from "../shared/chatInlineMarkdown";
 
 type UserRow = {
   _id: any;
@@ -314,7 +315,7 @@ function readDirectMessageTextPreview(contentJson: unknown): string | null {
       : contentJson && typeof contentJson === "object" && !Array.isArray(contentJson)
         ? (contentJson as Record<string, unknown>).text
         : null;
-  const normalized = String(rawText ?? "").replace(/\s+/g, " ").trim();
+  const normalized = stripChatInlineMarkdown(rawText).replace(/\s+/g, " ").trim();
   if (!normalized) {
     if (attachments.length === 0) return null;
     if (attachments.length === 1) return attachments[0]?.type === "image" ? "Sent an image" : "Sent a file";
