@@ -93,7 +93,6 @@ const MAX_DM_ATTACHMENT_MIME_CHARS = 160;
 const DM_TYPING_DISPLAY_WINDOW_MS = 5000;
 const MAX_DM_TYPING_PRESENCE_SCAN_ROWS = 12;
 const MAX_DM_TYPING_PRESENCE_VISIBLE_ROWS = 4;
-const MAX_DM_RECIPIENT_ROWS = 25;
 const MAX_DM_GLOBAL_SOURCE_COMMUNITIES = 12;
 const MAX_DM_GLOBAL_OWNED_COMMUNITY_ROWS = 12;
 const MAX_DM_GLOBAL_SOURCE_MEMBERSHIP_ROWS = 48;
@@ -1111,77 +1110,6 @@ export const ensureDirectConversationFromCommunity = mutation({
     });
 
     return await mapDirectConversation(ctx, conversation, { viewerUserId });
-  },
-});
-
-export const listEligibleDirectMessageRecipientsForViewer = query({
-  args: {
-    authSubject: v.optional(v.string()),
-    search: v.optional(v.string()),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const safeLimit = Math.max(1, Math.min(MAX_DM_RECIPIENT_ROWS, Math.floor(args.limit ?? 20)));
-    const search = normalizeRecipientSearch(args.search);
-    const sourceCommunities = await listDirectMessageSourceCommunitiesForViewer(ctx, viewerUserId);
-    const seenUserIds = new Set<string>();
-    const recipients: EligibleDirectMessageRecipient[] = [];
-
-    if (search) {
-      const exactHandleUser = await findUserByNormalizedHandle(ctx, search);
-      const exactHandleUserKey = exactHandleUser ? normalizeIdValue(exactHandleUser._id) : "";
-      if (exactHandleUser && exactHandleUserKey && exactHandleUserKey !== normalizeIdValue(viewerUserId)) {
-        for (const community of sourceCommunities) {
-          const recipient = await mapEligibleDirectMessageRecipient({
-            ctx,
-            community,
-            viewerUserId,
-            userId: exactHandleUser._id,
-            search,
-          });
-          if (!recipient) continue;
-          seenUserIds.add(exactHandleUserKey);
-          recipients.push(recipient);
-          break;
-        }
-      }
-    }
-
-    const maxCandidateUserIdsPerCommunity = search
-      ? MAX_DM_GLOBAL_RECIPIENT_CANDIDATE_ROWS
-      : Math.max(safeLimit * 4, safeLimit);
-
-    for (const community of sourceCommunities) {
-      if (recipients.length >= safeLimit) break;
-      const candidateUserIds = await listDirectMessageCandidateUserIdsForCommunity({
-        ctx,
-        community,
-        maxUserIds: maxCandidateUserIdsPerCommunity,
-      });
-      for (const userId of candidateUserIds) {
-        if (recipients.length >= safeLimit) break;
-        const userKey = normalizeIdValue(userId);
-        if (!userKey || userKey === normalizeIdValue(viewerUserId) || seenUserIds.has(userKey)) {
-          continue;
-        }
-        const recipient = await mapEligibleDirectMessageRecipient({
-          ctx,
-          community,
-          viewerUserId,
-          userId,
-          search,
-        });
-        if (!recipient) continue;
-        seenUserIds.add(userKey);
-        recipients.push(recipient);
-      }
-    }
-
-    return recipients;
   },
 });
 

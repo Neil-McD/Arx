@@ -7,7 +7,6 @@ import type {
   DirectMessageNetworkPeopleBundle,
   DirectMessageNetworkPerson,
   DirectMessagePeerPresence,
-  DirectMessageRecipient,
   DirectMessageTypingPresenceBundle,
 } from "./communityTypes";
 
@@ -158,23 +157,6 @@ export async function ensureCloudDirectConversationFromCommunity<SessionT>(
   return payload;
 }
 
-export async function listCloudDirectMessages<SessionT>(
-  params: CloudDirectMessagesGatewayParams<SessionT> & {
-    conversationId: string;
-    beforeSeq?: number | null;
-    limit?: number;
-  },
-): Promise<DirectMessage[]> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("directMessages:listDirectMessages" as any, {
-    authSubject,
-    conversationId: params.conversationId,
-    beforeSeq: params.beforeSeq ?? null,
-    limit: params.limit ?? 100,
-  });
-  return coerceRows<DirectMessage>(payload);
-}
-
 export async function listCloudDirectConversations<SessionT>(
   params: CloudDirectMessagesGatewayParams<SessionT> & {
     limit?: number;
@@ -186,21 +168,6 @@ export async function listCloudDirectConversations<SessionT>(
     limit: params.limit ?? 30,
   });
   return coerceRows<DirectMessageConversation>(payload);
-}
-
-export async function listCloudEligibleDirectMessageRecipientsForViewer<SessionT>(
-  params: CloudDirectMessagesGatewayParams<SessionT> & {
-    search?: string;
-    limit?: number;
-  },
-): Promise<DirectMessageRecipient[]> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("directMessages:listEligibleDirectMessageRecipientsForViewer" as any, {
-    authSubject,
-    search: params.search ?? "",
-    limit: params.limit ?? 20,
-  });
-  return coerceRows<DirectMessageRecipient>(payload);
 }
 
 export async function listCloudNetworkPeople<SessionT>(
