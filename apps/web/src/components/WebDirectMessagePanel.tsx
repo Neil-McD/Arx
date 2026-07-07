@@ -64,6 +64,7 @@ type WebDirectMessagePanelProps = {
 };
 
 const DM_AUTO_SCROLL_THRESHOLD_PX = 96;
+const DM_COMPOSER_MAX_HEIGHT_PX = 148;
 const DM_CLUSTER_GAP_MS = 5 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -345,6 +346,7 @@ function formatDirectTypingLabel(
 
 export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragDepthRef = useRef(0);
   const shouldFollowMessagesRef = useRef(true);
@@ -466,6 +468,18 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
     if (!messagesElement) return;
     messagesElement.scrollTop = messagesElement.scrollHeight;
   }, []);
+
+  // Grow the composer upward as the draft wraps; the attach/mic/send buttons
+  // stay pinned via the composer's flex-end alignment.
+  useEffect(() => {
+    const textarea = composerTextareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, DM_COMPOSER_MAX_HEIGHT_PX)}px`;
+    if (shouldFollowMessagesRef.current) {
+      scrollMessagesToBottom();
+    }
+  }, [props.input, scrollMessagesToBottom]);
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -801,6 +815,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         </button>
         <textarea
           ref={(node) => {
+            composerTextareaRef.current = node;
             if (props.inputRef) props.inputRef.current = node;
           }}
           className="community-dm-panel-input"

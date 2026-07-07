@@ -12327,7 +12327,8 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-dm-panel-input {
   flex: 1 1 auto;
   min-height: 38px;
-  max-height: 96px;
+  max-height: 148px;
+  overflow-y: auto;
   padding: 9px 12px;
   resize: none;
   border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 80%, transparent);

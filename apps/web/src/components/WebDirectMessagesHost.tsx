@@ -571,7 +571,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         }
       }
       input.style.height = "auto";
-      input.style.height = `${Math.min(input.scrollHeight, 96)}px`;
+      input.style.height = `${Math.min(input.scrollHeight, 148)}px`;
       input.focus({ preventScroll: true });
       const end = input.value.length;
       try {
