@@ -116,6 +116,7 @@ export type DirectMessageNetworkPerson = DirectMessageRecipient & {
 export type DirectMessageNetworkPeopleBundle = {
   people: DirectMessageNetworkPerson[];
   source_community_count: number;
+  has_more?: boolean;
 };
 
 export type DirectMessage = {

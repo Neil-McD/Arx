@@ -2287,9 +2287,11 @@ async function executeRetrievalAgentLoop(
           }
         }
 
-        const needsWorkspaceSession = requiresSandboxSession(
-          toolName as RetrievalToolName,
-        );
+        const activeDaytonaRuntimeSubstrate =
+          executionSession.getActiveDaytonaRuntimeSubstrate();
+        const needsWorkspaceSession =
+          requiresSandboxSession(toolName as RetrievalToolName) &&
+          activeDaytonaRuntimeSubstrate?.provider !== "daytona";
 
         if (needsWorkspaceSession && !executionSession.hasWorkspaceSession()) {
           try {
@@ -2370,8 +2372,7 @@ async function executeRetrievalAgentLoop(
                 toolName: toolName as RetrievalToolName,
                 args: normalizedArgs,
                 workspaceSession: executionSession.getWorkspaceSession(),
-                activeDaytonaRuntimeSubstrate:
-                  executionSession.getActiveDaytonaRuntimeSubstrate(),
+                activeDaytonaRuntimeSubstrate,
                 executeDaytonaWorkspaceTool: async (toolParams) =>
                   await executionSession.executeDaytonaWorkspaceTool(toolParams),
                 signal,

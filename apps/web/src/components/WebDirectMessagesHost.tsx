@@ -449,6 +449,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const [isLoadingPeople, setIsLoadingPeople] = useState(false);
   const [peopleError, setPeopleError] = useState<string | null>(null);
   const [sourceCommunityCount, setSourceCommunityCount] = useState<number | null>(null);
+  const [hasMorePeople, setHasMorePeople] = useState(false);
+  const isLoadingMorePeopleRef = useRef(false);
   const inboxLoadRequestRef = useRef(0);
   const peopleLoadRequestRef = useRef(0);
   const hasInboxLiveSubscriptionRef = useRef(false);
@@ -718,6 +720,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         if (peopleLoadRequestRef.current !== requestId) return;
         setNetworkPeople(bundle.people);
         setSourceCommunityCount(bundle.source_community_count);
+        setHasMorePeople(Boolean(bundle.has_more) && !search.trim());
       } catch (error) {
         if (peopleLoadRequestRef.current !== requestId) return;
         setPeopleError(toErrorMessage(error, "Failed to load people."));
@@ -728,6 +731,41 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     },
     [ensureSession, session],
   );
+
+  const loadMoreNetworkPeople = useCallback(async () => {
+    if (!session || !hasMorePeople || searchValue.trim()) return;
+    if (isLoadingMorePeopleRef.current) return;
+    isLoadingMorePeopleRef.current = true;
+    const requestId = peopleLoadRequestRef.current;
+    try {
+      const usableSession = await resolveDirectMessageSession(
+        session,
+        ensureSession,
+        "direct_messages_network_people_more",
+      );
+      if (!usableSession || peopleLoadRequestRef.current !== requestId) return;
+      const excludeUserIds = networkPeople
+        .map((person) => String(person.user_id ?? "").trim())
+        .filter(Boolean);
+      const bundle = await listCloudNetworkPeople({
+        session: usableSession,
+        search: "",
+        limit: 15,
+        excludeUserIds,
+      });
+      if (peopleLoadRequestRef.current !== requestId) return;
+      setNetworkPeople((previous) => {
+        const seen = new Set(previous.map((person) => person.user_id));
+        return [...previous, ...bundle.people.filter((person) => !seen.has(person.user_id))];
+      });
+      const reachedExcludeCap = excludeUserIds.length + bundle.people.length >= 200;
+      setHasMorePeople(Boolean(bundle.has_more) && bundle.people.length > 0 && !reachedExcludeCap);
+    } catch {
+      setHasMorePeople(false);
+    } finally {
+      isLoadingMorePeopleRef.current = false;
+    }
+  }, [ensureSession, hasMorePeople, networkPeople, searchValue, session]);
 
   useEffect(() => {
     readMarkSeqByConversationRef.current = {};
@@ -1815,6 +1853,8 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           isLoadingPeople={isLoadingPeople}
           peopleError={peopleError}
           sourceCommunityCount={sourceCommunityCount}
+          hasMorePeople={hasMorePeople}
+          onLoadMorePeople={loadMoreNetworkPeople}
           canBrowsePeople={Boolean(session)}
           sessionUserId={sessionUserId}
           getInitials={getInitials}

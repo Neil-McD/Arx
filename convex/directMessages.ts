@@ -98,6 +98,7 @@ const MAX_DM_GLOBAL_RECIPIENT_MEMBERSHIP_ROWS = 150;
 const MAX_DM_GLOBAL_RECIPIENT_CANDIDATE_ROWS = 150;
 const MAX_DM_NETWORK_PEOPLE_ROWS = 30;
 const MAX_DM_NETWORK_PRESENCE_ROWS_PER_COMMUNITY = 40;
+const MAX_DM_NETWORK_EXCLUDE_USER_IDS = 200;
 const MAX_DM_CLIENT_MESSAGE_ID_CHARS = 64;
 const MAX_DM_BLOCK_SCAN_ROWS = 200;
 const DM_MESSAGE_RATE_LIMIT = 25;
@@ -1147,6 +1148,7 @@ export const listNetworkPeopleForViewer = query({
     authSubject: v.optional(v.string()),
     search: v.optional(v.string()),
     limit: v.optional(v.number()),
+    excludeUserIds: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const viewerUserId = await resolveUserIdForAuthenticatedRequest({
@@ -1155,6 +1157,12 @@ export const listNetworkPeopleForViewer = query({
     });
     const safeLimit = Math.max(1, Math.min(MAX_DM_NETWORK_PEOPLE_ROWS, Math.floor(args.limit ?? 20)));
     const search = normalizeRecipientSearch(args.search);
+    const excludedPublicUserIds = new Set(
+      (args.excludeUserIds ?? [])
+        .slice(0, MAX_DM_NETWORK_EXCLUDE_USER_IDS)
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean),
+    );
     const sourceCommunities = await listDirectMessageSourceCommunitiesForViewer(ctx, viewerUserId);
     const viewerUserKey = normalizeIdValue(viewerUserId);
     const blockedUserKeys = await listDirectMessageBlockedUserKeysForViewer(ctx, viewerUserId);
@@ -1199,9 +1207,13 @@ export const listNetworkPeopleForViewer = query({
       }
     }
 
-    const orderedCandidates = Array.from(candidatesByUser.values()).sort(
-      (left, right) => (right.lastSeenAtMs ?? 0) - (left.lastSeenAtMs ?? 0),
-    );
+    const orderedCandidates = Array.from(candidatesByUser.entries())
+      .map(([userKey, candidate]) => ({ ...candidate, userKey }))
+      .sort(
+        (left, right) =>
+          (right.lastSeenAtMs ?? 0) - (left.lastSeenAtMs ?? 0) ||
+          left.userKey.localeCompare(right.userKey),
+      );
 
     const seenUserIds = new Set<string>();
     const people: Array<EligibleDirectMessageRecipient & { last_active_at: string | null }> = [];
@@ -1239,6 +1251,13 @@ export const listNetworkPeopleForViewer = query({
       if (people.length >= safeLimit) break;
       const userKey = normalizeIdValue(candidate.userId);
       if (!userKey || seenUserIds.has(userKey)) continue;
+      if (excludedPublicUserIds.size > 0) {
+        const publicUserId = await resolvePublicUserId(ctx, candidate.userId);
+        if (publicUserId && excludedPublicUserIds.has(publicUserId)) {
+          seenUserIds.add(userKey);
+          continue;
+        }
+      }
       const recipient = await mapEligibleDirectMessageRecipient({
         ctx,
         community: candidate.community,
@@ -1257,6 +1276,7 @@ export const listNetworkPeopleForViewer = query({
     return {
       people,
       source_community_count: sourceCommunities.length,
+      has_more: people.length >= safeLimit,
     };
   },
 });

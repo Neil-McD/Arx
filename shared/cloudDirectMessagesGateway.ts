@@ -206,20 +206,27 @@ export async function listCloudNetworkPeople<SessionT>(
   params: CloudDirectMessagesGatewayParams<SessionT> & {
     search?: string;
     limit?: number;
+    excludeUserIds?: readonly string[];
   },
 ): Promise<DirectMessageNetworkPeopleBundle> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const excludeUserIds = (params.excludeUserIds ?? [])
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 200);
   const payload = (await client.query("directMessages:listNetworkPeopleForViewer" as any, {
     authSubject,
     search: params.search ?? "",
     limit: params.limit ?? 20,
+    ...(excludeUserIds.length > 0 ? { excludeUserIds } : null),
   })) as DirectMessageNetworkPeopleBundle | null;
   if (!payload || typeof payload !== "object" || !Array.isArray(payload.people)) {
-    return { people: [], source_community_count: 0 };
+    return { people: [], source_community_count: 0, has_more: false };
   }
   return {
     people: payload.people as DirectMessageNetworkPerson[],
     source_community_count: Math.max(0, Math.floor(Number(payload.source_community_count ?? 0))),
+    has_more: Boolean(payload.has_more),
   };
 }
 

@@ -17,6 +17,8 @@ type WebDirectMessageInboxPanelProps = {
   isLoadingPeople: boolean;
   peopleError: string | null;
   sourceCommunityCount: number | null;
+  hasMorePeople?: boolean;
+  onLoadMorePeople?: () => void | Promise<void>;
   canBrowsePeople: boolean;
   sessionUserId: string | null;
   getInitials: (value: string) => string;
@@ -67,10 +69,17 @@ function formatPersonPresenceLabel(person: DirectMessageNetworkPerson): string {
 
 export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProps) {
   const normalizedSearch = props.searchValue.trim().replace(/^@+/, "").toLowerCase();
-  const loadedConversationIds = new Set(props.conversations.map((conversation) => conversation.id));
+  // Conversations without messages are legacy ghost rows from the old eager
+  // create flow; their peers belong in the people zone instead.
+  const conversationsWithMessages = props.conversations.filter(
+    (conversation) => Math.max(0, Math.floor(Number(conversation.last_seq ?? 0))) > 0,
+  );
+  const loadedConversationIds = new Set(
+    conversationsWithMessages.map((conversation) => conversation.id),
+  );
 
   const filteredConversations = normalizedSearch
-    ? props.conversations.filter((conversation) => {
+    ? conversationsWithMessages.filter((conversation) => {
         const peer = resolveDirectMessagePeer(conversation, props.sessionUserId);
         const haystack = [
           peer?.display_name,
@@ -82,7 +91,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
           .toLowerCase();
         return haystack.includes(normalizedSearch);
       })
-    : props.conversations;
+    : conversationsWithMessages;
 
   const visiblePeople = props.people.filter((person) => {
     const existingConversationId = String(person.existing_conversation_id ?? "").trim();
@@ -119,7 +128,16 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
       {props.error ? <div className="community-dm-panel-error">{props.error}</div> : null}
       {props.peopleError ? <div className="community-dm-panel-error">{props.peopleError}</div> : null}
 
-      <div className="community-dm-inbox-list">
+      <div
+        className="community-dm-inbox-list"
+        onScroll={(event) => {
+          if (!props.hasMorePeople || !props.onLoadMorePeople || normalizedSearch) return;
+          const target = event.currentTarget;
+          if (target.scrollHeight - target.scrollTop - target.clientHeight < 160) {
+            void props.onLoadMorePeople();
+          }
+        }}
+      >
         {hasZeroCommunities ? (
           <div className="community-dm-discovery-card">
             <UsersRound aria-hidden="true" />
@@ -236,6 +254,14 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
 
         {isInitialPeopleLoad && !hasZeroCommunities ? (
           <div className="community-dm-panel-empty community-dm-inbox-people-loading">Finding people...</div>
+        ) : null}
+
+        {props.hasMorePeople && visiblePeople.length > 0 && !normalizedSearch ? (
+          <div className="community-dm-inbox-list-footer">Loading more people...</div>
+        ) : null}
+
+        {!props.hasMorePeople && visiblePeople.length > 0 && !normalizedSearch && !props.isLoadingPeople ? (
+          <div className="community-dm-inbox-list-footer">That's everyone across your communities</div>
         ) : null}
 
         {!hasAnyRows && !isInitialInboxLoad && !isInitialPeopleLoad && !hasZeroCommunities ? (

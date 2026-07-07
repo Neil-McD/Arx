@@ -45,6 +45,7 @@ const webThreadMutationController = read("shared/useWebThreadMutationController.
 const threads = read("convex/threads.ts");
 const codexWorkerBridge = read("convex/polynetCodexWorkerBridge.ts");
 const harnessToolPolicy = read("shared/harnessToolPolicy.ts");
+const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 
 assert.match(
   packageJson,
@@ -301,6 +302,11 @@ assert.match(
   handlers,
   /allowedToolNames: polynetAllowedToolNamesForRun[\s\S]*activeDaytonaRuntimeSubstrate:\s*activeDaytonaRuntimeSubstrateForPolynetTools/,
   "PolyNet agent-loop calls must use the filtered tool list and shared Daytona substrate",
+);
+assert.match(
+  runtimeAgentLoop,
+  /const activeDaytonaRuntimeSubstrate =[\s\S]*executionSession\.getActiveDaytonaRuntimeSubstrate\(\);[\s\S]*const needsWorkspaceSession =[\s\S]*requiresSandboxSession\(toolName as RetrievalToolName\) &&[\s\S]*activeDaytonaRuntimeSubstrate\?\.provider !== "daytona";[\s\S]*activeDaytonaRuntimeSubstrate,\s*[\s\S]*executeDaytonaWorkspaceTool/,
+  "PolyNet Daytona file and shell tools must bypass legacy workspace-session creation and execute against the shared Daytona substrate",
 );
 assert.doesNotMatch(
   handlers,
