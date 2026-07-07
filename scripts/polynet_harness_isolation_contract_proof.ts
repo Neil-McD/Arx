@@ -316,7 +316,7 @@ assert.match(
 );
 assert.match(
   handlers,
-  /settlePolynetDaytonaRuntimeCreditsBestEffort[\s\S]*getDaytonaCodexRuntimeTargetByRunIdInternal[\s\S]*settleReservedCreditsStrict\(\{[\s\S]*creditKey: polynetDaytonaRuntimeCreditKey[\s\S]*vendor|provider: "daytona"[\s\S]*harness: "polynet"[\s\S]*eventType: "polynet_daytona_runtime_credit_settled"/,
+  /settlePolynetDaytonaRuntimeCreditsBestEffort[\s\S]*getDaytonaCodexRuntimeTargetByRunIdInternal[\s\S]*settleReservedCreditsStrict\(\{[\s\S]*creditKey: polynetDaytonaRuntimeCreditKey[\s\S]*harness: "polynet"[\s\S]*provider: "daytona"[\s\S]*eventType: "polynet_daytona_runtime_credit_settled"/,
   "native PolyNet Daytona runs must settle canonical Daytona workspace compute credits through the credit ledger",
 );
 assert.match(
