@@ -7,6 +7,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   "weekly_founder_digest",
   "event_reminder",
   "mention_notification",
+  "dm_message_notification",
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
@@ -293,6 +294,22 @@ export function renderEmailTemplate(params: {
         `${mentionerName} mentioned you`,
         snippet ? `"${snippet}"` : `You were mentioned in ${communityName}.`,
         "Open chat",
+      );
+    }
+    case "dm_message_notification": {
+      const senderName = readString((payload as any)?.senderName) || "Someone";
+      const snippet = readString((payload as any)?.snippet);
+      const sharedCommunityName = readString((payload as any)?.communityName);
+      return renderTransactionalTemplate(
+        `${senderName} sent you a message on Polynet`,
+        payload,
+        `${senderName} sent you a message`,
+        snippet
+          ? `"${snippet}"`
+          : sharedCommunityName
+            ? `New direct message from ${sharedCommunityName}.`
+            : "Open Polynet to read it.",
+        "Open message",
       );
     }
     case "event_reminder":

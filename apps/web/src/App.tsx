@@ -11112,6 +11112,19 @@ export default function App() {
     unreadCount: directMessagesUnreadCount,
     onOpenConversation: handleOpenDirectConversationById,
   });
+  useEffect(() => {
+    if (!session || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const dmConversationId = String(url.searchParams.get("dm") ?? "").trim();
+    if (!dmConversationId) return;
+    url.searchParams.delete("dm");
+    window.history.replaceState(
+      window.history.state ?? {},
+      document.title,
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+    handleOpenDirectConversationById(dmConversationId);
+  }, [session, handleOpenDirectConversationById]);
   const directMessagesUnreadLabel =
     directMessagesUnreadCount > 0 ? `${directMessagesUnreadCount} unread` : null;
   const directMessagesButton = session ? (

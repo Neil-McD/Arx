@@ -12560,6 +12560,13 @@ button.community-launch-knowledge-integration-chip:disabled {
   color: var(--text-muted);
 }
 
+.community-dm-inbox-row-muted {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  color: var(--text-faint);
+}
+
 .community-dm-inbox-list-footer {
   flex: none;
   padding: 12px 0 6px;

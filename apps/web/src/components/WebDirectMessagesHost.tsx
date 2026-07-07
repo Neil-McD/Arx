@@ -18,6 +18,7 @@ import {
   ensureCloudDirectConversationFromCommunity,
   listCloudDirectMessagePeerPresence,
   listCloudNetworkPeople,
+  setCloudDirectConversationMuted,
   unblockCloudDirectMessageUser,
   listCloudDirectConversations,
   markCloudDirectConversationRead,
@@ -959,6 +960,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
 
   useEffect(() => {
     const unreadCount = conversations.reduce((total, conversation) => {
+      if (conversation.viewer_muted) return total;
       const count = Number(conversation.unread_count ?? 0);
       if (!Number.isFinite(count)) return total;
       return total + Math.max(0, Math.floor(count));
@@ -1112,6 +1114,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
                 const previousSeq = previousSeqByConversation[row.id] ?? 0;
                 if (seq <= previousSeq) continue;
                 if (row.last_message_from_viewer) continue;
+                if (row.viewer_muted) continue;
                 const isReadingThread =
                   isOpenRef.current &&
                   directMessagePanelRef.current?.conversation.id === row.id &&
@@ -1830,6 +1833,48 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     [directMessagePanel, updateConversationEchoes],
   );
 
+  const toggleMuteForActiveConversation = useCallback(async () => {
+    const current = directMessagePanelRef.current;
+    if (!current || !session) return;
+    const conversation = current.conversation;
+    if (isVirtualDirectConversationId(conversation.id)) return;
+    const nextMuted = !conversation.viewer_muted;
+    try {
+      const usableSession = await resolveDirectMessageSession(
+        session,
+        ensureSession,
+        "direct_messages_mute",
+      );
+      if (!usableSession) throw new Error("Sign in to mute conversations.");
+      const updated = await setCloudDirectConversationMuted({
+        session: usableSession,
+        conversationId: conversation.id,
+        muted: nextMuted,
+      });
+      setConversations((previous) =>
+        previous.map((row) => (row.id === updated.id ? updated : row)),
+      );
+      setDirectMessagePanel((previous) =>
+        previous?.conversation.id === updated.id
+          ? {
+              ...previous,
+              conversation: updated,
+              error: null,
+            }
+          : previous,
+      );
+    } catch (error) {
+      setDirectMessagePanel((previous) =>
+        previous?.conversation.id === conversation.id
+          ? {
+              ...previous,
+              error: toErrorMessage(error, "Failed to update the conversation."),
+            }
+          : previous,
+      );
+    }
+  }, [ensureSession, session]);
+
   const toggleBlockForActivePeer = useCallback(async () => {
     const current = directMessagePanelRef.current;
     if (!current || !session) return;
@@ -1968,8 +2013,10 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           attachments={directMessagePanel.attachments}
           typingPresence={directTypingPresence}
           isPeerBlocked={Boolean(directMessagePanel.conversation.viewer_has_blocked_peer)}
+          isConversationMuted={Boolean(directMessagePanel.conversation.viewer_muted)}
           showBlockAction={!isVirtualDirectConversationId(directMessagePanel.conversation.id)}
           onToggleBlockPeer={toggleBlockForActivePeer}
+          onToggleMuteConversation={toggleMuteForActiveConversation}
           peerLastActiveAt={
             (() => {
               const peerUserId = findConversationPeerUserId(directMessagePanel.conversation, sessionUserId);

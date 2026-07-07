@@ -100,6 +100,7 @@ import type * as crons from "../crons.js";
 import type * as daytonaCodexRuntimeTargetActions from "../daytonaCodexRuntimeTargetActions.js";
 import type * as daytonaCodexRuntimeTargets from "../daytonaCodexRuntimeTargets.js";
 import type * as developerApps from "../developerApps.js";
+import type * as directMessageEmails from "../directMessageEmails.js";
 import type * as directMessages from "../directMessages.js";
 import type * as discoverMarketplace from "../discoverMarketplace.js";
 import type * as email from "../email.js";
@@ -306,6 +307,7 @@ declare const fullApi: ApiFromModules<{
   daytonaCodexRuntimeTargetActions: typeof daytonaCodexRuntimeTargetActions;
   daytonaCodexRuntimeTargets: typeof daytonaCodexRuntimeTargets;
   developerApps: typeof developerApps;
+  directMessageEmails: typeof directMessageEmails;
   directMessages: typeof directMessages;
   discoverMarketplace: typeof discoverMarketplace;
   email: typeof email;

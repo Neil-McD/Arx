@@ -187,8 +187,9 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
           const previewText =
             String(conversation.last_message_preview ?? "").trim() || `Started in ${communityName}`;
           const timeLabel = formatInboxTime(conversation.last_message_at ?? conversation.updated_at);
+          const isMuted = Boolean(conversation.viewer_muted);
           const unreadCount = Math.max(0, Math.floor(Number(conversation.unread_count ?? 0)));
-          const hasUnread = Boolean(conversation.has_unread || unreadCount > 0);
+          const hasUnread = !isMuted && Boolean(conversation.has_unread || unreadCount > 0);
           const peerUserId = String(peer?.user_id ?? "").trim();
           const peerPresenceKnown = Boolean(
             peerUserId && props.peerPresenceByUserId && peerUserId in props.peerPresenceByUserId,
@@ -231,6 +232,9 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
                     <PremiumMemberBadge badge={peer?.premium_badge ?? null} />
                   </span>
                   <span className="community-dm-inbox-row-meta-group">
+                    {isMuted ? (
+                      <BellOff className="community-dm-inbox-row-muted" aria-hidden="true" />
+                    ) : null}
                     {timeLabel ? <span className="community-dm-inbox-row-time">{timeLabel}</span> : null}
                     {hasUnread ? (
                       <span

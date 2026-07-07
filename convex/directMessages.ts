@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import {
   communityMembershipRowIsActive,
@@ -45,6 +46,7 @@ type DirectMessageParticipantLike = {
   status: "active" | "left";
   lastReadSeq: number;
   lastActivityAt?: number;
+  mutedAt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -104,6 +106,7 @@ const MAX_DM_PEER_PRESENCE_TARGETS = 50;
 const MAX_DM_PEER_PRESENCE_ROWS_PER_USER = 8;
 const MAX_DM_CLIENT_MESSAGE_ID_CHARS = 64;
 const MAX_DM_BLOCK_SCAN_ROWS = 200;
+const DM_EMAIL_NOTIFY_DELAY_MS = 2 * 60 * 1000;
 const DM_MESSAGE_RATE_LIMIT = 25;
 const DM_MESSAGE_RATE_WINDOW_MS = 60 * 1000;
 const DM_NEW_CONVERSATION_RATE_LIMIT = 15;
@@ -740,6 +743,7 @@ async function mapDirectConversation(
     viewer_last_read_seq: viewerLastReadSeq,
     unread_count: unreadCount,
     has_unread: unreadCount > 0,
+    viewer_muted: Boolean(viewerParticipant?.mutedAt),
     viewer_has_blocked_peer: viewerHasBlockedPeer,
     last_message_from_viewer:
       Boolean(viewerUserKey) &&
@@ -1014,6 +1018,29 @@ async function appendDirectMessageFromUser(args: {
   const message = (await args.ctx.db.get(messageId)) as DirectMessageLike | null;
   if (!message) throw new Error("dm_message_create_failed");
   return message;
+}
+
+async function scheduleDirectMessageEmailNotification(args: {
+  ctx: any;
+  conversationId: any;
+  messageSeq: number;
+  recipientUserId: any;
+  senderUserId: any;
+}): Promise<void> {
+  try {
+    await args.ctx.scheduler.runAfter(
+      DM_EMAIL_NOTIFY_DELAY_MS,
+      (internal as any).directMessageEmails.maybeNotifyRecipientInternal,
+      {
+        conversationId: args.conversationId,
+        messageSeq: args.messageSeq,
+        recipientUserId: args.recipientUserId,
+        senderUserId: args.senderUserId,
+      },
+    );
+  } catch {
+    // Email nudges are best-effort; the message itself already landed.
+  }
 }
 
 export const ensureDirectConversationFromCommunity = mutation({
@@ -1408,6 +1435,33 @@ export const markDirectConversationRead = mutation({
   },
 });
 
+export const setDirectConversationMuted = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    conversationId: v.id("dmConversations"),
+    muted: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const { conversation, participant } = await requireActiveUserParticipant({
+      ctx,
+      conversationId: args.conversationId,
+      userId: viewerUserId,
+    });
+    const nowMs = Date.now();
+    await ctx.db.patch(participant._id, {
+      mutedAt: args.muted ? nowMs : undefined,
+      updatedAt: nowMs,
+    });
+    const refreshed = (await ctx.db.get(conversation._id)) as DirectMessageConversationLike | null;
+    if (!refreshed) throw new Error("dm_conversation_not_found");
+    return await mapDirectConversation(ctx, refreshed, { viewerUserId });
+  },
+});
+
 export const setDirectTyping = mutation({
   args: {
     authSubject: v.optional(v.string()),
@@ -1625,6 +1679,23 @@ export const sendDirectMessage = mutation({
       attachments: args.attachments,
       clientMessageId: args.clientMessageId ?? null,
     });
+    const viewerUserKey = normalizeIdValue(viewerUserId);
+    const peerParticipant = (await listConversationParticipants(ctx, conversation._id)).find(
+      (row) =>
+        row.status === "active" &&
+        row.participantType === "user" &&
+        normalizeIdValue(row.userId) &&
+        normalizeIdValue(row.userId) !== viewerUserKey,
+    );
+    if (peerParticipant?.userId) {
+      await scheduleDirectMessageEmailNotification({
+        ctx,
+        conversationId: conversation._id,
+        messageSeq: message.seq,
+        recipientUserId: peerParticipant.userId,
+        senderUserId: viewerUserId,
+      });
+    }
     return await mapDirectMessage(ctx, message);
   },
 });
@@ -1707,6 +1778,13 @@ export const sendDirectMessageToUser = mutation({
       text: args.text,
       attachments: args.attachments,
       clientMessageId: args.clientMessageId ?? null,
+    });
+    await scheduleDirectMessageEmailNotification({
+      ctx,
+      conversationId: conversation._id,
+      messageSeq: message.seq,
+      recipientUserId: targetUser._id,
+      senderUserId: viewerUserId,
     });
     const refreshedConversation = (await ctx.db.get(conversation._id)) as DirectMessageConversationLike | null;
     if (!refreshedConversation) throw new Error("dm_conversation_not_found");

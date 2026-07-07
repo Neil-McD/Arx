@@ -951,6 +951,8 @@ export default defineSchema({
     eventReminderEnabled: v.boolean(),
     // Mention ping emails; absent means enabled.
     mentionEmailsEnabled: v.optional(v.boolean()),
+    // Direct message emails; absent means enabled.
+    dmEmailsEnabled: v.optional(v.boolean()),
     founderAdminEmailsEnabled: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1981,6 +1983,8 @@ export default defineSchema({
     status: v.union(v.literal("active"), v.literal("left")),
     lastReadSeq: v.number(),
     lastActivityAt: v.optional(v.number()),
+    // Viewer-side mute: suppresses badges and notifications, never delivery.
+    mutedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

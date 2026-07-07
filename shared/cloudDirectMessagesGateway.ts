@@ -278,6 +278,22 @@ export async function listCloudDirectMessagePeerPresence<SessionT>(
   return Array.isArray(payload?.peers) ? payload.peers : [];
 }
 
+export async function setCloudDirectConversationMuted<SessionT>(
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    conversationId: string;
+    muted: boolean;
+  },
+): Promise<DirectMessageConversation> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.mutation("directMessages:setDirectConversationMuted" as any, {
+    authSubject,
+    conversationId: params.conversationId,
+    muted: params.muted,
+  })) as DirectMessageConversation | null;
+  if (!payload?.id) throw new Error("Failed to update conversation.");
+  return payload;
+}
+
 export async function markCloudDirectConversationRead<SessionT>(
   params: CloudDirectMessagesGatewayParams<SessionT> & {
     conversationId: string;

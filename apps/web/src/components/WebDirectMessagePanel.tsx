@@ -1,4 +1,4 @@
-import { ArrowLeft, Ban, MessageCircle, MoreHorizontal, Paperclip, RotateCcw } from "lucide-react";
+import { ArrowLeft, Ban, Bell, BellOff, MessageCircle, MoreHorizontal, Paperclip, RotateCcw } from "lucide-react";
 import type { ChangeEvent, ComponentProps, DragEvent, FormEvent, MutableRefObject, ReactNode } from "react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -43,8 +43,10 @@ type WebDirectMessagePanelProps = {
   attachments: DirectMessageComposerAttachment[];
   typingPresence: DirectMessageTypingPresenceBundle;
   isPeerBlocked?: boolean;
+  isConversationMuted?: boolean;
   showBlockAction?: boolean;
   onToggleBlockPeer?: () => void | Promise<void>;
+  onToggleMuteConversation?: () => void | Promise<void>;
   peerLastActiveAt?: string | null;
   sessionUserId: string | null;
   getInitials: (value: string) => string;
@@ -649,6 +651,25 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
             </button>
             {isMenuOpen ? (
               <div className="community-dm-panel-menu" role="menu">
+                {props.onToggleMuteConversation ? (
+                  <button
+                    className="community-dm-panel-menu-item"
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setIsConfirmingBlock(false);
+                      void props.onToggleMuteConversation?.();
+                    }}
+                  >
+                    {props.isConversationMuted ? (
+                      <Bell aria-hidden="true" />
+                    ) : (
+                      <BellOff aria-hidden="true" />
+                    )}
+                    <span>{props.isConversationMuted ? "Unmute conversation" : "Mute conversation"}</span>
+                  </button>
+                ) : null}
                 <button
                   className={`community-dm-panel-menu-item${isConfirmingBlock ? " is-confirming" : ""}`}
                   type="button"
