@@ -11810,7 +11810,21 @@ button.community-launch-knowledge-integration-chip:disabled {
   gap: 0;
   overflow: auto;
   margin-right: -12px;
-  padding: 6px 14px 2px 2px;
+  padding: 10px 14px 14px 2px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 20px,
+    #000 calc(100% - 24px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 20px,
+    #000 calc(100% - 24px),
+    transparent 100%
+  );
 }
 
 .community-dm-panel-message {
@@ -12363,7 +12377,21 @@ button.community-launch-knowledge-integration-chip:disabled {
   gap: 4px;
   overflow: auto;
   margin-right: -12px;
-  padding: 2px 14px 2px 2px;
+  padding: 6px 14px 16px 2px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 16px,
+    #000 calc(100% - 26px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 16px,
+    #000 calc(100% - 26px),
+    transparent 100%
+  );
 }
 
 .community-dm-inbox-panel .community-dm-panel-empty {
