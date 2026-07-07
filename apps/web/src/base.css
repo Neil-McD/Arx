@@ -992,6 +992,12 @@ body {
   margin-top: 1px;
 }
 
+/* Profile panel renders the name as an 18px heading; scale the mark with it. */
+.community-profile-panel-name-row .premium-member-badge svg {
+  width: 20px;
+  height: 20px;
+}
+
 .premium-member-badge-label {
   position: absolute;
   width: 1px;
