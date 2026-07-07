@@ -11945,6 +11945,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   overflow-wrap: anywhere;
 }
 
+.community-dm-panel-message-text {
+  white-space: pre-wrap;
+}
+
 .community-dm-panel-message-text + .chat-media-grid,
 .community-dm-panel-message-text + .attachments-preview,
 .community-dm-panel-message-text + .community-dm-attachments-preview {
