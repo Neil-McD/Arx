@@ -920,6 +920,7 @@ export function CommunityInteractionFeedList(
                         >
                           <span className="community-interaction-author">{label}</span>
                         </ProfileHoverCard>
+                        <PremiumMemberBadge badge={profile?.premium_badge ?? null} />
                         {badge ? <span className="community-interaction-badge">{badge}</span> : null}
                         {chip ? <span className="community-interaction-kind">{chip}</span> : null}
                         <span>{props.formatChatTime(first.root.created_at)}</span>

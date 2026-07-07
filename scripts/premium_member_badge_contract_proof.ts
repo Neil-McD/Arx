@@ -23,6 +23,7 @@ const profilePanel = read("apps/web/src/components/WebCommunityProfilePanel.tsx"
 const memberSettings = read("apps/web/src/components/CommunityMemberSettingsDialog.tsx");
 const mentionAutocomplete = read("apps/web/src/components/communityMentionAutocomplete.tsx");
 const interactionFeed = read("apps/web/src/components/communityInteractionFeed.tsx");
+const interactionProjection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const dmInboxPanel = read("apps/web/src/components/WebDirectMessageInboxPanel.tsx");
 const dmPanel = read("apps/web/src/components/WebDirectMessagePanel.tsx");
 const baseCss = read("apps/web/src/base.css");
@@ -126,9 +127,19 @@ for (const [label, source, pattern] of [
     /PremiumMemberBadge[\s\S]*<PremiumMemberBadge badge=\{props\.profile\?\.premium_badge \?\? null\}/,
   ],
   [
-    "direct message inbox and recipient rows",
+    "interaction feed inline author",
+    interactionFeed,
+    /community-interaction-author[\s\S]*<\/ProfileHoverCard>\s*<PremiumMemberBadge badge=\{profile\?\.premium_badge \?\? null\}/,
+  ],
+  [
+    "interaction thread anchor and reply authors",
+    interactionProjection,
+    /<PremiumMemberBadge[\s\S]*premium_badge \?\? null[\s\S]*<PremiumMemberBadge badge=\{profile\?\.premium_badge \?\? null\}/,
+  ],
+  [
+    "direct message inbox conversation and people rows",
     dmInboxPanel,
-    /PremiumMemberBadge[\s\S]*<PremiumMemberBadge badge=\{recipient\.premium_badge \?\? null\}[\s\S]*<PremiumMemberBadge badge=\{peer\?\.premium_badge \?\? null\}/,
+    /PremiumMemberBadge[\s\S]*<PremiumMemberBadge badge=\{peer\?\.premium_badge \?\? null\}[\s\S]*<PremiumMemberBadge badge=\{person\.premium_badge \?\? null\}/,
   ],
   [
     "direct message conversation header",

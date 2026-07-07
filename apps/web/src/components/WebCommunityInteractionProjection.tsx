@@ -17,6 +17,7 @@ import type {
   CommunityInteractionReplyBundle,
   CommunityInteractionRootBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
+import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import {
@@ -504,6 +505,13 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                     >
                       <span className="community-interaction-author">{selectedRootLabel}</span>
                     </ProfileHoverCard>
+                    <PremiumMemberBadge
+                      badge={
+                        selectedRoot.root.actor_user_id
+                          ? props.profilesByUserId[selectedRoot.root.actor_user_id]?.premium_badge ?? null
+                          : null
+                      }
+                    />
                     {selectedRootBadge ? (
                       <span className="community-interaction-badge">{selectedRootBadge}</span>
                     ) : null}
@@ -637,6 +645,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                           >
                             <span className="community-interaction-author">{label}</span>
                           </ProfileHoverCard>
+                          <PremiumMemberBadge badge={profile?.premium_badge ?? null} />
                           {badge ? <span className="community-interaction-badge">{badge}</span> : null}
                           <span>{props.formatChatTime(reply.created_at)}</span>
                         </div>

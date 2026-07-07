@@ -530,7 +530,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                           onClick={() => void setDevAccountTier("architect")}
                           disabled={isSettingDevAccountTier || tier === "architect"}
                         >
-                          Architect
+                          Premium
                         </button>
                       </div>
                     </div>
