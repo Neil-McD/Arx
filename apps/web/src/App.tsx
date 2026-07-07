@@ -11888,6 +11888,7 @@ export default function App() {
         showAppToastMessage={showAppToastMessage}
         onUnreadCountChange={setDirectMessagesUnreadCount}
         onIncomingDirectMessage={directMessageWebNotifications.notifyIncoming}
+        onDirectMessageSent={directMessageWebNotifications.requestPermissionIfNeeded}
         notificationsState={directMessageWebNotifications.notificationsState}
         onToggleNotifications={directMessageWebNotifications.toggleNotifications}
         onClose={handleCloseDirectMessages}

@@ -104,6 +104,7 @@ type WebDirectMessagesHostProps<SessionT> = {
   showAppToastMessage?: (message: string) => void;
   onUnreadCountChange?: (count: number) => void;
   onIncomingDirectMessage?: (event: IncomingDirectMessageEvent) => void;
+  onDirectMessageSent?: () => void;
   notificationsState?: DirectMessageNotificationsUiState;
   onToggleNotifications?: () => void;
   onClose: () => void;
@@ -474,6 +475,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     showAppToastMessage,
     onUnreadCountChange,
     onIncomingDirectMessage,
+    onDirectMessageSent,
     notificationsState,
     onToggleNotifications,
     onClose,
@@ -1753,6 +1755,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     );
     delete draftsByConversationRef.current[conversationId];
     updateConversationEchoes(conversationId, (echoes) => [...echoes, echo]);
+    // Still inside the send click/keypress, so a first-send notification
+    // permission prompt keeps its user gesture.
+    onDirectMessageSent?.();
     typingInputHadTextRef.current = false;
     void clearDirectTypingForConversation(conversationId);
     window.setTimeout(() => {
@@ -1774,6 +1779,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     deliverVirtualDirectMessageEcho,
     directMessagePanel,
     focusDirectMessageInput,
+    onDirectMessageSent,
     session,
     sessionUserId,
     updateConversationEchoes,

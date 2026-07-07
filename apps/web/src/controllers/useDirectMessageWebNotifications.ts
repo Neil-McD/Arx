@@ -18,6 +18,7 @@ type UseDirectMessageWebNotificationsResult = {
   notificationsState: DirectMessageNotificationsUiState;
   notifyIncoming: (event: IncomingDirectMessageEvent) => void;
   toggleNotifications: () => void;
+  requestPermissionIfNeeded: () => void;
 };
 
 function readStoredMasterEnabled(): boolean {
@@ -220,7 +221,27 @@ export function useDirectMessageWebNotifications(
     [playIncomingSound],
   );
 
+  const requestPermissionIfNeeded = useCallback(() => {
+    if (!isEnabledRef.current || !isMasterEnabledRef.current) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "default") return;
+    void Notification.requestPermission()
+      .then((result) => setPermission(result))
+      .catch(() => {});
+  }, []);
+
   const toggleNotifications = useCallback(() => {
+    // Enabled but never asked: a bell click grants banners instead of
+    // toggling sound off.
+    if (
+      isMasterEnabledRef.current &&
+      typeof Notification !== "undefined" &&
+      Notification.permission === "default"
+    ) {
+      void Notification.requestPermission()
+        .then((result) => setPermission(result))
+        .catch(() => {});
+      return;
+    }
     const next = !isMasterEnabledRef.current;
     try {
       window.localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, next ? "on" : "off");
@@ -247,5 +268,6 @@ export function useDirectMessageWebNotifications(
     notificationsState,
     notifyIncoming,
     toggleNotifications,
+    requestPermissionIfNeeded,
   };
 }

@@ -1,4 +1,4 @@
-import { Bell, BellOff, MessageCircle, Search, UsersRound } from "lucide-react";
+import { Bell, BellOff, MessageCircle, MessageCirclePlus, Search, UsersRound } from "lucide-react";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
 import type {
@@ -290,7 +290,7 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
                     </span>
                     <span className="community-dm-inbox-row-meta">{presenceLabel}</span>
                   </span>
-                  <MessageCircle className="community-dm-inbox-row-go" aria-hidden="true" />
+                  <MessageCirclePlus className="community-dm-inbox-row-go" aria-hidden="true" />
                 </button>
               );
             })
