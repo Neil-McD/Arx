@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
-import { Bot, Check, CircleUserRound, PlugZap, X } from "lucide-react";
+import { Check, CircleUserRound, PlugZap, X } from "lucide-react";
 import {
   formatAccountSetupMissingGuidance,
-  getFirstIncompleteAccountSetupStep,
   type AccountSetupStatus,
   type AccountSetupStep,
 } from "../../../../shared/accountSetup";
@@ -16,7 +15,6 @@ import {
   type LegalDocumentEntry,
 } from "../docs/legalDocumentsContent";
 import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
-import { WebAgentPersonalityPicker } from "./WebAgentPersonalityPicker";
 import { WebSocialProfileLinksFields } from "./WebSocialProfileLinksFields";
 
 type OnboardingStep = Exclude<AccountSetupStep, "complete">;
@@ -71,10 +69,6 @@ type WebOnboardingPageProps = {
   openAiConnectionError: string | null;
   openAiConnectionSuccess: string | null;
   onConnectOpenAi: () => Promise<void> | void;
-  agentName: string;
-  agentSoul: string;
-  isSavingAgent: boolean;
-  onSaveAgent: (next: { agentName: string; agentSoul: string }) => Promise<AccountSetupStatus | false | null> | AccountSetupStatus | false | null;
   onFinishOnboarding: () => Promise<void> | void;
   onClose?: () => void;
 };
@@ -87,24 +81,19 @@ export type PlatformLegalAcceptanceDraft = {
 const STEP_LABELS: Record<OnboardingStep, string> = {
   identity: "Profile",
   inference: "Inference",
-  agent: "Agent",
 };
 
 function normalizeStep(step: AccountSetupStep | null | undefined): OnboardingStep {
-  if (step === "inference" || step === "agent") return step;
+  if (step === "inference") return step;
   return "identity";
 }
 
 function stepIndex(step: OnboardingStep): number {
-  return ["identity", "inference", "agent"].indexOf(step);
+  return ["identity", "inference"].indexOf(step);
 }
 
 function stepIsComplete(status: AccountSetupStatus | null, step: OnboardingStep): boolean {
   return Boolean(status?.steps.find((item) => item.step === step)?.completed);
-}
-
-function normalizeAgentSoulDraft(agentSoul: string): string {
-  return agentSoul.trim();
 }
 
 function StepIcon(props: { step: OnboardingStep }) {
@@ -113,8 +102,6 @@ function StepIcon(props: { step: OnboardingStep }) {
       return <CircleUserRound size={15} strokeWidth={2} aria-hidden="true" />;
     case "inference":
       return <PlugZap size={15} strokeWidth={2} aria-hidden="true" />;
-    case "agent":
-      return <Bot size={15} strokeWidth={2} aria-hidden="true" />;
   }
 }
 
@@ -166,8 +153,6 @@ function formatProviderStatus(
 
 export function WebOnboardingPage(props: WebOnboardingPageProps) {
   const [step, setStep] = useState<OnboardingStep>(() => normalizeStep(props.accountSetupStatus?.current_step));
-  const [agentNameDraft, setAgentNameDraft] = useState(props.agentName);
-  const [agentSoulDraft, setAgentSoulDraft] = useState(() => normalizeAgentSoulDraft(props.agentSoul));
   const [hasConfirmedPlatformLegal, setHasConfirmedPlatformLegal] = useState(false);
   const [activeLegalDocument, setActiveLegalDocument] = useState<LegalDocumentEntry | null>(null);
   const [setupGuidance, setSetupGuidance] = useState<string | null>(null);
@@ -175,20 +160,6 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     props.openAiConnected ? "openai" : props.chatgptConnected ? "chatgpt" : null,
   );
   const isModal = props.variant === "modal";
-
-  useEffect(() => {
-    setAgentNameDraft(props.agentName);
-  }, [props.agentName]);
-
-  useEffect(() => {
-    setAgentSoulDraft(normalizeAgentSoulDraft(props.agentSoul));
-  }, [props.agentSoul]);
-
-  useEffect(() => {
-    const currentStep = props.accountSetupStatus?.current_step;
-    if (currentStep === "complete") return;
-    if (step === "inference" && currentStep === "agent") setStep("agent");
-  }, [props.accountSetupStatus?.current_step, step]);
 
   useEffect(() => {
     if (props.openAiConnected) setProviderChoice("openai");
@@ -218,7 +189,6 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     Boolean(props.avatarUrl?.trim()) &&
     handleReady &&
     platformLegalReady;
-  const agentReady = agentNameDraft.trim().length > 0 && agentSoulDraft.trim().length > 0;
   const handleAvailability = formatHandleAvailability(
     props.handle,
     props.handleAvailability,
@@ -238,7 +208,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     props.isSavingOpenAiConnection,
   );
   const stepOrder = useMemo<OnboardingStep[]>(
-    () => ["identity", "inference", "agent"],
+    () => ["identity", "inference"],
     [],
   );
   const setupRequirementMessage =
@@ -263,34 +233,16 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
       if (ok) setStep("inference");
       return;
     }
-    if (step === "agent") {
-      const setupAfterSave = await props.onSaveAgent({
-        agentName: agentNameDraft,
-        agentSoul: agentSoulDraft,
-      });
-      if (setupAfterSave === false) return;
-      const setupStatus = setupAfterSave ?? props.accountSetupStatus;
-      const firstIncompleteStep = getFirstIncompleteAccountSetupStep(setupStatus);
-      if (setupStatus && firstIncompleteStep) {
-        setSetupGuidance(formatAccountSetupMissingGuidance(setupStatus));
-        setStep(firstIncompleteStep);
-        return;
-      }
-      await props.onFinishOnboarding();
-      return;
-    }
     if (step === "inference") {
       if (!hasInferenceProvider) return;
-      setStep("agent");
+      await props.onFinishOnboarding();
     }
   };
 
   const nextDisabled =
     props.isSaving ||
-    props.isSavingAgent ||
     (step === "identity" && !profileReady) ||
-    (step === "inference" && !hasInferenceProvider) ||
-    (step === "agent" && !agentReady);
+    (step === "inference" && !hasInferenceProvider);
 
   const handleClose = () => {
     props.onClose?.();
@@ -568,29 +520,6 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
             </div>
           ) : null}
 
-          {step === "agent" ? (
-            <div className="polynet-onboarding-agent">
-              <div className="polynet-onboarding-step-intro">
-                <strong>Give your agent a name and a personality.</strong>
-                <p>Pick the starting energy. You can tune it later.</p>
-              </div>
-              <label>
-                Agent name
-                <input
-                  value={agentNameDraft}
-                  onChange={(event) => setAgentNameDraft(event.target.value)}
-                  placeholder="Polynet Agent"
-                />
-              </label>
-              <WebAgentPersonalityPicker
-                value={agentSoulDraft}
-                onChange={setAgentSoulDraft}
-                disabled={props.isSavingAgent}
-                variant="onboarding"
-              />
-            </div>
-          ) : null}
-
           {displayedStatusMessage ? (
             <p
               className={
@@ -609,7 +538,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 <button
                   type="button"
                   className="polynet-onboarding-back"
-                  disabled={props.isSaving || props.isSavingAgent}
+                  disabled={props.isSaving}
                   onClick={() => setStep(stepOrder[Math.max(0, stepIndex(step) - 1)])}
                 >
                   Back
@@ -621,7 +550,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 disabled={nextDisabled}
                 onClick={() => void goNext()}
               >
-                {props.isSaving || props.isSavingAgent ? "Saving..." : step === "agent" ? "Finish" : "Next"}
+                {props.isSaving ? "Saving..." : step === "inference" ? "Finish" : "Next"}
               </button>
             </div>
           </div>

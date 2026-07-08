@@ -10,7 +10,6 @@ const accountSetupStep = v.optional(
   v.union(
     v.literal("identity"),
     v.literal("inference"),
-    v.literal("agent"),
     v.literal("complete"),
   ),
 );

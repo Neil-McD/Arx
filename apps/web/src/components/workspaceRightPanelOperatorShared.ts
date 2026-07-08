@@ -75,8 +75,6 @@ export function formatAccountSetupStep(value: OperatorAccountSetupUserRecord["se
       return "Profile";
     case "inference":
       return "Inference";
-    case "agent":
-      return "Agent";
     case "complete":
       return "Complete";
     default:
@@ -96,8 +94,6 @@ export function formatAccountSetupMissing(value: OperatorAccountSetupUserRecord[
       return "Platform legal";
     case "inference_provider":
       return "Inference";
-    case "agent_name":
-      return "Agent name";
     default:
       return value;
   }

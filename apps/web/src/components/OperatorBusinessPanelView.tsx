@@ -26,14 +26,13 @@ import {
   type PartnerPayoutCycleActions,
 } from "./workspaceRightPanelOperatorShared";
 
-const OPERATOR_ACCOUNT_SETUP_STEP_ORDER = ["identity", "inference", "agent", "complete"] as const;
+const OPERATOR_ACCOUNT_SETUP_STEP_ORDER = ["identity", "inference", "complete"] as const;
 const OPERATOR_ACCOUNT_SETUP_MISSING_ORDER = [
   "display_name",
   "handle",
   "avatar",
   "platform_legal",
   "inference_provider",
-  "agent_name",
 ] as const;
 
 function formatPartnerHandle(handle: string | null): string | null {

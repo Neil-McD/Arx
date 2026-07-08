@@ -4075,25 +4075,6 @@ export default function App() {
     }
   }
 
-  async function saveOnboardingAgent(next: { agentName: string; agentSoul: string }): Promise<AccountSetupStatus | false | null> {
-    const activeSession = await ensureUsableAuthSession();
-    if (!activeSession) {
-      requireSignIn({ reason: "try_polynet_free", payload: {} });
-      return false;
-    }
-    const agentName = next.agentName.trim();
-    if (!agentName) {
-      setOnboardingError("Give your agent a name to continue.");
-      return false;
-    }
-    setOnboardingError(null);
-    return await saveUserMemorySettingsAndRefreshSetup({
-      ...userMemorySettings,
-      agent_name: agentName,
-      agent_soul: next.agentSoul,
-    });
-  }
-
   async function deleteOwnAccountFromSettings(): Promise<void> {
     const activeSession = await ensureUsableAuthSession();
     if (!activeSession) {
@@ -11724,10 +11705,6 @@ export default function App() {
       openAiConnectionError: providerConnectionUi.openAiConnectionError,
       openAiConnectionSuccess: providerConnectionUi.openAiConnectionSuccess,
       onConnectOpenAi: providerConnectionUi.handleConnectOpenAi,
-      agentName: userMemorySettings.agent_name,
-      agentSoul: userMemorySettings.agent_soul,
-      isSavingAgent: isLoadingUserMemorySettings,
-      onSaveAgent: saveOnboardingAgent,
       onFinishOnboarding: finishOnboarding,
       onClose: () => setIsOnboardingModalOpen(false),
     },

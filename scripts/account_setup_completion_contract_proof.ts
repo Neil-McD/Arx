@@ -38,16 +38,16 @@ assert.match(profileHandle, /\^\[a-z0-9\]/, "profile handles must use a constrai
 for (const marker of [
   '"identity"',
   '"inference"',
-  '"agent"',
   '"display_name"',
   '"handle"',
   '"avatar"',
   '"platform_legal"',
   '"inference_provider"',
-  '"agent_name"',
 ]) {
   assert.ok(accountSetup.includes(marker), `account setup model missing ${marker}`);
 }
+assert.doesNotMatch(accountSetup, /"agent"/, "account setup must not include an agent step");
+assert.doesNotMatch(accountSetup, /"agent_name"/, "agent naming must not gate account setup completion");
 assert.match(accountSetup, /export function buildAccountSetupStatus/, "setup completion must be derived by one helper");
 assert.match(accountSetup, /export function getFirstIncompleteAccountSetupStep/, "setup model must expose the first incomplete step");
 assert.match(accountSetup, /export function formatAccountSetupMissingGuidance/, "setup model must expose precise missing-setup guidance");
@@ -57,7 +57,7 @@ assert.match(accountSetup, /validateProfileHandle\(input\.handle\)\.ok/, "profil
 assert.match(accountSetup, /missing\.push\("handle"\)/, "profile setup must require handle");
 assert.match(accountSetup, /missing\.push\("platform_legal"\)/, "profile setup must require platform legal acceptance");
 assert.doesNotMatch(accountSetup, /identityMissing\.push\("bio"\)/, "profile setup must not require bio");
-assert.doesNotMatch(accountSetup, /agentMissing\.push\("agent_soul"\)/, "agent setup must not require soul text");
+assert.doesNotMatch(accountSetup, /agentMissing/, "agent setup must not gate account setup completion");
 assert.doesNotMatch(accountSetup, /directionMissing/, "path selection must not gate account setup completion");
 
 assert.match(profiles, /validateProfileHandle/, "profile mutations must validate handles");
@@ -84,7 +84,7 @@ assert.doesNotMatch(accountSetupCore, /avatarUrl: params\.user\.avatarUrl/, "aut
 assert.doesNotMatch(convexAuthenticatedClient, /resolveAuthSessionDisplayName|resolveAuthSessionAvatarUrl/, "Convex bootstrap must not send provider profile metadata");
 assert.doesNotMatch(authBootstrap, /args\.identity\.displayName|args\.identity\.avatarUrl/, "auth bootstrap must not seed provider profile metadata");
 assert.match(accountSetupCore, /query\("userProviderConnections"\)/, "inference completion must derive from provider connections");
-assert.match(accountSetupCore, /query\("userMemorySettings"\)/, "agent completion must derive from user memory settings");
+assert.doesNotMatch(accountSetupCore, /userMemorySettings/, "agent naming must not participate in account setup derivation");
 assert.match(profiles, /account_setup: await loadAccountSetupStatusForUser/, "onboarding profile responses must include setup status");
 assert.match(profiles, /recordCurrentPlatformLegalAcceptance/, "profile onboarding must record platform legal acceptance server-side");
 assert.match(profiles, /platform_legal_versions_required/, "profile onboarding must require both legal document versions together");
@@ -124,14 +124,12 @@ assert.match(onboardingPage, /onConnectOpenAi/, "onboarding inference step must 
 assert.match(onboardingPage, /Use your Plus or Pro plan limits/, "onboarding inference choice should clearly name ChatGPT plan limits");
 assert.match(onboardingPage, /Recommended/, "onboarding inference choice should mark ChatGPT as recommended");
 assert.match(onboardingPage, /Use a key from your OpenAI account/, "onboarding inference choice should clearly name the API key path");
-assert.match(onboardingPage, /onSaveAgent/, "onboarding agent step must persist canonical agent settings");
-assert.match(onboardingPage, /onFinishOnboarding/, "onboarding agent step must finish setup directly");
+assert.match(onboardingPage, /onFinishOnboarding/, "onboarding inference step must finish setup directly");
 assert.doesNotMatch(onboardingPage, /Direction|onBuildCommunity|onDiscoverCommunity|polynet-onboarding-direction/, "onboarding must not expose a direction step");
-assert.doesNotMatch(onboardingPage, /DEFAULT_AGENT_PERSONALITY_PROMPT_TEXT/, "onboarding must not default-select a personality preset");
-assert.match(onboardingPage, /agentNameDraft\.trim\(\)\.length > 0 && agentSoulDraft\.trim\(\)\.length > 0/, "onboarding agent finish must require an explicit personality selection");
-assert.match(onboardingPage, /getFirstIncompleteAccountSetupStep/, "onboarding finish should route users to the exact missing setup step");
-assert.match(onboardingPage, /const setupAfterSave = await props\.onSaveAgent/, "onboarding finish must use the refreshed setup status returned by agent save");
-assert.match(onboardingPage, /formatAccountSetupMissingGuidance\(setupStatus\)/, "onboarding finish must not format guidance from stale pre-save status");
+assert.doesNotMatch(onboardingPage, /onSaveAgent|agentNameDraft|agentSoulDraft|polynet-onboarding-agent/, "onboarding must not expose an agent step — naming lives in Settings");
+assert.doesNotMatch(onboardingPage, /WebAgentPersonalityPicker/, "onboarding must not render the personality picker");
+assert.match(onboardingPage, /if \(step === "inference"\) \{\s*if \(!hasInferenceProvider\) return;\s*await props\.onFinishOnboarding\(\);/, "inference must be the final step and finish onboarding directly");
+assert.match(onboardingPage, /formatAccountSetupMissingGuidance\(props\.accountSetupStatus\)/, "onboarding must format guidance from the canonical setup status");
 assert.match(onboardingPage, /polynet-onboarding-guidance/, "onboarding setup blockers should render as guidance, not red server errors");
 assert.match(app, /async function finishOnboarding/, "app shell must finish account onboarding without a direction choice");
 assert.match(app, /completeOnboarding: true/, "finish flow must mark onboarding complete explicitly");

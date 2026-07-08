@@ -1,16 +1,15 @@
 import { validateProfileHandle } from "./profileHandle.ts";
 
-export type AccountSetupStep = "identity" | "inference" | "agent" | "complete";
+export type AccountSetupStep = "identity" | "inference" | "complete";
 
 export type AccountSetupMissing =
   | "display_name"
   | "handle"
   | "avatar"
   | "platform_legal"
-  | "inference_provider"
-  | "agent_name";
+  | "inference_provider";
 
-export const ACCOUNT_SETUP_STEPS: AccountSetupStep[] = ["identity", "inference", "agent", "complete"];
+export const ACCOUNT_SETUP_STEPS: AccountSetupStep[] = ["identity", "inference", "complete"];
 
 export const ACCOUNT_SETUP_MISSING_FIELDS: AccountSetupMissing[] = [
   "display_name",
@@ -18,7 +17,6 @@ export const ACCOUNT_SETUP_MISSING_FIELDS: AccountSetupMissing[] = [
   "avatar",
   "platform_legal",
   "inference_provider",
-  "agent_name",
 ];
 
 export type AccountSetupStepStatus = {
@@ -47,8 +45,6 @@ export type AccountSetupStatusInput = {
   hasAcceptedPlatformLegal?: boolean | null;
   bio?: string | null;
   hasInferenceProvider?: boolean | null;
-  agentName?: string | null;
-  agentSoul?: string | null;
 };
 
 function hasText(value: unknown): boolean {
@@ -104,13 +100,9 @@ export function buildAccountSetupStatus(input: AccountSetupStatusInput): Account
     ? []
     : ["inference_provider"];
 
-  const agentMissing: AccountSetupMissing[] = [];
-  if (!hasText(input.agentName)) agentMissing.push("agent_name");
-
   const steps = [
     buildStepStatus("identity", identityMissing, 4),
     buildStepStatus("inference", inferenceMissing, 1),
-    buildStepStatus("agent", agentMissing, 1),
   ];
   const missing = steps.flatMap((step) => step.missing);
   const totalItems = steps.reduce((sum, step) => sum + step.total_items, 0);
@@ -147,16 +139,11 @@ export function formatAccountSetupMissingGuidance(status: AccountSetupStatus | n
 
   const incompleteSteps = status.steps
     .filter((step) => !step.completed)
-    .map((step) => {
-      if (step.step === "identity") return "profile";
-      if (step.step === "inference") return "inference";
-      return "agent";
-    });
+    .map((step) => (step.step === "identity" ? "profile" : "inference"));
 
   if (incompleteSteps.length === 1) {
     const step = incompleteSteps[0];
     if (step === "profile") return "Finish your profile to continue.";
-    if (step === "agent") return "Give your agent a name to finish account setup.";
     return "Connect an inference provider to finish account setup.";
   }
 

@@ -33,12 +33,21 @@ for (const table of [
   "users",
   "userProfileDetails",
   "userProviderConnections",
-  "userMemorySettings",
   "communities",
   "communityMemberships",
 ]) {
   assert.match(operatorIntelligence, new RegExp(`"${table}"`), `operator setup visibility must source ${table}`);
 }
+assert.doesNotMatch(
+  operatorIntelligence,
+  /v\.literal\("agent"\)/,
+  "operator setup snapshots must not include the deleted agent step",
+);
+assert.doesNotMatch(
+  operatorDashboard,
+  /v\.literal\("agent"\)/,
+  "operator setup filters must not include the deleted agent step",
+);
 
 assert.match(
   operatorDashboard,
@@ -102,8 +111,6 @@ const existingWithoutProfileDetail = buildAccountSetupStatus({
   avatarUrl: "https://example.com/avatar.png",
   hasAcceptedPlatformLegal: true,
   hasInferenceProvider: true,
-  agentName: "Poly",
-  agentSoul: "Helpful.",
 });
 assert.equal(existingWithoutProfileDetail.current_step, "complete");
 assert.equal(existingWithoutProfileDetail.completed, true);
@@ -115,8 +122,6 @@ const missingProvider = buildAccountSetupStatus({
   bio: "Creator.",
   hasAcceptedPlatformLegal: true,
   hasInferenceProvider: false,
-  agentName: "Poly",
-  agentSoul: "Helpful.",
 });
 assert.equal(missingProvider.current_step, "inference");
 assert.deepEqual(missingProvider.missing, ["inference_provider"]);
@@ -127,7 +132,6 @@ const complete = buildAccountSetupStatus({
   avatarUrl: "https://example.com/avatar.png",
   hasAcceptedPlatformLegal: true,
   hasInferenceProvider: true,
-  agentName: "Poly",
 });
 assert.equal(complete.current_step, "complete");
 assert.equal(complete.completed, true);
@@ -138,7 +142,6 @@ const missingLegal = buildAccountSetupStatus({
   handle: "legal-missing",
   avatarUrl: "https://example.com/avatar.png",
   hasInferenceProvider: true,
-  agentName: "Poly",
 });
 assert.equal(missingLegal.current_step, "identity");
 assert.deepEqual(missingLegal.missing, ["platform_legal"]);

@@ -24,7 +24,6 @@ function formatSetupCardDescription(status: AccountSetupStatus): string {
     return "Finish your profile.";
   }
   if (status.current_step === "inference") return "Connect ChatGPT or add an OpenAI API key.";
-  if (status.current_step === "agent") return "Name your agent.";
   return "Finish account setup.";
 }
 

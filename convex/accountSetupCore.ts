@@ -42,12 +42,6 @@ export type AccountSetupProviderConnectionRow = {
   provider?: string;
 };
 
-export type AccountSetupMemorySettingsRow = {
-  userId: any;
-  agentName?: string;
-  agentSoul?: string;
-};
-
 export type AccountSetupLegalAcceptanceRow = {
   userId?: any;
   documentKey?: string;
@@ -58,7 +52,6 @@ export function buildAccountSetupStatusForRows(params: {
   user: AccountSetupUserRow;
   detail: AccountSetupProfileDetailRow | null;
   providerConnections: AccountSetupProviderConnectionRow[];
-  memorySettings: AccountSetupMemorySettingsRow | null;
   legalAcceptances?: AccountSetupLegalAcceptanceRow[];
 }): AccountSetupStatus {
   const hasInferenceProvider = params.providerConnections.some(
@@ -73,8 +66,6 @@ export function buildAccountSetupStatusForRows(params: {
     hasAcceptedPlatformLegal: hasAcceptedCurrentPlatformLegalFromRows(params.legalAcceptances ?? []),
     bio: params.detail?.bio ?? null,
     hasInferenceProvider,
-    agentName: params.memorySettings?.agentName ?? null,
-    agentSoul: params.memorySettings?.agentSoul ?? null,
   });
 }
 
@@ -132,16 +123,14 @@ export async function loadAccountSetupStatusForUser(
   user: AccountSetupUserRow,
   detail: AccountSetupProfileDetailRow | null,
 ): Promise<AccountSetupStatus> {
-  const [providerConnections, memorySettings, legalAcceptances] = await Promise.all([
+  const [providerConnections, legalAcceptances] = await Promise.all([
     ctx.db.query("userProviderConnections").withIndex("by_user", (q: any) => q.eq("userId", user._id)).collect(),
-    ctx.db.query("userMemorySettings").withIndex("by_user", (q: any) => q.eq("userId", user._id)).first(),
     listPlatformLegalAcceptancesForUser(ctx, user._id),
   ]);
   return buildAccountSetupStatusForRows({
     user,
     detail,
     providerConnections,
-    memorySettings,
     legalAcceptances,
   });
 }
