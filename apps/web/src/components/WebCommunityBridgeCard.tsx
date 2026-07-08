@@ -15,6 +15,9 @@ import {
 } from "../docs/legalDocumentsContent";
 import type { PlatformLegalAcceptanceDraft } from "./WebOnboardingPage";
 import { WebPlatformLegalReaderModal } from "./WebPlatformLegalReaderModal";
+/* The card's styles live in the visitor chrome sheet; own the import so the
+   card renders styled wherever it mounts (funnel gate OR standalone page). */
+import "./CommunityVisitorChrome.css";
 
 import {
   formatProfileHandleAvailabilityHint,

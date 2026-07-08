@@ -7,6 +7,7 @@ import { WebPublicCommunityFunnel } from "./WebPublicCommunityFunnel";
 import { WebWorkspaceSurfaceHost } from "./WebWorkspaceSurfaceHost";
 import { WebLandingPage } from "./WebLandingPage";
 import { WebOnboardingPage } from "./WebOnboardingPage";
+import { WebPlatformBridgePage } from "./WebPlatformBridgePage";
 
 export type WebAppMainSurfaceHostProps = {
   activePage: AppPage;
@@ -17,6 +18,7 @@ export type WebAppMainSurfaceHostProps = {
   holdLandingForAuth: boolean;
   landingPageProps: ComponentProps<typeof WebLandingPage>;
   onboardingPageProps: ComponentProps<typeof WebOnboardingPage>;
+  platformBridgePageProps: ComponentProps<typeof WebPlatformBridgePage>;
   showOnboardingModal: boolean;
   workspaceSurfaceHostProps: ComponentProps<typeof WebWorkspaceSurfaceHost>;
   publicCommunityFunnelProps: ComponentProps<typeof WebPublicCommunityFunnel>;
@@ -42,7 +44,9 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
         <div className="community-body">
           <WebPublicCommunityFunnel {...props.publicCommunityFunnelProps} />
         </div>
-      ) : props.activePage === "workspace" || props.activePage === "onboarding" ? (
+      ) : props.activePage === "onboarding" ? (
+        <WebPlatformBridgePage {...props.platformBridgePageProps} />
+      ) : props.activePage === "workspace" ? (
         <WebWorkspaceSurfaceHost {...props.workspaceSurfaceHostProps} />
       ) : props.showCommunitySurface ? (
         <WebCommunityHost {...props.communityHostProps} />

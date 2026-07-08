@@ -3528,6 +3528,38 @@ body {
     transform: translateY(-148px);
   }
 }
+/* Standalone platform bridge: generic joiners' front door — clean page,
+   platform mark, the bridge card, nothing else. */
+.polynet-platform-bridge-page {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 56px 20px 80px;
+  color: var(--text-primary);
+  background: var(--bg-app);
+}
+
+.polynet-platform-bridge-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.polynet-platform-bridge-mark img {
+  width: 28px;
+  height: 28px;
+}
+
+.polynet-platform-bridge-tagline {
+  margin: 8px 0 30px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 .polynet-onboarding-modal-backdrop {
   position: fixed;
   inset: 0;
