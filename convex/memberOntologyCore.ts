@@ -82,18 +82,21 @@ export async function insertMemberFacts(ctx: any, args: {
 }): Promise<string[]> {
   const marker = String(args.confirmMarker ?? "").trim();
   const insertedIds: string[] = [];
+  /* One collect for the whole batch; duplicates match in memory. */
+  const existingRows = (await ctx.db
+    .query("memberFacts")
+    .withIndex("by_user_community", (q: any) =>
+      q.eq("userId", args.userId).eq("communityId", args.communityId ?? undefined),
+    )
+    .collect()) as any[];
+  const supersededIds = new Set<string>();
   for (const draft of args.drafts) {
     const normalized = normalizeMemberFactDraft(draft);
     /* Same-kind same-body duplicates supersede the older row instead of
        accumulating — idempotent writes for replayed bridges/interviews. */
-    const existingRows = (await ctx.db
-      .query("memberFacts")
-      .withIndex("by_user_community", (q: any) =>
-        q.eq("userId", args.userId).eq("communityId", args.communityId ?? undefined),
-      )
-      .collect()) as any[];
     for (const existing of existingRows) {
       if (existing.kind !== normalized.kind || existing.body !== normalized.body) continue;
+      if (supersededIds.has(String(existing._id))) continue;
       if (
         canTransitionMemberFactConsent({
           from: existing.consentState,
@@ -101,6 +104,7 @@ export async function insertMemberFacts(ctx: any, args: {
           actorType: args.createdByActorType,
         })
       ) {
+        supersededIds.add(String(existing._id));
         await ctx.db.patch(existing._id, { consentState: "superseded", updatedAt: args.nowMs });
       }
     }

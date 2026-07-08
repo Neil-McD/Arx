@@ -2480,17 +2480,23 @@ export default function App() {
   const communityAttachmentsRef = useRef<MessageAttachment[]>([]);
   const [communityChatError, setCommunityChatError] = useState<string | null>(null);
   /* Setup-required errors are a doorway, not a dead end: whenever a community
-     surface strands on the profile/setup gate, open the setup surface too. */
+     surface strands on the profile/setup gate, open the setup surface too —
+     once per distinct message, so retries of the same failure don't reopen a
+     modal the member already dismissed. */
+  const lastSetupGateErrorRef = useRef<string | null>(null);
   useEffect(() => {
-    const needsSetup = [communityChatError, communityInteractionError].some((message) =>
-      Boolean(
-        message &&
-          (message.includes("profile_setup_required") ||
-            message.includes("account_setup_required") ||
-            message.includes("Finish your profile")),
-      ),
-    );
-    if (!needsSetup) return;
+    const setupGateMessage =
+      [communityChatError, communityInteractionError].find((message) =>
+        Boolean(
+          message &&
+            (message.includes("profile_setup_required") ||
+              message.includes("account_setup_required") ||
+              message.includes("Finish your profile")),
+        ),
+      ) ?? null;
+    if (!setupGateMessage) return;
+    if (lastSetupGateErrorRef.current === setupGateMessage) return;
+    lastSetupGateErrorRef.current = setupGateMessage;
     openProfileSetup();
   }, [communityChatError, communityInteractionError, openProfileSetup]);
   const [copiedCommunityMessageId, setCopiedCommunityMessageId] = useState<string | null>(null);
@@ -3949,12 +3955,8 @@ export default function App() {
       setOnboardingError("Add your display name, handle, and profile photo to continue.");
       return false;
     }
-    const currentSetup = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
-    if (currentSetup?.missing.includes("platform_legal") !== false) {
-      setOnboardingError("Agree to the Terms of Service and acknowledge the Privacy & AI Data Policy to continue.");
-      if (shouldNavigate) setIsOnboardingModalOpen(true);
-      return false;
-    }
+    /* Legal acceptance is judged by the server-loaded status below — never by
+       render-closure state, which is stale when a save just landed. */
 
     setIsSavingOnboarding(true);
     setOnboardingError(null);
@@ -4041,7 +4043,9 @@ export default function App() {
         );
       }
     }
-    handlePublicLandingPrimaryAction();
+    /* Approval applicants have nothing to run — the request is already in;
+       the gate's "Request pending" state takes over once the bridge clears. */
+    if (!approvalPending) handlePublicLandingPrimaryAction();
     return true;
   }
 
@@ -9250,6 +9254,13 @@ export default function App() {
       });
       return;
     }
+    /* A completed-but-unredeemed purchase must redeem, never re-checkout —
+       otherwise the paid-return window can charge twice. */
+    const unredeemedClaimToken = readPendingPurchaseClaimToken();
+    if (unredeemedClaimToken) {
+      void redeemPurchaseClaim(unredeemedClaimToken);
+      return;
+    }
     if (canJoinWithCheckout && selectedPublicCommunityPlan) {
       const communityFunnelPath = applyShellVariantToPublicPath(
         buildCommunityFunnelPath(publicCommunityUi.publicCommunity.slug) ?? `/c/${encodeURIComponent(publicCommunityUi.publicCommunity.slug)}`,
@@ -11871,10 +11882,12 @@ export default function App() {
               communityAvatarFocusY: resolvedPublicCommunity.avatar_focus_y ?? null,
               communityAvatarZoom: resolvedPublicCommunity.avatar_zoom ?? null,
               paidReceiptLabel:
-                checkoutStatus === "succeeded"
+                checkoutStatus === "succeeded" && !canEnterPublicCommunity
                   ? "Payment received — you're in as soon as this is done"
                   : null,
-              enterLabel: `Enter ${resolvedPublicCommunity.name}`,
+              enterLabel: approvalPending
+                ? "Finish setup"
+                : `Enter ${resolvedPublicCommunity.name}`,
               displayName: profileUi.profileName,
               handle: profileUi.profileHandle,
               avatarUrl: profileUi.profileAvatarUrl,
@@ -11896,8 +11909,6 @@ export default function App() {
               openAiConnectionError: providerConnectionUi.openAiConnectionError,
               openAiConnectionSuccess: providerConnectionUi.openAiConnectionSuccess,
               onConnectOpenAi: providerConnectionUi.handleConnectOpenAi,
-              platformLegalRequired:
-                effectiveAccountSetupStatus.missing.includes("platform_legal"),
               isSaving: isSavingOnboarding,
               error: onboardingError,
               onEnter: completeBridgeAndEnter,

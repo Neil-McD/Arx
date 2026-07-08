@@ -50,7 +50,6 @@ export type WebCommunityBridgeCardProps = {
   openAiConnectionError: string | null;
   openAiConnectionSuccess: string | null;
   onConnectOpenAi: () => Promise<void> | void;
-  platformLegalRequired: boolean;
   isSaving: boolean;
   error: string | null;
   onEnter: (legalAcceptance: PlatformLegalAcceptanceDraft | null) => Promise<boolean> | boolean;
@@ -92,14 +91,13 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
     props.handleAvailability,
     props.isCheckingHandleAvailability,
   );
-  const legalReady = !props.platformLegalRequired || hasConfirmedLegal;
 
   const missing: BridgeMissing[] = [];
   if (!props.avatarUrl?.trim()) missing.push("photo");
   if (!props.displayName.trim()) missing.push("name");
   if (!handleHint.ok) missing.push("handle");
   if (!hasInferenceProvider) missing.push("AI");
-  if (!legalReady) missing.push("terms");
+  if (!hasConfirmedLegal) missing.push("terms");
 
   const lit = (field: BridgeMissing) => attempted && missing.includes(field);
 
@@ -112,14 +110,13 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
       target?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-    await props.onEnter(
-      props.platformLegalRequired
-        ? {
-            termsOfServiceVersion: TERMS_OF_SERVICE_ENTRY.version,
-            privacyPolicyVersion: PRIVACY_AI_DATA_POLICY_ENTRY.version,
-          }
-        : null,
-    );
+    /* Always submit acceptance versions — the server records them
+       idempotently, and version skew fails loudly instead of stranding
+       the member behind a checkbox that isn't rendered. */
+    await props.onEnter({
+      termsOfServiceVersion: TERMS_OF_SERVICE_ENTRY.version,
+      privacyPolicyVersion: PRIVACY_AI_DATA_POLICY_ENTRY.version,
+    });
   };
 
   return (
@@ -277,26 +274,38 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
         {props.openAiConnectionSuccess ? <p className="cvs-bridge-success">{props.openAiConnectionSuccess}</p> : null}
       </div>
 
-      {props.platformLegalRequired ? (
-        <label className={`cvs-bridge-legal${lit("terms") ? " cvs-bridge-miss-text" : ""}`} ref={legalRef}>
-          <input
-            type="checkbox"
-            checked={hasConfirmedLegal}
-            onChange={(event) => setHasConfirmedLegal(event.target.checked)}
-          />
-          <span>
-            I agree to the{" "}
-            <button type="button" onClick={() => setActiveLegalDocument(TERMS_OF_SERVICE_ENTRY)}>
-              Terms of Service
-            </button>{" "}
-            and acknowledge the{" "}
-            <button type="button" onClick={() => setActiveLegalDocument(PRIVACY_AI_DATA_POLICY_ENTRY)}>
-              Privacy &amp; AI Data Policy
-            </button>
-            .
-          </span>
-        </label>
-      ) : null}
+      <label className={`cvs-bridge-legal${lit("terms") ? " cvs-bridge-miss-text" : ""}`} ref={legalRef}>
+        <input
+          type="checkbox"
+          checked={hasConfirmedLegal}
+          onChange={(event) => setHasConfirmedLegal(event.target.checked)}
+        />
+        <span>
+          I agree to the{" "}
+          <button
+            type="button"
+            onClick={(event) => {
+              /* Reading the document must not toggle consent — stop the
+                 label's default activation from reaching the checkbox. */
+              event.preventDefault();
+              setActiveLegalDocument(TERMS_OF_SERVICE_ENTRY);
+            }}
+          >
+            Terms of Service
+          </button>{" "}
+          and acknowledge the{" "}
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              setActiveLegalDocument(PRIVACY_AI_DATA_POLICY_ENTRY);
+            }}
+          >
+            Privacy &amp; AI Data Policy
+          </button>
+          .
+        </span>
+      </label>
 
       {props.error ? <p className="cvs-bridge-error">{props.error}</p> : null}
 
