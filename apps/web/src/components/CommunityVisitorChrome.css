@@ -288,23 +288,38 @@
 
 .cvs-bridge-idgrid { display: flex; gap: 16px; }
 .cvs-bridge-avblock { flex: none; width: 86px; text-align: center; }
-.cvs-bridge-avbtn {
+/* Bridge affordance over the CANONICAL avatar (.polynet-onboarding-avatar
+   carries shape/overflow/img rules — same system as chat and the modal). */
+.cvs-bridge-avatar {
   width: 78px;
   height: 78px;
-  border-radius: 50%;
+  margin: 0 auto;
+  cursor: pointer;
+  color: var(--text-faint, #52525b);
   border: 1.5px dashed var(--border-strong, #35353b);
   background: var(--bg-card, rgba(23, 23, 26, 0.9));
-  color: var(--text-faint, #52525b);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  overflow: hidden;
-  padding: 0;
-  transition: border-color 0.15s;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
 }
-.cvs-bridge-avbtn:hover { border-color: var(--accent-gold, #d66a8a); }
-.cvs-bridge-avbtn.has-photo { border-style: solid; }
-.cvs-bridge-avcap { font-size: 10.5px; color: var(--text-faint, #52525b); margin-top: 7px; line-height: 1.4; }
+.cvs-bridge-avatar:hover {
+  border-color: var(--accent-gold, #d66a8a);
+  color: var(--text-muted, #71717a);
+}
+.cvs-bridge-avatar.has-image { border-style: solid; }
+.cvs-bridge-avcap {
+  display: inline-block;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10.5px;
+  color: var(--text-faint, #52525b);
+  margin-top: 7px;
+  line-height: 1.4;
+}
+.cvs-bridge-avcap:hover { color: var(--text-muted, #71717a); }
 .cvs-bridge-avcap.done { color: #43c37a; }
 
 .cvs-bridge-fields { flex: 1; display: flex; flex-direction: column; gap: 11px; min-width: 0; }

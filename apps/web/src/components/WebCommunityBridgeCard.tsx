@@ -41,6 +41,9 @@ export type WebCommunityBridgeCardProps = {
   displayName: string;
   handle: string;
   avatarUrl: string | null;
+  avatarFocusX: number;
+  avatarFocusY: number;
+  avatarZoom: number;
   handleAvailability: BridgeHandleAvailability | null;
   isCheckingHandleAvailability: boolean;
   onDisplayNameChange: (value: string) => void;
@@ -171,18 +174,21 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
         </div>
         <div className="cvs-bridge-idgrid">
           <div className="cvs-bridge-avblock">
-            <button
-              type="button"
-              className={`cvs-bridge-avbtn${props.avatarUrl ? " has-photo" : ""}${lit("photo") ? " cvs-bridge-miss" : ""}`}
+            {/* The one canonical avatar system (UserAvatar/StableAvatar with
+               framing + ready/fallback states) — same as chat and the modal. */}
+            <UserAvatar
+              className={`polynet-onboarding-avatar cvs-bridge-avatar${lit("photo") ? " cvs-bridge-miss" : ""}`}
+              readyClassName="has-image"
+              name={props.displayName || props.handle || "Profile"}
+              imageUrl={props.avatarUrl}
+              focusX={props.avatarFocusX}
+              focusY={props.avatarFocusY}
+              zoom={props.avatarZoom}
+              alt="Profile avatar"
+              title={props.avatarUrl ? "Change photo" : "Add a profile photo"}
               onClick={() => avatarInputRef.current?.click()}
-              aria-label="Add a profile photo"
-            >
-              {props.avatarUrl ? (
-                <UserAvatar className="cfg-fill" imageUrl={props.avatarUrl} name={props.displayName || "You"} />
-              ) : (
-                <Camera size={22} strokeWidth={1.6} aria-hidden="true" />
-              )}
-            </button>
+              fallback={<Camera size={22} strokeWidth={1.6} aria-hidden="true" />}
+            />
             <input
               ref={avatarInputRef}
               type="file"
@@ -193,9 +199,13 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
                 event.target.value = "";
               }}
             />
-            <div className={`cvs-bridge-avcap${props.avatarUrl ? " done" : ""}`}>
-              {props.avatarUrl ? "Looks good" : "Add a photo (required)"}
-            </div>
+            <button
+              type="button"
+              className={`cvs-bridge-avcap${props.avatarUrl ? " done" : ""}`}
+              onClick={() => avatarInputRef.current?.click()}
+            >
+              {props.avatarUrl ? "Change photo" : "Add a photo (required)"}
+            </button>
           </div>
           <div className="cvs-bridge-fields">
             <label className="cvs-bridge-field">
