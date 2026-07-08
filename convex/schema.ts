@@ -904,6 +904,10 @@ export default defineSchema({
       ),
     ),
     onboardingCompletedAt: v.optional(v.number()),
+    /* Deterministic capture: IANA timezone from the member's browser
+       (Intl.DateTimeFormat), refreshed when it drifts. Never asked. */
+    timezone: v.optional(v.string()),
+    timezoneCapturedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),

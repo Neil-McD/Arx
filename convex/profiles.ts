@@ -141,12 +141,49 @@ async function mapProfileDetail(ctx: any, user: UserRow, detail: ProfileDetailRo
     ...(await mapProfileBase(ctx, user, detail)),
     bio: detail?.bio ?? null,
     social_links: normalizeSocialProfileLinks(detail?.socialLinks ?? {}),
+    timezone: (detail as any)?.timezone ?? null,
     onboarding_completed_at:
       typeof detail?.onboardingCompletedAt === "number"
         ? new Date(detail.onboardingCompletedAt).toISOString()
         : null,
   };
 }
+
+/* Deterministic timezone capture: the browser's IANA zone, recorded silently
+   and refreshed when it drifts. Never shown as a question to the member. */
+const IANA_TIMEZONE_PATTERN = /^[A-Za-z_+-]+(?:\/[A-Za-z0-9_+-]+){0,2}$/;
+
+export const recordMemberTimezone = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    timezone: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const timezone = args.timezone.trim();
+    if (!timezone || timezone.length > 64 || !IANA_TIMEZONE_PATTERN.test(timezone)) {
+      throw new Error("member_timezone_invalid");
+    }
+    const nowMs = Date.now();
+    const detail = await findProfileDetailByUserId(ctx, userId);
+    if (detail) {
+      if ((detail as any).timezone === timezone) return { ok: true };
+      await ctx.db.patch(detail._id, { timezone, timezoneCapturedAt: nowMs, updatedAt: nowMs });
+    } else {
+      await ctx.db.insert("userProfileDetails", {
+        userId,
+        timezone,
+        timezoneCapturedAt: nowMs,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+    }
+    return { ok: true };
+  },
+});
 
 async function mapProfileDetailWithSetup(
   ctx: any,

@@ -17,6 +17,9 @@ import {
   type MemberFactProvenance,
   type MemberOntologyLens,
 } from "../shared/memberOntology";
+import type { MemberAccountContextLike } from "../shared/memberContextMarkdown";
+import { getCanonicalTierByUserIdInternal } from "./auth";
+import { communityMembershipRowIsActive } from "./communityCore";
 
 export type MemberFactRow = MemberFactLike & {
   _id: any;
@@ -191,6 +194,68 @@ export async function readMemberFactsForLens(ctx: any, args: {
     .withIndex("by_user", (q: any) => q.eq("userId", args.subjectUserId))
     .collect()) as any[];
   return rows.filter((row) => memberFactVisibleToLens(toFactLike(row), args.lens)) as MemberFactRow[];
+}
+
+/* The deterministic account block for member.md — assembled from data the
+   platform already holds; nothing here is asked of the member. */
+export async function loadMemberAccountContext(
+  ctx: any,
+  userId: any,
+  nowMs: number,
+): Promise<MemberAccountContextLike> {
+  const [user, detail, providerConnections, membershipRows, ownedRows, canonicalTier] =
+    await Promise.all([
+      ctx.db.get(userId),
+      ctx.db
+        .query("userProfileDetails")
+        .withIndex("by_user", (q: any) => q.eq("userId", userId))
+        .first(),
+      ctx.db
+        .query("userProviderConnections")
+        .withIndex("by_user", (q: any) => q.eq("userId", userId))
+        .collect(),
+      ctx.db
+        .query("communityMemberships")
+        .withIndex("by_user", (q: any) => q.eq("userId", userId))
+        .collect(),
+      ctx.db
+        .query("communities")
+        .withIndex("by_owner", (q: any) => q.eq("ownerId", userId))
+        .collect(),
+      getCanonicalTierByUserIdInternal(ctx, userId, nowMs),
+    ]);
+
+  const hasChatgpt = providerConnections.some((row: any) => row?.provider === "chatgpt");
+  const hasOpenAi = providerConnections.some((row: any) => row?.provider === "openai");
+
+  const activeMemberships = (membershipRows as any[]).filter((row) =>
+    communityMembershipRowIsActive(row),
+  );
+  const memberships = await Promise.all(
+    activeMemberships.map(async (row) => {
+      const community = await ctx.db.get(row.communityId);
+      return {
+        communityName: String(community?.name ?? "Community"),
+        role: String(row.role ?? "member"),
+        accessSource: String(row.accessSource ?? "unknown"),
+      };
+    }),
+  );
+
+  const socialLinks = Object.values((detail?.socialLinks ?? {}) as Record<string, unknown>)
+    .map((link) => String(link ?? "").trim())
+    .filter(Boolean);
+
+  return {
+    displayName: detail?.displayName ?? null,
+    handle: user?.handle ?? null,
+    tier: canonicalTier === "architect" ? "premium" : "free",
+    timezone: detail?.timezone ?? null,
+    inferenceProvider: hasChatgpt ? "chatgpt" : hasOpenAi ? "openai" : null,
+    socialLinks,
+    memberships,
+    ownedCommunities: (ownedRows as any[]).map((row) => ({ name: String(row.name ?? "Community") })),
+  };
 }
 
 export async function readMemberSpine(ctx: any, userId: any): Promise<{

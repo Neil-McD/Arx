@@ -295,3 +295,15 @@ export async function recordStatedBridgeMemberFacts<SessionT>(
     links: params.links,
   });
 }
+
+/* Silent deterministic capture: the browser's IANA timezone for the member
+   ontology's account context. Fire-and-forget from the client. */
+export async function recordMemberTimezoneRpc<SessionT>(
+  params: CloudProfilesGatewayParams<SessionT> & { timezone: string },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  await client.mutation("profiles:recordMemberTimezone" as any, {
+    authSubject,
+    timezone: params.timezone,
+  });
+}

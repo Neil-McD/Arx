@@ -136,6 +136,7 @@ import {
   checkCloudProfileHandleAvailability,
   loadCloudAccountSetupStatus,
   prepareCloudProfileAvatarField,
+  recordMemberTimezoneRpc,
   recordStatedBridgeMemberFacts,
   resolveCloudOnboardingProfileDetail,
   type CloudProfileHandleAvailability,
@@ -4454,6 +4455,25 @@ export default function App() {
          platform bridge page. */
     })();
   }, [activePage, cloudProfile, session]);
+
+  /* Deterministic timezone capture: record the browser's IANA zone silently,
+     refreshed when it drifts from what the profile holds. Never a question. */
+  const timezoneSyncRef = useRef(false);
+  useEffect(() => {
+    if (!session || !cloudProfile) return;
+    if (timezoneSyncRef.current) return;
+    let browserTimezone = "";
+    try {
+      browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+    } catch {
+      return;
+    }
+    if (!browserTimezone) return;
+    timezoneSyncRef.current = true;
+    const stored = (cloudProfile as { timezone?: string | null }).timezone ?? null;
+    if (stored === browserTimezone) return;
+    void recordMemberTimezoneRpc({ session, timezone: browserTimezone }).catch(() => null);
+  }, [cloudProfile, session]);
 
   /* Load the viewer's profile + setup status wherever setup state matters:
      the workspace (setup card, remedial modal) and /c/ routes (the bridge —

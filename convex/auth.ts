@@ -80,7 +80,7 @@ function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boole
   return true;
 }
 
-async function getCanonicalTierByUserIdInternal(ctx: any, userId: any, nowMs: number): Promise<CanonicalTier> {
+export async function getCanonicalTierByUserIdInternal(ctx: any, userId: any, nowMs: number): Promise<CanonicalTier> {
   const rows = (await ctx.db
     .query("userEntitlements")
     .withIndex("by_user", (q: any) => q.eq("userId", userId))

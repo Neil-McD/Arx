@@ -7,11 +7,13 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { communityMembershipRowIsActive } from "./communityCore";
 import {
   insertMemberFacts,
+  loadMemberAccountContext,
   readMemberFactsForLens,
   readMemberSpine,
   transitionMemberFactConsent,
   type MemberFactRow,
 } from "./memberOntologyCore";
+import { renderMemberContextMarkdown } from "../shared/memberContextMarkdown";
 
 const factDraftValidator = v.object({
   kind: v.string(),
@@ -192,6 +194,37 @@ export const getMemberOrientation = query({
       subject_user_id: String(args.subjectUserId),
       spine,
       facts: facts.map(mapFactForOutput),
+    };
+  },
+});
+
+/* The exact artifact slice 5 injects into the guide's context, and the same
+   one the member sees as "what Polynet knows about me". Self lens. */
+export const getMyMemberContextMarkdown = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.optional(v.id("communities")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const [account, facts, community] = await Promise.all([
+      loadMemberAccountContext(ctx, userId, Date.now()),
+      readMemberFactsForLens(ctx, { subjectUserId: userId, lens: { kind: "self" } }),
+      args.communityId ? ctx.db.get(args.communityId) : Promise.resolve(null),
+    ]);
+    const rendered = renderMemberContextMarkdown({
+      account,
+      facts,
+      lens: { kind: "self" },
+      communityId: args.communityId ? String(args.communityId) : null,
+      communityName: community?.name ?? null,
+    });
+    return {
+      member_md: rendered.memberMd,
+      community_md: rendered.communityMd,
     };
   },
 });
