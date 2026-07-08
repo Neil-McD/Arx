@@ -2478,6 +2478,20 @@ export default function App() {
   const [communityAttachments, setCommunityAttachments] = useState<MessageAttachment[]>([]);
   const communityAttachmentsRef = useRef<MessageAttachment[]>([]);
   const [communityChatError, setCommunityChatError] = useState<string | null>(null);
+  /* Setup-required errors are a doorway, not a dead end: whenever a community
+     surface strands on the profile/setup gate, open the setup surface too. */
+  useEffect(() => {
+    const needsSetup = [communityChatError, communityInteractionError].some((message) =>
+      Boolean(
+        message &&
+          (message.includes("profile_setup_required") ||
+            message.includes("account_setup_required") ||
+            message.includes("Finish your profile")),
+      ),
+    );
+    if (!needsSetup) return;
+    openProfileSetup();
+  }, [communityChatError, communityInteractionError, openProfileSetup]);
   const [copiedCommunityMessageId, setCopiedCommunityMessageId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isUserAtBottom, setIsUserAtBottom] = useState(true);
@@ -3895,12 +3909,21 @@ export default function App() {
 
     try {
       const row = await loadProfileForOnboarding(activeSession);
-      setIsOnboardingModalOpen(!row?.account_setup?.completed);
-      navigateTo("/workspace");
+      if (row?.account_setup?.completed) {
+        setIsOnboardingModalOpen(false);
+        navigateTo("/workspace");
+        return;
+      }
     } catch {
-      setIsOnboardingModalOpen(true);
-      navigateTo("/workspace");
+      /* Unknown setup state — the bridge collects everything from scratch. */
     }
+    /* Incomplete accounts onboard through the Polynet home community's
+       bridge — platform onboarding is the default community's onboarding. */
+    const homeFunnelPath = applyShellVariantToPublicPath(
+      buildCommunityFunnelPath("polynet") ?? "/c/polynet",
+      shellVariant,
+    );
+    window.location.assign(homeFunnelPath);
   }
 
   async function finishOnboarding(options?: { navigate?: boolean }): Promise<boolean> {
