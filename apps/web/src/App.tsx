@@ -3903,17 +3903,18 @@ export default function App() {
     }
   }
 
-  async function finishOnboarding(): Promise<void> {
+  async function finishOnboarding(options?: { navigate?: boolean }): Promise<boolean> {
+    const shouldNavigate = options?.navigate !== false;
     const activeSession = await ensureUsableAuthSession();
     if (!activeSession) {
       requireSignIn({ reason: "try_polynet_free", payload: {} });
-      return;
+      return false;
     }
 
     const userId = resolveAuthSubject(activeSession);
     if (!userId) {
       setOnboardingError("We could not verify your account. Sign in again to continue.");
-      return;
+      return false;
     }
 
     const displayName = profileUi.profileName.trim() || null;
@@ -3922,13 +3923,13 @@ export default function App() {
     const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
     if (!displayName || !handle || !avatarUrl) {
       setOnboardingError("Add your display name, handle, and profile photo to continue.");
-      return;
+      return false;
     }
     const currentSetup = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
     if (currentSetup?.missing.includes("platform_legal") !== false) {
       setOnboardingError("Agree to the Terms of Service and acknowledge the Privacy & AI Data Policy to continue.");
-      setIsOnboardingModalOpen(true);
-      return;
+      if (shouldNavigate) setIsOnboardingModalOpen(true);
+      return false;
     }
 
     setIsSavingOnboarding(true);
@@ -3940,8 +3941,8 @@ export default function App() {
       if (latestSetup) setAccountSetupStatus(latestSetup);
       if (!latestSetup?.completed) {
         setOnboardingError(formatAccountSetupMissingGuidance(latestSetup));
-        setIsOnboardingModalOpen(true);
-        return;
+        if (shouldNavigate) setIsOnboardingModalOpen(true);
+        return false;
       }
       const avatarField = await prepareCloudProfileAvatarField<AuthSession>({
         session: activeSession,
@@ -3983,13 +3984,29 @@ export default function App() {
         profileUi.setProfileAvatarZoom(saved.avatar_zoom ?? 1);
       }
 
-      navigateTo("/workspace");
+      if (shouldNavigate) navigateTo("/workspace");
+      return true;
     } catch (error) {
       const message = formatProfileMutationError(error, "Failed to save onboarding.");
       setOnboardingError(message);
+      return false;
     } finally {
       setIsSavingOnboarding(false);
     }
+  }
+
+  /* Bridge Enter: save identity + legal, complete setup, then run the join
+     action — the whole thing without ever leaving the community page. */
+  async function completeBridgeAndEnter(legalAcceptance: {
+    termsOfServiceVersion: string;
+    privacyPolicyVersion: string;
+  } | null): Promise<boolean> {
+    const savedProfile = await saveOnboardingProfile(legalAcceptance);
+    if (!savedProfile) return false;
+    const finished = await finishOnboarding({ navigate: false });
+    if (!finished) return false;
+    handlePublicLandingPrimaryAction();
+    return true;
   }
 
   async function saveOnboardingProfile(legalAcceptance: {
@@ -4334,12 +4351,18 @@ export default function App() {
       const row = cloudProfile ?? (await loadProfileForOnboarding(session));
       if (row?.account_setup?.completed) {
         setIsOnboardingModalOpen(false);
-      } else {
-        setIsOnboardingModalOpen(true);
+        navigateTo("/workspace");
+        return;
       }
-      navigateTo("/workspace");
+      /* Onboarding is only ever community onboarding — no community context
+         means the Polynet home community receives you. The bridge lives there. */
+      const homeFunnelPath = applyShellVariantToPublicPath(
+        buildCommunityFunnelPath("polynet") ?? "/c/polynet",
+        shellVariant,
+      );
+      window.location.assign(homeFunnelPath);
     })();
-  }, [activePage, cloudProfile, session]);
+  }, [activePage, cloudProfile, session, shellVariant]);
 
   useEffect(() => {
     if (activePage !== "workspace") return;
@@ -4358,6 +4381,28 @@ export default function App() {
     cloudProfile,
     hasLoadedOnboardingProfile,
     isAuthBootstrapComplete,
+    session,
+  ]);
+
+  /* The bridge needs the viewer's setup status on /c/ routes: a signed-in
+     visitor with an incomplete account meets the gate card's second state. */
+  useEffect(() => {
+    if (publicRoute.kind !== "community_funnel") return;
+    if (!isAuthBootstrapComplete) return;
+    if (!session) return;
+    if (cloudProfile) {
+      setHasLoadedOnboardingProfile(true);
+      return;
+    }
+    if (hasLoadedOnboardingProfile) {
+      return;
+    }
+    void loadProfileForOnboarding(session);
+  }, [
+    cloudProfile,
+    hasLoadedOnboardingProfile,
+    isAuthBootstrapComplete,
+    publicRoute.kind,
     session,
   ]);
 
@@ -11773,6 +11818,55 @@ export default function App() {
       publicJoinError: publicCommunityUi.publicJoinError,
       checkoutError,
       showSignIn: showPublicSignIn,
+      bridge:
+        /* The pitch converts first; the bridge only meets people who are
+           already in motion — joined (intent replay), pending approval, or
+           paid — and still owe platform credentials. */
+        !isPublicFunnelPreviewRoute &&
+        session &&
+        resolvedPublicCommunity &&
+        effectiveAccountSetupStatus &&
+        !effectiveAccountSetupStatus.completed &&
+        (canEnterPublicCommunity || approvalPending || checkoutStatus === "succeeded")
+          ? {
+              communityName: resolvedPublicCommunity.name,
+              communityAvatarUrl: resolvedPublicCommunity.avatar_url ?? null,
+              communityAvatarFocusX: resolvedPublicCommunity.avatar_focus_x ?? null,
+              communityAvatarFocusY: resolvedPublicCommunity.avatar_focus_y ?? null,
+              communityAvatarZoom: resolvedPublicCommunity.avatar_zoom ?? null,
+              paidReceiptLabel:
+                checkoutStatus === "succeeded"
+                  ? "Payment received — you're in as soon as this is done"
+                  : null,
+              enterLabel: `Enter ${resolvedPublicCommunity.name}`,
+              displayName: profileUi.profileName,
+              handle: profileUi.profileHandle,
+              avatarUrl: profileUi.profileAvatarUrl,
+              handleAvailability: onboardingHandleAvailability,
+              isCheckingHandleAvailability: isCheckingOnboardingHandle,
+              onDisplayNameChange: profileUi.setProfileName,
+              onHandleChange: profileUi.setProfileHandle,
+              onAvatarUpload: handleProfileAvatarUpload,
+              chatgptConnected: chatgptConnection.connected,
+              openAiConnected: openAiConnection.connected,
+              isConnectingChatgpt: providerConnectionUi.isConnectingChatgpt,
+              isPollingChatgptConnection: providerConnectionUi.isPollingChatgptConnection,
+              onConnectChatgpt: () => {
+                void providerConnectionUi.handleConnectChatgpt();
+              },
+              openAiApiKeyDraft: providerConnectionUi.openAiApiKeyDraft,
+              setOpenAiApiKeyDraft: providerConnectionUi.setOpenAiApiKeyDraft,
+              isSavingOpenAiConnection: providerConnectionUi.isSavingOpenAiConnection,
+              openAiConnectionError: providerConnectionUi.openAiConnectionError,
+              openAiConnectionSuccess: providerConnectionUi.openAiConnectionSuccess,
+              onConnectOpenAi: providerConnectionUi.handleConnectOpenAi,
+              platformLegalRequired:
+                effectiveAccountSetupStatus.missing.includes("platform_legal"),
+              isSaving: isSavingOnboarding,
+              error: onboardingError,
+              onEnter: completeBridgeAndEnter,
+            }
+          : null,
     },
     communityHostProps: {
       communityTab,

@@ -7,6 +7,7 @@ import {
   filterOnlineAvatarFaces,
 } from "../../../../shared/communityFunnelUi";
 import type { ComponentProps } from "react";
+import type { WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
 import { WebCommunityVisitorSurface } from "./WebCommunityVisitorSurface";
 
 type FunnelMode = "enter" | "join" | "request_access" | "checkout" | "private";
@@ -103,6 +104,9 @@ type WebPublicCommunityFunnelProps = {
   showSignIn: boolean;
   /** Bumped by the shell when a locked nav tab is tapped (visitor lens). */
   gateOpenNonce?: number;
+  /** Present when the signed-in viewer still owes platform credentials —
+      renders the gate card's second state instead of the pitch gate. */
+  bridge?: WebCommunityBridgeCardProps | null;
 };
 
 function deriveFunnelMode(args: {
@@ -344,6 +348,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       alertMessages={!isLoadingPublicCommunity ? funnelErrors : []}
       gateSlugKey={publicCommunity?.slug ?? publicRouteSlug ?? null}
       gateOpenNonce={gateOpenNonce}
+      bridge={props.bridge ?? null}
     />
   );
 }

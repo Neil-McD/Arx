@@ -69,7 +69,7 @@ type WebOnboardingPageProps = {
   openAiConnectionError: string | null;
   openAiConnectionSuccess: string | null;
   onConnectOpenAi: () => Promise<void> | void;
-  onFinishOnboarding: () => Promise<void> | void;
+  onFinishOnboarding: () => Promise<boolean | void> | boolean | void;
   onClose?: () => void;
 };
 

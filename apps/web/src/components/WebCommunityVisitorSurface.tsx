@@ -28,6 +28,7 @@ import {
   CommunityVisitorGhostThread,
   CommunityVisitorJoinRope,
 } from "./CommunityVisitorChrome";
+import { WebCommunityBridgeCard, type WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
 import { WebCommunityInteractionProjection } from "./WebCommunityInteractionProjection";
 import "./CommunityVisitorChrome.css";
 
@@ -66,6 +67,9 @@ type WebCommunityVisitorSurfaceProps = {
   gateSlugKey?: string | null;
   /** Bumped by the shell when a locked nav tab is tapped — reopens the gate. */
   gateOpenNonce?: number;
+  /** The gate card's second state: signed-in, setup incomplete — collect
+      identity + inference in place, then enter. Unskippable while present. */
+  bridge?: WebCommunityBridgeCardProps | null;
 };
 
 const NOOP = () => {};
@@ -307,7 +311,13 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
         </div>
       </div>
 
-      {gateMounted ? (
+      {props.bridge ? (
+        /* Bridge state: the front door asks for credentials. No backdrop
+           dismiss, no "View it first" — completing it is the only way in. */
+        <div className="cfg-gate cvs-gate cvs-gate-bridge">
+          <WebCommunityBridgeCard {...props.bridge} />
+        </div>
+      ) : gateMounted ? (
         <div
           className={`cfg-gate cvs-gate${gateOpen ? "" : " off"}`}
           onClick={(event) => {
