@@ -6,8 +6,10 @@
 import { useRef, useState } from "react";
 import { Camera, Check } from "lucide-react";
 import { validateProfileHandle } from "../../../../shared/profileHandle";
+import type { SocialProfileKind, SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { WebSocialProfileLinksFields } from "./WebSocialProfileLinksFields";
 import {
   PRIVACY_AI_DATA_POLICY_ENTRY,
   TERMS_OF_SERVICE_ENTRY,
@@ -44,10 +46,12 @@ export type WebCommunityBridgeCardProps = {
   avatarFocusX: number;
   avatarFocusY: number;
   avatarZoom: number;
+  socialLinks: SocialProfileLinks;
   handleAvailability: BridgeHandleAvailability | null;
   isCheckingHandleAvailability: boolean;
   onDisplayNameChange: (value: string) => void;
   onHandleChange: (value: string) => void;
+  onSocialLinkChange: (kind: SocialProfileKind, value: string) => void;
   onAvatarUpload: (file: File | null) => Promise<void> | void;
   chatgptConnected: boolean;
   openAiConnected: boolean;
@@ -233,6 +237,18 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
               <span className={`cvs-bridge-avail${handleHint.ok ? " ok" : ""}`}>{handleHint.label}</span>
             </label>
           </div>
+        </div>
+        {/* Optional, deterministic profile seeds — the canonical social-links
+           editor. Whatever lands here is saved with the profile and written
+           to the ontology ledger as stated_bridge facts. */}
+        <div className="cvs-bridge-socials">
+          <span className="cvs-bridge-socials-label">Social links (optional)</span>
+          <WebSocialProfileLinksFields
+            values={props.socialLinks}
+            disabled={props.isSaving}
+            variant="onboarding"
+            onChange={props.onSocialLinkChange}
+          />
         </div>
       </div>
 

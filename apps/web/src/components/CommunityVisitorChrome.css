@@ -323,6 +323,14 @@
 .cvs-bridge-avcap.done { color: #43c37a; }
 
 .cvs-bridge-fields { flex: 1; display: flex; flex-direction: column; gap: 11px; min-width: 0; }
+.cvs-bridge-socials {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+.cvs-bridge-socials-label { font-size: 11.5px; color: var(--text-muted, #71717a); }
 .cvs-bridge-field { display: block; font-size: 11.5px; color: var(--text-muted, #71717a); }
 .cvs-bridge-field input {
   display: block;
