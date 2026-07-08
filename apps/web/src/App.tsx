@@ -2106,6 +2106,19 @@ export default function App() {
     setOnboardingError(null);
     setIsOnboardingModalOpen(true);
   }, []);
+  /* The bridge (gate card's second state) opens on an entry ATTEMPT — the
+     pitch always converts first. Platform-generic arrivals (?src=platform)
+     skip the community pitch: they already came through the platform's. */
+  const [isBridgeGateOpen, setIsBridgeGateOpen] = useState(false);
+  const [bridgePendingEntry, setBridgePendingEntry] = useState<{
+    communityId: string;
+    communitySlug: string | null;
+  } | null>(null);
+  const [isPlatformBridgeEntry] = useState<boolean>(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("src") === "platform",
+  );
   const refreshAccountSetupStatus = useCallback(async (activeSession: AuthSession | null = sessionRef.current ?? session) => {
     if (!activeSession) {
       setAccountSetupStatus(null);
@@ -3925,12 +3938,15 @@ export default function App() {
       /* Unknown setup state — the bridge collects everything from scratch. */
     }
     /* Incomplete accounts onboard through the Polynet home community's
-       bridge — platform onboarding is the default community's onboarding. */
+       bridge — platform onboarding is the default community's onboarding,
+       presented as the generic platform bridge (src=platform). */
     const homeFunnelPath = applyShellVariantToPublicPath(
       buildCommunityFunnelPath("polynet") ?? "/c/polynet",
       shellVariant,
     );
-    window.location.assign(homeFunnelPath);
+    window.location.assign(
+      `${homeFunnelPath}${homeFunnelPath.includes("?") ? "&" : "?"}src=platform`,
+    );
   }
 
   async function finishOnboarding(options?: { navigate?: boolean }): Promise<boolean> {
@@ -4021,7 +4037,26 @@ export default function App() {
     }
   }
 
-  /* Bridge Enter: save identity + legal, complete setup, then run the join
+  /* One gatekeeper for every entry path (free join, claim redemption, enter
+     click): incomplete setup on the funnel route opens the bridge instead of
+     entering; everything else passes straight through. */
+  function enterCommunityThroughBridge(entry: {
+    communityId: string;
+    communitySlug: string | null;
+  }): void {
+    const setupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
+    if (publicRoute.kind === "community_funnel" && setupStatus && !setupStatus.completed) {
+      setBridgePendingEntry(entry);
+      setIsBridgeGateOpen(true);
+      return;
+    }
+    void enterJoinedCommunity({
+      communityId: entry.communityId,
+      communitySlug: entry.communitySlug,
+    });
+  }
+
+  /* Bridge Enter: save identity + legal, complete setup, then run the entry
      action — the whole thing without ever leaving the community page. */
   async function completeBridgeAndEnter(legalAcceptance: {
     termsOfServiceVersion: string;
@@ -4043,9 +4078,21 @@ export default function App() {
         );
       }
     }
+    setIsBridgeGateOpen(false);
     /* Approval applicants have nothing to run — the request is already in;
        the gate's "Request pending" state takes over once the bridge clears. */
-    if (!approvalPending) handlePublicLandingPrimaryAction();
+    if (!approvalPending) {
+      const entry = bridgePendingEntry;
+      setBridgePendingEntry(null);
+      if (entry) {
+        void enterJoinedCommunity({
+          communityId: entry.communityId,
+          communitySlug: entry.communitySlug,
+        });
+      } else {
+        handlePublicLandingPrimaryAction();
+      }
+    }
     return true;
   }
 
@@ -4395,12 +4442,15 @@ export default function App() {
         return;
       }
       /* Onboarding is only ever community onboarding — no community context
-         means the Polynet home community receives you. The bridge lives there. */
+         means the Polynet home community receives you. src=platform renders
+         the generic platform bridge there, skipping the community pitch. */
       const homeFunnelPath = applyShellVariantToPublicPath(
         buildCommunityFunnelPath("polynet") ?? "/c/polynet",
         shellVariant,
       );
-      window.location.assign(homeFunnelPath);
+      window.location.assign(
+        `${homeFunnelPath}${homeFunnelPath.includes("?") ? "&" : "?"}src=platform`,
+      );
     })();
   }, [activePage, cloudProfile, session, shellVariant]);
 
@@ -7183,7 +7233,7 @@ export default function App() {
     requireSignIn,
     loadCommunities,
     openCommunityWorkspace: ({ communityId, communitySlug }) => {
-      void enterJoinedCommunity({ communityId, communitySlug });
+      enterCommunityThroughBridge({ communityId, communitySlug: communitySlug ?? null });
     },
     onJoinRequestSent: ({ communityId, communitySlug }) => {
       captureProductAnalyticsEvent("community join request sent", {
@@ -7235,7 +7285,7 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
     requireSignIn,
     openCommunityWorkspace: ({ communityId, communitySlug }) => {
-      void enterJoinedCommunity({ communityId, communitySlug });
+      enterCommunityThroughBridge({ communityId, communitySlug: communitySlug ?? null });
     },
     loadCommunities,
     clearPendingPurchaseClaimToken,
@@ -9248,9 +9298,9 @@ export default function App() {
     if (isPublicFunnelPreviewRoute) return;
     if (!publicCommunityUi.publicCommunity) return;
     if (canEnterPublicCommunity && publicCommunityUi.publicCommunityAccess?.community_id) {
-      void enterJoinedCommunity({
+      enterCommunityThroughBridge({
         communityId: publicCommunityUi.publicCommunityAccess.community_id,
-        communitySlug: publicCommunityUi.publicCommunity.slug,
+        communitySlug: publicCommunityUi.publicCommunity.slug ?? null,
       });
       return;
     }
@@ -11866,16 +11916,18 @@ export default function App() {
       checkoutError,
       showSignIn: showPublicSignIn,
       bridge:
-        /* The pitch converts first; the bridge only meets people who are
-           already in motion — joined (intent replay), pending approval, or
-           paid — and still owe platform credentials. */
+        /* The pitch converts first: the bridge opens on an entry ATTEMPT
+           (join/enter/claim), never on arrival. Platform-generic arrivals
+           (?src=platform) skip straight to it — they already came through
+           the platform's own pitch. */
         !isPublicFunnelPreviewRoute &&
         session &&
         resolvedPublicCommunity &&
         effectiveAccountSetupStatus &&
         !effectiveAccountSetupStatus.completed &&
-        (canEnterPublicCommunity || approvalPending || checkoutStatus === "succeeded")
+        (isBridgeGateOpen || isPlatformBridgeEntry)
           ? {
+              variant: isPlatformBridgeEntry ? ("platform" as const) : ("community" as const),
               communityName: resolvedPublicCommunity.name,
               communityAvatarUrl: resolvedPublicCommunity.avatar_url ?? null,
               communityAvatarFocusX: resolvedPublicCommunity.avatar_focus_x ?? null,
@@ -11885,9 +11937,11 @@ export default function App() {
                 checkoutStatus === "succeeded" && !canEnterPublicCommunity
                   ? "Payment received — you're in as soon as this is done"
                   : null,
-              enterLabel: approvalPending
-                ? "Finish setup"
-                : `Enter ${resolvedPublicCommunity.name}`,
+              enterLabel: isPlatformBridgeEntry
+                ? "Enter Polynet"
+                : approvalPending
+                  ? "Finish setup"
+                  : `Enter ${resolvedPublicCommunity.name}`,
               displayName: profileUi.profileName,
               handle: profileUi.profileHandle,
               avatarUrl: profileUi.profileAvatarUrl,

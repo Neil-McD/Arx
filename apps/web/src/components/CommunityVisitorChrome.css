@@ -234,9 +234,14 @@
 
 /* ---- The gate card's second state: the bridge (identity + inference, one page). ---- */
 .cfg-gate.cvs-gate-bridge {
-  align-items: flex-start;
+  align-items: center;
   overflow-y: auto;
-  padding: 34px 20px 40px;
+  padding: 24px 20px;
+}
+/* Platform-generic presentation: no community banner, the mark sits plain. */
+.cvs-bridge-platform .cfg-gav {
+  margin-top: 22px;
+  border-color: transparent;
 }
 .cfg-gatecard.cvs-bridge-card {
   width: min(440px, 94vw);

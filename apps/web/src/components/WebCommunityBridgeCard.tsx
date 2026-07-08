@@ -24,6 +24,10 @@ type BridgeHandleAvailability = {
 };
 
 export type WebCommunityBridgeCardProps = {
+  /* "community": banner + community identity — for people entering a specific
+     community. "platform": bannerless, platform-generic — for people who just
+     joined Polynet and already came through the platform's own pitch. */
+  variant?: "community" | "platform";
   communityName: string;
   communityAvatarUrl: string | null;
   communityAvatarFocusX: number | null;
@@ -119,9 +123,11 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
     });
   };
 
+  const isPlatform = props.variant === "platform";
+
   return (
-    <div className="cfg-gatecard cvs-bridge-card">
-      <div className="cfg-gbanner" />
+    <div className={`cfg-gatecard cvs-bridge-card${isPlatform ? " cvs-bridge-platform" : ""}`}>
+      {isPlatform ? null : <div className="cfg-gbanner" />}
       <div className="cfg-gav">
         <CommunityAvatar
           className="cfg-fill"
@@ -212,7 +218,9 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
           <i />
         </div>
         <p className="cvs-bridge-aicopy">
-          {props.communityName} onboards you through your agent — connect the AI that powers it.
+          {isPlatform
+            ? "Polynet runs on your AI — you bring the model, it powers everything you do here."
+            : `${props.communityName} onboards you through your agent — connect the AI that powers it.`}
         </p>
         <div className="cvs-bridge-tiles">
           <button
