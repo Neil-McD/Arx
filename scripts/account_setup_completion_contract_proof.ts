@@ -18,6 +18,7 @@ const accountSetup = read("shared/accountSetup.ts");
 const profileHandle = read("shared/profileHandle.ts");
 const app = read("apps/web/src/App.tsx");
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
+const legalReaderModal = read("apps/web/src/components/WebPlatformLegalReaderModal.tsx");
 const setupCard = read("apps/web/src/components/WebAccountSetupCard.tsx");
 const workspaceLandingProjection = read("apps/web/src/controllers/buildWebWorkspaceLandingProjection.tsx");
 
@@ -49,7 +50,7 @@ for (const marker of [
 assert.doesNotMatch(accountSetup, /"agent"/, "account setup must not include an agent step");
 assert.doesNotMatch(accountSetup, /"agent_name"/, "agent naming must not gate account setup completion");
 assert.match(accountSetup, /export function buildAccountSetupStatus/, "setup completion must be derived by one helper");
-assert.match(accountSetup, /export function getFirstIncompleteAccountSetupStep/, "setup model must expose the first incomplete step");
+assert.doesNotMatch(accountSetup, /getFirstIncompleteAccountSetupStep/, "step-routing helper was deleted with the step wizard — must not return");
 assert.match(accountSetup, /export function formatAccountSetupMissingGuidance/, "setup model must expose precise missing-setup guidance");
 assert.match(accountSetup, /Connect ChatGPT or an OpenAI API key to finish account setup\./, "inference-only setup guidance must name the exact missing requirement");
 assert.doesNotMatch(accountSetup, /"direction"/, "account setup must not include a direction step");
@@ -118,7 +119,8 @@ assert.match(onboardingPage, /<span>Bio<\/span>/, "onboarding profile step shoul
 assert.match(onboardingPage, /handleReady[\s\S]*?profileReady[\s\S]*?handleReady/, "onboarding profile step must require an available handle");
 assert.match(onboardingPage, /Terms of Service[\s\S]*Privacy &amp; AI Data Policy/, "onboarding profile step must link the platform legal documents inline");
 assert.match(onboardingPage, /platformLegalReady[\s\S]*?profileReady[\s\S]*?platformLegalReady/, "onboarding profile step must require platform legal acceptance before Next");
-assert.match(onboardingPage, /polynet-onboarding-legal-reader message-text/, "onboarding legal documents must render in a scrollable modal reader");
+assert.match(onboardingPage, /WebPlatformLegalReaderModal/, "onboarding legal documents must render through the shared reader modal");
+assert.match(legalReaderModal, /polynet-onboarding-legal-reader message-text/, "the shared legal reader must render documents in the scrollable modal reader");
 assert.match(onboardingPage, /onConnectChatgpt/, "onboarding inference step must reuse ChatGPT provider flow");
 assert.match(onboardingPage, /onConnectOpenAi/, "onboarding inference step must reuse OpenAI provider flow");
 assert.match(onboardingPage, /Use your Plus or Pro plan limits/, "onboarding inference choice should clearly name ChatGPT plan limits");

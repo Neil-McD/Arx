@@ -120,12 +120,6 @@ export function buildAccountSetupStatus(input: AccountSetupStatusInput): Account
   };
 }
 
-export function getFirstIncompleteAccountSetupStep(
-  status: AccountSetupStatus | null | undefined,
-): Exclude<AccountSetupStep, "complete"> | null {
-  return status?.steps.find((step) => !step.completed)?.step ?? null;
-}
-
 export function formatAccountSetupMissingGuidance(status: AccountSetupStatus | null | undefined): string {
   if (!status || status.completed || status.missing.length === 0) return "Account setup is complete.";
 

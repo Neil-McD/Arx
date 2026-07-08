@@ -5,8 +5,8 @@ import {
   type AccountSetupStatus,
   type AccountSetupStep,
 } from "../../../../shared/accountSetup";
-import { renderMarkdown } from "../../../../shared/markdownUi";
 import { normalizeProfileHandle } from "../../../../shared/profileHandle";
+import { formatProfileHandleAvailabilityHint } from "./profileHandleAvailabilityHint";
 import type { SocialProfileKind, SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
@@ -14,6 +14,7 @@ import {
   TERMS_OF_SERVICE_ENTRY,
   type LegalDocumentEntry,
 } from "../docs/legalDocumentsContent";
+import { WebPlatformLegalReaderModal } from "./WebPlatformLegalReaderModal";
 import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
 import { WebSocialProfileLinksFields } from "./WebSocialProfileLinksFields";
 
@@ -27,7 +28,6 @@ type ProfileHandleAvailability = {
 };
 
 type WebOnboardingPageProps = {
-  variant?: "page" | "modal";
   accountSetupStatus: AccountSetupStatus | null;
   displayName: string;
   handle: string;
@@ -110,34 +110,22 @@ function formatHandleAvailability(
   availability: ProfileHandleAvailability | null,
   isChecking: boolean,
 ): { kind: "idle" | "checking" | "success" | "error"; label: string } {
-  if (!handle.trim()) {
-    return { kind: "idle", label: "Required for your public profile." };
-  }
-  if (isChecking) {
-    return { kind: "checking", label: "Checking handle..." };
-  }
-  if (!availability) {
-    return { kind: "idle", label: "Use 3-32 letters, numbers, underscores, or hyphens." };
-  }
-  if (availability.status === "available") {
-    return { kind: "success", label: `@${availability.handle} is available.` };
-  }
-  if (availability.status === "taken") {
-    return { kind: "error", label: "That handle is already taken." };
-  }
-  if (availability.status === "reserved") {
-    return { kind: "error", label: "That handle is reserved." };
-  }
-  if (availability.status === "too_short") {
-    return { kind: "error", label: "Use at least 3 characters." };
-  }
-  if (availability.status === "too_long") {
-    return { kind: "error", label: "Use 32 characters or less." };
-  }
-  if (availability.status === "invalid_format") {
-    return { kind: "error", label: "Start and end with a letter or number." };
-  }
-  return { kind: "idle", label: "Required for your public profile." };
+  return formatProfileHandleAvailabilityHint({
+    handle,
+    availability,
+    isChecking,
+    copy: {
+      empty: "Required for your public profile.",
+      checking: "Checking handle...",
+      unknown: "Use 3-32 letters, numbers, underscores, or hyphens.",
+      available: (available) => `@${available} is available.`,
+      taken: "That handle is already taken.",
+      reserved: "That handle is reserved.",
+      tooShort: "Use at least 3 characters.",
+      tooLong: "Use 32 characters or less.",
+      invalidFormat: "Start and end with a letter or number.",
+    },
+  });
 }
 
 function formatProviderStatus(
@@ -159,7 +147,6 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
   const [providerChoice, setProviderChoice] = useState<"chatgpt" | "openai" | null>(() =>
     props.openAiConnected ? "openai" : props.chatgptConnected ? "chatgpt" : null,
   );
-  const isModal = props.variant === "modal";
 
   useEffect(() => {
     if (props.openAiConnected) setProviderChoice("openai");
@@ -255,7 +242,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
           <img src="/favicon.svg" alt="" />
           <span>Polynet</span>
         </div>
-        {isModal && props.onClose ? (
+        {props.onClose ? (
           <button
             className="polynet-onboarding-close"
             type="button"
@@ -557,46 +544,17 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
         </div>
       </div>
 
-      {isModal && props.onClose ? (
+      {props.onClose ? (
         <button className="polynet-onboarding-finish-later" type="button" onClick={props.onClose}>
           Finish later
         </button>
       ) : null}
 
       {activeLegalDocument ? (
-        <div className="modal-overlay polynet-onboarding-legal-overlay" onClick={() => setActiveLegalDocument(null)}>
-          <div
-            className="modal polynet-onboarding-legal-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="polynet-onboarding-legal-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div>
-                <div className="modal-title" id="polynet-onboarding-legal-title">
-                  {activeLegalDocument.title}
-                </div>
-                <div className="polynet-onboarding-legal-meta">
-                  {activeLegalDocument.version} - Effective {activeLegalDocument.effectiveDate}
-                </div>
-              </div>
-              <button
-                className="modal-close"
-                type="button"
-                onClick={() => setActiveLegalDocument(null)}
-                title="Close"
-              >
-                x
-              </button>
-            </div>
-            <div className="modal-body polynet-onboarding-legal-body">
-              <div className="polynet-onboarding-legal-reader message-text">
-                {renderMarkdown(activeLegalDocument.content)}
-              </div>
-            </div>
-          </div>
-        </div>
+        <WebPlatformLegalReaderModal
+          document={activeLegalDocument}
+          onClose={() => setActiveLegalDocument(null)}
+        />
       ) : null}
 
       <WebUserAvatarEditorModal
@@ -617,24 +575,16 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     </section>
   );
 
-  if (isModal) {
-    return (
-      <div className="polynet-onboarding-modal-backdrop" role="presentation">
-        <div
-          className="polynet-onboarding-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="polynet-onboarding-title"
-        >
-          {flow}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <main className="polynet-onboarding-page" aria-labelledby="polynet-onboarding-title">
-      {flow}
-    </main>
+    <div className="polynet-onboarding-modal-backdrop" role="presentation">
+      <div
+        className="polynet-onboarding-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="polynet-onboarding-title"
+      >
+        {flow}
+      </div>
+    </div>
   );
 }

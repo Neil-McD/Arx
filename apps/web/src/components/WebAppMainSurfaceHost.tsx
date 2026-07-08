@@ -56,7 +56,7 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
         </div>
       )}
       {props.showOnboardingModal ? (
-        <WebOnboardingPage {...props.onboardingPageProps} variant="modal" />
+        <WebOnboardingPage {...props.onboardingPageProps} />
       ) : null}
     </main>
   );

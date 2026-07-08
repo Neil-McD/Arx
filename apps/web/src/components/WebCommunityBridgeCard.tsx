@@ -13,15 +13,15 @@ import {
   TERMS_OF_SERVICE_ENTRY,
   type LegalDocumentEntry,
 } from "../docs/legalDocumentsContent";
-import { renderMarkdown } from "../../../../shared/markdownUi";
 import type { PlatformLegalAcceptanceDraft } from "./WebOnboardingPage";
+import { WebPlatformLegalReaderModal } from "./WebPlatformLegalReaderModal";
 
-type BridgeHandleAvailability = {
-  available: boolean;
-  status: "empty" | "too_short" | "too_long" | "invalid_format" | "reserved" | "available" | "taken";
-  handle: string | null;
-  normalized_handle: string | null;
-};
+import {
+  formatProfileHandleAvailabilityHint,
+  type ProfileHandleAvailabilityLike,
+} from "./profileHandleAvailabilityHint";
+
+type BridgeHandleAvailability = ProfileHandleAvailabilityLike;
 
 export type WebCommunityBridgeCardProps = {
   /* "community": banner + community identity — for people entering a specific
@@ -67,16 +67,27 @@ function formatBridgeHandleHint(
   isChecking: boolean,
 ): { ok: boolean; label: string } {
   const trimmed = handle.trim();
-  if (!trimmed) return { ok: false, label: "" };
-  if (isChecking) return { ok: false, label: "Checking handle..." };
-  if (!validateProfileHandle(trimmed).ok) {
+  /* Instant client-side format feedback before the availability check lands. */
+  if (trimmed && !isChecking && !validateProfileHandle(trimmed).ok) {
     return { ok: false, label: "Use 3-32 letters, numbers, underscores, or hyphens." };
   }
-  if (!availability) return { ok: false, label: "" };
-  if (availability.status === "available") return { ok: true, label: `@${trimmed} is available` };
-  if (availability.status === "taken") return { ok: false, label: `@${trimmed} is taken` };
-  if (availability.status === "reserved") return { ok: false, label: `@${trimmed} is reserved` };
-  return { ok: false, label: "Use 3-32 letters, numbers, underscores, or hyphens." };
+  const hint = formatProfileHandleAvailabilityHint({
+    handle,
+    availability,
+    isChecking,
+    copy: {
+      empty: "",
+      checking: "Checking handle...",
+      unknown: "",
+      available: () => `@${trimmed} is available`,
+      taken: `@${trimmed} is taken`,
+      reserved: `@${trimmed} is reserved`,
+      tooShort: "Use 3-32 letters, numbers, underscores, or hyphens.",
+      tooLong: "Use 3-32 letters, numbers, underscores, or hyphens.",
+      invalidFormat: "Use 3-32 letters, numbers, underscores, or hyphens.",
+    },
+  });
+  return { ok: hint.kind === "success", label: hint.label };
 }
 
 export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
@@ -332,31 +343,10 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
       </div>
 
       {activeLegalDocument ? (
-        <div className="modal-overlay polynet-onboarding-legal-overlay" onClick={() => setActiveLegalDocument(null)}>
-          <div
-            className="modal polynet-onboarding-legal-modal"
-            role="dialog"
-            aria-modal="true"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-header">
-              <div>
-                <div className="modal-title">{activeLegalDocument.title}</div>
-                <div className="polynet-onboarding-legal-meta">
-                  {activeLegalDocument.version} - Effective {activeLegalDocument.effectiveDate}
-                </div>
-              </div>
-              <button className="modal-close" type="button" onClick={() => setActiveLegalDocument(null)} title="Close">
-                x
-              </button>
-            </div>
-            <div className="modal-body polynet-onboarding-legal-body">
-              <div className="polynet-onboarding-legal-reader message-text">
-                {renderMarkdown(activeLegalDocument.content)}
-              </div>
-            </div>
-          </div>
-        </div>
+        <WebPlatformLegalReaderModal
+          document={activeLegalDocument}
+          onClose={() => setActiveLegalDocument(null)}
+        />
       ) : null}
     </div>
   );

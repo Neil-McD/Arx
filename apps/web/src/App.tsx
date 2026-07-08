@@ -3921,6 +3921,19 @@ export default function App() {
     return row;
   }
 
+  /* Incomplete accounts onboard through the Polynet home community's bridge,
+     presented as the generic platform variant (src=platform) — the single
+     seam for where platform-generic onboarding lives. */
+  const redirectIncompleteAccountToPlatformBridge = useCallback(() => {
+    const homeFunnelPath = applyShellVariantToPublicPath(
+      buildCommunityFunnelPath("polynet") ?? "/c/polynet",
+      shellVariant,
+    );
+    window.location.assign(
+      `${homeFunnelPath}${homeFunnelPath.includes("?") ? "&" : "?"}src=platform`,
+    );
+  }, [shellVariant]);
+
   async function routeTryPolynetFree(activeSession: AuthSession | null = sessionRef.current ?? session): Promise<void> {
     if (!activeSession) {
       requireSignIn({ reason: "try_polynet_free", payload: {} });
@@ -3937,16 +3950,7 @@ export default function App() {
     } catch {
       /* Unknown setup state — the bridge collects everything from scratch. */
     }
-    /* Incomplete accounts onboard through the Polynet home community's
-       bridge — platform onboarding is the default community's onboarding,
-       presented as the generic platform bridge (src=platform). */
-    const homeFunnelPath = applyShellVariantToPublicPath(
-      buildCommunityFunnelPath("polynet") ?? "/c/polynet",
-      shellVariant,
-    );
-    window.location.assign(
-      `${homeFunnelPath}${homeFunnelPath.includes("?") ? "&" : "?"}src=platform`,
-    );
+    redirectIncompleteAccountToPlatformBridge();
   }
 
   async function finishOnboarding(options?: { navigate?: boolean }): Promise<boolean> {
@@ -4442,20 +4446,19 @@ export default function App() {
         return;
       }
       /* Onboarding is only ever community onboarding — no community context
-         means the Polynet home community receives you. src=platform renders
-         the generic platform bridge there, skipping the community pitch. */
-      const homeFunnelPath = applyShellVariantToPublicPath(
-        buildCommunityFunnelPath("polynet") ?? "/c/polynet",
-        shellVariant,
-      );
-      window.location.assign(
-        `${homeFunnelPath}${homeFunnelPath.includes("?") ? "&" : "?"}src=platform`,
-      );
+         means the Polynet home community receives you. */
+      redirectIncompleteAccountToPlatformBridge();
     })();
-  }, [activePage, cloudProfile, session, shellVariant]);
+  }, [activePage, cloudProfile, redirectIncompleteAccountToPlatformBridge, session]);
 
+  /* Load the viewer's profile + setup status wherever setup state matters:
+     the workspace (setup card, remedial modal) and /c/ routes (the bridge —
+     a signed-in visitor with an incomplete account meets the gate card's
+     second state on an entry attempt). */
   useEffect(() => {
-    if (activePage !== "workspace") return;
+    const needsOnboardingProfile =
+      activePage === "workspace" || publicRoute.kind === "community_funnel";
+    if (!needsOnboardingProfile) return;
     if (!isAuthBootstrapComplete) return;
     if (!session) return;
     if (cloudProfile) {
@@ -4468,27 +4471,6 @@ export default function App() {
     void loadProfileForOnboarding(session);
   }, [
     activePage,
-    cloudProfile,
-    hasLoadedOnboardingProfile,
-    isAuthBootstrapComplete,
-    session,
-  ]);
-
-  /* The bridge needs the viewer's setup status on /c/ routes: a signed-in
-     visitor with an incomplete account meets the gate card's second state. */
-  useEffect(() => {
-    if (publicRoute.kind !== "community_funnel") return;
-    if (!isAuthBootstrapComplete) return;
-    if (!session) return;
-    if (cloudProfile) {
-      setHasLoadedOnboardingProfile(true);
-      return;
-    }
-    if (hasLoadedOnboardingProfile) {
-      return;
-    }
-    void loadProfileForOnboarding(session);
-  }, [
     cloudProfile,
     hasLoadedOnboardingProfile,
     isAuthBootstrapComplete,
