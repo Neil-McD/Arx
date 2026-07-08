@@ -1,0 +1,209 @@
+/* Member ontology db glue. All consent transitions and all reads route
+   through the pure core in shared/memberOntology.ts — no consent logic or
+   visibility filtering may be hand-rolled here or at query sites.
+   Contract: docs/member-ontology-contract-v1.md. */
+import {
+  buildMemberSpine,
+  canTransitionMemberFactConsent,
+  deriveBornConsentState,
+  isMemberFactKind,
+  isMemberFactProvenance,
+  memberFactVisibleToLens,
+  normalizeMemberFactBody,
+  type MemberFactActorType,
+  type MemberFactConsentState,
+  type MemberFactKind,
+  type MemberFactLike,
+  type MemberFactProvenance,
+  type MemberOntologyLens,
+} from "../shared/memberOntology";
+
+export type MemberFactRow = MemberFactLike & {
+  _id: any;
+  userId: any;
+  confidence: number;
+  evidenceRefs: string[];
+  stalenessScore: number;
+  createdByActorType: MemberFactActorType;
+  createdByUserId?: any;
+  version: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type MemberFactDraft = {
+  kind: MemberFactKind;
+  body: string;
+  provenance: MemberFactProvenance;
+  confidence?: number;
+  evidenceRef?: string | null;
+};
+
+function toFactLike(row: any): MemberFactLike {
+  return {
+    communityId: row.communityId ? String(row.communityId) : null,
+    kind: row.kind,
+    body: row.body,
+    provenance: row.provenance,
+    consentState: row.consentState,
+  };
+}
+
+export function normalizeMemberFactDraft(draft: MemberFactDraft): {
+  kind: MemberFactKind;
+  body: string;
+  provenance: MemberFactProvenance;
+  confidence: number;
+  evidenceRefs: string[];
+} {
+  if (!isMemberFactKind(draft.kind)) throw new Error("member_fact_kind_invalid");
+  if (!isMemberFactProvenance(draft.provenance)) throw new Error("member_fact_provenance_invalid");
+  const body = normalizeMemberFactBody(draft.body);
+  if (!body) throw new Error("member_fact_body_required");
+  const confidence = Math.max(0, Math.min(1, Number(draft.confidence ?? 1)));
+  const evidenceRef = String(draft.evidenceRef ?? "").trim();
+  return {
+    kind: draft.kind,
+    body,
+    provenance: draft.provenance,
+    confidence,
+    evidenceRefs: evidenceRef ? [evidenceRef] : [],
+  };
+}
+
+export async function insertMemberFacts(ctx: any, args: {
+  userId: any;
+  communityId: any | null;
+  drafts: MemberFactDraft[];
+  createdByActorType: MemberFactActorType;
+  createdByUserId?: any;
+  confirmMarker?: string | null;
+  nowMs: number;
+}): Promise<string[]> {
+  const marker = String(args.confirmMarker ?? "").trim();
+  const insertedIds: string[] = [];
+  for (const draft of args.drafts) {
+    const normalized = normalizeMemberFactDraft(draft);
+    /* Same-kind same-body duplicates supersede the older row instead of
+       accumulating — idempotent writes for replayed bridges/interviews. */
+    const existingRows = (await ctx.db
+      .query("memberFacts")
+      .withIndex("by_user_community", (q: any) =>
+        q.eq("userId", args.userId).eq("communityId", args.communityId ?? undefined),
+      )
+      .collect()) as any[];
+    for (const existing of existingRows) {
+      if (existing.kind !== normalized.kind || existing.body !== normalized.body) continue;
+      if (
+        canTransitionMemberFactConsent({
+          from: existing.consentState,
+          to: "superseded",
+          actorType: args.createdByActorType,
+        })
+      ) {
+        await ctx.db.patch(existing._id, { consentState: "superseded", updatedAt: args.nowMs });
+      }
+    }
+    const id = await ctx.db.insert("memberFacts", {
+      userId: args.userId,
+      communityId: args.communityId ?? undefined,
+      kind: normalized.kind,
+      body: normalized.body,
+      provenance: normalized.provenance,
+      confidence: normalized.confidence,
+      evidenceRefs: marker ? [...normalized.evidenceRefs, marker] : normalized.evidenceRefs,
+      stalenessScore: 0,
+      consentState: deriveBornConsentState(normalized.provenance),
+      createdByActorType: args.createdByActorType,
+      createdByUserId: args.createdByUserId ?? undefined,
+      version: 1,
+      createdAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+    insertedIds.push(String(id));
+  }
+  await recomputeMemberSpine(ctx, args.userId, args.nowMs);
+  return insertedIds;
+}
+
+export async function transitionMemberFactConsent(ctx: any, args: {
+  factId: any;
+  to: MemberFactConsentState;
+  actorType: MemberFactActorType;
+  actorUserId: any;
+  nowMs: number;
+}): Promise<void> {
+  const fact = await ctx.db.get(args.factId);
+  if (!fact) throw new Error("member_fact_not_found");
+  /* Only the subject member consents about themselves. */
+  if (args.actorType === "member" && String(fact.userId) !== String(args.actorUserId)) {
+    throw new Error("member_fact_consent_forbidden");
+  }
+  if (
+    !canTransitionMemberFactConsent({
+      from: fact.consentState,
+      to: args.to,
+      actorType: args.actorType,
+    })
+  ) {
+    throw new Error("member_fact_consent_transition_invalid");
+  }
+  await ctx.db.patch(args.factId, { consentState: args.to, updatedAt: args.nowMs });
+  await recomputeMemberSpine(ctx, fact.userId, args.nowMs);
+}
+
+export async function recomputeMemberSpine(ctx: any, userId: any, nowMs: number): Promise<void> {
+  const rows = (await ctx.db
+    .query("memberFacts")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .collect()) as any[];
+  const spine = buildMemberSpine(rows.map(toFactLike));
+  const existing = await ctx.db
+    .query("memberProfileSpines")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .first();
+  const next = {
+    userId,
+    situation: spine.situation ?? undefined,
+    goals: spine.goals,
+    interests: spine.interests,
+    links: spine.links,
+    factCount: rows.length,
+    updatedAt: nowMs,
+  };
+  if (existing) {
+    await ctx.db.patch(existing._id, next);
+  } else {
+    await ctx.db.insert("memberProfileSpines", next);
+  }
+}
+
+export async function readMemberFactsForLens(ctx: any, args: {
+  subjectUserId: any;
+  lens: MemberOntologyLens;
+}): Promise<MemberFactRow[]> {
+  const rows = (await ctx.db
+    .query("memberFacts")
+    .withIndex("by_user", (q: any) => q.eq("userId", args.subjectUserId))
+    .collect()) as any[];
+  return rows.filter((row) => memberFactVisibleToLens(toFactLike(row), args.lens)) as MemberFactRow[];
+}
+
+export async function readMemberSpine(ctx: any, userId: any): Promise<{
+  situation: string | null;
+  goals: string[];
+  interests: string[];
+  links: string[];
+} | null> {
+  const row = await ctx.db
+    .query("memberProfileSpines")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .first();
+  if (!row) return null;
+  return {
+    situation: row.situation ?? null,
+    goals: row.goals ?? [],
+    interests: row.interests ?? [],
+    links: row.links ?? [],
+  };
+}

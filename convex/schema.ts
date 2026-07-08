@@ -1011,6 +1011,72 @@ export default defineSchema({
     .index("by_user_scope", ["userId", "scope"])
     .index("by_user_scope_updatedAt", ["userId", "scope", "updatedAt"]),
 
+  /* Member ontology ledger — docs/member-ontology-contract-v1.md.
+     communityId null = platform-wide; set = scoped to that community (this
+     column IS the cross-community isolation mechanism). consentState is
+     derived from provenance at birth; transitions are member-driven only. */
+  memberFacts: defineTable({
+    userId: v.id("users"),
+    communityId: v.optional(v.id("communities")),
+    kind: v.union(
+      v.literal("situation"),
+      v.literal("goal"),
+      v.literal("skill"),
+      v.literal("interest"),
+      v.literal("availability"),
+      v.literal("preference"),
+      v.literal("link"),
+    ),
+    body: v.string(),
+    provenance: v.union(
+      v.literal("stated_bridge"),
+      v.literal("stated_interview"),
+      v.literal("form_answer"),
+      v.literal("social_enrichment"),
+      v.literal("inferred_agent"),
+      v.literal("observed_behavior"),
+    ),
+    confidence: v.number(),
+    evidenceRefs: v.array(v.string()),
+    stalenessScore: v.number(),
+    consentState: v.union(
+      v.literal("approved"),
+      v.literal("pending"),
+      v.literal("rejected"),
+      v.literal("retracted"),
+      v.literal("superseded"),
+      v.literal("agent_internal"),
+    ),
+    createdByActorType: v.union(
+      v.literal("member"),
+      v.literal("admin"),
+      v.literal("agent"),
+      v.literal("compiler"),
+      v.literal("system"),
+    ),
+    createdByUserId: v.optional(v.id("users")),
+    version: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_community", ["userId", "communityId"])
+    .index("by_community_kind", ["communityId", "kind"])
+    .index("by_user_consentState", ["userId", "consentState"])
+    .index("by_community_consentState", ["communityId", "consentState"]),
+
+  /* Fast profile-card projection of approved platform-scoped facts. The
+     ledger is truth; only recomputeMemberSpine writes here. */
+  memberProfileSpines: defineTable({
+    userId: v.id("users"),
+    situation: v.optional(v.string()),
+    goals: v.array(v.string()),
+    interests: v.array(v.string()),
+    links: v.array(v.string()),
+    factCount: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
   cloudProjects: defineTable({
     ownerId: v.id("users"),
     name: v.optional(v.string()),

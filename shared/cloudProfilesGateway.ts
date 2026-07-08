@@ -282,3 +282,16 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
   });
   return firstGatewayRow<TProfile>(payload);
 }
+
+/* Bridge write path for the member ontology ledger: platform-scoped
+   stated_bridge link facts. Fire-and-forget from the client — entry never
+   waits on ledger writes. docs/member-ontology-contract-v1.md */
+export async function recordStatedBridgeMemberFacts<SessionT>(
+  params: CloudProfilesGatewayParams<SessionT> & { links: string[] },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  await client.mutation("memberOntology:recordStatedBridgeFacts" as any, {
+    authSubject,
+    links: params.links,
+  });
+}

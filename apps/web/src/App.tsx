@@ -136,6 +136,7 @@ import {
   checkCloudProfileHandleAvailability,
   loadCloudAccountSetupStatus,
   prepareCloudProfileAvatarField,
+  recordStatedBridgeMemberFacts,
   resolveCloudOnboardingProfileDetail,
   type CloudProfileHandleAvailability,
   upsertCloudProfileDetail,
@@ -4028,6 +4029,18 @@ export default function App() {
     if (!savedProfile) return false;
     const finished = await finishOnboarding({ navigate: false });
     if (!finished) return false;
+    /* Seed the ontology ledger with what they typed — never blocks entry. */
+    const bridgeLinks = Object.values(profileUi.profileSocialLinks ?? {})
+      .map((link) => String(link ?? "").trim())
+      .filter(Boolean);
+    if (bridgeLinks.length > 0) {
+      const ledgerSession = sessionRef.current ?? session;
+      if (ledgerSession) {
+        void recordStatedBridgeMemberFacts({ session: ledgerSession, links: bridgeLinks }).catch(
+          () => null,
+        );
+      }
+    }
     handlePublicLandingPrimaryAction();
     return true;
   }
