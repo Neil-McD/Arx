@@ -363,8 +363,13 @@ assert.match(
 );
 assert.match(
   platformSkill,
-  /Second example register[\s\S]*different structure on purpose/,
-  "onboarding skill must carry two structurally distinct exemplars to prevent template parroting",
+  /Originality:[\s\S]*do not use a stock welcome opener[\s\S]*Start from one concrete observation supported by this run's fetched context/,
+  "onboarding skill must derive its opener from fetched context instead of a prompt exemplar",
+);
+assert.doesNotMatch(
+  platformSkill,
+  /Example register|Second example register/,
+  "onboarding skill must not carry prose exemplars that can be copied into the response",
 );
 assert.match(
   platformSkill,
@@ -385,11 +390,6 @@ assert.match(
   onboardingLifecycle,
   /Write the first assistant message only, following your onboarding-guide skill instructions[\s\S]*Do not claim external\/social research unless a real research tool result/,
   "onboarding lifecycle request must defer opener shape and voice to the single skill spec",
-);
-assert.match(
-  platformSkill,
-  /Example register, adapt to real fetched context and never copy it verbatim/,
-  "onboarding skill must teach the register with a positive exemplar instead of a blocklist",
 );
 assert.match(
   platformSkill,
