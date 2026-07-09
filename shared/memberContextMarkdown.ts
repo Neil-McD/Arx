@@ -65,7 +65,14 @@ export function renderMemberContextMarkdown(args: {
   /* Defense in depth: callers pass lens-filtered rows, but the renderer
      re-applies the one predicate so it cannot leak what a caller forgot. */
   const visible = args.facts.filter((fact) => memberFactVisibleToLens(fact, args.lens));
-  const platformFacts = visible.filter((fact) => fact.communityId === null);
+  const accountSocialLinks = new Set(
+    args.account.socialLinks.map((link) => String(link ?? "").trim()).filter(Boolean),
+  );
+  const platformFacts = visible.filter(
+    (fact) =>
+      fact.communityId === null &&
+      !(fact.kind === "link" && accountSocialLinks.has(fact.body.trim())),
+  );
   const communityId = args.communityId ?? null;
   const communityFacts = communityId
     ? visible.filter((fact) => fact.communityId === communityId)

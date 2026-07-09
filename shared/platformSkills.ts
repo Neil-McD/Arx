@@ -54,6 +54,10 @@ export const PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES = [
   "community_resource_builder_apply_changeset",
 ] as const satisfies readonly RetrievalToolName[];
 
+export const PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES = [
+  "member_profile_confirm_facts",
+] as const satisfies readonly RetrievalToolName[];
+
 export type PlatformSkillSelectionSummary = {
   platform_skill_id?: unknown;
   mention_token?: unknown;
@@ -71,10 +75,27 @@ export function hasSelectedPlatformResourcesArchitectSkill(
   });
 }
 
+export function hasSelectedPlatformOnboardingGuideSkill(
+  selectedSkills: readonly PlatformSkillSelectionSummary[],
+): boolean {
+  const platformSkillId = PLATFORM_ONBOARDING_GUIDE_SKILL.id.toLowerCase();
+  const mentionToken = PLATFORM_ONBOARDING_GUIDE_SKILL.mentionToken.toLowerCase();
+  return selectedSkills.some((skill) => {
+    const id = String(skill.platform_skill_id ?? "").trim().toLowerCase();
+    const token = String(skill.mention_token ?? "").trim().toLowerCase();
+    return id === platformSkillId || token === mentionToken;
+  });
+}
+
 export function buildPlatformSkillToolNamesForSelection(
   selectedSkills: readonly PlatformSkillSelectionSummary[],
 ): readonly RetrievalToolName[] {
-  return hasSelectedPlatformResourcesArchitectSkill(selectedSkills)
-    ? PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES
-    : [];
+  return [
+    ...(hasSelectedPlatformResourcesArchitectSkill(selectedSkills)
+      ? PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES
+      : []),
+    ...(hasSelectedPlatformOnboardingGuideSkill(selectedSkills)
+      ? PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES
+      : []),
+  ];
 }

@@ -705,6 +705,7 @@ export function useWebTurnRunnerController<
       let runtimeStage: string | null = null;
       let responseStarted = false;
       let firstEventSeen = false;
+      let streamStartNotified = false;
       let lastEventName: string | null = null;
       let finalContent = "";
       let preserveStreamingStateForRecovery = false;
@@ -867,6 +868,14 @@ export function useWebTurnRunnerController<
                       }
                     : null,
                 );
+              }
+            }
+            if (!streamStartNotified) {
+              streamStartNotified = true;
+              try {
+                params.onStreamStart?.({ runId: runIdFromServer });
+              } catch {
+                // UI lifecycle callbacks must not interrupt the runtime stream.
               }
             }
           } else if (eventName === "delta") {

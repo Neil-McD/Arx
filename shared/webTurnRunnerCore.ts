@@ -112,8 +112,14 @@ export type RunAgentTurnParams = {
   systemPrompt?: string | null;
   inferenceSource?: "free" | "user_key" | "chatgpt";
   runtimeEngine?: RuntimeEngine;
-  requestedFundingSource: "demo_public" | "user_key" | "user_chatgpt";
+  requestedFundingSource:
+    | "demo_public"
+    | "user_key"
+    | "user_chatgpt"
+    | "platform"
+    | "auto";
   requestedAgenticTools?: boolean;
+  onStreamStart?: (params: { runId: string | null }) => void;
   replyToId?: string;
   messages?: PublicTurnThreadMessage[];
   suppressStreamingUi?: boolean;

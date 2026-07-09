@@ -149,27 +149,31 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
   return (
     <div className={`cfg-gatecard cvs-bridge-card${isPlatform ? " cvs-bridge-platform" : ""}`}>
       {isPlatform ? null : <div className="cfg-gbanner" />}
-      <div className="cfg-gav">
-        <CommunityAvatar
-          className="cfg-fill"
-          imageUrl={props.communityAvatarUrl}
-          focusX={props.communityAvatarFocusX}
-          focusY={props.communityAvatarFocusY}
-          zoom={props.communityAvatarZoom}
-          name={props.communityName}
-          alt={`${props.communityName} avatar`}
-        />
-      </div>
-      <div className="cfg-gname">{props.communityName}</div>
-      {props.paidReceiptLabel ? (
-        <div className="cvs-bridge-paid">
-          <span className="cvs-bridge-paid-dot" aria-hidden="true" />
-          {props.paidReceiptLabel}
-        </div>
-      ) : null}
-      <p className="cfg-gpromise">
-        You&rsquo;re in as soon as you set up <b>who you are here</b>.
-      </p>
+      {isPlatform ? null : (
+        <>
+          <div className="cfg-gav">
+            <CommunityAvatar
+              className="cfg-fill"
+              imageUrl={props.communityAvatarUrl}
+              focusX={props.communityAvatarFocusX}
+              focusY={props.communityAvatarFocusY}
+              zoom={props.communityAvatarZoom}
+              name={props.communityName}
+              alt={`${props.communityName} avatar`}
+            />
+          </div>
+          <div className="cfg-gname">{props.communityName}</div>
+          {props.paidReceiptLabel ? (
+            <div className="cvs-bridge-paid">
+              <span className="cvs-bridge-paid-dot" aria-hidden="true" />
+              {props.paidReceiptLabel}
+            </div>
+          ) : null}
+          <p className="cfg-gpromise">
+            You&rsquo;re in as soon as you set up <b>who you are here</b>.
+          </p>
+        </>
+      )}
 
       <div className="cvs-bridge-section" ref={identityRef}>
         <div className="cvs-bridge-label">

@@ -8,6 +8,8 @@ function read(path: string): string {
 const schema = read("convex/schema.ts");
 const profiles = read("convex/profiles.ts");
 const lifecycle = read("convex/agentLifecycleActivations.ts");
+const onboardingLifecycle = read("convex/onboardingLifecycle.ts");
+const runtimeTurnHandlers = read("convex/runtimeTurnHandlers.ts");
 const skillLifecycle = read("shared/runtimeSkillLifecycle.ts");
 const skillContract = read("docs/skill-harness-contract.md");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
@@ -66,18 +68,33 @@ assert.match(
 
 assert.match(
   lifecycle,
-  /ensureOnboardingCompletedAgentLifecycleActivation/,
-  "onboarding lifecycle activation helper must exist",
-);
-assert.match(
-  lifecycle,
   /trigger: RuntimeSkillLifecycleTrigger = "onboarding_completed"/,
   "onboarding helper must write the onboarding_completed trigger",
 );
-assert.match(
+assert.doesNotMatch(
   lifecycle,
   /scopeType = "user" as const/,
-  "onboarding activation must be user scoped",
+  "profile completion must not create legacy user-scoped onboarding evidence",
+);
+assert.doesNotMatch(
+  lifecycle,
+  /account_onboarding_completed/,
+  "activation sources must not keep the deleted user-scoped account completion path",
+);
+assert.match(
+  lifecycle,
+  /ensureCommunityOnboardingCompletedAgentLifecycleActivation/,
+  "community-scoped onboarding activation helper must exist",
+);
+assert.match(
+  lifecycle,
+  /scopeType = "community" as const/,
+  "onboarding guide kickoff must be scoped to the active community lens",
+);
+assert.match(
+  lifecycle,
+  /scopeType: v\.literal\("community"\)/,
+  "lifecycle activation claim API must not accept deleted user-scoped activations",
 );
 assert.match(
   lifecycle,
@@ -99,16 +116,46 @@ assert.match(
   /findLifecycleActivation[\s\S]*withIndex\("by_user_trigger_scope"/,
   "onboarding activation must fail closed on duplicate trigger scope",
 );
-
 assert.match(
+  lifecycle,
+  /ONBOARDING_ACTIVATION_PROCESSING_STALE_MS/,
+  "processing lifecycle claims must have a bounded stale-reclaim window",
+);
+assert.match(
+  lifecycle,
+  /if \(isOnboardingActivationClaimable\(activation, nowMs\)\)[\s\S]*reclaimed: true as const[\s\S]*ok: false as const,[\s\S]*status: "processing" as const/,
+  "fresh processing lifecycle claims must remain idempotent",
+);
+assert.match(
+  lifecycle,
+  /reclaimed: true as const/,
+  "stale processing lifecycle claims must be reclaimable",
+);
+assert.match(
+  lifecycle,
+  /activation\.runId && activation\.runId !== args\.runId[\s\S]*reason: "run_mismatch"/,
+  "late stale lifecycle runs must not overwrite the current activation claim",
+);
+assert.match(
+  lifecycle,
+  /activation\.status === "completed"[\s\S]*reason: "already_completed"/,
+  "failure finalization must not regress a completed lifecycle activation",
+);
+
+assert.doesNotMatch(
   profiles,
   /ensureOnboardingCompletedAgentLifecycleActivation/,
-  "profile completion must write the lifecycle activation",
+  "profile completion must not write legacy user-scoped lifecycle evidence",
+);
+assert.match(
+  profiles,
+  /insertMissingBridgeSocialLinkFacts/,
+  "profile completion must keep deterministic bridge social-link ontology seeding",
 );
 assert.match(
   profiles,
   /args\.completeOnboarding === true && !existingDetail\?\.onboardingCompletedAt/,
-  "activation must fire only on explicit first onboarding completion",
+  "bridge fact seeding must run only on explicit first onboarding completion",
 );
 assert.doesNotMatch(
   profiles,
@@ -122,19 +169,79 @@ assert.match(
   "runtime loop must already have a lifecycle trigger dispatch seam",
 );
 assert.match(
-  skillContract,
-  /explicit onboarding completion writes one pending `onboarding_completed`/,
-  "contract must state the current event-source boundary",
+  runtimeAgentLoop,
+  /privateLifecycleContextMd\?: string \| null/,
+  "runtime loop must support private lifecycle context outside the user message envelope",
+);
+assert.match(
+  runtimeAgentLoop,
+  /messages: params\.messages\.map[\s\S]*lifecycleTrigger: params\.skillLifecycleTrigger/,
+  "skill lifecycle selection must resolve from safe messages plus lifecycle trigger evidence",
 );
 assert.match(
   skillContract,
-  /no cron, email, notification, or runtime dispatcher is wired in this slice/,
-  "contract must not overclaim proactive dispatch",
+  /community-scoped `onboarding_completed` activation/,
+  "contract must state the community-scoped bridge handoff boundary",
 );
 assert.match(
   skillContract,
-  /first workspace thread creation remains deferred/,
+  /private lifecycle context/,
+  "contract must state that lifecycle-private context is not a normal user message",
+);
+assert.match(
+  skillContract,
+  /run-id guarded/,
+  "contract must state lifecycle finalization is guarded against stale run overwrite",
+);
+assert.match(
+  skillContract,
+  /no cron, email, notification, or background dispatcher is wired in this slice/,
+  "contract must not overclaim background dispatch",
+);
+assert.match(
+  skillContract,
+  /first\s+workspace thread creation remains deferred/,
   "contract must explicitly defer first-thread lifecycle activation",
+);
+assert.match(
+  onboardingLifecycle,
+  /requestOnboardingGuideKickoff/,
+  "bridge handoff action must exist",
+);
+assert.match(
+  onboardingLifecycle,
+  /ensureCloudThread/,
+  "bridge handoff must create or reuse a normal cloud thread",
+);
+assert.match(
+  onboardingLifecycle,
+  /community-onboarding/,
+  "bridge handoff must use a deterministic onboarding thread key",
+);
+assert.match(
+  runtimeTurnHandlers,
+  /claimOnboardingCompletedAgentLifecycleActivationInternal/,
+  "normal runtime handling must claim the activation before running",
+);
+assert.match(
+  runtimeTurnHandlers,
+  /executeChatToolsAgentLoop/,
+  "onboarding must use the normal runtime agent loop",
+);
+assert.match(
+  runtimeTurnHandlers,
+  /skillLifecycleTrigger: onboardingLifecycleRun[\s\S]*?"onboarding_completed"/,
+  "normal runtime handling must select the onboarding skill through lifecycle trigger",
+);
+assert.doesNotMatch(
+  onboardingLifecycle,
+  /communityAgentServeRequests|persistRuntimeUserMessage|executeChatToolsAgentLoop/,
+  "preparation must not route through agent queues or execute a model turn",
+);
+assert.match(
+  runtimeTurnHandlers,
+  /persistVisibleUserMessage = onboardingLifecycleRun === null/,
+  "normal runtime handling must suppress the synthetic onboarding user message",
 );
 
 console.log("agent_lifecycle_activation_contract_proof: ok");

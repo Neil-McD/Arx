@@ -90,34 +90,6 @@ export const confirmMemberInterviewFacts = mutation({
   },
 });
 
-/* Platform-scoped facts the member typed into the bridge (social links). */
-export const recordStatedBridgeFacts = mutation({
-  args: {
-    authSubject: v.optional(v.string()),
-    links: v.array(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const drafts = args.links
-      .map((link) => String(link ?? "").trim())
-      .filter(Boolean)
-      .map((link) => ({ kind: "link" as const, body: link, provenance: "stated_bridge" as const }));
-    if (drafts.length === 0) return { inserted: 0 };
-    const insertedIds = await insertMemberFacts(ctx, {
-      userId,
-      communityId: null,
-      drafts,
-      createdByActorType: "member",
-      createdByUserId: userId,
-      nowMs: Date.now(),
-    });
-    return { inserted: insertedIds.length };
-  },
-});
-
 export const approveMemberFact = mutation({
   args: {
     authSubject: v.optional(v.string()),

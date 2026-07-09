@@ -69,7 +69,7 @@ Current lifecycle example:
 - `platform:onboarding-guide`
 - globally visible as a locked platform skill
 - selected by explicit `$onboarding-guide` mention or backend lifecycle trigger evidence
-- grants no tools by itself
+- grants only `member_profile_confirm_facts`, and only after platform skill selection
 
 ### Community Skills
 
@@ -99,12 +99,12 @@ Allowed activation routes:
 - `lifecycle_trigger`: backend lifecycle event selects a skill, such as onboarding completion or first workspace thread.
 - `task_match`: backend selector matches request intent against skill metadata with confidence and ambiguity controls.
 
-Current behavior supports `explicit_mention`, `platform_required`, and a backend
-resolver path for onboarding `lifecycle_trigger` selections. The onboarding
-platform skill is also an explicit-mention canary for platform-owned skills that
-are globally visible but not auto-injected. `ui_selected`,
-automatic product event sources for lifecycle triggers, and `task_match` are
-contract targets, not assumed current behavior.
+Current behavior supports `explicit_mention`, `platform_required`, and the
+bridge-completion product event as a backend-validated onboarding
+`lifecycle_trigger`. The onboarding platform skill remains an explicit-mention canary
+for platform-owned skills that are globally visible but not auto-injected.
+`ui_selected`, additional lifecycle event sources, and `task_match` are contract
+targets, not assumed current behavior.
 
 If activation is ambiguous, the harness should not inject competing skill bodies. It should either select the higher-authority unambiguous skill or record the ambiguity and proceed without the ambiguous skill body.
 
@@ -116,6 +116,24 @@ Selected skill records should carry backend-only activation evidence:
 If selected skill evidence is missing or malformed in a normalized runtime
 payload, the manifest should preserve that as missing evidence rather than
 inventing a route.
+
+## Lifecycle Private Context
+
+Lifecycle-triggered runs may need server-derived context that is useful to the
+selected skill but too private or too attackable to treat as a user message.
+For onboarding, this includes member ontology markdown and community-scoped
+member context.
+
+That context must use the runtime private lifecycle context channel, not the
+normal chat message envelope. The normal message should stay a compact,
+auditable lifecycle request. The private lifecycle context can be injected into
+the server-side prompt as orientation for the selected lifecycle skill, but:
+
+- it must not be persisted as a fake user message
+- it must not become `latestUserText`
+- it must not be used for explicit `$skill` mention selection
+- prompt receipts may record only section identity and character counts, not
+  the private markdown itself
 
 ## Package Shape
 
@@ -194,9 +212,25 @@ Current behavior:
 - selected skills are recorded in backend context manifests
 - selected skill records include backend-only activation route and reason
 - the onboarding platform skill can be selected by explicit mention or backend lifecycle trigger
-- explicit onboarding completion writes one pending `onboarding_completed`
-  lifecycle activation per user
-- no cron, email, notification, or runtime dispatcher is wired in this slice
+- the onboarding platform skill grants one narrow member-ontology write tool:
+  `member_profile_confirm_facts`; the tool requires an active community lens,
+  writes only for the authenticated member, and accepts only confirmed
+  `stated_interview` / `form_answer` facts
+- explicit profile completion no longer writes legacy pending
+  user-scoped `onboarding_completed` lifecycle evidence
+- the bridge handoff action resolves the active community lens, ensures one
+  community-scoped `onboarding_completed` activation, creates or reuses a
+  deterministic normal cloud thread, and returns preparation state without
+  invoking a model
+- the authenticated client enters that thread and opens the existing runtime
+  SSE transport without a user-authored message
+- the normal runtime handler admits that message-less turn only when thread
+  ownership, deterministic thread scope, community lens, and a claimable
+  activation agree; it then selects `lifecycle_trigger`, suppresses synthetic
+  user-message persistence, and streams the normal runtime timeline
+- lifecycle activation finalization is run-id guarded so a reclaimed stale run
+  cannot overwrite the current activation claim
+- no cron, email, notification, or background dispatcher is wired in this slice
 
 ## Keep
 
@@ -227,17 +261,27 @@ Current behavior:
 
 ## Onboarding Skill Target
 
-Onboarding should become a lifecycle-triggered skill, not a special-case prompt.
+Onboarding is a lifecycle-triggered skill, not a special-case prompt.
 
-The backend should select it when an eligible lifecycle event occurs. The current wired event is account onboarding completion; first workspace thread creation remains deferred. Its instructions should be injected only for that turn or run. The skill should not become permanent always-on context.
+The backend selects it when an eligible bridge handoff occurs. The current wired
+event is member onboarding completion scoped to the active community lens; first
+workspace thread creation remains deferred. Its instructions are injected only
+for that turn or run. The skill should not become permanent always-on context.
 
 Irreducible onboarding flow:
 
 1. backend observes a lifecycle event
 2. backend selects the onboarding skill with `lifecycle_trigger`
-3. runtime injects the onboarding skill body for that run
-4. agent introduces itself and gives the first useful action
-5. backend records activation evidence and completion state
+3. backend creates or reuses the deterministic normal cloud thread for the
+   active community lens
+4. client enters that thread and opens the normal runtime SSE turn
+5. runtime atomically claims the activation and injects the onboarding skill body
+6. bridge renders the compact handoff screen until the real SSE `start` event
+7. agent welcomes the member with a real orientation: who the agent is, where
+   the member is, how the active thread/community lens works, which practical
+   workspace surfaces matter next, what starting context is available, the
+   profile-memory boundary, and one plain profile-building question
+8. backend records completion only after the assistant message persists
 
 ## Definition Of Done For Skill Harness Maturity
 

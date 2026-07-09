@@ -130,6 +130,63 @@ const COMMUNITY_SEARCH_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["confirm_marker", "facts"],
+  properties: {
+    confirm_marker: {
+      type: "string",
+      minLength: 1,
+      maxLength: 160,
+      description: "Stable marker for the member-approved interview batch.",
+    },
+    facts: {
+      type: "array",
+      minItems: 1,
+      maxItems: 12,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "body", "provenance"],
+        properties: {
+          kind: {
+            type: "string",
+            enum: [
+              "situation",
+              "goal",
+              "skill",
+              "interest",
+              "availability",
+              "preference",
+              "link",
+            ],
+          },
+          body: {
+            type: "string",
+            minLength: 1,
+            maxLength: 500,
+          },
+          provenance: {
+            type: "string",
+            enum: ["stated_interview", "form_answer"],
+          },
+          confidence: {
+            type: "number",
+            minimum: 0,
+            maximum: 1,
+          },
+          evidence_ref: {
+            type: "string",
+            minLength: 1,
+            maxLength: 180,
+          },
+        },
+      },
+    },
+  },
+};
+
 const COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -801,6 +858,11 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     name: "get_active_community_context",
     description: "Read bounded profile context for the active community lens. The active community is server-selected from the thread context.",
     inputSchema: EMPTY_TOOL_SCHEMA,
+  },
+  member_profile_confirm_facts: {
+    name: "member_profile_confirm_facts",
+    description: "Write member-approved onboarding interview facts to the active member profile ontology for the active community lens.",
+    inputSchema: MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA,
   },
   community_resources_list: {
     name: "community_resources_list",
@@ -1583,6 +1645,65 @@ export function normalizeToolArguments(
   }
   if (toolName === "get_active_community_context") {
     return {};
+  }
+  if (toolName === "member_profile_confirm_facts") {
+    const confirmMarker = normalizeString(args.confirm_marker ?? args.confirmMarker);
+    if (!confirmMarker) throw new Error("member_profile_confirm_facts requires confirm_marker.");
+    if (!Array.isArray(args.facts)) {
+      throw new Error("member_profile_confirm_facts requires facts.");
+    }
+    if (args.facts.length < 1) {
+      throw new Error("member_profile_confirm_facts facts cannot be empty.");
+    }
+    if (args.facts.length > 12) {
+      throw new Error("member_profile_confirm_facts supports at most 12 facts.");
+    }
+    const validKinds = new Set([
+      "situation",
+      "goal",
+      "skill",
+      "interest",
+      "availability",
+      "preference",
+      "link",
+    ]);
+    const facts = args.facts.map((rawFact, index) => {
+      if (!rawFact || typeof rawFact !== "object" || Array.isArray(rawFact)) {
+        throw new Error(`member_profile_confirm_facts fact ${index + 1} must be an object.`);
+      }
+      const fact = rawFact as Record<string, unknown>;
+      const kind = normalizeString(fact.kind)?.toLowerCase() ?? "";
+      if (!validKinds.has(kind)) {
+        throw new Error(`member_profile_confirm_facts fact ${index + 1} has invalid kind.`);
+      }
+      const provenance = normalizeString(fact.provenance)?.toLowerCase() ?? "";
+      if (provenance !== "stated_interview" && provenance !== "form_answer") {
+        throw new Error(
+          "member_profile_confirm_facts only accepts stated_interview or form_answer provenance.",
+        );
+      }
+      const body = normalizeString(fact.body);
+      if (!body) {
+        throw new Error(`member_profile_confirm_facts fact ${index + 1} requires body.`);
+      }
+      const confidenceRaw = fact.confidence;
+      const confidence =
+        typeof confidenceRaw === "number" && Number.isFinite(confidenceRaw)
+          ? Math.max(0, Math.min(1, confidenceRaw))
+          : null;
+      const evidenceRef = normalizeString(fact.evidence_ref ?? fact.evidenceRef);
+      return {
+        kind,
+        body: body.slice(0, 500),
+        provenance,
+        ...(confidence !== null ? { confidence } : null),
+        ...(evidenceRef ? { evidenceRef: evidenceRef.slice(0, 180) } : null),
+      };
+    });
+    return {
+      confirmMarker: confirmMarker.slice(0, 160),
+      facts,
+    };
   }
   if (toolName === "search_product_docs") {
     const query = normalizeString(args.query);

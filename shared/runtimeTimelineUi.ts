@@ -312,6 +312,7 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   if (toolName === "community_resource_builder_apply_changeset") return "Apply resource changeset";
   if (toolName === "community_search") return `Community search${query ? `: ${query}` : ""}`;
   if (toolName === "community_write") return "Community write";
+  if (toolName === "member_profile_confirm_facts") return "Profile facts";
   if (toolName === "list_dir") return `Listed ${path || "."}`;
   if (toolName === "read") return `Read ${shortPath || path || "file"}`;
   if (toolName === "glob") return `Glob ${pattern || "pattern"}`;

@@ -194,26 +194,16 @@ require_match_in_file "$RESOLUTION_FILE" '"community_write"' \
   "runtime capability resolution includes community tools"
 require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("search_product_docs", "get_product_doc"\)' \
   "runtime capability resolution includes product docs tools"
-require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("web_research"\)' \
+require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("web_research", "web_crawl"\)' \
   "runtime capability resolution includes web research tools"
 require_match_in_file "$RESOLUTION_FILE" 'if \(params.activeCapabilityFamilies.includes\("workspace_tools"\)\)' \
   "runtime capability resolution gates workspace tools structurally"
-require_match_in_file "$RESOLUTION_FILE" '"list_dir"' \
-  "runtime capability resolution includes list_dir"
-require_match_in_file "$RESOLUTION_FILE" '"read"' \
-  "runtime capability resolution includes read"
-require_match_in_file "$RESOLUTION_FILE" '"glob"' \
-  "runtime capability resolution includes glob"
-require_match_in_file "$RESOLUTION_FILE" '"grep"' \
-  "runtime capability resolution includes grep"
-require_match_in_file "$RESOLUTION_FILE" '"sha256"' \
-  "runtime capability resolution includes sha256"
-require_match_in_file "$RESOLUTION_FILE" '"write"' \
-  "runtime capability resolution includes write"
-require_match_in_file "$RESOLUTION_FILE" '"edit"' \
-  "runtime capability resolution includes edit"
-require_match_in_file "$RESOLUTION_FILE" '"bash"' \
-  "runtime capability resolution includes bash"
+require_match_in_file "$RESOLUTION_FILE" 'SANDBOX_FILE_SHELL_TOOL_NAMES' \
+  "runtime capability resolution includes sandbox file/shell tools"
+require_match_in_file "$RESOLUTION_FILE" 'SANDBOX_PREVIEW_TOOL_NAMES' \
+  "runtime capability resolution includes sandbox preview tools"
+require_match_in_file "$RESOLUTION_FILE" 'PROJECT_WORKSPACE_TERMINAL_TOOL_NAMES' \
+  "runtime capability resolution includes project terminal tools"
 
 echo "== Runtime tool loop proof =="
 node --experimental-strip-types --experimental-specifier-resolution=node "$ROOT/scripts/runtime_tool_loop_proof.ts"

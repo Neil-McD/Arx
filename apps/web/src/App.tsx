@@ -11,6 +11,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { flushSync } from "react-dom";
 import { MessageCircle } from "lucide-react";
 import "highlight.js/styles/github-dark.css";
 import {
@@ -137,11 +138,13 @@ import {
   loadCloudAccountSetupStatus,
   prepareCloudProfileAvatarField,
   recordMemberTimezoneRpc,
-  recordStatedBridgeMemberFacts,
   resolveCloudOnboardingProfileDetail,
   type CloudProfileHandleAvailability,
   upsertCloudProfileDetail,
 } from "../../../shared/cloudProfilesGateway";
+import {
+  requestOnboardingGuideKickoff,
+} from "../../../shared/cloudOnboardingGuideGateway";
 import { formatProfileMutationError } from "../../../shared/profileMutationErrors";
 import {
   formatAccountSetupMissingGuidance,
@@ -587,6 +590,15 @@ type CommunityRecord = {
   owner_id: string;
   created_at: string;
   updated_at: string;
+};
+
+type OnboardingGuidePendingState = {
+  communityId: string | null;
+  communitySlug: string | null;
+  communityName: string;
+  status: "starting" | "failed";
+  error: string | null;
+  startedAtMs: number;
 };
 
 function mapLaunchCommunityCreateError(error: unknown): string {
@@ -2114,6 +2126,7 @@ export default function App() {
   const [bridgePendingEntry, setBridgePendingEntry] = useState<{
     communityId: string;
     communitySlug: string | null;
+    communityName?: string | null;
   } | null>(null);
   const refreshAccountSetupStatus = useCallback(async (activeSession: AuthSession | null = sessionRef.current ?? session) => {
     if (!activeSession) {
@@ -2316,6 +2329,8 @@ export default function App() {
   const [hasResolvedCommunities, setHasResolvedCommunities] = useState(false);
   const [communities, setCommunities] = useState<CommunityRecord[]>([]);
   const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
+  const [onboardingGuidePending, setOnboardingGuidePending] =
+    useState<OnboardingGuidePendingState | null>(null);
   const communityRailOrderStorageKey = useMemo(
     () => `${COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX}:${session?.user?.id ?? "local"}`,
     [session?.user?.id],
@@ -4038,10 +4053,20 @@ export default function App() {
   function enterCommunityThroughBridge(entry: {
     communityId: string;
     communitySlug: string | null;
+    communityName?: string | null;
   }): void {
     const setupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
     if (publicRoute.kind === "community_funnel" && setupStatus && !setupStatus.completed) {
-      setBridgePendingEntry(entry);
+      const communityName =
+        String(entry.communityName ?? "").trim() ||
+        (activeCommunity?.id === entry.communityId ? activeCommunity.name : "") ||
+        (publicCommunityUi.publicCommunityAccess?.community_id === entry.communityId
+          ? publicCommunityUi.publicCommunity?.name ?? ""
+          : "");
+      setBridgePendingEntry({
+        ...entry,
+        communityName: communityName || null,
+      });
       setIsBridgeGateOpen(true);
       return;
     }
@@ -4051,17 +4076,183 @@ export default function App() {
     });
   }
 
-  /* Seed the ontology ledger with what they typed — never blocks entry. */
-  function recordBridgeLedgerFactsBestEffort(): void {
-    const bridgeLinks = Object.values(profileUi.profileSocialLinks ?? {})
-      .map((link) => String(link ?? "").trim())
-      .filter(Boolean);
-    if (bridgeLinks.length === 0) return;
-    const ledgerSession = sessionRef.current ?? session;
-    if (!ledgerSession) return;
-    void recordStatedBridgeMemberFacts({ session: ledgerSession, links: bridgeLinks }).catch(
-      () => null,
-    );
+  async function requestOnboardingGuideAfterBridge(options?: {
+    communityId?: string | null;
+    communitySlug?: string | null;
+    communityName?: string | null;
+  }): Promise<boolean> {
+    const activeSession = sessionRef.current ?? session;
+    if (!activeSession) return false;
+    const targetCommunityId = String(options?.communityId ?? "").trim() || null;
+    const targetCommunitySlug =
+      String(options?.communitySlug ?? "").trim() ||
+      (targetCommunityId ? resolveKnownCommunitySlugById(targetCommunityId) : null);
+    const targetCommunity =
+      (targetCommunityId
+        ? communities.find((community) => community.id === targetCommunityId)
+        : null) ??
+      (targetCommunitySlug
+        ? communities.find((community) => community.slug === targetCommunitySlug)
+        : null);
+    const targetCommunityName =
+      String(
+        options?.communityName ??
+        targetCommunity?.name ??
+        (targetCommunityId || targetCommunitySlug ? "this community" : "Polynet"),
+      ).trim() ||
+      "Polynet";
+    const pendingStartedAtMs = Date.now();
+    const routePath = buildAppRoutePath({
+      page: "workspace",
+      view: "home",
+      settingsPage: "agent",
+      communitySlug: targetCommunitySlug,
+      communityTab: "chat",
+      threadId: null,
+    }) ?? buildWorkspaceDraftPath();
+
+    if (targetCommunityId || targetCommunitySlug) {
+      syncCommunitySelection({
+        communityId: targetCommunityId,
+        communitySlug: targetCommunitySlug,
+      });
+    }
+    flushSync(() => {
+      setOnboardingGuidePending({
+        communityId: targetCommunityId,
+        communitySlug: targetCommunitySlug,
+        communityName: targetCommunityName,
+        status: "starting",
+        error: null,
+        startedAtMs: pendingStartedAtMs,
+      });
+      setActiveThreadId(null);
+      setWorkspaceWantsNewChatMode(true);
+    });
+    navigateTo(routePath);
+
+    try {
+      const result = await requestOnboardingGuideKickoff<AuthSession>({
+        session: activeSession,
+        communityId: targetCommunityId,
+      });
+      if (!result || result.ok === false) {
+        if (result?.error) {
+          console.warn("[onboarding-guide] kickoff failed:", result.error);
+        }
+        setOnboardingGuidePending((current) =>
+          current?.startedAtMs === pendingStartedAtMs
+            ? { ...current, status: "failed", error: result?.error || "Guide kickoff failed." }
+            : current,
+        );
+        return false;
+      }
+
+      const threadId = String(result.thread_id ?? "").trim();
+      if (!threadId) {
+        setOnboardingGuidePending((current) =>
+          current?.startedAtMs === pendingStartedAtMs
+            ? { ...current, status: "failed", error: "Guide kickoff did not return a thread." }
+            : current,
+        );
+        return false;
+      }
+      const communityId =
+        String(result.community_id ?? targetCommunityId ?? "").trim() || null;
+      const runRequired = result.run_required === true;
+
+      if (communityId || targetCommunitySlug) {
+        syncCommunitySelection({
+          communityId,
+          communitySlug: targetCommunitySlug,
+        });
+      }
+
+      const nowSeconds = Date.now() / 1000;
+      setThreads((prev) => {
+        const existing = prev.find((thread) => thread.id === threadId) ?? null;
+        const nextThread: ThreadRecord = {
+          id: threadId,
+          title: existing?.title ?? `Welcome to ${targetCommunityName}`,
+          model_id: existing?.model_id ?? DEFAULT_ACTIVE_MODEL_ID,
+          runtime_engine: existing?.runtime_engine ?? "polynet",
+          project_id: existing?.project_id ?? null,
+          community_id: existing?.community_id ?? communityId,
+          context_version: existing?.context_version ?? 0,
+          agent_attention: existing?.agent_attention ?? true,
+          last_seq: Math.max(1, existing?.last_seq ?? 0),
+          created_at: existing?.created_at ?? nowSeconds,
+          updated_at: nowSeconds,
+        };
+        return [nextThread, ...prev.filter((thread) => thread.id !== threadId)];
+      });
+
+      setActiveThreadId(threadId);
+      setWorkspaceWantsNewChatMode(false);
+      if (!runRequired) {
+        try {
+          await Promise.all([
+            loadThreadMessages(threadId, activeSession),
+            loadThreads(activeSession),
+          ]);
+        } finally {
+          setOnboardingGuidePending((current) =>
+            current?.startedAtMs === pendingStartedAtMs ? null : current,
+          );
+        }
+        return true;
+      }
+
+      const runId =
+        String(result.run_id ?? "").trim() ||
+        `onboarding:${communityId ?? "platform"}:${crypto.randomUUID()}`;
+      const turnResult = await runAgentTurn(activeSession, threadId, {
+        preferredModelId: DEFAULT_ACTIVE_MODEL_ID,
+        mode: "respond",
+        runIdHint: runId,
+        systemPrompt: null,
+        runtimeEngine: "polynet",
+        requestedFundingSource: "auto",
+        requestedAgenticTools: true,
+        onStreamStart: () => {
+          setOnboardingGuidePending((current) =>
+            current?.startedAtMs === pendingStartedAtMs ? null : current,
+          );
+        },
+      });
+      if (turnResult.error) {
+        setThreadErrorForThread(threadId, turnResult.error);
+        setOnboardingGuidePending((current) =>
+          current?.startedAtMs === pendingStartedAtMs
+            ? { ...current, status: "failed", error: turnResult.error }
+            : current,
+        );
+        return false;
+      }
+      setOnboardingGuidePending((current) =>
+        current?.startedAtMs === pendingStartedAtMs ? null : current,
+      );
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn("[onboarding-guide] kickoff failed:", message);
+      setOnboardingGuidePending((current) =>
+        current?.startedAtMs === pendingStartedAtMs
+          ? { ...current, status: "failed", error: message || "Guide kickoff failed." }
+          : current,
+      );
+      return false;
+    }
+  }
+
+  function retryOnboardingGuideAfterBridge(): void {
+    const pending = onboardingGuidePending;
+    if (!pending || pending.status === "starting") return;
+    void requestOnboardingGuideAfterBridge({
+      communityId: pending.communityId,
+      communitySlug: pending.communitySlug,
+      communityName: pending.communityName,
+    });
   }
 
   /* Platform bridge Enter (standalone page): save identity + legal, complete
@@ -4072,14 +4263,14 @@ export default function App() {
   } | null): Promise<boolean> {
     const savedProfile = await saveOnboardingProfile(legalAcceptance);
     if (!savedProfile) return false;
-    const finished = await finishOnboarding();
+    const finished = await finishOnboarding({ navigate: false });
     if (!finished) return false;
-    recordBridgeLedgerFactsBestEffort();
+    await requestOnboardingGuideAfterBridge();
     return true;
   }
 
-  /* Bridge Enter: save identity + legal, complete setup, then run the entry
-     action — the whole thing without ever leaving the community page. */
+  /* Bridge Enter: save identity + legal, complete setup, run community entry,
+     then let the guide handoff select the normal community-lens thread. */
   async function completeBridgeAndEnter(legalAcceptance: {
     termsOfServiceVersion: string;
     privacyPolicyVersion: string;
@@ -4088,21 +4279,42 @@ export default function App() {
     if (!savedProfile) return false;
     const finished = await finishOnboarding({ navigate: false });
     if (!finished) return false;
-    recordBridgeLedgerFactsBestEffort();
+    const guideTarget = bridgePendingEntry ?? (
+      activeCommunityId
+        ? {
+            communityId: activeCommunityId,
+            communitySlug: selectedActiveCommunitySlug,
+          }
+        : null
+    );
     setIsBridgeGateOpen(false);
     /* Approval applicants have nothing to run — the request is already in;
        the gate's "Request pending" state takes over once the bridge clears. */
-    if (!approvalPending) {
-      const entry = bridgePendingEntry;
+    if (approvalPending) {
       setBridgePendingEntry(null);
-      if (entry) {
-        void enterJoinedCommunity({
-          communityId: entry.communityId,
-          communitySlug: entry.communitySlug,
-        });
-      } else {
-        handlePublicLandingPrimaryAction();
-      }
+      return true;
+    }
+    const entry = bridgePendingEntry;
+    setBridgePendingEntry(null);
+    if (entry) {
+      void enterJoinedCommunity({
+        communityId: entry.communityId,
+        communitySlug: entry.communitySlug,
+      });
+    } else {
+      handlePublicLandingPrimaryAction();
+    }
+    if (guideTarget) {
+      const guideTargetName =
+        String(guideTarget.communityName ?? "").trim() ||
+        (guideTarget.communityId && activeCommunity?.id === guideTarget.communityId
+          ? activeCommunity.name
+          : null);
+      void requestOnboardingGuideAfterBridge({
+        communityId: guideTarget.communityId,
+        communitySlug: guideTarget.communitySlug,
+        communityName: guideTargetName,
+      });
     }
     return true;
   }
@@ -9060,10 +9272,11 @@ export default function App() {
 	  }, [guestThreadHasMessages, guestThreadMessages]);
 
   const hasSelectedCommunity = Boolean(String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim());
+  const shellProjectionActivePage = onboardingGuidePending ? "onboarding" : activePage;
   const shellProjection = buildWebShellProjection({
     publicRouteKind: shellPublicRoute.kind,
     shellVariant,
-    activePage,
+    activePage: shellProjectionActivePage,
     activeView,
     mobileSettingsView,
     userWantsSessions,
@@ -11784,6 +11997,11 @@ export default function App() {
       </svg>
     </button>
   ) : null;
+  const onboardingHandoffCommunity =
+    onboardingGuidePending?.communityId
+      ? communities.find((community) => community.id === onboardingGuidePending.communityId) ??
+        (activeCommunity?.id === onboardingGuidePending.communityId ? activeCommunity : null)
+      : null;
 
   const mainSurfaceHostProps = buildWebAppMainSurfaceHostProps({
     activePage,
@@ -11858,6 +12076,18 @@ export default function App() {
       onFinishOnboarding: finishOnboarding,
       onClose: () => setIsOnboardingModalOpen(false),
     },
+    onboardingHandoffPageProps: onboardingGuidePending
+      ? {
+          targetName: onboardingGuidePending.communityName,
+          communityAvatarUrl: onboardingHandoffCommunity?.avatar_url ?? null,
+          communityAvatarFocusX: onboardingHandoffCommunity?.avatar_focus_x ?? null,
+          communityAvatarFocusY: onboardingHandoffCommunity?.avatar_focus_y ?? null,
+          communityAvatarZoom: onboardingHandoffCommunity?.avatar_zoom ?? null,
+          status: onboardingGuidePending.status,
+          error: onboardingGuidePending.error,
+          onRetry: retryOnboardingGuideAfterBridge,
+        }
+      : null,
     platformBridgePageProps: {
       bridge:
         session && effectiveAccountSetupStatus && !effectiveAccountSetupStatus.completed
@@ -12301,7 +12531,7 @@ export default function App() {
     forceMobileCommunityRoot: showMobileShell && isVisitorCommunitySurface,
     mobileSecondaryMode,
     showMobileSettingsIndex,
-    activePage,
+    activePage: shellProjectionActivePage,
     hasSelectedCommunity,
     activeCommunity: isVisitorCommunitySurface ? visitorShellActiveCommunity : activeCommunity,
     activeCommunityAttentionCount,

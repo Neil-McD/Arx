@@ -7,6 +7,7 @@ import { WebPublicCommunityFunnel } from "./WebPublicCommunityFunnel";
 import { WebWorkspaceSurfaceHost } from "./WebWorkspaceSurfaceHost";
 import { WebLandingPage } from "./WebLandingPage";
 import { WebOnboardingPage } from "./WebOnboardingPage";
+import { WebOnboardingHandoffPage } from "./WebOnboardingHandoffPage";
 import { WebPlatformBridgePage } from "./WebPlatformBridgePage";
 
 export type WebAppMainSurfaceHostProps = {
@@ -18,6 +19,7 @@ export type WebAppMainSurfaceHostProps = {
   holdLandingForAuth: boolean;
   landingPageProps: ComponentProps<typeof WebLandingPage>;
   onboardingPageProps: ComponentProps<typeof WebOnboardingPage>;
+  onboardingHandoffPageProps: ComponentProps<typeof WebOnboardingHandoffPage> | null;
   platformBridgePageProps: ComponentProps<typeof WebPlatformBridgePage>;
   showOnboardingModal: boolean;
   workspaceSurfaceHostProps: ComponentProps<typeof WebWorkspaceSurfaceHost>;
@@ -31,13 +33,17 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
   return (
     <main
       className={`workspace${
-        props.showPublicCommunityFunnel || props.activePage !== "workspace"
+        props.onboardingHandoffPageProps ||
+        props.showPublicCommunityFunnel ||
+        props.activePage !== "workspace"
           ? " community-mode"
           : ""
       }`}
     >
       {props.holdLandingForAuth ? (
         <div className="landing-auth-hold" aria-hidden="true" />
+      ) : props.onboardingHandoffPageProps ? (
+        <WebOnboardingHandoffPage {...props.onboardingHandoffPageProps} />
       ) : props.activePage === "landing" ? (
         <WebLandingPage {...props.landingPageProps} />
       ) : props.showPublicCommunityFunnel ? (

@@ -10,7 +10,7 @@ export function describeRuntimeSkillLifecycleTrigger(
   trigger: RuntimeSkillLifecycleTrigger,
 ): string {
   const descriptions: Record<RuntimeSkillLifecycleTrigger, string> = {
-    onboarding_completed: "account onboarding completed",
+    onboarding_completed: "member onboarding completed",
   };
   return descriptions[trigger];
 }

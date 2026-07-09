@@ -4,9 +4,13 @@ import { readFileSync } from "node:fs";
 import { buildEffectiveSkills } from "../shared/effectiveSkills.ts";
 import {
   COMMUNITY_MANAGER_PLATFORM_SKILLS,
+  GLOBAL_PLATFORM_SKILLS,
+  PLATFORM_ONBOARDING_GUIDE_SKILL,
+  PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES,
   PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES,
   PLATFORM_RESOURCES_ARCHITECT_SKILL,
   buildPlatformSkillToolNamesForSelection,
+  hasSelectedPlatformOnboardingGuideSkill,
   hasSelectedPlatformResourcesArchitectSkill,
 } from "../shared/platformSkills.ts";
 
@@ -21,6 +25,9 @@ function assertIncludes(haystack: string, needle: string, label: string) {
 function main() {
   assert.deepEqual(COMMUNITY_MANAGER_PLATFORM_SKILLS, [
     PLATFORM_RESOURCES_ARCHITECT_SKILL,
+  ]);
+  assert.deepEqual(GLOBAL_PLATFORM_SKILLS, [
+    PLATFORM_ONBOARDING_GUIDE_SKILL,
   ]);
   assert.equal(PLATFORM_RESOURCES_ARCHITECT_SKILL.scope, "platform");
   assert.equal(PLATFORM_RESOURCES_ARCHITECT_SKILL.locked, true);
@@ -47,6 +54,21 @@ function main() {
       { mention_token: "resources-architect" },
     ]),
     PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES,
+  );
+  assert.deepEqual(PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES, [
+    "member_profile_confirm_facts",
+  ]);
+  assert.equal(
+    hasSelectedPlatformOnboardingGuideSkill([
+      { platform_skill_id: "platform:onboarding-guide" },
+    ]),
+    true,
+  );
+  assert.deepEqual(
+    buildPlatformSkillToolNamesForSelection([
+      { mention_token: "onboarding-guide" },
+    ]),
+    PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES,
   );
   assert.deepEqual(buildPlatformSkillToolNamesForSelection([]), []);
 
@@ -171,6 +193,16 @@ function main() {
     "server-side Resources Architect instructions",
   );
   assertIncludes(
+    platformSkillRuntime,
+    "First response order: 1. say who you are",
+    "server-side Onboarding Guide orientation contract",
+  );
+  assertIncludes(
+    platformSkillRuntime,
+    "Attached social links alone are leads, not proof.",
+    "Onboarding Guide must not fabricate social research from attached links",
+  );
+  assertIncludes(
     runtimeSkillResolution,
     "COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS",
     "runtime platform skill source",
@@ -246,6 +278,12 @@ function main() {
     assertIncludes(runtimeToolPolicy, `${toolName}: {`, "Resources Architect tool policy");
     assertIncludes(runtimeAgentLoop, `params.toolName === "${toolName}"`, "Resources Architect tool executor");
   }
+  for (const toolName of PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES) {
+    assertIncludes(retrievalTools, toolName, "Onboarding Guide retrieval tool");
+    assertIncludes(toolRegistry, `${toolName}: {`, "Onboarding Guide tool registry entry");
+    assertIncludes(runtimeToolPolicy, `${toolName}: {`, "Onboarding Guide tool policy");
+    assertIncludes(runtimeAgentLoop, `params.toolName === "${toolName}"`, "Onboarding Guide tool executor");
+  }
   assertIncludes(
     runtimeAgentLoop,
     "buildEffectiveAllowedToolNames",
@@ -261,6 +299,12 @@ function main() {
       runtimeTurnResolution,
     ),
     "builder tools must not be exposed by default community tool entitlement",
+  );
+  assert.ok(
+    !/resolveAllowedToolNames[\s\S]*member_profile_confirm_facts/.test(
+      runtimeTurnResolution,
+    ),
+    "member profile confirmation must be exposed by selected onboarding skill, not default community entitlement",
   );
   assertIncludes(
     runtimePrompt,

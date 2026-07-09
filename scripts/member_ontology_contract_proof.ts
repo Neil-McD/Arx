@@ -19,6 +19,13 @@ function read(path: string): string {
 const surface = read("convex/memberOntology.ts");
 const core = read("convex/memberOntologyCore.ts");
 const schema = read("convex/schema.ts");
+const profiles = read("convex/profiles.ts");
+const cloudProfilesGateway = read("shared/cloudProfilesGateway.ts");
+const toolRegistry = read("shared/toolRegistry.ts");
+const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
+const platformSkillRuntime = read("convex/platformSkillRuntime.ts");
+const app = read("apps/web/src/App.tsx");
+const bridgeBackfillScript = read("scripts/backfill_bridge_social_link_facts.sh");
 
 /* 1. Born consent state matches provenance for all six provenances. */
 assert.equal(deriveBornConsentState("stated_bridge"), "approved");
@@ -133,7 +140,7 @@ assert.ok(
 
 /* 5. The spine projects only approved, platform-scoped facts. */
 const spine = buildMemberSpine([
-  { communityId: null, kind: "situation", body: "Building Polynet", provenance: "stated_bridge", consentState: "approved" },
+  { communityId: null, kind: "situation", body: "Building Polynet", provenance: "stated_interview", consentState: "approved" },
   { communityId: null, kind: "goal", body: "Ship the bridge", provenance: "stated_interview", consentState: "approved" },
   { communityId: null, kind: "link", body: "https://x.com/neil", provenance: "stated_bridge", consentState: "approved" },
   { communityId: null, kind: "goal", body: "PENDING must not project", provenance: "inferred_agent", consentState: "pending" },
@@ -171,7 +178,67 @@ assert.match(
   /provenance !== "stated_interview" && draft\.provenance !== "form_answer"/,
   "the confirm-card mutation accepts only interview/form provenances",
 );
+assert.match(
+  toolRegistry,
+  /MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA[\s\S]*enum: \["stated_interview", "form_answer"\]/,
+  "the onboarding runtime tool schema must accept only interview/form provenances",
+);
+assert.match(
+  toolRegistry,
+  /toolName === "member_profile_confirm_facts"[\s\S]*supports at most 12 facts/,
+  "the onboarding runtime tool schema/normalizer must accept only bounded confirmed interview/form facts",
+);
+assert.match(
+  runtimeAgentLoop,
+  /params\.toolName === "member_profile_confirm_facts"[\s\S]*community_required[\s\S]*authenticated_user_required[\s\S]*memberOntology\.confirmMemberInterviewFacts/,
+  "the onboarding runtime tool must require active community/auth and delegate to the existing confirmation mutation",
+);
+assert.match(
+  platformSkillRuntime,
+  /member_profile_confirm_facts[\s\S]*Do not silently store guesses[\s\S]*stated_interview or form_answer/,
+  "the onboarding guide instructions must frame ontology writes as confirmed interview facts only",
+);
 assert.match(surface, /communityMembershipRowIsActive/, "membership checks use the canonical helper");
+assert.match(
+  core,
+  /insertMissingBridgeSocialLinkFacts[\s\S]*by_user_community[\s\S]*row\.kind === "link" && row\.consentState !== "superseded"[\s\S]*dryRun[\s\S]*deriveBornConsentState\("stated_bridge"\)[\s\S]*recomputeMemberSpine/,
+  "bridge social-link inserts must check existing non-superseded platform link facts before writing",
+);
+assert.match(
+  profiles,
+  /shouldSeedFirstCompletionBridgeFacts[\s\S]*listBridgeSocialLinks\(nextSocialLinks\)/,
+  "bridge link facts seed only on first account completion, not every profile save",
+);
+assert.match(
+  profiles,
+  /insertMissingBridgeSocialLinkFacts\(ctx,[\s\S]*userId: actor\.dbUserId,[\s\S]*confirmMarker: "bridge:account_setup_completed"/,
+  "profile completion must seed platform-scoped member-owned link facts server-side",
+);
+assert.match(
+  profiles,
+  /backfillCompletedProfileBridgeSocialLinkFacts = mutation\([\s\S]*cursor: v\.optional\(v\.union\(v\.string\(\), v\.null\(\)\)\)[\s\S]*requireOperatorRole\(ctx, args\.authSubject, "operator"\)[\s\S]*const dryRun = args\.dryRun !== false[\s\S]*\.paginate\(\{[\s\S]*cursor: args\.cursor \?\? null[\s\S]*numItems: maxProfiles[\s\S]*maximumRowsRead: maxProfiles[\s\S]*typeof detail\.onboardingCompletedAt !== "number"[\s\S]*normalizeSocialProfileLinks[\s\S]*preview\.missing\.slice\(0, remainingInsertBudget\)/,
+  "bridge social-link backfill must be operator-gated, dry-run by default, cursorable, completed-profile-only, normalized, and insert-limited",
+);
+assert.match(
+  profiles,
+  /next_cursor: page\.isDone \? null : page\.continueCursor/,
+  "bridge social-link backfill must return the Convex continue cursor",
+);
+assert.match(
+  bridgeBackfillScript,
+  /EXPECTED_CONVEX_DEPLOYMENT="dev:quick-porcupine-949"[\s\S]*--write[\s\S]*--cursor[\s\S]*profiles:backfillCompletedProfileBridgeSocialLinkFacts/,
+  "bridge social-link backfill script should be staging-guarded, write-explicit, and cursorable",
+);
+assert.doesNotMatch(
+  cloudProfilesGateway,
+  /recordStatedBridgeMemberFacts|memberOntology:recordStatedBridgeFacts/,
+  "bridge ontology seeding must not depend on a client-side best-effort gateway call",
+);
+assert.doesNotMatch(
+  app,
+  /recordBridgeLedgerFactsBestEffort|recordStatedBridgeMemberFacts/,
+  "bridge completion must not call a separate client-side ontology write path",
+);
 assert.match(schema, /memberFacts: defineTable/, "memberFacts ledger table must exist");
 assert.match(schema, /memberProfileSpines: defineTable/, "spine projection table must exist");
 assert.match(schema, /\.index\("by_user_community", \["userId", "communityId"\]\)/, "ledger must index user+community");
@@ -194,6 +261,7 @@ const goldenAccount = {
   ownedCommunities: [{ name: "Atlas Collective" }],
 };
 const goldenFacts: MemberFactLike[] = [
+  { communityId: null, kind: "link", body: "https://x.com/neil", provenance: "stated_bridge", consentState: "approved" },
   { communityId: null, kind: "situation", body: "Building Polynet", provenance: "stated_interview", consentState: "approved" },
   { communityId: null, kind: "goal", body: "Ship the bridge", provenance: "stated_interview", consentState: "approved" },
   { communityId: "c1", kind: "goal", body: "Meet builders", provenance: "stated_interview", consentState: "approved" },
@@ -227,6 +295,11 @@ assert.equal(
     "- Ship the bridge",
   ].join("\n"),
   "member.md golden output drifted",
+);
+assert.equal(
+  golden.memberMd.match(/https:\/\/x\.com\/neil/g)?.length ?? 0,
+  1,
+  "account social links and bridge link facts must not duplicate in member.md",
 );
 assert.equal(
   golden.communityMd,

@@ -44,6 +44,7 @@ const FIXED_TOOL_FAMILIES = {
     "community_resource_builder_apply_changeset",
     "community_search",
     "community_write",
+    "member_profile_confirm_facts",
   ],
   web: ["web_research", "web_crawl"],
   workspace_fs: ["list_dir", "read", "glob", "grep", "sha256", "write", "edit"],
@@ -202,6 +203,7 @@ function proveFixedPolicyBoundaries() {
 
   const exclusiveTools: RetrievalToolName[] = [
     "community_write",
+    "member_profile_confirm_facts",
     "community_resource_builder_stage_changeset",
     "community_resource_builder_apply_changeset",
     "web_crawl",
@@ -254,6 +256,9 @@ function proveFixedPolicyBoundaries() {
   }
   assert.equal(getFixedRuntimeToolPolicy("community_write").mutatesState, true);
   assert.equal(getFixedRuntimeToolPolicy("community_write").requiresCommunity, true);
+  assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").mutatesState, true);
+  assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").requiresCommunity, true);
+  assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").requiresWorkspace, false);
   for (const toolName of [
     "community_resource_builder_stage_changeset",
     "community_resource_builder_apply_changeset",

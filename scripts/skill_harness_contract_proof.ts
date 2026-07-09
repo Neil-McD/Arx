@@ -7,8 +7,10 @@ import { buildEffectiveSkills } from "../shared/effectiveSkills.ts";
 import {
   COMMUNITY_MANAGER_PLATFORM_SKILLS,
   GLOBAL_PLATFORM_SKILLS,
+  PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES,
   PLATFORM_ONBOARDING_GUIDE_SKILL,
   PLATFORM_RESOURCES_ARCHITECT_SKILL,
+  PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES,
   buildPlatformSkillToolNamesForSelection,
 } from "../shared/platformSkills.ts";
 import {
@@ -89,6 +91,7 @@ function proveContractNamesCurrentGroundTruth() {
     "convex/runtimeAgentLoop.ts",
     "shared/runtimeContextManifest.ts",
     "platform:onboarding-guide",
+    "member_profile_confirm_facts",
     "explicit-mention canary",
     "activation_route",
     "activation_reason",
@@ -271,12 +274,13 @@ function proveScopeShadowingAndPlatformToolExpansion() {
     buildPlatformSkillToolNamesForSelection([
       { platform_skill_id: "platform:resources-architect" },
     ]),
-    [
-      "community_resource_builder_list",
-      "community_resource_builder_read",
-      "community_resource_builder_stage_changeset",
-      "community_resource_builder_apply_changeset",
-    ],
+    PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES,
+  );
+  assert.deepEqual(
+    buildPlatformSkillToolNamesForSelection([
+      { platform_skill_id: "platform:onboarding-guide" },
+    ]),
+    PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES,
   );
   assert.deepEqual(buildPlatformSkillToolNamesForSelection([]), []);
   console.log("PASS: higher-authority skills shadow duplicates and expand platform tools");
@@ -416,7 +420,7 @@ function proveLifecycleOnboardingActivationUsesSkillHarnessPath() {
   );
   assert.equal(
     lifecycleSelectedSkills[0]?.activation_reason,
-    "account onboarding completed",
+    "member onboarding completed",
   );
 
   const resolved = composeResolvedRuntimeHarness({
@@ -447,6 +451,11 @@ function proveLifecycleOnboardingActivationUsesSkillHarnessPath() {
     "community_resource_builder_apply_changeset",
     "lifecycle onboarding should not expose Resources Architect tools",
   );
+  assert.deepEqual(
+    buildPlatformSkillToolNamesForSelection(lifecycleSelectedSkills),
+    PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES,
+    "lifecycle onboarding should expose only the member profile confirmation tool",
+  );
 
   const manifest = buildRuntimeContextManifest({
     generatedAt: "2026-06-18T00:00:00.000Z",
@@ -459,7 +468,7 @@ function proveLifecycleOnboardingActivationUsesSkillHarnessPath() {
     inferenceSource: "test",
     latestUserText: "Hi.",
     messages: [{ role: "user", content: "Hi." }],
-    allowedToolNames: [],
+    allowedToolNames: [...PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES],
     mountedTools: [],
     communityResourceLane: {
       lane: "none",
@@ -476,7 +485,15 @@ function proveLifecycleOnboardingActivationUsesSkillHarnessPath() {
   assert.equal(onboardingPrompt?.activationRoute, "lifecycle_trigger");
   assert.equal(
     onboardingPrompt?.activationReason,
-    "account onboarding completed",
+    "member onboarding completed",
+  );
+  const memberProfileTool = manifest.tools.find(
+    (tool) => tool.name === "member_profile_confirm_facts",
+  );
+  assert.equal(memberProfileTool?.family, "member_profile");
+  assert.equal(
+    memberProfileTool?.grantedBy,
+    "selected_platform_onboarding_skill",
   );
   console.log("PASS: lifecycle onboarding uses selected skill harness path");
 }
@@ -549,7 +566,10 @@ function proveExplicitOnboardingCanarySkill() {
     "PLATFORM_SKILL_PACKAGE: Onboarding Guide ($onboarding-guide)",
     "explicitly selected onboarding instructions",
   );
-  assert.deepEqual(buildPlatformSkillToolNamesForSelection([explicitSelected]), []);
+  assert.deepEqual(
+    buildPlatformSkillToolNamesForSelection([explicitSelected]),
+    PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES,
+  );
 
   const manifest = buildRuntimeContextManifest({
     generatedAt: "2026-06-18T00:00:00.000Z",

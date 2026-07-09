@@ -19,7 +19,8 @@ import {
   type AccountSetupProfileDetailRow as ProfileDetailRow,
   type AccountSetupUserRow as UserRow,
 } from "./accountSetupCore";
-import { ensureOnboardingCompletedAgentLifecycleActivation } from "./agentLifecycleActivations";
+import { insertMissingBridgeSocialLinkFacts } from "./memberOntologyCore";
+import { requireOperatorRole } from "./operatorAccess";
 
 type ProfileMutationErrorCode =
   | "profile_avatar_invalid"
@@ -78,6 +79,28 @@ function normalizeProfileSocialLinksForStorage(raw: unknown): SocialProfileLinks
     instagram: normalizeProfileSocialLink("instagram", input.instagram),
   };
   return SOCIAL_PROFILE_KINDS.some((kind) => links[kind]) ? links : undefined;
+}
+
+const DEFAULT_BRIDGE_SOCIAL_LINK_BACKFILL_PROFILE_LIMIT = 250;
+const MAX_BRIDGE_SOCIAL_LINK_BACKFILL_PROFILE_LIMIT = 1000;
+const DEFAULT_BRIDGE_SOCIAL_LINK_BACKFILL_INSERT_LIMIT = 100;
+const MAX_BRIDGE_SOCIAL_LINK_BACKFILL_INSERT_LIMIT = 500;
+
+function listBridgeSocialLinks(links: SocialProfileLinks | undefined): string[] {
+  if (!links) return [];
+  return SOCIAL_PROFILE_KINDS.map((kind) => links[kind])
+    .map((link) => String(link ?? "").trim())
+    .filter(Boolean);
+}
+
+function normalizeBridgeSocialLinkBackfillLimit(
+  raw: unknown,
+  fallback: number,
+  max: number,
+): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.min(max, Math.floor(parsed)));
 }
 
 async function maybeResolveStorageUrl(ctx: any, storageId: unknown): Promise<string | null> {
@@ -510,8 +533,11 @@ export const upsertProfileDetail = mutation({
         : normalizeProfileSocialLinksForStorage(args.socialLinks);
     const shouldMarkOnboardingDismissed =
       args.markOnboardingDismissed === true || args.completeOnboarding === true;
-    const shouldCreateOnboardingLifecycleActivation =
+    const shouldSeedFirstCompletionBridgeFacts =
       args.completeOnboarding === true && !existingDetail?.onboardingCompletedAt;
+    const bridgeSocialLinks = shouldSeedFirstCompletionBridgeFacts
+      ? listBridgeSocialLinks(nextSocialLinks)
+      : [];
 
     if (!existingDetail) {
       await ctx.db.insert("userProfileDetails", {
@@ -545,12 +571,16 @@ export const upsertProfileDetail = mutation({
       });
     }
 
-    if (shouldCreateOnboardingLifecycleActivation) {
-      await ensureOnboardingCompletedAgentLifecycleActivation({
-        ctx,
-        userId: actor.dbUserId,
-        nowMs,
-      });
+    if (shouldSeedFirstCompletionBridgeFacts) {
+      if (bridgeSocialLinks.length > 0) {
+        await insertMissingBridgeSocialLinkFacts(ctx, {
+          userId: actor.dbUserId,
+          links: bridgeSocialLinks,
+          createdByUserId: actor.dbUserId,
+          confirmMarker: "bridge:account_setup_completed",
+          nowMs,
+        });
+      }
     }
 
     if (
@@ -566,5 +596,113 @@ export const upsertProfileDetail = mutation({
     if (!refreshedUser) throwProfileMutationError("user_not_found");
 
     return await mapProfileDetailWithSetup(ctx, refreshedUser, detail);
+  },
+});
+
+export const backfillCompletedProfileBridgeSocialLinkFacts = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    dryRun: v.optional(v.boolean()),
+    maxProfiles: v.optional(v.number()),
+    maxInserts: v.optional(v.number()),
+    cursor: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    await requireOperatorRole(ctx, args.authSubject, "operator");
+    const dryRun = args.dryRun !== false;
+    const maxProfiles = normalizeBridgeSocialLinkBackfillLimit(
+      args.maxProfiles,
+      DEFAULT_BRIDGE_SOCIAL_LINK_BACKFILL_PROFILE_LIMIT,
+      MAX_BRIDGE_SOCIAL_LINK_BACKFILL_PROFILE_LIMIT,
+    );
+    const maxInserts = normalizeBridgeSocialLinkBackfillLimit(
+      args.maxInserts,
+      DEFAULT_BRIDGE_SOCIAL_LINK_BACKFILL_INSERT_LIMIT,
+      MAX_BRIDGE_SOCIAL_LINK_BACKFILL_INSERT_LIMIT,
+    );
+    const nowMs = Date.now();
+    const page = await ctx.db
+      .query("userProfileDetails")
+      .order("asc")
+      .paginate({
+        cursor: args.cursor ?? null,
+        numItems: maxProfiles,
+        maximumRowsRead: maxProfiles,
+      });
+    const rows = page.page as ProfileDetailRow[];
+    let scannedProfiles = 0;
+    let completedProfiles = 0;
+    let profilesWithLinks = 0;
+    let profilesWithMissingLinks = 0;
+    let requestedLinks = 0;
+    let existingLinks = 0;
+    let missingLinks = 0;
+    let insertedLinks = 0;
+    let truncated = !page.isDone;
+
+    for (const detail of rows) {
+      scannedProfiles += 1;
+      if (typeof detail.onboardingCompletedAt !== "number") continue;
+      completedProfiles += 1;
+
+      const storedLinks = normalizeSocialProfileLinks((detail as any).socialLinks ?? {});
+      const links = listBridgeSocialLinks(storedLinks);
+      if (links.length === 0) continue;
+      profilesWithLinks += 1;
+
+      const remainingInsertBudget = maxInserts - insertedLinks;
+      if (!dryRun && remainingInsertBudget <= 0) {
+        truncated = true;
+        break;
+      }
+
+      const preview = await insertMissingBridgeSocialLinkFacts(ctx, {
+        userId: detail.userId,
+        links,
+        createdByUserId: detail.userId,
+        confirmMarker: "bridge:social_link_backfill",
+        nowMs,
+        dryRun: true,
+      });
+      requestedLinks += preview.requested;
+      existingLinks += preview.existing;
+      missingLinks += preview.missing.length;
+      if (preview.missing.length > 0) profilesWithMissingLinks += 1;
+      if (dryRun || preview.missing.length === 0) continue;
+
+      const linksToInsert = preview.missing.slice(0, remainingInsertBudget);
+      if (linksToInsert.length < preview.missing.length) {
+        truncated = true;
+      }
+      const result = await insertMissingBridgeSocialLinkFacts(ctx, {
+        userId: detail.userId,
+        links: linksToInsert,
+        createdByUserId: detail.userId,
+        confirmMarker: "bridge:social_link_backfill",
+        nowMs,
+      });
+      insertedLinks += result.inserted;
+      if (!dryRun && insertedLinks >= maxInserts) {
+        truncated = true;
+        break;
+      }
+    }
+
+    return {
+      dry_run: dryRun,
+      max_profiles: maxProfiles,
+      max_inserts: maxInserts,
+      cursor: args.cursor ?? null,
+      next_cursor: page.isDone ? null : page.continueCursor,
+      scanned_profiles: scannedProfiles,
+      completed_profiles: completedProfiles,
+      profiles_with_links: profilesWithLinks,
+      profiles_with_missing_links: profilesWithMissingLinks,
+      requested_links: requestedLinks,
+      existing_links: existingLinks,
+      missing_links: missingLinks,
+      inserted_links: dryRun ? 0 : insertedLinks,
+      truncated,
+    };
   },
 });

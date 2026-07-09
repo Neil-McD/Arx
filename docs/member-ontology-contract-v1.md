@@ -72,7 +72,7 @@ link           social or external profile URLs
 **Provenance** (immutable, closed set):
 
 ```txt
-stated_bridge       typed into the bridge (identity fields, links)
+stated_bridge       semantic facts typed into the bridge (v1: normalized social links only)
 stated_interview    said to the guide during onboarding conversation
 form_answer         creator-defined form field, filled via interview
 social_enrichment   derived by the member's own agent from their public links
@@ -154,16 +154,41 @@ through one shared predicate function; no reader hand-rolls visibility.
 
 ## Write Paths
 
-1. **Bridge completion** → `stated_bridge` facts (links, availability-bearing
-   basics), platform scope, born approved.
-2. **Interview confirm card** → batch of `stated_interview` / `form_answer`
-   facts, community scope, born approved-in-scope. This is the API the guide
-   (onboarding slice 5) calls; one mutation, one approval marker.
+1. **Bridge completion** → normalized social profile URLs become
+   `stated_bridge` `link` facts, platform scope, born approved. This happens
+   inside the server-side profile completion mutation so profile state and
+   ontology seed facts share one deterministic write path. Bridge identity
+   fields, legal acceptance, inference provider, tier, memberships, and browser
+   timezone remain account/profile context for `member.md`; they are not
+   duplicated as ledger facts.
+2. **Interview confirmation** → batch of `stated_interview` / `form_answer`
+   facts, community scope, born approved-in-scope. The onboarding guide reaches
+   this through the selected platform-skill runtime tool
+   `member_profile_confirm_facts`, which delegates to the same confirmation
+   mutation; one mutation, one approval marker.
 3. **Enrichment** → the member's own agent drafts `social_enrichment` facts,
    born pending; the member's review approves/rejects each.
 4. **Ongoing observation** → agents/compiler write `inferred_agent` (pending)
    and `observed_behavior` (agent_internal) facts over time; the capture-loop
    surfaces pending ones for approval at natural moments.
+
+### Bridge Social-Link Repair
+
+The bridge link seed is deterministic for new account completions. Existing
+completed profiles from before this contract slice are repaired only through the
+explicit operator backfill `profiles:backfillCompletedProfileBridgeSocialLinkFacts`
+or its staging-guarded wrapper `scripts/backfill_bridge_social_link_facts.sh`.
+
+Repair rules:
+
+- dry-run by default; `--write` is required to insert rows
+- bounded and cursorable through Convex pagination; continue with the previous
+  result's `next_cursor`
+- completed profiles only (`onboardingCompletedAt` present)
+- stored social profile URLs are normalized again before use
+- only missing non-superseded platform `link` facts are inserted
+- bridge identity, legal, inference, tier, membership, and timezone fields are
+  never backfilled as ledger facts
 
 ## Proof Obligations
 

@@ -36,6 +36,7 @@ const envelope = buildRuntimeTurnEnvelope({
     "community_resource_builder_stage_changeset",
     "community_search",
     "community_write",
+    "member_profile_confirm_facts",
     "web_research",
     "read",
     "write",
@@ -92,6 +93,7 @@ const fullManifest = buildRuntimeContextManifest({
     "community_resource_builder_stage_changeset",
     "community_search",
     "community_write",
+    "member_profile_confirm_facts",
     "web_research",
     "read",
     "write",
@@ -162,6 +164,8 @@ assert.ok(ids(fullManifest.resources).includes("background_terminal_output"));
 assert.ok(!ids(fullManifest.resources).includes("message_attachments"));
 
 assert.equal(toolByName(fullManifest, "community_write")?.effect, "write");
+assert.equal(toolByName(fullManifest, "member_profile_confirm_facts")?.family, "member_profile");
+assert.equal(toolByName(fullManifest, "member_profile_confirm_facts")?.effect, "write");
 assert.equal(toolByName(fullManifest, "read")?.family, "sandbox_read");
 assert.equal(toolByName(fullManifest, "write")?.family, "sandbox_write");
 assert.equal(toolByName(fullManifest, "terminal_start")?.effect, "process");

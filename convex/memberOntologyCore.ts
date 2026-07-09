@@ -42,6 +42,13 @@ export type MemberFactDraft = {
   evidenceRef?: string | null;
 };
 
+export type MissingBridgeSocialLinkFactInsertResult = {
+  requested: number;
+  existing: number;
+  missing: string[];
+  inserted: number;
+};
+
 function toFactLike(row: any): MemberFactLike {
   return {
     communityId: row.communityId ? String(row.communityId) : null,
@@ -131,6 +138,75 @@ export async function insertMemberFacts(ctx: any, args: {
   }
   await recomputeMemberSpine(ctx, args.userId, args.nowMs);
   return insertedIds;
+}
+
+export async function insertMissingBridgeSocialLinkFacts(ctx: any, args: {
+  userId: any;
+  links: string[];
+  createdByUserId?: any;
+  confirmMarker?: string | null;
+  nowMs: number;
+  dryRun?: boolean;
+}): Promise<MissingBridgeSocialLinkFactInsertResult> {
+  const marker = String(args.confirmMarker ?? "").trim();
+  const requestedLinks = Array.from(
+    new Set(
+      args.links
+        .map((link) => normalizeMemberFactBody(link))
+        .filter((link): link is string => Boolean(link)),
+    ),
+  );
+  if (requestedLinks.length === 0) {
+    return { requested: 0, existing: 0, missing: [], inserted: 0 };
+  }
+
+  const existingRows = (await ctx.db
+    .query("memberFacts")
+    .withIndex("by_user_community", (q: any) =>
+      q.eq("userId", args.userId).eq("communityId", undefined),
+    )
+    .collect()) as any[];
+  const existingLinkBodies = new Set(
+    existingRows
+      .filter((row) => row.kind === "link" && row.consentState !== "superseded")
+      .map((row) => String(row.body ?? "").trim())
+      .filter(Boolean),
+  );
+  const missing = requestedLinks.filter((link) => !existingLinkBodies.has(link));
+  if (args.dryRun || missing.length === 0) {
+    return {
+      requested: requestedLinks.length,
+      existing: requestedLinks.length - missing.length,
+      missing,
+      inserted: 0,
+    };
+  }
+
+  for (const link of missing) {
+    await ctx.db.insert("memberFacts", {
+      userId: args.userId,
+      communityId: undefined,
+      kind: "link",
+      body: link,
+      provenance: "stated_bridge",
+      confidence: 1,
+      evidenceRefs: marker ? ["bridge:social_link", marker] : ["bridge:social_link"],
+      stalenessScore: 0,
+      consentState: deriveBornConsentState("stated_bridge"),
+      createdByActorType: "member",
+      createdByUserId: args.createdByUserId ?? undefined,
+      version: 1,
+      createdAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+  }
+  await recomputeMemberSpine(ctx, args.userId, args.nowMs);
+  return {
+    requested: requestedLinks.length,
+    existing: requestedLinks.length - missing.length,
+    missing,
+    inserted: missing.length,
+  };
 }
 
 export async function transitionMemberFactConsent(ctx: any, args: {

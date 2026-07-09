@@ -198,6 +198,10 @@ const COMMUNITY_WRITE_TOOL_NAMES = new Set<RetrievalToolName>([
   "community_write",
 ]);
 
+const MEMBER_PROFILE_WRITE_TOOL_NAMES = new Set<RetrievalToolName>([
+  "member_profile_confirm_facts",
+]);
+
 const WEB_RESEARCH_TOOL_NAMES = new Set<RetrievalToolName>([
   "web_research",
   "web_crawl",
@@ -327,6 +331,13 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
   }
   if (COMMUNITY_WRITE_TOOL_NAMES.has(toolName)) {
     return { family: "community_write", grantedBy: "validated_community_lens", effect: "write" };
+  }
+  if (MEMBER_PROFILE_WRITE_TOOL_NAMES.has(toolName)) {
+    return {
+      family: "member_profile",
+      grantedBy: "selected_platform_onboarding_skill",
+      effect: "write",
+    };
   }
   if (WEB_RESEARCH_TOOL_NAMES.has(toolName)) {
     return { family: "web_research", grantedBy: "web_research_capability", effect: "external" };
