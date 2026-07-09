@@ -7,7 +7,6 @@ import {
   normalizePersistedId,
   normalizePersistedSeq,
 } from "./httpRuntimeTurnState";
-import type { RuntimeAccountPlan } from "../shared/runtimePrompt";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -21,36 +20,6 @@ function isPartialAssistantContentJson(value: unknown): boolean {
   const meta = asRecord(record.meta);
   const partialRun = asRecord(meta?.partial_run);
   return partialRun?.incomplete === true;
-}
-
-function buildPremiumUpgradeCtaForAssistantMessage(args: {
-  accountPlan?: RuntimeAccountPlan | null;
-  content: string;
-  partialRun?: {
-    status: "error" | "cancelled";
-  } | null;
-}): { kind: "premium_tools_required"; action: "open_billing" } | null {
-  if (args.accountPlan !== "free") return null;
-  if (args.partialRun) return null;
-  const content = String(args.content ?? "").toLowerCase();
-  if (!content.includes("premium")) return null;
-  const referencesUpgradePath =
-    content.includes("billing") ||
-    content.includes("upgrade") ||
-    content.includes("polynet premium");
-  if (!referencesUpgradePath) return null;
-  const referencesUnavailablePremiumBoundary =
-    content.includes("requires premium") ||
-    content.includes("require premium") ||
-    content.includes("requires polynet premium") ||
-    content.includes("require polynet premium") ||
-    content.includes("premium tools") ||
-    content.includes("workspace tools require");
-  if (!referencesUnavailablePremiumBoundary) return null;
-  return {
-    kind: "premium_tools_required",
-    action: "open_billing",
-  };
 }
 
 export async function ensureRuntimeRunStarted(args: {
@@ -183,7 +152,6 @@ export async function persistRuntimeAssistantMessage(args: {
   }> | null;
   runId: string;
   content: string;
-  accountPlan?: RuntimeAccountPlan | null;
   partialRun?: {
     status: "error" | "cancelled";
     reason?: string | null;
@@ -192,11 +160,6 @@ export async function persistRuntimeAssistantMessage(args: {
   } | null;
 }) {
   const engineId = String(args.engineId ?? "").trim() || "runtime_turn";
-  const premiumUpgradeCta = buildPremiumUpgradeCtaForAssistantMessage({
-    accountPlan: args.accountPlan,
-    content: args.content,
-    partialRun: args.partialRun,
-  });
   const inferenceLaneFallbacks = Array.isArray(args.inferenceLaneFallbacks)
     ? args.inferenceLaneFallbacks.filter(
         (item): item is {
@@ -240,9 +203,6 @@ export async function persistRuntimeAssistantMessage(args: {
             : null),
           ...(inferenceLaneFallbacks.length > 0
             ? { inference_lane_fallbacks: inferenceLaneFallbacks }
-            : null),
-          ...(premiumUpgradeCta
-            ? { premium_upgrade_cta: premiumUpgradeCta }
             : null),
         },
       },

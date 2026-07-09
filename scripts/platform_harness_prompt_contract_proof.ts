@@ -379,7 +379,6 @@ async function proveSourceContract() {
   const runtimeTurnPersistenceSource = await readRepoFile("convex/runtimeTurnPersistence.ts");
   const runtimeTurnResolutionSource = await readRepoFile("convex/runtimeTurnResolution.ts");
   const polynetCodexWorkerBridgeSource = await readRepoFile("convex/polynetCodexWorkerBridge.ts");
-  const polynetCodexWorkerIngestSource = await readRepoFile("convex/polynetCodexWorkerIngest.ts");
   const threadsSource = await readRepoFile("convex/threads.ts");
   const canonicalGateEngineSource = await readRepoFile("shared/canonicalGateEngine.ts");
   const schemaSource = await readRepoFile("convex/schema.ts");
@@ -398,6 +397,7 @@ async function proveSourceContract() {
   const freeAccountModalSource = await readRepoFile("shared/FreeAccountIncludedModal.tsx");
   const accountSettingsSectionSource = await readRepoFile("apps/web/src/components/WebAccountSettingsSection.tsx");
   const appSource = await readRepoFile("apps/web/src/App.tsx");
+  const webTurnRunnerSource = await readRepoFile("shared/useWebTurnRunnerController.ts");
 
   assert.match(
     runtimePromptSource,
@@ -489,20 +489,15 @@ async function proveSourceContract() {
     /runtimeRuns: defineTable\(\{[\s\S]*capabilityFamilies: v\.optional\(v\.array\(v\.string\(\)\)\),[\s\S]*accountPlan: v\.optional\(v\.union\(v\.literal\("free"\), v\.literal\("premium"\)\)\)/,
     "runtime run schema must persist account plan metadata used by prompt and tool policy",
   );
-  assert.match(
+  assert.doesNotMatch(
     runtimeTurnPersistenceSource,
-    /buildPremiumUpgradeCtaForAssistantMessage[\s\S]*accountPlan !== "free"[\s\S]*premium_upgrade_cta/,
-    "assistant message persistence should attach premium upgrade CTA metadata only from free-plan premium-boundary responses",
+    /buildPremiumUpgradeCtaForAssistantMessage|content\.includes\("premium"\)|premium_upgrade_cta/,
+    "assistant message persistence must not infer billing UI from model-written prose",
   );
   assert.match(
-    runtimeTurnHandlersSource,
-    /persistRuntimeAssistantMessage\(\{[\s\S]*accountPlan: runtimeAccountPlan,[\s\S]*content:/,
-    "assistant persistence calls should pass the resolved runtime account plan",
-  );
-  assert.match(
-    polynetCodexWorkerIngestSource,
-    /accountPlan: runRow\.accountPlan === "premium" \? "premium" : "free"/,
-    "Codex worker ingest must persist assistant messages with the verified run row account plan",
+    webTurnRunnerSource,
+    /eventName === "error"[\s\S]*classifyCloudFunctionErrorCategory[\s\S]*setInferenceIssueModal/,
+    "billing UI must come from structured runtime error evidence",
   );
   assert.match(
     messageMetadataUiSource,
@@ -511,8 +506,8 @@ async function proveSourceContract() {
   );
   assert.match(
     workspaceSurfaceProjectionSource,
-    /parsePremiumUpgradeCta[\s\S]*const premiumUpgradeCta = !isUser[\s\S]*premiumUpgradeCta,/,
-    "workspace projection should expose premium upgrade CTA metadata on assistant message views",
+    /isOnboardingLifecycleMessage[\s\S]*startsWith\("onboarding:"\)[\s\S]*!isOnboardingLifecycleMessage[\s\S]*parsePremiumUpgradeCta/,
+    "workspace projection must suppress legacy premium CTA metadata on onboarding turns",
   );
   assert.match(
     workspaceThreadViewsSource,

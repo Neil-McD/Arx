@@ -1664,7 +1664,6 @@ export async function handleRuntimeTurnRequest(args: {
           inferenceLaneFallbacks:
             params.inferenceLaneFallbacksOverride ?? inferenceLaneFallbacks,
           runId,
-          accountPlan: runtimeAccountPlan,
           content: finalAnswer.content,
           partialRun:
             params.markPartialRun === false
@@ -2925,7 +2924,6 @@ export async function handleRuntimeTurnRequest(args: {
                 lane,
                 inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
                 runId,
-                accountPlan: runtimeAccountPlan,
                 content: streamedContent,
               }));
             } catch (error) {
@@ -3281,7 +3279,6 @@ export async function handleRuntimeTurnRequest(args: {
                 lane,
                 inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
                 runId,
-                accountPlan: runtimeAccountPlan,
                 content: streamedContent,
               }));
             } catch (error) {
@@ -3784,7 +3781,6 @@ export async function handleRuntimeTurnRequest(args: {
                 lane,
                 inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
                 runId,
-                accountPlan: runtimeAccountPlan,
                 content: streamedContent,
               }));
             } catch (error) {
@@ -4001,7 +3997,6 @@ export async function handleRuntimeTurnRequest(args: {
             lane,
             inferenceLaneFallbacks,
             runId,
-            accountPlan: runtimeAccountPlan,
             content,
           }));
       } catch (error) {

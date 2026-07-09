@@ -89,6 +89,21 @@ assert.doesNotMatch(
   "safe lifecycle user request must not contain private ontology markdown",
 );
 assert.match(
+  safeRequestBody,
+  /call get_active_community_context[\s\S]*community_resources_map[\s\S]*search_product_docs/,
+  "onboarding opener must perform bounded read-only orientation calls before answering",
+);
+assert.match(
+  safeRequestBody,
+  /Do not call member_profile_confirm_facts, community_write, workspace, web, computer, MCP, paid, or premium tools/,
+  "onboarding opener must stay on the free-safe read-only tool surface",
+);
+assert.match(
+  safeRequestBody,
+  /Do not mention account plan, billing, Premium, upgrades, unavailable tools, or provider limits/,
+  "onboarding opener must not introduce billing or upgrade friction",
+);
+assert.match(
   runtimeTurnHandlers,
   /resolveOnboardingLifecycleCandidate/,
   "normal runtime handling must recognize backend-authorized onboarding lifecycle turns",

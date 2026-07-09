@@ -182,7 +182,10 @@ export function buildWebWorkspaceSurfaceProjection(
         ? params.parseMessageMemorySuggestions(message.content_json)
         : [];
       const memoryAdded = !isUser ? params.parseMessageMemoryAdded(message.content_json) : [];
-      const premiumUpgradeCta = !isUser
+      const isOnboardingLifecycleMessage =
+        typeof message.run_id === "string" &&
+        message.run_id.startsWith("onboarding:");
+      const premiumUpgradeCta = !isUser && !isOnboardingLifecycleMessage
         ? params.parsePremiumUpgradeCta(message.content_json)
         : null;
       const communityEvidence = !isUser

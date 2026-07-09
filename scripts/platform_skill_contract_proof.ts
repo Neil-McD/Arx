@@ -203,6 +203,16 @@ function main() {
     "Onboarding Guide must not fabricate social research from attached links",
   );
   assertIncludes(
+    platformSkillRuntime,
+    "call get_active_community_context",
+    "Onboarding Guide must inspect the active community through a real tool call",
+  );
+  assertIncludes(
+    platformSkillRuntime,
+    "Do not call member_profile_confirm_facts, community_write, workspace, web, computer, MCP, or any paid or premium tool",
+    "Onboarding Guide opener must remain read-only and free-safe",
+  );
+  assertIncludes(
     runtimeSkillResolution,
     "COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS",
     "runtime platform skill source",

@@ -232,7 +232,6 @@ export async function handlePolynetCodexWorkerIngest(
         inferenceSource: context.inference_source,
         lane: context.lane,
         runId: context.run_id,
-        accountPlan: runRow.accountPlan === "premium" ? "premium" : "free",
         content: assistantText,
         ...(status === "error" || status === "cancelled"
           ? {
