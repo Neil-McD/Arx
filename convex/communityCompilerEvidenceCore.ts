@@ -7,6 +7,7 @@ export const COMPILER_EVIDENCE_RUN_LIMIT = 100;
 export const COMPILER_EVIDENCE_SCAN_LIMIT = 500;
 export const COMPILER_EVIDENCE_VISIBILITY_SCOPES = ["admin", "community", "public"] as const;
 export const COMMUNITY_AGENT_SELF_AUTHORED_TRACE_AGENT_KEY = "community_agent";
+export const COMPILER_DIGEST_SIGNAL_SOURCE_ID_PREFIX = "community_compiler_digest_signal:";
 
 export type EvidencePriority = "standard" | "strong" | "critical";
 export type SourceTraceCompilerState =
@@ -89,6 +90,12 @@ function containsCriticalLanguage(row: SourceTraceRow): boolean {
 }
 
 function classifyEvidencePriority(row: SourceTraceRow): EvidencePriority {
+  if (
+    row.actorType === "compiler" &&
+    String(row.sourceId ?? "").startsWith(COMPILER_DIGEST_SIGNAL_SOURCE_ID_PREFIX)
+  ) {
+    return row.sourceType === "outcome" ? "critical" : "strong";
+  }
   if (row.sourceType === "outcome" || row.sourceType === "feedback") return "critical";
   if (containsCriticalLanguage(row)) return "critical";
   if (

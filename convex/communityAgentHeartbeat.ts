@@ -200,18 +200,39 @@ export const assessCommunityAgentCycleInternal = internalQuery({
     if (cyclesToday >= COMMUNITY_AGENT_CYCLES_PER_DAY_CAP) {
       return { enqueue: false, reason: "daily_cycle_cap_reached" };
     }
-    // Delta gate: only new raw signal since the last successful observer pass
-    // earns a wake. Unchanged material never re-wakes the roles.
-    const newestTrace = (await ctx.db
-      .query("communitySourceTraces" as any)
-      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
-      .order("desc")
-      .first()) as Record<string, any> | null;
-    if (!newestTrace) {
+    // Delta gate: only new raw learning signal since the last successful
+    // observer pass earns a wake. This intentionally looks at the archive and
+    // outcome lanes too, because the free digest pass is what bridges those
+    // signals into source traces for the heartbeat evidence gate.
+    const [newestTrace, newestArchiveDoc, newestOutcome] = await Promise.all([
+      ctx.db
+        .query("communitySourceTraces" as any)
+        .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
+        .order("desc")
+        .first() as Promise<Record<string, any> | null>,
+      ctx.db
+        .query("communityArchiveDocuments" as any)
+        .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
+        .order("desc")
+        .first() as Promise<Record<string, any> | null>,
+      ctx.db
+        .query("communityOutcomeObservations" as any)
+        .withIndex("by_community_observedAt", (q: any) => q.eq("communityId", args.communityId))
+        .order("desc")
+        .first() as Promise<Record<string, any> | null>,
+    ]);
+    const newestSignalAt = Math.max(
+      Number(newestTrace?.createdAt ?? 0),
+      Number(newestArchiveDoc?.createdAt ?? 0),
+      Number(newestArchiveDoc?.updatedAt ?? 0),
+      Number(newestOutcome?.observedAt ?? 0),
+      Number(newestOutcome?.createdAt ?? 0),
+    );
+    if (!Number.isFinite(newestSignalAt) || newestSignalAt <= 0) {
       return { enqueue: false, reason: "no_source_traces" };
     }
     const lastOkObserver = recentRuns.find((row) => row.role === "observer" && row.status === "ok");
-    if (lastOkObserver && Number(newestTrace.createdAt ?? 0) <= Number(lastOkObserver.startedAt ?? 0)) {
+    if (lastOkObserver && newestSignalAt <= Number(lastOkObserver.startedAt ?? 0)) {
       return { enqueue: false, reason: "no_new_signal" };
     }
     return { enqueue: true, reason: lastOkObserver ? "new_signal" : "first_cycle" };

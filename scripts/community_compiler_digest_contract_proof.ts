@@ -79,9 +79,16 @@ assert.match(
 );
 assert.doesNotMatch(
   digest,
-  /MAX_SOURCE_TRACE_FETCH|traceRowsRaw|query\("communitySourceTraces"[\s\S]*by_community_createdAt"[\s\S]*gte\("createdAt", windowStartedAtMs\)/,
-  "compiler digest should not consume broad 30-day source traces as handled evidence",
+  /MAX_SOURCE_TRACE_FETCH|traceRowsRaw/,
+  "compiler digest should not reintroduce broad source trace fetch aliases",
 );
+for (const match of digest.matchAll(/query\("communitySourceTraces"[\s\S]{0,700}/g)) {
+  assert.doesNotMatch(
+    match[0],
+    /by_community_createdAt|gte\("createdAt", windowStartedAtMs\)/,
+    "compiler digest should not consume broad 30-day source traces as handled evidence",
+  );
+}
 for (const tableName of [
   "communityEvents",
   "communityMemberships",
@@ -98,6 +105,41 @@ assert.match(
   digest,
   /dedupeKey = `community_compiler_digest:v1:/,
   "compiler digest pass should use a deterministic digest dedupe key",
+);
+assert.match(
+  digest,
+  /function bridgeSourceTypeForDigestCategory[\s\S]*category === "chat_activity"[\s\S]*return "chat"[\s\S]*category === "ai_feed_signal"[\s\S]*return "ai_feed"[\s\S]*category === "resource_activity"[\s\S]*return "resource"[\s\S]*category === "outcome_signal"[\s\S]*return "outcome"/,
+  "compiler digest bridge should map only learning digest categories to product source trace types",
+);
+assert.match(
+  digest,
+  /function digestSignalSourceId[\s\S]*COMPILER_DIGEST_SIGNAL_SOURCE_ID_PREFIX[\s\S]*"v1"[\s\S]*args\.dayKey[\s\S]*args\.item\.category/,
+  "compiler digest bridge should use deterministic per-day source ids",
+);
+assert.match(
+  digest,
+  /async function attachDigestSignalSourceTraces[\s\S]*upsertCommunitySourceTrace[\s\S]*actorType: "compiler"[\s\S]*actorAgentKey: COMMUNITY_COMPILER_DIGEST_AGENT_KEY[\s\S]*allowExistingUpdate: true/,
+  "compiler digest bridge should upsert source traces as compiler-owned idempotent evidence",
+);
+assert.match(
+  digest,
+  /item\.category === "ai_feed_signal"[\s\S]*communityAgentAiFeedSourceIds\.has/,
+  "compiler digest bridge should not re-open community-agent-authored AI feed output as evidence",
+);
+assert.match(
+  digest,
+  /communityAgentAiFeedSourceIds = new Set\([\s\S]*COMMUNITY_AGENT_SELF_AUTHORED_TRACE_AGENT_KEY[\s\S]*authorLabel[\s\S]*community agent/,
+  "compiler digest bridge should classify canonical and legacy community-agent AI feed sources before bridging",
+);
+assert.match(
+  digest,
+  /markSelectedSourceTracesCompiled[\s\S]*attachDigestSignalSourceTraces/,
+  "compiler digest bridge should run after selected source traces are handled so new bridge evidence remains pending for heartbeat",
+);
+assert.match(
+  digest,
+  /attachDigestSignalSourceTraces[\s\S]*ctx\.db\.patch\(digestId as any,[\s\S]*items: bridgeResult\.items/,
+  "compiler digest bridge should attach created source trace ids back to digest items",
 );
 assert.match(
   digest,
@@ -131,7 +173,7 @@ assert.match(
 );
 assert.match(
   digest,
-  /const row = \(await ctx\.db\.get\(digestId\)\)[\s\S]*community_compiler_digest_write_failed[\s\S]*markSelectedSourceTracesCompiled/,
+  /let row = \(await ctx\.db\.get\(digestId\)\)[\s\S]*community_compiler_digest_write_failed[\s\S]*markSelectedSourceTracesCompiled/,
   "selected source traces should only be marked compiled after the digest write is confirmed",
 );
 assert.match(
@@ -193,12 +235,12 @@ assert.match(
 );
 assert.match(
   docs,
-  /Fourth Implementation Slice[\s\S]*communityCompilerDigests[\s\S]*Compiler digests are not directory truth/,
+  /Fourth Implementation Slice[\s\S]*Compiler digests are not directory truth[\s\S]*bridge-owned[\s\S]*Digest-signal source traces are wake evidence/,
   "architecture doc should capture the non-canonical compiler digest slice",
 );
 assert.match(
   docs,
-  /Twelfth Implementation Slice[\s\S]*Pending source traces[\s\S]*marked `compiled`[\s\S]*only after the digest row exists[\s\S]*Unselected source traces remain `pending`/,
+  /Twelfth Implementation Slice[\s\S]*Pending source traces[\s\S]*marked `compiled`[\s\S]*only after the digest row exists[\s\S]*Unselected source traces remain `pending`[\s\S]*idempotent bridge upserts must not reopen/,
   "architecture doc should capture source-trace evidence consumption",
 );
 

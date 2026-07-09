@@ -9,8 +9,11 @@ import {
 import {
   drainSelfAuthoredPendingSourceTracesForCommunity,
   measureCommunityCompilerEvidenceForCommunity,
+  COMMUNITY_AGENT_SELF_AUTHORED_TRACE_AGENT_KEY,
+  COMPILER_DIGEST_SIGNAL_SOURCE_ID_PREFIX,
   type SourceTraceRow,
 } from "./communityCompilerEvidenceCore";
+import { upsertCommunitySourceTrace } from "./communityIntelligenceDirectory";
 
 const COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS = 30;
 const COMMUNITY_COMPILER_DIGEST_WINDOW_MS = COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -61,6 +64,8 @@ type AiFeedPostRow = {
   title?: string;
   body: string;
   evidence?: string[];
+  agentKey?: string;
+  authorLabel?: string;
   score: number;
   goodCount: number;
   lowSignalCount: number;
@@ -229,6 +234,112 @@ function makeItem(args: {
   };
 }
 
+function bridgeSourceTypeForDigestCategory(category: DigestCategory): "chat" | "ai_feed" | "resource" | "outcome" | null {
+  if (category === "chat_activity") return "chat";
+  if (category === "ai_feed_signal") return "ai_feed";
+  if (category === "resource_activity") return "resource";
+  if (category === "outcome_signal") return "outcome";
+  return null;
+}
+
+function digestSignalSourceId(args: {
+  dayKey: string;
+  item: DigestItem;
+  itemIndex: number;
+}): string {
+  const sourceKey = (args.item.sourceIds ?? [])
+    .map((value) => String(value ?? "").trim().replace(/[^A-Za-z0-9:_-]+/g, "_"))
+    .filter(Boolean)
+    .slice(0, 4)
+    .join("_")
+    .slice(0, 220);
+  return [
+    COMPILER_DIGEST_SIGNAL_SOURCE_ID_PREFIX.slice(0, -1),
+    "v1",
+    args.dayKey,
+    args.item.category,
+    sourceKey || `item_${args.itemIndex}`,
+  ].join(":");
+}
+
+function digestSignalVisibilityForItem(item: DigestItem): {
+  visibilityScope: "admin" | "community";
+  sourceVisibility: "community" | "redacted";
+} {
+  if (item.category === "outcome_signal") {
+    return { visibilityScope: "admin", sourceVisibility: "redacted" };
+  }
+  return { visibilityScope: "community", sourceVisibility: "community" };
+}
+
+async function attachDigestSignalSourceTraces(args: {
+  ctx: any;
+  communityId: any;
+  digestId: any;
+  items: DigestItem[];
+  dayKey: string;
+  nowMs: number;
+  communityAgentAiFeedSourceIds: Set<string>;
+}): Promise<{ items: DigestItem[]; createdOrUpdatedCount: number }> {
+  let createdOrUpdatedCount = 0;
+  const nextItems: DigestItem[] = [];
+  for (let itemIndex = 0; itemIndex < args.items.length; itemIndex += 1) {
+    const item = args.items[itemIndex];
+    const sourceType = bridgeSourceTypeForDigestCategory(item.category);
+    if (!sourceType) {
+      nextItems.push(item);
+      continue;
+    }
+    if (
+      item.category === "ai_feed_signal" &&
+      (item.sourceIds ?? []).some((sourceId) => args.communityAgentAiFeedSourceIds.has(sourceId))
+    ) {
+      nextItems.push(item);
+      continue;
+    }
+    const visibility = digestSignalVisibilityForItem(item);
+    const sourceId = digestSignalSourceId({ dayKey: args.dayKey, item, itemIndex });
+    await upsertCommunitySourceTrace({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      sourceType,
+      sourceId,
+      title: `Compiler digest signal: ${item.title}`,
+      summary: [
+        "Non-canonical compiler digest signal preserved as pending source-trace evidence.",
+        `Digest: ${normalizeIdValue(args.digestId)}.`,
+        `Category: ${item.category}.`,
+        `Signal summary: ${item.summary}`,
+      ].join(" "),
+      visibilityScope: visibility.visibilityScope,
+      sourceVisibility: visibility.sourceVisibility,
+      actorType: "compiler",
+      actorAgentKey: COMMUNITY_COMPILER_DIGEST_AGENT_KEY,
+      allowExistingUpdate: true,
+      nowMs: args.nowMs,
+    });
+    const traceRow = (await args.ctx.db
+      .query("communitySourceTraces" as any)
+      .withIndex("by_community_source", (q: any) =>
+        q.eq("communityId", args.communityId).eq("sourceType", sourceType).eq("sourceId", sourceId),
+      )
+      .first()) as SourceTraceRow | null;
+    const traceId = traceRow?._id;
+    createdOrUpdatedCount += 1;
+    nextItems.push(makeItem({
+      category: item.category,
+      title: item.title,
+      summary: item.summary,
+      priority: item.priority,
+      confidence: item.confidence,
+      sourceTypes: item.sourceTypes,
+      sourceIds: item.sourceIds,
+      sourceTraceIds: traceId ? uniqueDigestTraceIds(item.sourceTraceIds ?? [], [traceId]) : item.sourceTraceIds,
+    }));
+  }
+  return { items: nextItems, createdOrUpdatedCount };
+}
+
 function mapDigestRow(row: CompilerDigestRow) {
   return {
     id: normalizeIdValue(row._id),
@@ -350,6 +461,15 @@ async function runCommunityCompilerDigestPassCore(
     const aiFeedRows = aiFeedRowsRaw
       .slice()
       .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0) || b.createdAt - a.createdAt);
+    const communityAgentAiFeedSourceIds = new Set(
+      aiFeedRows
+        .filter((row) =>
+          String(row.agentKey ?? "").trim() === COMMUNITY_AGENT_SELF_AUTHORED_TRACE_AGENT_KEY ||
+          String(row.authorLabel ?? "").trim().toLowerCase() === "community agent"
+        )
+        .map((row) => normalizeIdValue(row._id))
+        .filter(Boolean),
+    );
     const postingMemberKeys = new Set(
       chatRows
         .map((row) => String(row.authorLabel ?? "").trim())
@@ -492,7 +612,7 @@ async function runCommunityCompilerDigestPassCore(
         createdAt: nowMs,
       });
     }
-    const row = (await ctx.db.get(digestId)) as CompilerDigestRow | null;
+    let row = (await ctx.db.get(digestId)) as CompilerDigestRow | null;
     if (!row) throw new Error("community_compiler_digest_write_failed");
     if (representedSelectedSourceTraceRows.length > 0) {
       await markSelectedSourceTracesCompiled({
@@ -502,6 +622,23 @@ async function runCommunityCompilerDigestPassCore(
         digestId,
         nowMs,
       });
+    }
+    const bridgeResult = await attachDigestSignalSourceTraces({
+      ctx,
+      communityId: args.communityId,
+      digestId,
+      items: row.items,
+      dayKey: utcDayKey(nowMs),
+      nowMs,
+      communityAgentAiFeedSourceIds,
+    });
+    if (bridgeResult.createdOrUpdatedCount > 0) {
+      await ctx.db.patch(digestId as any, {
+        items: bridgeResult.items,
+        updatedAt: nowMs,
+      });
+      row = (await ctx.db.get(digestId)) as CompilerDigestRow | null;
+      if (!row) throw new Error("community_compiler_digest_write_failed");
     }
     return mapDigestRow(row);
 }

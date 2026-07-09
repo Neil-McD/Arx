@@ -94,6 +94,16 @@ assert.match(
   "memory sweep should refresh digest, settle metabolizer scores, then enqueue the delayed heartbeat",
 );
 assert.match(
+  heartbeat,
+  /communityArchiveDocuments[\s\S]*by_community_createdAt[\s\S]*communityOutcomeObservations[\s\S]*by_community_observedAt[\s\S]*newestSignalAt/,
+  "cycle assessment should allow archive and outcome signal to earn a digest/heartbeat attempt before source traces exist",
+);
+assert.match(
+  heartbeat,
+  /newestSignalAt <= Number\(lastOkObserver\.startedAt/,
+  "cycle assessment delta gate should compare the newest raw learning signal against the last successful observer",
+);
+assert.match(
   sweepBlock,
   /settleCommunityMemorySignalsInternal[\s\S]*communityId: target\.communityId/,
   "metabolizer settlement should be scoped to the same single community target as the sweep",

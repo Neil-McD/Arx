@@ -39,6 +39,16 @@ assert.match(
 );
 assert.match(
   evidenceCore,
+  /COMPILER_DIGEST_SIGNAL_SOURCE_ID_PREFIX = "community_compiler_digest_signal:"/,
+  "compiler evidence should define the digest-signal source id prefix",
+);
+assert.match(
+  evidenceCore,
+  /startsWith\(COMPILER_DIGEST_SIGNAL_SOURCE_ID_PREFIX\)[\s\S]*row\.sourceType === "outcome" \? "critical" : "strong"/,
+  "compiler digest signal traces should count as aggregate strong evidence, with outcomes critical",
+);
+assert.match(
+  evidenceCore,
   /row\.sourceType === "outcome" \|\| row\.sourceType === "feedback"[\s\S]*return "critical"/,
   "outcome and feedback evidence should be critical",
 );

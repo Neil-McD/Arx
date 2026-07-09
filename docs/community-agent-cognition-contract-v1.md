@@ -1053,13 +1053,25 @@ The fourth backend slice adds the first non-canonical compiler digest pass:
 Rules:
 
 - Compiler digests are not directory truth.
-- The digest pass writes only `communityCompilerDigests`.
+- The digest pass writes `communityCompilerDigests` and may upsert bridge-owned
+  source traces for selected digest signals; it still does not write directory
+  truth or policy requests.
 - The pass is fixed to the same 30-day compiler window.
 - The pass is idempotent per community/day so heartbeat retries do not spam duplicate digests.
 - Digest items are bounded and typed: chat activity, AI Feed signal, resource activity, event activity, member state, outcome signal, source trace signal, and pending directory decision.
 - Learning digest items should be generated from signal-bearing sources: chat, AI Feed, resources, outcomes, source traces, transcripts, feedback, workflow runs, artifacts, and pending directory decisions.
 - Event scheduling, member joins, presence, reactions, and generic activity are excluded from learning digests unless they produce evidence-bearing traces such as transcripts, feedback, outcomes, decisions, artifacts, or workflow records.
 - Digest items may point at source ids or source trace ids, but they do not mutate `communityIntelligenceNodes`, `communityIntelligenceEdges`, or `communityIntelligenceChangeRequests`.
+- Digest-signal source traces are wake evidence, not memory. They are stable,
+  idempotent rows for chat, AI Feed, resource, or outcome digest items so the
+  heartbeat gate can inspect the same signal the digest saw.
+- Digest-signal source traces count as aggregate evidence: non-outcome digest
+  signals are `strong`; outcome digest signals are `critical`.
+- Digest-signal source traces are created after the digest row exists, so the
+  sweep's delayed heartbeat can see them as pending evidence instead of having
+  them consumed by the same digest pass.
+- Digest-signal source traces must not re-bridge community-agent-authored AI
+  Feed output into eligible compiler evidence.
 - The digest is manager-scoped in this backend slice because it exposes compiler state and pending decision counts.
 
 ## Fifth Implementation Slice
@@ -1314,6 +1326,9 @@ Rules:
 - The pass does not auto-dismiss low-signal traces yet.
 - The pass does not set `carried_forward` yet.
 - Same-day digest reruns must preserve previously represented source-trace evidence instead of erasing it from the digest item.
+- Same-day digest reruns may reopen digest-signal source traces only when the
+  digest signal materially changes; idempotent bridge upserts must not reopen
+  already handled evidence.
 
 ## Thirteenth Implementation Slice
 
@@ -1812,10 +1827,13 @@ A memory sweep runs every six hours: refresh the community's compiler digest
 (deterministic, free), settle metabolizer scores from retrieval/outcome
 signals, then knock for a cycle ten minutes later. The knock is triple-gated
 before any tokens can be spent — owner off-switch, daily cycle cap, and a
-delta check (new raw signal since the last successful observer pass;
+delta check (new raw learning signal since the last successful observer pass;
 unchanged material never re-wakes the roles) — and the heartbeat's evidence
-gate has the final word. Frequency controls worst-case latency only; the
-gates own cost.
+gate has the final word. Raw learning signal includes trusted source traces,
+archive-backed chat/AI-feed/resource activity, and outcome observations. The
+digest bridge converts digest-visible signal into pending source-trace evidence
+before the delayed heartbeat measures whether the community agent should wake.
+Frequency controls worst-case latency only; the gates own cost.
 
 ### Decisions Pending
 
