@@ -4,6 +4,7 @@ import {
   type NativeToolAwareCompletionSuccess,
   type NativeToolAwareMessage,
   type NativeToolInputContentPart,
+  type NativeToolChoice,
 } from "../shared/nativeToolProtocol";
 import {
   NativeProviderToolCallParseError,
@@ -239,6 +240,7 @@ export async function runOpenAiNativeToolCompletion(params: {
   tools: OpenAiResponsesFunctionTool[];
   apiKeyOverride?: string | null;
   parallelToolCalls?: boolean;
+  toolChoice?: NativeToolChoice;
   signal?: AbortSignal;
 }): Promise<
   | NativeToolAwareCompletionSuccess<string>
@@ -270,7 +272,7 @@ export async function runOpenAiNativeToolCompletion(params: {
       input: normalized.inputItems,
       max_output_tokens: params.maxTokens,
       tools: params.tools,
-      tool_choice: "auto",
+      tool_choice: params.toolChoice ?? "auto",
       parallel_tool_calls: params.parallelToolCalls === true,
     };
     if (normalized.instructions) requestBody.instructions = normalized.instructions;

@@ -275,7 +275,10 @@ Irreducible onboarding flow:
 3. backend creates or reuses the deterministic normal cloud thread for the
    active community lens
 4. client enters that thread and opens the normal runtime SSE turn
-5. runtime atomically claims the activation and injects the onboarding skill body
+5. runtime atomically claims the activation, injects the onboarding skill body,
+   and forces the orientation protocol: `get_active_community_context`, then
+   `search_product_docs` for Polynet or `community_resources_map` for a named
+   community, then no more tools before the answer
 6. bridge renders the compact handoff screen until the real SSE `start` event
 7. agent welcomes the member with an evidence-grounded orientation: what this
    community's real content covers (from first-turn tool reads), where the

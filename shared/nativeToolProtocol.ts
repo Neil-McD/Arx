@@ -1,5 +1,13 @@
 import type { RetrievalToolName } from "./retrievalTools";
 
+export type NativeToolChoice<TToolName extends string = string> =
+  | "auto"
+  | "none"
+  | {
+      type: "function";
+      name: TToolName;
+    };
+
 export type NativeToolInputContentPart =
   | {
       type: "text";

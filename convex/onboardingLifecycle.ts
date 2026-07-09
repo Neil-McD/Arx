@@ -7,10 +7,10 @@ import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 
 export const ONBOARDING_THREAD_KEY_PREFIX = "community-onboarding";
 export const ONBOARDING_MODEL_ID = "gpt-5.5";
-/* Staging experiment (2026-07-09): raised from 1200 so the mandated
-   orientation tool calls plus the opener fit. This is the max_output_tokens
-   ceiling, not a prose target — measure real usage on staging before
-   treating 4000 as permanent. */
+/* Staging experiment (2026-07-09): raised from 1200 for reasoning-capable
+   provider completions. OpenAI/OpenRouter apply this ceiling per completion,
+   not per whole tool loop; the ChatGPT Codex transport intentionally omits an
+   output-token field. Measure usage by inference lane before making it final. */
 export const ONBOARDING_MAX_TOKENS = 4000;
 export const ONBOARDING_LIFECYCLE_AUDIT_LABEL =
   "Onboarding guide lifecycle kickoff.";

@@ -2,6 +2,7 @@ import {
   buildAssistantToolCallsMessage,
   parseNativeToolArguments,
   type NativeToolAwareCompletionSuccess,
+  type NativeToolChoice,
 } from "../shared/nativeToolProtocol";
 import {
   buildChatgptAuthorizeUrl,
@@ -115,6 +116,7 @@ export async function runChatgptNativeToolCompletion(params: {
   maxTokens: number;
   tools: ChatgptFunctionTool[];
   parallelToolCalls?: boolean;
+  toolChoice?: NativeToolChoice;
   onReasoningSummaryTextDelta?: (params: { delta: string; summaryIndex: number }) => Promise<void> | void;
   onReasoningSummaryPartAdded?: (params: { summaryIndex: number }) => Promise<void> | void;
   requestMetadata?: ChatgptCodexRequestMetadata | null;

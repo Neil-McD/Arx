@@ -1,5 +1,6 @@
 import { getFreshChatgptAuthForUser } from "./chatgptAuth";
 import type {
+  NativeToolChoice,
   NativeToolAwareMessage,
   NativeToolInputContentPart,
 } from "../shared/nativeToolProtocol";
@@ -511,6 +512,7 @@ export function buildChatgptCodexRequestPayload(params: {
   maxTokens: number;
   tools?: ChatgptFunctionTool[];
   parallelToolCalls?: boolean;
+  toolChoice?: NativeToolChoice;
   reasoningSummary?: ChatgptReasoningSummaryLevel | null;
   reasoningEffort?: ChatgptReasoningEffort | null;
   requestMetadata?: ChatgptCodexRequestMetadata | null;
@@ -530,7 +532,7 @@ export function buildChatgptCodexRequestPayload(params: {
   if (Array.isArray(params.tools) && params.tools.length > 0) {
     requestBody.tools = params.tools;
     requestBody.parallel_tool_calls = params.parallelToolCalls === true;
-    requestBody.tool_choice = "auto";
+    requestBody.tool_choice = params.toolChoice ?? "auto";
   }
   if (params.reasoningSummary) {
     requestBody.reasoning = {
@@ -684,6 +686,7 @@ export async function runChatgptResponsesRequest(params: {
   maxTokens: number;
   tools?: ChatgptFunctionTool[];
   parallelToolCalls?: boolean;
+  toolChoice?: NativeToolChoice;
   signal?: AbortSignal;
   reasoningSummary?: ChatgptReasoningSummaryLevel | null;
   reasoningEffort?: ChatgptReasoningEffort | null;
@@ -709,6 +712,7 @@ export async function runChatgptResponsesRequest(params: {
       maxTokens: params.maxTokens,
       tools: params.tools,
       parallelToolCalls: params.parallelToolCalls,
+      toolChoice: params.toolChoice,
       reasoningSummary: params.reasoningSummary,
       reasoningEffort: params.reasoningEffort,
       requestMetadata,
@@ -846,6 +850,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
   tools?: ChatgptFunctionTool[];
   onDelta?: (delta: string) => void;
   parallelToolCalls?: boolean;
+  toolChoice?: NativeToolChoice;
   onReasoningSummaryTextDelta?: (params: { delta: string; summaryIndex: number }) => Promise<void> | void;
   onReasoningSummaryPartAdded?: (params: { summaryIndex: number }) => Promise<void> | void;
   signal?: AbortSignal;
@@ -874,6 +879,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
       maxTokens: params.maxTokens,
       tools: params.tools,
       parallelToolCalls: params.parallelToolCalls,
+      toolChoice: params.toolChoice,
       reasoningSummary: params.reasoningSummary,
       reasoningEffort: params.reasoningEffort,
       requestMetadata,

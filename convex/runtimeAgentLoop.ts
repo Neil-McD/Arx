@@ -63,6 +63,7 @@ import {
   getNativeToolCompletionToolCalls,
   type NativeToolAwareCompletionSuccess,
   type NativeToolAwareMessage,
+  type NativeToolChoice,
 } from "../shared/nativeToolProtocol";
 import {
   type NativeToolExecutionResult,
@@ -100,6 +101,7 @@ import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryE
 import { parseProviderModelRef } from "./httpInferenceConfig";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import { logStructuredError, summarizeErrorForLog } from "./errorLogging";
+import { isPlatformHomeCommunity } from "./platformHomeCommunity";
 import {
   createPolynetExecutionSession,
   type ActiveDaytonaRuntimeSubstrateForTools,
@@ -159,6 +161,19 @@ const CHAT_TOOLS_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget =
 const RUNTIME_PARALLEL_READ_TOOLS_FLAG =
   "RUNTIME_PARALLEL_READ_TOOLS_ENABLED";
 const PRIVATE_LIFECYCLE_CONTEXT_MAX_CHARS = 24_000;
+
+function buildRequiredLifecycleToolSequence(params: {
+  lifecycleTrigger?: RuntimeSkillLifecycleTrigger | null;
+  communitySlug?: string | null;
+}): RetrievalToolName[] {
+  if (params.lifecycleTrigger !== "onboarding_completed") return [];
+  return [
+    "get_active_community_context",
+    isPlatformHomeCommunity({ communitySlug: params.communitySlug })
+      ? "search_product_docs"
+      : "community_resources_map",
+  ];
+}
 
 function normalizePrivateLifecycleContext(raw?: string | null): string {
   return String(raw ?? "").trim().slice(0, PRIVATE_LIFECYCLE_CONTEXT_MAX_CHARS);
@@ -1345,6 +1360,7 @@ async function runProviderNativeToolCompletion(params: {
   responsesApiTools: ChatgptCompatibleFunctionTool[];
   apiKeyOverride?: string | null;
   parallelToolCalls?: boolean;
+  toolChoice?: NativeToolChoice;
   onReasoningSummaryTextDelta?: (params: {
     delta: string;
     summaryIndex: number;
@@ -1366,6 +1382,7 @@ async function runProviderNativeToolCompletion(params: {
       maxTokens: params.maxTokens,
       tools: params.responsesApiTools,
       parallelToolCalls: params.parallelToolCalls,
+      toolChoice: params.toolChoice,
       onReasoningSummaryTextDelta: params.onReasoningSummaryTextDelta,
       onReasoningSummaryPartAdded: params.onReasoningSummaryPartAdded,
       requestMetadata: params.requestMetadata,
@@ -1384,6 +1401,7 @@ async function runProviderNativeToolCompletion(params: {
       tools: params.responsesApiTools,
       apiKeyOverride: params.inferenceSource === "user_key" ? params.apiKeyOverride : null,
       parallelToolCalls: params.parallelToolCalls,
+      toolChoice: params.toolChoice,
       signal: params.signal,
     });
   }
@@ -1394,6 +1412,7 @@ async function runProviderNativeToolCompletion(params: {
     tools: params.openRouterTools,
     apiKeyOverride: params.apiKeyOverride,
     parallelToolCalls: params.parallelToolCalls,
+    toolChoice: params.toolChoice,
     signal: params.signal,
   });
 }
@@ -1633,6 +1652,11 @@ async function executeRetrievalAgentLoop(
       buildResolverResponsesTool: buildResolveMountedToolsResponsesTool,
     });
   const initialProviderTools = buildActiveProviderTools();
+  const requiredLifecycleToolSequence = buildRequiredLifecycleToolSequence({
+    lifecycleTrigger: params.skillLifecycleTrigger,
+    communitySlug: params.communitySlug,
+  });
+  let requiredLifecycleToolIndex = 0;
   try {
     await params.appendRunEvent({
       eventType: "runtime_prompt_bundle_resolved",
@@ -1987,6 +2011,24 @@ async function executeRetrievalAgentLoop(
     };
     const loopStartedAt = Date.now();
     const chatgptCodexRequestId = String(params.threadId ?? "").trim() || params.runId;
+    const missingRequiredLifecycleTool = requiredLifecycleToolSequence.find(
+      (toolName) => !initialProviderTools.activeToolNames.includes(toolName),
+    );
+    if (missingRequiredLifecycleTool) {
+      return {
+        ok: false,
+        status: 500,
+        code: "onboarding_required_tool_unavailable",
+        stopReason: "model_error",
+        message: "The onboarding orientation tool protocol is unavailable.",
+        promptTokens: null,
+        completionTokens: null,
+        transcript: [...nativeTranscript],
+        stepCount: 0,
+        steps: [],
+        pendingToolName: missingRequiredLifecycleTool,
+      };
+    }
     const loopResult = await runNativeRuntimeKernel<string>({
       messages: nativeTranscript,
       budget: params.loopBudget,
@@ -2002,6 +2044,14 @@ async function executeRetrievalAgentLoop(
         reasoningSummaryStreamCount += 1;
         try {
           const providerTools = buildActiveProviderTools();
+          const requiredToolName =
+            requiredLifecycleToolSequence[requiredLifecycleToolIndex] ?? null;
+          const providerToolChoice: NativeToolChoice =
+            requiredLifecycleToolSequence.length === 0
+              ? "auto"
+              : requiredToolName
+                ? { type: "function", name: requiredToolName }
+                : "none";
           completion = await runAbortableWithRuntimeCancellation({
             ctx: params.ctx,
             ownerId: params.userId,
@@ -2018,7 +2068,9 @@ async function executeRetrievalAgentLoop(
                 openRouterTools: providerTools.openAiTools,
                 responsesApiTools: providerTools.responsesTools,
                 apiKeyOverride: params.apiKeyOverride,
-                parallelToolCalls: parallelReadToolsEnabled,
+                parallelToolCalls:
+                  providerToolChoice === "auto" && parallelReadToolsEnabled,
+                toolChoice: providerToolChoice,
                 requestMetadata: {
                   sessionId: chatgptCodexRequestId,
                   threadId: chatgptCodexRequestId,
@@ -2082,7 +2134,41 @@ async function executeRetrievalAgentLoop(
         }
         if (!completion.ok) return completion;
         const providerTools = buildActiveProviderTools();
-        const unknownToolCall = getNativeToolCompletionToolCalls(completion).find(
+        const completionToolCalls = getNativeToolCompletionToolCalls(completion);
+        const requiredToolName =
+          requiredLifecycleToolSequence[requiredLifecycleToolIndex] ?? null;
+        if (requiredToolName) {
+          const requiredToolCall = completionToolCalls[0] ?? null;
+          if (
+            completionToolCalls.length !== 1 ||
+            requiredToolCall?.toolName !== requiredToolName
+          ) {
+            return {
+              ok: false,
+              status: 502,
+              code: "onboarding_required_tool_not_called",
+              stopReason: "invalid_model_output",
+              message: "The provider did not follow the onboarding orientation tool protocol.",
+              pendingToolCallId: requiredToolCall?.providerCallId,
+              pendingToolName: requiredToolName,
+            };
+          }
+          requiredLifecycleToolIndex += 1;
+        } else if (
+          requiredLifecycleToolSequence.length > 0 &&
+          completionToolCalls.length > 0
+        ) {
+          return {
+            ok: false,
+            status: 502,
+            code: "onboarding_unexpected_tool_call",
+            stopReason: "invalid_model_output",
+            message: "The provider called an extra tool after onboarding orientation completed.",
+            pendingToolCallId: completionToolCalls[0]?.providerCallId,
+            pendingToolName: completionToolCalls[0]?.toolName,
+          };
+        }
+        const unknownToolCall = completionToolCalls.find(
           (toolCall) => !providerTools.activeToolNames.includes(toolCall.toolName),
         );
         if (unknownToolCall) {

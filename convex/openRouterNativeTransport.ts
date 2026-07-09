@@ -3,6 +3,7 @@ import {
   parseNativeToolArguments,
   type NativeToolAwareCompletionSuccess,
   type NativeToolAwareMessage,
+  type NativeToolChoice,
 } from "../shared/nativeToolProtocol";
 import { parseOpenRouterError } from "./httpRuntimeSupport";
 
@@ -31,6 +32,14 @@ function normalizeOpenAiToolCallName(raw: unknown): string | null {
   return normalized || null;
 }
 
+function buildOpenRouterToolChoice(choice: NativeToolChoice | undefined): unknown {
+  if (!choice || choice === "auto" || choice === "none") return choice ?? "auto";
+  return {
+    type: "function",
+    function: { name: choice.name },
+  };
+}
+
 export async function runOpenRouterNativeToolCompletion(params: {
   modelRef: string;
   messages: NativeToolAwareMessage[];
@@ -38,6 +47,7 @@ export async function runOpenRouterNativeToolCompletion(params: {
   tools: OpenAiCompatibleFunctionTool[];
   apiKeyOverride?: string | null;
   parallelToolCalls?: boolean;
+  toolChoice?: NativeToolChoice;
   signal?: AbortSignal;
 }): Promise<
   | NativeToolAwareCompletionSuccess<string>
@@ -67,7 +77,7 @@ export async function runOpenRouterNativeToolCompletion(params: {
     max_tokens: params.maxTokens,
     stream: false,
     tools: params.tools,
-    tool_choice: "auto",
+    tool_choice: buildOpenRouterToolChoice(params.toolChoice),
     parallel_tool_calls: params.parallelToolCalls === true,
   };
   if (params.modelRef.toLowerCase().includes(":free")) {

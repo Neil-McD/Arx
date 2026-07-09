@@ -120,6 +120,53 @@ function proveCodexPayloadPreservesReasoningAndMetadata() {
   assert.equal(payload.parallel_tool_calls, false);
   assert.equal(Array.isArray(payload.input), true);
 
+  const forcedToolPayload = buildChatgptCodexRequestPayload({
+    modelId: "gpt-5.5",
+    maxTokens: 1200,
+    messages: [{ role: "user", content: "orient" }],
+    tools: [
+      {
+        type: "function",
+        name: "get_active_community_context",
+        description: "Read active community context",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: {},
+          required: [],
+        },
+        strict: true,
+      },
+    ],
+    toolChoice: { type: "function", name: "get_active_community_context" },
+  });
+  assert.deepEqual(forcedToolPayload.tool_choice, {
+    type: "function",
+    name: "get_active_community_context",
+  });
+
+  const finalAnswerPayload = buildChatgptCodexRequestPayload({
+    modelId: "gpt-5.5",
+    maxTokens: 1200,
+    messages: [{ role: "user", content: "answer" }],
+    tools: [
+      {
+        type: "function",
+        name: "get_active_community_context",
+        description: "Read active community context",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: {},
+          required: [],
+        },
+        strict: true,
+      },
+    ],
+    toolChoice: "none",
+  });
+  assert.equal(finalAnswerPayload.tool_choice, "none");
+
   const defaultMetadataPayload = buildChatgptCodexRequestPayload({
     modelId: "gpt-5.5",
     maxTokens: 1200,
@@ -136,7 +183,7 @@ function proveCodexPayloadPreservesReasoningAndMetadata() {
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
   );
 
-  console.log("PASS: Codex payload preserves metadata, streaming, tools, and encrypted reasoning");
+  console.log("PASS: Codex payload preserves metadata, tool choice, streaming, and encrypted reasoning");
 }
 
 function proveFailureClassificationAvoidsBlind404s() {

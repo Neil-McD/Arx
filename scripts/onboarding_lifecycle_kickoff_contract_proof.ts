@@ -21,6 +21,10 @@ const webTurnRunner = read("shared/useWebTurnRunnerController.ts");
 const webTurnRunnerCore = read("shared/webTurnRunnerCore.ts");
 const platformSkill = read("convex/platformSkillRuntime.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
+const nativeToolProtocol = read("shared/nativeToolProtocol.ts");
+const chatgptTransport = read("convex/chatgptResponsesTransport.ts");
+const openAiTransport = read("convex/openAiNativeToolCompletion.ts");
+const openRouterTransport = read("convex/openRouterNativeTransport.ts");
 const contract = read("docs/skill-harness-contract.md");
 const completeBridgeAndEnterBody =
   app.match(
@@ -52,7 +56,7 @@ assert.match(
 assert.match(
   onboardingLifecycle,
   /ONBOARDING_MAX_TOKENS = 4000/,
-  "onboarding opener must budget for mandated orientation tool calls plus the reply",
+  "onboarding staging experiment must retain the measured provider-completion ceiling",
 );
 assert.match(
   onboardingLifecycle,
@@ -387,6 +391,41 @@ assert.match(
   /member_profile_confirm_facts[\s\S]*Do not silently store guesses/,
   "onboarding skill must treat ontology writes as explicit confirmed profile memory",
 );
+assert.match(
+  runtimeAgentLoop,
+  /buildRequiredLifecycleToolSequence[\s\S]*onboarding_completed[\s\S]*get_active_community_context[\s\S]*search_product_docs[\s\S]*community_resources_map/,
+  "onboarding runtime must choose the two orientation reads deterministically by lens",
+);
+assert.match(
+  runtimeAgentLoop,
+  /providerToolChoice[\s\S]*type: "function", name: requiredToolName[\s\S]*: "none"[\s\S]*toolChoice: providerToolChoice/,
+  "onboarding runtime must force each required read and then force the final answer",
+);
+assert.match(
+  runtimeAgentLoop,
+  /onboarding_required_tool_unavailable[\s\S]*onboarding_required_tool_not_called[\s\S]*onboarding_unexpected_tool_call/,
+  "onboarding runtime must fail closed when its forced tool protocol cannot be honored",
+);
+assert.match(
+  nativeToolProtocol,
+  /NativeToolChoice[\s\S]*"auto"[\s\S]*"none"[\s\S]*type: "function"[\s\S]*name: TToolName/,
+  "native tool protocol must define a provider-neutral named tool choice",
+);
+assert.match(
+  chatgptTransport,
+  /toolChoice\??:[\s\S]*requestBody\.tool_choice = params\.toolChoice \?\? "auto"/,
+  "ChatGPT native transport must project the runtime tool choice",
+);
+assert.match(
+  openAiTransport,
+  /toolChoice\??:[\s\S]*tool_choice: params\.toolChoice \?\? "auto"/,
+  "OpenAI native transport must project the runtime tool choice",
+);
+assert.match(
+  openRouterTransport,
+  /toolChoice\??:[\s\S]*tool_choice: buildOpenRouterToolChoice\(params\.toolChoice\)/,
+  "OpenRouter native transport must project the runtime tool choice",
+);
 
 assert.match(
   contract,
@@ -405,7 +444,7 @@ assert.match(
 );
 assert.match(
   contract,
-  /compact handoff screen[\s\S]*evidence-grounded orientation[\s\S]*active thread\/community lens[\s\S]*profile-memory boundary[\s\S]*one-clause agent grounding instead of a named[\s\S]*self-introduction/,
+  /forces the orientation protocol:[\s\S]*get_active_community_context[\s\S]*search_product_docs[\s\S]*community_resources_map[\s\S]*compact handoff screen[\s\S]*evidence-grounded orientation[\s\S]*active thread\/community lens[\s\S]*profile-memory boundary[\s\S]*one-clause agent grounding instead of a named[\s\S]*self-introduction/,
   "skill harness contract must document the deterministic bridge-to-agent handoff screen",
 );
 
