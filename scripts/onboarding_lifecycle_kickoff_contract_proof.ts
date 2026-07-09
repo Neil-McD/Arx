@@ -358,6 +358,16 @@ assert.match(
 );
 assert.match(
   platformSkill,
+  /you are THEIR agent[\s\S]*not the community's agent/,
+  "onboarding opener identity is the member's own agent — communities have separate agents on community surfaces",
+);
+assert.match(
+  platformSkill,
+  /Second example register[\s\S]*different structure on purpose/,
+  "onboarding skill must carry two structurally distinct exemplars to prevent template parroting",
+);
+assert.match(
+  platformSkill,
   /Evidence rule:[\s\S]*must trace to a tool result from this run, the private orientation context, or the active community lens/,
   "onboarding skill must ground every opener claim in fetched or injected evidence",
 );
