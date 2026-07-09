@@ -194,8 +194,18 @@ function main() {
   );
   assertIncludes(
     platformSkillRuntime,
-    "First response order: 1. say who you are",
-    "server-side Onboarding Guide orientation contract",
+    "First response shape: at most 4 short paragraphs",
+    "server-side Onboarding Guide opener shape contract",
+  );
+  assertIncludes(
+    platformSkillRuntime,
+    "Do not introduce yourself by name",
+    "Onboarding Guide must not self-introduce",
+  );
+  assertIncludes(
+    platformSkillRuntime,
+    "Billing boundary: never mention the member's account plan, billing, Premium",
+    "Onboarding Guide must keep billing out of the welcome",
   );
   assertIncludes(
     platformSkillRuntime,

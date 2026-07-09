@@ -61,6 +61,9 @@ export function renderMemberContextMarkdown(args: {
   lens: MemberOntologyLens;
   communityId?: string | null;
   communityName?: string | null;
+  /* Lifecycle prompts exclude billing-adjacent lines (tier, inference
+     provider): the model cannot mention entitlements it never saw. */
+  includeBillingContext?: boolean;
 }): { memberMd: string; communityMd: string | null } {
   /* Defense in depth: callers pass lens-filtered rows, but the renderer
      re-applies the one predicate so it cannot leak what a caller forgot. */
@@ -82,9 +85,11 @@ export function renderMemberContextMarkdown(args: {
   const name = account.displayName?.trim() || "Member";
   const title = account.handle?.trim() ? `# Member — ${name} (@${account.handle.trim()})` : `# Member — ${name}`;
 
-  const accountLines: string[] = ["", "## Account", `- Tier: ${account.tier}`];
+  const includeBillingContext = args.includeBillingContext !== false;
+  const accountLines: string[] = ["", "## Account"];
+  if (includeBillingContext) accountLines.push(`- Tier: ${account.tier}`);
   if (account.timezone?.trim()) accountLines.push(`- Timezone: ${account.timezone.trim()}`);
-  if (account.inferenceProvider) {
+  if (includeBillingContext && account.inferenceProvider) {
     accountLines.push(`- Inference: ${INFERENCE_LABELS[account.inferenceProvider]}`);
   }
   const memberships = [...account.memberships].sort((a, b) =>

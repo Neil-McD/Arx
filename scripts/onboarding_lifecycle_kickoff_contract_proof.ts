@@ -51,8 +51,8 @@ assert.match(
 );
 assert.match(
   onboardingLifecycle,
-  /ONBOARDING_MAX_TOKENS = 1200/,
-  "onboarding opener must have enough token budget for real orientation",
+  /ONBOARDING_MAX_TOKENS = 4000/,
+  "onboarding opener must budget for mandated orientation tool calls plus the reply",
 );
 assert.match(
   onboardingLifecycle,
@@ -283,8 +283,8 @@ assert.match(
 );
 assert.match(
   handoffPage,
-  /Polynet is orienting your agent[\s\S]*Polynet is orienting your \$\{targetName\} lens[\s\S]*Try again/,
-  "handoff page must present the irreducible agent-orienting launch shell and retry",
+  /Your Polynet agent is getting oriented[\s\S]*Your agent is getting oriented to \$\{targetName\}[\s\S]*Try again/,
+  "handoff page must present the member-language launch shell and retry",
 );
 assert.doesNotMatch(
   handoffPage,
@@ -344,13 +344,23 @@ assert.match(
 );
 assert.match(
   platformSkill,
-  /First response:[\s\S]*240-360 words[\s\S]*real grounding/,
-  "onboarding skill must produce a real orientation-first opener without overloading the member",
+  /First response shape:[\s\S]*at most 4 short paragraphs[\s\S]*exactly one plain question/,
+  "onboarding skill must produce a brief evidence-grounded opener ending in one question",
 );
 assert.match(
   platformSkill,
-  /First response order:[\s\S]*say who you are[\s\S]*where the member is now[\s\S]*what this thread\/lens is for[\s\S]*show them around[\s\S]*starting context[\s\S]*profile-memory boundary[\s\S]*one plain question/,
-  "onboarding skill must force the opener to orient identity, location, lens, workspace, context, memory, and next question",
+  /Ground the member in one short clause[\s\S]*Do not introduce yourself by name[\s\S]*never describe yourself as a thread, a product, or an AI system/,
+  "onboarding skill must ground identity in one clause without a named self-introduction",
+);
+assert.match(
+  platformSkill,
+  /Evidence rule:[\s\S]*must trace to a tool result from this run, the private orientation context, or the active community lens/,
+  "onboarding skill must ground every opener claim in fetched or injected evidence",
+);
+assert.doesNotMatch(
+  platformSkill,
+  /say who you are|240-360 words|5-7 short paragraphs/,
+  "onboarding skill must not retain the essay-length self-introducing opener spec",
 );
 assert.match(
   platformSkill,
@@ -359,13 +369,18 @@ assert.match(
 );
 assert.match(
   onboardingLifecycle,
-  /Write the first assistant message only: 5-7 short paragraphs, roughly 240-360 words\.[\s\S]*Do not claim external\/social research unless a real research tool result/,
-  "onboarding lifecycle request must align with the richer no-fake-research opener",
+  /Write the first assistant message only, following your onboarding-guide skill instructions[\s\S]*Do not claim external\/social research unless a real research tool result/,
+  "onboarding lifecycle request must defer opener shape and voice to the single skill spec",
 );
 assert.match(
   platformSkill,
-  /Avoid hype:[\s\S]*leverage, chatbot theater, build\/sell\/systematize/,
-  "onboarding skill must avoid marketing copy",
+  /Example register, adapt to real fetched context and never copy it verbatim/,
+  "onboarding skill must teach the register with a positive exemplar instead of a blocklist",
+);
+assert.match(
+  platformSkill,
+  /Billing boundary: never mention the member's account plan, billing, Premium/,
+  "onboarding skill must keep billing and entitlement talk out of onboarding",
 );
 assert.match(
   platformSkill,
@@ -390,7 +405,7 @@ assert.match(
 );
 assert.match(
   contract,
-  /compact handoff screen[\s\S]*who the agent is[\s\S]*where[\s\S]*active thread\/community lens[\s\S]*profile-memory boundary/,
+  /compact handoff screen[\s\S]*evidence-grounded orientation[\s\S]*active thread\/community lens[\s\S]*profile-memory boundary[\s\S]*one-clause agent grounding instead of a named[\s\S]*self-introduction/,
   "skill harness contract must document the deterministic bridge-to-agent handoff screen",
 );
 

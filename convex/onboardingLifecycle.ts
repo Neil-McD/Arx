@@ -7,7 +7,11 @@ import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 
 export const ONBOARDING_THREAD_KEY_PREFIX = "community-onboarding";
 export const ONBOARDING_MODEL_ID = "gpt-5.5";
-export const ONBOARDING_MAX_TOKENS = 1200;
+/* Staging experiment (2026-07-09): raised from 1200 so the mandated
+   orientation tool calls plus the opener fit. This is the max_output_tokens
+   ceiling, not a prose target — measure real usage on staging before
+   treating 4000 as permanent. */
+export const ONBOARDING_MAX_TOKENS = 4000;
 export const ONBOARDING_LIFECYCLE_AUDIT_LABEL =
   "Onboarding guide lifecycle kickoff.";
 
@@ -61,15 +65,13 @@ export function buildOnboardingLifecycleSafeUserRequest(args: {
     args.communityName ? `Community lens: ${args.communityName}` : "Community lens: active community",
     "",
     "Start the member's onboarding conversation now.",
-    "Write the first assistant message only: 5-7 short paragraphs, roughly 240-360 words.",
+    "Write the first assistant message only, following your onboarding-guide skill instructions for its shape, length, and voice.",
     "Before writing, call get_active_community_context, then call exactly one additional read-only orientation tool: community_resources_map for community grounding or search_product_docs for platform grounding.",
     "Use only read-only product-doc and community-context/resource tools in this opener. Do not call member_profile_confirm_facts, community_write, workspace, web, computer, MCP, paid, or premium tools.",
     "Orient yourself from those tool results, private lifecycle context, runtime context, and the active community lens.",
-    "The opener must say who you are, where the member is now, what this thread/community lens is for, how to use the workspace next, what starting context you have, and how profile memory works.",
     "Do not claim external/social research unless a real research tool result in this run supports it. Attached social links alone are leads, not proof.",
     "Do not mention account plan, billing, Premium, upgrades, unavailable tools, or provider limits unless the member asks.",
     "State that profile memory is built only from confirmed answers or reviewed context, then ask one plain question.",
-    "Do not use slogans, generic product-tour copy, or phrases like leverage, chatbot theater, build/sell/systematize, or First question.",
     "Ask one question about what brought the member here, what they are trying to do, or what would make this community useful to them.",
   ].join("\n");
 }

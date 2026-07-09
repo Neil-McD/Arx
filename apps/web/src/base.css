@@ -3570,6 +3570,7 @@ body {
 }
 
 .polynet-onboarding-launch-shell {
+  animation: onboardingLaunchShellIn 220ms ease-out;
   width: min(100%, 318px);
   min-height: 180px;
   display: grid;
@@ -3597,7 +3598,7 @@ body {
   place-items: center;
   border-radius: 13px;
   overflow: hidden;
-  background: #050507;
+  background: color-mix(in srgb, var(--bg-app) 55%, black);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
 }
 
@@ -3679,10 +3680,10 @@ body {
 .polynet-onboarding-launch-action button {
   min-height: 38px;
   padding: 0 18px;
-  border: 1px solid rgba(255, 255, 255, 0.86);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 86%, transparent);
   border-radius: 8px;
-  background: #f4f4f7;
-  color: #121216;
+  background: color-mix(in srgb, var(--text-primary) 94%, transparent);
+  color: var(--bg-app);
   font-size: 13px;
   font-weight: 750;
   cursor: pointer;
@@ -3702,7 +3703,23 @@ body {
   }
 }
 
+@keyframes onboardingLaunchShellIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .polynet-onboarding-launch-shell {
+    animation: none;
+  }
+
   .polynet-onboarding-launch-meter span {
     animation: none;
   }

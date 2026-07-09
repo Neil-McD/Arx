@@ -596,9 +596,16 @@ type OnboardingGuidePendingState = {
   communityId: string | null;
   communitySlug: string | null;
   communityName: string;
-  status: "starting" | "failed";
+  status: "saving" | "preparing" | "starting" | "failed";
   error: string | null;
   startedAtMs: number;
+  /* A failure before the guide kickoff retries the whole bridge ceremony
+     (every step is idempotent); a kickoff failure retries the kickoff alone. */
+  retryScope: "platform_bridge" | "community_bridge" | "kickoff";
+  legalAcceptance: {
+    termsOfServiceVersion: string;
+    privacyPolicyVersion: string;
+  } | null;
 };
 
 function mapLaunchCommunityCreateError(error: unknown): string {
@@ -4125,6 +4132,8 @@ export default function App() {
         status: "starting",
         error: null,
         startedAtMs: pendingStartedAtMs,
+        retryScope: "kickoff",
+        legalAcceptance: null,
       });
       setActiveThreadId(null);
       setWorkspaceWantsNewChatMode(true);
@@ -4247,7 +4256,43 @@ export default function App() {
 
   function retryOnboardingGuideAfterBridge(): void {
     const pending = onboardingGuidePending;
-    if (!pending || pending.status === "starting") return;
+    if (!pending || pending.status !== "failed") return;
+    if (pending.retryScope === "platform_bridge") {
+      void completePlatformBridge(pending.legalAcceptance);
+      return;
+    }
+    if (pending.retryScope === "community_bridge") {
+      /* The gate already closed and the entry was consumed — retry re-runs the
+         idempotent save/finish steps in place, then the kickoff (which owns
+         community selection and navigation itself). */
+      void (async () => {
+        const setPhase = (status: "saving" | "preparing" | "failed", error: string | null = null) => {
+          setOnboardingGuidePending((current) =>
+            current?.startedAtMs === pending.startedAtMs
+              ? { ...current, status, error }
+              : current,
+          );
+        };
+        setPhase("saving");
+        const saved = await saveOnboardingProfile(pending.legalAcceptance);
+        if (!saved) {
+          setPhase("failed", "We could not save your profile.");
+          return;
+        }
+        setPhase("preparing");
+        const finished = await finishOnboarding({ navigate: false });
+        if (!finished) {
+          setPhase("failed", "We could not finish your account setup.");
+          return;
+        }
+        await requestOnboardingGuideAfterBridge({
+          communityId: pending.communityId,
+          communitySlug: pending.communitySlug,
+          communityName: pending.communityName,
+        });
+      })();
+      return;
+    }
     void requestOnboardingGuideAfterBridge({
       communityId: pending.communityId,
       communitySlug: pending.communitySlug,
@@ -4255,16 +4300,50 @@ export default function App() {
     });
   }
 
-  /* Platform bridge Enter (standalone page): save identity + legal, complete
-     setup, and land in the workspace — the guide meets them there. */
+  /* Platform bridge Enter (standalone page): the ceremony state mounts the
+     handoff surface synchronously at click time, before any network — the
+     setup-completion bounce effect defers to it, so the draft workspace can
+     never render between the bridge and the guide. */
   async function completePlatformBridge(legalAcceptance: {
     termsOfServiceVersion: string;
     privacyPolicyVersion: string;
   } | null): Promise<boolean> {
+    if (!validateOnboardingProfileInputs(legalAcceptance)) return false;
+    const ceremonyStartedAtMs = Date.now();
+    const failCeremony = (error: string) => {
+      setOnboardingGuidePending((current) =>
+        current?.startedAtMs === ceremonyStartedAtMs
+          ? { ...current, status: "failed", error }
+          : current,
+      );
+    };
+    flushSync(() => {
+      setOnboardingGuidePending({
+        communityId: null,
+        communitySlug: null,
+        communityName: "Polynet",
+        status: "saving",
+        error: null,
+        startedAtMs: ceremonyStartedAtMs,
+        retryScope: "platform_bridge",
+        legalAcceptance,
+      });
+    });
     const savedProfile = await saveOnboardingProfile(legalAcceptance);
-    if (!savedProfile) return false;
+    if (!savedProfile) {
+      failCeremony("We could not save your profile.");
+      return false;
+    }
+    setOnboardingGuidePending((current) =>
+      current?.startedAtMs === ceremonyStartedAtMs
+        ? { ...current, status: "preparing" }
+        : current,
+    );
     const finished = await finishOnboarding({ navigate: false });
-    if (!finished) return false;
+    if (!finished) {
+      failCeremony("We could not finish your account setup.");
+      return false;
+    }
     await requestOnboardingGuideAfterBridge();
     return true;
   }
@@ -4275,10 +4354,21 @@ export default function App() {
     termsOfServiceVersion: string;
     privacyPolicyVersion: string;
   } | null): Promise<boolean> {
-    const savedProfile = await saveOnboardingProfile(legalAcceptance);
-    if (!savedProfile) return false;
-    const finished = await finishOnboarding({ navigate: false });
-    if (!finished) return false;
+    /* Approval applicants have nothing to run — the request is already in;
+       the gate's "Request pending" state takes over once the bridge clears. */
+    if (approvalPending) {
+      const savedProfile = await saveOnboardingProfile(legalAcceptance);
+      if (!savedProfile) return false;
+      const finished = await finishOnboarding({ navigate: false });
+      if (!finished) return false;
+      setIsBridgeGateOpen(false);
+      setBridgePendingEntry(null);
+      return true;
+    }
+    /* Same invariant as the platform bridge: validate, mount the ceremony
+       synchronously, then do network work — no intermediate surface can
+       render between the gate and the guide. */
+    if (!validateOnboardingProfileInputs(legalAcceptance)) return false;
     const guideTarget = bridgePendingEntry ?? (
       activeCommunityId
         ? {
@@ -4287,15 +4377,52 @@ export default function App() {
           }
         : null
     );
-    setIsBridgeGateOpen(false);
-    /* Approval applicants have nothing to run — the request is already in;
-       the gate's "Request pending" state takes over once the bridge clears. */
-    if (approvalPending) {
-      setBridgePendingEntry(null);
-      return true;
+    const guideTargetName = guideTarget
+      ? String(guideTarget.communityName ?? "").trim() ||
+        (guideTarget.communityId && activeCommunity?.id === guideTarget.communityId
+          ? activeCommunity.name
+          : null)
+      : null;
+    const ceremonyStartedAtMs = Date.now();
+    const failCeremony = (error: string) => {
+      setOnboardingGuidePending((current) =>
+        current?.startedAtMs === ceremonyStartedAtMs
+          ? { ...current, status: "failed", error }
+          : current,
+      );
+    };
+    if (guideTarget) {
+      flushSync(() => {
+        setOnboardingGuidePending({
+          communityId: guideTarget.communityId ?? null,
+          communitySlug: guideTarget.communitySlug ?? null,
+          communityName: guideTargetName || "this community",
+          status: "saving",
+          error: null,
+          startedAtMs: ceremonyStartedAtMs,
+          retryScope: "community_bridge",
+          legalAcceptance,
+        });
+      });
     }
+    setIsBridgeGateOpen(false);
     const entry = bridgePendingEntry;
     setBridgePendingEntry(null);
+    const savedProfile = await saveOnboardingProfile(legalAcceptance);
+    if (!savedProfile) {
+      failCeremony("We could not save your profile.");
+      return false;
+    }
+    setOnboardingGuidePending((current) =>
+      current?.startedAtMs === ceremonyStartedAtMs
+        ? { ...current, status: "preparing" }
+        : current,
+    );
+    const finished = await finishOnboarding({ navigate: false });
+    if (!finished) {
+      failCeremony("We could not finish your account setup.");
+      return false;
+    }
     if (entry) {
       void enterJoinedCommunity({
         communityId: entry.communityId,
@@ -4305,16 +4432,33 @@ export default function App() {
       handlePublicLandingPrimaryAction();
     }
     if (guideTarget) {
-      const guideTargetName =
-        String(guideTarget.communityName ?? "").trim() ||
-        (guideTarget.communityId && activeCommunity?.id === guideTarget.communityId
-          ? activeCommunity.name
-          : null);
       void requestOnboardingGuideAfterBridge({
         communityId: guideTarget.communityId,
         communitySlug: guideTarget.communitySlug,
         communityName: guideTargetName,
       });
+    }
+    return true;
+  }
+
+  /* Client-side bridge validation, shared with saveOnboardingProfile: failures
+     here keep the user on the bridge with inline errors — the ceremony (and
+     its handoff surface) only starts once the inputs can actually be saved. */
+  function validateOnboardingProfileInputs(legalAcceptance: {
+    termsOfServiceVersion: string;
+    privacyPolicyVersion: string;
+  } | null): boolean {
+    const displayName = profileUi.profileName.trim();
+    const handle = profileUi.profileHandle.trim() || null;
+    const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
+    if (!displayName || !handle || !avatarUrl) {
+      setOnboardingError("Add your display name, handle, and profile photo to continue.");
+      return false;
+    }
+    const currentSetup = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
+    if (currentSetup?.missing.includes("platform_legal") !== false && !legalAcceptance) {
+      setOnboardingError("Agree to the Terms of Service and acknowledge the Privacy & AI Data Policy to continue.");
+      return false;
     }
     return true;
   }
@@ -4339,15 +4483,7 @@ export default function App() {
     const handle = profileUi.profileHandle.trim() || null;
     const bio = profileUi.profileBio.trim() || null;
     const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
-    if (!displayName || !handle || !avatarUrl) {
-      setOnboardingError("Add your display name, handle, and profile photo to continue.");
-      return false;
-    }
-    const currentSetup = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
-    if (currentSetup?.missing.includes("platform_legal") !== false && !legalAcceptance) {
-      setOnboardingError("Agree to the Terms of Service and acknowledge the Privacy & AI Data Policy to continue.");
-      return false;
-    }
+    if (!validateOnboardingProfileInputs(legalAcceptance)) return false;
 
     setIsSavingOnboarding(true);
     setOnboardingError(null);
@@ -4657,6 +4793,10 @@ export default function App() {
   useEffect(() => {
     if (activePage !== "onboarding") return;
     if (!session) return;
+    /* The bridge ceremony completes setup while standing on this route — the
+       stale-arrival bounce must defer to it, or the draft workspace flashes
+       between the bridge and the guide handoff. */
+    if (onboardingGuidePending) return;
     void (async () => {
       const row = cloudProfile ?? (await loadProfileForOnboarding(session));
       if (row?.account_setup?.completed) {
@@ -4666,7 +4806,7 @@ export default function App() {
       /* Incomplete accounts stay: this route renders the standalone
          platform bridge page. */
     })();
-  }, [activePage, cloudProfile, session]);
+  }, [activePage, cloudProfile, onboardingGuidePending, session]);
 
   /* Deterministic timezone capture: record the browser's IANA zone silently,
      refreshed when it drifts from what the profile holds. Never a question. */

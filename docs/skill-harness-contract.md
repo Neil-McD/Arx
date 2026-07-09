@@ -277,10 +277,13 @@ Irreducible onboarding flow:
 4. client enters that thread and opens the normal runtime SSE turn
 5. runtime atomically claims the activation and injects the onboarding skill body
 6. bridge renders the compact handoff screen until the real SSE `start` event
-7. agent welcomes the member with a real orientation: who the agent is, where
-   the member is, how the active thread/community lens works, which practical
-   workspace surfaces matter next, what starting context is available, the
-   profile-memory boundary, and one plain profile-building question
+7. agent welcomes the member with an evidence-grounded orientation: what this
+   community's real content covers (from first-turn tool reads), where the
+   member is and how the active thread/community lens works (one sentence of
+   mechanics at most), the profile-memory boundary, and exactly one plain
+   profile-building question — a one-clause agent grounding instead of a named
+   self-introduction, no billing or entitlement talk, at most 4 short
+   paragraphs
 8. backend records completion only after the assistant message persists
 
 ## Definition Of Done For Skill Harness Maturity

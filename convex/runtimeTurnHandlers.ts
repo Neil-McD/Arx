@@ -884,6 +884,7 @@ export async function handleRuntimeTurnRequest(args: {
           {
             authSubject: actor.authSubject,
             communityId: onboardingCandidate.communityId as any,
+            includeBillingContext: false,
           },
         )) as {
           member_md?: unknown;

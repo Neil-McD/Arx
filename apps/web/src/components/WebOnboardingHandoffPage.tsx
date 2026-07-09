@@ -6,7 +6,7 @@ export type WebOnboardingHandoffPageProps = {
   communityAvatarFocusX: number | null;
   communityAvatarFocusY: number | null;
   communityAvatarZoom: number | null;
-  status: "starting" | "failed";
+  status: "saving" | "preparing" | "starting" | "failed";
   error: string | null;
   onRetry: () => void;
 };
@@ -16,10 +16,18 @@ export function WebOnboardingHandoffPage(props: WebOnboardingHandoffPageProps) {
   const isFailed = props.status === "failed";
   const launchTitle =
     targetName === "Polynet"
-      ? "Polynet is orienting your agent"
-      : `Polynet is orienting your ${targetName} lens`;
+      ? "Your Polynet agent is getting oriented"
+      : `Your agent is getting oriented to ${targetName}`;
+  /* Honest ceremony phases — the detail line reflects what is actually
+     happening, never an invented checklist step. */
   const launchDetail =
-    targetName === "Polynet" ? "Opening your workspace." : "Opening the community workspace.";
+    props.status === "saving"
+      ? "Saving your profile."
+      : props.status === "preparing"
+        ? "Preparing your workspace."
+        : targetName === "Polynet"
+          ? "Opening your workspace."
+          : "Opening the community workspace.";
   const failedMessage = "We could not start your guide yet. Try again in a moment.";
 
   return (
