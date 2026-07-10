@@ -57,6 +57,11 @@ export const STANDALONE_APP_LAUNCH_SEARCH_PARAM = "launch";
 export const STANDALONE_APP_LAUNCH_SEARCH_VALUE = "app";
 export const WORKSPACE_DRAFT_PROJECT_SEARCH_PARAM = "project";
 
+export type LegacyWorkspaceRouteContext = {
+  kind: "root" | "thread" | "community";
+  communitySlug: string | null;
+};
+
 const RESERVED_WORKSPACE_ROUTE_SEGMENTS = new Set([
   "apps",
   "community",
@@ -236,8 +241,42 @@ export function buildCommunityFunnelPath(communitySlug: string | null | undefine
 function splitPathSegments(pathname: string): string[] {
   return String(pathname ?? "")
     .split("/")
-    .map((segment) => decodeURIComponent(segment).trim())
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment).trim();
+      } catch {
+        return segment.trim();
+      }
+    })
     .filter(Boolean);
+}
+
+export function readLegacyWorkspaceRouteContext(
+  pathname: string | null | undefined,
+): LegacyWorkspaceRouteContext | null {
+  const parsed = new URL(String(pathname || "/"), "http://local.arx");
+  const stripped = stripShellVariantFromPathname(parsed.pathname || "/");
+  const segments = splitPathSegments(new URL(stripped, "http://local.arx").pathname);
+  if (segments[0] !== "workspace") return null;
+  if (segments[1] === "thread") {
+    return { kind: "thread", communitySlug: null };
+  }
+  const communitySlug =
+    segments[1] === "community"
+      ? String(segments[2] ?? "").trim() || null
+      : !isReservedWorkspaceRouteSegment(segments[1])
+        ? String(segments[1] ?? "").trim() || null
+        : null;
+  return {
+    kind: communitySlug ? "community" : "root",
+    communitySlug,
+  };
+}
+
+export function isLegacyWorkspaceRoutePath(
+  pathname: string | null | undefined,
+): boolean {
+  return readLegacyWorkspaceRouteContext(pathname) !== null;
 }
 
 function normalizeDocsSlug(value: string | null | undefined): string | null {
@@ -337,36 +376,16 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
   }
 
   if (segments[0] === "workspace") {
-    if (segments.length === 1) {
-      return {
-        page: "workspace",
-        view: "home",
-        settingsPage: "agent",
-        communitySlug: null,
-        communityTab: "chat",
-        threadId: null,
-      };
-    }
-    if (segments[1] === "thread" && segments.length >= 3) {
-      const rawThreadId = String(segments[2] ?? "").trim();
-      return {
-        page: "workspace",
-        view: "home",
-        settingsPage: "agent",
-        communitySlug: null,
-        communityTab: "chat",
-        threadId: isUuid(rawThreadId) ? rawThreadId : null,
-      };
-    }
     if (segments[1] === "community" && segments.length === 5 && segments[3] === "setup") {
       const slug = String(segments[2] ?? "").trim();
       if (!slug) return null;
       return {
-        page: "workspace",
+        page: "community",
         view: "home",
         settingsPage: "agent",
         communitySlug: slug,
-        communityTab: "chat",
+        communityTab: "settings",
+        communitySettingsPane: "community",
         threadId: null,
       };
     }
@@ -378,38 +397,23 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       const slug = String(segments[1] ?? "").trim();
       if (!slug) return null;
       return {
-        page: "workspace",
+        page: "community",
         view: "home",
         settingsPage: "agent",
         communitySlug: slug,
-        communityTab: "chat",
+        communityTab: "settings",
+        communitySettingsPane: "community",
         threadId: null,
       };
     }
-    if (segments[1] === "community" && segments.length === 3) {
-      const slug = String(segments[2] ?? "").trim();
-      if (!slug) return null;
-      return {
-        page: "workspace",
-        view: "home",
-        settingsPage: "agent",
-        communitySlug: slug,
-        communityTab: "chat",
-        threadId: null,
-      };
-    }
-    if (segments.length === 2 && !isReservedWorkspaceRouteSegment(segments[1])) {
-      const slug = String(segments[1] ?? "").trim();
-      if (!slug) return null;
-      return {
-        page: "workspace",
-        view: "home",
-        settingsPage: "agent",
-        communitySlug: slug,
-        communityTab: "chat",
-        threadId: null,
-      };
-    }
+    return {
+      page: "landing",
+      view: "home",
+      settingsPage: "agent",
+      communitySlug: null,
+      communityTab: "chat",
+      threadId: null,
+    };
   }
 
   if (segments[0] === "settings") {

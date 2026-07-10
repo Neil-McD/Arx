@@ -46,7 +46,6 @@ export function popNavSnapshot(stack: NavSnapshotBase[]): NavSnapshotBase | null
 }
 
 export type BackTargetLabel =
-  | "workspace"
   | "community"
   | "discover"
   | "docs"
@@ -59,5 +58,5 @@ export function formatBackTargetLabel(
   if (snapshot.page === "docs") return "docs";
   if (snapshot.page === "community") return "community";
   if (snapshot.view === "settings") return "settings";
-  return "workspace";
+  return "community";
 }

@@ -23,9 +23,6 @@ Today the app uses pathname as the canonical route contract.
 Current canonical/pathname routes include:
 
 - `/discover`
-- `/workspace`
-- `/workspace/:communitySlug`
-- `/workspace/thread/:threadId`
 - `/settings/profile`
 - `/settings/account`
 - `/settings/agent`
@@ -54,7 +51,6 @@ Polynet should have four route classes:
 
 These are top-level application destinations:
 
-- `/workspace`
 - `/discover`
 - `/settings/profile`
 - `/settings/account`
@@ -121,16 +117,24 @@ Preferred direction:
 
 This keeps object identity stable while making the active view explicit.
 
-For workspace operating routes, the same principle applies:
+## Legacy Workspace Compatibility
 
-- `/workspace`
-- `/workspace/:communitySlug`
-- `/workspace/thread/:threadId`
+`/workspace`, `/workspace/:communitySlug`, `/workspace/community/:slug`, and
+`/workspace/thread/:threadId` are no longer product destinations. They remain
+recognized only as migration inputs while the protected runtime substrate is
+isolated for later reuse.
 
-This is now the active route direction in the web app.
+Legacy entry is auth-aware:
 
-`/workspace/community/:slug` is accepted as a legacy compatibility route. Normal community workspace routes should
-canonicalize to `/workspace/:communitySlug`; reserved workspace segments use the legacy route as an escape hatch.
+- authenticated entry resolves through the server-authoritative member
+  destination action and opens an authorized community or Discover;
+- signed-out community entry opens `/c/:slug`;
+- signed-out generic or thread entry opens `/`;
+- old community launch setup URLs restore under `/c/:slug/settings/community`.
+
+New code must not generate a `/workspace*` URL. Internal Workspace route helpers
+and the MCP `workspace_context` wire term remain temporarily intact because they
+are compatibility substrate, not reachable product navigation.
 
 ## Transactional Routes
 
@@ -162,4 +166,5 @@ New work should use pathname routes only, and controllers should not assume hash
 3. When implementing public user profiles or app profiles, use:
    - `/u/:handle`
    - `/app/:slug`
-4. When touching major navigation again, move pathname toward owning page identity directly.
+4. Continue deleting first-party Workspace references only after their runtime,
+   billing, and MCP responsibilities have explicit community-scoped owners.

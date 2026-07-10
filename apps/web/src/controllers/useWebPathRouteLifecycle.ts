@@ -12,7 +12,10 @@ import type {
   DiscoverTab,
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
-import type { PublicRoute } from "../../../../shared/webAppRouteState";
+import {
+  isLegacyWorkspaceRoutePath,
+  type PublicRoute,
+} from "../../../../shared/webAppRouteState";
 import { isCommunityLaunchSetupRoutePath } from "../communityLaunchSetupRoute";
 
 function hasPendingOAuthCallbackParams(): boolean {
@@ -94,6 +97,7 @@ export function useWebPathRouteLifecycle(params: {
     if (params.publicRouteKind !== "app") return;
     if (hasPendingOAuthCallbackParams()) return;
     if (hasCommunityLaunchSetupRouteState()) return;
+    if (isLegacyWorkspaceRoutePath(window.location.pathname)) return;
 
     const nextPath = params.buildAppRoutePath({
       page: params.activePage,

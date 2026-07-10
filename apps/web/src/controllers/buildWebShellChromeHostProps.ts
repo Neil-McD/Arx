@@ -56,7 +56,7 @@ export function buildWebShellChromeHostProps(params: {
   handleTopbarBackFromPublicFunnel: () => void;
   handleTopbarBackFromWorkspaceSettings: () => void;
   setUserWantsSessions: (value: ((prev: boolean) => boolean) | boolean) => void;
-  handleTopbarBackToWorkspace: () => void;
+  handleTopbarBackToCommunity: () => void;
   workspaceShellPanels: ReactNode;
   communityTab: WebShellChromeHostProps["communityShell"]["communityTab"];
   communityTabIndicators: WebShellChromeHostProps["communityShell"]["communityTabIndicators"];
@@ -173,7 +173,7 @@ export function buildWebShellChromeHostProps(params: {
         params.setUserWantsSessions((prev: boolean) => !prev);
       },
       onStartNewThread: params.handleStartNewWorkspaceThreadFromShell,
-      onBackToWorkspace: params.handleTopbarBackToWorkspace,
+      onBackToCommunity: params.handleTopbarBackToCommunity,
     },
     workspaceShellPanels: params.workspaceShellPanels,
     communityShell: {

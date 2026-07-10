@@ -210,6 +210,7 @@ import {
 import {
   COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES,
   buildCommunityLaunchSetupRoutePath,
+  isCommunityLaunchSetupRoutePath,
   parseCommunityLaunchSetupRouteStep,
   readCommunityLaunchSetupRouteContext,
   readCurrentCommunityLaunchSetupRouteContext,
@@ -263,8 +264,6 @@ import type {
 } from "../../../shared/communityTypes";
 import type { CreateSkillPackageInput } from "../../../shared/skillPackageTypes";
 import {
-  deriveBackFromWorkspaceSettingsFallbackTransition,
-  deriveBackToWorkspaceFallbackTransition,
   deriveOpenDiscoverTransition,
   deriveToggleWorkspaceSettingsTransition,
 } from "../../../shared/appNavTransitions";
@@ -283,7 +282,9 @@ import {
   buildSettingsPath,
   buildCommunityFunnelPreviewPath,
   buildWorkspaceDraftPath,
+  isLegacyWorkspaceRoutePath,
   isRootAppRoutePath,
+  readLegacyWorkspaceRouteContext,
   readAppRouteFromLocation,
   readPublicRouteFromLocation,
   readShellVariantFromPathname,
@@ -1025,8 +1026,7 @@ function clearPendingWorkspaceCardSetupReturn(): void {
 }
 
 function buildWorkspaceCardSetupReturnUrl(): string {
-  const pathname = window.location.pathname.startsWith("/") ? window.location.pathname : "/workspace";
-  return `${window.location.origin}${pathname}`;
+  return `${window.location.origin}/settings/billing`;
 }
 
 function buildPremiumSubscriptionReturnUrl(): string {
@@ -1984,10 +1984,10 @@ export default function App() {
   const [publicRoute, setPublicRoute] = useState<PublicRoute>(() => initialPublicRoute);
   const [shellVariant, setShellVariant] = useState<AppShellVariant>(() => initialShellVariant);
   const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay>(null);
-  const [mobileRootPage, setMobileRootPage] = useState<MobileRootPage>("agent");
+  const [mobileRootPage, setMobileRootPage] = useState<MobileRootPage>("community");
   const [mobileSettingsView, setMobileSettingsView] = useState<"index" | "detail">("detail");
 
-  const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "workspace");
+  const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "landing");
   const [activeView, setActiveView] = useState<AppView>(() => initialAppRoute?.view ?? "home");
   const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => initialAppRoute?.settingsPage ?? "account");
   const [selectedProductDocSlug, setSelectedProductDocSlug] = useState<string | null>(
@@ -3394,6 +3394,13 @@ export default function App() {
     if (normalizedTab === communityTab) return;
     setCommunityResourceModuleId(null);
     applyCommunityShellState({ communityTab: normalizedTab });
+    if (isCommunityLaunchSetupRoutePath(window.location.pathname)) {
+      const normalizedPath = buildCommunityTabPath(
+        selectedActiveCommunitySlug,
+        normalizedTab,
+      );
+      if (normalizedPath) navigateTo(normalizedPath, { replace: true });
+    }
   }, [
     activeCommunityAccess,
     activeCommunityId,
@@ -3405,6 +3412,7 @@ export default function App() {
     canViewActiveCommunitySettings,
     communityTab,
     isLoadingCommunityAccess,
+    selectedActiveCommunitySlug,
   ]);
 
   const communityTypingUsers = useCommunityTypingPresence({
@@ -4419,7 +4427,7 @@ export default function App() {
       applyCommunityShellState({
         communityId: restoredCommunityId,
         communitySlug: restoredCommunitySlug,
-        communityTab: "chat",
+        communityTab: "settings",
       });
     } else if (restoredCommunityId) {
       applyCommunityShellState({
@@ -4495,14 +4503,9 @@ export default function App() {
       const communitySlug = normalizeLaunchOAuthContextParam(
         selectedActiveCommunitySlug ?? activeCommunity?.slug ?? setupContext.communitySlug,
       );
-      const routePath = buildAppRoutePath({
-        page: "workspace",
-        view: "home",
-        settingsPage: "agent",
-        communitySlug,
-        communityTab: "chat",
-        threadId: null,
-      }) ?? buildWorkspaceDraftPath();
+      const routePath =
+        buildCommunityTabPath(communitySlug, "settings", null, "community") ??
+        "/discover";
       const nextPath = applyShellVariantToKnownPath(routePath, shellVariant);
       if (nextPath !== currentPath) {
         window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
@@ -4518,17 +4521,6 @@ export default function App() {
     shellVariant,
   ]);
 
-  const applyStandaloneWorkspaceLaunch = useCallback((nextPath: string) => {
-    window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
-    applyCommunityShellState({
-      communityId: null,
-      communitySlug: null,
-      communityTab: "chat",
-    });
-    workspaceProject.actions.setActiveProjectId(null);
-    applyLocationToState();
-  }, [applyCommunityShellState, applyLocationToState, workspaceProject.actions]);
-
   useEffect(() => {
     if (!isAuthBootstrapComplete) return;
     if (!session) return;
@@ -4538,6 +4530,44 @@ export default function App() {
     void routeTryPolynetFree(session);
   }, [activePage, isAuthBootstrapComplete, publicRoute.kind, session]);
 
+  const legacyWorkspaceRedirectRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isAuthBootstrapComplete) return;
+    if (publicRoute.kind !== "app") return;
+    const pathname = window.location.pathname || "/";
+    if (session && isCommunityLaunchSetupRoutePath(pathname)) return;
+    const legacyContext = readLegacyWorkspaceRouteContext(pathname);
+    if (!legacyContext) return;
+
+    const redirectKey = `${resolveAuthSubject(session) ?? "signed-out"}:${pathname}`;
+    if (legacyWorkspaceRedirectRef.current === redirectKey) return;
+    legacyWorkspaceRedirectRef.current = redirectKey;
+
+    if (!session) {
+      navigateTo(
+        legacyContext.communitySlug
+          ? buildCommunityFunnelPath(legacyContext.communitySlug) ?? "/"
+          : "/",
+        { replace: true },
+      );
+      return;
+    }
+
+    void resolveAndEnterMemberDestination({
+      session,
+      communitySlug: legacyContext.communitySlug,
+      replace: true,
+    }).then((entered) => {
+      if (entered) return;
+      navigateTo(
+        legacyContext.communitySlug
+          ? buildCommunityFunnelPath(legacyContext.communitySlug) ?? "/discover"
+          : "/discover",
+        { replace: true },
+      );
+    });
+  }, [isAuthBootstrapComplete, publicRoute.kind, session]);
+
   useEffect(() => {
     if (!isStandaloneWebApp()) return;
     const currentUrl = new URL(window.location.href);
@@ -4546,12 +4576,9 @@ export default function App() {
     }
 
     currentUrl.searchParams.delete(STANDALONE_APP_LAUNCH_SEARCH_PARAM);
-    const shellVariantForLaunch = readShellVariantFromPathname(currentUrl.pathname || "/");
-    const canonicalAppPath = applyShellVariantToAppPath(buildWorkspaceDraftPath(), shellVariantForLaunch);
-    const canonicalUrl = new URL(canonicalAppPath, currentUrl.origin);
-    const nextPath = `${canonicalUrl.pathname}${canonicalUrl.search}${canonicalUrl.hash}` || buildWorkspaceDraftPath();
-    applyStandaloneWorkspaceLaunch(nextPath);
-  }, [applyStandaloneWorkspaceLaunch]);
+    const nextPath = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}` || "/";
+    window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
+  }, []);
 
   /* (Deleted 2026-07-02: the standalone signed-out funnel deferral used to
      bounce /c/:slug to a workspace launch. The visitor lens made that
@@ -4759,13 +4786,20 @@ export default function App() {
     navigateTo(nextRoutePath, { replace: true });
   };
   const goBack = (): boolean => {
-    const snapshot = popNavSnapshot(navStackRef.current) as NavSnapshot | null;
+    let snapshot = popNavSnapshot(navStackRef.current) as NavSnapshot | null;
+    while (snapshot?.page === "workspace" && snapshot.view === "home") {
+      snapshot = popNavSnapshot(navStackRef.current) as NavSnapshot | null;
+    }
     if (!snapshot) return false;
     restoreNavSnapshot(snapshot);
     return true;
   };
 
-  const backTargetSnapshot = navStackRef.current.length > 0 ? navStackRef.current[navStackRef.current.length - 1] : null;
+  const backTargetSnapshot =
+    [...navStackRef.current]
+      .reverse()
+      .find((snapshot) => snapshot.page !== "workspace" || snapshot.view !== "home") ??
+    null;
   const backTargetLabel = backTargetSnapshot ? formatBackTargetLabelShared(backTargetSnapshot) : null;
   const effectiveBackTargetLabel = backTargetLabel;
 
@@ -5589,7 +5623,7 @@ export default function App() {
         communitySlug: null,
         communityTab: "chat",
       });
-      setActivePage("workspace");
+      setActivePage("discover");
       setActiveView("home");
       setCommunities((prev) => prev.filter((community) => community.id !== leavingId));
     },
@@ -7185,10 +7219,9 @@ export default function App() {
         void payload;
       },
       open_workspace_draft: (payload) => {
-        openWorkspaceDraft({
-          replace: true,
-          projectId: payload.project_id ?? null,
-          focusComposer: focusWorkspaceComposer,
+        void payload;
+        void resolveAndEnterMemberDestination({ replace: true }).then((entered) => {
+          if (!entered) navigateTo("/discover", { replace: true });
         });
       },
       connect_provider: (payload) => {
@@ -7642,8 +7675,12 @@ export default function App() {
       Boolean(activeCommunityId) &&
       Boolean(canManageCommunitySettings) &&
       Boolean(effectiveAccountSetupStatus?.completed) &&
-      activePage === "workspace" &&
-      activeView === "home";
+      activePage === "community" &&
+      Boolean(
+        isCommunityLaunchSetupModalOpen ||
+          pendingCommunityLaunchKnowledgeOAuthContext ||
+          pendingCommunityLaunchSetupRouteContext,
+      );
     if (!shouldLoadLaunchStatus || !session || !activeCommunityId) {
       communityLaunchSetupStatusLoadedCommunityIdRef.current = null;
       setCommunityLaunchSetupStatus(null);
@@ -7695,6 +7732,7 @@ export default function App() {
     canManageCommunitySettings,
     effectiveAccountSetupStatus?.completed,
     activeCommunity?.updated_at,
+    isCommunityLaunchSetupModalOpen,
     pendingCommunityLaunchKnowledgeOAuthContext,
     pendingCommunityLaunchSetupRouteContext,
   ]);
@@ -7742,7 +7780,7 @@ export default function App() {
       applyCommunityShellState({
         communityId: targetCommunityId,
         communitySlug: targetCommunitySlug,
-        communityTab: "chat",
+        communityTab: "settings",
       });
       return;
     }
@@ -7791,7 +7829,7 @@ export default function App() {
       applyCommunityShellState({
         communityId: targetCommunityId,
         communitySlug: targetCommunitySlug,
-        communityTab: "chat",
+        communityTab: "settings",
       });
       return;
     }
@@ -9451,21 +9489,20 @@ export default function App() {
     shellPublicRoute.kind === "app" && authPresentationState !== "signed_out";
   const isAuthRecoveringSignedInAppShell =
     shellPublicRoute.kind === "app" && authPresentationState === "recovering_signed_in";
-  const shouldHoldRootLandingForAuth =
+  const shouldHoldLandingForAuth =
     shellPublicRoute.kind === "app" &&
     activePage === "landing" &&
-    authPresentationState !== "signed_out" &&
     typeof window !== "undefined" &&
-    isRootAppRoutePath(window.location.pathname || "/");
+    (isLegacyWorkspaceRoutePath(window.location.pathname || "/") ||
+      (authPresentationState !== "signed_out" &&
+        isRootAppRoutePath(window.location.pathname || "/")));
   const isAccountGraphHydratingCriticalAppShell =
     shellPublicRoute.kind === "app" &&
     authPresentationState === "signed_in" &&
     accountGraphHydrationPhase === "critical";
 
 	  const handleTopbarBackFromWorkspaceSettings = () => {
-	    if (goBack()) return;
-	    const transition = deriveBackFromWorkspaceSettingsFallbackTransition();
-	    setActiveView(transition.nextView);
+	    handleTopbarBackToCommunity();
 	  };
 	  const handleTopbarBackFromPublicFunnel = () => {
 	    void goBack();
@@ -9479,15 +9516,23 @@ export default function App() {
       if (!fallbackPath) return;
       navigateTo(fallbackPath, { replace: true });
     };
-	  const handleTopbarBackToWorkspace = () => {
+	  function handleTopbarBackToCommunity() {
 	    if (goBack()) return;
-	    const transition = deriveBackToWorkspaceFallbackTransition(
-	      { activeView },
-	      { forceHomeView: true },
-	    );
-	    setActiveView(transition.nextView);
-	    setActivePage(transition.nextPage);
-	  };
+	    const communitySlug = String(
+	      selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "",
+	    ).trim();
+	    if (communitySlug) {
+	      openCommunityChat(communitySlug, { clearUnread: true });
+	      return;
+	    }
+	    if (session) {
+	      void resolveAndEnterMemberDestination({ session, replace: true }).then((entered) => {
+	        if (!entered) navigateTo("/discover", { replace: true });
+	      });
+	      return;
+	    }
+	    navigateTo("/discover", { replace: true });
+	  }
 		  const handleOpenLandingCommunity = () => {
 		    const communitySlug = String(activeCommunity?.slug ?? "").trim();
 		    if (!communitySlug) return;
@@ -10143,7 +10188,6 @@ export default function App() {
 	        setCommunityLaunchSetupInitialStep(null);
 	        setIsCommunityLaunchCreateMode(true);
 	        setIsCommunityLaunchSetupModalOpen(true);
-        navigateTo("/workspace");
       })();
     };
     const handleCreateCommunityFromLaunch = async (
@@ -10215,10 +10259,10 @@ export default function App() {
         applyCommunityShellState({
           communityId: community.id,
           communitySlug: community.slug,
-          communityTab: "chat",
+          communityTab: "settings",
         });
         setPublicRoute({ kind: "app" });
-        setActivePage("workspace");
+        setActivePage("community");
         setActiveView("home");
         setIsCommunityLaunchCreateMode(false);
         setIsLoadingCommunityLaunchSetupStatus(true);
@@ -10258,10 +10302,7 @@ export default function App() {
       mobileRootPage,
       hasSelectedCommunity,
       canViewMembersRoot: hasSelectedCommunity && canViewMembersActiveCommunity,
-      forceCommunityRoot:
-        showMobileShell &&
-        (shellPublicRoute.kind === "community_funnel" ||
-          shellPublicRoute.kind === "community_funnel_preview"),
+      forceCommunityRoot: showMobileShell,
       mobileOverlay,
       showMobileShell,
       showMobileSettingsShell,
@@ -10272,7 +10313,7 @@ export default function App() {
       setMobileSettingsView,
       openCommunityChat,
       handleOpenDiscover,
-      handleTopbarBackToWorkspace,
+      handleTopbarBackToCommunity,
       hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
       openCommunityCreateFlow: openCommunityLaunchCreateFlow,
       setIsFreeAccountInfoOpen,
@@ -10281,8 +10322,7 @@ export default function App() {
       if (shellPublicRoute.kind !== "app") return;
       if (activePage !== "community") return;
       if (hasSelectedCommunity) return;
-      setActiveView("home");
-      setActivePage("discover");
+      navigateTo("/discover", { replace: true });
     }, [activePage, hasSelectedCommunity, shellPublicRoute.kind]);
 	  const handleToggleWorkspaceSettings = () => {
 	    const transition = deriveToggleWorkspaceSettingsTransition({ activePage, activeView });
@@ -11753,7 +11793,7 @@ export default function App() {
     activePage,
     isPublicCommunityFunnel,
     publicRoute: shellPublicRoute,
-    holdLandingForAuth: shouldHoldRootLandingForAuth,
+    holdLandingForAuth: shouldHoldLandingForAuth,
     landingPageProps: {
       onTryFree: () => {
         void routeTryPolynetFree();
@@ -12211,7 +12251,7 @@ export default function App() {
     handleMobileShellTouchCancel,
     mobileShellMode,
     mobileRootPage,
-    forceMobileCommunityRoot: showMobileShell && isVisitorCommunitySurface,
+    forceMobileCommunityRoot: showMobileShell,
     mobileSecondaryMode,
     showMobileSettingsIndex,
     activePage,
@@ -12236,7 +12276,7 @@ export default function App() {
     handleTopbarBackFromPublicFunnel,
     handleTopbarBackFromWorkspaceSettings,
     setUserWantsSessions,
-    handleTopbarBackToWorkspace,
+    handleTopbarBackToCommunity,
     workspaceShellPanels,
     communityTab: isVisitorCommunitySurface ? "chat" : communityTab,
     communityTabIndicators: isVisitorCommunitySurface

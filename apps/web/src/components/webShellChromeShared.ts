@@ -52,7 +52,7 @@ export type WebDesktopShellHeaderProps = {
   onBackFromWorkspaceSettings: () => void;
   onToggleSessions: () => void;
   onStartNewThread: () => void;
-  onBackToWorkspace: () => void;
+  onBackToCommunity: () => void;
 };
 
 export type WebCommunityShellProps = {

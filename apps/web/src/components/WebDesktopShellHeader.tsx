@@ -57,7 +57,7 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
               <svg viewBox="0 0 24 24" className="back-icon">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
-              <span className="back-path">{props.backTargetLabel ?? "workspace"}</span>
+              <span className="back-path">{props.backTargetLabel ?? "community"}</span>
             </button>
           ) : (
             <>
@@ -90,14 +90,14 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
         ) : (
           <button
             className="back-to-workspace"
-            onClick={props.onBackToWorkspace}
+            onClick={props.onBackToCommunity}
             title="Back"
             type="button"
           >
             <svg viewBox="0 0 24 24" className="back-icon">
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
-            <span className="back-path">{props.backTargetLabel ?? "workspace"}</span>
+            <span className="back-path">{props.backTargetLabel ?? "community"}</span>
           </button>
         )}
       </div>

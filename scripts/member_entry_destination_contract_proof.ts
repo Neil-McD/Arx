@@ -121,7 +121,17 @@ assert.doesNotMatch(
 assert.match(
   routes,
   /function buildWorkspaceDraftPath[\s\S]*return appendWorkspaceDraftProjectSearch\("\/workspace"/,
-  "legacy Workspace routes must remain directly available during isolation",
+  "legacy Workspace route builders must remain as internal compatibility substrate during isolation",
+);
+assert.match(
+  routes,
+  /readLegacyWorkspaceRouteContext[\s\S]*segments\[0\] !== "workspace"[\s\S]*communitySlug/,
+  "legacy Workspace URLs must be classified before auth-aware destination resolution",
+);
+assert.match(
+  app,
+  /readLegacyWorkspaceRouteContext[\s\S]*resolveAndEnterMemberDestination[\s\S]*buildCommunityFunnelPath/,
+  "legacy Workspace entry must resolve to an authorized community or a public funnel instead of rendering Workspace",
 );
 
 console.log("member_entry_destination_contract_proof: ok");

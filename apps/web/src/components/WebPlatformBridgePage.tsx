@@ -1,12 +1,12 @@
 /* The standalone platform bridge: generic joiners (no community context) meet
    the same bridge card in its platform presentation on a clean page — no
-   community pitch, no community backdrop — and exit to the workspace, where
-   the guide greets them. Community joiners never see this page. */
+   community pitch or community backdrop. The server resolves their canonical
+   community destination after setup. Community joiners never see this page. */
 import { WebCommunityBridgeCard, type WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
 
 export function WebPlatformBridgePage(props: {
-  /** null = hold: setup status still loading, or a completed account is about
-      to be redirected to the workspace by the route effect. */
+  /** null = hold: setup status is loading, or a completed account is about to
+      be redirected to its community destination by the route effect. */
   bridge: WebCommunityBridgeCardProps | null;
 }) {
   return (

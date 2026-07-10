@@ -30,7 +30,7 @@ export function useWebMobileShellController(params: {
   setMobileSettingsView: Dispatch<SetStateAction<MobileSettingsView>>;
   openCommunityChat: (communitySlug: string, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }) => void;
   handleOpenDiscover: () => void;
-  handleTopbarBackToWorkspace: () => void;
+  handleTopbarBackToCommunity: () => void;
   hasCommunityCreateAccess: boolean;
   openCommunityCreateFlow: () => void;
   setIsFreeAccountInfoOpen: Dispatch<SetStateAction<boolean>>;
@@ -75,7 +75,7 @@ export function useWebMobileShellController(params: {
           return;
         }
         if (params.activePage !== "workspace") {
-          params.handleTopbarBackToWorkspace();
+          params.handleTopbarBackToCommunity();
         }
         return;
       }
@@ -104,7 +104,7 @@ export function useWebMobileShellController(params: {
       params.activeView,
       params.canViewMembersRoot,
       params.forceCommunityRoot,
-      params.handleTopbarBackToWorkspace,
+      params.handleTopbarBackToCommunity,
       params.setActiveView,
       params.setMobileOverlay,
       params.setMobileRootPage,
@@ -126,9 +126,8 @@ export function useWebMobileShellController(params: {
 
   const handleExitMobileSettings = useCallback(() => {
     params.setMobileOverlay(null);
-    params.setActivePage("workspace");
-    params.setActiveView("home");
-  }, [params.setActivePage, params.setActiveView, params.setMobileOverlay]);
+    openMobileCommunitySurface();
+  }, [openMobileCommunitySurface, params.setMobileOverlay]);
 
   const openMobileCreateCommunity = useCallback(() => {
     params.setMobileOverlay(null);

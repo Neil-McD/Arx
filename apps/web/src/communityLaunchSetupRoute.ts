@@ -3,8 +3,7 @@ import {
   type CommunityLaunchSetupStep,
 } from "../../../shared/communityLaunchSetup";
 import {
-  buildWorkspaceCommunityDraftPath,
-  buildWorkspaceDraftPath,
+  buildCommunityTabPath,
   isReservedWorkspaceRouteSegment,
   stripShellVariantFromPathname,
 } from "../../../shared/webAppRouteState";
@@ -151,12 +150,9 @@ export function buildCommunityLaunchSetupRoutePath(args: {
 }): string {
   const communityId = normalizeLaunchSetupRouteParam(args.communityId);
   const communitySlug = normalizeLaunchSetupRouteParam(args.communitySlug);
-  const communityRoutePath = buildWorkspaceCommunityDraftPath(communitySlug);
-  if (communityRoutePath) {
-    return `${communityRoutePath}/setup/${encodeURIComponent(args.step)}`;
-  }
-
-  const routePath = buildWorkspaceDraftPath();
+  const routePath =
+    buildCommunityTabPath(communitySlug, "settings", null, "community") ??
+    "/discover";
   const url = new URL(routePath, "https://www.polynet.ai");
   url.searchParams.set("community_launch_setup", "1");
   url.searchParams.set("community_launch_step", args.step);
