@@ -51,7 +51,7 @@ export type AppRoutePathState = {
   projectId?: string | null;
 };
 
-export const DEFAULT_POST_SIGN_IN_PATH = "/workspace";
+export const DEFAULT_POST_SIGN_IN_PATH = "/";
 export const MOBILE_SHELL_PATH_PREFIX = "/m";
 export const STANDALONE_APP_LAUNCH_SEARCH_PARAM = "launch";
 export const STANDALONE_APP_LAUNCH_SEARCH_VALUE = "app";

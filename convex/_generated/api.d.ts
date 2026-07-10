@@ -135,6 +135,7 @@ import type * as httpVoice from "../httpVoice.js";
 import type * as legalAcceptances from "../legalAcceptances.js";
 import type * as mcpHttpClient from "../mcpHttpClient.js";
 import type * as mcpSnapshotCodec from "../mcpSnapshotCodec.js";
+import type * as memberEntryDestination from "../memberEntryDestination.js";
 import type * as memberOntology from "../memberOntology.js";
 import type * as memberOntologyCore from "../memberOntologyCore.js";
 import type * as modelRegistry from "../modelRegistry.js";
@@ -345,6 +346,7 @@ declare const fullApi: ApiFromModules<{
   legalAcceptances: typeof legalAcceptances;
   mcpHttpClient: typeof mcpHttpClient;
   mcpSnapshotCodec: typeof mcpSnapshotCodec;
+  memberEntryDestination: typeof memberEntryDestination;
   memberOntology: typeof memberOntology;
   memberOntologyCore: typeof memberOntologyCore;
   modelRegistry: typeof modelRegistry;

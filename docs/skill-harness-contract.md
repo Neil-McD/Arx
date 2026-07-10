@@ -218,12 +218,13 @@ Current behavior:
   `stated_interview` / `form_answer` facts
 - explicit profile completion no longer writes legacy pending
   user-scoped `onboarding_completed` lifecycle evidence
-- the bridge handoff action resolves the active community lens, ensures one
-  community-scoped `onboarding_completed` activation, creates or reuses a
-  deterministic normal cloud thread, and returns preparation state without
-  invoking a model
-- the authenticated client enters that thread and opens the existing runtime
-  SSE transport without a user-authored message
+- the backend onboarding capability can resolve an active community lens,
+  ensure one community-scoped `onboarding_completed` activation, create or
+  reuse a deterministic normal cloud thread, and return preparation state
+  without invoking a model
+- the current community-first web bridge does not call that capability; it
+  resolves an authorized community destination and enters community chat
+  without creating a hidden personal thread or runtime turn
 - the normal runtime handler admits that message-less turn only when thread
   ownership, deterministic thread scope, community lens, and a claimable
   activation agree; it then selects `lifecycle_trigger`, suppresses synthetic
@@ -243,6 +244,8 @@ Current behavior:
 
 ## Add Later
 
+- reconnect lifecycle onboarding through a visible interactive community-agent
+  surface rather than the isolated personal Workspace handoff
 - first-class trigger policy fields
 - first workspace thread lifecycle trigger
 - `ui_selected` activation
@@ -261,33 +264,20 @@ Current behavior:
 
 ## Onboarding Skill Target
 
-Onboarding is a lifecycle-triggered skill, not a special-case prompt.
+Onboarding remains a lifecycle-triggered skill capability, not a special-case
+prompt. It is not emitted by the current web bridge. The bridge now has one job:
+complete deterministic account setup and enter the server-authorized community.
 
-The backend selects it when an eligible bridge handoff occurs. The current wired
-event is member onboarding completion scoped to the active community lens; first
-workspace thread creation remains deferred. Its instructions are injected only
-for that turn or run. The skill should not become permanent always-on context.
+The retained backend capability still supports a normal streaming runtime turn:
+it creates or reuses a deterministic cloud thread, atomically claims the
+activation, injects the onboarding skill body, and forces the bounded
+orientation protocol (`get_active_community_context`, then
+`search_product_docs` for Polynet or `community_resources_map` for a named
+community). It records completion only after the assistant message persists.
 
-Irreducible onboarding flow:
-
-1. backend observes a lifecycle event
-2. backend selects the onboarding skill with `lifecycle_trigger`
-3. backend creates or reuses the deterministic normal cloud thread for the
-   active community lens
-4. client enters that thread and opens the normal runtime SSE turn
-5. runtime atomically claims the activation, injects the onboarding skill body,
-   and forces the orientation protocol: `get_active_community_context`, then
-   `search_product_docs` for Polynet or `community_resources_map` for a named
-   community, then no more tools before the answer
-6. bridge renders the compact handoff screen until the real SSE `start` event
-7. agent welcomes the member with an evidence-grounded orientation: what this
-   community's real content covers (from first-turn tool reads), where the
-   member is and how the active thread/community lens works (one sentence of
-   mechanics at most), the profile-memory boundary, and exactly one plain
-   profile-building question — a one-clause agent grounding instead of a named
-   self-introduction, no billing or entitlement talk, at most 4 short
-   paragraphs
-8. backend records completion only after the assistant message persists
+Reactivation is deferred until the product has a visible interactive
+community-agent surface. That surface must reuse this governed runtime substrate
+without restoring bridge-to-Workspace navigation or creating an invisible turn.
 
 ## Definition Of Done For Skill Harness Maturity
 

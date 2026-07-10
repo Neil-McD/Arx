@@ -11,7 +11,6 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import { flushSync } from "react-dom";
 import { MessageCircle } from "lucide-react";
 import "highlight.js/styles/github-dark.css";
 import {
@@ -134,6 +133,10 @@ import {
   saveCloudCommunityPublicPresentation,
 } from "../../../shared/cloudCommunityFunnelGateway";
 import {
+  resolveCloudMemberEntryDestination,
+  type CloudMemberEntryDestination,
+} from "../../../shared/cloudMemberEntryDestinationGateway";
+import {
   checkCloudProfileHandleAvailability,
   loadCloudAccountSetupStatus,
   prepareCloudProfileAvatarField,
@@ -142,9 +145,6 @@ import {
   type CloudProfileHandleAvailability,
   upsertCloudProfileDetail,
 } from "../../../shared/cloudProfilesGateway";
-import {
-  requestOnboardingGuideKickoff,
-} from "../../../shared/cloudOnboardingGuideGateway";
 import { formatProfileMutationError } from "../../../shared/profileMutationErrors";
 import {
   formatAccountSetupMissingGuidance,
@@ -272,7 +272,6 @@ import {
   type AppShellVariant,
   type AppRouteState,
   type PublicRoute,
-  DEFAULT_POST_SIGN_IN_PATH,
   STANDALONE_APP_LAUNCH_SEARCH_PARAM,
   STANDALONE_APP_LAUNCH_SEARCH_VALUE,
   applyShellVariantToPublicPath,
@@ -581,22 +580,6 @@ type CommunityRecord = {
   owner_id: string;
   created_at: string;
   updated_at: string;
-};
-
-type OnboardingGuidePendingState = {
-  communityId: string | null;
-  communitySlug: string | null;
-  communityName: string;
-  status: "saving" | "preparing" | "starting" | "failed";
-  error: string | null;
-  startedAtMs: number;
-  /* A failure before the guide kickoff retries the whole bridge ceremony
-     (every step is idempotent); a kickoff failure retries the kickoff alone. */
-  retryScope: "platform_bridge" | "community_bridge" | "kickoff";
-  legalAcceptance: {
-    termsOfServiceVersion: string;
-    privacyPolicyVersion: string;
-  } | null;
 };
 
 function mapLaunchCommunityCreateError(error: unknown): string {
@@ -2316,8 +2299,11 @@ export default function App() {
   const [hasResolvedCommunities, setHasResolvedCommunities] = useState(false);
   const [communities, setCommunities] = useState<CommunityRecord[]>([]);
   const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
-  const [onboardingGuidePending, setOnboardingGuidePending] =
-    useState<OnboardingGuidePendingState | null>(null);
+  const defaultMemberEntryResolutionRef =
+    useRef<{
+      authSubject: string;
+      promise: Promise<CloudMemberEntryDestination | null>;
+    } | null>(null);
   const communityRailOrderStorageKey = useMemo(
     () => `${COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX}:${session?.user?.id ?? "local"}`,
     [session?.user?.id],
@@ -3910,6 +3896,88 @@ export default function App() {
     applyLocationToState();
   }
 
+  async function resolveMemberEntryDestination(options?: {
+    session?: AuthSession | null;
+    communityId?: string | null;
+    communitySlug?: string | null;
+  }): Promise<CloudMemberEntryDestination | null> {
+    const activeSession = options?.session ?? sessionRef.current ?? session;
+    if (!activeSession) return null;
+    const authSubject = resolveAuthSubject(activeSession);
+    if (!authSubject) return null;
+    const isDefaultDestination = !options?.communityId && !options?.communitySlug;
+    if (
+      isDefaultDestination &&
+      defaultMemberEntryResolutionRef.current?.authSubject === authSubject
+    ) {
+      return await defaultMemberEntryResolutionRef.current.promise;
+    }
+    const request = resolveCloudMemberEntryDestination<AuthSession>({
+      session: activeSession,
+      communityId: options?.communityId ?? null,
+      communitySlug: options?.communitySlug ?? null,
+    });
+    if (isDefaultDestination) {
+      defaultMemberEntryResolutionRef.current = { authSubject, promise: request };
+    }
+    try {
+      return await request;
+    } catch (error) {
+      console.warn("[member-entry] destination resolution failed:", error);
+      return null;
+    } finally {
+      if (
+        isDefaultDestination &&
+        defaultMemberEntryResolutionRef.current?.promise === request
+      ) {
+        defaultMemberEntryResolutionRef.current = null;
+      }
+    }
+  }
+
+  function applyMemberEntryDestination(
+    destination: CloudMemberEntryDestination,
+    options?: { replace?: boolean },
+  ): void {
+    if (destination.page === "discover") {
+      applyCommunityShellState({
+        communityId: null,
+        communitySlug: null,
+        communityTab: "chat",
+      });
+      navigateTo("/discover", { replace: options?.replace !== false });
+      return;
+    }
+
+    const path = buildCommunityTabPath(destination.community_slug, "chat");
+    if (!path) throw new Error("community_destination_path_required");
+    syncCommunitySelection({
+      communityId: destination.community_id,
+      communitySlug: destination.community_slug,
+    });
+    setPublicRoute({ kind: "app" });
+    navigateTo(path, { replace: options?.replace !== false });
+
+    const activeSession = sessionRef.current ?? session;
+    if (activeSession) {
+      void loadCommunities(activeSession).catch(() => {
+        // Destination access is already authoritative; this refresh is best effort.
+      });
+    }
+  }
+
+  async function resolveAndEnterMemberDestination(options?: {
+    session?: AuthSession | null;
+    communityId?: string | null;
+    communitySlug?: string | null;
+    replace?: boolean;
+  }): Promise<boolean> {
+    const destination = await resolveMemberEntryDestination(options);
+    if (!destination) return false;
+    applyMemberEntryDestination(destination, { replace: options?.replace });
+    return true;
+  }
+
   async function loadProfileForOnboarding(activeSession: AuthSession): Promise<UserProfileDetail | null> {
     const userId = resolveAuthSubject(activeSession);
     if (!userId) return null;
@@ -3944,7 +4012,14 @@ export default function App() {
       const row = await loadProfileForOnboarding(activeSession);
       if (row?.account_setup?.completed) {
         setIsOnboardingModalOpen(false);
-        navigateTo("/workspace");
+        const entered = await resolveAndEnterMemberDestination({
+          session: activeSession,
+          replace: true,
+        });
+        if (!entered) {
+          setOnboardingError("We could not open your community. Try again.");
+          navigateTo("/discover", { replace: true });
+        }
         return;
       }
     } catch {
@@ -4030,7 +4105,16 @@ export default function App() {
         profileUi.setProfileAvatarZoom(saved.avatar_zoom ?? 1);
       }
 
-      if (shouldNavigate) navigateTo("/workspace");
+      if (shouldNavigate) {
+        const entered = await resolveAndEnterMemberDestination({
+          session: activeSession,
+          replace: true,
+        });
+        if (!entered) {
+          setOnboardingError("We could not open your community. Try again.");
+          return false;
+        }
+      }
       return true;
     } catch (error) {
       const message = formatProfileMutationError(error, "Failed to save onboarding.");
@@ -4064,279 +4148,34 @@ export default function App() {
       setIsBridgeGateOpen(true);
       return;
     }
-    void enterJoinedCommunity({
+    void resolveAndEnterMemberDestination({
       communityId: entry.communityId,
       communitySlug: entry.communitySlug,
+      replace: true,
     });
   }
 
-  async function requestOnboardingGuideAfterBridge(options?: {
-    communityId?: string | null;
-    communitySlug?: string | null;
-    communityName?: string | null;
-  }): Promise<boolean> {
-    const activeSession = sessionRef.current ?? session;
-    if (!activeSession) return false;
-    const targetCommunityId = String(options?.communityId ?? "").trim() || null;
-    const targetCommunitySlug =
-      String(options?.communitySlug ?? "").trim() ||
-      (targetCommunityId ? resolveKnownCommunitySlugById(targetCommunityId) : null);
-    const targetCommunity =
-      (targetCommunityId
-        ? communities.find((community) => community.id === targetCommunityId)
-        : null) ??
-      (targetCommunitySlug
-        ? communities.find((community) => community.slug === targetCommunitySlug)
-        : null);
-    const targetCommunityName =
-      String(
-        options?.communityName ??
-        targetCommunity?.name ??
-        (targetCommunityId || targetCommunitySlug ? "this community" : "Polynet"),
-      ).trim() ||
-      "Polynet";
-    const pendingStartedAtMs = Date.now();
-    const routePath = buildAppRoutePath({
-      page: "workspace",
-      view: "home",
-      settingsPage: "agent",
-      communitySlug: targetCommunitySlug,
-      communityTab: "chat",
-      threadId: null,
-    }) ?? buildWorkspaceDraftPath();
-
-    if (targetCommunityId || targetCommunitySlug) {
-      syncCommunitySelection({
-        communityId: targetCommunityId,
-        communitySlug: targetCommunitySlug,
-      });
-    }
-    flushSync(() => {
-      setOnboardingGuidePending({
-        communityId: targetCommunityId,
-        communitySlug: targetCommunitySlug,
-        communityName: targetCommunityName,
-        status: "starting",
-        error: null,
-        startedAtMs: pendingStartedAtMs,
-        retryScope: "kickoff",
-        legalAcceptance: null,
-      });
-      setActiveThreadId(null);
-      setWorkspaceWantsNewChatMode(true);
-    });
-    navigateTo(routePath);
-
-    try {
-      const result = await requestOnboardingGuideKickoff<AuthSession>({
-        session: activeSession,
-        communityId: targetCommunityId,
-      });
-      if (!result || result.ok === false) {
-        if (result?.error) {
-          console.warn("[onboarding-guide] kickoff failed:", result.error);
-        }
-        setOnboardingGuidePending((current) =>
-          current?.startedAtMs === pendingStartedAtMs
-            ? { ...current, status: "failed", error: result?.error || "Guide kickoff failed." }
-            : current,
-        );
-        return false;
-      }
-
-      const threadId = String(result.thread_id ?? "").trim();
-      if (!threadId) {
-        setOnboardingGuidePending((current) =>
-          current?.startedAtMs === pendingStartedAtMs
-            ? { ...current, status: "failed", error: "Guide kickoff did not return a thread." }
-            : current,
-        );
-        return false;
-      }
-      const communityId =
-        String(result.community_id ?? targetCommunityId ?? "").trim() || null;
-      const runRequired = result.run_required === true;
-
-      if (communityId || targetCommunitySlug) {
-        syncCommunitySelection({
-          communityId,
-          communitySlug: targetCommunitySlug,
-        });
-      }
-
-      const nowSeconds = Date.now() / 1000;
-      setThreads((prev) => {
-        const existing = prev.find((thread) => thread.id === threadId) ?? null;
-        const nextThread: ThreadRecord = {
-          id: threadId,
-          title: existing?.title ?? `Welcome to ${targetCommunityName}`,
-          model_id: existing?.model_id ?? DEFAULT_ACTIVE_MODEL_ID,
-          runtime_engine: existing?.runtime_engine ?? "polynet",
-          project_id: existing?.project_id ?? null,
-          community_id: existing?.community_id ?? communityId,
-          context_version: existing?.context_version ?? 0,
-          agent_attention: existing?.agent_attention ?? true,
-          last_seq: Math.max(1, existing?.last_seq ?? 0),
-          created_at: existing?.created_at ?? nowSeconds,
-          updated_at: nowSeconds,
-        };
-        return [nextThread, ...prev.filter((thread) => thread.id !== threadId)];
-      });
-
-      setActiveThreadId(threadId);
-      setWorkspaceWantsNewChatMode(false);
-      if (!runRequired) {
-        try {
-          await Promise.all([
-            loadThreadMessages(threadId, activeSession),
-            loadThreads(activeSession),
-          ]);
-        } finally {
-          setOnboardingGuidePending((current) =>
-            current?.startedAtMs === pendingStartedAtMs ? null : current,
-          );
-        }
-        return true;
-      }
-
-      const runId =
-        String(result.run_id ?? "").trim() ||
-        `onboarding:${communityId ?? "platform"}:${crypto.randomUUID()}`;
-      const turnResult = await runAgentTurn(activeSession, threadId, {
-        preferredModelId: DEFAULT_ACTIVE_MODEL_ID,
-        mode: "respond",
-        runIdHint: runId,
-        systemPrompt: null,
-        runtimeEngine: "polynet",
-        requestedFundingSource: "auto",
-        requestedAgenticTools: true,
-        onStreamStart: () => {
-          setOnboardingGuidePending((current) =>
-            current?.startedAtMs === pendingStartedAtMs ? null : current,
-          );
-        },
-      });
-      if (turnResult.error) {
-        setThreadErrorForThread(threadId, turnResult.error);
-        setOnboardingGuidePending((current) =>
-          current?.startedAtMs === pendingStartedAtMs
-            ? { ...current, status: "failed", error: turnResult.error }
-            : current,
-        );
-        return false;
-      }
-      setOnboardingGuidePending((current) =>
-        current?.startedAtMs === pendingStartedAtMs ? null : current,
-      );
-      return true;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn("[onboarding-guide] kickoff failed:", message);
-      setOnboardingGuidePending((current) =>
-        current?.startedAtMs === pendingStartedAtMs
-          ? { ...current, status: "failed", error: message || "Guide kickoff failed." }
-          : current,
-      );
-      return false;
-    }
-  }
-
-  function retryOnboardingGuideAfterBridge(): void {
-    const pending = onboardingGuidePending;
-    if (!pending || pending.status !== "failed") return;
-    if (pending.retryScope === "platform_bridge") {
-      void completePlatformBridge(pending.legalAcceptance);
-      return;
-    }
-    if (pending.retryScope === "community_bridge") {
-      /* The gate already closed and the entry was consumed — retry re-runs the
-         idempotent save/finish steps in place, then the kickoff (which owns
-         community selection and navigation itself). */
-      void (async () => {
-        const setPhase = (status: "saving" | "preparing" | "failed", error: string | null = null) => {
-          setOnboardingGuidePending((current) =>
-            current?.startedAtMs === pending.startedAtMs
-              ? { ...current, status, error }
-              : current,
-          );
-        };
-        setPhase("saving");
-        const saved = await saveOnboardingProfile(pending.legalAcceptance);
-        if (!saved) {
-          setPhase("failed", "We could not save your profile.");
-          return;
-        }
-        setPhase("preparing");
-        const finished = await finishOnboarding({ navigate: false });
-        if (!finished) {
-          setPhase("failed", "We could not finish your account setup.");
-          return;
-        }
-        await requestOnboardingGuideAfterBridge({
-          communityId: pending.communityId,
-          communitySlug: pending.communitySlug,
-          communityName: pending.communityName,
-        });
-      })();
-      return;
-    }
-    void requestOnboardingGuideAfterBridge({
-      communityId: pending.communityId,
-      communitySlug: pending.communitySlug,
-      communityName: pending.communityName,
-    });
-  }
-
-  /* Platform bridge Enter (standalone page): the ceremony state mounts the
-     handoff surface synchronously at click time, before any network — the
-     setup-completion bounce effect defers to it, so the draft workspace can
-     never render between the bridge and the guide. */
+  /* Platform bridge Enter: save the deterministic account profile, then let
+     the server resolve the canonical Polynet community destination. */
   async function completePlatformBridge(legalAcceptance: {
     termsOfServiceVersion: string;
     privacyPolicyVersion: string;
   } | null): Promise<boolean> {
     if (!validateOnboardingProfileInputs(legalAcceptance)) return false;
-    const ceremonyStartedAtMs = Date.now();
-    const failCeremony = (error: string) => {
-      setOnboardingGuidePending((current) =>
-        current?.startedAtMs === ceremonyStartedAtMs
-          ? { ...current, status: "failed", error }
-          : current,
-      );
-    };
-    flushSync(() => {
-      setOnboardingGuidePending({
-        communityId: null,
-        communitySlug: null,
-        communityName: "Polynet",
-        status: "saving",
-        error: null,
-        startedAtMs: ceremonyStartedAtMs,
-        retryScope: "platform_bridge",
-        legalAcceptance,
-      });
-    });
     const savedProfile = await saveOnboardingProfile(legalAcceptance);
-    if (!savedProfile) {
-      failCeremony("We could not save your profile.");
-      return false;
-    }
-    setOnboardingGuidePending((current) =>
-      current?.startedAtMs === ceremonyStartedAtMs
-        ? { ...current, status: "preparing" }
-        : current,
-    );
+    if (!savedProfile) return false;
     const finished = await finishOnboarding({ navigate: false });
-    if (!finished) {
-      failCeremony("We could not finish your account setup.");
+    if (!finished) return false;
+    const entered = await resolveAndEnterMemberDestination({ replace: true });
+    if (!entered) {
+      setOnboardingError("We could not open Polynet. Try again.");
       return false;
     }
-    await requestOnboardingGuideAfterBridge();
     return true;
   }
 
-  /* Bridge Enter: save identity + legal, complete setup, run community entry,
-     then let the guide handoff select the normal community-lens thread. */
+  /* Community bridge Enter: save identity + legal, then revalidate the exact
+     requested community before changing the route. */
   async function completeBridgeAndEnter(legalAcceptance: {
     termsOfServiceVersion: string;
     privacyPolicyVersion: string;
@@ -4352,11 +4191,8 @@ export default function App() {
       setBridgePendingEntry(null);
       return true;
     }
-    /* Same invariant as the platform bridge: validate, mount the ceremony
-       synchronously, then do network work — no intermediate surface can
-       render between the gate and the guide. */
     if (!validateOnboardingProfileInputs(legalAcceptance)) return false;
-    const guideTarget = bridgePendingEntry ?? (
+    const entry = bridgePendingEntry ?? (
       activeCommunityId
         ? {
             communityId: activeCommunityId,
@@ -4364,73 +4200,30 @@ export default function App() {
           }
         : null
     );
-    const guideTargetName = guideTarget
-      ? String(guideTarget.communityName ?? "").trim() ||
-        (guideTarget.communityId && activeCommunity?.id === guideTarget.communityId
-          ? activeCommunity.name
-          : null)
-      : null;
-    const ceremonyStartedAtMs = Date.now();
-    const failCeremony = (error: string) => {
-      setOnboardingGuidePending((current) =>
-        current?.startedAtMs === ceremonyStartedAtMs
-          ? { ...current, status: "failed", error }
-          : current,
-      );
-    };
-    if (guideTarget) {
-      flushSync(() => {
-        setOnboardingGuidePending({
-          communityId: guideTarget.communityId ?? null,
-          communitySlug: guideTarget.communitySlug ?? null,
-          communityName: guideTargetName || "this community",
-          status: "saving",
-          error: null,
-          startedAtMs: ceremonyStartedAtMs,
-          retryScope: "community_bridge",
-          legalAcceptance,
-        });
-      });
+    if (!entry?.communityId) {
+      setOnboardingError("We could not verify this community. Try again.");
+      return false;
+    }
+    const savedProfile = await saveOnboardingProfile(legalAcceptance);
+    if (!savedProfile) return false;
+    const finished = await finishOnboarding({ navigate: false });
+    if (!finished) return false;
+    const destination = await resolveMemberEntryDestination({
+      communityId: entry.communityId,
+      communitySlug: entry.communitySlug,
+    });
+    if (!destination || destination.page !== "community") {
+      setOnboardingError("We could not open this community. Try again.");
+      return false;
     }
     setIsBridgeGateOpen(false);
-    const entry = bridgePendingEntry;
     setBridgePendingEntry(null);
-    const savedProfile = await saveOnboardingProfile(legalAcceptance);
-    if (!savedProfile) {
-      failCeremony("We could not save your profile.");
-      return false;
-    }
-    setOnboardingGuidePending((current) =>
-      current?.startedAtMs === ceremonyStartedAtMs
-        ? { ...current, status: "preparing" }
-        : current,
-    );
-    const finished = await finishOnboarding({ navigate: false });
-    if (!finished) {
-      failCeremony("We could not finish your account setup.");
-      return false;
-    }
-    if (entry) {
-      void enterJoinedCommunity({
-        communityId: entry.communityId,
-        communitySlug: entry.communitySlug,
-      });
-    } else {
-      handlePublicLandingPrimaryAction();
-    }
-    if (guideTarget) {
-      void requestOnboardingGuideAfterBridge({
-        communityId: guideTarget.communityId,
-        communitySlug: guideTarget.communitySlug,
-        communityName: guideTargetName,
-      });
-    }
+    applyMemberEntryDestination(destination, { replace: true });
     return true;
   }
 
   /* Client-side bridge validation, shared with saveOnboardingProfile: failures
-     here keep the user on the bridge with inline errors — the ceremony (and
-     its handoff surface) only starts once the inputs can actually be saved. */
+     here keep the user on the bridge with inline errors. */
   function validateOnboardingProfileInputs(legalAcceptance: {
     termsOfServiceVersion: string;
     privacyPolicyVersion: string;
@@ -4742,7 +4535,7 @@ export default function App() {
     if (publicRoute.kind !== "app") return;
     if (activePage !== "landing") return;
     if (!isRootAppRoutePath(window.location.pathname || "/")) return;
-    navigateTo(buildWorkspaceDraftPath(), { replace: true });
+    void routeTryPolynetFree(session);
   }, [activePage, isAuthBootstrapComplete, publicRoute.kind, session]);
 
   useEffect(() => {
@@ -4775,20 +4568,22 @@ export default function App() {
   useEffect(() => {
     if (activePage !== "onboarding") return;
     if (!session) return;
-    /* The bridge ceremony completes setup while standing on this route — the
-       stale-arrival bounce must defer to it, or the draft workspace flashes
-       between the bridge and the guide handoff. */
-    if (onboardingGuidePending) return;
     void (async () => {
       const row = cloudProfile ?? (await loadProfileForOnboarding(session));
       if (row?.account_setup?.completed) {
         setIsOnboardingModalOpen(false);
-        navigateTo("/workspace");
+        const entered = await resolveAndEnterMemberDestination({
+          session,
+          replace: true,
+        });
+        if (!entered) {
+          setOnboardingError("We could not open your community. Try again.");
+        }
       }
       /* Incomplete accounts stay: this route renders the standalone
          platform bridge page. */
     })();
-  }, [activePage, cloudProfile, onboardingGuidePending, session]);
+  }, [activePage, cloudProfile, session]);
 
   /* Deterministic timezone capture: record the browser's IANA zone silently,
      refreshed when it drifts from what the profile holds. Never a question. */
@@ -4809,13 +4604,11 @@ export default function App() {
     void recordMemberTimezoneRpc({ session, timezone: browserTimezone }).catch(() => null);
   }, [cloudProfile, session]);
 
-  /* Load the viewer's profile + setup status wherever setup state matters:
-     the workspace (setup card, remedial modal) and /c/ routes (the bridge —
-     a signed-in visitor with an incomplete account meets the gate card's
-     second state on an entry attempt). */
+  /* Load the viewer's profile + setup status wherever setup state matters. */
   useEffect(() => {
     const needsOnboardingProfile =
       activePage === "workspace" ||
+      activePage === "community" ||
       activePage === "onboarding" ||
       publicRoute.kind === "community_funnel";
     if (!needsOnboardingProfile) return;
@@ -9360,11 +9153,10 @@ export default function App() {
 	  }, [guestThreadHasMessages, guestThreadMessages]);
 
   const hasSelectedCommunity = Boolean(String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim());
-  const shellProjectionActivePage = onboardingGuidePending ? "onboarding" : activePage;
   const shellProjection = buildWebShellProjection({
     publicRouteKind: shellPublicRoute.kind,
     shellVariant,
-    activePage: shellProjectionActivePage,
+    activePage,
     activeView,
     mobileSettingsView,
     userWantsSessions,
@@ -9662,7 +9454,7 @@ export default function App() {
   const shouldHoldRootLandingForAuth =
     shellPublicRoute.kind === "app" &&
     activePage === "landing" &&
-    authPresentationState === "recovering_signed_in" &&
+    authPresentationState !== "signed_out" &&
     typeof window !== "undefined" &&
     isRootAppRoutePath(window.location.pathname || "/");
   const isAccountGraphHydratingCriticalAppShell =
@@ -11957,12 +11749,6 @@ export default function App() {
       </svg>
     </button>
   ) : null;
-  const onboardingHandoffCommunity =
-    onboardingGuidePending?.communityId
-      ? communities.find((community) => community.id === onboardingGuidePending.communityId) ??
-        (activeCommunity?.id === onboardingGuidePending.communityId ? activeCommunity : null)
-      : null;
-
   const mainSurfaceHostProps = buildWebAppMainSurfaceHostProps({
     activePage,
     isPublicCommunityFunnel,
@@ -12036,18 +11822,6 @@ export default function App() {
       onFinishOnboarding: finishOnboarding,
       onClose: () => setIsOnboardingModalOpen(false),
     },
-    onboardingHandoffPageProps: onboardingGuidePending
-      ? {
-          targetName: onboardingGuidePending.communityName,
-          communityAvatarUrl: onboardingHandoffCommunity?.avatar_url ?? null,
-          communityAvatarFocusX: onboardingHandoffCommunity?.avatar_focus_x ?? null,
-          communityAvatarFocusY: onboardingHandoffCommunity?.avatar_focus_y ?? null,
-          communityAvatarZoom: onboardingHandoffCommunity?.avatar_zoom ?? null,
-          status: onboardingGuidePending.status,
-          error: onboardingGuidePending.error,
-          onRetry: retryOnboardingGuideAfterBridge,
-        }
-      : null,
     platformBridgePageProps: {
       bridge:
         session && effectiveAccountSetupStatus && !effectiveAccountSetupStatus.completed
@@ -12440,7 +12214,7 @@ export default function App() {
     forceMobileCommunityRoot: showMobileShell && isVisitorCommunitySurface,
     mobileSecondaryMode,
     showMobileSettingsIndex,
-    activePage: shellProjectionActivePage,
+    activePage,
     hasSelectedCommunity,
     activeCommunity: isVisitorCommunitySurface ? visitorShellActiveCommunity : activeCommunity,
     activeCommunityAttentionCount,

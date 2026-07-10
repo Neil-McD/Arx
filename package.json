@@ -40,6 +40,7 @@
     "check:social-profile-links-save-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/social_profile_links_save_contract_proof.ts",
     "check:account-setup-operator-visibility": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_setup_operator_visibility_proof.ts",
     "check:member-ontology-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/member_ontology_contract_proof.ts",
+    "check:member-entry-destination-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/member_entry_destination_contract_proof.ts",
     "check:critical-audit-events-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/critical_audit_events_proof.ts",
     "check:stripe-connect-onboarding-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/stripe_connect_onboarding_diagnostics_proof.ts",
     "check:stripe-customer-checkout-identity-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/stripe_customer_checkout_identity_proof.ts",
