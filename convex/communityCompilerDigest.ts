@@ -175,41 +175,14 @@ function mergeSourceTraceDigestItem(args: {
   const sourceTraceIds = uniqueDigestTraceIds(args.next.sourceTraceIds, args.existing.sourceTraceIds);
   return makeItem({
     category: "source_trace_signal",
-    title: `${sourceTraceIds.length} selected pending source traces compiled`,
-    summary: `${args.next.summary} This item preserves same-day source-trace evidence already represented by the digest.`,
+    title: `${sourceTraceIds.length} selected pending source traces available for cognition`,
+    summary: `${args.next.summary} This item preserves same-day source-trace evidence already represented by the digest without settling it.`,
     priority: Math.max(args.existing.priority, args.next.priority),
     confidence: Math.max(args.existing.confidence, args.next.confidence),
     sourceTypes: Array.from(new Set([...args.existing.sourceTypes, ...args.next.sourceTypes])).slice(0, 12),
     sourceIds: Array.from(new Set([...args.existing.sourceIds, ...args.next.sourceIds])).slice(0, MAX_SOURCE_IDS_PER_ITEM),
     sourceTraceIds,
   });
-}
-
-async function markSelectedSourceTracesCompiled(args: {
-  ctx: any;
-  communityId: any;
-  traceRows: SourceTraceRow[];
-  digestId: any;
-  nowMs: number;
-}): Promise<number> {
-  let handled = 0;
-  const seen = new Set<string>();
-  for (const row of args.traceRows) {
-    const id = normalizeIdValue(row._id);
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    const fresh = (await args.ctx.db.get(row._id as any)) as SourceTraceRow | null;
-    if (!fresh || normalizeIdValue(fresh.communityId) !== normalizeIdValue(args.communityId)) continue;
-    if (fresh.compilerState !== undefined && fresh.compilerState !== "pending") continue;
-    await args.ctx.db.patch(row._id as any, {
-      compilerState: "compiled" as const,
-      compilerPendingSince: typeof fresh.compilerPendingSince === "number" ? fresh.compilerPendingSince : fresh.createdAt,
-      compilerLastHandledAt: args.nowMs,
-      compilerLastDigestId: args.digestId,
-    });
-    handled += 1;
-  }
-  return handled;
 }
 
 function makeItem(args: {
@@ -528,8 +501,8 @@ async function runCommunityCompilerDigestPassCore(
     const nextSourceTraceItem = selectedSourceTraceRows.length > 0
       ? makeItem({
         category: "source_trace_signal",
-        title: `${selectedSourceTraceRows.length} selected pending source traces compiled`,
-        summary: `${selectedSourceTraceRows.length} selected pending source traces were represented in this digest and can now be marked compiled. ${compilerEvidence.measurement.pending_total} eligible source traces were pending when measured.`,
+        title: `${selectedSourceTraceRows.length} selected pending source traces available for cognition`,
+        summary: `${selectedSourceTraceRows.length} selected pending source traces are represented in this digest and remain pending until a community cognition cycle handles them. ${compilerEvidence.measurement.pending_total} eligible source traces were pending when measured.`,
         priority: Math.min(1, 0.45 + selectedSourceTraceRows.length / 80),
         confidence: 0.8,
         sourceTypes: Array.from(new Set(selectedSourceTraceRows.map((row) => row.sourceType))).slice(0, 12),
@@ -541,10 +514,6 @@ async function runCommunityCompilerDigestPassCore(
       existing: existingSourceTraceItem(existing),
       next: nextSourceTraceItem,
     });
-    const representedSourceTraceIds = new Set((sourceTraceItem?.sourceTraceIds ?? []).map(normalizeIdValue));
-    const representedSelectedSourceTraceRows = selectedSourceTraceRows.filter((row) =>
-      representedSourceTraceIds.has(normalizeIdValue(row._id)),
-    );
     if (sourceTraceItem) {
       items.push(sourceTraceItem);
     }
@@ -614,15 +583,6 @@ async function runCommunityCompilerDigestPassCore(
     }
     let row = (await ctx.db.get(digestId)) as CompilerDigestRow | null;
     if (!row) throw new Error("community_compiler_digest_write_failed");
-    if (representedSelectedSourceTraceRows.length > 0) {
-      await markSelectedSourceTracesCompiled({
-        ctx,
-        communityId: args.communityId,
-        traceRows: representedSelectedSourceTraceRows,
-        digestId,
-        nowMs,
-      });
-    }
     const bridgeResult = await attachDigestSignalSourceTraces({
       ctx,
       communityId: args.communityId,

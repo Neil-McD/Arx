@@ -2,6 +2,7 @@ import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { normalizeIdValue } from "./communityCore";
+import { COMPILER_EVIDENCE_VISIBILITY_SCOPES } from "./communityCompilerEvidenceCore";
 
 const COMMUNITY_AGENT_HEARTBEAT_MAX_DELAY_MS = 24 * 60 * 60 * 1000;
 const COMMUNITY_AGENT_HEARTBEAT_MAX_TOOL_STEPS = 8;
@@ -41,10 +42,28 @@ function wakeEvidenceFromMeasurement(measurement: Record<string, any>) {
   };
 }
 
+function selectedEvidenceFromMeasurement(
+  measurement: Record<string, any>,
+): Array<{ traceId: string; expectedUpdatedAt: number }> {
+  if (!Array.isArray(measurement.selected_evidence_units)) return [];
+  const selected: Array<{ traceId: string; expectedUpdatedAt: number }> = [];
+  const seen = new Set<string>();
+  for (const unit of measurement.selected_evidence_units) {
+    const traceId = boundedText(unit?.trace_id, 128);
+    const expectedUpdatedAt = Date.parse(boundedText(unit?.updated_at, 80));
+    if (!traceId || seen.has(traceId) || !Number.isFinite(expectedUpdatedAt)) continue;
+    seen.add(traceId);
+    selected.push({ traceId, expectedUpdatedAt });
+    if (selected.length >= 100) break;
+  }
+  return selected;
+}
+
 export const enqueueCommunityAgentHeartbeatInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
     heartbeatId: v.optional(v.string()),
+    compilerDigestId: v.optional(v.id("communityCompilerDigests")),
     runAfterMs: v.optional(v.number()),
     modelId: v.optional(v.string()),
     maxToolSteps: v.optional(v.number()),
@@ -53,6 +72,12 @@ export const enqueueCommunityAgentHeartbeatInternal = internalMutation({
   handler: async (ctx, args) => {
     const community = await ctx.db.get(args.communityId);
     if (!community) throw new Error("community_agent_heartbeat_community_not_found");
+    if (args.compilerDigestId) {
+      const digest = (await ctx.db.get(args.compilerDigestId)) as Record<string, any> | null;
+      if (!digest || normalizeIdValue(digest.communityId) !== normalizeIdValue(args.communityId)) {
+        throw new Error("community_agent_heartbeat_digest_not_found");
+      }
+    }
     const nowMs = args.nowMs ?? Date.now();
     const heartbeatId = boundedText(args.heartbeatId, 200) || buildHeartbeatId(args.communityId, nowMs);
     const runAfterMs = clampDelayMs(args.runAfterMs);
@@ -62,6 +87,7 @@ export const enqueueCommunityAgentHeartbeatInternal = internalMutation({
       {
         communityId: args.communityId,
         heartbeatId,
+        compilerDigestId: args.compilerDigestId,
         modelId: boundedText(args.modelId, 128) || undefined,
         maxToolSteps: clampToolSteps(args.maxToolSteps),
       },
@@ -70,6 +96,7 @@ export const enqueueCommunityAgentHeartbeatInternal = internalMutation({
       ok: true,
       community_id: normalizeIdValue(args.communityId),
       heartbeat_id: heartbeatId,
+      compiler_digest_id: args.compilerDigestId ? normalizeIdValue(args.compilerDigestId) : null,
       scheduled_after_ms: runAfterMs,
     };
   },
@@ -79,6 +106,7 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
   args: {
     communityId: v.id("communities"),
     heartbeatId: v.optional(v.string()),
+    compilerDigestId: v.optional(v.id("communityCompilerDigests")),
     modelId: v.optional(v.string()),
     maxToolSteps: v.optional(v.number()),
   },
@@ -98,6 +126,7 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
       },
     )) as Record<string, any>;
     const wakeEvidence = wakeEvidenceFromMeasurement(compilerEvidence);
+    const selectedEvidence = selectedEvidenceFromMeasurement(compilerEvidence);
     if (!compilerEvidence.should_run) {
       const skippedRun = await ctx.runMutation(
         internalRefs.communityAgentRuntime.recordCommunityAgentSkippedRunInternal,
@@ -127,14 +156,53 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
     // A woken heartbeat runs the full role cycle (observer -> questioner ->
     // steward over a shared ledger); the observer ends the cycle early when
     // the window holds no real signal.
-    return await ctx.runAction(internalRefs.communityAgentRuntime.runCommunityAgentCycleInternal, {
+    const cycleResult = (await ctx.runAction(internalRefs.communityAgentRuntime.runCommunityAgentCycleInternal, {
       communityId: args.communityId,
       triggerType: "heartbeat",
       heartbeatId,
       modelId,
       wakeReason: wakeEvidence.reason,
       wakeEvidence,
-    });
+    })) as Record<string, any>;
+    if (!cycleResult.evidence_processed) {
+      return {
+        ...cycleResult,
+        evidence_settlement: {
+          ok: true,
+          skipped: true,
+          reason: "cognition_cycle_did_not_process_evidence",
+          requested_count: selectedEvidence.length,
+          settled_count: 0,
+        },
+      };
+    }
+    try {
+      const evidenceSettlement = await ctx.runMutation(
+        internalRefs.communityCompilerEvidence.settleCommunityCompilerEvidenceCycleInternal,
+        {
+          communityId: args.communityId,
+          evidence: selectedEvidence,
+          compilerDigestId: args.compilerDigestId,
+        },
+      );
+      return { ...cycleResult, evidence_settlement: evidenceSettlement };
+    } catch (error) {
+      return {
+        ...cycleResult,
+        ok: false,
+        evidence_settlement: {
+          ok: false,
+          skipped: false,
+          reason: "community_compiler_evidence_settlement_failed",
+          requested_count: selectedEvidence.length,
+          settled_count: 0,
+          error_code: boundedText(
+            error instanceof Error ? error.message : "community_compiler_evidence_settlement_failed",
+            120,
+          ),
+        },
+      };
+    }
   },
 });
 
@@ -199,6 +267,27 @@ export const assessCommunityAgentCycleInternal = internalQuery({
     ).length;
     if (cyclesToday >= COMMUNITY_AGENT_CYCLES_PER_DAY_CAP) {
       return { enqueue: false, reason: "daily_cycle_cap_reached" };
+    }
+    // Pending evidence is unfinished work. It must be allowed to retry even if
+    // an earlier observer succeeded before a later role or settlement failed.
+    // This only earns the free digest + delayed knock; the heartbeat's evidence
+    // thresholds still decide whether any model tokens are spent.
+    const pendingEvidenceRows = await Promise.all(
+      COMPILER_EVIDENCE_VISIBILITY_SCOPES.map((visibilityScope) =>
+        ctx.db
+          .query("communitySourceTraces" as any)
+          .withIndex("by_community_compilerState_visibility_pendingSince", (q: any) =>
+            q
+              .eq("communityId", args.communityId)
+              .eq("compilerState", "pending")
+              .eq("visibilityScope", visibilityScope),
+          )
+          .order("asc")
+          .first() as Promise<Record<string, any> | null>,
+      ),
+    );
+    if (pendingEvidenceRows.some(Boolean)) {
+      return { enqueue: true, reason: "pending_evidence" };
     }
     // Delta gate: only new raw learning signal since the last successful
     // observer pass earns a wake. This intentionally looks at the archive and
@@ -270,10 +359,12 @@ export const runCommunityMemorySweepInternal = internalAction({
       // Fresh digest first (free), then the cycle knock 10 minutes behind so
       // the roles always wake to current material. The evidence gate inside
       // the heartbeat still has the final word.
+      let compilerDigestId: string | undefined;
       try {
-        await ctx.runMutation(internalRefs.communityCompilerDigest.runCommunityCompilerDigestPassInternal, {
+        const digest = (await ctx.runMutation(internalRefs.communityCompilerDigest.runCommunityCompilerDigestPassInternal, {
           communityId: target.communityId,
-        });
+        })) as Record<string, any>;
+        compilerDigestId = boundedText(digest?.id, 128) || undefined;
       } catch {
         // A failed digest pass should not block the knock; the gate decides.
       }
@@ -305,6 +396,7 @@ export const runCommunityMemorySweepInternal = internalAction({
       }
       await ctx.runMutation(internalRefs.communityAgentHeartbeat.enqueueCommunityAgentHeartbeatInternal, {
         communityId: target.communityId,
+        compilerDigestId,
         runAfterMs: COMMUNITY_AGENT_SWEEP_HEARTBEAT_DELAY_MS,
       });
       enqueued += 1;

@@ -293,3 +293,88 @@ export async function drainSelfAuthoredPendingSourceTracesForCommunity(args: {
   }
   return drained;
 }
+
+export async function settleCommunityCompilerEvidenceForCycle(args: {
+  ctx: any;
+  communityId: any;
+  evidence: Array<{ traceId: any; expectedUpdatedAt: number }>;
+  compilerDigestId?: any;
+  nowMs: number;
+}) {
+  const communityId = normalizeIdValue(args.communityId);
+  if (args.compilerDigestId) {
+    const digest = (await args.ctx.db.get(args.compilerDigestId as any)) as { communityId?: any } | null;
+    if (!digest || normalizeIdValue(digest.communityId) !== communityId) {
+      throw new Error("community_compiler_evidence_digest_not_found");
+    }
+  }
+
+  const requestedEvidence: Array<{ traceId: any; expectedUpdatedAt: number }> = [];
+  const seen = new Set<string>();
+  for (const evidence of args.evidence) {
+    const id = normalizeIdValue(evidence.traceId);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    requestedEvidence.push({
+      traceId: evidence.traceId,
+      expectedUpdatedAt: Number(evidence.expectedUpdatedAt),
+    });
+    if (requestedEvidence.length >= COMPILER_EVIDENCE_RUN_LIMIT) break;
+  }
+
+  const rows: Array<{ row: SourceTraceRow; expectedUpdatedAt: number }> = [];
+  for (const evidence of requestedEvidence) {
+    const row = (await args.ctx.db.get(evidence.traceId as any)) as SourceTraceRow | null;
+    if (!row || normalizeIdValue(row.communityId) !== communityId) {
+      throw new Error("community_compiler_evidence_trace_not_found");
+    }
+    rows.push({ row, expectedUpdatedAt: evidence.expectedUpdatedAt });
+  }
+
+  const settledTraceIds: any[] = [];
+  let alreadyTerminalCount = 0;
+  let excludedSelfAuthoredCount = 0;
+  let changedSinceSelectionCount = 0;
+  for (const selection of rows) {
+    const { row } = selection;
+    if (isCommunityAgentSelfAuthoredTrace(row)) {
+      if (compilerState(row) === "pending") {
+        await args.ctx.db.patch(row._id as any, {
+          compilerState: "excluded_self_authored" as const,
+          compilerPendingSince: undefined,
+          compilerLastHandledAt: args.nowMs,
+          compilerLastDigestId: undefined,
+        });
+      }
+      excludedSelfAuthoredCount += 1;
+      continue;
+    }
+    if (compilerState(row) !== "pending") {
+      alreadyTerminalCount += 1;
+      continue;
+    }
+    if (!Number.isFinite(selection.expectedUpdatedAt) || row.updatedAt !== selection.expectedUpdatedAt) {
+      changedSinceSelectionCount += 1;
+      continue;
+    }
+    await args.ctx.db.patch(row._id as any, {
+      compilerState: "compiled" as const,
+      compilerPendingSince:
+        typeof row.compilerPendingSince === "number" ? row.compilerPendingSince : row.createdAt,
+      compilerLastHandledAt: args.nowMs,
+      ...(args.compilerDigestId ? { compilerLastDigestId: args.compilerDigestId } : {}),
+    });
+    settledTraceIds.push(row._id);
+  }
+
+  return {
+    ok: true,
+    community_id: communityId,
+    requested_count: requestedEvidence.length,
+    settled_count: settledTraceIds.length,
+    already_terminal_count: alreadyTerminalCount,
+    excluded_self_authored_count: excludedSelfAuthoredCount,
+    changed_since_selection_count: changedSinceSelectionCount,
+    settled_trace_ids: settledTraceIds.map(normalizeIdValue),
+  };
+}

@@ -1303,25 +1303,46 @@ Rules:
 
 ## Twelfth Implementation Slice
 
-The twelfth backend slice closes the first source-trace compiler lifecycle loop:
+The twelfth backend slice packages selected source-trace evidence without
+claiming the community cognition cycle has handled it:
 
 ```txt
 Pending source traces
   -> shared pending-evidence selector
   -> compiler digest source_trace_signal item
   -> digest row persisted
-  -> selected source traces marked compiled
+  -> selected source traces remain pending
+  -> community cognition cycle inspects the bounded evidence snapshot
+  -> successful completed cycle marks that snapshot compiled
 ```
 
 Rules:
 
 - The digest pass must use the same pending-evidence selector exposed by `measureCommunityCompilerEvidenceInternal`.
 - The digest pass may still read the 30-day activity window for chat, AI feed, resources, outcomes, and pending directory decisions, but source-trace consumption comes only from selected pending source traces.
-- A `source_trace_signal` digest item represents the selected pending traces that the pass handled.
-- Selected source traces are marked `compiled` only after the digest row exists.
-- The compiled patch sets `compilerLastHandledAt` and `compilerLastDigestId`.
-- The compiled patch stays inside the same explicit `communityId`.
-- The compiled patch must not use `communityCompilerDigests.windowEndedAt` as a cursor.
+- A `source_trace_signal` digest item represents selected pending traces that
+  are available to the community cognition cycle; digest inclusion is not
+  evidence handling.
+- The deterministic digest pass never changes selected evidence from `pending`
+  to `compiled`.
+- A heartbeat snapshots the selector's bounded evidence IDs and `updatedAt`
+  versions before the role cycle starts.
+- A successful, non-skipped cognition cycle marks only that same-community
+  snapshot `compiled` and sets `compilerLastHandledAt`.
+- When the heartbeat carries the digest created by its sweep, settlement also
+  records `compilerLastDigestId` after verifying the digest belongs to the same
+  community.
+- Failed, interrupted, or overlapping/skipped cycles leave evidence `pending`
+  for retry.
+- Evidence that materially changes after selection also remains `pending`; a
+  cycle cannot acknowledge content it did not inspect.
+- Explicit pending evidence bypasses the raw-signal delta check on a later
+  sweep so interrupted cognition can retry. This only schedules the free
+  digest and delayed knock; the heartbeat evidence thresholds still gate model
+  spend.
+- Settlement is idempotent: already-terminal traces remain unchanged.
+- Neither selection nor settlement uses `communityCompilerDigests.windowEndedAt`
+  as a cursor.
 - Unselected source traces remain `pending`.
 - The pass does not auto-dismiss low-signal traces yet.
 - The pass does not set `carried_forward` yet.
@@ -1833,6 +1854,9 @@ gate has the final word. Raw learning signal includes trusted source traces,
 archive-backed chat/AI-feed/resource activity, and outcome observations. The
 digest bridge converts digest-visible signal into pending source-trace evidence
 before the delayed heartbeat measures whether the community agent should wake.
+The digest never acknowledges that evidence itself: only a successful,
+non-skipped community cognition cycle may settle its selected snapshot as
+compiled. Failed or overlapping cycles leave the evidence pending for retry.
 Frequency controls worst-case latency only; the gates own cost.
 
 ### Decisions Pending

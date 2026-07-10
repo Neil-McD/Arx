@@ -131,10 +131,10 @@ assert.match(
   /communityAgentAiFeedSourceIds = new Set\([\s\S]*COMMUNITY_AGENT_SELF_AUTHORED_TRACE_AGENT_KEY[\s\S]*authorLabel[\s\S]*community agent/,
   "compiler digest bridge should classify canonical and legacy community-agent AI feed sources before bridging",
 );
-assert.match(
+assert.doesNotMatch(
   digest,
-  /markSelectedSourceTracesCompiled[\s\S]*attachDigestSignalSourceTraces/,
-  "compiler digest bridge should run after selected source traces are handled so new bridge evidence remains pending for heartbeat",
+  /markSelectedSourceTracesCompiled|compilerState: "compiled" as const/,
+  "compiler digest must package pending evidence without settling cognition-owned lifecycle state",
 );
 assert.match(
   digest,
@@ -168,18 +168,8 @@ assert.match(
 );
 assert.match(
   digest,
-  /representedSourceTraceIds[\s\S]*representedSelectedSourceTraceRows = selectedSourceTraceRows\.filter[\s\S]*traceRows: representedSelectedSourceTraceRows/,
-  "compiler digest should only mark selected traces compiled when they are represented in the digest item",
-);
-assert.match(
-  digest,
-  /let row = \(await ctx\.db\.get\(digestId\)\)[\s\S]*community_compiler_digest_write_failed[\s\S]*markSelectedSourceTracesCompiled/,
-  "selected source traces should only be marked compiled after the digest write is confirmed",
-);
-assert.match(
-  digest,
-  /markSelectedSourceTracesCompiled[\s\S]*normalizeIdValue\(fresh\.communityId\) !== normalizeIdValue\(args\.communityId\)[\s\S]*fresh\.compilerState !== undefined && fresh\.compilerState !== "pending"[\s\S]*compilerState: "compiled" as const[\s\S]*compilerLastHandledAt: args\.nowMs[\s\S]*compilerLastDigestId: args\.digestId/,
-  "compiled marking should stay same-community and only close still-pending traces",
+  /selected pending source traces available for cognition[\s\S]*remain pending until a community cognition cycle handles them/,
+  "compiler digest should label selected traces as available without claiming they were handled",
 );
 {
   const payloadStart = digest.indexOf("const payload = {");
@@ -240,8 +230,8 @@ assert.match(
 );
 assert.match(
   docs,
-  /Twelfth Implementation Slice[\s\S]*Pending source traces[\s\S]*marked `compiled`[\s\S]*only after the digest row exists[\s\S]*Unselected source traces remain `pending`[\s\S]*idempotent bridge upserts must not reopen/,
-  "architecture doc should capture source-trace evidence consumption",
+  /Twelfth Implementation Slice[\s\S]*Pending source traces[\s\S]*remain pending[\s\S]*community cognition cycle[\s\S]*idempotent bridge upserts must not reopen/,
+  "architecture doc should assign source-trace settlement to cognition rather than the digest",
 );
 
 console.log("community_compiler_digest_contract_proof: ok");

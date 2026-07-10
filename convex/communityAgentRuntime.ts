@@ -1136,6 +1136,7 @@ export const runCommunityAgentCycleInternal = internalAction({
     const roleResults: Array<{
       role: CommunityAgentRoleKey;
       ok: boolean;
+      skipped: boolean;
       stop_reason: string | null;
       tool_step_count: number;
       candidate_proposal_ids: string[];
@@ -1157,6 +1158,7 @@ export const runCommunityAgentCycleInternal = internalAction({
       roleResults.push({
         role: roleKey,
         ok: result.ok,
+        skipped: result.skipped,
         stop_reason: result.stop_reason ?? null,
         tool_step_count: result.tool_step_count,
         candidate_proposal_ids: result.candidate_proposal_ids,
@@ -1189,8 +1191,13 @@ export const runCommunityAgentCycleInternal = internalAction({
         }
       }
     }
+    const evidenceProcessed =
+      roleResults.length > 0 &&
+      roleResults.every((entry) => entry.ok && !entry.skipped) &&
+      (endedEarly === null || endedEarly === "observer_no_signal");
     return {
       ok: roleResults.every((entry) => entry.ok),
+      evidence_processed: evidenceProcessed,
       cycle_id: cycleId,
       ended_early: endedEarly,
       roles: roleResults,

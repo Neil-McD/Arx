@@ -155,6 +155,11 @@ assert.match(
 );
 assert.match(
   runtime,
+  /roleResults\.push\(\{[\s\S]*skipped: result\.skipped[\s\S]*evidenceProcessed =[\s\S]*entry\.ok && !entry\.skipped[\s\S]*evidence_processed: evidenceProcessed/,
+  "cycle results should acknowledge evidence only when real non-skipped role work completed",
+);
+assert.match(
+  runtime,
   /appendCommunityAgentCycleLedgerNoteInternal = internalMutation/,
   "cycle ledger appends must be a separate mutation from the directory airlock write",
 );

@@ -86,11 +86,36 @@ assert.match(
   /runCommunityAgentCycleInternal[\s\S]*wakeReason: wakeEvidence\.reason[\s\S]*wakeEvidence/,
   "heartbeat action should pass wake reason and evidence into real community-agent runs",
 );
+assert.match(
+  heartbeat,
+  /selectedEvidenceFromMeasurement[\s\S]*selected_evidence_units[\s\S]*expectedUpdatedAt = Date\.parse[\s\S]*selected\.length >= 100/,
+  "heartbeat should carry a bounded id-plus-version evidence snapshot selected by the wake measurement",
+);
+assert.match(
+  heartbeat,
+  /if \(!cycleResult\.evidence_processed\)[\s\S]*cognition_cycle_did_not_process_evidence[\s\S]*settled_count: 0/,
+  "failed, interrupted, or overlapping cognition cycles must leave selected evidence pending",
+);
+assert.match(
+  heartbeat,
+  /cycleResult\.evidence_processed[\s\S]*settleCommunityCompilerEvidenceCycleInternal[\s\S]*communityId: args\.communityId[\s\S]*evidence: selectedEvidence[\s\S]*compilerDigestId: args\.compilerDigestId/,
+  "a completed cognition cycle should settle exactly its selected evidence in the same community",
+);
+assert.match(
+  heartbeat,
+  /compilerDigestId: v\.optional\(v\.id\("communityCompilerDigests"\)\)[\s\S]*ctx\.scheduler\.runAfter[\s\S]*compilerDigestId: args\.compilerDigestId/,
+  "scheduled heartbeats should carry the digest provenance produced by the sweep",
+);
+assert.match(
+  heartbeat,
+  /if \(args\.compilerDigestId\)[\s\S]*ctx\.db\.get\(args\.compilerDigestId\)[\s\S]*digest\.communityId[\s\S]*community_agent_heartbeat_digest_not_found/,
+  "heartbeat enqueue should reject cross-community digest provenance before scheduling spend",
+);
 
 const sweepBlock = exportedFunctionBlock(heartbeat, "runCommunityMemorySweepInternal");
 assert.match(
   sweepBlock,
-  /runCommunityCompilerDigestPassInternal[\s\S]*settleCommunityMemorySignalsInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
+  /runCommunityCompilerDigestPassInternal[\s\S]*compilerDigestId = boundedText\(digest\?\.id[\s\S]*settleCommunityMemorySignalsInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal[\s\S]*compilerDigestId/,
   "memory sweep should refresh digest, settle metabolizer scores, then enqueue the delayed heartbeat",
 );
 assert.match(
@@ -102,6 +127,11 @@ assert.match(
   heartbeat,
   /newestSignalAt <= Number\(lastOkObserver\.startedAt/,
   "cycle assessment delta gate should compare the newest raw learning signal against the last successful observer",
+);
+assert.match(
+  heartbeat,
+  /COMPILER_EVIDENCE_VISIBILITY_SCOPES\.map[\s\S]*by_community_compilerState_visibility_pendingSince[\s\S]*\.eq\("compilerState", "pending"\)[\s\S]*reason: "pending_evidence"[\s\S]*newestSignalAt/,
+  "unfinished pending evidence should retry before the raw-signal delta gate can suppress it",
 );
 assert.match(
   sweepBlock,

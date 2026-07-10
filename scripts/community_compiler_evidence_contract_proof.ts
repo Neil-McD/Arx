@@ -15,8 +15,14 @@ assert.match(
   /"check:community-compiler-evidence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_compiler_evidence_contract_proof\.ts"/,
   "package scripts should expose the community compiler evidence proof",
 );
+assert.match(
+  packageJson,
+  /"check:community-compiler-evidence-settlement-behavior": "tsx scripts\/community_compiler_evidence_settlement_behavior\.ts"/,
+  "package scripts should expose the executable evidence-settlement behavior test",
+);
 
 assert.match(evidence, /export const measureCommunityCompilerEvidenceInternal = internalQuery/);
+assert.match(evidence, /export const settleCommunityCompilerEvidenceCycleInternal = internalMutation/);
 assert.doesNotMatch(evidence, /export const .* = query\(|export const .* = mutation\(|export const .* = action\(/);
 assert.match(evidence, /measureCommunityCompilerEvidenceForCommunity/);
 assert.doesNotMatch(`${evidence}\n${evidenceCore}`, /userId|authSubject|userPrompt|prompt: v\.string|agentKey/);
@@ -97,6 +103,26 @@ assert.match(
   evidenceCore,
   /reason !== "no_trigger"[\s\S]*has_more_pending[\s\S]*counts_are_lower_bound[\s\S]*selected_trace_ids[\s\S]*selected_evidence_units[\s\S]*thresholds/,
   "measurement should return trigger state, selected ids, evidence units, and thresholds",
+);
+assert.match(
+  evidenceCore,
+  /settleCommunityCompilerEvidenceForCycle[\s\S]*requestedEvidence\.length >= COMPILER_EVIDENCE_RUN_LIMIT[\s\S]*community_compiler_evidence_trace_not_found/,
+  "cycle settlement should stay bounded and fail closed on missing or cross-community traces",
+);
+assert.match(
+  evidenceCore,
+  /settleCommunityCompilerEvidenceForCycle[\s\S]*compilerState\(row\) !== "pending"[\s\S]*row\.updatedAt !== selection\.expectedUpdatedAt[\s\S]*changedSinceSelectionCount[\s\S]*compilerState: "compiled" as const[\s\S]*compilerLastHandledAt: args\.nowMs/,
+  "cycle settlement should idempotently close only still-pending evidence after cognition",
+);
+assert.match(
+  evidence,
+  /evidence: v\.array\(v\.object\(\{[\s\S]*traceId: v\.id\("communitySourceTraces"\)[\s\S]*expectedUpdatedAt: v\.number\(\)/,
+  "cycle settlement should receive an id-plus-version evidence snapshot",
+);
+assert.match(
+  evidenceCore,
+  /compilerDigestId[\s\S]*community_compiler_evidence_digest_not_found[\s\S]*compilerLastDigestId: args\.compilerDigestId/,
+  "cycle settlement should bind optional digest provenance to the same community",
 );
 assert.match(
   schema,
