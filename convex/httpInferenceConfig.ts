@@ -1,8 +1,11 @@
+import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
+
 const DEFAULT_PUBLIC_MODEL_MAP: Record<string, string> = Object.freeze({
   "gpt-oss-120b-free": "openai/gpt-oss-120b:free",
 });
 
 const DEFAULT_PLATFORM_MODEL_MAP: Record<string, string> = Object.freeze({
+  [DEFAULT_ACTIVE_MODEL_ID]: "openai/gpt-5.6-sol",
   "gpt-5.5": "openai/gpt-5.5",
   "sonnet-4.6": "anthropic/claude-sonnet-4-5",
   "opus-4.6": "anthropic/claude-opus-4-1",

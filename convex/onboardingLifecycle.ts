@@ -4,9 +4,10 @@ import { v } from "convex/values";
 import type { AuthenticatedActor } from "./runtimeTurnResolution";
 import { requireCommunityChatAccess } from "./communityCore";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
+import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
 
 export const ONBOARDING_THREAD_KEY_PREFIX = "community-onboarding";
-export const ONBOARDING_MODEL_ID = "gpt-5.5";
+export const ONBOARDING_MODEL_ID = DEFAULT_ACTIVE_MODEL_ID;
 /* Staging experiment (2026-07-09): raised from 1200 for reasoning-capable
    provider completions. OpenAI/OpenRouter apply this ceiling per completion,
    not per whole tool loop; the ChatGPT Codex transport intentionally omits an

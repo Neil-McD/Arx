@@ -344,6 +344,7 @@ import { resolveUserAccessPolicy } from "../../../shared/capabilities";
 import { isStandaloneWebApp } from "../../../shared/browserRuntimeMode";
 import {
   DEFAULT_ACTIVE_MODEL_ID,
+  DEFAULT_ACTIVE_MODEL_LABEL,
   DEFAULT_GUEST_MODEL_ID,
   FREE_MODEL_ALLOWLIST as SHARED_FREE_MODEL_ALLOWLIST,
   FREE_MODEL_LABELS as SHARED_FREE_MODEL_LABELS,
@@ -2267,11 +2268,11 @@ export default function App() {
   const [modelToggles, setModelToggles] = useState<ModelToggle[]>(DEFAULT_MODEL_TOGGLES);
   const [modelProviderById, setModelProviderById] = useState<Record<string, string>>({});
   const platformModelToggles = useMemo<ModelToggle[]>(() => {
-    const gpt55 = modelToggles.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID);
+    const defaultOpenAiModel = modelToggles.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID);
     return [
       {
         id: DEFAULT_ACTIVE_MODEL_ID,
-        label: gpt55?.label ?? "GPT 5.5",
+        label: defaultOpenAiModel?.label ?? DEFAULT_ACTIVE_MODEL_LABEL,
         enabled: true,
       },
     ];

@@ -23,6 +23,7 @@ import {
   normalizeCommunityLensAuthority,
   type CommunityLensAuthority,
 } from "../shared/communityLensAuthority";
+import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
 import {
   asRuntimeMessages,
   gateDeniedResponse,
@@ -351,7 +352,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   setStage("gate");
   const publicMap = loadPublicModelMap();
   const platformMap = loadPlatformModelMap();
-  const requestedModelId = String(input.model_id ?? "").trim() || "gpt-5.5";
+  const requestedModelId = String(input.model_id ?? "").trim() || DEFAULT_ACTIVE_MODEL_ID;
   const publicRef = publicMap[requestedModelId];
   const requestedRuntimeEngine = normalizeRuntimeEngine(input.runtime_engine);
   if (
@@ -416,6 +417,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   );
   const fallbackPlatformRef =
     readEnv("ARX_PLATFORM_DEFAULT_MODEL") ||
+    platformMap[DEFAULT_ACTIVE_MODEL_ID] ||
     platformMap["gpt-5.5"] ||
     requestedModelId;
   const modelRef =
