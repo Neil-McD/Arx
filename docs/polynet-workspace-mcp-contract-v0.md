@@ -52,6 +52,12 @@ authenticated user
   -> backend memory kernel
 ```
 
+The provider adapter delegates membership lookup, current-access resolution,
+and authority derivation to the canonical community capability boundary. Its
+public `workspace_context` toolset is the v0 compatibility projection of the
+internal `community_context` capability; this vocabulary mapping must not
+create a second authorization implementation.
+
 The MCP client must never provide a trusted `communityId`, user id, entitlement, or permission decision.
 
 `polynet_open_workspace` and `polynet_get_workspace_context` must include an MCP-facing `authority` projection derived from the existing community access bundle:

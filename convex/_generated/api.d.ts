@@ -59,6 +59,7 @@ import type * as communityArchiveEmbeddingPipeline from "../communityArchiveEmbe
 import type * as communityArchiveRetrieval from "../communityArchiveRetrieval.js";
 import type * as communityArchiveShared from "../communityArchiveShared.js";
 import type * as communityAttention from "../communityAttention.js";
+import type * as communityCapabilityContext from "../communityCapabilityContext.js";
 import type * as communityChat from "../communityChat.js";
 import type * as communityCommerce from "../communityCommerce.js";
 import type * as communityCompilerCandidates from "../communityCompilerCandidates.js";
@@ -270,6 +271,7 @@ declare const fullApi: ApiFromModules<{
   communityArchiveRetrieval: typeof communityArchiveRetrieval;
   communityArchiveShared: typeof communityArchiveShared;
   communityAttention: typeof communityAttention;
+  communityCapabilityContext: typeof communityCapabilityContext;
   communityChat: typeof communityChat;
   communityCommerce: typeof communityCommerce;
   communityCompilerCandidates: typeof communityCompilerCandidates;

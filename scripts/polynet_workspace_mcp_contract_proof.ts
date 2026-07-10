@@ -35,6 +35,8 @@ function toolDispatchBlock(source: string, toolName: string): string {
 const contract = read("docs/polynet-workspace-mcp-contract-v0.md");
 const polynetMcp = read("shared/polynetMcp.ts");
 const httpMcp = read("convex/httpMcp.ts");
+const communityCapabilityContract = read("shared/communityCapabilityContract.ts");
+const communityCapabilityContext = read("convex/communityCapabilityContext.ts");
 const packageJson = read("package.json");
 const integrationsSettings = read(
   "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
@@ -712,10 +714,38 @@ assertIncludes(
 const resolverBlockStart = httpMcp.indexOf("async function resolveWorkspaceContext");
 const resolverBlockEnd = httpMcp.indexOf("\nfunction normalizeWorkspaceMemoryTypes", resolverBlockStart);
 const resolverBlock = httpMcp.slice(resolverBlockStart, resolverBlockEnd);
-assertIncludes(resolverBlock, "listAccessibleCommunities", "workspace resolver membership lookup");
-assertIncludes(resolverBlock, "getMyCommunityAccessBySlug", "workspace resolver access lookup");
-assertIncludes(resolverBlock, "workspaceAccessIsOpen", "workspace resolver capability gate");
+assertIncludes(resolverBlock, "resolveCommunityCapabilityContext", "workspace resolver canonical context lookup");
 assertNotIncludes(resolverBlock, "toolArgs.communityId", "workspace resolver");
+assertIncludes(
+  communityCapabilityContext,
+  "listAccessibleCommunityMemberships",
+  "canonical context membership lookup",
+);
+assertIncludes(
+  communityCapabilityContext,
+  "getMyCommunityAccessBySlug",
+  "canonical context access lookup",
+);
+assertIncludes(
+  communityCapabilityContext,
+  "communityAccessIsOpen",
+  "canonical context access gate",
+);
+assertIncludes(
+  communityCapabilityContext,
+  "deriveCommunityCapabilityAuthority",
+  "canonical context authority derivation",
+);
+assertIncludes(
+  communityCapabilityContract,
+  '"community_context"',
+  "canonical internal community context capability",
+);
+assertIncludes(
+  httpMcp,
+  'community_context: "workspace_context"',
+  "legacy MCP workspace context projection",
+);
 
 const memorySearchDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_memory_search");
 assertIncludes(memorySearchDispatch, "resolveWorkspaceContext", "memory search workspace revalidation");

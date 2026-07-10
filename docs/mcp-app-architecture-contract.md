@@ -27,6 +27,29 @@ Polynet capability kernel
       -> Community apps
 ```
 
+### Community Capability Boundary
+
+Community-scoped adapters must resolve actor, community, access, and authority
+through one canonical boundary before invoking community tools.
+
+Current code:
+- `shared/communityCapabilityContract.ts` owns normalized relations,
+  capability projection, authority lenses, and capability checks.
+- `convex/communityCapabilityContext.ts` owns authenticated membership lookup,
+  current-access resolution, and the server-derived `communityId`.
+
+Rules:
+- Clients provide selectors, never trusted user ids, community ids, relations,
+  entitlements, or capability decisions.
+- Authority is derived from current backend access on every request. Stored run
+  or context snapshots are audit evidence, not future authorization.
+- Internal architecture uses `community_context`. The deployed MCP v0 adapter
+  projects that capability as `workspace_context` for wire compatibility.
+- MCP, native community agents, and future UI adapters may format different
+  envelopes, but they must not independently reimplement community authority.
+- The MCP provider calls deterministic community capabilities directly. It
+  must not route external-agent tool calls through a Polynet LLM runtime.
+
 ## Canonical objects
 
 ### App Definition
