@@ -1,3 +1,5 @@
+import type { CommunityAccess } from "./communityTypes";
+
 export const COMMUNITY_CAPABILITY_NAMES = [
   "community_context",
   "accepted_memory",
@@ -29,7 +31,7 @@ export type CommunityCapabilityAuthorityLens =
   | "pending"
   | "no_access";
 
-export type CommunityAccessCapabilities = {
+export type CommunityCapabilityFlags = {
   canView: boolean;
   canEnterCommunity: boolean;
   canReadChat: boolean;
@@ -48,10 +50,31 @@ export type CommunityAccessCapabilities = {
 export type CommunityCapabilityAuthority = {
   relation: CommunityCapabilityRelation;
   authorityLens: CommunityCapabilityAuthorityLens;
-  capabilities: CommunityAccessCapabilities;
+  capabilities: CommunityCapabilityFlags;
   availableCapabilities: CommunityCapabilityName[];
   unavailableReason: "join_request_pending" | "community_access_required" | null;
 };
+
+export type CommunityCapabilityAccessInput = Partial<
+  Pick<
+    CommunityAccess,
+    | "relation"
+    | "is_entitled"
+    | "can_view"
+    | "can_enter_community"
+    | "can_read_chat"
+    | "can_post_chat"
+    | "can_post_message"
+    | "can_manage_resources"
+    | "can_moderate_content"
+    | "can_manage_members"
+    | "can_review_join_requests"
+    | "can_manage_pricing"
+    | "can_manage_branding"
+    | "can_manage_publishing"
+    | "can_manage_payouts"
+  >
+>;
 
 export function normalizeCommunityCapabilityRelation(raw: unknown): CommunityCapabilityRelation {
   const relation = typeof raw === "string" ? raw.trim().toLowerCase() : "";
@@ -68,8 +91,8 @@ export function normalizeCommunityCapabilityRelation(raw: unknown): CommunityCap
 }
 
 export function projectCommunityAccessCapabilities(
-  access: Record<string, unknown>,
-): CommunityAccessCapabilities {
+  access: CommunityCapabilityAccessInput,
+): CommunityCapabilityFlags {
   return {
     canView: access.can_view === true,
     canEnterCommunity: access.can_enter_community === true,
@@ -88,7 +111,7 @@ export function projectCommunityAccessCapabilities(
 }
 
 export function deriveCommunityCapabilityAuthority(
-  access: Record<string, unknown>,
+  access: CommunityCapabilityAccessInput,
 ): CommunityCapabilityAuthority {
   const relation = normalizeCommunityCapabilityRelation(access.relation);
   const capabilities = projectCommunityAccessCapabilities(access);
@@ -159,8 +182,11 @@ export function deriveCommunityCapabilityAuthority(
   };
 }
 
-export function communityAccessIsOpen(access: Record<string, unknown>): boolean {
-  return access.can_enter_community === true || access.can_read_chat === true;
+export function communityAccessIsOpen(access: CommunityCapabilityAccessInput): boolean {
+  return (
+    access.is_entitled === true &&
+    (access.can_enter_community === true || access.can_read_chat === true)
+  );
 }
 
 export function hasCommunityCapability(

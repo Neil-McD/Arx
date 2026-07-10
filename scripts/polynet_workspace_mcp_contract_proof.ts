@@ -37,6 +37,7 @@ const polynetMcp = read("shared/polynetMcp.ts");
 const httpMcp = read("convex/httpMcp.ts");
 const communityCapabilityContract = read("shared/communityCapabilityContract.ts");
 const communityCapabilityContext = read("convex/communityCapabilityContext.ts");
+const communityCapabilityContextContract = read("shared/communityCapabilityContextContract.ts");
 const packageJson = read("package.json");
 const integrationsSettings = read(
   "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
@@ -714,25 +715,30 @@ assertIncludes(
 const resolverBlockStart = httpMcp.indexOf("async function resolveWorkspaceContext");
 const resolverBlockEnd = httpMcp.indexOf("\nfunction normalizeWorkspaceMemoryTypes", resolverBlockStart);
 const resolverBlock = httpMcp.slice(resolverBlockStart, resolverBlockEnd);
-assertIncludes(resolverBlock, "resolveCommunityCapabilityContext", "workspace resolver canonical context lookup");
+assertIncludes(resolverBlock, "resolveCommunityCapabilityContextInternal", "workspace resolver atomic context lookup");
 assertNotIncludes(resolverBlock, "toolArgs.communityId", "workspace resolver");
 assertIncludes(
   communityCapabilityContext,
-  "listAccessibleCommunityMemberships",
+  "resolveCommunityCapabilityContextInternal = internalQuery",
+  "canonical atomic context resolver",
+);
+assertIncludes(
+  communityCapabilityContext,
+  'query("communities")',
+  "canonical context community lookup",
+);
+assertIncludes(
+  communityCapabilityContext,
+  'query("communityMemberships")',
   "canonical context membership lookup",
 );
 assertIncludes(
-  communityCapabilityContext,
-  "getMyCommunityAccessBySlug",
-  "canonical context access lookup",
-);
-assertIncludes(
-  communityCapabilityContext,
+  communityCapabilityContextContract,
   "communityAccessIsOpen",
   "canonical context access gate",
 );
 assertIncludes(
-  communityCapabilityContext,
+  communityCapabilityContextContract,
   "deriveCommunityCapabilityAuthority",
   "canonical context authority derivation",
 );

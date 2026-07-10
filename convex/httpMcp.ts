@@ -23,10 +23,9 @@ import {
 import {
   findCommunityMembershipBySlug as findCommunityBySlug,
   listAccessibleCommunityMemberships as listAccessibleCommunities,
-  resolveCommunityCapabilityContext,
   type CommunityMembershipProjection,
 } from "./communityCapabilityContext";
-import { normalizeSlug } from "./communityCore";
+import { normalizeCommunityCapabilitySlug } from "../shared/communityCapabilityContextContract";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -507,14 +506,14 @@ function buildWorkspaceAuthority(authority: CommunityCapabilityAuthority) {
 }
 
 function buildWorkspaceContextId(communitySlug: string | null | undefined): string | null {
-  const slug = normalizeSlug(communitySlug);
+  const slug = normalizeCommunityCapabilitySlug(communitySlug);
   return slug ? `${WORKSPACE_CONTEXT_PREFIX}${slug}` : null;
 }
 
 function parseWorkspaceContextId(value: unknown): string | null {
   const raw = normalizeString(value, 200);
   if (!raw || !raw.startsWith(WORKSPACE_CONTEXT_PREFIX)) return null;
-  return normalizeSlug(raw.slice(WORKSPACE_CONTEXT_PREFIX.length));
+  return normalizeCommunityCapabilitySlug(raw.slice(WORKSPACE_CONTEXT_PREFIX.length));
 }
 
 function sanitizeWorkspaceSummary(row: CommunityMembershipProjection) {
@@ -607,11 +606,13 @@ async function resolveWorkspaceContext(args: {
   if (!communitySlug) {
     return { ok: false, message: "workspace_context_id must use the community:<slug> shape." };
   }
-  const resolved = await resolveCommunityCapabilityContext({
-    ctx: args.ctx,
-    authSubject: args.authSubject,
-    communitySlug,
-  });
+  const resolved = await args.ctx.runQuery(
+    internal.communityCapabilityContext.resolveCommunityCapabilityContextInternal as any,
+    {
+      authSubject: args.authSubject,
+      communitySlug,
+    },
+  );
   if (!resolved.ok) {
     if (resolved.code === "community_access_unavailable") {
       return { ok: false, message: "Workspace access could not be resolved." };
@@ -754,18 +755,23 @@ async function handleToolCall(args: {
     if (!communitySlug) {
       return { ok: false, type: "tool", message: "community_slug is required." };
     }
-    const rows = await listAccessibleCommunities(ctx, authSubject);
-    const row = findCommunityBySlug(rows, communitySlug);
-    if (!row) {
-      return { ok: false, type: "tool", message: "Community not found or not accessible." };
-    }
-    const access = (await ctx.runQuery(api.community.getMyCommunityAccessBySlug as any, {
+    const resolved = await resolveWorkspaceContext({
+      ctx,
       authSubject,
-      communitySlug,
-    })) as Record<string, unknown> | null;
-    if (!access) {
-      return { ok: false, type: "tool", message: "Community access could not be resolved." };
+      workspaceContextId: buildWorkspaceContextId(communitySlug),
+    });
+    if (!resolved.ok) {
+      return {
+        ok: false,
+        type: "tool",
+        message:
+          resolved.message === "Workspace access could not be resolved."
+            ? "Community access could not be resolved."
+            : "Community not found or not accessible.",
+      };
     }
+    const row = resolved.context.row;
+    const access = resolved.context.access;
     const community = {
       slug: String(row.communities?.slug ?? "").trim(),
       name: String(row.communities?.name ?? "").trim() || "Community",

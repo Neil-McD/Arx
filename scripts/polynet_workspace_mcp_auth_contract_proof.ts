@@ -36,6 +36,7 @@ const contract = read("docs/polynet-workspace-mcp-contract-v0.md");
 const authSetup = read("docs/auth-runtime-setup-workos-authkit.md");
 const httpMcp = read("convex/httpMcp.ts");
 const communityCapabilityContext = read("convex/communityCapabilityContext.ts");
+const communityCapabilityContextContract = read("shared/communityCapabilityContextContract.ts");
 const authConfig = read("convex/auth.config.ts");
 const sharedMcp = read("shared/polynetMcp.ts");
 const packageJson = read("package.json");
@@ -591,21 +592,26 @@ const resolverBlock = blockBetween(
 );
 assertIncludes(
   resolverBlock,
-  "resolveCommunityCapabilityContext",
-  "workspace adapter delegates to canonical community authorization",
+  "resolveCommunityCapabilityContextInternal",
+  "workspace adapter delegates to atomic community authorization",
 );
 assertIncludes(
   communityCapabilityContext,
-  "listAccessibleCommunityMemberships",
+  "resolveCommunityCapabilityContextInternal = internalQuery",
+  "canonical atomic community authorization",
+);
+assertIncludes(
+  communityCapabilityContext,
+  'query("communities")',
+  "canonical community lookup",
+);
+assertIncludes(
+  communityCapabilityContext,
+  'query("communityMemberships")',
   "canonical community membership lookup",
 );
 assertIncludes(
-  communityCapabilityContext,
-  "getMyCommunityAccessBySlug",
-  "canonical community access lookup",
-);
-assertIncludes(
-  communityCapabilityContext,
+  communityCapabilityContextContract,
   "communityAccessIsOpen",
   "canonical community access gate",
 );
