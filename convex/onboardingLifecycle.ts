@@ -71,8 +71,7 @@ export function buildOnboardingLifecycleSafeUserRequest(args: {
     "Orient yourself from those tool results, private lifecycle context, runtime context, and the active community lens.",
     "Do not claim external/social research unless a real research tool result in this run supports it. Attached social links alone are leads, not proof.",
     "Do not mention account plan, billing, Premium, upgrades, unavailable tools, or provider limits unless the member asks.",
-    "State that profile memory is built only from confirmed answers or reviewed context, then ask one plain question.",
-    "Ask one question about what brought the member here, what they are trying to do, or what would make this community useful to them.",
+    "Ask one plain, concrete question about what brought the member here or what they are working on. Never ask hypotheticals about what 'would be useful.'",
   ].join("\n");
 }
 

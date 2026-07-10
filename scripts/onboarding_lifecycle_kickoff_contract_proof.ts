@@ -373,6 +373,31 @@ assert.doesNotMatch(
 );
 assert.match(
   platformSkill,
+  /Conversation law:[\s\S]*every turn must deliver one concrete useful thing[\s\S]*Never ask hypotheticals about what 'would be useful.'/,
+  "onboarding must lead with concrete member value and ask grounded questions",
+);
+assert.match(
+  platformSkill,
+  /enforce all of it silently/,
+  "onboarding boundaries must live in behavior rather than the response",
+);
+assert.doesNotMatch(
+  platformSkill,
+  /Mention once, plainly|State that profile memory/,
+  "onboarding must not mandate self-disclosure of its memory policy",
+);
+assert.doesNotMatch(
+  platformSkill,
+  /would make this community useful/,
+  "onboarding questions must be concrete rather than product-evaluation hypotheticals",
+);
+assert.doesNotMatch(
+  safeRequestBody,
+  /State that profile memory|would make this community useful/,
+  "the lifecycle request must not reintroduce policy narration or hypothetical questions",
+);
+assert.match(
+  platformSkill,
   /Evidence rule:[\s\S]*must trace to a tool result from this run, the private orientation context, or the active community lens/,
   "onboarding skill must ground every opener claim in fetched or injected evidence",
 );
