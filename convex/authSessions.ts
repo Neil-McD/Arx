@@ -272,7 +272,9 @@ function normalizeStoredState(
   const accessToken = readObjectString(sessionPayload, ["access_token", "accessToken"]);
   const refreshToken =
     readObjectString(sessionPayload, ["refresh_token", "refreshToken"]) ?? options.fallback?.refreshToken ?? null;
-  const idToken = readObjectString(sessionPayload, ["id_token", "idToken"]) ?? options.fallback?.idToken ?? null;
+  // A refresh response that omits id_token did not rotate it. Do not keep the
+  // old ID token as a runtime credential; the new access token is authoritative.
+  const idToken = readObjectString(sessionPayload, ["id_token", "idToken"]);
   if (!accessToken || (requireRefreshToken && !refreshToken)) return null;
 
   const accessTokenExpiresAt =

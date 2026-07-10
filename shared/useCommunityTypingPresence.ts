@@ -79,7 +79,10 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
         const latestArgs = argsRef.current;
         const usableSession = await resolveUsableSession(args.session, latestArgs.ensureSession);
         if (!usableSession || cancelled) return;
-        const liveClient = createCloudCommunityChatLiveClient({ session: usableSession });
+        const liveClient = createCloudCommunityChatLiveClient({
+          session: usableSession,
+          ensureSession: latestArgs.ensureSession,
+        });
         liveClientRef.current?.close();
         liveClientRef.current = liveClient;
         dispose = subscribeCloudCommunityTyping<CommunityTypingPresenceBundle>({
