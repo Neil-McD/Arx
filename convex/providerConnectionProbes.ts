@@ -2,6 +2,7 @@ import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { getFreshChatgptAuthForUser, isWebChatgptSpikeEnabled, runChatgptCompletion } from "./httpChatgpt";
+import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
 
 function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -29,7 +30,7 @@ export const probeChatgptConnection = action({
     const userId = actor?.dbUserId;
     if (!userId) throw new Error("authenticated_user_required");
 
-    const modelId = normalizeString(args.modelId) || "gpt-5.5";
+    const modelId = normalizeString(args.modelId) || DEFAULT_ACTIVE_MODEL_ID;
     const prompt = normalizeString(args.prompt) || "Reply with exactly the word OK.";
     const auth = await getFreshChatgptAuthForUser({
       ctx,

@@ -4,61 +4,65 @@ import {
   extractRuntimeEngineIdFromMessageContent,
   formatModelAttributionLabel,
 } from "../shared/modelAttributionUi.ts";
+import {
+  DEFAULT_ACTIVE_MODEL_ID,
+  DEFAULT_ACTIVE_MODEL_LABEL,
+} from "../shared/modelCatalog.ts";
 
 const toggles = [
   {
-    id: "gpt-5.5",
-    label: "GPT 5.5",
+    id: DEFAULT_ACTIVE_MODEL_ID,
+    label: DEFAULT_ACTIVE_MODEL_LABEL,
   },
 ];
 
 assert.equal(
   formatModelAttributionLabel({
-    modelId: "gpt-5.5",
+    modelId: DEFAULT_ACTIVE_MODEL_ID,
     inferenceSource: "chatgpt",
     engineId: "runtime_turn",
     modelToggles: toggles,
   }),
-  "GPT 5.5 · Polynet",
+  `${DEFAULT_ACTIVE_MODEL_LABEL} · Polynet`,
   "Polynet runtime turns should not render ChatGPT as the assistant-output provider",
 );
 
 assert.equal(
   formatModelAttributionLabel({
-    modelId: "gpt-5.5",
+    modelId: DEFAULT_ACTIVE_MODEL_ID,
     inferenceSource: "chatgpt",
     engineId: "runtime_convex",
     modelToggles: toggles,
   }),
-  "GPT 5.5 · Polynet",
+  `${DEFAULT_ACTIVE_MODEL_LABEL} · Polynet`,
   "Convex-backed Polynet runtime turns should render Polynet attribution",
 );
 
 assert.equal(
   formatModelAttributionLabel({
-    modelId: "gpt-5.5",
+    modelId: DEFAULT_ACTIVE_MODEL_ID,
     inferenceSource: "chatgpt",
     engineId: "polynet_codex_worker",
     modelToggles: toggles,
   }),
-  "GPT 5.5 · Codex",
+  `${DEFAULT_ACTIVE_MODEL_LABEL} · Codex`,
   "Codex worker turns should render Codex rather than the underlying ChatGPT account provider",
 );
 
 assert.equal(
   formatModelAttributionLabel({
-    modelId: "gpt-5.5",
+    modelId: DEFAULT_ACTIVE_MODEL_ID,
     inferenceSource: "chatgpt",
     engineId: null,
     modelToggles: toggles,
   }),
-  "GPT 5.5 · ChatGPT",
+  `${DEFAULT_ACTIVE_MODEL_LABEL} · ChatGPT`,
   "ChatGPT should remain visible when it is the only known provider signal",
 );
 
 assert.equal(
   formatModelAttributionLabel({
-    modelId: "gpt-5.5",
+    modelId: DEFAULT_ACTIVE_MODEL_ID,
     inferenceSource: "chatgpt",
     engineId: "agent_web",
     modelToggles: toggles,
@@ -70,7 +74,7 @@ assert.equal(
       },
     ],
   }),
-  "GPT 5.5 · Polynet (ChatGPT fallback -> OpenRouter)",
+  `${DEFAULT_ACTIVE_MODEL_LABEL} · Polynet (ChatGPT fallback -> OpenRouter)`,
   "Fallback details should preserve factual provider history without overriding runtime attribution",
 );
 
