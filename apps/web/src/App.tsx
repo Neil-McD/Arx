@@ -2805,7 +2805,10 @@ export default function App() {
       const usableSession = await ensureUsableAuthSession(session ?? undefined);
       if (!usableSession || cancelled) return;
       try {
-        liveClient = createCloudCommunityChatLiveClient({ session: usableSession });
+        liveClient = createCloudCommunityChatLiveClient({
+          session: usableSession,
+          ensureSession: ensureUsableAuthSession,
+        });
         unsubscribe = subscribeCloudCommunityInteractionRoots({
           liveClient,
           communityId: activeCommunityId,
@@ -2863,7 +2866,10 @@ export default function App() {
       const usableSession = await ensureUsableAuthSession(session ?? undefined);
       if (!usableSession || cancelled) return;
       try {
-        liveClient = createCloudCommunityChatLiveClient({ session: usableSession });
+        liveClient = createCloudCommunityChatLiveClient({
+          session: usableSession,
+          ensureSession: ensureUsableAuthSession,
+        });
         unsubscribe = subscribeCloudCommunityAgentServeIssue({
           liveClient,
           communityId: activeCommunityId,
@@ -2906,7 +2912,10 @@ export default function App() {
       const usableSession = await ensureUsableAuthSession(session ?? undefined);
       if (!usableSession || cancelled) return;
       try {
-        liveClient = createCloudCommunityChatLiveClient({ session: usableSession });
+        liveClient = createCloudCommunityChatLiveClient({
+          session: usableSession,
+          ensureSession: ensureUsableAuthSession,
+        });
         unsubscribe = subscribeCloudCommunityInteractionReplies({
           liveClient,
           rootId,

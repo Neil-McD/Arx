@@ -1,7 +1,7 @@
 import { ConvexHttpClient } from "convex/browser";
 import {
   resolveAuthSubject,
-  resolveAuthIdentityToken,
+  resolveConvexRuntimeToken,
   resolveAuthSessionEmail,
   type AuthSessionLike,
 } from "./authSession";
@@ -85,9 +85,9 @@ function rethrowBootstrapActorError(error: unknown): never {
 
 function buildAuthenticatedBootstrapCacheKey(session: AuthSessionLike): string | null {
   const authSubject = resolveAuthSubject(session);
-  const identityToken = resolveAuthIdentityToken(session);
-  if (!authSubject || !identityToken) return null;
-  return `${authSubject}::${identityToken}`;
+  const runtimeToken = resolveConvexRuntimeToken(session);
+  if (!authSubject || !runtimeToken) return null;
+  return `${authSubject}::${runtimeToken}`;
 }
 
 export async function bootstrapConvexAuthenticatedClient(
@@ -107,9 +107,9 @@ export async function bootstrapConvexAuthenticatedClient(
     }
 
     const client = createConvexClientForUrl(convexUrl);
-    const identityToken = resolveAuthIdentityToken(session);
-    if (identityToken) {
-      client.setAuth(identityToken);
+    const runtimeToken = resolveConvexRuntimeToken(session);
+    if (runtimeToken) {
+      client.setAuth(runtimeToken);
     }
 
     let actor: Record<string, unknown> | null = null;

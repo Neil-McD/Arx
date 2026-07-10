@@ -96,7 +96,11 @@ type WebDirectMessagesHostProps<SessionT> = {
   openRequest: DirectMessageOpenRequest;
   openConversationRequest?: DirectMessageOpenConversationRequest;
   session: SessionT | null;
-  ensureSession?: (session?: SessionT | null, source?: string) => Promise<SessionT | null>;
+  ensureSession?: (
+    session?: SessionT | null,
+    source?: string,
+    options?: { forceRefresh?: boolean },
+  ) => Promise<SessionT | null>;
   sessionUserId: string | null;
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
@@ -141,6 +145,20 @@ function friendlyDirectMessageSendError(error: unknown, fallback: string): strin
     normalized.startsWith("dm_") ||
     normalized.startsWith("convex_");
   return looksLikeRawServerError ? fallback : raw;
+}
+
+function friendlyDirectMessageReadError(error: unknown, fallback: string): string {
+  const raw = toErrorMessage(error, fallback);
+  const normalized = raw.toLowerCase();
+  const isRecoverableConnectionError =
+    normalized.includes("verified_identity_required") ||
+    normalized.includes("server error") ||
+    normalized.includes("uncaught error") ||
+    normalized.includes("[convex") ||
+    normalized.startsWith("convex_");
+  return isRecoverableConnectionError
+    ? "Messages temporarily disconnected. Reconnecting…"
+    : raw;
 }
 
 async function resolveDirectMessageSession<SessionT>(
@@ -728,7 +746,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       setConversations(rows);
     } catch (error) {
       if (inboxLoadRequestRef.current !== requestId) return;
-      setInboxError(toErrorMessage(error, "Failed to load direct messages."));
+      setInboxError(friendlyDirectMessageReadError(error, "Failed to load direct messages."));
     } finally {
       if (inboxLoadRequestRef.current !== requestId) return;
       setIsLoadingInbox(false);
@@ -1091,7 +1109,10 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           setInboxError(null);
           return;
         }
-        liveClient = createCloudDirectMessagesLiveClient({ session: usableSession });
+        liveClient = createCloudDirectMessagesLiveClient({
+          session: usableSession,
+          ensureSession,
+        });
         if (isDisposed) {
           liveClient.close();
           return;
@@ -1149,14 +1170,14 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           onError: (error) => {
             if (isDisposed) return;
             setIsLoadingInbox(false);
-            setInboxError(toErrorMessage(error, "Failed to load direct messages."));
+            setInboxError(friendlyDirectMessageReadError(error, "Failed to load direct messages."));
           },
         });
       } catch (error) {
         if (isDisposed) return;
         hasInboxLiveSubscriptionRef.current = false;
         setIsLoadingInbox(false);
-        setInboxError(toErrorMessage(error, "Failed to load direct messages."));
+        setInboxError(friendlyDirectMessageReadError(error, "Failed to load direct messages."));
         void loadInbox();
       }
     })();
@@ -1261,7 +1282,10 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           );
           return;
         }
-        liveClient = createCloudDirectMessagesLiveClient({ session: usableSession });
+        liveClient = createCloudDirectMessagesLiveClient({
+          session: usableSession,
+          ensureSession,
+        });
         if (isDisposed) {
           liveClient.close();
           return;
@@ -1301,7 +1325,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
                 ? {
                     ...previous,
                     isLoading: false,
-                    error: toErrorMessage(error, "Failed to load direct messages."),
+                    error: friendlyDirectMessageReadError(error, "Failed to load direct messages."),
                   }
                 : previous,
             );
@@ -1314,7 +1338,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             ? {
                 ...previous,
                 isLoading: false,
-                error: toErrorMessage(error, "Failed to load direct messages."),
+                error: friendlyDirectMessageReadError(error, "Failed to load direct messages."),
               }
             : previous,
         );
