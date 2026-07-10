@@ -6,7 +6,7 @@ const AUTH_FLOW_COOKIE_NAME_SECURE = "__Secure-arx-auth-flow";
 const AUTH_FLOW_COOKIE_NAME_LOCAL = "arx-auth-flow";
 const AUTH_FLOW_TTL_MS = 20 * 60 * 1000;
 const DEFAULT_SESSION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
-const DEFAULT_POST_SIGN_IN_PATH = "/workspace";
+const DEFAULT_POST_SIGN_IN_PATH = "/";
 
 function readEnv(name) {
   return String(process.env?.[name] ?? "").trim();

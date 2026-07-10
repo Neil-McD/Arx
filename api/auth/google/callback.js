@@ -30,7 +30,7 @@ export default async function handler(req, res) {
   }
 
   const pending = readVerifiedAuthFlow(req);
-  const fallbackReturnTo = pending?.returnTo ?? "/workspace";
+  const fallbackReturnTo = pending?.returnTo ?? "/";
   const redirectWithError = async (errorDescription) => {
     clearAuthFlowCookie(res, req);
     redirect(

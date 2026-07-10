@@ -9,6 +9,8 @@ const backend = read("convex/memberEntryDestination.ts");
 const homeCommunity = read("convex/platformHomeCommunity.ts");
 const gateway = read("shared/cloudMemberEntryDestinationGateway.ts");
 const routes = read("shared/webAppRouteState.ts");
+const authCookies = read("api/auth/_cookies.js");
+const authCallback = read("api/auth/google/callback.js");
 const app = read("apps/web/src/App.tsx");
 
 const platformBridgeBody =
@@ -65,6 +67,16 @@ assert.match(
   routes,
   /DEFAULT_POST_SIGN_IN_PATH = "\/"/,
   "default sign-in must return to the root resolver instead of Workspace",
+);
+assert.match(
+  authCookies,
+  /DEFAULT_POST_SIGN_IN_PATH = "\/"/,
+  "same-origin auth cookies must share the root member-entry fallback",
+);
+assert.match(
+  authCallback,
+  /fallbackReturnTo = pending\?\.returnTo \?\? "\/"/,
+  "Google callback fallback must return through canonical root member entry",
 );
 assert.match(
   app,
