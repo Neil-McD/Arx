@@ -7,8 +7,7 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
     !props.isPublicCommunityFunnel &&
     Boolean(
       props.workspaceRightPanelToggle ||
-        props.directMessagesButton ||
-        props.communityHomeButton,
+        props.directMessagesButton,
     );
   const topbarRightClassName = [
     "topbar-right",
@@ -108,7 +107,6 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
           <>
             {props.workspaceRightPanelToggle}
             {props.directMessagesButton}
-            {props.communityHomeButton}
           </>
         )}
       </div>

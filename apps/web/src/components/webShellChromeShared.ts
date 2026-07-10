@@ -47,7 +47,6 @@ export type WebDesktopShellHeaderProps = {
   hasWorkspaceRightPanelControl: boolean;
   workspaceRightPanelToggle: ReactNode;
   directMessagesButton: ReactNode;
-  communityHomeButton: ReactNode;
   onExitPublicFunnelPreview: () => void;
   onBackFromPublicFunnel: () => void;
   onBackFromWorkspaceSettings: () => void;

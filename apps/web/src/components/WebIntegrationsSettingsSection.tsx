@@ -189,10 +189,6 @@ type SessionLike = {
 type WebIntegrationsSettingsSectionProps = {
   session: SessionLike;
   requireSignIn: () => void;
-  openDiscoverApps: () => void;
-  openDiscoverSkills: () => void;
-  shouldOpenCreateSkillComposer: boolean;
-  onConsumeCreateSkillComposerOpen: () => void;
   effectiveMcpApps: EffectiveMcpApp[];
   isLoadingEffectiveMcpApps: boolean;
   effectiveMcpAppsError: string | null;
@@ -309,10 +305,6 @@ export function WebIntegrationsSettingsSection(
   const {
     session,
     requireSignIn,
-    openDiscoverApps,
-    openDiscoverSkills,
-    shouldOpenCreateSkillComposer,
-    onConsumeCreateSkillComposerOpen,
     effectiveMcpApps,
     isLoadingEffectiveMcpApps,
     effectiveMcpAppsError,
@@ -394,7 +386,6 @@ export function WebIntegrationsSettingsSection(
   const personalAppSetup = usePersonalAppSetupController({
     hasSession: Boolean(session),
     requireSignIn,
-    onUnavailable: openDiscoverApps,
     isConnecting: isConnectingUserPlatformApp,
     refreshingPersonalMountId: refreshingUserPlatformAppMountId,
     refreshingCommunityMountId: refreshingCommunityAppMountId,
@@ -430,15 +421,6 @@ export function WebIntegrationsSettingsSection(
     return () => window.clearTimeout(timeout);
   }, [polyMcpCopyState]);
 
-  useEffect(() => {
-    if (!shouldOpenCreateSkillComposer) return;
-    setEditingUserPlatformSkillInstallId(null);
-    setEditingSkillDraft(buildInitialSkillDraft());
-    setSkillDraft(buildInitialSkillDraft());
-    setIsCreateSkillOpen(true);
-    onConsumeCreateSkillComposerOpen();
-  }, [onConsumeCreateSkillComposerOpen, shouldOpenCreateSkillComposer]);
-
   const handleCreatePersonalSkill = async () => {
     const ok = await onCreateUserPlatformSkill(skillDraft);
     if (!ok) return;
@@ -470,13 +452,6 @@ export function WebIntegrationsSettingsSection(
     <>
       <div className="integrations-header">
         <div className="panel-title">Integrations</div>
-        <button
-          type="button"
-          className="settings-cta integrations-header-action"
-          onClick={session ? openDiscoverApps : requireSignIn}
-        >
-          {session ? "Connect apps" : "Sign in to connect"}
-        </button>
       </div>
 
       {session ? (
@@ -584,7 +559,7 @@ export function WebIntegrationsSettingsSection(
             !isLoadingEffectiveMcpApps &&
             visibleEffectiveMcpApps.length === 0 ? (
               <div className="model-note">
-                No apps connected yet. Use `Connect apps` to browse the catalog.
+                No apps are connected to this harness yet.
               </div>
             ) : null}
             {visibleEffectiveMcpApps.map((effectiveApp) => {
@@ -902,13 +877,6 @@ export function WebIntegrationsSettingsSection(
         ) : (
           <>
             <div className="agent-capability-toolbar">
-              <button
-                type="button"
-                onClick={session ? openDiscoverSkills : requireSignIn}
-                disabled={isCreatingUserPlatformSkill}
-              >
-                Browse skills
-              </button>
               <button
                 type="button"
                 onClick={() => setIsCreateSkillOpen((prev) => !prev)}

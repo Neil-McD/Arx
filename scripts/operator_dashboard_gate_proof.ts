@@ -242,13 +242,18 @@ assert.match(
 );
 assert.match(
   app,
-  /workspaceRightPanelToggle,[\s\S]*communityHomeButton,/,
-  "desktop shell props must receive the unified workspace right-panel toggle next to the community button",
+  /workspaceRightPanelToggle,[\s\S]*directMessagesButton,/,
+  "desktop shell props must receive the workspace right-panel and direct-message controls",
 );
 assert.match(
   webDesktopShellHeader,
-  /props\.workspaceRightPanelToggle[\s\S]*props\.communityHomeButton/,
-  "desktop header must render one unified workspace right-panel toggle before the community button",
+  /props\.workspaceRightPanelToggle[\s\S]*props\.directMessagesButton/,
+  "desktop header must render the workspace right-panel control before direct messages",
+);
+assert.doesNotMatch(
+  webDesktopShellHeader,
+  /communityHomeButton/,
+  "desktop header must not retain the redundant community home control",
 );
 assert.doesNotMatch(
   app,

@@ -39,13 +39,9 @@ function main() {
   const cloudCommunityAppMountGateway = readText(
     join(root, "shared/cloudCommunityAppMountGateway.ts"),
   );
-  const webDiscoverPanel = readText(
-    join(root, "apps/web/src/components/WebDiscoverPanel.tsx"),
-  );
   const communityAppsController = readText(
     join(root, "apps/web/src/controllers/useWebCommunityAppsController.ts"),
   );
-  const appShell = readText(join(root, "apps/web/src/App.tsx"));
 
   for (const exportedName of [
     "export const connectCommunityApp = action({",
@@ -342,20 +338,30 @@ function main() {
     "callTool:",
     "runtime MCP manager calls remote mounted tools",
   );
-  assertIncludes(
-    webDiscoverPanel,
-    "communityConnectRequirements = personalConnectRequirements.filter",
-    "community add hides personal secret requirements",
+  const connectInputStart = communityAppMountTypes.indexOf(
+    "export type ConnectCommunityAppInput = {",
+  );
+  const connectInputEnd = communityAppMountTypes.indexOf(
+    "export type SetupImportedCommunityMcpAppInput",
+    connectInputStart,
+  );
+  assert.ok(
+    connectInputStart >= 0 && connectInputEnd > connectInputStart,
+    "community connect input contract must exist",
+  );
+  const communityConnectInput = communityAppMountTypes.slice(
+    connectInputStart,
+    connectInputEnd,
   );
   assertIncludes(
-    webDiscoverPanel,
-    "secret: undefined",
-    "community add does not submit personal secrets",
+    communityConnectInput,
+    "auth_type: DeveloperAppAuthType",
+    "community connect input keeps explicit auth metadata",
   );
-  assertIncludes(
-    appShell,
-    "loadUserPlatformAppMounts(session)",
-    "community add reloads personal harness mounts after seeding",
+  assertNotIncludes(
+    communityConnectInput,
+    "secret",
+    "community connect input cannot carry personal secrets",
   );
   assertIncludes(
     communityAppsController,

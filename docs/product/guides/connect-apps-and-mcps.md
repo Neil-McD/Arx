@@ -3,7 +3,7 @@ id: product.guide.connect_apps_and_mcps
 title: Connect Apps and MCPs
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-05-10
+last_verified: 2026-07-10
 ---
 
 # Connect Apps and MCPs
@@ -18,22 +18,22 @@ Apps and MCPs are capability connections. They should be added when they solve a
 
 In the current community agent model, apps are the capability surface. A connected app can expose tools or external system context, but runtime capability comes from the user's canonical harness app state.
 
-## Current Alpha Flow
+## Current Alpha Surface
 
-For a community owner/admin:
+Discover is communities-only. App and skill catalogs are not public Discover
+destinations.
 
-1. Open the community AI Agent surface.
-2. Open Apps.
-3. Add a remote MCP app to the community.
-4. Polynet records the community app record.
-5. Polynet seeds/reuses the app in the builder's and active members' personal harness state.
-6. Members see the same effective app status in personal Settings, Community Settings, and Discover.
+For community owners and admins, existing community app records remain manageable
+from the community AI Agent and Community Settings surfaces. Connected apps keep
+their canonical validation, tool snapshot, provenance, and user harness state.
 
-For personal platform apps:
+For members, personal Settings remains the management surface for existing app
+state, custom skills, and the official Polynet MCP setup packet used by external
+agent harnesses.
 
-1. Open Discover Apps or Integrations.
-2. Add the app where a direct personal connection path exists.
-3. If credentials are required, complete setup in the personal harness state. Token apps use a pasted secret; OAuth apps redirect through a server-side callback, then finish through an authenticated Polynet finalization step before tokens are stored.
+The catalog, OAuth, validation, and mounting backend contracts remain intact while
+new connection UX is relocated to a community-scoped settings flow. Do not restore
+Apps or Skills as Discover tabs to expose those contracts.
 
 ## System Model
 
@@ -76,7 +76,7 @@ Capability is real only when:
 8. Runtime prompt context must not claim more app capability than the harness can execute.
 9. Secrets and auth state should not live in community prompt/config text or community app records.
 10. Communities grant access; users own app state; runtime executes only user harness tools.
-11. Ready Discover apps must declare adapter, validation, auth mode, readiness, identity, context, result, declared-intent, and risk metadata before they can be treated as connectable.
+11. Ready catalog-defined apps must declare adapter, validation, auth mode, readiness, identity, context, result, declared-intent, and risk metadata before they can be treated as connectable.
 12. Catalog app connectability must be enforced on the server, not inferred from client-submitted fields.
 13. Shopify Storefront MCP is a catalog app template with endpoint-instance identity, not one global Shopify app identity.
 14. Shopify's ready path accepts only the standard Storefront MCP `/api/mcp` endpoint; UCP catalog endpoints such as `/api/ucp/mcp` need a separate reviewed profile before they are connectable.

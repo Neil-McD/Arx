@@ -74,7 +74,6 @@ type WebCommunitySettingsSectionProps = {
     updatingMountId: string | null;
     refreshingMountId: string | null;
     removingMountId: string | null;
-    onBrowseCatalog: () => void;
     onUpdateMount: (
       communityAppMountId: string,
       patch: {
@@ -528,7 +527,6 @@ function CommunityIntegrationsSettingsSection({
   const personalAppSetup = usePersonalAppSetupController({
     hasSession,
     requireSignIn,
-    onUnavailable: integrations.onBrowseCatalog,
     isConnecting: integrations.isOptingIntoApp,
     refreshingPersonalMountId: integrations.refreshingPersonalMountId,
     reconnectingPersonalMountId: integrations.reconnectingPersonalMountId,
@@ -570,17 +568,6 @@ function CommunityIntegrationsSettingsSection({
         Members can add community apps to their own harness and use their own
         credentials when an app requires authentication.
       </div>
-      {canManage ? (
-        <div className="agent-capability-toolbar">
-          <button
-            type="button"
-            className="settings-cta"
-            onClick={integrations.onBrowseCatalog}
-          >
-            Browse apps
-          </button>
-        </div>
-      ) : null}
       {integrations.error ? (
         <div className="auth-error">Couldn&apos;t load community integrations.</div>
       ) : null}

@@ -27,7 +27,6 @@ export type WebCommunityAiAgentAppsEditorProps = {
   updatingMountId: string | null;
   refreshingMountId: string | null;
   removingMountId: string | null;
-  onOpenDiscoverApps: () => void;
   onUpdateMount: (
     communityAppMountId: string,
     patch: {
@@ -54,7 +53,6 @@ export function WebCommunityAiAgentAppsEditor(
     updatingMountId,
     refreshingMountId,
     removingMountId,
-    onOpenDiscoverApps,
     onUpdateMount,
     onRefreshApp,
     onUnmountApp,
@@ -64,15 +62,6 @@ export function WebCommunityAiAgentAppsEditor(
   return (
     <div className="settings-section">
       <div className="model-note agent-editor-intro">{intro}</div>
-
-      <div className="agent-capability-toolbar">
-        <button
-          type="button"
-          onClick={onOpenDiscoverApps}
-        >
-          Discover apps
-        </button>
-      </div>
 
       {error ? <div className="auth-error">{error}</div> : null}
       {mutationError ? <div className="auth-error">{mutationError}</div> : null}

@@ -34,7 +34,7 @@ const OPERATOR_WEB_DEPLOY_ROUTE_PROBES: Array<{
 }> = [
   { label: "Home", path: "/", criticality: "critical" },
   { label: "Workspace", path: "/workspace", criticality: "critical" },
-  { label: "Discover apps", path: "/discover/apps", criticality: "important" },
+  { label: "Discover communities", path: "/discover", criticality: "important" },
   { label: "Integrations", path: "/settings/integrations", criticality: "important" },
 ];
 const OPERATOR_WEB_DEPLOY_PROBE_TIMEOUT_MS = 4000;

@@ -151,10 +151,6 @@ export type WebSettingsPanelsProps = {
   integrations: {
     session: SessionLike;
     requireSignIn: () => void;
-    openDiscoverApps: () => void;
-    openDiscoverSkills: () => void;
-    shouldOpenCreateSkillComposer: boolean;
-    onConsumeCreateSkillComposerOpen: () => void;
     effectiveMcpApps: EffectiveMcpApp[];
     isLoadingEffectiveMcpApps: boolean;
     effectiveMcpAppsError: string | null;
@@ -377,11 +373,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
   const integrationsSectionProps = {
     session: integrations.session,
     requireSignIn: integrations.requireSignIn,
-    openDiscoverApps: integrations.openDiscoverApps,
-    openDiscoverSkills: integrations.openDiscoverSkills,
-    shouldOpenCreateSkillComposer: integrations.shouldOpenCreateSkillComposer,
-    onConsumeCreateSkillComposerOpen:
-      integrations.onConsumeCreateSkillComposerOpen,
     effectiveMcpApps: integrations.effectiveMcpApps,
     isLoadingEffectiveMcpApps: integrations.isLoadingEffectiveMcpApps,
     effectiveMcpAppsError: integrations.effectiveMcpAppsError,

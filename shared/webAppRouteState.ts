@@ -2,7 +2,6 @@ import { isUuid } from "./appIdentity";
 import {
   parseCommunitySettingsPane,
   parseCommunityTab,
-  parseDiscoverTab,
   type AppPage,
   type AppView,
   type CommunitySettingsPane,
@@ -311,17 +310,16 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     };
   }
 
-  if (segments[0] === "discover" && segments.length <= 3) {
-    const discoverTab = parseDiscoverTab(segments[1] ?? null);
+  if (segments[0] === "discover") {
     return {
       page: "discover",
       view: "home",
       settingsPage: "agent",
       communitySlug: null,
       communityTab: "chat",
-      discoverTab,
-      discoverAppId: discoverTab === "apps" ? String(segments[2] ?? "").trim() || null : null,
-      discoverSkillId: discoverTab === "skills" ? String(segments[2] ?? "").trim() || null : null,
+      discoverTab: "communities",
+      discoverAppId: null,
+      discoverSkillId: null,
       threadId: null,
     };
   }
@@ -521,15 +519,6 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
   }
 
   if (state.page === "discover") {
-    const tab = parseDiscoverTab(state.discoverTab);
-    if (tab === "apps") {
-      const appId = String(state.discoverAppId ?? "").trim();
-      return appId ? `/discover/apps/${encodeURIComponent(appId)}` : "/discover/apps";
-    }
-    if (tab === "skills") {
-      const skillId = String(state.discoverSkillId ?? "").trim();
-      return skillId ? `/discover/skills/${encodeURIComponent(skillId)}` : "/discover/skills";
-    }
     return "/discover";
   }
 

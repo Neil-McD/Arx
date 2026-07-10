@@ -49,33 +49,13 @@ export type BackTargetLabel =
   | "workspace"
   | "community"
   | "discover"
-  | "apps"
-  | "skills"
   | "docs"
   | "settings";
-
-function formatDiscoverRouteBackTargetLabel(routePath: string | null | undefined): BackTargetLabel | null {
-  const raw = String(routePath ?? "").trim();
-  if (!raw) return null;
-  try {
-    const path = new URL(raw, "http://local.polynet").pathname;
-    const segments = path.split("/").filter(Boolean);
-    const routeSegments = segments[0] === "m" ? segments.slice(1) : segments;
-    if (routeSegments[0] !== "discover") return null;
-    if (routeSegments[1] === "apps") return "apps";
-    if (routeSegments[1] === "skills") return "skills";
-    return "discover";
-  } catch {
-    return null;
-  }
-}
 
 export function formatBackTargetLabel(
   snapshot: Pick<NavSnapshotBase, "page" | "view"> & { routePath?: string | null },
 ): BackTargetLabel {
-  if (snapshot.page === "discover") {
-    return formatDiscoverRouteBackTargetLabel(snapshot.routePath) ?? "discover";
-  }
+  if (snapshot.page === "discover") return "discover";
   if (snapshot.page === "docs") return "docs";
   if (snapshot.page === "community") return "community";
   if (snapshot.view === "settings") return "settings";

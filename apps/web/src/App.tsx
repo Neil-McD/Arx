@@ -236,7 +236,6 @@ import {
   type AppView,
   type CommunitySettingsPane,
   type CommunityTab,
-  type DiscoverTab,
   isCommunityRouteManagedTab,
   normalizeCommunityTabForAccess,
   type SettingsGroup,
@@ -262,16 +261,7 @@ import type {
   UserProfile as SharedUserProfile,
   UserProfileDetail as SharedUserProfileDetail,
 } from "../../../shared/communityTypes";
-import type { ConnectCommunityAppInput } from "../../../shared/communityAppMountTypes";
 import type { CreateSkillPackageInput } from "../../../shared/skillPackageTypes";
-import {
-  DISCOVER_APP_CATALOG,
-  type DiscoverAppCatalogEntry,
-} from "../../../shared/discoverCatalog";
-import {
-  DISCOVER_SKILL_CATALOG,
-  type DiscoverSkillCatalogEntry,
-} from "../../../shared/discoverSkillCatalog";
 import {
   deriveBackFromWorkspaceSettingsFallbackTransition,
   deriveBackToWorkspaceFallbackTransition,
@@ -2017,20 +2007,9 @@ export default function App() {
   const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "workspace");
   const [activeView, setActiveView] = useState<AppView>(() => initialAppRoute?.view ?? "home");
   const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => initialAppRoute?.settingsPage ?? "account");
-  const [discoverActiveTab, setDiscoverActiveTab] = useState<DiscoverTab>(
-    () => initialAppRoute?.discoverTab ?? "communities",
-  );
-  const [selectedDiscoverAppId, setSelectedDiscoverAppId] = useState<string | null>(
-    () => initialAppRoute?.discoverAppId ?? null,
-  );
-  const [selectedDiscoverSkillId, setSelectedDiscoverSkillId] = useState<string | null>(
-    () => initialAppRoute?.discoverSkillId ?? null,
-  );
   const [selectedProductDocSlug, setSelectedProductDocSlug] = useState<string | null>(
     () => initialAppRoute?.docsSlug ?? null,
   );
-  const [shouldOpenCreatePersonalSkill, setShouldOpenCreatePersonalSkill] =
-    useState(false);
   const settingsGroup = settingsGroupForPage(settingsPage);
   const [userWantsSessions, setUserWantsSessions] = useState(false);
   const [workspaceViewportWidth, setWorkspaceViewportWidth] = useState(() =>
@@ -3744,7 +3723,6 @@ export default function App() {
     communityAppMounts,
     isLoadingCommunityAppMounts,
     communityAppMountError,
-    isConnectingCommunityApp,
     communityAppMutationError,
     updatingCommunityAppMountId,
     refreshingCommunityAppMountId,
@@ -3752,7 +3730,6 @@ export default function App() {
     communityAppMountsLoadedCommunityIdRef,
     clearCommunityAppMounts,
     loadCommunityAppMounts,
-    connectCommunityApp,
     updateCommunityAppMount,
     refreshCommunityApp,
     setupImportedCommunityMcpApp,
@@ -4566,11 +4543,6 @@ export default function App() {
     setActivePage(nextAppRoute.page);
     setActiveView(nextAppRoute.page === "workspace" ? nextAppRoute.view : "home");
     setSettingsPage(nextAppRoute.settingsPage);
-    if (nextAppRoute.page === "discover") {
-      setDiscoverActiveTab(nextAppRoute.discoverTab ?? "communities");
-      setSelectedDiscoverAppId(nextAppRoute.discoverAppId ?? null);
-      setSelectedDiscoverSkillId(nextAppRoute.discoverSkillId ?? null);
-    }
     if (nextAppRoute.page === "docs") {
       setSelectedProductDocSlug(nextAppRoute.docsSlug ?? null);
     }
@@ -4885,9 +4857,9 @@ export default function App() {
           activePage === "community" && communityTab === "resources" ? communityResourceModuleId : null,
         communitySettingsPane:
           activePage === "community" && communityTab === "settings" ? communitySettingsPane : null,
-        discoverTab: discoverActiveTab,
-        discoverAppId: selectedDiscoverAppId,
-        discoverSkillId: selectedDiscoverSkillId,
+        discoverTab: "communities",
+        discoverAppId: null,
+        discoverSkillId: null,
         docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
         threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
         projectId:
@@ -5002,13 +4974,7 @@ export default function App() {
 
   const backTargetSnapshot = navStackRef.current.length > 0 ? navStackRef.current[navStackRef.current.length - 1] : null;
   const backTargetLabel = backTargetSnapshot ? formatBackTargetLabelShared(backTargetSnapshot) : null;
-  const discoverDetailBackTargetLabel =
-    activePage === "discover" && discoverActiveTab === "apps" && selectedDiscoverAppId
-      ? "apps"
-      : activePage === "discover" && discoverActiveTab === "skills" && selectedDiscoverSkillId
-        ? "skills"
-        : null;
-  const effectiveBackTargetLabel = backTargetLabel ?? discoverDetailBackTargetLabel;
+  const effectiveBackTargetLabel = backTargetLabel;
 
   const threadsHydratedRef = useRef(false);
   const lastCloudStatusRefreshAtRef = useRef(0);
@@ -5442,27 +5408,6 @@ export default function App() {
     loadEffectiveSkills,
     session,
   ]);
-
-  const handleConnectCommunityApp = useCallback(
-    async (input: ConnectCommunityAppInput) => {
-      const ok = await connectCommunityApp(input);
-      if (ok) {
-        if (session) {
-          userPlatformAppMountsLoadedUserIdRef.current = null;
-          void loadUserPlatformAppMounts(session);
-        }
-        void reloadEffectiveMcpApps();
-      }
-      return ok;
-    },
-    [
-      connectCommunityApp,
-      loadUserPlatformAppMounts,
-      reloadEffectiveMcpApps,
-      session,
-      userPlatformAppMountsLoadedUserIdRef,
-    ],
-  );
 
   const handleConnectUserPlatformApp = useCallback(
     async (input: {
@@ -5962,8 +5907,6 @@ export default function App() {
   const [isExporting, setIsExporting] = useState(false);
 
   const [discoverCommunities, setDiscoverCommunities] = useState<DiscoverCommunity[]>([]);
-  const [discoverApps, setDiscoverApps] = useState<DiscoverAppCatalogEntry[]>(DISCOVER_APP_CATALOG);
-  const [discoverSkills, setDiscoverSkills] = useState<DiscoverSkillCatalogEntry[]>(DISCOVER_SKILL_CATALOG);
   const [isLoadingDiscover, setIsLoadingDiscover] = useState(false);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
   const [lastDiscoverLoadAttemptedAt, setLastDiscoverLoadAttemptedAt] = useState(0);
@@ -6099,8 +6042,6 @@ export default function App() {
     setIsLoadingDiscover,
     setDiscoverError,
     setDiscoverCommunities,
-    setDiscoverApps,
-    setDiscoverSkills,
     setLastDiscoverLoadAttemptedAt,
   });
 
@@ -6523,9 +6464,6 @@ export default function App() {
     communityTab,
     communityResourceModuleId,
     communitySettingsPane,
-    discoverTab: discoverActiveTab,
-    discoverAppId: selectedDiscoverAppId,
-    discoverSkillId: selectedDiscoverSkillId,
     docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
     activeThreadId,
     applyLocationToState,
@@ -9751,16 +9689,6 @@ export default function App() {
     };
 	  const handleTopbarBackToWorkspace = () => {
 	    if (goBack()) return;
-      if (activePage === "discover") {
-        if (discoverActiveTab === "apps" && selectedDiscoverAppId) {
-          navigateTo("/discover/apps", { replace: true });
-          return;
-        }
-        if (discoverActiveTab === "skills" && selectedDiscoverSkillId) {
-          navigateTo("/discover/skills", { replace: true });
-          return;
-        }
-      }
 	    const transition = deriveBackToWorkspaceFallbackTransition(
 	      { activeView },
 	      { forceHomeView: true },
@@ -9780,92 +9708,9 @@ export default function App() {
 		  const handleOpenDiscover = () => {
 		    const transition = deriveOpenDiscoverTransition({ activePage });
 		    if (transition.shouldPushSnapshot) pushNavSnapshot();
-	      setDiscoverActiveTab("communities");
-	      setSelectedDiscoverAppId(null);
-	      setSelectedDiscoverSkillId(null);
 		    setActiveView(transition.nextView);
 		    setActivePage(transition.nextPage);
 		  };
-	    const handleOpenDiscoverApps = () => {
-	      const transition = deriveOpenDiscoverTransition({ activePage });
-	      if (transition.shouldPushSnapshot) pushNavSnapshot();
-      setDiscoverActiveTab("apps");
-      setSelectedDiscoverAppId(null);
-      setSelectedDiscoverSkillId(null);
-      setActiveView(transition.nextView);
-      setActivePage(transition.nextPage);
-	    };
-	    const handleOpenDiscoverSkills = () => {
-	      const transition = deriveOpenDiscoverTransition({ activePage });
-	      if (transition.shouldPushSnapshot) pushNavSnapshot();
-	      setDiscoverActiveTab("skills");
-	      setSelectedDiscoverAppId(null);
-	      setSelectedDiscoverSkillId(null);
-	      setActiveView(transition.nextView);
-	      setActivePage(transition.nextPage);
-	    };
-    const handleSelectDiscoverTab = (tab: DiscoverTab) => {
-      setDiscoverActiveTab(tab);
-      if (tab !== "apps") {
-        setSelectedDiscoverAppId(null);
-      }
-      if (tab !== "skills") {
-        setSelectedDiscoverSkillId(null);
-      }
-    };
-    const handleSelectDiscoverApp = (appId: string | null) => {
-      const nextAppId = String(appId ?? "").trim() || null;
-      if (
-        nextAppId &&
-        activePage === "discover" &&
-        discoverActiveTab === "apps" &&
-        !selectedDiscoverAppId
-      ) {
-        pushNavSnapshot();
-      }
-      setSelectedDiscoverAppId(nextAppId);
-      if (nextAppId) {
-        setSelectedDiscoverSkillId(null);
-      }
-    };
-    const handleSelectDiscoverSkill = (skillId: string | null) => {
-      const nextSkillId = String(skillId ?? "").trim() || null;
-      if (
-        nextSkillId &&
-        activePage === "discover" &&
-        discoverActiveTab === "skills" &&
-        !selectedDiscoverSkillId
-      ) {
-        pushNavSnapshot();
-      }
-      setSelectedDiscoverSkillId(nextSkillId);
-      if (nextSkillId) {
-        setSelectedDiscoverAppId(null);
-      }
-    };
-	    const handleOpenIntegrationsSettings = () => {
-	      pushNavSnapshot();
-	      setShouldOpenCreatePersonalSkill(false);
-	      setActivePage("workspace");
-	      setActiveView("settings");
-	      setSettingsPage("integrations");
-	    };
-    const handleOpenCreatePersonalSkill = () => {
-      pushNavSnapshot();
-      setShouldOpenCreatePersonalSkill(true);
-      setActivePage("workspace");
-      setActiveView("settings");
-      setSettingsPage("integrations");
-    };
-    const handleOpenActiveCommunityAiAgentTab = (tab: "apps" | "skills") => {
-      const nextCommunitySlug = String(
-        selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "",
-      ).trim();
-      if (!nextCommunitySlug) return;
-      pushNavSnapshot();
-      setCommunityAiAgentPreferredTab(tab);
-      openCommunityTab(nextCommunitySlug, "ai_agent", { pushSnapshot: false });
-    };
     const handleOpenCommunityLaunchSetupStep = (step: CommunityLaunchSetupStep) => {
       const nextCommunitySlug = String(
         selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "",
@@ -10854,7 +10699,6 @@ export default function App() {
         updatingMountId: updatingCommunityAppMountId,
         refreshingMountId: refreshingCommunityAppMountId,
         removingMountId: removingCommunityAppMountId,
-        onBrowseCatalog: handleOpenDiscoverApps,
         onUpdateMount: handleUpdateCommunityAppMount,
         onRefreshApp: handleRefreshCommunityApp,
         onSetupImportedMcpApp: handleSetupImportedCommunityMcpApp,
@@ -10990,7 +10834,7 @@ export default function App() {
       },
       aiAgentAppsEditorProps: {
         intro: "Manage apps attached to this community.",
-        emptyState: "Discover apps to attach trusted tools to this community.",
+        emptyState: "No apps are attached to this community yet.",
         mounts: communityAppMounts,
         effectiveMcpApps,
         isLoading: isLoadingCommunityAppMounts,
@@ -11000,7 +10844,6 @@ export default function App() {
         updatingMountId: updatingCommunityAppMountId,
         refreshingMountId: refreshingCommunityAppMountId,
         removingMountId: removingCommunityAppMountId,
-        onOpenDiscoverApps: handleOpenDiscoverApps,
         onUpdateMount: handleUpdateCommunityAppMount,
         onRefreshApp: handleRefreshCommunityApp,
         onUnmountApp: handleUnmountCommunityApp,
@@ -11008,7 +10851,7 @@ export default function App() {
       aiAgentSkillsEditorProps: {
         intro: "Attach reusable skill packages here so this community lens can load behavior units on demand without bloating the base prompt.",
         emptyState: "Attach the first skill package to this community. Attached skills become available when members explicitly mention them in this lens.",
-        addButtonLabel: "Browse skills",
+        addButtonLabel: "Create skill",
         platformSkills: canManageResourcesActiveCommunity
           ? COMMUNITY_MANAGER_PLATFORM_SKILLS
           : [],
@@ -11027,7 +10870,6 @@ export default function App() {
         onAttachPackage: handleAttachSkillPackageToCommunity,
         onUpdateSkill: handleUpdateCommunitySkillAttachment,
         onDetachSkill: handleDetachCommunitySkill,
-        onBrowseCatalog: handleOpenDiscoverSkills,
       },
       isLoadingCommunityFunnel,
       communityFunnelError,
@@ -11529,11 +11371,6 @@ export default function App() {
     integrations: {
       session: session,
       requireSignIn,
-      openDiscoverApps: handleOpenDiscoverApps,
-      openDiscoverSkills: handleOpenDiscoverSkills,
-      shouldOpenCreateSkillComposer: shouldOpenCreatePersonalSkill,
-      onConsumeCreateSkillComposerOpen: () =>
-        setShouldOpenCreatePersonalSkill(false),
       effectiveMcpApps,
       isLoadingEffectiveMcpApps,
       effectiveMcpAppsError,
@@ -11581,33 +11418,6 @@ export default function App() {
     Number(Boolean(activeCommunityAttentionSummary.ai_feed)) +
     Number(Boolean(activeCommunityAttentionSummary.resources)) +
     Number(Boolean(activeCommunityAttentionSummary.events));
-  const communityHomeButton = activeCommunity ? (
-    <button
-      className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
-      onClick={() => {
-        const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity.slug ?? "").trim();
-        if (!nextCommunitySlug) return;
-        openCommunityChat(nextCommunitySlug, { clearUnread: true });
-      }}
-      aria-label="Open community"
-      title={activeCommunity.name}
-      type="button"
-    >
-      <CommunityAvatar
-        className="community-btn-avatar"
-        imageUrl={activeCommunity.avatar_url}
-        focusX={activeCommunity.avatar_focus_x}
-        focusY={activeCommunity.avatar_focus_y}
-        zoom={activeCommunity.avatar_zoom}
-        name={activeCommunity.name}
-        fallback={communityInitials(activeCommunity.name)}
-        fallbackClassName="community-btn-initials"
-      />
-      {activeCommunityAttentionCount > 0 ? (
-        <span className="unread-badge">{activeCommunityAttentionCount}</span>
-      ) : null}
-    </button>
-  ) : null;
   const directMessageWebNotifications = useDirectMessageWebNotifications({
     isEnabled: Boolean(session),
     unreadCount: directMessagesUnreadCount,
@@ -12412,62 +12222,11 @@ export default function App() {
       secondaryPanelsProps: communitySecondarySurfaceProps,
     },
     discoverPanelProps: {
-      showMobileShell,
-      activeTab: discoverActiveTab,
-      selectedAppId: selectedDiscoverAppId,
-      selectedSkillId: selectedDiscoverSkillId,
-      onSelectTab: handleSelectDiscoverTab,
-      onSelectApp: handleSelectDiscoverApp,
-      onSelectSkill: handleSelectDiscoverSkill,
-      hasSession: Boolean(session),
-      isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
-      onRequireAuth: () => requireSignIn(),
       isLoadingDiscover,
       discoverCommunitiesCount: discoverCommunities.length,
       discoverError,
       discoverCommunities,
-      discoverApps,
-      discoverSkills,
       formatPlanPrice: (plan) => (plan ? formatPlanPrice(plan) : "Free"),
-      userPlatformAppMounts,
-      isLoadingUserPlatformAppMounts,
-      userPlatformAppMountError,
-      userPlatformAppMutationError,
-      isConnectingUserPlatformApp,
-      onConnectUserPlatformApp: handleConnectUserPlatformApp,
-      onBeginUserPlatformAppOAuth: handleBeginUserPlatformAppOAuth,
-      manageableCommunityTargetName: canManageMembersActiveCommunity
-        ? (activeCommunity?.name ?? null)
-        : null,
-      communityAppMounts,
-      isLoadingCommunityAppMounts,
-      communityAppMountError,
-      communityAppMutationError,
-      isConnectingCommunityApp,
-      onConnectCommunityApp: handleConnectCommunityApp,
-      userPlatformSkills,
-      isLoadingUserPlatformSkills,
-      userPlatformSkillError,
-      userPlatformSkillMutationError,
-      isCreatingUserPlatformSkill,
-      onCreateUserPlatformSkill: handleCreateUserPlatformSkill,
-      communitySkillAttachments,
-      ownedSkillPackages,
-      isLoadingCommunitySkillAttachments,
-      isLoadingOwnedSkillPackages,
-      communitySkillAttachmentError,
-      ownedSkillPackagesError,
-      communitySkillMutationError,
-      isCreatingCommunitySkill: isCreatingSkill,
-      attachingCommunitySkillPackageId: attachingSkillPackageId,
-      onCreateCommunitySkill: handleCreateCommunitySkill,
-      onAttachSkillPackageToCommunity: handleAttachSkillPackageToCommunity,
-      onOpenIntegrationsSettings: handleOpenIntegrationsSettings,
-      onOpenCreateUserPlatformSkill: handleOpenCreatePersonalSkill,
-      onOpenActiveCommunityAiAgentApps: () =>
-        handleOpenActiveCommunityAiAgentTab("apps"),
-      onOpenActiveCommunityAiAgentSkills: () =>
-        handleOpenActiveCommunityAiAgentTab("skills"),
       onActivateCommunity: (community) => {
         activateDiscoverCommunityCard({
           canActivate: Boolean(community.slug),
@@ -12486,7 +12245,7 @@ export default function App() {
     settingsPage,
           communitySlug: null,
           communityTab: "chat",
-          discoverTab: discoverActiveTab,
+          discoverTab: "communities",
           discoverAppId: null,
           discoverSkillId: null,
           docsSlug: nextSlug,
@@ -12699,7 +12458,6 @@ export default function App() {
     hasWorkspaceRightPanelControl: showWorkspaceRightPanelControl,
     workspaceRightPanelToggle,
     directMessagesButton,
-    communityHomeButton,
     handleExitPublicFunnelPreview,
     handleTopbarBackFromPublicFunnel,
     handleTopbarBackFromWorkspaceSettings,

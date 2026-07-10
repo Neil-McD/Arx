@@ -50,9 +50,6 @@ export function useWebPathRouteLifecycle(params: {
   communityTab: CommunityTab;
   communityResourceModuleId: string | null;
   communitySettingsPane: CommunitySettingsPane;
-  discoverTab: DiscoverTab;
-  discoverAppId: string | null;
-  discoverSkillId: string | null;
   docsSlug: string | null;
   activeThreadId: string | null;
   applyLocationToState: () => void;
@@ -112,9 +109,9 @@ export function useWebPathRouteLifecycle(params: {
         params.activePage === "community" && params.communityTab === "settings"
           ? params.communitySettingsPane
           : null,
-      discoverTab: params.discoverTab,
-      discoverAppId: params.discoverAppId,
-      discoverSkillId: params.discoverSkillId,
+      discoverTab: "communities",
+      discoverAppId: null,
+      discoverSkillId: null,
       docsSlug: params.docsSlug,
       threadId: params.activePage === "workspace" && params.activeView === "home" ? params.activeThreadId : null,
     });
@@ -132,9 +129,6 @@ export function useWebPathRouteLifecycle(params: {
     params.communityTab,
     params.communityResourceModuleId,
     params.communitySettingsPane,
-    params.discoverTab,
-    params.discoverAppId,
-    params.discoverSkillId,
     params.docsSlug,
     params.activeThreadId,
   ]);

@@ -13883,37 +13883,8 @@ button.chat-reply-quote:hover {
   border: 1px solid var(--border-default);
 }
 
-/* Unread badge on community button */
-.community-btn {
-  position: relative;
-}
-
 .direct-messages-topbar-button {
   position: relative;
-}
-
-.community-btn-avatar,
-.community-btn-initials {
-  width: 22px;
-  height: 22px;
-  border-radius: 8px;
-}
-
-.community-btn-avatar {
-  position: relative;
-  display: block;
-  overflow: hidden;
-  user-select: none;
-  -webkit-user-drag: none;
-}
-
-.community-btn-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  user-select: none;
-  -webkit-user-drag: none;
 }
 
 .community-nav-banner-img,
@@ -13922,16 +13893,6 @@ button.chat-reply-quote:hover {
 .create-community-avatar img {
   user-select: none;
   -webkit-user-drag: none;
-}
-
-.community-btn-initials {
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-primary);
-  background: var(--bg-card);
-  border: 1px solid var(--border-default);
 }
 
 .unread-badge {
