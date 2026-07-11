@@ -3,7 +3,9 @@ import {
   useEffect,
   useRef,
   useState,
+  type Dispatch,
   type FormEvent,
+  type SetStateAction,
 } from "react";
 import {
   LoaderCircle,
@@ -18,7 +20,7 @@ import { renderMarkdown } from "../../../../shared/markdownUi";
 import { extractTextFromContentJson } from "../../../../shared/communityMessageParsing";
 import { ensureCloudMemberAgentCommunityThread } from "../../../../shared/cloudMemberAgentGateway";
 import {
-  listConvexCloudThreadMessagesByThreadKey,
+  listConvexCloudNewestThreadMessagesByThreadKey,
   type CloudMessageTransportRow,
 } from "../../../../shared/cloudThreadsRead";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../../../../shared/modelCatalog";
@@ -33,6 +35,12 @@ import "./WebMemberAgentDock.css";
 
 type MemberAgentMessage = Omit<CloudMessageTransportRow, "role"> & {
   role: "user" | "assistant" | "system";
+};
+
+type CommunityScope = {
+  communityId: string | null;
+  userId: string | null;
+  generation: number;
 };
 
 type WebMemberAgentDockProps = {
@@ -90,30 +98,68 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const retryRef = useRef<{ text: string; messageId: string } | null>(null);
   const activeThreadKeyRef = useRef<string | null>(null);
+  const communityScopeRef = useRef<CommunityScope>({
+    communityId: props.communityId,
+    userId: props.session?.user.id ?? null,
+    generation: 0,
+  });
+  const scopeUserId = props.session?.user.id ?? null;
+  if (
+    communityScopeRef.current.communityId !== props.communityId ||
+    communityScopeRef.current.userId !== scopeUserId
+  ) {
+    communityScopeRef.current = {
+      communityId: props.communityId,
+      userId: scopeUserId,
+      generation: communityScopeRef.current.generation + 1,
+    };
+  }
+
+  const isCurrentScope = useCallback((scope: CommunityScope): boolean => {
+    const current = communityScopeRef.current;
+    return (
+      current.communityId === scope.communityId &&
+      current.userId === scope.userId &&
+      current.generation === scope.generation
+    );
+  }, []);
 
   const loadMessages = useCallback(
     async (targetThreadKey: string, session: AuthSession): Promise<void> => {
-      const rows = await listConvexCloudThreadMessagesByThreadKey({
+      const scope = communityScopeRef.current;
+      const rows = await listConvexCloudNewestThreadMessagesByThreadKey({
         session,
         threadKey: targetThreadKey,
-        limit: 1000,
+        limit: 200,
       });
+      if (!isCurrentScope(scope) || activeThreadKeyRef.current !== targetThreadKey) return;
       setMessages(normalizeMessages(rows ?? []));
     },
-    [],
+    [isCurrentScope],
   );
 
   const setThreadError = useCallback(
     (
-      _targetThreadKey: string | null,
+      targetThreadKey: string | null,
       value: string | null | ((previous: string | null) => string | null),
     ) => {
+      if (targetThreadKey && targetThreadKey !== activeThreadKeyRef.current) return;
       setLocalError((previous) =>
         typeof value === "function" ? value(previous) : value,
       );
     },
     [],
   );
+
+  const setInferenceIssueForActiveThread = useCallback<
+    Dispatch<SetStateAction<InferenceIssueModalState | null>>
+  >((value) => {
+    setInferenceIssue((previous) => {
+      const next = typeof value === "function" ? value(previous) : value;
+      if (next?.threadId && next.threadId !== activeThreadKeyRef.current) return previous;
+      return next;
+    });
+  }, []);
 
   const {
     createThreadMessage,
@@ -152,7 +198,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     loadThreads: async () => undefined,
     showMemoryToastMessage: () => undefined,
     setThreadErrorForThread: setThreadError,
-    setInferenceIssueModal: setInferenceIssue,
+    setInferenceIssueModal: setInferenceIssueForActiveThread,
     setThreadSendingStateById: setSendingByThread,
     setThreadStreamingStateById: setStreamingByThread,
     setRuntimeEventsByRunId,
@@ -175,7 +221,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     setLocalError(null);
     setInferenceIssue(null);
     retryRef.current = null;
-  }, [props.communityId, stopStreamingTurn]);
+  }, [props.communityId, props.session?.user.id, stopStreamingTurn]);
 
   useEffect(() => {
     if (!props.isVisible) {
@@ -187,6 +233,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   useEffect(() => {
     if (!isOpen || !props.isVisible || !props.communityId || !props.session) return;
     let cancelled = false;
+    const scope = communityScopeRef.current;
     setIsPreparing(true);
     setLocalError(null);
     void (async () => {
@@ -195,20 +242,21 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
           props.session,
           "member_agent_dock_open",
         );
-        if (!usableSession || cancelled) return;
+        if (!usableSession || cancelled || !isCurrentScope(scope)) return;
         const thread = await ensureCloudMemberAgentCommunityThread({
           session: usableSession,
           communityId: props.communityId!,
         });
-        if (cancelled) return;
+        if (cancelled || !isCurrentScope(scope)) return;
+        activeThreadKeyRef.current = thread.thread_key;
         setThreadKey(thread.thread_key);
         await loadMessages(thread.thread_key, usableSession);
       } catch (error) {
-        if (cancelled) return;
+        if (cancelled || !isCurrentScope(scope)) return;
         console.warn("member_agent_dock_open_failed", error);
         setLocalError("Your agent could not open in this community.");
       } finally {
-        if (!cancelled) setIsPreparing(false);
+        if (!cancelled && isCurrentScope(scope)) setIsPreparing(false);
       }
     })();
     return () => {
@@ -221,6 +269,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     props.ensureSession,
     props.isVisible,
     props.session,
+    isCurrentScope,
   ]);
 
   const streamingState = threadKey ? streamingByThread[threadKey] ?? null : null;
@@ -251,6 +300,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     setInput("");
     const retry = retryRef.current;
     const messageId = retry?.text === text ? retry.messageId : crypto.randomUUID();
+    const scope = communityScopeRef.current;
     let targetThreadKey: string | null = null;
     try {
       const usableSession = await props.ensureSession(
@@ -258,11 +308,14 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         "member_agent_dock_send",
       );
       if (!usableSession) throw new Error("auth_session_required");
+      if (!isCurrentScope(scope)) return;
       const thread = await ensureCloudMemberAgentCommunityThread({
         session: usableSession,
         communityId: props.communityId,
       });
+      if (!isCurrentScope(scope)) return;
       targetThreadKey = thread.thread_key;
+      activeThreadKeyRef.current = thread.thread_key;
       setThreadKey(thread.thread_key);
       setSendingByThread((previous) => ({ ...previous, [thread.thread_key]: true }));
       await createThreadMessage(usableSession, {
@@ -271,6 +324,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         role: "user",
         content_json: { text },
       });
+      if (!isCurrentScope(scope)) return;
       const optimisticMessage: MemberAgentMessage = {
         id: messageId,
         thread_id: thread.thread_key,
@@ -297,11 +351,13 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         requestedFundingSource: "auto",
         requestedAgenticTools: true,
         replyToId: messageId,
-        messages: optimisticMessages,
+        messages: [optimisticMessage],
       });
       if (result.error) throw new Error(result.error);
+      if (!isCurrentScope(scope)) return;
       await loadMessages(thread.thread_key, usableSession);
     } catch (error) {
+      if (!isCurrentScope(scope)) return;
       console.warn("member_agent_dock_send_failed", error);
       setInput(text);
       retryRef.current = { text, messageId };

@@ -23,6 +23,7 @@ import {
 import { normalizeWorkspacePreviewPort } from "../shared/workspacePreviewPort";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
 import { buildMemberAgentThreadKey } from "../shared/runtimeInvocationSurface";
+import { MEMBER_AGENT_CONTEXT_MAX_MESSAGES } from "../shared/memberAgentConversationContext";
 
 type ThreadLike = {
   _id: any;
@@ -1517,6 +1518,80 @@ export const listCloudThreadMessages = query({
         contentJson: await mapCloudMessageContentJsonForRead(ctx, row.contentJson),
       })),
     );
+  },
+});
+
+export const listNewestCloudThreadMessages = query({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    threadId: v.id("threads"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireOwnedCloudThread({
+      ctx,
+      ownerId,
+      threadId: args.threadId,
+    });
+    const safeLimit = Math.max(1, Math.min(1000, Math.floor(args.limit ?? 200)));
+    const newestFirst = (await ctx.db
+      .query("cloudMessages")
+      .withIndex("by_thread_seq", (q) => q.eq("threadId", args.threadId))
+      .order("desc")
+      .take(safeLimit)) as CloudMessageLike[];
+    const chronological = newestFirst.slice().reverse();
+    return await Promise.all(
+      chronological.map(async (row) => ({
+        ...row,
+        contentJson: await mapCloudMessageContentJsonForRead(ctx, row.contentJson),
+      })),
+    );
+  },
+});
+
+export const listMemberAgentRuntimeMessagesInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    expectedUserMessageKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const thread = (await ctx.db.get(args.threadId)) as ThreadLike | null;
+    if (!thread || thread.ownerId !== args.ownerId || typeof thread.archivedAt === "number") {
+      throw new Error("member_agent_thread_not_found");
+    }
+    const expectedUserMessageKey = String(args.expectedUserMessageKey ?? "").trim();
+    if (!expectedUserMessageKey) throw new Error("member_agent_user_message_key_required");
+    const expected = (await ctx.db
+      .query("cloudMessages")
+      .withIndex("by_owner_messageKey", (q) =>
+        q.eq("ownerId", args.ownerId).eq("messageKey", expectedUserMessageKey),
+      )
+      .first()) as CloudMessageLike | null;
+    if (!expected || expected.threadId !== thread._id) {
+      throw new Error("member_agent_user_message_not_found");
+    }
+    if (expected.role !== "user") throw new Error("member_agent_expected_message_not_user");
+
+    const newestFirst = (await ctx.db
+      .query("cloudMessages")
+      .withIndex("by_thread_seq", (q) =>
+        q.eq("threadId", thread._id).lte("seq", expected.seq),
+      )
+      .order("desc")
+      .take(MEMBER_AGENT_CONTEXT_MAX_MESSAGES)) as CloudMessageLike[];
+    return newestFirst.map((row) => ({
+      messageKey: row.messageKey,
+      seq: row.seq,
+      role: row.role,
+      contentJson: row.contentJson,
+    }));
   },
 });
 
