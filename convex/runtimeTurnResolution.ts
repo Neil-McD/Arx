@@ -35,6 +35,13 @@ import {
   parseRequestedFundingSource,
   resolveGateDecisionForAuthenticatedActor,
 } from "./httpRuntimeSupport";
+import {
+  buildMemberAgentThreadKey,
+  resolveRuntimeInvocationSurfaceForThread,
+  restrictCapabilityFamiliesForInvocationSurface,
+  restrictToolNamesForInvocationSurface,
+  type RuntimeInvocationSurface,
+} from "../shared/runtimeInvocationSurface";
 
 export type RuntimeCapabilityFamily = CapabilityFamily;
 
@@ -43,6 +50,7 @@ export type RuntimeTurnInput = {
   model_id?: string | null;
   runtime_engine?: RuntimeEngine | null;
   surface?: "web";
+  invocation_surface?: RuntimeInvocationSurface | null;
   requested_agentic_tools?: boolean | null;
   requested_funding_source?:
     | "demo_public"
@@ -118,6 +126,7 @@ export type RuntimeTurnResolution = {
   resolvedRuntimeCapabilityFamilies: RuntimeCapabilityFamily[];
   resolvedRuntimeHarnessProfile: string;
   runtimeExecutionMode: "agentic" | "chat";
+  invocationSurface: RuntimeInvocationSurface;
 };
 
 function resolveRequestedAgenticTools(raw: unknown): boolean {
@@ -374,6 +383,10 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   const requestedAgenticTools = resolveRequestedAgenticTools(
     input.requested_agentic_tools,
   );
+  const invocationSurface = resolveRuntimeInvocationSurfaceForThread({
+    requestedSurface: input.invocation_surface,
+    threadKey,
+  });
   const requestedFundingSource = parseRequestedFundingSource(
     input.requested_funding_source,
     publicRef ? "demo_public" : "platform",
@@ -515,6 +528,31 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   let runtimeCommunitySystemPrompt: string | null = null;
   let runtimeCommunityLensAuthority: CommunityLensAuthority | null = null;
   const threadCommunityId = String(ownedThread.communityId ?? "").trim();
+  if (invocationSurface === "member_agent_dock" && !threadCommunityId) {
+    return {
+      ok: false,
+      response: fail(403, {
+        ok: false,
+        code: "member_agent_community_required",
+        error: "member_agent_community_required",
+        message: "The member agent dock requires an authorized community context.",
+      }),
+    };
+  }
+  if (
+    invocationSurface === "member_agent_dock" &&
+    threadKey !== buildMemberAgentThreadKey(threadCommunityId)
+  ) {
+    return {
+      ok: false,
+      response: fail(403, {
+        ok: false,
+        code: "member_agent_thread_context_mismatch",
+        error: "member_agent_thread_context_mismatch",
+        message: "The member agent channel does not match its community context.",
+      }),
+    };
+  }
   if (threadCommunityId) {
     try {
       const resolvedCommunity = (await ctx.runQuery(
@@ -576,14 +614,20 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   }
 
   const runtimeProjectId = String(ownedThread.projectId ?? "").trim() || null;
-  const resolvedRuntimeCapabilityFamilies = resolveActiveCapabilityFamiliesFromEntitlements({
-    entitledCapabilityFamilies: gateDecision.entitledCapabilityFamilies,
-    hasProjectContext: Boolean(runtimeProjectId),
-    hasCommunityContext: Boolean(runtimeCommunityId),
-  }) as RuntimeCapabilityFamily[];
-  const allowedToolNames = resolveAllowedToolNames({
-    activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
-    inferenceSource,
+  const resolvedRuntimeCapabilityFamilies = restrictCapabilityFamiliesForInvocationSurface({
+    invocationSurface,
+    capabilityFamilies: resolveActiveCapabilityFamiliesFromEntitlements({
+      entitledCapabilityFamilies: gateDecision.entitledCapabilityFamilies,
+      hasProjectContext: Boolean(runtimeProjectId),
+      hasCommunityContext: Boolean(runtimeCommunityId),
+    }) as RuntimeCapabilityFamily[],
+  });
+  const allowedToolNames = restrictToolNamesForInvocationSurface({
+    invocationSurface,
+    toolNames: resolveAllowedToolNames({
+      activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
+      inferenceSource,
+    }),
   });
   const runtimeExecutionMode: "agentic" | "chat" =
     requestedAgenticTools && allowedToolNames.length > 0
@@ -629,6 +673,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
       }),
       runtimeExecutionMode,
+      invocationSurface,
     },
   };
 }

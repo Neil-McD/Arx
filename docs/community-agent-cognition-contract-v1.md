@@ -16,10 +16,21 @@ This document defines the intended architecture for community cognition, memory 
 
 ## Current Runtime Boundary
 
-There is one canonical community-agent identity with two runtime surfaces:
+There is one canonical community-agent identity with two runtime surfaces. The
+member's private agent dock is not one of them; it is a client of the member's
+personal agent runtime under the active community lens.
+
+1. `member_agent_dock`
+   - belongs to the signed-in member, not the community
+   - uses one deterministic private thread per member and community
+   - requester-funded and server-bound to an authorized community lens
+   - receives only product-doc and community read tools in the first surface contract
+   - cannot invoke workspace, Daytona, web, MCP, autonomous cognition, or community publishing tools
+
+The community-owned runtime surfaces are:
 
 1. `member_concierge`
-   - entered from a direct mention or the private community agent dock
+   - entered from a direct community-agent mention
    - requester-funded through the requester's provider connection
    - revalidates community access and source visibility for every turn
    - receives only product-doc and community-resource retrieval tools
@@ -32,7 +43,7 @@ There is one canonical community-agent identity with two runtime surfaces:
    - only the Steward role receives the directory airlock write tool
    - cannot be directly prompted by a member or administrator
 
-Both surfaces resolve community identity, owner/config state, agent display
+Both community-owned surfaces resolve community identity, owner/config state, agent display
 identity, and community-wide instructions through the same canonical context
 resolver. They intentionally do not share a combined tool list. One entity and
 one context contract do not imply one authority envelope.

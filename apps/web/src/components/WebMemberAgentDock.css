@@ -1,4 +1,4 @@
-.community-agent-dock {
+.member-agent-dock {
   position: fixed;
   right: 20px;
   bottom: 20px;
@@ -6,7 +6,7 @@
   pointer-events: none;
 }
 
-.community-agent-dock-launcher {
+.member-agent-dock-launcher {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -24,32 +24,32 @@
   transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
 }
 
-.community-agent-dock-launcher:hover {
+.member-agent-dock-launcher:hover {
   border-color: var(--stroke-active);
   background: var(--surface-card-hover);
   transform: translateY(-2px);
 }
 
-.community-agent-dock-launcher:focus-visible,
-.community-agent-dock button:focus-visible,
-.community-agent-dock textarea:focus-visible {
+.member-agent-dock-launcher:focus-visible,
+.member-agent-dock button:focus-visible,
+.member-agent-dock textarea:focus-visible {
   outline: 2px solid var(--accent-gold);
   outline-offset: 2px;
 }
 
-.community-agent-dock-launcher svg {
+.member-agent-dock-launcher svg {
   width: 21px;
   height: 21px;
 }
 
-.community-agent-dock-launcher img,
-.community-agent-dock-avatar img {
+.member-agent-dock-launcher img,
+.member-agent-dock-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.community-agent-dock-panel {
+.member-agent-dock-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   width: min(400px, calc(100vw - 40px));
@@ -66,19 +66,19 @@
   transition: opacity 180ms ease, transform 180ms ease;
 }
 
-.community-agent-dock.is-open .community-agent-dock-panel {
+.member-agent-dock.is-open .member-agent-dock-panel {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0) scale(1);
 }
 
-.community-agent-dock.is-open .community-agent-dock-launcher {
+.member-agent-dock.is-open .member-agent-dock-launcher {
   opacity: 0;
   pointer-events: none;
   transform: scale(0.92);
 }
 
-.community-agent-dock-header {
+.member-agent-dock-header {
   display: flex;
   min-height: 60px;
   align-items: center;
@@ -87,20 +87,20 @@
   border-bottom: 1px solid var(--stroke-muted);
 }
 
-.community-agent-dock-identity {
+.member-agent-dock-identity {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 10px;
 }
 
-.community-agent-dock-identity > span:last-child {
+.member-agent-dock-identity > span:last-child {
   display: grid;
   min-width: 0;
   gap: 1px;
 }
 
-.community-agent-dock-identity strong {
+.member-agent-dock-identity strong {
   overflow: hidden;
   font-size: 13px;
   font-weight: 650;
@@ -109,12 +109,12 @@
   white-space: nowrap;
 }
 
-.community-agent-dock-identity small {
+.member-agent-dock-identity small {
   color: var(--text-ink-muted);
   font-size: 11px;
 }
 
-.community-agent-dock-avatar {
+.member-agent-dock-avatar {
   display: grid;
   width: 32px;
   height: 32px;
@@ -127,12 +127,12 @@
   border-radius: 7px;
 }
 
-.community-agent-dock-avatar svg {
+.member-agent-dock-avatar svg {
   width: 16px;
   height: 16px;
 }
 
-.community-agent-dock-header > button {
+.member-agent-dock-header > button {
   display: grid;
   width: 32px;
   height: 32px;
@@ -144,17 +144,17 @@
   cursor: pointer;
 }
 
-.community-agent-dock-header > button:hover {
+.member-agent-dock-header > button:hover {
   color: var(--icon-hover);
   background: var(--hover-overlay);
 }
 
-.community-agent-dock-header > button svg {
+.member-agent-dock-header > button svg {
   width: 17px;
   height: 17px;
 }
 
-.community-agent-dock-transcript {
+.member-agent-dock-transcript {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -162,7 +162,7 @@
   scrollbar-width: thin;
 }
 
-.community-agent-dock-empty {
+.member-agent-dock-empty {
   display: grid;
   min-height: 100%;
   place-content: center;
@@ -172,19 +172,19 @@
   text-align: center;
 }
 
-.community-agent-dock-empty svg {
+.member-agent-dock-empty svg {
   width: 22px;
   height: 22px;
 }
 
-.community-agent-dock-empty p {
+.member-agent-dock-empty p {
   max-width: 240px;
   margin: 0;
   font-size: 13px;
   line-height: 1.5;
 }
 
-.community-agent-dock-message {
+.member-agent-dock-message {
   width: fit-content;
   max-width: 88%;
   margin: 0 0 16px;
@@ -193,41 +193,41 @@
   overflow-wrap: anywhere;
 }
 
-.community-agent-dock-message > :first-child {
+.member-agent-dock-message > :first-child {
   margin-top: 0;
 }
 
-.community-agent-dock-message > :last-child {
+.member-agent-dock-message > :last-child {
   margin-bottom: 0;
 }
 
-.community-agent-dock-message.is-human {
+.member-agent-dock-message.is-human {
   margin-left: auto;
   padding: 9px 11px;
   background: var(--surface-card-alt);
   border-radius: 8px 8px 2px 8px;
 }
 
-.community-agent-dock-message.is-human p {
+.member-agent-dock-message.is-human p {
   margin: 0;
 }
 
-.community-agent-dock-message.is-pending {
+.member-agent-dock-message.is-pending {
   opacity: 0.72;
 }
 
-.community-agent-dock-message.is-community_agent,
-.community-agent-dock-message.is-streaming {
+.member-agent-dock-message.is-assistant,
+.member-agent-dock-message.is-streaming {
   max-width: 100%;
   color: var(--text-ink-primary);
 }
 
-.community-agent-dock-live-turn {
+.member-agent-dock-live-turn {
   margin-top: 4px;
 }
 
-.community-agent-dock-reasoning,
-.community-agent-dock-tool {
+.member-agent-dock-reasoning,
+.member-agent-dock-tool {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -237,34 +237,34 @@
   line-height: 1.45;
 }
 
-.community-agent-dock-reasoning svg,
-.community-agent-dock-tool svg {
+.member-agent-dock-reasoning svg,
+.member-agent-dock-tool svg {
   width: 13px;
   height: 13px;
   flex: 0 0 13px;
   margin-top: 1px;
 }
 
-.community-agent-dock-reasoning svg,
+.member-agent-dock-reasoning svg,
 .is-spinning {
-  animation: community-agent-dock-spin 900ms linear infinite;
+  animation: member-agent-dock-spin 900ms linear infinite;
 }
 
-.community-agent-dock-tool svg {
+.member-agent-dock-tool svg {
   color: var(--accent-gold);
 }
 
-.community-agent-dock-caret {
+.member-agent-dock-caret {
   display: inline-block;
   width: 2px;
   height: 1em;
   margin-left: 3px;
   vertical-align: -0.12em;
   background: var(--accent-gold);
-  animation: community-agent-dock-caret 900ms steps(1) infinite;
+  animation: member-agent-dock-caret 900ms steps(1) infinite;
 }
 
-.community-agent-dock-error {
+.member-agent-dock-error {
   margin: 12px 0 0;
   padding: 9px 10px;
   color: #e8b4c4;
@@ -274,7 +274,7 @@
   line-height: 1.45;
 }
 
-.community-agent-dock-composer {
+.member-agent-dock-composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 34px;
   align-items: end;
@@ -286,11 +286,11 @@
   border-radius: 8px;
 }
 
-.community-agent-dock-composer:focus-within {
+.member-agent-dock-composer:focus-within {
   border-color: var(--stroke-strong);
 }
 
-.community-agent-dock-composer textarea {
+.member-agent-dock-composer textarea {
   min-width: 0;
   max-height: 112px;
   padding: 7px 0;
@@ -304,11 +304,11 @@
   outline: 0;
 }
 
-.community-agent-dock-composer textarea::placeholder {
+.member-agent-dock-composer textarea::placeholder {
   color: var(--text-ink-faint);
 }
 
-.community-agent-dock-composer button {
+.member-agent-dock-composer button {
   display: grid;
   width: 34px;
   height: 34px;
@@ -320,45 +320,45 @@
   cursor: pointer;
 }
 
-.community-agent-dock-composer button:disabled {
+.member-agent-dock-composer button:disabled {
   color: var(--text-ink-faint);
   background: var(--surface-card-alt);
   cursor: default;
 }
 
-.community-agent-dock-composer button svg {
+.member-agent-dock-composer button svg {
   width: 16px;
   height: 16px;
 }
 
-@keyframes community-agent-dock-spin {
+@keyframes member-agent-dock-spin {
   to { transform: rotate(360deg); }
 }
 
-@keyframes community-agent-dock-caret {
+@keyframes member-agent-dock-caret {
   50% { opacity: 0; }
 }
 
 @media (max-width: 700px) {
-  .community-agent-dock {
+  .member-agent-dock {
     right: 12px;
     bottom: calc(12px + env(safe-area-inset-bottom));
   }
 
-  .community-agent-dock-panel {
+  .member-agent-dock-panel {
     width: calc(100vw - 24px);
     height: min(72svh, 620px);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .community-agent-dock-panel,
-  .community-agent-dock-launcher {
+  .member-agent-dock-panel,
+  .member-agent-dock-launcher {
     transition: none;
   }
 
-  .community-agent-dock-reasoning svg,
-  .community-agent-dock-caret,
+  .member-agent-dock-reasoning svg,
+  .member-agent-dock-caret,
   .is-spinning {
     animation: none;
   }

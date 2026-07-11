@@ -740,6 +740,7 @@ export function useWebTurnRunnerController<
               thread_id: threadId,
               stream: streamRuntimeTurn,
               surface: "web",
+              invocation_surface: params.invocationSurface ?? "workspace",
               model_id: params.preferredModelId,
               ...(params.runtimeEngine
                 ? { runtime_engine: params.runtimeEngine }

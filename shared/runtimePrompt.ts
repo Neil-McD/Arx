@@ -16,6 +16,10 @@ import {
   renderProjectContextForPrompt,
   type RuntimeProjectContextPrompt,
 } from "./projectContext.ts";
+import {
+  buildRuntimeInvocationSurfacePrompt,
+  type RuntimeInvocationSurface,
+} from "./runtimeInvocationSurface.ts";
 
 export type ThreadWorkingStatePrompt = {
   version?: number | null;
@@ -158,6 +162,7 @@ export type RuntimePlatformHarnessPromptParams = RuntimeCommunityPromptFields & 
   currentDateTimeIso?: string | null;
   currentDateLabel?: string | null;
   currentTimeZone?: string | null;
+  invocationSurface?: RuntimeInvocationSurface;
 };
 
 function normalizePromptBlock(value: string | null | undefined): string | null {
@@ -826,6 +831,17 @@ export function buildPlatformHarnessRuntimePromptBundle(
     }),
   ];
   const semiStablePromptBlocks = [
+    ...(params.invocationSurface === "member_agent_dock"
+      ? [
+          buildRuntimePromptSection({
+            id: "invocation_surface",
+            layer: "scoped",
+            owner: "runtime",
+            source: "shared/runtimeInvocationSurface.ts#buildRuntimeInvocationSurfacePrompt",
+            text: buildRuntimeInvocationSurfacePrompt(params.invocationSurface),
+          }),
+        ]
+      : []),
     buildRuntimePromptSection({
       id: "community_lens",
       layer: "scoped",

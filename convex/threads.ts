@@ -21,6 +21,8 @@ import {
   type RuntimeEngine,
 } from "../shared/runtimeEngine";
 import { normalizeWorkspacePreviewPort } from "../shared/workspacePreviewPort";
+import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
+import { buildMemberAgentThreadKey } from "../shared/runtimeInvocationSurface";
 
 type ThreadLike = {
   _id: any;
@@ -1314,6 +1316,83 @@ export const ensureCloudThread = mutation({
     const created = (await ctx.db.get(id)) as ThreadLike | null;
     if (!created) throw new Error("thread_create_failed");
     return created;
+  },
+});
+
+export const ensureMemberAgentCommunityThread = mutation({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const { community } = await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: ownerId,
+    });
+    const nowMs = args.nowMs ?? Date.now();
+    const communityId = String(community._id);
+    const threadKey = buildMemberAgentThreadKey(communityId);
+    const existing = await getCloudThreadByThreadKeyInternal({
+      ctx,
+      ownerId,
+      threadKey,
+    });
+    if (existing) {
+      if (String(existing.communityId ?? "").trim() !== communityId) {
+        throw new Error("member_agent_thread_context_mismatch");
+      }
+      const patch: Record<string, unknown> = { updatedAt: nowMs };
+      if (existing.modelId !== DEFAULT_ACTIVE_MODEL_ID) {
+        patch.modelId = DEFAULT_ACTIVE_MODEL_ID;
+      }
+      if (existing.runtimeEngine !== "polynet") {
+        patch.runtimeEngine = "polynet";
+      }
+      if (typeof existing.archivedAt === "number") {
+        patch.archivedAt = undefined;
+      }
+      await ctx.db.patch(existing._id, patch);
+      const refreshed = (await ctx.db.get(existing._id)) as ThreadLike | null;
+      const thread = refreshed ?? existing;
+      return {
+        thread_id: String(thread._id),
+        thread_key: threadKey,
+        community_id: communityId,
+        model_id: DEFAULT_ACTIVE_MODEL_ID,
+        runtime_engine: "polynet" as const,
+        context_version: normalizeContextVersion(thread.contextVersion),
+      };
+    }
+
+    const id = await ctx.db.insert("threads", {
+      ownerId,
+      threadKey,
+      title: `${String(community.name ?? "Community").trim() || "Community"} agent`,
+      titleSource: "auto",
+      communityId,
+      modelId: DEFAULT_ACTIVE_MODEL_ID,
+      runtimeEngine: "polynet",
+      contextVersion: 0,
+      lastSeq: 0,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return {
+      thread_id: String(id),
+      thread_key: threadKey,
+      community_id: communityId,
+      model_id: DEFAULT_ACTIVE_MODEL_ID,
+      runtime_engine: "polynet" as const,
+      context_version: 0,
+    };
   },
 });
 

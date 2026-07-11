@@ -2,6 +2,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
 import type { PaidUsageBillingMode } from "./paidUsageBilling";
 import type { RuntimeEngine } from "./runtimeEngine";
+import type { RuntimeInvocationSurface } from "./runtimeInvocationSurface";
 import type { PaidToolKind } from "./workspaceCredits";
 
 export type InferenceIssueModalState = {
@@ -112,6 +113,7 @@ export type RunAgentTurnParams = {
   systemPrompt?: string | null;
   inferenceSource?: "free" | "user_key" | "chatgpt";
   runtimeEngine?: RuntimeEngine;
+  invocationSurface?: RuntimeInvocationSurface;
   requestedFundingSource:
     | "demo_public"
     | "user_key"

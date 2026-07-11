@@ -553,9 +553,9 @@ const WebAppMainSurfaceHost = lazy(() =>
   })),
 );
 
-const WebCommunityAgentDock = lazy(() =>
-  import("./components/WebCommunityAgentDock").then((module) => ({
-    default: module.WebCommunityAgentDock,
+const WebMemberAgentDock = lazy(() =>
+  import("./components/WebMemberAgentDock").then((module) => ({
+    default: module.WebMemberAgentDock,
   })),
 );
 
@@ -12035,7 +12035,7 @@ export default function App() {
     <>
       <WebGlobalOverlayHost {...globalOverlayHostProps} />
       <Suspense fallback={null}>
-        <WebCommunityAgentDock
+        <WebMemberAgentDock
           isVisible={
             Boolean(session) &&
             activePage === "community" &&
@@ -12049,9 +12049,10 @@ export default function App() {
           }
           communityId={activeCommunity?.id ?? null}
           communityName={activeCommunity?.name ?? "Community"}
-          communityAvatarUrl={activeCommunity?.avatar_url ?? null}
           session={session}
           ensureSession={ensureUsableAuthSession}
+          fetchPublic={fetchWithPublic}
+          fetchAuth={fetchWithAuth}
         />
       </Suspense>
       <WebDirectMessagesHost
