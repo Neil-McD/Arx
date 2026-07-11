@@ -205,6 +205,11 @@ assert.match(
   /\.member-agent-dock-launcher\.is-working svg \{[\s\S]*animation: member-agent-dock-working-pulse 1\.35s ease-in-out infinite;/,
   "an active agent turn must use the faster working pulse",
 );
+assert.match(
+  styles,
+  /\.member-agent-dock-launcher:hover svg,[\s\S]*\.member-agent-dock-launcher:focus-visible svg \{[\s\S]*drop-shadow\(0 0 11px rgba\(167, 139, 250, 0\.62\)\);[\s\S]*animation: none;/,
+  "hover and keyboard focus must hold a stable bright state instead of freezing an arbitrary animation frame",
+);
 const launcherMotion = ["member-agent-dock-breathe", "member-agent-dock-working-pulse"]
   .map((name) => styles.match(new RegExp(`@keyframes ${name} \\{[\\s\\S]*?\\n\\}`))?.[0] ?? "")
   .join("\n");
