@@ -42,6 +42,10 @@ import {
   restrictToolNamesForInvocationSurface,
   type RuntimeInvocationSurface,
 } from "../shared/runtimeInvocationSurface";
+import {
+  buildMemberAgentConversationContext,
+  type MemberAgentStoredMessage,
+} from "../shared/memberAgentConversationContext";
 
 export type RuntimeCapabilityFamily = CapabilityFamily;
 
@@ -340,9 +344,56 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     };
   }
 
+  const invocationSurface = resolveRuntimeInvocationSurfaceForThread({
+    requestedSurface: input.invocation_surface,
+    threadKey,
+  });
+
   setStage("messages");
-  const runtimeMessages = asRuntimeMessages(input);
-  const conversationMessages = stripSystemMessages(runtimeMessages);
+  let conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
+  if (invocationSurface === "member_agent_dock") {
+    const expectedUserMessageKey = String(input.user_message_key ?? "").trim();
+    if (!expectedUserMessageKey) {
+      return {
+        ok: false,
+        response: fail(400, {
+          ok: false,
+          code: "member_agent_user_message_key_required",
+          error: "member_agent_user_message_key_required",
+          message: "The member agent turn requires a persisted user message.",
+        }),
+      };
+    }
+    try {
+      const storedRows = (await ctx.runQuery(
+        internal.threads.listMemberAgentRuntimeMessagesInternal as any,
+        {
+          ownerId: actor.dbUserId,
+          threadId: ownedThread._id,
+          expectedUserMessageKey,
+        },
+      )) as MemberAgentStoredMessage[];
+      const context = buildMemberAgentConversationContext({
+        rows: storedRows,
+        expectedUserMessageKey,
+      });
+      if (!context.ok) throw new Error(context.code);
+      conversationMessages = context.messages;
+    } catch {
+      return {
+        ok: false,
+        response: fail(409, {
+          ok: false,
+          code: "member_agent_context_unavailable",
+          error: "member_agent_context_unavailable",
+          message: "The member agent conversation changed before this turn could start.",
+        }),
+      };
+    }
+  } else {
+    const runtimeMessages = asRuntimeMessages(input);
+    conversationMessages = stripSystemMessages(runtimeMessages);
+  }
   if (
     conversationMessages.length === 0 ||
     conversationMessages[conversationMessages.length - 1]?.role !== "user"
@@ -383,10 +434,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   const requestedAgenticTools = resolveRequestedAgenticTools(
     input.requested_agentic_tools,
   );
-  const invocationSurface = resolveRuntimeInvocationSurfaceForThread({
-    requestedSurface: input.invocation_surface,
-    threadKey,
-  });
   const requestedFundingSource = parseRequestedFundingSource(
     input.requested_funding_source,
     publicRef ? "demo_public" : "platform",

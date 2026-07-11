@@ -376,6 +376,35 @@ export async function listConvexCloudThreadMessagesPageByThreadKey(params: {
     .filter((row): row is CloudMessageTransportRow => Boolean(row));
 }
 
+export async function listConvexCloudNewestThreadMessagesByThreadKey(params: {
+  session: AuthSessionLike;
+  threadKey: string;
+  limit?: number;
+}): Promise<CloudMessageTransportRow[] | null> {
+  const bootstrapped = await bootstrapConvexOwnerId(params.session);
+  if (!bootstrapped) return null;
+  const { client, authSubject } = bootstrapped;
+  const threadKey = String(params.threadKey ?? "").trim();
+  if (!threadKey) return [];
+
+  const thread = (await client.query("threads:getCloudThreadByThreadKey" as any, {
+    authSubject,
+    threadKey,
+  })) as ConvexThreadRow | null;
+  const internalThreadId = String(thread?._id ?? "").trim();
+  if (!internalThreadId) return [];
+
+  const limit = Math.max(1, Math.min(1000, Math.floor(params.limit ?? 200)));
+  const rows = (await client.query("threads:listNewestCloudThreadMessages" as any, {
+    authSubject,
+    threadId: internalThreadId,
+    limit,
+  })) as ConvexMessageRow[];
+  return rows
+    .map((row) => mapConvexMessageRow(row, threadKey))
+    .filter((row): row is CloudMessageTransportRow => Boolean(row));
+}
+
 export async function listConvexCloudThreadMessagesByThreadKey(params: {
   session: AuthSessionLike;
   threadKey: string;

@@ -24,6 +24,8 @@ personal agent runtime under the active community lens.
    - belongs to the signed-in member, not the community
    - uses one deterministic private thread per member and community
    - requester-funded and server-bound to an authorized community lens
+   - the server constructs bounded conversation history from persisted messages through the exact user message that started the turn; browser-supplied history is never authoritative
+   - transcript loads commit only while their originating community, signed-in member generation, and thread remain active
    - receives only product-doc and community read tools in the first surface contract
    - cannot invoke workspace, Daytona, web, MCP, autonomous cognition, or community publishing tools
 

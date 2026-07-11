@@ -7,6 +7,7 @@ import {
   restrictCapabilityFamiliesForInvocationSurface,
   restrictToolNamesForInvocationSurface,
 } from "../shared/runtimeInvocationSurface.ts";
+import { buildMemberAgentConversationContext } from "../shared/memberAgentConversationContext.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -18,6 +19,7 @@ const resolution = read("convex/runtimeTurnResolution.ts");
 const runtimeLoop = read("convex/runtimeAgentLoop.ts");
 const runner = read("shared/useWebTurnRunnerController.ts");
 const gateway = read("shared/cloudMemberAgentGateway.ts");
+const threadReadGateway = read("shared/cloudThreadsRead.ts");
 const component = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const app = read("apps/web/src/App.tsx");
 const cognitionContract = read("docs/community-agent-cognition-contract-v1.md");
@@ -83,6 +85,16 @@ assert.match(
 );
 assert.match(
   threads,
+  /listNewestCloudThreadMessages = query[\s\S]*by_thread_seq[\s\S]*order\("desc"\)[\s\S]*take\(safeLimit\)/,
+  "the dock transcript must read from the newest end of the message index",
+);
+assert.match(
+  threads,
+  /listMemberAgentRuntimeMessagesInternal = internalQuery[\s\S]*expectedUserMessageKey[\s\S]*lte\("seq", expected\.seq\)[\s\S]*order\("desc"\)/,
+  "runtime history must stop at the persisted user message that started the turn",
+);
+assert.match(
+  threads,
   /buildMemberAgentThreadKey\(communityId\)[\s\S]*member_agent_thread_context_mismatch/,
   "the server must derive the channel key and fail closed on context collisions",
 );
@@ -95,6 +107,11 @@ assert.match(
 assert.match(
   resolution,
   /invocation_surface\?: RuntimeInvocationSurface[\s\S]*resolveRuntimeInvocationSurfaceForThread[\s\S]*member_agent_community_required/,
+);
+assert.match(
+  resolution,
+  /invocationSurface === "member_agent_dock"[\s\S]*listMemberAgentRuntimeMessagesInternal[\s\S]*buildMemberAgentConversationContext[\s\S]*else \{[\s\S]*asRuntimeMessages\(input\)/,
+  "member-agent history must come from stored rows while other runtime surfaces retain their existing input contract",
 );
 assert.match(
   resolution,
@@ -126,11 +143,26 @@ assert.match(
   "the browser must use the dedicated server-derived channel mutation",
 );
 assert.match(
+  threadReadGateway,
+  /listConvexCloudNewestThreadMessagesByThreadKey[\s\S]*threads:listNewestCloudThreadMessages/,
+);
+assert.match(
   component,
   /ensureCloudMemberAgentCommunityThread[\s\S]*useWebTurnRunnerController[\s\S]*runAgentTurn/,
   "the dock must use the retained personal runtime and streaming controller",
 );
 assert.match(component, /invocationSurface: "member_agent_dock"/);
+assert.match(component, /communityScopeRef[\s\S]*isCurrentScope/);
+assert.match(
+  component,
+  /listConvexCloudNewestThreadMessagesByThreadKey[\s\S]*activeThreadKeyRef\.current !== targetThreadKey/,
+  "late transcript reads must not commit outside their active community and thread",
+);
+assert.match(
+  component,
+  /messages: \[optimisticMessage\]/,
+  "the browser must send only the current user message, not authoritative history",
+);
 assert.match(component, /<strong>Your agent<\/strong>/);
 assert.doesNotMatch(
   component,
@@ -143,7 +175,59 @@ assert.match(
 );
 assert.match(
   cognitionContract,
-  /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
+  /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*server constructs bounded conversation history[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
+);
+
+const canonicalContext = buildMemberAgentConversationContext({
+  expectedUserMessageKey: "user-3",
+  maxMessages: 3,
+  rows: [
+    { messageKey: "assistant-4", seq: 4, role: "assistant", contentJson: { text: "future" } },
+    { messageKey: "user-3", seq: 3, role: "user", contentJson: { text: "current" } },
+    { messageKey: "assistant-2", seq: 2, role: "assistant", contentJson: { text: "prior answer" } },
+    { messageKey: "user-1", seq: 1, role: "user", contentJson: { text: "prior question" } },
+  ],
+});
+assert.deepEqual(canonicalContext, {
+  ok: true,
+  expectedUserSeq: 3,
+  characterCount: 33,
+  messages: [
+    { role: "user", content: "prior question" },
+    { role: "assistant", content: "prior answer" },
+    { role: "user", content: "current" },
+  ],
+});
+
+const boundedContext = buildMemberAgentConversationContext({
+  expectedUserMessageKey: "user-2",
+  maxCharacters: 8,
+  rows: [
+    { messageKey: "user-2", seq: 2, role: "user", contentJson: { text: "123456789" } },
+    { messageKey: "assistant-1", seq: 1, role: "assistant", contentJson: { text: "older" } },
+  ],
+});
+assert.deepEqual(boundedContext, {
+  ok: true,
+  expectedUserSeq: 2,
+  characterCount: 8,
+  messages: [{ role: "user", content: "12345678" }],
+});
+assert.deepEqual(
+  buildMemberAgentConversationContext({
+    expectedUserMessageKey: "missing",
+    rows: [],
+  }),
+  { ok: false, code: "expected_user_message_missing" },
+);
+assert.deepEqual(
+  buildMemberAgentConversationContext({
+    expectedUserMessageKey: "assistant-1",
+    rows: [
+      { messageKey: "assistant-1", seq: 1, role: "assistant", contentJson: { text: "no" } },
+    ],
+  }),
+  { ok: false, code: "expected_message_not_user" },
 );
 
 console.log("member_agent_dock_contract_proof: ok");
