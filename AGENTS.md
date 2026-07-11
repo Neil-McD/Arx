@@ -19,7 +19,8 @@ This file is the execution contract for agents working in this repository.
 
 ### MVP North Star
 - A founder can create a community, share a funnel link, and onboard members through a gated flow.
-- Members can discover communities, join, chat/post/use voice, access resources, and use the community-scoped AI agent.
+- Members can discover communities, join, chat/post/use voice, access resources, and use their personal agent under an authorized community lens.
+- Communities retain a separate community-owned agent for mentions and autonomous cognition.
 - External agent harnesses can access authorized community context through the official Polynet MCP.
 
 ---
@@ -82,8 +83,10 @@ If a cleanup touches any of the above, require explicit human confirmation.
 - `Published` does not mean ungated access; entitlement and membership checks still apply.
 - Community funnel is a single canonical entry surface for join/gate.
 
-### Community Agent + External Harness Context
-- Native community-agent interactions are bound to one explicit community context.
+### Member Agent, Community Agent + External Harness Context
+- The bottom-right dock is the member's personal agent under one explicit community context.
+- Direct community-agent mentions and autonomous cognition use the separate community-owned agent identity.
+- Native member-agent and community-agent interactions are bound to one explicit community context.
 - External MCP requests select community context explicitly and server-validate it.
 - Context changes affect subsequent turns only and never retroactively mutate stored history.
 - Community context must fail closed if membership or entitlement is missing.

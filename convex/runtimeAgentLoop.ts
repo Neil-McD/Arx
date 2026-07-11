@@ -90,6 +90,10 @@ import {
   type ThreadWorkingStatePrompt,
 } from "../shared/runtimePrompt";
 import {
+  restrictToolNamesForInvocationSurface,
+  type RuntimeInvocationSurface,
+} from "../shared/runtimeInvocationSurface";
+import {
   buildRuntimeTurnEnvelope,
   type RuntimeTurnEnvelopeV1,
 } from "../shared/runtimeTurnEnvelope";
@@ -1433,6 +1437,7 @@ async function executeRetrievalAgentLoop(
     harnessName: "chat_tools";
     loopBudget: RuntimeKernelBudget;
     allowedToolNames: readonly RetrievalToolName[];
+    invocationSurface?: RuntimeInvocationSurface;
     skillLifecycleTrigger?: RuntimeSkillLifecycleTrigger | null;
     privateLifecycleContextMd?: string | null;
     lifecycleAuditLabel?: string | null;
@@ -1473,21 +1478,23 @@ async function executeRetrievalAgentLoop(
     ),
   );
   const runtimeMountedUserPlatformAppTools: RuntimeMountedMcpTool[] =
-    mountedUserPlatformAppTools.map((tool) => ({
-      scope: "user",
-      mount_id: tool.user_platform_app_mount_id,
-      runtime_tool_name: `me__${tool.namespaced_tool_name}`,
-      developer_app_id: tool.developer_app_id,
-      catalog_app_id: tool.catalog_app_id,
-      app_name: tool.app_name,
-      endpoint_url: tool.endpoint_url,
-      auth_type: tool.auth_type,
-      tool_name: tool.tool_name,
-      namespaced_tool_name: tool.namespaced_tool_name,
-      description: tool.description,
-      input_schema: tool.input_schema,
-      risk_level: tool.risk_level,
-    }));
+    params.invocationSurface === "member_agent_dock"
+      ? []
+      : mountedUserPlatformAppTools.map((tool) => ({
+          scope: "user",
+          mount_id: tool.user_platform_app_mount_id,
+          runtime_tool_name: `me__${tool.namespaced_tool_name}`,
+          developer_app_id: tool.developer_app_id,
+          catalog_app_id: tool.catalog_app_id,
+          app_name: tool.app_name,
+          endpoint_url: tool.endpoint_url,
+          auth_type: tool.auth_type,
+          tool_name: tool.tool_name,
+          namespaced_tool_name: tool.namespaced_tool_name,
+          description: tool.description,
+          input_schema: tool.input_schema,
+          risk_level: tool.risk_level,
+        }));
   const skillResolution = normalizeRuntimeSkillResolution(
     await params.ctx.runQuery(
       internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal,
@@ -1509,9 +1516,12 @@ async function executeRetrievalAgentLoop(
   });
   const platformSkills = resolvedHarness.platformSkillInventory;
   const selectedPlatformSkills = resolvedHarness.selectedPlatformSkills;
-  const effectiveAllowedToolNames = buildEffectiveAllowedToolNames({
-    baseAllowedToolNames: params.allowedToolNames,
-    selectedPlatformSkills,
+  const effectiveAllowedToolNames = restrictToolNamesForInvocationSurface({
+    invocationSurface: params.invocationSurface ?? "workspace",
+    toolNames: buildEffectiveAllowedToolNames({
+      baseAllowedToolNames: params.allowedToolNames,
+      selectedPlatformSkills,
+    }),
   });
   const installedUserPlatformSkills = resolvedHarness.personalSkillInventory;
   const selectedUserPlatformSkills = resolvedHarness.selectedPersonalSkills;
@@ -1625,6 +1635,7 @@ async function executeRetrievalAgentLoop(
     currentDateLabel: runtimeDateLabel,
     currentTimeZone: runtimeTimeZone,
     accountPlan: params.accountPlan,
+    invocationSurface: params.invocationSurface ?? "workspace",
   });
   const promptSuffix = executionSession.buildPromptSuffix();
   const privateLifecyclePrompt = buildPrivateLifecyclePrompt(
@@ -2798,6 +2809,7 @@ async function executeChatToolsAgentLoop(
     maxTokens: number;
     runId: string;
     allowedToolNames: readonly RetrievalToolName[];
+    invocationSurface?: RuntimeInvocationSurface;
     skillLifecycleTrigger?: RuntimeSkillLifecycleTrigger | null;
     privateLifecycleContextMd?: string | null;
     lifecycleAuditLabel?: string | null;

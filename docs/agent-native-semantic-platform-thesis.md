@@ -202,8 +202,10 @@ program.
   notification links do not generate Workspace URLs.
 - The protected Workspace harness remains isolated as compatibility substrate;
   it is not a product destination and has not been destructively deleted.
-- The community agent dock and mention path use the same requester-funded,
-  read-only Concierge serve worker.
+- The bottom-right dock uses the member's personal Polynet runtime under the
+  active community lens. It is not the community agent.
+- Direct community-agent mentions use the requester-funded, read-only Concierge
+  serve worker.
 - Autonomous community cognition remains a separate owner-funded authority mode
   of the same canonical community-agent identity.
 - External MCP remains permissioned by community. Legacy `workspace` names in

@@ -858,6 +858,7 @@ export async function handleRuntimeTurnRequest(args: {
       resolvedRuntimeCapabilityFamilies,
       resolvedRuntimeHarnessProfile,
       runtimeExecutionMode: resolvedRuntimeExecutionMode,
+      invocationSurface,
     } = resolved.value;
     let onboardingLifecycleRun: {
       privateLifecycleContextMd: string;
@@ -1031,6 +1032,7 @@ export async function handleRuntimeTurnRequest(args: {
       executionMode: runtimeExecutionMode,
       capabilityFamilies: resolvedRuntimeCapabilityFamilies,
       harnessProfile: resolvedRuntimeHarnessProfile,
+      invocationSurface,
     };
     const runStartArgs: Record<string, unknown> = {
       ownerId: actor.dbUserId,
@@ -1907,6 +1909,7 @@ export async function handleRuntimeTurnRequest(args: {
         account_plan: runtimeAccountPlan,
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
+        invocation_surface: invocationSurface,
       },
     });
     await appendRunEvent({
@@ -1938,6 +1941,7 @@ export async function handleRuntimeTurnRequest(args: {
         allowed_tool_names: polynetHarnessToolPolicy.fixedRuntimeToolNames,
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
+        invocation_surface: invocationSurface,
       },
     });
     if (runtimeExecutionMode === "agentic") {
@@ -3081,6 +3085,7 @@ export async function handleRuntimeTurnRequest(args: {
               agentSoul: runtimeAgentProfile.agentSoul,
               threadWorkingState: ownedThread.workingState ?? null,
               allowedToolNames: polynetAllowedToolNamesForRun,
+              invocationSurface,
               skillLifecycleTrigger: onboardingLifecycleRun
                 ? "onboarding_completed"
                 : null,
@@ -3390,6 +3395,7 @@ export async function handleRuntimeTurnRequest(args: {
           agentSoul: runtimeAgentProfile.agentSoul,
           threadWorkingState: ownedThread.workingState ?? null,
           allowedToolNames: polynetAllowedToolNamesForRun,
+          invocationSurface,
           skillLifecycleTrigger: onboardingLifecycleRun
             ? "onboarding_completed"
             : null,
