@@ -35,6 +35,7 @@ import {
 } from "./communitySourceUrlPolicy";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { intakeCommunityAgentMention } from "./communityAgentConciergeCore";
+import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import {
   EVERYBODY_MENTION_ROLE_KEY,
   cancelEverybodyMentionBroadcastsForInteractionSource,
@@ -190,6 +191,7 @@ const MAX_INTERACTION_MENTIONS_PER_BUNDLE = 24;
 const MAX_VIEWER_REACTIONS_PER_TARGET = 24;
 const MAX_INTERACTION_MENTIONS_PER_WRITE = 24;
 const MAX_INTERACTION_MENTION_LIFECYCLE_ROWS = MAX_INTERACTION_MENTIONS_PER_WRITE + 8;
+const COMMUNITY_AGENT_DOCK_REPLY_LIMIT = 100;
 
 const rootKindValidator = v.union(
   v.literal("discussion"),
@@ -236,6 +238,44 @@ function normalizeBeforeNumber(raw: unknown): number | null {
 
 function composerIdempotencyKey(idempotencyKey: string, kind: "root" | "reply"): string {
   return `community_composer:${kind}:${idempotencyKey}`.slice(0, MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS);
+}
+
+function communityAgentDockRootIdempotencyKey(userId: any): string {
+  return `community_agent_dock:root:${normalizeIdValue(userId)}`.slice(
+    0,
+    MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS,
+  );
+}
+
+function communityAgentDockReplyIdempotencyKey(raw: unknown): string {
+  return `community_agent_dock:reply:${normalizeIdempotencyKey(raw)}`.slice(
+    0,
+    MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS,
+  );
+}
+
+function assertOwnedCommunityAgentDockRoot(root: InteractionRootRow, userId: any): void {
+  if (
+    root.actorType !== "system" ||
+    normalizeIdValue(root.actorUserId) !== normalizeIdValue(userId) ||
+    root.kind !== "agent_signal" ||
+    root.visibilityScope !== "private" ||
+    root.status !== "live"
+  ) {
+    throw new Error("community_agent_dock_root_invalid");
+  }
+}
+
+async function findCanonicalAgentMentionForReply(ctx: any, replyId: any): Promise<MentionRow | null> {
+  const mentions = (await ctx.db
+    .query("communityInteractionMentions" as any)
+    .withIndex("by_reply", (q: any) => q.eq("replyId", replyId))
+    .take(MAX_INTERACTION_MENTIONS_PER_BUNDLE)) as MentionRow[];
+  return mentions.find(
+    (mention) =>
+      mention.mentionKind === "community_agent" &&
+      mention.mentionedAgentKey === CANONICAL_COMMUNITY_AGENT_KEY,
+  ) ?? null;
 }
 
 async function resolveOptionalReplyTargetForCanonicalComposer(args: {
@@ -1684,6 +1724,10 @@ export const createCommunityInteractionComposerMessage = mutation({
     if (root.status !== "live" || root.lockedAt) {
       throw new Error("interaction_root_closed");
     }
+    if (root.idempotencyKey.startsWith("community_agent_dock:root:")) {
+      assertOwnedCommunityAgentDockRoot(root, userId);
+      throw new Error("community_agent_dock_dedicated_endpoint_required");
+    }
 
     const idempotencyKey = composerIdempotencyKey(normalizeIdempotencyKey(args.idempotencyKey), "reply");
     let reply = await getExistingReplyByIdempotencyKey(ctx, root.communityId, idempotencyKey);
@@ -1761,6 +1805,236 @@ export const createCommunityInteractionComposerMessage = mutation({
         deduped,
         idempotency_key: idempotencyKey,
       },
+    };
+  },
+});
+
+export const sendCommunityAgentDockMessage = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    idempotencyKey: v.string(),
+    text: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    await requireProfileSetupCompleteForUser(ctx, userId);
+
+    const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
+    if (!text) throw new Error("interaction_content_required");
+    const nowMs = Date.now();
+    const rootIdempotencyKey = communityAgentDockRootIdempotencyKey(userId);
+    let root = await getExistingRootByIdempotencyKey(ctx, args.communityId, rootIdempotencyKey);
+    if (!root) {
+      const rootId = await ctx.db.insert("communityInteractionRoots" as any, {
+        communityId: args.communityId,
+        actorType: "system",
+        actorUserId: userId,
+        actorAgentKey: CANONICAL_COMMUNITY_AGENT_KEY,
+        kind: "agent_signal",
+        status: "live",
+        visibilityScope: "private",
+        contentSummary: "Private community agent conversation",
+        replyCount: 0,
+        reactionSummary: [],
+        idempotencyKey: rootIdempotencyKey,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      root = (await ctx.db.get(rootId)) as InteractionRootRow | null;
+      if (!root) throw new Error("community_agent_dock_root_create_failed");
+    }
+    assertOwnedCommunityAgentDockRoot(root, userId);
+
+    const replyIdempotencyKey = communityAgentDockReplyIdempotencyKey(args.idempotencyKey);
+    let reply = await getExistingReplyByIdempotencyKey(ctx, args.communityId, replyIdempotencyKey);
+    let deduped = true;
+    if (reply) {
+      if (
+        normalizeIdValue(reply.rootId) !== normalizeIdValue(root._id) ||
+        normalizeIdValue(reply.actorUserId) !== normalizeIdValue(userId) ||
+        reply.actorType !== "human" ||
+        reply.visibilityScope !== "private"
+      ) {
+        throw new Error("interaction_idempotency_key_conflict");
+      }
+    } else {
+      const activeRequest = (await ctx.db
+        .query("communityAgentServeRequests" as any)
+        .withIndex("by_sourceRoot_createdAt", (q: any) => q.eq("sourceRootId", root._id))
+        .order("desc")
+        .first()) as any;
+      if (
+        activeRequest &&
+        normalizeIdValue(activeRequest.requesterUserId) === normalizeIdValue(userId) &&
+        (activeRequest.status === "queued" || activeRequest.status === "running")
+      ) {
+        throw new Error("community_agent_dock_turn_in_progress");
+      }
+      const seq = await nextReplySeq(ctx, root._id);
+      const replyId = await ctx.db.insert("communityInteractionReplies" as any, {
+        communityId: args.communityId,
+        rootId: root._id,
+        seq,
+        actorType: "human",
+        actorUserId: userId,
+        status: "live",
+        visibilityScope: "private",
+        contentSummary: text.slice(0, MAX_INTERACTION_SUMMARY_CHARS),
+        reactionSummary: [],
+        idempotencyKey: replyIdempotencyKey,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      const inserted = await insertContentBlocksForTarget({
+        ctx,
+        communityId: args.communityId,
+        replyId,
+        visibilityScope: "private",
+        blocks: [{ blockType: "markdown_text", text }, ...extractLinkBlocksFromText(text)],
+        nowMs,
+      });
+      await scheduleEmbedEnrichment(ctx, inserted.embedIds);
+      await ctx.db.patch(root._id, {
+        replyCount: Math.max(0, Math.floor(root.replyCount ?? 0)) + 1,
+        lastReplyAt: nowMs,
+        updatedAt: nowMs,
+      });
+      reply = (await ctx.db.get(replyId)) as InteractionReplyRow | null;
+      if (!reply) throw new Error("community_agent_dock_reply_create_failed");
+      deduped = false;
+    }
+
+    let mention = await findCanonicalAgentMentionForReply(ctx, reply._id);
+    if (!mention) {
+      const mentionId = await ctx.db.insert("communityInteractionMentions" as any, {
+        communityId: args.communityId,
+        replyId: reply._id,
+        mentionKind: "community_agent",
+        mentionedAgentKey: CANONICAL_COMMUNITY_AGENT_KEY,
+        notifyState: "pending",
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      mention = (await ctx.db.get(mentionId)) as MentionRow | null;
+      if (!mention) throw new Error("community_agent_dock_mention_create_failed");
+    }
+    const intake = await intakeCommunityAgentMention({
+      ctx,
+      mention,
+      nowMs,
+    });
+
+    return {
+      root_id: normalizeIdValue(root._id),
+      reply_id: normalizeIdValue(reply._id),
+      serve_request_id: intake.request_id,
+      serve_status: intake.status,
+      intake_reason: intake.intake_reason,
+      deduped,
+    };
+  },
+});
+
+export const getMyCommunityAgentDock = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+
+    const root = await getExistingRootByIdempotencyKey(
+      ctx,
+      args.communityId,
+      communityAgentDockRootIdempotencyKey(userId),
+    );
+    if (!root) {
+      return { root_id: null, messages: [], request: null, events: [] };
+    }
+    assertOwnedCommunityAgentDockRoot(root, userId);
+
+    const replies = ((await ctx.db
+      .query("communityInteractionReplies" as any)
+      .withIndex("by_root_seq", (q: any) => q.eq("rootId", root._id))
+      .order("desc")
+      .take(COMMUNITY_AGENT_DOCK_REPLY_LIMIT)) as InteractionReplyRow[]).reverse().filter((reply) => {
+        if (reply.status !== "live" || reply.visibilityScope !== "private") return false;
+        if (reply.actorType === "human") {
+          return normalizeIdValue(reply.actorUserId) === normalizeIdValue(userId);
+        }
+        return (
+          reply.actorType === "community_agent" &&
+          reply.actorAgentKey === CANONICAL_COMMUNITY_AGENT_KEY
+        );
+      });
+    const userIdCache = new Map<string, string | null>();
+    const messages = await Promise.all(
+      replies.map((reply) => mapReplyBundle(ctx, reply, false, userIdCache, [])),
+    );
+
+    const requestRows = (await ctx.db
+      .query("communityAgentServeRequests" as any)
+      .withIndex("by_sourceRoot_createdAt", (q: any) => q.eq("sourceRootId", root._id))
+      .order("desc")
+      .take(1)) as any[];
+    const request = requestRows.find(
+      (candidate) =>
+        normalizeIdValue(candidate.requesterUserId) === normalizeIdValue(userId) &&
+        normalizeIdValue(candidate.communityId) === normalizeIdValue(args.communityId),
+    ) ?? null;
+    const serveRunId = request ? `community-agent-serve:${normalizeIdValue(request._id)}` : null;
+    const eventRows = serveRunId
+      ? await ctx.db
+          .query("communityAgentRunEvents" as any)
+          .withIndex("by_run_seq", (q: any) => q.eq("runId", serveRunId))
+          .order("asc")
+          .take(240)
+      : [];
+    const events = eventRows
+      .filter((event: any) => normalizeIdValue(event.communityId) === normalizeIdValue(args.communityId))
+      .filter((event: any) =>
+        ["reasoning", "assistant", "tool_call", "tool_result", "final", "error"].includes(event.kind),
+      )
+      .map((event: any) => ({
+        id: normalizeIdValue(event._id),
+        seq: event.seq,
+        kind: event.kind,
+        tool_name: event.toolName ?? null,
+        status: event.status ?? null,
+        error_code: event.errorCode ?? null,
+        content: event.kind === "tool_result" ? "" : event.content,
+        created_at: toIsoString(event.createdAt),
+      }));
+
+    return {
+      root_id: normalizeIdValue(root._id),
+      messages,
+      request: request
+        ? {
+            id: normalizeIdValue(request._id),
+            status: request.status,
+            intake_reason: request.intakeReason,
+            response_reply_id: request.responseReplyId ? normalizeIdValue(request.responseReplyId) : null,
+            error_code: request.errorCode ?? null,
+            error_message: request.errorMessage ?? request.skipReason ?? null,
+            created_at: toIsoString(request.createdAt),
+            updated_at: toIsoString(request.updatedAt),
+          }
+        : null,
+      events,
     };
   },
 });

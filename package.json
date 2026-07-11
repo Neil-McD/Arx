@@ -217,6 +217,7 @@
     "check:community-agent-concierge-intake-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_concierge_intake_contract_proof.ts",
     "check:community-agent-serve-issue-notice-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_serve_issue_notice_contract_proof.ts",
     "check:community-agent-serve-worker-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_serve_worker_contract_proof.ts",
+    "check:community-agent-dock-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_dock_contract_proof.ts",
     "check:community-agent-heartbeat-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_heartbeat_contract_proof.ts",
     "check:community-agent-runtime-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_runtime_contract_proof.ts",
     "check:premium-member-badge-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/premium_member_badge_contract_proof.ts",

@@ -117,6 +117,7 @@ export async function runChatgptNativeToolCompletion(params: {
   tools: ChatgptFunctionTool[];
   parallelToolCalls?: boolean;
   toolChoice?: NativeToolChoice;
+  onDelta?: (delta: string) => Promise<void> | void;
   onReasoningSummaryTextDelta?: (params: { delta: string; summaryIndex: number }) => Promise<void> | void;
   onReasoningSummaryPartAdded?: (params: { summaryIndex: number }) => Promise<void> | void;
   requestMetadata?: ChatgptCodexRequestMetadata | null;

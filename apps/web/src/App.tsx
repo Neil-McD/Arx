@@ -553,6 +553,12 @@ const WebAppMainSurfaceHost = lazy(() =>
   })),
 );
 
+const WebCommunityAgentDock = lazy(() =>
+  import("./components/WebCommunityAgentDock").then((module) => ({
+    default: module.WebCommunityAgentDock,
+  })),
+);
+
 const WebStandalonePublicRouteShell = lazy(() =>
   import("./components/WebStandalonePublicRouteShell").then((module) => ({
     default: module.WebStandalonePublicRouteShell,
@@ -12072,6 +12078,23 @@ export default function App() {
   const globalOverlays = (
     <>
       <WebGlobalOverlayHost {...globalOverlayHostProps} />
+      <Suspense fallback={null}>
+        <WebCommunityAgentDock
+          isVisible={
+            Boolean(session) &&
+            activePage === "community" &&
+            publicRoute.kind !== "community_funnel" &&
+            publicRoute.kind !== "community_funnel_preview" &&
+            hasResolvedCommunityChat &&
+            !["settings", "ai_agent", "funnel", "analytics"].includes(communityTab)
+          }
+          communityId={activeCommunity?.id ?? null}
+          communityName={activeCommunity?.name ?? "Community"}
+          communityAvatarUrl={activeCommunity?.avatar_url ?? null}
+          session={session}
+          ensureSession={ensureUsableAuthSession}
+        />
+      </Suspense>
       <WebDirectMessagesHost
         isOpen={isDirectMessagesOpen}
         openRequest={directMessageOpenRequest}

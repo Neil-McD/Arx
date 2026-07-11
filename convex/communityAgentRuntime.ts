@@ -799,7 +799,7 @@ export const recordCommunityAgentRunEventsInternal = internalMutation({
       const seq = Math.max(0, Math.floor(event.seq));
       // Hard cap so a pathological run cannot flood the log.
       if (seq >= RUN_EVENT_MAX_SEQ) continue;
-      await ctx.db.insert("communityAgentRunEvents" as any, {
+      const row = {
         communityId: args.communityId,
         runId: boundedText(args.runId, 128),
         seq,
@@ -809,7 +809,16 @@ export const recordCommunityAgentRunEventsInternal = internalMutation({
         errorCode: boundedText(event.errorCode, 120) || undefined,
         content: boundedText(event.content, RUN_EVENT_CONTENT_MAX_CHARS),
         createdAt: nowMs,
-      });
+      };
+      const existing = await ctx.db
+        .query("communityAgentRunEvents" as any)
+        .withIndex("by_run_seq", (q: any) => q.eq("runId", row.runId).eq("seq", seq))
+        .first();
+      if (existing) {
+        await ctx.db.patch(existing._id, row);
+      } else {
+        await ctx.db.insert("communityAgentRunEvents" as any, row);
+      }
     }
     return { ok: true, recorded: args.events.length };
   },
