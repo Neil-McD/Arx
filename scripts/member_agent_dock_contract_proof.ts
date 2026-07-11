@@ -187,13 +187,18 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher \{[\s\S]*width: 64px;[\s\S]*height: 64px;[\s\S]*overflow: visible;[\s\S]*color: var\(--member-agent-accent\);[\s\S]*background: transparent;[\s\S]*border: 0;[\s\S]*box-shadow: none;/,
-  "the agent launcher must keep a stable hit target without painting a visible container",
+  /\.member-agent-dock-launcher \{[\s\S]*?width: 60px;[\s\S]*?height: 60px;[\s\S]*?color: #f7f7f8;[\s\S]*?background: rgba\(5, 5, 6, 0\.96\);[\s\S]*?border: 1px solid rgba\(255, 255, 255, 0\.22\);[\s\S]*?border-radius: 16px;/,
+  "the agent launcher must render as a compact, high-contrast floating control",
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher svg \{[\s\S]*width: 44px;[\s\S]*height: 44px;[\s\S]*drop-shadow\(0 0 7px rgba\(167, 139, 250, 0\.42\)\);[\s\S]*animation: member-agent-dock-breathe 5\.6s ease-in-out infinite;/,
-  "the floating purple agent mark must remain visually prominent without an orb or button surface",
+  /box-shadow:\s*0 10px 28px rgba\(0, 0, 0, 0\.58\),\s*0 2px 8px rgba\(0, 0, 0, 0\.46\),\s*inset 0 1px 0 rgba\(255, 255, 255, 0\.08\);/,
+  "the launcher must remain visually separated from busy community content",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock-launcher svg \{[\s\S]*width: 28px;[\s\S]*height: 28px;[\s\S]*opacity: 1;[\s\S]*drop-shadow\(0 1px 2px rgba\(0, 0, 0, 0\.55\)\);/,
+  "the launcher glyph must remain crisp and subordinate to the control surface",
 );
 assert.match(
   component,
@@ -202,15 +207,20 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher\.is-working svg \{[\s\S]*animation: member-agent-dock-working-pulse 1\.35s ease-in-out infinite;/,
-  "an active agent turn must use the faster working pulse",
+  /\.member-agent-dock-launcher\.is-working \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*border-color: rgba\(167, 139, 250, 0\.58\);[\s\S]*animation: member-agent-dock-working-pulse 1\.6s ease-in-out infinite;/,
+  "an active agent turn must reserve purple motion for the working state",
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher:hover svg,[\s\S]*\.member-agent-dock-launcher:focus-visible svg \{[\s\S]*drop-shadow\(0 0 11px rgba\(167, 139, 250, 0\.62\)\);[\s\S]*animation: none;/,
-  "hover and keyboard focus must hold a stable bright state instead of freezing an arbitrary animation frame",
+  /\.member-agent-dock-launcher:hover \{[\s\S]*background: rgba\(12, 12, 14, 0\.98\);[\s\S]*border-color: rgba\(255, 255, 255, 0\.34\);/,
+  "hover must clarify the floating control without moving it",
 );
-const launcherMotion = ["member-agent-dock-breathe", "member-agent-dock-working-pulse"]
+assert.match(
+  styles,
+  /\.member-agent-dock-launcher\.is-working:hover,[\s\S]*\.member-agent-dock-launcher\.is-working:focus-visible \{[\s\S]*animation: none;/,
+  "hover and keyboard focus must not freeze the working animation on an arbitrary frame",
+);
+const launcherMotion = ["member-agent-dock-working-pulse"]
   .map((name) => styles.match(new RegExp(`@keyframes ${name} \\{[\\s\\S]*?\\n\\}`))?.[0] ?? "")
   .join("\n");
 assert.doesNotMatch(
@@ -220,14 +230,14 @@ assert.doesNotMatch(
 );
 assert.match(
   styles,
-  /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.member-agent-dock-launcher svg,[\s\S]*animation: none;/,
+  /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.member-agent-dock-launcher,[\s\S]*animation: none;/,
   "launcher presence animation must respect reduced-motion preferences",
 );
 const launcherHover = styles.match(/\.member-agent-dock-launcher:hover \{[\s\S]*?\n\}/)?.[0] ?? "";
 assert.doesNotMatch(
   launcherHover,
-  /transform|stroke-active|border|box-shadow/,
-  "hover must not lift the launcher or reintroduce a visible container",
+  /transform|translate|scale/,
+  "hover must not lift or scale the launcher",
 );
 assert.match(
   styles,

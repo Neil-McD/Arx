@@ -15,23 +15,36 @@
   right: 0;
   bottom: 0;
   display: grid;
-  width: 64px;
-  height: 64px;
+  width: 60px;
+  height: 60px;
   place-items: center;
   overflow: visible;
-  color: var(--member-agent-accent);
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  box-shadow: none;
+  color: #f7f7f8;
+  background: rgba(5, 5, 6, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 16px;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.58),
+    0 2px 8px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
   pointer-events: auto;
   cursor: pointer;
-  transition: color 160ms ease;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .member-agent-dock-launcher:hover {
-  color: var(--member-agent-accent-strong);
-  background: transparent;
+  color: #fff;
+  background: rgba(12, 12, 14, 0.98);
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.62),
+    0 3px 10px rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .member-agent-dock-launcher:focus-visible,
@@ -42,24 +55,28 @@
 }
 
 .member-agent-dock-launcher svg {
-  width: 44px;
-  height: 44px;
-  opacity: 0.9;
-  filter: drop-shadow(0 0 7px rgba(167, 139, 250, 0.42));
-  animation: member-agent-dock-breathe 5.6s ease-in-out infinite;
-  transition: filter 160ms ease;
-  will-change: filter, opacity;
+  width: 28px;
+  height: 28px;
+  opacity: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+  transition: color 140ms ease, filter 140ms ease;
 }
 
-.member-agent-dock-launcher.is-working svg {
-  animation: member-agent-dock-working-pulse 1.35s ease-in-out infinite;
+.member-agent-dock-launcher.is-working {
+  color: var(--member-agent-accent-strong);
+  border-color: rgba(167, 139, 250, 0.58);
+  animation: member-agent-dock-working-pulse 1.6s ease-in-out infinite;
+}
+
+.member-agent-dock-launcher.is-working:hover,
+.member-agent-dock-launcher.is-working:focus-visible {
+  animation: none;
 }
 
 .member-agent-dock-launcher:hover svg,
 .member-agent-dock-launcher:focus-visible svg {
   opacity: 1;
-  filter: drop-shadow(0 0 11px rgba(167, 139, 250, 0.62));
-  animation: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
 }
 
 .member-agent-dock-launcher img,
@@ -361,29 +378,20 @@
   50% { opacity: 0; }
 }
 
-@keyframes member-agent-dock-breathe {
-  0%, 66%, 100% {
-    opacity: 0.88;
-    filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.34));
-  }
-  78% {
-    opacity: 1;
-    filter: drop-shadow(0 0 12px rgba(167, 139, 250, 0.64));
-  }
-  88% {
-    opacity: 0.94;
-    filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.46));
-  }
-}
-
 @keyframes member-agent-dock-working-pulse {
   0%, 100% {
-    opacity: 0.82;
-    filter: drop-shadow(0 0 7px rgba(167, 139, 250, 0.42));
+    box-shadow:
+      0 10px 28px rgba(0, 0, 0, 0.58),
+      0 0 0 1px rgba(167, 139, 250, 0.08),
+      0 0 12px rgba(167, 139, 250, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
   50% {
-    opacity: 1;
-    filter: drop-shadow(0 0 15px rgba(196, 181, 253, 0.76));
+    box-shadow:
+      0 10px 28px rgba(0, 0, 0, 0.58),
+      0 0 0 1px rgba(167, 139, 250, 0.22),
+      0 0 20px rgba(167, 139, 250, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
 }
 
@@ -406,14 +414,9 @@
   }
 
   .member-agent-dock-reasoning svg,
-  .member-agent-dock-launcher svg,
+  .member-agent-dock-launcher,
   .member-agent-dock-caret,
   .is-spinning {
     animation: none;
-  }
-
-  .member-agent-dock-launcher svg {
-    opacity: 1;
-    will-change: auto;
   }
 }
