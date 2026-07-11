@@ -78,7 +78,7 @@ function buildAppUrl(path: string): string {
 }
 
 function buildEventsActionUrl(communitySlug: string): string {
-  return buildAppUrl(buildCommunityTabPath(communitySlug, "events") ?? "/workspace");
+  return buildAppUrl(buildCommunityTabPath(communitySlug, "events") ?? "/discover");
 }
 
 function formatEventStartLabel(startsAt: number, timezone: string): string {

@@ -4684,8 +4684,6 @@ export default function App() {
         communitySettingsPane:
           activePage === "community" && communityTab === "settings" ? communitySettingsPane : null,
         discoverTab: "communities",
-        discoverAppId: null,
-        discoverSkillId: null,
         docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
         threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
         projectId:
@@ -12066,8 +12064,6 @@ export default function App() {
           communitySlug: null,
           communityTab: "chat",
           discoverTab: "communities",
-          discoverAppId: null,
-          discoverSkillId: null,
           docsSlug: nextSlug,
           threadId: null,
         }) ?? "/docs");

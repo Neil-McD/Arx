@@ -120,8 +120,13 @@ function main() {
 
   assert.match(
     webAppRouteState,
-    /if \(segments\[0\] === "discover"[\s\S]*discoverTab: "communities"[\s\S]*discoverAppId: null[\s\S]*discoverSkillId: null/,
+    /if \(segments\[0\] === "discover"[\s\S]*discoverTab: "communities"/,
     "legacy Discover URLs must parse into the communities route",
+  );
+  assert.doesNotMatch(
+    webAppRouteState,
+    /discoverAppId|discoverSkillId/,
+    "route state must not retain dead catalog identifiers",
   );
   assert.match(
     webAppRouteState,
@@ -135,7 +140,7 @@ function main() {
   );
   assert.match(
     pathRouteLifecycle,
-    /discoverTab: "communities"[\s\S]*discoverAppId: null[\s\S]*discoverSkillId: null/,
+    /discoverTab: "communities"/,
     "route lifecycle must replace legacy catalog paths with /discover",
   );
 

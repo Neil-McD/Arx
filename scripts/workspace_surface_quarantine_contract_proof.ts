@@ -16,6 +16,9 @@ const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const mcp = read("convex/httpMcp.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
+const emailEvents = read("convex/emailEvents.ts");
+const emailDigests = read("convex/emailDigests.ts");
+const eventReminders = read("convex/eventReminders.ts");
 
 assert.deepEqual(readLegacyWorkspaceRouteContext("/workspace"), {
   kind: "root",
@@ -79,6 +82,13 @@ assert.doesNotMatch(
   /path: "\/workspace"/,
   "operator deploy probes must not advertise Workspace as a product route",
 );
+for (const [label, source] of [
+  ["transactional email", emailEvents],
+  ["community digest", emailDigests],
+  ["event reminder", eventReminders],
+] as const) {
+  assert.doesNotMatch(source, /["'`]\/workspace(?:[\/"'`]|$)/, `${label} links must not enter Workspace`);
+}
 assert.match(
   app,
   /useState<MobileRootPage>\("community"\)[\s\S]*forceCommunityRoot: showMobileShell/,

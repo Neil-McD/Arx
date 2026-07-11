@@ -28,8 +28,6 @@ export type AppRouteState = {
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
   discoverTab?: DiscoverTab | null;
-  discoverAppId?: string | null;
-  discoverSkillId?: string | null;
   docsSlug?: string | null;
   threadId: string | null;
   projectId?: string | null;
@@ -44,8 +42,6 @@ export type AppRoutePathState = {
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
   discoverTab?: DiscoverTab | null;
-  discoverAppId?: string | null;
-  discoverSkillId?: string | null;
   docsSlug?: string | null;
   threadId: string | null;
   projectId?: string | null;
@@ -357,8 +353,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       communitySlug: null,
       communityTab: "chat",
       discoverTab: "communities",
-      discoverAppId: null,
-      discoverSkillId: null,
       threadId: null,
     };
   }
@@ -494,8 +488,6 @@ export function readAppRouteFromLocation(): AppRouteState {
       communityResourceModuleId: fromPath.communityResourceModuleId ?? null,
       communitySettingsPane: fromPath.communitySettingsPane ?? null,
       discoverTab: fromPath.discoverTab ?? "communities",
-      discoverAppId: fromPath.discoverAppId ?? null,
-      discoverSkillId: fromPath.discoverSkillId ?? null,
       docsSlug: fromPath.docsSlug ?? null,
       threadId: fromPath.threadId,
       projectId,
@@ -509,8 +501,6 @@ export function readAppRouteFromLocation(): AppRouteState {
     communitySlug: null,
     communityTab: "chat",
     discoverTab: "communities",
-    discoverAppId: null,
-    discoverSkillId: null,
     docsSlug: null,
     threadId: null,
     projectId: null,

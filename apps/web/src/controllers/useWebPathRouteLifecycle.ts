@@ -66,8 +66,6 @@ export function useWebPathRouteLifecycle(params: {
     communityResourceModuleId?: string | null;
     communitySettingsPane?: CommunitySettingsPane | null;
     discoverTab: DiscoverTab;
-    discoverAppId: string | null;
-    discoverSkillId: string | null;
     docsSlug: string | null;
     threadId: string | null;
   }) => string | null;
@@ -114,8 +112,6 @@ export function useWebPathRouteLifecycle(params: {
           ? params.communitySettingsPane
           : null,
       discoverTab: "communities",
-      discoverAppId: null,
-      discoverSkillId: null,
       docsSlug: params.docsSlug,
       threadId: params.activePage === "workspace" && params.activeView === "home" ? params.activeThreadId : null,
     });
