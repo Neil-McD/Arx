@@ -1,5 +1,11 @@
 # Polynet Workspace MCP Provider Contract v0
 
+> Community-first compatibility note: `workspace` survives in v0 tool names,
+> input fields, and response keys only as a stable external wire contract. The
+> selected object is always one permissioned Polynet community context. Product
+> copy and agent instructions must say community context; new architecture must
+> not introduce a separate Workspace product or runtime behind these names.
+
 Status: active contract
 
 ## First Principle

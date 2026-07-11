@@ -50,6 +50,16 @@ assertIncludes(
 );
 assertIncludes(
   contract,
+  "`workspace` survives in v0 tool names",
+  "community-first MCP wire compatibility note",
+);
+assertIncludes(
+  contract,
+  "selected object is always one permissioned Polynet community context",
+  "community-first MCP semantic boundary",
+);
+assertIncludes(
+  contract,
   "It is not the existing Polynet MCP app consumer path.",
   "workspace MCP provider/consumer boundary",
 );
@@ -387,7 +397,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "verify the connection by listing the user's Polynet workspaces",
+  "verify the connection by listing the user's Polynet community contexts",
   "PolyMCP setup packet should require connection verification",
 );
 assertIncludes(
@@ -506,13 +516,13 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Before using workspace-specific memory, list or open the relevant Polynet workspace.",
+  "Before using community-specific memory, list or select the relevant Polynet community context.",
   "PolyMCP setup packet should require workspace selection before memory use",
 );
 assertIncludes(
   integrationsSettings,
-  "Treat workspace context IDs as opaque selectors. Do not invent them.",
-  "PolyMCP setup packet should preserve workspace context selector rules",
+  "Treat community context IDs as opaque selectors. The API field remains workspace_context_id for compatibility; do not invent values.",
+  "PolyMCP setup packet should preserve the compatible community context selector rule",
 );
 assertIncludes(
   integrationsSettings,
@@ -657,11 +667,14 @@ assertIncludes(
 );
 
 const openWorkspaceDefinition = toolDefinitionBlock(polynetMcp, "polynet_open_workspace");
+assertIncludes(openWorkspaceDefinition, 'title: "Select Polynet Community Context"', "community-first MCP title");
+assertIncludes(openWorkspaceDefinition, "tool name is retained for wire compatibility", "legacy tool-name compatibility");
 assertIncludes(openWorkspaceDefinition, "workspace: {", "open workspace context output");
 assertIncludes(openWorkspaceDefinition, "additionalProperties: true", "open workspace context output");
 assertIncludes(openWorkspaceDefinition, "authority: WORKSPACE_AUTHORITY_SCHEMA", "open workspace authority output");
 
 const workspaceContextDefinition = toolDefinitionBlock(polynetMcp, "polynet_get_workspace_context");
+assertIncludes(workspaceContextDefinition, 'title: "Get Polynet Community Context"', "community-first context title");
 assertIncludes(workspaceContextDefinition, "authority: WORKSPACE_AUTHORITY_SCHEMA", "workspace context authority output");
 assertIncludes(polynetMcp, "const WORKSPACE_AUTHORITY_SCHEMA", "workspace authority schema");
 assertIncludes(polynetMcp, "\"authority_lens\"", "workspace authority lens schema");

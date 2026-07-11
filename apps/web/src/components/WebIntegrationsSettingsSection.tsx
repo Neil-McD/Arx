@@ -80,7 +80,7 @@ const POLYNET_MCP_SETUP_BUNDLE = [
   "1. Identify which harness you are running in.",
   "2. Add Polynet with the matching setup path below, unless Polynet is already configured.",
   "3. If authentication is needed, give the user one clear sign-in action for this harness.",
-  "4. After sign-in, verify the connection by listing the user's Polynet workspaces.",
+  "4. After sign-in, verify the connection by listing the user's Polynet community contexts.",
   "5. If this already-open chat cannot see the tools after sign-in, tell the user to start a fresh chat or reconnect tools.",
   "6. Tell the user when Polynet is connected.",
   "",
@@ -152,7 +152,7 @@ const POLYNET_MCP_SETUP_BUNDLE = [
   "",
   "## Verify",
   "",
-  "After setup, use Polynet to list the user's Polynet workspaces.",
+  "After setup, use Polynet to list the user's Polynet community contexts.",
   "",
   "If Polynet tools are not visible after sign-in, tell the user to start a fresh chat or reconnect tools. Do not repeat OAuth unless the harness still says authentication is required.",
   "",
@@ -174,9 +174,9 @@ const POLYNET_MCP_SETUP_BUNDLE = [
   "- warnings",
   "- outcomes",
   "",
-  "Before using workspace-specific memory, list or open the relevant Polynet workspace.",
+  "Before using community-specific memory, list or select the relevant Polynet community context.",
   "",
-  "Treat workspace context IDs as opaque selectors. Do not invent them.",
+  "Treat community context IDs as opaque selectors. The API field remains workspace_context_id for compatibility; do not invent values.",
 ].join("\n");
 
 type SessionLike = {
@@ -466,7 +466,7 @@ export function WebIntegrationsSettingsSection(
           </div>
           <div className="settings-section-desc">
             Connect Codex, Claude Code, Cursor, or another AI harness to your
-            Polynet workspace memory.
+            Polynet community memory.
           </div>
           <div className="integrations-app-list">
             <div className="integration-mounted-row polymcp-access-row">
