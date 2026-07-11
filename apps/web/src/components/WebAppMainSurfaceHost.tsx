@@ -38,12 +38,12 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
     >
       {props.holdLandingForAuth ? (
         <div className="landing-auth-hold" aria-hidden="true" />
-      ) : props.activePage === "landing" ? (
-        <WebLandingPage {...props.landingPageProps} />
       ) : props.showPublicCommunityFunnel ? (
         <div className="community-body">
           <WebPublicCommunityFunnel {...props.publicCommunityFunnelProps} />
         </div>
+      ) : props.activePage === "landing" ? (
+        <WebLandingPage {...props.landingPageProps} />
       ) : props.activePage === "onboarding" ? (
         <WebPlatformBridgePage {...props.platformBridgePageProps} />
       ) : props.activePage === "workspace" ? (

@@ -98,6 +98,11 @@ assert.doesNotMatch(
   /public-route-panel|public-community-funnel-panel/,
   "the preview route must render through the plain community-body, identical to live",
 );
+assert.ok(
+  surfaceHost.indexOf('props.showPublicCommunityFunnel ?') <
+    surfaceHost.indexOf('props.activePage === "landing" ?'),
+  "a direct /c/:slug route must render the community funnel before the app-page landing fallback",
+);
 assert.match(
   shellProjection,
   /const isVisitorCommunityRoute =[\s\S]*"community_funnel"[\s\S]*"community_funnel_preview";/,
