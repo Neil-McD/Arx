@@ -93,7 +93,6 @@ type CommunityLaunchSetupCommunity = {
   visibility: string;
   entry_policy?: CommunityEntryPolicy | null;
   agent_system_prompt?: string | null;
-  agent_starter_prompts?: string[] | null;
 };
 
 export type CommunityLaunchProfileSaveDraft = {
@@ -462,7 +461,6 @@ export type CommunityLaunchGitHubImportResult = {
 
 export type CommunityLaunchAgentSaveDraft = {
   systemPrompt: string;
-  starterPrompts: string[];
 };
 
 export type CommunityLaunchAccessSaveDraft = {
@@ -630,15 +628,6 @@ function getNextLaunchStep(
   const index = STEP_ORDER.indexOf(step);
   if (index < 0 || index >= STEP_ORDER.length - 1) return null;
   return STEP_ORDER[index + 1];
-}
-
-function getStarterPrompts(
-  community: CommunityLaunchSetupCommunity | null,
-): string[] {
-  const prompts = Array.isArray(community?.agent_starter_prompts)
-    ? community.agent_starter_prompts
-    : [];
-  return [0, 1, 2].map((index) => String(prompts[index] ?? "").trim());
 }
 
 function isPublishProfileMissing(
@@ -940,7 +929,6 @@ export function WebCommunityLaunchSetupModal(
   const knowledgeLinkPremiumDismissedCommunityKeysRef = useRef<Set<string>>(new Set());
   const [agentDraft, setAgentDraft] = useState<CommunityLaunchAgentSaveDraft>({
     systemPrompt: "",
-    starterPrompts: ["", "", ""],
   });
   const [accessDraft, setAccessDraft] = useState<CommunityEntryPolicy>("open");
   const effectiveKnowledgeLinkSources = isCreateMode
@@ -1103,7 +1091,6 @@ export function WebCommunityLaunchSetupModal(
       knowledgeProviderStateCommunityKeyRef.current = "__create__";
       setAgentDraft({
         systemPrompt: "",
-        starterPrompts: ["", "", ""],
       });
       setAccessDraft("approval");
       setStepError(null);
@@ -1163,7 +1150,6 @@ export function WebCommunityLaunchSetupModal(
     setKnowledgeAssemblyFailedStage(null);
     setAgentDraft({
       systemPrompt: community.agent_system_prompt ?? "",
-      starterPrompts: getStarterPrompts(community),
     });
     setAccessDraft(community.entry_policy ?? "open");
     setStepError(null);
@@ -1188,7 +1174,6 @@ export function WebCommunityLaunchSetupModal(
     community?.banner_url,
     community?.entry_policy,
     community?.agent_system_prompt,
-    community?.agent_starter_prompts,
   ]);
 
   useEffect(() => {
@@ -3192,32 +3177,6 @@ export function WebCommunityLaunchSetupModal(
               placeholder="How should the agent help this community?"
             />
           </label>
-          <details className="community-launch-starter-panel">
-            <summary>
-              <strong>Starter prompts</strong>
-              <span>Optional quick questions members can tap.</span>
-            </summary>
-            <div className="community-launch-starter-list">
-              {agentDraft.starterPrompts.map((prompt, index) => (
-                <label className="community-launch-field" key={index}>
-                  <span>Prompt {index + 1}</span>
-                  <textarea
-                    value={prompt}
-                    onChange={(event) => {
-                      const nextPrompts = [...agentDraft.starterPrompts];
-                      nextPrompts[index] = event.target.value;
-                      setAgentDraft((draft) => ({
-                        ...draft,
-                        starterPrompts: nextPrompts,
-                      }));
-                    }}
-                    rows={2}
-                    placeholder="Suggested first question"
-                  />
-                </label>
-              ))}
-            </div>
-          </details>
           <div className="community-launch-step-actions">
             {renderFinishLaterButton()}
             <button

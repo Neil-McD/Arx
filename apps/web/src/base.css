@@ -4437,48 +4437,6 @@ body {
     inset 0 0 0 1px rgba(0, 0, 0, 0.24);
 }
 
-.community-launch-starter-panel {
-  display: grid;
-  gap: 10px;
-  border: 1px solid color-mix(in srgb, var(--border-muted) 76%, var(--text-secondary));
-  border-radius: 12px;
-  padding: 12px;
-  background: color-mix(in srgb, var(--bg-page) 38%, transparent);
-}
-
-.community-launch-starter-panel summary {
-  display: grid;
-  gap: 3px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.community-launch-starter-panel summary::-webkit-details-marker {
-  display: none;
-}
-
-.community-launch-starter-panel strong {
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.2;
-}
-
-.community-launch-starter-panel summary span {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.community-launch-starter-list {
-  display: grid;
-  gap: 9px;
-  padding-top: 10px;
-}
-
-.community-launch-starter-list .community-launch-field textarea {
-  min-height: 56px;
-}
-
 .community-launch-knowledge-gateway {
   gap: 14px;
 }

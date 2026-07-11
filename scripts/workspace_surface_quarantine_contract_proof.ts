@@ -14,6 +14,9 @@ const mobileController = read("apps/web/src/controllers/useWebMobileShellControl
 const mobileTopBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
+const communityAgentSection = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
+const communityAgentInstructions = read("apps/web/src/components/WebCommunityAiAgentInstructionsEditor.tsx");
+const communityLaunchSetup = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const mcp = read("convex/httpMcp.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const emailEvents = read("convex/emailEvents.ts");
@@ -118,6 +121,35 @@ assert.doesNotMatch(
   launchSetupRoute,
   /buildWorkspace(?:Community)?DraftPath/,
   "new launch setup URLs must not be generated under Workspace",
+);
+assert.match(
+  communityAgentSection,
+  /\{ id: "instructions", label: "Instructions" \}/,
+  "community agent settings must expose instructions as the canonical configuration surface",
+);
+assert.doesNotMatch(
+  communityAgentSection,
+  /\{ id: "workspace", label: "Workspace" \}/,
+  "community agent settings must not expose the quarantined Workspace surface",
+);
+for (const legacyLandingCopy of ["Preview workspace", "Starter prompts", "DEFAULT_EMPTY_THREAD_LANDING"]) {
+  assert.doesNotMatch(
+    communityAgentInstructions,
+    new RegExp(legacyLandingCopy),
+    `community agent instructions must not expose legacy landing control: ${legacyLandingCopy}`,
+  );
+}
+for (const legacyLaunchField of ["starterPrompts", "community-launch-starter-panel", "agent_starter_prompts"]) {
+  assert.doesNotMatch(
+    communityLaunchSetup,
+    new RegExp(legacyLaunchField),
+    `community launch setup must not expose legacy Workspace starter state: ${legacyLaunchField}`,
+  );
+}
+assert.match(
+  app,
+  /communityAgentConfigLoadedCommunityIdRef\.current === community\.id[\s\S]*DEFAULT_EMPTY_THREAD_LANDING/,
+  "launch setup must never copy hidden landing state across community boundaries",
 );
 
 assert.match(

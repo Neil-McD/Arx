@@ -6,15 +6,15 @@ import {
   type WebCommunityAiAgentAppsEditorProps,
 } from "./WebCommunityAiAgentAppsEditor";
 import {
-  WebCommunityAiAgentLandingEditor,
-  type WebCommunityAiAgentLandingEditorProps,
-} from "./WebCommunityAiAgentLandingEditor";
+  WebCommunityAiAgentInstructionsEditor,
+  type WebCommunityAiAgentInstructionsEditorProps,
+} from "./WebCommunityAiAgentInstructionsEditor";
 import {
   WebCommunityAiAgentSkillsEditor,
   type WebCommunityAiAgentSkillsEditorProps,
 } from "./WebCommunityAiAgentSkillsEditor";
 
-type CommunityAiAgentTab = "workspace" | "apps" | "skills";
+type CommunityAiAgentTab = "instructions" | "apps" | "skills";
 
 type WebCommunityAiAgentSectionProps = {
   activeCommunity: unknown | null;
@@ -24,7 +24,7 @@ type WebCommunityAiAgentSectionProps = {
   isLoadingCommunityAgentConfig: boolean;
   communityAgentConfigError: string | null;
   onRequireSignIn: () => void;
-  workspaceEditorProps: WebCommunityAiAgentLandingEditorProps;
+  instructionsEditorProps: WebCommunityAiAgentInstructionsEditorProps;
   appsEditorProps: WebCommunityAiAgentAppsEditorProps;
   skillsEditorProps: WebCommunityAiAgentSkillsEditorProps;
 };
@@ -33,7 +33,7 @@ const COMMUNITY_AI_AGENT_TABS: Array<{
   id: CommunityAiAgentTab;
   label: string;
 }> = [
-  { id: "workspace", label: "Workspace" },
+  { id: "instructions", label: "Instructions" },
   { id: "apps", label: "Apps" },
   { id: "skills", label: "Skills" },
 ];
@@ -47,11 +47,11 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     isLoadingCommunityAgentConfig,
     communityAgentConfigError,
     onRequireSignIn,
-    workspaceEditorProps,
+    instructionsEditorProps,
     appsEditorProps,
     skillsEditorProps,
   } = props;
-  const [activeTab, setActiveTab] = useState<CommunityAiAgentTab>("workspace");
+  const [activeTab, setActiveTab] = useState<CommunityAiAgentTab>("instructions");
   useEffect(() => {
     if (!preferredTab) return;
     setActiveTab(preferredTab);
@@ -82,13 +82,13 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     );
   } else if (!canManageMembersActiveCommunity) {
     content = <div className="chat-empty">Only owners and admins can configure the AI agent.</div>;
-  } else if (activeTab === "workspace") {
+  } else if (activeTab === "instructions") {
     if (isLoadingCommunityAgentConfig) {
       content = <div className="chat-empty">Loading…</div>;
     } else if (communityAgentConfigError) {
       content = <div className="auth-error">{communityAgentConfigError}</div>;
     } else {
-      content = <WebCommunityAiAgentLandingEditor {...workspaceEditorProps} />;
+      content = <WebCommunityAiAgentInstructionsEditor {...instructionsEditorProps} />;
     }
   } else if (activeTab === "skills") {
     content = <WebCommunityAiAgentSkillsEditor {...skillsEditorProps} />;

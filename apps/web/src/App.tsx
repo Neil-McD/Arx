@@ -4868,8 +4868,8 @@ export default function App() {
     agent_soul: "",
   });
   const [communityAiAgentPreferredTab, setCommunityAiAgentPreferredTab] = useState<
-    "workspace" | "apps" | "skills"
-  >("workspace");
+    "instructions" | "apps" | "skills"
+  >("instructions");
   const [isLoadingUserMemorySettings, setIsLoadingUserMemorySettings] = useState(false);
   const [chatgptConnection, setChatgptConnection] = useState<CloudChatgptConnectionStatus>({
     provider: "chatgpt",
@@ -5199,18 +5199,6 @@ export default function App() {
     loadFailureMessage: "Failed to load AI agent config.",
     saveFailureMessage: "Failed to save AI agent changes.",
   });
-  const handleSaveCommunityAgentConfigAndRefreshLanding = useCallback(async (): Promise<boolean> => {
-    const communityIdAtSave = activeCommunityId;
-    const normalizedLanding = normalizeCommunityAgentDraftForSave(communityAgentConfigLanding);
-    const saved = await handleSaveCommunityAgentConfig();
-    if (!saved || !communityIdAtSave || !normalizedLanding) return saved;
-    if (activeCommunityIdRef.current !== communityIdAtSave) return saved;
-    communityAgentLandingFetchSeqRef.current += 1;
-    activeCommunityAgentLandingCommunityIdRef.current = communityIdAtSave;
-    setActiveCommunityAgentLanding(normalizedLanding);
-    return saved;
-  }, [activeCommunityId, communityAgentConfigLanding, handleSaveCommunityAgentConfig]);
-
   const reloadEffectiveMcpApps = useCallback(async () => {
     if (!session) {
       clearEffectiveMcpApps();
@@ -9565,37 +9553,11 @@ export default function App() {
         return;
       }
       if (step === "agent") {
-        setCommunityAiAgentPreferredTab("workspace");
+        setCommunityAiAgentPreferredTab("instructions");
         openCommunityTab(nextCommunitySlug, "ai_agent", { pushSnapshot: false });
         return;
       }
       openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
-    };
-    const communityLaunchAgentStarterPrompts = useMemo(() => {
-      const landing = normalizeCommunityAgentLanding(communityAgentConfigLanding) ?? DEFAULT_EMPTY_THREAD_LANDING;
-      return [0, 1, 2].map((index) =>
-        String(landing.tabs[index]?.prompts?.[0] ?? "").trim(),
-      );
-    }, [communityAgentConfigLanding]);
-    const buildCommunityLaunchAgentLanding = (starterPrompts: string[]): CommunityAgentLanding => {
-      const currentLanding = normalizeCommunityAgentLanding(communityAgentConfigLanding) ?? DEFAULT_EMPTY_THREAD_LANDING;
-      const fallbackLanding = DEFAULT_EMPTY_THREAD_LANDING;
-      return {
-        title: fallbackLanding.title,
-        subtitle: fallbackLanding.subtitle,
-        tabs: [0, 1, 2].map((index) => {
-          const currentTab = currentLanding.tabs[index] ?? fallbackLanding.tabs[index]!;
-          const fallbackPrompt = fallbackLanding.tabs[index]?.prompts?.[0] ?? "";
-          const prompt = String(starterPrompts[index] ?? "").trim() ||
-            String(currentTab.prompts?.[0] ?? "").trim() ||
-            fallbackPrompt;
-          return {
-            id: currentTab.id || fallbackLanding.tabs[index]!.id,
-            label: currentTab.label || fallbackLanding.tabs[index]!.label,
-            prompts: [prompt],
-          };
-        }),
-      };
     };
     const applyCommunityLaunchProfileResult = (result: CloudCommunityLaunchProfileSaveResult) => {
       setCommunities((prev) =>
@@ -10079,12 +10041,16 @@ export default function App() {
     };
     const handleSaveCommunityLaunchAgent = async (draft: {
       systemPrompt: string;
-      starterPrompts: string[];
     }) => {
       const { session, community } = requireCommunityLaunchSaveContext();
-      const landing = buildCommunityLaunchAgentLanding(draft.starterPrompts);
+      const loadedForCommunity =
+        communityAgentConfigLoadedCommunityIdRef.current === community.id;
+      const landing = loadedForCommunity
+        ? normalizeCommunityAgentLanding(communityAgentConfigLanding) ??
+          DEFAULT_EMPTY_THREAD_LANDING
+        : DEFAULT_EMPTY_THREAD_LANDING;
       const normalizedLanding = normalizeCommunityAgentDraftForSave(landing);
-      if (!normalizedLanding) throw new Error("Add at least one onboarding prompt.");
+      if (!normalizedLanding) throw new Error("Community agent configuration unavailable.");
       const row = await saveCloudCommunityAgentConfigDirect({
         session,
         communityId: community.id,
@@ -10653,19 +10619,15 @@ export default function App() {
       aiAgentPreferredTab: communityAiAgentPreferredTab,
       isLoadingCommunityAgentConfig,
       communityAgentConfigError,
-      aiAgentWorkspaceEditorProps: {
+      aiAgentInstructionsEditorProps: {
         communityAgentConfigDirtyRef,
-        handleSaveCommunityAgentConfig: handleSaveCommunityAgentConfigAndRefreshLanding,
+        handleSaveCommunityAgentConfig,
         handleResetCommunityAgentConfig,
         isSavingCommunityAgentConfig,
         communityAgentConfigSaveError,
-        communityAgentConfigLanding,
-        setCommunityAgentConfigLanding,
-        markCommunityAgentConfigDirty,
         communityAgentConfigCommunitySystemPrompt,
         setCommunityAgentConfigCommunitySystemPrompt,
-        previewCommunityName: activeCommunity?.name ?? "Community",
-        previewProjectName: workspace.derived.resolvedActiveProjectName,
+        markCommunityAgentConfigDirty,
       },
       aiAgentAppsEditorProps: {
         intro: "Manage apps attached to this community.",
@@ -12135,7 +12097,6 @@ export default function App() {
                 visibility: activeCommunity.visibility,
                 entry_policy: activeCommunity.entry_policy ?? null,
                 agent_system_prompt: communityAgentConfigCommunitySystemPrompt,
-                agent_starter_prompts: communityLaunchAgentStarterPrompts,
               }
             : null
         }
