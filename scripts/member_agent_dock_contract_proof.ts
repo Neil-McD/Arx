@@ -187,13 +187,36 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher \{[\s\S]*width: 56px;[\s\S]*height: 56px;[\s\S]*overflow: visible;[\s\S]*color: var\(--member-agent-accent\);[\s\S]*background: transparent;[\s\S]*border: 0;[\s\S]*box-shadow: none;/,
+  /\.member-agent-dock-launcher \{[\s\S]*width: 64px;[\s\S]*height: 64px;[\s\S]*overflow: visible;[\s\S]*color: var\(--member-agent-accent\);[\s\S]*background: transparent;[\s\S]*border: 0;[\s\S]*box-shadow: none;/,
   "the agent launcher must keep a stable hit target without painting a visible container",
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher svg \{[\s\S]*width: 32px;[\s\S]*height: 32px;[\s\S]*drop-shadow\(0 0 5px rgba\(167, 139, 250, 0\.34\)\);/,
+  /\.member-agent-dock-launcher svg \{[\s\S]*width: 44px;[\s\S]*height: 44px;[\s\S]*drop-shadow\(0 0 7px rgba\(167, 139, 250, 0\.42\)\);[\s\S]*animation: member-agent-dock-breathe 5\.6s ease-in-out infinite;/,
   "the floating purple agent mark must remain visually prominent without an orb or button surface",
+);
+assert.match(
+  component,
+  /member-agent-dock-launcher\$\{turnIsActive \? " is-working" : ""\}/,
+  "the launcher must derive its working presence from the existing turn lifecycle",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock-launcher\.is-working svg \{[\s\S]*animation: member-agent-dock-working-pulse 1\.35s ease-in-out infinite;/,
+  "an active agent turn must use the faster working pulse",
+);
+const launcherMotion = ["member-agent-dock-breathe", "member-agent-dock-working-pulse"]
+  .map((name) => styles.match(new RegExp(`@keyframes ${name} \\{[\\s\\S]*?\\n\\}`))?.[0] ?? "")
+  .join("\n");
+assert.doesNotMatch(
+  launcherMotion,
+  /transform|translate|rotate/,
+  "launcher presence must never bounce, lift, or spin",
+);
+assert.match(
+  styles,
+  /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*\.member-agent-dock-launcher svg,[\s\S]*animation: none;/,
+  "launcher presence animation must respect reduced-motion preferences",
 );
 const launcherHover = styles.match(/\.member-agent-dock-launcher:hover \{[\s\S]*?\n\}/)?.[0] ?? "";
 assert.doesNotMatch(
