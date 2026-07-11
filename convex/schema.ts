@@ -2124,7 +2124,9 @@ export default defineSchema({
     agentEnabled: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_community", ["communityId"]),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_updatedAt", ["communityId", "updatedAt"]),
 
   communityAgentRuns: defineTable({
     communityId: v.id("communities"),

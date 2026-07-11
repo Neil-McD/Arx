@@ -5,6 +5,8 @@ import { join } from "node:path";
 const root = process.cwd();
 const worker = readFileSync(join(root, "convex/communityAgentServeWorker.ts"), "utf8");
 const conciergeTools = readFileSync(join(root, "shared/communityAgentConciergeTools.ts"), "utf8");
+const context = readFileSync(join(root, "convex/communityAgentContext.ts"), "utf8");
+const boundary = readFileSync(join(root, "shared/communityAgentRuntimeBoundary.ts"), "utf8");
 const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
@@ -62,13 +64,21 @@ assert.match(
 );
 assert.match(
   readBlock,
-  /latestCommunityAgentConfig[\s\S]*config\?\.agentEnabled === false[\s\S]*agent_disabled/,
+  /readCanonicalCommunityAgentContext[\s\S]*!canonicalContext\.agentEnabled[\s\S]*agent_disabled/,
   "serve context should respect the community agent off switch",
 );
 assert.match(
   readBlock,
-  /agent:\s*\{[\s\S]*displayName: boundedText\(config\?\.agentDisplayName, 120\) \|\| "Polynet"[\s\S]*systemPrompt: boundedText\(config\?\.systemPrompt, 4_000\)/,
+  /agent:\s*\{[\s\S]*displayName: canonicalContext\.agentDisplayName[\s\S]*systemPrompt: boundedText\(canonicalContext\.communitySystemPrompt, 4_000\)/,
   "serve context should load the AI Agent community-wide instructions from communityAgentConfigs.systemPrompt",
+);
+assert.match(context, /communityAgentConfigs[\s\S]*by_community_updatedAt[\s\S]*\.order\("desc"\)[\s\S]*\.first\(\)/);
+assert.doesNotMatch(worker, /query\("communityAgentConfigs"/);
+assert.match(boundary, /member_concierge[\s\S]*sponsor: "requester"[\s\S]*toolAuthority: "retrieval_only"/);
+assert.match(
+  worker,
+  /buildCommunityAgentIdentityPrompt\(\{[\s\S]*surface: "member_concierge"/,
+  "member-facing turns should identify the canonical agent through the shared runtime boundary",
 );
 assert.match(
   readBlock,

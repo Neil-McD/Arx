@@ -27,6 +27,8 @@ import {
   nextCommunityAgentServeAttempt,
   normalizeCommunityAgentServeAttempt,
 } from "../shared/communityAgentDockContract";
+import { buildCommunityAgentIdentityPrompt } from "../shared/communityAgentRuntimeBoundary";
+import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 
 const SERVE_WORKER_DEFAULT_LIMIT = 3;
 const SERVE_WORKER_MAX_LIMIT = 5;
@@ -230,7 +232,10 @@ async function executeConciergeTool(args: {
     userId: normalizeIdValue(args.context.request.sponsorUserId),
     authSubject: undefined,
     projectId: null,
-    runId: `community-agent-serve:${normalizeIdValue(args.requestId)}`,
+    runId: buildCommunityAgentServeRunId(
+      normalizeIdValue(args.requestId),
+      args.context.request.attempt,
+    ),
     communityId: normalizeIdValue(args.context.request.communityId),
     toolName: args.toolName,
     args: args.rawArguments,
@@ -281,14 +286,6 @@ async function requesterHasChatgptConnection(ctx: any, requesterUserId: any): Pr
     )
     .first()) as Record<string, any> | null;
   return Boolean(row?.encryptedSecretHex);
-}
-
-async function latestCommunityAgentConfig(ctx: any, communityId: any): Promise<Record<string, any> | null> {
-  const rows = (await ctx.db
-    .query("communityAgentConfigs" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .take(5)) as Array<Record<string, any>>;
-  return rows.slice().sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))[0] ?? null;
 }
 
 async function listContentBlocksForRoot(ctx: any, rootId: any): Promise<ContentBlockRow[]> {
@@ -512,8 +509,8 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       return { ok: false as const, errorCode: "serve_request_invalid", errorMessage: "Serve request failed invariant checks." };
     }
 
-    const community = (await ctx.db.get(request.communityId as any)) as Record<string, any> | null;
-    if (!community) {
+    const canonicalContext = await readCanonicalCommunityAgentContext(ctx, request.communityId);
+    if (!canonicalContext) {
       return { ok: false as const, errorCode: "community_not_found", errorMessage: "Community not found." };
     }
     try {
@@ -530,8 +527,7 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       };
     }
 
-    const config = await latestCommunityAgentConfig(ctx, request.communityId);
-    if (config?.agentEnabled === false) {
+    if (!canonicalContext.agentEnabled) {
       return {
         ok: false as const,
         errorCode: "agent_disabled",
@@ -612,14 +608,14 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
         responseVisibilityScope: narrowVisibility(request.responseVisibilityScope, sourceVisibilityScope),
       },
       community: {
-        name: boundedText(community.name, 200),
-        slug: boundedText(community.slug, 200),
-        oneLiner: boundedText(community.oneLiner, 500),
-        about: boundedText(community.about, 2_000),
+        name: canonicalContext.communityName ?? "",
+        slug: canonicalContext.communitySlug ?? "",
+        oneLiner: canonicalContext.communityOneLiner ?? "",
+        about: boundedText(canonicalContext.communityAbout, 2_000),
       },
       agent: {
-        displayName: boundedText(config?.agentDisplayName, 120) || "Polynet",
-        systemPrompt: boundedText(config?.systemPrompt, 4_000),
+        displayName: canonicalContext.agentDisplayName,
+        systemPrompt: boundedText(canonicalContext.communitySystemPrompt, 4_000),
       },
       source: {
         rootText,
@@ -809,7 +805,10 @@ function buildServeMessages(context: any): NativeToolAwareMessage[] {
     {
       role: "system" as const,
       content:
-        `You are ${context.agent.displayName}, the visible community agent for this one community.\n` +
+        buildCommunityAgentIdentityPrompt({
+          surface: "member_concierge",
+          displayName: context.agent.displayName,
+        }) + "\n" +
         "Answer the direct community-agent mention request in the same chat thread.\n" +
         "Be concise, useful, and plainspoken. Do not claim to update memory, run workflows, or write the directory.\n" +
         "You have no write authority here. You are only answering the requester.\n" +

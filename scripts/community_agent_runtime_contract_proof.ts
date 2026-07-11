@@ -9,6 +9,8 @@ const protocol = readFileSync(join(root, "shared/communityAgentToolProtocol.ts")
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
+const context = readFileSync(join(root, "convex/communityAgentContext.ts"), "utf8");
+const boundary = readFileSync(join(root, "shared/communityAgentRuntimeBoundary.ts"), "utf8");
 
 assert.match(
   packageJson,
@@ -22,6 +24,12 @@ assert.match(runtime, /export const resolveCommunityAgentRunContextInternal = in
 assert.match(runtime, /export const createCommunityAgentRunInternal = internalMutation/);
 assert.match(runtime, /export const recordCommunityAgentSkippedRunInternal = internalMutation/);
 assert.match(runtime, /export const finishCommunityAgentRunInternal = internalMutation/);
+assert.match(runtime, /readCanonicalCommunityAgentContext/);
+assert.match(context, /communityAgentConfigs[\s\S]*by_community_updatedAt[\s\S]*\.order\("desc"\)[\s\S]*\.first\(\)/);
+assert.doesNotMatch(runtime, /query\("communityAgentConfigs"/);
+assert.match(boundary, /member_concierge[\s\S]*sponsor: "requester"[\s\S]*toolAuthority: "retrieval_only"/);
+assert.match(boundary, /autonomous_cognition[\s\S]*sponsor: "community_owner"[\s\S]*toolAuthority: "steward_airlock_only"/);
+assert.match(runtime, /buildCommunityAgentIdentityPrompt\(\{ surface: "autonomous_cognition" \}\)/);
 assert.doesNotMatch(runtime, /export const runCommunityAgentLoop = action\(|export const .* = action\(/);
 assert.doesNotMatch(runtime, /userPrompt|prompt: v\.string|authSubject|userId: v\.optional/);
 assert.doesNotMatch(runtime, /agentKey: v\.(?:optional\()?string/, "runtime actions and run creation must not accept caller-supplied agentKey");
