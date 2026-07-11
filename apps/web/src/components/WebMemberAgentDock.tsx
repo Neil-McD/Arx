@@ -382,7 +382,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     <aside className={`member-agent-dock${isOpen ? " is-open" : ""}`} aria-live="polite">
       <button
         type="button"
-        className="member-agent-dock-launcher"
+        className={`member-agent-dock-launcher${turnIsActive ? " is-working" : ""}`}
         onClick={() => setIsOpen((open) => !open)}
         aria-label={isOpen ? "Close your agent" : "Open your agent"}
         title={isOpen ? "Close your agent" : "Open your agent"}
