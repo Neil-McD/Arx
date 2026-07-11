@@ -205,10 +205,6 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   });
 
   useEffect(() => {
-    activeThreadKeyRef.current = threadKey;
-  }, [threadKey]);
-
-  useEffect(() => {
     const previousThreadKey = activeThreadKeyRef.current;
     if (previousThreadKey) stopStreamingTurn(previousThreadKey);
     activeThreadKeyRef.current = null;
