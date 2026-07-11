@@ -170,6 +170,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     setMessages([]);
     setSendingByThread({});
     setStreamingByThread({});
+    setIsPreparing(false);
     setInput("");
     setLocalError(null);
     setInferenceIssue(null);
@@ -177,7 +178,10 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   }, [props.communityId, stopStreamingTurn]);
 
   useEffect(() => {
-    if (!props.isVisible) setIsOpen(false);
+    if (!props.isVisible) {
+      setIsOpen(false);
+      setIsPreparing(false);
+    }
   }, [props.isVisible]);
 
   useEffect(() => {
