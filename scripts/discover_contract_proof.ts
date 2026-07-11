@@ -102,31 +102,21 @@ function main() {
     "Discover cards must not bypass the gate",
   );
 
-  assert.match(
-    appShellNavigation,
-    /export type DiscoverTab = "communities";/,
-    "Discover must have one communities-only mode",
-  );
   assert.doesNotMatch(
     appShellNavigation,
-    /DiscoverTab = [^;]*("apps"|"skills")/,
-    "Apps and Skills must not be Discover tabs",
-  );
-  assert.match(
-    appShellNavigation,
-    /export function parseDiscoverTab[\s\S]*return "communities";/,
-    "legacy Discover tab values must normalize to communities",
+    /DiscoverTab|parseDiscoverTab/,
+    "single-mode Discover must not retain tab state",
   );
 
   assert.match(
     webAppRouteState,
-    /if \(segments\[0\] === "discover"[\s\S]*discoverTab: "communities"/,
+    /if \(segments\[0\] === "discover"[\s\S]*page: "discover"/,
     "legacy Discover URLs must parse into the communities route",
   );
   assert.doesNotMatch(
     webAppRouteState,
-    /discoverAppId|discoverSkillId/,
-    "route state must not retain dead catalog identifiers",
+    /discoverTab|discoverAppId|discoverSkillId/,
+    "route state must not retain dead catalog metadata",
   );
   assert.match(
     webAppRouteState,
@@ -138,10 +128,10 @@ function main() {
     /`\/discover\/(apps|skills)/,
     "route building must not emit retired catalog URLs",
   );
-  assert.match(
+  assert.doesNotMatch(
     pathRouteLifecycle,
-    /discoverTab: "communities"/,
-    "route lifecycle must replace legacy catalog paths with /discover",
+    /discoverTab|discoverAppId|discoverSkillId/,
+    "route lifecycle must not carry retired catalog state",
   );
 
   assert.match(

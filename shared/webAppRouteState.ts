@@ -6,7 +6,6 @@ import {
   type AppView,
   type CommunitySettingsPane,
   type CommunityTab,
-  type DiscoverTab,
   type SettingsPage,
 } from "./appShellNavigation";
 
@@ -27,7 +26,6 @@ export type AppRouteState = {
   communityTab: CommunityTab;
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
-  discoverTab?: DiscoverTab | null;
   docsSlug?: string | null;
   threadId: string | null;
   projectId?: string | null;
@@ -41,7 +39,6 @@ export type AppRoutePathState = {
   communityTab: CommunityTab;
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
-  discoverTab?: DiscoverTab | null;
   docsSlug?: string | null;
   threadId: string | null;
   projectId?: string | null;
@@ -352,7 +349,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       settingsPage: "agent",
       communitySlug: null,
       communityTab: "chat",
-      discoverTab: "communities",
       threadId: null,
     };
   }
@@ -487,7 +483,6 @@ export function readAppRouteFromLocation(): AppRouteState {
       communityTab: fromPath.communityTab,
       communityResourceModuleId: fromPath.communityResourceModuleId ?? null,
       communitySettingsPane: fromPath.communitySettingsPane ?? null,
-      discoverTab: fromPath.discoverTab ?? "communities",
       docsSlug: fromPath.docsSlug ?? null,
       threadId: fromPath.threadId,
       projectId,
@@ -500,7 +495,6 @@ export function readAppRouteFromLocation(): AppRouteState {
     settingsPage: "agent",
     communitySlug: null,
     communityTab: "chat",
-    discoverTab: "communities",
     docsSlug: null,
     threadId: null,
     projectId: null,

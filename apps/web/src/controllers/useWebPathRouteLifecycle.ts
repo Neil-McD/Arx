@@ -9,7 +9,6 @@ import type {
   AppView,
   CommunitySettingsPane,
   CommunityTab,
-  DiscoverTab,
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
 import {
@@ -65,7 +64,6 @@ export function useWebPathRouteLifecycle(params: {
     communityTab: CommunityTab;
     communityResourceModuleId?: string | null;
     communitySettingsPane?: CommunitySettingsPane | null;
-    discoverTab: DiscoverTab;
     docsSlug: string | null;
     threadId: string | null;
   }) => string | null;
@@ -111,7 +109,6 @@ export function useWebPathRouteLifecycle(params: {
         params.activePage === "community" && params.communityTab === "settings"
           ? params.communitySettingsPane
           : null,
-      discoverTab: "communities",
       docsSlug: params.docsSlug,
       threadId: params.activePage === "workspace" && params.activeView === "home" ? params.activeThreadId : null,
     });

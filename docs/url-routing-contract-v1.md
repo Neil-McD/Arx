@@ -136,6 +136,10 @@ New code must not generate a `/workspace*` URL. Internal Workspace route helpers
 and the MCP `workspace_context` wire term remain temporarily intact because they
 are compatibility substrate, not reachable product navigation.
 
+Transactional emails, digests, and reminders follow the same rule. If a
+community-specific URL cannot be constructed, they fall back to `/discover`,
+never to a legacy Workspace route.
+
 ## Transactional Routes
 
 Keep special transactional routes explicit and separate from entity routes:

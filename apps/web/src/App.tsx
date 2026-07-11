@@ -4683,7 +4683,6 @@ export default function App() {
           activePage === "community" && communityTab === "resources" ? communityResourceModuleId : null,
         communitySettingsPane:
           activePage === "community" && communityTab === "settings" ? communitySettingsPane : null,
-        discoverTab: "communities",
         docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
         threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
         projectId:
@@ -12063,7 +12062,6 @@ export default function App() {
     settingsPage,
           communitySlug: null,
           communityTab: "chat",
-          discoverTab: "communities",
           docsSlug: nextSlug,
           threadId: null,
         }) ?? "/docs");

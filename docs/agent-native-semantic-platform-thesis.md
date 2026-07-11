@@ -193,3 +193,18 @@ The current architecture work must first complete the community-scoped pivot:
 Only after that foundation is simple and stable should this broader semantic
 filesystem and context-compiler thesis become the active implementation
 program.
+
+### Work 3 staging checkpoint (2026-07-11)
+
+- Authenticated root entry resolves to an authorized community, normally the
+  Polynet home community; Discover is the fallback and lists communities only.
+- The left rail is the community selector. First-party navigation and
+  notification links do not generate Workspace URLs.
+- The protected Workspace harness remains isolated as compatibility substrate;
+  it is not a product destination and has not been destructively deleted.
+- The community agent dock and mention path use the same requester-funded,
+  read-only Concierge serve worker.
+- Autonomous community cognition remains a separate owner-funded authority mode
+  of the same canonical community-agent identity.
+- External MCP remains permissioned by community. Legacy `workspace` names in
+  its v0 wire contract do not represent a Workspace product or separate runtime.
