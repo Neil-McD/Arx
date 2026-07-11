@@ -19,8 +19,8 @@ This file is the execution contract for agents working in this repository.
 
 ### MVP North Star
 - A founder can create a community, share a funnel link, and onboard members through a gated flow.
-- Members can join, chat/post/use voice, access resources, and use personal AI threads.
-- AI in a thread can switch community context safely and deterministically.
+- Members can discover communities, join, chat/post/use voice, access resources, and use the community-scoped AI agent.
+- External agent harnesses can access authorized community context through the official Polynet MCP.
 
 ---
 
@@ -29,14 +29,16 @@ This file is the execution contract for agents working in this repository.
 - Auth and session lifecycle.
 - Community creation and management.
 - Community visibility model simplified to `Published` and `Unlisted`.
-- Discover page retained using simplified visibility semantics.
+- Discover is a communities-only surface using simplified visibility semantics.
 - Gated community access model (including for `Published` communities).
 - Public community funnels for founder-shared links (YouTube/social/direct).
 - Core member UX: join, navigate, post/chat, and voice.
 - Billing and provider/account connections.
 - Automated payouts for community builders (existing community payout flow).
-- Tiered access and quota enforcement for personal AI usage.
-- Personal AI threads with community lens/context switching inside a thread.
+- Community-scoped AI agent interactions embedded in community surfaces.
+- Official Polynet MCP access for external agent harnesses.
+- Tiered access and quota enforcement for AI usage.
+- Existing thread and workspace infrastructure retained as migration substrate, not as the primary MVP destination.
 - Ongoing `App.tsx` decomposition and cleanup required for launch stability.
 
 ---
@@ -47,6 +49,8 @@ This file is the execution contract for agents working in this repository.
 - Automated affiliate payouts.
 - Advanced automations/workflow depth beyond minimal alpha.
 - Funnel builder.
+- Standalone general-purpose personal-agent Workspace or multi-agent canvas.
+- Public Apps and Skills catalogs inside Discover.
 - Duplicate/legacy UI surfaces not required for MVP journeys.
 - Extra inference-gating complexity beyond minimal tier limits.
 - Nice-to-have platform expansions not directly improving creator setup + member participation.
@@ -78,11 +82,13 @@ If a cleanup touches any of the above, require explicit human confirmation.
 - `Published` does not mean ungated access; entitlement and membership checks still apply.
 - Community funnel is a single canonical entry surface for join/gate.
 
-### Thread Community Lens
-- Thread-level community context is explicit and server-validated.
-- Switching lens affects subsequent turns only, never retroactively mutates prior turns.
-- Lens context must fail closed if membership/entitlement is missing.
+### Community Agent + External Harness Context
+- Native community-agent interactions are bound to one explicit community context.
+- External MCP requests select community context explicitly and server-validate it.
+- Context changes affect subsequent turns only and never retroactively mutate stored history.
+- Community context must fail closed if membership or entitlement is missing.
 - Context used for each turn must be auditable from stored thread records/events.
+- Threads and messages may remain internal persistence primitives without being user-facing navigation.
 
 ### Payments and Entitlements
 - Redirects are UX only; provider/webhook verification is authoritative.
@@ -92,7 +98,7 @@ If a cleanup touches any of the above, require explicit human confirmation.
 
 ### Security and Tool Boundaries
 - Web runtime cannot execute local filesystem/shell tools.
-- Workspace cloud tools are provider-bounded and approval-gated.
+- Cloud tools are provider-bounded and approval-gated.
 - Path traversal and symlink escape must fail closed.
 
 ---
@@ -150,7 +156,7 @@ All must be demonstrably true:
 - Founder can create/manage community and share funnel link.
 - Member can discover/open funnel, pass gate, and join community.
 - Community usage loop works: navigate, post/chat, voice, resources.
-- Thread lens switch between communities works and remains auditable.
+- Community-agent and external MCP context are explicit, authorized, and auditable.
 - Billing flow reaches entitlement correctly; builder payouts continue.
 - No deferred feature is required to complete primary MVP journeys.
 

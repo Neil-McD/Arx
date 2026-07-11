@@ -593,8 +593,8 @@ assert.match(
 );
 assert.match(
   launchSetupRoute,
-  /COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES[\s\S]*community_launch_setup[\s\S]*community_launch_step[\s\S]*readCommunityLaunchSetupPathRouteContext[\s\S]*readCurrentCommunityLaunchSetupRouteContext[\s\S]*\/setup\/\$\{encodeURIComponent\(args\.step\)\}/,
-  "launch setup route helper must own path-first parse/build behavior for durable setup-step URLs",
+  /COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES[\s\S]*readCommunityLaunchSetupPathRouteContext[\s\S]*readCurrentCommunityLaunchSetupRouteContext[\s\S]*buildCommunityTabPath\(communitySlug, "settings", null, "community"\)[\s\S]*community_launch_setup[\s\S]*community_launch_step/,
+  "launch setup must preserve old path parsing while building new durable state under community settings",
 );
 assert.match(
   routeLifecycle,

@@ -154,13 +154,11 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
                           const changed =
                             communityShell.onSelectActiveCommunity(community);
                           if (!changed) return;
-                          if (communityShell.activePage !== "workspace") {
-                            const nextCommunitySlug = String(
-                              community.slug ?? "",
-                            ).trim();
-                            if (nextCommunitySlug) {
-                              communityShell.onOpenCommunityChat(nextCommunitySlug);
-                            }
+                          const nextCommunitySlug = String(
+                            community.slug ?? "",
+                          ).trim();
+                          if (nextCommunitySlug) {
+                            communityShell.onOpenCommunityChat(nextCommunitySlug);
                           }
                         }}
                       >

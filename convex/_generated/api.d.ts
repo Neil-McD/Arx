@@ -47,6 +47,7 @@ import type * as communityAdmin from "../communityAdmin.js";
 import type * as communityAgent from "../communityAgent.js";
 import type * as communityAgentConcierge from "../communityAgentConcierge.js";
 import type * as communityAgentConciergeCore from "../communityAgentConciergeCore.js";
+import type * as communityAgentContext from "../communityAgentContext.js";
 import type * as communityAgentFilesystem from "../communityAgentFilesystem.js";
 import type * as communityAgentHeartbeat from "../communityAgentHeartbeat.js";
 import type * as communityAgentRuntime from "../communityAgentRuntime.js";
@@ -59,6 +60,7 @@ import type * as communityArchiveEmbeddingPipeline from "../communityArchiveEmbe
 import type * as communityArchiveRetrieval from "../communityArchiveRetrieval.js";
 import type * as communityArchiveShared from "../communityArchiveShared.js";
 import type * as communityAttention from "../communityAttention.js";
+import type * as communityCapabilityContext from "../communityCapabilityContext.js";
 import type * as communityChat from "../communityChat.js";
 import type * as communityCommerce from "../communityCommerce.js";
 import type * as communityCompilerCandidates from "../communityCompilerCandidates.js";
@@ -135,6 +137,7 @@ import type * as httpVoice from "../httpVoice.js";
 import type * as legalAcceptances from "../legalAcceptances.js";
 import type * as mcpHttpClient from "../mcpHttpClient.js";
 import type * as mcpSnapshotCodec from "../mcpSnapshotCodec.js";
+import type * as memberEntryDestination from "../memberEntryDestination.js";
 import type * as memberOntology from "../memberOntology.js";
 import type * as memberOntologyCore from "../memberOntologyCore.js";
 import type * as modelRegistry from "../modelRegistry.js";
@@ -257,6 +260,7 @@ declare const fullApi: ApiFromModules<{
   communityAgent: typeof communityAgent;
   communityAgentConcierge: typeof communityAgentConcierge;
   communityAgentConciergeCore: typeof communityAgentConciergeCore;
+  communityAgentContext: typeof communityAgentContext;
   communityAgentFilesystem: typeof communityAgentFilesystem;
   communityAgentHeartbeat: typeof communityAgentHeartbeat;
   communityAgentRuntime: typeof communityAgentRuntime;
@@ -269,6 +273,7 @@ declare const fullApi: ApiFromModules<{
   communityArchiveRetrieval: typeof communityArchiveRetrieval;
   communityArchiveShared: typeof communityArchiveShared;
   communityAttention: typeof communityAttention;
+  communityCapabilityContext: typeof communityCapabilityContext;
   communityChat: typeof communityChat;
   communityCommerce: typeof communityCommerce;
   communityCompilerCandidates: typeof communityCompilerCandidates;
@@ -345,6 +350,7 @@ declare const fullApi: ApiFromModules<{
   legalAcceptances: typeof legalAcceptances;
   mcpHttpClient: typeof mcpHttpClient;
   mcpSnapshotCodec: typeof mcpSnapshotCodec;
+  memberEntryDestination: typeof memberEntryDestination;
   memberOntology: typeof memberOntology;
   memberOntologyCore: typeof memberOntologyCore;
   modelRegistry: typeof modelRegistry;

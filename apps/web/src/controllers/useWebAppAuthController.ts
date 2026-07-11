@@ -59,13 +59,21 @@ type UseWebAppAuthControllerResult = {
   authError: string | null;
   requireSignIn: (intentInput?: unknown) => void;
   handleSignOut: () => Promise<void>;
-  ensureUsableAuthSession: (session?: AuthSession | null, source?: string) => Promise<AuthSession | null>;
+  ensureUsableAuthSession: (
+    session?: AuthSession | null,
+    source?: string,
+    options?: { forceRefresh?: boolean },
+  ) => Promise<AuthSession | null>;
   fetchWithAuth: (url: string, init: RequestInit, session: AuthSession) => Promise<Response>;
   fetchWithPublic: (url: string, init?: RequestInit) => Promise<Response>;
   sessionArg: { session: AuthSession | null };
   authenticatedSessionArg: {
     session: AuthSession | null;
-    ensureSession: (session?: AuthSession | null, source?: string) => Promise<AuthSession | null>;
+    ensureSession: (
+      session?: AuthSession | null,
+      source?: string,
+      options?: { forceRefresh?: boolean },
+    ) => Promise<AuthSession | null>;
   };
 };
 
@@ -208,11 +216,61 @@ export function useWebAppAuthController(
   const ensureUsableAuthSession = useCallback(async (
     currentSession: AuthSession | null | undefined = sessionRef.current ?? session,
     sourceInput?: string,
+    options?: { forceRefresh?: boolean },
   ): Promise<AuthSession | null> => {
     const requestSession = currentSession ?? null;
     if (!requestSession) return null;
     const source = String(sourceInput ?? "").trim() || "unknown";
     const startedAt = Date.now();
+
+    if (options?.forceRefresh) {
+      const epochAtRefreshStart = authSessionEpochRef.current;
+      const refreshed = await refreshAuthSessionLockedResult();
+      if (authSessionEpochRef.current !== epochAtRefreshStart) return null;
+      if (refreshed.status === "terminal_failure") {
+        ensuredSessionCacheRef.current = null;
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_session_ensure",
+          status: "failure",
+          detail: {
+            source,
+            forcedRefresh: true,
+            durationMs: Date.now() - startedAt,
+            reason: refreshed.reason,
+          },
+        });
+        await expireAuthSessionLocally();
+        return null;
+      }
+      if (refreshed.status !== "refreshed") {
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_session_ensure",
+          status: "failure",
+          detail: {
+            source,
+            forcedRefresh: true,
+            durationMs: Date.now() - startedAt,
+            reason: refreshed.reason,
+          },
+        });
+        return null;
+      }
+      adoptAuthSession(refreshed.session);
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "auth_session_ensure",
+        status: "success",
+        detail: {
+          source,
+          forcedRefresh: true,
+          durationMs: Date.now() - startedAt,
+          sessionChanged: !sessionsEqual(refreshed.session, requestSession),
+        },
+      });
+      return sessionRef.current ?? refreshed.session;
+    }
 
     const requestKey = buildAuthSessionCacheKey(requestSession);
     if (requestKey) {

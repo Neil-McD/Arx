@@ -61,8 +61,8 @@ export function WebMobileTopBar({
           <button
             type="button"
             className="mobile-topbar-icon mobile-topbar-back"
-            aria-label="Back to workspace"
-            title="Back to workspace"
+            aria-label="Back to community"
+            title="Back to community"
             onClick={onBack}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -98,26 +98,28 @@ export function WebMobileTopBar({
         ) : null}
       </div>
 
-      <div className="mobile-topbar-center" role="tablist" aria-label="View mode">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={isAgentModeActive}
-          className={`mobile-topbar-mode${isAgentModeActive ? " active" : ""}`}
-          onClick={() => onSelectRootPage("agent")}
-        >
-          Agent
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={isRightModeActive}
-          className={`mobile-topbar-mode${isRightModeActive ? " active" : ""}`}
-          onClick={() => onSelectRootPage("community")}
-        >
-          {rightModeLabel}
-        </button>
-      </div>
+      {!forceCommunityRoot ? (
+        <div className="mobile-topbar-center" role="tablist" aria-label="View mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isAgentModeActive}
+            className={`mobile-topbar-mode${isAgentModeActive ? " active" : ""}`}
+            onClick={() => onSelectRootPage("agent")}
+          >
+            Agent
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isRightModeActive}
+            className={`mobile-topbar-mode${isRightModeActive ? " active" : ""}`}
+            onClick={() => onSelectRootPage("community")}
+          >
+            {rightModeLabel}
+          </button>
+        </div>
+      ) : null}
 
       <div className="mobile-topbar-right">
         <button

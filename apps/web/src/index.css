@@ -146,15 +146,6 @@
   -webkit-backdrop-filter: blur(16px) saturate(130%);
 }
 
-.app-topbar .topbar-right .community-btn:hover,
-.app-topbar .topbar-right .community-btn:active {
-  background: transparent;
-}
-
-.app-topbar .topbar-right .community-btn {
-  transform: none;
-}
-
 .app-topbar .icon-button,
 .app-topbar .new-session-header-btn {
   width: 32px;

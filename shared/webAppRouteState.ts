@@ -2,12 +2,10 @@ import { isUuid } from "./appIdentity";
 import {
   parseCommunitySettingsPane,
   parseCommunityTab,
-  parseDiscoverTab,
   type AppPage,
   type AppView,
   type CommunitySettingsPane,
   type CommunityTab,
-  type DiscoverTab,
   type SettingsPage,
 } from "./appShellNavigation";
 
@@ -28,9 +26,6 @@ export type AppRouteState = {
   communityTab: CommunityTab;
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
-  discoverTab?: DiscoverTab | null;
-  discoverAppId?: string | null;
-  discoverSkillId?: string | null;
   docsSlug?: string | null;
   threadId: string | null;
   projectId?: string | null;
@@ -44,19 +39,21 @@ export type AppRoutePathState = {
   communityTab: CommunityTab;
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
-  discoverTab?: DiscoverTab | null;
-  discoverAppId?: string | null;
-  discoverSkillId?: string | null;
   docsSlug?: string | null;
   threadId: string | null;
   projectId?: string | null;
 };
 
-export const DEFAULT_POST_SIGN_IN_PATH = "/workspace";
+export const DEFAULT_POST_SIGN_IN_PATH = "/";
 export const MOBILE_SHELL_PATH_PREFIX = "/m";
 export const STANDALONE_APP_LAUNCH_SEARCH_PARAM = "launch";
 export const STANDALONE_APP_LAUNCH_SEARCH_VALUE = "app";
 export const WORKSPACE_DRAFT_PROJECT_SEARCH_PARAM = "project";
+
+export type LegacyWorkspaceRouteContext = {
+  kind: "root" | "thread" | "community";
+  communitySlug: string | null;
+};
 
 const RESERVED_WORKSPACE_ROUTE_SEGMENTS = new Set([
   "apps",
@@ -237,8 +234,42 @@ export function buildCommunityFunnelPath(communitySlug: string | null | undefine
 function splitPathSegments(pathname: string): string[] {
   return String(pathname ?? "")
     .split("/")
-    .map((segment) => decodeURIComponent(segment).trim())
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment).trim();
+      } catch {
+        return segment.trim();
+      }
+    })
     .filter(Boolean);
+}
+
+export function readLegacyWorkspaceRouteContext(
+  pathname: string | null | undefined,
+): LegacyWorkspaceRouteContext | null {
+  const parsed = new URL(String(pathname || "/"), "http://local.arx");
+  const stripped = stripShellVariantFromPathname(parsed.pathname || "/");
+  const segments = splitPathSegments(new URL(stripped, "http://local.arx").pathname);
+  if (segments[0] !== "workspace") return null;
+  if (segments[1] === "thread") {
+    return { kind: "thread", communitySlug: null };
+  }
+  const communitySlug =
+    segments[1] === "community"
+      ? String(segments[2] ?? "").trim() || null
+      : !isReservedWorkspaceRouteSegment(segments[1])
+        ? String(segments[1] ?? "").trim() || null
+        : null;
+  return {
+    kind: communitySlug ? "community" : "root",
+    communitySlug,
+  };
+}
+
+export function isLegacyWorkspaceRoutePath(
+  pathname: string | null | undefined,
+): boolean {
+  return readLegacyWorkspaceRouteContext(pathname) !== null;
 }
 
 function normalizeDocsSlug(value: string | null | undefined): string | null {
@@ -311,17 +342,13 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     };
   }
 
-  if (segments[0] === "discover" && segments.length <= 3) {
-    const discoverTab = parseDiscoverTab(segments[1] ?? null);
+  if (segments[0] === "discover") {
     return {
       page: "discover",
       view: "home",
       settingsPage: "agent",
       communitySlug: null,
       communityTab: "chat",
-      discoverTab,
-      discoverAppId: discoverTab === "apps" ? String(segments[2] ?? "").trim() || null : null,
-      discoverSkillId: discoverTab === "skills" ? String(segments[2] ?? "").trim() || null : null,
       threadId: null,
     };
   }
@@ -339,36 +366,16 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
   }
 
   if (segments[0] === "workspace") {
-    if (segments.length === 1) {
-      return {
-        page: "workspace",
-        view: "home",
-        settingsPage: "agent",
-        communitySlug: null,
-        communityTab: "chat",
-        threadId: null,
-      };
-    }
-    if (segments[1] === "thread" && segments.length >= 3) {
-      const rawThreadId = String(segments[2] ?? "").trim();
-      return {
-        page: "workspace",
-        view: "home",
-        settingsPage: "agent",
-        communitySlug: null,
-        communityTab: "chat",
-        threadId: isUuid(rawThreadId) ? rawThreadId : null,
-      };
-    }
     if (segments[1] === "community" && segments.length === 5 && segments[3] === "setup") {
       const slug = String(segments[2] ?? "").trim();
       if (!slug) return null;
       return {
-        page: "workspace",
+        page: "community",
         view: "home",
         settingsPage: "agent",
         communitySlug: slug,
-        communityTab: "chat",
+        communityTab: "settings",
+        communitySettingsPane: "community",
         threadId: null,
       };
     }
@@ -380,38 +387,23 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       const slug = String(segments[1] ?? "").trim();
       if (!slug) return null;
       return {
-        page: "workspace",
+        page: "community",
         view: "home",
         settingsPage: "agent",
         communitySlug: slug,
-        communityTab: "chat",
+        communityTab: "settings",
+        communitySettingsPane: "community",
         threadId: null,
       };
     }
-    if (segments[1] === "community" && segments.length === 3) {
-      const slug = String(segments[2] ?? "").trim();
-      if (!slug) return null;
-      return {
-        page: "workspace",
-        view: "home",
-        settingsPage: "agent",
-        communitySlug: slug,
-        communityTab: "chat",
-        threadId: null,
-      };
-    }
-    if (segments.length === 2 && !isReservedWorkspaceRouteSegment(segments[1])) {
-      const slug = String(segments[1] ?? "").trim();
-      if (!slug) return null;
-      return {
-        page: "workspace",
-        view: "home",
-        settingsPage: "agent",
-        communitySlug: slug,
-        communityTab: "chat",
-        threadId: null,
-      };
-    }
+    return {
+      page: "landing",
+      view: "home",
+      settingsPage: "agent",
+      communitySlug: null,
+      communityTab: "chat",
+      threadId: null,
+    };
   }
 
   if (segments[0] === "settings") {
@@ -491,9 +483,6 @@ export function readAppRouteFromLocation(): AppRouteState {
       communityTab: fromPath.communityTab,
       communityResourceModuleId: fromPath.communityResourceModuleId ?? null,
       communitySettingsPane: fromPath.communitySettingsPane ?? null,
-      discoverTab: fromPath.discoverTab ?? "communities",
-      discoverAppId: fromPath.discoverAppId ?? null,
-      discoverSkillId: fromPath.discoverSkillId ?? null,
       docsSlug: fromPath.docsSlug ?? null,
       threadId: fromPath.threadId,
       projectId,
@@ -506,9 +495,6 @@ export function readAppRouteFromLocation(): AppRouteState {
     settingsPage: "agent",
     communitySlug: null,
     communityTab: "chat",
-    discoverTab: "communities",
-    discoverAppId: null,
-    discoverSkillId: null,
     docsSlug: null,
     threadId: null,
     projectId: null,
@@ -521,15 +507,6 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
   }
 
   if (state.page === "discover") {
-    const tab = parseDiscoverTab(state.discoverTab);
-    if (tab === "apps") {
-      const appId = String(state.discoverAppId ?? "").trim();
-      return appId ? `/discover/apps/${encodeURIComponent(appId)}` : "/discover/apps";
-    }
-    if (tab === "skills") {
-      const skillId = String(state.discoverSkillId ?? "").trim();
-      return skillId ? `/discover/skills/${encodeURIComponent(skillId)}` : "/discover/skills";
-    }
     return "/discover";
   }
 

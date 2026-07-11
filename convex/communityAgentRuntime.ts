@@ -29,7 +29,9 @@ import {
   type CommunityAgentRoleKey,
 } from "../shared/communityAgentRoles";
 import { renderCommunityAgentSkills } from "../shared/communityAgentSkills";
+import { buildCommunityAgentIdentityPrompt } from "../shared/communityAgentRuntimeBoundary";
 import { normalizeIdValue, toIsoString } from "./communityCore";
+import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 
 const COMMUNITY_AGENT_RUNTIME_MAX_TOOL_STEPS = 12;
 const COMMUNITY_AGENT_RUNTIME_MAX_OUTPUT_CHARS = 12_000;
@@ -259,8 +261,7 @@ function coerceCommunityAgentCompletion(
 // the longest common prompt prefix so role runs share the provider's prompt
 // cache. Role-specific instruction lives in the <role_definition> layer below.
 const COMMUNITY_AGENT_SHARED_RULES = [
-  "You are the autonomous community agent for exactly one Polynet community.",
-  "You are not a member's personal agent and you are not a public chat assistant.",
+  buildCommunityAgentIdentityPrompt({ surface: "autonomous_cognition" }),
   "You wake from platform triggers and inspect the community compiler and directory filesystem.",
   "",
   "Hard rules:",
@@ -466,27 +467,20 @@ export const resolveCommunityAgentRunContextInternal = internalQuery({
     communityId: v.id("communities"),
   },
   handler: async (ctx, args): Promise<CommunityAgentResolvedContext> => {
-    const community = (await ctx.db.get(args.communityId)) as Record<string, any> | null;
-    if (!community) throw new Error("community_agent_runtime_community_not_found");
-    const sponsorUserId = community.ownerId;
+    const canonicalContext = await readCanonicalCommunityAgentContext(ctx, args.communityId);
+    if (!canonicalContext) throw new Error("community_agent_runtime_community_not_found");
+    const sponsorUserId = canonicalContext.ownerUserId;
     if (!sponsorUserId) throw new Error("community_agent_runtime_owner_required");
     const owner = await ctx.db.get(sponsorUserId as any);
     if (!owner) throw new Error("community_agent_runtime_owner_not_found");
-    const configRows = (await ctx.db
-      .query("communityAgentConfigs" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as Array<Record<string, any>>;
-    const config = configRows
-      .slice()
-      .sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))[0] ?? null;
     return {
       communityId: args.communityId,
-      communityName: boundedText(community.name, 200) || null,
-      communitySlug: boundedText(community.slug, 200) || null,
-      communityOneLiner: boundedText(community.oneLiner, 500) || null,
-      communityAbout: boundedText(community.about, 4_000) || null,
+      communityName: canonicalContext.communityName,
+      communitySlug: canonicalContext.communitySlug,
+      communityOneLiner: canonicalContext.communityOneLiner,
+      communityAbout: canonicalContext.communityAbout,
       sponsorUserId,
-      communitySystemPrompt: boundedText(config?.systemPrompt, 40_000) || null,
+      communitySystemPrompt: canonicalContext.communitySystemPrompt,
     };
   },
 });
@@ -799,7 +793,7 @@ export const recordCommunityAgentRunEventsInternal = internalMutation({
       const seq = Math.max(0, Math.floor(event.seq));
       // Hard cap so a pathological run cannot flood the log.
       if (seq >= RUN_EVENT_MAX_SEQ) continue;
-      await ctx.db.insert("communityAgentRunEvents" as any, {
+      const row = {
         communityId: args.communityId,
         runId: boundedText(args.runId, 128),
         seq,
@@ -809,7 +803,16 @@ export const recordCommunityAgentRunEventsInternal = internalMutation({
         errorCode: boundedText(event.errorCode, 120) || undefined,
         content: boundedText(event.content, RUN_EVENT_CONTENT_MAX_CHARS),
         createdAt: nowMs,
-      });
+      };
+      const existing = await ctx.db
+        .query("communityAgentRunEvents" as any)
+        .withIndex("by_run_seq", (q: any) => q.eq("runId", row.runId).eq("seq", seq))
+        .first();
+      if (existing) {
+        await ctx.db.patch(existing._id, row);
+      } else {
+        await ctx.db.insert("communityAgentRunEvents" as any, row);
+      }
     }
     return { ok: true, recorded: args.events.length };
   },

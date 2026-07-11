@@ -70,7 +70,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   aiAgentPreferredTab: WebCommunitySecondaryPanelsProps["aiAgent"]["preferredTab"];
   isLoadingCommunityAgentConfig: WebCommunitySecondaryPanelsProps["aiAgent"]["isLoadingCommunityAgentConfig"];
   communityAgentConfigError: WebCommunitySecondaryPanelsProps["aiAgent"]["communityAgentConfigError"];
-  aiAgentWorkspaceEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["workspaceEditorProps"];
+  aiAgentInstructionsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["instructionsEditorProps"];
   aiAgentAppsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["appsEditorProps"];
   aiAgentSkillsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["skillsEditorProps"];
   isLoadingCommunityFunnel: WebCommunitySecondaryPanelsProps["funnel"]["isLoadingCommunityFunnel"];
@@ -251,7 +251,7 @@ export function buildWebCommunitySurfaceProjection(
       isLoadingCommunityAgentConfig: params.isLoadingCommunityAgentConfig,
       communityAgentConfigError: params.communityAgentConfigError,
       onRequireSignIn: params.requireSignIn,
-      workspaceEditorProps: params.aiAgentWorkspaceEditorProps,
+      instructionsEditorProps: params.aiAgentInstructionsEditorProps,
       appsEditorProps: params.aiAgentAppsEditorProps,
       skillsEditorProps: params.aiAgentSkillsEditorProps,
     },

@@ -73,6 +73,9 @@ import {
 } from "./communityChat";
 import {
   createCommunityInteractionComposerMessage as createCommunityInteractionComposerMessageImpl,
+  getMyCommunityAgentDockTranscript as getMyCommunityAgentDockTranscriptImpl,
+  getMyCommunityAgentDockTurn as getMyCommunityAgentDockTurnImpl,
+  sendCommunityAgentDockMessage as sendCommunityAgentDockMessageImpl,
   deleteCommunityInteractionMessage as deleteCommunityInteractionMessageImpl,
   editCommunityInteractionMessage as editCommunityInteractionMessageImpl,
   listCommunityInteractionReplies as listCommunityInteractionRepliesImpl,
@@ -291,6 +294,9 @@ export const createMessageReaction = createMessageReactionImpl;
 export const deleteMessageReactionById = deleteMessageReactionByIdImpl;
 export const listMessageReactions = listMessageReactionsImpl;
 export const createCommunityInteractionComposerMessage = createCommunityInteractionComposerMessageImpl;
+export const getMyCommunityAgentDockTranscript = getMyCommunityAgentDockTranscriptImpl;
+export const getMyCommunityAgentDockTurn = getMyCommunityAgentDockTurnImpl;
+export const sendCommunityAgentDockMessage = sendCommunityAgentDockMessageImpl;
 export const listCommunityInteractionRoots = listCommunityInteractionRootsImpl;
 export const listCommunityInteractionReplies = listCommunityInteractionRepliesImpl;
 export const toggleCommunityInteractionReaction = toggleCommunityInteractionReactionImpl;

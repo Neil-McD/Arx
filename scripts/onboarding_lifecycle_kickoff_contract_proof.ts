@@ -10,12 +10,6 @@ const lifecycleActivations = read("convex/agentLifecycleActivations.ts");
 const runtimeTurnHandlers = read("convex/runtimeTurnHandlers.ts");
 const runtimeTurnResolution = read("convex/runtimeTurnResolution.ts");
 const app = read("apps/web/src/App.tsx");
-const bridgeCard = read("apps/web/src/components/WebCommunityBridgeCard.tsx");
-const workspaceLandingProjection = read("apps/web/src/controllers/buildWebWorkspaceLandingProjection.tsx");
-const workspaceHost = read("apps/web/src/components/WebWorkspaceHost.tsx");
-const mainSurfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
-const handoffPage = read("apps/web/src/components/WebOnboardingHandoffPage.tsx");
-const baseCss = read("apps/web/src/base.css");
 const gateway = read("shared/cloudOnboardingGuideGateway.ts");
 const webTurnRunner = read("shared/useWebTurnRunnerController.ts");
 const webTurnRunnerCore = read("shared/webTurnRunnerCore.ts");
@@ -213,32 +207,12 @@ assert.match(
 assert.match(
   gateway,
   /client\.action\("onboardingLifecycle:requestOnboardingGuideKickoff"/,
-  "web gateway must call the kickoff action directly",
-);
-assert.match(
-  app,
-  /requestOnboardingGuideAfterBridge/,
-  "bridge must have a best-effort onboarding guide handoff",
-);
-assert.match(
-  app,
-  /completePlatformBridge[\s\S]*finishOnboarding\(\{ navigate: false \}\)[\s\S]*await requestOnboardingGuideAfterBridge\(\)/,
-  "platform bridge completion must start the guide handoff after account setup completes",
-);
-assert.match(
-  app,
-  /flushSync\(\(\) => \{[\s\S]*setOnboardingGuidePending[\s\S]*setActiveThreadId\(null\)[\s\S]*setWorkspaceWantsNewChatMode\(true\)[\s\S]*\}\);[\s\S]*navigateTo\(routePath\)[\s\S]*await requestOnboardingGuideKickoff/,
-  "guide handoff must commit the visible launch shell before navigating and waiting on the backend action",
-);
-assert.match(
-  app,
-  /run_required[\s\S]*runAgentTurn\(activeSession, threadId,[\s\S]*onStreamStart:/,
-  "bridge handoff must enter the thread and start the lifecycle turn through the normal client runner",
+  "the isolated onboarding gateway must retain the backend kickoff capability",
 );
 assert.doesNotMatch(
   app,
-  /getOnboardingGuideLaunchDelayMs|ONBOARDING_GUIDE_MIN_LAUNCH_MS/,
-  "bridge handoff must not use a timer as a substitute for runtime readiness",
+  /requestOnboardingGuideKickoff|requestOnboardingGuideAfterBridge|setOnboardingGuidePending/,
+  "the community-first web bridge must not create a personal onboarding thread or activation",
 );
 assert.match(
   webTurnRunnerCore,
@@ -248,87 +222,17 @@ assert.match(
 assert.match(
   webTurnRunner,
   /eventName === "start"[\s\S]*params\.onStreamStart\?\./,
-  "the transition shell must clear from the first real SSE start event",
-);
-assert.match(
-  app,
-  /shellProjectionActivePage = onboardingGuidePending \? "onboarding" : activePage[\s\S]*activePage: shellProjectionActivePage/,
-  "guide handoff must suppress workspace shell chrome by projecting as onboarding while pending",
-);
-assert.match(
-  app,
-  /completeBridgeAndEnter[\s\S]*requestOnboardingGuideAfterBridge\(\{[\s\S]*communityId: guideTarget\.communityId/,
-  "community bridge completion must trigger the guide handoff with the active community",
+  "the retained normal runtime transport must continue exposing real SSE start events",
 );
 assert.match(
   completeBridgeAndEnterBody,
-  /if \(approvalPending\) \{[\s\S]*setBridgePendingEntry\(null\);[\s\S]*return true;[\s\S]*\}[\s\S]*requestOnboardingGuideAfterBridge/,
-  "approval-pending community bridge completion must stop before guide handoff",
+  /if \(approvalPending\) \{[\s\S]*setBridgePendingEntry\(null\);[\s\S]*return true;[\s\S]*\}/,
+  "approval-pending community bridge completion must stop after deterministic profile setup",
 );
 assert.doesNotMatch(
   approvalPendingBridgeBranch,
-  /requestOnboardingGuideAfterBridge|enterJoinedCommunity|handlePublicLandingPrimaryAction/,
-  "approval-pending community bridge completion must not start a guide or enter community chat",
-);
-assert.match(
-  bridgeCard,
-  /\{isPlatform \? null : \([\s\S]*<div className="cfg-gav">[\s\S]*<div className="cfg-gname">/,
-  "generic platform bridge must not repeat the community masthead inside the card",
-);
-assert.match(
-  bridgeCard,
-  /cvs-bridge-platform/,
-  "platform bridge card must retain a distinct styling hook",
-);
-assert.match(
-  mainSurfaceHost,
-  /onboardingHandoffPageProps[\s\S]*community-mode[\s\S]*<WebOnboardingHandoffPage/,
-  "main surface must render the bridge handoff as a first-class screen",
-);
-assert.match(
-  handoffPage,
-  /Your Polynet agent is getting oriented[\s\S]*Your agent is getting oriented to \$\{targetName\}[\s\S]*Try again/,
-  "handoff page must present the member-language launch shell and retry",
-);
-assert.doesNotMatch(
-  handoffPage,
-  /Step 2|Onboarding into|Profile saved|lens selected|Starting your guide/,
-  "handoff page must not regress into the heavy checklist flow",
-);
-assert.match(
-  handoffPage,
-  /failedMessage = "We could not start your guide yet\. Try again in a moment\."/,
-  "handoff failure UI must use stable user-facing copy",
-);
-assert.doesNotMatch(
-  handoffPage,
-  /\{props\.error \|\||\{props\.error\}/,
-  "handoff failure UI must not render raw backend error strings",
-);
-assert.doesNotMatch(
-  workspaceLandingProjection,
-  /web-empty-thread-guide-pending|emptyThreadGuidePending/,
-  "workspace landing projection must not own the onboarding handoff UI",
-);
-assert.doesNotMatch(
-  workspaceHost,
-  /isOnboardingGuidePending|emptyThreadGuidePending|Starting your guide/,
-  "workspace host must not render the onboarding handoff above the composer",
-);
-assert.doesNotMatch(
-  baseCss,
-  /web-empty-thread-guide/,
-  "legacy composer-adjacent onboarding guide strip CSS must stay deleted",
-);
-assert.match(
-  baseCss,
-  /polynet-onboarding-launch-shell[\s\S]*onboardingLaunchMeter/,
-  "handoff CSS must use the compact launch shell and subtle meter",
-);
-assert.doesNotMatch(
-  baseCss,
-  /polynet-onboarding-handoff-card|polynet-onboarding-handoff-steps|onboardingHandoffDot|onboardingHandoffPulse/,
-  "handoff CSS must not keep the deleted checklist styling hooks",
+  /requestOnboardingGuideAfterBridge|resolveAndEnterMemberDestination|applyMemberEntryDestination/,
+  "approval-pending community bridge completion must not enter community chat",
 );
 
 assert.match(
@@ -464,8 +368,8 @@ assert.match(
 
 assert.match(
   contract,
-  /deterministic normal cloud thread/,
-  "skill harness contract must document the normal-thread handoff",
+  /backend onboarding capability[\s\S]*deterministic normal cloud thread/,
+  "skill harness contract must retain the governed backend onboarding capability",
 );
 assert.match(
   contract,
@@ -479,8 +383,8 @@ assert.match(
 );
 assert.match(
   contract,
-  /forces the orientation protocol:[\s\S]*get_active_community_context[\s\S]*search_product_docs[\s\S]*community_resources_map[\s\S]*compact handoff screen[\s\S]*evidence-grounded orientation[\s\S]*active thread\/community lens[\s\S]*profile-memory boundary[\s\S]*one-clause agent grounding instead of a named[\s\S]*self-introduction/,
-  "skill harness contract must document the deterministic bridge-to-agent handoff screen",
+  /not emitted by the current web bridge[\s\S]*visible interactive[\s\S]*community-agent surface[\s\S]*without restoring bridge-to-Workspace navigation or creating an invisible turn/,
+  "skill harness contract must document the community-first isolation boundary",
 );
 
 console.log("onboarding_lifecycle_kickoff_contract_proof: ok");

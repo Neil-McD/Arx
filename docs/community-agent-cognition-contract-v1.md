@@ -1,8 +1,8 @@
 # Community Agent Cognition Contract v1
 
-Status: planned architecture
+Status: active architecture; core runtime boundary implemented on Work 3 staging
 Scope: product architecture, memory system, community agent loop
-Last updated: 2026-07-01 (Amendment v1.1 appended)
+Last updated: 2026-07-11
 
 ## Purpose
 
@@ -13,6 +13,29 @@ The core idea:
 > Members act through personal agents. Communities learn through community agents.
 
 This document defines the intended architecture for community cognition, memory compilation, and future workflow improvement. It is not an inventory of the current implementation. Current code must be evaluated against this contract, not the other way around.
+
+## Current Runtime Boundary
+
+There is one canonical community-agent identity with two runtime surfaces:
+
+1. `member_concierge`
+   - entered from a direct mention or the private community agent dock
+   - requester-funded through the requester's provider connection
+   - revalidates community access and source visibility for every turn
+   - receives only product-doc and community-resource retrieval tools
+   - cannot write community memory or invoke autonomous cognition
+
+2. `autonomous_cognition`
+   - entered only from internal heartbeat/event triggers
+   - community-owner-funded
+   - operates on the community compiler and directory filesystem
+   - only the Steward role receives the directory airlock write tool
+   - cannot be directly prompted by a member or administrator
+
+Both surfaces resolve community identity, owner/config state, agent display
+identity, and community-wide instructions through the same canonical context
+resolver. They intentionally do not share a combined tool list. One entity and
+one context contract do not imply one authority envelope.
 
 ## Irreducible System
 

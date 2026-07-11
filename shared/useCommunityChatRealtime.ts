@@ -131,7 +131,10 @@ export function useCommunityChatRealtime<
         const threadId = await latestArgs.ensureCommunityChatThread(args.activeCommunityId!, usableSession);
         if (cancelled) return;
 
-        const liveClient = createCloudCommunityChatLiveClient({ session: usableSession });
+        const liveClient = createCloudCommunityChatLiveClient({
+          session: usableSession,
+          ensureSession: latestArgs.ensureSession,
+        });
         liveClientRef.current?.close();
         liveClientRef.current = liveClient;
 

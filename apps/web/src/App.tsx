@@ -11,7 +11,6 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import { flushSync } from "react-dom";
 import { MessageCircle } from "lucide-react";
 import "highlight.js/styles/github-dark.css";
 import {
@@ -134,6 +133,10 @@ import {
   saveCloudCommunityPublicPresentation,
 } from "../../../shared/cloudCommunityFunnelGateway";
 import {
+  resolveCloudMemberEntryDestination,
+  type CloudMemberEntryDestination,
+} from "../../../shared/cloudMemberEntryDestinationGateway";
+import {
   checkCloudProfileHandleAvailability,
   loadCloudAccountSetupStatus,
   prepareCloudProfileAvatarField,
@@ -142,9 +145,6 @@ import {
   type CloudProfileHandleAvailability,
   upsertCloudProfileDetail,
 } from "../../../shared/cloudProfilesGateway";
-import {
-  requestOnboardingGuideKickoff,
-} from "../../../shared/cloudOnboardingGuideGateway";
 import { formatProfileMutationError } from "../../../shared/profileMutationErrors";
 import {
   formatAccountSetupMissingGuidance,
@@ -210,6 +210,7 @@ import {
 import {
   COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES,
   buildCommunityLaunchSetupRoutePath,
+  isCommunityLaunchSetupRoutePath,
   parseCommunityLaunchSetupRouteStep,
   readCommunityLaunchSetupRouteContext,
   readCurrentCommunityLaunchSetupRouteContext,
@@ -236,7 +237,6 @@ import {
   type AppView,
   type CommunitySettingsPane,
   type CommunityTab,
-  type DiscoverTab,
   isCommunityRouteManagedTab,
   normalizeCommunityTabForAccess,
   type SettingsGroup,
@@ -262,19 +262,8 @@ import type {
   UserProfile as SharedUserProfile,
   UserProfileDetail as SharedUserProfileDetail,
 } from "../../../shared/communityTypes";
-import type { ConnectCommunityAppInput } from "../../../shared/communityAppMountTypes";
 import type { CreateSkillPackageInput } from "../../../shared/skillPackageTypes";
 import {
-  DISCOVER_APP_CATALOG,
-  type DiscoverAppCatalogEntry,
-} from "../../../shared/discoverCatalog";
-import {
-  DISCOVER_SKILL_CATALOG,
-  type DiscoverSkillCatalogEntry,
-} from "../../../shared/discoverSkillCatalog";
-import {
-  deriveBackFromWorkspaceSettingsFallbackTransition,
-  deriveBackToWorkspaceFallbackTransition,
   deriveOpenDiscoverTransition,
   deriveToggleWorkspaceSettingsTransition,
 } from "../../../shared/appNavTransitions";
@@ -282,7 +271,6 @@ import {
   type AppShellVariant,
   type AppRouteState,
   type PublicRoute,
-  DEFAULT_POST_SIGN_IN_PATH,
   STANDALONE_APP_LAUNCH_SEARCH_PARAM,
   STANDALONE_APP_LAUNCH_SEARCH_VALUE,
   applyShellVariantToPublicPath,
@@ -294,7 +282,9 @@ import {
   buildSettingsPath,
   buildCommunityFunnelPreviewPath,
   buildWorkspaceDraftPath,
+  isLegacyWorkspaceRoutePath,
   isRootAppRoutePath,
+  readLegacyWorkspaceRouteContext,
   readAppRouteFromLocation,
   readPublicRouteFromLocation,
   readShellVariantFromPathname,
@@ -563,6 +553,12 @@ const WebAppMainSurfaceHost = lazy(() =>
   })),
 );
 
+const WebCommunityAgentDock = lazy(() =>
+  import("./components/WebCommunityAgentDock").then((module) => ({
+    default: module.WebCommunityAgentDock,
+  })),
+);
+
 const WebStandalonePublicRouteShell = lazy(() =>
   import("./components/WebStandalonePublicRouteShell").then((module) => ({
     default: module.WebStandalonePublicRouteShell,
@@ -591,22 +587,6 @@ type CommunityRecord = {
   owner_id: string;
   created_at: string;
   updated_at: string;
-};
-
-type OnboardingGuidePendingState = {
-  communityId: string | null;
-  communitySlug: string | null;
-  communityName: string;
-  status: "saving" | "preparing" | "starting" | "failed";
-  error: string | null;
-  startedAtMs: number;
-  /* A failure before the guide kickoff retries the whole bridge ceremony
-     (every step is idempotent); a kickoff failure retries the kickoff alone. */
-  retryScope: "platform_bridge" | "community_bridge" | "kickoff";
-  legalAcceptance: {
-    termsOfServiceVersion: string;
-    privacyPolicyVersion: string;
-  } | null;
 };
 
 function mapLaunchCommunityCreateError(error: unknown): string {
@@ -1052,8 +1032,7 @@ function clearPendingWorkspaceCardSetupReturn(): void {
 }
 
 function buildWorkspaceCardSetupReturnUrl(): string {
-  const pathname = window.location.pathname.startsWith("/") ? window.location.pathname : "/workspace";
-  return `${window.location.origin}${pathname}`;
+  return `${window.location.origin}/settings/billing`;
 }
 
 function buildPremiumSubscriptionReturnUrl(): string {
@@ -2011,26 +1990,15 @@ export default function App() {
   const [publicRoute, setPublicRoute] = useState<PublicRoute>(() => initialPublicRoute);
   const [shellVariant, setShellVariant] = useState<AppShellVariant>(() => initialShellVariant);
   const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay>(null);
-  const [mobileRootPage, setMobileRootPage] = useState<MobileRootPage>("agent");
+  const [mobileRootPage, setMobileRootPage] = useState<MobileRootPage>("community");
   const [mobileSettingsView, setMobileSettingsView] = useState<"index" | "detail">("detail");
 
-  const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "workspace");
+  const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "landing");
   const [activeView, setActiveView] = useState<AppView>(() => initialAppRoute?.view ?? "home");
   const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => initialAppRoute?.settingsPage ?? "account");
-  const [discoverActiveTab, setDiscoverActiveTab] = useState<DiscoverTab>(
-    () => initialAppRoute?.discoverTab ?? "communities",
-  );
-  const [selectedDiscoverAppId, setSelectedDiscoverAppId] = useState<string | null>(
-    () => initialAppRoute?.discoverAppId ?? null,
-  );
-  const [selectedDiscoverSkillId, setSelectedDiscoverSkillId] = useState<string | null>(
-    () => initialAppRoute?.discoverSkillId ?? null,
-  );
   const [selectedProductDocSlug, setSelectedProductDocSlug] = useState<string | null>(
     () => initialAppRoute?.docsSlug ?? null,
   );
-  const [shouldOpenCreatePersonalSkill, setShouldOpenCreatePersonalSkill] =
-    useState(false);
   const settingsGroup = settingsGroupForPage(settingsPage);
   const [userWantsSessions, setUserWantsSessions] = useState(false);
   const [workspaceViewportWidth, setWorkspaceViewportWidth] = useState(() =>
@@ -2337,8 +2305,11 @@ export default function App() {
   const [hasResolvedCommunities, setHasResolvedCommunities] = useState(false);
   const [communities, setCommunities] = useState<CommunityRecord[]>([]);
   const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
-  const [onboardingGuidePending, setOnboardingGuidePending] =
-    useState<OnboardingGuidePendingState | null>(null);
+  const defaultMemberEntryResolutionRef =
+    useRef<{
+      authSubject: string;
+      promise: Promise<CloudMemberEntryDestination | null>;
+    } | null>(null);
   const communityRailOrderStorageKey = useMemo(
     () => `${COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX}:${session?.user?.id ?? "local"}`,
     [session?.user?.id],
@@ -2806,7 +2777,10 @@ export default function App() {
       const usableSession = await ensureUsableAuthSession(session ?? undefined);
       if (!usableSession || cancelled) return;
       try {
-        liveClient = createCloudCommunityChatLiveClient({ session: usableSession });
+        liveClient = createCloudCommunityChatLiveClient({
+          session: usableSession,
+          ensureSession: ensureUsableAuthSession,
+        });
         unsubscribe = subscribeCloudCommunityInteractionRoots({
           liveClient,
           communityId: activeCommunityId,
@@ -2864,7 +2838,10 @@ export default function App() {
       const usableSession = await ensureUsableAuthSession(session ?? undefined);
       if (!usableSession || cancelled) return;
       try {
-        liveClient = createCloudCommunityChatLiveClient({ session: usableSession });
+        liveClient = createCloudCommunityChatLiveClient({
+          session: usableSession,
+          ensureSession: ensureUsableAuthSession,
+        });
         unsubscribe = subscribeCloudCommunityAgentServeIssue({
           liveClient,
           communityId: activeCommunityId,
@@ -2907,7 +2884,10 @@ export default function App() {
       const usableSession = await ensureUsableAuthSession(session ?? undefined);
       if (!usableSession || cancelled) return;
       try {
-        liveClient = createCloudCommunityChatLiveClient({ session: usableSession });
+        liveClient = createCloudCommunityChatLiveClient({
+          session: usableSession,
+          ensureSession: ensureUsableAuthSession,
+        });
         unsubscribe = subscribeCloudCommunityInteractionReplies({
           liveClient,
           rootId,
@@ -3420,6 +3400,13 @@ export default function App() {
     if (normalizedTab === communityTab) return;
     setCommunityResourceModuleId(null);
     applyCommunityShellState({ communityTab: normalizedTab });
+    if (isCommunityLaunchSetupRoutePath(window.location.pathname)) {
+      const normalizedPath = buildCommunityTabPath(
+        selectedActiveCommunitySlug,
+        normalizedTab,
+      );
+      if (normalizedPath) navigateTo(normalizedPath, { replace: true });
+    }
   }, [
     activeCommunityAccess,
     activeCommunityId,
@@ -3431,6 +3418,7 @@ export default function App() {
     canViewActiveCommunitySettings,
     communityTab,
     isLoadingCommunityAccess,
+    selectedActiveCommunitySlug,
   ]);
 
   const communityTypingUsers = useCommunityTypingPresence({
@@ -3735,7 +3723,6 @@ export default function App() {
     communityAppMounts,
     isLoadingCommunityAppMounts,
     communityAppMountError,
-    isConnectingCommunityApp,
     communityAppMutationError,
     updatingCommunityAppMountId,
     refreshingCommunityAppMountId,
@@ -3743,7 +3730,6 @@ export default function App() {
     communityAppMountsLoadedCommunityIdRef,
     clearCommunityAppMounts,
     loadCommunityAppMounts,
-    connectCommunityApp,
     updateCommunityAppMount,
     refreshCommunityApp,
     setupImportedCommunityMcpApp,
@@ -3924,6 +3910,88 @@ export default function App() {
     applyLocationToState();
   }
 
+  async function resolveMemberEntryDestination(options?: {
+    session?: AuthSession | null;
+    communityId?: string | null;
+    communitySlug?: string | null;
+  }): Promise<CloudMemberEntryDestination | null> {
+    const activeSession = options?.session ?? sessionRef.current ?? session;
+    if (!activeSession) return null;
+    const authSubject = resolveAuthSubject(activeSession);
+    if (!authSubject) return null;
+    const isDefaultDestination = !options?.communityId && !options?.communitySlug;
+    if (
+      isDefaultDestination &&
+      defaultMemberEntryResolutionRef.current?.authSubject === authSubject
+    ) {
+      return await defaultMemberEntryResolutionRef.current.promise;
+    }
+    const request = resolveCloudMemberEntryDestination<AuthSession>({
+      session: activeSession,
+      communityId: options?.communityId ?? null,
+      communitySlug: options?.communitySlug ?? null,
+    });
+    if (isDefaultDestination) {
+      defaultMemberEntryResolutionRef.current = { authSubject, promise: request };
+    }
+    try {
+      return await request;
+    } catch (error) {
+      console.warn("[member-entry] destination resolution failed:", error);
+      return null;
+    } finally {
+      if (
+        isDefaultDestination &&
+        defaultMemberEntryResolutionRef.current?.promise === request
+      ) {
+        defaultMemberEntryResolutionRef.current = null;
+      }
+    }
+  }
+
+  function applyMemberEntryDestination(
+    destination: CloudMemberEntryDestination,
+    options?: { replace?: boolean },
+  ): void {
+    if (destination.page === "discover") {
+      applyCommunityShellState({
+        communityId: null,
+        communitySlug: null,
+        communityTab: "chat",
+      });
+      navigateTo("/discover", { replace: options?.replace !== false });
+      return;
+    }
+
+    const path = buildCommunityTabPath(destination.community_slug, "chat");
+    if (!path) throw new Error("community_destination_path_required");
+    syncCommunitySelection({
+      communityId: destination.community_id,
+      communitySlug: destination.community_slug,
+    });
+    setPublicRoute({ kind: "app" });
+    navigateTo(path, { replace: options?.replace !== false });
+
+    const activeSession = sessionRef.current ?? session;
+    if (activeSession) {
+      void loadCommunities(activeSession).catch(() => {
+        // Destination access is already authoritative; this refresh is best effort.
+      });
+    }
+  }
+
+  async function resolveAndEnterMemberDestination(options?: {
+    session?: AuthSession | null;
+    communityId?: string | null;
+    communitySlug?: string | null;
+    replace?: boolean;
+  }): Promise<boolean> {
+    const destination = await resolveMemberEntryDestination(options);
+    if (!destination) return false;
+    applyMemberEntryDestination(destination, { replace: options?.replace });
+    return true;
+  }
+
   async function loadProfileForOnboarding(activeSession: AuthSession): Promise<UserProfileDetail | null> {
     const userId = resolveAuthSubject(activeSession);
     if (!userId) return null;
@@ -3958,7 +4026,14 @@ export default function App() {
       const row = await loadProfileForOnboarding(activeSession);
       if (row?.account_setup?.completed) {
         setIsOnboardingModalOpen(false);
-        navigateTo("/workspace");
+        const entered = await resolveAndEnterMemberDestination({
+          session: activeSession,
+          replace: true,
+        });
+        if (!entered) {
+          setOnboardingError("We could not open your community. Try again.");
+          navigateTo("/discover", { replace: true });
+        }
         return;
       }
     } catch {
@@ -4044,7 +4119,16 @@ export default function App() {
         profileUi.setProfileAvatarZoom(saved.avatar_zoom ?? 1);
       }
 
-      if (shouldNavigate) navigateTo("/workspace");
+      if (shouldNavigate) {
+        const entered = await resolveAndEnterMemberDestination({
+          session: activeSession,
+          replace: true,
+        });
+        if (!entered) {
+          setOnboardingError("We could not open your community. Try again.");
+          return false;
+        }
+      }
       return true;
     } catch (error) {
       const message = formatProfileMutationError(error, "Failed to save onboarding.");
@@ -4078,279 +4162,34 @@ export default function App() {
       setIsBridgeGateOpen(true);
       return;
     }
-    void enterJoinedCommunity({
+    void resolveAndEnterMemberDestination({
       communityId: entry.communityId,
       communitySlug: entry.communitySlug,
+      replace: true,
     });
   }
 
-  async function requestOnboardingGuideAfterBridge(options?: {
-    communityId?: string | null;
-    communitySlug?: string | null;
-    communityName?: string | null;
-  }): Promise<boolean> {
-    const activeSession = sessionRef.current ?? session;
-    if (!activeSession) return false;
-    const targetCommunityId = String(options?.communityId ?? "").trim() || null;
-    const targetCommunitySlug =
-      String(options?.communitySlug ?? "").trim() ||
-      (targetCommunityId ? resolveKnownCommunitySlugById(targetCommunityId) : null);
-    const targetCommunity =
-      (targetCommunityId
-        ? communities.find((community) => community.id === targetCommunityId)
-        : null) ??
-      (targetCommunitySlug
-        ? communities.find((community) => community.slug === targetCommunitySlug)
-        : null);
-    const targetCommunityName =
-      String(
-        options?.communityName ??
-        targetCommunity?.name ??
-        (targetCommunityId || targetCommunitySlug ? "this community" : "Polynet"),
-      ).trim() ||
-      "Polynet";
-    const pendingStartedAtMs = Date.now();
-    const routePath = buildAppRoutePath({
-      page: "workspace",
-      view: "home",
-      settingsPage: "agent",
-      communitySlug: targetCommunitySlug,
-      communityTab: "chat",
-      threadId: null,
-    }) ?? buildWorkspaceDraftPath();
-
-    if (targetCommunityId || targetCommunitySlug) {
-      syncCommunitySelection({
-        communityId: targetCommunityId,
-        communitySlug: targetCommunitySlug,
-      });
-    }
-    flushSync(() => {
-      setOnboardingGuidePending({
-        communityId: targetCommunityId,
-        communitySlug: targetCommunitySlug,
-        communityName: targetCommunityName,
-        status: "starting",
-        error: null,
-        startedAtMs: pendingStartedAtMs,
-        retryScope: "kickoff",
-        legalAcceptance: null,
-      });
-      setActiveThreadId(null);
-      setWorkspaceWantsNewChatMode(true);
-    });
-    navigateTo(routePath);
-
-    try {
-      const result = await requestOnboardingGuideKickoff<AuthSession>({
-        session: activeSession,
-        communityId: targetCommunityId,
-      });
-      if (!result || result.ok === false) {
-        if (result?.error) {
-          console.warn("[onboarding-guide] kickoff failed:", result.error);
-        }
-        setOnboardingGuidePending((current) =>
-          current?.startedAtMs === pendingStartedAtMs
-            ? { ...current, status: "failed", error: result?.error || "Guide kickoff failed." }
-            : current,
-        );
-        return false;
-      }
-
-      const threadId = String(result.thread_id ?? "").trim();
-      if (!threadId) {
-        setOnboardingGuidePending((current) =>
-          current?.startedAtMs === pendingStartedAtMs
-            ? { ...current, status: "failed", error: "Guide kickoff did not return a thread." }
-            : current,
-        );
-        return false;
-      }
-      const communityId =
-        String(result.community_id ?? targetCommunityId ?? "").trim() || null;
-      const runRequired = result.run_required === true;
-
-      if (communityId || targetCommunitySlug) {
-        syncCommunitySelection({
-          communityId,
-          communitySlug: targetCommunitySlug,
-        });
-      }
-
-      const nowSeconds = Date.now() / 1000;
-      setThreads((prev) => {
-        const existing = prev.find((thread) => thread.id === threadId) ?? null;
-        const nextThread: ThreadRecord = {
-          id: threadId,
-          title: existing?.title ?? `Welcome to ${targetCommunityName}`,
-          model_id: existing?.model_id ?? DEFAULT_ACTIVE_MODEL_ID,
-          runtime_engine: existing?.runtime_engine ?? "polynet",
-          project_id: existing?.project_id ?? null,
-          community_id: existing?.community_id ?? communityId,
-          context_version: existing?.context_version ?? 0,
-          agent_attention: existing?.agent_attention ?? true,
-          last_seq: Math.max(1, existing?.last_seq ?? 0),
-          created_at: existing?.created_at ?? nowSeconds,
-          updated_at: nowSeconds,
-        };
-        return [nextThread, ...prev.filter((thread) => thread.id !== threadId)];
-      });
-
-      setActiveThreadId(threadId);
-      setWorkspaceWantsNewChatMode(false);
-      if (!runRequired) {
-        try {
-          await Promise.all([
-            loadThreadMessages(threadId, activeSession),
-            loadThreads(activeSession),
-          ]);
-        } finally {
-          setOnboardingGuidePending((current) =>
-            current?.startedAtMs === pendingStartedAtMs ? null : current,
-          );
-        }
-        return true;
-      }
-
-      const runId =
-        String(result.run_id ?? "").trim() ||
-        `onboarding:${communityId ?? "platform"}:${crypto.randomUUID()}`;
-      const turnResult = await runAgentTurn(activeSession, threadId, {
-        preferredModelId: DEFAULT_ACTIVE_MODEL_ID,
-        mode: "respond",
-        runIdHint: runId,
-        systemPrompt: null,
-        runtimeEngine: "polynet",
-        requestedFundingSource: "auto",
-        requestedAgenticTools: true,
-        onStreamStart: () => {
-          setOnboardingGuidePending((current) =>
-            current?.startedAtMs === pendingStartedAtMs ? null : current,
-          );
-        },
-      });
-      if (turnResult.error) {
-        setThreadErrorForThread(threadId, turnResult.error);
-        setOnboardingGuidePending((current) =>
-          current?.startedAtMs === pendingStartedAtMs
-            ? { ...current, status: "failed", error: turnResult.error }
-            : current,
-        );
-        return false;
-      }
-      setOnboardingGuidePending((current) =>
-        current?.startedAtMs === pendingStartedAtMs ? null : current,
-      );
-      return true;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn("[onboarding-guide] kickoff failed:", message);
-      setOnboardingGuidePending((current) =>
-        current?.startedAtMs === pendingStartedAtMs
-          ? { ...current, status: "failed", error: message || "Guide kickoff failed." }
-          : current,
-      );
-      return false;
-    }
-  }
-
-  function retryOnboardingGuideAfterBridge(): void {
-    const pending = onboardingGuidePending;
-    if (!pending || pending.status !== "failed") return;
-    if (pending.retryScope === "platform_bridge") {
-      void completePlatformBridge(pending.legalAcceptance);
-      return;
-    }
-    if (pending.retryScope === "community_bridge") {
-      /* The gate already closed and the entry was consumed — retry re-runs the
-         idempotent save/finish steps in place, then the kickoff (which owns
-         community selection and navigation itself). */
-      void (async () => {
-        const setPhase = (status: "saving" | "preparing" | "failed", error: string | null = null) => {
-          setOnboardingGuidePending((current) =>
-            current?.startedAtMs === pending.startedAtMs
-              ? { ...current, status, error }
-              : current,
-          );
-        };
-        setPhase("saving");
-        const saved = await saveOnboardingProfile(pending.legalAcceptance);
-        if (!saved) {
-          setPhase("failed", "We could not save your profile.");
-          return;
-        }
-        setPhase("preparing");
-        const finished = await finishOnboarding({ navigate: false });
-        if (!finished) {
-          setPhase("failed", "We could not finish your account setup.");
-          return;
-        }
-        await requestOnboardingGuideAfterBridge({
-          communityId: pending.communityId,
-          communitySlug: pending.communitySlug,
-          communityName: pending.communityName,
-        });
-      })();
-      return;
-    }
-    void requestOnboardingGuideAfterBridge({
-      communityId: pending.communityId,
-      communitySlug: pending.communitySlug,
-      communityName: pending.communityName,
-    });
-  }
-
-  /* Platform bridge Enter (standalone page): the ceremony state mounts the
-     handoff surface synchronously at click time, before any network — the
-     setup-completion bounce effect defers to it, so the draft workspace can
-     never render between the bridge and the guide. */
+  /* Platform bridge Enter: save the deterministic account profile, then let
+     the server resolve the canonical Polynet community destination. */
   async function completePlatformBridge(legalAcceptance: {
     termsOfServiceVersion: string;
     privacyPolicyVersion: string;
   } | null): Promise<boolean> {
     if (!validateOnboardingProfileInputs(legalAcceptance)) return false;
-    const ceremonyStartedAtMs = Date.now();
-    const failCeremony = (error: string) => {
-      setOnboardingGuidePending((current) =>
-        current?.startedAtMs === ceremonyStartedAtMs
-          ? { ...current, status: "failed", error }
-          : current,
-      );
-    };
-    flushSync(() => {
-      setOnboardingGuidePending({
-        communityId: null,
-        communitySlug: null,
-        communityName: "Polynet",
-        status: "saving",
-        error: null,
-        startedAtMs: ceremonyStartedAtMs,
-        retryScope: "platform_bridge",
-        legalAcceptance,
-      });
-    });
     const savedProfile = await saveOnboardingProfile(legalAcceptance);
-    if (!savedProfile) {
-      failCeremony("We could not save your profile.");
-      return false;
-    }
-    setOnboardingGuidePending((current) =>
-      current?.startedAtMs === ceremonyStartedAtMs
-        ? { ...current, status: "preparing" }
-        : current,
-    );
+    if (!savedProfile) return false;
     const finished = await finishOnboarding({ navigate: false });
-    if (!finished) {
-      failCeremony("We could not finish your account setup.");
+    if (!finished) return false;
+    const entered = await resolveAndEnterMemberDestination({ replace: true });
+    if (!entered) {
+      setOnboardingError("We could not open Polynet. Try again.");
       return false;
     }
-    await requestOnboardingGuideAfterBridge();
     return true;
   }
 
-  /* Bridge Enter: save identity + legal, complete setup, run community entry,
-     then let the guide handoff select the normal community-lens thread. */
+  /* Community bridge Enter: save identity + legal, then revalidate the exact
+     requested community before changing the route. */
   async function completeBridgeAndEnter(legalAcceptance: {
     termsOfServiceVersion: string;
     privacyPolicyVersion: string;
@@ -4366,11 +4205,8 @@ export default function App() {
       setBridgePendingEntry(null);
       return true;
     }
-    /* Same invariant as the platform bridge: validate, mount the ceremony
-       synchronously, then do network work — no intermediate surface can
-       render between the gate and the guide. */
     if (!validateOnboardingProfileInputs(legalAcceptance)) return false;
-    const guideTarget = bridgePendingEntry ?? (
+    const entry = bridgePendingEntry ?? (
       activeCommunityId
         ? {
             communityId: activeCommunityId,
@@ -4378,73 +4214,30 @@ export default function App() {
           }
         : null
     );
-    const guideTargetName = guideTarget
-      ? String(guideTarget.communityName ?? "").trim() ||
-        (guideTarget.communityId && activeCommunity?.id === guideTarget.communityId
-          ? activeCommunity.name
-          : null)
-      : null;
-    const ceremonyStartedAtMs = Date.now();
-    const failCeremony = (error: string) => {
-      setOnboardingGuidePending((current) =>
-        current?.startedAtMs === ceremonyStartedAtMs
-          ? { ...current, status: "failed", error }
-          : current,
-      );
-    };
-    if (guideTarget) {
-      flushSync(() => {
-        setOnboardingGuidePending({
-          communityId: guideTarget.communityId ?? null,
-          communitySlug: guideTarget.communitySlug ?? null,
-          communityName: guideTargetName || "this community",
-          status: "saving",
-          error: null,
-          startedAtMs: ceremonyStartedAtMs,
-          retryScope: "community_bridge",
-          legalAcceptance,
-        });
-      });
+    if (!entry?.communityId) {
+      setOnboardingError("We could not verify this community. Try again.");
+      return false;
+    }
+    const savedProfile = await saveOnboardingProfile(legalAcceptance);
+    if (!savedProfile) return false;
+    const finished = await finishOnboarding({ navigate: false });
+    if (!finished) return false;
+    const destination = await resolveMemberEntryDestination({
+      communityId: entry.communityId,
+      communitySlug: entry.communitySlug,
+    });
+    if (!destination || destination.page !== "community") {
+      setOnboardingError("We could not open this community. Try again.");
+      return false;
     }
     setIsBridgeGateOpen(false);
-    const entry = bridgePendingEntry;
     setBridgePendingEntry(null);
-    const savedProfile = await saveOnboardingProfile(legalAcceptance);
-    if (!savedProfile) {
-      failCeremony("We could not save your profile.");
-      return false;
-    }
-    setOnboardingGuidePending((current) =>
-      current?.startedAtMs === ceremonyStartedAtMs
-        ? { ...current, status: "preparing" }
-        : current,
-    );
-    const finished = await finishOnboarding({ navigate: false });
-    if (!finished) {
-      failCeremony("We could not finish your account setup.");
-      return false;
-    }
-    if (entry) {
-      void enterJoinedCommunity({
-        communityId: entry.communityId,
-        communitySlug: entry.communitySlug,
-      });
-    } else {
-      handlePublicLandingPrimaryAction();
-    }
-    if (guideTarget) {
-      void requestOnboardingGuideAfterBridge({
-        communityId: guideTarget.communityId,
-        communitySlug: guideTarget.communitySlug,
-        communityName: guideTargetName,
-      });
-    }
+    applyMemberEntryDestination(destination, { replace: true });
     return true;
   }
 
   /* Client-side bridge validation, shared with saveOnboardingProfile: failures
-     here keep the user on the bridge with inline errors — the ceremony (and
-     its handoff surface) only starts once the inputs can actually be saved. */
+     here keep the user on the bridge with inline errors. */
   function validateOnboardingProfileInputs(legalAcceptance: {
     termsOfServiceVersion: string;
     privacyPolicyVersion: string;
@@ -4557,11 +4350,6 @@ export default function App() {
     setActivePage(nextAppRoute.page);
     setActiveView(nextAppRoute.page === "workspace" ? nextAppRoute.view : "home");
     setSettingsPage(nextAppRoute.settingsPage);
-    if (nextAppRoute.page === "discover") {
-      setDiscoverActiveTab(nextAppRoute.discoverTab ?? "communities");
-      setSelectedDiscoverAppId(nextAppRoute.discoverAppId ?? null);
-      setSelectedDiscoverSkillId(nextAppRoute.discoverSkillId ?? null);
-    }
     if (nextAppRoute.page === "docs") {
       setSelectedProductDocSlug(nextAppRoute.docsSlug ?? null);
     }
@@ -4645,7 +4433,7 @@ export default function App() {
       applyCommunityShellState({
         communityId: restoredCommunityId,
         communitySlug: restoredCommunitySlug,
-        communityTab: "chat",
+        communityTab: "settings",
       });
     } else if (restoredCommunityId) {
       applyCommunityShellState({
@@ -4721,14 +4509,9 @@ export default function App() {
       const communitySlug = normalizeLaunchOAuthContextParam(
         selectedActiveCommunitySlug ?? activeCommunity?.slug ?? setupContext.communitySlug,
       );
-      const routePath = buildAppRoutePath({
-        page: "workspace",
-        view: "home",
-        settingsPage: "agent",
-        communitySlug,
-        communityTab: "chat",
-        threadId: null,
-      }) ?? buildWorkspaceDraftPath();
+      const routePath =
+        buildCommunityTabPath(communitySlug, "settings", null, "community") ??
+        "/discover";
       const nextPath = applyShellVariantToKnownPath(routePath, shellVariant);
       if (nextPath !== currentPath) {
         window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
@@ -4744,25 +4527,52 @@ export default function App() {
     shellVariant,
   ]);
 
-  const applyStandaloneWorkspaceLaunch = useCallback((nextPath: string) => {
-    window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
-    applyCommunityShellState({
-      communityId: null,
-      communitySlug: null,
-      communityTab: "chat",
-    });
-    workspaceProject.actions.setActiveProjectId(null);
-    applyLocationToState();
-  }, [applyCommunityShellState, applyLocationToState, workspaceProject.actions]);
-
   useEffect(() => {
     if (!isAuthBootstrapComplete) return;
     if (!session) return;
     if (publicRoute.kind !== "app") return;
     if (activePage !== "landing") return;
     if (!isRootAppRoutePath(window.location.pathname || "/")) return;
-    navigateTo(buildWorkspaceDraftPath(), { replace: true });
+    void routeTryPolynetFree(session);
   }, [activePage, isAuthBootstrapComplete, publicRoute.kind, session]);
+
+  const legacyWorkspaceRedirectRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isAuthBootstrapComplete) return;
+    if (publicRoute.kind !== "app") return;
+    const pathname = window.location.pathname || "/";
+    if (session && isCommunityLaunchSetupRoutePath(pathname)) return;
+    const legacyContext = readLegacyWorkspaceRouteContext(pathname);
+    if (!legacyContext) return;
+
+    const redirectKey = `${resolveAuthSubject(session) ?? "signed-out"}:${pathname}`;
+    if (legacyWorkspaceRedirectRef.current === redirectKey) return;
+    legacyWorkspaceRedirectRef.current = redirectKey;
+
+    if (!session) {
+      navigateTo(
+        legacyContext.communitySlug
+          ? buildCommunityFunnelPath(legacyContext.communitySlug) ?? "/"
+          : "/",
+        { replace: true },
+      );
+      return;
+    }
+
+    void resolveAndEnterMemberDestination({
+      session,
+      communitySlug: legacyContext.communitySlug,
+      replace: true,
+    }).then((entered) => {
+      if (entered) return;
+      navigateTo(
+        legacyContext.communitySlug
+          ? buildCommunityFunnelPath(legacyContext.communitySlug) ?? "/discover"
+          : "/discover",
+        { replace: true },
+      );
+    });
+  }, [isAuthBootstrapComplete, publicRoute.kind, session]);
 
   useEffect(() => {
     if (!isStandaloneWebApp()) return;
@@ -4772,12 +4582,9 @@ export default function App() {
     }
 
     currentUrl.searchParams.delete(STANDALONE_APP_LAUNCH_SEARCH_PARAM);
-    const shellVariantForLaunch = readShellVariantFromPathname(currentUrl.pathname || "/");
-    const canonicalAppPath = applyShellVariantToAppPath(buildWorkspaceDraftPath(), shellVariantForLaunch);
-    const canonicalUrl = new URL(canonicalAppPath, currentUrl.origin);
-    const nextPath = `${canonicalUrl.pathname}${canonicalUrl.search}${canonicalUrl.hash}` || buildWorkspaceDraftPath();
-    applyStandaloneWorkspaceLaunch(nextPath);
-  }, [applyStandaloneWorkspaceLaunch]);
+    const nextPath = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}` || "/";
+    window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
+  }, []);
 
   /* (Deleted 2026-07-02: the standalone signed-out funnel deferral used to
      bounce /c/:slug to a workspace launch. The visitor lens made that
@@ -4794,20 +4601,22 @@ export default function App() {
   useEffect(() => {
     if (activePage !== "onboarding") return;
     if (!session) return;
-    /* The bridge ceremony completes setup while standing on this route — the
-       stale-arrival bounce must defer to it, or the draft workspace flashes
-       between the bridge and the guide handoff. */
-    if (onboardingGuidePending) return;
     void (async () => {
       const row = cloudProfile ?? (await loadProfileForOnboarding(session));
       if (row?.account_setup?.completed) {
         setIsOnboardingModalOpen(false);
-        navigateTo("/workspace");
+        const entered = await resolveAndEnterMemberDestination({
+          session,
+          replace: true,
+        });
+        if (!entered) {
+          setOnboardingError("We could not open your community. Try again.");
+        }
       }
       /* Incomplete accounts stay: this route renders the standalone
          platform bridge page. */
     })();
-  }, [activePage, cloudProfile, onboardingGuidePending, session]);
+  }, [activePage, cloudProfile, session]);
 
   /* Deterministic timezone capture: record the browser's IANA zone silently,
      refreshed when it drifts from what the profile holds. Never a question. */
@@ -4828,13 +4637,11 @@ export default function App() {
     void recordMemberTimezoneRpc({ session, timezone: browserTimezone }).catch(() => null);
   }, [cloudProfile, session]);
 
-  /* Load the viewer's profile + setup status wherever setup state matters:
-     the workspace (setup card, remedial modal) and /c/ routes (the bridge —
-     a signed-in visitor with an incomplete account meets the gate card's
-     second state on an entry attempt). */
+  /* Load the viewer's profile + setup status wherever setup state matters. */
   useEffect(() => {
     const needsOnboardingProfile =
       activePage === "workspace" ||
+      activePage === "community" ||
       activePage === "onboarding" ||
       publicRoute.kind === "community_funnel";
     if (!needsOnboardingProfile) return;
@@ -4876,9 +4683,6 @@ export default function App() {
           activePage === "community" && communityTab === "resources" ? communityResourceModuleId : null,
         communitySettingsPane:
           activePage === "community" && communityTab === "settings" ? communitySettingsPane : null,
-        discoverTab: discoverActiveTab,
-        discoverAppId: selectedDiscoverAppId,
-        discoverSkillId: selectedDiscoverSkillId,
         docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
         threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
         projectId:
@@ -4985,21 +4789,22 @@ export default function App() {
     navigateTo(nextRoutePath, { replace: true });
   };
   const goBack = (): boolean => {
-    const snapshot = popNavSnapshot(navStackRef.current) as NavSnapshot | null;
+    let snapshot = popNavSnapshot(navStackRef.current) as NavSnapshot | null;
+    while (snapshot?.page === "workspace" && snapshot.view === "home") {
+      snapshot = popNavSnapshot(navStackRef.current) as NavSnapshot | null;
+    }
     if (!snapshot) return false;
     restoreNavSnapshot(snapshot);
     return true;
   };
 
-  const backTargetSnapshot = navStackRef.current.length > 0 ? navStackRef.current[navStackRef.current.length - 1] : null;
+  const backTargetSnapshot =
+    [...navStackRef.current]
+      .reverse()
+      .find((snapshot) => snapshot.page !== "workspace" || snapshot.view !== "home") ??
+    null;
   const backTargetLabel = backTargetSnapshot ? formatBackTargetLabelShared(backTargetSnapshot) : null;
-  const discoverDetailBackTargetLabel =
-    activePage === "discover" && discoverActiveTab === "apps" && selectedDiscoverAppId
-      ? "apps"
-      : activePage === "discover" && discoverActiveTab === "skills" && selectedDiscoverSkillId
-        ? "skills"
-        : null;
-  const effectiveBackTargetLabel = backTargetLabel ?? discoverDetailBackTargetLabel;
+  const effectiveBackTargetLabel = backTargetLabel;
 
   const threadsHydratedRef = useRef(false);
   const lastCloudStatusRefreshAtRef = useRef(0);
@@ -5063,8 +4868,8 @@ export default function App() {
     agent_soul: "",
   });
   const [communityAiAgentPreferredTab, setCommunityAiAgentPreferredTab] = useState<
-    "workspace" | "apps" | "skills"
-  >("workspace");
+    "instructions" | "apps" | "skills"
+  >("instructions");
   const [isLoadingUserMemorySettings, setIsLoadingUserMemorySettings] = useState(false);
   const [chatgptConnection, setChatgptConnection] = useState<CloudChatgptConnectionStatus>({
     provider: "chatgpt",
@@ -5394,18 +5199,6 @@ export default function App() {
     loadFailureMessage: "Failed to load AI agent config.",
     saveFailureMessage: "Failed to save AI agent changes.",
   });
-  const handleSaveCommunityAgentConfigAndRefreshLanding = useCallback(async (): Promise<boolean> => {
-    const communityIdAtSave = activeCommunityId;
-    const normalizedLanding = normalizeCommunityAgentDraftForSave(communityAgentConfigLanding);
-    const saved = await handleSaveCommunityAgentConfig();
-    if (!saved || !communityIdAtSave || !normalizedLanding) return saved;
-    if (activeCommunityIdRef.current !== communityIdAtSave) return saved;
-    communityAgentLandingFetchSeqRef.current += 1;
-    activeCommunityAgentLandingCommunityIdRef.current = communityIdAtSave;
-    setActiveCommunityAgentLanding(normalizedLanding);
-    return saved;
-  }, [activeCommunityId, communityAgentConfigLanding, handleSaveCommunityAgentConfig]);
-
   const reloadEffectiveMcpApps = useCallback(async () => {
     if (!session) {
       clearEffectiveMcpApps();
@@ -5433,27 +5226,6 @@ export default function App() {
     loadEffectiveSkills,
     session,
   ]);
-
-  const handleConnectCommunityApp = useCallback(
-    async (input: ConnectCommunityAppInput) => {
-      const ok = await connectCommunityApp(input);
-      if (ok) {
-        if (session) {
-          userPlatformAppMountsLoadedUserIdRef.current = null;
-          void loadUserPlatformAppMounts(session);
-        }
-        void reloadEffectiveMcpApps();
-      }
-      return ok;
-    },
-    [
-      connectCommunityApp,
-      loadUserPlatformAppMounts,
-      reloadEffectiveMcpApps,
-      session,
-      userPlatformAppMountsLoadedUserIdRef,
-    ],
-  );
 
   const handleConnectUserPlatformApp = useCallback(
     async (input: {
@@ -5842,7 +5614,7 @@ export default function App() {
         communitySlug: null,
         communityTab: "chat",
       });
-      setActivePage("workspace");
+      setActivePage("discover");
       setActiveView("home");
       setCommunities((prev) => prev.filter((community) => community.id !== leavingId));
     },
@@ -5953,8 +5725,6 @@ export default function App() {
   const [isExporting, setIsExporting] = useState(false);
 
   const [discoverCommunities, setDiscoverCommunities] = useState<DiscoverCommunity[]>([]);
-  const [discoverApps, setDiscoverApps] = useState<DiscoverAppCatalogEntry[]>(DISCOVER_APP_CATALOG);
-  const [discoverSkills, setDiscoverSkills] = useState<DiscoverSkillCatalogEntry[]>(DISCOVER_SKILL_CATALOG);
   const [isLoadingDiscover, setIsLoadingDiscover] = useState(false);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
   const [lastDiscoverLoadAttemptedAt, setLastDiscoverLoadAttemptedAt] = useState(0);
@@ -6090,8 +5860,6 @@ export default function App() {
     setIsLoadingDiscover,
     setDiscoverError,
     setDiscoverCommunities,
-    setDiscoverApps,
-    setDiscoverSkills,
     setLastDiscoverLoadAttemptedAt,
   });
 
@@ -6514,9 +6282,6 @@ export default function App() {
     communityTab,
     communityResourceModuleId,
     communitySettingsPane,
-    discoverTab: discoverActiveTab,
-    discoverAppId: selectedDiscoverAppId,
-    discoverSkillId: selectedDiscoverSkillId,
     docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
     activeThreadId,
     applyLocationToState,
@@ -7445,10 +7210,9 @@ export default function App() {
         void payload;
       },
       open_workspace_draft: (payload) => {
-        openWorkspaceDraft({
-          replace: true,
-          projectId: payload.project_id ?? null,
-          focusComposer: focusWorkspaceComposer,
+        void payload;
+        void resolveAndEnterMemberDestination({ replace: true }).then((entered) => {
+          if (!entered) navigateTo("/discover", { replace: true });
         });
       },
       connect_provider: (payload) => {
@@ -7902,8 +7666,12 @@ export default function App() {
       Boolean(activeCommunityId) &&
       Boolean(canManageCommunitySettings) &&
       Boolean(effectiveAccountSetupStatus?.completed) &&
-      activePage === "workspace" &&
-      activeView === "home";
+      activePage === "community" &&
+      Boolean(
+        isCommunityLaunchSetupModalOpen ||
+          pendingCommunityLaunchKnowledgeOAuthContext ||
+          pendingCommunityLaunchSetupRouteContext,
+      );
     if (!shouldLoadLaunchStatus || !session || !activeCommunityId) {
       communityLaunchSetupStatusLoadedCommunityIdRef.current = null;
       setCommunityLaunchSetupStatus(null);
@@ -7955,6 +7723,7 @@ export default function App() {
     canManageCommunitySettings,
     effectiveAccountSetupStatus?.completed,
     activeCommunity?.updated_at,
+    isCommunityLaunchSetupModalOpen,
     pendingCommunityLaunchKnowledgeOAuthContext,
     pendingCommunityLaunchSetupRouteContext,
   ]);
@@ -8002,7 +7771,7 @@ export default function App() {
       applyCommunityShellState({
         communityId: targetCommunityId,
         communitySlug: targetCommunitySlug,
-        communityTab: "chat",
+        communityTab: "settings",
       });
       return;
     }
@@ -8051,7 +7820,7 @@ export default function App() {
       applyCommunityShellState({
         communityId: targetCommunityId,
         communitySlug: targetCommunitySlug,
-        communityTab: "chat",
+        communityTab: "settings",
       });
       return;
     }
@@ -9413,11 +9182,10 @@ export default function App() {
 	  }, [guestThreadHasMessages, guestThreadMessages]);
 
   const hasSelectedCommunity = Boolean(String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim());
-  const shellProjectionActivePage = onboardingGuidePending ? "onboarding" : activePage;
   const shellProjection = buildWebShellProjection({
     publicRouteKind: shellPublicRoute.kind,
     shellVariant,
-    activePage: shellProjectionActivePage,
+    activePage,
     activeView,
     mobileSettingsView,
     userWantsSessions,
@@ -9712,21 +9480,20 @@ export default function App() {
     shellPublicRoute.kind === "app" && authPresentationState !== "signed_out";
   const isAuthRecoveringSignedInAppShell =
     shellPublicRoute.kind === "app" && authPresentationState === "recovering_signed_in";
-  const shouldHoldRootLandingForAuth =
+  const shouldHoldLandingForAuth =
     shellPublicRoute.kind === "app" &&
     activePage === "landing" &&
-    authPresentationState === "recovering_signed_in" &&
     typeof window !== "undefined" &&
-    isRootAppRoutePath(window.location.pathname || "/");
+    (isLegacyWorkspaceRoutePath(window.location.pathname || "/") ||
+      (authPresentationState !== "signed_out" &&
+        isRootAppRoutePath(window.location.pathname || "/")));
   const isAccountGraphHydratingCriticalAppShell =
     shellPublicRoute.kind === "app" &&
     authPresentationState === "signed_in" &&
     accountGraphHydrationPhase === "critical";
 
 	  const handleTopbarBackFromWorkspaceSettings = () => {
-	    if (goBack()) return;
-	    const transition = deriveBackFromWorkspaceSettingsFallbackTransition();
-	    setActiveView(transition.nextView);
+	    handleTopbarBackToCommunity();
 	  };
 	  const handleTopbarBackFromPublicFunnel = () => {
 	    void goBack();
@@ -9740,25 +9507,23 @@ export default function App() {
       if (!fallbackPath) return;
       navigateTo(fallbackPath, { replace: true });
     };
-	  const handleTopbarBackToWorkspace = () => {
+	  function handleTopbarBackToCommunity() {
 	    if (goBack()) return;
-      if (activePage === "discover") {
-        if (discoverActiveTab === "apps" && selectedDiscoverAppId) {
-          navigateTo("/discover/apps", { replace: true });
-          return;
-        }
-        if (discoverActiveTab === "skills" && selectedDiscoverSkillId) {
-          navigateTo("/discover/skills", { replace: true });
-          return;
-        }
-      }
-	    const transition = deriveBackToWorkspaceFallbackTransition(
-	      { activeView },
-	      { forceHomeView: true },
-	    );
-	    setActiveView(transition.nextView);
-	    setActivePage(transition.nextPage);
-	  };
+	    const communitySlug = String(
+	      selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "",
+	    ).trim();
+	    if (communitySlug) {
+	      openCommunityChat(communitySlug, { clearUnread: true });
+	      return;
+	    }
+	    if (session) {
+	      void resolveAndEnterMemberDestination({ session, replace: true }).then((entered) => {
+	        if (!entered) navigateTo("/discover", { replace: true });
+	      });
+	      return;
+	    }
+	    navigateTo("/discover", { replace: true });
+	  }
 		  const handleOpenLandingCommunity = () => {
 		    const communitySlug = String(activeCommunity?.slug ?? "").trim();
 		    if (!communitySlug) return;
@@ -9771,92 +9536,9 @@ export default function App() {
 		  const handleOpenDiscover = () => {
 		    const transition = deriveOpenDiscoverTransition({ activePage });
 		    if (transition.shouldPushSnapshot) pushNavSnapshot();
-	      setDiscoverActiveTab("communities");
-	      setSelectedDiscoverAppId(null);
-	      setSelectedDiscoverSkillId(null);
 		    setActiveView(transition.nextView);
 		    setActivePage(transition.nextPage);
 		  };
-	    const handleOpenDiscoverApps = () => {
-	      const transition = deriveOpenDiscoverTransition({ activePage });
-	      if (transition.shouldPushSnapshot) pushNavSnapshot();
-      setDiscoverActiveTab("apps");
-      setSelectedDiscoverAppId(null);
-      setSelectedDiscoverSkillId(null);
-      setActiveView(transition.nextView);
-      setActivePage(transition.nextPage);
-	    };
-	    const handleOpenDiscoverSkills = () => {
-	      const transition = deriveOpenDiscoverTransition({ activePage });
-	      if (transition.shouldPushSnapshot) pushNavSnapshot();
-	      setDiscoverActiveTab("skills");
-	      setSelectedDiscoverAppId(null);
-	      setSelectedDiscoverSkillId(null);
-	      setActiveView(transition.nextView);
-	      setActivePage(transition.nextPage);
-	    };
-    const handleSelectDiscoverTab = (tab: DiscoverTab) => {
-      setDiscoverActiveTab(tab);
-      if (tab !== "apps") {
-        setSelectedDiscoverAppId(null);
-      }
-      if (tab !== "skills") {
-        setSelectedDiscoverSkillId(null);
-      }
-    };
-    const handleSelectDiscoverApp = (appId: string | null) => {
-      const nextAppId = String(appId ?? "").trim() || null;
-      if (
-        nextAppId &&
-        activePage === "discover" &&
-        discoverActiveTab === "apps" &&
-        !selectedDiscoverAppId
-      ) {
-        pushNavSnapshot();
-      }
-      setSelectedDiscoverAppId(nextAppId);
-      if (nextAppId) {
-        setSelectedDiscoverSkillId(null);
-      }
-    };
-    const handleSelectDiscoverSkill = (skillId: string | null) => {
-      const nextSkillId = String(skillId ?? "").trim() || null;
-      if (
-        nextSkillId &&
-        activePage === "discover" &&
-        discoverActiveTab === "skills" &&
-        !selectedDiscoverSkillId
-      ) {
-        pushNavSnapshot();
-      }
-      setSelectedDiscoverSkillId(nextSkillId);
-      if (nextSkillId) {
-        setSelectedDiscoverAppId(null);
-      }
-    };
-	    const handleOpenIntegrationsSettings = () => {
-	      pushNavSnapshot();
-	      setShouldOpenCreatePersonalSkill(false);
-	      setActivePage("workspace");
-	      setActiveView("settings");
-	      setSettingsPage("integrations");
-	    };
-    const handleOpenCreatePersonalSkill = () => {
-      pushNavSnapshot();
-      setShouldOpenCreatePersonalSkill(true);
-      setActivePage("workspace");
-      setActiveView("settings");
-      setSettingsPage("integrations");
-    };
-    const handleOpenActiveCommunityAiAgentTab = (tab: "apps" | "skills") => {
-      const nextCommunitySlug = String(
-        selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "",
-      ).trim();
-      if (!nextCommunitySlug) return;
-      pushNavSnapshot();
-      setCommunityAiAgentPreferredTab(tab);
-      openCommunityTab(nextCommunitySlug, "ai_agent", { pushSnapshot: false });
-    };
     const handleOpenCommunityLaunchSetupStep = (step: CommunityLaunchSetupStep) => {
       const nextCommunitySlug = String(
         selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "",
@@ -9871,37 +9553,11 @@ export default function App() {
         return;
       }
       if (step === "agent") {
-        setCommunityAiAgentPreferredTab("workspace");
+        setCommunityAiAgentPreferredTab("instructions");
         openCommunityTab(nextCommunitySlug, "ai_agent", { pushSnapshot: false });
         return;
       }
       openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
-    };
-    const communityLaunchAgentStarterPrompts = useMemo(() => {
-      const landing = normalizeCommunityAgentLanding(communityAgentConfigLanding) ?? DEFAULT_EMPTY_THREAD_LANDING;
-      return [0, 1, 2].map((index) =>
-        String(landing.tabs[index]?.prompts?.[0] ?? "").trim(),
-      );
-    }, [communityAgentConfigLanding]);
-    const buildCommunityLaunchAgentLanding = (starterPrompts: string[]): CommunityAgentLanding => {
-      const currentLanding = normalizeCommunityAgentLanding(communityAgentConfigLanding) ?? DEFAULT_EMPTY_THREAD_LANDING;
-      const fallbackLanding = DEFAULT_EMPTY_THREAD_LANDING;
-      return {
-        title: fallbackLanding.title,
-        subtitle: fallbackLanding.subtitle,
-        tabs: [0, 1, 2].map((index) => {
-          const currentTab = currentLanding.tabs[index] ?? fallbackLanding.tabs[index]!;
-          const fallbackPrompt = fallbackLanding.tabs[index]?.prompts?.[0] ?? "";
-          const prompt = String(starterPrompts[index] ?? "").trim() ||
-            String(currentTab.prompts?.[0] ?? "").trim() ||
-            fallbackPrompt;
-          return {
-            id: currentTab.id || fallbackLanding.tabs[index]!.id,
-            label: currentTab.label || fallbackLanding.tabs[index]!.label,
-            prompts: [prompt],
-          };
-        }),
-      };
     };
     const applyCommunityLaunchProfileResult = (result: CloudCommunityLaunchProfileSaveResult) => {
       setCommunities((prev) =>
@@ -10385,12 +10041,16 @@ export default function App() {
     };
     const handleSaveCommunityLaunchAgent = async (draft: {
       systemPrompt: string;
-      starterPrompts: string[];
     }) => {
       const { session, community } = requireCommunityLaunchSaveContext();
-      const landing = buildCommunityLaunchAgentLanding(draft.starterPrompts);
+      const loadedForCommunity =
+        communityAgentConfigLoadedCommunityIdRef.current === community.id;
+      const landing = loadedForCommunity
+        ? normalizeCommunityAgentLanding(communityAgentConfigLanding) ??
+          DEFAULT_EMPTY_THREAD_LANDING
+        : DEFAULT_EMPTY_THREAD_LANDING;
       const normalizedLanding = normalizeCommunityAgentDraftForSave(landing);
-      if (!normalizedLanding) throw new Error("Add at least one onboarding prompt.");
+      if (!normalizedLanding) throw new Error("Community agent configuration unavailable.");
       const row = await saveCloudCommunityAgentConfigDirect({
         session,
         communityId: community.id,
@@ -10497,7 +10157,6 @@ export default function App() {
 	        setCommunityLaunchSetupInitialStep(null);
 	        setIsCommunityLaunchCreateMode(true);
 	        setIsCommunityLaunchSetupModalOpen(true);
-        navigateTo("/workspace");
       })();
     };
     const handleCreateCommunityFromLaunch = async (
@@ -10569,10 +10228,10 @@ export default function App() {
         applyCommunityShellState({
           communityId: community.id,
           communitySlug: community.slug,
-          communityTab: "chat",
+          communityTab: "settings",
         });
         setPublicRoute({ kind: "app" });
-        setActivePage("workspace");
+        setActivePage("community");
         setActiveView("home");
         setIsCommunityLaunchCreateMode(false);
         setIsLoadingCommunityLaunchSetupStatus(true);
@@ -10612,10 +10271,7 @@ export default function App() {
       mobileRootPage,
       hasSelectedCommunity,
       canViewMembersRoot: hasSelectedCommunity && canViewMembersActiveCommunity,
-      forceCommunityRoot:
-        showMobileShell &&
-        (shellPublicRoute.kind === "community_funnel" ||
-          shellPublicRoute.kind === "community_funnel_preview"),
+      forceCommunityRoot: showMobileShell,
       mobileOverlay,
       showMobileShell,
       showMobileSettingsShell,
@@ -10626,7 +10282,7 @@ export default function App() {
       setMobileSettingsView,
       openCommunityChat,
       handleOpenDiscover,
-      handleTopbarBackToWorkspace,
+      handleTopbarBackToCommunity,
       hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
       openCommunityCreateFlow: openCommunityLaunchCreateFlow,
       setIsFreeAccountInfoOpen,
@@ -10635,8 +10291,7 @@ export default function App() {
       if (shellPublicRoute.kind !== "app") return;
       if (activePage !== "community") return;
       if (hasSelectedCommunity) return;
-      setActiveView("home");
-      setActivePage("discover");
+      navigateTo("/discover", { replace: true });
     }, [activePage, hasSelectedCommunity, shellPublicRoute.kind]);
 	  const handleToggleWorkspaceSettings = () => {
 	    const transition = deriveToggleWorkspaceSettingsTransition({ activePage, activeView });
@@ -10845,7 +10500,6 @@ export default function App() {
         updatingMountId: updatingCommunityAppMountId,
         refreshingMountId: refreshingCommunityAppMountId,
         removingMountId: removingCommunityAppMountId,
-        onBrowseCatalog: handleOpenDiscoverApps,
         onUpdateMount: handleUpdateCommunityAppMount,
         onRefreshApp: handleRefreshCommunityApp,
         onSetupImportedMcpApp: handleSetupImportedCommunityMcpApp,
@@ -10965,23 +10619,19 @@ export default function App() {
       aiAgentPreferredTab: communityAiAgentPreferredTab,
       isLoadingCommunityAgentConfig,
       communityAgentConfigError,
-      aiAgentWorkspaceEditorProps: {
+      aiAgentInstructionsEditorProps: {
         communityAgentConfigDirtyRef,
-        handleSaveCommunityAgentConfig: handleSaveCommunityAgentConfigAndRefreshLanding,
+        handleSaveCommunityAgentConfig,
         handleResetCommunityAgentConfig,
         isSavingCommunityAgentConfig,
         communityAgentConfigSaveError,
-        communityAgentConfigLanding,
-        setCommunityAgentConfigLanding,
-        markCommunityAgentConfigDirty,
         communityAgentConfigCommunitySystemPrompt,
         setCommunityAgentConfigCommunitySystemPrompt,
-        previewCommunityName: activeCommunity?.name ?? "Community",
-        previewProjectName: workspace.derived.resolvedActiveProjectName,
+        markCommunityAgentConfigDirty,
       },
       aiAgentAppsEditorProps: {
         intro: "Manage apps attached to this community.",
-        emptyState: "Discover apps to attach trusted tools to this community.",
+        emptyState: "No apps are attached to this community yet.",
         mounts: communityAppMounts,
         effectiveMcpApps,
         isLoading: isLoadingCommunityAppMounts,
@@ -10991,7 +10641,6 @@ export default function App() {
         updatingMountId: updatingCommunityAppMountId,
         refreshingMountId: refreshingCommunityAppMountId,
         removingMountId: removingCommunityAppMountId,
-        onOpenDiscoverApps: handleOpenDiscoverApps,
         onUpdateMount: handleUpdateCommunityAppMount,
         onRefreshApp: handleRefreshCommunityApp,
         onUnmountApp: handleUnmountCommunityApp,
@@ -10999,7 +10648,7 @@ export default function App() {
       aiAgentSkillsEditorProps: {
         intro: "Attach reusable skill packages here so this community lens can load behavior units on demand without bloating the base prompt.",
         emptyState: "Attach the first skill package to this community. Attached skills become available when members explicitly mention them in this lens.",
-        addButtonLabel: "Browse skills",
+        addButtonLabel: "Create skill",
         platformSkills: canManageResourcesActiveCommunity
           ? COMMUNITY_MANAGER_PLATFORM_SKILLS
           : [],
@@ -11018,7 +10667,6 @@ export default function App() {
         onAttachPackage: handleAttachSkillPackageToCommunity,
         onUpdateSkill: handleUpdateCommunitySkillAttachment,
         onDetachSkill: handleDetachCommunitySkill,
-        onBrowseCatalog: handleOpenDiscoverSkills,
       },
       isLoadingCommunityFunnel,
       communityFunnelError,
@@ -11520,11 +11168,6 @@ export default function App() {
     integrations: {
       session: session,
       requireSignIn,
-      openDiscoverApps: handleOpenDiscoverApps,
-      openDiscoverSkills: handleOpenDiscoverSkills,
-      shouldOpenCreateSkillComposer: shouldOpenCreatePersonalSkill,
-      onConsumeCreateSkillComposerOpen: () =>
-        setShouldOpenCreatePersonalSkill(false),
       effectiveMcpApps,
       isLoadingEffectiveMcpApps,
       effectiveMcpAppsError,
@@ -11572,33 +11215,6 @@ export default function App() {
     Number(Boolean(activeCommunityAttentionSummary.ai_feed)) +
     Number(Boolean(activeCommunityAttentionSummary.resources)) +
     Number(Boolean(activeCommunityAttentionSummary.events));
-  const communityHomeButton = activeCommunity ? (
-    <button
-      className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
-      onClick={() => {
-        const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity.slug ?? "").trim();
-        if (!nextCommunitySlug) return;
-        openCommunityChat(nextCommunitySlug, { clearUnread: true });
-      }}
-      aria-label="Open community"
-      title={activeCommunity.name}
-      type="button"
-    >
-      <CommunityAvatar
-        className="community-btn-avatar"
-        imageUrl={activeCommunity.avatar_url}
-        focusX={activeCommunity.avatar_focus_x}
-        focusY={activeCommunity.avatar_focus_y}
-        zoom={activeCommunity.avatar_zoom}
-        name={activeCommunity.name}
-        fallback={communityInitials(activeCommunity.name)}
-        fallbackClassName="community-btn-initials"
-      />
-      {activeCommunityAttentionCount > 0 ? (
-        <span className="unread-badge">{activeCommunityAttentionCount}</span>
-      ) : null}
-    </button>
-  ) : null;
   const directMessageWebNotifications = useDirectMessageWebNotifications({
     isEnabled: Boolean(session),
     unreadCount: directMessagesUnreadCount,
@@ -12138,17 +11754,11 @@ export default function App() {
       </svg>
     </button>
   ) : null;
-  const onboardingHandoffCommunity =
-    onboardingGuidePending?.communityId
-      ? communities.find((community) => community.id === onboardingGuidePending.communityId) ??
-        (activeCommunity?.id === onboardingGuidePending.communityId ? activeCommunity : null)
-      : null;
-
   const mainSurfaceHostProps = buildWebAppMainSurfaceHostProps({
     activePage,
     isPublicCommunityFunnel,
     publicRoute: shellPublicRoute,
-    holdLandingForAuth: shouldHoldRootLandingForAuth,
+    holdLandingForAuth: shouldHoldLandingForAuth,
     landingPageProps: {
       onTryFree: () => {
         void routeTryPolynetFree();
@@ -12217,18 +11827,6 @@ export default function App() {
       onFinishOnboarding: finishOnboarding,
       onClose: () => setIsOnboardingModalOpen(false),
     },
-    onboardingHandoffPageProps: onboardingGuidePending
-      ? {
-          targetName: onboardingGuidePending.communityName,
-          communityAvatarUrl: onboardingHandoffCommunity?.avatar_url ?? null,
-          communityAvatarFocusX: onboardingHandoffCommunity?.avatar_focus_x ?? null,
-          communityAvatarFocusY: onboardingHandoffCommunity?.avatar_focus_y ?? null,
-          communityAvatarZoom: onboardingHandoffCommunity?.avatar_zoom ?? null,
-          status: onboardingGuidePending.status,
-          error: onboardingGuidePending.error,
-          onRetry: retryOnboardingGuideAfterBridge,
-        }
-      : null,
     platformBridgePageProps: {
       bridge:
         session && effectiveAccountSetupStatus && !effectiveAccountSetupStatus.completed
@@ -12403,62 +12001,11 @@ export default function App() {
       secondaryPanelsProps: communitySecondarySurfaceProps,
     },
     discoverPanelProps: {
-      showMobileShell,
-      activeTab: discoverActiveTab,
-      selectedAppId: selectedDiscoverAppId,
-      selectedSkillId: selectedDiscoverSkillId,
-      onSelectTab: handleSelectDiscoverTab,
-      onSelectApp: handleSelectDiscoverApp,
-      onSelectSkill: handleSelectDiscoverSkill,
-      hasSession: Boolean(session),
-      isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
-      onRequireAuth: () => requireSignIn(),
       isLoadingDiscover,
       discoverCommunitiesCount: discoverCommunities.length,
       discoverError,
       discoverCommunities,
-      discoverApps,
-      discoverSkills,
       formatPlanPrice: (plan) => (plan ? formatPlanPrice(plan) : "Free"),
-      userPlatformAppMounts,
-      isLoadingUserPlatformAppMounts,
-      userPlatformAppMountError,
-      userPlatformAppMutationError,
-      isConnectingUserPlatformApp,
-      onConnectUserPlatformApp: handleConnectUserPlatformApp,
-      onBeginUserPlatformAppOAuth: handleBeginUserPlatformAppOAuth,
-      manageableCommunityTargetName: canManageMembersActiveCommunity
-        ? (activeCommunity?.name ?? null)
-        : null,
-      communityAppMounts,
-      isLoadingCommunityAppMounts,
-      communityAppMountError,
-      communityAppMutationError,
-      isConnectingCommunityApp,
-      onConnectCommunityApp: handleConnectCommunityApp,
-      userPlatformSkills,
-      isLoadingUserPlatformSkills,
-      userPlatformSkillError,
-      userPlatformSkillMutationError,
-      isCreatingUserPlatformSkill,
-      onCreateUserPlatformSkill: handleCreateUserPlatformSkill,
-      communitySkillAttachments,
-      ownedSkillPackages,
-      isLoadingCommunitySkillAttachments,
-      isLoadingOwnedSkillPackages,
-      communitySkillAttachmentError,
-      ownedSkillPackagesError,
-      communitySkillMutationError,
-      isCreatingCommunitySkill: isCreatingSkill,
-      attachingCommunitySkillPackageId: attachingSkillPackageId,
-      onCreateCommunitySkill: handleCreateCommunitySkill,
-      onAttachSkillPackageToCommunity: handleAttachSkillPackageToCommunity,
-      onOpenIntegrationsSettings: handleOpenIntegrationsSettings,
-      onOpenCreateUserPlatformSkill: handleOpenCreatePersonalSkill,
-      onOpenActiveCommunityAiAgentApps: () =>
-        handleOpenActiveCommunityAiAgentTab("apps"),
-      onOpenActiveCommunityAiAgentSkills: () =>
-        handleOpenActiveCommunityAiAgentTab("skills"),
       onActivateCommunity: (community) => {
         activateDiscoverCommunityCard({
           canActivate: Boolean(community.slug),
@@ -12477,9 +12024,6 @@ export default function App() {
     settingsPage,
           communitySlug: null,
           communityTab: "chat",
-          discoverTab: discoverActiveTab,
-          discoverAppId: null,
-          discoverSkillId: null,
           docsSlug: nextSlug,
           threadId: null,
         }) ?? "/docs");
@@ -12490,6 +12034,26 @@ export default function App() {
   const globalOverlays = (
     <>
       <WebGlobalOverlayHost {...globalOverlayHostProps} />
+      <Suspense fallback={null}>
+        <WebCommunityAgentDock
+          isVisible={
+            Boolean(session) &&
+            activePage === "community" &&
+            publicRoute.kind !== "community_funnel" &&
+            publicRoute.kind !== "community_funnel_preview" &&
+            hasResolvedCommunityChat &&
+            !isCommunityLaunchSetupModalOpen &&
+            !isDirectMessagesOpen &&
+            !isOnboardingModalOpen &&
+            !["settings", "ai_agent", "funnel", "analytics"].includes(communityTab)
+          }
+          communityId={activeCommunity?.id ?? null}
+          communityName={activeCommunity?.name ?? "Community"}
+          communityAvatarUrl={activeCommunity?.avatar_url ?? null}
+          session={session}
+          ensureSession={ensureUsableAuthSession}
+        />
+      </Suspense>
       <WebDirectMessagesHost
         isOpen={isDirectMessagesOpen}
         openRequest={directMessageOpenRequest}
@@ -12533,7 +12097,6 @@ export default function App() {
                 visibility: activeCommunity.visibility,
                 entry_policy: activeCommunity.entry_policy ?? null,
                 agent_system_prompt: communityAgentConfigCommunitySystemPrompt,
-                agent_starter_prompts: communityLaunchAgentStarterPrompts,
               }
             : null
         }
@@ -12669,10 +12232,10 @@ export default function App() {
     handleMobileShellTouchCancel,
     mobileShellMode,
     mobileRootPage,
-    forceMobileCommunityRoot: showMobileShell && isVisitorCommunitySurface,
+    forceMobileCommunityRoot: showMobileShell,
     mobileSecondaryMode,
     showMobileSettingsIndex,
-    activePage: shellProjectionActivePage,
+    activePage,
     hasSelectedCommunity,
     activeCommunity: isVisitorCommunitySurface ? visitorShellActiveCommunity : activeCommunity,
     activeCommunityAttentionCount,
@@ -12690,12 +12253,11 @@ export default function App() {
     hasWorkspaceRightPanelControl: showWorkspaceRightPanelControl,
     workspaceRightPanelToggle,
     directMessagesButton,
-    communityHomeButton,
     handleExitPublicFunnelPreview,
     handleTopbarBackFromPublicFunnel,
     handleTopbarBackFromWorkspaceSettings,
     setUserWantsSessions,
-    handleTopbarBackToWorkspace,
+    handleTopbarBackToCommunity,
     workspaceShellPanels,
     communityTab: isVisitorCommunitySurface ? "chat" : communityTab,
     communityTabIndicators: isVisitorCommunitySurface

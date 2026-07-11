@@ -79,7 +79,10 @@ export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
           ? await args.ensureSession(args.session, "direct_messages_typing_presence")
           : args.session;
         if (isDisposed || !usableSession || !args.conversationId) return;
-        const liveClient = createCloudDirectMessagesLiveClient({ session: usableSession });
+        const liveClient = createCloudDirectMessagesLiveClient({
+          session: usableSession,
+          ensureSession: args.ensureSession,
+        });
         if (isDisposed) {
           liveClient.close();
           return;

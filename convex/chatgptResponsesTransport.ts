@@ -848,7 +848,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
   messages: Array<RuntimeChatgptMessage | ChatgptToolAwareMessage>;
   maxTokens: number;
   tools?: ChatgptFunctionTool[];
-  onDelta?: (delta: string) => void;
+  onDelta?: (delta: string) => Promise<void> | void;
   parallelToolCalls?: boolean;
   toolChoice?: NativeToolChoice;
   onReasoningSummaryTextDelta?: (params: { delta: string; summaryIndex: number }) => Promise<void> | void;
@@ -1035,7 +1035,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
             emittedAnyDelta = true;
             sawDelta = true;
             text += delta;
-            params.onDelta?.(delta);
+            await params.onDelta?.(delta);
           }
           return null;
         }
@@ -1068,7 +1068,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
             emittedAnyDelta = true;
             sawDoneText = true;
             text += doneText;
-            params.onDelta?.(doneText);
+            await params.onDelta?.(doneText);
           }
           return null;
         }
@@ -1095,7 +1095,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
               emittedAnyDelta = true;
               sawDoneText = true;
               text += doneText;
-              params.onDelta?.(doneText);
+              await params.onDelta?.(doneText);
             }
           }
         }

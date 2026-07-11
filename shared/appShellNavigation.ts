@@ -20,8 +20,6 @@ export type AppPage = "landing" | "onboarding" | "workspace" | "community" | "di
 
 export type AppView = "home" | "settings";
 
-export type DiscoverTab = "communities" | "apps" | "skills";
-
 export const COMMUNITY_TABS = [
   "chat",
   "ai_feed",
@@ -135,18 +133,6 @@ export function parseCommunitySettingsPane(value: string | null | undefined): Co
     case "community":
     default:
       return "community";
-  }
-}
-
-export function parseDiscoverTab(value: string | null | undefined): DiscoverTab {
-  switch ((value ?? "").trim()) {
-    case "apps":
-      return "apps";
-    case "skills":
-      return "skills";
-    case "communities":
-    default:
-      return "communities";
   }
 }
 

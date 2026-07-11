@@ -1,6 +1,12 @@
 import { ConvexReactClient } from "convex/react";
-import { resolveAuthIdentityToken, resolveAuthSubject } from "./authSession";
+import { resolveConvexRuntimeToken, resolveAuthSubject } from "./authSession";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
+import {
+  createAuthenticatedConvexRealtimeClient,
+  type AuthenticatedConvexRealtimeClient,
+  type ConvexRealtimeAuthState,
+  type ConvexRealtimeEnsureSession,
+} from "./convexRealtimeAuth";
 import type {
   DirectMessage,
   DirectMessageConversation,
@@ -27,8 +33,9 @@ export type CloudDirectMessagesLiveClient = {
 type SharedLiveClientEntry = {
   key: string;
   client: ConvexReactClient;
+  realtimeClient: AuthenticatedConvexRealtimeClient;
   refCount: number;
-  sessionRef: { current: unknown };
+  authState: ConvexRealtimeAuthState<any>;
   closeTimer: ReturnType<typeof setTimeout> | null;
 };
 
@@ -49,8 +56,8 @@ function coerceRows<TRow>(payload: unknown): TRow[] {
   return [payload as TRow];
 }
 
-function resolveSessionIdentityToken(sessionRaw: unknown): string {
-  return String(resolveAuthIdentityToken((sessionRaw ?? null) as any) ?? "").trim();
+function resolveSessionRuntimeToken(sessionRaw: unknown): string {
+  return String(resolveConvexRuntimeToken((sessionRaw ?? null) as any) ?? "").trim();
 }
 
 function emitLiveRows<TRow>(
@@ -82,14 +89,16 @@ function emitLiveResult<TResult>(
 }
 
 export function createCloudDirectMessagesLiveClient<SessionT>(
-  params: CloudDirectMessagesGatewayParams<SessionT>,
+  params: CloudDirectMessagesGatewayParams<SessionT> & {
+    ensureSession?: ConvexRealtimeEnsureSession<SessionT>;
+  },
 ): CloudDirectMessagesLiveClient {
   const authSubject = resolveAuthSubject(params.session as any);
   if (!authSubject) {
     throw new Error("convex_auth_subject_required");
   }
-  const identityToken = resolveSessionIdentityToken(params.session);
-  if (!identityToken) {
+  const runtimeToken = resolveSessionRuntimeToken(params.session);
+  if (!runtimeToken) {
     throw new Error("convex_identity_token_required");
   }
 
@@ -97,21 +106,33 @@ export function createCloudDirectMessagesLiveClient<SessionT>(
   const key = `${convexUrl}::${authSubject}`;
   let entry = sharedLiveClientEntry;
   if (entry && entry.key === key) {
+    const previousRuntimeToken = resolveSessionRuntimeToken(entry.authState.sessionRef.current);
     entry.refCount += 1;
-    entry.sessionRef.current = params.session;
+    entry.authState.sessionRef.current = params.session;
+    entry.authState.ensureSessionRef.current = params.ensureSession;
     if (entry.closeTimer !== null) {
       clearTimeout(entry.closeTimer);
       entry.closeTimer = null;
     }
+    if (previousRuntimeToken !== runtimeToken) {
+      entry.realtimeClient.reauthenticate();
+    }
   } else {
-    const sessionRef: { current: unknown } = { current: params.session };
-    const client = new ConvexReactClient(convexUrl);
-    client.setAuth(async () => resolveSessionIdentityToken(sessionRef.current) || null);
+    const authState: ConvexRealtimeAuthState<SessionT> = {
+      sessionRef: { current: params.session },
+      ensureSessionRef: { current: params.ensureSession },
+    };
+    const realtimeClient = createAuthenticatedConvexRealtimeClient({
+      convexUrl,
+      authState,
+      source: "direct_messages_live",
+    });
     entry = {
       key,
-      client,
+      client: realtimeClient.client,
+      realtimeClient,
       refCount: 1,
-      sessionRef,
+      authState,
       closeTimer: null,
     };
     sharedLiveClientEntry = entry;
@@ -135,7 +156,7 @@ export function createCloudDirectMessagesLiveClient<SessionT>(
         if (sharedLiveClientEntry === acquired) {
           sharedLiveClientEntry = null;
         }
-        void acquired.client.close();
+        acquired.realtimeClient.close();
       }, SHARED_LIVE_CLIENT_CLOSE_LINGER_MS);
     },
   };

@@ -52,7 +52,7 @@ export async function enqueueCommunityAccessGrantedEmailInternal(params: {
       String(community.name ?? community.slug ?? "").trim() || "your community";
     const communitySlug = String(community.slug ?? "").trim();
     const actionPath =
-      buildCommunityTabPath(communitySlug || null, "chat") || "/workspace";
+      buildCommunityTabPath(communitySlug || null, "chat") || "/discover";
     return await params.ctx.runMutation(
       (internal as any).email.enqueueEmailJobInternal,
       {
@@ -91,7 +91,7 @@ export async function enqueueCommunityBillingIssueEmailInternal(params: {
     const actionPath =
       buildCommunityTabPath(communitySlug || null, "settings") ||
       buildCommunityTabPath(communitySlug || null, "chat") ||
-      "/workspace";
+      "/discover";
     return await params.ctx.runMutation(
       (internal as any).email.enqueueEmailJobInternal,
       {

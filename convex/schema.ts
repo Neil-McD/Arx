@@ -1885,6 +1885,7 @@ export default defineSchema({
     ),
     responseRootId: v.optional(v.id("communityInteractionRoots")),
     responseReplyId: v.optional(v.id("communityInteractionReplies")),
+    attempt: v.optional(v.number()),
     runId: v.optional(v.id("communityAgentRuns")),
     sourceTraceId: v.optional(v.id("communitySourceTraces")),
     skipReason: v.optional(v.string()),
@@ -1897,6 +1898,7 @@ export default defineSchema({
     .index("by_sourceMention", ["sourceMentionId"])
     .index("by_status_createdAt", ["status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_sourceRoot_createdAt", ["sourceRootId", "createdAt"])
     .index("by_requester_createdAt", ["requesterUserId", "createdAt"])
     .index("by_requester_community_createdAt", ["requesterUserId", "communityId", "createdAt"]),
 
@@ -2122,7 +2124,9 @@ export default defineSchema({
     agentEnabled: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_community", ["communityId"]),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_updatedAt", ["communityId", "updatedAt"]),
 
   communityAgentRuns: defineTable({
     communityId: v.id("communities"),

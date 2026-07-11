@@ -23,9 +23,6 @@ function main() {
   const runtimeHarnessComposition = readText(
     join(root, "convex/runtimeHarnessComposition.ts"),
   );
-  const discoverPanel = readText(
-    join(root, "apps/web/src/components/WebDiscoverPanel.tsx"),
-  );
   const communitySettings = readText(
     join(root, "apps/web/src/components/WebCommunitySettingsSection.tsx"),
   );
@@ -227,16 +224,6 @@ function main() {
     );
   }
 
-  assertIncludes(
-    discoverPanel,
-    "Add ${selectedApp.name} to ${communityTargetLabel}",
-    "Discover community app add copy",
-  );
-  assertNotIncludes(
-    discoverPanel,
-    "Recommend ${selectedApp.name} in ${communityTargetLabel}",
-    "Discover legacy community recommend copy",
-  );
   assertIncludes(
     communitySettings,
     "No apps have been added to this community yet.",

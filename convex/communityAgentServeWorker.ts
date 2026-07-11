@@ -22,6 +22,13 @@ import {
   type RuntimeKernelToolExecutionResult,
 } from "../shared/runtimeKernelTypes";
 import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
+import {
+  buildCommunityAgentServeRunId,
+  nextCommunityAgentServeAttempt,
+  normalizeCommunityAgentServeAttempt,
+} from "../shared/communityAgentDockContract";
+import { buildCommunityAgentIdentityPrompt } from "../shared/communityAgentRuntimeBoundary";
+import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 
 const SERVE_WORKER_DEFAULT_LIMIT = 3;
 const SERVE_WORKER_MAX_LIMIT = 5;
@@ -34,6 +41,7 @@ const REPLY_TEXT_MAX_CHARS = 8_000;
 const REPLY_SUMMARY_MAX_CHARS = 500;
 const ERROR_CODE_MAX_CHARS = 120;
 const ERROR_MESSAGE_MAX_CHARS = 500;
+const SERVE_EVENT_DELTA_FLUSH_CHARS = 48;
 
 type VisibilityScope = "private" | "admin" | "community" | "public";
 
@@ -51,6 +59,7 @@ type ServeRequestRow = {
   sourceVisibilityScope?: VisibilityScope;
   responseVisibilityScope?: VisibilityScope;
   responseReplyId?: any;
+  attempt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -58,7 +67,9 @@ type ServeRequestRow = {
 type InteractionRootRow = {
   _id: any;
   communityId: any;
+  actorType: string;
   actorUserId?: any;
+  idempotencyKey: string;
   status: "live" | "hidden" | "deleted";
   visibilityScope: VisibilityScope;
   contentSummary: string;
@@ -69,7 +80,9 @@ type InteractionReplyRow = {
   _id: any;
   communityId: any;
   rootId: any;
+  actorType: string;
   actorUserId?: any;
+  actorAgentKey?: string;
   status: "live" | "hidden" | "deleted";
   visibilityScope: VisibilityScope;
   contentSummary: string;
@@ -83,6 +96,74 @@ type ContentBlockRow = {
 };
 
 const internalRefs = internal as any;
+
+type ServeRunEventKind = "reasoning" | "assistant" | "tool_call" | "tool_result" | "final" | "error";
+
+function createServeRunEventRecorder(args: {
+  ctx: any;
+  communityId: any;
+  requestId: any;
+  attempt: number;
+}) {
+  const runId = buildCommunityAgentServeRunId(normalizeIdValue(args.requestId), args.attempt);
+  let seq = 0;
+  const buffers: Record<"reasoning" | "assistant", string> = {
+    reasoning: "",
+    assistant: "",
+  };
+
+  const record = async (event: {
+    kind: ServeRunEventKind;
+    content: string;
+    toolName?: string;
+    status?: string;
+    errorCode?: string;
+  }) => {
+    const eventSeq = seq;
+    seq += 1;
+    try {
+      await args.ctx.runMutation(
+        internalRefs.communityAgentRuntime.recordCommunityAgentRunEventsInternal,
+        {
+          communityId: args.communityId,
+          runId,
+          events: [{
+            seq: eventSeq,
+            kind: event.kind,
+            content: boundedText(event.content, 8_000),
+            ...(event.toolName ? { toolName: event.toolName } : {}),
+            ...(event.status ? { status: event.status } : {}),
+            ...(event.errorCode ? { errorCode: event.errorCode } : {}),
+          }],
+        },
+      );
+    } catch {
+      // Event visibility is best-effort and must never break the canonical serve.
+    }
+  };
+
+  const flush = async (kind: "reasoning" | "assistant") => {
+    const content = buffers[kind];
+    if (!content) return;
+    buffers[kind] = "";
+    await record({ kind, content });
+  };
+
+  return {
+    pushDelta: async (kind: "reasoning" | "assistant", delta: string) => {
+      buffers[kind] += delta;
+      if (buffers[kind].length >= SERVE_EVENT_DELTA_FLUSH_CHARS) {
+        await flush(kind);
+      }
+    },
+    flush,
+    flushAll: async () => {
+      await flush("reasoning");
+      await flush("assistant");
+    },
+    record,
+  };
+}
 
 function unsupportedConciergeToolFailure(toolName: unknown): RuntimeKernelFailureInput {
   const pendingToolName = String(toolName ?? "").trim();
@@ -151,7 +232,10 @@ async function executeConciergeTool(args: {
     userId: normalizeIdValue(args.context.request.sponsorUserId),
     authSubject: undefined,
     projectId: null,
-    runId: `community-agent-serve:${normalizeIdValue(args.requestId)}`,
+    runId: buildCommunityAgentServeRunId(
+      normalizeIdValue(args.requestId),
+      args.context.request.attempt,
+    ),
     communityId: normalizeIdValue(args.context.request.communityId),
     toolName: args.toolName,
     args: args.rawArguments,
@@ -204,14 +288,6 @@ async function requesterHasChatgptConnection(ctx: any, requesterUserId: any): Pr
   return Boolean(row?.encryptedSecretHex);
 }
 
-async function latestCommunityAgentConfig(ctx: any, communityId: any): Promise<Record<string, any> | null> {
-  const rows = (await ctx.db
-    .query("communityAgentConfigs" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .take(5)) as Array<Record<string, any>>;
-  return rows.slice().sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))[0] ?? null;
-}
-
 async function listContentBlocksForRoot(ctx: any, rootId: any): Promise<ContentBlockRow[]> {
   return (await ctx.db
     .query("communityInteractionContentBlocks" as any)
@@ -239,6 +315,39 @@ function contentTextFromBlocks(blocks: ContentBlockRow[], fallback: unknown): st
     })
     .filter(Boolean);
   return boundedText(parts.join("\n\n") || fallback, SOURCE_TEXT_MAX_CHARS);
+}
+
+async function buildPrivateDockConversationContext(args: {
+  ctx: any;
+  root: InteractionRootRow;
+  requesterUserId: any;
+  sourceReplyId?: any;
+}): Promise<string> {
+  if (
+    !args.root.idempotencyKey?.startsWith("community_agent_dock:root:") ||
+    args.root.actorType !== "system" ||
+    args.root.visibilityScope !== "private" ||
+    normalizeIdValue(args.root.actorUserId) !== normalizeIdValue(args.requesterUserId)
+  ) {
+    return "";
+  }
+  const rows = ((await args.ctx.db
+    .query("communityInteractionReplies" as any)
+    .withIndex("by_root_seq", (q: any) => q.eq("rootId", args.root._id))
+    .order("desc")
+    .take(16)) as InteractionReplyRow[]).reverse();
+  const parts = rows
+    .filter((row) => normalizeIdValue(row._id) !== normalizeIdValue(args.sourceReplyId))
+    .filter((row) => row.status === "live" && row.visibilityScope === "private")
+    .filter((row) =>
+      row.actorType === "human"
+        ? normalizeIdValue(row.actorUserId) === normalizeIdValue(args.requesterUserId)
+        : row.actorType === "community_agent" && row.actorAgentKey === CANONICAL_COMMUNITY_AGENT_KEY,
+    )
+    .map((row) => `${row.actorType === "human" ? "Member" : "Agent"}: ${boundedText(row.contentSummary, 800)}`)
+    .filter(Boolean);
+  while (parts.join("\n\n").length > 6_000 && parts.length > 1) parts.shift();
+  return parts.join("\n\n");
 }
 
 async function nextReplySeq(ctx: any, rootId: any): Promise<number> {
@@ -325,8 +434,10 @@ export const claimNextCommunityAgentServeRequestInternal = internalMutation({
           requestId: null,
         };
       }
+      const attempt = nextCommunityAgentServeAttempt(request.attempt);
       await ctx.db.patch(request._id as any, {
         status: "running",
+        attempt,
         updatedAt: nowMs,
       });
       return {
@@ -367,8 +478,10 @@ export const claimNextCommunityAgentServeRequestInternal = internalMutation({
         );
         continue;
       }
+      const attempt = nextCommunityAgentServeAttempt(request.attempt);
       await ctx.db.patch(request._id as any, {
         status: "running",
+        attempt,
         updatedAt: nowMs,
       });
       return {
@@ -396,8 +509,8 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       return { ok: false as const, errorCode: "serve_request_invalid", errorMessage: "Serve request failed invariant checks." };
     }
 
-    const community = (await ctx.db.get(request.communityId as any)) as Record<string, any> | null;
-    if (!community) {
+    const canonicalContext = await readCanonicalCommunityAgentContext(ctx, request.communityId);
+    if (!canonicalContext) {
       return { ok: false as const, errorCode: "community_not_found", errorMessage: "Community not found." };
     }
     try {
@@ -414,8 +527,7 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       };
     }
 
-    const config = await latestCommunityAgentConfig(ctx, request.communityId);
-    if (config?.agentEnabled === false) {
+    if (!canonicalContext.agentEnabled) {
       return {
         ok: false as const,
         errorCode: "agent_disabled",
@@ -477,6 +589,12 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
         errorMessage: "The requester cannot read the source interaction visibility scope.",
       };
     }
+    const conversationText = await buildPrivateDockConversationContext({
+      ctx,
+      root,
+      requesterUserId: request.requesterUserId,
+      sourceReplyId: reply?._id,
+    });
     return {
       ok: true as const,
       request: {
@@ -484,25 +602,27 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
         communityId: request.communityId,
         requesterUserId: request.requesterUserId,
         sponsorUserId: request.sponsorUserId,
+        attempt: normalizeCommunityAgentServeAttempt(request.attempt),
         sourceRootId: root._id,
         sourceReplyId: reply?._id ?? null,
         responseVisibilityScope: narrowVisibility(request.responseVisibilityScope, sourceVisibilityScope),
       },
       community: {
-        name: boundedText(community.name, 200),
-        slug: boundedText(community.slug, 200),
-        oneLiner: boundedText(community.oneLiner, 500),
-        about: boundedText(community.about, 2_000),
+        name: canonicalContext.communityName ?? "",
+        slug: canonicalContext.communitySlug ?? "",
+        oneLiner: canonicalContext.communityOneLiner ?? "",
+        about: boundedText(canonicalContext.communityAbout, 2_000),
       },
       agent: {
-        displayName: boundedText(config?.agentDisplayName, 120) || "Polynet",
-        systemPrompt: boundedText(config?.systemPrompt, 4_000),
+        displayName: canonicalContext.agentDisplayName,
+        systemPrompt: boundedText(canonicalContext.communitySystemPrompt, 4_000),
       },
       source: {
         rootText,
         replyText,
         text: replyText || rootText,
         isReply: Boolean(reply),
+        conversationText,
       },
     };
   },
@@ -672,7 +792,9 @@ function buildServeMessages(context: any): NativeToolAwareMessage[] {
     context.community.oneLiner ? `One-liner: ${context.community.oneLiner}` : "",
     context.community.about ? `About: ${context.community.about}` : "",
   ].filter(Boolean).join("\n");
-  const sourceContext = context.source.isReply
+  const sourceContext = context.source.conversationText
+    ? `Recent private conversation (oldest to newest):\n${context.source.conversationText}\n\nCurrent member message:\n${context.source.replyText}`
+    : context.source.isReply
     ? `Thread root:\n${context.source.rootText}\n\nMentioned reply:\n${context.source.replyText}`
     : `Mentioned post:\n${context.source.rootText}`;
   const communityWideInstructions = context.agent.systemPrompt
@@ -683,7 +805,10 @@ function buildServeMessages(context: any): NativeToolAwareMessage[] {
     {
       role: "system" as const,
       content:
-        `You are ${context.agent.displayName}, the visible community agent for this one community.\n` +
+        buildCommunityAgentIdentityPrompt({
+          surface: "member_concierge",
+          displayName: context.agent.displayName,
+        }) + "\n" +
         "Answer the direct community-agent mention request in the same chat thread.\n" +
         "Be concise, useful, and plainspoken. Do not claim to update memory, run workflows, or write the directory.\n" +
         "You have no write authority here. You are only answering the requester.\n" +
@@ -735,6 +860,13 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         continue;
       }
 
+      const eventRecorder = createServeRunEventRecorder({
+        ctx,
+        communityId: context.request.communityId,
+        requestId,
+        attempt: context.request.attempt,
+      });
+
       let completion: any;
       try {
         completion = await runNativeRuntimeKernel<CommunityAgentConciergeToolName>({
@@ -754,16 +886,47 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
               maxTokens: SERVE_REPLY_MAX_TOKENS,
               tools: buildCommunityAgentConciergeFunctionTools(),
               parallelToolCalls: false,
+              onDelta: async (delta) => {
+                await eventRecorder.flush("reasoning");
+                await eventRecorder.pushDelta("assistant", delta);
+              },
+              onReasoningSummaryPartAdded: async () => {
+                await eventRecorder.flush("reasoning");
+              },
+              onReasoningSummaryTextDelta: async ({ delta }) => {
+                await eventRecorder.pushDelta("reasoning", delta);
+              },
               requestMetadata: {
                 userId: normalizeIdValue(context.request.sponsorUserId),
                 sessionId: `community-agent-serve:${normalizeIdValue(context.request.communityId)}`,
-                threadId: `serve-request:${normalizeIdValue(requestId)}`,
+                threadId: buildCommunityAgentServeRunId(
+                  normalizeIdValue(requestId),
+                  context.request.attempt,
+                ),
               },
               reasoningEffort: "low",
             });
             return coerceConciergeCompletion(toolCompletion);
           },
           normalizeToolArguments: normalizeCommunityAgentConciergeToolArguments,
+          onToolStepStart: async ({ step }) => {
+            await eventRecorder.flushAll();
+            await eventRecorder.record({
+              kind: "tool_call",
+              toolName: String(step.toolName),
+              status: "running",
+              content: String(step.toolName),
+            });
+          },
+          onToolStepFinish: async ({ step, toolResult }) => {
+            await eventRecorder.record({
+              kind: "tool_result",
+              toolName: String(step.toolName),
+              status: toolResult.status,
+              errorCode: toolResult.errorCode ?? undefined,
+              content: toolResult.status === "ok" ? "Tool completed" : "Tool failed",
+            });
+          },
           executeTool: async ({ toolName, rawArguments }) =>
             await executeConciergeTool({
               ctx,
@@ -774,6 +937,12 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
             }),
         });
       } catch (error) {
+        await eventRecorder.flushAll();
+        await eventRecorder.record({
+          kind: "error",
+          errorCode: "provider_exception",
+          content: "The community agent could not complete this turn.",
+        });
         await ctx.runMutation(internalRefs.communityAgentServeWorker.failCommunityAgentServeRequestInternal, {
           requestId,
           errorCode: "provider_exception",
@@ -787,7 +956,13 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         });
         continue;
       }
+      await eventRecorder.flushAll();
       if ((completion as any)?.ok === false) {
+        await eventRecorder.record({
+          kind: "error",
+          errorCode: (completion as any).code ?? "provider_error",
+          content: "The community agent could not complete this turn.",
+        });
         await ctx.runMutation(internalRefs.communityAgentServeWorker.failCommunityAgentServeRequestInternal, {
           requestId,
           errorCode: (completion as any).code ?? "provider_error",
@@ -802,6 +977,12 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         continue;
       }
 
+      await eventRecorder.record({
+        kind: "final",
+        status: "completed",
+        content: String((completion as any).assistantText ?? ""),
+      });
+
       let finalized: any;
       try {
         finalized = await ctx.runMutation(
@@ -813,6 +994,11 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
           },
         );
       } catch (error) {
+        await eventRecorder.record({
+          kind: "error",
+          errorCode: "serve_finalize_exception",
+          content: "The response completed but could not be saved.",
+        });
         await ctx.runMutation(internalRefs.communityAgentServeWorker.failCommunityAgentServeRequestInternal, {
           requestId,
           errorCode: "serve_finalize_exception",

@@ -29,8 +29,8 @@ assert.match(
 );
 assert.match(
   app,
-  /const \[mobileRootPage, setMobileRootPage\] = useState<MobileRootPage>\("agent"\);/,
-  "mobile shell should start on the Agent root page",
+  /const \[mobileRootPage, setMobileRootPage\] = useState<MobileRootPage>\("community"\);/,
+  "mobile shell should start on the Community root page",
 );
 assert.match(
   app,
@@ -44,8 +44,8 @@ assert.match(
 );
 assert.match(
   app,
-  /forceCommunityRoot:[\s\S]*showMobileShell[\s\S]*shellPublicRoute\.kind === "community_funnel"[\s\S]*shellPublicRoute\.kind === "community_funnel_preview"/,
-  "mobile public community routes should force the Community root instead of inheriting the Agent default",
+  /forceCommunityRoot: showMobileShell/,
+  "all reachable mobile shell routes should stay on the Community root while Workspace is quarantined",
 );
 assert.doesNotMatch(
   app,
@@ -79,8 +79,8 @@ assert.match(
 );
 assert.match(
   topBar,
-  /<div className="mobile-topbar-center" role="tablist" aria-label="View mode">[\s\S]*className=\{`mobile-topbar-mode\$\{isAgentModeActive \? " active" : ""\}`\}[\s\S]*Agent[\s\S]*className=\{`mobile-topbar-mode\$\{isRightModeActive \? " active" : ""\}`\}[\s\S]*\{rightModeLabel\}/,
-  "mobile topbar center should render the previous two-button segmented control, not the root-page dot pager",
+  /\{!forceCommunityRoot \? \([\s\S]*mobile-topbar-center[\s\S]*Agent[\s\S]*\{rightModeLabel\}[\s\S]*\) : null\}/,
+  "mobile topbar must hide the obsolete Agent selector on reachable community-only routes",
 );
 assert.doesNotMatch(
   topBar,

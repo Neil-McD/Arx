@@ -13,7 +13,19 @@ import {
   executeSearchProductDocsTool,
 } from "../shared/productDocsRuntime.ts";
 import type { ProductDocsSearchIndex } from "../shared/productDocsSearch.ts";
-import { normalizeSlug } from "./communityCore";
+import {
+  hasCommunityCapability,
+  normalizeCommunityCapabilityRelation,
+  projectCommunityAccessCapabilities,
+  type CommunityCapabilityAuthority,
+  type CommunityCapabilityName,
+} from "../shared/communityCapabilityContract";
+import {
+  findCommunityMembershipBySlug as findCommunityBySlug,
+  listAccessibleCommunityMemberships as listAccessibleCommunities,
+  type CommunityMembershipProjection,
+} from "./communityCapabilityContext";
+import { normalizeCommunityCapabilitySlug } from "../shared/communityCapabilityContextContract";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -62,24 +74,12 @@ type JsonRpcRequest = {
   params?: unknown;
 };
 
-type CommunityMembershipProjection = {
-  community_id: string;
-  role: string;
-  communities: {
-    slug?: string | null;
-    name?: string | null;
-    one_liner?: string | null;
-    about?: string | null;
-    visibility?: string | null;
-    entry_policy?: string | null;
-  };
-};
-
 type ResolvedWorkspaceContext = {
   communityId: string;
   communitySlug: string;
   row: CommunityMembershipProjection;
   access: Record<string, unknown>;
+  authority: CommunityCapabilityAuthority;
   workspace: Record<string, unknown>;
 };
 
@@ -461,111 +461,59 @@ function sanitizeCommunitySummary(row: CommunityMembershipProjection) {
 }
 
 function sanitizeMcpAccessRelation(raw: unknown): string {
-  const relation = normalizeString(raw, 32)?.toLowerCase();
-  if (
-    relation === "owner" ||
-    relation === "admin" ||
-    relation === "moderator" ||
-    relation === "member" ||
-    relation === "pending"
-  ) {
-    return relation;
-  }
-  return "no_access";
+  return normalizeCommunityCapabilityRelation(raw);
 }
 
 function sanitizeCommunityAccessCapabilities(access: Record<string, unknown>) {
+  const capabilities = projectCommunityAccessCapabilities(access);
   return {
-    can_view: access.can_view === true,
-    can_enter_community: access.can_enter_community === true,
-    can_read_chat: access.can_read_chat === true,
-    can_post_chat: access.can_post_chat === true,
-    can_post_message: access.can_post_message === true,
-    can_manage_resources: access.can_manage_resources === true,
-    can_moderate_content: access.can_moderate_content === true,
-    can_manage_members: access.can_manage_members === true,
-    can_review_join_requests: access.can_review_join_requests === true,
-    can_manage_pricing: access.can_manage_pricing === true,
-    can_manage_branding: access.can_manage_branding === true,
-    can_manage_publishing: access.can_manage_publishing === true,
-    can_manage_payouts: access.can_manage_payouts === true,
+    can_view: capabilities.canView,
+    can_enter_community: capabilities.canEnterCommunity,
+    can_read_chat: capabilities.canReadChat,
+    can_post_chat: capabilities.canPostChat,
+    can_post_message: capabilities.canPostMessage,
+    can_manage_resources: capabilities.canManageResources,
+    can_moderate_content: capabilities.canModerateContent,
+    can_manage_members: capabilities.canManageMembers,
+    can_review_join_requests: capabilities.canReviewJoinRequests,
+    can_manage_pricing: capabilities.canManagePricing,
+    can_manage_branding: capabilities.canManageBranding,
+    can_manage_publishing: capabilities.canManagePublishing,
+    can_manage_payouts: capabilities.canManagePayouts,
   };
 }
 
-function buildWorkspaceAuthority(access: Record<string, unknown>) {
-  const relation = sanitizeMcpAccessRelation(access.relation);
-  const isEntitled = access.is_entitled === true;
-  const capabilities = sanitizeCommunityAccessCapabilities(access);
-  const availableToolsets: string[] = ["workspace_context"];
+const MCP_TOOLSET_BY_COMMUNITY_CAPABILITY: Record<CommunityCapabilityName, string> = {
+  community_context: "workspace_context",
+  accepted_memory: "accepted_memory",
+  raw_evidence_search: "raw_evidence_search",
+  member_resources: "member_resources",
+  builder_resources: "builder_resources",
+  join_request_review: "join_request_review",
+  community_admin: "community_admin",
+  owner_controls: "owner_controls",
+};
 
-  if (isEntitled && (capabilities.can_enter_community || capabilities.can_read_chat)) {
-    availableToolsets.push("accepted_memory", "raw_evidence_search", "member_resources");
-  }
-  if (capabilities.can_manage_resources) {
-    availableToolsets.push("builder_resources");
-  }
-  if (capabilities.can_review_join_requests) {
-    availableToolsets.push("join_request_review");
-  }
-  if (
-    capabilities.can_manage_members ||
-    capabilities.can_manage_pricing ||
-    capabilities.can_manage_branding ||
-    capabilities.can_manage_publishing ||
-    capabilities.can_manage_payouts
-  ) {
-    availableToolsets.push("community_admin");
-  }
-  if (
-    relation === "owner" ||
-    capabilities.can_manage_branding ||
-    capabilities.can_manage_publishing ||
-    capabilities.can_manage_payouts
-  ) {
-    availableToolsets.push("owner_controls");
-  }
-
-  const authorityLens =
-    relation === "owner"
-      ? capabilities.can_manage_resources
-        ? "owner_builder"
-        : "owner"
-      : relation === "admin"
-        ? capabilities.can_manage_resources
-          ? "admin_builder"
-          : "admin"
-        : relation === "moderator"
-          ? "moderator"
-          : relation === "member"
-            ? "member"
-            : relation === "pending"
-              ? "pending"
-              : "no_access";
-
+function buildWorkspaceAuthority(authority: CommunityCapabilityAuthority) {
   return {
-    relation,
-    authority_lens: authorityLens,
-    available_toolsets: availableToolsets.filter(
-      (value, index, list) => list.indexOf(value) === index,
+    relation: authority.relation,
+    authority_lens: authority.authorityLens,
+    available_toolsets: authority.availableCapabilities.map(
+      (capability) => MCP_TOOLSET_BY_COMMUNITY_CAPABILITY[capability],
     ),
-    unavailable_reason:
-      relation === "pending"
-        ? "join_request_pending"
-        : relation === "no_access"
-          ? "community_access_required"
-          : null,
+    unavailable_reason: authority.unavailableReason,
   };
 }
 
 function buildWorkspaceContextId(communitySlug: string | null | undefined): string | null {
-  const slug = normalizeSlug(communitySlug);
+  const slug = normalizeCommunityCapabilitySlug(communitySlug);
   return slug ? `${WORKSPACE_CONTEXT_PREFIX}${slug}` : null;
 }
 
 function parseWorkspaceContextId(value: unknown): string | null {
   const raw = normalizeString(value, 200);
   if (!raw || !raw.startsWith(WORKSPACE_CONTEXT_PREFIX)) return null;
-  return normalizeSlug(raw.slice(WORKSPACE_CONTEXT_PREFIX.length));
+  return normalizeCommunityCapabilitySlug(raw.slice(WORKSPACE_CONTEXT_PREFIX.length));
 }
 
 function sanitizeWorkspaceSummary(row: CommunityMembershipProjection) {
@@ -580,10 +528,11 @@ function sanitizeWorkspaceSummary(row: CommunityMembershipProjection) {
 function buildWorkspaceContext(
   row: CommunityMembershipProjection,
   access: Record<string, unknown>,
+  canonicalAuthority: CommunityCapabilityAuthority,
 ) {
   const summary = sanitizeWorkspaceSummary(row);
   const capabilities = sanitizeCommunityAccessCapabilities(access);
-  const authority = buildWorkspaceAuthority(access);
+  const authority = buildWorkspaceAuthority(canonicalAuthority);
   return {
     ...summary,
     community: {
@@ -612,10 +561,6 @@ function buildWorkspaceContext(
         "Use polynet_community_search for raw recent/archive evidence; do not treat raw evidence as community-endorsed memory.",
     },
   };
-}
-
-function workspaceAccessIsOpen(access: Record<string, unknown>): boolean {
-  return access.can_enter_community === true || access.can_read_chat === true;
 }
 
 function sanitizeCommunitySearchItem(raw: unknown) {
@@ -649,26 +594,6 @@ function buildToolTextContent(payload: Record<string, unknown>): Array<{ type: "
   ];
 }
 
-async function listAccessibleCommunities(ctx: any, authSubject: string): Promise<CommunityMembershipProjection[]> {
-  const rows = (await ctx.runQuery(api.community.listCommunityMemberships as any, {
-    authSubject,
-    selectMode: "full",
-  })) as CommunityMembershipProjection[];
-  return rows.filter((row) => normalizeString(row.communities?.slug, 160));
-}
-
-function findCommunityBySlug(
-  rows: CommunityMembershipProjection[],
-  communitySlug: string,
-): CommunityMembershipProjection | null {
-  const normalized = normalizeSlug(communitySlug);
-  if (!normalized) return null;
-  return (
-    rows.find((row) => normalizeSlug(row.communities?.slug) === normalized) ??
-    null
-  );
-}
-
 async function resolveWorkspaceContext(args: {
   ctx: any;
   authSubject: string;
@@ -681,29 +606,32 @@ async function resolveWorkspaceContext(args: {
   if (!communitySlug) {
     return { ok: false, message: "workspace_context_id must use the community:<slug> shape." };
   }
-  const rows = await listAccessibleCommunities(args.ctx, args.authSubject);
-  const row = findCommunityBySlug(rows, communitySlug);
-  if (!row) {
+  const resolved = await args.ctx.runQuery(
+    internal.communityCapabilityContext.resolveCommunityCapabilityContextInternal as any,
+    {
+      authSubject: args.authSubject,
+      communitySlug,
+    },
+  );
+  if (!resolved.ok) {
+    if (resolved.code === "community_access_unavailable") {
+      return { ok: false, message: "Workspace access could not be resolved." };
+    }
+    if (resolved.code === "community_access_closed") {
+      return { ok: false, message: "Workspace is not accessible for this user." };
+    }
     return { ok: false, message: "Workspace not found or not accessible." };
   }
-  const access = (await args.ctx.runQuery(api.community.getMyCommunityAccessBySlug as any, {
-    authSubject: args.authSubject,
-    communitySlug,
-  })) as Record<string, unknown> | null;
-  if (!access) {
-    return { ok: false, message: "Workspace access could not be resolved." };
-  }
-  if (!workspaceAccessIsOpen(access)) {
-    return { ok: false, message: "Workspace is not accessible for this user." };
-  }
+  const { membership, access, authority } = resolved.context;
   return {
     ok: true,
     context: {
-      communityId: row.community_id,
+      communityId: resolved.context.communityId,
       communitySlug,
-      row,
+      row: membership,
       access,
-      workspace: buildWorkspaceContext(row, access),
+      authority,
+      workspace: buildWorkspaceContext(membership, access, authority),
     },
   };
 }
@@ -735,21 +663,14 @@ function memoryToolErrorMessage(raw: unknown, fallback: string): string | null {
   return normalizeString(row.message, 500) ?? normalizeString(row.reason_code, 120) ?? fallback;
 }
 
-function workspaceAuthorityHasToolset(workspace: Record<string, unknown>, toolset: string): boolean {
-  const authority = workspace.authority;
-  if (!authority || typeof authority !== "object" || Array.isArray(authority)) return false;
-  const availableToolsets = (authority as Record<string, unknown>).available_toolsets;
-  return Array.isArray(availableToolsets) && availableToolsets.includes(toolset);
-}
-
 function requireWorkspaceAuthorityToolset(
-  workspace: Record<string, unknown>,
-  toolset: string,
+  authority: CommunityCapabilityAuthority,
+  capability: CommunityCapabilityName,
 ): { ok: true } | { ok: false; message: string } {
-  if (workspaceAuthorityHasToolset(workspace, toolset)) return { ok: true };
+  if (hasCommunityCapability(authority, capability)) return { ok: true };
   return {
     ok: false,
-    message: `Workspace authority does not include ${toolset}.`,
+    message: `Workspace authority does not include ${MCP_TOOLSET_BY_COMMUNITY_CAPABILITY[capability]}.`,
   };
 }
 
@@ -834,18 +755,23 @@ async function handleToolCall(args: {
     if (!communitySlug) {
       return { ok: false, type: "tool", message: "community_slug is required." };
     }
-    const rows = await listAccessibleCommunities(ctx, authSubject);
-    const row = findCommunityBySlug(rows, communitySlug);
-    if (!row) {
-      return { ok: false, type: "tool", message: "Community not found or not accessible." };
-    }
-    const access = (await ctx.runQuery(api.community.getMyCommunityAccessBySlug as any, {
+    const resolved = await resolveWorkspaceContext({
+      ctx,
       authSubject,
-      communitySlug,
-    })) as Record<string, unknown> | null;
-    if (!access) {
-      return { ok: false, type: "tool", message: "Community access could not be resolved." };
+      workspaceContextId: buildWorkspaceContextId(communitySlug),
+    });
+    if (!resolved.ok) {
+      return {
+        ok: false,
+        type: "tool",
+        message:
+          resolved.message === "Workspace access could not be resolved."
+            ? "Community access could not be resolved."
+            : "Community not found or not accessible.",
+      };
     }
+    const row = resolved.context.row;
+    const access = resolved.context.access;
     const community = {
       slug: String(row.communities?.slug ?? "").trim(),
       name: String(row.communities?.name ?? "").trim() || "Community",
@@ -976,7 +902,7 @@ async function handleToolCall(args: {
     if (!resolved.ok) {
       return { ok: false, type: "tool", message: resolved.message };
     }
-    const authority = requireWorkspaceAuthorityToolset(resolved.context.workspace, "member_resources");
+    const authority = requireWorkspaceAuthorityToolset(resolved.context.authority, "member_resources");
     if (!authority.ok) {
       return { ok: false, type: "tool", message: authority.message };
     }
@@ -1021,7 +947,7 @@ async function handleToolCall(args: {
     if (!resolved.ok) {
       return { ok: false, type: "tool", message: resolved.message };
     }
-    const authority = requireWorkspaceAuthorityToolset(resolved.context.workspace, "member_resources");
+    const authority = requireWorkspaceAuthorityToolset(resolved.context.authority, "member_resources");
     if (!authority.ok) {
       return { ok: false, type: "tool", message: authority.message };
     }
@@ -1067,7 +993,7 @@ async function handleToolCall(args: {
     if (!resolved.ok) {
       return { ok: false, type: "tool", message: resolved.message };
     }
-    const authority = requireWorkspaceAuthorityToolset(resolved.context.workspace, "member_resources");
+    const authority = requireWorkspaceAuthorityToolset(resolved.context.authority, "member_resources");
     if (!authority.ok) {
       return { ok: false, type: "tool", message: authority.message };
     }
@@ -1117,7 +1043,7 @@ async function handleToolCall(args: {
     if (!resolved.ok) {
       return { ok: false, type: "tool", message: resolved.message };
     }
-    const authority = requireWorkspaceAuthorityToolset(resolved.context.workspace, "member_resources");
+    const authority = requireWorkspaceAuthorityToolset(resolved.context.authority, "member_resources");
     if (!authority.ok) {
       return { ok: false, type: "tool", message: authority.message };
     }
@@ -1166,7 +1092,7 @@ async function handleToolCall(args: {
     if (!resolved.ok) {
       return { ok: false, type: "tool", message: resolved.message };
     }
-    const authority = requireWorkspaceAuthorityToolset(resolved.context.workspace, "builder_resources");
+    const authority = requireWorkspaceAuthorityToolset(resolved.context.authority, "builder_resources");
     if (!authority.ok) {
       return { ok: false, type: "tool", message: authority.message };
     }
@@ -1211,7 +1137,7 @@ async function handleToolCall(args: {
     if (!resolved.ok) {
       return { ok: false, type: "tool", message: resolved.message };
     }
-    const authority = requireWorkspaceAuthorityToolset(resolved.context.workspace, "builder_resources");
+    const authority = requireWorkspaceAuthorityToolset(resolved.context.authority, "builder_resources");
     if (!authority.ok) {
       return { ok: false, type: "tool", message: authority.message };
     }
@@ -1255,7 +1181,7 @@ async function handleToolCall(args: {
     if (!resolved.ok) {
       return { ok: false, type: "tool", message: resolved.message };
     }
-    const authority = requireWorkspaceAuthorityToolset(resolved.context.workspace, "builder_resources");
+    const authority = requireWorkspaceAuthorityToolset(resolved.context.authority, "builder_resources");
     if (!authority.ok) {
       return { ok: false, type: "tool", message: authority.message };
     }

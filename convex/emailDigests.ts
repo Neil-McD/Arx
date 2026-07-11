@@ -187,7 +187,7 @@ function sourceTypeLabel(sourceType: CommunityArchiveDocumentRow["sourceType"]):
 }
 
 function itemUrlPath(communitySlug: string, tab: "chat" | "ai_feed" | "resources" | "polynet"): string {
-  return buildCommunityTabPath(communitySlug, tab) ?? "/workspace";
+  return buildCommunityTabPath(communitySlug, tab) ?? "/discover";
 }
 
 async function listDigestCommunities(ctx: any, args: {

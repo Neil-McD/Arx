@@ -38,6 +38,16 @@ export function resolveAuthIdentityToken(session: AuthSessionLike): string | nul
   return accessToken || null;
 }
 
+// Convex accepts the WorkOS access token configured in convex/auth.config.ts.
+// Prefer the rotating runtime credential here; an ID token can outlive an
+// access-token refresh and is only a compatibility fallback.
+export function resolveConvexRuntimeToken(session: AuthSessionLike): string | null {
+  const accessToken = String(session?.access_token ?? "").trim();
+  if (accessToken) return accessToken;
+  const idToken = String(session?.id_token ?? "").trim();
+  return idToken || null;
+}
+
 export function resolveAuthSubject(session: AuthSessionLike): string | null {
   const userId = String(session?.user?.id ?? "").trim();
   if (userId) return userId;

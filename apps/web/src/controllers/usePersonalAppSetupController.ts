@@ -51,7 +51,7 @@ type PersonalAppSetupTarget = {
 type UsePersonalAppSetupControllerArgs = {
   hasSession: boolean;
   requireSignIn: () => void;
-  onUnavailable: () => void;
+  onUnavailable?: () => void;
   isConnecting: boolean;
   refreshingPersonalMountId: string | null;
   reconnectingPersonalMountId: string | null;
@@ -323,7 +323,7 @@ export function usePersonalAppSetupController(
       return { opened: true };
     }
     if (!isImportedCommunityMcpSetupTarget(openArgs.source)) {
-      args.onUnavailable();
+      args.onUnavailable?.();
       return { opened: false, reason: "not_connectable" };
     }
     const readyCatalogEntry =

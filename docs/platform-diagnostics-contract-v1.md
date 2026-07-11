@@ -78,7 +78,7 @@ Each diagnostic signal should be classified with one of these statuses:
 | Security and audit | privileged mutations, destructive actions, webhooks, operator access | Are trust boundaries holding? | Convex critical audit, Sentry, Stripe | permission denied events, webhook signature failures, account deletion events, operator role changes, suspicious retries | partial |
 | Runtime and AI | workspace turns, model calls, streaming, provider calls | Can the intelligence layer complete work reliably? | Sentry, Convex runtime events, Vercel/Convex logs | turn success rate, time to first token, p95 turn latency, provider failures, rate limits, cost per successful turn | partial |
 | Tools, MCP, and workspace runtime | MCP validation, tool calls, terminal/computer use, sandbox lifecycle | Can tools actually execute? | Blaxel, Convex runtime events, Sentry spans, MCP diagnostics | tool success rate, tool failures by app/tool, sandbox create failures, timeout rate, MCP live/not-live reasons | partial |
-| Discover and harness | Discover apps/skills, add/like, canonical harness projection | Are apps and skills installed and projected correctly? | Convex, PostHog, Sentry | add success rate, duplicate/canonicalization conflicts, setup-needed count, validation failures, click-to-live rate | partial |
+| Integrations and harness | Settings-managed apps/skills, canonical harness projection | Are apps and skills configured and projected correctly? | Convex, PostHog, Sentry | setup success rate, duplicate/canonicalization conflicts, setup-needed count, validation failures, click-to-live rate | partial |
 | Community core | chat, feed, resources, events, members, settings | Are communities usable once joined? | Convex, PostHog, Sentry | message send failures, resource load failures, event creation failures, member action failures, community route errors | partial |
 | Funnel and join | public funnel, join request, paid join, claim flow | Can visitors become members? | PostHog, Convex, Stripe, Sentry | page visits, join starts, join completions, conversion rate, checkout failures, pending claim age | partial |
 | Billing and entitlements | account commerce, credits, community subscriptions, payouts | Is money state correct? | Stripe, Convex audit, Sentry | checkout completion, webhook failures, subscription sync failures, credit reservation/settlement failures, payout blocked count | partial |
@@ -142,12 +142,12 @@ Each diagnostic signal should be classified with one of these statuses:
 | Workspace command failures | Failed terminal/process commands and exit code | workspace command logs and runtime events | Blaxel, Convex | now |
 | Stuck sandbox/process age | Oldest active sandbox/process past expected lifetime | workspace reconciliation state | Blaxel, Convex | later |
 
-### Discover and Harness
+### Integrations and Harness
 
 | KPI | Definition | Source of Truth | Tool | Panel Priority |
 | --- | --- | --- | --- | --- |
-| App add success rate | Successful app add/like to personal harness | Convex app mount state and PostHog events | Convex, PostHog | now |
-| Community recommendation success | Community app recommendation resolves to user harness state | Convex effective MCP projection | Convex | now |
+| App setup success rate | Successful settings-based app setup to canonical harness state | Convex app mount state and PostHog events | Convex, PostHog | now |
+| Community app projection success | Community app state resolves to the effective user harness | Convex effective MCP projection | Convex | now |
 | Duplicate app conflicts | Same app appears more than once in effective user harness | Convex diagnostic query | Convex | now |
 | Setup-needed count | Apps mounted but not live | Convex harness projection | Convex | now |
 | Click-to-live rate | Added apps that become live in selected window | Convex and PostHog | Convex, PostHog | later |

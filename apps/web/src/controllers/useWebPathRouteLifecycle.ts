@@ -9,10 +9,12 @@ import type {
   AppView,
   CommunitySettingsPane,
   CommunityTab,
-  DiscoverTab,
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
-import type { PublicRoute } from "../../../../shared/webAppRouteState";
+import {
+  isLegacyWorkspaceRoutePath,
+  type PublicRoute,
+} from "../../../../shared/webAppRouteState";
 import { isCommunityLaunchSetupRoutePath } from "../communityLaunchSetupRoute";
 
 function hasPendingOAuthCallbackParams(): boolean {
@@ -50,9 +52,6 @@ export function useWebPathRouteLifecycle(params: {
   communityTab: CommunityTab;
   communityResourceModuleId: string | null;
   communitySettingsPane: CommunitySettingsPane;
-  discoverTab: DiscoverTab;
-  discoverAppId: string | null;
-  discoverSkillId: string | null;
   docsSlug: string | null;
   activeThreadId: string | null;
   applyLocationToState: () => void;
@@ -65,9 +64,6 @@ export function useWebPathRouteLifecycle(params: {
     communityTab: CommunityTab;
     communityResourceModuleId?: string | null;
     communitySettingsPane?: CommunitySettingsPane | null;
-    discoverTab: DiscoverTab;
-    discoverAppId: string | null;
-    discoverSkillId: string | null;
     docsSlug: string | null;
     threadId: string | null;
   }) => string | null;
@@ -97,6 +93,7 @@ export function useWebPathRouteLifecycle(params: {
     if (params.publicRouteKind !== "app") return;
     if (hasPendingOAuthCallbackParams()) return;
     if (hasCommunityLaunchSetupRouteState()) return;
+    if (isLegacyWorkspaceRoutePath(window.location.pathname)) return;
 
     const nextPath = params.buildAppRoutePath({
       page: params.activePage,
@@ -112,9 +109,6 @@ export function useWebPathRouteLifecycle(params: {
         params.activePage === "community" && params.communityTab === "settings"
           ? params.communitySettingsPane
           : null,
-      discoverTab: params.discoverTab,
-      discoverAppId: params.discoverAppId,
-      discoverSkillId: params.discoverSkillId,
       docsSlug: params.docsSlug,
       threadId: params.activePage === "workspace" && params.activeView === "home" ? params.activeThreadId : null,
     });
@@ -132,9 +126,6 @@ export function useWebPathRouteLifecycle(params: {
     params.communityTab,
     params.communityResourceModuleId,
     params.communitySettingsPane,
-    params.discoverTab,
-    params.discoverAppId,
-    params.discoverSkillId,
     params.docsSlug,
     params.activeThreadId,
   ]);

@@ -1,5 +1,11 @@
 # Polynet Workspace MCP Provider Contract v0
 
+> Community-first compatibility note: `workspace` survives in v0 tool names,
+> input fields, and response keys only as a stable external wire contract. The
+> selected object is always one permissioned Polynet community context. Product
+> copy and agent instructions must say community context; new architecture must
+> not introduce a separate Workspace product or runtime behind these names.
+
 Status: active contract
 
 ## First Principle
@@ -51,6 +57,12 @@ authenticated user
   -> server-derived community id
   -> backend memory kernel
 ```
+
+The provider adapter delegates membership lookup, current-access resolution,
+and authority derivation to the canonical community capability boundary. Its
+public `workspace_context` toolset is the v0 compatibility projection of the
+internal `community_context` capability; this vocabulary mapping must not
+create a second authorization implementation.
 
 The MCP client must never provide a trusted `communityId`, user id, entitlement, or permission decision.
 

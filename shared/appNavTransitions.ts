@@ -79,17 +79,3 @@ export function deriveToggleWorkspaceSettingsTransition(
     nextView,
   };
 }
-
-export function deriveBackFromWorkspaceSettingsFallbackTransition(): { nextView: "home" } {
-  return { nextView: "home" };
-}
-
-export function deriveBackToWorkspaceFallbackTransition(
-  state: Pick<AppNavState, "activeView">,
-  opts?: { forceHomeView?: boolean },
-): { nextPage: "workspace"; nextView: AppView } {
-  return {
-    nextPage: "workspace",
-    nextView: opts?.forceHomeView ? "home" : state.activeView,
-  };
-}

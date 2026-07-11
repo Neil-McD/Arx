@@ -35,6 +35,9 @@ function toolDispatchBlock(source: string, toolName: string): string {
 const contract = read("docs/polynet-workspace-mcp-contract-v0.md");
 const polynetMcp = read("shared/polynetMcp.ts");
 const httpMcp = read("convex/httpMcp.ts");
+const communityCapabilityContract = read("shared/communityCapabilityContract.ts");
+const communityCapabilityContext = read("convex/communityCapabilityContext.ts");
+const communityCapabilityContextContract = read("shared/communityCapabilityContextContract.ts");
 const packageJson = read("package.json");
 const integrationsSettings = read(
   "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
@@ -44,6 +47,16 @@ assertIncludes(
   contract,
   "Polynet Workspace MCP is a provider surface.",
   "workspace MCP contract first principle",
+);
+assertIncludes(
+  contract,
+  "`workspace` survives in v0 tool names",
+  "community-first MCP wire compatibility note",
+);
+assertIncludes(
+  contract,
+  "selected object is always one permissioned Polynet community context",
+  "community-first MCP semantic boundary",
 );
 assertIncludes(
   contract,
@@ -384,7 +397,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "verify the connection by listing the user's Polynet workspaces",
+  "verify the connection by listing the user's Polynet community contexts",
   "PolyMCP setup packet should require connection verification",
 );
 assertIncludes(
@@ -503,13 +516,13 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Before using workspace-specific memory, list or open the relevant Polynet workspace.",
+  "Before using community-specific memory, list or select the relevant Polynet community context.",
   "PolyMCP setup packet should require workspace selection before memory use",
 );
 assertIncludes(
   integrationsSettings,
-  "Treat workspace context IDs as opaque selectors. Do not invent them.",
-  "PolyMCP setup packet should preserve workspace context selector rules",
+  "Treat community context IDs as opaque selectors. The API field remains workspace_context_id for compatibility; do not invent values.",
+  "PolyMCP setup packet should preserve the compatible community context selector rule",
 );
 assertIncludes(
   integrationsSettings,
@@ -654,11 +667,14 @@ assertIncludes(
 );
 
 const openWorkspaceDefinition = toolDefinitionBlock(polynetMcp, "polynet_open_workspace");
+assertIncludes(openWorkspaceDefinition, 'title: "Select Polynet Community Context"', "community-first MCP title");
+assertIncludes(openWorkspaceDefinition, "tool name is retained for wire compatibility", "legacy tool-name compatibility");
 assertIncludes(openWorkspaceDefinition, "workspace: {", "open workspace context output");
 assertIncludes(openWorkspaceDefinition, "additionalProperties: true", "open workspace context output");
 assertIncludes(openWorkspaceDefinition, "authority: WORKSPACE_AUTHORITY_SCHEMA", "open workspace authority output");
 
 const workspaceContextDefinition = toolDefinitionBlock(polynetMcp, "polynet_get_workspace_context");
+assertIncludes(workspaceContextDefinition, 'title: "Get Polynet Community Context"', "community-first context title");
 assertIncludes(workspaceContextDefinition, "authority: WORKSPACE_AUTHORITY_SCHEMA", "workspace context authority output");
 assertIncludes(polynetMcp, "const WORKSPACE_AUTHORITY_SCHEMA", "workspace authority schema");
 assertIncludes(polynetMcp, "\"authority_lens\"", "workspace authority lens schema");
@@ -712,10 +728,43 @@ assertIncludes(
 const resolverBlockStart = httpMcp.indexOf("async function resolveWorkspaceContext");
 const resolverBlockEnd = httpMcp.indexOf("\nfunction normalizeWorkspaceMemoryTypes", resolverBlockStart);
 const resolverBlock = httpMcp.slice(resolverBlockStart, resolverBlockEnd);
-assertIncludes(resolverBlock, "listAccessibleCommunities", "workspace resolver membership lookup");
-assertIncludes(resolverBlock, "getMyCommunityAccessBySlug", "workspace resolver access lookup");
-assertIncludes(resolverBlock, "workspaceAccessIsOpen", "workspace resolver capability gate");
+assertIncludes(resolverBlock, "resolveCommunityCapabilityContextInternal", "workspace resolver atomic context lookup");
 assertNotIncludes(resolverBlock, "toolArgs.communityId", "workspace resolver");
+assertIncludes(
+  communityCapabilityContext,
+  "resolveCommunityCapabilityContextInternal = internalQuery",
+  "canonical atomic context resolver",
+);
+assertIncludes(
+  communityCapabilityContext,
+  'query("communities")',
+  "canonical context community lookup",
+);
+assertIncludes(
+  communityCapabilityContext,
+  'query("communityMemberships")',
+  "canonical context membership lookup",
+);
+assertIncludes(
+  communityCapabilityContextContract,
+  "communityAccessIsOpen",
+  "canonical context access gate",
+);
+assertIncludes(
+  communityCapabilityContextContract,
+  "deriveCommunityCapabilityAuthority",
+  "canonical context authority derivation",
+);
+assertIncludes(
+  communityCapabilityContract,
+  '"community_context"',
+  "canonical internal community context capability",
+);
+assertIncludes(
+  httpMcp,
+  'community_context: "workspace_context"',
+  "legacy MCP workspace context projection",
+);
 
 const memorySearchDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_memory_search");
 assertIncludes(memorySearchDispatch, "resolveWorkspaceContext", "memory search workspace revalidation");

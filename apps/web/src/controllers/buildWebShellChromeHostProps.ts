@@ -52,12 +52,11 @@ export function buildWebShellChromeHostProps(params: {
   hasWorkspaceRightPanelControl: boolean;
   workspaceRightPanelToggle: ReactNode;
   directMessagesButton: ReactNode;
-  communityHomeButton: ReactNode;
   handleExitPublicFunnelPreview: () => void;
   handleTopbarBackFromPublicFunnel: () => void;
   handleTopbarBackFromWorkspaceSettings: () => void;
   setUserWantsSessions: (value: ((prev: boolean) => boolean) | boolean) => void;
-  handleTopbarBackToWorkspace: () => void;
+  handleTopbarBackToCommunity: () => void;
   workspaceShellPanels: ReactNode;
   communityTab: WebShellChromeHostProps["communityShell"]["communityTab"];
   communityTabIndicators: WebShellChromeHostProps["communityShell"]["communityTabIndicators"];
@@ -167,7 +166,6 @@ export function buildWebShellChromeHostProps(params: {
       hasWorkspaceRightPanelControl: params.hasWorkspaceRightPanelControl,
       workspaceRightPanelToggle: params.workspaceRightPanelToggle,
       directMessagesButton: params.directMessagesButton,
-      communityHomeButton: params.communityHomeButton,
       onExitPublicFunnelPreview: params.handleExitPublicFunnelPreview,
       onBackFromPublicFunnel: params.handleTopbarBackFromPublicFunnel,
       onBackFromWorkspaceSettings: params.handleTopbarBackFromWorkspaceSettings,
@@ -175,7 +173,7 @@ export function buildWebShellChromeHostProps(params: {
         params.setUserWantsSessions((prev: boolean) => !prev);
       },
       onStartNewThread: params.handleStartNewWorkspaceThreadFromShell,
-      onBackToWorkspace: params.handleTopbarBackToWorkspace,
+      onBackToCommunity: params.handleTopbarBackToCommunity,
     },
     workspaceShellPanels: params.workspaceShellPanels,
     communityShell: {
