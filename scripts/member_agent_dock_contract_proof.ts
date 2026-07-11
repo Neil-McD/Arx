@@ -21,6 +21,7 @@ const runner = read("shared/useWebTurnRunnerController.ts");
 const gateway = read("shared/cloudMemberAgentGateway.ts");
 const threadReadGateway = read("shared/cloudThreadsRead.ts");
 const component = read("apps/web/src/components/WebMemberAgentDock.tsx");
+const styles = read("apps/web/src/components/WebMemberAgentDock.css");
 const app = read("apps/web/src/App.tsx");
 const cognitionContract = read("docs/community-agent-cognition-contract-v1.md");
 
@@ -179,6 +180,32 @@ assert.match(
   "the browser must send only the current user message, not authoritative history",
 );
 assert.match(component, /<strong>Your agent<\/strong>/);
+assert.match(
+  styles,
+  /--member-agent-accent: #a78bfa;[\s\S]*--member-agent-accent-soft: rgba\(167, 139, 250, 0\.16\);/,
+  "the dock must reuse the platform's established purple agent identity",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock-launcher \{[\s\S]*width: 56px;[\s\S]*height: 56px;[\s\S]*color: var\(--member-agent-accent\);/,
+  "the agent launcher must remain a stable, prominent purple control",
+);
+const launcherHover = styles.match(/\.member-agent-dock-launcher:hover \{[\s\S]*?\n\}/)?.[0] ?? "";
+assert.doesNotMatch(
+  launcherHover,
+  /transform|stroke-active/,
+  "hover must not lift the launcher or reintroduce the pink active border",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock-message\.is-user \{[\s\S]*max-width: 84%;[\s\S]*margin-left: auto;[\s\S]*background: var\(--surface-card-alt\);/,
+  "stored user roles must render as right-aligned conversation bubbles",
+);
+assert.doesNotMatch(
+  styles,
+  /\.member-agent-dock-message\.is-human/,
+  "the dock must not style the obsolete human role name",
+);
 assert.doesNotMatch(
   component,
   /sendCloudCommunityAgentDockMessage|communityAgentServeWorker|communityAgentConcierge/,
