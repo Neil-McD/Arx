@@ -187,14 +187,19 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher \{[\s\S]*width: 56px;[\s\S]*height: 56px;[\s\S]*color: var\(--member-agent-accent\);/,
-  "the agent launcher must remain a stable, prominent purple control",
+  /\.member-agent-dock-launcher \{[\s\S]*width: 56px;[\s\S]*height: 56px;[\s\S]*overflow: visible;[\s\S]*color: var\(--member-agent-accent\);[\s\S]*background: transparent;[\s\S]*border: 0;[\s\S]*box-shadow: none;/,
+  "the agent launcher must keep a stable hit target without painting a visible container",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock-launcher svg \{[\s\S]*width: 32px;[\s\S]*height: 32px;[\s\S]*drop-shadow\(0 0 5px rgba\(167, 139, 250, 0\.34\)\);/,
+  "the floating purple agent mark must remain visually prominent without an orb or button surface",
 );
 const launcherHover = styles.match(/\.member-agent-dock-launcher:hover \{[\s\S]*?\n\}/)?.[0] ?? "";
 assert.doesNotMatch(
   launcherHover,
-  /transform|stroke-active/,
-  "hover must not lift the launcher or reintroduce the pink active border",
+  /transform|stroke-active|border|box-shadow/,
+  "hover must not lift the launcher or reintroduce a visible container",
 );
 assert.match(
   styles,
