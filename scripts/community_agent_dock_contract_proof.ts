@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import {
+  buildCommunityAgentServeRunId,
+  communityAgentDockReplyIsVisibleToOwner,
+  nextCommunityAgentServeAttempt,
+  projectCommunityAgentDockPublicIssue,
+} from "../shared/communityAgentDockContract.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -14,6 +20,13 @@ const transport = read("convex/chatgptResponsesTransport.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const component = read("apps/web/src/components/WebCommunityAgentDock.tsx");
 const app = read("apps/web/src/App.tsx");
+const dockCss = read("apps/web/src/components/WebCommunityAgentDock.css");
+const transcriptQuery = interactions.match(
+  /export const getMyCommunityAgentDockTranscript = query\([\s\S]*?\n\}\);\n\nexport const getMyCommunityAgentDockTurn/,
+)?.[0] ?? "";
+const turnQuery = interactions.match(
+  /export const getMyCommunityAgentDockTurn = query\([\s\S]*?\n\}\);\n\nexport const listCommunityInteractionRoots/,
+)?.[0] ?? "";
 
 assert.match(
   packageJson,
@@ -53,9 +66,16 @@ assert.match(
 );
 assert.match(
   interactions,
-  /getMyCommunityAgentDock = query[\s\S]*requireCommunityChatAccess[\s\S]*assertOwnedCommunityAgentDockRoot/,
+  /getMyCommunityAgentDockTranscript = query[\s\S]*getMyCommunityAgentDockTurn = query/,
+  "dock transcript and active turn must use separate reactive queries",
+);
+assert.match(
+  transcriptQuery,
+  /requireCommunityChatAccess[\s\S]*assertOwnedCommunityAgentDockRoot/,
   "dock reads must re-check access and ownership",
 );
+assert.doesNotMatch(transcriptQuery, /communityAgentRunEvents|communityAgentServeRequests/);
+assert.doesNotMatch(turnQuery, /mapReplyBundle|listContentBlocksForReply/);
 assert.match(
   schema,
   /communityAgentServeRequests: defineTable[\s\S]*\.index\("by_sourceRoot_createdAt", \["sourceRootId", "createdAt"\]\)/,
@@ -71,6 +91,11 @@ assert.match(
   /event\.kind === "tool_result" \? "" : event\.content/,
   "raw tool results must not be projected into the member dock",
 );
+assert.doesNotMatch(
+  turnQuery,
+  /request\.errorMessage|request\.skipReason/,
+  "dock turn projection must not expose raw backend errors",
+);
 assert.match(
   interactions,
   /by_root_seq[\s\S]*\.order\("desc"\)[\s\S]*\.take\(COMMUNITY_AGENT_DOCK_REPLY_LIMIT\)[\s\S]*\.reverse\(\)/,
@@ -81,6 +106,12 @@ assert.match(
   serveWorker,
   /createServeRunEventRecorder[\s\S]*SERVE_EVENT_DELTA_FLUSH_CHARS/,
   "serve deltas must be batched before durable event writes",
+);
+assert.match(schema, /communityAgentServeRequests: defineTable[\s\S]*attempt: v\.optional\(v\.number\(\)\)/);
+assert.match(
+  serveWorker,
+  /nextCommunityAgentServeAttempt\(request\.attempt\)[\s\S]*attempt,[\s\S]*buildCommunityAgentServeRunId/,
+  "every claimed serve attempt must receive an isolated run-event identity",
 );
 for (const callback of ["onDelta", "onReasoningSummaryTextDelta", "onToolStepStart", "onToolStepFinish"]) {
   assert.match(serveWorker, new RegExp(`${callback}:`), `serve worker must wire ${callback}`);
@@ -121,14 +152,16 @@ assert.match(
 
 assert.match(
   gateway,
-  /sendCloudCommunityAgentDockMessage[\s\S]*subscribeCloudCommunityAgentDock[\s\S]*getMyCommunityAgentDock/,
-  "the client must use the dedicated authenticated mutation and realtime query",
+  /sendCloudCommunityAgentDockMessage[\s\S]*subscribeCloudCommunityAgentDockTranscript[\s\S]*subscribeCloudCommunityAgentDockTurn/,
+  "the client must use dedicated authenticated transcript and turn subscriptions",
 );
 assert.match(
   component,
-  /createCloudCommunityChatLiveClient[\s\S]*subscribeCloudCommunityAgentDock[\s\S]*sendCloudCommunityAgentDockMessage/,
+  /createCloudCommunityChatLiveClient[\s\S]*subscribeCloudCommunityAgentDockTranscript[\s\S]*subscribeCloudCommunityAgentDockTurn[\s\S]*sendCloudCommunityAgentDockMessage/,
   "the dock must subscribe only through the authenticated Convex client",
 );
+assert.match(component, /message\.id === pendingMessage\.replyId/);
+assert.match(component, /replyId: result\.reply_id/);
 assert.match(
   component,
   /requestIsActive[\s\S]*reasoningText[\s\S]*toolRows[\s\S]*assistantStream/,
@@ -143,6 +176,29 @@ assert.match(
   app,
   /<WebCommunityAgentDock[\s\S]*activePage === "community"[\s\S]*publicRoute\.kind !== "community_funnel"[\s\S]*hasResolvedCommunityChat/,
   "the dock must mount only on authorized internal community surfaces",
+);
+assert.match(app, /!isCommunityLaunchSetupModalOpen[\s\S]*!isDirectMessagesOpen[\s\S]*!isOnboardingModalOpen/);
+assert.match(dockCss, /\.community-agent-dock \{[\s\S]*z-index: 70/);
+
+assert.equal(nextCommunityAgentServeAttempt(undefined), 1);
+assert.equal(nextCommunityAgentServeAttempt(1), 2);
+assert.equal(buildCommunityAgentServeRunId("req_1", 0), "community-agent-serve:req_1");
+assert.equal(buildCommunityAgentServeRunId("req_1", 2), "community-agent-serve:req_1:attempt:2");
+assert.deepEqual(
+  projectCommunityAgentDockPublicIssue({
+    status: "error",
+    errorCode: "provider_exception",
+  }),
+  { code: "turn_failed", message: "The community agent could not complete this turn." },
+);
+assert.equal(
+  communityAgentDockReplyIsVisibleToOwner({
+    actorType: "human",
+    actorUserId: "user_b",
+    ownerUserId: "user_a",
+    canonicalAgentKey: "community_agent",
+  }),
+  false,
 );
 
 console.log("community_agent_dock_contract_proof: ok");

@@ -149,20 +149,31 @@ export type CommunityAgentDockEvent = {
   created_at: string;
 };
 
+export type CommunityAgentDockMessage = {
+  id: string;
+  actor_type: "human" | "community_agent" | string;
+  actor_agent_key: string | null;
+  text: string;
+  created_at: string;
+};
+
 export type CommunityAgentDockRequest = {
   id: string;
   status: "queued" | "skipped" | "running" | "responded" | "error" | string;
   intake_reason: string;
+  attempt: number;
   response_reply_id: string | null;
-  error_code: string | null;
-  error_message: string | null;
+  public_issue: { code: string; message: string } | null;
   created_at: string;
   updated_at: string;
 };
 
-export type CommunityAgentDockSnapshot = {
+export type CommunityAgentDockTranscript = {
   root_id: string | null;
-  messages: CommunityInteractionReplyBundle[];
+  messages: CommunityAgentDockMessage[];
+};
+
+export type CommunityAgentDockTurn = {
   request: CommunityAgentDockRequest | null;
   events: CommunityAgentDockEvent[];
 };
@@ -398,14 +409,14 @@ export function subscribeCloudCommunityInteractionReplies(params: {
   return watch.onUpdate(publish);
 }
 
-export function subscribeCloudCommunityAgentDock(params: {
+export function subscribeCloudCommunityAgentDockTranscript(params: {
   liveClient: CloudCommunityChatLiveClient;
   communityId: string;
-  onUpdate: (snapshot: CommunityAgentDockSnapshot) => void;
+  onUpdate: (transcript: CommunityAgentDockTranscript) => void;
   onError?: (error: unknown) => void;
 }): () => void {
   const watch = params.liveClient.client.watchQuery(
-    (api as any).community.getMyCommunityAgentDock,
+    (api as any).community.getMyCommunityAgentDockTranscript,
     {
       authSubject: params.liveClient.authSubject,
       communityId: params.communityId as any,
@@ -413,11 +424,38 @@ export function subscribeCloudCommunityAgentDock(params: {
   );
   const publish = () => {
     try {
-      const result = watch.localQueryResult() as CommunityAgentDockSnapshot | undefined;
+      const result = watch.localQueryResult() as CommunityAgentDockTranscript | undefined;
       if (typeof result === "undefined") return;
       params.onUpdate({
         root_id: result?.root_id ?? null,
         messages: Array.isArray(result?.messages) ? result.messages : [],
+      });
+    } catch (error) {
+      params.onError?.(error);
+    }
+  };
+  publish();
+  return watch.onUpdate(publish);
+}
+
+export function subscribeCloudCommunityAgentDockTurn(params: {
+  liveClient: CloudCommunityChatLiveClient;
+  communityId: string;
+  onUpdate: (turn: CommunityAgentDockTurn) => void;
+  onError?: (error: unknown) => void;
+}): () => void {
+  const watch = params.liveClient.client.watchQuery(
+    (api as any).community.getMyCommunityAgentDockTurn,
+    {
+      authSubject: params.liveClient.authSubject,
+      communityId: params.communityId as any,
+    } as any,
+  );
+  const publish = () => {
+    try {
+      const result = watch.localQueryResult() as CommunityAgentDockTurn | undefined;
+      if (typeof result === "undefined") return;
+      params.onUpdate({
         request: result?.request ?? null,
         events: Array.isArray(result?.events) ? result.events : [],
       });

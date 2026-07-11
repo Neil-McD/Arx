@@ -1885,6 +1885,7 @@ export default defineSchema({
     ),
     responseRootId: v.optional(v.id("communityInteractionRoots")),
     responseReplyId: v.optional(v.id("communityInteractionReplies")),
+    attempt: v.optional(v.number()),
     runId: v.optional(v.id("communityAgentRuns")),
     sourceTraceId: v.optional(v.id("communitySourceTraces")),
     skipReason: v.optional(v.string()),

@@ -37,6 +37,12 @@ import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { intakeCommunityAgentMention } from "./communityAgentConciergeCore";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import {
+  buildCommunityAgentServeRunId,
+  communityAgentDockReplyIsVisibleToOwner,
+  normalizeCommunityAgentServeAttempt,
+  projectCommunityAgentDockPublicIssue,
+} from "../shared/communityAgentDockContract";
+import {
   EVERYBODY_MENTION_ROLE_KEY,
   cancelEverybodyMentionBroadcastsForInteractionSource,
   scheduleEverybodyMentionBroadcast,
@@ -276,6 +282,22 @@ async function findCanonicalAgentMentionForReply(ctx: any, replyId: any): Promis
       mention.mentionKind === "community_agent" &&
       mention.mentionedAgentKey === CANONICAL_COMMUNITY_AGENT_KEY,
   ) ?? null;
+}
+
+async function mapCommunityAgentDockMessage(ctx: any, reply: InteractionReplyRow) {
+  const blocks = await listContentBlocksForReply(ctx, reply._id);
+  const text = blocks
+    .filter((block) => block.blockType === "markdown_text" && block.text)
+    .map((block) => String(block.text ?? ""))
+    .join("\n\n")
+    .trim() || reply.contentSummary;
+  return {
+    id: normalizeIdValue(reply._id),
+    actor_type: reply.actorType,
+    actor_agent_key: reply.actorAgentKey ?? null,
+    text,
+    created_at: toIsoString(reply.createdAt),
+  };
 }
 
 async function resolveOptionalReplyTargetForCanonicalComposer(args: {
@@ -1942,7 +1964,7 @@ export const sendCommunityAgentDockMessage = mutation({
   },
 });
 
-export const getMyCommunityAgentDock = query({
+export const getMyCommunityAgentDockTranscript = query({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
@@ -1962,7 +1984,7 @@ export const getMyCommunityAgentDock = query({
       communityAgentDockRootIdempotencyKey(userId),
     );
     if (!root) {
-      return { root_id: null, messages: [], request: null, events: [] };
+      return { root_id: null, messages: [] };
     }
     assertOwnedCommunityAgentDockRoot(root, userId);
 
@@ -1972,18 +1994,41 @@ export const getMyCommunityAgentDock = query({
       .order("desc")
       .take(COMMUNITY_AGENT_DOCK_REPLY_LIMIT)) as InteractionReplyRow[]).reverse().filter((reply) => {
         if (reply.status !== "live" || reply.visibilityScope !== "private") return false;
-        if (reply.actorType === "human") {
-          return normalizeIdValue(reply.actorUserId) === normalizeIdValue(userId);
-        }
-        return (
-          reply.actorType === "community_agent" &&
-          reply.actorAgentKey === CANONICAL_COMMUNITY_AGENT_KEY
-        );
+        return communityAgentDockReplyIsVisibleToOwner({
+          actorType: reply.actorType,
+          actorUserId: reply.actorUserId,
+          actorAgentKey: reply.actorAgentKey,
+          ownerUserId: userId,
+          canonicalAgentKey: CANONICAL_COMMUNITY_AGENT_KEY,
+        });
       });
-    const userIdCache = new Map<string, string | null>();
-    const messages = await Promise.all(
-      replies.map((reply) => mapReplyBundle(ctx, reply, false, userIdCache, [])),
+    const messages = await Promise.all(replies.map((reply) => mapCommunityAgentDockMessage(ctx, reply)));
+
+    return { root_id: normalizeIdValue(root._id), messages };
+  },
+});
+
+export const getMyCommunityAgentDockTurn = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+
+    const root = await getExistingRootByIdempotencyKey(
+      ctx,
+      args.communityId,
+      communityAgentDockRootIdempotencyKey(userId),
     );
+    if (!root) return { request: null, events: [] };
+    assertOwnedCommunityAgentDockRoot(root, userId);
 
     const requestRows = (await ctx.db
       .query("communityAgentServeRequests" as any)
@@ -1995,7 +2040,10 @@ export const getMyCommunityAgentDock = query({
         normalizeIdValue(candidate.requesterUserId) === normalizeIdValue(userId) &&
         normalizeIdValue(candidate.communityId) === normalizeIdValue(args.communityId),
     ) ?? null;
-    const serveRunId = request ? `community-agent-serve:${normalizeIdValue(request._id)}` : null;
+    const attempt = normalizeCommunityAgentServeAttempt(request?.attempt);
+    const serveRunId = request
+      ? buildCommunityAgentServeRunId(normalizeIdValue(request._id), attempt)
+      : null;
     const eventRows = serveRunId
       ? await ctx.db
           .query("communityAgentRunEvents" as any)
@@ -2020,16 +2068,18 @@ export const getMyCommunityAgentDock = query({
       }));
 
     return {
-      root_id: normalizeIdValue(root._id),
-      messages,
       request: request
         ? {
             id: normalizeIdValue(request._id),
             status: request.status,
             intake_reason: request.intakeReason,
+            attempt,
             response_reply_id: request.responseReplyId ? normalizeIdValue(request.responseReplyId) : null,
-            error_code: request.errorCode ?? null,
-            error_message: request.errorMessage ?? request.skipReason ?? null,
+            public_issue: projectCommunityAgentDockPublicIssue({
+              status: request.status,
+              intakeReason: request.intakeReason,
+              errorCode: request.errorCode,
+            }),
             created_at: toIsoString(request.createdAt),
             updated_at: toIsoString(request.updatedAt),
           }

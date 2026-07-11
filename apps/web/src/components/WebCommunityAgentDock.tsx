@@ -12,10 +12,11 @@ import type { AuthSession } from "../auth";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import {
   sendCloudCommunityAgentDockMessage,
-  subscribeCloudCommunityAgentDock,
+  subscribeCloudCommunityAgentDockTranscript,
+  subscribeCloudCommunityAgentDockTurn,
   type CommunityAgentDockEvent,
-  type CommunityAgentDockSnapshot,
-  type CommunityInteractionReplyBundle,
+  type CommunityAgentDockTranscript,
+  type CommunityAgentDockTurn,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
 import {
   createCloudCommunityChatLiveClient,
@@ -36,21 +37,15 @@ type WebCommunityAgentDockProps = {
   ) => Promise<AuthSession | null>;
 };
 
-const EMPTY_SNAPSHOT: CommunityAgentDockSnapshot = {
+const EMPTY_TRANSCRIPT: CommunityAgentDockTranscript = {
   root_id: null,
   messages: [],
+};
+
+const EMPTY_TURN: CommunityAgentDockTurn = {
   request: null,
   events: [],
 };
-
-function messageText(bundle: CommunityInteractionReplyBundle): string {
-  const markdown = bundle.content_blocks
-    .filter((block) => block.block_type === "markdown_text" && block.text)
-    .map((block) => block.text)
-    .join("\n\n")
-    .trim();
-  return markdown || bundle.reply.content_summary;
-}
 
 function toolLabel(toolName: string | null): string {
   switch (toolName) {
@@ -67,45 +62,37 @@ function toolLabel(toolName: string | null): string {
   }
 }
 
-function formatDockError(snapshot: CommunityAgentDockSnapshot, fallback: string | null): string | null {
-  const request = snapshot.request;
-  if (request?.intake_reason === "requester_connection_missing") {
-    return "Connect ChatGPT in Settings to use this agent.";
-  }
-  if (request?.intake_reason === "agent_disabled") {
-    return "This community agent is currently unavailable.";
-  }
-  if (request?.status === "error" || request?.status === "skipped") {
-    return request.error_message || "The community agent could not complete this turn.";
-  }
-  return fallback;
+function formatDockError(turn: CommunityAgentDockTurn, fallback: string | null): string | null {
+  return turn.request?.public_issue?.message ?? fallback;
 }
 
 function latestToolRows(events: CommunityAgentDockEvent[]): CommunityAgentDockEvent[] {
   return events.filter((event) => event.kind === "tool_call").slice(-4);
 }
 
-function isResponsePersisted(snapshot: CommunityAgentDockSnapshot): boolean {
-  const responseReplyId = snapshot.request?.response_reply_id;
+function isResponsePersisted(transcript: CommunityAgentDockTranscript, turn: CommunityAgentDockTurn): boolean {
+  const responseReplyId = turn.request?.response_reply_id;
   return Boolean(
-    responseReplyId && snapshot.messages.some((message) => message.reply.id === responseReplyId),
+    responseReplyId && transcript.messages.some((message) => message.id === responseReplyId),
   );
 }
 
 export function WebCommunityAgentDock(props: WebCommunityAgentDockProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [snapshot, setSnapshot] = useState<CommunityAgentDockSnapshot>(EMPTY_SNAPSHOT);
+  const [transcript, setTranscript] = useState<CommunityAgentDockTranscript>(EMPTY_TRANSCRIPT);
+  const [turn, setTurn] = useState<CommunityAgentDockTurn>(EMPTY_TURN);
   const [input, setInput] = useState("");
-  const [pendingText, setPendingText] = useState<string | null>(null);
+  const [pendingMessage, setPendingMessage] = useState<{ text: string; replyId: string | null } | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const retrySendRef = useRef<{ text: string; idempotencyKey: string } | null>(null);
 
   useEffect(() => {
-    setSnapshot(EMPTY_SNAPSHOT);
+    setTranscript(EMPTY_TRANSCRIPT);
+    setTurn(EMPTY_TURN);
     setInput("");
-    setPendingText(null);
+    setPendingMessage(null);
     setLocalError(null);
     retrySendRef.current = null;
   }, [props.communityId]);
@@ -118,7 +105,8 @@ export function WebCommunityAgentDock(props: WebCommunityAgentDockProps) {
     if (!isOpen || !props.isVisible || !props.communityId || !props.session) return;
     let cancelled = false;
     let liveClient: CloudCommunityChatLiveClient | null = null;
-    let unsubscribe: (() => void) | null = null;
+    let unsubscribeTranscript: (() => void) | null = null;
+    let unsubscribeTurn: (() => void) | null = null;
     void (async () => {
       const usableSession = await props.ensureSession(props.session, "community_agent_dock");
       if (!usableSession || cancelled) return;
@@ -127,17 +115,31 @@ export function WebCommunityAgentDock(props: WebCommunityAgentDockProps) {
           session: usableSession,
           ensureSession: props.ensureSession,
         });
-        unsubscribe = subscribeCloudCommunityAgentDock({
+        unsubscribeTranscript = subscribeCloudCommunityAgentDockTranscript({
           liveClient,
           communityId: props.communityId!,
-          onUpdate: (nextSnapshot) => {
+          onUpdate: (nextTranscript) => {
             if (cancelled) return;
-            setSnapshot(nextSnapshot);
+            setTranscript(nextTranscript);
             setLocalError(null);
           },
           onError: (error) => {
             if (cancelled) return;
             console.warn("community_agent_dock_subscription_failed", error);
+            setLocalError("The community agent could not reconnect.");
+          },
+        });
+        unsubscribeTurn = subscribeCloudCommunityAgentDockTurn({
+          liveClient,
+          communityId: props.communityId!,
+          onUpdate: (nextTurn) => {
+            if (cancelled) return;
+            setTurn(nextTurn);
+            setLocalError(null);
+          },
+          onError: (error) => {
+            if (cancelled) return;
+            console.warn("community_agent_dock_turn_subscription_failed", error);
             setLocalError("The community agent could not reconnect.");
           },
         });
@@ -149,34 +151,33 @@ export function WebCommunityAgentDock(props: WebCommunityAgentDockProps) {
     })();
     return () => {
       cancelled = true;
-      unsubscribe?.();
+      unsubscribeTranscript?.();
+      unsubscribeTurn?.();
       liveClient?.close();
     };
   }, [isOpen, props.communityId, props.ensureSession, props.isVisible, props.session]);
 
-  const requestIsActive = snapshot.request?.status === "queued" || snapshot.request?.status === "running";
-  const pendingTextIsPersisted = Boolean(
-    pendingText && snapshot.messages.some(
-      (message) => message.reply.actor_type === "human" && messageText(message) === pendingText,
-    ),
+  const requestIsActive = turn.request?.status === "queued" || turn.request?.status === "running";
+  const pendingMessageIsPersisted = Boolean(
+    pendingMessage?.replyId && transcript.messages.some((message) => message.id === pendingMessage.replyId),
   );
-  const visiblePendingText = pendingTextIsPersisted ? null : pendingText;
+  const visiblePendingText = pendingMessageIsPersisted ? null : pendingMessage?.text ?? null;
   const turnIsActive = isSending || Boolean(visiblePendingText) || requestIsActive;
-  const responsePersisted = isResponsePersisted(snapshot);
+  const responsePersisted = isResponsePersisted(transcript, turn);
   const assistantStream = useMemo(
-    () => snapshot.events.filter((event) => event.kind === "assistant").map((event) => event.content).join(""),
-    [snapshot.events],
+    () => turn.events.filter((event) => event.kind === "assistant").map((event) => event.content).join(""),
+    [turn.events],
   );
   const finalEventText = useMemo(
-    () => [...snapshot.events].reverse().find((event) => event.kind === "final")?.content ?? "",
-    [snapshot.events],
+    () => [...turn.events].reverse().find((event) => event.kind === "final")?.content ?? "",
+    [turn.events],
   );
   const reasoningText = useMemo(
-    () => snapshot.events.filter((event) => event.kind === "reasoning").map((event) => event.content).join("").trim(),
-    [snapshot.events],
+    () => turn.events.filter((event) => event.kind === "reasoning").map((event) => event.content).join("").trim(),
+    [turn.events],
   );
-  const toolRows = useMemo(() => latestToolRows(snapshot.events), [snapshot.events]);
-  const dockError = formatDockError(snapshot, localError);
+  const toolRows = useMemo(() => latestToolRows(turn.events), [turn.events]);
+  const dockError = formatDockError(turn, localError);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -184,18 +185,18 @@ export function WebCommunityAgentDock(props: WebCommunityAgentDockProps) {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [assistantStream, isOpen, snapshot.messages.length, snapshot.events.length]);
+  }, [assistantStream, isOpen, transcript.messages.length, turn.events.length]);
 
   useEffect(() => {
-    if (pendingTextIsPersisted) setPendingText(null);
-  }, [pendingTextIsPersisted]);
+    if (pendingMessageIsPersisted) setPendingMessage(null);
+  }, [pendingMessageIsPersisted]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const text = input.trim();
     if (!text || turnIsActive || !props.communityId || !props.session) return;
     setIsSending(true);
-    setPendingText(text);
+    setPendingMessage({ text, replyId: null });
     setLocalError(null);
     setInput("");
     const retrySend = retrySendRef.current;
@@ -207,17 +208,18 @@ export function WebCommunityAgentDock(props: WebCommunityAgentDockProps) {
     try {
       const usableSession = await props.ensureSession(props.session, "community_agent_dock_send");
       if (!usableSession) throw new Error("auth_session_required");
-      await sendCloudCommunityAgentDockMessage({
+      const result = await sendCloudCommunityAgentDockMessage({
         session: usableSession,
         communityId: props.communityId,
         idempotencyKey,
         text,
       });
+      setPendingMessage({ text, replyId: result.reply_id });
       retrySendRef.current = null;
     } catch (error) {
       console.warn("community_agent_dock_send_failed", error);
       setInput(text);
-      setPendingText(null);
+      setPendingMessage(null);
       retrySendRef.current = { text, idempotencyKey };
       setLocalError("Your message was not sent. Try again.");
     } finally {
@@ -265,21 +267,21 @@ export function WebCommunityAgentDock(props: WebCommunityAgentDockProps) {
         </header>
 
         <div className="community-agent-dock-transcript" ref={scrollRef}>
-          {snapshot.messages.length === 0 && !turnIsActive ? (
+          {transcript.messages.length === 0 && !turnIsActive ? (
             <div className="community-agent-dock-empty">
               <MessageCircle aria-hidden="true" />
               <p>What do you want to know about {props.communityName}?</p>
             </div>
           ) : null}
 
-          {snapshot.messages.map((message) => (
+          {transcript.messages.map((message) => (
             <article
-              key={message.reply.id}
-              className={`community-agent-dock-message is-${message.reply.actor_type}`}
+              key={message.id}
+              className={`community-agent-dock-message is-${message.actor_type}`}
             >
-              {message.reply.actor_type === "community_agent"
-                ? renderMarkdown(messageText(message))
-                : <p>{messageText(message)}</p>}
+              {message.actor_type === "community_agent"
+                ? renderMarkdown(message.text)
+                : <p>{message.text}</p>}
             </article>
           ))}
 
@@ -303,7 +305,7 @@ export function WebCommunityAgentDock(props: WebCommunityAgentDockProps) {
                 </div>
               ) : null}
               {toolRows.map((toolEvent) => {
-                const result = snapshot.events.find(
+                const result = turn.events.find(
                   (event) =>
                     event.kind === "tool_result" &&
                     event.seq > toolEvent.seq &&

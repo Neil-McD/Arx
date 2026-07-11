@@ -22,6 +22,11 @@ import {
   type RuntimeKernelToolExecutionResult,
 } from "../shared/runtimeKernelTypes";
 import { executeRetrievalHarnessTool } from "./runtimeAgentLoop";
+import {
+  buildCommunityAgentServeRunId,
+  nextCommunityAgentServeAttempt,
+  normalizeCommunityAgentServeAttempt,
+} from "../shared/communityAgentDockContract";
 
 const SERVE_WORKER_DEFAULT_LIMIT = 3;
 const SERVE_WORKER_MAX_LIMIT = 5;
@@ -52,6 +57,7 @@ type ServeRequestRow = {
   sourceVisibilityScope?: VisibilityScope;
   responseVisibilityScope?: VisibilityScope;
   responseReplyId?: any;
+  attempt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -95,8 +101,9 @@ function createServeRunEventRecorder(args: {
   ctx: any;
   communityId: any;
   requestId: any;
+  attempt: number;
 }) {
-  const runId = `community-agent-serve:${normalizeIdValue(args.requestId)}`;
+  const runId = buildCommunityAgentServeRunId(normalizeIdValue(args.requestId), args.attempt);
   let seq = 0;
   const buffers: Record<"reasoning" | "assistant", string> = {
     reasoning: "",
@@ -430,8 +437,10 @@ export const claimNextCommunityAgentServeRequestInternal = internalMutation({
           requestId: null,
         };
       }
+      const attempt = nextCommunityAgentServeAttempt(request.attempt);
       await ctx.db.patch(request._id as any, {
         status: "running",
+        attempt,
         updatedAt: nowMs,
       });
       return {
@@ -472,8 +481,10 @@ export const claimNextCommunityAgentServeRequestInternal = internalMutation({
         );
         continue;
       }
+      const attempt = nextCommunityAgentServeAttempt(request.attempt);
       await ctx.db.patch(request._id as any, {
         status: "running",
+        attempt,
         updatedAt: nowMs,
       });
       return {
@@ -595,6 +606,7 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
         communityId: request.communityId,
         requesterUserId: request.requesterUserId,
         sponsorUserId: request.sponsorUserId,
+        attempt: normalizeCommunityAgentServeAttempt(request.attempt),
         sourceRootId: root._id,
         sourceReplyId: reply?._id ?? null,
         responseVisibilityScope: narrowVisibility(request.responseVisibilityScope, sourceVisibilityScope),
@@ -853,6 +865,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         ctx,
         communityId: context.request.communityId,
         requestId,
+        attempt: context.request.attempt,
       });
 
       let completion: any;
@@ -887,7 +900,10 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
               requestMetadata: {
                 userId: normalizeIdValue(context.request.sponsorUserId),
                 sessionId: `community-agent-serve:${normalizeIdValue(context.request.communityId)}`,
-                threadId: `serve-request:${normalizeIdValue(requestId)}`,
+                threadId: buildCommunityAgentServeRunId(
+                  normalizeIdValue(requestId),
+                  context.request.attempt,
+                ),
               },
               reasoningEffort: "low",
             });

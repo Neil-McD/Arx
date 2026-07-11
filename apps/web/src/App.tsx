@@ -12086,6 +12086,9 @@ export default function App() {
             publicRoute.kind !== "community_funnel" &&
             publicRoute.kind !== "community_funnel_preview" &&
             hasResolvedCommunityChat &&
+            !isCommunityLaunchSetupModalOpen &&
+            !isDirectMessagesOpen &&
+            !isOnboardingModalOpen &&
             !["settings", "ai_agent", "funnel", "analytics"].includes(communityTab)
           }
           communityId={activeCommunity?.id ?? null}
