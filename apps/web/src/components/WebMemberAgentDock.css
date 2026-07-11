@@ -18,20 +18,20 @@
   width: 56px;
   height: 56px;
   place-items: center;
-  overflow: hidden;
+  overflow: visible;
   color: var(--member-agent-accent);
-  background: color-mix(in srgb, var(--member-agent-accent) 16%, #111114);
-  border: 1px solid var(--member-agent-accent-border);
+  background: transparent;
+  border: 0;
   border-radius: 8px;
+  box-shadow: none;
   pointer-events: auto;
   cursor: pointer;
-  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+  transition: color 160ms ease;
 }
 
 .member-agent-dock-launcher:hover {
   color: var(--member-agent-accent-strong);
-  background: color-mix(in srgb, var(--member-agent-accent) 22%, #111114);
-  border-color: color-mix(in srgb, var(--member-agent-accent) 48%, transparent);
+  background: transparent;
 }
 
 .member-agent-dock-launcher:focus-visible,
@@ -42,8 +42,14 @@
 }
 
 .member-agent-dock-launcher svg {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
+  filter: drop-shadow(0 0 5px rgba(167, 139, 250, 0.34));
+  transition: filter 160ms ease;
+}
+
+.member-agent-dock-launcher:hover svg {
+  filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.46));
 }
 
 .member-agent-dock-launcher img,
