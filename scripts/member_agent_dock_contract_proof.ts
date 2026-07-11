@@ -136,6 +136,16 @@ assert.match(
   runner,
   /invocation_surface: params\.invocationSurface \?\? "workspace"/,
 );
+assert.doesNotMatch(
+  runner,
+  /messageId,[\s\S]{0,160}seq: 0,[\s\S]{0,160}role: params\.role/,
+  "new browser messages must let Convex assign their canonical sequence",
+);
+assert.match(
+  threads,
+  /typeof args\.seq === "number" && Number\.isFinite\(args\.seq\) && args\.seq > 0[\s\S]*const seq = explicitSeq \?\?/,
+  "the cloud write boundary must reject sequence zero as a client-assigned canonical position",
+);
 
 assert.match(
   gateway,

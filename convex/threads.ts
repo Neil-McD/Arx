@@ -1672,7 +1672,9 @@ export const addCloudThreadMessage = mutation({
     });
 
     const explicitSeq =
-      typeof args.seq === "number" && Number.isFinite(args.seq) ? Math.max(0, Math.floor(args.seq)) : null;
+      typeof args.seq === "number" && Number.isFinite(args.seq) && args.seq > 0
+        ? Math.floor(args.seq)
+        : null;
     const seq = explicitSeq ?? Math.max(0, Math.floor((thread.lastSeq ?? 0) + 1));
     const explicitMessageKey = String(args.messageKey ?? "").trim();
     const messageKey = explicitMessageKey || `${String(thread._id)}:${seq}`;
