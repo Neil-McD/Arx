@@ -51,15 +51,15 @@
   will-change: filter, opacity;
 }
 
+.member-agent-dock-launcher.is-working svg {
+  animation: member-agent-dock-working-pulse 1.35s ease-in-out infinite;
+}
+
 .member-agent-dock-launcher:hover svg,
 .member-agent-dock-launcher:focus-visible svg {
   opacity: 1;
   filter: drop-shadow(0 0 11px rgba(167, 139, 250, 0.62));
-  animation-play-state: paused;
-}
-
-.member-agent-dock-launcher.is-working svg {
-  animation: member-agent-dock-working-pulse 1.35s ease-in-out infinite;
+  animation: none;
 }
 
 .member-agent-dock-launcher img,
