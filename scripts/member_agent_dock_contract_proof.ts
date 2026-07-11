@@ -163,6 +163,11 @@ assert.match(
 );
 assert.match(component, /invocationSurface: "member_agent_dock"/);
 assert.match(component, /communityScopeRef[\s\S]*isCurrentScope/);
+assert.doesNotMatch(
+  component,
+  /useEffect\(\(\) => \{\s*activeThreadKeyRef\.current = threadKey;/,
+  "a passive effect must not overwrite a synchronously selected thread during transcript loading",
+);
 assert.match(
   component,
   /listConvexCloudNewestThreadMessagesByThreadKey[\s\S]*activeThreadKeyRef\.current !== targetThreadKey/,
