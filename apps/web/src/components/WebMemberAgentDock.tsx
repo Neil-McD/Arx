@@ -10,10 +10,10 @@ import {
 import {
   LoaderCircle,
   MessageCircle,
+  MessageSquarePlus,
   Send,
   Sparkles,
   Square,
-  SquarePen,
   X,
 } from "lucide-react";
 import { getAuthUrl, type AuthSession } from "../auth";
@@ -515,10 +515,10 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
               type="button"
               onClick={() => void startNewChat()}
               disabled={turnIsActive || isPreparing || isStartingNewChat || !episodeId}
-              aria-label="New chat"
-              title="New chat"
+              aria-label="Start fresh conversation"
+              title="Start fresh conversation"
             >
-              <SquarePen aria-hidden="true" />
+              <MessageSquarePlus aria-hidden="true" />
             </button>
             <button type="button" onClick={() => setIsOpen(false)} aria-label="Close" title="Close">
               <X aria-hidden="true" />
@@ -558,7 +558,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
           {isStartingNewChat ? (
             <div className="member-agent-dock-reasoning">
               <LoaderCircle aria-hidden="true" />
-              <span>Starting a new chat</span>
+              <span>Starting fresh</span>
             </div>
           ) : null}
 

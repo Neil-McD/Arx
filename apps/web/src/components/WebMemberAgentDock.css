@@ -89,8 +89,8 @@
 .member-agent-dock-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(400px, calc(100vw - 40px));
-  height: min(620px, calc(100svh - 40px));
+  width: min(460px, calc(100vw - 40px));
+  height: min(680px, calc(100svh - 40px));
   overflow: hidden;
   color: var(--text-ink-primary);
   background: color-mix(in srgb, var(--surface-panel) 96%, #000 4%);
@@ -414,7 +414,7 @@
 
   .member-agent-dock-panel {
     width: calc(100vw - 24px);
-    height: min(72svh, 620px);
+    height: min(78svh, 680px);
   }
 }
 
