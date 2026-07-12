@@ -19,8 +19,6 @@ import type {
 
 export type WebShellChromeHostProps = {
   showHeaderIslands: boolean;
-  isSessionsDrawerOpen: boolean;
-  shouldOverlaySessionsDrawer: boolean;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
   showMobilePublicFunnel: boolean;
@@ -30,7 +28,6 @@ export type WebShellChromeHostProps = {
   onTouchCancel?: TouchEventHandler<HTMLDivElement>;
   mobileTopBarProps: ComponentProps<typeof WebMobileTopBar>;
   desktopHeader: WebDesktopShellHeaderProps;
-  workspaceShellPanels: ReactNode;
   communityShell: WebCommunityShellProps;
   settingsSidebar: WebSettingsSidebarProps;
   hasLeftPanel: boolean;
@@ -46,13 +43,6 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     <WebMobileTopBar {...props.mobileTopBarProps} />
   ) : (
     <WebDesktopShellHeader {...props.desktopHeader} />
-  );
-
-  const shellExtras = (
-    <>
-      {props.workspaceShellPanels}
-      <WebMobileCommunityShell communityShell={props.communityShell} />
-    </>
   );
 
   const shellSidePanels = (
@@ -83,8 +73,6 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
 
   const { rootClassName, shellClassName } = buildWebShellChromeClassNames({
     showHeaderIslands: props.showHeaderIslands,
-    isSessionsDrawerOpen: props.isSessionsDrawerOpen,
-    shouldOverlaySessionsDrawer: props.shouldOverlaySessionsDrawer,
     showMobileAppShell: props.showMobileAppShell,
     showMobileSettingsShell: props.showMobileSettingsShell,
     showMobilePublicFunnel: props.showMobilePublicFunnel,
@@ -103,7 +91,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       onTouchCancel={props.onTouchCancel}
     >
       {shellHeader}
-      {shellExtras}
+      <WebMobileCommunityShell communityShell={props.communityShell} />
 
       <div className={shellClassName}>
         {shellSidePanels}

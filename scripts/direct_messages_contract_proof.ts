@@ -390,7 +390,8 @@ assert.match(dmInboxPanel, /is-unread/, "DM inbox rows must expose unread state 
 assert.match(dmInboxPanel, /community-dm-inbox-row-unread/, "DM inbox rows must render an unread badge");
 assert.match(shellChromeShared, /directMessagesButton: ReactNode/, "desktop shell props must expose the global DM button");
 assert.match(shellChromeProps, /directMessagesButton: params\.directMessagesButton/, "shell prop builder must pass the global DM button through");
-assert.match(desktopHeader, /workspaceRightPanelToggle\}[\s\S]*directMessagesButton\}/, "desktop header order must be panel then DM");
+assert.match(desktopHeader, /props\.isPublicCommunityFunnel \? null : props\.directMessagesButton/, "desktop header must render the global DM button without Workspace chrome");
+assert.doesNotMatch(desktopHeader, /workspaceRightPanelToggle|hasWorkspaceRightPanelControl/);
 assert.doesNotMatch(desktopHeader, /communityHomeButton/, "desktop header must not retain the redundant community home control");
 assert.match(app, /className=\{`icon-button direct-messages-topbar-button/, "app shell must render a top-right direct messages button");
 assert.match(app, /handleOpenDirectMessageFromCommunity/, "app shell must own the profile-to-DM launch handler");

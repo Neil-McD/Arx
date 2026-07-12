@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -9,8 +9,7 @@ const app = read("apps/web/src/App.tsx");
 const shared = read("apps/web/src/components/webShellChromeShared.ts");
 const controller = read("apps/web/src/controllers/useWebMobileShellController.ts");
 const topBar = read("apps/web/src/components/WebMobileTopBar.tsx");
-const workspacePanels = read("apps/web/src/components/WebWorkspaceShellPanels.tsx");
-const workspacePanelHost = read("apps/web/src/components/WebWorkspaceShellPanelsHost.tsx");
+const shellChromeProps = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const interactionProjection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const indexCss = read("apps/web/src/index.css");
@@ -90,18 +89,12 @@ assert.doesNotMatch(
 assert.match(
   topBar,
   /rootPage === "agent" && onStartNewThread/,
-  "new workspace thread action should stay scoped to the Agent root page",
+  "the reusable top bar may expose a new-thread affordance only when a caller supplies it",
 );
-assert.doesNotMatch(
-  workspacePanels,
-  /WebMobileThreadsRootSurface|mobile-root-surface|mobile-threads-root/,
-  "workspace panels should not export or render a standalone mobile Threads page",
-);
-assert.doesNotMatch(
-  workspacePanelHost,
-  /WebMobileThreadsRootSurface|onExitThreadsRoot/,
-  "workspace panel host should only host the drawer/sidebar state path",
-);
+assert.match(shellChromeProps, /onStartNewThread: null/);
+assert.doesNotMatch(shellChromeProps, /workspaceShellPanels|handleStartNewWorkspaceThreadFromShell/);
+assert.equal(existsSync("apps/web/src/components/WebWorkspaceShellPanels.tsx"), false);
+assert.equal(existsSync("apps/web/src/components/WebWorkspaceShellPanelsHost.tsx"), false);
 assert.match(
   chatPanel,
   /mobileMembersOverlayOpen\?: boolean;[\s\S]*onCloseMobileMembersOverlay\?: \(\) => void;/,

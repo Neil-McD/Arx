@@ -11,11 +11,11 @@ export function buildWebAppMainSurfaceHostProps(params: {
   showOnboardingModal: WebAppMainSurfaceHostProps["showOnboardingModal"];
   holdLandingForAuth: WebAppMainSurfaceHostProps["holdLandingForAuth"];
   settingsSurfaceHostProps: WebAppMainSurfaceHostProps["settingsSurfaceHostProps"];
-  workspaceSurfaceHostProps: WebAppMainSurfaceHostProps["workspaceSurfaceHostProps"];
   publicCommunityFunnelProps: WebAppMainSurfaceHostProps["publicCommunityFunnelProps"];
   communityHostProps: WebAppMainSurfaceHostProps["communityHostProps"];
   discoverPanelProps: WebAppMainSurfaceHostProps["discoverPanelProps"];
   productDocsPanelProps: WebAppMainSurfaceHostProps["productDocsPanelProps"];
+  operatorDashboardProps: WebAppMainSurfaceHostProps["operatorDashboardProps"];
 }): WebAppMainSurfaceHostProps {
   return {
     activePage: params.activePage,
@@ -26,16 +26,20 @@ export function buildWebAppMainSurfaceHostProps(params: {
       params.publicRoute.kind === "app" && params.activePage === "discover",
     showProductDocsPanel:
       params.publicRoute.kind === "app" && params.activePage === "docs",
+    showOperatorDashboard:
+      params.publicRoute.kind === "app" &&
+      params.activePage === "operator" &&
+      Boolean(params.operatorDashboardProps),
     holdLandingForAuth: params.holdLandingForAuth,
     landingPageProps: params.landingPageProps,
     onboardingPageProps: params.onboardingPageProps,
     platformBridgePageProps: params.platformBridgePageProps,
     showOnboardingModal: params.showOnboardingModal,
     settingsSurfaceHostProps: params.settingsSurfaceHostProps,
-    workspaceSurfaceHostProps: params.workspaceSurfaceHostProps,
     publicCommunityFunnelProps: params.publicCommunityFunnelProps,
     communityHostProps: params.communityHostProps,
     discoverPanelProps: params.discoverPanelProps,
     productDocsPanelProps: params.productDocsPanelProps,
+    operatorDashboardProps: params.operatorDashboardProps,
   };
 }

@@ -238,6 +238,7 @@ import {
   type CommunityTab,
   isCommunityRouteManagedTab,
   normalizeCommunityTabForAccess,
+  type OperatorTab,
   type SettingsGroup,
   type SettingsPage,
   settingsGroupLabel,
@@ -477,8 +478,6 @@ import { useWebRuntimeRunLifecycle } from "./controllers/useWebRuntimeRunLifecyc
 import { useWebUiPersistenceLifecycle } from "./controllers/useWebUiPersistenceLifecycle";
 import { buildWebShellProjection } from "./controllers/buildWebShellProjection";
 import { buildWebCommunitySurfaceProjection } from "./controllers/buildWebCommunitySurfaceProjection";
-import { buildWebWorkspaceSurfaceProjection } from "./controllers/buildWebWorkspaceSurfaceProjection";
-import { buildWebWorkspaceLandingProjection } from "./controllers/buildWebWorkspaceLandingProjection";
 import { useWebVoiceInputController } from "../../../shared/useWebVoiceInputController";
 import { useCommunityAgentLandingLifecycle } from "../../../shared/useCommunityAgentLandingLifecycle";
 import { useCommunityAgentConfigLifecycle } from "../../../shared/useCommunityAgentConfigLifecycle";
@@ -508,17 +507,7 @@ import {
 } from "../../../shared/runtimeEngine";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import type { WorkspaceComposerApi, WorkspaceComposerDraft } from "./components/WebWorkspaceHost";
-import {
-  resolveWorkspaceRightPanelShellState,
-  useWorkspaceRightPanelController,
-} from "./components/useWorkspaceRightPanelController";
-import {
-  buildWorkspaceRightPanelUserData,
-} from "./components/workspaceRightPanelData";
-import {
-  bundleText,
-  stripSharedAttachmentSummary,
-} from "./components/communityInteractionFeed";
+import { useWorkspaceRightPanelController } from "./components/useWorkspaceRightPanelController";
 import {
   WebGlobalOverlayHost,
   type WebGlobalOverlayHostProps,
@@ -536,7 +525,6 @@ import {
 } from "./components/WebDirectMessagesHost";
 import { useDirectMessageWebNotifications } from "./controllers/useDirectMessageWebNotifications";
 import { mergeUserProfileEntry } from "../../../shared/userProfileMerge";
-import { WebWorkspaceShellPanelsHost } from "./components/WebWorkspaceShellPanelsHost";
 import type { MobileOverlay, MobileRootPage } from "./components/webShellChromeShared";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
@@ -1900,10 +1888,11 @@ export default function App() {
 
   const [operatorAccessState, setOperatorAccessState] = useState<{
     subject: string;
-    access: OperatorAccessSnapshot;
+    access: OperatorAccessSnapshot | null;
   } | null>(null);
-  const operatorAccess =
-    operatorAccessState?.subject === canonicalSessionUserId ? operatorAccessState.access : null;
+  const isOperatorAccessResolved =
+    Boolean(canonicalSessionUserId) && operatorAccessState?.subject === canonicalSessionUserId;
+  const operatorAccess = isOperatorAccessResolved ? operatorAccessState?.access ?? null : null;
 
   useEffect(() => {
     let isAlive = true;
@@ -1918,7 +1907,7 @@ export default function App() {
       (access) => {
         if (!isAlive) return;
         if (!access) {
-          setOperatorAccessState((prev) => (prev?.subject === operatorSubject ? null : prev));
+          setOperatorAccessState({ subject: operatorSubject, access: null });
           return;
         }
         setOperatorAccessState({ subject: operatorSubject, access });
@@ -1930,8 +1919,11 @@ export default function App() {
           message.includes("operator_access_forbidden") ||
           message.includes("operator_access_identity_mismatch")
         ) {
-          setOperatorAccessState((prev) => (prev?.subject === operatorSubject ? null : prev));
+          setOperatorAccessState({ subject: operatorSubject, access: null });
+          return;
         }
+        console.warn("Failed to resolve operator access:", error);
+        setOperatorAccessState({ subject: operatorSubject, access: null });
       },
     );
 
@@ -1939,7 +1931,7 @@ export default function App() {
       isAlive = false;
     };
   }, [canonicalSessionUserId, session]);
-  const hasOperatorRightPanelAccess = Boolean(session && operatorAccess);
+  const hasOperatorAccess = Boolean(session && operatorAccess);
   const profileStorageUserId = canonicalSessionUserId;
   const initialProfileDraft = useMemo(
     () => readProfileDraftForUser(profileStorageUserId),
@@ -1957,6 +1949,9 @@ export default function App() {
   const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => initialAppRoute?.settingsPage ?? "account");
   const [selectedProductDocSlug, setSelectedProductDocSlug] = useState<string | null>(
     () => initialAppRoute?.docsSlug ?? null,
+  );
+  const [activeOperatorTab, setActiveOperatorTab] = useState<OperatorTab>(
+    () => initialAppRoute?.operatorTab ?? "platform",
   );
   const settingsGroup = settingsGroupForPage(settingsPage);
   const [userWantsSessions, setUserWantsSessions] = useState(false);
@@ -4304,6 +4299,9 @@ export default function App() {
     if (nextAppRoute.page === "docs") {
       setSelectedProductDocSlug(nextAppRoute.docsSlug ?? null);
     }
+    if (nextAppRoute.page === "operator") {
+      setActiveOperatorTab(nextAppRoute.operatorTab ?? "platform");
+    }
     if (nextAppRoute.page === "community") {
       applyCommunityShellState({
         communitySlug: normalizedCommunitySlug,
@@ -4569,6 +4567,35 @@ export default function App() {
     })();
   }, [activePage, cloudProfile, session]);
 
+  const operatorRouteRedirectRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (activePage !== "operator") {
+      operatorRouteRedirectRef.current = null;
+      return;
+    }
+    if (!isAuthBootstrapComplete) return;
+    if (!session) {
+      navigateTo("/", { replace: true });
+      return;
+    }
+    if (!isOperatorAccessResolved) return;
+    if (operatorAccess) return;
+
+    const redirectKey = String(canonicalSessionUserId ?? "operator-denied");
+    if (operatorRouteRedirectRef.current === redirectKey) return;
+    operatorRouteRedirectRef.current = redirectKey;
+    void resolveAndEnterMemberDestination({ session, replace: true }).then((entered) => {
+      if (!entered) navigateTo("/discover", { replace: true });
+    });
+  }, [
+    activePage,
+    canonicalSessionUserId,
+    isAuthBootstrapComplete,
+    isOperatorAccessResolved,
+    operatorAccess,
+    session,
+  ]);
+
   /* Deterministic timezone capture: record the browser's IANA zone silently,
      refreshed when it drifts from what the profile holds. Never a question. */
   const timezoneSyncRef = useRef(false);
@@ -4636,6 +4663,7 @@ export default function App() {
         communitySettingsPane:
           activePage === "community" && communityTab === "settings" ? communitySettingsPane : null,
         docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
+        operatorTab: activePage === "operator" ? activeOperatorTab : null,
         threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
         projectId:
           activePage === "workspace" && activeView === "home" && !activeThreadId
@@ -4664,6 +4692,11 @@ export default function App() {
     if (activePage === "settings" && settingsPage === page) return;
     if (activePage !== "settings") pushNavSnapshot();
     navigateTo(buildSettingsPath(page));
+  };
+  const openOperatorConsole = (tab: OperatorTab = "platform"): void => {
+    if (!hasOperatorAccess) return;
+    if (activePage !== "operator") pushNavSnapshot();
+    navigateTo(`/operator/${tab}`);
   };
   const {
     syncCommunitySelection,
@@ -6212,6 +6245,7 @@ export default function App() {
     communityResourceModuleId,
     communitySettingsPane,
     docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
+    operatorTab: activePage === "operator" ? activeOperatorTab : null,
     activeThreadId,
     applyLocationToState,
     setStripeConnectReturn,
@@ -11262,388 +11296,6 @@ export default function App() {
     appToast,
   });
 
-  const workspaceShellPanels = (
-    <WebWorkspaceShellPanelsHost<ThreadRecord, CloudProjectRecord>
-      threads={threads}
-      projects={workspace.state.projects}
-      resolveThreadProjectId={resolveWorkspaceSidebarThreadProjectId}
-      getThreadSearchText={getWorkspaceSidebarThreadSearchText}
-      sessionsDrawerEnabled={sessionsDrawerEnabled}
-      isSessionsDrawerOpen={isSessionsDrawerOpen}
-      showMobileAppShell={showMobileAppShell}
-      showMobileShell={showMobileShell}
-      mobileOverlay={mobileOverlay}
-      setMobileOverlay={setMobileOverlay}
-      threadError={inlineThreadError}
-      displayedThreadError={displayedThreadError}
-      showGuestSignInAction={showGuestSignInAction}
-      session={session}
-      hasAuthenticatedPresentation={hasAuthenticatedAppShellPresentation}
-      isAuthRecoveringSignedIn={isAuthRecoveringSignedInAppShell}
-      authError={previewSidebarAuthError}
-      requireSignIn={() => requireSignIn()}
-      openMobileAgentSettings={openMobileAgentSettings}
-      activeThreadId={activeThreadId}
-      guestThreadId={GUEST_THREAD_ID}
-      guestThreadHasMessages={guestThreadHasMessages}
-      guestThreadPreview={guestThreadPreview}
-      renderProjectToolbarAction={renderCloudProjectCreateAction}
-      getThreadDisplayTitle={getThreadDisplayTitle}
-      selectThread={selectWorkspaceThread}
-      startDraftInProject={handleStartDraftInCloudProject}
-      editProject={projectUiController.openEditProjectModal}
-      deleteProject={(project) => void projectUiController.openDeleteProjectModal(project)}
-      applyGuestWorkspaceState={applyGuestWorkspaceState}
-      resetGuestThread={resetGuestThread}
-    />
-  );
-
-  const workspaceLandingProjection = buildWebWorkspaceLandingProjection({
-    showGuestSignupRail: !hasAuthenticatedAppShellPresentation,
-    activeCommunity: activeCommunity
-      ? {
-          name: activeCommunity.name,
-          avatar_url: activeCommunity.avatar_url,
-          avatar_focus_x: activeCommunity.avatar_focus_x,
-          avatar_focus_y: activeCommunity.avatar_focus_y,
-          avatar_zoom: activeCommunity.avatar_zoom,
-        }
-      : null,
-    resolvedActiveProjectName: workspace.derived.resolvedActiveProjectName,
-    emptyThreadLandingTitle: emptyThreadLanding.title,
-    onRequireSignIn: () => requireSignIn(),
-    onOpenLandingCommunity: handleOpenLandingCommunity,
-    onOpenLandingProject: handleOpenLandingProject,
-    shouldShowAccountSetupCard,
-    accountSetupStatus: effectiveAccountSetupStatus,
-    onContinueAccountSetup: () => {
-      setIsOnboardingModalOpen(true);
-    },
-    shouldShowCommunityLaunchSetupCard,
-    communityLaunchSetupStatus,
-    onContinueCommunityLaunchSetup: () => {
-      const step = resolveCommunityLaunchSetupRouteStep();
-      setIsCommunityLaunchCreateMode(false);
-      setCommunityLaunchSetupInitialStep(step);
-      setIsCommunityLaunchSetupModalOpen(true);
-      replaceCommunityLaunchSetupRouteState(step);
-    },
-  });
-  const { workspaceHostProps } = buildWebWorkspaceSurfaceProjection({
-    session: session,
-    hasAuthenticatedPresentation: hasAuthenticatedAppShellPresentation,
-    isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
-    isAccountGraphHydratingCritical: isAccountGraphHydratingCriticalAppShell,
-    activeThreadId,
-    guestThreadId: GUEST_THREAD_ID,
-    isEmptyWorkspaceThread,
-    showEmptyThreadLandingSkeleton,
-    isHydratingActiveWorkspaceThread,
-    isActiveWorkspaceThreadBusy,
-    isStreamingWorkspaceTurn,
-    inferenceToast,
-    memoryToast,
-    ...workspaceLandingProjection,
-    initialComposerDraft: workspaceComposerDraftRef.current,
-    onComposerDraftChange: handleWorkspaceComposerDraftChange,
-    onRegisterComposerApi: handleRegisterWorkspaceComposerApi,
-    landingActionButtons,
-    authedWorkspaceComposerPlaceholder: "Ask anything",
-    guestWorkspaceComposerPlaceholder: "Ask anything (preview)",
-    setWorkspaceError: setThreadError,
-    ingestWorkspaceAttachmentsFromFileList: async (files, existing, onError) =>
-      (await ingestWorkspaceAttachmentsFromFileList(
-        files,
-        existing as MessageAttachment[],
-        onError,
-      )) as typeof existing,
-    setLoadingThreadMessagesThreadId,
-    setThreadMessages,
-    loadThreadMessages: (threadId, session) =>
-      loadThreadMessages(threadId, session as AuthSession),
-    onSendMessage: ({ text, attachments, clearComposer }) => {
-      void sendUserMessage({
-        text,
-        attachments: attachments as MessageAttachment[],
-        clearComposer,
-      });
-    },
-    onStopStreamingTurn: () => {
-      stopStreamingTurn(activeThreadId ?? undefined);
-    },
-    resolveWorkspaceSession: ensureUsableAuthSession,
-    activeProjectId: currentWorkspaceProjectId,
-    showAppToastMessage,
-    activeModelLabel: workspace.derived.activeModelLabel,
-    modelToggles: platformModelToggles,
-    accountTier: accountCommerceStatus?.account_tier ?? null,
-    activeRuntimeEngine: activeRuntimeEngineForWorkspace,
-    onRuntimeEngineChange: handleWorkspaceRuntimeEngineChange,
-    workspaceVoiceUiState,
-    workspaceVoiceTitle: workspaceVoiceIntent.title,
-    onWorkspaceVoiceClick: () => void handleVoiceInputClick("workspace"),
-    activeThreadStreamingRunId,
-    activeThreadStreamingState,
-    runtimeEventsByRunId,
-    threadError: inlineThreadError,
-    displayedThreadError,
-    showGuestSignInAction,
-    requireSignIn,
-    canRetryLastThreadTurn,
-    retryLastTurn,
-    threadMessages,
-    copiedMessageId,
-    handleCopyMessage,
-    copyTextToClipboard,
-    parseMessageText,
-    parseMessageAttachments,
-    parseMessageMemoryUsed,
-    parseMessageHistoryUsed,
-    parseMessageMemorySuggestions,
-    parseMessageMemoryAdded,
-    parsePremiumUpgradeCta,
-    extractCommunityEvidenceUsedV1,
-    buildMessageContextModalPayload: (payload) =>
-      buildMessageContextModalPayload<MemoryUsedItem, HistoryUsedItem, MemorySuggestion>({
-        memoryUsed: payload.memoryUsed,
-        historyUsed: payload.historyUsed,
-        memorySuggestions: payload.memorySuggestions,
-        memoryAdded: payload.memoryAdded,
-        communityEvidence: payload.communityEvidence,
-      }),
-    hasContextPayload,
-    openMessageContextModal,
-    setContextModal,
-    extractInferenceSourceFromMessageContent,
-    extractModelIdFromMessageContent,
-    extractRuntimeEngineIdFromMessageContent,
-    formatModelSignature,
-    renderMarkdown,
-    onOpenPremiumBilling: openPremiumBilling,
-  });
-  const {
-    showControl: showWorkspaceRightPanelControl,
-    showOperatorTabs: showWorkspaceRightPanelOperatorTabs,
-    isVisible: isWorkspaceRightPanelVisible,
-  } = resolveWorkspaceRightPanelShellState({
-    hasSession: Boolean(session),
-    isWorkspaceHome: activePage === "workspace" && activeView === "home",
-    isMobileAppShell: showMobileAppShell,
-    hasOperatorRightPanelAccess,
-    isOpen: isWorkspaceRightPanelOpen,
-  });
-  const shouldLoadBuilderPartnerRightPanel = Boolean(
-    session &&
-    showWorkspaceRightPanelControl &&
-    isWorkspaceRightPanelVisible
-  );
-
-  useEffect(() => {
-    if (!shouldLoadBuilderPartnerRightPanel || !session) return;
-    void loadBuilderPartnerProgram(session as AuthSession);
-  }, [
-    canonicalSessionUserId,
-    communities.length,
-    loadBuilderPartnerProgram,
-    session,
-    shouldLoadBuilderPartnerRightPanel,
-  ]);
-
-  useEffect(() => {
-    if (showWorkspaceRightPanelControl) return;
-    handleWorkspaceRightPanelLayoutChange({ open: false, width: 0, gutter: 0 });
-  }, [
-    handleWorkspaceRightPanelLayoutChange,
-    showWorkspaceRightPanelControl,
-  ]);
-
-  const workspaceUserDataPanel = buildWorkspaceRightPanelUserData({
-    workspaceCreditBalance,
-    isLoadingWorkspaceCreditBalance,
-    workspaceCreditBalanceError,
-    hasWorkspaceCardOnFile:
-      workspaceCardOnFileStatus === null
-        ? null
-        : workspaceCardOnFileStatus.has_card_on_file === true,
-    isStartingWorkspaceComputer,
-    isStoppingWorkspaceComputer,
-    workspaceComputerStartError,
-    session,
-    activeProjectId: currentWorkspaceProjectId,
-    activeProjectName: currentWorkspaceProjectName,
-    activeThreadTitle: activeThread ? getThreadDisplayTitle(activeThread) : null,
-    activeModelLabel: workspace.derived.activeModelLabel,
-    onOpenWorkspaceBilling: openPremiumBilling,
-    onTurnOnComputer: turnOnWorkspaceComputer,
-    onTurnOffComputer: turnOffWorkspaceComputer,
-  });
-  const handleOpenWorkspacePanelCommunity = useCallback(() => {
-    const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
-    if (!nextCommunitySlug) return;
-    openCommunityChat(nextCommunitySlug, { clearUnread: true });
-  }, [activeCommunity?.slug, openCommunityChat, selectedActiveCommunitySlug]);
-  const activeCommunityRoleLabel = useMemo(() => {
-    if (!activeCommunityId) return null;
-    const role = String(communityRoleById[activeCommunityId] ?? "").trim();
-    if (!role) return null;
-    return role
-      .split(/[_\s-]+/)
-      .filter(Boolean)
-      .map((part) => part[0]?.toUpperCase() + part.slice(1).toLowerCase())
-      .join(" ");
-  }, [activeCommunityId, communityRoleById]);
-  const workspaceCommunityRecentChatPreview = useMemo<ReactNode>(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId) {
-      return (
-        <div className="workspace-community-preview__empty">
-          Recent chat is unavailable for this community.
-        </div>
-      );
-    }
-
-    const roots = appendPendingRoots(
-      communityInteractionRoots,
-      pendingCanonicalInteractions,
-      activeCommunityId,
-    )
-      .filter((bundle) => bundle.root.community_id === activeCommunityId)
-      .slice(0, 6);
-
-    if (communityInteractionError && roots.length === 0) {
-      return (
-        <div className="workspace-community-preview__empty" role="alert">
-          <span>{communityInteractionError}</span>
-          <button
-            type="button"
-            onClick={() => {
-              if (!session) return;
-              void loadCommunityInteractionRoots(activeCommunityId, session);
-            }}
-          >
-            Retry
-          </button>
-        </div>
-      );
-    }
-
-    if (isLoadingCommunityInteractions && roots.length === 0) {
-      return (
-        <div className="workspace-community-preview__empty" aria-live="polite">
-          Loading recent chat...
-        </div>
-      );
-    }
-
-    if (roots.length === 0) {
-      return (
-        <div className="workspace-community-preview__empty">
-          No recent messages yet.
-        </div>
-      );
-    }
-
-    return (
-      <div className="workspace-community-preview__list">
-        {roots.map((bundle) => {
-          const root = bundle.root;
-          const body = stripSharedAttachmentSummary(
-            bundleText(bundle.content_blocks, root.content_summary),
-            bundle.attachments.length > 0,
-          );
-          const actorName = root.actor_user_id
-            ? displayName(root.actor_user_id)
-            : root.actor_agent_key
-              ? root.actor_agent_key.replace(/_/g, " ")
-              : root.actor_type === "community_agent"
-                ? "Community agent"
-                : "Member";
-          const createdAtLabel = formatChatTime(root.created_at);
-          return (
-            <button
-              key={root.id}
-              type="button"
-              className={`workspace-community-preview__message${bundle.pending ? " is-pending" : ""}`}
-              onClick={() => {
-                handleSelectCommunityInteractionRoot(root.id);
-                handleOpenWorkspacePanelCommunity();
-              }}
-            >
-              <span className="workspace-community-preview__message-meta">
-                <strong>{actorName}</strong>
-                <span>{createdAtLabel}</span>
-              </span>
-              <span className="workspace-community-preview__message-body">
-                {body || root.title || "Message"}
-              </span>
-              {root.reply_count > 0 ? (
-                <span className="workspace-community-preview__message-footer">
-                  {root.reply_count === 1 ? "1 reply" : `${root.reply_count} replies`}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
-    );
-  }, [
-    activeCommunityId,
-    communityInteractionError,
-    communityInteractionRoots,
-    displayName,
-    formatChatTime,
-    handleOpenWorkspacePanelCommunity,
-    handleSelectCommunityInteractionRoot,
-    isLoadingCommunityInteractions,
-    loadCommunityInteractionRoots,
-    pendingCanonicalInteractions,
-    session,
-  ]);
-  const workspaceCommunityPreviewPanel = activeCommunity
-    ? {
-        activeCommunity: {
-          id: activeCommunity.id,
-          slug: activeCommunity.slug,
-          name: activeCommunity.name,
-          one_liner: activeCommunity.one_liner,
-          avatar_url: activeCommunity.avatar_url,
-          avatar_focus_x: activeCommunity.avatar_focus_x,
-          avatar_focus_y: activeCommunity.avatar_focus_y,
-          avatar_zoom: activeCommunity.avatar_zoom,
-        },
-        roleLabel: activeCommunityRoleLabel,
-        memberCount:
-          activeCommunityPresenceSummary?.member_count ??
-          communityDirectoryMemberCount ??
-          activeCommunitySocialMemberCount ??
-          null,
-        onlineCount:
-          activeCommunityPresenceSummary?.online_count ??
-          (activeCommunityOnlineUserIds.size > 0 ? activeCommunityOnlineUserIds.size : null),
-        recentChatPreview: workspaceCommunityRecentChatPreview,
-        onOpenCommunity: handleOpenWorkspacePanelCommunity,
-      }
-    : null;
-
-  const workspaceRightPanelToggle = showWorkspaceRightPanelControl ? (
-    <button
-      type="button"
-      className={`icon-button workspace-right-panel-toggle${isWorkspaceRightPanelVisible ? " active" : ""}`}
-      onClick={handleToggleWorkspaceRightPanel}
-      aria-expanded={isWorkspaceRightPanelVisible}
-      aria-controls="workspace-right-panel"
-      aria-label={
-        isWorkspaceRightPanelVisible
-          ? "Close workspace data panel"
-          : "Open workspace data panel"
-      }
-      title={isWorkspaceRightPanelVisible ? "Close data panel" : "Open data panel"}
-    >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="4" width="18" height="16" rx="2" />
-        <path d="M15 4v16" />
-      </svg>
-    </button>
-  ) : null;
   const mainSurfaceHostProps = buildWebAppMainSurfaceHostProps({
     activePage,
     isPublicCommunityFunnel,
@@ -11771,19 +11423,9 @@ export default function App() {
         setMobileSettingsView("detail");
       },
       onShowMobileSettingsIndex: () => setMobileSettingsView("index"),
+      showOperatorConsole: hasOperatorAccess,
+      onOpenOperatorConsole: () => openOperatorConsole("platform"),
       settingsPanelsProps,
-    },
-    workspaceSurfaceHostProps: {
-      workspaceHostProps: {
-        ...workspaceHostProps,
-        showWorkspaceRightPanel: showWorkspaceRightPanelControl,
-        operatorRightPanelSession: showWorkspaceRightPanelOperatorTabs ? session : null,
-        builderPartnerProgramPanel: builderPartnerProgramPanelProps,
-        workspaceRightPanelOpen: isWorkspaceRightPanelVisible,
-        workspaceCommunityPreviewPanel,
-        workspaceUserDataPanel,
-        onWorkspaceRightPanelLayoutChange: handleWorkspaceRightPanelLayoutChange,
-      },
     },
     publicCommunityFunnelProps: {
       publicRouteSlug:
@@ -11921,6 +11563,14 @@ export default function App() {
       },
       renderMarkdown,
     },
+    operatorDashboardProps:
+      session && operatorAccess
+        ? {
+            session,
+            activeTab: activeOperatorTab,
+            onSelectTab: openOperatorConsole,
+          }
+        : null,
   });
   const globalOverlays = (
     <>
@@ -12112,8 +11762,6 @@ export default function App() {
       : null;
   const shellChromeHostProps = buildWebShellChromeHostProps({
     showHeaderIslands,
-    isSessionsDrawerOpen,
-    shouldOverlaySessionsDrawer,
     showMobileAppShell,
     showMobileSettingsShell,
     showMobilePublicFunnel,
@@ -12133,7 +11781,6 @@ export default function App() {
     activeCommunityAttentionCount,
     openMobileDrawer,
     handleExitMobileSettings,
-    handleStartNewWorkspaceThreadFromShell,
     handleSelectMobileRootPage,
     setMobileOverlay,
     isPublicCommunityFunnel,
@@ -12141,16 +11788,11 @@ export default function App() {
     hasBackTargetSnapshot: Boolean(backTargetSnapshot),
     backTargetLabel: effectiveBackTargetLabel ?? null,
     activeView,
-    userWantsSessions,
-    hasWorkspaceRightPanelControl: showWorkspaceRightPanelControl,
-    workspaceRightPanelToggle,
     directMessagesButton,
     handleExitPublicFunnelPreview,
     handleTopbarBackFromPublicFunnel,
     handleTopbarBackFromSettings,
-    setUserWantsSessions,
     handleTopbarBackToCommunity,
-    workspaceShellPanels,
     communityTab: isVisitorCommunitySurface ? "chat" : communityTab,
     communityTabIndicators: isVisitorCommunitySurface
       ? { chat: false, ai_feed: false, resources: false, events: false, mentions: false }
@@ -12219,6 +11861,8 @@ export default function App() {
       : () => openGlobalSettings("agent"),
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,
+    showOperatorConsole: hasOperatorAccess,
+    openOperatorConsole: () => openOperatorConsole("platform"),
     hasLeftPanel,
     isGlobalSettings,
     mainSurface,

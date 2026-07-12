@@ -14,9 +14,6 @@ const launchGateway = read("shared/cloudCommunityLaunchSetupGateway.ts");
 const convexSchema = read("convex/schema.ts");
 const launchQuery = read("convex/communityLaunchSetup.ts");
 const communityBarrel = read("convex/community.ts");
-const setupCard = read(
-  "apps/web/src/components/WebCommunityLaunchSetupCard.tsx",
-);
 const setupModal = read(
   "apps/web/src/components/WebCommunityLaunchSetupModal.tsx",
 );
@@ -30,9 +27,6 @@ const shellChromeHostProps = read(
 );
 const mobileShellController = read(
   "apps/web/src/controllers/useWebMobileShellController.ts",
-);
-const workspaceLandingProjection = read(
-  "apps/web/src/controllers/buildWebWorkspaceLandingProjection.tsx",
 );
 
 assert.deepEqual(COMMUNITY_LAUNCH_SETUP_STEPS, [
@@ -320,11 +314,6 @@ assert.match(
   communityBarrel,
   /saveCommunityLaunchProfile/,
   "community barrel must expose the launch profile mutation",
-);
-assert.match(
-  setupCard,
-  /Community launch/,
-  "workspace card must present launch setup separately from account setup",
 );
 assert.match(
   setupModal,
@@ -690,7 +679,7 @@ assert.match(
 );
 assert.match(
   appShell,
-  /accountTier=\{accountCommerceStatus\?\.account_tier \?\? null\}[\s\S]*onOpenPremiumBilling=\{openWorkspacePremiumBilling\}/,
+  /accountTier=\{accountCommerceStatus\?\.account_tier \?\? null\}[\s\S]*onOpenPremiumBilling=\{openPremiumBilling\}/,
   "app shell must pass account tier and Billing navigation into launch Knowledge for premium-link disclosure",
 );
 assert.doesNotMatch(
@@ -868,10 +857,6 @@ assert.match(
   /\.community-launch-choice \{[\s\S]*background: linear-gradient\([\s\S]*180deg,[\s\S]*rgba\(255, 255, 255, 0\.072\),[\s\S]*rgba\(255, 255, 255, 0\.044\)[\s\S]*\)/,
   "launch access selector cards must use a visibly raised neutral button surface",
 );
-assert.match(
-  workspaceLandingProjection,
-  /WebCommunityLaunchSetupCard/,
-  "workspace landing must be able to render the community launch setup card",
-);
+assert.doesNotMatch(appShell, /WebCommunityLaunchSetupCard|buildWebWorkspaceLandingProjection/);
 
 console.log("PASS: community launch setup contract is canonical.");

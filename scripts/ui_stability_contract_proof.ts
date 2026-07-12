@@ -22,7 +22,6 @@ const threadSidebarSelectors = read("shared/threadSidebarSelectors.ts");
 const workspaceActiveProjectSelector = read("shared/workspaceActiveProjectSelector.ts");
 const workspaceProjectStateController = read("apps/web/src/controllers/useWebWorkspaceProjectStateController.ts");
 const workspaceSidebarStateHost = read("apps/web/src/components/WebWorkspaceSidebarStateHost.tsx");
-const workspaceLandingProjection = read("apps/web/src/controllers/buildWebWorkspaceLandingProjection.tsx");
 const threadSidebarPanel = read("apps/web/src/components/WebThreadSidebarPanel.tsx");
 
 assert.match(
@@ -116,10 +115,10 @@ assert.match(
   /activeInsightTab === "community" && props\.workspaceCommunityPreviewPanel[\s\S]*<WorkspaceCommunityPreviewPanelContent/,
   "workspace right panel shell should render the restored read-only community preview tab",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /workspaceCommunityPreviewPanel[\s\S]*activeCommunity:[\s\S]*recentChatPreview: workspaceCommunityRecentChatPreview[\s\S]*onOpenCommunity: handleOpenWorkspacePanelCommunity/,
-  "App should project active community lens state into the workspace preview tab",
+  /workspaceCommunityPreviewPanel|workspaceCommunityRecentChatPreview|handleOpenWorkspacePanelCommunity/,
+  "App must not project the retired Workspace community preview",
 );
 assert.doesNotMatch(
   workspaceRightPanel,
@@ -131,10 +130,10 @@ assert.doesNotMatch(
   /buildWorkspaceRightPanelCommunityData|buildWorkspaceRightPanelRecentSignals|workspacePanelCommunityRecentSignals|workspacePanelCommunityIntegrations/,
   "workspace right panel data must stay workspace-only after community context moved to the chat rail",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /buildWorkspaceRightPanelUserData\(\{[\s\S]*workspaceCreditBalance[\s\S]*onTurnOnComputer: turnOnWorkspaceComputer[\s\S]*onTurnOffComputer: turnOffWorkspaceComputer/,
-  "workspace right panel user data props must be assembled through the panel data builder",
+  /buildWorkspaceRightPanelUserData/,
+  "App must not assemble data for the retired Workspace right panel",
 );
 assert.match(
   app,
@@ -181,30 +180,10 @@ assert.match(
   /const generalThreads = useMemo\(\(\) => \{[\s\S]*return visibleThreads\.filter\(\(thread\) => \{[\s\S]*const projectId = props\.resolveThreadProjectId\(thread\);[\s\S]*return !projectId;[\s\S]*\}\);/,
   "threads with explicit but temporarily unloaded project ids must not be recategorized as General",
 );
-assert.match(
-  app,
-  /buildWebWorkspaceSurfaceProjection\(\{[\s\S]*activeProjectId: currentWorkspaceProjectId/,
-  "workspace host files, terminals, and previews must use the current workspace project authority",
-);
-assert.match(
-  app,
-  /buildWorkspaceRightPanelUserData\(\{[\s\S]*activeProjectId: currentWorkspaceProjectId[\s\S]*activeProjectName: currentWorkspaceProjectName/,
-  "right panel computer summary and files must use the same current workspace project authority",
-);
-assert.match(
-  workspaceLandingProjection,
-  /const activeProjectName = String\(params\.resolvedActiveProjectName \?\? ""\)\.trim\(\);[\s\S]*const emptyThreadSubtitle = activeProjectName \?/,
-  "empty workspace landing must render project identity only when explicit project scope exists",
-);
 assert.doesNotMatch(
-  workspaceLandingProjection,
-  /Loose chat/,
-  "empty workspace landing must not label standalone drafts as Loose chat",
-);
-assert.match(
-  workspaceLandingProjection,
-  /You are in[\s\S]*\{activeProjectName\}[\s\S]*workspace/,
-  "empty workspace landing project cue should show explanatory project workspace text only when explicit project scope exists",
+  app,
+  /buildWebWorkspaceSurfaceProjection|buildWorkspaceRightPanelUserData|buildWebWorkspaceLandingProjection/,
+  "the retired Workspace presentation must not be projected from App",
 );
 assert.match(
   threadSidebarPanel,

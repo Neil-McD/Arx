@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readLegacyWorkspaceRouteContext } from "../shared/webAppRouteState.ts";
 
 function read(path: string): string {
@@ -15,7 +15,6 @@ const mobileTopBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx");
-const workspaceSurface = read("apps/web/src/components/WebWorkspaceSurfaceHost.tsx");
 const communityAgentSection = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
 const communityAgentInstructions = read("apps/web/src/components/WebCommunityAiAgentInstructionsEditor.tsx");
 const communityLaunchSetup = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
@@ -154,21 +153,27 @@ assert.match(
   "launch setup must never copy hidden landing state across community boundaries",
 );
 
-assert.match(
+assert.match(mainSurface, /activePage === "settings"[\s\S]*WebSettingsSurfaceHost/);
+assert.doesNotMatch(
   mainSurface,
-  /import \{ WebSettingsSurfaceHost \}[\s\S]*import \{ WebWorkspaceSurfaceHost \}[\s\S]*activePage === "settings"[\s\S]*WebSettingsSurfaceHost[\s\S]*activePage === "workspace"[\s\S]*WebWorkspaceSurfaceHost/,
-  "the protected Workspace implementation must remain isolated for later migration",
+  /WebWorkspaceSurfaceHost|workspaceSurfaceHostProps|activePage === "workspace"/,
+  "the app surface host must not import, accept, or mount a Workspace presentation",
 );
+for (const retiredPath of [
+  "apps/web/src/components/WebWorkspaceSurfaceHost.tsx",
+  "apps/web/src/components/WebWorkspaceShellPanels.tsx",
+  "apps/web/src/components/WebWorkspaceShellPanelsHost.tsx",
+  "apps/web/src/controllers/buildWebWorkspaceLandingProjection.tsx",
+  "apps/web/src/controllers/buildWebWorkspaceSurfaceProjection.tsx",
+]) {
+  assert.equal(existsSync(retiredPath), false, `${retiredPath} must remain deleted`);
+}
 assert.match(
   settingsSurface,
   /WebSettingsPanels[\s\S]*SettingsNavList/,
   "global settings must own its renderer and navigation independently of Workspace",
 );
-assert.doesNotMatch(
-  workspaceSurface,
-  /Settings|activeView/,
-  "the quarantined Workspace surface must not own global settings behavior",
-);
+assert.doesNotMatch(app, /WebWorkspaceSurfaceHost|WebWorkspaceShellPanelsHost/);
 assert.match(
   mcp,
   /community_context: "workspace_context"/,

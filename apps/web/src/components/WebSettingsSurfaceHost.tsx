@@ -12,6 +12,8 @@ export type WebSettingsSurfaceHostProps = {
   showMobileSettingsIndex: boolean;
   onSelectMobileSettingsPage: (page: SettingsPage) => void;
   onShowMobileSettingsIndex: () => void;
+  showOperatorConsole: boolean;
+  onOpenOperatorConsole: () => void;
   settingsPanelsProps: WebSettingsPanelsProps;
 };
 
@@ -31,6 +33,8 @@ export function WebSettingsSurfaceHost(props: WebSettingsSurfaceHostProps) {
               <SettingsNavList
                 settingsGroup={null}
                 onSelectPage={props.onSelectMobileSettingsPage}
+                showOperatorConsole={props.showOperatorConsole}
+                onOpenOperatorConsole={props.onOpenOperatorConsole}
               />
             </div>
           </div>

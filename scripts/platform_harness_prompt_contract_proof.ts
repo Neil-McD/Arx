@@ -388,7 +388,6 @@ async function proveSourceContract() {
   const paidToolCreditReservationSource = await readRepoFile("convex/paidToolCreditReservation.ts");
   const voiceControllerSource = await readRepoFile("shared/useWebVoiceInputController.ts");
   const messageMetadataUiSource = await readRepoFile("shared/messageMetadataUi.ts");
-  const workspaceSurfaceProjectionSource = await readRepoFile("apps/web/src/controllers/buildWebWorkspaceSurfaceProjection.tsx");
   const workspaceThreadViewsSource = await readRepoFile("apps/web/src/components/webWorkspaceThreadViews.ts");
   const workspaceThreadMessageListSource = await readRepoFile("apps/web/src/components/WebWorkspaceThreadMessageList.tsx");
   const workspaceHostSource = await readRepoFile("apps/web/src/components/WebWorkspaceHost.tsx");
@@ -505,11 +504,6 @@ async function proveSourceContract() {
     "web metadata parser should accept the durable premium upgrade CTA shape",
   );
   assert.match(
-    workspaceSurfaceProjectionSource,
-    /isOnboardingLifecycleMessage[\s\S]*startsWith\("onboarding:"\)[\s\S]*!isOnboardingLifecycleMessage[\s\S]*parsePremiumUpgradeCta/,
-    "workspace projection must suppress legacy premium CTA metadata on onboarding turns",
-  );
-  assert.match(
     workspaceThreadViewsSource,
     /PremiumUpgradeCta[\s\S]*premiumUpgradeCta: PremiumUpgradeCta \| null/,
     "workspace message view model should include premium upgrade CTA metadata",
@@ -531,13 +525,13 @@ async function proveSourceContract() {
   );
   assert.match(
     appSource,
-    /handleWorkspaceRuntimeEngineChange[\s\S]*canUseRuntimeEngineForTier[\s\S]*openWorkspacePremiumBilling[\s\S]*updateThreadRuntimeEngine/,
+    /handleWorkspaceRuntimeEngineChange[\s\S]*canUseRuntimeEngineForTier[\s\S]*openPremiumBilling[\s\S]*updateThreadRuntimeEngine/,
     "app shell must not commit premium runtime selection for accounts without runtime access",
   );
   assert.match(
     appSource,
-    /parsePremiumUpgradeCta[\s\S]*openWorkspacePremiumBilling[\s\S]*setActiveView\("settings"\)[\s\S]*setSettingsPage\("billing"\)[\s\S]*onOpenPremiumBilling: openWorkspacePremiumBilling/,
-    "app shell should route premium CTA clicks to Settings Billing",
+    /const openPremiumBilling = \(\) => openGlobalSettings\("billing"\)/,
+    "premium actions must route to the first-class global Billing surface",
   );
   assert.doesNotMatch(
     schemaSource,

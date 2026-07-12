@@ -92,7 +92,7 @@ export function OperatorEmailPanelView(props: {
   const configuration = emailAuth?.configuration ?? null;
 
   return (
-    <div className="workspace-right-panel__grid">
+    <div className="operator-dashboard__grid">
       <section className="operator-dashboard__metrics" aria-label="Email operations overview">
         <div>
           <span>Pending due</span>

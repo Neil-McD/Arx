@@ -19,8 +19,6 @@ const profileHandle = read("shared/profileHandle.ts");
 const app = read("apps/web/src/App.tsx");
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const legalReaderModal = read("apps/web/src/components/WebPlatformLegalReaderModal.tsx");
-const setupCard = read("apps/web/src/components/WebAccountSetupCard.tsx");
-const workspaceLandingProjection = read("apps/web/src/controllers/buildWebWorkspaceLandingProjection.tsx");
 
 assert.match(schema, /handle: v\.optional\(v\.string\(\)\)/, "users table must store a public profile handle");
 assert.match(schema, /normalizedHandle: v\.optional\(v\.string\(\)\)/, "users table must store normalized handle");
@@ -139,7 +137,6 @@ assert.match(app, /formatAccountSetupMissingGuidance\(latestSetup\)/, "finish fl
 assert.doesNotMatch(app, /Finish profile, inference, and agent setup to continue\./, "finish flow must not use stale generic missing-setup copy");
 assert.match(app, /saveUserMemorySettingsAndRefreshSetup[\s\S]*Promise<AccountSetupStatus \| null>[\s\S]*return await refreshAccountSetupStatus\(\)/, "agent save must return refreshed account setup status");
 assert.doesNotMatch(app, /onboardingDirection: destination|completeOnboarding\("build_community"|completeOnboarding\("discover_community"/, "finish flow must not store a direction choice");
-assert.match(setupCard, /Finish account setup/, "workspace setup card must replace provider-only nudge");
-assert.match(workspaceLandingProjection, /WebAccountSetupCard/, "workspace empty state must render the account setup card");
+assert.doesNotMatch(app, /WebAccountSetupCard|buildWebWorkspaceLandingProjection/);
 
 console.log("PASS: account setup completion contract is canonical.");

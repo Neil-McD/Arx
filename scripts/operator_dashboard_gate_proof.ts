@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { buildAppRoutePath, readAppRouteFromLocation } from "../shared/webAppRouteState.ts";
+import { buildWebShellProjection } from "../apps/web/src/controllers/buildWebShellProjection.ts";
 
 function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -20,12 +22,52 @@ const schema = read("convex/schema.ts");
 const webRouteState = read("shared/webAppRouteState.ts");
 const app = read("apps/web/src/App.tsx");
 const appMainSurfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
+const operatorHost = read("apps/web/src/components/WebOperatorDashboardHost.tsx");
+const settingsNav = read("shared/SettingsNavList.tsx");
+const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
 const webDesktopShellHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
-const workspaceHost = read("apps/web/src/components/WebWorkspaceHost.tsx");
-const workspaceRightPanelController = read("apps/web/src/components/useWorkspaceRightPanelController.ts");
 const baseCss = read("apps/web/src/base.css");
 const packageJson = read("package.json");
 const seedScript = read("scripts/seed_operator_owner.ts");
+
+const originalWindow = globalThis.window;
+Object.defineProperty(globalThis, "window", {
+  configurable: true,
+  value: { location: { pathname: "/operator/email", search: "" } },
+});
+assert.equal(readAppRouteFromLocation().page, "operator");
+assert.equal(readAppRouteFromLocation().operatorTab, "email");
+assert.equal(
+  buildAppRoutePath({
+    page: "operator",
+    view: "home",
+    settingsPage: "agent",
+    communitySlug: null,
+    communityTab: "chat",
+    operatorTab: "communities",
+    threadId: null,
+  }),
+  "/operator/communities",
+);
+if (originalWindow === undefined) {
+  Reflect.deleteProperty(globalThis, "window");
+} else {
+  Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
+}
+
+const operatorProjection = buildWebShellProjection({
+  publicRouteKind: "app",
+  shellVariant: "standard",
+  activePage: "operator",
+  activeView: "home",
+  mobileSettingsView: "detail",
+  userWantsSessions: false,
+  hasSelectedCommunity: true,
+  isPublicCommunityFunnel: false,
+});
+assert.equal(operatorProjection.showDesktopCommunityRail, false);
+assert.equal(operatorProjection.showDesktopCommunityNav, false);
+assert.equal(operatorProjection.hasLeftPanel, false);
 
 assert.match(
   schema,
@@ -178,77 +220,70 @@ assert.doesNotMatch(
   "web gateway must not call internal operator intelligence directly",
 );
 
-assert.doesNotMatch(webRouteState, /segments\[0\] === "operator"/, "standalone operator route must stay deleted");
-assert.doesNotMatch(webRouteState, /state\.page === "operator"/, "operator page serialization must stay deleted");
-assert.doesNotMatch(
+assert.match(
+  webRouteState,
+  /segments\[0\] === "operator"[\s\S]*page: "operator"[\s\S]*operatorTab: parseOperatorTab/,
+  "operator routes must parse into one canonical operator page with a bounded tab",
+);
+assert.match(
+  webRouteState,
+  /state\.page === "operator"[\s\S]*`\/operator\/\$\{state\.operatorTab \?\? "platform"\}`/,
+  "operator routes must serialize to a canonical tab path",
+);
+assert.match(
+  app,
+  /isOperatorAccessResolved =[\s\S]*operatorAccessState\?\.subject === canonicalSessionUserId[\s\S]*operatorAccess = isOperatorAccessResolved/,
+  "operator rendering must distinguish unresolved access from a resolved denial for the current auth subject",
+);
+assert.match(
+  app,
+  /if \(!access\) \{[\s\S]*setOperatorAccessState\(\{ subject: operatorSubject, access: null \}\)/,
+  "the optional access probe must record a resolved denial instead of leaving the route pending",
+);
+assert.match(
+  app,
+  /activePage !== "operator"[\s\S]*!isOperatorAccessResolved[\s\S]*if \(operatorAccess\) return;[\s\S]*resolveAndEnterMemberDestination/,
+  "unauthorized operator routes must wait for access resolution and then fail closed to a member destination",
+);
+assert.match(
   appMainSurfaceHost,
-  /WebOperatorDashboard|showOperatorDashboard|operatorDashboardProps/,
-  "standalone operator dashboard surface must stay deleted",
+  /activePage === "operator"[\s\S]*showOperatorDashboard && props\.operatorDashboardProps[\s\S]*landing-auth-hold/,
+  "the operator surface must render only with authorized props and otherwise show a neutral hold",
 );
 assert.match(
-  app,
-  /operatorAccessState\?\.subject === canonicalSessionUserId \? operatorAccessState\.access : null[\s\S]*loadOptionalOperatorAccessCanonical\(\{ session \}\)[\s\S]*if \(!access\)[\s\S]*setOperatorAccessState\(\{ subject: operatorSubject, access \}\)/,
-  "workspace must only enable operator UI after the non-throwing operator access probe returns a current-subject snapshot",
+  operatorHost,
+  /useOperatorDashboardData\(\{[\s\S]*enabled: true[\s\S]*surface: "operator_console"/,
+  "operator data must load only after the authorized operator host mounts and must record the canonical surface",
 );
 assert.match(
-  app,
-  /hasOperatorRightPanelAccess = Boolean\(session && operatorAccess\)/,
-  "workspace operator panel must stay hidden without an operator access snapshot",
+  operatorHost,
+  /OPERATOR_TABS\.map[\s\S]*OperatorPlatformPanelView[\s\S]*OperatorBusinessPanelView[\s\S]*OperatorEmailPanelView[\s\S]*OperatorCommunitiesPanelView/,
+  "the operator console must expose the four bounded diagnostic views",
+);
+assert.doesNotMatch(
+  operatorHost,
+  /WebWorkspaceRightPanel|workspace-right-panel/,
+  "the operator console must not depend on retired Workspace panel presentation",
+);
+assert.match(
+  settingsNav,
+  /showOperatorConsole && onOpenOperatorConsole[\s\S]*Operator Console/,
+  "global settings navigation must expose the console only after operator access is granted",
+);
+assert.match(
+  shellProjection,
+  /isOperatorPage[\s\S]*!isOperatorPage && !showMobileAppShell/,
+  "the desktop operator console must remain full width without the community rail",
 );
 assert.doesNotMatch(
   app,
-  /operatorAccess\?\.userId === canonicalSessionUserId|operatorAccess\?\.userId === sessionUserId/,
-  "workspace must not compare Convex operator ids to WorkOS auth subjects",
+  /resolveWorkspaceRightPanelShellState|operatorRightPanelSession:|workspaceRightPanelToggle =/,
+  "App must not mount the retired Workspace operator presentation",
 );
-assert.match(
-  workspaceHost,
-  /showOperatorTabs = Boolean\(props\.operatorRightPanelSession\)/,
-  "workspace host must derive operator tabs only from an authenticated operator data-panel session",
-);
-assert.match(
-  workspaceHost,
-  /isOperatorRightPanelTabActive =[\s\S]*activeRightPanelMode === "operator"[\s\S]*isOperatorInsightTab\(activeRightPanelTab\)/,
-  "workspace host must know whether the active right-panel tab is an operator insight tab inside operator mode",
-);
-assert.match(
-  workspaceHost,
-  /useOperatorDashboardData\([\s\S]*enabled:[\s\S]*isWorkspaceRightPanelVisible[\s\S]*showOperatorTabs[\s\S]*activeRightPanelMode === "operator"[\s\S]*isOperatorRightPanelTabActive/,
-  "operator data loading must be disabled unless the right panel is visible, operator tabs are authorized, operator mode is active, and an operator tab is active",
-);
-assert.match(
-  workspaceRightPanelController,
-  /showControl = Boolean\([\s\S]*params\.hasSession[\s\S]*params\.isWorkspaceHome[\s\S]*!params\.isMobileAppShell/,
-  "workspace right-panel control resolver must remain signed-in desktop workspace-home scoped",
-);
-assert.match(
-  workspaceRightPanelController,
-  /showOperatorTabs: Boolean\(showControl && params\.hasOperatorRightPanelAccess\)/,
-  "operator-only tabs must remain gated by the operator access snapshot",
-);
-assert.match(
-  app,
-  /resolveWorkspaceRightPanelShellState\(\{[\s\S]*hasSession: Boolean\(session\)[\s\S]*isWorkspaceHome: activePage === "workspace" && activeView === "home"[\s\S]*isMobileAppShell: showMobileAppShell[\s\S]*hasOperatorRightPanelAccess[\s\S]*isOpen: isWorkspaceRightPanelOpen/,
-  "App must resolve workspace right-panel shell state from session, route, mobile shell, operator access, and open preference",
-);
-assert.match(
-  app,
-  /operatorRightPanelSession: showWorkspaceRightPanelOperatorTabs \? session : null/,
-  "workspace host must receive an operator data session only after operator access is confirmed",
-);
-assert.match(
-  app,
-  /workspaceRightPanelToggle = showWorkspaceRightPanelControl \? \([\s\S]*workspace-right-panel-toggle/,
-  "workspace right-panel toggle should be built only from the signed-in workspace control flag",
-);
-assert.match(
-  app,
-  /workspaceRightPanelToggle,[\s\S]*directMessagesButton,/,
-  "desktop shell props must receive the workspace right-panel and direct-message controls",
-);
-assert.match(
+assert.doesNotMatch(
   webDesktopShellHeader,
-  /props\.workspaceRightPanelToggle[\s\S]*props\.directMessagesButton/,
-  "desktop header must render the workspace right-panel control before direct messages",
+  /workspaceRightPanelToggle|hasWorkspaceRightPanelControl/,
+  "desktop shell must not expose Workspace operator chrome",
 );
 assert.doesNotMatch(
   webDesktopShellHeader,
@@ -259,11 +294,6 @@ assert.doesNotMatch(
   app,
   /workspaceUserDataToggle|workspaceOperatorDataToggle/,
   "workspace header must not render separate user and operator data toggles",
-);
-assert.doesNotMatch(
-  workspaceHost,
-  /workspace-right-panel-toggle/,
-  "workspace host must not position its own top-right operator toggle outside the shared header",
 );
 assert.doesNotMatch(
   baseCss,

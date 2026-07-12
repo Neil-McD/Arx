@@ -21,6 +21,8 @@ export function WebSettingsSidebar(props: Props) {
         <SettingsNavList
           settingsGroup={settingsSidebar.settingsGroup}
           onSelectPage={settingsSidebar.onSelectPage}
+          showOperatorConsole={settingsSidebar.showOperatorConsole}
+          onOpenOperatorConsole={settingsSidebar.onOpenOperatorConsole}
         />
       </div>
     </aside>

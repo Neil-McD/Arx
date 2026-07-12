@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Handshake } from "lucide-react";
+import { Handshake, ShieldCheck } from "lucide-react";
 import { settingsGroupLabel, type SettingsGroup, type SettingsPage } from "./appShellNavigation";
 
 type SettingsNavItem = {
@@ -105,12 +105,16 @@ type SettingsNavListProps = {
   settingsGroup: SettingsGroup | null;
   onSelectPage: (page: SettingsPage) => void;
   buttonType?: "button" | "submit" | "reset";
+  showOperatorConsole?: boolean;
+  onOpenOperatorConsole?: () => void;
 };
 
 export function SettingsNavList({
   settingsGroup,
   onSelectPage,
   buttonType = "button",
+  showOperatorConsole = false,
+  onOpenOperatorConsole,
 }: SettingsNavListProps) {
   return (
     <>
@@ -127,6 +131,20 @@ export function SettingsNavList({
           {settingsGroupLabel(item.id)}
         </button>
       ))}
+      {showOperatorConsole && onOpenOperatorConsole ? (
+        <button
+          className="nav-item settings-nav-operator"
+          onClick={onOpenOperatorConsole}
+          type={buttonType}
+          aria-label="Operator Console"
+          title="Operator Console"
+        >
+          <span className="nav-icon nav-icon-emphasis">
+            <ShieldCheck />
+          </span>
+          Operator Console
+        </button>
+      ) : null}
     </>
   );
 }
