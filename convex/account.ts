@@ -540,6 +540,25 @@ export const deleteOwnAccount = mutation({
     }
     await record("cloudMessages", cloudMessages.length);
 
+    const memberAgentChannels = await ctx.db
+      .query("memberAgentChannels")
+      .withIndex("by_owner_community", (q) => q.eq("ownerId", userId))
+      .collect();
+    let deletedMemberAgentEpisodes = 0;
+    for (const channel of memberAgentChannels) {
+      const episodes = await ctx.db
+        .query("memberAgentEpisodes")
+        .withIndex("by_channel_ordinal", (q) => q.eq("channelId", channel._id))
+        .collect();
+      for (const episode of episodes) {
+        await ctx.db.delete(episode._id);
+        deletedMemberAgentEpisodes += 1;
+      }
+      await ctx.db.delete(channel._id);
+    }
+    await record("memberAgentEpisodes", deletedMemberAgentEpisodes);
+    await record("memberAgentChannels", memberAgentChannels.length);
+
     const threads = await ctx.db
       .query("threads")
       .withIndex("by_owner", (q) => q.eq("ownerId", userId))

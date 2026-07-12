@@ -36,7 +36,7 @@ import {
   resolveGateDecisionForAuthenticatedActor,
 } from "./httpRuntimeSupport";
 import {
-  buildMemberAgentThreadKey,
+  isMemberAgentThreadKeyForCommunity,
   resolveRuntimeInvocationSurfaceForThread,
   restrictCapabilityFamiliesForInvocationSurface,
   restrictToolNamesForInvocationSurface,
@@ -588,7 +588,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   }
   if (
     invocationSurface === "member_agent_dock" &&
-    threadKey !== buildMemberAgentThreadKey(threadCommunityId)
+    !isMemberAgentThreadKeyForCommunity(threadKey, threadCommunityId)
   ) {
     return {
       ok: false,

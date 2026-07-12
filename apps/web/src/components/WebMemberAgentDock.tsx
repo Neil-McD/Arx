@@ -13,12 +13,17 @@ import {
   Send,
   Sparkles,
   Square,
+  SquarePen,
   X,
 } from "lucide-react";
 import { getAuthUrl, type AuthSession } from "../auth";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import { extractTextFromContentJson } from "../../../../shared/communityMessageParsing";
-import { ensureCloudMemberAgentCommunityThread } from "../../../../shared/cloudMemberAgentGateway";
+import {
+  ensureCloudMemberAgentCommunityChannel,
+  startNewCloudMemberAgentCommunityEpisode,
+  type CloudMemberAgentChannel,
+} from "../../../../shared/cloudMemberAgentGateway";
 import {
   listConvexCloudNewestThreadMessagesByThreadKey,
   type CloudMessageTransportRow,
@@ -85,9 +90,11 @@ function formatInferenceIssue(issue: InferenceIssueModalState | null): string | 
 export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [threadKey, setThreadKey] = useState<string | null>(null);
+  const [episodeId, setEpisodeId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MemberAgentMessage[]>([]);
   const [input, setInput] = useState("");
   const [isPreparing, setIsPreparing] = useState(false);
+  const [isStartingNewChat, setIsStartingNewChat] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [inferenceIssue, setInferenceIssue] = useState<InferenceIssueModalState | null>(null);
   const [sendingByThread, setSendingByThread] = useState<Record<string, boolean>>({});
@@ -125,15 +132,20 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   }, []);
 
   const loadMessages = useCallback(
-    async (targetThreadKey: string, session: AuthSession): Promise<void> => {
+    async (
+      targetThreadKey: string,
+      session: AuthSession,
+    ): Promise<MemberAgentMessage[] | null> => {
       const scope = communityScopeRef.current;
       const rows = await listConvexCloudNewestThreadMessagesByThreadKey({
         session,
         threadKey: targetThreadKey,
         limit: 200,
       });
-      if (!isCurrentScope(scope) || activeThreadKeyRef.current !== targetThreadKey) return;
-      setMessages(normalizeMessages(rows ?? []));
+      if (!isCurrentScope(scope) || activeThreadKeyRef.current !== targetThreadKey) return null;
+      const normalized = normalizeMessages(rows ?? []);
+      setMessages(normalized);
+      return normalized;
     },
     [isCurrentScope],
   );
@@ -194,7 +206,9 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     parseMemoryUsedArray: () => [],
     parseHistoryUsedArray: () => [],
     extractCommunityEvidenceUsedV1: () => null,
-    loadThreadMessages: loadMessages,
+    loadThreadMessages: async (targetThreadKey, session) => {
+      await loadMessages(targetThreadKey, session);
+    },
     loadThreads: async () => undefined,
     showMemoryToastMessage: () => undefined,
     setThreadErrorForThread: setThreadError,
@@ -209,10 +223,12 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     if (previousThreadKey) stopStreamingTurn(previousThreadKey);
     activeThreadKeyRef.current = null;
     setThreadKey(null);
+    setEpisodeId(null);
     setMessages([]);
     setSendingByThread({});
     setStreamingByThread({});
     setIsPreparing(false);
+    setIsStartingNewChat(false);
     setInput("");
     setLocalError(null);
     setInferenceIssue(null);
@@ -239,13 +255,14 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
           "member_agent_dock_open",
         );
         if (!usableSession || cancelled || !isCurrentScope(scope)) return;
-        const thread = await ensureCloudMemberAgentCommunityThread({
+        const thread = await ensureCloudMemberAgentCommunityChannel({
           session: usableSession,
           communityId: props.communityId!,
         });
         if (cancelled || !isCurrentScope(scope)) return;
         activeThreadKeyRef.current = thread.thread_key;
         setThreadKey(thread.thread_key);
+        setEpisodeId(thread.episode_id);
         await loadMessages(thread.thread_key, usableSession);
       } catch (error) {
         if (cancelled || !isCurrentScope(scope)) return;
@@ -276,6 +293,17 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const visibleMessages = messages.filter((message) => message.role !== "system");
   const dockError = localError ?? formatInferenceIssue(inferenceIssue);
 
+  const activateEmptyEpisode = useCallback((thread: CloudMemberAgentChannel) => {
+    activeThreadKeyRef.current = thread.thread_key;
+    setThreadKey(thread.thread_key);
+    setEpisodeId(thread.episode_id);
+    setMessages([]);
+    setInput("");
+    setSendingByThread({});
+    setStreamingByThread({});
+    retryRef.current = null;
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
     const frame = window.requestAnimationFrame(() => {
@@ -287,10 +315,81 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     return () => window.cancelAnimationFrame(frame);
   }, [isOpen, messages.length, runtimeEvents.length, streamedText]);
 
+  const startNewChat = async () => {
+    if (
+      turnIsActive ||
+      isPreparing ||
+      isStartingNewChat ||
+      !episodeId ||
+      !props.communityId ||
+      !props.session
+    ) {
+      return;
+    }
+    const scope = communityScopeRef.current;
+    const expectedEpisodeId = episodeId;
+    let usableSession: AuthSession | null = null;
+    setIsStartingNewChat(true);
+    setLocalError(null);
+    setInferenceIssue(null);
+    try {
+      usableSession = await props.ensureSession(
+        props.session,
+        "member_agent_dock_new_chat",
+      );
+      if (!usableSession || !isCurrentScope(scope)) return;
+      const thread = await startNewCloudMemberAgentCommunityEpisode({
+        session: usableSession,
+        communityId: props.communityId,
+        expectedActiveEpisodeId: expectedEpisodeId,
+      });
+      if (!isCurrentScope(scope)) return;
+      activateEmptyEpisode(thread);
+    } catch (error) {
+      if (!isCurrentScope(scope)) return;
+      console.warn("member_agent_dock_new_chat_failed", error);
+      if (usableSession) {
+        try {
+          const current = await ensureCloudMemberAgentCommunityChannel({
+            session: usableSession,
+            communityId: props.communityId,
+          });
+          if (!isCurrentScope(scope)) return;
+          if (current.episode_id !== expectedEpisodeId) {
+            activateEmptyEpisode(current);
+            try {
+              await loadMessages(current.thread_key, usableSession);
+            } catch (loadError) {
+              if (!isCurrentScope(scope)) return;
+              console.warn("member_agent_dock_new_chat_reconcile_load_failed", loadError);
+              setLocalError("Your new chat is active, but its messages could not load.");
+            }
+            return;
+          }
+        } catch (reconcileError) {
+          if (!isCurrentScope(scope)) return;
+          console.warn("member_agent_dock_new_chat_reconcile_failed", reconcileError);
+        }
+      }
+      setLocalError("Your agent could not start a new chat. Try again.");
+    } finally {
+      if (isCurrentScope(scope)) setIsStartingNewChat(false);
+    }
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const text = input.trim();
-    if (!text || turnIsActive || !props.communityId || !props.session) return;
+    if (
+      !text ||
+      turnIsActive ||
+      isPreparing ||
+      isStartingNewChat ||
+      !props.communityId ||
+      !props.session
+    ) {
+      return;
+    }
     setLocalError(null);
     setInferenceIssue(null);
     setInput("");
@@ -305,14 +404,23 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       );
       if (!usableSession) throw new Error("auth_session_required");
       if (!isCurrentScope(scope)) return;
-      const thread = await ensureCloudMemberAgentCommunityThread({
+      const thread = await ensureCloudMemberAgentCommunityChannel({
         session: usableSession,
         communityId: props.communityId,
       });
       if (!isCurrentScope(scope)) return;
+      let activeMessages = messages;
+      if (activeThreadKeyRef.current !== thread.thread_key) {
+        activeThreadKeyRef.current = thread.thread_key;
+        setThreadKey(thread.thread_key);
+        setEpisodeId(thread.episode_id);
+        setMessages([]);
+        activeMessages = (await loadMessages(thread.thread_key, usableSession)) ?? [];
+        if (!isCurrentScope(scope)) return;
+      } else {
+        setEpisodeId(thread.episode_id);
+      }
       targetThreadKey = thread.thread_key;
-      activeThreadKeyRef.current = thread.thread_key;
-      setThreadKey(thread.thread_key);
       setSendingByThread((previous) => ({ ...previous, [thread.thread_key]: true }));
       await createThreadMessage(usableSession, {
         id: messageId,
@@ -324,7 +432,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       const optimisticMessage: MemberAgentMessage = {
         id: messageId,
         thread_id: thread.thread_key,
-        seq: messages.length + 1,
+        seq: activeMessages.length + 1,
         role: "user",
         content_json: { text },
         engine_id: null,
@@ -332,9 +440,9 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         run_id: null,
         created_at: new Date().toISOString(),
       };
-      const optimisticMessages = messages.some((message) => message.id === messageId)
-        ? messages
-        : [...messages, optimisticMessage];
+      const optimisticMessages = activeMessages.some((message) => message.id === messageId)
+        ? activeMessages
+        : [...activeMessages, optimisticMessage];
       setMessages(optimisticMessages);
       retryRef.current = null;
       const result = await runAgentTurn(usableSession, thread.thread_key, {
@@ -402,13 +510,27 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
               <small>{turnIsActive ? "Working" : `${props.communityName} context`}</small>
             </span>
           </div>
-          <button type="button" onClick={() => setIsOpen(false)} aria-label="Close" title="Close">
-            <X aria-hidden="true" />
-          </button>
+          <div className="member-agent-dock-header-actions">
+            <button
+              type="button"
+              onClick={() => void startNewChat()}
+              disabled={turnIsActive || isPreparing || isStartingNewChat || !episodeId}
+              aria-label="New chat"
+              title="New chat"
+            >
+              <SquarePen aria-hidden="true" />
+            </button>
+            <button type="button" onClick={() => setIsOpen(false)} aria-label="Close" title="Close">
+              <X aria-hidden="true" />
+            </button>
+          </div>
         </header>
 
         <div className="member-agent-dock-transcript" ref={scrollRef}>
-          {visibleMessages.length === 0 && !turnIsActive && !isPreparing ? (
+          {visibleMessages.length === 0 &&
+          !turnIsActive &&
+          !isPreparing &&
+          !isStartingNewChat ? (
             <div className="member-agent-dock-empty">
               <MessageCircle aria-hidden="true" />
               <p>Ask your agent about {props.communityName}.</p>
@@ -430,6 +552,13 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             <div className="member-agent-dock-reasoning">
               <LoaderCircle aria-hidden="true" />
               <span>Opening your agent</span>
+            </div>
+          ) : null}
+
+          {isStartingNewChat ? (
+            <div className="member-agent-dock-reasoning">
+              <LoaderCircle aria-hidden="true" />
+              <span>Starting a new chat</span>
             </div>
           ) : null}
 
@@ -475,7 +604,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             aria-label="Message your agent"
             rows={1}
             maxLength={8000}
-            disabled={turnIsActive || isPreparing}
+            disabled={turnIsActive || isPreparing || isStartingNewChat}
           />
           {turnIsActive && threadKey ? (
             <button
@@ -489,7 +618,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
           ) : (
             <button
               type="submit"
-              disabled={!input.trim() || isPreparing}
+              disabled={!input.trim() || isPreparing || isStartingNewChat}
               aria-label="Send"
               title="Send"
             >

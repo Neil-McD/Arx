@@ -56,6 +56,7 @@ const INDEXED_USER_REFERENCES: IndexedReferenceSpec[] = [
   { table: "communityResources", index: "by_createdBy", field: "createdByUserId" },
   { table: "communityResourceModules", index: "by_createdBy", field: "createdByUserId" },
   { table: "communityEvents", index: "by_createdBy", field: "createdByUserId" },
+  { table: "memberAgentChannels", index: "by_owner_community", field: "ownerId" },
   { table: "threads", index: "by_owner", field: "ownerId" },
   { table: "cloudMessages", index: "by_owner_messageKey", field: "ownerId" },
   { table: "runtimeRuns", index: "by_owner_startedAt", field: "ownerId" },

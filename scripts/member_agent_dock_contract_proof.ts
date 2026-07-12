@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  buildMemberAgentEpisodeThreadKey,
   buildMemberAgentThreadKey,
   buildRuntimeInvocationSurfacePrompt,
+  isMemberAgentThreadKeyForCommunity,
   resolveRuntimeInvocationSurfaceForThread,
   restrictCapabilityFamiliesForInvocationSurface,
   restrictToolNamesForInvocationSurface,
@@ -21,6 +23,7 @@ function read(path: string): string {
 }
 
 const packageJson = read("package.json");
+const schema = read("convex/schema.ts");
 const threads = read("convex/threads.ts");
 const resolution = read("convex/runtimeTurnResolution.ts");
 const runtimeLoop = read("convex/runtimeAgentLoop.ts");
@@ -31,6 +34,9 @@ const component = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const styles = read("apps/web/src/components/WebMemberAgentDock.css");
 const app = read("apps/web/src/App.tsx");
 const cognitionContract = read("docs/community-agent-cognition-contract-v1.md");
+const account = read("convex/account.ts");
+const anonymousUserCleanup = read("convex/anonymousUserCleanup.ts");
+const communityLifecycle = read("convex/communityLifecycle.ts");
 const profiles = read("convex/profiles.ts");
 const runtimePrompt = read("shared/runtimePrompt.ts");
 
@@ -41,6 +47,26 @@ assert.match(
 
 assert.equal(buildMemberAgentThreadKey("community_1"), "member-agent:community_1");
 assert.throws(() => buildMemberAgentThreadKey(""), /member_agent_community_required/);
+assert.equal(
+  buildMemberAgentEpisodeThreadKey("community_1", 2),
+  "member-agent:community_1:episode:2",
+);
+assert.throws(
+  () => buildMemberAgentEpisodeThreadKey("community_1", 0),
+  /member_agent_episode_ordinal_invalid/,
+);
+assert.equal(
+  isMemberAgentThreadKeyForCommunity("member-agent:community_1", "community_1"),
+  true,
+);
+assert.equal(
+  isMemberAgentThreadKeyForCommunity("member-agent:community_1:episode:3", "community_1"),
+  true,
+);
+assert.equal(
+  isMemberAgentThreadKeyForCommunity("member-agent:community_2:episode:3", "community_1"),
+  false,
+);
 assert.equal(
   resolveRuntimeInvocationSurfaceForThread({
     requestedSurface: "workspace",
@@ -217,9 +243,69 @@ assert.equal(
 assert.doesNotMatch(JSON.stringify(identityManifest), /Neil McDevitt|neilmcd|youtube\.com/);
 
 assert.match(
+  schema,
+  /memberAgentChannels: defineTable\([\s\S]*activeEpisodeId: v\.optional\(v\.id\("memberAgentEpisodes"\)\)[\s\S]*communityNameSnapshot: v\.optional\(v\.string\(\)\)[\s\S]*communityDeletedAt: v\.optional\(v\.number\(\)\)[\s\S]*\.index\("by_owner_community", \["ownerId", "communityId"\]\)[\s\S]*\.index\("by_community", \["communityId"\]\)/,
+  "the stable member-community channel must own the active episode pointer",
+);
+assert.match(
+  schema,
+  /memberAgentEpisodes: defineTable\([\s\S]*channelId: v\.id\("memberAgentChannels"\)[\s\S]*threadId: v\.id\("threads"\)[\s\S]*status: v\.union\(v\.literal\("active"\), v\.literal\("closed"\)\)/,
+  "episode lifecycle metadata must remain separate from canonical threads and messages",
+);
+assert.match(
   threads,
   /ensureMemberAgentCommunityThread = mutation[\s\S]*resolveOwnerIdForAuthenticatedRequest[\s\S]*requireCommunityChatAccess/,
   "the private member-agent channel must authenticate and revalidate community access",
+);
+assert.match(
+  threads,
+  /ensureMemberAgentCommunityChannelCore[\s\S]*buildMemberAgentThreadKey\(communityId\)[\s\S]*buildMemberAgentEpisodeThreadKey\(communityId, 1\)[\s\S]*memberAgentChannels[\s\S]*memberAgentEpisodes/,
+  "the channel must lazily adopt legacy episode one before creating new storage",
+);
+assert.match(
+  threads,
+  /startNewMemberAgentCommunityEpisode = mutation[\s\S]*expectedActiveEpisodeId[\s\S]*status: "closed"[\s\S]*activeEpisodeId: episodeId/,
+  "New chat must close the prior episode and atomically move the channel pointer",
+);
+assert.doesNotMatch(
+  threads.match(/startNewMemberAgentCommunityEpisode = mutation[\s\S]*?\n\}\);/)?.[0] ?? "",
+  /archivedAt|\.delete\(/,
+  "New chat must preserve the prior thread and transcript",
+);
+assert.match(
+  threads,
+  /requireActiveMemberAgentEpisodeForUserMessage[\s\S]*getMemberAgentChannel[\s\S]*episode\.threadId !== args\.thread\._id[\s\S]*member_agent_episode_not_active/,
+  "new user messages must fail closed when addressed to a closed member-agent episode",
+);
+assert.match(
+  threads,
+  /getMemberAgentChannel[\s\S]*\.withIndex\("by_owner_community"[\s\S]*\.unique\(\)/,
+  "channel lookup must fail closed if the one-channel invariant is violated",
+);
+assert.match(
+  communityLifecycle,
+  /tombstoneMemberAgentChannelsForDeletedCommunity[\s\S]*\.withIndex\("by_community"[\s\S]*status: "closed"[\s\S]*activeEpisodeId: undefined[\s\S]*communityDeletedAt: args\.nowMs/,
+  "community deletion must disable member-agent channels without deleting private history",
+);
+assert.match(
+  communityLifecycle,
+  /await tombstoneMemberAgentChannelsForDeletedCommunity\([\s\S]*await ctx\.db\.delete\(community\._id/,
+  "channel tombstones must commit before the community record is removed",
+);
+assert.match(
+  threads,
+  /if \(explicitMessageKey\)[\s\S]*return existingByMessageKey;[\s\S]*if \(args\.role === "user"\)[\s\S]*requireActiveMemberAgentEpisodeForUserMessage/,
+  "idempotent retries may resolve an existing user message after rotation without reopening the episode",
+);
+assert.match(
+  account,
+  /memberAgentChannels[\s\S]*memberAgentEpisodes[\s\S]*ctx\.db\.delete\(channel\._id\)[\s\S]*const threads/,
+  "account deletion must remove episodes before channels and canonical threads",
+);
+assert.match(
+  anonymousUserCleanup,
+  /memberAgentChannels[\s\S]*by_owner_community[\s\S]*ownerId/,
+  "anonymous-user cleanup must treat a member-agent channel as a live user reference",
 );
 assert.match(
   threads,
@@ -233,7 +319,7 @@ assert.match(
 );
 assert.match(
   threads,
-  /buildMemberAgentThreadKey\(communityId\)[\s\S]*member_agent_thread_context_mismatch/,
+  /prepareActiveMemberAgentThread[\s\S]*isMemberAgentThreadKeyForCommunity[\s\S]*member_agent_thread_context_mismatch/,
   "the server must derive the channel key and fail closed on context collisions",
 );
 assert.match(
@@ -253,7 +339,7 @@ assert.match(
 );
 assert.match(
   resolution,
-  /threadKey !== buildMemberAgentThreadKey\(threadCommunityId\)[\s\S]*member_agent_thread_context_mismatch/,
+  /!isMemberAgentThreadKeyForCommunity\(threadKey, threadCommunityId\)[\s\S]*member_agent_thread_context_mismatch/,
 );
 assert.match(
   resolution,
@@ -310,7 +396,7 @@ assert.match(
 
 assert.match(
   gateway,
-  /threads:ensureMemberAgentCommunityThread/,
+  /threads:ensureMemberAgentCommunityThread[\s\S]*threads:startNewMemberAgentCommunityEpisode/,
   "the browser must use the dedicated server-derived channel mutation",
 );
 assert.match(
@@ -319,9 +405,28 @@ assert.match(
 );
 assert.match(
   component,
-  /ensureCloudMemberAgentCommunityThread[\s\S]*useWebTurnRunnerController[\s\S]*runAgentTurn/,
+  /ensureCloudMemberAgentCommunityChannel[\s\S]*useWebTurnRunnerController[\s\S]*runAgentTurn/,
   "the dock must use the retained personal runtime and streaming controller",
 );
+assert.match(
+  component,
+  /startNewCloudMemberAgentCommunityEpisode[\s\S]*expectedActiveEpisodeId[\s\S]*activateEmptyEpisode\(thread\)/,
+  "New chat must switch the active thread only after the server returns the new episode",
+);
+assert.match(
+  component,
+  /member_agent_dock_new_chat_failed[\s\S]*ensureCloudMemberAgentCommunityChannel[\s\S]*current\.episode_id !== expectedEpisodeId[\s\S]*activateEmptyEpisode\(current\)/,
+  "an ambiguous New chat result must reconcile to the active server episode",
+);
+const startNewChatBlock =
+  component.match(/const startNewChat = async \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? "";
+const directRotationBlock = startNewChatBlock.split("} catch (error) {")[0] ?? "";
+assert.doesNotMatch(
+  directRotationBlock,
+  /loadMessages\(/,
+  "a committed empty episode must not be reported as failed because of a redundant read",
+);
+assert.match(component, /aria-label="New chat"[\s\S]*<SquarePen/);
 assert.match(component, /invocationSurface: "member_agent_dock"/);
 assert.match(component, /communityScopeRef[\s\S]*isCurrentScope/);
 assert.doesNotMatch(
@@ -420,7 +525,7 @@ assert.match(
 );
 assert.match(
   cognitionContract,
-  /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*server constructs bounded conversation history[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
+  /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*one stable private channel per member and community[\s\S]*New chat[\s\S]*community deletion closes and tombstones[\s\S]*server constructs bounded conversation history[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
 );
 
 const canonicalContext = buildMemberAgentConversationContext({

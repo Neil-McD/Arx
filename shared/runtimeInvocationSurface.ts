@@ -45,6 +45,31 @@ export function buildMemberAgentThreadKey(communityId: string): string {
   return `${MEMBER_AGENT_THREAD_KEY_PREFIX}:${normalizedCommunityId}`.slice(0, 200);
 }
 
+export function buildMemberAgentEpisodeThreadKey(
+  communityId: string,
+  ordinal: number,
+): string {
+  const legacyKey = buildMemberAgentThreadKey(communityId);
+  if (!Number.isSafeInteger(ordinal) || ordinal < 1) {
+    throw new Error("member_agent_episode_ordinal_invalid");
+  }
+  return `${legacyKey}:episode:${ordinal}`.slice(0, 200);
+}
+
+export function isMemberAgentThreadKeyForCommunity(
+  threadKey: string,
+  communityId: string,
+): boolean {
+  const normalizedThreadKey = String(threadKey ?? "").trim();
+  const legacyKey = buildMemberAgentThreadKey(communityId);
+  if (normalizedThreadKey === legacyKey) return true;
+  const episodeOrdinal = normalizedThreadKey.slice(`${legacyKey}:episode:`.length);
+  return (
+    normalizedThreadKey.startsWith(`${legacyKey}:episode:`) &&
+    /^[1-9]\d*$/.test(episodeOrdinal)
+  );
+}
+
 export function restrictCapabilityFamiliesForInvocationSurface(params: {
   invocationSurface: RuntimeInvocationSurface;
   capabilityFamilies: readonly CapabilityFamily[];
