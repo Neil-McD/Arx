@@ -167,6 +167,7 @@ export type BuildRuntimeContextManifestInput = {
   selectedPersonalSkills?: readonly ManifestSkillInput[] | null;
   selectedCommunitySkills?: readonly ManifestSkillInput[] | null;
   hasBrowserBuiltDemoPrompt?: boolean | null;
+  memberIdentityContextMd?: string | null;
 };
 
 const PRODUCT_DOC_TOOL_NAMES = new Set<RetrievalToolName>([
@@ -411,6 +412,16 @@ function buildPromptEntries(params: BuildRuntimeContextManifestInput & {
       reason: "member-configured agent posture",
     });
   }
+  if (hasText(params.memberIdentityContextMd)) {
+    prompts.push({
+      id: "member_identity_context",
+      owner: "user",
+      authority: "scoped",
+      injected: true,
+      source: "shared/memberAgentIdentityContext.ts",
+      reason: "bounded deterministic member identity context",
+    });
+  }
   if (hasText(params.communityId)) {
     prompts.push({
       id: "community_lens",
@@ -487,6 +498,16 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
   resourceLane: CommunityResourceRuntimeLaneState;
 }): RuntimeContextManifestResource[] {
   const resources: RuntimeContextManifestResource[] = [];
+  if (hasText(params.memberIdentityContextMd)) {
+    resources.push({
+      id: "member_identity_context",
+      owner: "user",
+      retrieval: "injected_excerpt",
+      visibility: "private",
+      source: "profiles.resolveMemberAgentIdentityContextInternal",
+      reason: "deterministic account identity for the member's private agent",
+    });
+  }
   if (hasAnyTool(params.allowedToolNames, PRODUCT_DOC_TOOL_NAMES)) {
     resources.push({
       id: "product_docs",

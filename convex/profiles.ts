@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { ensureAuthenticatedActor, resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { validateProfileHandle } from "../shared/profileHandle";
@@ -136,6 +136,27 @@ async function findProfileDetailByUserId(ctx: any, userId: any): Promise<Profile
     .withIndex("by_user", (q: any) => q.eq("userId", userId))
     .first()) as ProfileDetailRow | null;
 }
+
+export const resolveMemberAgentIdentityContextInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const [user, detail] = await Promise.all([
+      ctx.db.get(args.userId) as Promise<UserRow | null>,
+      findProfileDetailByUserId(ctx, args.userId),
+    ]);
+    if (!user) return null;
+
+    return {
+      display_name: detail?.displayName ?? user.displayName ?? null,
+      handle: user.handle ?? null,
+      bio: detail?.bio ?? null,
+      timezone: (detail as any)?.timezone ?? null,
+      social_links: normalizeSocialProfileLinks(detail?.socialLinks ?? {}),
+    };
+  },
+});
 
 async function resolveProfileAvatarFields(ctx: any, detail: ProfileDetailRow | null) {
   const avatarUrl = await maybeResolveStorageUrl(ctx, detail?.avatarStorageId);

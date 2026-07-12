@@ -163,6 +163,7 @@ export type RuntimePlatformHarnessPromptParams = RuntimeCommunityPromptFields & 
   currentDateLabel?: string | null;
   currentTimeZone?: string | null;
   invocationSurface?: RuntimeInvocationSurface;
+  memberIdentityContextMd?: string | null;
 };
 
 function normalizePromptBlock(value: string | null | undefined): string | null {
@@ -839,6 +840,13 @@ export function buildPlatformHarnessRuntimePromptBundle(
             owner: "runtime",
             source: "shared/runtimeInvocationSurface.ts#buildRuntimeInvocationSurfacePrompt",
             text: buildRuntimeInvocationSurfacePrompt(params.invocationSurface),
+          }),
+          buildRuntimePromptSection({
+            id: "member_identity_context",
+            layer: "scoped",
+            owner: "user",
+            source: "shared/memberAgentIdentityContext.ts#renderMemberAgentIdentityContext",
+            text: params.memberIdentityContextMd,
           }),
         ]
       : []),
