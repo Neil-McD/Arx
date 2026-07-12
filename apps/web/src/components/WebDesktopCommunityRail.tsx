@@ -116,9 +116,9 @@ export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
         <button
           type="button"
           className={`community-rail-button${
-            communityShell.activeView === "settings" ? " active" : ""
+            communityShell.activePage === "settings" ? " active" : ""
           }`}
-          onClick={communityShell.onToggleWorkspaceSettings}
+          onClick={communityShell.onOpenGlobalSettings}
           title="Settings"
           aria-label="Settings"
         >

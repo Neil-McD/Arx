@@ -6,14 +6,16 @@ import {
   type SetStateAction,
   type TouchEventHandler,
 } from "react";
-import type { AppPage, AppView } from "../../../../shared/appShellNavigation";
+import type {
+  AppPage,
+  SettingsPage,
+} from "../../../../shared/appShellNavigation";
 import type { MobileOverlay, MobileRootPage } from "../components/webShellChromeShared";
 
 type MobileSettingsView = "index" | "detail";
 
 export function useWebMobileShellController(params: {
   activePage: AppPage;
-  activeView: AppView;
   activeCommunitySlug: string | null;
   selectedActiveCommunitySlug: string | null;
   mobileRootPage: MobileRootPage;
@@ -25,9 +27,8 @@ export function useWebMobileShellController(params: {
   showMobileSettingsShell: boolean;
   setMobileOverlay: Dispatch<SetStateAction<MobileOverlay | null>>;
   setMobileRootPage: Dispatch<SetStateAction<MobileRootPage>>;
-  setActivePage: Dispatch<SetStateAction<AppPage>>;
-  setActiveView: Dispatch<SetStateAction<AppView>>;
   setMobileSettingsView: Dispatch<SetStateAction<MobileSettingsView>>;
+  openGlobalSettings: (page: SettingsPage) => void;
   openCommunityChat: (communitySlug: string, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }) => void;
   handleOpenDiscover: () => void;
   handleTopbarBackToCommunity: () => void;
@@ -70,10 +71,6 @@ export function useWebMobileShellController(params: {
       if (nextRootPage === "agent") {
         params.setMobileOverlay(null);
         params.setMobileRootPage("agent");
-        if (params.activeView === "settings") {
-          params.setActiveView("home");
-          return;
-        }
         if (params.activePage !== "workspace") {
           params.handleTopbarBackToCommunity();
         }
@@ -101,11 +98,9 @@ export function useWebMobileShellController(params: {
     },
     [
       params.activePage,
-      params.activeView,
       params.canViewMembersRoot,
       params.forceCommunityRoot,
       params.handleTopbarBackToCommunity,
-      params.setActiveView,
       params.setMobileOverlay,
       params.setMobileRootPage,
       openMobileCommunitySurface,
@@ -114,12 +109,10 @@ export function useWebMobileShellController(params: {
 
   const openMobileAgentSettings = useCallback(() => {
     params.setMobileOverlay(null);
-    params.setActivePage("workspace");
-    params.setActiveView("settings");
+    params.openGlobalSettings("agent");
     params.setMobileSettingsView("index");
   }, [
-    params.setActivePage,
-    params.setActiveView,
+    params.openGlobalSettings,
     params.setMobileOverlay,
     params.setMobileSettingsView,
   ]);

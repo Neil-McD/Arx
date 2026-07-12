@@ -1054,7 +1054,7 @@ assert.match(
 );
 assert.match(
   app,
-  /onOpenWorkspaceBilling:[\s\S]*setActiveView\("settings"\)[\s\S]*setSettingsPage\("billing"\)/,
+  /const openPremiumBilling = \(\) => openGlobalSettings\("billing"\)[\s\S]*onOpenWorkspaceBilling: openPremiumBilling/,
   "right-panel workspace billing action must open the canonical billing settings page",
 );
 

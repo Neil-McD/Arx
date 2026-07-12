@@ -14,6 +14,8 @@ const mobileController = read("apps/web/src/controllers/useWebMobileShellControl
 const mobileTopBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
+const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx");
+const workspaceSurface = read("apps/web/src/components/WebWorkspaceSurfaceHost.tsx");
 const communityAgentSection = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
 const communityAgentInstructions = read("apps/web/src/components/WebCommunityAiAgentInstructionsEditor.tsx");
 const communityLaunchSetup = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
@@ -154,8 +156,18 @@ assert.match(
 
 assert.match(
   mainSurface,
-  /import \{ WebWorkspaceSurfaceHost \}[\s\S]*activePage === "workspace"[\s\S]*WebWorkspaceSurfaceHost/,
+  /import \{ WebSettingsSurfaceHost \}[\s\S]*import \{ WebWorkspaceSurfaceHost \}[\s\S]*activePage === "settings"[\s\S]*WebSettingsSurfaceHost[\s\S]*activePage === "workspace"[\s\S]*WebWorkspaceSurfaceHost/,
   "the protected Workspace implementation must remain isolated for later migration",
+);
+assert.match(
+  settingsSurface,
+  /WebSettingsPanels[\s\S]*SettingsNavList/,
+  "global settings must own its renderer and navigation independently of Workspace",
+);
+assert.doesNotMatch(
+  workspaceSurface,
+  /Settings|activeView/,
+  "the quarantined Workspace surface must not own global settings behavior",
 );
 assert.match(
   mcp,

@@ -262,10 +262,7 @@ import type {
   UserProfileDetail as SharedUserProfileDetail,
 } from "../../../shared/communityTypes";
 import type { CreateSkillPackageInput } from "../../../shared/skillPackageTypes";
-import {
-  deriveOpenDiscoverTransition,
-  deriveToggleWorkspaceSettingsTransition,
-} from "../../../shared/appNavTransitions";
+import { deriveOpenDiscoverTransition } from "../../../shared/appNavTransitions";
 import {
   type AppShellVariant,
   type AppRouteState,
@@ -4631,6 +4628,7 @@ export default function App() {
   useEffect(() => {
     const needsOnboardingProfile =
       activePage === "workspace" ||
+      activePage === "settings" ||
       activePage === "community" ||
       activePage === "onboarding" ||
       publicRoute.kind === "community_funnel";
@@ -4697,6 +4695,11 @@ export default function App() {
     pushUniqueNavSnapshot(navStackRef.current, snapshot, {
       includeWorkspaceWantsNewChat: true,
     });
+  };
+  const openGlobalSettings = (page: SettingsPage): void => {
+    if (activePage === "settings" && settingsPage === page) return;
+    if (activePage !== "settings") pushNavSnapshot();
+    navigateTo(buildSettingsPath(page));
   };
   const {
     syncCommunitySelection,
@@ -5775,12 +5778,7 @@ export default function App() {
     maybeSetThreadTitleFromText,
     setThreadCommunityLens,
   } = workspaceCore.threadMutation;
-  const openWorkspacePremiumBilling = useCallback(() => {
-    pushNavSnapshot();
-    setActivePage("workspace");
-    setActiveView("settings");
-    setSettingsPage("billing");
-  }, [pushNavSnapshot]);
+  const openPremiumBilling = () => openGlobalSettings("billing");
   const handleWorkspaceRuntimeEngineChange = useCallback(
     (next: RuntimeEngine): void => {
       const runtimeEngine = normalizeActiveWorkspaceRuntimeEngine(next);
@@ -5793,7 +5791,7 @@ export default function App() {
           accountTier: accountCommerceStatus?.account_tier ?? null,
         })
       ) {
-        openWorkspacePremiumBilling();
+        openPremiumBilling();
         return;
       }
       setActiveRuntimeEngine(runtimeEngine);
@@ -5814,7 +5812,7 @@ export default function App() {
       accountCommerceStatus?.account_tier,
       accountCommerceStatus,
       isLoadingAccountCommerce,
-      openWorkspacePremiumBilling,
+      openPremiumBilling,
       setActiveRuntimeEngine,
       setThreads,
       updateThreadRuntimeEngine,
@@ -6963,9 +6961,7 @@ export default function App() {
   useEffect(() => {
     const shouldLoadUserPlatformApps =
       activePage === "discover" ||
-      (activePage === "workspace" &&
-        activeView === "settings" &&
-        settingsPage === "integrations");
+      (activePage === "settings" && settingsPage === "integrations");
     if (!shouldLoadUserPlatformApps) return;
     if (!session) {
       clearUserPlatformAppMounts();
@@ -6975,7 +6971,6 @@ export default function App() {
     void loadUserPlatformAppMounts(session);
   }, [
     activePage,
-    activeView,
     session,
     settingsPage,
     clearUserPlatformAppMounts,
@@ -6988,9 +6983,7 @@ export default function App() {
       activePage === "discover" ||
       (activePage === "community" && communityTab === "settings") ||
       (activePage === "community" && communityTab === "ai_agent") ||
-      (activePage === "workspace" &&
-        activeView === "settings" &&
-        settingsPage === "integrations");
+      (activePage === "settings" && settingsPage === "integrations");
     if (!shouldLoadEffectiveMcpApps) return;
     if (!session) {
       clearEffectiveMcpApps();
@@ -7002,7 +6995,6 @@ export default function App() {
   }, [
     activeCommunityId,
     activePage,
-    activeView,
     communityTab,
     session,
     settingsPage,
@@ -7013,8 +7005,7 @@ export default function App() {
 
   useEffect(() => {
     const shouldLoadEffectiveSkills =
-      activePage === "workspace" &&
-      activeView === "settings" &&
+      activePage === "settings" &&
       settingsPage === "integrations";
     if (!shouldLoadEffectiveSkills) return;
     if (!session) {
@@ -7027,7 +7018,6 @@ export default function App() {
   }, [
     activeCommunityId,
     activePage,
-    activeView,
     session,
     settingsPage,
     clearEffectiveSkills,
@@ -7038,9 +7028,7 @@ export default function App() {
   useEffect(() => {
     const shouldLoadUserPlatformSkills =
       activePage === "discover" ||
-      (activePage === "workspace" &&
-        activeView === "settings" &&
-        settingsPage === "integrations");
+      (activePage === "settings" && settingsPage === "integrations");
     if (!shouldLoadUserPlatformSkills) return;
     if (!session) {
       clearUserPlatformSkills();
@@ -7050,7 +7038,6 @@ export default function App() {
     void loadUserPlatformSkills(session);
   }, [
     activePage,
-    activeView,
     session,
     settingsPage,
     clearUserPlatformSkills,
@@ -7062,9 +7049,7 @@ export default function App() {
     const shouldLoadCommunitySkills =
       (activePage === "community" && communityTab === "ai_agent") ||
       activePage === "discover" ||
-      (activePage === "workspace" &&
-        activeView === "settings" &&
-        settingsPage === "integrations");
+      (activePage === "settings" && settingsPage === "integrations");
     if (!shouldLoadCommunitySkills) return;
     if (!session || !activeCommunityId || !canManageMembersActiveCommunity) {
       clearCommunitySkillAttachments();
@@ -7074,7 +7059,6 @@ export default function App() {
     void loadCommunitySkillAttachments(activeCommunityId, session);
   }, [
     activePage,
-    activeView,
     communityTab,
     session,
     activeCommunityId,
@@ -7188,8 +7172,7 @@ export default function App() {
           return;
         }
         if (payload.provider === "openai") {
-          setActiveView("settings");
-          setSettingsPage("account");
+          openGlobalSettings("account");
           showAppToastMessage("Paste your OpenAI API key in Account settings.");
           return;
         }
@@ -9160,7 +9143,7 @@ export default function App() {
     isPublicCommunityFunnel,
   });
   const {
-    isWorkspaceSettings,
+    isGlobalSettings,
     showMobileAppShell,
     showMobileSettingsShell,
     showMobileShell,
@@ -9459,7 +9442,7 @@ export default function App() {
     authPresentationState === "signed_in" &&
     accountGraphHydrationPhase === "critical";
 
-	  const handleTopbarBackFromWorkspaceSettings = () => {
+	  const handleTopbarBackFromSettings = () => {
 	    handleTopbarBackToCommunity();
 	  };
 	  const handleTopbarBackFromPublicFunnel = () => {
@@ -10232,7 +10215,6 @@ export default function App() {
       handleMobileShellTouchCancel,
     } = useWebMobileShellController({
       activePage,
-      activeView,
       activeCommunitySlug: String(activeCommunity?.slug ?? "").trim() || null,
       selectedActiveCommunitySlug,
       mobileRootPage,
@@ -10244,9 +10226,8 @@ export default function App() {
       showMobileSettingsShell,
       setMobileOverlay,
       setMobileRootPage,
-      setActivePage,
-      setActiveView,
       setMobileSettingsView,
+      openGlobalSettings,
       openCommunityChat,
       handleOpenDiscover,
       handleTopbarBackToCommunity,
@@ -10260,12 +10241,6 @@ export default function App() {
       if (hasSelectedCommunity) return;
       navigateTo("/discover", { replace: true });
     }, [activePage, hasSelectedCommunity, shellPublicRoute.kind]);
-	  const handleToggleWorkspaceSettings = () => {
-	    const transition = deriveToggleWorkspaceSettingsTransition({ activePage, activeView });
-	    if (transition.shouldPushSnapshot) pushNavSnapshot();
-	    setActivePage(transition.nextPage);
-	    setActiveView(transition.nextView);
-	  };
   const handleSelectActiveCommunity = useCallback((community: CommunityRecord): boolean => {
     if (
       !confirmDiscardUnsavedCommunitySettingsWeb({
@@ -11317,9 +11292,8 @@ export default function App() {
     inferenceIssueModal,
     isInferenceIssueModalRunning,
     setInferenceIssueModal,
-    setActiveView,
-    setSettingsPage,
-    onOpenPremiumBilling: openWorkspacePremiumBilling,
+    onOpenSettings: openGlobalSettings,
+    onOpenPremiumBilling: openPremiumBilling,
     isFreeAccountInfoOpen,
     accountCommerceError,
     communityModalHostProps: communityUi.modalHostProps,
@@ -11483,7 +11457,7 @@ export default function App() {
     extractRuntimeEngineIdFromMessageContent,
     formatModelSignature,
     renderMarkdown,
-    onOpenPremiumBilling: openWorkspacePremiumBilling,
+    onOpenPremiumBilling: openPremiumBilling,
   });
   const {
     showControl: showWorkspaceRightPanelControl,
@@ -11537,12 +11511,7 @@ export default function App() {
     activeProjectName: currentWorkspaceProjectName,
     activeThreadTitle: activeThread ? getThreadDisplayTitle(activeThread) : null,
     activeModelLabel: workspace.derived.activeModelLabel,
-    onOpenWorkspaceBilling: () => {
-      pushNavSnapshot();
-      setActivePage("workspace");
-      setActiveView("settings");
-      setSettingsPage("billing");
-    },
+    onOpenWorkspaceBilling: openPremiumBilling,
     onTurnOnComputer: turnOnWorkspaceComputer,
     onTurnOffComputer: turnOffWorkspaceComputer,
   });
@@ -11831,8 +11800,7 @@ export default function App() {
           : null,
     },
     showOnboardingModal: shellPublicRoute.kind === "app" && isOnboardingModalOpen,
-    workspaceSurfaceHostProps: {
-      activeView,
+    settingsSurfaceHostProps: {
       settingsGroup: settingsGroup as SettingsGroup,
       showMobileSettingsShell,
       showMobileSettingsIndex,
@@ -11842,6 +11810,8 @@ export default function App() {
       },
       onShowMobileSettingsIndex: () => setMobileSettingsView("index"),
       settingsPanelsProps,
+    },
+    workspaceSurfaceHostProps: {
       workspaceHostProps: {
         ...workspaceHostProps,
         showWorkspaceRightPanel: showWorkspaceRightPanelControl,
@@ -12091,7 +12061,7 @@ export default function App() {
         onSaveAbout={handleSaveCommunityLaunchAbout}
         onAddKnowledgeLink={handleAddCommunityLaunchKnowledgeLink}
         accountTier={accountCommerceStatus?.account_tier ?? null}
-        onOpenPremiumBilling={openWorkspacePremiumBilling}
+        onOpenPremiumBilling={openPremiumBilling}
         onAddKnowledgeFile={handleAddCommunityLaunchKnowledgeFile}
         onLoadKnowledgeSources={handleLoadCommunityLaunchKnowledgeSources}
         onRemoveKnowledgeLinkSource={handleRemoveCommunityLaunchKnowledgeSource}
@@ -12215,7 +12185,7 @@ export default function App() {
     directMessagesButton,
     handleExitPublicFunnelPreview,
     handleTopbarBackFromPublicFunnel,
-    handleTopbarBackFromWorkspaceSettings,
+    handleTopbarBackFromSettings,
     setUserWantsSessions,
     handleTopbarBackToCommunity,
     workspaceShellPanels,
@@ -12282,13 +12252,13 @@ export default function App() {
     setCommunityRailListElement,
     getCommunityRailItemBindings,
     setIsFreeAccountInfoOpen,
-    handleToggleWorkspaceSettings: isVisitorCommunitySurface
+    handleOpenGlobalSettings: isVisitorCommunitySurface
       ? () => navigateTo(buildSettingsPath("agent"))
-      : handleToggleWorkspaceSettings,
+      : () => openGlobalSettings("agent"),
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,
     hasLeftPanel,
-    isWorkspaceSettings,
+    isGlobalSettings,
     mainSurface,
     globalOverlays,
   });

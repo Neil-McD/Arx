@@ -36,7 +36,7 @@ export type WebShellChromeHostProps = {
   hasLeftPanel: boolean;
   showDesktopCommunityRail: boolean;
   showDesktopCommunityNav: boolean;
-  isWorkspaceSettings: boolean;
+  isGlobalSettings: boolean;
   mainSurface: ReactNode;
   globalOverlays: ReactNode;
 };
@@ -91,7 +91,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     mobileOverlay: Boolean(props.mobileOverlay),
     showDesktopCommunityRail: props.showDesktopCommunityRail,
     showDesktopCommunityNav: props.showDesktopCommunityNav,
-    isWorkspaceSettings: props.isWorkspaceSettings,
+    isGlobalSettings: props.isGlobalSettings,
     hasLeftPanel: props.hasLeftPanel,
   });
 

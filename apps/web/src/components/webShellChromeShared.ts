@@ -49,7 +49,7 @@ export type WebDesktopShellHeaderProps = {
   directMessagesButton: ReactNode;
   onExitPublicFunnelPreview: () => void;
   onBackFromPublicFunnel: () => void;
-  onBackFromWorkspaceSettings: () => void;
+  onBackFromSettings: () => void;
   onToggleSessions: () => void;
   onStartNewThread: () => void;
   onBackToCommunity: () => void;
@@ -98,12 +98,12 @@ export type WebCommunityShellProps = {
   communityCreateCtaLabel: string;
   communityCreateCtaTitle: string;
   activeView: AppView;
-  onToggleWorkspaceSettings: () => void;
+  onOpenGlobalSettings: () => void;
 };
 
 export type WebSettingsSidebarProps = {
   showMobileSettingsShell: boolean;
-  isWorkspaceSettings: boolean;
+  isGlobalSettings: boolean;
   settingsGroup: SettingsGroup;
   onSelectPage: (page: SettingsPage) => void;
 };

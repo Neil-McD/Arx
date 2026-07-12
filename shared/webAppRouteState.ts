@@ -408,8 +408,8 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
 
   if (segments[0] === "settings") {
     return {
-      page: "workspace",
-      view: "settings",
+      page: "settings",
+      view: "home",
       settingsPage: parseSettingsPage(segments[1] ?? null),
       communitySlug: null,
       communityTab: "chat",
@@ -502,7 +502,7 @@ export function readAppRouteFromLocation(): AppRouteState {
 }
 
 export function buildAppRoutePath(state: AppRoutePathState): string | null {
-  if (state.view === "settings") {
+  if (state.page === "settings") {
     return buildSettingsPath(state.settingsPage);
   }
 
