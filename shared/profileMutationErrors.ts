@@ -1,4 +1,6 @@
 const PROFILE_MUTATION_ERROR_MESSAGES = {
+  profile_display_name_too_long: "Display name must be 120 characters or less.",
+  profile_bio_too_long: "Bio must be 500 characters or less.",
   profile_handle_taken: "That handle is already taken.",
   profile_handle_empty: "Add a handle to continue.",
   profile_handle_reserved: "That handle is reserved.",

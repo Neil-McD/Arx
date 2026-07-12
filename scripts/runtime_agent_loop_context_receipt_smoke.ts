@@ -176,6 +176,11 @@ assert.equal(manifest?.request?.conversationMessageCount, 1);
 assert.ok(manifest?.summary?.promptCount > 0, "manifest should enumerate prompt inputs");
 assert.ok(manifest?.summary?.toolCount > 0, "manifest should enumerate active tools");
 assert.ok(manifest?.summary?.runtimeStateCount > 0, "manifest should enumerate runtime state");
+assert.equal(
+  manifest?.runtimeState?.find((state: any) => state.id === "member_identity_context")?.status,
+  "not_applicable",
+  "workspace receipts should explicitly record that private identity projection was not applicable",
+);
 assert.ok(
   queryCalls.length > 0,
   "smoke should exercise the runtime loop's Convex query boundary",

@@ -9,6 +9,8 @@ import {
 } from "./communityResourceLane.ts";
 import type { RuntimeTurnEnvelopeV1 } from "./runtimeTurnEnvelope.ts";
 import type { RuntimeTurnContextPacket } from "./runtimeTurnContextPacket.ts";
+import type { RuntimeInvocationSurface } from "./runtimeInvocationSurface.ts";
+import type { MemberIdentityContextStatus } from "./memberAgentIdentityContext.ts";
 
 export type RuntimeContextManifestOwner =
   | "platform"
@@ -81,6 +83,7 @@ export type RuntimeContextManifestTool = {
 export type RuntimeContextManifestRuntimeState = {
   id: string;
   kind: string;
+  status?: MemberIdentityContextStatus;
   rendered: boolean;
   redacted: boolean;
   source: string;
@@ -167,7 +170,9 @@ export type BuildRuntimeContextManifestInput = {
   selectedPersonalSkills?: readonly ManifestSkillInput[] | null;
   selectedCommunitySkills?: readonly ManifestSkillInput[] | null;
   hasBrowserBuiltDemoPrompt?: boolean | null;
+  invocationSurface?: RuntimeInvocationSurface | null;
   memberIdentityContextMd?: string | null;
+  memberIdentityContextStatus?: MemberIdentityContextStatus | null;
 };
 
 const PRODUCT_DOC_TOOL_NAMES = new Set<RetrievalToolName>([
@@ -238,6 +243,21 @@ function compactText(value: unknown, limit: number): string | null {
 
 function hasText(value: unknown): boolean {
   return Boolean(compactText(value, 1));
+}
+
+function resolveMemberIdentityContextStatus(
+  params: BuildRuntimeContextManifestInput,
+): MemberIdentityContextStatus {
+  if (params.invocationSurface !== "member_agent_dock") return "not_applicable";
+  if (params.memberIdentityContextStatus === "error") return "error";
+  if (params.memberIdentityContextStatus === "loaded" && hasText(params.memberIdentityContextMd)) {
+    return "loaded";
+  }
+  return hasText(params.memberIdentityContextMd) ? "loaded" : "empty";
+}
+
+function hasMemberIdentityContext(params: BuildRuntimeContextManifestInput): boolean {
+  return resolveMemberIdentityContextStatus(params) === "loaded";
 }
 
 function uniqueToolNames(values: readonly RetrievalToolName[] | null | undefined): RetrievalToolName[] {
@@ -412,7 +432,7 @@ function buildPromptEntries(params: BuildRuntimeContextManifestInput & {
       reason: "member-configured agent posture",
     });
   }
-  if (hasText(params.memberIdentityContextMd)) {
+  if (hasMemberIdentityContext(params)) {
     prompts.push({
       id: "member_identity_context",
       owner: "user",
@@ -498,7 +518,7 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
   resourceLane: CommunityResourceRuntimeLaneState;
 }): RuntimeContextManifestResource[] {
   const resources: RuntimeContextManifestResource[] = [];
-  if (hasText(params.memberIdentityContextMd)) {
+  if (hasMemberIdentityContext(params)) {
     resources.push({
       id: "member_identity_context",
       owner: "user",
@@ -630,6 +650,16 @@ function buildToolEntries(params: BuildRuntimeContextManifestInput & {
 function buildRuntimeStateEntries(params: BuildRuntimeContextManifestInput): RuntimeContextManifestRuntimeState[] {
   const packet = params.runtimeTurnContext;
   const state: RuntimeContextManifestRuntimeState[] = [];
+  const identityStatus = resolveMemberIdentityContextStatus(params);
+  state.push({
+    id: "member_identity_context",
+    kind: "private_profile_projection",
+    status: identityStatus,
+    rendered: identityStatus === "loaded",
+    redacted: true,
+    source: "profiles.resolveMemberAgentIdentityContextInternal",
+    reason: "private deterministic identity projection status",
+  });
   if (params.runtimeTurnEnvelope) {
     state.push({
       id: "runtime_turn_envelope",

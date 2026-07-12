@@ -100,7 +100,10 @@ import {
 import {
   buildRuntimeContextManifest,
 } from "../shared/runtimeContextManifest.ts";
-import { renderMemberAgentIdentityContext } from "../shared/memberAgentIdentityContext.ts";
+import {
+  renderMemberAgentIdentityContext,
+  type MemberIdentityContextStatus,
+} from "../shared/memberAgentIdentityContext.ts";
 import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { parseProviderModelRef } from "./httpInferenceConfig";
@@ -1593,7 +1596,9 @@ async function executeRetrievalAgentLoop(
   ).packet;
   const projectContext = runtimeTurnContext.projectContext ?? null;
   let memberIdentityContextMd: string | null = null;
+  let memberIdentityContextStatus: MemberIdentityContextStatus = "not_applicable";
   if (params.invocationSurface === "member_agent_dock") {
+    memberIdentityContextStatus = "empty";
     try {
       const identity = await params.ctx.runQuery(
         internal.profiles.resolveMemberAgentIdentityContextInternal,
@@ -1610,9 +1615,11 @@ async function executeRetrievalAgentLoop(
             }
           : null,
       );
+      memberIdentityContextStatus = memberIdentityContextMd ? "loaded" : "empty";
     } catch {
       // Identity context improves personalization but must never block a member turn.
       memberIdentityContextMd = null;
+      memberIdentityContextStatus = "error";
     }
   }
   const runtimeContextManifest = buildRuntimeContextManifest({
@@ -1637,7 +1644,9 @@ async function executeRetrievalAgentLoop(
     selectedPlatformSkills,
     selectedPersonalSkills: selectedUserPlatformSkills,
     selectedCommunitySkills,
+    invocationSurface: params.invocationSurface,
     memberIdentityContextMd,
+    memberIdentityContextStatus,
   });
   const runtimePromptBundle = buildPlatformHarnessRuntimePromptBundle({
     loopBudget: params.loopBudget,

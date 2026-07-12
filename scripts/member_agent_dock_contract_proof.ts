@@ -151,7 +151,9 @@ assert.equal(
 assert.doesNotMatch(workspacePromptBundle.text, /MEMBER_IDENTITY_CONTEXT/);
 
 const identityManifest = buildRuntimeContextManifest({
+  invocationSurface: "member_agent_dock",
   memberIdentityContextMd: identityContext,
+  memberIdentityContextStatus: "loaded",
 });
 assert.deepEqual(
   identityManifest.resources.find((resource) => resource.id === "member_identity_context"),
@@ -164,6 +166,55 @@ assert.deepEqual(
     reason: "deterministic account identity for the member's private agent",
   },
 );
+assert.deepEqual(
+  identityManifest.runtimeState.find((state) => state.id === "member_identity_context"),
+  {
+    id: "member_identity_context",
+    kind: "private_profile_projection",
+    status: "loaded",
+    rendered: true,
+    redacted: true,
+    source: "profiles.resolveMemberAgentIdentityContextInternal",
+    reason: "private deterministic identity projection status",
+  },
+);
+
+const emptyIdentityManifest = buildRuntimeContextManifest({
+  invocationSurface: "member_agent_dock",
+  memberIdentityContextStatus: "empty",
+});
+assert.equal(
+  emptyIdentityManifest.runtimeState.find((state) => state.id === "member_identity_context")?.status,
+  "empty",
+);
+
+const errorIdentityManifest = buildRuntimeContextManifest({
+  invocationSurface: "member_agent_dock",
+  memberIdentityContextStatus: "error",
+});
+assert.equal(
+  errorIdentityManifest.runtimeState.find((state) => state.id === "member_identity_context")?.status,
+  "error",
+);
+
+const workspaceIdentityManifest = buildRuntimeContextManifest({
+  invocationSurface: "workspace",
+  memberIdentityContextMd: identityContext,
+  memberIdentityContextStatus: "loaded",
+});
+assert.equal(
+  workspaceIdentityManifest.prompts.some((prompt) => prompt.id === "member_identity_context"),
+  false,
+);
+assert.equal(
+  workspaceIdentityManifest.resources.some((resource) => resource.id === "member_identity_context"),
+  false,
+);
+assert.equal(
+  workspaceIdentityManifest.runtimeState.find((state) => state.id === "member_identity_context")?.status,
+  "not_applicable",
+);
+assert.doesNotMatch(JSON.stringify(identityManifest), /Neil McDevitt|neilmcd|youtube\.com/);
 
 assert.match(
   threads,
