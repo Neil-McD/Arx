@@ -11581,24 +11581,32 @@ export default function App() {
           }
         : null,
   });
+  const canonicalPolynetMemberAgentCommunity =
+    communities.find(
+      (community) => String(community.slug ?? "").trim().toLowerCase() === "polynet",
+    ) ?? null;
+  const memberAgentDockCommunity =
+    activePage === "community"
+      ? activeCommunity
+      : canonicalPolynetMemberAgentCommunity;
+  const isMemberAgentDockVisible =
+    Boolean(session) &&
+    publicRoute.kind === "app" &&
+    activePage !== "landing" &&
+    activePage !== "onboarding" &&
+    hasResolvedCommunities &&
+    Boolean(memberAgentDockCommunity?.id) &&
+    !isCommunityLaunchSetupModalOpen &&
+    !isDirectMessagesOpen &&
+    !isOnboardingModalOpen;
   const globalOverlays = (
     <>
       <WebGlobalOverlayHost {...globalOverlayHostProps} />
       <Suspense fallback={null}>
         <WebMemberAgentDock
-          isVisible={
-            Boolean(session) &&
-            activePage === "community" &&
-            publicRoute.kind !== "community_funnel" &&
-            publicRoute.kind !== "community_funnel_preview" &&
-            hasResolvedCommunityChat &&
-            !isCommunityLaunchSetupModalOpen &&
-            !isDirectMessagesOpen &&
-            !isOnboardingModalOpen &&
-            !["settings", "ai_agent", "funnel", "analytics"].includes(communityTab)
-          }
-          communityId={activeCommunity?.id ?? null}
-          communityName={activeCommunity?.name ?? "Community"}
+          isVisible={isMemberAgentDockVisible}
+          communityId={memberAgentDockCommunity?.id ?? null}
+          communityName={memberAgentDockCommunity?.name ?? "Polynet"}
           session={session}
           ensureSession={ensureUsableAuthSession}
           fetchPublic={fetchWithPublic}

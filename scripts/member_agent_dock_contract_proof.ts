@@ -426,7 +426,12 @@ assert.doesNotMatch(
   /loadMessages\(/,
   "a committed empty episode must not be reported as failed because of a redundant read",
 );
-assert.match(component, /aria-label="New chat"[\s\S]*<SquarePen/);
+assert.match(
+  component,
+  /aria-label="Start fresh conversation"[\s\S]*title="Start fresh conversation"[\s\S]*<MessageSquarePlus/,
+  "the fresh-conversation action must use a conversation-specific icon and label",
+);
+assert.match(component, /<span>Starting fresh<\/span>/);
 assert.match(component, /invocationSurface: "member_agent_dock"/);
 assert.match(component, /communityScopeRef[\s\S]*isCurrentScope/);
 assert.doesNotMatch(
@@ -449,6 +454,16 @@ assert.match(
   styles,
   /--member-agent-accent: #a78bfa;[\s\S]*--member-agent-accent-soft: rgba\(167, 139, 250, 0\.16\);/,
   "the dock must reuse the platform's established purple agent identity",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock-panel \{[\s\S]*width: min\(460px, calc\(100vw - 40px\)\);[\s\S]*height: min\(680px, calc\(100svh - 40px\)\);/,
+  "the desktop operating panel must provide more room without overflowing the viewport",
+);
+assert.match(
+  styles,
+  /@media \(max-width: 700px\) \{[\s\S]*width: calc\(100vw - 24px\);[\s\S]*height: min\(78svh, 680px\);/,
+  "the larger panel must remain bounded on mobile",
 );
 assert.match(
   styles,
@@ -521,11 +536,21 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /<WebMemberAgentDock[\s\S]*activePage === "community"[\s\S]*publicRoute\.kind !== "community_funnel"[\s\S]*hasResolvedCommunityChat/,
+  /canonicalPolynetMemberAgentCommunity[\s\S]*community\.slug[\s\S]*=== "polynet"[\s\S]*memberAgentDockCommunity[\s\S]*activePage === "community"[\s\S]*activeCommunity[\s\S]*canonicalPolynetMemberAgentCommunity/,
+  "community routes must use their active community while global routes use Polynet",
+);
+assert.match(
+  app,
+  /isMemberAgentDockVisible[\s\S]*Boolean\(session\)[\s\S]*publicRoute\.kind === "app"[\s\S]*activePage !== "landing"[\s\S]*activePage !== "onboarding"[\s\S]*hasResolvedCommunities[\s\S]*!isCommunityLaunchSetupModalOpen[\s\S]*!isDirectMessagesOpen[\s\S]*!isOnboardingModalOpen/,
+  "the operating panel must span authenticated app pages but stay out of acquisition and blocking overlays",
+);
+assert.match(
+  app,
+  /<WebMemberAgentDock[\s\S]*isVisible=\{isMemberAgentDockVisible\}[\s\S]*communityId=\{memberAgentDockCommunity\?\.id \?\? null\}/,
 );
 assert.match(
   cognitionContract,
-  /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*one stable private channel per member and community[\s\S]*New chat[\s\S]*community deletion closes and tombstones[\s\S]*server constructs bounded conversation history[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
+  /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*one stable private channel per member and community[\s\S]*Start fresh conversation[\s\S]*community deletion closes and tombstones[\s\S]*server constructs bounded conversation history[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
 );
 
 const canonicalContext = buildMemberAgentConversationContext({

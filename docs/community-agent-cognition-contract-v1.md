@@ -23,7 +23,7 @@ personal agent runtime under the active community lens.
 1. `member_agent_dock`
    - belongs to the signed-in member, not the community
    - uses one stable private channel per member and community; the channel points to one active hidden conversation episode backed by the existing thread/message runtime
-   - `New chat` closes the active episode and atomically moves the channel to a fresh episode without deleting or exposing a picker for prior transcripts
+   - `Start fresh conversation` closes the active episode and atomically moves the channel to a fresh episode without deleting or exposing a picker for prior transcripts
    - community deletion closes and tombstones these member-owned channels but preserves their private episodes and transcripts until the member deletes their account
    - requester-funded and server-bound to an authorized community lens
    - the server constructs bounded conversation history from persisted messages through the exact user message that started the turn; browser-supplied history is never authoritative
