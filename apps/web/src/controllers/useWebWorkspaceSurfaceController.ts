@@ -2,11 +2,7 @@ import { useCallback } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { ModelToggle } from "../../../../shared/modelCatalog";
 
-import {
-  hydrateWorkspaceSurfaceState,
-  resetWorkspaceSurfaceState,
-  resumeWorkspaceSurfaceState,
-} from "./workspaceSurfaceLifecycle";
+import { resetWorkspaceSurfaceState } from "./workspaceSurfaceLifecycle";
 import type { WebCloudProjectRecord } from "./useWebProjectUiController";
 
 type ThreadLike = {
@@ -68,8 +64,6 @@ type UseWebWorkspaceSurfaceControllerParams<
   setThreadStreamingStateById: Dispatch<SetStateAction<Record<string, ThreadStreamingStateT>>>;
   setRuntimeEventsByRunId: Dispatch<SetStateAction<Record<string, RuntimeEventT[]>>>;
   setLoadingThreadMessagesThreadId: Dispatch<SetStateAction<string | null>>;
-  loadThreads: (session: SessionT) => Promise<void>;
-  loadModelRegistry: (session: SessionT) => Promise<void>;
 };
 
 export function useWebWorkspaceSurfaceController<
@@ -107,34 +101,6 @@ export function useWebWorkspaceSurfaceController<
     });
   }, [params]);
 
-  const hydrateSurfaceState = useCallback(
-    async (session: SessionT): Promise<void> =>
-      hydrateWorkspaceSurfaceState(
-        {
-          threadsHydratedRef: params.threadsHydratedRef,
-          loadWorkspaceProjects: params.project.actions.loadProjects,
-          loadThreads: params.loadThreads,
-          loadModelRegistry: params.loadModelRegistry,
-        },
-        session,
-      ),
-    [params],
-  );
-
-  const resumeSurfaceState = useCallback(
-    async (session: SessionT): Promise<void> =>
-      resumeWorkspaceSurfaceState(
-        {
-          threadsHydratedRef: params.threadsHydratedRef,
-          loadWorkspaceProjects: params.project.actions.loadProjects,
-          loadThreads: params.loadThreads,
-          loadModelRegistry: params.loadModelRegistry,
-        },
-        session,
-      ),
-    [params],
-  );
-
   return {
     state: {
       identity: {
@@ -161,8 +127,6 @@ export function useWebWorkspaceSurfaceController<
       handleProjectUpdated: params.project.actions.handleProjectUpdated,
       handleProjectDeleted: params.project.actions.handleProjectDeleted,
       resetWorkspaceSurfaceState: resetSurfaceState,
-      hydrateWorkspaceSurfaceState: hydrateSurfaceState,
-      resumeWorkspaceSurfaceState: resumeSurfaceState,
     },
   };
 }

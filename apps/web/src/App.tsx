@@ -1756,9 +1756,7 @@ export default function App() {
           userId,
         },
       });
-      const criticalTasks: Array<Promise<void>> = [
-        workspace.actions.hydrateWorkspaceSurfaceState(session),
-      ];
+      const criticalTasks: Array<Promise<void>> = [];
       if (shouldTreatCommunitiesAsCritical) {
         criticalTasks.push(runCommunitiesHydration(session, "session_ready_critical"));
       }
@@ -1832,43 +1830,9 @@ export default function App() {
     },
     onSessionFocusReady: async (session) => {
       const userId = String(session.user?.id ?? "").trim() || null;
-      const focusCriticalStartedAt = Date.now();
       emitWorkspaceEvent({
         scope: "lifecycle",
         name: "account_graph_refresh",
-        status: "start",
-        detail: {
-          phase: "session_focus_ready",
-          userId,
-        },
-      });
-      const workspaceResults = await Promise.allSettled([
-        workspace.actions.resumeWorkspaceSurfaceState(session),
-      ]);
-      const workspaceFailureCount = workspaceResults.filter((result) => result.status === "rejected").length;
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "account_graph_refresh",
-        status: workspaceFailureCount > 0 ? "failure" : "success",
-        detail: {
-          phase: "session_focus_ready",
-          stage: "workspace_ready",
-          userId,
-          failureCount: workspaceFailureCount,
-          durationMs: Date.now() - focusCriticalStartedAt,
-        },
-        error:
-          workspaceFailureCount > 0
-            ? formatWorkspaceInstrumentationError(
-                workspaceResults
-                  .filter((result): result is PromiseRejectedResult => result.status === "rejected")
-                  .map((result) => result.reason)[0],
-              )
-            : undefined,
-      });
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "account_graph_refresh_secondary",
         status: "start",
         detail: {
           phase: "session_focus_ready",
@@ -1883,7 +1847,7 @@ export default function App() {
         const failureCount = results.filter((result) => result.status === "rejected").length;
         emitWorkspaceEvent({
           scope: "lifecycle",
-          name: "account_graph_refresh_secondary",
+          name: "account_graph_refresh",
           status: failureCount > 0 ? "failure" : "success",
             detail: {
               phase: "session_focus_ready",
@@ -5699,7 +5663,7 @@ export default function App() {
   const [discoverError, setDiscoverError] = useState<string | null>(null);
   const [lastDiscoverLoadAttemptedAt, setLastDiscoverLoadAttemptedAt] = useState(0);
 
-  const { loadThreads, loadThreadMessages, loadModelRegistry } = useWebThreadDataController<
+  const { loadThreads, loadThreadMessages } = useWebThreadDataController<
     AuthSession,
     ThreadMessage
   >({
@@ -8805,8 +8769,6 @@ export default function App() {
     setThreadStreamingStateById,
     setRuntimeEventsByRunId,
     setLoadingThreadMessagesThreadId,
-    loadThreads,
-    loadModelRegistry,
   });
   const currentWorkspaceProjectSelection = resolveWorkspaceActiveProject({
     activeThread,
