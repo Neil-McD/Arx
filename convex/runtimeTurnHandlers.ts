@@ -5,7 +5,6 @@ import {
 import { api, internal } from "./_generated/api";
 import { loadPublicModelMap } from "./httpInferenceConfig";
 import {
-  asRuntimeMessages,
   normalizeMaxTokens,
   normalizeMessages,
   runOpenAiCompletion,
@@ -61,7 +60,6 @@ import {
   RequireAuthenticatedActor,
   resolveAuthenticatedRuntimeTurn,
   RuntimeTurnInput,
-  type AuthenticatedActor,
 } from "./runtimeTurnResolution";
 import {
   ensureRuntimeRunStarted,
@@ -124,16 +122,6 @@ import {
 } from "../shared/polynetCodexWorkerLimits";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { logStructuredError } from "./errorLogging";
-import {
-  buildOnboardingLifecycleSafeUserRequest,
-  buildOnboardingPrivateLifecycleContext,
-  buildOnboardingRunId,
-  buildOnboardingThreadKey,
-  ONBOARDING_LIFECYCLE_AUDIT_LABEL,
-  ONBOARDING_MAX_TOKENS,
-  ONBOARDING_MODEL_ID,
-  ONBOARDING_THREAD_KEY_PREFIX,
-} from "./onboardingLifecycle";
 
 export type {
   SseResponseEvent,
@@ -393,75 +381,6 @@ async function loadUserAgentProfileForRuntime(
       agentSoul: null,
     };
   }
-}
-
-type OnboardingLifecycleCandidateResolution =
-  | { kind: "none" }
-  | { kind: "auth_failed"; response: Response }
-  | {
-      kind: "blocked";
-      status: string;
-      runId: string | null;
-    }
-  | {
-      kind: "ready";
-      actor: AuthenticatedActor;
-      communityId: string;
-      threadKey: string;
-    };
-
-async function resolveOnboardingLifecycleCandidate(args: {
-  ctx: any;
-  req: Request;
-  input: RuntimeTurnInput;
-  requireAuthenticatedActor: RequireAuthenticatedActor;
-}): Promise<OnboardingLifecycleCandidateResolution> {
-  if (asRuntimeMessages(args.input).length > 0) return { kind: "none" };
-  const threadKey = String(args.input.thread_id ?? "").trim();
-  if (!threadKey.startsWith(`${ONBOARDING_THREAD_KEY_PREFIX}:`)) {
-    return { kind: "none" };
-  }
-
-  const auth = await args.requireAuthenticatedActor(args.ctx, args.req);
-  if (!auth.ok) return { kind: "auth_failed", response: auth.response };
-  const thread = (await args.ctx.runQuery(
-    (api as any).threads.getCloudThreadByThreadKey as any,
-    {
-      ownerId: auth.actor.dbUserId,
-      threadKey,
-    },
-  )) as { _id?: unknown; communityId?: unknown } | null;
-  const communityId = String(thread?.communityId ?? "").trim();
-  if (!thread?._id || !communityId || buildOnboardingThreadKey(communityId) !== threadKey) {
-    return { kind: "none" };
-  }
-
-  const activation = (await args.ctx.runQuery(
-    (internal as any).agentLifecycleActivations.getCommunityOnboardingActivationInternal as any,
-    {
-      userId: auth.actor.dbUserId,
-      communityId: communityId as any,
-      nowMs: Date.now(),
-    },
-  )) as {
-    status?: unknown;
-    runId?: unknown;
-    claimable?: unknown;
-  } | null;
-  if (!activation) return { kind: "none" };
-  if (activation.claimable !== true) {
-    return {
-      kind: "blocked",
-      status: String(activation.status ?? "not_claimable").trim() || "not_claimable",
-      runId: String(activation.runId ?? "").trim() || null,
-    };
-  }
-  return {
-    kind: "ready",
-    actor: auth.actor,
-    communityId,
-    threadKey,
-  };
 }
 
 function emitBufferedAssistantText(params: {
@@ -755,12 +674,6 @@ export async function handleRuntimeTurnRequest(args: {
         contextSnapshot?: RuntimeTurnContextSnapshotV1 | null;
       }) => Promise<void>)
     | null = null;
-  let finishOnboardingActivationBestEffort:
-    | ((params: {
-        status: "ok" | "error" | "cancelled";
-        errorCode?: string | null;
-      }) => Promise<void>)
-    | null = null;
 
   let input: RuntimeTurnInput;
   try {
@@ -776,54 +689,11 @@ export async function handleRuntimeTurnRequest(args: {
 
   runtimeTurnStage = "auth";
   try {
-    const onboardingCandidateResolution = await resolveOnboardingLifecycleCandidate({
+    const resolved = await resolveAuthenticatedRuntimeTurn({
       ctx,
       req,
       input,
       requireAuthenticatedActor,
-    });
-    if (onboardingCandidateResolution.kind === "auth_failed") {
-      return withRuntimeHeaders(onboardingCandidateResolution.response);
-    }
-    if (onboardingCandidateResolution.kind === "blocked") {
-      return runtimeJsonResponse(409, {
-        ok: false,
-        code: `onboarding_activation_${onboardingCandidateResolution.status}`,
-        error: `onboarding_activation_${onboardingCandidateResolution.status}`,
-        message: "This onboarding guide is already running or completed.",
-        run_id: onboardingCandidateResolution.runId,
-      });
-    }
-    const onboardingCandidate =
-      onboardingCandidateResolution.kind === "ready"
-        ? onboardingCandidateResolution
-        : null;
-    const effectiveInput: RuntimeTurnInput = onboardingCandidate
-      ? {
-          ...input,
-          model_id: ONBOARDING_MODEL_ID,
-          runtime_engine: "polynet",
-          requested_funding_source: "auto",
-          requested_agentic_tools: true,
-          stream: true,
-          idempotency_key:
-            String(input.idempotency_key ?? "").trim() ||
-            buildOnboardingRunId(onboardingCandidate.communityId),
-          message: null,
-          messages: [{
-            role: "user",
-            content: buildOnboardingLifecycleSafeUserRequest({ communityName: null }),
-          }],
-          max_tokens: ONBOARDING_MAX_TOKENS,
-        }
-      : input;
-    const resolved = await resolveAuthenticatedRuntimeTurn({
-      ctx,
-      req,
-      input: effectiveInput,
-      requireAuthenticatedActor: onboardingCandidate
-        ? async () => ({ ok: true as const, actor: onboardingCandidate.actor })
-        : requireAuthenticatedActor,
       setStage: (stage) => {
         runtimeTurnStage = stage;
       },
@@ -860,126 +730,20 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeExecutionMode: resolvedRuntimeExecutionMode,
       invocationSurface,
     } = resolved.value;
-    let onboardingLifecycleRun: {
-      privateLifecycleContextMd: string;
-    } | null = null;
     const runId =
-      String(effectiveInput.idempotency_key ?? "").trim() ||
+      String(input.idempotency_key ?? "").trim() ||
       `convex_runtime:${crypto.randomUUID()}`;
-    if (onboardingCandidate) {
-      if (runtimeCommunityId !== onboardingCandidate.communityId) {
-        return runtimeJsonResponse(403, {
-          ok: false,
-          code: "onboarding_community_mismatch",
-          error: "onboarding_community_mismatch",
-          message: "The onboarding activation does not match this thread's community lens.",
-        });
-      }
-      let renderedMemberContext: {
-        member_md?: unknown;
-        community_md?: unknown;
-      } | null = null;
-      try {
-        renderedMemberContext = (await ctx.runQuery(
-          (api as any).memberOntology.getMyMemberContextMarkdown as any,
-          {
-            authSubject: actor.authSubject,
-            communityId: onboardingCandidate.communityId as any,
-            includeBillingContext: false,
-          },
-        )) as {
-          member_md?: unknown;
-          community_md?: unknown;
-        } | null;
-      } catch {
-        renderedMemberContext = null;
-      }
-      const privateLifecycleContextMd = buildOnboardingPrivateLifecycleContext({
-        memberMd: String(renderedMemberContext?.member_md ?? "").trim() || null,
-        communityMd:
-          String(renderedMemberContext?.community_md ?? "").trim() || null,
-      });
-      const claim = (await ctx.runMutation(
-        (internal as any).agentLifecycleActivations
-          .claimOnboardingCompletedAgentLifecycleActivationInternal as any,
-        {
-          userId: actor.dbUserId,
-          scopeType: "community",
-          scopeKey: onboardingCandidate.communityId,
-          threadId: ownedThread._id as any,
-          runId,
-          nowMs: Date.now(),
-        },
-      )) as {
-        ok?: boolean;
-        status?: unknown;
-        activationId?: unknown;
-        runId?: unknown;
-      } | null;
-      if (!claim?.ok || !claim.activationId) {
-        const status = String(claim?.status ?? "not_claimed").trim() || "not_claimed";
-        return runtimeJsonResponse(409, {
-          ok: false,
-          code: `onboarding_activation_${status}`,
-          error: `onboarding_activation_${status}`,
-          message: "This onboarding guide is already running or completed.",
-          run_id: String(claim?.runId ?? "").trim() || null,
-        });
-      }
-      let activationFinished = false;
-      finishOnboardingActivationBestEffort = async (params) => {
-        if (activationFinished) return;
-        try {
-          if (params.status === "ok") {
-            await ctx.runMutation(
-              (internal as any).agentLifecycleActivations
-                .completeOnboardingCompletedAgentLifecycleActivationInternal as any,
-              {
-                activationId: claim.activationId,
-                threadId: ownedThread._id as any,
-                runId,
-                nowMs: Date.now(),
-              },
-            );
-          } else {
-            await ctx.runMutation(
-              (internal as any).agentLifecycleActivations
-                .failOnboardingCompletedAgentLifecycleActivationInternal as any,
-              {
-                activationId: claim.activationId,
-                threadId: ownedThread._id as any,
-                runId,
-                error:
-                  String(params.errorCode ?? "").trim() ||
-                  (params.status === "cancelled"
-                    ? USER_CANCELLED_RUNTIME_CODE
-                    : "onboarding_runtime_failed"),
-                nowMs: Date.now(),
-              },
-            );
-          }
-          activationFinished = true;
-        } catch {
-          // The stale-claim timeout remains the deterministic retry backstop.
-        }
-      };
-      onboardingLifecycleRun = { privateLifecycleContextMd };
-    }
-    const runtimeExecutionMode: "agentic" | "chat" = onboardingLifecycleRun
-      ? "agentic"
-      : resolvedRuntimeExecutionMode;
+    const runtimeExecutionMode: "agentic" | "chat" = resolvedRuntimeExecutionMode;
     const runtimeAgentProfile = await loadUserAgentProfileForRuntime(ctx, actor.dbUserId);
     startedRunId = runId;
     runtimeTurnStage = "run_start";
-    const explicitUserMessageKey = String(effectiveInput.user_message_key ?? "").trim();
+    const explicitUserMessageKey = String(input.user_message_key ?? "").trim();
     const userMessageKeyForRun =
       explicitUserMessageKey || `user:${threadKey}:${runId}`;
     const assistantMessageKeyForRun = `assistant:${threadKey}:${runId}`;
-    const latestUserText = onboardingLifecycleRun
-      ? ONBOARDING_LIFECYCLE_AUDIT_LABEL
-      : String(
-          conversationMessages[conversationMessages.length - 1]?.content ?? "",
-        ).trim();
+    const latestUserText = String(
+      conversationMessages[conversationMessages.length - 1]?.content ?? "",
+    ).trim();
     const runtimeCommunityContextVersion = Number.isFinite(Number(ownedThread.contextVersion ?? 0))
       ? Math.max(0, Math.floor(Number(ownedThread.contextVersion ?? 0)))
       : 0;
@@ -987,7 +751,7 @@ export async function handleRuntimeTurnRequest(args: {
       sessionId: String(ownedThread._id),
       threadId: String(ownedThread._id),
     };
-    const persistVisibleUserMessage = onboardingLifecycleRun === null;
+    const persistVisibleUserMessage = true;
     const persistVisibleAssistantMessage = true;
     const runVisibility = "user_visible";
     const runStartedAt = Date.now();
@@ -999,10 +763,6 @@ export async function handleRuntimeTurnRequest(args: {
       accountPlan: runtimeAccountPlan,
     });
     if (!runtimeEngineResolution.ok) {
-      await finishOnboardingActivationBestEffort?.({
-        status: "error",
-        errorCode: runtimeEngineResolution.code,
-      });
       return runtimeJsonResponse(runtimeEngineResolution.status, {
         ok: false,
         code: runtimeEngineResolution.code,
@@ -1040,9 +800,6 @@ export async function handleRuntimeTurnRequest(args: {
       runId,
       lane,
       visibility: runVisibility,
-      ...(onboardingLifecycleRun
-        ? { internalFollowupKind: "onboarding_guide" }
-        : null),
       projectId: runtimeProjectId ?? undefined,
       communityId: runtimeCommunityId ? (runtimeCommunityId as any) : undefined,
       communityContextVersion: runtimeCommunityId ? runtimeCommunityContextVersion : undefined,
@@ -1050,9 +807,7 @@ export async function handleRuntimeTurnRequest(args: {
       engineId: runtimeEngineId,
       runtimeEngineRequested: runtimeEngineResolution.requestedRuntimeEngine ?? undefined,
       runtimeEngineResolved: runtimeEngineResolution.resolvedRuntimeEngine,
-      runtimeEngineSource: onboardingLifecycleRun
-        ? "onboarding_lifecycle"
-        : runtimeEngineResolution.runtimeEngineSource,
+      runtimeEngineSource: runtimeEngineResolution.runtimeEngineSource,
       executionMode: runtimeExecutionMode,
       sandboxMode: runtimeSandboxMode,
       contractName:
@@ -1080,10 +835,6 @@ export async function handleRuntimeTurnRequest(args: {
       fail: runtimeJsonResponse,
     });
     if (!runStart.ok) {
-      await finishOnboardingActivationBestEffort?.({
-        status: "error",
-        errorCode: "runtime_start_failed",
-      });
       return runStart.response;
     }
 
@@ -1451,10 +1202,6 @@ export async function handleRuntimeTurnRequest(args: {
               ? "cancelled"
               : params.errorCode || params.reason || "error",
         );
-        await finishOnboardingActivationBestEffort?.({
-          status: params.status,
-          errorCode: params.errorCode ?? params.reason ?? null,
-        });
       }
     };
     finishRunBestEffort = finishRunBestEffortForRun;
@@ -3079,21 +2826,11 @@ export async function handleRuntimeTurnRequest(args: {
               communityContextVersion: runtimeCommunityId
                 ? runtimeCommunityContextVersion
                 : null,
-              agentName:
-                runtimeAgentProfile.agentName ??
-                (onboardingLifecycleRun ? "Polynet" : null),
+              agentName: runtimeAgentProfile.agentName,
               agentSoul: runtimeAgentProfile.agentSoul,
               threadWorkingState: ownedThread.workingState ?? null,
               allowedToolNames: polynetAllowedToolNamesForRun,
               invocationSurface,
-              skillLifecycleTrigger: onboardingLifecycleRun
-                ? "onboarding_completed"
-                : null,
-              privateLifecycleContextMd:
-                onboardingLifecycleRun?.privateLifecycleContextMd ?? null,
-              lifecycleAuditLabel: onboardingLifecycleRun
-                ? ONBOARDING_LIFECYCLE_AUDIT_LABEL
-                : null,
               activeDaytonaRuntimeSubstrate:
                 activeDaytonaRuntimeSubstrateForPolynetTools,
               apiKeyOverride: providerApiKeyOverride,
@@ -3389,21 +3126,11 @@ export async function handleRuntimeTurnRequest(args: {
           communityContextVersion: runtimeCommunityId
             ? runtimeCommunityContextVersion
             : null,
-          agentName:
-            runtimeAgentProfile.agentName ??
-            (onboardingLifecycleRun ? "Polynet" : null),
+          agentName: runtimeAgentProfile.agentName,
           agentSoul: runtimeAgentProfile.agentSoul,
           threadWorkingState: ownedThread.workingState ?? null,
           allowedToolNames: polynetAllowedToolNamesForRun,
           invocationSurface,
-          skillLifecycleTrigger: onboardingLifecycleRun
-            ? "onboarding_completed"
-            : null,
-          privateLifecycleContextMd:
-            onboardingLifecycleRun?.privateLifecycleContextMd ?? null,
-          lifecycleAuditLabel: onboardingLifecycleRun
-            ? ONBOARDING_LIFECYCLE_AUDIT_LABEL
-            : null,
           activeDaytonaRuntimeSubstrate:
             activeDaytonaRuntimeSubstrateForPolynetTools,
           apiKeyOverride: providerApiKeyOverride,
@@ -4090,10 +3817,6 @@ export async function handleRuntimeTurnRequest(args: {
           errorMessage: "Run cancelled by user.",
         });
       }
-      await finishOnboardingActivationBestEffort?.({
-        status: "cancelled",
-        errorCode: USER_CANCELLED_RUNTIME_CODE,
-      });
       return runtimeJsonResponse(409, {
         ok: false,
         code: USER_CANCELLED_RUNTIME_CODE,
@@ -4111,10 +3834,6 @@ export async function handleRuntimeTurnRequest(args: {
         errorMessage: message || "Runtime turn failed unexpectedly.",
       });
     }
-    await finishOnboardingActivationBestEffort?.({
-      status: "error",
-      errorCode: "runtime_turn_unhandled",
-    });
     logStructuredError("runtime_turn_unhandled", {
       error,
       requestId,

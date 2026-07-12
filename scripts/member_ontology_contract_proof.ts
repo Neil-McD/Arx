@@ -23,7 +23,6 @@ const profiles = read("convex/profiles.ts");
 const cloudProfilesGateway = read("shared/cloudProfilesGateway.ts");
 const toolRegistry = read("shared/toolRegistry.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
-const platformSkillRuntime = read("convex/platformSkillRuntime.ts");
 const app = read("apps/web/src/App.tsx");
 const bridgeBackfillScript = read("scripts/backfill_bridge_social_link_facts.sh");
 const contractDoc = read("docs/member-ontology-contract-v1.md");
@@ -205,22 +204,17 @@ assert.match(
 assert.match(
   toolRegistry,
   /MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA[\s\S]*enum: \["stated_interview", "form_answer"\]/,
-  "the onboarding runtime tool schema must accept only interview/form provenances",
+  "the member profile confirmation tool schema must accept only interview/form provenances",
 );
 assert.match(
   toolRegistry,
   /toolName === "member_profile_confirm_facts"[\s\S]*supports at most 12 facts/,
-  "the onboarding runtime tool schema/normalizer must accept only bounded confirmed interview/form facts",
+  "the member profile confirmation tool must accept only bounded confirmed interview/form facts",
 );
 assert.match(
   runtimeAgentLoop,
   /params\.toolName === "member_profile_confirm_facts"[\s\S]*community_required[\s\S]*authenticated_user_required[\s\S]*memberOntology\.confirmMemberInterviewFacts/,
-  "the onboarding runtime tool must require active community/auth and delegate to the existing confirmation mutation",
-);
-assert.match(
-  platformSkillRuntime,
-  /member_profile_confirm_facts[\s\S]*Do not silently store guesses[\s\S]*stated_interview or form_answer/,
-  "the onboarding guide instructions must frame ontology writes as confirmed interview facts only",
+  "the dormant profile confirmation primitive must require active community/auth and delegate to the existing confirmation mutation",
 );
 assert.match(surface, /communityMembershipRowIsActive/, "membership checks use the canonical helper");
 assert.match(

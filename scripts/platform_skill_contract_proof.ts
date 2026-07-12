@@ -5,12 +5,9 @@ import { buildEffectiveSkills } from "../shared/effectiveSkills.ts";
 import {
   COMMUNITY_MANAGER_PLATFORM_SKILLS,
   GLOBAL_PLATFORM_SKILLS,
-  PLATFORM_ONBOARDING_GUIDE_SKILL,
-  PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES,
   PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES,
   PLATFORM_RESOURCES_ARCHITECT_SKILL,
   buildPlatformSkillToolNamesForSelection,
-  hasSelectedPlatformOnboardingGuideSkill,
   hasSelectedPlatformResourcesArchitectSkill,
 } from "../shared/platformSkills.ts";
 
@@ -26,9 +23,7 @@ function main() {
   assert.deepEqual(COMMUNITY_MANAGER_PLATFORM_SKILLS, [
     PLATFORM_RESOURCES_ARCHITECT_SKILL,
   ]);
-  assert.deepEqual(GLOBAL_PLATFORM_SKILLS, [
-    PLATFORM_ONBOARDING_GUIDE_SKILL,
-  ]);
+  assert.deepEqual(GLOBAL_PLATFORM_SKILLS, []);
   assert.equal(PLATFORM_RESOURCES_ARCHITECT_SKILL.scope, "platform");
   assert.equal(PLATFORM_RESOURCES_ARCHITECT_SKILL.locked, true);
   assert.equal(PLATFORM_RESOURCES_ARCHITECT_SKILL.canDisable, false);
@@ -54,21 +49,6 @@ function main() {
       { mention_token: "resources-architect" },
     ]),
     PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES,
-  );
-  assert.deepEqual(PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES, [
-    "member_profile_confirm_facts",
-  ]);
-  assert.equal(
-    hasSelectedPlatformOnboardingGuideSkill([
-      { platform_skill_id: "platform:onboarding-guide" },
-    ]),
-    true,
-  );
-  assert.deepEqual(
-    buildPlatformSkillToolNamesForSelection([
-      { mention_token: "onboarding-guide" },
-    ]),
-    PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES,
   );
   assert.deepEqual(buildPlatformSkillToolNamesForSelection([]), []);
 
@@ -194,33 +174,12 @@ function main() {
   );
   assertIncludes(
     platformSkillRuntime,
-    "First response shape: at most 4 short paragraphs",
-    "server-side Onboarding Guide opener shape contract",
+    "GLOBAL_PLATFORM_RUNTIME_SKILLS",
+    "global platform runtime skill inventory",
   );
-  assertIncludes(
-    platformSkillRuntime,
-    "Do not introduce yourself by name",
-    "Onboarding Guide must not self-introduce",
-  );
-  assertIncludes(
-    platformSkillRuntime,
-    "Billing boundary: never mention the member's account plan, billing, Premium",
-    "Onboarding Guide must keep billing out of the welcome",
-  );
-  assertIncludes(
-    platformSkillRuntime,
-    "Attached social links alone are leads, not proof.",
-    "Onboarding Guide must not fabricate social research from attached links",
-  );
-  assertIncludes(
-    platformSkillRuntime,
-    "call get_active_community_context",
-    "Onboarding Guide must inspect the active community through a real tool call",
-  );
-  assertIncludes(
-    platformSkillRuntime,
-    "Do not call member_profile_confirm_facts, community_write, workspace, web, computer, MCP, or any paid or premium tool",
-    "Onboarding Guide opener must remain read-only and free-safe",
+  assert.ok(
+    /GLOBAL_PLATFORM_RUNTIME_SKILLS:[^=]*= \[\]/.test(platformSkillRuntime),
+    "retired onboarding must leave no global runtime skill",
   );
   assertIncludes(
     runtimeSkillResolution,
@@ -298,12 +257,6 @@ function main() {
     assertIncludes(runtimeToolPolicy, `${toolName}: {`, "Resources Architect tool policy");
     assertIncludes(runtimeAgentLoop, `params.toolName === "${toolName}"`, "Resources Architect tool executor");
   }
-  for (const toolName of PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES) {
-    assertIncludes(retrievalTools, toolName, "Onboarding Guide retrieval tool");
-    assertIncludes(toolRegistry, `${toolName}: {`, "Onboarding Guide tool registry entry");
-    assertIncludes(runtimeToolPolicy, `${toolName}: {`, "Onboarding Guide tool policy");
-    assertIncludes(runtimeAgentLoop, `params.toolName === "${toolName}"`, "Onboarding Guide tool executor");
-  }
   assertIncludes(
     runtimeAgentLoop,
     "buildEffectiveAllowedToolNames",
@@ -324,7 +277,7 @@ function main() {
     !/resolveAllowedToolNames[\s\S]*member_profile_confirm_facts/.test(
       runtimeTurnResolution,
     ),
-    "member profile confirmation must be exposed by selected onboarding skill, not default community entitlement",
+    "dormant member profile confirmation must not be a default community entitlement",
   );
   assertIncludes(
     runtimePrompt,

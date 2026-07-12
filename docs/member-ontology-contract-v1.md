@@ -73,7 +73,7 @@ link           social or external profile URLs
 
 ```txt
 stated_bridge       semantic facts typed into the bridge (v1: normalized social links only)
-stated_interview    said to the guide during onboarding conversation
+stated_interview    said during an explicit profile-building conversation
 form_answer         creator-defined form field, filled via interview
 social_enrichment   derived by the member's own agent from their public links
 inferred_agent      inferred by an agent from conversation or activity
@@ -112,7 +112,7 @@ not consent on a member's behalf. This is the contract's single most
 load-bearing rule: **founders act only on approved member facts, members approve
 facts, and human/admin reads never double as an internal agent lens.**
 
-The onboarding confirm card ("here's what I'll tell {creator} — right?") is
+The future profile confirmation step ("here's what I'll tell {creator} — right?") is
 formally: batch-approve all `stated_interview` + `form_answer` rows created in
 that session, scoped to that community.
 
@@ -169,10 +169,10 @@ must never become actionable context merely because an agent is reading.
    timezone remain account/profile context for `member.md`; they are not
    duplicated as ledger facts.
 2. **Interview confirmation** → batch of `stated_interview` / `form_answer`
-   facts, community scope, born approved-in-scope. The onboarding guide reaches
-   this through the selected platform-skill runtime tool
-   `member_profile_confirm_facts`, which delegates to the same confirmation
-   mutation; one mutation, one approval marker.
+   facts, community scope, born approved-in-scope. The dormant
+   `member_profile_confirm_facts` runtime primitive delegates to the same
+   confirmation mutation; one mutation, one approval marker. No current global
+   skill exposes it. A future profile-building flow must activate it explicitly.
 3. **Enrichment** → the member's own agent drafts `social_enrichment` facts,
    born pending; the member's review approves/rejects each.
 4. **Ongoing observation** → agents/compiler write `inferred_agent` (pending)

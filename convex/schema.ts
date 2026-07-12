@@ -912,6 +912,8 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
+  // Inert retention table for historical onboarding-agent rows. No runtime
+  // reader or writer remains; remove only after an audited data cleanup.
   agentLifecycleActivations: defineTable({
     userId: v.id("users"),
     trigger: v.literal("onboarding_completed"),

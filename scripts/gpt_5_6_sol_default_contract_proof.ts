@@ -15,7 +15,6 @@ function read(path: string): string {
 const modelCatalog = read("shared/modelCatalog.ts");
 const inferenceConfig = read("convex/httpInferenceConfig.ts");
 const runtimeResolution = read("convex/runtimeTurnResolution.ts");
-const onboardingLifecycle = read("convex/onboardingLifecycle.ts");
 const providerProbes = read("convex/providerConnectionProbes.ts");
 const providerGateway = read("shared/cloudProviderConnectionsGateway.ts");
 const daytonaPolicy = read("shared/daytonaCodexRuntimePolicy.ts");
@@ -61,11 +60,6 @@ assert.match(
   runtimeResolution,
   /platformMap\[DEFAULT_ACTIVE_MODEL_ID\][\s\S]*platformMap\["gpt-5\.5"\]/,
   "runtime provider fallback must prefer Sol before legacy GPT-5.5",
-);
-assert.match(
-  onboardingLifecycle,
-  /ONBOARDING_MODEL_ID = DEFAULT_ACTIVE_MODEL_ID/,
-  "deterministic onboarding must use the canonical Sol default",
 );
 assert.match(
   providerProbes,
