@@ -48,7 +48,6 @@ import {
 } from "./platformHomeCommunity";
 import { getStripeClient } from "./stripeCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
-import { normalizeCommunityMemberOnboardingConfig } from "../shared/communityMemberOnboarding";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
 type AnalyticsBucketValue = "day" | "week" | "month";
@@ -125,26 +124,6 @@ const ACTIVE_RECURRING_SUBSCRIPTION_STATUSES = new Set([
   "cancel_at_period_end",
 ]);
 
-function mapCommunityMemberOnboardingForOutput(community: CommunityLike) {
-  const config = community.memberOnboarding;
-  return normalizeCommunityMemberOnboardingConfig(
-    config
-      ? {
-          enabled: config.enabled,
-          title: config.title,
-          description: config.description,
-          video_url: config.videoUrl ?? null,
-          primary_action: config.primaryAction,
-          ai_guide_prompt: config.aiGuidePrompt,
-        }
-      : null,
-    community.name,
-  );
-}
-
-function canViewCommunityMemberOnboardingAdminConfig(role: string): boolean {
-  return role === "owner" || role === "admin";
-}
 const COMMUNITY_ADMIN_MEMBERS_DEFAULT_PAGE_SIZE = 25;
 const COMMUNITY_ADMIN_MEMBERS_MAX_PAGE_SIZE = 100;
 
@@ -968,9 +947,6 @@ export const listCommunityMemberships = query({
             banner_zoom: branding.banner_zoom,
             visibility: community.visibility,
             entry_policy: resolveCommunityEntryPolicy(community),
-            ...(canViewCommunityMemberOnboardingAdminConfig(role)
-              ? { member_onboarding: mapCommunityMemberOnboardingForOutput(community) }
-              : {}),
             updated_at: toIsoString(community.updatedAt),
           };
     };

@@ -3,7 +3,6 @@ import {
   buildCommunityResourceDirectoryFields,
   buildCommunityResourceModuleDirectoryFields,
 } from "../shared/communityResourceDirectory";
-import type { CommunityMemberOnboardingPrimaryAction } from "../shared/communityMemberOnboarding";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
@@ -23,16 +22,6 @@ export type CommunityLike = {
   bannerFocusX?: number;
   bannerFocusY?: number;
   bannerZoom?: number;
-  memberOnboarding?: {
-    enabled: boolean;
-    title: string;
-    description: string;
-    videoUrl?: string | null;
-    primaryAction: CommunityMemberOnboardingPrimaryAction;
-    aiGuidePrompt: string;
-    updatedAt?: number;
-    updatedByUserId?: any;
-  };
   visibility: "published" | "unlisted";
   entryPolicy?: CommunityEntryPolicy;
   activeMemberCount?: number;
