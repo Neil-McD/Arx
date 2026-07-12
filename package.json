@@ -58,7 +58,7 @@
     "check:email-auth-diagnostic-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/email_auth_diagnostic_contract_proof.ts",
     "check:email-verified-auth-sync-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/email_verified_auth_sync_contract_proof.ts",
     "check:operator-intelligence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/operator_intelligence_proof.ts",
-    "check:operator-dashboard-gate-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/operator_dashboard_gate_proof.ts",
+    "check:operator-dashboard-gate-proof": "tsx scripts/operator_dashboard_gate_proof.ts",
     "check:ui-stability-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/ui_stability_contract_proof.ts",
     "check:workspace-composer-focus-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_composer_focus_policy_proof.ts",
     "check:community-composer-focus-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_composer_focus_policy_proof.ts",

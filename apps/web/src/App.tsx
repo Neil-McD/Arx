@@ -238,6 +238,7 @@ import {
   type CommunityTab,
   isCommunityRouteManagedTab,
   normalizeCommunityTabForAccess,
+  type OperatorTab,
   type SettingsGroup,
   type SettingsPage,
   settingsGroupLabel,
@@ -1887,10 +1888,11 @@ export default function App() {
 
   const [operatorAccessState, setOperatorAccessState] = useState<{
     subject: string;
-    access: OperatorAccessSnapshot;
+    access: OperatorAccessSnapshot | null;
   } | null>(null);
-  const operatorAccess =
-    operatorAccessState?.subject === canonicalSessionUserId ? operatorAccessState.access : null;
+  const isOperatorAccessResolved =
+    Boolean(canonicalSessionUserId) && operatorAccessState?.subject === canonicalSessionUserId;
+  const operatorAccess = isOperatorAccessResolved ? operatorAccessState?.access ?? null : null;
 
   useEffect(() => {
     let isAlive = true;
@@ -1905,7 +1907,7 @@ export default function App() {
       (access) => {
         if (!isAlive) return;
         if (!access) {
-          setOperatorAccessState((prev) => (prev?.subject === operatorSubject ? null : prev));
+          setOperatorAccessState({ subject: operatorSubject, access: null });
           return;
         }
         setOperatorAccessState({ subject: operatorSubject, access });
@@ -1917,8 +1919,11 @@ export default function App() {
           message.includes("operator_access_forbidden") ||
           message.includes("operator_access_identity_mismatch")
         ) {
-          setOperatorAccessState((prev) => (prev?.subject === operatorSubject ? null : prev));
+          setOperatorAccessState({ subject: operatorSubject, access: null });
+          return;
         }
+        console.warn("Failed to resolve operator access:", error);
+        setOperatorAccessState({ subject: operatorSubject, access: null });
       },
     );
 
@@ -1926,7 +1931,7 @@ export default function App() {
       isAlive = false;
     };
   }, [canonicalSessionUserId, session]);
-  const hasOperatorRightPanelAccess = Boolean(session && operatorAccess);
+  const hasOperatorAccess = Boolean(session && operatorAccess);
   const profileStorageUserId = canonicalSessionUserId;
   const initialProfileDraft = useMemo(
     () => readProfileDraftForUser(profileStorageUserId),
@@ -1944,6 +1949,9 @@ export default function App() {
   const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => initialAppRoute?.settingsPage ?? "account");
   const [selectedProductDocSlug, setSelectedProductDocSlug] = useState<string | null>(
     () => initialAppRoute?.docsSlug ?? null,
+  );
+  const [activeOperatorTab, setActiveOperatorTab] = useState<OperatorTab>(
+    () => initialAppRoute?.operatorTab ?? "platform",
   );
   const settingsGroup = settingsGroupForPage(settingsPage);
   const [userWantsSessions, setUserWantsSessions] = useState(false);
@@ -4291,6 +4299,9 @@ export default function App() {
     if (nextAppRoute.page === "docs") {
       setSelectedProductDocSlug(nextAppRoute.docsSlug ?? null);
     }
+    if (nextAppRoute.page === "operator") {
+      setActiveOperatorTab(nextAppRoute.operatorTab ?? "platform");
+    }
     if (nextAppRoute.page === "community") {
       applyCommunityShellState({
         communitySlug: normalizedCommunitySlug,
@@ -4556,6 +4567,35 @@ export default function App() {
     })();
   }, [activePage, cloudProfile, session]);
 
+  const operatorRouteRedirectRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (activePage !== "operator") {
+      operatorRouteRedirectRef.current = null;
+      return;
+    }
+    if (!isAuthBootstrapComplete) return;
+    if (!session) {
+      navigateTo("/", { replace: true });
+      return;
+    }
+    if (!isOperatorAccessResolved) return;
+    if (operatorAccess) return;
+
+    const redirectKey = String(canonicalSessionUserId ?? "operator-denied");
+    if (operatorRouteRedirectRef.current === redirectKey) return;
+    operatorRouteRedirectRef.current = redirectKey;
+    void resolveAndEnterMemberDestination({ session, replace: true }).then((entered) => {
+      if (!entered) navigateTo("/discover", { replace: true });
+    });
+  }, [
+    activePage,
+    canonicalSessionUserId,
+    isAuthBootstrapComplete,
+    isOperatorAccessResolved,
+    operatorAccess,
+    session,
+  ]);
+
   /* Deterministic timezone capture: record the browser's IANA zone silently,
      refreshed when it drifts from what the profile holds. Never a question. */
   const timezoneSyncRef = useRef(false);
@@ -4623,6 +4663,7 @@ export default function App() {
         communitySettingsPane:
           activePage === "community" && communityTab === "settings" ? communitySettingsPane : null,
         docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
+        operatorTab: activePage === "operator" ? activeOperatorTab : null,
         threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
         projectId:
           activePage === "workspace" && activeView === "home" && !activeThreadId
@@ -4651,6 +4692,11 @@ export default function App() {
     if (activePage === "settings" && settingsPage === page) return;
     if (activePage !== "settings") pushNavSnapshot();
     navigateTo(buildSettingsPath(page));
+  };
+  const openOperatorConsole = (tab: OperatorTab = "platform"): void => {
+    if (!hasOperatorAccess) return;
+    if (activePage !== "operator") pushNavSnapshot();
+    navigateTo(`/operator/${tab}`);
   };
   const {
     syncCommunitySelection,
@@ -6199,6 +6245,7 @@ export default function App() {
     communityResourceModuleId,
     communitySettingsPane,
     docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
+    operatorTab: activePage === "operator" ? activeOperatorTab : null,
     activeThreadId,
     applyLocationToState,
     setStripeConnectReturn,
@@ -11376,6 +11423,8 @@ export default function App() {
         setMobileSettingsView("detail");
       },
       onShowMobileSettingsIndex: () => setMobileSettingsView("index"),
+      showOperatorConsole: hasOperatorAccess,
+      onOpenOperatorConsole: () => openOperatorConsole("platform"),
       settingsPanelsProps,
     },
     publicCommunityFunnelProps: {
@@ -11514,6 +11563,14 @@ export default function App() {
       },
       renderMarkdown,
     },
+    operatorDashboardProps:
+      session && operatorAccess
+        ? {
+            session,
+            activeTab: activeOperatorTab,
+            onSelectTab: openOperatorConsole,
+          }
+        : null,
   });
   const globalOverlays = (
     <>
@@ -11804,6 +11861,8 @@ export default function App() {
       : () => openGlobalSettings("agent"),
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,
+    showOperatorConsole: hasOperatorAccess,
+    openOperatorConsole: () => openOperatorConsole("platform"),
     hasLeftPanel,
     isGlobalSettings,
     mainSurface,

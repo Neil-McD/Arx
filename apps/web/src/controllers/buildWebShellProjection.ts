@@ -36,6 +36,7 @@ export function buildWebShellProjection(params: {
   const isGlobalSettings = isAppRoute && params.activePage === "settings";
   const isLandingPage = isAppRoute && params.activePage === "landing";
   const isOnboardingPage = isAppRoute && params.activePage === "onboarding";
+  const isOperatorPage = isAppRoute && params.activePage === "operator";
   const isPublicAppPage = isLandingPage || isOnboardingPage;
   /* The visitor lens on mobile: /c/:slug gets the SAME mobile community
      shell a member gets — one column, the middle panel is the page. */
@@ -53,6 +54,7 @@ export function buildWebShellProjection(params: {
         params.activePage === "settings" ||
         params.activePage === "community" ||
         params.activePage === "discover" ||
+        params.activePage === "operator" ||
         params.activePage === "docs")) ||
     isMobileVisitorCommunity;
   const showMobileSettingsShell =
@@ -80,7 +82,7 @@ export function buildWebShellProjection(params: {
       !showMobilePublicFunnel) ||
     showDesktopPublicFunnelNav;
   const showDesktopCommunityRail =
-    (isAppRoute && !showMobileAppShell && !showMobilePublicFunnel) ||
+    (isAppRoute && !isOperatorPage && !showMobileAppShell && !showMobilePublicFunnel) ||
     showDesktopPublicFunnelNav;
   const shouldShowDesktopCommunityRail =
     showDesktopCommunityRail && !isPublicAppPage;
@@ -92,6 +94,8 @@ export function buildWebShellProjection(params: {
       ? "agent"
       : params.activePage === "discover"
         ? "discover"
+        : params.activePage === "operator"
+          ? "discover"
         : params.activePage === "docs"
           ? "discover"
           : "community";

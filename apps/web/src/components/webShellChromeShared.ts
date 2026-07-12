@@ -101,4 +101,6 @@ export type WebSettingsSidebarProps = {
   isGlobalSettings: boolean;
   settingsGroup: SettingsGroup;
   onSelectPage: (page: SettingsPage) => void;
+  showOperatorConsole: boolean;
+  onOpenOperatorConsole: () => void;
 };

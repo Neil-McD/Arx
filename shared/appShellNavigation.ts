@@ -21,11 +21,23 @@ export type AppPage =
   | "onboarding"
   | "workspace"
   | "settings"
+  | "operator"
   | "community"
   | "discover"
   | "docs";
 
 export type AppView = "home" | "settings";
+
+export const OPERATOR_TABS = ["platform", "business", "email", "communities"] as const;
+
+export type OperatorTab = (typeof OPERATOR_TABS)[number];
+
+export function parseOperatorTab(value: string | null | undefined): OperatorTab {
+  const normalized = String(value ?? "").trim();
+  return OPERATOR_TABS.includes(normalized as OperatorTab)
+    ? (normalized as OperatorTab)
+    : "platform";
+}
 
 export const COMMUNITY_TABS = [
   "chat",

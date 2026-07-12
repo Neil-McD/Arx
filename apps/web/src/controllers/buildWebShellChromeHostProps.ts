@@ -88,6 +88,8 @@ export function buildWebShellChromeHostProps(params: {
   handleOpenGlobalSettings: () => void;
   settingsGroup: SettingsGroup;
   setSettingsPage: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
+  showOperatorConsole: boolean;
+  openOperatorConsole: () => void;
   hasLeftPanel: boolean;
   isGlobalSettings: boolean;
   mainSurface: ReactNode;
@@ -239,6 +241,8 @@ export function buildWebShellChromeHostProps(params: {
       isGlobalSettings: params.isGlobalSettings,
       settingsGroup: params.settingsGroup,
       onSelectPage: params.setSettingsPage,
+      showOperatorConsole: params.showOperatorConsole,
+      onOpenOperatorConsole: params.openOperatorConsole,
     },
     hasLeftPanel: params.hasLeftPanel,
     showDesktopCommunityRail: params.showDesktopCommunityRail,

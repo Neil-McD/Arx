@@ -2,10 +2,12 @@ import { isUuid } from "./appIdentity";
 import {
   parseCommunitySettingsPane,
   parseCommunityTab,
+  parseOperatorTab,
   type AppPage,
   type AppView,
   type CommunitySettingsPane,
   type CommunityTab,
+  type OperatorTab,
   type SettingsPage,
 } from "./appShellNavigation";
 
@@ -27,6 +29,7 @@ export type AppRouteState = {
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
   docsSlug?: string | null;
+  operatorTab?: OperatorTab | null;
   threadId: string | null;
   projectId?: string | null;
 };
@@ -40,6 +43,7 @@ export type AppRoutePathState = {
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
   docsSlug?: string | null;
+  operatorTab?: OperatorTab | null;
   threadId: string | null;
   projectId?: string | null;
 };
@@ -365,6 +369,18 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     };
   }
 
+  if (segments[0] === "operator" && segments.length <= 2) {
+    return {
+      page: "operator",
+      view: "home",
+      settingsPage: "agent",
+      communitySlug: null,
+      communityTab: "chat",
+      operatorTab: parseOperatorTab(segments[1] ?? null),
+      threadId: null,
+    };
+  }
+
   if (segments[0] === "workspace") {
     if (segments[1] === "community" && segments.length === 5 && segments[3] === "setup") {
       const slug = String(segments[2] ?? "").trim();
@@ -484,6 +500,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       communityResourceModuleId: fromPath.communityResourceModuleId ?? null,
       communitySettingsPane: fromPath.communitySettingsPane ?? null,
       docsSlug: fromPath.docsSlug ?? null,
+      ...(fromPath.operatorTab ? { operatorTab: fromPath.operatorTab } : {}),
       threadId: fromPath.threadId,
       projectId,
     };
@@ -521,6 +538,10 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
 
   if (state.page === "docs") {
     return buildDocsPath(state.docsSlug);
+  }
+
+  if (state.page === "operator") {
+    return `/operator/${state.operatorTab ?? "platform"}`;
   }
 
   if (state.page === "landing") {

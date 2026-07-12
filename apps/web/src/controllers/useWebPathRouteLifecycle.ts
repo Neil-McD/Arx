@@ -9,6 +9,7 @@ import type {
   AppView,
   CommunitySettingsPane,
   CommunityTab,
+  OperatorTab,
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
 import {
@@ -53,6 +54,7 @@ export function useWebPathRouteLifecycle(params: {
   communityResourceModuleId: string | null;
   communitySettingsPane: CommunitySettingsPane;
   docsSlug: string | null;
+  operatorTab: OperatorTab | null;
   activeThreadId: string | null;
   applyLocationToState: () => void;
   setStripeConnectReturn: Dispatch<SetStateAction<StripeConnectReturn | null>>;
@@ -65,6 +67,7 @@ export function useWebPathRouteLifecycle(params: {
     communityResourceModuleId?: string | null;
     communitySettingsPane?: CommunitySettingsPane | null;
     docsSlug: string | null;
+    operatorTab?: OperatorTab | null;
     threadId: string | null;
   }) => string | null;
 }) {
@@ -110,6 +113,7 @@ export function useWebPathRouteLifecycle(params: {
           ? params.communitySettingsPane
           : null,
       docsSlug: params.docsSlug,
+      operatorTab: params.activePage === "operator" ? params.operatorTab : null,
       threadId: params.activePage === "workspace" && params.activeView === "home" ? params.activeThreadId : null,
     });
     if (!nextPath) return;
@@ -127,6 +131,7 @@ export function useWebPathRouteLifecycle(params: {
     params.communityResourceModuleId,
     params.communitySettingsPane,
     params.docsSlug,
+    params.operatorTab,
     params.activeThreadId,
   ]);
 }

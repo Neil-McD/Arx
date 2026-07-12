@@ -94,7 +94,7 @@ export function OperatorBusinessPanelView(props: {
       : "Community fee attribution pending.";
 
   return (
-    <div className="workspace-right-panel__grid">
+    <div className="operator-dashboard__grid">
       <section className="operator-dashboard__metrics" aria-label="Business overview">
         <div>
           <span>Visitors</span>

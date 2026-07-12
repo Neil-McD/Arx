@@ -32010,6 +32010,98 @@ button.message-citation-chip:hover {
   box-sizing: border-box;
 }
 
+.operator-console {
+  width: min(1320px, calc(100vw - 64px));
+  padding-top: 24px;
+}
+
+.operator-console__header {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.operator-console__header h1 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.operator-console__header .operator-dashboard__eyebrow {
+  margin-bottom: 6px;
+}
+
+.operator-console__tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.operator-console__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.operator-console__tabs button {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.operator-console__tabs button:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.operator-console__tabs button.is-active {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-default));
+  background: color-mix(in srgb, var(--accent) 13%, rgba(255, 255, 255, 0.035));
+  color: var(--text-primary);
+}
+
+.operator-console__status:empty {
+  display: none;
+}
+
+.operator-console__status .operator-dashboard__notice {
+  margin: 0;
+  border-radius: 6px;
+}
+
+.operator-console__status .operator-dashboard__notice.is-error {
+  border-color: color-mix(in srgb, var(--accent-gold) 38%, var(--border-default));
+  color: var(--accent-gold);
+}
+
+.operator-console__content {
+  min-width: 0;
+  min-height: 0;
+}
+
+.operator-console .operator-dashboard__metrics > div,
+.operator-console .operator-dashboard__panel {
+  border-radius: 8px;
+}
+
+.settings-nav-operator {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-default);
+}
+
 .operator-dashboard__header {
   max-width: 760px;
 }
@@ -32382,6 +32474,20 @@ button.message-citation-chip:hover {
 
   .operator-dashboard__header h1 {
     font-size: 34px;
+  }
+
+  .operator-console {
+    padding-top: 18px;
+  }
+
+  .operator-console__header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .operator-console__header h1 {
+    font-size: 24px;
   }
 }
 

@@ -15,7 +15,7 @@ export function OperatorCommunitiesPanelView(props: {
 }) {
   const totals = props.overview?.totals;
   return (
-    <div className="workspace-right-panel__grid">
+    <div className="operator-dashboard__grid">
       <section className="operator-dashboard__metrics" aria-label="Community performance overview">
         <div>
           <span>Communities</span>

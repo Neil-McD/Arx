@@ -31,7 +31,7 @@ export function OperatorPlatformPanelView(props: {
   const runtimeExecution = props.runtimeTools?.executionAvailability ?? null;
   const runtimeTopFailureCodes = runtimeExecution?.topFailureCodes ?? props.runtimeTools?.topFailureCodes ?? [];
   return (
-    <div className="workspace-right-panel__grid">
+    <div className="operator-dashboard__grid">
       <section className="operator-dashboard__metrics" aria-label="Platform health overview">
         {healthCards.map((card) => (
           <div className={`operator-platform-health-card is-${card.status}`} key={card.id}>
