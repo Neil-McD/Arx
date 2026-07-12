@@ -187,12 +187,12 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher \{[\s\S]*?width: 60px;[\s\S]*?height: 60px;[\s\S]*?color: var\(--member-agent-accent\);[\s\S]*?background: rgba\(5, 5, 6, 0\.96\);[\s\S]*?border: 1px solid rgba\(255, 255, 255, 0\.22\);[\s\S]*?border-radius: 16px;/,
+  /\.member-agent-dock-launcher \{[\s\S]*?width: 60px;[\s\S]*?height: 60px;[\s\S]*?color: var\(--member-agent-accent\);[\s\S]*?background: color-mix\(in srgb, var\(--member-agent-accent\) 18%, #111115\);[\s\S]*?border: 1px solid var\(--member-agent-accent-border\);[\s\S]*?border-radius: 16px;/,
   "the agent launcher must keep its purple identity inside a compact, high-contrast control",
 );
 assert.match(
   styles,
-  /box-shadow:\s*0 10px 28px rgba\(0, 0, 0, 0\.58\),\s*0 2px 8px rgba\(0, 0, 0, 0\.46\),\s*inset 0 1px 0 rgba\(255, 255, 255, 0\.08\);/,
+  /box-shadow:\s*0 8px 24px rgba\(0, 0, 0, 0\.46\),\s*0 2px 8px rgba\(0, 0, 0, 0\.34\),\s*inset 0 1px 0 rgba\(196, 181, 253, 0\.1\);/,
   "the launcher must remain visually separated from busy community content",
 );
 assert.match(
@@ -212,7 +212,7 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher:hover \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*background: rgba\(12, 12, 14, 0\.98\);[\s\S]*border-color: rgba\(255, 255, 255, 0\.34\);/,
+  /\.member-agent-dock-launcher:hover \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*background: color-mix\(in srgb, var\(--member-agent-accent\) 24%, #111115\);[\s\S]*border-color: rgba\(167, 139, 250, 0\.48\);/,
   "hover must clarify the floating control without moving it",
 );
 assert.match(
