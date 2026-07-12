@@ -96,7 +96,7 @@ export function useCommunityDeleteController<
       });
       setShowDeleteCommunityModal(false);
       setActiveCommunityId(null);
-      setActivePage("workspace" as PageT);
+      setActivePage("discover" as PageT);
       setActiveView("home" as ViewT);
       setCommunityTab("chat" as TabT);
       setCommunities((prev) => prev.filter((community) => getCommunityId(community) !== deletedId));

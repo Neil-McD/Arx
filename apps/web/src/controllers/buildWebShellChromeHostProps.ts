@@ -54,7 +54,7 @@ export function buildWebShellChromeHostProps(params: {
   directMessagesButton: ReactNode;
   handleExitPublicFunnelPreview: () => void;
   handleTopbarBackFromPublicFunnel: () => void;
-  handleTopbarBackFromWorkspaceSettings: () => void;
+  handleTopbarBackFromSettings: () => void;
   setUserWantsSessions: (value: ((prev: boolean) => boolean) | boolean) => void;
   handleTopbarBackToCommunity: () => void;
   workspaceShellPanels: ReactNode;
@@ -93,11 +93,11 @@ export function buildWebShellChromeHostProps(params: {
   setCommunityRailListElement: WebShellChromeHostProps["communityShell"]["setCommunityRailListElement"];
   getCommunityRailItemBindings: WebShellChromeHostProps["communityShell"]["getCommunityRailItemBindings"];
   setIsFreeAccountInfoOpen: (value: boolean) => void;
-  handleToggleWorkspaceSettings: () => void;
+  handleOpenGlobalSettings: () => void;
   settingsGroup: SettingsGroup;
   setSettingsPage: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
   hasLeftPanel: boolean;
-  isWorkspaceSettings: boolean;
+  isGlobalSettings: boolean;
   mainSurface: ReactNode;
   globalOverlays: ReactNode;
 }): WebShellChromeHostProps {
@@ -168,7 +168,7 @@ export function buildWebShellChromeHostProps(params: {
       directMessagesButton: params.directMessagesButton,
       onExitPublicFunnelPreview: params.handleExitPublicFunnelPreview,
       onBackFromPublicFunnel: params.handleTopbarBackFromPublicFunnel,
-      onBackFromWorkspaceSettings: params.handleTopbarBackFromWorkspaceSettings,
+      onBackFromSettings: params.handleTopbarBackFromSettings,
       onToggleSessions: () => {
         params.setUserWantsSessions((prev: boolean) => !prev);
       },
@@ -255,18 +255,18 @@ export function buildWebShellChromeHostProps(params: {
       communityCreateCtaLabel: "+",
       communityCreateCtaTitle: "Create community",
       activeView: params.activeView,
-      onToggleWorkspaceSettings: params.handleToggleWorkspaceSettings,
+      onOpenGlobalSettings: params.handleOpenGlobalSettings,
     },
     settingsSidebar: {
       showMobileSettingsShell: params.showMobileSettingsShell,
-      isWorkspaceSettings: params.isWorkspaceSettings,
+      isGlobalSettings: params.isGlobalSettings,
       settingsGroup: params.settingsGroup,
       onSelectPage: params.setSettingsPage,
     },
     hasLeftPanel: params.hasLeftPanel,
     showDesktopCommunityRail: params.showDesktopCommunityRail,
     showDesktopCommunityNav: params.showDesktopCommunityNav,
-    isWorkspaceSettings: params.isWorkspaceSettings,
+    isGlobalSettings: params.isGlobalSettings,
     mainSurface: params.mainSurface,
     globalOverlays: params.globalOverlays,
   };

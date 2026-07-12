@@ -4,6 +4,7 @@ import { WebCommunityHost } from "./WebCommunityHost";
 import { WebDiscoverPanel } from "./WebDiscoverPanel";
 import { WebProductDocsPanel } from "./WebProductDocsPanel";
 import { WebPublicCommunityFunnel } from "./WebPublicCommunityFunnel";
+import { WebSettingsSurfaceHost } from "./WebSettingsSurfaceHost";
 import { WebWorkspaceSurfaceHost } from "./WebWorkspaceSurfaceHost";
 import { WebLandingPage } from "./WebLandingPage";
 import { WebOnboardingPage } from "./WebOnboardingPage";
@@ -20,6 +21,7 @@ export type WebAppMainSurfaceHostProps = {
   onboardingPageProps: ComponentProps<typeof WebOnboardingPage>;
   platformBridgePageProps: ComponentProps<typeof WebPlatformBridgePage>;
   showOnboardingModal: boolean;
+  settingsSurfaceHostProps: ComponentProps<typeof WebSettingsSurfaceHost>;
   workspaceSurfaceHostProps: ComponentProps<typeof WebWorkspaceSurfaceHost>;
   publicCommunityFunnelProps: ComponentProps<typeof WebPublicCommunityFunnel>;
   communityHostProps: ComponentProps<typeof WebCommunityHost>;
@@ -31,7 +33,8 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
   return (
     <main
       className={`workspace${
-        props.showPublicCommunityFunnel || props.activePage !== "workspace"
+        props.showPublicCommunityFunnel ||
+        (props.activePage !== "workspace" && props.activePage !== "settings")
           ? " community-mode"
           : ""
       }`}
@@ -46,6 +49,8 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
         <WebLandingPage {...props.landingPageProps} />
       ) : props.activePage === "onboarding" ? (
         <WebPlatformBridgePage {...props.platformBridgePageProps} />
+      ) : props.activePage === "settings" ? (
+        <WebSettingsSurfaceHost {...props.settingsSurfaceHostProps} />
       ) : props.activePage === "workspace" ? (
         <WebWorkspaceSurfaceHost {...props.workspaceSurfaceHostProps} />
       ) : props.showCommunitySurface ? (

@@ -62,20 +62,3 @@ export function deriveOpenDiscoverTransition(state: Pick<AppNavState, "activePag
     nextView: "home",
   };
 }
-
-export type ToggleWorkspaceSettingsTransition = {
-  shouldPushSnapshot: boolean;
-  nextPage: "workspace";
-  nextView: AppView;
-};
-
-export function deriveToggleWorkspaceSettingsTransition(
-  state: Pick<AppNavState, "activePage" | "activeView">,
-): ToggleWorkspaceSettingsTransition {
-  const nextView: AppView = state.activePage === "workspace" && state.activeView === "settings" ? "home" : "settings";
-  return {
-    shouldPushSnapshot: nextView === "settings",
-    nextPage: "workspace",
-    nextView,
-  };
-}

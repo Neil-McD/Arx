@@ -1,5 +1,5 @@
 import { EXTERNAL_MEMORY_IMPORT_PROMPT } from "../../../../shared/externalMemoryImport";
-import type { AppView, SettingsPage } from "../../../../shared/appShellNavigation";
+import type { SettingsPage } from "../../../../shared/appShellNavigation";
 import type { WebGlobalOverlayHostProps } from "../components/WebGlobalOverlayHost";
 
 type InferenceIssueModalState = NonNullable<
@@ -44,8 +44,7 @@ export function buildWebGlobalOverlayHostProps(params: {
   inferenceIssueModal: InferenceIssueModalState;
   isInferenceIssueModalRunning: boolean;
   setInferenceIssueModal: (value: InferenceIssueModalState) => void;
-  setActiveView: (value: AppView) => void;
-  setSettingsPage: (value: SettingsPage) => void;
+  onOpenSettings: (page: SettingsPage) => void;
   onOpenPremiumBilling: () => void;
   isFreeAccountInfoOpen: boolean;
   accountCommerceError: string | null;
@@ -110,8 +109,7 @@ export function buildWebGlobalOverlayHostProps(params: {
           onClose: () => params.setInferenceIssueModal(null),
           onOpenSettings: (reason) => {
             params.setInferenceIssueModal(null);
-            params.setActiveView("settings");
-            params.setSettingsPage(
+            params.onOpenSettings(
               reason === "workspace_credits" ? "billing" : "account",
             );
           },

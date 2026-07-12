@@ -6,7 +6,7 @@ type MobileSecondaryMode = "discover" | "community";
 type MobileShellMode = "agent" | "discover" | "community";
 
 export type WebShellProjection = {
-  isWorkspaceSettings: boolean;
+  isGlobalSettings: boolean;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
   showMobileShell: boolean;
@@ -33,8 +33,7 @@ export function buildWebShellProjection(params: {
   isPublicCommunityFunnel: boolean;
 }): WebShellProjection {
   const isAppRoute = params.publicRouteKind === "app";
-  const isWorkspaceSettings =
-    isAppRoute && params.activePage === "workspace" && params.activeView === "settings";
+  const isGlobalSettings = isAppRoute && params.activePage === "settings";
   const isLandingPage = isAppRoute && params.activePage === "landing";
   const isOnboardingPage = isAppRoute && params.activePage === "onboarding";
   const isPublicAppPage = isLandingPage || isOnboardingPage;
@@ -51,11 +50,13 @@ export function buildWebShellProjection(params: {
       !isPublicAppPage &&
       !params.isPublicCommunityFunnel &&
       (params.activePage === "workspace" ||
+        params.activePage === "settings" ||
         params.activePage === "community" ||
         params.activePage === "discover" ||
         params.activePage === "docs")) ||
     isMobileVisitorCommunity;
-  const showMobileSettingsShell = showMobileAppShell && isWorkspaceSettings && !isMobileVisitorCommunity;
+  const showMobileSettingsShell =
+    showMobileAppShell && isGlobalSettings && !isMobileVisitorCommunity;
   const showMobileShell = showMobileAppShell && !showMobileSettingsShell;
   const showMobileSettingsIndex =
     showMobileSettingsShell && params.mobileSettingsView === "index";
@@ -66,8 +67,7 @@ export function buildWebShellProjection(params: {
     !isMobileVisitorCommunity;
   const sessionsDrawerEnabled =
     isAppRoute &&
-    params.activePage === "workspace" &&
-    !isWorkspaceSettings;
+    params.activePage === "workspace";
   const isSessionsDrawerOpen = sessionsDrawerEnabled && params.userWantsSessions;
   /* The visitor lens: /c/:slug and its /preview render the SAME community
      layout a member sees — shell nav column included. One render path. */
@@ -85,7 +85,7 @@ export function buildWebShellProjection(params: {
   const shouldShowDesktopCommunityRail =
     showDesktopCommunityRail && !isPublicAppPage;
   const hasLeftPanel =
-    (isWorkspaceSettings && !showMobileSettingsShell) || showDesktopCommunityNav;
+    (isGlobalSettings && !showMobileSettingsShell) || showDesktopCommunityNav;
   const mobileShellMode: MobileShellMode = isMobileVisitorCommunity
     ? "community"
     : params.activePage === "workspace"
@@ -103,7 +103,7 @@ export function buildWebShellProjection(params: {
     params.activeView === "home";
 
   return {
-    isWorkspaceSettings,
+    isGlobalSettings,
     showMobileAppShell,
     showMobileSettingsShell,
     showMobileShell,

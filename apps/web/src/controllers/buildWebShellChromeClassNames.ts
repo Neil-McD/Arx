@@ -8,7 +8,7 @@ type BuildWebShellChromeClassNamesParams = {
   mobileOverlay: boolean;
   showDesktopCommunityRail: boolean;
   showDesktopCommunityNav: boolean;
-  isWorkspaceSettings: boolean;
+  isGlobalSettings: boolean;
   hasLeftPanel: boolean;
 };
 
@@ -28,7 +28,7 @@ export function buildWebShellChromeClassNames(
   const shellClassName = `app-shell${
     params.showDesktopCommunityRail ? " with-community-rail" : ""
   }${params.showDesktopCommunityNav ? " community-layout" : ""}${
-    params.showDesktopCommunityNav || params.isWorkspaceSettings
+    params.showDesktopCommunityNav || params.isGlobalSettings
       ? " sessions-compact"
       : ""
   }${!params.hasLeftPanel ? " no-left" : ""} no-right`;

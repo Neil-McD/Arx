@@ -10,7 +10,7 @@ export function WebSettingsSidebar(props: Props) {
 
   if (
     settingsSidebar.showMobileSettingsShell ||
-    !settingsSidebar.isWorkspaceSettings
+    !settingsSidebar.isGlobalSettings
   ) {
     return null;
   }
