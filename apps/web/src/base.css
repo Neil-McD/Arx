@@ -32091,6 +32091,17 @@ button.message-citation-chip:hover {
   min-height: 0;
 }
 
+.operator-console__content > .operator-dashboard__grid {
+  grid-template-rows: none;
+  align-items: start;
+}
+
+.operator-console__content > .operator-dashboard__grid > .operator-dashboard__metrics,
+.operator-console__content > .operator-dashboard__grid > .operator-dashboard__section-heading,
+.operator-console__content > .operator-dashboard__grid > .operator-dashboard__panel--full {
+  grid-column: 1 / -1;
+}
+
 .operator-console .operator-dashboard__metrics > div,
 .operator-console .operator-dashboard__panel {
   border-radius: 8px;
