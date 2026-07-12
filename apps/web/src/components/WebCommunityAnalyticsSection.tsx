@@ -8,6 +8,7 @@ type WebCommunityAnalyticsSectionProps = {
   hasActiveCommunity: boolean;
   hasSession: boolean;
   canViewActiveCommunityAnalytics: boolean;
+  canViewPlatformAnalytics: boolean;
   onRequireSignIn: () => void;
   state: CommunityAnalyticsState;
   actions: CommunityAnalyticsActions;
@@ -18,6 +19,7 @@ export function WebCommunityAnalyticsSection(props: WebCommunityAnalyticsSection
     hasActiveCommunity,
     hasSession,
     canViewActiveCommunityAnalytics,
+    canViewPlatformAnalytics,
     onRequireSignIn,
     state,
     actions,
@@ -43,6 +45,7 @@ export function WebCommunityAnalyticsSection(props: WebCommunityAnalyticsSection
             hasActiveCommunity,
             hasSession,
             canViewActiveCommunityAnalytics,
+            canViewPlatformAnalytics,
           }}
           state={state}
           actions={actions}

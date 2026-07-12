@@ -5,6 +5,7 @@ import { OperatorCommunitiesPanelView } from "./OperatorCommunitiesPanelView";
 import { OperatorEmailPanelView } from "./OperatorEmailPanelView";
 import { OperatorPlatformPanelView } from "./OperatorPlatformPanelView";
 import { useOperatorDashboardData } from "./useOperatorDashboardData";
+import { WebAnalyticsScopeSwitcher } from "./WebAnalyticsScopeSwitcher";
 
 const OPERATOR_TAB_LABELS: Record<OperatorTab, string> = {
   platform: "Platform",
@@ -17,6 +18,7 @@ export type WebOperatorDashboardHostProps = {
   session: AuthSessionLike;
   activeTab: OperatorTab;
   onSelectTab: (tab: OperatorTab) => void;
+  onOpenCommunityAnalytics: (() => void) | null;
 };
 
 export function WebOperatorDashboardHost(props: WebOperatorDashboardHostProps) {
@@ -30,23 +32,29 @@ export function WebOperatorDashboardHost(props: WebOperatorDashboardHostProps) {
     <section className="operator-dashboard operator-console" aria-labelledby="operator-console-title">
       <header className="operator-console__header">
         <div>
-          <p className="operator-dashboard__eyebrow">Polynet operations</p>
-          <h1 id="operator-console-title">Operator Console</h1>
+          <p className="operator-dashboard__eyebrow">Platform analytics</p>
+          <h1 id="operator-console-title">Analytics</h1>
         </div>
-        <nav className="operator-console__tabs" aria-label="Operator console views">
-          {OPERATOR_TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              className={props.activeTab === tab ? "is-active" : ""}
-              aria-current={props.activeTab === tab ? "page" : undefined}
-              onClick={() => props.onSelectTab(tab)}
-            >
-              {OPERATOR_TAB_LABELS[tab]}
-            </button>
-          ))}
-        </nav>
+        <WebAnalyticsScopeSwitcher
+          activeScope="platform"
+          showPlatformScope
+          onOpenCommunityScope={props.onOpenCommunityAnalytics ?? undefined}
+          onOpenPlatformScope={() => undefined}
+        />
       </header>
+      <nav className="operator-console__tabs" aria-label="Platform analytics views">
+        {OPERATOR_TABS.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            className={props.activeTab === tab ? "is-active" : ""}
+            aria-current={props.activeTab === tab ? "page" : undefined}
+            onClick={() => props.onSelectTab(tab)}
+          >
+            {OPERATOR_TAB_LABELS[tab]}
+          </button>
+        ))}
+      </nav>
 
       <div className="operator-console__status" aria-live="polite">
         {operator.error ? (

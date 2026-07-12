@@ -10642,6 +10642,7 @@ export default function App() {
         previewFunnelAction: funnelPreviewAction,
       },
       canViewActiveCommunityAnalytics,
+      canViewPlatformAnalytics: hasOperatorAccess,
       analyticsState: {
         communityAnalyticsRange,
         isLoadingCommunityAnalytics,
@@ -10651,6 +10652,7 @@ export default function App() {
       },
       analyticsActions: {
         setCommunityAnalyticsRange,
+        openPlatformAnalytics: () => openOperatorConsole("platform"),
       },
       resourcesState: {
         isLoadingResources,
@@ -11296,6 +11298,10 @@ export default function App() {
     appToast,
   });
 
+  const selectedCommunityAnalyticsPath = buildCommunityTabPath(
+    selectedActiveCommunitySlug ?? activeCommunity?.slug,
+    "analytics",
+  );
   const mainSurfaceHostProps = buildWebAppMainSurfaceHostProps({
     activePage,
     isPublicCommunityFunnel,
@@ -11569,6 +11575,9 @@ export default function App() {
             session,
             activeTab: activeOperatorTab,
             onSelectTab: openOperatorConsole,
+            onOpenCommunityAnalytics: selectedCommunityAnalyticsPath
+              ? () => navigateTo(selectedCommunityAnalyticsPath)
+              : null,
           }
         : null,
   });

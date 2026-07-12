@@ -23,6 +23,8 @@ const webRouteState = read("shared/webAppRouteState.ts");
 const app = read("apps/web/src/App.tsx");
 const appMainSurfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const operatorHost = read("apps/web/src/components/WebOperatorDashboardHost.tsx");
+const analyticsScopeSwitcher = read("apps/web/src/components/WebAnalyticsScopeSwitcher.tsx");
+const communityAnalytics = read("apps/web/src/components/CommunityAnalyticsPanel.tsx");
 const settingsNav = read("shared/SettingsNavList.tsx");
 const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
 const webDesktopShellHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
@@ -256,6 +258,26 @@ assert.match(
   "operator data must load only after the authorized operator host mounts and must record the canonical surface",
 );
 assert.match(
+  analyticsScopeSwitcher,
+  /if \(!props\.showPlatformScope\) return null/,
+  "platform scope must stay hidden until operator access resolves",
+);
+assert.match(
+  analyticsScopeSwitcher,
+  /Analytics scope[\s\S]*Community[\s\S]*Platform/,
+  "analytics must expose one shared Community and Platform scope control",
+);
+assert.match(
+  operatorHost,
+  /Platform analytics[\s\S]*operator-console-title">Analytics[\s\S]*activeScope="platform"[\s\S]*onOpenCommunityScope/,
+  "the operator route must present the Platform scope of Analytics and preserve a community return path",
+);
+assert.match(
+  communityAnalytics,
+  /activeScope="community"[\s\S]*showPlatformScope=\{capabilities\.canViewPlatformAnalytics\}[\s\S]*actions\.openPlatformAnalytics/,
+  "community analytics must expose Platform only through the resolved operator capability",
+);
+assert.match(
   operatorHost,
   /OPERATOR_TABS\.map[\s\S]*OperatorPlatformPanelView[\s\S]*OperatorBusinessPanelView[\s\S]*OperatorEmailPanelView[\s\S]*OperatorCommunitiesPanelView/,
   "the operator console must expose the four bounded diagnostic views",
@@ -267,8 +289,8 @@ assert.doesNotMatch(
 );
 assert.match(
   settingsNav,
-  /showOperatorConsole && onOpenOperatorConsole[\s\S]*Operator Console/,
-  "global settings navigation must expose the console only after operator access is granted",
+  /showOperatorConsole && onOpenOperatorConsole[\s\S]*Platform Analytics/,
+  "global settings navigation must expose Platform Analytics only after operator access is granted",
 );
 assert.match(
   shellProjection,

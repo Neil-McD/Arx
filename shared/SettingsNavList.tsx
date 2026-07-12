@@ -136,13 +136,13 @@ export function SettingsNavList({
           className="nav-item settings-nav-operator"
           onClick={onOpenOperatorConsole}
           type={buttonType}
-          aria-label="Operator Console"
-          title="Operator Console"
+          aria-label="Platform Analytics"
+          title="Platform Analytics"
         >
           <span className="nav-icon nav-icon-emphasis">
             <ShieldCheck />
           </span>
-          Operator Console
+          Platform Analytics
         </button>
       ) : null}
     </>

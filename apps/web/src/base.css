@@ -24404,6 +24404,11 @@ button.message-citation-chip:hover {
   gap: 4px;
 }
 
+.analytics-scope-switcher {
+  width: 220px;
+  max-width: 100%;
+}
+
 .analytics-refreshing-note {
   font-size: 12px;
   color: var(--text-muted);
@@ -24488,6 +24493,11 @@ button.message-citation-chip:hover {
 .platform-switcher-btn:hover:not(.active):not(.is-active),
 .analytics-range-toggle .analytics-range-btn:hover:not(.active) {
   color: var(--text-secondary);
+}
+
+.platform-switcher-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .settings-panel .platform-switcher .platform-switcher-btn:hover:not(.active):not(.is-active),
@@ -32013,6 +32023,7 @@ button.message-citation-chip:hover {
 .operator-console {
   width: min(1320px, calc(100vw - 64px));
   padding-top: 24px;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .operator-console__header {
@@ -32042,6 +32053,8 @@ button.message-citation-chip:hover {
   gap: 4px;
   overflow-x: auto;
   scrollbar-width: none;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-default);
 }
 
 .operator-console__tabs::-webkit-scrollbar {
