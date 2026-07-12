@@ -32022,7 +32022,7 @@ button.message-citation-chip:hover {
 
 .operator-console {
   width: min(1320px, calc(100vw - 64px));
-  padding-top: 24px;
+  padding-top: 64px;
   grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
@@ -32505,7 +32505,7 @@ button.message-citation-chip:hover {
   }
 
   .operator-console {
-    padding-top: 18px;
+    padding-top: calc(var(--mobile-topbar-clearance) + 18px);
   }
 
   .operator-console__header {
