@@ -7,6 +7,7 @@ import type {
   CommunityAnalyticsCapabilities,
   CommunityAnalyticsState,
 } from "./communityAnalyticsContracts";
+import { WebAnalyticsScopeSwitcher } from "./WebAnalyticsScopeSwitcher";
 
 type CommunityAnalyticsPanelProps = {
   capabilities: CommunityAnalyticsCapabilities;
@@ -61,7 +62,15 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
   return (
     <>
       <div className="analytics-header-row">
-        <div className="panel-title">Community Analytics</div>
+        <div className="analytics-title-stack">
+          <div className="panel-title">Analytics</div>
+          <WebAnalyticsScopeSwitcher
+            activeScope="community"
+            showPlatformScope={capabilities.canViewPlatformAnalytics}
+            onOpenCommunityScope={() => undefined}
+            onOpenPlatformScope={actions.openPlatformAnalytics}
+          />
+        </div>
         <div
           className="platform-switcher platform-switcher-compact"
           role="tablist"
