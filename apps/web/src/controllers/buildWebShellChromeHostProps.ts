@@ -19,8 +19,6 @@ type CommunityLike = {
 
 export function buildWebShellChromeHostProps(params: {
   showHeaderIslands: boolean;
-  isSessionsDrawerOpen: boolean;
-  shouldOverlaySessionsDrawer: boolean;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
   showMobilePublicFunnel: boolean;
@@ -40,7 +38,6 @@ export function buildWebShellChromeHostProps(params: {
   activeCommunityAttentionCount: number;
   openMobileDrawer: () => void;
   handleExitMobileSettings: () => void;
-  handleStartNewWorkspaceThreadFromShell: () => void;
   handleSelectMobileRootPage: WebShellChromeHostProps["mobileTopBarProps"]["onSelectRootPage"];
   setMobileOverlay: (value: MobileOverlay) => void;
   isPublicCommunityFunnel: boolean;
@@ -48,16 +45,11 @@ export function buildWebShellChromeHostProps(params: {
   hasBackTargetSnapshot: boolean;
   backTargetLabel: string | null;
   activeView: "home" | "settings";
-  userWantsSessions: boolean;
-  hasWorkspaceRightPanelControl: boolean;
-  workspaceRightPanelToggle: ReactNode;
   directMessagesButton: ReactNode;
   handleExitPublicFunnelPreview: () => void;
   handleTopbarBackFromPublicFunnel: () => void;
   handleTopbarBackFromSettings: () => void;
-  setUserWantsSessions: (value: ((prev: boolean) => boolean) | boolean) => void;
   handleTopbarBackToCommunity: () => void;
-  workspaceShellPanels: ReactNode;
   communityTab: WebShellChromeHostProps["communityShell"]["communityTab"];
   communityTabIndicators: WebShellChromeHostProps["communityShell"]["communityTabIndicators"];
   canViewMembersActiveCommunity: boolean;
@@ -103,8 +95,6 @@ export function buildWebShellChromeHostProps(params: {
 }): WebShellChromeHostProps {
   return {
     showHeaderIslands: params.showHeaderIslands,
-    isSessionsDrawerOpen: params.isSessionsDrawerOpen,
-    shouldOverlaySessionsDrawer: params.shouldOverlaySessionsDrawer,
     showMobileAppShell: params.showMobileAppShell,
     showMobileSettingsShell: params.showMobileSettingsShell,
     showMobilePublicFunnel: params.showMobilePublicFunnel,
@@ -146,12 +136,7 @@ export function buildWebShellChromeHostProps(params: {
       onBack: params.showMobileSettingsIndex
         ? params.handleExitMobileSettings
         : null,
-      onStartNewThread:
-        !params.showMobileSettingsShell &&
-        !params.forceMobileCommunityRoot &&
-        params.mobileShellMode === "agent"
-          ? params.handleStartNewWorkspaceThreadFromShell
-          : null,
+      onStartNewThread: null,
       onSelectRootPage: params.handleSelectMobileRootPage,
       onOpenCommunitySelector: () => params.setMobileOverlay("community_selector"),
     },
@@ -162,20 +147,12 @@ export function buildWebShellChromeHostProps(params: {
       backTargetLabel: params.backTargetLabel,
       activePage: params.activePage,
       activeView: params.activeView,
-      userWantsSessions: params.userWantsSessions,
-      hasWorkspaceRightPanelControl: params.hasWorkspaceRightPanelControl,
-      workspaceRightPanelToggle: params.workspaceRightPanelToggle,
       directMessagesButton: params.directMessagesButton,
       onExitPublicFunnelPreview: params.handleExitPublicFunnelPreview,
       onBackFromPublicFunnel: params.handleTopbarBackFromPublicFunnel,
       onBackFromSettings: params.handleTopbarBackFromSettings,
-      onToggleSessions: () => {
-        params.setUserWantsSessions((prev: boolean) => !prev);
-      },
-      onStartNewThread: params.handleStartNewWorkspaceThreadFromShell,
       onBackToCommunity: params.handleTopbarBackToCommunity,
     },
-    workspaceShellPanels: params.workspaceShellPanels,
     communityShell: {
       showMobileShell: params.showMobileShell,
       mobileOverlay: params.mobileOverlay,

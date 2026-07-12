@@ -11,7 +11,6 @@ export function buildWebAppMainSurfaceHostProps(params: {
   showOnboardingModal: WebAppMainSurfaceHostProps["showOnboardingModal"];
   holdLandingForAuth: WebAppMainSurfaceHostProps["holdLandingForAuth"];
   settingsSurfaceHostProps: WebAppMainSurfaceHostProps["settingsSurfaceHostProps"];
-  workspaceSurfaceHostProps: WebAppMainSurfaceHostProps["workspaceSurfaceHostProps"];
   publicCommunityFunnelProps: WebAppMainSurfaceHostProps["publicCommunityFunnelProps"];
   communityHostProps: WebAppMainSurfaceHostProps["communityHostProps"];
   discoverPanelProps: WebAppMainSurfaceHostProps["discoverPanelProps"];
@@ -32,7 +31,6 @@ export function buildWebAppMainSurfaceHostProps(params: {
     platformBridgePageProps: params.platformBridgePageProps,
     showOnboardingModal: params.showOnboardingModal,
     settingsSurfaceHostProps: params.settingsSurfaceHostProps,
-    workspaceSurfaceHostProps: params.workspaceSurfaceHostProps,
     publicCommunityFunnelProps: params.publicCommunityFunnelProps,
     communityHostProps: params.communityHostProps,
     discoverPanelProps: params.discoverPanelProps,

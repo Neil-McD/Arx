@@ -225,30 +225,15 @@ assert.match(
   /showOperatorTabs: Boolean\(showControl && params\.hasOperatorRightPanelAccess\)/,
   "operator-only tabs must remain gated by the operator access snapshot",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /resolveWorkspaceRightPanelShellState\(\{[\s\S]*hasSession: Boolean\(session\)[\s\S]*isWorkspaceHome: activePage === "workspace" && activeView === "home"[\s\S]*isMobileAppShell: showMobileAppShell[\s\S]*hasOperatorRightPanelAccess[\s\S]*isOpen: isWorkspaceRightPanelOpen/,
-  "App must resolve workspace right-panel shell state from session, route, mobile shell, operator access, and open preference",
+  /resolveWorkspaceRightPanelShellState|operatorRightPanelSession:|workspaceRightPanelToggle =/,
+  "App must not mount the retired Workspace operator presentation",
 );
-assert.match(
-  app,
-  /operatorRightPanelSession: showWorkspaceRightPanelOperatorTabs \? session : null/,
-  "workspace host must receive an operator data session only after operator access is confirmed",
-);
-assert.match(
-  app,
-  /workspaceRightPanelToggle = showWorkspaceRightPanelControl \? \([\s\S]*workspace-right-panel-toggle/,
-  "workspace right-panel toggle should be built only from the signed-in workspace control flag",
-);
-assert.match(
-  app,
-  /workspaceRightPanelToggle,[\s\S]*directMessagesButton,/,
-  "desktop shell props must receive the workspace right-panel and direct-message controls",
-);
-assert.match(
+assert.doesNotMatch(
   webDesktopShellHeader,
-  /props\.workspaceRightPanelToggle[\s\S]*props\.directMessagesButton/,
-  "desktop header must render the workspace right-panel control before direct messages",
+  /workspaceRightPanelToggle|hasWorkspaceRightPanelControl/,
+  "desktop shell must not expose Workspace operator chrome",
 );
 assert.doesNotMatch(
   webDesktopShellHeader,

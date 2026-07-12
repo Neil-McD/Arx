@@ -43,15 +43,10 @@ export type WebDesktopShellHeaderProps = {
   backTargetLabel: string | null;
   activePage: AppPage;
   activeView: AppView;
-  userWantsSessions: boolean;
-  hasWorkspaceRightPanelControl: boolean;
-  workspaceRightPanelToggle: ReactNode;
   directMessagesButton: ReactNode;
   onExitPublicFunnelPreview: () => void;
   onBackFromPublicFunnel: () => void;
   onBackFromSettings: () => void;
-  onToggleSessions: () => void;
-  onStartNewThread: () => void;
   onBackToCommunity: () => void;
 };
 

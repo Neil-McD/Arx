@@ -92,7 +92,6 @@ const transitions = read("shared/appNavTransitions.ts");
 const app = read("apps/web/src/App.tsx");
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx");
-const workspaceSurface = read("apps/web/src/components/WebWorkspaceSurfaceHost.tsx");
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
 const globalOverlays = read("apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts");
 
@@ -106,7 +105,7 @@ assert.match(
   /activePage === "settings"[\s\S]*WebSettingsSurfaceHost/,
 );
 assert.match(settingsSurface, /SettingsNavList[\s\S]*WebSettingsPanels/);
-assert.doesNotMatch(workspaceSurface, /Settings|activeView/);
+assert.doesNotMatch(mainSurface, /WebWorkspaceSurfaceHost|workspaceSurfaceHostProps/);
 assert.match(
   app,
   /const openGlobalSettings = \(page: SettingsPage\)[\s\S]*activePage === "settings" && settingsPage === page[\s\S]*pushNavSnapshot\(\)[\s\S]*navigateTo\(buildSettingsPath\(page\)\)/,
