@@ -169,7 +169,13 @@
   height: 16px;
 }
 
-.member-agent-dock-header > button {
+.member-agent-dock-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.member-agent-dock-header-actions > button {
   display: grid;
   width: 32px;
   height: 32px;
@@ -181,12 +187,17 @@
   cursor: pointer;
 }
 
-.member-agent-dock-header > button:hover {
+.member-agent-dock-header-actions > button:hover:not(:disabled) {
   color: var(--icon-hover);
   background: var(--hover-overlay);
 }
 
-.member-agent-dock-header > button svg {
+.member-agent-dock-header-actions > button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.member-agent-dock-header-actions > button svg {
   width: 17px;
   height: 17px;
 }

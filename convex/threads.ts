@@ -22,7 +22,12 @@ import {
 } from "../shared/runtimeEngine";
 import { normalizeWorkspacePreviewPort } from "../shared/workspacePreviewPort";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
-import { buildMemberAgentThreadKey } from "../shared/runtimeInvocationSurface";
+import {
+  MEMBER_AGENT_THREAD_KEY_PREFIX,
+  buildMemberAgentEpisodeThreadKey,
+  buildMemberAgentThreadKey,
+  isMemberAgentThreadKeyForCommunity,
+} from "../shared/runtimeInvocationSurface";
 import { MEMBER_AGENT_CONTEXT_MAX_MESSAGES } from "../shared/memberAgentConversationContext";
 
 type ThreadLike = {
@@ -57,6 +62,30 @@ type CloudMessageLike = {
   modelId?: string;
   runId?: string;
   createdAt: number;
+};
+
+type MemberAgentChannelLike = {
+  _id: any;
+  ownerId: any;
+  communityId: any;
+  activeEpisodeId?: any;
+  communityNameSnapshot?: string;
+  communityDeletedAt?: number;
+  nextOrdinal: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type MemberAgentEpisodeLike = {
+  _id: any;
+  channelId: any;
+  threadId: any;
+  ordinal: number;
+  status: "active" | "closed";
+  startedAt: number;
+  closedAt?: number;
+  createdAt: number;
+  updatedAt: number;
 };
 
 type StoredCloudMessageAttachment = {
@@ -1320,6 +1349,212 @@ export const ensureCloudThread = mutation({
   },
 });
 
+async function getMemberAgentChannel(args: {
+  ctx: any;
+  ownerId: any;
+  communityId: any;
+}): Promise<MemberAgentChannelLike | null> {
+  return (await args.ctx.db
+    .query("memberAgentChannels")
+    .withIndex("by_owner_community", (q: any) =>
+      q.eq("ownerId", args.ownerId).eq("communityId", args.communityId),
+    )
+    .unique()) as MemberAgentChannelLike | null;
+}
+
+async function requireActiveMemberAgentEpisodeForUserMessage(args: {
+  ctx: any;
+  ownerId: any;
+  thread: ThreadLike;
+}): Promise<void> {
+  const threadKey = String(args.thread.threadKey ?? "").trim();
+  if (!threadKey.startsWith(`${MEMBER_AGENT_THREAD_KEY_PREFIX}:`)) return;
+  const communityId = String(args.thread.communityId ?? "").trim();
+  if (!communityId || !isMemberAgentThreadKeyForCommunity(threadKey, communityId)) {
+    throw new Error("member_agent_thread_context_mismatch");
+  }
+  const channel = await getMemberAgentChannel({
+    ctx: args.ctx,
+    ownerId: args.ownerId,
+    communityId,
+  });
+  if (typeof channel?.communityDeletedAt === "number") {
+    throw new Error("member_agent_community_deleted");
+  }
+  if (!channel?.activeEpisodeId) throw new Error("member_agent_episode_not_active");
+  const episode = (await args.ctx.db.get(
+    channel.activeEpisodeId,
+  )) as MemberAgentEpisodeLike | null;
+  if (
+    !episode ||
+    episode.channelId !== channel._id ||
+    episode.threadId !== args.thread._id ||
+    episode.status !== "active"
+  ) {
+    throw new Error("member_agent_episode_not_active");
+  }
+}
+
+async function prepareActiveMemberAgentThread(args: {
+  ctx: any;
+  thread: ThreadLike;
+  communityId: string;
+  episodeOrdinal: number;
+  nowMs: number;
+}): Promise<ThreadLike> {
+  const threadKey = String(args.thread.threadKey ?? "").trim();
+  const legacyThreadKey = buildMemberAgentThreadKey(args.communityId);
+  const expectedEpisodeThreadKey = buildMemberAgentEpisodeThreadKey(
+    args.communityId,
+    args.episodeOrdinal,
+  );
+  if (
+    String(args.thread.communityId ?? "").trim() !== args.communityId ||
+    !isMemberAgentThreadKeyForCommunity(threadKey, args.communityId) ||
+    (threadKey !== expectedEpisodeThreadKey &&
+      !(args.episodeOrdinal === 1 && threadKey === legacyThreadKey))
+  ) {
+    throw new Error("member_agent_thread_context_mismatch");
+  }
+  const patch: Record<string, unknown> = {};
+  if (args.thread.modelId !== DEFAULT_ACTIVE_MODEL_ID) patch.modelId = DEFAULT_ACTIVE_MODEL_ID;
+  if (args.thread.runtimeEngine !== "polynet") patch.runtimeEngine = "polynet";
+  if (typeof args.thread.archivedAt === "number") patch.archivedAt = undefined;
+  if (Object.keys(patch).length === 0) return args.thread;
+  patch.updatedAt = args.nowMs;
+  await args.ctx.db.patch(args.thread._id, patch);
+  return ((await args.ctx.db.get(args.thread._id)) as ThreadLike | null) ?? args.thread;
+}
+
+function buildMemberAgentChannelResponse(args: {
+  channel: MemberAgentChannelLike;
+  episode: MemberAgentEpisodeLike;
+  thread: ThreadLike;
+  communityId: string;
+}) {
+  const threadKey = String(args.thread.threadKey ?? "").trim();
+  if (!threadKey) throw new Error("member_agent_thread_key_missing");
+  return {
+    channel_id: String(args.channel._id),
+    episode_id: String(args.episode._id),
+    episode_ordinal: args.episode.ordinal,
+    thread_id: String(args.thread._id),
+    thread_key: threadKey,
+    community_id: args.communityId,
+    model_id: DEFAULT_ACTIVE_MODEL_ID,
+    runtime_engine: "polynet" as const,
+    context_version: normalizeContextVersion(args.thread.contextVersion),
+  };
+}
+
+async function ensureMemberAgentCommunityChannelCore(args: {
+  ctx: any;
+  ownerId: any;
+  community: any;
+  nowMs: number;
+}) {
+  const communityId = String(args.community._id);
+  const existingChannel = await getMemberAgentChannel({
+    ctx: args.ctx,
+    ownerId: args.ownerId,
+    communityId: args.community._id,
+  });
+  if (existingChannel) {
+    if (typeof existingChannel.communityDeletedAt === "number") {
+      throw new Error("member_agent_community_deleted");
+    }
+    if (!existingChannel.activeEpisodeId) throw new Error("member_agent_active_episode_missing");
+    const episode = (await args.ctx.db.get(
+      existingChannel.activeEpisodeId,
+    )) as MemberAgentEpisodeLike | null;
+    if (
+      !episode ||
+      episode.channelId !== existingChannel._id ||
+      episode.status !== "active"
+    ) {
+      throw new Error("member_agent_active_episode_invalid");
+    }
+    const storedThread = (await args.ctx.db.get(episode.threadId)) as ThreadLike | null;
+    if (!storedThread || storedThread.ownerId !== args.ownerId) {
+      throw new Error("member_agent_thread_not_found");
+    }
+    const thread = await prepareActiveMemberAgentThread({
+      ctx: args.ctx,
+      thread: storedThread,
+      communityId,
+      episodeOrdinal: episode.ordinal,
+      nowMs: args.nowMs,
+    });
+    return buildMemberAgentChannelResponse({
+      channel: existingChannel,
+      episode,
+      thread,
+      communityId,
+    });
+  }
+
+  const legacyThreadKey = buildMemberAgentThreadKey(communityId);
+  const episodeOneThreadKey = buildMemberAgentEpisodeThreadKey(communityId, 1);
+  const adoptedThread =
+    (await getCloudThreadByThreadKeyInternal({
+      ctx: args.ctx,
+      ownerId: args.ownerId,
+      threadKey: legacyThreadKey,
+    })) ??
+    (await getCloudThreadByThreadKeyInternal({
+      ctx: args.ctx,
+      ownerId: args.ownerId,
+      threadKey: episodeOneThreadKey,
+    }));
+  const threadId = adoptedThread
+    ? adoptedThread._id
+    : await args.ctx.db.insert("threads", {
+        ownerId: args.ownerId,
+        threadKey: episodeOneThreadKey,
+        title: `${String(args.community.name ?? "Community").trim() || "Community"} agent`,
+        titleSource: "auto",
+        communityId,
+        modelId: DEFAULT_ACTIVE_MODEL_ID,
+        runtimeEngine: "polynet",
+        contextVersion: 0,
+        lastSeq: 0,
+        createdAt: args.nowMs,
+        updatedAt: args.nowMs,
+      });
+  const storedThread = (await args.ctx.db.get(threadId)) as ThreadLike | null;
+  if (!storedThread) throw new Error("member_agent_thread_create_failed");
+  const thread = await prepareActiveMemberAgentThread({
+    ctx: args.ctx,
+    thread: storedThread,
+    communityId,
+    episodeOrdinal: 1,
+    nowMs: args.nowMs,
+  });
+  const channelId = await args.ctx.db.insert("memberAgentChannels", {
+    ownerId: args.ownerId,
+    communityId: args.community._id,
+    communityNameSnapshot:
+      String(args.community.name ?? "Community").trim() || "Community",
+    nextOrdinal: 2,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  const episodeId = await args.ctx.db.insert("memberAgentEpisodes", {
+    channelId,
+    threadId,
+    ordinal: 1,
+    status: "active",
+    startedAt: thread.createdAt,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  await args.ctx.db.patch(channelId, { activeEpisodeId: episodeId });
+  const channel = (await args.ctx.db.get(channelId)) as MemberAgentChannelLike | null;
+  const episode = (await args.ctx.db.get(episodeId)) as MemberAgentEpisodeLike | null;
+  if (!channel || !episode) throw new Error("member_agent_channel_create_failed");
+  return buildMemberAgentChannelResponse({ channel, episode, thread, communityId });
+}
+
 export const ensureMemberAgentCommunityThread = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -1338,42 +1573,66 @@ export const ensureMemberAgentCommunityThread = mutation({
       communityId: args.communityId,
       userId: ownerId,
     });
-    const nowMs = args.nowMs ?? Date.now();
-    const communityId = String(community._id);
-    const threadKey = buildMemberAgentThreadKey(communityId);
-    const existing = await getCloudThreadByThreadKeyInternal({
+    return await ensureMemberAgentCommunityChannelCore({
       ctx,
       ownerId,
-      threadKey,
+      community,
+      nowMs: args.nowMs ?? Date.now(),
     });
-    if (existing) {
-      if (String(existing.communityId ?? "").trim() !== communityId) {
-        throw new Error("member_agent_thread_context_mismatch");
-      }
-      const patch: Record<string, unknown> = { updatedAt: nowMs };
-      if (existing.modelId !== DEFAULT_ACTIVE_MODEL_ID) {
-        patch.modelId = DEFAULT_ACTIVE_MODEL_ID;
-      }
-      if (existing.runtimeEngine !== "polynet") {
-        patch.runtimeEngine = "polynet";
-      }
-      if (typeof existing.archivedAt === "number") {
-        patch.archivedAt = undefined;
-      }
-      await ctx.db.patch(existing._id, patch);
-      const refreshed = (await ctx.db.get(existing._id)) as ThreadLike | null;
-      const thread = refreshed ?? existing;
-      return {
-        thread_id: String(thread._id),
-        thread_key: threadKey,
-        community_id: communityId,
-        model_id: DEFAULT_ACTIVE_MODEL_ID,
-        runtime_engine: "polynet" as const,
-        context_version: normalizeContextVersion(thread.contextVersion),
-      };
-    }
+  },
+});
 
-    const id = await ctx.db.insert("threads", {
+export const startNewMemberAgentCommunityEpisode = mutation({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    expectedActiveEpisodeId: v.id("memberAgentEpisodes"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const { community } = await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: ownerId,
+    });
+    const nowMs = args.nowMs ?? Date.now();
+    await ensureMemberAgentCommunityChannelCore({ ctx, ownerId, community, nowMs });
+    const channel = await getMemberAgentChannel({
+      ctx,
+      ownerId,
+      communityId: community._id,
+    });
+    if (!channel || !channel.activeEpisodeId) {
+      throw new Error("member_agent_active_episode_missing");
+    }
+    if (channel.activeEpisodeId !== args.expectedActiveEpisodeId) {
+      throw new Error("member_agent_active_episode_changed");
+    }
+    const currentEpisode = (await ctx.db.get(
+      channel.activeEpisodeId,
+    )) as MemberAgentEpisodeLike | null;
+    if (
+      !currentEpisode ||
+      currentEpisode.channelId !== channel._id ||
+      currentEpisode.status !== "active"
+    ) {
+      throw new Error("member_agent_active_episode_invalid");
+    }
+    const ordinal = Math.max(
+      currentEpisode.ordinal + 1,
+      Number.isSafeInteger(channel.nextOrdinal) ? channel.nextOrdinal : 2,
+    );
+    const communityId = String(community._id);
+    const threadKey = buildMemberAgentEpisodeThreadKey(communityId, ordinal);
+    const collision = await getCloudThreadByThreadKeyInternal({ ctx, ownerId, threadKey });
+    if (collision) throw new Error("member_agent_episode_thread_collision");
+    const threadId = await ctx.db.insert("threads", {
       ownerId,
       threadKey,
       title: `${String(community.name ?? "Community").trim() || "Community"} agent`,
@@ -1386,14 +1645,37 @@ export const ensureMemberAgentCommunityThread = mutation({
       createdAt: nowMs,
       updatedAt: nowMs,
     });
-    return {
-      thread_id: String(id),
-      thread_key: threadKey,
-      community_id: communityId,
-      model_id: DEFAULT_ACTIVE_MODEL_ID,
-      runtime_engine: "polynet" as const,
-      context_version: 0,
-    };
+    const episodeId = await ctx.db.insert("memberAgentEpisodes", {
+      channelId: channel._id,
+      threadId,
+      ordinal,
+      status: "active",
+      startedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    await ctx.db.patch(currentEpisode._id, {
+      status: "closed",
+      closedAt: nowMs,
+      updatedAt: nowMs,
+    });
+    await ctx.db.patch(channel._id, {
+      activeEpisodeId: episodeId,
+      nextOrdinal: ordinal + 1,
+      updatedAt: nowMs,
+    });
+    const nextChannel = (await ctx.db.get(channel._id)) as MemberAgentChannelLike | null;
+    const episode = (await ctx.db.get(episodeId)) as MemberAgentEpisodeLike | null;
+    const thread = (await ctx.db.get(threadId)) as ThreadLike | null;
+    if (!nextChannel || !episode || !thread) {
+      throw new Error("member_agent_episode_create_failed");
+    }
+    return buildMemberAgentChannelResponse({
+      channel: nextChannel,
+      episode,
+      thread,
+      communityId,
+    });
   },
 });
 
@@ -1692,6 +1974,10 @@ export const addCloudThreadMessage = mutation({
       }
     }
 
+    if (args.role === "user") {
+      await requireActiveMemberAgentEpisodeForUserMessage({ ctx, ownerId, thread });
+    }
+
     const existingBySeq = (await ctx.db
       .query("cloudMessages")
       .withIndex("by_thread_seq", (q) => q.eq("threadId", thread._id).eq("seq", seq))
@@ -1760,6 +2046,10 @@ export const upsertCloudThreadMessageByMessageKey = mutation({
     });
     const messageKey = String(args.messageKey ?? "").trim();
     if (!messageKey) throw new Error("message_key_required");
+
+    if (args.role === "user") {
+      await requireActiveMemberAgentEpisodeForUserMessage({ ctx, ownerId, thread });
+    }
 
     const existing = (await ctx.db
       .query("cloudMessages")

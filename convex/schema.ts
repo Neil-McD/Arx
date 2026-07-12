@@ -3188,6 +3188,32 @@ export default defineSchema({
     .index("by_community_windowEndedAt", ["communityId", "windowEndedAt"])
     .index("by_community_dedupeKey", ["communityId", "dedupeKey"]),
 
+  memberAgentChannels: defineTable({
+    ownerId: v.id("users"),
+    communityId: v.id("communities"),
+    activeEpisodeId: v.optional(v.id("memberAgentEpisodes")),
+    communityNameSnapshot: v.optional(v.string()),
+    communityDeletedAt: v.optional(v.number()),
+    nextOrdinal: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_community", ["ownerId", "communityId"])
+    .index("by_community", ["communityId"]),
+
+  memberAgentEpisodes: defineTable({
+    channelId: v.id("memberAgentChannels"),
+    threadId: v.id("threads"),
+    ordinal: v.number(),
+    status: v.union(v.literal("active"), v.literal("closed")),
+    startedAt: v.number(),
+    closedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_channel_ordinal", ["channelId", "ordinal"])
+    .index("by_thread", ["threadId"]),
+
   threads: defineTable({
     ownerId: v.id("users"),
     threadKey: v.optional(v.string()),

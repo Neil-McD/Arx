@@ -48,6 +48,54 @@ import {
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
 
+type MemberAgentChannelLifecycleLike = {
+  _id: any;
+  activeEpisodeId?: any;
+};
+
+type MemberAgentEpisodeLifecycleLike = {
+  _id: any;
+  channelId: any;
+  status: "active" | "closed";
+};
+
+async function tombstoneMemberAgentChannelsForDeletedCommunity(args: {
+  ctx: any;
+  community: CommunityLike;
+  nowMs: number;
+}): Promise<void> {
+  const channels = (await args.ctx.db
+    .query("memberAgentChannels")
+    .withIndex("by_community", (q: any) => q.eq("communityId", args.community._id))
+    .collect()) as MemberAgentChannelLifecycleLike[];
+  const communityNameSnapshot =
+    String(args.community.name ?? "Deleted community").trim() || "Deleted community";
+  for (const channel of channels) {
+    if (channel.activeEpisodeId) {
+      const episode = (await args.ctx.db.get(
+        channel.activeEpisodeId,
+      )) as MemberAgentEpisodeLifecycleLike | null;
+      if (
+        episode &&
+        episode.channelId === channel._id &&
+        episode.status === "active"
+      ) {
+        await args.ctx.db.patch(episode._id, {
+          status: "closed",
+          closedAt: args.nowMs,
+          updatedAt: args.nowMs,
+        });
+      }
+    }
+    await args.ctx.db.patch(channel._id, {
+      activeEpisodeId: undefined,
+      communityNameSnapshot,
+      communityDeletedAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+  }
+}
+
 async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   id: string;
   slug: string;
@@ -934,6 +982,7 @@ export const deleteCommunity = mutation({
       communityId: args.communityId,
       userId: args.userId,
     });
+    const nowMs = Date.now();
 
     const memberships = (await ctx.db
       .query("communityMemberships")
@@ -1028,6 +1077,12 @@ export const deleteCommunity = mutation({
       }
       await ctx.db.delete(thread._id as any);
     }
+
+    await tombstoneMemberAgentChannelsForDeletedCommunity({
+      ctx,
+      community,
+      nowMs,
+    });
 
     await ctx.db.delete(community._id as any);
     return { ok: true };
