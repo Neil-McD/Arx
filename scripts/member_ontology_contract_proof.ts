@@ -26,6 +26,7 @@ const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const platformSkillRuntime = read("convex/platformSkillRuntime.ts");
 const app = read("apps/web/src/App.tsx");
 const bridgeBackfillScript = read("scripts/backfill_bridge_social_link_facts.sh");
+const contractDoc = read("docs/member-ontology-contract-v1.md");
 
 /* 1. Born consent state matches provenance for all six provenances. */
 assert.equal(deriveBornConsentState("stated_bridge"), "approved");
@@ -94,8 +95,31 @@ assert.ok(
   !memberFactVisibleToLens(factInA, { kind: "founder_admin", communityId: "community_b" }),
   "community A facts must never surface through community B's founder lens",
 );
+assert.ok(
+  memberFactVisibleToLens(factInA, { kind: "founder_admin", communityId: "community_a" }),
+  "approved community facts are visible through that community's founder/admin lens",
+);
 
-/* 4. observed_behavior never reaches the member-to-member lens, any state. */
+/* 4. Unapproved and internal facts never reach founder/admin or orientation. */
+const founderHiddenFacts: MemberFactLike[] = [
+  { communityId: "community_a", kind: "goal", body: "Pending", provenance: "inferred_agent", consentState: "pending" },
+  { communityId: "community_a", kind: "goal", body: "Rejected", provenance: "inferred_agent", consentState: "rejected" },
+  { communityId: "community_a", kind: "goal", body: "Retracted", provenance: "stated_interview", consentState: "retracted" },
+  { communityId: "community_a", kind: "goal", body: "Superseded", provenance: "stated_interview", consentState: "superseded" },
+  { communityId: "community_a", kind: "preference", body: "Observed", provenance: "observed_behavior", consentState: "agent_internal" },
+];
+for (const fact of founderHiddenFacts) {
+  assert.ok(
+    !memberFactVisibleToLens(fact, { kind: "founder_admin", communityId: "community_a" }),
+    `founder/admin must not see ${fact.consentState} facts`,
+  );
+  assert.ok(
+    memberFactVisibleToLens(fact, { kind: "self" }),
+    `the member's self lens must retain its own ${fact.consentState} facts`,
+  );
+}
+
+/* observed_behavior never reaches member-to-member orientation, any state. */
 for (const consentState of ["approved", "pending", "agent_internal"] as const) {
   assert.ok(
     !memberFactVisibleToLens(
@@ -112,7 +136,7 @@ for (const consentState of ["approved", "pending", "agent_internal"] as const) {
   );
 }
 assert.ok(
-  memberFactVisibleToLens(
+  !memberFactVisibleToLens(
     {
       communityId: "community_a",
       kind: "preference",
@@ -122,7 +146,7 @@ assert.ok(
     },
     { kind: "founder_admin", communityId: "community_a" },
   ),
-  "the founder lens may reason over its community's observed facts",
+  "observed behavior must not escape through the human founder/admin lens",
 );
 assert.ok(
   !memberFactVisibleToLens(
@@ -336,5 +360,15 @@ assert.doesNotMatch(rendererModule, /Date\.now|new Date\(/, "the renderer must b
 assert.match(rendererModule, /memberFactVisibleToLens/, "the renderer must re-apply the one visibility predicate");
 assert.match(surface, /loadMemberAccountContext/, "the context query must assemble the deterministic account block");
 assert.match(surface, /renderMemberContextMarkdown/, "the context query must render through the one renderer");
+assert.match(
+  contractDoc,
+  /Founder\/admin[\s\S]*`approved` facts scoped to that community[\s\S]*There is no community-agent-internal member lens in v1/,
+  "the written contract must keep human founder/admin reads separate from future internal agent context",
+);
+assert.doesNotMatch(
+  contractDoc,
+  /Founder agent \(admin lens\)[^\n]*any consent state/,
+  "the contract must not restore the old all-consent-state founder lens",
+);
 
 console.log("PASS: member ontology contract holds — consent from provenance, one predicate, one renderer, isolated scopes.");
