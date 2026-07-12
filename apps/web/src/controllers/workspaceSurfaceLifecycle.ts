@@ -1,8 +1,5 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import {
-  emitWorkspaceEvent,
-  formatWorkspaceInstrumentationError,
-} from "../lib/workspaceInstrumentation";
+import { emitWorkspaceEvent } from "../lib/workspaceInstrumentation";
 
 type WorkspaceSurfaceResetDeps<ProjectT, ThreadT, ThreadMessageT, ThreadStreamingStateT, RuntimeEventT> = {
   resetWorkspaceComposer: () => void;
@@ -20,13 +17,6 @@ type WorkspaceSurfaceResetDeps<ProjectT, ThreadT, ThreadMessageT, ThreadStreamin
   setThreadStreamingStateById: Dispatch<SetStateAction<Record<string, ThreadStreamingStateT>>>;
   setRuntimeEventsByRunId: Dispatch<SetStateAction<Record<string, RuntimeEventT[]>>>;
   setLoadingThreadMessagesThreadId: Dispatch<SetStateAction<string | null>>;
-};
-
-type WorkspaceSurfaceHydrationDeps<SessionT> = {
-  threadsHydratedRef: MutableRefObject<boolean>;
-  loadWorkspaceProjects: (session: SessionT) => Promise<void>;
-  loadThreads: (session: SessionT) => Promise<void>;
-  loadModelRegistry: (session: SessionT) => Promise<void>;
 };
 
 export function resetWorkspaceSurfaceState<
@@ -66,100 +56,5 @@ export function resetWorkspaceSurfaceState<
     detail: {
       threadsHydratedAfter: deps.threadsHydratedRef.current,
     },
-  });
-}
-
-export async function hydrateWorkspaceSurfaceState<SessionT>(
-  deps: WorkspaceSurfaceHydrationDeps<SessionT>,
-  session: SessionT,
-): Promise<void> {
-  const startedAt = Date.now();
-  emitWorkspaceEvent({
-    scope: "lifecycle",
-    name: "workspace_hydrate",
-    status: "start",
-    detail: {
-      threadsHydratedBefore: deps.threadsHydratedRef.current,
-      sessionPresent: Boolean(session),
-    },
-  });
-  deps.threadsHydratedRef.current = false;
-  const results = await Promise.allSettled([
-    deps.loadWorkspaceProjects(session),
-    deps.loadThreads(session),
-  ]);
-  const failureCount = results.filter((result) => result.status === "rejected").length;
-  void deps.loadModelRegistry(session).catch((error) => {
-    emitWorkspaceEvent({
-      scope: "lifecycle",
-      name: "workspace_model_registry_hydrate",
-      status: "failure",
-      error: formatWorkspaceInstrumentationError(error),
-    });
-  });
-  emitWorkspaceEvent({
-    scope: "lifecycle",
-    name: "workspace_hydrate",
-    status: failureCount > 0 ? "failure" : "success",
-    detail: {
-      threadsHydratedAfter: deps.threadsHydratedRef.current,
-      failureCount,
-      durationMs: Date.now() - startedAt,
-    },
-    error:
-      failureCount > 0
-        ? formatWorkspaceInstrumentationError(
-            results
-              .filter((result): result is PromiseRejectedResult => result.status === "rejected")
-              .map((result) => result.reason)[0],
-          )
-        : undefined,
-  });
-}
-
-export async function resumeWorkspaceSurfaceState<SessionT>(
-  deps: WorkspaceSurfaceHydrationDeps<SessionT>,
-  session: SessionT,
-): Promise<void> {
-  const startedAt = Date.now();
-  emitWorkspaceEvent({
-    scope: "lifecycle",
-    name: "workspace_resume",
-    status: "start",
-    detail: {
-      threadsHydratedBefore: deps.threadsHydratedRef.current,
-      sessionPresent: Boolean(session),
-    },
-  });
-  const results = await Promise.allSettled([
-    deps.loadWorkspaceProjects(session),
-    deps.threadsHydratedRef.current ? Promise.resolve() : deps.loadThreads(session),
-  ]);
-  const failureCount = results.filter((result) => result.status === "rejected").length;
-  void deps.loadModelRegistry(session).catch((error) => {
-    emitWorkspaceEvent({
-      scope: "lifecycle",
-      name: "workspace_model_registry_resume",
-      status: "failure",
-      error: formatWorkspaceInstrumentationError(error),
-    });
-  });
-  emitWorkspaceEvent({
-    scope: "lifecycle",
-    name: "workspace_resume",
-    status: failureCount > 0 ? "failure" : "success",
-    detail: {
-      threadsHydratedAfter: deps.threadsHydratedRef.current,
-      failureCount,
-      durationMs: Date.now() - startedAt,
-    },
-    error:
-      failureCount > 0
-        ? formatWorkspaceInstrumentationError(
-            results
-              .filter((result): result is PromiseRejectedResult => result.status === "rejected")
-              .map((result) => result.reason)[0],
-          )
-        : undefined,
   });
 }
