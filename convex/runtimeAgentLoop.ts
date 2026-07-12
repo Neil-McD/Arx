@@ -100,6 +100,7 @@ import {
 import {
   buildRuntimeContextManifest,
 } from "../shared/runtimeContextManifest.ts";
+import { renderMemberAgentIdentityContext } from "../shared/memberAgentIdentityContext.ts";
 import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { parseProviderModelRef } from "./httpInferenceConfig";
@@ -1591,6 +1592,29 @@ async function executeRetrievalAgentLoop(
     })
   ).packet;
   const projectContext = runtimeTurnContext.projectContext ?? null;
+  let memberIdentityContextMd: string | null = null;
+  if (params.invocationSurface === "member_agent_dock") {
+    try {
+      const identity = await params.ctx.runQuery(
+        internal.profiles.resolveMemberAgentIdentityContextInternal,
+        { userId: params.userId as any },
+      );
+      memberIdentityContextMd = renderMemberAgentIdentityContext(
+        identity
+          ? {
+              displayName: identity.display_name,
+              handle: identity.handle,
+              bio: identity.bio,
+              timezone: identity.timezone,
+              socialLinks: identity.social_links,
+            }
+          : null,
+      );
+    } catch {
+      // Identity context improves personalization but must never block a member turn.
+      memberIdentityContextMd = null;
+    }
+  }
   const runtimeContextManifest = buildRuntimeContextManifest({
     generatedAt: runtimeDateTimeIso,
     userId: params.userId ?? null,
@@ -1613,6 +1637,7 @@ async function executeRetrievalAgentLoop(
     selectedPlatformSkills,
     selectedPersonalSkills: selectedUserPlatformSkills,
     selectedCommunitySkills,
+    memberIdentityContextMd,
   });
   const runtimePromptBundle = buildPlatformHarnessRuntimePromptBundle({
     loopBudget: params.loopBudget,
@@ -1636,6 +1661,7 @@ async function executeRetrievalAgentLoop(
     currentTimeZone: runtimeTimeZone,
     accountPlan: params.accountPlan,
     invocationSurface: params.invocationSurface ?? "workspace",
+    memberIdentityContextMd,
   });
   const promptSuffix = executionSession.buildPromptSuffix();
   const privateLifecyclePrompt = buildPrivateLifecyclePrompt(
