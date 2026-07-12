@@ -356,7 +356,7 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
   if (MEMBER_PROFILE_WRITE_TOOL_NAMES.has(toolName)) {
     return {
       family: "member_profile",
-      grantedBy: "selected_platform_onboarding_skill",
+      grantedBy: "explicit_profile_confirmation_flow",
       effect: "write",
     };
   }

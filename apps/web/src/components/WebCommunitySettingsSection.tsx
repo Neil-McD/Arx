@@ -4,11 +4,6 @@ import type { CommunitySettingsLayer } from "../../../../shared/communityAccessV
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
-import type {
-  CommunityMemberOnboardingConfig,
-  CommunityMemberOnboardingPrimaryAction,
-} from "../../../../shared/communityMemberOnboarding";
-import { normalizeExternalUrl, parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 import { formatStripeConnectCountry } from "../../../../shared/stripeConnectCountries";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { CommunitySettingsPane } from "../../../../shared/appShellNavigation";
@@ -125,10 +120,6 @@ type WebCommunitySettingsSectionProps = {
     communitySettingsPricingMode: CommunityPricingMode;
     communitySettingsPriceUsdMonthly: string;
     communitySettingsPriceUsdAnnual: string;
-    communityMemberOnboardingConfig: CommunityMemberOnboardingConfig;
-    isCommunityMemberOnboardingDirty: boolean;
-    communityMemberOnboardingError: string | null;
-    isSavingCommunityMemberOnboarding: boolean;
     isCommunitySettingsDirty: boolean;
     communitySettingsError: string | null;
     isSavingCommunitySettings: boolean;
@@ -168,15 +159,8 @@ type WebCommunitySettingsSectionProps = {
     setCommunitySettingsPricingMode: (value: CommunityPricingMode) => void;
     setCommunitySettingsPriceUsdMonthly: (value: string) => void;
     setCommunitySettingsPriceUsdAnnual: (value: string) => void;
-    setCommunityMemberOnboardingConfig: (
-      value:
-        | CommunityMemberOnboardingConfig
-        | ((prev: CommunityMemberOnboardingConfig) => CommunityMemberOnboardingConfig),
-    ) => void;
-    markCommunityMemberOnboardingDirty: () => void;
     setCommunityPricingDirty: () => void;
     handleSaveCommunitySettings: () => Promise<void> | void;
-    handleSaveCommunityMemberOnboarding: () => Promise<void> | void;
     openDeleteCommunityModal: () => void;
     handleToggleCommunityMute: (value: boolean) => Promise<void> | void;
     handleLeaveCommunity: () => Promise<void> | void;
@@ -215,7 +199,6 @@ function buildPersonalOptInInput(args: {
 
 const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
   community: "Community",
-  onboarding: "Onboarding",
   integrations: "Integrations",
   danger: "Danger",
 };
@@ -256,258 +239,6 @@ function CommunitySettingsPaneSwitcher({
         </button>
       ))}
     </div>
-  );
-}
-
-const COMMUNITY_MEMBER_ONBOARDING_ACTION_LABELS: Record<
-  CommunityMemberOnboardingPrimaryAction,
-  string
-> = {
-  introduce: "Introduce yourself in chat",
-  ask_agent: "Ask the community agent",
-  view_resources: "View starter resources",
-  start_workflow: "Start a recommended workflow",
-};
-
-function resolveMemberOnboardingVideoPreview(videoUrl: string): {
-  host: string;
-  thumbnailUrl: string | null;
-} {
-  const embed = videoUrl ? parseEmbedUrl(videoUrl) : null;
-  const normalizedUrl = videoUrl ? normalizeExternalUrl(videoUrl) : null;
-  const host = normalizedUrl ? normalizedUrl.hostname.replace(/^www\./, "") : "";
-  const thumbnailUrl =
-    embed && "thumbnailUrls" in embed
-      ? (embed.thumbnailUrls[embed.thumbnailUrls.length - 1] ?? embed.thumbnailUrl)
-      : null;
-  return {
-    host,
-    thumbnailUrl,
-  };
-}
-
-function CommunityMemberOnboardingSettingsSection({
-  activeCommunity,
-  state,
-  actions,
-}: SharedSettingsProps & {
-  activeCommunity: ActiveCommunity;
-}) {
-  const [previewMode, setPreviewMode] = useState<"workspace" | "open">("workspace");
-  const config = state.communityMemberOnboardingConfig;
-  const updateConfig = (patch: Partial<CommunityMemberOnboardingConfig>) => {
-    actions.setCommunityMemberOnboardingConfig((prev) => ({ ...prev, ...patch }));
-    actions.markCommunityMemberOnboardingDirty();
-  };
-  const videoUrl = config.video_url ?? "";
-  const videoPreview = resolveMemberOnboardingVideoPreview(videoUrl);
-  const actionLabel = COMMUNITY_MEMBER_ONBOARDING_ACTION_LABELS[config.primary_action];
-  const previewTitle = config.title || `Welcome to ${activeCommunity.name}`;
-  const previewDescription = config.description;
-
-  return (
-    <>
-      <div className="settings-section member-onboarding-settings-section">
-        <label className="member-onboarding-toggle">
-          <input
-            type="checkbox"
-            checked={config.enabled}
-            disabled={state.isSavingCommunityMemberOnboarding}
-            onChange={(event) => updateConfig({ enabled: event.target.checked })}
-          />
-          <span className="member-onboarding-toggle-copy">
-            <strong>Show onboarding to new members</strong>
-            <span>When enabled, new members see the welcome prompt after joining.</span>
-          </span>
-          <span className="member-onboarding-switch" aria-hidden="true" />
-        </label>
-
-        <div className="member-onboarding-layout">
-          <div className="member-onboarding-form">
-            <label className="create-community-field">
-              <span>Welcome title</span>
-              <input
-                type="text"
-                value={config.title}
-                maxLength={120}
-                disabled={state.isSavingCommunityMemberOnboarding}
-                onChange={(event) => updateConfig({ title: event.target.value })}
-              />
-            </label>
-            <label className="create-community-field">
-              <span>Short description</span>
-              <textarea
-                rows={3}
-                value={config.description}
-                maxLength={400}
-                disabled={state.isSavingCommunityMemberOnboarding}
-                onChange={(event) => updateConfig({ description: event.target.value })}
-              />
-            </label>
-            <div className="member-onboarding-field-grid">
-              <label className="create-community-field">
-                <span>Welcome video URL</span>
-                <input
-                  type="url"
-                  placeholder="https://youtube.com/..."
-                  value={videoUrl}
-                  disabled={state.isSavingCommunityMemberOnboarding}
-                  onChange={(event) => updateConfig({ video_url: event.target.value.trim() || null })}
-                />
-                <span className="create-community-hint">
-                  The thumbnail is pulled from the video link when available.
-                </span>
-              </label>
-              <label className="create-community-field">
-                <span>Primary first action</span>
-                <select
-                  className="select-styled"
-                  value={config.primary_action}
-                  disabled={state.isSavingCommunityMemberOnboarding}
-                  onChange={(event) =>
-                    updateConfig({
-                      primary_action: event.target.value as CommunityMemberOnboardingPrimaryAction,
-                    })
-                  }
-                >
-                  {Object.entries(COMMUNITY_MEMBER_ONBOARDING_ACTION_LABELS).map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <label className="create-community-field">
-              <span>AI guide prompt</span>
-              <textarea
-                rows={4}
-                value={config.ai_guide_prompt}
-                maxLength={1000}
-                disabled={state.isSavingCommunityMemberOnboarding}
-                onChange={(event) => updateConfig({ ai_guide_prompt: event.target.value })}
-              />
-              <span className="create-community-hint">
-                Used later by the community agent to orient new members.
-              </span>
-            </label>
-          </div>
-          <div className="member-onboarding-preview">
-            <div className="member-onboarding-preview-top">
-              <div className="member-onboarding-preview-label">Member preview</div>
-              <div className="member-onboarding-preview-modes" role="group" aria-label="Preview state">
-                <button
-                  type="button"
-                  className={previewMode === "workspace" ? "is-active" : ""}
-                  aria-pressed={previewMode === "workspace"}
-                  onClick={() => setPreviewMode("workspace")}
-                >
-                  Workspace
-                </button>
-                <button
-                  type="button"
-                  className={previewMode === "open" ? "is-active" : ""}
-                  aria-pressed={previewMode === "open"}
-                  onClick={() => setPreviewMode("open")}
-                >
-                  Open
-                </button>
-              </div>
-            </div>
-            <div className={`member-onboarding-preview-surface${config.enabled ? "" : " is-muted"}`}>
-              <div className="member-onboarding-preview-workspace">
-                <div className="member-onboarding-preview-hero">
-                  <div className="member-onboarding-preview-avatar" aria-hidden="true">
-                    {activeCommunity.name.slice(0, 1).toUpperCase()}
-                  </div>
-                  <strong>Welcome to {activeCommunity.name}</strong>
-                  <span>You are in Project 1 workspace</span>
-                </div>
-                <div className="member-onboarding-preview-composer">
-                  Describe what you need help with...
-                </div>
-                <button
-                  type="button"
-                  className="member-onboarding-preview-card"
-                  onClick={() => setPreviewMode("open")}
-                >
-                  <span className="member-onboarding-preview-card-media" aria-hidden="true">
-                    {videoPreview.thumbnailUrl ? (
-                      <img src={videoPreview.thumbnailUrl} alt="" loading="lazy" />
-                    ) : (
-                      <span>Video</span>
-                    )}
-                    <span className="member-onboarding-preview-play">Play</span>
-                  </span>
-                  <span className="member-onboarding-preview-card-copy">
-                    <strong>{previewTitle}</strong>
-                    <span>{previewDescription}</span>
-                    <small>{videoPreview.host ? videoPreview.host : "Welcome video"}</small>
-                  </span>
-                </button>
-              </div>
-              {previewMode === "open" ? (
-                <div className="member-onboarding-preview-modal-layer">
-                  <div className="member-onboarding-preview-modal" role="presentation">
-                    <button
-                      type="button"
-                      className="member-onboarding-preview-close"
-                      aria-label="Close preview"
-                      onClick={() => setPreviewMode("workspace")}
-                    >
-                      x
-                    </button>
-                    <div className="member-onboarding-preview-modal-media">
-                      {videoPreview.thumbnailUrl ? (
-                        <img src={videoPreview.thumbnailUrl} alt="" loading="lazy" />
-                      ) : (
-                        <div className="member-onboarding-preview-media-empty">Video</div>
-                      )}
-                      <span className="member-onboarding-preview-play">Play</span>
-                    </div>
-                    <div className="member-onboarding-preview-modal-copy">
-                      <strong>{previewTitle}</strong>
-                      <span>{previewDescription}</span>
-                      {videoPreview.host ? (
-                        <small>Video from {videoPreview.host}</small>
-                      ) : (
-                        <small>No video set yet.</small>
-                      )}
-                    </div>
-                    <div className="member-onboarding-preview-guide">
-                      <span>First action</span>
-                      <strong>{actionLabel}</strong>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-        {state.communityMemberOnboardingError ? (
-          <div className="auth-error">{state.communityMemberOnboardingError}</div>
-        ) : null}
-        <div className="create-community-actions member-onboarding-actions">
-          <button
-            className={`platform-save-button${
-              state.isCommunityMemberOnboardingDirty ? " is-dirty" : " is-saved"
-            }`}
-            type="button"
-            disabled={
-              state.isSavingCommunityMemberOnboarding ||
-              !state.isCommunityMemberOnboardingDirty
-            }
-            onClick={() => void actions.handleSaveCommunityMemberOnboarding()}
-          >
-            {state.isSavingCommunityMemberOnboarding
-              ? "Saving..."
-              : state.isCommunityMemberOnboardingDirty
-                ? "Save onboarding"
-                : "Saved"}
-          </button>
-        </div>
-      </div>
-    </>
   );
 }
 
@@ -1191,14 +922,14 @@ function CommunityMemberSettingsSection({
         <div className="settings-section-desc">
           Manage how {activeCommunity.name} behaves for your account.
         </div>
-        <label className="member-onboarding-toggle" style={{ marginTop: 16 }}>
+        <label className="community-member-toggle" style={{ marginTop: 16 }}>
           <input
             type="checkbox"
             checked={state.communityMemberMuted}
             disabled={state.isLoadingCommunityMemberSettings}
             onChange={(event) => void actions.handleToggleCommunityMute(event.target.checked)}
           />
-          <span className="member-onboarding-toggle-copy">
+          <span className="community-member-toggle-copy">
             <strong>{state.communityMemberMuted ? "Community muted" : "Mute community"}</strong>
             <span>
               {state.communityMemberMuted
@@ -1206,7 +937,7 @@ function CommunityMemberSettingsSection({
                 : "Reduce notifications and attention markers from this community."}
             </span>
           </span>
-          <span className="member-onboarding-switch" aria-hidden="true" />
+          <span className="community-member-switch" aria-hidden="true" />
         </label>
         {state.communityMemberSettingsError ? (
           <div className="auth-error" style={{ marginTop: 12 }}>
@@ -1253,8 +984,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
   } = props;
   const isOwnerSettingsLayer = communitySettingsLayer === "owner";
   const ownerSettingsPanes: CommunitySettingsPane[] = canDeleteCommunity
-    ? ["community", "onboarding", "integrations", "danger"]
-    : ["community", "onboarding", "integrations"];
+    ? ["community", "integrations", "danger"]
+    : ["community", "integrations"];
   const availableSettingsPanes = canManageCommunitySettings ? ownerSettingsPanes : [];
   const selectedSettingsPane = availableSettingsPanes.includes(activePane)
     ? activePane
@@ -1355,13 +1086,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   </button>
                 </div>
               </>
-            ) : null}
-            {selectedSettingsPane === "onboarding" ? (
-              <CommunityMemberOnboardingSettingsSection
-                activeCommunity={activeCommunity}
-                state={state}
-                actions={actions}
-              />
             ) : null}
             {selectedSettingsPane === "integrations" ? (
               <CommunityIntegrationsSettingsSection

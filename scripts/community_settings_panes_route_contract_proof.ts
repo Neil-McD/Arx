@@ -13,15 +13,20 @@ const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfac
 const settingsSection = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
 const accessViewModel = read("shared/communityAccessViewModel.ts");
 
-for (const pane of ["community", "onboarding", "integrations", "danger"] as const) {
+for (const pane of ["community", "integrations", "danger"] as const) {
   assert.match(navigation, new RegExp(`"${pane}"`), `navigation contract missing ${pane} pane slug`);
   assert.match(settingsSection, new RegExp(`${pane}`), `settings UI missing ${pane} pane`);
 }
 
 assert.match(
   navigation,
-  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"onboarding"[\s\S]*"integrations"[\s\S]*"danger"[\s\S]*\] as const/,
+  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"integrations"[\s\S]*"danger"[\s\S]*\] as const/,
   "community settings panes must be a shared slug union",
+);
+assert.doesNotMatch(
+  settingsSection,
+  /CommunityMemberOnboarding|member-onboarding|Save onboarding|AI guide prompt/,
+  "retired community onboarding controls must not remain in settings",
 );
 assert.doesNotMatch(
   navigation,

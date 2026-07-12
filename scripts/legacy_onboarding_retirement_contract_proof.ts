@@ -15,6 +15,7 @@ for (const path of [
   "convex/agentLifecycleActivations.ts",
   "shared/cloudOnboardingGuideGateway.ts",
   "shared/runtimeSkillLifecycle.ts",
+  "shared/communityMemberOnboarding.ts",
 ]) {
   assert.equal(existsSync(path), false, `${path} must remain retired`);
 }
@@ -56,10 +57,25 @@ const toolRegistry = read("shared/toolRegistry.ts");
 assert.match(toolRegistry, /member_profile_confirm_facts/);
 
 const schema = read("convex/schema.ts");
-assert.match(schema, /Inert retention table for historical onboarding-agent rows/);
-assert.match(schema, /agentLifecycleActivations:\s*defineTable/);
+assert.doesNotMatch(schema, /agentLifecycleActivations:\s*defineTable|memberOnboarding:/);
+
+const retiredCommunityConfigSurface = [
+  read("apps/web/src/App.tsx"),
+  read("apps/web/src/components/WebCommunitySettingsSection.tsx"),
+  read("convex/communityLifecycle.ts"),
+  read("shared/cloudCommunityAdminGateway.ts"),
+  read("shared/appShellNavigation.ts"),
+  read("shared/runtimeContextManifest.ts"),
+].join("\n");
+assert.doesNotMatch(
+  retiredCommunityConfigSurface,
+  /CommunityMemberOnboarding|communityMemberOnboarding|member_onboarding|memberOnboarding|saveCommunityMemberOnboardingConfig|selected_platform_onboarding_skill/,
+);
 
 const generatedApi = read("convex/_generated/api.d.ts");
-assert.doesNotMatch(generatedApi, /onboardingLifecycle|agentLifecycleActivations/);
+assert.doesNotMatch(
+  generatedApi,
+  /onboardingLifecycle|agentLifecycleActivations|saveCommunityMemberOnboardingConfig/,
+);
 
 console.log("legacy_onboarding_retirement_contract_proof: ok");

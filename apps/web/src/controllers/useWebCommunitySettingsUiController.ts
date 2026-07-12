@@ -1,8 +1,4 @@
 import { useCallback, useRef, useState } from "react";
-import {
-  buildDefaultCommunityMemberOnboardingConfig,
-  type CommunityMemberOnboardingConfig,
-} from "../../../../shared/communityMemberOnboarding";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
@@ -24,27 +20,18 @@ export function useWebCommunitySettingsUiController() {
     useState<CommunityPricingMode>("free");
   const [communitySettingsPriceUsdMonthly, setCommunitySettingsPriceUsdMonthly] = useState("");
   const [communitySettingsPriceUsdAnnual, setCommunitySettingsPriceUsdAnnual] = useState("");
-  const [communityMemberOnboardingConfig, setCommunityMemberOnboardingConfig] =
-    useState<CommunityMemberOnboardingConfig>(() =>
-      buildDefaultCommunityMemberOnboardingConfig(),
-    );
   const [communitySettingsError, setCommunitySettingsError] = useState<string | null>(null);
-  const [communityMemberOnboardingError, setCommunityMemberOnboardingError] =
-    useState<string | null>(null);
   const [communitySettingsBannerUploadError, setCommunitySettingsBannerUploadError] =
     useState<string | null>(null);
   const [isProcessingCommunitySettingsBanner, setIsProcessingCommunitySettingsBanner] = useState(false);
   const [isCommunityAvatarFocusModalOpen, setIsCommunityAvatarFocusModalOpen] = useState(false);
   const [isCommunityBannerFocusModalOpen, setIsCommunityBannerFocusModalOpen] = useState(false);
   const [isSavingCommunitySettings, setIsSavingCommunitySettings] = useState(false);
-  const [isSavingCommunityMemberOnboarding, setIsSavingCommunityMemberOnboarding] =
-    useState(false);
   const [isSettingsBannerDragOver, setIsSettingsBannerDragOver] = useState(false);
   const [isSettingsAvatarDragOver, setIsSettingsAvatarDragOver] = useState(false);
 
   const communitySettingsLoadedCommunityIdRef = useRef<string | null>(null);
   const communitySettingsDirtyRef = useRef(false);
-  const communityMemberOnboardingDirtyRef = useRef(false);
   const communityPricingDirtyRef = useRef(false);
 
   const markCommunitySettingsDirty = useCallback(() => {
@@ -53,10 +40,6 @@ export function useWebCommunitySettingsUiController() {
 
   const markCommunityPricingDirty = useCallback(() => {
     communityPricingDirtyRef.current = true;
-  }, []);
-
-  const markCommunityMemberOnboardingDirty = useCallback(() => {
-    communityMemberOnboardingDirtyRef.current = true;
   }, []);
 
   return {
@@ -92,12 +75,8 @@ export function useWebCommunitySettingsUiController() {
     setCommunitySettingsPriceUsdMonthly,
     communitySettingsPriceUsdAnnual,
     setCommunitySettingsPriceUsdAnnual,
-    communityMemberOnboardingConfig,
-    setCommunityMemberOnboardingConfig,
     communitySettingsError,
     setCommunitySettingsError,
-    communityMemberOnboardingError,
-    setCommunityMemberOnboardingError,
     communitySettingsBannerUploadError,
     setCommunitySettingsBannerUploadError,
     isProcessingCommunitySettingsBanner,
@@ -108,18 +87,14 @@ export function useWebCommunitySettingsUiController() {
     setIsCommunityBannerFocusModalOpen,
     isSavingCommunitySettings,
     setIsSavingCommunitySettings,
-    isSavingCommunityMemberOnboarding,
-    setIsSavingCommunityMemberOnboarding,
     isSettingsBannerDragOver,
     setIsSettingsBannerDragOver,
     isSettingsAvatarDragOver,
     setIsSettingsAvatarDragOver,
     communitySettingsLoadedCommunityIdRef,
     communitySettingsDirtyRef,
-    communityMemberOnboardingDirtyRef,
     communityPricingDirtyRef,
     markCommunitySettingsDirty,
     markCommunityPricingDirty,
-    markCommunityMemberOnboardingDirty,
   };
 }

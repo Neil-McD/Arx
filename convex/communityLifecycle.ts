@@ -44,10 +44,6 @@ import {
   type CommunityPublishReadinessInput,
 } from "../shared/communityPublishReadiness";
 import {
-  normalizeCommunityMemberOnboardingConfig,
-  type CommunityMemberOnboardingConfig,
-} from "../shared/communityMemberOnboarding";
-import {
   canReceiveCommunityRevenue,
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
@@ -71,7 +67,6 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   banner_zoom: number;
   visibility: string;
   entry_policy: string;
-  member_onboarding: CommunityMemberOnboardingConfig;
   created_at: string;
   updated_at: string;
 }> {
@@ -97,51 +92,9 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
     banner_zoom: branding.banner_zoom,
     visibility: row.visibility,
     entry_policy: entryPolicy,
-    member_onboarding: mapStoredMemberOnboardingConfig(row.memberOnboarding, row.name),
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
   };
-}
-
-function buildStoredMemberOnboardingConfig(args: {
-  input: unknown;
-  communityName: string;
-  userId: any;
-  nowMs: number;
-}): NonNullable<CommunityLike["memberOnboarding"]> {
-  const normalized = normalizeCommunityMemberOnboardingConfig(
-    args.input as any,
-    args.communityName,
-  );
-  return {
-    enabled: normalized.enabled,
-    title: normalized.title,
-    description: normalized.description,
-    videoUrl: normalized.video_url,
-    primaryAction: normalized.primary_action,
-    aiGuidePrompt: normalized.ai_guide_prompt,
-    updatedAt: args.nowMs,
-    updatedByUserId: args.userId,
-  };
-}
-
-function mapStoredMemberOnboardingConfig(
-  config: CommunityLike["memberOnboarding"] | undefined,
-  communityName: string,
-): CommunityMemberOnboardingConfig {
-  return normalizeCommunityMemberOnboardingConfig(
-    config
-      ? {
-          enabled: config.enabled,
-          title: config.title,
-          description: config.description,
-          video_url: config.videoUrl ?? null,
-          primary_action: config.primaryAction,
-          ai_guide_prompt: config.aiGuidePrompt,
-        }
-      : null,
-    communityName,
-  );
 }
 
 async function saveCommunityOneLinerInternal(
@@ -730,62 +683,6 @@ export const saveCommunitySettings = mutation({
       banner_focus_y: branding.banner_focus_y,
       banner_zoom: branding.banner_zoom,
       visibility: updated.visibility,
-      updated_at: toIsoString(updated.updatedAt),
-    };
-  },
-});
-
-export const saveCommunityMemberOnboardingConfig = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    config: v.object({
-      enabled: v.boolean(),
-      title: v.string(),
-      description: v.string(),
-      video_url: v.optional(v.union(v.string(), v.null())),
-      primary_action: v.union(
-        v.literal("introduce"),
-        v.literal("ask_agent"),
-        v.literal("view_resources"),
-        v.literal("start_workflow"),
-      ),
-      ai_guide_prompt: v.string(),
-    }),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = Date.now();
-    const { community } = await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId,
-    });
-    const memberOnboarding = buildStoredMemberOnboardingConfig({
-      input: args.config,
-      communityName: community.name,
-      userId,
-      nowMs,
-    });
-
-    await ctx.db.patch(community._id as any, {
-      memberOnboarding,
-      updatedAt: nowMs,
-    });
-
-    const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
-    if (!updated) throw new Error("community_not_found");
-    return {
-      community_id: String(updated._id),
-      member_onboarding: mapStoredMemberOnboardingConfig(
-        updated.memberOnboarding,
-        updated.name,
-      ),
       updated_at: toIsoString(updated.updatedAt),
     };
   },

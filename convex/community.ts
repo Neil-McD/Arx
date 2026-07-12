@@ -166,7 +166,6 @@ import {
   generateCommunityBrandingUploadUrl as generateCommunityBrandingUploadUrlImpl,
   saveCommunityPublicPresentation as saveCommunityPublicPresentationImpl,
   saveCommunityLaunchProfile as saveCommunityLaunchProfileImpl,
-  saveCommunityMemberOnboardingConfig as saveCommunityMemberOnboardingConfigImpl,
   saveCommunityOneLiner as saveCommunityOneLinerImpl,
   saveCommunitySettings as saveCommunitySettingsImpl,
 } from "./communityLifecycle";
@@ -308,7 +307,6 @@ export const hideCommunityAiFeedPost = hideCommunityAiFeedPostImpl;
 export const publishCommunityAiFeedAgentPost = publishCommunityAiFeedAgentPostImpl;
 export const reactToCommunityAiFeedPost = reactToCommunityAiFeedPostImpl;
 export const saveCommunitySettings = saveCommunitySettingsImpl;
-export const saveCommunityMemberOnboardingConfig = saveCommunityMemberOnboardingConfigImpl;
 export const saveCommunityLaunchProfile = saveCommunityLaunchProfileImpl;
 export const saveCommunityOneLiner = saveCommunityOneLinerImpl;
 export const getCommunityLaunchSetupStatus = getCommunityLaunchSetupStatusImpl;
