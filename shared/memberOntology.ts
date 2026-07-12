@@ -105,8 +105,11 @@ export type MemberOntologyLens =
 export function memberFactVisibleToLens(fact: MemberFactLike, lens: MemberOntologyLens): boolean {
   if (lens.kind === "self") return true;
   if (lens.kind === "founder_admin") {
-    /* The founder lens sees its own community's facts in any state (including
-       agent_internal observations). Platform facts reach it via the spine. */
+    /* Human founder/admin reads fail closed: only member-approved facts from
+       this exact community. Any future community-agent internal context needs
+       a distinct lens rather than widening this one. */
+    if (fact.consentState !== "approved") return false;
+    if (fact.provenance === "observed_behavior") return false;
     return fact.communityId === lens.communityId;
   }
   /* member_orientation: approved facts of the shared community only. Never

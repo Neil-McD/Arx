@@ -93,7 +93,7 @@ stated_interview   → approved-in-scope (the confirm card is the batch approval
 form_answer        → approved-in-scope (same confirm card)
 social_enrichment  → pending
 inferred_agent     → pending
-observed_behavior  → agent_internal (terminal; never leaves agent lenses)
+observed_behavior  → agent_internal (terminal; remains private/internal)
 ```
 
 Transitions:
@@ -107,10 +107,10 @@ any            → superseded    (a newer fact of the same kind replaces it; old
 
 Who may transition: **members approve, retract, reject. Agents may only
 propose** (create `pending` rows) and supersede with newer `pending`/derived
-rows. Admins transition nothing — founder agents read, they do not consent on
-a member's behalf. This is the contract's single most load-bearing rule:
-**founder agents act on facts, members approve facts, and the two never share
-a lens.**
+rows. Admins transition nothing and read only approved community facts; they do
+not consent on a member's behalf. This is the contract's single most
+load-bearing rule: **founders act only on approved member facts, members approve
+facts, and human/admin reads never double as an internal agent lens.**
 
 The onboarding confirm card ("here's what I'll tell {creator} — right?") is
 formally: batch-approve all `stated_interview` + `form_answer` rows created in
@@ -122,16 +122,18 @@ that session, scoped to that community.
    community. What a member told community A can never appear in a query
    scoped to community B. Enforced structurally by `communityId`, and
    procedurally by the single shared visibility predicate (below).
-2. `observed_behavior` facts never render on member-to-member surfaces,
-   regardless of consent state.
+2. `observed_behavior` facts never render on founder/admin or member-to-member
+   surfaces, regardless of consent state. The member's private self lens retains
+   the complete ledger.
 3. **Platform spine visibility (decided 2026-07-08):** the spine is visible by
    default to every community the member joins — it is an enriched profile
    card. A per-community hide toggle is the escape hatch.
 4. **Retention on leave/removal (decided 2026-07-08):** when membership ends,
    that community's scoped facts drop from member-to-member surfaces
-   immediately, but the founder / founder agent retains them — a CRM-like
-   record of a past member (win-backs, rejoin context). Hard deletion happens
-   only on account deletion or explicit member retraction.
+   immediately, but the founder/admin lens retains approved facts — a CRM-like
+   record of a past member (win-backs, rejoin context). Retraction removes a
+   fact from every non-self read model while preserving the ledger tombstone;
+   account deletion erases the row.
 5. Account deletion erases the member's ledger rows and spine entirely.
 
 ## The Platform Spine
@@ -148,9 +150,14 @@ through one shared predicate function; no reader hand-rolls visibility.
 
 | Lens | Scope | May see |
 | --- | --- | --- |
-| Founder agent (admin lens) | one community | spine + that community's facts in any consent state, including `agent_internal` observed facts; retains after member leaves (invariant 4) |
+| Founder/admin | one community | spine + `approved` facts scoped to that community; nothing pending, rejected, retracted, superseded, or observed; retains approved facts after member leaves (invariant 4) |
 | Member-help (self lens) | the member's own agent | everything of their own — the richest view; consent trivially satisfied |
 | Member-to-member (orientation card) | shared community | spine + `approved` facts scoped to the community both share; nothing pending, nothing observed, nothing from other communities |
+
+There is no community-agent-internal member lens in v1. If one is introduced,
+it must be a distinct read model with explicit actor and provenance rules. It
+must not widen `founder_admin`, and rejected, retracted, or superseded facts
+must never become actionable context merely because an agent is reading.
 
 ## Write Paths
 
@@ -170,7 +177,9 @@ through one shared predicate function; no reader hand-rolls visibility.
    born pending; the member's review approves/rejects each.
 4. **Ongoing observation** → agents/compiler write `inferred_agent` (pending)
    and `observed_behavior` (agent_internal) facts over time; the capture-loop
-   surfaces pending ones for approval at natural moments.
+   surfaces pending ones for approval at natural moments. Neither state reaches
+   the human founder/admin lens. A future community-agent-internal consumer must
+   use its own explicitly designed lens.
 
 ### Bridge Social-Link Repair
 
