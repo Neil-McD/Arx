@@ -232,23 +232,18 @@ assert.match(
 );
 assert.match(
   runtimeAgentLoopSource,
-  /systemPrompt\s*=\s*`\$\{runtimePromptBundle\.text\}\$\{promptSuffix\}\$\{privateLifecyclePrompt\}`/,
-  "final system prompt should be bundle text plus harness suffix plus optional private lifecycle context",
+  /systemPrompt\s*=\s*`\$\{runtimePromptBundle\.text\}\$\{promptSuffix\}`/,
+  "final system prompt should be bundle text plus the resolved harness suffix",
 );
 assert.match(
   runtimeAgentLoopSource,
   /id:\s*"harness_prompt_suffix"/,
   "prompt receipt should account for the existing harness prompt suffix",
 );
-assert.match(
-  runtimeAgentLoopSource,
-  /id:\s*"private_lifecycle_context"/,
-  "prompt receipt should account for private lifecycle context by section metadata",
-);
 assert.doesNotMatch(
   runtimeAgentLoopSource,
-  /payload:\s*\{[\s\S]*privateLifecycleContextMd:/,
-  "prompt receipt payload must not dump private lifecycle markdown",
+  /privateLifecycleContextMd|private_lifecycle_context|privateLifecyclePrompt/,
+  "retired onboarding lifecycle context must not enter the prompt or receipt",
 );
 
 console.log("runtime_prompt_bundle_proof: ok");

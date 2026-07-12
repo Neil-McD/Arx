@@ -13,7 +13,6 @@ import {
 import {
   COMMUNITY_MANAGER_PLATFORM_RUNTIME_SKILLS,
   GLOBAL_PLATFORM_RUNTIME_SKILLS,
-  PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL,
   type RuntimePlatformSkillDefinition,
 } from "./platformSkillRuntime";
 import {
@@ -27,11 +26,6 @@ import {
   buildCommunityResourceRuntimeLaneState,
   type CommunityResourceRuntimeLaneState,
 } from "../shared/communityResourceLane";
-import {
-  describeRuntimeSkillLifecycleTrigger,
-  normalizeRuntimeSkillLifecycleTrigger,
-  type RuntimeSkillLifecycleTrigger,
-} from "../shared/runtimeSkillLifecycle";
 
 type UserPlatformSkillInstallRow = {
   _id: any;
@@ -206,26 +200,12 @@ function dedupeRuntimeSelectedPlatformSkills(
   return result;
 }
 
-export function buildRuntimeLifecyclePlatformSelectedSkills(
-  lifecycleTrigger: RuntimeSkillLifecycleTrigger | null | undefined,
-): RuntimeSelectedPlatformSkill[] {
-  const trigger = normalizeRuntimeSkillLifecycleTrigger(lifecycleTrigger);
-  if (!trigger) return [];
-  return [
-    buildRuntimeSelectedPlatformSkill(PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL, {
-      activation_route: "lifecycle_trigger",
-      activation_reason: describeRuntimeSkillLifecycleTrigger(trigger),
-    }),
-  ];
-}
-
 async function resolveRuntimePlatformSkillScope(args: {
   ctx: any;
   communityId: any | null;
   userId: any;
   includeSelectedData: boolean;
   communityResourceLane: CommunityResourceRuntimeLaneState;
-  lifecycleTrigger: RuntimeSkillLifecycleTrigger | null;
 }): Promise<{
   inventory: RuntimePlatformSkillInventory[];
   selectedCandidates: ScopedExplicitlyMentionedSkillCandidate<
@@ -233,11 +213,7 @@ async function resolveRuntimePlatformSkillScope(args: {
     RuntimeSelectedPlatformSkill
   >[];
   autoSelectedSkills: RuntimeSelectedPlatformSkill[];
-  lifecycleSelectedSkills: RuntimeSelectedPlatformSkill[];
 }> {
-  const lifecycleSelectedSkills = buildRuntimeLifecyclePlatformSelectedSkills(
-    args.lifecycleTrigger,
-  );
   const globalInventory = GLOBAL_PLATFORM_RUNTIME_SKILLS.map(
     buildRuntimePlatformSkillInventoryItem,
   );
@@ -260,7 +236,6 @@ async function resolveRuntimePlatformSkillScope(args: {
       inventory: globalInventory,
       selectedCandidates: globalSelectedCandidates,
       autoSelectedSkills: [],
-      lifecycleSelectedSkills,
     };
   }
 
@@ -294,7 +269,6 @@ async function resolveRuntimePlatformSkillScope(args: {
         : []),
     ],
     autoSelectedSkills,
-    lifecycleSelectedSkills,
   };
 }
 
@@ -586,7 +560,6 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
         content: v.string(),
       }),
     ),
-    lifecycleTrigger: v.optional(v.literal("onboarding_completed")),
   },
   handler: async (ctx, args): Promise<RuntimeSkillResolutionResult> => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -598,9 +571,6 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       args.messages as RuntimeSkillInferenceMessage[],
     );
     const includeSelectedData = requestedMentionTokens.length > 0;
-    const lifecycleTrigger = normalizeRuntimeSkillLifecycleTrigger(
-      args.lifecycleTrigger ?? null,
-    );
     const communityResourceLane = await resolveCommunityResourceRuntimeLane({
       ctx,
       communityId: args.communityId ?? null,
@@ -617,7 +587,6 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       userId,
       includeSelectedData,
       communityResourceLane,
-      lifecycleTrigger,
     });
     userPlatformSkillScope = filterUserSkillScopeAgainstPlatform({
       userSkillScope: userPlatformSkillScope,
@@ -684,7 +653,6 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       .map((selection) => selection.value as RuntimeSelectedPlatformSkill);
     const selectedPlatformSkills = dedupeRuntimeSelectedPlatformSkills([
       ...platformSkillScope.autoSelectedSkills,
-      ...platformSkillScope.lifecycleSelectedSkills,
       ...explicitlySelectedPlatformSkills,
     ]);
 

@@ -2,291 +2,127 @@
 
 Status: active contract
 
-This contract defines how Polynet skills should route context into the runtime harness without turning the system prompt into a dumping ground.
+This contract defines how Polynet skills route bounded workflow context into the runtime harness.
 
 ## First Principle
 
 Skills separate availability from activation.
 
-A skill can be available to a user, community, or platform lane without its full instructions entering every turn. The harness should expose compact skill inventory by default, then inject full skill instructions only when a backend-validated activation route selects that skill for the current turn.
+A skill may be available without its full instructions entering every turn. The
+harness exposes compact inventory by default and injects a selected body only
+after a backend-validated activation route chooses it.
 
-## What A Skill Is
+## Authority
 
-A skill is a reusable workflow package that can shape how an agent behaves for a task, domain, lifecycle event, or community workflow.
+Skill instructions sit below:
 
-Skills may define:
-
-- compact metadata used for routing
-- instructions used after activation
-- trigger policy used by backend selection
-- required runtime capabilities
-- optional references, scripts, assets, or templates
-- safety limits and failure behavior
-
-## What A Skill Is Not
-
-A skill is not:
-
-- a new authority layer above platform policy
-- a way to bypass community access, entitlements, billing, or tool policy
-- a second MCP/app runtime path
-- a replacement for resources, memory, or project context
-- an always-on prompt blob
-- a human-visible context receipt
-
-## Authority Order
-
-Skill instructions sit below the platform and runtime authority layers.
-
-The compact authority order is:
-
-1. platform doctrine and security rules
+1. platform doctrine and security
 2. access, entitlement, and billing checks
 3. runtime and tool policy
-4. backend-validated community lens
-5. selected platform skills
-6. selected community skills
-7. selected personal skills
-8. bounded resources, memory, and runtime evidence
-9. user request
+4. server-validated community scope
 
-Skills can guide workflow choices, but they cannot grant access, expand tool permissions by themselves, or weaken platform constraints.
+Skills cannot grant access, expand tool permissions by text, or weaken platform
+constraints.
 
 ## Scopes
 
-### Platform Skills
+- Platform skills are built into the harness and selected by platform-owned capability rules.
+- Community skills are attached to an authorized community lens.
+- Personal skills are installed by the member and remain private to that member.
+- Project skills are deferred.
 
-Platform skills are built into the harness and selected by platform-owned capability rules.
-
-Current example:
-
-- `platform:resources-architect`
-- requires `community_resources_manage`
-- exposes resource-builder tool names only after platform skill selection
-
-Current lifecycle example:
-
-- `platform:onboarding-guide`
-- globally visible as a locked platform skill
-- selected by explicit `$onboarding-guide` mention or backend lifecycle trigger evidence
-- grants only `member_profile_confirm_facts`, and only after platform skill selection
-
-### Community Skills
-
-Community skills are attached to the active community lens. They should be preferred for community-specific work when the active lens validates access.
-
-Community skills must fail closed when the user is not entitled to the community.
-
-### Personal Skills
-
-Personal skills are installed by the user and remain available across community lenses.
-
-When a community skill and personal skill overlap, the community-scoped skill wins for that community lens.
-
-### Project Skills
-
-Project skills are deferred. If added, they should be project/workspace-scoped workflow packages, not a second implementation of community or personal skills.
+Higher-authority scopes shadow duplicate lower-authority skills. Platform wins
+over community and personal; community wins over personal inside that lens.
 
 ## Activation Routes
 
-Activation must be explicit enough to debug and narrow enough to avoid context bloat.
+Current routes:
 
-Allowed activation routes:
+- `explicit_mention`: the member typed a `$skill-token`.
+- `platform_required`: a backend capability lane requires the platform skill.
 
-- `explicit_mention`: the user typed a `$skill-token`.
-- `ui_selected`: the UI submitted a structured skill selection.
-- `platform_required`: backend platform lane requires the skill, such as a builder resource-management lane.
-- `lifecycle_trigger`: backend lifecycle event selects a skill, such as onboarding completion or first workspace thread.
-- `task_match`: backend selector matches request intent against skill metadata with confidence and ambiguity controls.
+Deferred routes:
 
-Current behavior supports `explicit_mention`, `platform_required`, and the
-bridge-completion product event as a backend-validated onboarding
-`lifecycle_trigger`. The onboarding platform skill remains an explicit-mention canary
-for platform-owned skills that are globally visible but not auto-injected.
-`ui_selected`, additional lifecycle event sources, and `task_match` are contract
-targets, not assumed current behavior.
+- `ui_selected`
+- `lifecycle_trigger`
+- `task_match`
 
-If activation is ambiguous, the harness should not inject competing skill bodies. It should either select the higher-authority unambiguous skill or record the ambiguity and proceed without the ambiguous skill body.
+Selected skill records carry backend-only `activation_route` and
+`activation_reason` evidence. Missing evidence remains missing; the runtime must
+not invent it.
 
-Selected skill records should carry backend-only activation evidence:
+## Current Platform Skill
 
-- `activation_route`: the route that selected the skill
-- `activation_reason`: a compact diagnostic reason for the selection
+`platform:resources-architect` is available only to the authorized community
+resource-builder lane. Its builder tools are exposed only after the platform
+skill is selected.
 
-If selected skill evidence is missing or malformed in a normalized runtime
-payload, the manifest should preserve that as missing evidence rather than
-inventing a route.
-
-## Lifecycle Private Context
-
-Lifecycle-triggered runs may need server-derived context that is useful to the
-selected skill but too private or too attackable to treat as a user message.
-For onboarding, this includes member ontology markdown and community-scoped
-member context.
-
-That context must use the runtime private lifecycle context channel, not the
-normal chat message envelope. The normal message should stay a compact,
-auditable lifecycle request. The private lifecycle context can be injected into
-the server-side prompt as orientation for the selected lifecycle skill, but:
-
-- it must not be persisted as a fake user message
-- it must not become `latestUserText`
-- it must not be used for explicit `$skill` mention selection
-- prompt receipts may record only section identity and character counts, not
-  the private markdown itself
-
-## Package Shape
-
-The mature package shape should be:
-
-```ts
-type SkillPackageContract = {
-  id: string;
-  catalogSkillId?: string;
-  name: string;
-  mentionToken: string;
-  description: string;
-  scope: "platform" | "community" | "personal" | "project";
-  instructionsMd: string;
-  triggerPolicy?: {
-    allowedRoutes: Array<
-      | "explicit_mention"
-      | "ui_selected"
-      | "platform_required"
-      | "lifecycle_trigger"
-      | "task_match"
-    >;
-    allowImplicitActivation?: boolean;
-    lifecycleEvents?: string[];
-    taskMatchHints?: string[];
-  };
-  requiredCapabilities?: string[];
-  requiredTools?: string[];
-  references?: Array<{
-    id: string;
-    title: string;
-    kind: "doc" | "resource" | "template" | "script" | "asset";
-    loadPolicy: "only_when_needed" | "never_in_prompt" | "selected_with_skill";
-  }>;
-  safetyLimits?: {
-    maxInstructionChars?: number;
-    maxReferenceChars?: number;
-    requiresConfirmationBeforeWrite?: boolean;
-  };
-};
-```
-
-The current implementation is intentionally smaller. Add fields only when they remove ambiguity or prevent context waste.
+There is no global platform skill and no bridge-triggered skill activation.
 
 ## Current Ground Truth
 
-Current database tables:
+Database tables:
 
-- `skillPackages`: owner, catalog id, name, mention token, description, active instructions, active revision pointer
-- `skillPackageRevisions`: revisioned instruction bodies
-- `userPlatformSkillInstalls`: user-owned personal skill installs
-- `communitySkillAttachments`: community-attached skill records
-- `agentLifecycleActivations`: backend-only lifecycle activation ledger for
-  idempotent proactive runs
+- `skillPackages`
+- `skillPackageRevisions`
+- `userPlatformSkillInstalls`
+- `communitySkillAttachments`
 
-Current runtime seams:
+Runtime seams:
 
-- `convex/runtimeSkillResolution.ts`: resolves skill inventory and selected skills
-- `convex/runtimeHarnessComposition.ts`: composes skill/app prompt suffixes
-- `convex/runtimeAgentLoop.ts`: assembles skill resolution, context manifest, prompt, tools, and execution
-- `shared/runtimeSkillInventoryPrompt.ts`: bounds the inventory prompt
-- `shared/platformSkillOverlayRuntime.ts`: renders platform skill inventory and selected platform instructions
-- `shared/communityOverlayRuntime.ts`: renders community skill inventory and selected community instructions
-- `shared/personalSkillOverlayRuntime.ts`: renders personal skill inventory and selected personal instructions
-- `shared/runtimeContextManifest.ts`: records selected skill prompt evidence for backend audit
+- `convex/runtimeSkillResolution.ts` resolves inventory and selected skills.
+- `convex/runtimeHarnessComposition.ts` composes bounded prompt suffixes.
+- `convex/runtimeAgentLoop.ts` assembles prompt, manifest, tools, and execution.
+- `shared/runtimeSkillInventoryPrompt.ts` bounds inventory text.
+- `shared/runtimeContextManifest.ts` records selected-skill evidence.
 
 Current behavior:
 
-- globally available platform skill inventory is visible through bounded routing metadata
-- builder-lane platform skill inventory can be backend-selected by lane
-- personal and community skill inventory is visible through bounded routing metadata
-- personal and community skill bodies load only after explicit `$skill` activation
-- globally available platform skill bodies load only after explicit `$skill` activation or lifecycle selection
-- platform skills shadow lower-authority duplicates
-- community skills shadow personal duplicates inside a community lens
-- selected skills are recorded in backend context manifests
-- selected skill records include backend-only activation route and reason
-- the onboarding platform skill can be selected by explicit mention or backend lifecycle trigger
-- the onboarding platform skill grants one narrow member-ontology write tool:
-  `member_profile_confirm_facts`; the tool requires an active community lens,
-  writes only for the authenticated member, and accepts only confirmed
-  `stated_interview` / `form_answer` facts
-- explicit profile completion no longer writes legacy pending
-  user-scoped `onboarding_completed` lifecycle evidence
-- the backend onboarding capability can resolve an active community lens,
-  ensure one community-scoped `onboarding_completed` activation, create or
-  reuse a deterministic normal cloud thread, and return preparation state
-  without invoking a model
-- the current community-first web bridge does not call that capability; it
-  resolves an authorized community destination and enters community chat
-  without creating a hidden personal thread or runtime turn
-- the normal runtime handler admits that message-less turn only when thread
-  ownership, deterministic thread scope, community lens, and a claimable
-  activation agree; it then selects `lifecycle_trigger`, suppresses synthetic
-  user-message persistence, and streams the normal runtime timeline
-- lifecycle activation finalization is run-id guarded so a reclaimed stale run
-  cannot overwrite the current activation claim
-- no cron, email, notification, or background dispatcher is wired in this slice
+- platform, personal, and community inventory is compact and bounded
+- personal and community bodies load only after explicit mention
+- the resource-builder platform skill is selected by its backend lane
+- duplicate mention tokens are shadowed by higher authority
+- ambiguity fails closed without injecting competing bodies
+- selected skills and activation evidence appear in backend manifests
+- tools are granted by runtime policy and selected capability, never by prompt text alone
+
+## Dormant Profile Primitive
+
+`member_profile_confirm_facts` remains a permissioned runtime primitive for a
+future profile-building workflow. It is not granted by default and no current
+global platform skill exposes it. The tool requires an authenticated member,
+an active community scope, an explicit confirmation marker, and bounded
+`stated_interview` or `form_answer` facts.
 
 ## Keep
 
 - bounded skill inventory
 - selected-body injection
-- platform, community, and personal scope separation
-- duplicate shadowing by higher-authority scope
-- backend-only context evidence
-- resource-builder platform skill as a platform skill, not a generic prompt
+- scope separation and duplicate shadowing
+- backend activation evidence
+- resource-builder platform skill
+- human-inspectable context receipts
 
 ## Add Later
 
-- reconnect lifecycle onboarding through a visible interactive community-agent
-  surface rather than the isolated personal Workspace handoff
 - first-class trigger policy fields
-- first workspace thread lifecycle trigger
 - `ui_selected` activation
-- runtime dispatcher wiring for pending `lifecycle_trigger` activations
-- skill references/assets/dependencies
-- task matching with ambiguity controls
+- generic lifecycle activation only when a concrete visible product flow needs it
+- task matching with confidence and ambiguity controls
+- skill references, assets, scripts, and templates
 
 ## Do Not Add
 
-- a separate onboarding prompt stack
-- human-inspectable context receipts
+- an invisible bridge-triggered agent turn
+- a separate lifecycle prompt stack
 - all-skill injection
-- user-configurable skill authority
-- community-owned MCP runtime tools hidden inside skills
-- broad implicit activation without evidence and ambiguity controls
+- user-configurable platform authority
+- broad implicit activation without evidence
+- community-owned MCP capabilities hidden inside skills
 
-## Onboarding Skill Target
+## Definition Of Done
 
-Onboarding remains a lifecycle-triggered skill capability, not a special-case
-prompt. It is not emitted by the current web bridge. The bridge now has one job:
-complete deterministic account setup and enter the server-authorized community.
-
-The retained backend capability still supports a normal streaming runtime turn:
-it creates or reuses a deterministic cloud thread, atomically claims the
-activation, injects the onboarding skill body, and forces the bounded
-orientation protocol (`get_active_community_context`, then
-`search_product_docs` for Polynet or `community_resources_map` for a named
-community). It records completion only after the assistant message persists.
-
-Reactivation is deferred until the product has a visible interactive
-community-agent surface. That surface must reuse this governed runtime substrate
-without restoring bridge-to-Workspace navigation or creating an invisible turn.
-
-## Definition Of Done For Skill Harness Maturity
-
-The skill harness is mature when:
-
-- skill inventory is compact and bounded
-- full instructions load only when selected
-- activation routes are explicit and auditable
-- ambiguity fails closed
-- package references load only when needed
-- tools are granted by platform/runtime policy, not by skill text
-- lifecycle skills reuse the same harness path as explicit skills
+The skill harness is mature when inventory is bounded, full instructions load
+only when selected, activation is explicit and auditable, ambiguity fails
+closed, references load only when needed, and tools remain governed by runtime
+policy rather than skill prose.

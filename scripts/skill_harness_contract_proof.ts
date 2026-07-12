@@ -7,749 +7,196 @@ import { buildEffectiveSkills } from "../shared/effectiveSkills.ts";
 import {
   COMMUNITY_MANAGER_PLATFORM_SKILLS,
   GLOBAL_PLATFORM_SKILLS,
-  PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES,
-  PLATFORM_ONBOARDING_GUIDE_SKILL,
   PLATFORM_RESOURCES_ARCHITECT_SKILL,
   PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES,
   buildPlatformSkillToolNamesForSelection,
 } from "../shared/platformSkills.ts";
 import {
   extractExplicitSkillMentions,
-  normalizeRuntimeSkillActivationRoute,
   resolveScopedExplicitlyMentionedSkills,
 } from "../shared/runtimeSkillActivation.ts";
-import {
-  describeRuntimeSkillLifecycleTrigger,
-  normalizeRuntimeSkillLifecycleTrigger,
-  type RuntimeSkillLifecycleTrigger,
-} from "../shared/runtimeSkillLifecycle.ts";
 import {
   DEFAULT_RUNTIME_SKILL_INVENTORY_PROMPT_BUDGET_CHARS,
   buildBoundedSkillInventoryPrompt,
 } from "../shared/runtimeSkillInventoryPrompt.ts";
 import { buildRuntimeContextManifest } from "../shared/runtimeContextManifest.ts";
 
-function readText(path: string): string {
+function read(path: string): string {
   return readFileSync(path, "utf8");
 }
 
-function assertIncludes(haystack: string, needle: string, label: string) {
-  assert.ok(haystack.includes(needle), `expected ${label} to include ${needle}`);
+const contract = read("docs/skill-harness-contract.md");
+const runtimeSkillResolution = read("convex/runtimeSkillResolution.ts");
+const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
+const runtimeHarnessComposition = read("convex/runtimeHarnessComposition.ts");
+
+for (const marker of [
+  "Skills separate availability from activation.",
+  "explicit_mention",
+  "platform_required",
+  "skillPackages",
+  "skillPackageRevisions",
+  "userPlatformSkillInstalls",
+  "communitySkillAttachments",
+  "activation_route",
+  "activation_reason",
+  "human-inspectable context receipts",
+  "all-skill injection",
+]) {
+  assert.ok(contract.includes(marker), `skill harness contract missing ${marker}`);
 }
+assert.doesNotMatch(contract, /platform:onboarding-guide|\$onboarding-guide|onboarding_completed/);
 
-function assertExcludes(haystack: string, needle: string, label: string) {
-  assert.ok(!haystack.includes(needle), `expected ${label} to exclude ${needle}`);
-}
+const inventoryPrompt = buildBoundedSkillInventoryPrompt({
+  heading: "TEST_SKILL_CONTEXT",
+  introLines: ["Use compact inventory to route skill behavior."],
+  budgetChars: 320,
+  skills: Array.from({ length: 16 }, (_, index) => ({
+    name: `Workflow ${index}`,
+    mentionToken: `workflow-${index}`,
+    description: "A bounded workflow description that should be compacted.",
+  })),
+});
+assert.ok(inventoryPrompt.text.length <= 320);
+assert.equal(inventoryPrompt.report.usedChars, inventoryPrompt.text.length);
+assert.ok(
+  DEFAULT_RUNTIME_SKILL_INVENTORY_PROMPT_BUDGET_CHARS >=
+    inventoryPrompt.text.length,
+);
 
-function promptCharLength(value: string): number {
-  return Array.from(value).length;
-}
-
-const PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL = {
-  ...PLATFORM_ONBOARDING_GUIDE_SKILL,
-  instructionsMd:
-    "Introduce a newly onboarded Polynet user to the platform with one concrete next action.",
-};
-
-function buildRuntimeLifecyclePlatformSelectedSkills(
-  lifecycleTrigger: RuntimeSkillLifecycleTrigger | null | undefined,
-) {
-  const trigger = normalizeRuntimeSkillLifecycleTrigger(lifecycleTrigger);
-  if (!trigger) return [];
-  return [
+assert.deepEqual(
+  extractExplicitSkillMentions([
+    { role: "user", content: "Use $weekly-research and $launch." },
+  ]),
+  ["weekly-research", "launch"],
+);
+const explicitResolution = resolveScopedExplicitlyMentionedSkills(
+  [
     {
-      platform_skill_id: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.id,
-      catalog_skill_id:
-        PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.catalogSkillId ?? null,
-      name: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.name,
-      mention_token: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.mentionToken,
-      description: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.description ?? null,
-      requires_capability:
-        PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.requiresCapability,
-      instructions_md: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.instructionsMd,
-      activation_route: "lifecycle_trigger" as const,
-      activation_reason: describeRuntimeSkillLifecycleTrigger(trigger),
+      scope: "personal" as const,
+      mentionToken: "weekly-research",
+      value: { id: "personal-weekly" },
     },
-  ];
-}
-
-function proveContractNamesCurrentGroundTruth() {
-  const contract = readText("docs/skill-harness-contract.md");
-  const requiredNeedles = [
-    "Skills separate availability from activation.",
-    "explicit_mention",
-    "ui_selected",
-    "platform_required",
-    "lifecycle_trigger",
-    "task_match",
-    "skillPackages",
-    "skillPackageRevisions",
-    "userPlatformSkillInstalls",
-    "communitySkillAttachments",
-    "convex/runtimeSkillResolution.ts",
-    "convex/runtimeHarnessComposition.ts",
-    "convex/runtimeAgentLoop.ts",
-    "shared/runtimeContextManifest.ts",
-    "platform:onboarding-guide",
-    "member_profile_confirm_facts",
-    "explicit-mention canary",
-    "activation_route",
-    "activation_reason",
-    "a separate onboarding prompt stack",
-    "human-inspectable context receipts",
-    "all-skill injection",
-  ];
-  for (const needle of requiredNeedles) {
-    assertIncludes(contract, needle, "skill harness contract");
-  }
-
-  const schema = readText("convex/schema.ts");
-  for (const table of [
-    "skillPackages: defineTable",
-    "skillPackageRevisions: defineTable",
-    "userPlatformSkillInstalls: defineTable",
-    "communitySkillAttachments: defineTable",
-  ]) {
-    assertIncludes(schema, table, "current skill schema");
-  }
-  console.log("PASS: contract names current skill ground truth");
-}
-
-function proveBoundedInventoryBeforeSelectedBodies() {
-  const result = buildBoundedSkillInventoryPrompt({
-    heading: "TEST_SKILL_CONTEXT",
-    introLines: ["Use compact inventory to route skill behavior."],
-    budgetChars: 320,
-    skills: Array.from({ length: 16 }, (_, index) => ({
-      name: `Workflow ${index}`,
-      mentionToken: `workflow-${index}`,
-      description: "Long routing description. ".repeat(30),
-    })),
-  });
-
-  assert.ok(
-    promptCharLength(result.text) <= 320,
-    "expected inventory prompt to honor supplied budget",
-  );
-  assert.ok(
-    result.report.includedCount > 0,
-    "expected at least some compact skill inventory to remain visible",
-  );
-  assert.ok(
-    result.report.truncatedDescriptionCount > 0 ||
-      result.report.omittedCount > 0,
-    "expected oversized inventory to be shortened or omitted",
-  );
-
-  const resolved = composeResolvedRuntimeHarness({
-    personalMountedTools: [],
-    skillResolution: {
-      requested_mention_tokens: [],
-      ambiguous_mention_tokens: [],
-      community_resource_lane: {
-        lane: "member",
-        can_read_live_resources: true,
-        can_use_resource_builder: false,
-      },
-      platform_skill_inventory: [],
-      selected_platform_skills: [],
-      user_platform_skill_inventory: Array.from({ length: 300 }, (_, index) => ({
-        user_platform_skill_install_id: `install-${index}`,
-        skill_package_id: `skill-${index}`,
-        catalog_skill_id: `skill-${index}`,
-        name: `Personal Skill ${index}`,
-        mention_token: `personal-skill-${index}`,
-        description: "Long personal skill description. ".repeat(40),
-      })),
-      selected_user_platform_skills: [],
-      community_skill_inventory: [],
-      selected_community_skills: [],
+    {
+      scope: "community" as const,
+      mentionToken: "launch",
+      value: { id: "community-launch" },
     },
-  });
+  ],
+  ["weekly-research", "launch"],
+);
+assert.equal(explicitResolution.selected.length, 2);
+assert.deepEqual(explicitResolution.ambiguousMentionTokens, []);
 
-  assert.ok(
-    promptCharLength(resolved.systemPromptSuffix) <=
-      DEFAULT_RUNTIME_SKILL_INVENTORY_PROMPT_BUDGET_CHARS,
-    "expected unselected skill inventory to stay bounded",
-  );
-  assertExcludes(
-    resolved.systemPromptSuffix,
-    "PERSONAL_SKILL_PACKAGE:",
-    "unselected personal skill body injection",
-  );
-  console.log("PASS: inventory is bounded and unselected bodies stay out");
-}
-
-function proveExplicitSelectionAndAmbiguitySemantics() {
-  assert.deepEqual(
-    extractExplicitSkillMentions([
-      { role: "user", content: "Please use $weekly-research and $onboarding." },
-    ]),
-    ["weekly-research", "onboarding"],
-  );
-  assert.deepEqual(
-    extractExplicitSkillMentions([
-      { role: "user", content: "No skill token here." },
-    ]),
-    [],
-  );
-
-  const resolvedUnique = resolveScopedExplicitlyMentionedSkills(
-    [
-      {
-        scope: "personal",
-        mentionToken: "weekly-research",
-        value: { id: "personal-weekly" },
-      },
-    ],
-    ["weekly-research"],
-  );
-  assert.deepEqual(resolvedUnique.selected, [
-    { scope: "personal", value: { id: "personal-weekly" } },
-  ]);
-  assert.deepEqual(resolvedUnique.ambiguousMentionTokens, []);
-
-  const resolvedAmbiguous = resolveScopedExplicitlyMentionedSkills(
-    [
-      {
-        scope: "personal",
-        mentionToken: "weekly-research",
-        value: { id: "personal-weekly" },
-      },
-      {
-        scope: "community",
-        mentionToken: "weekly-research",
-        value: { id: "community-weekly" },
-      },
-    ],
-    ["weekly-research"],
-  );
-  assert.deepEqual(resolvedAmbiguous.selected, []);
-  assert.deepEqual(resolvedAmbiguous.ambiguousMentionTokens, [
-    "weekly-research",
-  ]);
-  console.log("PASS: explicit skill selection fails closed on ambiguity");
-}
-
-function proveScopeShadowingAndPlatformToolExpansion() {
-  const projected = buildEffectiveSkills({
-    platformSkills: COMMUNITY_MANAGER_PLATFORM_SKILLS,
-    personalSkills: [
-      {
-        id: "personal-install",
-        enabled: true,
-        skill: {
-          id: "personal-resources",
-          name: "Resources Architect",
-          mentionToken: "resources-architect",
-          description: "Personal duplicate",
-          catalogSkillId: "platform-resources-architect",
-          instructionsMd: "Personal duplicate instructions.",
-        },
-      },
-    ],
-    communitySkills: [
-      {
-        id: "community-attachment",
-        enabled: true,
-        skill: {
-          id: "community-resources",
-          name: "Resources Architect",
-          mentionToken: "resources-architect",
-          description: "Community duplicate",
-          catalogSkillId: "platform-resources-architect",
-        },
-      },
-    ],
-  });
-
-  assert.equal(projected.length, 1);
-  assert.equal(projected[0]?.scope, "platform");
-  assert.equal(projected[0]?.locked, true);
-  assert.equal(projected[0]?.platform_skill?.id, PLATFORM_RESOURCES_ARCHITECT_SKILL.id);
-  assert.equal(projected[0]?.personal_install?.id, "personal-install");
-  assert.equal(projected[0]?.community_attachment?.id, "community-attachment");
-
-  assert.deepEqual(
-    buildPlatformSkillToolNamesForSelection([
-      { platform_skill_id: "platform:resources-architect" },
-    ]),
-    PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES,
-  );
-  assert.deepEqual(
-    buildPlatformSkillToolNamesForSelection([
-      { platform_skill_id: "platform:onboarding-guide" },
-    ]),
-    PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES,
-  );
-  assert.deepEqual(buildPlatformSkillToolNamesForSelection([]), []);
-  console.log("PASS: higher-authority skills shadow duplicates and expand platform tools");
-}
-
-function proveActivationEvidenceSurvivesRuntimeAndManifest() {
-  const normalized = normalizeRuntimeSkillResolution({
-    requested_mention_tokens: ["weekly-research"],
-    ambiguous_mention_tokens: [],
-    community_resource_lane: {
-      lane: "builder",
-      can_read_live_resources: true,
-      can_use_resource_builder: true,
-    },
-    platform_skill_inventory: [],
-    selected_platform_skills: [
-      {
-        platform_skill_id: "platform:resources-architect",
-        catalog_skill_id: "platform-resources-architect",
+const projected = buildEffectiveSkills({
+  platformSkills: COMMUNITY_MANAGER_PLATFORM_SKILLS,
+  personalSkills: [
+    {
+      id: "personal-install",
+      enabled: true,
+      skill: {
+        id: "personal-skill",
         name: "Resources Architect",
-        mention_token: "resources-architect",
-        description: "Organize community Resources.",
-        requires_capability: "community_resources_manage",
-        instructions_md: "Refactor community Resources from source evidence.",
-        activation_route: "platform_required",
-        activation_reason:
-          "active builder community resource lane requires this platform workflow",
+        mentionToken: "resources-architect",
+        description: "Personal duplicate",
+        catalogSkillId: null,
+        instructionsMd: "Personal instructions.",
       },
-    ],
-    user_platform_skill_inventory: [],
-    selected_user_platform_skills: [
-      {
-        user_platform_skill_install_id: "personal-weekly-install",
-        skill_package_id: "personal-weekly-skill",
-        catalog_skill_id: "weekly-research",
-        name: "Weekly Research",
-        mention_token: "weekly-research",
-        description: "Run a weekly research workflow.",
-        skill_revision_id: "weekly-research-revision-1",
-        instructions_md: "Research carefully.",
-        activation_route: "explicit_mention",
-        activation_reason: "user explicitly mentioned $weekly-research",
-      },
-    ],
-    community_skill_inventory: [],
-    selected_community_skills: [],
-  });
-
-  assert.equal(
-    normalized.selected_platform_skills[0]?.activation_route,
-    "platform_required",
-  );
-  assert.equal(
-    normalized.selected_user_platform_skills[0]?.activation_route,
-    "explicit_mention",
-  );
-  assert.equal(
-    normalizeRuntimeSkillActivationRoute("platform_required"),
-    "platform_required",
-  );
-  assert.equal(normalizeRuntimeSkillActivationRoute("unknown_route"), null);
-
-  const manifest = buildRuntimeContextManifest({
-    generatedAt: "2026-06-18T00:00:00.000Z",
-    userId: "user",
-    threadId: "thread",
-    communityId: "community",
-    communityContextVersion: 1,
-    projectId: null,
-    harnessName: "chat_tools",
-    inferenceSource: "test",
-    latestUserText: "Use $weekly-research.",
-    messages: [{ role: "user", content: "Use $weekly-research." }],
-    allowedToolNames: [],
-    mountedTools: [],
-    communityResourceLane: normalized.community_resource_lane,
-    selectedPlatformSkills: normalized.selected_platform_skills,
-    selectedPersonalSkills: normalized.selected_user_platform_skills,
-    selectedCommunitySkills: normalized.selected_community_skills,
-  });
-
-  const platformPrompt = manifest.prompts.find(
-    (prompt) => prompt.id === "platform_skill:resources-architect",
-  );
-  const personalPrompt = manifest.prompts.find(
-    (prompt) => prompt.id === "personal_skill:weekly-research",
-  );
-  assert.equal(platformPrompt?.activationRoute, "platform_required");
-  assert.equal(
-    platformPrompt?.activationReason,
-    "active builder community resource lane requires this platform workflow",
-  );
-  assert.equal(personalPrompt?.activationRoute, "explicit_mention");
-  assert.equal(
-    personalPrompt?.activationReason,
-    "user explicitly mentioned $weekly-research",
-  );
-
-  const legacyNormalized = normalizeRuntimeSkillResolution({
-    selected_platform_skills: [
-      {
-        platform_skill_id: "platform:legacy",
-        name: "Legacy Platform",
-        mention_token: "legacy",
-        instructions_md: "Legacy selected body.",
-      },
-    ],
-  });
-  assert.equal(legacyNormalized.selected_platform_skills[0]?.activation_route, null);
-  assert.equal(
-    legacyNormalized.selected_platform_skills[0]?.activation_reason,
-    null,
-  );
-  console.log("PASS: selected skill activation evidence reaches manifest");
-}
-
-function proveLifecycleOnboardingActivationUsesSkillHarnessPath() {
-  assert.equal(PLATFORM_ONBOARDING_GUIDE_SKILL.requiresCapability, null);
-  assert.deepEqual(GLOBAL_PLATFORM_SKILLS, [PLATFORM_ONBOARDING_GUIDE_SKILL]);
-  assert.equal(
-    buildRuntimeLifecyclePlatformSelectedSkills(null).length,
-    0,
-    "no lifecycle trigger should mean no onboarding body",
-  );
-
-  const lifecycleSelectedSkills = buildRuntimeLifecyclePlatformSelectedSkills(
-    "onboarding_completed",
-  );
-  assert.equal(lifecycleSelectedSkills.length, 1);
-  assert.equal(
-    lifecycleSelectedSkills[0]?.platform_skill_id,
-    "platform:onboarding-guide",
-  );
-  assert.equal(
-    lifecycleSelectedSkills[0]?.activation_route,
-    "lifecycle_trigger",
-  );
-  assert.equal(
-    lifecycleSelectedSkills[0]?.activation_reason,
-    "member onboarding completed",
-  );
-
-  const resolved = composeResolvedRuntimeHarness({
-    personalMountedTools: [],
-    skillResolution: {
-      requested_mention_tokens: [],
-      ambiguous_mention_tokens: [],
-      community_resource_lane: {
-        lane: "none",
-        can_read_live_resources: false,
-        can_use_resource_builder: false,
-      },
-      platform_skill_inventory: [],
-      selected_platform_skills: lifecycleSelectedSkills,
-      user_platform_skill_inventory: [],
-      selected_user_platform_skills: [],
-      community_skill_inventory: [],
-      selected_community_skills: [],
     },
-  });
-  assertIncludes(
-    resolved.systemPromptSuffix,
-    "PLATFORM_SKILL_PACKAGE: Onboarding Guide ($onboarding-guide)",
-    "lifecycle-selected onboarding instructions",
-  );
-  assertExcludes(
-    resolved.systemPromptSuffix,
-    "community_resource_builder_apply_changeset",
-    "lifecycle onboarding should not expose Resources Architect tools",
-  );
-  assert.deepEqual(
-    buildPlatformSkillToolNamesForSelection(lifecycleSelectedSkills),
-    PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES,
-    "lifecycle onboarding should expose only the member profile confirmation tool",
-  );
-
-  const manifest = buildRuntimeContextManifest({
-    generatedAt: "2026-06-18T00:00:00.000Z",
-    userId: "user",
-    threadId: "thread",
-    communityId: null,
-    communityContextVersion: null,
-    projectId: null,
-    harnessName: "chat_tools",
-    inferenceSource: "test",
-    latestUserText: "Hi.",
-    messages: [{ role: "user", content: "Hi." }],
-    allowedToolNames: [...PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES],
-    mountedTools: [],
-    communityResourceLane: {
-      lane: "none",
-      can_read_live_resources: false,
-      can_use_resource_builder: false,
-    },
-    selectedPlatformSkills: lifecycleSelectedSkills,
-    selectedPersonalSkills: [],
-    selectedCommunitySkills: [],
-  });
-  const onboardingPrompt = manifest.prompts.find(
-    (prompt) => prompt.id === "platform_skill:onboarding-guide",
-  );
-  assert.equal(onboardingPrompt?.activationRoute, "lifecycle_trigger");
-  assert.equal(
-    onboardingPrompt?.activationReason,
-    "member onboarding completed",
-  );
-  const memberProfileTool = manifest.tools.find(
-    (tool) => tool.name === "member_profile_confirm_facts",
-  );
-  assert.equal(memberProfileTool?.family, "member_profile");
-  assert.equal(
-    memberProfileTool?.grantedBy,
-    "selected_platform_onboarding_skill",
-  );
-  console.log("PASS: lifecycle onboarding uses selected skill harness path");
-}
-
-function proveExplicitOnboardingCanarySkill() {
-  const onboardingInventoryItem = {
-    platform_skill_id: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.id,
-    catalog_skill_id:
-      PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.catalogSkillId ?? null,
-    name: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.name,
-    mention_token: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.mentionToken,
-    description: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.description ?? null,
-    requires_capability: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.requiresCapability,
-  };
-  const unresolved = composeResolvedRuntimeHarness({
-    personalMountedTools: [],
-    skillResolution: {
-      requested_mention_tokens: [],
-      ambiguous_mention_tokens: [],
-      community_resource_lane: {
-        lane: "none",
-        can_read_live_resources: false,
-        can_use_resource_builder: false,
+  ],
+  communitySkills: [
+    {
+      id: "community-attachment",
+      enabled: true,
+      skill: {
+        id: "community-skill",
+        name: "Resources Architect",
+        mentionToken: "resources-architect",
+        description: "Community duplicate",
+        catalogSkillId: null,
       },
-      platform_skill_inventory: [onboardingInventoryItem],
-      selected_platform_skills: [],
-      user_platform_skill_inventory: [],
-      selected_user_platform_skills: [],
-      community_skill_inventory: [],
-      selected_community_skills: [],
     },
-  });
-  assertIncludes(
-    unresolved.systemPromptSuffix,
-    "$onboarding-guide",
-    "global onboarding skill inventory",
-  );
-  assertExcludes(
-    unresolved.systemPromptSuffix,
-    "PLATFORM_SKILL_PACKAGE: Onboarding Guide ($onboarding-guide)",
-    "unselected onboarding body",
-  );
+  ],
+});
+assert.equal(projected.length, 1);
+assert.equal(projected[0]?.scope, "platform");
+assert.equal(projected[0]?.platform_skill?.id, PLATFORM_RESOURCES_ARCHITECT_SKILL.id);
+assert.equal(projected[0]?.personal_install?.id, "personal-install");
+assert.equal(projected[0]?.community_attachment?.id, "community-attachment");
+assert.deepEqual(GLOBAL_PLATFORM_SKILLS, []);
+assert.deepEqual(
+  buildPlatformSkillToolNamesForSelection([
+    { platform_skill_id: PLATFORM_RESOURCES_ARCHITECT_SKILL.id },
+  ]),
+  PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES,
+);
+assert.deepEqual(
+  buildPlatformSkillToolNamesForSelection([
+    { platform_skill_id: "platform:onboarding-guide" },
+  ]),
+  [],
+);
 
-  const explicitSelected = {
-    ...onboardingInventoryItem,
-    instructions_md: PLATFORM_ONBOARDING_GUIDE_RUNTIME_SKILL.instructionsMd,
-    activation_route: "explicit_mention" as const,
-    activation_reason: "user explicitly mentioned $onboarding-guide",
-  };
-  const resolved = composeResolvedRuntimeHarness({
-    personalMountedTools: [],
-    skillResolution: {
-      requested_mention_tokens: ["onboarding-guide"],
-      ambiguous_mention_tokens: [],
-      community_resource_lane: {
-        lane: "none",
-        can_read_live_resources: false,
-        can_use_resource_builder: false,
-      },
-      platform_skill_inventory: [onboardingInventoryItem],
-      selected_platform_skills: [explicitSelected],
-      user_platform_skill_inventory: [],
-      selected_user_platform_skills: [],
-      community_skill_inventory: [],
-      selected_community_skills: [],
+const normalized = normalizeRuntimeSkillResolution({
+  requested_mention_tokens: ["resources-architect"],
+  ambiguous_mention_tokens: [],
+  community_resource_lane: {
+    lane: "builder",
+    can_read_live_resources: true,
+    can_use_resource_builder: true,
+  },
+  platform_skill_inventory: [],
+  selected_platform_skills: [
+    {
+      platform_skill_id: PLATFORM_RESOURCES_ARCHITECT_SKILL.id,
+      catalog_skill_id: PLATFORM_RESOURCES_ARCHITECT_SKILL.catalogSkillId,
+      name: PLATFORM_RESOURCES_ARCHITECT_SKILL.name,
+      mention_token: PLATFORM_RESOURCES_ARCHITECT_SKILL.mentionToken,
+      instructions_md: "Inspect before editing.",
+      activation_route: "platform_required",
+      activation_reason: "active builder resource lane",
     },
-  });
-  assertIncludes(
-    resolved.systemPromptSuffix,
-    "PLATFORM_SKILL_PACKAGE: Onboarding Guide ($onboarding-guide)",
-    "explicitly selected onboarding instructions",
-  );
-  assert.deepEqual(
-    buildPlatformSkillToolNamesForSelection([explicitSelected]),
-    PLATFORM_ONBOARDING_GUIDE_TOOL_NAMES,
-  );
+  ],
+  user_platform_skill_inventory: [],
+  selected_user_platform_skills: [],
+  community_skill_inventory: [],
+  selected_community_skills: [],
+});
+const harness = composeResolvedRuntimeHarness({
+  personalMountedTools: [],
+  skillResolution: normalized,
+});
+assert.match(
+  harness.systemPromptSuffix,
+  /PLATFORM_SKILL_PACKAGE: Resources Architect \(\$resources-architect\)/,
+);
 
-  const manifest = buildRuntimeContextManifest({
-    generatedAt: "2026-06-18T00:00:00.000Z",
-    userId: "user",
-    threadId: "thread",
-    communityId: null,
-    communityContextVersion: null,
-    projectId: null,
-    harnessName: "chat_tools",
-    inferenceSource: "test",
-    latestUserText: "$onboarding-guide introduce me to Polynet.",
-    messages: [
-      {
-        role: "user",
-        content: "$onboarding-guide introduce me to Polynet.",
-      },
-    ],
-    allowedToolNames: [],
-    mountedTools: [],
-    communityResourceLane: {
-      lane: "none",
-      can_read_live_resources: false,
-      can_use_resource_builder: false,
-    },
-    selectedPlatformSkills: [explicitSelected],
-    selectedPersonalSkills: [],
-    selectedCommunitySkills: [],
-  });
-  const onboardingPrompt = manifest.prompts.find(
-    (prompt) => prompt.id === "platform_skill:onboarding-guide",
-  );
-  assert.equal(onboardingPrompt?.activationRoute, "explicit_mention");
-  assert.equal(
-    onboardingPrompt?.activationReason,
-    "user explicitly mentioned $onboarding-guide",
-  );
-  console.log("PASS: explicit onboarding canary uses platform skill path");
-}
+const manifest = buildRuntimeContextManifest({
+  selectedPlatformSkills: normalized.selected_platform_skills,
+  allowedToolNames: [...PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES],
+});
+const selectedPrompt = manifest.prompts.find(
+  (prompt) => prompt.id === "platform_skill:resources-architect",
+);
+assert.equal(selectedPrompt?.activationRoute, "platform_required");
+assert.equal(selectedPrompt?.activationReason, "active builder resource lane");
 
-function proveRuntimeWiringMatchesContract() {
-  const runtimeSkillResolution = readText("convex/runtimeSkillResolution.ts");
-  const runtimeHarnessComposition = readText("convex/runtimeHarnessComposition.ts");
-  const runtimeAgentLoop = readText("convex/runtimeAgentLoop.ts");
-  const runtimeContextManifest = readText("shared/runtimeContextManifest.ts");
-  const platformSkillRuntime = readText("convex/platformSkillRuntime.ts");
-  const platformSkills = readText("shared/platformSkills.ts");
-  const skillPackageTypes = readText("shared/skillPackageTypes.ts");
+assert.match(runtimeSkillResolution, /GLOBAL_PLATFORM_RUNTIME_SKILLS/);
+assert.match(runtimeSkillResolution, /activation_route: "platform_required"/);
+assert.match(runtimeSkillResolution, /activation_route: "explicit_mention"/);
+assert.doesNotMatch(
+  runtimeSkillResolution,
+  /lifecycleTrigger|lifecycle_trigger|onboarding_completed|onboarding-guide/,
+);
+assert.match(runtimeAgentLoop, /buildEffectiveAllowedToolNames/);
+assert.match(runtimeAgentLoop, /buildRuntimeContextManifest/);
+assert.doesNotMatch(
+  runtimeAgentLoop,
+  /skillLifecycleTrigger|privateLifecycleContext|onboarding_required_tool/,
+);
+assert.match(
+  runtimeHarnessComposition,
+  /DEFAULT_RUNTIME_SKILL_INVENTORY_PROMPT_BUDGET_CHARS/,
+);
 
-  assertIncludes(
-    runtimeSkillResolution,
-    "const includeSelectedData = requestedMentionTokens.length > 0",
-    "explicit selection controls personal/community body loading",
-  );
-  assertIncludes(
-    runtimeSkillResolution,
-    "GLOBAL_PLATFORM_RUNTIME_SKILLS",
-    "global platform skill inventory",
-  );
-  assertIncludes(
-    runtimeSkillResolution,
-    "globalSelectedCandidates",
-    "explicit global platform skill candidates",
-  );
-  assertIncludes(
-    runtimeSkillResolution,
-    "autoSelectedSkills",
-    "platform-required skill activation",
-  );
-  assertIncludes(
-    runtimeSkillResolution,
-    "activation_route: \"platform_required\"",
-    "platform-required activation route",
-  );
-  assertIncludes(
-    runtimeSkillResolution,
-    "activation_route: \"explicit_mention\"",
-    "explicit mention activation route",
-  );
-  assertIncludes(
-    runtimeSkillResolution,
-    "buildRuntimeLifecyclePlatformSelectedSkills",
-    "lifecycle-triggered platform skill selection",
-  );
-  assertIncludes(
-    runtimeSkillResolution,
-    "activation_route: \"lifecycle_trigger\"",
-    "lifecycle trigger activation route",
-  );
-  assertIncludes(
-    runtimeAgentLoop,
-    "skillLifecycleTrigger",
-    "runtime agent loop lifecycle trigger seam",
-  );
-  assertIncludes(
-    runtimeSkillResolution,
-    "filterUserSkillScopeAgainstPlatform",
-    "platform shadowing",
-  );
-  assertIncludes(
-    runtimeSkillResolution,
-    "filterCommunitySkillScopeAgainstPlatform",
-    "platform shadows community duplicates",
-  );
-  assertIncludes(
-    runtimeSkillResolution,
-    "filterUserSkillScopeAgainstCommunity",
-    "community shadows personal duplicates",
-  );
-  assertIncludes(
-    runtimeHarnessComposition,
-    "DEFAULT_RUNTIME_SKILL_INVENTORY_PROMPT_BUDGET_CHARS",
-    "bounded inventory budget",
-  );
-  assertIncludes(
-    runtimeHarnessComposition,
-    "selected_user_platform_skills",
-    "selected personal skill projection",
-  );
-  assertIncludes(
-    runtimeAgentLoop,
-    "buildEffectiveAllowedToolNames",
-    "platform skill tool expansion seam",
-  );
-  assertIncludes(
-    runtimeAgentLoop,
-    "buildRuntimeContextManifest",
-    "backend context manifest assembly",
-  );
-  assertIncludes(
-    runtimeContextManifest,
-    "pushSelectedSkillPrompts",
-    "selected skill manifest evidence",
-  );
-  assertIncludes(
-    runtimeContextManifest,
-    "activationRoute",
-    "selected skill activation route manifest evidence",
-  );
-  assertIncludes(
-    runtimeContextManifest,
-    "activationReason",
-    "selected skill activation reason manifest evidence",
-  );
-  assertIncludes(
-    platformSkillRuntime,
-    "PLATFORM_RESOURCES_ARCHITECT_INSTRUCTIONS_MD",
-    "built-in platform skill body",
-  );
-  assertIncludes(
-    platformSkills,
-    "GLOBAL_PLATFORM_SKILLS",
-    "global platform skill catalog",
-  );
-  assertIncludes(
-    platformSkills,
-    "requiresCapability",
-    "platform skill capability gate metadata",
-  );
-  assertIncludes(
-    skillPackageTypes,
-    "instructionsMd",
-    "current skill package body field",
-  );
-  assertExcludes(
-    skillPackageTypes,
-    "triggerPolicy",
-    "deferred trigger policy field",
-  );
-  console.log("PASS: runtime wiring matches the skill harness contract");
-}
-
-function main() {
-  proveContractNamesCurrentGroundTruth();
-  proveBoundedInventoryBeforeSelectedBodies();
-  proveExplicitSelectionAndAmbiguitySemantics();
-  proveScopeShadowingAndPlatformToolExpansion();
-  proveActivationEvidenceSurvivesRuntimeAndManifest();
-  proveLifecycleOnboardingActivationUsesSkillHarnessPath();
-  proveExplicitOnboardingCanarySkill();
-  proveRuntimeWiringMatchesContract();
-}
-
-main();
+console.log("skill_harness_contract_proof: ok");

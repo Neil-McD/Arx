@@ -10,7 +10,6 @@
 
 import type * as account from "../account.js";
 import type * as accountSetupCore from "../accountSetupCore.js";
-import type * as agentLifecycleActivations from "../agentLifecycleActivations.js";
 import type * as anonymousUserCleanup from "../anonymousUserCleanup.js";
 import type * as appConnections from "../appConnections.js";
 import type * as appCore from "../appCore.js";
@@ -141,7 +140,6 @@ import type * as memberEntryDestination from "../memberEntryDestination.js";
 import type * as memberOntology from "../memberOntology.js";
 import type * as memberOntologyCore from "../memberOntologyCore.js";
 import type * as modelRegistry from "../modelRegistry.js";
-import type * as onboardingLifecycle from "../onboardingLifecycle.js";
 import type * as openAiNativeToolCompletion from "../openAiNativeToolCompletion.js";
 import type * as openAiWebSearchTransport from "../openAiWebSearchTransport.js";
 import type * as openRouterNativeTransport from "../openRouterNativeTransport.js";
@@ -223,7 +221,6 @@ import type {
 declare const fullApi: ApiFromModules<{
   account: typeof account;
   accountSetupCore: typeof accountSetupCore;
-  agentLifecycleActivations: typeof agentLifecycleActivations;
   anonymousUserCleanup: typeof anonymousUserCleanup;
   appConnections: typeof appConnections;
   appCore: typeof appCore;
@@ -354,7 +351,6 @@ declare const fullApi: ApiFromModules<{
   memberOntology: typeof memberOntology;
   memberOntologyCore: typeof memberOntologyCore;
   modelRegistry: typeof modelRegistry;
-  onboardingLifecycle: typeof onboardingLifecycle;
   openAiNativeToolCompletion: typeof openAiNativeToolCompletion;
   openAiWebSearchTransport: typeof openAiWebSearchTransport;
   openRouterNativeTransport: typeof openRouterNativeTransport;
