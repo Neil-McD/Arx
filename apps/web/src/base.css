@@ -32102,6 +32102,10 @@ button.message-citation-chip:hover {
   grid-column: 1 / -1;
 }
 
+.operator-console__content > .operator-dashboard__grid > .operator-dashboard__metrics + .operator-dashboard__panel {
+  grid-column: 1 / -1;
+}
+
 .operator-console .operator-dashboard__metrics > div,
 .operator-console .operator-dashboard__panel {
   border-radius: 8px;
