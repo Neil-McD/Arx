@@ -17,6 +17,10 @@ import {
 import { WebPlatformLegalReaderModal } from "./WebPlatformLegalReaderModal";
 import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
 import { WebSocialProfileLinksFields } from "./WebSocialProfileLinksFields";
+import {
+  PROFILE_BIO_MAX_CHARS,
+  PROFILE_DISPLAY_NAME_MAX_CHARS,
+} from "../../../../shared/profileText";
 
 type OnboardingStep = Exclude<AccountSetupStep, "complete">;
 
@@ -355,6 +359,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   value={props.displayName}
                   onChange={(event) => props.onDisplayNameChange(event.target.value)}
                   placeholder="Your name"
+                  maxLength={PROFILE_DISPLAY_NAME_MAX_CHARS}
                 />
               </label>
               <label>
@@ -387,6 +392,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   onChange={(event) => props.onBioChange(event.target.value)}
                   placeholder="A short line about who you are or what you build."
                   rows={3}
+                  maxLength={PROFILE_BIO_MAX_CHARS}
                 />
               </label>
               <small>Name, handle, and profile photo are required.</small>

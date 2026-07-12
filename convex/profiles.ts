@@ -21,9 +21,15 @@ import {
 } from "./accountSetupCore";
 import { insertMissingBridgeSocialLinkFacts } from "./memberOntologyCore";
 import { requireOperatorRole } from "./operatorAccess";
+import {
+  validateProfileBio,
+  validateProfileDisplayName,
+} from "../shared/profileText";
 
 type ProfileMutationErrorCode =
   | "profile_avatar_invalid"
+  | "profile_display_name_too_long"
+  | "profile_bio_too_long"
   | "profile_handle_taken"
   | "profile_handle_empty"
   | "profile_handle_reserved"
@@ -466,11 +472,22 @@ export const upsertProfileDetail = mutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    const displayNameValidation =
+      args.displayName === undefined ? null : validateProfileDisplayName(args.displayName);
+    if (displayNameValidation && !displayNameValidation.ok) {
+      throwProfileMutationError("profile_display_name_too_long");
+    }
+    const bioValidation = args.bio === undefined ? null : validateProfileBio(args.bio);
+    if (bioValidation && !bioValidation.ok) {
+      throwProfileMutationError("profile_bio_too_long");
+    }
+    const normalizedDisplayName = displayNameValidation?.value;
+    const normalizedBio = bioValidation?.value;
     const actor = await ensureAuthenticatedActor({
       ctx,
       authSubject: args.authSubject ?? null,
       nowMs,
-      displayName: args.displayName,
+      displayName: normalizedDisplayName,
       avatarUrl: args.avatarStorageId ? undefined : args.avatarUrl,
     });
     const requestedSubject = normalizeSubject(args.userId ?? actor.authSubject);
@@ -480,7 +497,7 @@ export const upsertProfileDetail = mutation({
 
     const userPatch: Record<string, unknown> = { updatedAt: nowMs };
     if (args.displayName !== undefined) {
-      userPatch.displayName = String(args.displayName ?? "").trim() || undefined;
+      userPatch.displayName = normalizedDisplayName ?? undefined;
     }
     if (args.handle !== undefined) {
       const rawHandle = String(args.handle ?? "").trim();
@@ -523,7 +540,7 @@ export const upsertProfileDetail = mutation({
     }
     const nextDisplayName =
       args.displayName !== undefined
-        ? String(args.displayName ?? "").trim() || undefined
+        ? normalizedDisplayName ?? undefined
         : existingDetail?.displayName;
     const nextAvatarStorageId =
       args.avatarStorageId !== undefined
@@ -547,7 +564,7 @@ export const upsertProfileDetail = mutation({
       args.avatarZoom !== undefined
         ? normalizeAvatarZoom(args.avatarZoom)
         : normalizeAvatarZoom(existingDetail?.avatarZoom);
-    const nextBio = args.bio !== undefined ? String(args.bio ?? "").trim() || undefined : existingDetail?.bio;
+    const nextBio = args.bio !== undefined ? normalizedBio ?? undefined : existingDetail?.bio;
     const nextSocialLinks =
       args.socialLinks === undefined
         ? existingDetail?.socialLinks

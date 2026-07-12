@@ -3,6 +3,10 @@ import type { SocialProfileKind, SocialProfileLinks } from "../../../../shared/s
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { WebSocialProfileLinksFields } from "./WebSocialProfileLinksFields";
 import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
+import {
+  PROFILE_BIO_MAX_CHARS,
+  PROFILE_DISPLAY_NAME_MAX_CHARS,
+} from "../../../../shared/profileText";
 
 type SessionLike = {
   user: {
@@ -159,6 +163,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
           placeholder="Name"
           value={profileName}
           onChange={(event) => setProfileName(event.target.value)}
+          maxLength={PROFILE_DISPLAY_NAME_MAX_CHARS}
         />
       </div>
       <div className="profile-row profile-handle-row">
@@ -178,6 +183,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
         value={profileBio}
         onChange={(event) => setProfileBio(event.target.value)}
         rows={3}
+        maxLength={PROFILE_BIO_MAX_CHARS}
       />
       <div className="account-row">
         <div className="account-identity">
