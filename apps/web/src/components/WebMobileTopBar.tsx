@@ -1,14 +1,13 @@
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
-import type { MobileRootPage } from "./webShellChromeShared";
+import { UserAvatar } from "../../../../shared/UserAvatar";
+import type { MobileMemberFace, MobileRootPage } from "./webShellChromeShared";
 
 type WebMobileTopBarProps = {
   mode: "agent" | "discover" | "community";
   rootPage: MobileRootPage;
-  secondaryMode: "discover" | "community";
   showDrawerButton?: boolean;
   showBackButton?: boolean;
   hasActiveCommunity: boolean;
-  forceCommunityRoot?: boolean;
   activeCommunityName: string | null;
   activeCommunityAvatarUrl: string | null;
   activeCommunityAvatarFocusX?: number | null;
@@ -16,20 +15,30 @@ type WebMobileTopBarProps = {
   activeCommunityAvatarZoom?: number | null;
   activeCommunityInitials: string;
   activeCommunityAttentionCount: number;
+  canViewMembers: boolean;
+  memberFaces: MobileMemberFace[];
+  memberCount: number | null;
   onOpenDrawer: () => void;
   onBack?: (() => void) | null;
   onStartNewThread?: (() => void) | null;
-  onSelectRootPage: (page: MobileRootPage) => void;
   onOpenCommunitySelector: () => void;
+  onOpenMembers: () => void;
 };
 
+function formatMemberCount(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "Members";
+  const count = Math.max(0, Math.floor(value));
+  if (count < 1_000) return String(count);
+  if (count < 10_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  return `${Math.floor(count / 1_000)}K`;
+}
+
 export function WebMobileTopBar({
+  mode,
   rootPage,
-  secondaryMode,
   showDrawerButton = true,
   showBackButton = false,
   hasActiveCommunity,
-  forceCommunityRoot = false,
   activeCommunityName,
   activeCommunityAvatarUrl,
   activeCommunityAvatarFocusX,
@@ -37,25 +46,27 @@ export function WebMobileTopBar({
   activeCommunityAvatarZoom,
   activeCommunityInitials,
   activeCommunityAttentionCount,
+  canViewMembers,
+  memberFaces,
+  memberCount,
   onOpenDrawer,
   onBack = null,
   onStartNewThread = null,
-  onSelectRootPage,
   onOpenCommunitySelector,
+  onOpenMembers,
 }: WebMobileTopBarProps) {
   const communityLabel = (activeCommunityName ?? "").trim() || "Community";
-  const rightModeLabel = secondaryMode === "discover" ? "Discover" : "Community";
-  const isAgentModeActive = rootPage === "agent" || rootPage === "threads";
-  const isRightModeActive = forceCommunityRoot || rootPage === "community" || rootPage === "members";
-  const drawerLabel =
-    rootPage === "threads"
-      ? "Back to agent"
-      : rootPage === "community" || rootPage === "members"
-        ? "Open community panel"
-        : "Open threads";
+  const isAgent = rootPage === "agent";
+  const isDiscover = mode === "discover";
+  const selectorLabel = isDiscover ? "Discover" : communityLabel;
+  const visibleMemberFaces = memberFaces.slice(0, 2);
+  const memberCountLabel = formatMemberCount(memberCount);
+  const showMembers =
+    rootPage === "community" && mode === "community" && hasActiveCommunity && canViewMembers;
+  const drawerLabel = isAgent ? "Open threads" : "Open community navigation";
 
   return (
-    <header className="mobile-topbar">
+    <header className={`mobile-topbar${showMembers ? " has-members" : ""}`}>
       <div className="mobile-topbar-left">
         {showBackButton && onBack ? (
           <button
@@ -82,7 +93,51 @@ export function WebMobileTopBar({
             </svg>
           </button>
         ) : null}
-        {rootPage === "agent" && onStartNewThread ? (
+      </div>
+
+      <div className="mobile-topbar-center">
+        {isAgent ? (
+          <span className="mobile-topbar-context-label">Polynet AI</span>
+        ) : (
+          <button
+            type="button"
+            className="mobile-topbar-community-selector"
+            aria-label={hasActiveCommunity ? "Switch community" : "Discover or create community"}
+            title={hasActiveCommunity ? "Switch community" : "Discover or create community"}
+            onClick={onOpenCommunitySelector}
+          >
+            {hasActiveCommunity && !isDiscover ? (
+              <CommunityAvatar
+                className="mobile-topbar-community-avatar"
+                imageUrl={activeCommunityAvatarUrl}
+                focusX={activeCommunityAvatarFocusX}
+                focusY={activeCommunityAvatarFocusY}
+                zoom={activeCommunityAvatarZoom}
+                name={communityLabel}
+                fallback={activeCommunityInitials}
+                fallbackClassName="mobile-topbar-community-initials"
+              />
+            ) : (
+              <svg className="mobile-topbar-discover-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="m15.8 8.2-2.5 5.1-5.1 2.5 2.5-5.1 5.1-2.5z" />
+              </svg>
+            )}
+            <span className="mobile-topbar-community-name">{selectorLabel}</span>
+            <svg className="mobile-topbar-community-chevron" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m7 9.5 5 5 5-5" />
+            </svg>
+            {activeCommunityAttentionCount > 0 && !isDiscover ? (
+              <span className="mobile-topbar-attention" aria-label={`${activeCommunityAttentionCount} updates`}>
+                {activeCommunityAttentionCount > 99 ? "99+" : activeCommunityAttentionCount}
+              </span>
+            ) : null}
+          </button>
+        )}
+      </div>
+
+      <div className="mobile-topbar-right">
+        {isAgent && onStartNewThread ? (
           <button
             type="button"
             className="new-session-header-btn mobile-topbar-new-thread"
@@ -95,63 +150,41 @@ export function WebMobileTopBar({
               <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
           </button>
-        ) : null}
-      </div>
-
-      <div className="mobile-topbar-center" role="tablist" aria-label="View mode">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={isAgentModeActive}
-          className={`mobile-topbar-mode${isAgentModeActive ? " active" : ""}`}
-          onClick={() => onSelectRootPage("agent")}
-        >
-          Agent
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={isRightModeActive}
-          className={`mobile-topbar-mode${isRightModeActive ? " active" : ""}`}
-          onClick={() => onSelectRootPage("community")}
-        >
-          {rightModeLabel}
-        </button>
-      </div>
-
-      <div className="mobile-topbar-right">
-        <button
-          type="button"
-          className={`mobile-community-trigger${hasActiveCommunity ? "" : " is-empty"}`}
-          aria-label={hasActiveCommunity ? "Switch community" : "Discover or create community"}
-          title={hasActiveCommunity ? "Switch community" : "Discover or create community"}
-          onClick={onOpenCommunitySelector}
-        >
-          {hasActiveCommunity ? (
-            <>
-              <CommunityAvatar
-                className="mobile-community-trigger-avatar"
-                imageUrl={activeCommunityAvatarUrl}
-                focusX={activeCommunityAvatarFocusX}
-                focusY={activeCommunityAvatarFocusY}
-                zoom={activeCommunityAvatarZoom}
-                name={communityLabel}
-                fallback={activeCommunityInitials}
-                fallbackClassName="mobile-community-trigger-initials"
-              />
-              <svg className="mobile-community-trigger-chevron" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m6 9 6 6 6-6" />
+        ) : showMembers ? (
+          <button
+            type="button"
+            className="mobile-topbar-members"
+            aria-label={memberCount === null ? "View community members" : `View ${memberCountLabel} community members`}
+            title="Community members"
+            onClick={onOpenMembers}
+          >
+            {visibleMemberFaces.length > 0 ? (
+              <span className="mobile-topbar-member-faces" aria-hidden="true">
+                {visibleMemberFaces.map((face) => (
+                  <UserAvatar
+                    key={face.user_id}
+                    className="mobile-topbar-member-face"
+                    readyClassName="has-image"
+                    name={(face.display_name ?? "").trim() || "Member"}
+                    imageUrl={face.avatar_url}
+                    focusX={face.avatar_focus_x}
+                    focusY={face.avatar_focus_y}
+                    zoom={face.avatar_zoom}
+                    alt=""
+                    aria-hidden
+                  />
+                ))}
+              </span>
+            ) : (
+              <svg className="mobile-topbar-members-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" />
               </svg>
-              {activeCommunityAttentionCount > 0 ? (
-                <span className="unread-badge">{activeCommunityAttentionCount}</span>
-              ) : null}
-            </>
-          ) : (
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          )}
-        </button>
+            )}
+            <span className="mobile-topbar-member-count">{memberCountLabel}</span>
+          </button>
+        ) : null}
       </div>
     </header>
   );

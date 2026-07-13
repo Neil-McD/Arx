@@ -9429,7 +9429,6 @@ export default function App() {
     activeView,
     mobileSettingsView,
     userWantsSessions,
-    hasSelectedCommunity,
     isPublicCommunityFunnel,
   });
   const {
@@ -9445,7 +9444,6 @@ export default function App() {
     showDesktopCommunityNav,
     hasLeftPanel,
     mobileShellMode,
-    mobileSecondaryMode,
     showHeaderIslands,
   } = shellProjection;
   const dockedWorkspaceCenterWidth =
@@ -10609,9 +10607,6 @@ export default function App() {
       handleExitMobileSettings,
       openMobileCreateCommunity,
       openMobileDrawer,
-      handleMobileShellTouchStart,
-      handleMobileShellTouchEnd,
-      handleMobileShellTouchCancel,
     } = useWebMobileShellController({
       activePage,
       activeView,
@@ -10619,7 +10614,7 @@ export default function App() {
       selectedActiveCommunitySlug,
       mobileRootPage,
       hasSelectedCommunity,
-      canViewMembersRoot: hasSelectedCommunity && canViewMembersActiveCommunity,
+      canViewMembers: hasSelectedCommunity && canViewMembersActiveCommunity,
       forceCommunityRoot:
         showMobileShell &&
         (shellPublicRoute.kind === "community_funnel" ||
@@ -10627,6 +10622,8 @@ export default function App() {
       mobileOverlay,
       showMobileShell,
       showMobileSettingsShell,
+      canOpenDirectMessages: Boolean(session),
+      isDirectMessagesOpen,
       setMobileOverlay,
       setMobileRootPage,
       setActivePage,
@@ -10635,6 +10632,8 @@ export default function App() {
       openCommunityChat,
       handleOpenDiscover,
       handleTopbarBackToWorkspace,
+      openDirectMessages: handleOpenDirectMessages,
+      closeDirectMessages: handleCloseDirectMessages,
       hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
       openCommunityCreateFlow: openCommunityLaunchCreateFlow,
       setIsFreeAccountInfoOpen,
@@ -12500,6 +12499,7 @@ export default function App() {
       <WebGlobalOverlayHost {...globalOverlayHostProps} />
       <WebDirectMessagesHost
         isOpen={isDirectMessagesOpen}
+        mobileRoot={showMobileShell && mobileRootPage === "messages"}
         openRequest={directMessageOpenRequest}
         openConversationRequest={directMessageOpenConversationRequest}
         session={session}
@@ -12672,18 +12672,24 @@ export default function App() {
     showMobilePublicFunnel,
     mobileOverlay,
     showMobileShell,
-    handleMobileShellTouchStart,
-    handleMobileShellTouchEnd,
-    handleMobileShellTouchCancel,
     mobileShellMode,
     mobileRootPage,
     forceMobileCommunityRoot: showMobileShell && isVisitorCommunitySurface,
-    mobileSecondaryMode,
     showMobileSettingsIndex,
     activePage: shellProjectionActivePage,
-    hasSelectedCommunity,
     activeCommunity: isVisitorCommunitySurface ? visitorShellActiveCommunity : activeCommunity,
     activeCommunityAttentionCount,
+    activeCommunityMemberFaces:
+      !isVisitorCommunitySurface && canViewMembersActiveCommunity
+        ? activeCommunityPresenceSummary?.online_faces ?? []
+        : [],
+    activeCommunityMemberCount:
+      !isVisitorCommunitySurface && canViewMembersActiveCommunity
+        ? activeCommunityPresenceSummary?.member_count ??
+          communityDirectoryMemberCount ??
+          activeCommunitySocialMemberCount ??
+          null
+        : null,
     openMobileDrawer,
     handleExitMobileSettings,
     handleStartNewWorkspaceThreadFromShell,
@@ -12731,7 +12737,6 @@ export default function App() {
     openMobileAgentSettings,
     canOpenDirectMessages: Boolean(session),
     directMessagesUnreadCount,
-    handleOpenDirectMessages,
     /* Rail bridge: on the visitor route, app state changes don't render
        (publicRoute stays "community_funnel"), so shell verbs must really
        NAVIGATE — the rail is real, its clicks must be too. */

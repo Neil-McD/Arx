@@ -93,6 +93,7 @@ export type DirectMessageNotificationsUiState = "hidden" | "on" | "off" | "block
 
 type WebDirectMessagesHostProps<SessionT> = {
   isOpen: boolean;
+  mobileRoot?: boolean;
   openRequest: DirectMessageOpenRequest;
   openConversationRequest?: DirectMessageOpenConversationRequest;
   session: SessionT | null;
@@ -1353,7 +1354,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   }, [activeConversationId, ensureSession, isOpen, session, updateConversationEchoes]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || props.mobileRoot) return;
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -1373,7 +1374,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       document.removeEventListener("pointerdown", handlePointerDown, true);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, props.mobileRoot]);
 
   const openConversation = useCallback(
     (conversation: DirectMessageConversation) => {
@@ -2025,7 +2026,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   if (!isOpen) return null;
 
   return (
-    <div className="web-direct-messages-host">
+    <div className={`web-direct-messages-host${props.mobileRoot ? " mobile-root" : ""}`}>
       {directMessagePanel ? (
         <WebDirectMessagePanel
           conversation={directMessagePanel.conversation}
