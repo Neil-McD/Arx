@@ -29,6 +29,12 @@ import {
   isMemberAgentThreadKeyForCommunity,
 } from "../shared/runtimeInvocationSurface";
 import { MEMBER_AGENT_CONTEXT_MAX_MESSAGES } from "../shared/memberAgentConversationContext";
+import {
+  MEMBER_CONVERSATION_LIST_DEFAULT_LIMIT,
+  MEMBER_CONVERSATION_LIST_MAX_LIMIT,
+  buildMemberConversationRecallTranscript,
+  deriveMemberConversationTitle,
+} from "../shared/memberAgentEpisodeRecall";
 
 type ThreadLike = {
   _id: any;
@@ -1105,6 +1111,22 @@ function deriveTitleFromContent(contentJson: unknown): string | undefined {
   return undefined;
 }
 
+function deriveAutoThreadTitlePatch(args: {
+  thread: ThreadLike;
+  role: CloudMessageLike["role"];
+  contentJson: unknown;
+}): Record<string, unknown> {
+  if (
+    args.role !== "user" ||
+    (args.thread.titleSource ?? "auto") !== "auto" ||
+    String(args.thread.title ?? "").trim()
+  ) {
+    return {};
+  }
+  const title = deriveTitleFromContent(args.contentJson);
+  return title ? { title } : {};
+}
+
 export const listCloudThreadsByOwner = query({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -1511,7 +1533,6 @@ async function ensureMemberAgentCommunityChannelCore(args: {
     : await args.ctx.db.insert("threads", {
         ownerId: args.ownerId,
         threadKey: episodeOneThreadKey,
-        title: `${String(args.community.name ?? "Community").trim() || "Community"} agent`,
         titleSource: "auto",
         communityId,
         modelId: DEFAULT_ACTIVE_MODEL_ID,
@@ -1635,7 +1656,6 @@ export const startNewMemberAgentCommunityEpisode = mutation({
     const threadId = await ctx.db.insert("threads", {
       ownerId,
       threadKey,
-      title: `${String(community.name ?? "Community").trim() || "Community"} agent`,
       titleSource: "auto",
       communityId,
       modelId: DEFAULT_ACTIVE_MODEL_ID,
@@ -1877,6 +1897,146 @@ export const listMemberAgentRuntimeMessagesInternal = internalQuery({
   },
 });
 
+export const listMemberConversationsForToolInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    communityId: v.id("communities"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const channel = await getMemberAgentChannel({
+      ctx,
+      ownerId: args.ownerId,
+      communityId: args.communityId,
+    });
+    if (!channel || typeof channel.communityDeletedAt === "number") {
+      return { conversations: [] };
+    }
+    const safeLimit = Math.max(
+      1,
+      Math.min(
+        MEMBER_CONVERSATION_LIST_MAX_LIMIT,
+        Math.floor(args.limit ?? MEMBER_CONVERSATION_LIST_DEFAULT_LIMIT),
+      ),
+    );
+    const episodes = (await ctx.db
+      .query("memberAgentEpisodes")
+      .withIndex("by_channel_ordinal", (q) => q.eq("channelId", channel._id))
+      .order("desc")
+      .take(safeLimit)) as MemberAgentEpisodeLike[];
+    const conversations = [];
+    for (const episode of episodes) {
+      const thread = (await ctx.db.get(episode.threadId)) as ThreadLike | null;
+      if (
+        !thread ||
+        thread.ownerId !== args.ownerId ||
+        String(thread.communityId ?? "") !== String(args.communityId) ||
+        !isMemberAgentThreadKeyForCommunity(
+          String(thread.threadKey ?? ""),
+          String(args.communityId),
+        )
+      ) {
+        continue;
+      }
+      const firstRows = (await ctx.db
+        .query("cloudMessages")
+        .withIndex("by_thread_seq", (q) => q.eq("threadId", thread._id))
+        .order("asc")
+        .take(32)) as CloudMessageLike[];
+      const firstUserMessage = firstRows.find((row) => row.role === "user");
+      conversations.push({
+        episode_id: String(episode._id),
+        ordinal: episode.ordinal,
+        status: episode.status,
+        title: deriveMemberConversationTitle({
+          storedTitle: thread.title,
+          communityName: channel.communityNameSnapshot,
+          firstUserContentJson: firstUserMessage?.contentJson,
+          ordinal: episode.ordinal,
+        }),
+        started_at: episode.startedAt,
+        closed_at: episode.closedAt ?? null,
+        message_count_estimate: Math.max(0, Math.floor(thread.lastSeq ?? 0)),
+      });
+    }
+    return { conversations };
+  },
+});
+
+export const readMemberConversationForToolInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    communityId: v.id("communities"),
+    episodeId: v.id("memberAgentEpisodes"),
+  },
+  handler: async (ctx, args) => {
+    const channel = await getMemberAgentChannel({
+      ctx,
+      ownerId: args.ownerId,
+      communityId: args.communityId,
+    });
+    if (!channel || typeof channel.communityDeletedAt === "number") {
+      throw new Error("member_conversation_not_found");
+    }
+    const episode = (await ctx.db.get(args.episodeId)) as MemberAgentEpisodeLike | null;
+    if (!episode || episode.channelId !== channel._id) {
+      throw new Error("member_conversation_not_found");
+    }
+    const thread = (await ctx.db.get(episode.threadId)) as ThreadLike | null;
+    if (
+      !thread ||
+      thread.ownerId !== args.ownerId ||
+      String(thread.communityId ?? "") !== String(args.communityId) ||
+      !isMemberAgentThreadKeyForCommunity(
+        String(thread.threadKey ?? ""),
+        String(args.communityId),
+      )
+    ) {
+      throw new Error("member_conversation_not_found");
+    }
+    const headRows = (await ctx.db
+      .query("cloudMessages")
+      .withIndex("by_thread_seq", (q) => q.eq("threadId", thread._id))
+      .order("asc")
+      .take(64)) as CloudMessageLike[];
+    const tailWindow = (await ctx.db
+      .query("cloudMessages")
+      .withIndex("by_thread_seq", (q) => q.eq("threadId", thread._id))
+      .order("desc")
+      .take(161)) as CloudMessageLike[];
+    const hasMessagesOutsideTailWindow = tailWindow.length > 160;
+    const tailRows = tailWindow.slice(0, 160);
+    const transcript = buildMemberConversationRecallTranscript({
+      headRows,
+      tailRows,
+    });
+    const firstUserMessage = headRows.find((row) => row.role === "user");
+    const visibleWindowMessageCount = new Set(
+      [...headRows, ...tailRows]
+        .filter((row) => row.role === "user" || row.role === "assistant")
+        .map((row) => row.messageKey),
+    ).size;
+    return {
+      episode_id: String(episode._id),
+      ordinal: episode.ordinal,
+      status: episode.status,
+      title: deriveMemberConversationTitle({
+        storedTitle: thread.title,
+        communityName: channel.communityNameSnapshot,
+        firstUserContentJson: firstUserMessage?.contentJson,
+        ordinal: episode.ordinal,
+      }),
+      started_at: episode.startedAt,
+      closed_at: episode.closedAt ?? null,
+      messages: transcript.messages,
+      returned_message_count: transcript.messages.length,
+      character_count: transcript.characterCount,
+      history_truncated:
+        hasMessagesOutsideTailWindow || visibleWindowMessageCount > transcript.messages.length,
+    };
+  },
+});
+
 export const generateCloudThreadAttachmentUploadUrl = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -2005,11 +2165,12 @@ export const addCloudThreadMessage = mutation({
     const patch: Record<string, unknown> = {
       updatedAt: nowMs,
       lastSeq: nextLastSeq,
+      ...deriveAutoThreadTitlePatch({
+        thread,
+        role: args.role,
+        contentJson: args.contentJson,
+      }),
     };
-    if ((thread.titleSource ?? "auto") === "auto" && (!thread.title || !thread.title.trim()) && args.role === "user") {
-      const derivedTitle = deriveTitleFromContent(args.contentJson);
-      if (derivedTitle) patch.title = derivedTitle;
-    }
     await ctx.db.patch(thread._id, patch);
 
     const created = (await ctx.db.get(id)) as CloudMessageLike | null;
@@ -2072,6 +2233,11 @@ export const upsertCloudThreadMessageByMessageKey = mutation({
       await ctx.db.patch(thread._id, {
         updatedAt: nowMs,
         lastSeq: Math.max(0, Math.floor(Math.max(thread.lastSeq ?? 0, existing.seq ?? 0))),
+        ...deriveAutoThreadTitlePatch({
+          thread,
+          role: args.role,
+          contentJson: args.contentJson,
+        }),
       });
       const updated = (await ctx.db.get(existing._id)) as CloudMessageLike | null;
       if (!updated) throw new Error("message_update_failed");
@@ -2098,6 +2264,11 @@ export const upsertCloudThreadMessageByMessageKey = mutation({
     await ctx.db.patch(thread._id, {
       updatedAt: nowMs,
       lastSeq: Math.max(0, Math.floor(Math.max(thread.lastSeq ?? 0, seq))),
+      ...deriveAutoThreadTitlePatch({
+        thread,
+        role: args.role,
+        contentJson: args.contentJson,
+      }),
     });
     const created = (await ctx.db.get(id)) as CloudMessageLike | null;
     if (!created) throw new Error("message_create_failed");

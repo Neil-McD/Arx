@@ -298,6 +298,8 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   if (toolName === "search_product_docs") return `Docs search${query ? `: ${query}` : ""}`;
   if (toolName === "get_product_doc") return `Read docs${slug ? `: ${slug}` : ""}`;
   if (toolName === "get_active_community_context") return "Community context";
+  if (toolName === "member_conversations_list") return "Past conversations";
+  if (toolName === "member_conversation_read") return "Recall conversation";
   if (toolName === "community_resources_map") return "Resource map";
   if (toolName === "community_resources_read") return "Read resources";
   if (toolName === "community_resources_list") return `Community resources${path ? `: ${path}` : ""}`;

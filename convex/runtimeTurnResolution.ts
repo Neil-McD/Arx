@@ -671,10 +671,15 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   });
   const allowedToolNames = restrictToolNamesForInvocationSurface({
     invocationSurface,
-    toolNames: resolveAllowedToolNames({
-      activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
-      inferenceSource,
-    }),
+    toolNames: [
+      ...resolveAllowedToolNames({
+        activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
+        inferenceSource,
+      }),
+      ...(invocationSurface === "member_agent_dock"
+        ? (["member_conversations_list", "member_conversation_read"] as const)
+        : []),
+    ],
   });
   const runtimeExecutionMode: "agentic" | "chat" =
     requestedAgenticTools && allowedToolNames.length > 0

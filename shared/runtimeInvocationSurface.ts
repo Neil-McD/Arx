@@ -14,6 +14,8 @@ const MEMBER_AGENT_DOCK_TOOL_NAME_SET = new Set<RetrievalToolName>([
   "search_product_docs",
   "get_product_doc",
   "get_active_community_context",
+  "member_conversations_list",
+  "member_conversation_read",
   "community_resources_map",
   "community_resources_read",
   "community_resources_list",
@@ -104,6 +106,8 @@ export function buildRuntimeInvocationSurfacePrompt(
     "You are the member's own Polynet agent working under this community lens.",
     "You are not the community's agent. The community has a separate community-owned agent on community surfaces.",
     "Treat this as a normal private conversation with the member. Use community context when relevant without pretending to speak for the community.",
+    "Prior conversation episodes are not injected automatically. When the member refers to earlier work and the current episode is insufficient, list their conversations first, then read only the relevant episode before answering.",
+    "Never claim to remember a prior conversation unless the current episode or a successful conversation-read tool call supports the claim.",
     "Only the listed read tools are available on this surface. Do not propose or attempt workspace, sandbox, web, MCP, autonomous cognition, or community publishing actions.",
     "Do not mention plans, Premium, upgrades, billing, unavailable tools, or provider limits unless the member directly asks about them.",
   ].join("\n");

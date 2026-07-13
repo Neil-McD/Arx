@@ -2,7 +2,7 @@
 
 Status: active architecture; core runtime boundary implemented on Work 3 staging
 Scope: product architecture, memory system, community agent loop
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 ## Purpose
 
@@ -27,8 +27,10 @@ personal agent runtime under the active community lens.
    - community deletion closes and tombstones these member-owned channels but preserves their private episodes and transcripts until the member deletes their account
    - requester-funded and server-bound to an authorized community lens
    - the server constructs bounded conversation history from persisted messages through the exact user message that started the turn; browser-supplied history is never authoritative
+   - prior episodes are never injected automatically; the dock can list bounded episode metadata and read one bounded private transcript only through member-owned, active-community-scoped read tools
+   - recall tools return only user and assistant text, fail closed across members and communities, and require transcript evidence before the agent claims prior conversational memory
    - transcript loads commit only while their originating community, signed-in member generation, and thread remain active
-   - receives only product-doc and community read tools in the first surface contract
+   - receives only product-doc, community read, and private member-conversation recall tools in the first surface contract
    - cannot invoke workspace, Daytona, web, MCP, autonomous cognition, or community publishing tools
 
 The community-owned runtime surfaces are:

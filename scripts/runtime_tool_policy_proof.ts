@@ -33,6 +33,8 @@ const FIXED_TOOL_FAMILIES = {
   docs: ["search_product_docs", "get_product_doc"],
   community: [
     "get_active_community_context",
+    "member_conversations_list",
+    "member_conversation_read",
     "community_resources_map",
     "community_resources_read",
     "community_resources_list",

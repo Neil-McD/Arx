@@ -204,6 +204,31 @@ const COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const MEMBER_CONVERSATIONS_LIST_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 12,
+    },
+  },
+};
+
+const MEMBER_CONVERSATION_READ_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["episode_id"],
+  properties: {
+    episode_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 160,
+    },
+  },
+};
+
 const COMMUNITY_RESOURCES_MAP_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -859,6 +884,16 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     description: "Read bounded profile context for the active community lens. The active community is server-selected from the thread context.",
     inputSchema: EMPTY_TOOL_SCHEMA,
   },
+  member_conversations_list: {
+    name: "member_conversations_list",
+    description: "List the signed-in member's recent private conversation episodes inside the active community. Returns bounded metadata only; use member_conversation_read for relevant transcript evidence.",
+    inputSchema: MEMBER_CONVERSATIONS_LIST_TOOL_SCHEMA,
+  },
+  member_conversation_read: {
+    name: "member_conversation_read",
+    description: "Read a bounded user-and-assistant transcript window from one of the signed-in member's private conversation episodes inside the active community.",
+    inputSchema: MEMBER_CONVERSATION_READ_TOOL_SCHEMA,
+  },
   member_profile_confirm_facts: {
     name: "member_profile_confirm_facts",
     description: "Write member-approved onboarding interview facts to the active member profile ontology for the active community lens.",
@@ -1496,6 +1531,15 @@ export function normalizeToolArguments(
     const query = normalizeString(args.query);
     if (!query) throw new Error("community_search requires query.");
     return { query: query.slice(0, 240) };
+  }
+  if (toolName === "member_conversations_list") {
+    const limit = normalizeBoundedInteger(args.limit, "member_conversations_list limit", 1, 12);
+    return limit ? { limit } : {};
+  }
+  if (toolName === "member_conversation_read") {
+    const episodeId = normalizeString(args.episode_id);
+    if (!episodeId) throw new Error("member_conversation_read requires episode_id.");
+    return { episodeId: episodeId.slice(0, 160) };
   }
   if (toolName === "community_resources_list") {
     const path = normalizeString(args.path);

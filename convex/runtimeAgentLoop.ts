@@ -385,6 +385,85 @@ export async function executeRetrievalHarnessTool(params: {
     }
   }
 
+  if (params.toolName === "member_conversations_list") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage: "member_conversations_list requires an active community context.",
+      };
+    }
+    try {
+      const payload = await params.ctx.runQuery(
+        internal.threads.listMemberConversationsForToolInternal as any,
+        {
+          ownerId: params.userId as any,
+          communityId: params.communityId as any,
+          limit:
+            typeof normalizedArgs.limit === "number"
+              ? normalizedArgs.limit
+              : undefined,
+        },
+      );
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput(payload),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "member_conversations_list_failed",
+        errorMessage: message || "Member conversation listing failed.",
+      };
+    }
+  }
+
+  if (params.toolName === "member_conversation_read") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage: "member_conversation_read requires an active community context.",
+      };
+    }
+    try {
+      const payload = await params.ctx.runQuery(
+        internal.threads.readMemberConversationForToolInternal as any,
+        {
+          ownerId: params.userId as any,
+          communityId: params.communityId as any,
+          episodeId: String(normalizedArgs.episodeId ?? "") as any,
+        },
+      );
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput(payload),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "member_conversation_read_failed",
+        errorMessage: message || "Member conversation read failed.",
+      };
+    }
+  }
+
   if (params.toolName === "member_profile_confirm_facts") {
     if (!params.communityId) {
       return {
