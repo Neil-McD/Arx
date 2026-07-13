@@ -44,6 +44,52 @@ This is the canonical path. Do not rely on branch names, preview URLs, or old Ve
 
 ## Release Types
 
+### Community-first transition release
+
+Use this sequence while retiring the old onboarding agent and moving members to the
+global member-agent channel. This is a two-phase compatibility release, not an atomic
+web/backend cutover.
+
+1. From the exact validated release commit, run the read-only production preflight:
+
+```bash
+npm run preflight:community-first-release:prod
+```
+
+2. Stop if any production scan is truncated, any source-compatibility check fails,
+   or a dedicated `community-onboarding:` thread exists. Historical thread/message
+   deletion requires a separate data review and is never automatic.
+3. Deploy Convex production first. The temporary `requestOnboardingGuideKickoff`
+   shim routes cached old clients into the global member-agent channel; it does not
+   restore the old onboarding activation, skill, runtime, or dedicated thread.
+4. Confirm both the temporary kickoff RPC and the new member-agent/global-entry
+   functions are present before changing the web release.
+5. Land and push the same validated commit on `main`, then let Vercel project
+   `polynet` deploy it through GitHub.
+6. Smoke a cached old browser session and a fresh browser session. Both must enter
+   the normal community surface and open the same user-owned global agent channel.
+7. After the cached-client window, run the bounded functions in
+   `legacyOnboardingMigration.ts` until each returns `isDone: true`, then rerun the
+   production preflight and verify all legacy counts are zero.
+
+```bash
+npx convex run legacyOnboardingMigration:clearCommunityMemberOnboardingPageInternal \
+  '{"paginationOpts":{"numItems":100,"cursor":null}}' --prod
+npx convex run legacyOnboardingMigration:deleteAgentLifecycleActivationsPageInternal \
+  '{"paginationOpts":{"numItems":100,"cursor":null}}' --prod
+npm run preflight:community-first-release:prod
+```
+
+If a cleanup response returns `isDone: false`, pass its `continueCursor` as the
+next call's `paginationOpts.cursor`. Do not use `--push` during production cleanup.
+
+8. In a later cleanup release, remove the temporary RPC, migration module,
+   `agentLifecycleActivations` validator, and `communities.memberOnboarding` validator.
+
+Never deploy the web first during this transition: the new web requires backend
+functions that production does not currently expose. Never remove the legacy schema
+validators before the stored legacy values have been cleared.
+
 ### Normal release
 
 Use when the change is ready and not urgent.

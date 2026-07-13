@@ -912,6 +912,44 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
+  /* Deprecated release-compatibility table. Current product code never writes
+     this table; legacy rows are removed by legacyOnboardingMigration. */
+  agentLifecycleActivations: defineTable({
+    userId: v.id("users"),
+    trigger: v.literal("onboarding_completed"),
+    scopeType: v.union(
+      v.literal("user"),
+      v.literal("community"),
+      v.literal("project"),
+    ),
+    scopeKey: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    activationRoute: v.literal("lifecycle_trigger"),
+    activationReason: v.string(),
+    source: v.string(),
+    threadId: v.optional(v.id("threads")),
+    runId: v.optional(v.string()),
+    error: v.optional(v.string()),
+    processingAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_trigger_scope", [
+      "userId",
+      "trigger",
+      "scopeType",
+      "scopeKey",
+    ])
+    .index("by_status_createdAt", ["status", "createdAt"])
+    .index("by_user_status_updatedAt", ["userId", "status", "updatedAt"]),
+
   emailPreferences: defineTable({
     userId: v.id("users"),
     weeklyDigestEnabled: v.boolean(),
@@ -1228,6 +1266,25 @@ export default defineSchema({
     bannerFocusX: v.optional(v.number()),
     bannerFocusY: v.optional(v.number()),
     bannerZoom: v.optional(v.number()),
+    /* Deprecated release-compatibility field. Current product code never reads
+       or writes it; legacyOnboardingMigration removes stored values. */
+    memberOnboarding: v.optional(
+      v.object({
+        enabled: v.boolean(),
+        title: v.string(),
+        description: v.string(),
+        videoUrl: v.optional(v.union(v.string(), v.null())),
+        primaryAction: v.union(
+          v.literal("introduce"),
+          v.literal("ask_agent"),
+          v.literal("view_resources"),
+          v.literal("start_workflow"),
+        ),
+        aiGuidePrompt: v.string(),
+        updatedAt: v.optional(v.number()),
+        updatedByUserId: v.optional(v.id("users")),
+      }),
+    ),
     visibility: v.union(v.literal("published"), v.literal("unlisted")),
     entryPolicy: v.union(
       v.literal("open"),

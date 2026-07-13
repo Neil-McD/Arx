@@ -96,8 +96,8 @@ forbid_match_in_file "$HANDLERS_FILE" 'const runId = `convex_public:\$\{crypto\.
   "no public_turn runId override after idempotency assignment"
 
 echo "[3/10] Ensuring runtime turn persists user/assistant messages by deterministic keys..."
-require_match_in_file "$HANDLERS_FILE" 'const explicitUserMessageKey = String\(effectiveInput\.user_message_key \?\? ""\)\.trim\(\)' \
-  "runtime turn accepts explicit user_message_key override from the resolved effective input"
+require_match_in_file "$HANDLERS_FILE" 'const explicitUserMessageKey = String\(input\.user_message_key \?\? ""\)\.trim\(\)' \
+  "runtime turn accepts explicit user_message_key override from canonical input"
 require_match_in_file "$HANDLERS_FILE" 'const userMessageKeyForRun =' \
   "runtime user message key derivation exists"
 require_match_in_file "$HANDLERS_FILE" '`user:\$\{threadKey\}:\$\{runId\}`' \

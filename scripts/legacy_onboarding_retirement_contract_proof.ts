@@ -11,7 +11,6 @@ function read(path: string): string {
 }
 
 for (const path of [
-  "convex/onboardingLifecycle.ts",
   "convex/agentLifecycleActivations.ts",
   "shared/cloudOnboardingGuideGateway.ts",
   "shared/runtimeSkillLifecycle.ts",
@@ -19,6 +18,15 @@ for (const path of [
 ]) {
   assert.equal(existsSync(path), false, `${path} must remain retired`);
 }
+
+const compatibilityShim = read("convex/onboardingLifecycle.ts");
+assert.match(compatibilityShim, /Temporary cached-client compatibility only/);
+assert.match(compatibilityShim, /ensureMemberAgentGlobalChannel/);
+assert.match(compatibilityShim, /compatibility_route: "member_agent_global_channel"/);
+assert.doesNotMatch(
+  compatibilityShim,
+  /agentLifecycleActivations|onboarding-guide|ONBOARDING_LIFECYCLE_EVENT|runAgentTurn|community-onboarding/,
+);
 
 assert.deepEqual(GLOBAL_PLATFORM_SKILLS, []);
 assert.deepEqual(
@@ -57,7 +65,10 @@ const toolRegistry = read("shared/toolRegistry.ts");
 assert.match(toolRegistry, /member_profile_confirm_facts/);
 
 const schema = read("convex/schema.ts");
-assert.doesNotMatch(schema, /agentLifecycleActivations:\s*defineTable|memberOnboarding:/);
+assert.match(schema, /Deprecated release-compatibility table/);
+assert.match(schema, /agentLifecycleActivations:\s*defineTable/);
+assert.match(schema, /Deprecated release-compatibility field/);
+assert.match(schema, /memberOnboarding:\s*v\.optional/);
 
 const retiredCommunityConfigSurface = [
   read("apps/web/src/App.tsx"),
@@ -75,7 +86,7 @@ assert.doesNotMatch(
 const generatedApi = read("convex/_generated/api.d.ts");
 assert.doesNotMatch(
   generatedApi,
-  /onboardingLifecycle|agentLifecycleActivations|saveCommunityMemberOnboardingConfig/,
+  /agentLifecycleActivations|saveCommunityMemberOnboardingConfig/,
 );
 
 console.log("legacy_onboarding_retirement_contract_proof: ok");

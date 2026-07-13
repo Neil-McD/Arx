@@ -249,8 +249,13 @@ for (const forbidden of ["runtimeAgentLoop", "runtimeRuns", "threads", "Daytona"
 
 const mcpSource = read("convex/httpMcp.ts");
 assert.ok(
-  mcpSource.includes("resolveCommunityCapabilityContextInternal"),
-  "MCP adapter should use the atomic internal community context resolver",
+  mcpSource.includes("resolveAccessibleCommunityReadDetail"),
+  "MCP adapter should use the canonical accessible-community read kernel",
+);
+const communityReadKernelSource = read("convex/communityReadKernel.ts");
+assert.ok(
+  communityReadKernelSource.includes("resolveCommunityCapabilityContextInternal"),
+  "community read kernel should use the atomic internal community context resolver",
 );
 assert.ok(
   mcpSource.includes('community_context: "workspace_context"'),
