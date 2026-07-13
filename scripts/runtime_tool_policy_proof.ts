@@ -35,6 +35,8 @@ const FIXED_TOOL_FAMILIES = {
     "get_active_community_context",
     "member_conversations_list",
     "member_conversation_read",
+    "polynet_list_communities",
+    "polynet_get_community",
     "community_resources_map",
     "community_resources_read",
     "community_resources_list",

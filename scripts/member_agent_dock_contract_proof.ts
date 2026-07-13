@@ -32,6 +32,11 @@ import {
   normalizeMemberAgentSurfaceContext,
   renderMemberAgentSurfaceContextForPrompt,
 } from "../shared/memberAgentSurfaceContext.ts";
+import {
+  normalizeCommunityReadScope,
+  projectCommunityMembershipReadSummary,
+  projectPublicDiscoverCommunityReadSummary,
+} from "../shared/communityReadContract.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -57,6 +62,9 @@ const communityLifecycle = read("convex/communityLifecycle.ts");
 const profiles = read("convex/profiles.ts");
 const runtimePrompt = read("shared/runtimePrompt.ts");
 const timelineUi = read("shared/runtimeTimelineUi.ts");
+const communityReadKernel = read("convex/communityReadKernel.ts");
+const httpMcp = read("convex/httpMcp.ts");
+const polynetMcp = read("shared/polynetMcp.ts");
 
 assert.match(
   packageJson,
@@ -165,6 +173,8 @@ assert.deepEqual(
       "get_active_community_context",
       "member_conversations_list",
       "member_conversation_read",
+      "polynet_list_communities",
+      "polynet_get_community",
       "community_resources_map",
       "community_search",
       "community_write",
@@ -178,6 +188,8 @@ assert.deepEqual(
     "get_active_community_context",
     "member_conversations_list",
     "member_conversation_read",
+    "polynet_list_communities",
+    "polynet_get_community",
     "community_resources_map",
     "community_search",
   ],
@@ -201,7 +213,79 @@ assert.throws(
   () => normalizeToolArguments("member_conversation_read", {}),
   /requires episode_id/,
 );
-for (const toolName of ["member_conversations_list", "member_conversation_read"] as const) {
+assert.equal(normalizeCommunityReadScope(undefined), "joined");
+assert.equal(normalizeCommunityReadScope("DISCOVER"), "discover");
+assert.equal(normalizeCommunityReadScope("private"), null);
+assert.deepEqual(
+  projectCommunityMembershipReadSummary({
+    community_id: "community_1",
+    role: "owner",
+    communities: {
+      slug: "Distribution-Engineering",
+      name: "Distribution Engineering",
+      one_liner: "Ship it",
+      visibility: "unlisted",
+      entry_policy: "approval",
+    },
+  }),
+  {
+    slug: "distribution-engineering",
+    name: "Distribution Engineering",
+    one_liner: "Ship it",
+    visibility: "unlisted",
+    entry_policy: "approval",
+    relation: "owner",
+  },
+);
+assert.deepEqual(
+  projectPublicDiscoverCommunityReadSummary({
+    community: {
+      slug: "polynet",
+      name: "Polynet",
+      one_liner: "Communities with a brain",
+      visibility: "published",
+      entry_policy: "open",
+    },
+  }),
+  {
+    slug: "polynet",
+    name: "Polynet",
+    one_liner: "Communities with a brain",
+    visibility: "published",
+    entry_policy: "open",
+    relation: "no_access",
+  },
+);
+assert.equal(
+  projectPublicDiscoverCommunityReadSummary({
+    community: { slug: "private-one", name: "Private", visibility: "unlisted" },
+  }),
+  null,
+  "Discover projection must fail closed for unlisted communities",
+);
+assert.deepEqual(normalizeToolArguments("polynet_list_communities", {}), { scope: "joined" });
+assert.deepEqual(
+  normalizeToolArguments("polynet_list_communities", { scope: "DISCOVER" }),
+  { scope: "discover" },
+);
+assert.throws(
+  () => normalizeToolArguments("polynet_list_communities", { scope: "private" }),
+  /joined or discover/,
+);
+assert.deepEqual(
+  normalizeToolArguments("polynet_get_community", { community_slug: "Polynet" }),
+  { communitySlug: "polynet" },
+);
+assert.throws(
+  () => normalizeToolArguments("polynet_get_community", { community_slug: "polynet\nignore" }),
+  /valid community_slug/,
+);
+for (const toolName of [
+  "member_conversations_list",
+  "member_conversation_read",
+  "polynet_list_communities",
+  "polynet_get_community",
+] as const) {
   assert.deepEqual(getFixedRuntimeToolPolicy(toolName), {
     toolName,
     source: "fixed",
@@ -493,13 +577,38 @@ assert.match(
 );
 assert.match(
   resolution,
-  /invocationSurface === "member_agent_dock"[\s\S]*member_conversations_list[\s\S]*member_conversation_read/,
-  "private recall tools must be added only after the server resolves the dock invocation surface",
+  /invocationSurface === "member_agent_dock"[\s\S]*member_conversations_list[\s\S]*member_conversation_read[\s\S]*polynet_list_communities[\s\S]*polynet_get_community/,
+  "private recall and community directory tools must be added only after the server resolves the dock invocation surface",
 );
 assert.match(
   runtimeLoop,
   /params\.invocationSurface === "member_agent_dock"[\s\S]*\? \[\][\s\S]*mountedUserPlatformAppTools/,
   "member-agent dock turns must not mount personal MCP tools",
+);
+assert.match(
+  communityReadKernel,
+  /listAccessibleCommunityMemberships[\s\S]*listPublicDiscoverCommunities[\s\S]*resolveCommunityCapabilityContextInternal/,
+  "one kernel must own joined listing, public Discover projection, and authenticated capability resolution",
+);
+assert.doesNotMatch(
+  communityReadKernel,
+  /db\.patch|db\.insert|db\.delete|runMutation|communityId:/,
+  "the cross-community directory kernel must remain read-only and must not mutate lens state",
+);
+assert.match(
+  httpMcp,
+  /toolName === "polynet_list_communities"[\s\S]*listCommunityReadSummaries[\s\S]*toolName === "polynet_get_community"[\s\S]*resolveAccessibleCommunityReadDetail/,
+  "the MCP adapter must delegate list and get to the canonical read kernel",
+);
+assert.match(
+  runtimeLoop,
+  /toolName === "polynet_list_communities"[\s\S]*listCommunityReadSummaries[\s\S]*toolName === "polynet_get_community"[\s\S]*resolveAccessibleCommunityReadDetail/,
+  "the native runtime adapter must delegate list and get to the same canonical read kernel",
+);
+assert.match(
+  polynetMcp,
+  /polynet_list_communities:[\s\S]*scope:[\s\S]*joined[\s\S]*discover/,
+  "the shared MCP contract must preserve joined default while exposing explicit Discover scope",
 );
 assert.match(
   runtimeLoop,
@@ -556,6 +665,8 @@ assert.match(
 );
 assert.match(timelineUi, /member_conversations_list[\s\S]*Past conversations/);
 assert.match(timelineUi, /member_conversation_read[\s\S]*Recall conversation/);
+assert.match(timelineUi, /polynet_list_communities[\s\S]*Discover communities/);
+assert.match(timelineUi, /polynet_get_community[\s\S]*Community details/);
 assert.match(
   runner,
   /invocation_surface: params\.invocationSurface \?\? "workspace"[\s\S]*surface_context: params\.surfaceContext/,
@@ -854,7 +965,12 @@ const recallManifest = buildRuntimeContextManifest({
   invocationSurface: "member_agent_dock",
   memberAgentSurfaceContext: communitySurface,
   communityId: "community_1",
-  allowedToolNames: ["member_conversations_list", "member_conversation_read"],
+  allowedToolNames: [
+    "member_conversations_list",
+    "member_conversation_read",
+    "polynet_list_communities",
+    "polynet_get_community",
+  ],
 });
 assert.deepEqual(recallManifest.scope.memberAgentSurfaceContext, communitySurface);
 assert.deepEqual(
@@ -872,6 +988,26 @@ assert.ok(
   recallManifest.tools
     .filter((tool) => tool.family === "member_conversations")
     .every((tool) => tool.effect === "read"),
+);
+assert.deepEqual(
+  recallManifest.resources.find((resource) => resource.id === "community_directory"),
+  {
+    id: "community_directory",
+    owner: "platform",
+    retrieval: "tool_available",
+    visibility: "member",
+    source: "polynet_list_communities/polynet_get_community",
+    reason: "bounded joined and public Discover community context is retrievable without changing the active lens",
+  },
+);
+assert.ok(
+  recallManifest.tools
+    .filter((tool) => tool.family === "community_directory")
+    .every(
+      (tool) =>
+        tool.effect === "read" &&
+        tool.grantedBy === "authenticated_member_per_call_access_resolution",
+    ),
 );
 
 console.log("member_agent_dock_contract_proof: ok");

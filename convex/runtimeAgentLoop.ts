@@ -120,6 +120,10 @@ import {
   buildToolBatchTelemetryPayload,
 } from "./runtimeHarnessTelemetry";
 import {
+  listCommunityReadSummaries,
+  resolveAccessibleCommunityReadDetail,
+} from "./communityReadKernel";
+import {
   buildMountedAppOpenAiTools,
   buildMountedAppResponsesTools,
   formatJsonToolOutput,
@@ -441,6 +445,80 @@ export async function executeRetrievalHarnessTool(params: {
         outputText: "",
         errorCode: "member_conversation_read_failed",
         errorMessage: message || "Member conversation read failed.",
+      };
+    }
+  }
+
+  if (params.toolName === "polynet_list_communities") {
+    const authSubject = String(params.authSubject ?? "").trim();
+    if (!authSubject) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "authenticated_user_required",
+        errorMessage: "polynet_list_communities requires an authenticated user.",
+      };
+    }
+    try {
+      const listed = await listCommunityReadSummaries({
+        ctx: params.ctx,
+        authSubject,
+        scope: normalizedArgs.scope,
+      });
+      if (!listed.ok) throw new Error(listed.code);
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput({ communities: listed.communities }),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "polynet_list_communities_failed",
+        errorMessage: message || "Polynet community listing failed.",
+      };
+    }
+  }
+
+  if (params.toolName === "polynet_get_community") {
+    const authSubject = String(params.authSubject ?? "").trim();
+    if (!authSubject) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "authenticated_user_required",
+        errorMessage: "polynet_get_community requires an authenticated user.",
+      };
+    }
+    try {
+      const resolved = await resolveAccessibleCommunityReadDetail({
+        ctx: params.ctx,
+        authSubject,
+        communitySlug: String(normalizedArgs.communitySlug ?? ""),
+      });
+      if (!resolved.ok) throw new Error(resolved.code);
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput({ community: resolved.community }),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "polynet_get_community_failed",
+        errorMessage: message || "Polynet community lookup failed.",
       };
     }
   }

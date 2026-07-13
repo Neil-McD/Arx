@@ -3,7 +3,7 @@ id: product.agent
 title: Agent
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-07-12
+last_verified: 2026-07-13
 ---
 
 # Agent
@@ -53,6 +53,7 @@ The current product model supports:
 - read-only recall compatibility for retained legacy per-community episodes
 - community lens switching inside threads
 - deterministic Discover, community-section, and generic platform-page orientation
+- native read-only directory access to joined and public Discover communities
 - community resources and skills as controlled context inputs
 - apps/MCPs as explicit capability surfaces
 - personal memory as an explicit user-owned context layer
@@ -73,6 +74,7 @@ The current product model supports:
 10. Retained legacy per-community episodes are historical recall sources only; new messages and runtime turns use the active global episode.
 11. Page context guides relevance but cannot grant community access or tools.
 12. Discover must not silently inherit Polynet or the last visited community as its active lens.
+13. Reading another community through directory tools must not mutate the active lens, current page, or episode.
 
 ## Examples
 

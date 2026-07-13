@@ -36,6 +36,7 @@ const contract = read("docs/polynet-workspace-mcp-contract-v0.md");
 const authSetup = read("docs/auth-runtime-setup-workos-authkit.md");
 const httpMcp = read("convex/httpMcp.ts");
 const communityCapabilityContext = read("convex/communityCapabilityContext.ts");
+const communityReadKernel = read("convex/communityReadKernel.ts");
 const communityCapabilityContextContract = read("shared/communityCapabilityContextContract.ts");
 const authConfig = read("convex/auth.config.ts");
 const sharedMcp = read("shared/polynetMcp.ts");
@@ -592,8 +593,13 @@ const resolverBlock = blockBetween(
 );
 assertIncludes(
   resolverBlock,
+  "resolveAccessibleCommunityReadDetail",
+  "workspace adapter delegates to shared community read kernel",
+);
+assertIncludes(
+  communityReadKernel,
   "resolveCommunityCapabilityContextInternal",
-  "workspace adapter delegates to atomic community authorization",
+  "shared read kernel delegates to atomic community authorization",
 );
 assertIncludes(
   communityCapabilityContext,

@@ -707,7 +707,12 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         inferenceSource,
       }),
       ...(invocationSurface === "member_agent_dock"
-        ? (["member_conversations_list", "member_conversation_read"] as const)
+        ? ([
+            "member_conversations_list",
+            "member_conversation_read",
+            "polynet_list_communities",
+            "polynet_get_community",
+          ] as const)
         : []),
     ],
   });

@@ -1,4 +1,8 @@
 import type { RetrievalToolName } from "./retrievalTools";
+import {
+  getPolynetMcpToolDefinition,
+  type PolynetMcpToolName,
+} from "./polynetMcp.ts";
 
 type JsonSchema =
   | {
@@ -42,6 +46,25 @@ export type ResponsesApiFunctionTool = {
   parameters: JsonSchema;
   strict: boolean;
 };
+
+function getPolynetToolContract(name: PolynetMcpToolName): {
+  description: string;
+  inputSchema: JsonSchema;
+} {
+  const definition = getPolynetMcpToolDefinition(name);
+  if (!definition) throw new Error(`polynet_tool_contract_missing:${name}`);
+  return {
+    description: definition.description,
+    inputSchema: definition.inputSchema as JsonSchema,
+  };
+}
+
+const POLYNET_LIST_COMMUNITIES_TOOL = getPolynetToolContract(
+  "polynet_list_communities",
+);
+const POLYNET_GET_COMMUNITY_TOOL = getPolynetToolContract(
+  "polynet_get_community",
+);
 
 const PATH_ONLY_TOOL_SCHEMA: JsonSchema = {
   type: "object",
@@ -894,6 +917,14 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     description: "Read a bounded user-and-assistant transcript window with lens provenance from one of the signed-in member's private Polynet agent conversation episodes.",
     inputSchema: MEMBER_CONVERSATION_READ_TOOL_SCHEMA,
   },
+  polynet_list_communities: {
+    name: "polynet_list_communities",
+    ...POLYNET_LIST_COMMUNITIES_TOOL,
+  },
+  polynet_get_community: {
+    name: "polynet_get_community",
+    ...POLYNET_GET_COMMUNITY_TOOL,
+  },
   member_profile_confirm_facts: {
     name: "member_profile_confirm_facts",
     description: "Write member-approved onboarding interview facts to the active member profile ontology for the active community lens.",
@@ -1540,6 +1571,20 @@ export function normalizeToolArguments(
     const episodeId = normalizeString(args.episode_id ?? args.episodeId);
     if (!episodeId) throw new Error("member_conversation_read requires episode_id.");
     return { episodeId: episodeId.slice(0, 160) };
+  }
+  if (toolName === "polynet_list_communities") {
+    const scope = normalizeString(args.scope)?.toLowerCase() ?? "joined";
+    if (scope !== "joined" && scope !== "discover") {
+      throw new Error("polynet_list_communities scope must be joined or discover.");
+    }
+    return { scope };
+  }
+  if (toolName === "polynet_get_community") {
+    const communitySlug = normalizeString(args.community_slug ?? args.communitySlug)?.toLowerCase();
+    if (!communitySlug || !/^[a-z0-9-]{3,64}$/.test(communitySlug)) {
+      throw new Error("polynet_get_community requires a valid community_slug.");
+    }
+    return { communitySlug };
   }
   if (toolName === "community_resources_list") {
     const path = normalizeString(args.path);

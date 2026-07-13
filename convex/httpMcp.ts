@@ -15,7 +15,6 @@ import {
 import type { ProductDocsSearchIndex } from "../shared/productDocsSearch.ts";
 import {
   hasCommunityCapability,
-  normalizeCommunityCapabilityRelation,
   projectCommunityAccessCapabilities,
   type CommunityCapabilityAuthority,
   type CommunityCapabilityName,
@@ -26,6 +25,11 @@ import {
   type CommunityMembershipProjection,
 } from "./communityCapabilityContext";
 import { normalizeCommunityCapabilitySlug } from "../shared/communityCapabilityContextContract";
+import {
+  listCommunityReadSummaries,
+  resolveAccessibleCommunityReadDetail,
+} from "./communityReadKernel";
+import type { CommunityReadSummary } from "../shared/communityReadContract.ts";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -433,7 +437,7 @@ function emptyAcceptedResponse(req: Request, jsonResponse: JsonResponseFn): Resp
   });
 }
 
-function sanitizeCommunitySummary(row: CommunityMembershipProjection) {
+function sanitizeCommunitySummary(row: CommunityMembershipProjection): CommunityReadSummary {
   const role = normalizeString(row.role, 32)?.toLowerCase();
   return {
     slug: String(row.communities?.slug ?? "").trim(),
@@ -458,10 +462,6 @@ function sanitizeCommunitySummary(row: CommunityMembershipProjection) {
             ? "moderator"
             : "member",
   };
-}
-
-function sanitizeMcpAccessRelation(raw: unknown): string {
-  return normalizeCommunityCapabilityRelation(raw);
 }
 
 function sanitizeCommunityAccessCapabilities(access: Record<string, unknown>) {
@@ -518,6 +518,17 @@ function parseWorkspaceContextId(value: unknown): string | null {
 
 function sanitizeWorkspaceSummary(row: CommunityMembershipProjection) {
   const community = sanitizeCommunitySummary(row);
+  return buildWorkspaceSummaryFromCommunity(community);
+}
+
+function buildWorkspaceSummaryFromCommunity(community: {
+  slug: string;
+  name: string;
+  one_liner: string | null;
+  visibility: "published" | "unlisted";
+  entry_policy: "open" | "approval" | "paid_subscription";
+  relation: string;
+}) {
   return {
     workspace_context_id: buildWorkspaceContextId(community.slug) ?? "",
     workspace_type: "community",
@@ -606,13 +617,11 @@ async function resolveWorkspaceContext(args: {
   if (!communitySlug) {
     return { ok: false, message: "workspace_context_id must use the community:<slug> shape." };
   }
-  const resolved = await args.ctx.runQuery(
-    internal.communityCapabilityContext.resolveCommunityCapabilityContextInternal as any,
-    {
-      authSubject: args.authSubject,
-      communitySlug,
-    },
-  );
+  const resolved = await resolveAccessibleCommunityReadDetail({
+    ctx: args.ctx,
+    authSubject: args.authSubject,
+    communitySlug,
+  });
   if (!resolved.ok) {
     if (resolved.code === "community_access_unavailable") {
       return { ok: false, message: "Workspace access could not be resolved." };
@@ -725,8 +734,15 @@ async function handleToolCall(args: {
   const { ctx, authSubject, actor, toolName, toolArgs } = args;
 
   if (toolName === "polynet_list_communities") {
-    const rows = await listAccessibleCommunities(ctx, authSubject);
-    const communities = rows.map(sanitizeCommunitySummary);
+    const listed = await listCommunityReadSummaries({
+      ctx,
+      authSubject,
+      scope: toolArgs.scope,
+    });
+    if (!listed.ok) {
+      return { ok: false, type: "tool", message: "scope must be joined or discover." };
+    }
+    const communities = listed.communities;
     return {
       ok: true,
       result: {
@@ -738,8 +754,15 @@ async function handleToolCall(args: {
   }
 
   if (toolName === "polynet_list_workspaces") {
-    const rows = await listAccessibleCommunities(ctx, authSubject);
-    const workspaces = rows.map(sanitizeWorkspaceSummary);
+    const listed = await listCommunityReadSummaries({
+      ctx,
+      authSubject,
+      scope: "joined",
+    });
+    if (!listed.ok) {
+      return { ok: false, type: "tool", message: "Community listing failed." };
+    }
+    const workspaces = listed.communities.map(buildWorkspaceSummaryFromCommunity);
     return {
       ok: true,
       result: {
@@ -755,42 +778,19 @@ async function handleToolCall(args: {
     if (!communitySlug) {
       return { ok: false, type: "tool", message: "community_slug is required." };
     }
-    const resolved = await resolveWorkspaceContext({
+    const resolved = await resolveAccessibleCommunityReadDetail({
       ctx,
       authSubject,
-      workspaceContextId: buildWorkspaceContextId(communitySlug),
+      communitySlug,
     });
     if (!resolved.ok) {
       return {
         ok: false,
         type: "tool",
-        message:
-          resolved.message === "Workspace access could not be resolved."
-            ? "Community access could not be resolved."
-            : "Community not found or not accessible.",
+        message: "Community not found or not accessible.",
       };
     }
-    const row = resolved.context.row;
-    const access = resolved.context.access;
-    const community = {
-      slug: String(row.communities?.slug ?? "").trim(),
-      name: String(row.communities?.name ?? "").trim() || "Community",
-      one_liner: normalizeString(row.communities?.one_liner, 280),
-      about: normalizeString(row.communities?.about, 4000),
-      visibility:
-        String(row.communities?.visibility ?? "").trim().toLowerCase() === "published"
-          ? "published"
-          : "unlisted",
-      entry_policy:
-        String(row.communities?.entry_policy ?? "").trim().toLowerCase() === "paid_subscription"
-          ? "paid_subscription"
-          : String(row.communities?.entry_policy ?? "").trim().toLowerCase() === "approval"
-            ? "approval"
-            : "open",
-      relation: sanitizeMcpAccessRelation(access.relation),
-      is_entitled: access.is_entitled === true,
-      capabilities: sanitizeCommunityAccessCapabilities(access),
-    };
+    const community = resolved.community;
     return {
       ok: true,
       result: {

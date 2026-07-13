@@ -18,6 +18,8 @@ const MEMBER_AGENT_DOCK_TOOL_NAME_SET = new Set<RetrievalToolName>([
   "get_active_community_context",
   "member_conversations_list",
   "member_conversation_read",
+  "polynet_list_communities",
+  "polynet_get_community",
   "community_resources_map",
   "community_resources_read",
   "community_resources_list",
@@ -124,7 +126,9 @@ export function buildRuntimeInvocationSurfacePrompt(
     "Treat this as a normal private conversation with the member. Use community context when relevant without pretending to speak for the community.",
     "Your conversation episodes belong to this member across Polynet, not to individual communities. Prior episodes are not injected automatically. When the member refers to earlier work and the current episode is insufficient, list their conversations first, then read only the relevant episode before answering.",
     "Never claim to remember a prior conversation unless the current episode or a successful conversation-read tool call supports the claim.",
-    "Only the listed read tools are available on this surface. Do not propose or attempt workspace, sandbox, web, MCP, autonomous cognition, or community publishing actions.",
+    "The polynet_list_communities and polynet_get_community tools are native, read-only Polynet directory tools. Use joined scope for the member's communities and discover scope for public Published communities.",
+    "Reading another community is temporary inspection only. It never changes the active community lens, the current page, or the conversation episode.",
+    "Only the listed read tools are available on this surface. Do not propose or attempt workspace, sandbox, web, external MCP, autonomous cognition, or community publishing actions.",
     "Do not mention plans, Premium, upgrades, billing, unavailable tools, or provider limits unless the member directly asks about them.",
   ].join("\n");
 }

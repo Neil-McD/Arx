@@ -295,6 +295,7 @@ The current product model supports:
 - read-only recall compatibility for retained legacy per-community episodes
 - community lens switching inside threads
 - deterministic Discover, community-section, and generic platform-page orientation
+- native read-only directory access to joined and public Discover communities
 - community resources and skills as controlled context inputs
 - apps/MCPs as explicit capability surfaces
 - personal memory as an explicit user-owned context layer
@@ -315,6 +316,7 @@ The current product model supports:
 10. Retained legacy per-community episodes are historical recall sources only; new messages and runtime turns use the active global episode.
 11. Page context guides relevance but cannot grant community access or tools.
 12. Discover must not silently inherit Polynet or the last visited community as its active lens.
+13. Reading another community through directory tools must not mutate the active lens, current page, or episode.
 
 ## Examples
 
@@ -477,6 +479,7 @@ The current lens model supports:
 - visible community lens state in the workspace shell
 - lens changes that apply to subsequent turns only
 - runtime checks that fail closed when the community lens is unavailable
+- temporary read-only inspection of another accessible community without switching the lens
 
 ## Rules
 
@@ -489,6 +492,7 @@ The current lens model supports:
 7. Lens switching should be deterministic and auditable.
 8. Lens context should not be confused with repo/workspace execution context.
 9. The lens is not agent identity or episodic-memory ownership.
+10. Cross-community directory reads are explicit tool targets and never implicit lens mutations.
 
 ## Examples
 

@@ -37,6 +37,8 @@ const polynetMcp = read("shared/polynetMcp.ts");
 const httpMcp = read("convex/httpMcp.ts");
 const communityCapabilityContract = read("shared/communityCapabilityContract.ts");
 const communityCapabilityContext = read("convex/communityCapabilityContext.ts");
+const communityReadKernel = read("convex/communityReadKernel.ts");
+const communityReadContract = read("shared/communityReadContract.ts");
 const communityCapabilityContextContract = read("shared/communityCapabilityContextContract.ts");
 const packageJson = read("package.json");
 const integrationsSettings = read(
@@ -701,9 +703,9 @@ assertIncludes(
   "workspace context parsing",
 );
 assertIncludes(
-  httpMcp,
-  "function sanitizeMcpAccessRelation",
-  "MCP access relation projection",
+  communityReadContract,
+  "normalizeCommunityCapabilityRelation(context.access.relation)",
+  "shared community access relation projection",
 );
 assertIncludes(
   httpMcp,
@@ -728,7 +730,12 @@ assertIncludes(
 const resolverBlockStart = httpMcp.indexOf("async function resolveWorkspaceContext");
 const resolverBlockEnd = httpMcp.indexOf("\nfunction normalizeWorkspaceMemoryTypes", resolverBlockStart);
 const resolverBlock = httpMcp.slice(resolverBlockStart, resolverBlockEnd);
-assertIncludes(resolverBlock, "resolveCommunityCapabilityContextInternal", "workspace resolver atomic context lookup");
+assertIncludes(resolverBlock, "resolveAccessibleCommunityReadDetail", "workspace resolver shared read kernel");
+assertIncludes(
+  communityReadKernel,
+  "resolveCommunityCapabilityContextInternal",
+  "shared read kernel atomic context lookup",
+);
 assertNotIncludes(resolverBlock, "toolArgs.communityId", "workspace resolver");
 assertIncludes(
   communityCapabilityContext,

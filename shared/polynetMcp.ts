@@ -183,12 +183,22 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
     name: "polynet_list_communities",
     title: "List Polynet Communities",
     description:
-      "List the authenticated user's accessible Polynet communities with concise identity and access summaries.",
+      "List concise Polynet community identity and access summaries. Defaults to the authenticated user's joined communities; discover returns public Published communities.",
     annotations: {
       title: "List Polynet Communities",
       readOnlyHint: true,
     },
-    inputSchema: EMPTY_OBJECT_SCHEMA,
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        scope: {
+          type: "string",
+          enum: ["joined", "discover"],
+          description: "joined lists accessible member communities; discover lists public Published communities. Defaults to joined.",
+        },
+      },
+    },
     outputSchema: {
       type: "object",
       additionalProperties: false,

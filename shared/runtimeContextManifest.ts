@@ -195,6 +195,11 @@ const MEMBER_CONVERSATION_TOOL_NAMES = new Set<RetrievalToolName>([
   "member_conversation_read",
 ]);
 
+const COMMUNITY_DIRECTORY_TOOL_NAMES = new Set<RetrievalToolName>([
+  "polynet_list_communities",
+  "polynet_get_community",
+]);
+
 const COMMUNITY_RESOURCE_TOOL_NAMES = new Set<RetrievalToolName>([
   "community_resources_map",
   "community_resources_read",
@@ -350,6 +355,13 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
   }
   if (MEMBER_CONVERSATION_TOOL_NAMES.has(toolName)) {
     return { family: "member_conversations", grantedBy: "authenticated_member_owner_scope", effect: "read" };
+  }
+  if (COMMUNITY_DIRECTORY_TOOL_NAMES.has(toolName)) {
+    return {
+      family: "community_directory",
+      grantedBy: "authenticated_member_per_call_access_resolution",
+      effect: "read",
+    };
   }
   if (COMMUNITY_RESOURCE_TOOL_NAMES.has(toolName)) {
     const isWrite =
@@ -570,6 +582,16 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
       visibility: "private",
       source: "member_conversations_list/member_conversation_read",
       reason: "the member's private episodes are retrievable on demand across community lenses",
+    });
+  }
+  if (hasAnyTool(params.allowedToolNames, COMMUNITY_DIRECTORY_TOOL_NAMES)) {
+    resources.push({
+      id: "community_directory",
+      owner: "platform",
+      retrieval: "tool_available",
+      visibility: "member",
+      source: "polynet_list_communities/polynet_get_community",
+      reason: "bounded joined and public Discover community context is retrievable without changing the active lens",
     });
   }
   if (hasAnyTool(params.allowedToolNames, PRODUCT_DOC_TOOL_NAMES)) {

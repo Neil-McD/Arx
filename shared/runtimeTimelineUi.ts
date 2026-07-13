@@ -274,7 +274,12 @@ function categoryForTool(toolName: string): RuntimeToolCategory {
   }
   if (toolName === "search_product_docs" || toolName === "get_product_doc") return "docs";
   if (toolName === "web_research" || toolName === "web_crawl") return "web";
-  if (toolName === "get_active_community_context" || toolName.startsWith("community_")) return "community";
+  if (
+    toolName === "get_active_community_context" ||
+    toolName.startsWith("community_") ||
+    toolName === "polynet_list_communities" ||
+    toolName === "polynet_get_community"
+  ) return "community";
   return "other";
 }
 
@@ -300,6 +305,13 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   if (toolName === "get_active_community_context") return "Community context";
   if (toolName === "member_conversations_list") return "Past conversations";
   if (toolName === "member_conversation_read") return "Recall conversation";
+  if (toolName === "polynet_list_communities") {
+    return args?.scope === "discover" ? "Discover communities" : "Your communities";
+  }
+  if (toolName === "polynet_get_community") {
+    const communitySlug = toStringValue(args?.community_slug) ?? toStringValue(args?.communitySlug);
+    return `Community details${communitySlug ? `: ${communitySlug}` : ""}`;
+  }
   if (toolName === "community_resources_map") return "Resource map";
   if (toolName === "community_resources_read") return "Read resources";
   if (toolName === "community_resources_list") return `Community resources${path ? `: ${path}` : ""}`;
@@ -405,7 +417,12 @@ function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineTo
   const computerCalls = calls.filter((call) => call.category === "computer").length;
   const docsCalls = calls.filter((call) => call.category === "docs").length;
   const webCalls = calls.filter((call) => call.toolName === "web_research" || call.toolName === "web_crawl").length;
-  const communityCalls = calls.filter((call) => call.toolName.startsWith("community_")).length;
+  const communityCalls = calls.filter(
+    (call) =>
+      call.toolName.startsWith("community_") ||
+      call.toolName === "polynet_list_communities" ||
+      call.toolName === "polynet_get_community",
+  ).length;
   const prefix =
     category === "exploration"
       ? running

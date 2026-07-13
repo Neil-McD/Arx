@@ -3,7 +3,7 @@ id: product.community_lens
 title: Community Lens
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-07-12
+last_verified: 2026-07-13
 ---
 
 # Community Lens
@@ -41,6 +41,7 @@ The current lens model supports:
 - visible community lens state in the workspace shell
 - lens changes that apply to subsequent turns only
 - runtime checks that fail closed when the community lens is unavailable
+- temporary read-only inspection of another accessible community without switching the lens
 
 ## Rules
 
@@ -53,6 +54,7 @@ The current lens model supports:
 7. Lens switching should be deterministic and auditable.
 8. Lens context should not be confused with repo/workspace execution context.
 9. The lens is not agent identity or episodic-memory ownership.
+10. Cross-community directory reads are explicit tool targets and never implicit lens mutations.
 
 ## Examples
 

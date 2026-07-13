@@ -26,6 +26,13 @@ Polynet exposes MCP:
 
 This v0 slice exposes one authenticated user's accessible community workspaces to outside agent harnesses such as Codex, Claude Code, OpenCLAW, or any other MCP-capable client.
 
+`polynet_list_communities` defaults to `scope: joined` for compatibility. Its
+optional `scope: discover` projection lists only public `Published`
+communities; it never grants community access or exposes private community
+knowledge. Both MCP and Polynet's native member agent use the same bounded
+community-read projection and capability resolver rather than maintaining
+separate authorization implementations.
+
 The first useful loop is:
 
 ```text
