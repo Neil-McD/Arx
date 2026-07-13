@@ -10,7 +10,8 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
     Boolean(props.directMessagesButton);
   const hasContextualAppBack =
     !props.isPublicCommunityFunnel &&
-    isDesktopShellContextualBackPage(props.activePage);
+    (isDesktopShellContextualBackPage(props.activePage) ||
+      (props.activePage === "discover" && props.hasBackTargetSnapshot));
   if (!hasPublicFunnelBack && !hasContextualAppBack && !hasTopbarRightActions) {
     return null;
   }

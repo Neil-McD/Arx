@@ -81,6 +81,11 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     showDesktopCommunityNav: props.showDesktopCommunityNav,
     isGlobalSettings: props.isGlobalSettings,
     hasLeftPanel: props.hasLeftPanel,
+    reserveCommunityNavTopbarSpace:
+      !props.showMobileAppShell &&
+      props.desktopHeader.isPublicCommunityFunnel &&
+      (props.desktopHeader.isPublicFunnelPreviewRoute ||
+        props.desktopHeader.hasBackTargetSnapshot),
   });
 
   return (

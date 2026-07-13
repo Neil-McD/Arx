@@ -15,6 +15,9 @@ const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
 const mobileTopBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
+const shellHost = read("apps/web/src/components/WebShellChromeHost.tsx");
+const shellClassNames = read("apps/web/src/controllers/buildWebShellChromeClassNames.ts");
+const webCss = read("apps/web/src/index.css");
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx");
 const communityAgentSection = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
@@ -145,13 +148,28 @@ assert.equal(
 assert.equal(noOpStack.length, 0, "skipped snapshots must be consumed deterministically");
 assert.match(
   desktopHeader,
-  /hasContextualAppBack \? \([\s\S]*props\.activePage === "settings"[\s\S]*props\.onBackFromSettings[\s\S]*props\.onBackToCommunity[\s\S]*\) : null/,
-  "desktop header must render only explicit contextual app back actions",
+  /isDesktopShellContextualBackPage\(props\.activePage\)[\s\S]*props\.activePage === "discover" && props\.hasBackTargetSnapshot[\s\S]*hasContextualAppBack \? \([\s\S]*props\.activePage === "settings"[\s\S]*props\.onBackFromSettings[\s\S]*props\.onBackToCommunity[\s\S]*\) : null/,
+  "desktop header must add a Discover return action only when a prior surface exists",
 );
 assert.match(
   desktopHeader,
   /hasPublicFunnelBack[\s\S]*props\.isPublicFunnelPreviewRoute \|\| props\.hasBackTargetSnapshot/,
   "desktop header must preserve explicit funnel preview and return actions",
+);
+assert.match(
+  shellHost,
+  /reserveCommunityNavTopbarSpace:[\s\S]*props\.desktopHeader\.isPublicCommunityFunnel[\s\S]*props\.desktopHeader\.isPublicFunnelPreviewRoute[\s\S]*props\.desktopHeader\.hasBackTargetSnapshot/,
+  "only public funnel return actions may reserve the community navigation header row",
+);
+assert.match(
+  shellClassNames,
+  /reserveCommunityNavTopbarSpace \? " community-nav-topbar-space" : ""/,
+  "the shell must project public funnel header spacing as an explicit layout class",
+);
+assert.match(
+  webCss,
+  /\.app-root\.community-nav-topbar-space \.community-nav \{\s*padding-top: var\(--web-topbar-height\);\s*\}/,
+  "community navigation must be flush unless a real public funnel return action occupies the header",
 );
 assert.doesNotMatch(
   desktopHeader,

@@ -8,6 +8,7 @@ type BuildWebShellChromeClassNamesParams = {
   showDesktopCommunityNav: boolean;
   isGlobalSettings: boolean;
   hasLeftPanel: boolean;
+  reserveCommunityNavTopbarSpace: boolean;
 };
 
 export function buildWebShellChromeClassNames(
@@ -15,6 +16,8 @@ export function buildWebShellChromeClassNames(
 ): { rootClassName: string; shellClassName: string } {
   const rootClassName = `app-root${
     params.showHeaderIslands ? " web-header-islands" : ""
+  }${
+    params.reserveCommunityNavTopbarSpace ? " community-nav-topbar-space" : ""
   }${
     params.showMobileAppShell ? " mobile-shell" : ""
   }${params.showMobileSettingsShell ? " mobile-settings-shell" : ""}${

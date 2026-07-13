@@ -203,7 +203,7 @@
   padding-top: calc(18px + var(--web-topbar-height));
 }
 
-.community-nav {
+.app-root.community-nav-topbar-space .community-nav {
   padding-top: var(--web-topbar-height);
 }
 
@@ -2096,8 +2096,12 @@
   }
 
   .community-nav {
-    padding: calc(10px + var(--web-topbar-height)) 8px 10px;
+    padding: 10px 8px;
     overflow: hidden;
+  }
+
+  .app-root.community-nav-topbar-space .community-nav {
+    padding-top: calc(10px + var(--web-topbar-height));
   }
 
   .back-to-workspace {
