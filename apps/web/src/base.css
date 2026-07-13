@@ -11054,13 +11054,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   max-width: 420px;
 }
 
-.community-interaction-embed.is-bare {
-  padding: 8px 12px;
-  color: var(--accent);
-  font-size: 13px;
-  word-break: break-all;
-}
-
 /* Layered collapse: when the chat area itself is too narrow for feed + drawer
    side-by-side, the drawer takes over the area (back arrow returns to chat).
    Keyed to the projection's own width (container query) so it triggers based on

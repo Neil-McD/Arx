@@ -338,6 +338,8 @@ Rules:
 - fetcher responses must be read with a bounded response cap before JSON parsing
 - returned preview image URLs must pass the same shared community source URL policy or be omitted
 - enrichment failures patch the embed to `failed`; they do not fail or mutate the canonical root/reply text
+- renderers treat link blocks as derived preview metadata when canonical `markdown_text` already contains the URL; they must not append the URL a second time
+- failed preview embeds render no fallback card when the canonical message text already preserves the clickable URL
 
 ## Current Legacy Chat Adapter Slice
 
