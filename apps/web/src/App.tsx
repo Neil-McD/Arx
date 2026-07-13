@@ -9440,10 +9440,9 @@ export default function App() {
 	    handleTopbarBackToCommunity();
 	  };
 	  const handleTopbarBackFromPublicFunnel = () => {
-	    void goBack();
-	  };
+    void goBack();
+  };
     const handleExitPublicFunnelPreview = () => {
-      if (goBack()) return;
       const fallbackPath = applyShellVariantToAppPath(
         buildCommunityTabPath(publicRoute.kind === "community_funnel_preview" ? publicRoute.slug : null, "funnel") ?? "",
         shellVariant,

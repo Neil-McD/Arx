@@ -159,6 +159,16 @@ assert.doesNotMatch(
   "public funnel actions must not be suppressed by stale app-page state",
 );
 assert.match(
+  app,
+  /handleExitPublicFunnelPreview = \(\) => \{[\s\S]*buildCommunityTabPath\([\s\S]*"funnel"\)[\s\S]*navigateTo\(fallbackPath, \{ replace: true \}\)/,
+  "preview exit must return deterministically to the community funnel editor",
+);
+assert.doesNotMatch(
+  app,
+  /handleExitPublicFunnelPreview = \(\) => \{\s*if \(goBack\(\)\)/,
+  "preview exit must not be intercepted by ephemeral navigation history",
+);
+assert.match(
   launchSetupRoute,
   /buildCommunityTabPath\(communitySlug, "settings", null, "community"\)[\s\S]*community_launch_setup/,
   "new launch setup URLs must live under community settings",
