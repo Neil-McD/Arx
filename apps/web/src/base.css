@@ -338,7 +338,10 @@ body {
 
 .topbar-left button,
 .topbar-center button,
-.topbar-right button {
+.topbar-right button,
+.topbar-left a,
+.topbar-center a,
+.topbar-right a {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
