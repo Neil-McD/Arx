@@ -63,6 +63,7 @@ type ActiveThreadContext = {
 
 type WebMemberAgentDockProps = {
   isVisible: boolean;
+  mobileShellActive?: boolean;
   mobileRoot?: boolean;
   communityId: string | null;
   communityName: string | null;
@@ -104,7 +105,9 @@ function formatInferenceIssue(issue: InferenceIssueModalState | null): string | 
 
 export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const isOpenSurface = Boolean(props.mobileRoot || isOpen);
+  const isOpenSurface = props.mobileShellActive
+    ? Boolean(props.mobileRoot)
+    : isOpen;
   const [threadKey, setThreadKey] = useState<string | null>(null);
   const [episodeId, setEpisodeId] = useState<string | null>(null);
   const [, setThreadContext] = useState<ActiveThreadContext | null>(null);
@@ -575,7 +578,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}`}
       aria-live="polite"
     >
-      {!props.mobileRoot ? (
+      {!props.mobileShellActive ? (
         <button
           type="button"
           className={`member-agent-dock-launcher${turnIsActive ? " is-working" : ""}`}
@@ -609,7 +612,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             >
               <MessageSquarePlus aria-hidden="true" />
             </button>
-            {!props.mobileRoot ? (
+            {!props.mobileShellActive ? (
               <button type="button" onClick={() => setIsOpen(false)} aria-label="Close" title="Close">
                 <X aria-hidden="true" />
               </button>

@@ -11612,6 +11612,7 @@ export default function App() {
       <Suspense fallback={null}>
         <WebMemberAgentDock
           isVisible={isMemberAgentDockVisible}
+          mobileShellActive={showMobileShell}
           mobileRoot={showMobileShell && mobileRootPage === "agent"}
           communityId={memberAgentDockCommunity?.id ?? null}
           communityName={memberAgentDockCommunity?.name ?? null}

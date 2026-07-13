@@ -69,7 +69,7 @@ assert.match(
 );
 assert.match(
   app,
-  /mobileRoot=\{showMobileShell && mobileRootPage === "agent"\}[\s\S]*<WebDirectMessagesHost[\s\S]*mobileRoot=\{showMobileShell && mobileRootPage === "messages"\}/,
+  /mobileShellActive=\{showMobileShell\}[\s\S]*mobileRoot=\{showMobileShell && mobileRootPage === "agent"\}[\s\S]*<WebDirectMessagesHost[\s\S]*mobileRoot=\{showMobileShell && mobileRootPage === "messages"\}/,
   "AI and Messages should reuse the current member-agent and DM surfaces as mobile roots",
 );
 assert.match(
@@ -169,8 +169,8 @@ assert.match(
 
 assert.match(
   memberAgentDock,
-  /mobileRoot\?: boolean;[\s\S]*const isOpenSurface = Boolean\(props\.mobileRoot \|\| isOpen\);[\s\S]*props\.mobileRoot \? " mobile-root"/,
-  "the existing global member-agent should support controlled mobile-root presentation",
+  /mobileShellActive\?: boolean;[\s\S]*mobileRoot\?: boolean;[\s\S]*const isOpenSurface = props\.mobileShellActive[\s\S]*Boolean\(props\.mobileRoot\)[\s\S]*props\.mobileRoot \? " mobile-root"[\s\S]*!props\.mobileShellActive \? \(/,
+  "the existing global member-agent should support controlled mobile-root presentation without a duplicate launcher",
 );
 assert.match(
   memberAgentDockCss,
