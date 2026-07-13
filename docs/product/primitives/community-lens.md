@@ -3,20 +3,20 @@ id: product.community_lens
 title: Community Lens
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-07-12
 ---
 
 # Community Lens
 
 ## Definition
 
-A community lens is explicit community context attached to a workspace thread for future agent turns.
+A community lens is explicit community context attached to a personal-agent conversation for future turns.
 
 It tells the workspace agent which community context should apply next.
 
 ## Why It Exists
 
-The lens lets one workspace thread use a specific community's context, resources, skills, and policy without creating a separate workspace for every community.
+The lens lets one member-owned agent use a specific community's context, resources, skills, and policy without creating a separate agent or conversation for every community.
 
 The lens is the bridge between the personal workspace and the community intelligence system.
 
@@ -36,7 +36,7 @@ The backend validates access before the lens can provide community context. The 
 
 The current lens model supports:
 
-- switching an active workspace thread into a community context
+- switching the member's active personal-agent episode into a community context
 - backend validation before applying community context
 - visible community lens state in the workspace shell
 - lens changes that apply to subsequent turns only
@@ -52,6 +52,7 @@ The current lens model supports:
 6. Community resources, skills, and apps should only be available through the lens when policy allows.
 7. Lens switching should be deterministic and auditable.
 8. Lens context should not be confused with repo/workspace execution context.
+9. The lens is not agent identity or episodic-memory ownership.
 
 ## Examples
 

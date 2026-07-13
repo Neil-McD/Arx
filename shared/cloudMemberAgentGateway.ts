@@ -13,22 +13,7 @@ export type CloudMemberAgentChannel = {
   context_version: number;
 };
 
-export async function ensureCloudMemberAgentCommunityChannel(params: {
-  session: AuthSessionLike;
-  communityId: string;
-}): Promise<CloudMemberAgentChannel> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
-    params.session,
-  );
-  const communityId = String(params.communityId ?? "").trim();
-  if (!communityId) throw new Error("member_agent_community_required");
-  const payload = (await client.mutation(
-    "threads:ensureMemberAgentCommunityThread" as any,
-    {
-      authSubject,
-      communityId,
-    },
-  )) as CloudMemberAgentChannel | null;
+function normalizeMemberAgentChannel(payload: CloudMemberAgentChannel | null): CloudMemberAgentChannel {
   const threadKey = String(payload?.thread_key ?? "").trim();
   const channelId = String(payload?.channel_id ?? "").trim();
   const episodeId = String(payload?.episode_id ?? "").trim();
@@ -52,6 +37,57 @@ export async function ensureCloudMemberAgentCommunityChannel(params: {
   };
 }
 
+export async function ensureCloudMemberAgentGlobalChannel(params: {
+  session: AuthSessionLike;
+  initialCommunityId: string;
+}): Promise<CloudMemberAgentChannel> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const initialCommunityId = String(params.initialCommunityId ?? "").trim();
+  if (!initialCommunityId) throw new Error("member_agent_community_required");
+  const payload = (await client.mutation("threads:ensureMemberAgentGlobalChannel" as any, {
+    authSubject,
+    initialCommunityId,
+  })) as CloudMemberAgentChannel | null;
+  return normalizeMemberAgentChannel(payload);
+}
+
+export async function startNewCloudMemberAgentGlobalEpisode(params: {
+  session: AuthSessionLike;
+  initialCommunityId: string;
+  expectedActiveEpisodeId: string;
+}): Promise<CloudMemberAgentChannel> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const initialCommunityId = String(params.initialCommunityId ?? "").trim();
+  const expectedActiveEpisodeId = String(params.expectedActiveEpisodeId ?? "").trim();
+  if (!initialCommunityId) throw new Error("member_agent_community_required");
+  if (!expectedActiveEpisodeId) throw new Error("member_agent_active_episode_required");
+  const payload = (await client.mutation("threads:startNewMemberAgentGlobalEpisode" as any, {
+    authSubject,
+    initialCommunityId,
+    expectedActiveEpisodeId,
+  })) as CloudMemberAgentChannel | null;
+  return normalizeMemberAgentChannel(payload);
+}
+
+export async function ensureCloudMemberAgentCommunityChannel(params: {
+  session: AuthSessionLike;
+  communityId: string;
+}): Promise<CloudMemberAgentChannel> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
+    params.session,
+  );
+  const communityId = String(params.communityId ?? "").trim();
+  if (!communityId) throw new Error("member_agent_community_required");
+  const payload = (await client.mutation(
+    "threads:ensureMemberAgentCommunityThread" as any,
+    {
+      authSubject,
+      communityId,
+    },
+  )) as CloudMemberAgentChannel | null;
+  return normalizeMemberAgentChannel(payload);
+}
+
 export async function startNewCloudMemberAgentCommunityEpisode(params: {
   session: AuthSessionLike;
   communityId: string;
@@ -72,22 +108,5 @@ export async function startNewCloudMemberAgentCommunityEpisode(params: {
       expectedActiveEpisodeId,
     },
   )) as CloudMemberAgentChannel | null;
-  if (!payload?.thread_key || !payload.episode_id) {
-    throw new Error("member_agent_episode_unavailable");
-  }
-  return {
-    channel_id: String(payload.channel_id ?? "").trim(),
-    episode_id: String(payload.episode_id ?? "").trim(),
-    episode_ordinal: Number.isFinite(payload.episode_ordinal)
-      ? Math.max(1, Math.floor(payload.episode_ordinal))
-      : 1,
-    thread_id: String(payload.thread_id ?? "").trim(),
-    thread_key: String(payload.thread_key ?? "").trim(),
-    community_id: String(payload.community_id ?? "").trim(),
-    model_id: String(payload.model_id ?? "").trim(),
-    runtime_engine: "polynet",
-    context_version: Number.isFinite(payload.context_version)
-      ? Math.max(0, Math.floor(payload.context_version))
-      : 0,
-  };
+  return normalizeMemberAgentChannel(payload);
 }

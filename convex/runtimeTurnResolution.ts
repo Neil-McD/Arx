@@ -36,6 +36,7 @@ import {
   resolveGateDecisionForAuthenticatedActor,
 } from "./httpRuntimeSupport";
 import {
+  isGlobalMemberAgentEpisodeThreadKey,
   isMemberAgentThreadKeyForCommunity,
   resolveRuntimeInvocationSurfaceForThread,
   restrictCapabilityFamiliesForInvocationSurface,
@@ -588,6 +589,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   }
   if (
     invocationSurface === "member_agent_dock" &&
+    !isGlobalMemberAgentEpisodeThreadKey(threadKey) &&
     !isMemberAgentThreadKeyForCommunity(threadKey, threadCommunityId)
   ) {
     return {

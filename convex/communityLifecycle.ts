@@ -59,7 +59,7 @@ type MemberAgentEpisodeLifecycleLike = {
   status: "active" | "closed";
 };
 
-async function tombstoneMemberAgentChannelsForDeletedCommunity(args: {
+async function tombstoneLegacyMemberAgentChannelsForDeletedCommunity(args: {
   ctx: any;
   community: CommunityLike;
   nowMs: number;
@@ -1078,7 +1078,7 @@ export const deleteCommunity = mutation({
       await ctx.db.delete(thread._id as any);
     }
 
-    await tombstoneMemberAgentChannelsForDeletedCommunity({
+    await tombstoneLegacyMemberAgentChannelsForDeletedCommunity({
       ctx,
       community,
       nowMs,

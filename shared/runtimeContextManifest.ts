@@ -343,7 +343,7 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
     return { family: "community_context", grantedBy: "validated_community_lens", effect: "read" };
   }
   if (MEMBER_CONVERSATION_TOOL_NAMES.has(toolName)) {
-    return { family: "member_conversations", grantedBy: "authenticated_member_community_scope", effect: "read" };
+    return { family: "member_conversations", grantedBy: "authenticated_member_owner_scope", effect: "read" };
   }
   if (COMMUNITY_RESOURCE_TOOL_NAMES.has(toolName)) {
     const isWrite =
@@ -543,7 +543,7 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
       retrieval: "tool_available",
       visibility: "private",
       source: "member_conversations_list/member_conversation_read",
-      reason: "prior private episodes are retrievable on demand inside the active community",
+      reason: "the member's private episodes are retrievable on demand across community lenses",
     });
   }
   if (hasAnyTool(params.allowedToolNames, PRODUCT_DOC_TOOL_NAMES)) {

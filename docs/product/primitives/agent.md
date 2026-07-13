@@ -3,7 +3,7 @@ id: product.agent
 title: Agent
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-07-12
 ---
 
 # Agent
@@ -22,9 +22,9 @@ Without the agent, the community is mostly conversation and content. With the ag
 
 ## User Mental Model
 
-The agent should feel like the intelligent surface of a community or workspace, not like a detached chatbot.
+The member's personal agent should remain one continuous intelligent surface across Polynet, not become a separate agent for every community.
 
-In a community, the agent should understand the builder's domain and the community's resources. In the workspace, the agent should help the user work inside persistent threads and use the selected community lens when one is active.
+The bottom-right agent belongs to the signed-in member. It keeps that member's episodic history while using the community selected by the current surface as a server-validated lens for subsequent turns.
 
 ## System Mental Model
 
@@ -47,6 +47,8 @@ Runtime inputs can include user/session state, thread history, community resourc
 The current product model supports:
 
 - personal AI threads
+- one member-owned personal agent channel across communities
+- on-demand episodic recall across that member's prior conversations
 - community lens switching inside threads
 - community resources and skills as controlled context inputs
 - apps/MCPs as explicit capability surfaces
@@ -64,6 +66,7 @@ The current product model supports:
 6. Skills should be injected intentionally, not dumped into every turn.
 7. Apps/MCP tools should not be represented as available unless the runtime can actually use them.
 8. The agent should preserve broader user intent when the request is not actually community-scoped.
+9. Community navigation may change the next-turn lens, but it must not replace the member's agent or conversation.
 
 ## Examples
 

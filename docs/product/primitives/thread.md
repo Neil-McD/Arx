@@ -3,7 +3,7 @@ id: product.thread
 title: Thread
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-07-12
 ---
 
 # Thread
@@ -22,7 +22,7 @@ Without threads, the workspace would be a stateless prompt box. Threads let the 
 
 ## User Mental Model
 
-A thread is a continuing workspace conversation.
+A personal-agent episode is a continuing private conversation even when the member moves between communities.
 
 The user can leave and return to the thread. If they change the community lens, that changes what happens next, not what already happened.
 
@@ -40,6 +40,8 @@ The current thread model includes:
 - durable messages
 - route-addressable thread URLs
 - optional active community lens
+- immutable per-run lens provenance
+- episodic rotation through `Start fresh conversation`
 - runtime evidence and activity metadata
 - thread rendering and runtime evidence
 
@@ -53,6 +55,7 @@ The current thread model includes:
 6. A thread can have no active community lens.
 7. Runtime evidence is operational evidence, not the product source of truth.
 8. Thread context should be summarized, retrieved, or bounded rather than blindly copied forever.
+9. A personal-agent episode belongs to the member, not to the community selected as its current lens.
 
 ## Examples
 

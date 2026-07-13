@@ -203,7 +203,7 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     parallelSafe: true,
     exclusive: false,
     requiresWorkspace: false,
-    requiresCommunity: true,
+    requiresCommunity: false,
     requiresMcpSession: false,
   },
   member_conversation_read: {
@@ -216,7 +216,7 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     parallelSafe: true,
     exclusive: false,
     requiresWorkspace: false,
-    requiresCommunity: true,
+    requiresCommunity: false,
     requiresMcpSession: false,
   },
   community_resources_read: {

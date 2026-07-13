@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  buildGlobalMemberAgentEpisodeThreadKey,
   buildMemberAgentEpisodeThreadKey,
   buildMemberAgentThreadKey,
   buildRuntimeInvocationSurfacePrompt,
+  isGlobalMemberAgentEpisodeThreadKey,
   isMemberAgentThreadKeyForCommunity,
   resolveRuntimeInvocationSurfaceForThread,
   restrictCapabilityFamiliesForInvocationSurface,
@@ -55,6 +57,10 @@ assert.match(
 );
 
 assert.equal(buildMemberAgentThreadKey("community_1"), "member-agent:community_1");
+assert.equal(buildGlobalMemberAgentEpisodeThreadKey(2), "member-agent:global:episode:2");
+assert.equal(isGlobalMemberAgentEpisodeThreadKey("member-agent:global:episode:2"), true);
+assert.equal(isGlobalMemberAgentEpisodeThreadKey("member-agent:community_1:episode:2"), false);
+assert.throws(() => buildGlobalMemberAgentEpisodeThreadKey(0), /member_agent_episode_ordinal_invalid/);
 assert.throws(() => buildMemberAgentThreadKey(""), /member_agent_community_required/);
 assert.equal(
   buildMemberAgentEpisodeThreadKey("community_1", 2),
@@ -124,7 +130,7 @@ assert.deepEqual(
 );
 assert.match(
   buildRuntimeInvocationSurfacePrompt("member_agent_dock") ?? "",
-  /member's own Polynet agent[\s\S]*not the community's agent[\s\S]*Prior conversation episodes are not injected automatically[\s\S]*Never claim to remember/,
+  /member's own Polynet agent[\s\S]*not the community's agent[\s\S]*episodes belong to this member across Polynet[\s\S]*Never claim to remember/,
 );
 
 assert.deepEqual(normalizeToolArguments("member_conversations_list", { limit: 99 }), { limit: 12 });
@@ -147,7 +153,7 @@ for (const toolName of ["member_conversations_list", "member_conversation_read"]
     parallelSafe: true,
     exclusive: false,
     requiresWorkspace: false,
-    requiresCommunity: true,
+    requiresCommunity: false,
     requiresMcpSession: false,
   });
 }
@@ -282,8 +288,8 @@ assert.doesNotMatch(JSON.stringify(identityManifest), /Neil McDevitt|neilmcd|you
 
 assert.match(
   schema,
-  /memberAgentChannels: defineTable\([\s\S]*activeEpisodeId: v\.optional\(v\.id\("memberAgentEpisodes"\)\)[\s\S]*communityNameSnapshot: v\.optional\(v\.string\(\)\)[\s\S]*communityDeletedAt: v\.optional\(v\.number\(\)\)[\s\S]*\.index\("by_owner_community", \["ownerId", "communityId"\]\)[\s\S]*\.index\("by_community", \["communityId"\]\)/,
-  "the stable member-community channel must own the active episode pointer",
+  /memberAgentChannels: defineTable\([\s\S]*scopeKey: v\.optional\(v\.literal\("global"\)\)[\s\S]*communityId: v\.optional\(v\.id\("communities"\)\)[\s\S]*activeEpisodeId: v\.optional\(v\.id\("memberAgentEpisodes"\)\)[\s\S]*\.index\("by_owner_scope", \["ownerId", "scopeKey"\]\)[\s\S]*\.index\("by_owner", \["ownerId"\]\)[\s\S]*\.index\("by_owner_community", \["ownerId", "communityId"\]\)/,
+  "the stable user-global channel must coexist additively with legacy community channels",
 );
 assert.match(
   schema,
@@ -292,43 +298,43 @@ assert.match(
 );
 assert.match(
   threads,
-  /ensureMemberAgentCommunityThread = mutation[\s\S]*resolveOwnerIdForAuthenticatedRequest[\s\S]*requireCommunityChatAccess/,
-  "the private member-agent channel must authenticate and revalidate community access",
+  /ensureMemberAgentGlobalChannel = mutation[\s\S]*resolveOwnerIdForAuthenticatedRequest[\s\S]*requireCommunityChatAccess[\s\S]*ensureGlobalMemberAgentChannelCore/,
+  "the global private channel must authenticate and validate its initial community lens",
 );
 assert.match(
   threads,
-  /ensureMemberAgentCommunityChannelCore[\s\S]*buildMemberAgentThreadKey\(communityId\)[\s\S]*buildMemberAgentEpisodeThreadKey\(communityId, 1\)[\s\S]*memberAgentChannels[\s\S]*memberAgentEpisodes/,
-  "the channel must lazily adopt legacy episode one before creating new storage",
+  /ensureGlobalMemberAgentChannelCore[\s\S]*getGlobalMemberAgentChannel[\s\S]*buildGlobalMemberAgentEpisodeThreadKey\(1\)[\s\S]*scopeKey: MEMBER_AGENT_GLOBAL_SCOPE_KEY[\s\S]*memberAgentEpisodes/,
+  "the member must receive one global channel and one active global episode",
 );
 assert.match(
   threads,
-  /startNewMemberAgentCommunityEpisode = mutation[\s\S]*expectedActiveEpisodeId[\s\S]*status: "closed"[\s\S]*activeEpisodeId: episodeId/,
-  "New chat must close the prior episode and atomically move the channel pointer",
+  /startNewMemberAgentGlobalEpisode = mutation[\s\S]*expectedActiveEpisodeId[\s\S]*status: "closed"[\s\S]*activeEpisodeId: episodeId/,
+  "New chat must close the prior global episode and atomically move the global channel pointer",
 );
 assert.doesNotMatch(
-  threads.match(/startNewMemberAgentCommunityEpisode = mutation[\s\S]*?\n\}\);/)?.[0] ?? "",
+  threads.match(/startNewMemberAgentGlobalEpisode = mutation[\s\S]*?\n\}\);/)?.[0] ?? "",
   /archivedAt|\.delete\(/,
   "New chat must preserve the prior thread and transcript",
 );
 assert.match(
   threads,
-  /requireActiveMemberAgentEpisodeForUserMessage[\s\S]*getMemberAgentChannel[\s\S]*episode\.threadId !== args\.thread\._id[\s\S]*member_agent_episode_not_active/,
+  /requireActiveMemberAgentEpisodeForUserMessage[\s\S]*isGlobalMemberAgentEpisodeThreadKey[\s\S]*getGlobalMemberAgentChannel[\s\S]*episode\.threadId !== args\.thread\._id[\s\S]*member_agent_episode_not_active/,
   "new user messages must fail closed when addressed to a closed member-agent episode",
 );
 assert.match(
   threads,
-  /getMemberAgentChannel[\s\S]*\.withIndex\("by_owner_community"[\s\S]*\.unique\(\)/,
-  "channel lookup must fail closed if the one-channel invariant is violated",
+  /getGlobalMemberAgentChannel[\s\S]*\.withIndex\("by_owner_scope"[\s\S]*MEMBER_AGENT_GLOBAL_SCOPE_KEY[\s\S]*\.unique\(\)/,
+  "global channel lookup must fail closed if the one-channel-per-member invariant is violated",
 );
 assert.match(
   communityLifecycle,
-  /tombstoneMemberAgentChannelsForDeletedCommunity[\s\S]*\.withIndex\("by_community"[\s\S]*status: "closed"[\s\S]*activeEpisodeId: undefined[\s\S]*communityDeletedAt: args\.nowMs/,
-  "community deletion must disable member-agent channels without deleting private history",
+  /tombstoneLegacyMemberAgentChannelsForDeletedCommunity[\s\S]*\.withIndex\("by_community"[\s\S]*status: "closed"[\s\S]*activeEpisodeId: undefined[\s\S]*communityDeletedAt: args\.nowMs/,
+  "community deletion must disable only legacy community channels without deleting private history",
 );
 assert.match(
   communityLifecycle,
-  /await tombstoneMemberAgentChannelsForDeletedCommunity\([\s\S]*await ctx\.db\.delete\(community\._id/,
-  "channel tombstones must commit before the community record is removed",
+  /await tombstoneLegacyMemberAgentChannelsForDeletedCommunity\([\s\S]*await ctx\.db\.delete\(community\._id/,
+  "legacy channel tombstones must commit before the community record is removed",
 );
 assert.match(
   threads,
@@ -342,7 +348,7 @@ assert.match(
 );
 assert.match(
   anonymousUserCleanup,
-  /memberAgentChannels[\s\S]*by_owner_community[\s\S]*ownerId/,
+  /memberAgentChannels[\s\S]*by_owner[\s\S]*ownerId/,
   "anonymous-user cleanup must treat a member-agent channel as a live user reference",
 );
 assert.match(
@@ -357,17 +363,17 @@ assert.match(
 );
 assert.match(
   threads,
-  /listMemberConversationsForToolInternal = internalQuery[\s\S]*getMemberAgentChannel[\s\S]*by_channel_ordinal[\s\S]*deriveMemberConversationTitle/,
-  "episode discovery must start from the authenticated member-community channel",
+  /listMemberConversationsForToolInternal = internalQuery[\s\S]*\.withIndex\("by_owner"[\s\S]*by_channel_ordinal[\s\S]*lens_history: await buildMemberConversationLensHistory/,
+  "episode discovery must federate the authenticated member's global and legacy channels with lens provenance",
 );
 assert.match(
   threads,
-  /readMemberConversationForToolInternal = internalQuery[\s\S]*episode\.channelId !== channel\._id[\s\S]*thread\.ownerId !== args\.ownerId[\s\S]*thread\.communityId[\s\S]*isMemberAgentThreadKeyForCommunity[\s\S]*buildMemberConversationRecallTranscript/,
-  "episode reads must fail closed across owners, channels, and active communities",
+  /readMemberConversationForToolInternal = internalQuery[\s\S]*ctx\.db\.get\(episode\.channelId\)[\s\S]*channel\.ownerId !== args\.ownerId[\s\S]*isMemberConversationThreadForChannel[\s\S]*buildMemberConversationRecallTranscript[\s\S]*community_context_version/,
+  "episode reads must fail closed across owners while preserving per-turn lens provenance",
 );
 assert.match(
   threads,
-  /threadKey: episodeOneThreadKey,\s*titleSource: "auto"/,
+  /threadKey,\s*titleSource: "auto"/,
   "new episode threads must leave automatic titles empty until the first member message",
 );
 assert.match(
@@ -377,8 +383,8 @@ assert.match(
 );
 assert.match(
   threads,
-  /prepareActiveMemberAgentThread[\s\S]*isMemberAgentThreadKeyForCommunity[\s\S]*member_agent_thread_context_mismatch/,
-  "the server must derive the channel key and fail closed on context collisions",
+  /prepareActiveGlobalMemberAgentThread[\s\S]*buildGlobalMemberAgentEpisodeThreadKey[\s\S]*isGlobalMemberAgentEpisodeThreadKey[\s\S]*member_agent_thread_context_mismatch/,
+  "the server must derive the global episode key and fail closed on context collisions",
 );
 assert.match(
   threads,
@@ -397,7 +403,7 @@ assert.match(
 );
 assert.match(
   resolution,
-  /!isMemberAgentThreadKeyForCommunity\(threadKey, threadCommunityId\)[\s\S]*member_agent_thread_context_mismatch/,
+  /!isGlobalMemberAgentEpisodeThreadKey\(threadKey\)[\s\S]*!isMemberAgentThreadKeyForCommunity\(threadKey, threadCommunityId\)[\s\S]*member_agent_thread_context_mismatch/,
 );
 assert.match(
   resolution,
@@ -466,8 +472,8 @@ assert.match(
 
 assert.match(
   gateway,
-  /threads:ensureMemberAgentCommunityThread[\s\S]*threads:startNewMemberAgentCommunityEpisode/,
-  "the browser must use the dedicated server-derived channel mutation",
+  /threads:ensureMemberAgentGlobalChannel[\s\S]*threads:startNewMemberAgentGlobalEpisode/,
+  "the browser must use the dedicated user-global channel mutations",
 );
 assert.match(
   threadReadGateway,
@@ -475,17 +481,17 @@ assert.match(
 );
 assert.match(
   component,
-  /ensureCloudMemberAgentCommunityChannel[\s\S]*useWebTurnRunnerController[\s\S]*runAgentTurn/,
+  /ensureCloudMemberAgentGlobalChannel[\s\S]*useWebTurnRunnerController[\s\S]*runAgentTurn/,
   "the dock must use the retained personal runtime and streaming controller",
 );
 assert.match(
   component,
-  /startNewCloudMemberAgentCommunityEpisode[\s\S]*expectedActiveEpisodeId[\s\S]*activateEmptyEpisode\(thread\)/,
+  /startNewCloudMemberAgentGlobalEpisode[\s\S]*expectedActiveEpisodeId[\s\S]*activateEmptyEpisode\(thread\)/,
   "New chat must switch the active thread only after the server returns the new episode",
 );
 assert.match(
   component,
-  /member_agent_dock_new_chat_failed[\s\S]*ensureCloudMemberAgentCommunityChannel[\s\S]*current\.episode_id !== expectedEpisodeId[\s\S]*activateEmptyEpisode\(current\)/,
+  /member_agent_dock_new_chat_failed[\s\S]*ensureCloudMemberAgentGlobalChannel[\s\S]*current\.episode_id !== expectedEpisodeId[\s\S]*activateEmptyEpisode\(current\)/,
   "an ambiguous New chat result must reconcile to the active server episode",
 );
 const startNewChatBlock =
@@ -503,7 +509,13 @@ assert.match(
 );
 assert.match(component, /<span>Starting fresh<\/span>/);
 assert.match(component, /invocationSurface: "member_agent_dock"/);
-assert.match(component, /communityScopeRef[\s\S]*isCurrentScope/);
+assert.match(component, /agentScopeRef[\s\S]*isCurrentScope/);
+assert.doesNotMatch(component, /\}, \[props\.communityId, props\.session\?\.user\.id, stopStreamingTurn\]\);/);
+assert.match(
+  component,
+  /synchronizeDesiredLens[\s\S]*syncThreadCommunityLensCloud[\s\S]*setCloudThreadContext[\s\S]*createThreadMessage/,
+  "the dock must validate and synchronize the desired community lens before persisting the next user turn",
+);
 assert.doesNotMatch(
   component,
   /useEffect\(\(\) => \{\s*activeThreadKeyRef\.current = threadKey;/,
@@ -512,7 +524,7 @@ assert.doesNotMatch(
 assert.match(
   component,
   /listConvexCloudNewestThreadMessagesByThreadKey[\s\S]*activeThreadKeyRef\.current !== targetThreadKey/,
-  "late transcript reads must not commit outside their active community and thread",
+  "late transcript reads must not commit outside the active user agent thread",
 );
 assert.match(
   component,
@@ -620,7 +632,7 @@ assert.match(
 );
 assert.match(
   cognitionContract,
-  /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*one stable private channel per member and community[\s\S]*Start fresh conversation[\s\S]*community deletion closes and tombstones[\s\S]*prior episodes are never injected automatically[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
+  /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*one stable private channel per member across Polynet[\s\S]*changing communities changes the lens for subsequent turns[\s\S]*Start fresh conversation[\s\S]*community deletion makes that community unavailable as a future lens[\s\S]*recall spans the member's global episodes and retained legacy per-community episodes[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
 );
 
 const canonicalContext = buildMemberAgentConversationContext({
@@ -685,6 +697,7 @@ const recallRows = Array.from({ length: 70 }, (_, index) => {
       | "assistant"
       | "system",
     contentJson: { text: `${seq}:${"x".repeat(700)}` },
+    runId: seq % 2 === 0 ? `run-${seq}` : undefined,
   };
 });
 const boundedRecall = buildMemberConversationRecallTranscript({
@@ -700,6 +713,12 @@ assert.deepEqual(
   "bounded recall must preserve transcript chronology",
 );
 assert.equal(new Set(boundedRecall.messages.map((message) => message.seq)).size, boundedRecall.messages.length);
+assert.ok(
+  boundedRecall.messages
+    .filter((message) => message.role === "assistant")
+    .every((message) => message.runId === `run-${message.seq}`),
+  "bounded recall must preserve assistant run provenance for lens reconstruction",
+);
 assert.equal(
   deriveMemberConversationTitle({
     storedTitle: "Polynet agent",
@@ -727,7 +746,7 @@ assert.deepEqual(
     retrieval: "tool_available",
     visibility: "private",
     source: "member_conversations_list/member_conversation_read",
-    reason: "prior private episodes are retrievable on demand inside the active community",
+    reason: "the member's private episodes are retrievable on demand across community lenses",
   },
 );
 assert.ok(

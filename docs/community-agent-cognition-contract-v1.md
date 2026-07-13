@@ -22,14 +22,16 @@ personal agent runtime under the active community lens.
 
 1. `member_agent_dock`
    - belongs to the signed-in member, not the community
-   - uses one stable private channel per member and community; the channel points to one active hidden conversation episode backed by the existing thread/message runtime
+   - uses one stable private channel per member across Polynet; the channel points to one active hidden conversation episode backed by the existing thread/message runtime
+   - the active episode thread holds the current server-validated community lens; changing communities changes the lens for subsequent turns without changing the agent, channel, episode, or prior messages
+   - every runtime run captures immutable community-lens id and context-version provenance before execution
    - `Start fresh conversation` closes the active episode and atomically moves the channel to a fresh episode without deleting or exposing a picker for prior transcripts
-   - community deletion closes and tombstones these member-owned channels but preserves their private episodes and transcripts until the member deletes their account
+   - community deletion makes that community unavailable as a future lens but does not close the member's global channel or episodes
    - requester-funded and server-bound to an authorized community lens
    - the server constructs bounded conversation history from persisted messages through the exact user message that started the turn; browser-supplied history is never authoritative
-   - prior episodes are never injected automatically; the dock can list bounded episode metadata and read one bounded private transcript only through member-owned, active-community-scoped read tools
-   - recall tools return only user and assistant text, fail closed across members and communities, and require transcript evidence before the agent claims prior conversational memory
-   - transcript loads commit only while their originating community, signed-in member generation, and thread remain active
+   - prior episodes are never injected automatically; the dock can list bounded episode metadata and read one bounded private transcript only through member-owned recall tools
+   - recall spans the member's global episodes and retained legacy per-community episodes, returns lens provenance with user and assistant text, fails closed across members, and requires transcript evidence before the agent claims prior conversational memory
+   - transcript loads commit only while their signed-in member generation and thread remain active
    - receives only product-doc, community read, and private member-conversation recall tools in the first surface contract
    - cannot invoke workspace, Daytona, web, MCP, autonomous cognition, or community publishing tools
 

@@ -886,12 +886,12 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   member_conversations_list: {
     name: "member_conversations_list",
-    description: "List the signed-in member's recent private conversation episodes inside the active community. Returns bounded metadata only; use member_conversation_read for relevant transcript evidence.",
+    description: "List the signed-in member's recent private Polynet agent conversation episodes across community lenses. Returns bounded metadata and lens provenance only; use member_conversation_read for relevant transcript evidence.",
     inputSchema: MEMBER_CONVERSATIONS_LIST_TOOL_SCHEMA,
   },
   member_conversation_read: {
     name: "member_conversation_read",
-    description: "Read a bounded user-and-assistant transcript window from one of the signed-in member's private conversation episodes inside the active community.",
+    description: "Read a bounded user-and-assistant transcript window with lens provenance from one of the signed-in member's private Polynet agent conversation episodes.",
     inputSchema: MEMBER_CONVERSATION_READ_TOOL_SCHEMA,
   },
   member_profile_confirm_facts: {

@@ -542,7 +542,7 @@ export const deleteOwnAccount = mutation({
 
     const memberAgentChannels = await ctx.db
       .query("memberAgentChannels")
-      .withIndex("by_owner_community", (q) => q.eq("ownerId", userId))
+      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
       .collect();
     let deletedMemberAgentEpisodes = 0;
     for (const channel of memberAgentChannels) {

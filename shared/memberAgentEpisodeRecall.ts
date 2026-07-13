@@ -13,12 +13,14 @@ export type MemberConversationRecallStoredMessage = {
   seq: number;
   role: "user" | "assistant" | "system";
   contentJson: unknown;
+  runId?: string;
 };
 
 export type MemberConversationRecallMessage = {
   seq: number;
   role: "user" | "assistant";
   content: string;
+  runId?: string;
 };
 
 function normalizeLimit(raw: unknown, fallback: number, ceiling: number): number {
@@ -43,6 +45,7 @@ function normalizeRecallRows(
       seq: row.seq,
       role: row.role,
       content: content.slice(0, MEMBER_CONVERSATION_READ_MAX_MESSAGE_CHARS),
+      runId: String(row.runId ?? "").trim() || undefined,
     });
   }
   return normalized.sort((a, b) => a.seq - b.seq);

@@ -23,9 +23,12 @@ import {
 import { normalizeWorkspacePreviewPort } from "../shared/workspacePreviewPort";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
 import {
+  MEMBER_AGENT_GLOBAL_SCOPE_KEY,
   MEMBER_AGENT_THREAD_KEY_PREFIX,
+  buildGlobalMemberAgentEpisodeThreadKey,
   buildMemberAgentEpisodeThreadKey,
   buildMemberAgentThreadKey,
+  isGlobalMemberAgentEpisodeThreadKey,
   isMemberAgentThreadKeyForCommunity,
 } from "../shared/runtimeInvocationSurface";
 import { MEMBER_AGENT_CONTEXT_MAX_MESSAGES } from "../shared/memberAgentConversationContext";
@@ -73,7 +76,8 @@ type CloudMessageLike = {
 type MemberAgentChannelLike = {
   _id: any;
   ownerId: any;
-  communityId: any;
+  scopeKey?: "global";
+  communityId?: any;
   activeEpisodeId?: any;
   communityNameSnapshot?: string;
   communityDeletedAt?: number;
@@ -1384,6 +1388,18 @@ async function getMemberAgentChannel(args: {
     .unique()) as MemberAgentChannelLike | null;
 }
 
+async function getGlobalMemberAgentChannel(args: {
+  ctx: any;
+  ownerId: any;
+}): Promise<MemberAgentChannelLike | null> {
+  return (await args.ctx.db
+    .query("memberAgentChannels")
+    .withIndex("by_owner_scope", (q: any) =>
+      q.eq("ownerId", args.ownerId).eq("scopeKey", MEMBER_AGENT_GLOBAL_SCOPE_KEY),
+    )
+    .unique()) as MemberAgentChannelLike | null;
+}
+
 async function requireActiveMemberAgentEpisodeForUserMessage(args: {
   ctx: any;
   ownerId: any;
@@ -1392,14 +1408,20 @@ async function requireActiveMemberAgentEpisodeForUserMessage(args: {
   const threadKey = String(args.thread.threadKey ?? "").trim();
   if (!threadKey.startsWith(`${MEMBER_AGENT_THREAD_KEY_PREFIX}:`)) return;
   const communityId = String(args.thread.communityId ?? "").trim();
-  if (!communityId || !isMemberAgentThreadKeyForCommunity(threadKey, communityId)) {
+  const isGlobalEpisode = isGlobalMemberAgentEpisodeThreadKey(threadKey);
+  if (!isGlobalEpisode && (!communityId || !isMemberAgentThreadKeyForCommunity(threadKey, communityId))) {
     throw new Error("member_agent_thread_context_mismatch");
   }
-  const channel = await getMemberAgentChannel({
-    ctx: args.ctx,
-    ownerId: args.ownerId,
-    communityId,
-  });
+  const channel = isGlobalEpisode
+    ? await getGlobalMemberAgentChannel({
+        ctx: args.ctx,
+        ownerId: args.ownerId,
+      })
+    : await getMemberAgentChannel({
+        ctx: args.ctx,
+        ownerId: args.ownerId,
+        communityId,
+      });
   if (typeof channel?.communityDeletedAt === "number") {
     throw new Error("member_agent_community_deleted");
   }
@@ -1435,6 +1457,29 @@ async function prepareActiveMemberAgentThread(args: {
     !isMemberAgentThreadKeyForCommunity(threadKey, args.communityId) ||
     (threadKey !== expectedEpisodeThreadKey &&
       !(args.episodeOrdinal === 1 && threadKey === legacyThreadKey))
+  ) {
+    throw new Error("member_agent_thread_context_mismatch");
+  }
+  const patch: Record<string, unknown> = {};
+  if (args.thread.modelId !== DEFAULT_ACTIVE_MODEL_ID) patch.modelId = DEFAULT_ACTIVE_MODEL_ID;
+  if (args.thread.runtimeEngine !== "polynet") patch.runtimeEngine = "polynet";
+  if (typeof args.thread.archivedAt === "number") patch.archivedAt = undefined;
+  if (Object.keys(patch).length === 0) return args.thread;
+  patch.updatedAt = args.nowMs;
+  await args.ctx.db.patch(args.thread._id, patch);
+  return ((await args.ctx.db.get(args.thread._id)) as ThreadLike | null) ?? args.thread;
+}
+
+async function prepareActiveGlobalMemberAgentThread(args: {
+  ctx: any;
+  thread: ThreadLike;
+  episodeOrdinal: number;
+  nowMs: number;
+}): Promise<ThreadLike> {
+  const threadKey = String(args.thread.threadKey ?? "").trim();
+  if (
+    threadKey !== buildGlobalMemberAgentEpisodeThreadKey(args.episodeOrdinal) ||
+    !isGlobalMemberAgentEpisodeThreadKey(threadKey)
   ) {
     throw new Error("member_agent_thread_context_mismatch");
   }
@@ -1575,6 +1620,206 @@ async function ensureMemberAgentCommunityChannelCore(args: {
   if (!channel || !episode) throw new Error("member_agent_channel_create_failed");
   return buildMemberAgentChannelResponse({ channel, episode, thread, communityId });
 }
+
+async function ensureGlobalMemberAgentChannelCore(args: {
+  ctx: any;
+  ownerId: any;
+  initialCommunity: any;
+  nowMs: number;
+}) {
+  const existingChannel = await getGlobalMemberAgentChannel({
+    ctx: args.ctx,
+    ownerId: args.ownerId,
+  });
+  if (existingChannel) {
+    if (!existingChannel.activeEpisodeId) throw new Error("member_agent_active_episode_missing");
+    const episode = (await args.ctx.db.get(
+      existingChannel.activeEpisodeId,
+    )) as MemberAgentEpisodeLike | null;
+    if (!episode || episode.channelId !== existingChannel._id || episode.status !== "active") {
+      throw new Error("member_agent_active_episode_invalid");
+    }
+    const storedThread = (await args.ctx.db.get(episode.threadId)) as ThreadLike | null;
+    if (!storedThread || storedThread.ownerId !== args.ownerId) {
+      throw new Error("member_agent_thread_not_found");
+    }
+    const thread = await prepareActiveGlobalMemberAgentThread({
+      ctx: args.ctx,
+      thread: storedThread,
+      episodeOrdinal: episode.ordinal,
+      nowMs: args.nowMs,
+    });
+    const communityId = String(thread.communityId ?? "").trim();
+    if (!communityId) throw new Error("member_agent_community_required");
+    return buildMemberAgentChannelResponse({
+      channel: existingChannel,
+      episode,
+      thread,
+      communityId,
+    });
+  }
+
+  const communityId = String(args.initialCommunity._id);
+  const threadKey = buildGlobalMemberAgentEpisodeThreadKey(1);
+  const collision = await getCloudThreadByThreadKeyInternal({
+    ctx: args.ctx,
+    ownerId: args.ownerId,
+    threadKey,
+  });
+  if (collision) throw new Error("member_agent_episode_thread_collision");
+  const threadId = await args.ctx.db.insert("threads", {
+    ownerId: args.ownerId,
+    threadKey,
+    titleSource: "auto",
+    communityId,
+    modelId: DEFAULT_ACTIVE_MODEL_ID,
+    runtimeEngine: "polynet",
+    contextVersion: 0,
+    lastSeq: 0,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  const channelId = await args.ctx.db.insert("memberAgentChannels", {
+    ownerId: args.ownerId,
+    scopeKey: MEMBER_AGENT_GLOBAL_SCOPE_KEY,
+    nextOrdinal: 2,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  const episodeId = await args.ctx.db.insert("memberAgentEpisodes", {
+    channelId,
+    threadId,
+    ordinal: 1,
+    status: "active",
+    startedAt: args.nowMs,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  await args.ctx.db.patch(channelId, { activeEpisodeId: episodeId });
+  const channel = (await args.ctx.db.get(channelId)) as MemberAgentChannelLike | null;
+  const episode = (await args.ctx.db.get(episodeId)) as MemberAgentEpisodeLike | null;
+  const thread = (await args.ctx.db.get(threadId)) as ThreadLike | null;
+  if (!channel || !episode || !thread) throw new Error("member_agent_channel_create_failed");
+  return buildMemberAgentChannelResponse({ channel, episode, thread, communityId });
+}
+
+export const ensureMemberAgentGlobalChannel = mutation({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    initialCommunityId: v.id("communities"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const { community } = await requireCommunityChatAccess({
+      ctx,
+      communityId: args.initialCommunityId,
+      userId: ownerId,
+    });
+    return await ensureGlobalMemberAgentChannelCore({
+      ctx,
+      ownerId,
+      initialCommunity: community,
+      nowMs: args.nowMs ?? Date.now(),
+    });
+  },
+});
+
+export const startNewMemberAgentGlobalEpisode = mutation({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    initialCommunityId: v.id("communities"),
+    expectedActiveEpisodeId: v.id("memberAgentEpisodes"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const { community } = await requireCommunityChatAccess({
+      ctx,
+      communityId: args.initialCommunityId,
+      userId: ownerId,
+    });
+    const nowMs = args.nowMs ?? Date.now();
+    await ensureGlobalMemberAgentChannelCore({
+      ctx,
+      ownerId,
+      initialCommunity: community,
+      nowMs,
+    });
+    const channel = await getGlobalMemberAgentChannel({ ctx, ownerId });
+    if (!channel || !channel.activeEpisodeId) {
+      throw new Error("member_agent_active_episode_missing");
+    }
+    if (channel.activeEpisodeId !== args.expectedActiveEpisodeId) {
+      throw new Error("member_agent_active_episode_changed");
+    }
+    const currentEpisode = (await ctx.db.get(
+      channel.activeEpisodeId,
+    )) as MemberAgentEpisodeLike | null;
+    if (!currentEpisode || currentEpisode.channelId !== channel._id || currentEpisode.status !== "active") {
+      throw new Error("member_agent_active_episode_invalid");
+    }
+    const ordinal = Math.max(
+      currentEpisode.ordinal + 1,
+      Number.isSafeInteger(channel.nextOrdinal) ? channel.nextOrdinal : 2,
+    );
+    const communityId = String(community._id);
+    const threadKey = buildGlobalMemberAgentEpisodeThreadKey(ordinal);
+    const collision = await getCloudThreadByThreadKeyInternal({ ctx, ownerId, threadKey });
+    if (collision) throw new Error("member_agent_episode_thread_collision");
+    const threadId = await ctx.db.insert("threads", {
+      ownerId,
+      threadKey,
+      titleSource: "auto",
+      communityId,
+      modelId: DEFAULT_ACTIVE_MODEL_ID,
+      runtimeEngine: "polynet",
+      contextVersion: 0,
+      lastSeq: 0,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const episodeId = await ctx.db.insert("memberAgentEpisodes", {
+      channelId: channel._id,
+      threadId,
+      ordinal,
+      status: "active",
+      startedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    await ctx.db.patch(currentEpisode._id, {
+      status: "closed",
+      closedAt: nowMs,
+      updatedAt: nowMs,
+    });
+    await ctx.db.patch(channel._id, {
+      activeEpisodeId: episodeId,
+      nextOrdinal: ordinal + 1,
+      updatedAt: nowMs,
+    });
+    const nextChannel = (await ctx.db.get(channel._id)) as MemberAgentChannelLike | null;
+    const episode = (await ctx.db.get(episodeId)) as MemberAgentEpisodeLike | null;
+    const thread = (await ctx.db.get(threadId)) as ThreadLike | null;
+    if (!nextChannel || !episode || !thread) throw new Error("member_agent_episode_create_failed");
+    return buildMemberAgentChannelResponse({
+      channel: nextChannel,
+      episode,
+      thread,
+      communityId,
+    });
+  },
+});
 
 export const ensureMemberAgentCommunityThread = mutation({
   args: {
@@ -1897,21 +2142,60 @@ export const listMemberAgentRuntimeMessagesInternal = internalQuery({
   },
 });
 
+function isMemberConversationThreadForChannel(args: {
+  channel: MemberAgentChannelLike;
+  thread: ThreadLike;
+  ownerId: any;
+}): boolean {
+  if (args.thread.ownerId !== args.ownerId) return false;
+  const threadKey = String(args.thread.threadKey ?? "").trim();
+  if (args.channel.scopeKey === MEMBER_AGENT_GLOBAL_SCOPE_KEY) {
+    return isGlobalMemberAgentEpisodeThreadKey(threadKey);
+  }
+  const communityId = String(args.channel.communityId ?? "").trim();
+  return (
+    Boolean(communityId) &&
+    String(args.thread.communityId ?? "").trim() === communityId &&
+    isMemberAgentThreadKeyForCommunity(threadKey, communityId)
+  );
+}
+
+async function buildMemberConversationLensHistory(args: {
+  ctx: any;
+  thread: ThreadLike;
+  channel: MemberAgentChannelLike;
+}): Promise<Array<{ community_id: string; community_name: string | null }>> {
+  const runs = (await args.ctx.db
+    .query("runtimeRuns")
+    .withIndex("by_thread_startedAt", (q: any) => q.eq("threadId", args.thread._id))
+    .order("asc")
+    .collect()) as RuntimeRunLike[];
+  const ids = runs
+    .map((run) => String(run.communityId ?? "").trim())
+    .filter((value, index, list) => Boolean(value) && list.indexOf(value) === index);
+  const fallbackCommunityId = String(args.thread.communityId ?? "").trim();
+  if (ids.length === 0 && fallbackCommunityId) ids.push(fallbackCommunityId);
+  return await Promise.all(
+    ids.map(async (communityId) => {
+      const community = (await args.ctx.db.get(communityId as any)) as { name?: unknown } | null;
+      const legacySnapshot =
+        String(args.channel.communityId ?? "") === communityId
+          ? String(args.channel.communityNameSnapshot ?? "").trim() || null
+          : null;
+      return {
+        community_id: communityId,
+        community_name: String(community?.name ?? "").trim() || legacySnapshot,
+      };
+    }),
+  );
+}
+
 export const listMemberConversationsForToolInternal = internalQuery({
   args: {
     ownerId: v.id("users"),
-    communityId: v.id("communities"),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const channel = await getMemberAgentChannel({
-      ctx,
-      ownerId: args.ownerId,
-      communityId: args.communityId,
-    });
-    if (!channel || typeof channel.communityDeletedAt === "number") {
-      return { conversations: [] };
-    }
     const safeLimit = Math.max(
       1,
       Math.min(
@@ -1919,23 +2203,26 @@ export const listMemberConversationsForToolInternal = internalQuery({
         Math.floor(args.limit ?? MEMBER_CONVERSATION_LIST_DEFAULT_LIMIT),
       ),
     );
-    const episodes = (await ctx.db
-      .query("memberAgentEpisodes")
-      .withIndex("by_channel_ordinal", (q) => q.eq("channelId", channel._id))
-      .order("desc")
-      .take(safeLimit)) as MemberAgentEpisodeLike[];
+    const channels = (await ctx.db
+      .query("memberAgentChannels")
+      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+      .collect()) as MemberAgentChannelLike[];
+    const candidates: Array<{ channel: MemberAgentChannelLike; episode: MemberAgentEpisodeLike }> = [];
+    for (const channel of channels) {
+      const episodes = (await ctx.db
+        .query("memberAgentEpisodes")
+        .withIndex("by_channel_ordinal", (q) => q.eq("channelId", channel._id))
+        .collect()) as MemberAgentEpisodeLike[];
+      for (const episode of episodes) candidates.push({ channel, episode });
+    }
+    candidates.sort(
+      (a, b) => b.episode.startedAt - a.episode.startedAt || b.episode.ordinal - a.episode.ordinal,
+    );
     const conversations = [];
-    for (const episode of episodes) {
+    for (const { channel, episode } of candidates) {
+      if (conversations.length >= safeLimit) break;
       const thread = (await ctx.db.get(episode.threadId)) as ThreadLike | null;
-      if (
-        !thread ||
-        thread.ownerId !== args.ownerId ||
-        String(thread.communityId ?? "") !== String(args.communityId) ||
-        !isMemberAgentThreadKeyForCommunity(
-          String(thread.threadKey ?? ""),
-          String(args.communityId),
-        )
-      ) {
+      if (!thread || !isMemberConversationThreadForChannel({ channel, thread, ownerId: args.ownerId })) {
         continue;
       }
       const firstRows = (await ctx.db
@@ -1947,7 +2234,10 @@ export const listMemberConversationsForToolInternal = internalQuery({
       conversations.push({
         episode_id: String(episode._id),
         ordinal: episode.ordinal,
-        status: episode.status,
+        status:
+          channel.scopeKey === MEMBER_AGENT_GLOBAL_SCOPE_KEY ? episode.status : "historical",
+        storage_scope:
+          channel.scopeKey === MEMBER_AGENT_GLOBAL_SCOPE_KEY ? "global" : "legacy_community",
         title: deriveMemberConversationTitle({
           storedTitle: thread.title,
           communityName: channel.communityNameSnapshot,
@@ -1957,6 +2247,7 @@ export const listMemberConversationsForToolInternal = internalQuery({
         started_at: episode.startedAt,
         closed_at: episode.closedAt ?? null,
         message_count_estimate: Math.max(0, Math.floor(thread.lastSeq ?? 0)),
+        lens_history: await buildMemberConversationLensHistory({ ctx, thread, channel }),
       });
     }
     return { conversations };
@@ -1966,32 +2257,15 @@ export const listMemberConversationsForToolInternal = internalQuery({
 export const readMemberConversationForToolInternal = internalQuery({
   args: {
     ownerId: v.id("users"),
-    communityId: v.id("communities"),
     episodeId: v.id("memberAgentEpisodes"),
   },
   handler: async (ctx, args) => {
-    const channel = await getMemberAgentChannel({
-      ctx,
-      ownerId: args.ownerId,
-      communityId: args.communityId,
-    });
-    if (!channel || typeof channel.communityDeletedAt === "number") {
-      throw new Error("member_conversation_not_found");
-    }
     const episode = (await ctx.db.get(args.episodeId)) as MemberAgentEpisodeLike | null;
-    if (!episode || episode.channelId !== channel._id) {
-      throw new Error("member_conversation_not_found");
-    }
+    if (!episode) throw new Error("member_conversation_not_found");
+    const channel = (await ctx.db.get(episode.channelId)) as MemberAgentChannelLike | null;
+    if (!channel || channel.ownerId !== args.ownerId) throw new Error("member_conversation_not_found");
     const thread = (await ctx.db.get(episode.threadId)) as ThreadLike | null;
-    if (
-      !thread ||
-      thread.ownerId !== args.ownerId ||
-      String(thread.communityId ?? "") !== String(args.communityId) ||
-      !isMemberAgentThreadKeyForCommunity(
-        String(thread.threadKey ?? ""),
-        String(args.communityId),
-      )
-    ) {
+    if (!thread || !isMemberConversationThreadForChannel({ channel, thread, ownerId: args.ownerId })) {
       throw new Error("member_conversation_not_found");
     }
     const headRows = (await ctx.db
@@ -2010,6 +2284,11 @@ export const readMemberConversationForToolInternal = internalQuery({
       headRows,
       tailRows,
     });
+    const runs = (await ctx.db
+      .query("runtimeRuns")
+      .withIndex("by_thread_startedAt", (q) => q.eq("threadId", thread._id))
+      .collect()) as RuntimeRunLike[];
+    const runsById = new Map(runs.map((run) => [run.runId, run]));
     const firstUserMessage = headRows.find((row) => row.role === "user");
     const visibleWindowMessageCount = new Set(
       [...headRows, ...tailRows]
@@ -2019,7 +2298,10 @@ export const readMemberConversationForToolInternal = internalQuery({
     return {
       episode_id: String(episode._id),
       ordinal: episode.ordinal,
-      status: episode.status,
+      status:
+        channel.scopeKey === MEMBER_AGENT_GLOBAL_SCOPE_KEY ? episode.status : "historical",
+      storage_scope:
+        channel.scopeKey === MEMBER_AGENT_GLOBAL_SCOPE_KEY ? "global" : "legacy_community",
       title: deriveMemberConversationTitle({
         storedTitle: thread.title,
         communityName: channel.communityNameSnapshot,
@@ -2028,7 +2310,30 @@ export const readMemberConversationForToolInternal = internalQuery({
       }),
       started_at: episode.startedAt,
       closed_at: episode.closedAt ?? null,
-      messages: transcript.messages,
+      lens_history: await buildMemberConversationLensHistory({ ctx, thread, channel }),
+      messages: transcript.messages.map((message, index, messages) => {
+        const nextConversationalMessage =
+          message.role === "user"
+            ? messages.slice(index + 1).find(
+                (candidate) => candidate.role === "assistant" || candidate.role === "user",
+              )
+            : null;
+        const followingAssistant =
+          nextConversationalMessage?.role === "assistant" ? nextConversationalMessage : null;
+        const runId = message.runId ?? followingAssistant?.runId;
+        const run = runId ? runsById.get(runId) : null;
+        const communityId = String(run?.communityId ?? "").trim() || null;
+        return {
+          seq: message.seq,
+          role: message.role,
+          content: message.content,
+          community_id: communityId,
+          community_context_version:
+            communityId && typeof run?.communityContextVersion === "number"
+              ? run.communityContextVersion
+              : null,
+        };
+      }),
       returned_message_count: transcript.messages.length,
       character_count: transcript.characterCount,
       history_truncated:

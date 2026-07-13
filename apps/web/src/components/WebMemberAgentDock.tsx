@@ -20,10 +20,15 @@ import { getAuthUrl, type AuthSession } from "../auth";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import { extractTextFromContentJson } from "../../../../shared/communityMessageParsing";
 import {
-  ensureCloudMemberAgentCommunityChannel,
-  startNewCloudMemberAgentCommunityEpisode,
+  ensureCloudMemberAgentGlobalChannel,
+  startNewCloudMemberAgentGlobalEpisode,
   type CloudMemberAgentChannel,
 } from "../../../../shared/cloudMemberAgentGateway";
+import {
+  fetchCloudThreadContextById,
+  setCloudThreadContext,
+} from "../../../../shared/cloudThreadContextGateway";
+import { syncThreadCommunityLensCloud } from "../../../../shared/threadContextCloudSync";
 import {
   listConvexCloudNewestThreadMessagesByThreadKey,
   type CloudMessageTransportRow,
@@ -42,10 +47,14 @@ type MemberAgentMessage = Omit<CloudMessageTransportRow, "role"> & {
   role: "user" | "assistant" | "system";
 };
 
-type CommunityScope = {
-  communityId: string | null;
+type AgentScope = {
   userId: string | null;
   generation: number;
+};
+
+type ActiveThreadContext = {
+  communityId: string;
+  contextVersion: number;
 };
 
 type WebMemberAgentDockProps = {
@@ -91,6 +100,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [threadKey, setThreadKey] = useState<string | null>(null);
   const [episodeId, setEpisodeId] = useState<string | null>(null);
+  const [, setThreadContext] = useState<ActiveThreadContext | null>(null);
   const [messages, setMessages] = useState<MemberAgentMessage[]>([]);
   const [input, setInput] = useState("");
   const [isPreparing, setIsPreparing] = useState(false);
@@ -105,30 +115,22 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const retryRef = useRef<{ text: string; messageId: string } | null>(null);
   const activeThreadKeyRef = useRef<string | null>(null);
-  const communityScopeRef = useRef<CommunityScope>({
-    communityId: props.communityId,
+  const activeThreadContextRef = useRef<ActiveThreadContext | null>(null);
+  const agentScopeRef = useRef<AgentScope>({
     userId: props.session?.user.id ?? null,
     generation: 0,
   });
   const scopeUserId = props.session?.user.id ?? null;
-  if (
-    communityScopeRef.current.communityId !== props.communityId ||
-    communityScopeRef.current.userId !== scopeUserId
-  ) {
-    communityScopeRef.current = {
-      communityId: props.communityId,
+  if (agentScopeRef.current.userId !== scopeUserId) {
+    agentScopeRef.current = {
       userId: scopeUserId,
-      generation: communityScopeRef.current.generation + 1,
+      generation: agentScopeRef.current.generation + 1,
     };
   }
 
-  const isCurrentScope = useCallback((scope: CommunityScope): boolean => {
-    const current = communityScopeRef.current;
-    return (
-      current.communityId === scope.communityId &&
-      current.userId === scope.userId &&
-      current.generation === scope.generation
-    );
+  const isCurrentScope = useCallback((scope: AgentScope): boolean => {
+    const current = agentScopeRef.current;
+    return current.userId === scope.userId && current.generation === scope.generation;
   }, []);
 
   const loadMessages = useCallback(
@@ -136,7 +138,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       targetThreadKey: string,
       session: AuthSession,
     ): Promise<MemberAgentMessage[] | null> => {
-      const scope = communityScopeRef.current;
+      const scope = agentScopeRef.current;
       const rows = await listConvexCloudNewestThreadMessagesByThreadKey({
         session,
         threadKey: targetThreadKey,
@@ -189,15 +191,15 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     threadStreamingStateById: streamingByThread,
     getCloudRuntimeBaseUrl: getAuthUrl,
     getThreadById: (targetThreadKey) =>
-      targetThreadKey === threadKey && props.communityId
+      targetThreadKey === threadKey && activeThreadContextRef.current
         ? {
             id: targetThreadKey,
-            title: `${props.communityName} agent`,
+            title: "Your agent",
             model_id: DEFAULT_ACTIVE_MODEL_ID,
             runtime_engine: "polynet",
             project_id: null,
-            community_id: props.communityId,
-            context_version: 0,
+            community_id: activeThreadContextRef.current.communityId,
+            context_version: activeThreadContextRef.current.contextVersion,
           }
         : null,
     fetchCloudPublic: props.fetchPublic,
@@ -222,8 +224,10 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     const previousThreadKey = activeThreadKeyRef.current;
     if (previousThreadKey) stopStreamingTurn(previousThreadKey);
     activeThreadKeyRef.current = null;
+    activeThreadContextRef.current = null;
     setThreadKey(null);
     setEpisodeId(null);
+    setThreadContext(null);
     setMessages([]);
     setSendingByThread({});
     setStreamingByThread({});
@@ -233,7 +237,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     setLocalError(null);
     setInferenceIssue(null);
     retryRef.current = null;
-  }, [props.communityId, props.session?.user.id, stopStreamingTurn]);
+  }, [props.session?.user.id, stopStreamingTurn]);
 
   useEffect(() => {
     if (!props.isVisible) {
@@ -245,7 +249,8 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   useEffect(() => {
     if (!isOpen || !props.isVisible || !props.communityId || !props.session) return;
     let cancelled = false;
-    const scope = communityScopeRef.current;
+    if (activeThreadKeyRef.current) return;
+    const scope = agentScopeRef.current;
     setIsPreparing(true);
     setLocalError(null);
     void (async () => {
@@ -255,14 +260,19 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
           "member_agent_dock_open",
         );
         if (!usableSession || cancelled || !isCurrentScope(scope)) return;
-        const thread = await ensureCloudMemberAgentCommunityChannel({
+        const thread = await ensureCloudMemberAgentGlobalChannel({
           session: usableSession,
-          communityId: props.communityId!,
+          initialCommunityId: props.communityId!,
         });
         if (cancelled || !isCurrentScope(scope)) return;
         activeThreadKeyRef.current = thread.thread_key;
         setThreadKey(thread.thread_key);
         setEpisodeId(thread.episode_id);
+        activeThreadContextRef.current = {
+          communityId: thread.community_id,
+          contextVersion: thread.context_version,
+        };
+        setThreadContext(activeThreadContextRef.current);
         await loadMessages(thread.thread_key, usableSession);
       } catch (error) {
         if (cancelled || !isCurrentScope(scope)) return;
@@ -293,8 +303,59 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const visibleMessages = messages.filter((message) => message.role !== "system");
   const dockError = localError ?? formatInferenceIssue(inferenceIssue);
 
+  const observeThreadContext = useCallback((communityId: string, contextVersion: number) => {
+    const next = {
+      communityId: String(communityId ?? "").trim(),
+      contextVersion: Math.max(0, Math.floor(contextVersion)),
+    };
+    if (!next.communityId) throw new Error("member_agent_community_required");
+    activeThreadContextRef.current = next;
+    setThreadContext(next);
+  }, []);
+
+  const synchronizeDesiredLens = useCallback(
+    async (
+      channel: CloudMemberAgentChannel,
+      session: AuthSession,
+      desiredCommunityId: string,
+    ): Promise<CloudMemberAgentChannel> => {
+      if (channel.community_id === desiredCommunityId) {
+        observeThreadContext(channel.community_id, channel.context_version);
+        return channel;
+      }
+      const context = await syncThreadCommunityLensCloud({
+        threadId: channel.thread_key,
+        desiredCommunityId,
+        initialExpectedContextVersion: channel.context_version,
+        fetchLatestContext: () =>
+          fetchCloudThreadContextById({
+            session,
+            threadId: channel.thread_key,
+          }),
+        setThreadContext: (expectedContextVersion) =>
+          setCloudThreadContext({
+            session,
+            threadId: channel.thread_key,
+            expectedContextVersion,
+            communityId: desiredCommunityId,
+          }),
+      });
+      if (!context || context.community_id !== desiredCommunityId) {
+        throw new Error("Community context was not confirmed.");
+      }
+      observeThreadContext(desiredCommunityId, context.context_version);
+      return {
+        ...channel,
+        community_id: desiredCommunityId,
+        context_version: context.context_version,
+      };
+    },
+    [observeThreadContext],
+  );
+
   const activateEmptyEpisode = useCallback((thread: CloudMemberAgentChannel) => {
     activeThreadKeyRef.current = thread.thread_key;
+    observeThreadContext(thread.community_id, thread.context_version);
     setThreadKey(thread.thread_key);
     setEpisodeId(thread.episode_id);
     setMessages([]);
@@ -302,7 +363,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     setSendingByThread({});
     setStreamingByThread({});
     retryRef.current = null;
-  }, []);
+  }, [observeThreadContext]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -326,7 +387,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     ) {
       return;
     }
-    const scope = communityScopeRef.current;
+    const scope = agentScopeRef.current;
     const expectedEpisodeId = episodeId;
     let usableSession: AuthSession | null = null;
     setIsStartingNewChat(true);
@@ -338,9 +399,9 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         "member_agent_dock_new_chat",
       );
       if (!usableSession || !isCurrentScope(scope)) return;
-      const thread = await startNewCloudMemberAgentCommunityEpisode({
+      const thread = await startNewCloudMemberAgentGlobalEpisode({
         session: usableSession,
-        communityId: props.communityId,
+        initialCommunityId: props.communityId,
         expectedActiveEpisodeId: expectedEpisodeId,
       });
       if (!isCurrentScope(scope)) return;
@@ -350,9 +411,9 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       console.warn("member_agent_dock_new_chat_failed", error);
       if (usableSession) {
         try {
-          const current = await ensureCloudMemberAgentCommunityChannel({
+          const current = await ensureCloudMemberAgentGlobalChannel({
             session: usableSession,
-            communityId: props.communityId,
+            initialCommunityId: props.communityId,
           });
           if (!isCurrentScope(scope)) return;
           if (current.episode_id !== expectedEpisodeId) {
@@ -395,7 +456,8 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     setInput("");
     const retry = retryRef.current;
     const messageId = retry?.text === text ? retry.messageId : crypto.randomUUID();
-    const scope = communityScopeRef.current;
+    const scope = agentScopeRef.current;
+    const desiredCommunityId = props.communityId;
     let targetThreadKey: string | null = null;
     try {
       const usableSession = await props.ensureSession(
@@ -404,10 +466,12 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       );
       if (!usableSession) throw new Error("auth_session_required");
       if (!isCurrentScope(scope)) return;
-      const thread = await ensureCloudMemberAgentCommunityChannel({
+      let thread = await ensureCloudMemberAgentGlobalChannel({
         session: usableSession,
-        communityId: props.communityId,
+        initialCommunityId: desiredCommunityId,
       });
+      if (!isCurrentScope(scope)) return;
+      thread = await synchronizeDesiredLens(thread, usableSession, desiredCommunityId);
       if (!isCurrentScope(scope)) return;
       let activeMessages = messages;
       if (activeThreadKeyRef.current !== thread.thread_key) {

@@ -264,9 +264,9 @@ Without the agent, the community is mostly conversation and content. With the ag
 
 ## User Mental Model
 
-The agent should feel like the intelligent surface of a community or workspace, not like a detached chatbot.
+The member's personal agent should remain one continuous intelligent surface across Polynet, not become a separate agent for every community.
 
-In a community, the agent should understand the builder's domain and the community's resources. In the workspace, the agent should help the user work inside persistent threads and use the selected community lens when one is active.
+The bottom-right agent belongs to the signed-in member. It keeps that member's episodic history while using the community selected by the current surface as a server-validated lens for subsequent turns.
 
 ## System Mental Model
 
@@ -289,6 +289,8 @@ Runtime inputs can include user/session state, thread history, community resourc
 The current product model supports:
 
 - personal AI threads
+- one member-owned personal agent channel across communities
+- on-demand episodic recall across that member's prior conversations
 - community lens switching inside threads
 - community resources and skills as controlled context inputs
 - apps/MCPs as explicit capability surfaces
@@ -306,6 +308,7 @@ The current product model supports:
 6. Skills should be injected intentionally, not dumped into every turn.
 7. Apps/MCP tools should not be represented as available unless the runtime can actually use them.
 8. The agent should preserve broader user intent when the request is not actually community-scoped.
+9. Community navigation may change the next-turn lens, but it must not replace the member's agent or conversation.
 
 ## Examples
 
@@ -436,13 +439,13 @@ Summary: The server-validated community context applied to future thread turns.
 
 ## Definition
 
-A community lens is explicit community context attached to a workspace thread for future agent turns.
+A community lens is explicit community context attached to a personal-agent conversation for future turns.
 
 It tells the workspace agent which community context should apply next.
 
 ## Why It Exists
 
-The lens lets one workspace thread use a specific community's context, resources, skills, and policy without creating a separate workspace for every community.
+The lens lets one member-owned agent use a specific community's context, resources, skills, and policy without creating a separate agent or conversation for every community.
 
 The lens is the bridge between the personal workspace and the community intelligence system.
 
@@ -462,7 +465,7 @@ The backend validates access before the lens can provide community context. The 
 
 The current lens model supports:
 
-- switching an active workspace thread into a community context
+- switching the member's active personal-agent episode into a community context
 - backend validation before applying community context
 - visible community lens state in the workspace shell
 - lens changes that apply to subsequent turns only
@@ -478,6 +481,7 @@ The current lens model supports:
 6. Community resources, skills, and apps should only be available through the lens when policy allows.
 7. Lens switching should be deterministic and auditable.
 8. Lens context should not be confused with repo/workspace execution context.
+9. The lens is not agent identity or episodic-memory ownership.
 
 ## Examples
 
@@ -531,7 +535,7 @@ Without threads, the workspace would be a stateless prompt box. Threads let the 
 
 ## User Mental Model
 
-A thread is a continuing workspace conversation.
+A personal-agent episode is a continuing private conversation even when the member moves between communities.
 
 The user can leave and return to the thread. If they change the community lens, that changes what happens next, not what already happened.
 
@@ -549,6 +553,8 @@ The current thread model includes:
 - durable messages
 - route-addressable thread URLs
 - optional active community lens
+- immutable per-run lens provenance
+- episodic rotation through `Start fresh conversation`
 - runtime evidence and activity metadata
 - thread rendering and runtime evidence
 
@@ -562,6 +568,7 @@ The current thread model includes:
 6. A thread can have no active community lens.
 7. Runtime evidence is operational evidence, not the product source of truth.
 8. Thread context should be summarized, retrieved, or bounded rather than blindly copied forever.
+9. A personal-agent episode belongs to the member, not to the community selected as its current lens.
 
 ## Examples
 

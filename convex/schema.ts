@@ -3190,7 +3190,8 @@ export default defineSchema({
 
   memberAgentChannels: defineTable({
     ownerId: v.id("users"),
-    communityId: v.id("communities"),
+    scopeKey: v.optional(v.literal("global")),
+    communityId: v.optional(v.id("communities")),
     activeEpisodeId: v.optional(v.id("memberAgentEpisodes")),
     communityNameSnapshot: v.optional(v.string()),
     communityDeletedAt: v.optional(v.number()),
@@ -3198,6 +3199,8 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_owner_scope", ["ownerId", "scopeKey"])
+    .index("by_owner", ["ownerId"])
     .index("by_owner_community", ["ownerId", "communityId"])
     .index("by_community", ["communityId"]),
 
