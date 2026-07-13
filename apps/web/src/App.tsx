@@ -9440,16 +9440,8 @@ export default function App() {
 	    handleTopbarBackToCommunity();
 	  };
 	  const handleTopbarBackFromPublicFunnel = () => {
-    void goBack();
-  };
-    const handleExitPublicFunnelPreview = () => {
-      const fallbackPath = applyShellVariantToAppPath(
-        buildCommunityTabPath(publicRoute.kind === "community_funnel_preview" ? publicRoute.slug : null, "funnel") ?? "",
-        shellVariant,
-      );
-      if (!fallbackPath) return;
-      navigateTo(fallbackPath, { replace: true });
-    };
+	    void goBack();
+	  };
 	  function handleTopbarBackToCommunity() {
 	    if (goBack()) return;
 	    const communitySlug = String(
@@ -11823,7 +11815,13 @@ export default function App() {
     backTargetLabel: effectiveBackTargetLabel ?? null,
     activeView,
     directMessagesButton,
-    handleExitPublicFunnelPreview,
+    publicFunnelPreviewExitPath:
+      publicRoute.kind === "community_funnel_preview"
+        ? applyShellVariantToAppPath(
+            buildCommunityTabPath(publicRoute.slug, "funnel") ?? "",
+            shellVariant,
+          ) || null
+        : null,
     handleTopbarBackFromPublicFunnel,
     handleTopbarBackFromSettings,
     handleTopbarBackToCommunity,

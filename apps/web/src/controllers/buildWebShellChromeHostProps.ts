@@ -46,7 +46,7 @@ export function buildWebShellChromeHostProps(params: {
   backTargetLabel: string | null;
   activeView: "home" | "settings";
   directMessagesButton: ReactNode;
-  handleExitPublicFunnelPreview: () => void;
+  publicFunnelPreviewExitPath: string | null;
   handleTopbarBackFromPublicFunnel: () => void;
   handleTopbarBackFromSettings: () => void;
   handleTopbarBackToCommunity: () => void;
@@ -149,7 +149,7 @@ export function buildWebShellChromeHostProps(params: {
       backTargetLabel: params.backTargetLabel,
       activePage: params.activePage,
       directMessagesButton: params.directMessagesButton,
-      onExitPublicFunnelPreview: params.handleExitPublicFunnelPreview,
+      publicFunnelPreviewExitPath: params.publicFunnelPreviewExitPath,
       onBackFromPublicFunnel: params.handleTopbarBackFromPublicFunnel,
       onBackFromSettings: params.handleTopbarBackFromSettings,
       onBackToCommunity: params.handleTopbarBackToCommunity,

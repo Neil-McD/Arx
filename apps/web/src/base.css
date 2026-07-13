@@ -399,6 +399,7 @@ body {
   border-radius: 8px;
   cursor: pointer;
   color: var(--text-secondary);
+  text-decoration: none;
   font-family: var(--font-mono);
   font-size: 14px;
   transition: background 0.15s, color 0.15s;

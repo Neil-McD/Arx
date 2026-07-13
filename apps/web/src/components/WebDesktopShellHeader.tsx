@@ -27,17 +27,16 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
       <div className="topbar-left">
         {props.isPublicCommunityFunnel ? (
           props.isPublicFunnelPreviewRoute ? (
-            <button
+            <a
               className="back-to-workspace"
-              onClick={props.onExitPublicFunnelPreview}
+              href={props.publicFunnelPreviewExitPath ?? "/"}
               title="Exit preview"
-              type="button"
             >
               <svg viewBox="0 0 24 24" className="back-icon">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
               <span className="back-path">exit preview</span>
-            </button>
+            </a>
           ) : props.hasBackTargetSnapshot ? (
             <button
               className="back-to-workspace"

@@ -43,7 +43,7 @@ export type WebDesktopShellHeaderProps = {
   backTargetLabel: string | null;
   activePage: AppPage;
   directMessagesButton: ReactNode;
-  onExitPublicFunnelPreview: () => void;
+  publicFunnelPreviewExitPath: string | null;
   onBackFromPublicFunnel: () => void;
   onBackFromSettings: () => void;
   onBackToCommunity: () => void;

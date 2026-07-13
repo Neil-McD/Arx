@@ -159,14 +159,19 @@ assert.doesNotMatch(
   "public funnel actions must not be suppressed by stale app-page state",
 );
 assert.match(
-  app,
-  /handleExitPublicFunnelPreview = \(\) => \{[\s\S]*buildCommunityTabPath\([\s\S]*"funnel"\)[\s\S]*navigateTo\(fallbackPath, \{ replace: true \}\)/,
-  "preview exit must return deterministically to the community funnel editor",
+  desktopHeader,
+  /<a[\s\S]*href=\{props\.publicFunnelPreviewExitPath \?\? "\/"\}[\s\S]*title="Exit preview"/,
+  "preview exit must be native navigation rather than a hydration-dependent callback",
 );
 assert.doesNotMatch(
   app,
-  /handleExitPublicFunnelPreview = \(\) => \{\s*if \(goBack\(\)\)/,
-  "preview exit must not be intercepted by ephemeral navigation history",
+  /handleExitPublicFunnelPreview/,
+  "preview exit must not retain an ephemeral navigation callback",
+);
+assert.match(
+  app,
+  /publicFunnelPreviewExitPath:[\s\S]*buildCommunityTabPath\(publicRoute\.slug, "funnel"\)/,
+  "preview exit must target the owning community's funnel editor",
 );
 assert.match(
   launchSetupRoute,
