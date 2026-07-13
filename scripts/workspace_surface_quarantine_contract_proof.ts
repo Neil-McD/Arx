@@ -129,6 +129,16 @@ assert.match(
   "desktop header must render only explicit contextual app back actions",
 );
 assert.match(
+  desktopHeader,
+  /hasPublicFunnelBack[\s\S]*props\.isPublicFunnelPreviewRoute \|\| props\.hasBackTargetSnapshot/,
+  "desktop header must preserve explicit funnel preview and return actions",
+);
+assert.doesNotMatch(
+  desktopHeader,
+  /activePage === "landing" \|\| props\.activePage === "onboarding"/,
+  "public funnel actions must not be suppressed by stale app-page state",
+);
+assert.match(
   launchSetupRoute,
   /buildCommunityTabPath\(communitySlug, "settings", null, "community"\)[\s\S]*community_launch_setup/,
   "new launch setup URLs must live under community settings",

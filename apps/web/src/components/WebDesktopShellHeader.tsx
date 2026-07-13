@@ -2,12 +2,19 @@ import type { WebDesktopShellHeaderProps } from "./webShellChromeShared";
 import { isDesktopShellContextualBackPage } from "../../../../shared/appShellNavigation";
 
 export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
-  if (props.activePage === "landing" || props.activePage === "onboarding") return null;
-
+  const hasPublicFunnelBack =
+    props.isPublicCommunityFunnel &&
+    (props.isPublicFunnelPreviewRoute || props.hasBackTargetSnapshot);
   const hasTopbarRightActions =
     !props.isPublicCommunityFunnel &&
     Boolean(props.directMessagesButton);
-  const hasContextualAppBack = isDesktopShellContextualBackPage(props.activePage);
+  const hasContextualAppBack =
+    !props.isPublicCommunityFunnel &&
+    isDesktopShellContextualBackPage(props.activePage);
+  if (!hasPublicFunnelBack && !hasContextualAppBack && !hasTopbarRightActions) {
+    return null;
+  }
+
   const topbarRightClassName = [
     "topbar-right",
     hasTopbarRightActions ? "topbar-right-island" : "",
