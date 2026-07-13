@@ -157,6 +157,21 @@ assert.match(
   "interaction body should reserve markdown rendering for agent-authored messages while preserving plain chat rendering by default",
 );
 assert.match(
+  feed,
+  /export function bundleText[\s\S]*hasCanonicalMessageText[\s\S]*block\.block_type === "markdown_text"[\s\S]*hasCanonicalMessageText[\s\S]*block\.block_type !== "link"[\s\S]*:\s*orderedBlocks/,
+  "interaction bodies should omit derived link blocks when canonical markdown text already contains the URL while preserving link-only fallback text",
+);
+assert.match(
+  feed,
+  /export function EmbedCards[\s\S]*embed\.status === "pending" \|\| embed\.status === "ready"[\s\S]*embed\.status === "pending"[\s\S]*embed\.status !== "ready"\) return null;[\s\S]*className="community-interaction-embed"/,
+  "interaction embeds should render pending skeletons and ready cards without adding a fallback card for failed previews",
+);
+assert.doesNotMatch(
+  feed,
+  /community-interaction-embed is-bare/,
+  "interaction embeds should not render failed previews as duplicate bare URL cards",
+);
+assert.match(
   communityAccessViewModel,
   /const canEnterCommunity = access \? Boolean\(access\.can_enter_community \?\? access\.can_view\) : false;[\s\S]*canViewMembers: canEnterCommunity,/,
   "member-facing community nav visibility should derive from community entry access, not admin authority",
@@ -786,6 +801,11 @@ assert.match(
   contract,
   /Current Canonical Composer Bridge Slice[\s\S]*createCommunityInteractionComposerMessage[\s\S]*canonical chat writer[\s\S]*must not create legacy `communityChatMessages`[\s\S]*bounded, already-prepared attachment metadata[\s\S]*communityInteractionAttachments/,
   "interaction contract should document the active canonical composer bridge slice",
+);
+assert.match(
+  contract,
+  /Current Async Link Embed Enrichment Slice[\s\S]*link blocks as derived preview metadata[\s\S]*must not append the URL a second time[\s\S]*failed preview embeds render no fallback card/,
+  "interaction contract should prohibit duplicate link text and failed-preview fallback cards",
 );
 
 console.log("community interaction projection UI contract proof passed");

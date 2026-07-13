@@ -94,7 +94,14 @@ export function blockText(block: CommunityInteractionContentBlock): string {
 }
 
 export function bundleText(blocks: CommunityInteractionContentBlock[], fallback: string): string {
-  const text = sortedBlocks(blocks)
+  const orderedBlocks = sortedBlocks(blocks);
+  const hasCanonicalMessageText = orderedBlocks.some(
+    (block) => block.block_type === "markdown_text" && Boolean(blockText(block)),
+  );
+  const displayBlocks = hasCanonicalMessageText
+    ? orderedBlocks.filter((block) => block.block_type !== "link")
+    : orderedBlocks;
+  const text = displayBlocks
     .map(blockText)
     .filter(Boolean)
     .join("\n\n")
@@ -246,7 +253,9 @@ export function MessageActions(props: {
 
 export function EmbedCards(props: { embeds: CommunityInteractionEmbed[] }) {
   const visible = props.embeds.filter(
-    (embed) => embed.status !== "redacted" && (embed.embed_kind === "link" || embed.embed_kind === "workspace_ref"),
+    (embed) =>
+      (embed.status === "pending" || embed.status === "ready") &&
+      (embed.embed_kind === "link" || embed.embed_kind === "workspace_ref"),
   );
   if (visible.length === 0) return null;
   return (
@@ -261,22 +270,8 @@ export function EmbedCards(props: { embeds: CommunityInteractionEmbed[] }) {
             />
           );
         }
+        if (embed.status !== "ready") return null;
         const href = embed.source_url ?? undefined;
-        if (embed.status !== "ready") {
-          if (!href) return null;
-          return (
-            <a
-              key={embed.id}
-              className="community-interaction-embed is-bare"
-              href={href}
-              target="_blank"
-              rel="noreferrer noopener"
-              onClick={(event) => event.stopPropagation()}
-            >
-              {embed.source_url}
-            </a>
-          );
-        }
         const provider = embed.provider || hostnameOf(embed.source_url);
         return (
           <a
