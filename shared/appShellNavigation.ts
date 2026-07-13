@@ -28,6 +28,14 @@ export type AppPage =
 
 export type AppView = "home" | "settings";
 
+export type DesktopShellContextualBackPage = "settings" | "operator";
+
+export function isDesktopShellContextualBackPage(
+  page: AppPage,
+): page is DesktopShellContextualBackPage {
+  return page === "settings" || page === "operator";
+}
+
 export const OPERATOR_TABS = ["platform", "business", "email", "communities"] as const;
 
 export type OperatorTab = (typeof OPERATOR_TABS)[number];

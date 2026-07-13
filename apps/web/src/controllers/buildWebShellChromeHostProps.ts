@@ -148,7 +148,6 @@ export function buildWebShellChromeHostProps(params: {
       hasBackTargetSnapshot: params.hasBackTargetSnapshot,
       backTargetLabel: params.backTargetLabel,
       activePage: params.activePage,
-      activeView: params.activeView,
       directMessagesButton: params.directMessagesButton,
       onExitPublicFunnelPreview: params.handleExitPublicFunnelPreview,
       onBackFromPublicFunnel: params.handleTopbarBackFromPublicFunnel,

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import { isDesktopShellContextualBackPage } from "../shared/appShellNavigation.ts";
 import { readLegacyWorkspaceRouteContext } from "../shared/webAppRouteState.ts";
 
 function read(path: string): string {
@@ -108,10 +109,24 @@ assert.match(
   /\{!forceCommunityRoot \? \([\s\S]*Agent[\s\S]*\) : null\}/,
   "the obsolete mobile Agent selector must be hidden on reachable routes",
 );
+for (const page of ["community", "discover", "docs", "workspace"] as const) {
+  assert.equal(
+    isDesktopShellContextualBackPage(page),
+    false,
+    `${page} must not render a desktop shell back action`,
+  );
+}
+for (const page of ["settings", "operator"] as const) {
+  assert.equal(
+    isDesktopShellContextualBackPage(page),
+    true,
+    `${page} must retain a contextual desktop return action`,
+  );
+}
 assert.match(
   desktopHeader,
-  /onBackToCommunity[\s\S]*backTargetLabel \?\? "community"/,
-  "desktop back navigation must use community language and behavior",
+  /hasContextualAppBack \? \([\s\S]*props\.activePage === "settings"[\s\S]*props\.onBackFromSettings[\s\S]*props\.onBackToCommunity[\s\S]*\) : null/,
+  "desktop header must render only explicit contextual app back actions",
 );
 assert.match(
   launchSetupRoute,

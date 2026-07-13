@@ -42,7 +42,6 @@ export type WebDesktopShellHeaderProps = {
   hasBackTargetSnapshot: boolean;
   backTargetLabel: string | null;
   activePage: AppPage;
-  activeView: AppView;
   directMessagesButton: ReactNode;
   onExitPublicFunnelPreview: () => void;
   onBackFromPublicFunnel: () => void;

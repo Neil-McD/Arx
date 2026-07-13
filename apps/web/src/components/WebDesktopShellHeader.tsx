@@ -1,4 +1,5 @@
 import type { WebDesktopShellHeaderProps } from "./webShellChromeShared";
+import { isDesktopShellContextualBackPage } from "../../../../shared/appShellNavigation";
 
 export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
   if (props.activePage === "landing" || props.activePage === "onboarding") return null;
@@ -6,6 +7,7 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
   const hasTopbarRightActions =
     !props.isPublicCommunityFunnel &&
     Boolean(props.directMessagesButton);
+  const hasContextualAppBack = isDesktopShellContextualBackPage(props.activePage);
   const topbarRightClassName = [
     "topbar-right",
     hasTopbarRightActions ? "topbar-right-island" : "",
@@ -42,10 +44,14 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
               <span className="back-path">{props.backTargetLabel ?? "back"}</span>
             </button>
           ) : null
-        ) : props.activePage === "settings" ? (
+        ) : hasContextualAppBack ? (
           <button
             className="back-to-workspace"
-            onClick={props.onBackFromSettings}
+            onClick={
+              props.activePage === "settings"
+                ? props.onBackFromSettings
+                : props.onBackToCommunity
+            }
             title="Back"
             type="button"
           >
@@ -54,19 +60,7 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
             </svg>
             <span className="back-path">{props.backTargetLabel ?? "community"}</span>
           </button>
-        ) : (
-          <button
-            className="back-to-workspace"
-            onClick={props.onBackToCommunity}
-            title="Back"
-            type="button"
-          >
-            <svg viewBox="0 0 24 24" className="back-icon">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-            <span className="back-path">{props.backTargetLabel ?? "community"}</span>
-          </button>
-        )}
+        ) : null}
       </div>
 
       <div className={topbarRightClassName}>
