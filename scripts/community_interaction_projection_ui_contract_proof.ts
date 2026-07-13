@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  interactionBodyTextForEmbeds,
+  selectRichInteractionEmbeds,
+} from "../shared/communityInteractionLinkPresentation.ts";
 
 const root = process.cwd();
 
@@ -43,6 +47,22 @@ const sendController = read("shared/useCommunityChatMutationController.ts");
 const interactions = read("convex/communityInteractions.ts");
 const baseCss = read("apps/web/src/base.css");
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
+const readyFirstLinkEmbed = {
+  embed_kind: "link",
+  status: "ready",
+  source_url: "https://example.com/first",
+  normalized_source_url: "https://example.com/first",
+};
+const readySecondLinkEmbed = {
+  embed_kind: "link",
+  status: "ready",
+  source_url: "https://example.com/second",
+  normalized_source_url: "https://example.com/second",
+};
+const failedFirstLinkEmbed = {
+  ...readyFirstLinkEmbed,
+  status: "failed",
+};
 const publicCommunityStatsMapper = sectionBetween(
   communityPublic,
   "function mapPublicCommunityStats",
@@ -163,13 +183,57 @@ assert.match(
 );
 assert.match(
   feed,
-  /export function EmbedCards[\s\S]*embed\.status === "pending" \|\| embed\.status === "ready"[\s\S]*embed\.status === "pending"[\s\S]*embed\.status !== "ready"\) return null;[\s\S]*className="community-interaction-embed"/,
-  "interaction embeds should render pending skeletons and ready cards without adding a fallback card for failed previews",
+  /selectRichInteractionEmbeds[\s\S]*export function EmbedCards[\s\S]*const visible = selectRichInteractionEmbeds\(props\.embeds\)[\s\S]*embed\.status === "pending"[\s\S]*embed\.status !== "ready"\) return null;[\s\S]*className="community-interaction-embed"/,
+  "interaction embeds should use the shared single-preview policy before rendering pending skeletons or ready cards",
 );
 assert.doesNotMatch(
   feed,
   /community-interaction-embed is-bare/,
   "interaction embeds should not render failed previews as duplicate bare URL cards",
+);
+assert.match(
+  feed,
+  /embeds\?: CommunityInteractionEmbed\[\][\s\S]*interactionBodyTextForEmbeds\(props\.text, props\.embeds \?\? \[\]\)/,
+  "interaction bodies should apply standalone-link presentation without mutating canonical message text",
+);
+assert.match(
+  projection,
+  /<InteractionBody[\s\S]*embeds=\{selectedRoot\.embeds\}[\s\S]*<InteractionBody[\s\S]*embeds=\{bundle\.embeds\}/,
+  "thread roots and replies should apply the same standalone-link presentation as feed roots",
+);
+assert.equal(
+  selectRichInteractionEmbeds([readyFirstLinkEmbed, readySecondLinkEmbed]).length,
+  1,
+  "a message should render at most one rich embed",
+);
+assert.equal(
+  interactionBodyTextForEmbeds("Shared in context: https://example.com/first", [readyFirstLinkEmbed]),
+  "Shared in context: https://example.com/first",
+  "inline prose links should remain visible when a preview is ready",
+);
+assert.equal(
+  interactionBodyTextForEmbeds(
+    "Useful context\nhttps://example.com/first\nhttps://example.com/first",
+    [readyFirstLinkEmbed],
+  ),
+  "Useful context",
+  "a visible ready preview should replace standalone URL lines and collapse their consecutive duplicates",
+);
+assert.equal(
+  interactionBodyTextForEmbeds(
+    "https://example.com/first\nhttps://example.com/first",
+    [failedFirstLinkEmbed],
+  ),
+  "https://example.com/first",
+  "failed previews should preserve one standalone URL fallback",
+);
+assert.equal(
+  interactionBodyTextForEmbeds(
+    "https://example.com/first\nhttps://example.com/second",
+    [readyFirstLinkEmbed, readySecondLinkEmbed],
+  ),
+  "https://example.com/second",
+  "additional ready links should remain as text when only the first rich preview is shown",
 );
 assert.match(
   communityAccessViewModel,
@@ -780,6 +844,21 @@ assert.match(
   baseCss,
   /\.community-interaction-body\.community-interaction-markdown\s*\{[\s\S]*display:\s*block;[\s\S]*\.community-interaction-markdown \.md-header\s*\{[\s\S]*font-size:\s*1em;[\s\S]*\.community-interaction-markdown \.md-list\s*\{[\s\S]*padding-left:\s*1\.36em;/,
   "projection markdown should use compact chat-thread typography for agent replies",
+);
+assert.match(
+  baseCss,
+  /--chat-link:\s*var\(--accent-cyan\);[\s\S]*--chat-link-hover:[\s\S]*\.chat-link:visited\s*\{[\s\S]*color:\s*var\(--chat-link\);[\s\S]*\.chat-link:focus-visible\s*\{/,
+  "both dark-family themes should inherit one accessible semantic treatment for chat links",
+);
+assert.match(
+  baseCss,
+  /\.community-interaction-embed\s*\{[\s\S]*max-width:\s*460px;[\s\S]*background:\s*var\(--surface-card\);[\s\S]*\.community-interaction-embed:focus-visible[\s\S]*\.community-interaction-embed-provider\s*\{[\s\S]*color:\s*var\(--text-ink-secondary\);[\s\S]*\.community-interaction-embed-desc\s*\{[\s\S]*-webkit-line-clamp:\s*3;/,
+  "embed cards should inherit theme surfaces while keeping provider and description text readable",
+);
+assert.match(
+  read("shared/linkEmbedUi.tsx"),
+  /className="chat-link"[\s\S]*target="_blank"[\s\S]*rel="noreferrer noopener"/,
+  "auto-linked chat URLs should receive the semantic link class without weakening external-link safety",
 );
 assert.match(
   baseCss,

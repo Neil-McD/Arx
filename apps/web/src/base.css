@@ -39,6 +39,10 @@
   --accent-cyan: #4285f4;
   --accent-cyan-subtle: #2d6de0;
   --accent-cyan-glow: rgba(66, 133, 244, 0.16);
+  /* Links are a shared dark-family utility signal. Brand accents remain free
+     for theme identity, selection, mentions, and community actions. */
+  --chat-link: var(--accent-cyan);
+  --chat-link-hover: color-mix(in srgb, var(--accent-cyan) 82%, white 18%);
 
   /* Text */
   --text-primary: #e8e8ea;
@@ -10170,6 +10174,26 @@ button.community-launch-knowledge-integration-chip:disabled {
   font-weight: 700;
 }
 
+.community-interaction-markdown .md-link {
+  color: var(--chat-link);
+  text-decoration-color: color-mix(in srgb, var(--chat-link) 58%, transparent);
+}
+
+.community-interaction-markdown .md-link:visited {
+  color: var(--chat-link);
+}
+
+.community-interaction-markdown .md-link:hover {
+  color: var(--chat-link-hover);
+  text-decoration-color: var(--chat-link-hover);
+}
+
+.community-interaction-markdown .md-link:focus-visible {
+  outline: 2px solid var(--chat-link);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 .community-interaction-footer {
   margin-top: 8px;
   display: flex;
@@ -11004,17 +11028,27 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-interaction-embed {
   display: block;
-  max-width: 420px;
-  border: 1px solid var(--border-subtle);
+  max-width: 460px;
+  border: 1px solid var(--stroke-default);
   border-radius: 12px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--bg-card) 80%, transparent);
+  background: var(--surface-card);
   color: inherit;
   text-decoration: none;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
 }
 
 .community-interaction-embed:hover {
-  border-color: var(--border-default);
+  border-color: var(--stroke-strong);
+  background: var(--surface-card-hover);
+}
+
+.community-interaction-embed:focus-visible {
+  outline: 2px solid var(--chat-link);
+  outline-offset: 2px;
+  border-color: var(--chat-link);
 }
 
 .community-interaction-embed-media {
@@ -11032,26 +11066,31 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-embed-provider {
-  color: var(--text-faint);
+  color: var(--text-ink-secondary);
   font-size: 11px;
+  font-weight: 500;
 }
 
 .community-interaction-embed-title {
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 700;
+  color: var(--text-ink-primary);
+  font-size: 14px;
+  font-weight: 650;
   line-height: 1.35;
 }
 
 .community-interaction-embed-desc {
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.4;
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-ink-secondary);
+  font-size: 13px;
+  line-height: 1.42;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .community-interaction-embed.is-pending {
   height: 60px;
-  max-width: 420px;
+  max-width: 460px;
 }
 
 /* Layered collapse: when the chat area itself is too narrow for feed + drawer
@@ -12840,19 +12879,25 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .chat-body a {
-  color: var(--text-link, var(--accent-gold, var(--bg-button)));
+  color: var(--chat-link);
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--text-link, var(--accent-gold)) 45%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--chat-link) 58%, transparent);
   text-underline-offset: 2px;
 }
 
+.chat-body a:visited {
+  color: var(--chat-link);
+}
+
 .chat-body a:hover {
-  color: var(--text-link-hover, var(--text-link, var(--text-primary)));
-  text-decoration-color: color-mix(
-    in srgb,
-    var(--text-link-hover, var(--text-link, var(--accent-gold))) 75%,
-    transparent
-  );
+  color: var(--chat-link-hover);
+  text-decoration-color: var(--chat-link-hover);
+}
+
+.chat-body a:focus-visible {
+  outline: 2px solid var(--chat-link);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 .chat-media-grid {
@@ -20727,11 +20772,32 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
+.chat-link,
 .md-link {
   color: var(--text-link, var(--accent-gold, #c9a962));
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--text-link, var(--accent-gold)) 45%, transparent);
   text-underline-offset: 2px;
+}
+
+.chat-link {
+  color: var(--chat-link);
+  text-decoration-color: color-mix(in srgb, var(--chat-link) 58%, transparent);
+}
+
+.chat-link:visited {
+  color: var(--chat-link);
+}
+
+.chat-link:hover {
+  color: var(--chat-link-hover);
+  text-decoration-color: var(--chat-link-hover);
+}
+
+.chat-link:focus-visible {
+  outline: 2px solid var(--chat-link);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 .md-link:hover {

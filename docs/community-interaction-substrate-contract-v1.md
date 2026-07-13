@@ -340,6 +340,10 @@ Rules:
 - enrichment failures patch the embed to `failed`; they do not fail or mutate the canonical root/reply text
 - renderers treat link blocks as derived preview metadata when canonical `markdown_text` already contains the URL; they must not append the URL a second time
 - failed preview embeds render no fallback card when the canonical message text already preserves the clickable URL
+- renderers show at most one rich preview per message; additional links remain visible in canonical message text
+- a ready rich preview may replace an exact standalone URL line, but it must not remove the same URL when it appears inside prose
+- exact consecutive standalone duplicates collapse at presentation time without mutating stored message text
+- default dark and Polynet dark share one semantic chat-link treatment while their surface tokens continue to theme embed cards
 
 ## Current Legacy Chat Adapter Slice
 

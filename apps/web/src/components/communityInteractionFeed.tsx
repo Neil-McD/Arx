@@ -20,6 +20,10 @@ import {
   splitBodyIntoMentionSegments,
   type ResolvedMentionForRendering,
 } from "../../../../shared/communityMentionRendering";
+import {
+  interactionBodyTextForEmbeds,
+  selectRichInteractionEmbeds,
+} from "../../../../shared/communityInteractionLinkPresentation";
 import { renderChatInlineMarkdown } from "../../../../shared/chatInlineMarkdownUi";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
@@ -252,11 +256,7 @@ export function MessageActions(props: {
 }
 
 export function EmbedCards(props: { embeds: CommunityInteractionEmbed[] }) {
-  const visible = props.embeds.filter(
-    (embed) =>
-      (embed.status === "pending" || embed.status === "ready") &&
-      (embed.embed_kind === "link" || embed.embed_kind === "workspace_ref"),
-  );
+  const visible = selectRichInteractionEmbeds(props.embeds);
   if (visible.length === 0) return null;
   return (
     <div className="community-interaction-embeds">
@@ -684,9 +684,10 @@ export function InteractionBody(props: {
   renderTextWithLinks: (text: string) => ReactNode;
   renderMarkdown?: (text: string) => ReactNode;
   renderMode?: InteractionBodyRenderMode;
+  embeds?: CommunityInteractionEmbed[];
   mentionContext?: InteractionMentionContext;
 }) {
-  const text = props.text.trim();
+  const text = interactionBodyTextForEmbeds(props.text, props.embeds ?? []);
   if (!text) return null;
   if (props.renderMode === "compact_markdown" && props.renderMarkdown) {
     return (
@@ -981,6 +982,7 @@ export function CommunityInteractionFeedList(
                               <>
                                 <InteractionBody
                                   text={body}
+                                  embeds={bundle.embeds}
                                   renderTextWithLinks={props.renderTextWithLinks}
                                   renderMarkdown={props.renderMarkdown}
                                   renderMode={interactionBodyRenderModeForActor(root.actor_type)}

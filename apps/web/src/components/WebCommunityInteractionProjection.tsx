@@ -525,6 +525,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   ) : null}
                   <InteractionBody
                     text={selectedRootText}
+                    embeds={selectedRoot.embeds}
                     renderTextWithLinks={props.renderTextWithLinks}
                     renderMarkdown={props.renderMarkdown}
                     renderMode={interactionBodyRenderModeForActor(selectedRoot.root.actor_type)}
@@ -660,6 +661,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                           <>
                             <InteractionBody
                               text={body}
+                              embeds={bundle.embeds}
                               renderTextWithLinks={props.renderTextWithLinks}
                               renderMarkdown={props.renderMarkdown}
                               renderMode={interactionBodyRenderModeForActor(reply.actor_type)}
