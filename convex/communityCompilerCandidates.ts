@@ -7,6 +7,7 @@ import {
   toIsoString,
 } from "./communityCore";
 import { createTrustedCommunityIntelligenceChangeRequest } from "./communityIntelligenceDirectory";
+import type { CommunityAgentLearningEnvelope } from "../shared/communityAgentToolProtocol";
 
 const COMMUNITY_COMPILER_CANDIDATE_AGENT_KEY = "community_compiler_candidate_v1";
 const COMMUNITY_COMPILER_CANDIDATE_PAYLOAD_SOURCE = "compiler_digest_item_v1";
@@ -214,7 +215,7 @@ function addResolvedTrace(args: {
   });
   if (
     !(args.row.visibilityScope === "community" || args.row.visibilityScope === "public") ||
-    args.row.sourceVisibility === "redacted"
+    !(args.row.sourceVisibility === "community" || args.row.sourceVisibility === "public")
   ) {
     args.out.allResolvedTracesCommunityVisible = false;
   }
@@ -328,92 +329,36 @@ async function resolveSourceTraceIdsForDigestItem(args: {
   return out;
 }
 
-function buildCandidateTitle(item: DigestItem): string {
-  return truncateText(item.title, 180) || "Compiler candidate";
-}
-
-type LearningEnvelope = {
+type LearningEnvelope = CommunityAgentLearningEnvelope & {
   version: "compiler_learning_envelope_v1";
-  learningQuestion: string;
-  candidateClaim: string;
-  rejectedAlternative: string;
-  preferenceReason: string;
-  evidenceSummary: string;
-  uncertainty: string;
-  falsificationCriteria: string;
 };
 
-function learningQuestionForItem(item: DigestItem): string {
-  if (item.category === "chat_activity") {
-    return "What repeated question, decision, warning, example, or workflow opportunity should be extracted from this conversation evidence?";
-  }
-  if (item.category === "ai_feed_signal") {
-    return "What operational pattern, warning, or workflow hypothesis should be tested from this AI Feed signal?";
-  }
-  if (item.category === "resource_activity") {
-    return "Does this resource evidence support, contradict, stale, or improve any community directory intelligence?";
-  }
-  if (item.category === "outcome_signal") {
-    return "Which existing or candidate pattern did this outcome evidence support, weaken, or falsify?";
-  }
-  if (item.category === "source_trace_signal") {
-    return "What reusable operational pattern might be inferred from these normalized source traces?";
-  }
-  return "Is there a supported, reusable community learning from this compiler signal?";
+function requireLearningEnvelopeField(
+  raw: unknown,
+  field: keyof CommunityAgentLearningEnvelope,
+  maxLength: number,
+): string {
+  const value = truncateText(raw, maxLength);
+  if (!value) throw new Error(`community_compiler_learning_envelope_${field}_required`);
+  return value;
 }
 
-function rejectedAlternativeForItem(item: DigestItem): string {
-  if (item.category === "chat_activity") {
-    return "Treat the conversation as isolated chatter and extract no reusable question, warning, example, or workflow implication.";
-  }
-  if (item.category === "ai_feed_signal") {
-    return "Treat the AI Feed signal as interesting commentary without testing whether it should affect future workflows.";
-  }
-  if (item.category === "resource_activity") {
-    return "Treat the resource activity as canonical advice without checking reuse, staleness, contradiction, or outcome evidence.";
-  }
-  if (item.category === "outcome_signal") {
-    return "Leave prior recommendations unchanged despite new outcome evidence.";
-  }
-  if (item.category === "source_trace_signal") {
-    return "Leave normalized evidence uncompiled and unavailable to future workflow retrieval.";
-  }
-  return "Ignore this signal unless stronger evidence emerges.";
-}
-
-function falsificationCriteriaForItem(item: DigestItem): string {
-  if (item.category === "outcome_signal") {
-    return "Demote or contest the claim if later outcome observations fail to reproduce the same direction under similar conditions.";
-  }
-  if (item.category === "resource_activity") {
-    return "Demote or contest the claim if the source resource becomes stale, contradicted, or unused in relevant workflows.";
-  }
-  return "Demote, reject, or convert to an open question if later traces fail to show repeated use, outcome movement, or workflow relevance.";
-}
-
-function buildLearningEnvelope(args: {
-  item: DigestItem;
-  sourceTraceResolution: SourceTraceResolution;
-}): LearningEnvelope {
-  const sourceTypes = uniqueBoundedStrings(args.item.sourceTypes, 8, 64).join(", ") || "none";
-  const resolvedCount = args.sourceTraceResolution.sourceTraceIds.length;
-  const unresolvedCount = args.sourceTraceResolution.unresolvedSourceReferences.length;
-  const candidateClaim = truncateText(args.item.title || args.item.summary, 260) || "The compiler found a possible reusable community learning.";
+export function normalizeCommunityCompilerLearningEnvelope(raw: CommunityAgentLearningEnvelope): LearningEnvelope {
+  const record = payloadObject(raw);
   return {
     version: "compiler_learning_envelope_v1",
-    learningQuestion: learningQuestionForItem(args.item),
-    candidateClaim,
-    rejectedAlternative: rejectedAlternativeForItem(args.item),
-    preferenceReason: "Prefer the candidate only if the evidence shows it is more useful for future workflows than the rejected alternative.",
-    evidenceSummary: truncateText(
-      `${args.item.summary} Source types: ${sourceTypes}. Formal source traces resolved: ${resolvedCount}. Unresolved source references: ${unresolvedCount}.`,
-      900,
-    ),
-    uncertainty: resolvedCount > 0
-      ? "This is still candidate intelligence. It needs community-agent judgment and future outcome feedback before becoming validated memory."
-      : "Formal source trace evidence is missing or unresolved, so this should stay low-confidence until evidence is attached.",
-    falsificationCriteria: falsificationCriteriaForItem(args.item),
+    learningQuestion: requireLearningEnvelopeField(record.learningQuestion, "learningQuestion", 600),
+    candidateClaim: requireLearningEnvelopeField(record.candidateClaim, "candidateClaim", 800),
+    rejectedAlternative: requireLearningEnvelopeField(record.rejectedAlternative, "rejectedAlternative", 800),
+    preferenceReason: requireLearningEnvelopeField(record.preferenceReason, "preferenceReason", 1_000),
+    evidenceSummary: requireLearningEnvelopeField(record.evidenceSummary, "evidenceSummary", 2_000),
+    uncertainty: requireLearningEnvelopeField(record.uncertainty, "uncertainty", 1_000),
+    falsificationCriteria: requireLearningEnvelopeField(record.falsificationCriteria, "falsificationCriteria", 1_000),
   };
+}
+
+function buildCandidateTitle(learningEnvelope: LearningEnvelope): string {
+  return truncateText(learningEnvelope.candidateClaim, 180) || "Compiler candidate";
 }
 
 function buildCandidateBody(args: {
@@ -469,6 +414,7 @@ function buildCandidatePayload(args: {
   itemIndex: number;
   nodeType: NodeType;
   sourceTraceResolution: SourceTraceResolution;
+  learningEnvelope: LearningEnvelope;
   proposedByCommunityAgentRunId?: string;
   proposedByCommunityAgentHeartbeatId?: string;
 }) {
@@ -476,10 +422,7 @@ function buildCandidatePayload(args: {
   const needsTraceResolution =
     sourceTraceIds.length === 0 &&
     ((args.item.sourceIds ?? []).length > 0 || args.sourceTraceResolution.unresolvedSourceReferences.length > 0);
-  const learningEnvelope = buildLearningEnvelope({
-    item: args.item,
-    sourceTraceResolution: args.sourceTraceResolution,
-  });
+  const learningEnvelope = args.learningEnvelope;
   return {
     source: COMMUNITY_COMPILER_CANDIDATE_PAYLOAD_SOURCE,
     learningEnvelopeVersion: learningEnvelope.version,
@@ -515,7 +458,7 @@ function buildCandidatePayload(args: {
       unresolvedSourceReferences: args.sourceTraceResolution.unresolvedSourceReferences,
     },
     type: args.nodeType,
-    title: buildCandidateTitle(args.item),
+    title: buildCandidateTitle(learningEnvelope),
     bodyMd: buildCandidateBody({
       digest: args.digest,
       item: args.item,
@@ -614,6 +557,7 @@ export async function proposeCommunityIntelligenceFromDigestItemCore(args: {
   digestId: any;
   itemIndex: number;
   nodeType?: NodeType;
+  learningEnvelope: CommunityAgentLearningEnvelope;
   actorType?: "compiler" | "agent";
   actorAgentKey?: string;
   proposedByCommunityAgentRunId?: string;
@@ -650,12 +594,14 @@ export async function proposeCommunityIntelligenceFromDigestItemCore(args: {
     communityId: args.communityId,
     item,
   });
+  const learningEnvelope = normalizeCommunityCompilerLearningEnvelope(args.learningEnvelope);
   const requestedPayload = buildCandidatePayload({
     digest,
     item,
     itemIndex,
     nodeType,
     sourceTraceResolution,
+    learningEnvelope,
     proposedByCommunityAgentRunId: args.proposedByCommunityAgentRunId,
     proposedByCommunityAgentHeartbeatId: args.proposedByCommunityAgentHeartbeatId,
   });
@@ -667,7 +613,9 @@ export async function proposeCommunityIntelligenceFromDigestItemCore(args: {
     requestedPayload,
     confidence: clampScore(item.confidence, 0.5),
     privacyRisk: clampScore(
-      0.25 + (sourceTraceResolution.sourceTraceIds.length === 0 && (item.sourceIds ?? []).length > 0 ? 0.1 : 0),
+      0.25 +
+        (sourceTraceResolution.sourceTraceIds.length === 0 && (item.sourceIds ?? []).length > 0 ? 0.1 : 0) +
+        (!sourceTraceResolution.allResolvedTracesCommunityVisible ? 0.15 : 0),
       0.25,
     ),
     actorType: args.actorType ?? "compiler",

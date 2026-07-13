@@ -131,6 +131,16 @@ assert.match(
   /communityAgentAiFeedSourceIds = new Set\([\s\S]*COMMUNITY_AGENT_SELF_AUTHORED_TRACE_AGENT_KEY[\s\S]*authorLabel[\s\S]*community agent/,
   "compiler digest bridge should classify canonical and legacy community-agent AI feed sources before bridging",
 );
+assert.match(
+  digest,
+  /eligibleAiFeedRows = aiFeedRows\.filter\([\s\S]*!communityAgentAiFeedSourceIds\.has[\s\S]*for \(const post of eligibleAiFeedRows\.slice/,
+  "self-authored AI feed rows should be removed before digest items are created, not only skipped at the bridge",
+);
+assert.match(
+  digest,
+  /selectedSourceTraceRows = compilerEvidence\.selectedRows\.filter\([\s\S]*COMPILER_DIGEST_SIGNAL_SOURCE_ID_PREFIX/,
+  "digest bridge traces should stay on their originating digest items instead of being duplicated as direct source-trace items",
+);
 assert.doesNotMatch(
   digest,
   /markSelectedSourceTracesCompiled|compilerState: "compiled" as const/,
@@ -151,15 +161,10 @@ assert.match(
   /MAX_SOURCE_TRACE_IDS_PER_ITEM = 500/,
   "compiler digest should preserve the full selected evidence batch in the source-trace digest item",
 );
-assert.match(
+assert.doesNotMatch(
   digest,
-  /mergeSourceTraceDigestItem[\s\S]*existingSourceTraceItem\(existing\)[\s\S]*sourceTraceItem/,
-  "compiler digest reruns should preserve same-day source-trace evidence already represented by the digest",
-);
-assert.match(
-  digest,
-  /uniqueDigestTraceIds\(args\.next\.sourceTraceIds, args\.existing\.sourceTraceIds\)/,
-  "same-day source-trace merging should prioritize traces selected by the current compiler pass",
+  /mergeSourceTraceDigestItem|existingSourceTraceItem/,
+  "digest refreshes should represent current pending evidence, not retain settled historical batches",
 );
 assert.match(
   digest,

@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const runtime = readFileSync(join(root, "convex/communityAgentRuntime.ts"), "utf8");
+const roles = readFileSync(join(root, "shared/communityAgentRoles.ts"), "utf8");
 const filesystem = readFileSync(join(root, "convex/communityAgentFilesystem.ts"), "utf8");
 const protocol = readFileSync(join(root, "shared/communityAgentToolProtocol.ts"), "utf8");
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
@@ -61,6 +62,41 @@ assert.match(
   runtime,
   /buildCommunityAgentMessages[\s\S]*Wake reason:[\s\S]*Evidence state:/,
   "runtime should pass wake diagnostics into the bounded community-agent loop",
+);
+assert.match(
+  runtime,
+  /function slimCompilerWindowForSteward[\s\S]*pending_compiler_candidate_count[\s\S]*evidence_path/,
+  "the steward should receive actionable candidate counts and exact evidence coordinates",
+);
+assert.match(
+  roles,
+  /Role: Observer[\s\S]*evidencePath[\s\S]*Read only those exact paths[\s\S]*one concise batched ledger note/,
+  "observer procedure should avoid directory inventory and batch its handoff",
+);
+assert.match(
+  roles,
+  /Role: Questioner[\s\S]*Start from the ledger[\s\S]*Do not inventory compiler or directory roots[\s\S]*one concise batched ledger note/,
+  "questioner procedure should reflect on the ledger instead of rediscovering the filesystem",
+);
+assert.match(
+  roles,
+  /Role: Questioner[\s\S]*Synthetic fixtures, smoke tests, and platform diagnostics are not community learning[\s\S]*at most two directory search calls/,
+  "questioner should reject diagnostic evidence before it reaches the Steward",
+);
+assert.match(
+  roles,
+  /Role: Steward[\s\S]*do not inventory filesystem roots or generic change requests[\s\S]*\/compiler\/candidates only for actionable compiler candidates/,
+  "steward procedure should stay on the narrow actionable airlock path",
+);
+assert.match(
+  protocol,
+  /COMMUNITY_AGENT_LEDGER_NOTE_MAX_CHARS = 6_000[\s\S]*maxLength: COMMUNITY_AGENT_LEDGER_NOTE_MAX_CHARS[\s\S]*requireNonEmptyString\(args\.note, "note", COMMUNITY_AGENT_LEDGER_NOTE_MAX_CHARS\)/,
+  "one bounded ledger note should fit a complete semantic handoff",
+);
+assert.match(
+  runtime,
+  /boundedText\(args\.note, COMMUNITY_AGENT_LEDGER_NOTE_MAX_CHARS\)/,
+  "ledger persistence should use the same shared note bound as the tool protocol",
 );
 assert.match(runtime, /runChatgptNativeToolCompletion\([\s\S]*userId: normalizeIdValue\(resolved\.sponsorUserId\)[\s\S]*modelId/);
 assert.doesNotMatch(runtime, /runOpenRouterNativeToolCompletion|runOpenAi|OPENAI_API_KEY|platform.*fallback|demo_public/);
@@ -137,7 +173,6 @@ assert.match(
 // Role harness (Amendment v1.1): one agent entity, role prompts on the same
 // harness, chained per heartbeat cycle over a shared ledger. Authority is
 // structural: only the steward's tool list contains the airlock write tool.
-const roles = readFileSync(join(root, "shared/communityAgentRoles.ts"), "utf8");
 assert.match(
   roles,
   /observer:[\s\S]*toolNames: \["list", "read", "search", "note"\][\s\S]*questioner:[\s\S]*toolNames: \["list", "read", "search", "note"\][\s\S]*steward:[\s\S]*toolNames: \["list", "read", "search", "note", "write"\]/,

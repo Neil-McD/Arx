@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const filesystem = readFileSync(join(root, "convex/communityAgentFilesystem.ts"), "utf8");
+const compilerEvidence = readFileSync(join(root, "convex/communityAgentCompilerEvidence.ts"), "utf8");
 const candidates = readFileSync(join(root, "convex/communityCompilerCandidates.ts"), "utf8");
 const communityExports = readFileSync(join(root, "convex/community.ts"), "utf8");
 const protocol = readFileSync(join(root, "shared/communityAgentToolProtocol.ts"), "utf8");
@@ -78,11 +79,36 @@ assert.match(
   /writeCommunityAgentFilesystemInternal = internalMutation\([\s\S]*args: \{[\s\S]*context: communityAgentFilesystemContextValidator/,
   "write should inherit community scope from filesystem context",
 );
-assert.doesNotMatch(filesystem, /args\.communityId/, "filesystem operations should not accept community id as a loose operation argument");
+assert.doesNotMatch(protocol, /communityId/, "filesystem tools should inherit community id from runtime context, never tool arguments");
 assert.doesNotMatch(filesystem, /userId: v\.optional|authSubject: v\.optional|communityIds|crossCommunity|globalMemory/);
 assert.match(filesystem, /"\/compiler"[\s\S]*"\/directory"/, "root should expose compiler and directory only");
 assert.doesNotMatch(filesystem, /"\/activity"|\/activity|listThreadMessages|listCommunityAiFeedBundle|listCommunityResources|listCommunityEvents/);
-assert.match(filesystem, /"\/compiler\/digests"[\s\S]*"\/compiler\/candidates"/);
+assert.match(filesystem, /"\/compiler\/digests"[\s\S]*"\/compiler\/evidence"[\s\S]*"\/compiler\/candidates"/);
+assert.match(
+  compilerEvidence,
+  /COMPILER_EVIDENCE_RECORD_LIMIT = 8[\s\S]*COMPILER_EVIDENCE_EXCERPT_LIMIT = 1_200[\s\S]*COMPILER_EVIDENCE_CONTENT_BOUNDARY/,
+  "compiler evidence files should be bounded and carry an explicit untrusted-content boundary",
+);
+assert.match(
+  compilerEvidence,
+  /buildCommunityCompilerEvidenceBundle[\s\S]*normalizeIdValue\(args\.digest\.communityId\)[\s\S]*findArchiveEvidence[\s\S]*findOutcomeEvidence[\s\S]*findSourceTraceEvidence/,
+  "evidence bundles should resolve existing same-community evidence substrates",
+);
+assert.match(
+  filesystem,
+  /parts\[1\] === "evidence"[\s\S]*readExpectedRow\([\s\S]*context\.communityId[\s\S]*buildCommunityCompilerEvidenceBundle/,
+  "evidence reads should inherit and enforce the canonical filesystem community",
+);
+assert.match(
+  filesystem,
+  /function mapDigest[\s\S]*evidencePath:[\s\S]*digestItemCanExposeLearningEvidence[\s\S]*compilerEvidencePath/,
+  "digest items should provide exact evidence paths so roles never need to probe the filesystem",
+);
+assert.match(
+  filesystem,
+  /function changeRequestIsActionableCompilerCandidate[\s\S]*pending_decision[\s\S]*accepted[\s\S]*filter\(changeRequestIsActionableCompilerCandidate\)/,
+  "the compiler candidate directory should exclude applied and unrelated change requests",
+);
 assert.match(filesystem, /"\/directory\/nodes"[\s\S]*"\/directory\/edges"[\s\S]*"\/directory\/change-requests"/);
 assert.match(filesystem, /"compiler"[\s\S]*"digests"[\s\S]*readExpectedRow\([\s\S]*"community_compiler_digest_not_found"[\s\S]*isDigestRow/);
 assert.match(filesystem, /"compiler"[\s\S]*"candidates"[\s\S]*readExpectedRow\([\s\S]*"community_compiler_candidate_not_found"[\s\S]*isChangeRequestRow/);
@@ -100,10 +126,15 @@ assert.match(
   /enum: \[[\s\S]*"propose_directory_candidate_from_digest_item"[\s\S]*"decide_change_request"[\s\S]*"apply_accepted_change_request"/,
   "tool schema should expose decision/apply without adding new tools",
 );
+assert.match(
+  protocol,
+  /LEARNING_ENVELOPE_SCHEMA[\s\S]*learningQuestion[\s\S]*candidateClaim[\s\S]*rejectedAlternative[\s\S]*preferenceReason[\s\S]*evidenceSummary[\s\S]*uncertainty[\s\S]*falsificationCriteria/,
+  "the existing write tool should carry the complete semantic learning envelope",
+);
 assert.match(candidates, /export async function proposeCommunityIntelligenceFromDigestItemCore/);
 assert.match(
   filesystem,
-  /proposeCommunityIntelligenceFromDigestItemCore\([\s\S]*communityId: context\.communityId[\s\S]*actorType: "agent"[\s\S]*actorAgentKey: context\.agentKey[\s\S]*proposedByCommunityAgentRunId: context\.runId[\s\S]*proposedByCommunityAgentHeartbeatId: context\.heartbeatId/,
+  /proposeCommunityIntelligenceFromDigestItemCore\([\s\S]*communityId: context\.communityId[\s\S]*learningEnvelope: payload\.learningEnvelope[\s\S]*actorType: "agent"[\s\S]*actorAgentKey: context\.agentKey[\s\S]*proposedByCommunityAgentRunId: context\.runId[\s\S]*proposedByCommunityAgentHeartbeatId: context\.heartbeatId/,
 );
 assert.match(
   candidates,

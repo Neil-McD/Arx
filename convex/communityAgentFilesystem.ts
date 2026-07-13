@@ -7,6 +7,13 @@ import {
   decideTrustedCommunityIntelligenceChangeRequestCore,
 } from "./communityIntelligenceDirectory";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
+import type { CommunityAgentLearningEnvelope } from "../shared/communityAgentToolProtocol";
+import {
+  buildCommunityCompilerEvidenceBundle,
+  compilerEvidencePath,
+  digestItemAt,
+  digestItemCanExposeLearningEvidence,
+} from "./communityAgentCompilerEvidence";
 
 const COMPILER_CANDIDATE_PAYLOAD_SOURCE = "compiler_digest_item_v1";
 const DEFAULT_LIMIT = 50;
@@ -288,11 +295,30 @@ function mapDigest(row: DigestRow) {
     window_ended_at: toIsoString(row.windowEndedAt),
     summary: row.summary,
     item_count: row.itemCount,
-    items: row.items ?? [],
+    items: (row.items ?? []).map((raw, itemIndex) => {
+      if (!isRecord(raw)) return raw;
+      const item = digestItemAt(row, itemIndex);
+      return {
+        ...raw,
+        evidencePath: digestItemCanExposeLearningEvidence(item)
+          ? compilerEvidencePath(row._id, itemIndex)
+          : null,
+      };
+    }),
     signal_counts: row.signalCounts ?? {},
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
   };
+}
+
+function normalizeEvidenceItemIndex(raw: unknown): number {
+  const value = String(raw ?? "").trim();
+  if (!/^\d+$/.test(value)) throw new Error("community_compiler_digest_item_not_found");
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 100) {
+    throw new Error("community_compiler_digest_item_not_found");
+  }
+  return parsed;
 }
 
 function mapNode(row: NodeRow) {
@@ -363,6 +389,10 @@ function changeRequestIsCompilerCandidate(row: ChangeRequestRow): boolean {
     payload.source === COMPILER_CANDIDATE_PAYLOAD_SOURCE &&
     (row.createdByActorType === "agent" || row.createdByActorType === "compiler")
   );
+}
+
+function changeRequestIsActionableCompilerCandidate(row: ChangeRequestRow): boolean {
+  return changeRequestIsCompilerCandidate(row) && (row.status === "pending_decision" || row.status === "accepted");
 }
 
 async function getWritableCompilerCandidate(args: {
@@ -546,6 +576,7 @@ export const listCommunityAgentFilesystemInternal = internalQuery({
         entries: [
           directoryEntry({ type: "file", name: "window", path: "/compiler/window" }),
           directoryEntry({ type: "directory", name: "digests", path: "/compiler/digests" }),
+          directoryEntry({ type: "directory", name: "evidence", path: "/compiler/evidence" }),
           directoryEntry({ type: "directory", name: "candidates", path: "/compiler/candidates" }),
         ],
       };
@@ -580,9 +611,29 @@ export const listCommunityAgentFilesystemInternal = internalQuery({
       };
     }
 
+    if (path === "/compiler/evidence") {
+      const [digest] = await latestDigests(ctx, context.communityId, 1);
+      const entries = digest
+        ? digest.items
+            .map((_, itemIndex) => ({ itemIndex, item: digestItemAt(digest, itemIndex) }))
+            .filter(({ item }) => digestItemCanExposeLearningEvidence(item))
+            .slice(0, limit)
+            .map(({ itemIndex, item }) =>
+              directoryEntry({
+                type: "file",
+                name: `${normalizeIdValue(digest._id)}:${itemIndex}`,
+                path: compilerEvidencePath(digest._id, itemIndex),
+                summary: `${item.category}: ${item.title}`,
+                updatedAt: digest.updatedAt,
+              }),
+            )
+        : [];
+      return { ...contextMetadata(context), path, entries };
+    }
+
     if (path === "/compiler/candidates") {
       const rows = (await latestChangeRequests(ctx, context.communityId, limit * 4))
-        .filter(changeRequestIsCompilerCandidate)
+        .filter(changeRequestIsActionableCompilerCandidate)
         .slice(0, limit);
       return {
         ...contextMetadata(context),
@@ -678,12 +729,31 @@ export const readCommunityAgentFilesystemInternal = internalQuery({
         kind: "compiler_window_summary",
         latest_digest: digest ? mapDigest(digest) : null,
         pending_change_request_count: pending.length,
+        pending_compiler_candidate_count: pending.filter(changeRequestIsCompilerCandidate).length,
       };
     }
 
     if (parts[0] === "compiler" && parts[1] === "digests" && parts[2]) {
       const row = await readExpectedRow(ctx, context.communityId, parts[2], "community_compiler_digest_not_found", isDigestRow);
       return { ...contextMetadata(context), path, kind: "compiler_digest", digest: mapDigest(row) };
+    }
+
+    if (parts[0] === "compiler" && parts[1] === "evidence" && parts[2] && parts[3] && parts.length === 4) {
+      const digest = await readExpectedRow(
+        ctx,
+        context.communityId,
+        parts[2],
+        "community_compiler_digest_not_found",
+        isDigestRow,
+      );
+      const itemIndex = normalizeEvidenceItemIndex(parts[3]);
+      const bundle = await buildCommunityCompilerEvidenceBundle({
+        ctx,
+        communityId: context.communityId,
+        digest,
+        itemIndex,
+      });
+      return { ...contextMetadata(context), path, ...bundle };
     }
 
     if (parts[0] === "compiler" && parts[1] === "candidates" && parts[2]) {
@@ -766,6 +836,15 @@ export const writeCommunityAgentFilesystemInternal = internalMutation({
       changeRequestId: v.optional(v.id("communityIntelligenceChangeRequests")),
       decision: v.optional(v.union(v.literal("accepted"), v.literal("rejected"))),
       reason: v.optional(v.string()),
+      learningEnvelope: v.optional(v.object({
+        learningQuestion: v.string(),
+        candidateClaim: v.string(),
+        rejectedAlternative: v.string(),
+        preferenceReason: v.string(),
+        evidenceSummary: v.string(),
+        uncertainty: v.string(),
+        falsificationCriteria: v.string(),
+      })),
     }),
   },
   handler: async (ctx, args) => {
@@ -799,12 +878,16 @@ export const writeCommunityAgentFilesystemInternal = internalMutation({
     if (!payload.digestId || typeof payload.itemIndex !== "number") {
       throw new Error("community_agent_filesystem_digest_item_required");
     }
+    if (!payload.learningEnvelope) {
+      throw new Error("community_agent_filesystem_learning_envelope_required");
+    }
     const result = await proposeCommunityIntelligenceFromDigestItemCore({
       ctx,
       communityId: context.communityId,
       digestId: payload.digestId,
       itemIndex: payload.itemIndex,
       nodeType: payload.nodeType as NodeType | undefined,
+      learningEnvelope: payload.learningEnvelope as CommunityAgentLearningEnvelope,
       actorType: "agent",
       actorAgentKey: context.agentKey,
       proposedByCommunityAgentRunId: context.runId,

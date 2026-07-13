@@ -70,6 +70,11 @@ assert.match(
 );
 assert.match(
   candidates,
+  /!sourceTraceResolution\.allResolvedTracesCommunityVisible \? 0\.15 : 0/,
+  "restricted evidence should raise privacy risk so apply cannot make the candidate community-visible",
+);
+assert.match(
+  candidates,
   /evidenceStrength: sourceTraceIds\.length > 0 \? "observed" : "anecdotal"/,
   "candidate payload should downgrade evidence strength when formal trace evidence is missing",
 );
@@ -105,8 +110,18 @@ assert.match(
 );
 assert.match(
   candidates,
-  /buildLearningEnvelope[\s\S]*sourceTraceResolution[\s\S]*resolvedCount[\s\S]*unresolvedCount/,
-  "learning envelope should preserve evidence resolution context",
+  /normalizeCommunityCompilerLearningEnvelope[\s\S]*requireLearningEnvelopeField[\s\S]*candidateClaim[\s\S]*falsificationCriteria/,
+  "learning envelope should be model-authored, complete, and bounded before persistence",
+);
+assert.doesNotMatch(
+  candidates,
+  /function buildLearningEnvelope|learningQuestionForItem|rejectedAlternativeForItem|falsificationCriteriaForItem/,
+  "generic digest metadata should not manufacture semantic learning claims",
+);
+assert.match(
+  candidates,
+  /title: buildCandidateTitle\(learningEnvelope\)/,
+  "candidate titles should come from the semantic claim instead of aggregate digest titles",
 );
 assert.match(
   candidates,

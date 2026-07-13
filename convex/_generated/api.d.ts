@@ -45,6 +45,7 @@ import type * as communityAccessQueries from "../communityAccessQueries.js";
 import type * as communityActivity from "../communityActivity.js";
 import type * as communityAdmin from "../communityAdmin.js";
 import type * as communityAgent from "../communityAgent.js";
+import type * as communityAgentCompilerEvidence from "../communityAgentCompilerEvidence.js";
 import type * as communityAgentConcierge from "../communityAgentConcierge.js";
 import type * as communityAgentConciergeCore from "../communityAgentConciergeCore.js";
 import type * as communityAgentFilesystem from "../communityAgentFilesystem.js";
@@ -255,6 +256,7 @@ declare const fullApi: ApiFromModules<{
   communityActivity: typeof communityActivity;
   communityAdmin: typeof communityAdmin;
   communityAgent: typeof communityAgent;
+  communityAgentCompilerEvidence: typeof communityAgentCompilerEvidence;
   communityAgentConcierge: typeof communityAgentConcierge;
   communityAgentConciergeCore: typeof communityAgentConciergeCore;
   communityAgentFilesystem: typeof communityAgentFilesystem;

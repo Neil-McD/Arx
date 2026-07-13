@@ -19,6 +19,17 @@ export type CommunityAgentToolName = "list" | "read" | "search" | "note" | "writ
 export const CANONICAL_COMMUNITY_AGENT_KEY = "community_agent" as const;
 
 export const COMMUNITY_AGENT_TOOL_NAMES = ["list", "read", "search", "note", "write"] as const;
+export const COMMUNITY_AGENT_LEDGER_NOTE_MAX_CHARS = 6_000;
+
+export type CommunityAgentLearningEnvelope = {
+  learningQuestion: string;
+  candidateClaim: string;
+  rejectedAlternative: string;
+  preferenceReason: string;
+  evidenceSummary: string;
+  uncertainty: string;
+  falsificationCriteria: string;
+};
 
 export type CommunityAgentFunctionTool = {
   type: "function";
@@ -48,6 +59,29 @@ const NODE_TYPE_SCHEMA: JsonSchema = {
     "open_question",
     null,
   ],
+};
+
+const LEARNING_ENVELOPE_SCHEMA: JsonSchema = {
+  type: ["object", "null"],
+  additionalProperties: false,
+  required: [
+    "learningQuestion",
+    "candidateClaim",
+    "rejectedAlternative",
+    "preferenceReason",
+    "evidenceSummary",
+    "uncertainty",
+    "falsificationCriteria",
+  ],
+  properties: {
+    learningQuestion: { type: "string", minLength: 1, maxLength: 600 },
+    candidateClaim: { type: "string", minLength: 1, maxLength: 800 },
+    rejectedAlternative: { type: "string", minLength: 1, maxLength: 800 },
+    preferenceReason: { type: "string", minLength: 1, maxLength: 1_000 },
+    evidenceSummary: { type: "string", minLength: 1, maxLength: 2_000 },
+    uncertainty: { type: "string", minLength: 1, maxLength: 1_000 },
+    falsificationCriteria: { type: "string", minLength: 1, maxLength: 1_000 },
+  },
 };
 
 const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionTool> = {
@@ -119,7 +153,7 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
         note: {
           type: "string",
           minLength: 1,
-          maxLength: 2000,
+          maxLength: COMMUNITY_AGENT_LEDGER_NOTE_MAX_CHARS,
         },
       },
     },
@@ -145,7 +179,15 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
         payload: {
           type: "object",
           additionalProperties: false,
-          required: ["digestId", "itemIndex", "nodeType", "changeRequestId", "decision", "reason"],
+          required: [
+            "digestId",
+            "itemIndex",
+            "nodeType",
+            "changeRequestId",
+            "decision",
+            "reason",
+            "learningEnvelope",
+          ],
           properties: {
             digestId: {
               type: ["string", "null"],
@@ -171,6 +213,7 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
               type: ["string", "null"],
               maxLength: 2000,
             },
+            learningEnvelope: LEARNING_ENVELOPE_SCHEMA,
           },
         },
       },
@@ -223,6 +266,19 @@ function normalizeDecision(raw: unknown): "accepted" | "rejected" {
   return value;
 }
 
+function normalizeLearningEnvelope(raw: unknown): Record<string, string> {
+  const record = payloadObject(raw);
+  return {
+    learningQuestion: requireNonEmptyString(record.learningQuestion, "learning_question", 600),
+    candidateClaim: requireNonEmptyString(record.candidateClaim, "candidate_claim", 800),
+    rejectedAlternative: requireNonEmptyString(record.rejectedAlternative, "rejected_alternative", 800),
+    preferenceReason: requireNonEmptyString(record.preferenceReason, "preference_reason", 1_000),
+    evidenceSummary: requireNonEmptyString(record.evidenceSummary, "evidence_summary", 2_000),
+    uncertainty: requireNonEmptyString(record.uncertainty, "uncertainty", 1_000),
+    falsificationCriteria: requireNonEmptyString(record.falsificationCriteria, "falsification_criteria", 1_000),
+  };
+}
+
 // Role-filtered builder: pass a role's tool allowlist and only those schemas
 // are sent to the model. Authority by absence — a role that cannot write never
 // sees the write tool at all. No argument keeps the full legacy set.
@@ -257,7 +313,7 @@ export function normalizeCommunityAgentToolArguments(
   }
   if (toolName === "note") {
     return {
-      note: requireNonEmptyString(args.note, "note", 2000),
+      note: requireNonEmptyString(args.note, "note", COMMUNITY_AGENT_LEDGER_NOTE_MAX_CHARS),
     };
   }
   if (toolName === "write") {
@@ -298,6 +354,7 @@ export function normalizeCommunityAgentToolArguments(
     const normalizedPayload: Record<string, unknown> = {
       digestId: requireNonEmptyString(payload.digestId, "digest_id", 128),
       itemIndex,
+      learningEnvelope: normalizeLearningEnvelope(payload.learningEnvelope),
     };
     const nodeType = normalizeNodeType(payload.nodeType);
     if (nodeType) normalizedPayload.nodeType = nodeType;

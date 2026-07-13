@@ -162,29 +162,6 @@ function uniqueDigestTraceIds(...groups: any[][]): any[] {
   return out;
 }
 
-function existingSourceTraceItem(row: CompilerDigestRow | null): DigestItem | null {
-  return row?.items.find((item) => item.category === "source_trace_signal") ?? null;
-}
-
-function mergeSourceTraceDigestItem(args: {
-  existing: DigestItem | null;
-  next: DigestItem | null;
-}): DigestItem | null {
-  if (!args.existing) return args.next;
-  if (!args.next) return args.existing;
-  const sourceTraceIds = uniqueDigestTraceIds(args.next.sourceTraceIds, args.existing.sourceTraceIds);
-  return makeItem({
-    category: "source_trace_signal",
-    title: `${sourceTraceIds.length} selected pending source traces available for cognition`,
-    summary: `${args.next.summary} This item preserves same-day source-trace evidence already represented by the digest without settling it.`,
-    priority: Math.max(args.existing.priority, args.next.priority),
-    confidence: Math.max(args.existing.confidence, args.next.confidence),
-    sourceTypes: Array.from(new Set([...args.existing.sourceTypes, ...args.next.sourceTypes])).slice(0, 12),
-    sourceIds: Array.from(new Set([...args.existing.sourceIds, ...args.next.sourceIds])).slice(0, MAX_SOURCE_IDS_PER_ITEM),
-    sourceTraceIds,
-  });
-}
-
 function makeItem(args: {
   category: DigestCategory;
   title: string;
@@ -427,10 +404,16 @@ async function runCommunityCompilerDigestPassCore(
         .take(MAX_CHANGE_REQUEST_FETCH) as Promise<ChangeRequestRow[]>,
     ]);
 
-    const selectedSourceTraceRows = compilerEvidence.selectedRows;
+    const selectedSourceTraceRows = compilerEvidence.selectedRows.filter(
+      (row) => !String(row.sourceId ?? "").startsWith(COMPILER_DIGEST_SIGNAL_SOURCE_ID_PREFIX),
+    );
     const chatRows = archiveRows.filter((row) => row.sourceType === "chat");
     const resourceRows = archiveRows.filter((row) => row.sourceType === "resource");
-    const archiveAiFeedRows = archiveRows.filter((row) => row.sourceType === "ai_feed");
+    const archiveAiFeedRows = archiveRows.filter(
+      (row) =>
+        row.sourceType === "ai_feed" &&
+        String(row.authorLabel ?? "").trim().toLowerCase() !== "community agent",
+    );
     const aiFeedRows = aiFeedRowsRaw
       .slice()
       .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0) || b.createdAt - a.createdAt);
@@ -442,6 +425,9 @@ async function runCommunityCompilerDigestPassCore(
         )
         .map((row) => normalizeIdValue(row._id))
         .filter(Boolean),
+    );
+    const eligibleAiFeedRows = aiFeedRows.filter(
+      (row) => !communityAgentAiFeedSourceIds.has(normalizeIdValue(row._id)),
     );
     const postingMemberKeys = new Set(
       chatRows
@@ -465,7 +451,7 @@ async function runCommunityCompilerDigestPassCore(
         sourceIds: sourceIds(chatRows),
       }));
     }
-    for (const post of aiFeedRows.slice(0, 3)) {
+    for (const post of eligibleAiFeedRows.slice(0, 3)) {
       items.push(makeItem({
         category: "ai_feed_signal",
         title: post.title || `${post.type} from AI Feed`,
@@ -510,10 +496,7 @@ async function runCommunityCompilerDigestPassCore(
         sourceTraceIds: sourceTraceIds(selectedSourceTraceRows),
       })
       : null;
-    const sourceTraceItem = mergeSourceTraceDigestItem({
-      existing: existingSourceTraceItem(existing),
-      next: nextSourceTraceItem,
-    });
+    const sourceTraceItem = nextSourceTraceItem;
     if (sourceTraceItem) {
       items.push(sourceTraceItem);
     }
@@ -534,7 +517,7 @@ async function runCommunityCompilerDigestPassCore(
       .slice(0, MAX_DIGEST_ITEMS);
     const signalCounts = {
       chat: chatRows.length,
-      aiFeed: Math.max(aiFeedRows.length, archiveAiFeedRows.length),
+      aiFeed: Math.max(eligibleAiFeedRows.length, archiveAiFeedRows.length),
       resources: resourceRows.length,
       events: 0,
       sourceTraces: sourceTraceItem?.sourceTraceIds.length ?? 0,
@@ -551,7 +534,7 @@ async function runCommunityCompilerDigestPassCore(
         `${chatRows.length} chat, ${signalCounts.aiFeed} AI feed, and ${resourceRows.length} resource learning signals were considered.`,
         "Events, member joins, presence, reactions, and generic activity are excluded from learning digests unless they produce transcripts, feedback, outcomes, decisions, artifacts, or source traces.",
         `${selectedSourceTraceRows.length} selected pending source traces, ${outcomeRows.length} outcomes, and ${pendingChangeRequests.length} pending directory decisions are in the working set.`,
-        `${sourceTraceItem?.sourceTraceIds.length ?? 0} source traces are represented by the digest after same-day merging.`,
+        `${sourceTraceItem?.sourceTraceIds.length ?? 0} direct source traces are represented by the current digest.`,
         "This digest is non-canonical compiler output.",
       ].join(" "),
       1_200,

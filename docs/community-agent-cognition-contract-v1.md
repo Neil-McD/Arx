@@ -1864,3 +1864,51 @@ Frequency controls worst-case latency only; the gates own cost.
 - Concierge evidence reach: directory + resources first; raw archive search
   later, behind guardrails (the archive RAG lane is the recorded attack
   surface).
+
+## Twenty-Sixth Implementation Slice: Semantic Handoff v1
+
+The sleep loop now has a concrete semantic bridge between aggregate compiler
+digests and directory proposals. This does not add a new tool, table, agent, or
+raw-activity surface.
+
+```txt
+digest item
+  -> /compiler/evidence/{digestId}/{itemIndex}
+  -> Observer triage
+  -> Questioner learning envelope
+  -> Steward write through the existing airlock
+  -> pending directory change request
+```
+
+Rules:
+
+- `/compiler/evidence` is a virtual, read-only compiler directory. Evidence is
+  resolved from existing same-community archive documents, source traces, and
+  outcome observations.
+- Every inspectable digest item carries its exact `evidencePath`; roles read
+  only those paths and never probe unmarked digest items.
+- Each evidence file is bounded to eight records and each text excerpt is
+  bounded before it reaches model context.
+- Every referenced row is rechecked against the runtime's canonical
+  `communityId`. Missing, cross-community, private, and community-agent-authored
+  evidence is unresolved rather than guessed or leaked.
+- Evidence content is untrusted data. Neither the runtime nor any role may obey
+  instructions found inside evidence.
+- The Steward keeps using the single `write` tool and the existing
+  `propose_directory_candidate_from_digest_item` operation.
+- A proposal must carry all seven semantic fields: learning question, candidate
+  claim, rejected alternative, preference reason, evidence summary,
+  uncertainty, and falsification criteria.
+- The candidate title and body come from that bounded learning envelope, not
+  from a generic aggregate digest title such as "24 chat signals."
+- Evidence ids remain compiler-owned. The model may interpret a digest item but
+  may not submit arbitrary source ids or bypass the source-trace airlock.
+- Self-authored AI-feed rows are removed before digest item creation. Digest
+  bridge traces stay attached to their originating digest item, while direct
+  source-trace items contain only currently pending non-bridge evidence.
+- Observer and Questioner each produce one batched ledger handoff. Steward reads
+  only actionable compiler candidates, not the generic change-request history.
+- A ledger note is bounded at 6,000 characters so one complete learning
+  envelope survives handoff without retrying truncated notes.
+- Synthetic fixtures, smoke tests, and platform diagnostics may validate the
+  machinery but are never eligible community memory.
