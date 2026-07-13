@@ -10,7 +10,6 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type { CloudCommunityPolynetOverview } from "../../../../shared/cloudCommunityPolynetGateway";
 import { formatCompactStat } from "../../../../shared/communityFunnelUi";
 import type { CommunityFunnelHeroMediaKind } from "../../../../shared/communityTypes";
-import { renderMarkdown } from "../../../../shared/markdownUi";
 import {
   buildWebCommunityVisitorProjection,
   type VisitorFeaturedMessageLike,
@@ -262,7 +261,6 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
               getInitials={getInitialsFromLabel}
               formatChatTime={formatVisitorChatTime}
               renderTextWithLinks={renderTextWithLinks}
-              renderMarkdown={renderMarkdown}
               currentUserId={null}
               mainComposer={
                 <CommunityVisitorJoinRope

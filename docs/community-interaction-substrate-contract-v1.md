@@ -346,6 +346,17 @@ Rules:
 - exact consecutive standalone duplicates collapse at presentation time without mutating stored message text
 - default dark and Polynet dark share one semantic chat-link treatment while their surface tokens continue to theme embed cards
 
+Bounded chat formatting rules:
+
+- human, community-agent, and personal-agent messages use the same deterministic presentation path in feed roots, selected thread roots, replies, and visitor previews
+- the supported block grammar is paragraphs, deliberate line breaks, three compact heading levels, ordered and unordered lists with at most two nested levels, blockquotes, exact-line dividers, and fenced code
+- the supported inline grammar is bold, italic, strikethrough, inline code, safe labeled links, bare web links, email links, phone links, and canonical mention chips
+- labeled links fail closed to literal text unless their target is a valid HTTP, HTTPS, `mailto`, or normalized `tel` target; raw HTML is never interpreted
+- tables, task lists, images, math, artifacts, and syntax highlighting remain outside the community-chat grammar
+- direct messages retain their existing inline-only grammar and do not opt into this community-chat slice
+- formatting and contact linking are derived presentation only; they do not mutate canonical message text, composer behavior, content blocks, mentions, or embed records
+- fenced code protects matching standalone URL lines from in-flow embed replacement
+
 ## Current Legacy Chat Adapter Slice
 
 The compatibility adapter keeps the legacy chat mutation alive while dual-writing canonical interactions for old-path compatibility sends:

@@ -24,6 +24,8 @@ import {
   interactionPresentationForEmbeds,
   selectRichInteractionEmbeds,
 } from "../../../../shared/communityInteractionLinkPresentation";
+import { ChatBlockMarkdown } from "../../../../shared/chatBlockMarkdownUi";
+import { tokenizeChatContactText } from "../../../../shared/chatContactText";
 import { renderChatInlineMarkdown } from "../../../../shared/chatInlineMarkdownUi";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
@@ -673,43 +675,37 @@ function MentionChipSpan(props: {
   );
 }
 
-export type InteractionBodyRenderMode = "plain" | "compact_markdown";
-
-export function interactionBodyRenderModeForActor(actorType: string): InteractionBodyRenderMode {
-  return actorType === "community_agent" || actorType === "personal_agent" ? "compact_markdown" : "plain";
-}
-
 export type InteractionBodyProps = {
   text: string;
   renderTextWithLinks: (text: string) => ReactNode;
-  renderMarkdown?: (text: string) => ReactNode;
-  renderMode?: InteractionBodyRenderMode;
   mentionContext?: InteractionMentionContext;
 };
 
 export function InteractionBody(props: InteractionBodyProps) {
   const text = String(props.text ?? "").trim();
   if (!text) return null;
-  if (props.renderMode === "compact_markdown" && props.renderMarkdown) {
-    return (
-      <div className="community-interaction-body community-interaction-markdown">
-        {props.renderMarkdown(text)}
-      </div>
-    );
-  }
-  const parts = text.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
-  if (parts.length === 0) return null;
   const resolvedMentions =
     props.mentionContext && props.mentionContext.mentions.length > 0
       ? resolveMentionsForRendering(props.mentionContext)
       : [];
-  const renderTextSegment = (segment: string): ReactNode =>
-    renderChatInlineMarkdown(segment, { renderTextRun: props.renderTextWithLinks });
-  const renderPart = (part: string): ReactNode => {
+
+  const renderContactText = (segment: string): ReactNode =>
+    tokenizeChatContactText(segment).map((token, index) => {
+      if (token.kind === "text") {
+        return <Fragment key={`text:${index}`}>{props.renderTextWithLinks(token.text)}</Fragment>;
+      }
+      return (
+        <a key={`${token.kind}:${index}`} className="chat-link" href={token.href}>
+          {token.text}
+        </a>
+      );
+    });
+
+  const renderMentionAwareText = (segment: string): ReactNode => {
     if (resolvedMentions.length === 0 || !props.mentionContext) {
-      return renderTextSegment(part);
+      return renderContactText(segment);
     }
-    const segments = splitBodyIntoMentionSegments(part, resolvedMentions);
+    const segments = splitBodyIntoMentionSegments(segment, resolvedMentions);
     return segments.map((segment, index) =>
       segment.type === "mention" ? (
         <MentionChipSpan
@@ -719,15 +715,21 @@ export function InteractionBody(props: InteractionBodyProps) {
           context={props.mentionContext!}
         />
       ) : (
-        <Fragment key={`t:${index}`}>{renderTextSegment(segment.text)}</Fragment>
+        <Fragment key={`t:${index}`}>{renderContactText(segment.text)}</Fragment>
       ),
     );
   };
+
+  const renderInline = (segment: string): ReactNode =>
+    renderChatInlineMarkdown(segment, {
+      renderTextRun: renderMentionAwareText,
+      renderFormattedRun: renderMentionAwareText,
+      allowLabeledLinks: true,
+    });
+
   return (
-    <div className="community-interaction-body">
-      {parts.map((part, index) => (
-        <p key={`${index}:${part.slice(0, 24)}`}>{renderPart(part)}</p>
-      ))}
+    <div className="community-interaction-body community-interaction-chat-markdown">
+      <ChatBlockMarkdown text={text} renderInline={renderInline} />
     </div>
   );
 }
@@ -749,8 +751,6 @@ export function InteractionContent(
             key={`text:${index}`}
             text={segment.text}
             renderTextWithLinks={props.renderTextWithLinks}
-            renderMarkdown={props.renderMarkdown}
-            renderMode={props.renderMode}
             mentionContext={props.mentionContext}
           />
         ),
@@ -1014,8 +1014,6 @@ export function CommunityInteractionFeedList(
                                   text={body}
                                   embeds={bundle.embeds}
                                   renderTextWithLinks={props.renderTextWithLinks}
-                                  renderMarkdown={props.renderMarkdown}
-                                  renderMode={interactionBodyRenderModeForActor(root.actor_type)}
                                   mentionContext={{
                                     mentions: bundle.mentions ?? [],
                                     displayName: props.displayName,

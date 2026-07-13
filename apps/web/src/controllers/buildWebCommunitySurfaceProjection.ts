@@ -147,7 +147,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   parseReplyPrefix: WebCommunityChatPanelProps["parseReplyPrefix"];
   truncateReplyPreview: WebCommunityChatPanelProps["truncateReplyPreview"];
   renderTextWithLinks: WebCommunityChatPanelProps["renderTextWithLinks"];
-  renderMarkdown: WebCommunityChatPanelProps["renderMarkdown"];
   onScrollToReplyMessage: WebCommunityChatPanelProps["onScrollToReplyMessage"];
   onOpenCommunityChatLightbox: WebCommunityChatPanelProps["onOpenCommunityChatLightbox"];
   onToggleReaction: WebCommunityChatPanelProps["onToggleReaction"];
@@ -377,7 +376,6 @@ export function buildWebCommunitySurfaceProjection(
     parseReplyPrefix: params.parseReplyPrefix,
     truncateReplyPreview: params.truncateReplyPreview,
     renderTextWithLinks: params.renderTextWithLinks,
-    renderMarkdown: params.renderMarkdown,
     onScrollToReplyMessage: params.onScrollToReplyMessage,
     onOpenCommunityChatLightbox: params.onOpenCommunityChatLightbox,
     onToggleReaction: params.onToggleReaction,

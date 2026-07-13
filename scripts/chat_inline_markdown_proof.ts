@@ -15,6 +15,36 @@ assert.deepEqual(tokenizeChatInlineMarkdown("hello **world**"), [
   { kind: "text", text: "hello " },
   { kind: "bold", text: "world" },
 ]);
+assert.deepEqual(tokenizeChatInlineMarkdown("Read [the guide](https://example.com/guide)."), [
+  { kind: "text", text: "Read " },
+  { kind: "text", text: "[the guide](https://example.com/guide)" },
+  { kind: "text", text: "." },
+]);
+assert.deepEqual(tokenizeChatInlineMarkdown("Read [the guide](https://example.com/guide).", {
+  allowLabeledLinks: true,
+}), [
+  { kind: "text", text: "Read " },
+  { kind: "link", text: "the guide", href: "https://example.com/guide" },
+  { kind: "text", text: "." },
+]);
+assert.deepEqual(tokenizeChatInlineMarkdown("Read [the reference](https://en.wikipedia.org/wiki/Foo_(bar)).", {
+  allowLabeledLinks: true,
+}), [
+  { kind: "text", text: "Read " },
+  { kind: "link", text: "the reference", href: "https://en.wikipedia.org/wiki/Foo_(bar)" },
+  { kind: "text", text: "." },
+]);
+assert.deepEqual(tokenizeChatInlineMarkdown("Email [the owner](mailto:owner@example.com)", {
+  allowLabeledLinks: true,
+}), [
+  { kind: "text", text: "Email " },
+  { kind: "link", text: "the owner", href: "mailto:owner@example.com" },
+]);
+assert.deepEqual(tokenizeChatInlineMarkdown("[unsafe](tel:javascript:alert)", {
+  allowLabeledLinks: true,
+}), [
+  { kind: "text", text: "[unsafe](tel:javascript:alert)" },
+]);
 assert.deepEqual(tokenizeChatInlineMarkdown("*hi* and ~~bye~~ and `x=1`"), [
   { kind: "italic", text: "hi" },
   { kind: "text", text: " and " },
@@ -70,6 +100,10 @@ assert.deepEqual(tokenizeChatInlineMarkdown("see https://a.io/x_y_z now"), [
 
 // Strip round-trips to plain content.
 assert.equal(stripChatInlineMarkdown("**hey** `code` ~~gone~~ *soft*"), "hey code gone soft");
+assert.equal(
+  stripChatInlineMarkdown("Read [the guide](https://example.com/guide)"),
+  "Read [the guide](https://example.com/guide)",
+);
 assert.equal(stripChatInlineMarkdown("```ts\nconst a = 1;\n```"), "const a = 1;");
 assert.equal(stripChatInlineMarkdown("plain text"), "plain text");
 assert.equal(stripChatInlineMarkdown(null), "");

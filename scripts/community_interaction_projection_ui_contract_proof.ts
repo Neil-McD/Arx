@@ -34,6 +34,7 @@ const chromeHost = read("apps/web/src/components/WebShellChromeHost.tsx");
 const mobileCommunityShell = read("apps/web/src/components/WebMobileCommunityShell.tsx");
 const chromeHostPropsBuilder = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
+const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const adminGateway = read("shared/cloudCommunityAdminGateway.ts");
@@ -47,6 +48,7 @@ const sendController = read("shared/useCommunityChatMutationController.ts");
 const interactions = read("convex/communityInteractions.ts");
 const baseCss = read("apps/web/src/base.css");
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
+const chatBlockMarkdownUi = read("shared/chatBlockMarkdownUi.tsx");
 const readyFirstLinkEmbed = {
   embed_kind: "link",
   status: "ready",
@@ -82,6 +84,11 @@ assert.match(
   packageJson,
   /"check:community-interaction-projection-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_interaction_projection_ui_contract_proof\.ts"/,
   "package scripts should expose the community interaction projection UI proof",
+);
+assert.match(
+  packageJson,
+  /"check:chat-block-markdown-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/chat_block_markdown_proof\.ts"/,
+  "package scripts should expose the bounded chat formatting proof",
 );
 
 assert.doesNotMatch(
@@ -152,33 +159,53 @@ assert.match(
 );
 assert.match(
   app,
-  /renderTextWithLinks,[\s\S]*renderMarkdown,[\s\S]*onScrollToReplyMessage: scrollToCommunityMessage/,
-  "App should pass the shared markdown renderer into the community chat panel",
+  /renderTextWithLinks,[\s\S]*onScrollToReplyMessage: scrollToCommunityMessage/,
+  "App should pass safe link rendering into the community chat panel",
 );
-assert.match(
+assert.doesNotMatch(
   chatPanel,
-  /renderTextWithLinks: \(text: string\) => ReactNode;[\s\S]*renderMarkdown: \(text: string\) => ReactNode;[\s\S]*WebCommunityInteractionProjection[\s\S]*renderMarkdown=\{renderMarkdown\}/,
-  "chat panel should thread the shared markdown renderer into the canonical projection",
+  /renderMarkdown/,
+  "community chat should not depend on the broad workspace markdown renderer",
 );
-assert.match(
+assert.doesNotMatch(
   surfaceProjection,
-  /renderMarkdown: WebCommunityChatPanelProps\["renderMarkdown"\];[\s\S]*renderMarkdown: params\.renderMarkdown,/,
-  "community surface projection builder should carry the markdown renderer into chat panel props",
+  /renderMarkdown/,
+  "community surface projection should not carry an unused workspace markdown renderer",
 );
-assert.match(
+assert.doesNotMatch(
   visitorSurface,
-  /import \{ renderMarkdown \} from "\.\.\/\.\.\/\.\.\/\.\.\/shared\/markdownUi";[\s\S]*WebCommunityInteractionProjection[\s\S]*renderMarkdown=\{renderMarkdown\}/,
-  "visitor community preview should pass markdown rendering into the shared projection component",
+  /renderMarkdown/,
+  "visitor chat should use the same bounded community renderer without importing workspace markdown",
 );
-assert.match(
+assert.doesNotMatch(
   projection,
-  /renderMarkdown: \(text: string\) => ReactNode;[\s\S]*InteractionContent[\s\S]*renderMarkdown=\{props\.renderMarkdown\}[\s\S]*renderMode=\{interactionBodyRenderModeForActor\(selectedRoot\.root\.actor_type\)\}[\s\S]*InteractionContent[\s\S]*renderMarkdown=\{props\.renderMarkdown\}[\s\S]*renderMode=\{interactionBodyRenderModeForActor\(reply\.actor_type\)\}/,
-  "projection should render agent-authored root and reply bodies through compact markdown mode",
+  /renderMarkdown|interactionBodyRenderModeForActor|renderMode=/,
+  "roots and replies should not branch rendering by actor type",
 );
 assert.match(
   feed,
-  /export function interactionBodyRenderModeForActor\(actorType: string\)[\s\S]*actorType === "community_agent" \|\| actorType === "personal_agent" \? "compact_markdown" : "plain"[\s\S]*props\.renderMode === "compact_markdown" && props\.renderMarkdown[\s\S]*community-interaction-body community-interaction-markdown[\s\S]*props\.renderMarkdown\(text\)/,
-  "interaction body should reserve markdown rendering for agent-authored messages while preserving plain chat rendering by default",
+  /ChatBlockMarkdown[\s\S]*tokenizeChatContactText[\s\S]*export function InteractionBody[\s\S]*renderFormattedRun: renderMentionAwareText,[\s\S]*allowLabeledLinks: true,[\s\S]*community-interaction-body community-interaction-chat-markdown[\s\S]*<ChatBlockMarkdown text=\{text\} renderInline=\{renderInline\}/,
+  "every community message should use the bounded block renderer with contact and mention-aware inline formatting",
+);
+assert.doesNotMatch(
+  feed,
+  /interactionBodyRenderModeForActor|compact_markdown|props\.renderMarkdown/,
+  "feed rendering should have one deterministic path for humans and agents",
+);
+assert.doesNotMatch(
+  directMessages,
+  /allowLabeledLinks/,
+  "direct messages should retain their existing inline-only formatting behavior",
+);
+assert.match(
+  chatBlockMarkdownUi,
+  /className="chat-md-code-block"[\s\S]*tabIndex=\{0\}[\s\S]*onKeyDown=[\s\S]*ArrowLeft[\s\S]*ArrowRight[\s\S]*Home[\s\S]*End/,
+  "overflowing community code blocks should be focusable and keyboard-scrollable",
+);
+assert.match(
+  baseCss,
+  /\.community-interaction-chat-markdown \.chat-md-code-block:focus-visible\s*\{[\s\S]*outline:\s*2px solid var\(--chat-link\)/,
+  "focused community code blocks should expose a visible theme-aware outline",
 );
 assert.match(
   feed,
@@ -268,6 +295,14 @@ assert.deepEqual(
     trailingEmbeds: [pendingFirstLinkEmbed],
   },
   "pending previews should preserve the source link and existing trailing skeleton placement",
+);
+assert.deepEqual(
+  interactionPresentationForEmbeds("```txt\nhttps://example.com/first\n```", [readyFirstLinkEmbed]),
+  {
+    bodySegments: [{ type: "text", text: "```txt\nhttps://example.com/first\n```" }],
+    trailingEmbeds: [readyFirstLinkEmbed],
+  },
+  "standalone URLs inside fenced code should remain code instead of becoming in-flow embeds",
 );
 assert.deepEqual(
   interactionPresentationForEmbeds(
@@ -890,8 +925,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-interaction-body\.community-interaction-markdown\s*\{[\s\S]*display:\s*block;[\s\S]*\.community-interaction-markdown \.md-header\s*\{[\s\S]*font-size:\s*1em;[\s\S]*\.community-interaction-markdown \.md-list\s*\{[\s\S]*padding-left:\s*1\.36em;/,
-  "projection markdown should use compact chat-thread typography for agent replies",
+  /\.community-interaction-body\.community-interaction-chat-markdown\s*\{[\s\S]*display:\s*block;[\s\S]*\.community-interaction-chat-markdown \.chat-md-heading-1\s*\{[\s\S]*font-size:\s*1\.08em;[\s\S]*\.community-interaction-chat-markdown \.chat-md-list\s*\{[\s\S]*padding-left:\s*1\.36em;[\s\S]*\.community-interaction-chat-markdown \.chat-md-code-block\s*\{/,
+  "projection markdown should style bounded headings, lists, and code with compact chat typography",
 );
 assert.match(
   baseCss,

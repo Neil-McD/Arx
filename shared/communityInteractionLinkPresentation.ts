@@ -67,6 +67,7 @@ export function interactionPresentationForEmbeds<T extends CommunityInteractionL
 
   let previousStandaloneUrl: string | null = null;
   let visibleEmbedPlaced = false;
+  let insideCodeFence = false;
   let textLines: string[] = [];
   const bodySegments: CommunityInteractionPresentationSegment<T>[] = [];
   const flushText = () => {
@@ -77,6 +78,16 @@ export function interactionPresentationForEmbeds<T extends CommunityInteractionL
 
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
+    if (/^```(?:[A-Za-z0-9_+-]*)\s*$/.test(trimmed)) {
+      insideCodeFence = !insideCodeFence;
+      previousStandaloneUrl = null;
+      textLines.push(line);
+      continue;
+    }
+    if (insideCodeFence) {
+      textLines.push(line);
+      continue;
+    }
     if (!trimmed) {
       textLines.push(line);
       continue;
