@@ -61,15 +61,12 @@ export function isGlobalMemberAgentEpisodeThreadKey(threadKey: string): boolean 
   return normalizedThreadKey.startsWith(prefix) && /^[1-9]\d*$/.test(normalizedThreadKey.slice(prefix.length));
 }
 
-export function buildMemberAgentEpisodeThreadKey(
-  communityId: string,
-  ordinal: number,
-): string {
-  const legacyKey = buildMemberAgentThreadKey(communityId);
-  if (!Number.isSafeInteger(ordinal) || ordinal < 1) {
-    throw new Error("member_agent_episode_ordinal_invalid");
-  }
-  return `${legacyKey}:episode:${ordinal}`.slice(0, 200);
+export function isReadOnlyLegacyMemberAgentThreadKey(threadKey: string): boolean {
+  const normalizedThreadKey = String(threadKey ?? "").trim();
+  return (
+    normalizedThreadKey.startsWith(`${MEMBER_AGENT_THREAD_KEY_PREFIX}:`) &&
+    !isGlobalMemberAgentEpisodeThreadKey(normalizedThreadKey)
+  );
 }
 
 export function isMemberAgentThreadKeyForCommunity(

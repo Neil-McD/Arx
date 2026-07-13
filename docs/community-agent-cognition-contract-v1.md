@@ -31,6 +31,7 @@ personal agent runtime under the active community lens.
    - the server constructs bounded conversation history from persisted messages through the exact user message that started the turn; browser-supplied history is never authoritative
    - prior episodes are never injected automatically; the dock can list bounded episode metadata and read one bounded private transcript only through member-owned recall tools
    - recall spans the member's global episodes and retained legacy per-community episodes, returns lens provenance with user and assistant text, fails closed across members, and requires transcript evidence before the agent claims prior conversational memory
+   - retained legacy per-community episodes are read-only recall artifacts: no client gateway or public mutation may create, rotate, message, or execute them
    - transcript loads commit only while their signed-in member generation and thread remain active
    - receives only product-doc, community read, and private member-conversation recall tools in the first surface contract
    - cannot invoke workspace, Daytona, web, MCP, autonomous cognition, or community publishing tools

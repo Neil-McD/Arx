@@ -42,6 +42,7 @@ The current thread model includes:
 - optional active community lens
 - immutable per-run lens provenance
 - episodic rotation through `Start fresh conversation`
+- read-only recall of retained legacy per-community episodes
 - runtime evidence and activity metadata
 - thread rendering and runtime evidence
 
@@ -56,6 +57,7 @@ The current thread model includes:
 7. Runtime evidence is operational evidence, not the product source of truth.
 8. Thread context should be summarized, retrieved, or bounded rather than blindly copied forever.
 9. A personal-agent episode belongs to the member, not to the community selected as its current lens.
+10. Legacy per-community personal-agent episodes cannot receive new messages or runtime turns.
 
 ## Examples
 

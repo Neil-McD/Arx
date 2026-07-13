@@ -36,8 +36,7 @@ import {
   resolveGateDecisionForAuthenticatedActor,
 } from "./httpRuntimeSupport";
 import {
-  isGlobalMemberAgentEpisodeThreadKey,
-  isMemberAgentThreadKeyForCommunity,
+  isReadOnlyLegacyMemberAgentThreadKey,
   resolveRuntimeInvocationSurfaceForThread,
   restrictCapabilityFamiliesForInvocationSurface,
   restrictToolNamesForInvocationSurface,
@@ -589,16 +588,15 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   }
   if (
     invocationSurface === "member_agent_dock" &&
-    !isGlobalMemberAgentEpisodeThreadKey(threadKey) &&
-    !isMemberAgentThreadKeyForCommunity(threadKey, threadCommunityId)
+    isReadOnlyLegacyMemberAgentThreadKey(threadKey)
   ) {
     return {
       ok: false,
       response: fail(403, {
         ok: false,
-        code: "member_agent_thread_context_mismatch",
-        error: "member_agent_thread_context_mismatch",
-        message: "The member agent channel does not match its community context.",
+        code: "member_agent_legacy_episode_read_only",
+        error: "member_agent_legacy_episode_read_only",
+        message: "Historical member-agent episodes are available through recall only.",
       }),
     };
   }

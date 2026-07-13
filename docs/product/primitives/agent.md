@@ -49,6 +49,7 @@ The current product model supports:
 - personal AI threads
 - one member-owned personal agent channel across communities
 - on-demand episodic recall across that member's prior conversations
+- read-only recall compatibility for retained legacy per-community episodes
 - community lens switching inside threads
 - community resources and skills as controlled context inputs
 - apps/MCPs as explicit capability surfaces
@@ -67,6 +68,7 @@ The current product model supports:
 7. Apps/MCP tools should not be represented as available unless the runtime can actually use them.
 8. The agent should preserve broader user intent when the request is not actually community-scoped.
 9. Community navigation may change the next-turn lens, but it must not replace the member's agent or conversation.
+10. Retained legacy per-community episodes are historical recall sources only; new messages and runtime turns use the active global episode.
 
 ## Examples
 

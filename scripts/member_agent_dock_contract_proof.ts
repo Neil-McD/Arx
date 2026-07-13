@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   buildGlobalMemberAgentEpisodeThreadKey,
-  buildMemberAgentEpisodeThreadKey,
   buildMemberAgentThreadKey,
   buildRuntimeInvocationSurfacePrompt,
   isGlobalMemberAgentEpisodeThreadKey,
   isMemberAgentThreadKeyForCommunity,
+  isReadOnlyLegacyMemberAgentThreadKey,
   resolveRuntimeInvocationSurfaceForThread,
   restrictCapabilityFamiliesForInvocationSurface,
   restrictToolNamesForInvocationSurface,
@@ -60,16 +60,12 @@ assert.equal(buildMemberAgentThreadKey("community_1"), "member-agent:community_1
 assert.equal(buildGlobalMemberAgentEpisodeThreadKey(2), "member-agent:global:episode:2");
 assert.equal(isGlobalMemberAgentEpisodeThreadKey("member-agent:global:episode:2"), true);
 assert.equal(isGlobalMemberAgentEpisodeThreadKey("member-agent:community_1:episode:2"), false);
+assert.equal(isReadOnlyLegacyMemberAgentThreadKey("member-agent:community_1:episode:2"), true);
+assert.equal(isReadOnlyLegacyMemberAgentThreadKey("member-agent:community_1"), true);
+assert.equal(isReadOnlyLegacyMemberAgentThreadKey("member-agent:global:episode:2"), false);
+assert.equal(isReadOnlyLegacyMemberAgentThreadKey("workspace:thread_1"), false);
 assert.throws(() => buildGlobalMemberAgentEpisodeThreadKey(0), /member_agent_episode_ordinal_invalid/);
 assert.throws(() => buildMemberAgentThreadKey(""), /member_agent_community_required/);
-assert.equal(
-  buildMemberAgentEpisodeThreadKey("community_1", 2),
-  "member-agent:community_1:episode:2",
-);
-assert.throws(
-  () => buildMemberAgentEpisodeThreadKey("community_1", 0),
-  /member_agent_episode_ordinal_invalid/,
-);
 assert.equal(
   isMemberAgentThreadKeyForCommunity("member-agent:community_1", "community_1"),
   true,
@@ -323,8 +319,13 @@ assert.doesNotMatch(
 );
 assert.match(
   threads,
-  /requireActiveMemberAgentEpisodeForUserMessage[\s\S]*isGlobalMemberAgentEpisodeThreadKey[\s\S]*getGlobalMemberAgentChannel[\s\S]*episode\.threadId !== args\.thread\._id[\s\S]*member_agent_episode_not_active/,
+  /requireWritableMemberAgentThread[\s\S]*isReadOnlyLegacyMemberAgentThreadKey\(threadKey\)[\s\S]*member_agent_legacy_episode_read_only[\s\S]*args\.role !== "user"[\s\S]*getGlobalMemberAgentChannel[\s\S]*episode\.threadId !== args\.thread\._id[\s\S]*member_agent_episode_not_active/,
   "new user messages must fail closed when addressed to a closed member-agent episode",
+);
+assert.doesNotMatch(
+  threads,
+  /ensureMemberAgentCommunityThread|startNewMemberAgentCommunityEpisode|ensureMemberAgentCommunityChannelCore/,
+  "legacy per-community channels must not retain a public writer or episode rotator",
 );
 assert.match(
   threads,
@@ -343,8 +344,13 @@ assert.match(
 );
 assert.match(
   threads,
-  /if \(explicitMessageKey\)[\s\S]*return existingByMessageKey;[\s\S]*if \(args\.role === "user"\)[\s\S]*requireActiveMemberAgentEpisodeForUserMessage/,
+  /if \(explicitMessageKey\)[\s\S]*return existingByMessageKey;[\s\S]*requireWritableMemberAgentThread/,
   "idempotent retries may resolve an existing user message after rotation without reopening the episode",
+);
+assert.equal(
+  (threads.match(/requireWritableMemberAgentThread\(\{/g) ?? []).length,
+  2,
+  "both message creation paths must reject every new write to retained legacy episodes",
 );
 assert.match(
   account,
@@ -408,7 +414,7 @@ assert.match(
 );
 assert.match(
   resolution,
-  /!isGlobalMemberAgentEpisodeThreadKey\(threadKey\)[\s\S]*!isMemberAgentThreadKeyForCommunity\(threadKey, threadCommunityId\)[\s\S]*member_agent_thread_context_mismatch/,
+  /isReadOnlyLegacyMemberAgentThreadKey\(threadKey\)[\s\S]*member_agent_legacy_episode_read_only[\s\S]*Historical member-agent episodes are available through recall only/,
 );
 assert.match(
   resolution,
@@ -479,6 +485,11 @@ assert.match(
   gateway,
   /threads:ensureMemberAgentGlobalChannel[\s\S]*threads:startNewMemberAgentGlobalEpisode/,
   "the browser must use the dedicated user-global channel mutations",
+);
+assert.doesNotMatch(
+  gateway,
+  /ensureCloudMemberAgentCommunityChannel|startNewCloudMemberAgentCommunityEpisode|ensureMemberAgentCommunityThread|startNewMemberAgentCommunityEpisode/,
+  "the browser gateway must expose no legacy per-community writer",
 );
 assert.match(
   threadReadGateway,
@@ -637,7 +648,7 @@ assert.match(
 );
 assert.match(
   cognitionContract,
-  /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*one stable private channel per member across Polynet[\s\S]*changing communities changes the lens for subsequent turns[\s\S]*Start fresh conversation[\s\S]*community deletion makes that community unavailable as a future lens[\s\S]*recall spans the member's global episodes and retained legacy per-community episodes[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
+  /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*one stable private channel per member across Polynet[\s\S]*changing communities changes the lens for subsequent turns[\s\S]*Start fresh conversation[\s\S]*community deletion makes that community unavailable as a future lens[\s\S]*retained legacy per-community episodes are read-only recall artifacts[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
 );
 
 const canonicalContext = buildMemberAgentConversationContext({
