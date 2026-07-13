@@ -142,9 +142,8 @@ import {
   ActorAvatar,
   CommunityInteractionFeedList,
   EditForm,
-  EmbedCards,
   InteractionAttachments,
-  InteractionBody,
+  InteractionContent,
   MessageActions,
   OverflowMenu,
   ProfileHoverCard,
@@ -523,7 +522,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   {selectedRoot.root.title ? (
                     <div className="community-interaction-title">{selectedRoot.root.title}</div>
                   ) : null}
-                  <InteractionBody
+                  <InteractionContent
                     text={selectedRootText}
                     embeds={selectedRoot.embeds}
                     renderTextWithLinks={props.renderTextWithLinks}
@@ -540,9 +539,13 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                       getInitials: props.getInitials,
                       communityAgentDisplayName: props.activeCommunityName,
                     }}
+                    afterBody={(
+                      <InteractionAttachments
+                        attachments={selectedRoot.attachments}
+                        onOpenImage={props.onOpenCommunityChatLightbox}
+                      />
+                    )}
                   />
-                  <InteractionAttachments attachments={selectedRoot.attachments} onOpenImage={props.onOpenCommunityChatLightbox} />
-                  <EmbedCards embeds={selectedRoot.embeds} />
                   <div className="community-interaction-thread-anchor-actions">
                     <ReactionSummary
                       rows={selectedRoot.root.reaction_summary}
@@ -659,7 +662,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                           />
                         ) : (
                           <>
-                            <InteractionBody
+                            <InteractionContent
                               text={body}
                               embeds={bundle.embeds}
                               renderTextWithLinks={props.renderTextWithLinks}
@@ -676,9 +679,13 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                                 getInitials: props.getInitials,
                                 communityAgentDisplayName: props.activeCommunityName,
                               }}
+                              afterBody={(
+                                <InteractionAttachments
+                                  attachments={bundle.attachments}
+                                  onOpenImage={props.onOpenCommunityChatLightbox}
+                                />
+                              )}
                             />
-                            <InteractionAttachments attachments={bundle.attachments} onOpenImage={props.onOpenCommunityChatLightbox} />
-                            <EmbedCards embeds={bundle.embeds} />
                             {reply.edited_at ? (
                               <span className="community-interaction-edited">(edited)</span>
                             ) : null}

@@ -341,7 +341,8 @@ Rules:
 - renderers treat link blocks as derived preview metadata when canonical `markdown_text` already contains the URL; they must not append the URL a second time
 - failed preview embeds render no fallback card when the canonical message text already preserves the clickable URL
 - renderers show at most one rich preview per message; additional links remain visible in canonical message text
-- a ready rich preview may replace an exact standalone URL line, but it must not remove the same URL when it appears inside prose
+- a ready rich preview replaces its matching exact standalone URL line at that authored position; it must not move surrounding copy or remove the same URL when it appears inside prose
+- previews without an exact ready standalone URL match retain the trailing position after canonical attachments, preserving pending, inline-link, workspace-reference, and attachment ordering
 - exact consecutive standalone duplicates collapse at presentation time without mutating stored message text
 - default dark and Polynet dark share one semantic chat-link treatment while their surface tokens continue to theme embed cards
 

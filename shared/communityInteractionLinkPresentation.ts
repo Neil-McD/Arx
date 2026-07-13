@@ -5,6 +5,15 @@ export type CommunityInteractionLinkEmbedLike = {
   normalized_source_url?: string | null;
 };
 
+export type CommunityInteractionPresentationSegment<T extends CommunityInteractionLinkEmbedLike> =
+  | { type: "text"; text: string }
+  | { type: "embed"; embed: T };
+
+export type CommunityInteractionPresentation<T extends CommunityInteractionLinkEmbedLike> = {
+  bodySegments: CommunityInteractionPresentationSegment<T>[];
+  trailingEmbeds: T[];
+};
+
 const MAX_RICH_INTERACTION_EMBEDS = 1;
 const STANDALONE_HTTP_URL_RE = /^https?:\/\/\S+$/i;
 const TRAILING_URL_PUNCTUATION_RE = /[.,;:!?)\]}'"]+$/;
@@ -38,41 +47,65 @@ export function selectRichInteractionEmbeds<T extends CommunityInteractionLinkEm
     .slice(0, MAX_RICH_INTERACTION_EMBEDS);
 }
 
-export function interactionBodyTextForEmbeds(
+export function interactionPresentationForEmbeds<T extends CommunityInteractionLinkEmbedLike>(
   rawText: unknown,
-  embeds: readonly CommunityInteractionLinkEmbedLike[],
-): string {
+  embeds: readonly T[],
+): CommunityInteractionPresentation<T> {
   const text = String(rawText ?? "").trim();
-  if (!text) return "";
+  const visibleEmbed = selectRichInteractionEmbeds(embeds)[0] ?? null;
+  if (!text) {
+    return {
+      bodySegments: [],
+      trailingEmbeds: visibleEmbed ? [visibleEmbed] : [],
+    };
+  }
 
-  const readyVisibleLinkUrls = new Set(
-    selectRichInteractionEmbeds(embeds)
-      .filter((embed) => embed.embed_kind === "link" && embed.status === "ready")
-      .map(embedUrlKey)
-      .filter((url): url is string => Boolean(url)),
-  );
+  const readyVisibleLinkUrl =
+    visibleEmbed?.embed_kind === "link" && visibleEmbed.status === "ready"
+      ? embedUrlKey(visibleEmbed)
+      : null;
 
   let previousStandaloneUrl: string | null = null;
-  const nextLines: string[] = [];
+  let visibleEmbedPlaced = false;
+  let textLines: string[] = [];
+  const bodySegments: CommunityInteractionPresentationSegment<T>[] = [];
+  const flushText = () => {
+    const segmentText = textLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    textLines = [];
+    if (segmentText) bodySegments.push({ type: "text", text: segmentText });
+  };
+
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) {
-      nextLines.push(line);
+      textLines.push(line);
       continue;
     }
 
     const standaloneUrl = canonicalHttpUrl(trimmed);
     if (!standaloneUrl) {
       previousStandaloneUrl = null;
-      nextLines.push(line);
+      textLines.push(line);
       continue;
     }
 
     const isConsecutiveDuplicate = standaloneUrl === previousStandaloneUrl;
     previousStandaloneUrl = standaloneUrl;
-    if (isConsecutiveDuplicate || readyVisibleLinkUrls.has(standaloneUrl)) continue;
-    nextLines.push(line);
-  }
+    if (isConsecutiveDuplicate) continue;
 
-  return nextLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    if (!visibleEmbedPlaced && readyVisibleLinkUrl === standaloneUrl && visibleEmbed) {
+      flushText();
+      bodySegments.push({ type: "embed", embed: visibleEmbed });
+      visibleEmbedPlaced = true;
+      continue;
+    }
+
+    textLines.push(line);
+  }
+  flushText();
+
+  return {
+    bodySegments,
+    trailingEmbeds: visibleEmbed && !visibleEmbedPlaced ? [visibleEmbed] : [],
+  };
 }
