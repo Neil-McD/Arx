@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { isDesktopShellContextualBackPage } from "../shared/appShellNavigation.ts";
+import { popDistinctNavSnapshot, type NavSnapshotBase } from "../shared/navSnapshot.ts";
 import { readLegacyWorkspaceRouteContext } from "../shared/webAppRouteState.ts";
 
 function read(path: string): string {
@@ -123,6 +124,25 @@ for (const page of ["settings", "operator"] as const) {
     `${page} must retain a contextual desktop return action`,
   );
 }
+const baseSnapshot: NavSnapshotBase = {
+  page: "community",
+  view: "home",
+  settingsPage: "profile",
+  communitySlug: "polynet",
+  communityTab: "chat",
+  threadId: null,
+};
+const noOpStack = [
+  { ...baseSnapshot, page: "discover" as const, routePath: "/discover" },
+  { ...baseSnapshot, page: "workspace" as const, routePath: "/workspace" },
+  { ...baseSnapshot, routePath: "/c/polynet/preview" },
+];
+assert.equal(
+  popDistinctNavSnapshot(noOpStack, "/c/polynet/preview")?.routePath,
+  "/discover",
+  "back navigation must skip same-route and quarantined Workspace snapshots",
+);
+assert.equal(noOpStack.length, 0, "skipped snapshots must be consumed deterministically");
 assert.match(
   desktopHeader,
   /hasContextualAppBack \? \([\s\S]*props\.activePage === "settings"[\s\S]*props\.onBackFromSettings[\s\S]*props\.onBackToCommunity[\s\S]*\) : null/,

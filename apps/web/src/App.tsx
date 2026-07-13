@@ -290,7 +290,7 @@ import { PRODUCT_DOCS_DEFAULT_SLUG } from "./docs/productDocsMeta";
 import {
   formatBackTargetLabel as formatBackTargetLabelShared,
   type NavSnapshotBase,
-  popNavSnapshot,
+  popDistinctNavSnapshot,
   pushUniqueNavSnapshot,
 } from "../../../shared/navSnapshot";
 import {
@@ -4780,10 +4780,7 @@ export default function App() {
     navigateTo(nextRoutePath, { replace: true });
   };
   const goBack = (): boolean => {
-    let snapshot = popNavSnapshot(navStackRef.current) as NavSnapshot | null;
-    while (snapshot?.page === "workspace" && snapshot.view === "home") {
-      snapshot = popNavSnapshot(navStackRef.current) as NavSnapshot | null;
-    }
+    const snapshot = popDistinctNavSnapshot(navStackRef.current, readCurrentRoutePath());
     if (!snapshot) return false;
     restoreNavSnapshot(snapshot);
     return true;

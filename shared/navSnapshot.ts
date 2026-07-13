@@ -41,8 +41,24 @@ export function pushUniqueNavSnapshot(
   stack.push(snapshot);
 }
 
-export function popNavSnapshot(stack: NavSnapshotBase[]): NavSnapshotBase | null {
-  return stack.pop() ?? null;
+export function popDistinctNavSnapshot<
+  T extends NavSnapshotBase & { routePath?: string | null },
+>(stack: T[], currentRoutePath: string): T | null {
+  const normalizedCurrentRoutePath = currentRoutePath.trim();
+  while (stack.length > 0) {
+    const snapshot = stack.pop() ?? null;
+    if (!snapshot) return null;
+    const isQuarantinedWorkspaceHome = snapshot.page === "workspace" && snapshot.view === "home";
+    const snapshotRoutePath = String(snapshot.routePath ?? "").trim();
+    if (
+      isQuarantinedWorkspaceHome ||
+      (snapshotRoutePath && snapshotRoutePath === normalizedCurrentRoutePath)
+    ) {
+      continue;
+    }
+    return snapshot;
+  }
+  return null;
 }
 
 export type BackTargetLabel =
