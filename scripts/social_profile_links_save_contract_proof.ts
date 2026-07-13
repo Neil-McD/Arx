@@ -36,7 +36,11 @@ assert.match(
   /const saveProfileToCloud = useCallback\(async \(options: SaveProfileToCloudOptions = \{\}\): Promise<boolean>/,
   "profile saves must return a success boolean for modal callers",
 );
-assert.match(adminController, /return false;[\s\S]*onProfileSaveUnauthenticated/, "unauthenticated profile saves must report failure");
+assert.match(
+  adminController,
+  /if \(!session\) \{[\s\S]*onProfileSaveUnauthenticated\?\.\(\);[\s\S]*return false;[\s\S]*\}/,
+  "unauthenticated profile saves must notify the shell and report failure",
+);
 assert.match(adminController, /if \(!saved\) \{[\s\S]*return false;[\s\S]*\}/, "empty profile save responses must report failure");
 assert.match(adminController, /catch \(error\) \{[\s\S]*return false;[\s\S]*\}/, "profile save exceptions must report failure");
 assert.match(adminController, /setProfileSocialLinks\(saved\.social_links/, "successful saves must hydrate social links from server truth");
