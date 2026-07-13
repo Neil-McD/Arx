@@ -2,7 +2,6 @@ import type { AppPage, AppView } from "../../../../shared/appShellNavigation";
 import type { AppShellVariant, PublicRoute } from "../../../../shared/webAppRouteState";
 
 type MobileSettingsView = "index" | "detail";
-type MobileSecondaryMode = "discover" | "community";
 type MobileShellMode = "agent" | "discover" | "community";
 
 export type WebShellProjection = {
@@ -18,7 +17,6 @@ export type WebShellProjection = {
   showDesktopCommunityNav: boolean;
   hasLeftPanel: boolean;
   mobileShellMode: MobileShellMode;
-  mobileSecondaryMode: MobileSecondaryMode;
   showHeaderIslands: boolean;
 };
 
@@ -29,7 +27,6 @@ export function buildWebShellProjection(params: {
   activeView: AppView;
   mobileSettingsView: MobileSettingsView;
   userWantsSessions: boolean;
-  hasSelectedCommunity: boolean;
   isPublicCommunityFunnel: boolean;
 }): WebShellProjection {
   const isAppRoute = params.publicRouteKind === "app";
@@ -99,8 +96,6 @@ export function buildWebShellProjection(params: {
         : params.activePage === "docs"
           ? "discover"
           : "community";
-  const mobileSecondaryMode: MobileSecondaryMode =
-    params.hasSelectedCommunity || isMobileVisitorCommunity ? "community" : "discover";
   const showHeaderIslands =
     isAppRoute &&
     params.activePage === "workspace" &&
@@ -119,7 +114,6 @@ export function buildWebShellProjection(params: {
     showDesktopCommunityNav,
     hasLeftPanel,
     mobileShellMode,
-    mobileSecondaryMode,
     showHeaderIslands,
   };
 }

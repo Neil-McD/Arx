@@ -1,7 +1,6 @@
 import type {
   ComponentProps,
   ReactNode,
-  TouchEventHandler,
 } from "react";
 import { CommunityNav } from "../../../../shared/CommunityNav";
 import { WebMobileTopBar } from "./WebMobileTopBar";
@@ -23,9 +22,6 @@ export type WebShellChromeHostProps = {
   showMobileSettingsShell: boolean;
   showMobilePublicFunnel: boolean;
   mobileOverlay: MobileOverlay;
-  onTouchStart?: TouchEventHandler<HTMLDivElement>;
-  onTouchEnd?: TouchEventHandler<HTMLDivElement>;
-  onTouchCancel?: TouchEventHandler<HTMLDivElement>;
   mobileTopBarProps: ComponentProps<typeof WebMobileTopBar>;
   desktopHeader: WebDesktopShellHeaderProps;
   communityShell: WebCommunityShellProps;
@@ -39,8 +35,15 @@ export type WebShellChromeHostProps = {
 };
 
 export function WebShellChromeHost(props: WebShellChromeHostProps) {
+  const isMobileDedicatedRoot =
+    props.showMobileAppShell &&
+    !props.showMobileSettingsShell &&
+    (props.communityShell.mobileRootPage === "agent" ||
+      props.communityShell.mobileRootPage === "messages");
   const shellHeader = props.showMobileAppShell ? (
-    <WebMobileTopBar {...props.mobileTopBarProps} />
+    isMobileDedicatedRoot ? null : (
+      <WebMobileTopBar {...props.mobileTopBarProps} />
+    )
   ) : (
     <WebDesktopShellHeader {...props.desktopHeader} />
   );
@@ -89,18 +92,13 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   });
 
   return (
-    <div
-      className={rootClassName}
-      onTouchStart={props.onTouchStart}
-      onTouchEnd={props.onTouchEnd}
-      onTouchCancel={props.onTouchCancel}
-    >
+    <div className={rootClassName}>
       {shellHeader}
       <WebMobileCommunityShell communityShell={props.communityShell} />
 
       <div className={shellClassName}>
         {shellSidePanels}
-        {props.mainSurface}
+        {isMobileDedicatedRoot ? null : props.mainSurface}
       </div>
 
       {props.globalOverlays}

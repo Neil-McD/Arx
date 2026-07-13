@@ -100,8 +100,18 @@ for (const [label, source] of [
 }
 assert.match(
   app,
-  /useState<MobileRootPage>\("community"\)[\s\S]*forceCommunityRoot: showMobileShell/,
-  "reachable mobile navigation must remain community-scoped",
+  /useState<MobileRootPage>\("community"\)[\s\S]*mobileRoot=\{showMobileShell && mobileRootPage === "agent"\}/,
+  "mobile navigation may open the global member agent without restoring Workspace",
+);
+assert.doesNotMatch(
+  mobileController,
+  /handleTopbarBackToWorkspace|setActivePage|setActiveView|activePage === "workspace"/,
+  "the mobile AI root must remain independent from the quarantined Workspace surface",
+);
+assert.match(
+  mobileController,
+  /if \(nextRootPage === "agent"\) \{[\s\S]*setMobileRootPage\("agent"\)[\s\S]*return/,
+  "the AI rail destination must select the member-agent presentation only",
 );
 assert.match(
   mobileController,
@@ -110,8 +120,13 @@ assert.match(
 );
 assert.match(
   mobileTopBar,
-  /\{!forceCommunityRoot \? \([\s\S]*Agent[\s\S]*\) : null\}/,
-  "the obsolete mobile Agent selector must be hidden on reachable routes",
+  /mobile-topbar-community-selector/,
+  "the community header must retain the centered community selector",
+);
+assert.doesNotMatch(
+  mobileTopBar,
+  /mobile-topbar-mode|onSelectRootPage|onStartNewThread/,
+  "the obsolete Workspace-era Agent selector and thread action must remain deleted",
 );
 for (const page of ["community", "discover", "docs", "workspace"] as const) {
   assert.equal(

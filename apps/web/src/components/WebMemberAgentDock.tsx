@@ -63,6 +63,7 @@ type ActiveThreadContext = {
 
 type WebMemberAgentDockProps = {
   isVisible: boolean;
+  mobileRoot?: boolean;
   communityId: string | null;
   communityName: string | null;
   surfaceContext: MemberAgentSurfaceContextV1 | null;
@@ -103,6 +104,7 @@ function formatInferenceIssue(issue: InferenceIssueModalState | null): string | 
 
 export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const isOpenSurface = Boolean(props.mobileRoot || isOpen);
   const [threadKey, setThreadKey] = useState<string | null>(null);
   const [episodeId, setEpisodeId] = useState<string | null>(null);
   const [, setThreadContext] = useState<ActiveThreadContext | null>(null);
@@ -253,7 +255,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   }, [props.isVisible]);
 
   useEffect(() => {
-    if (!isOpen || !props.isVisible || !surfaceKind || !props.session) return;
+    if (!isOpenSurface || !props.isVisible || !surfaceKind || !props.session) return;
     let cancelled = false;
     if (activeThreadKeyRef.current) return;
     const scope = agentScopeRef.current;
@@ -292,7 +294,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       cancelled = true;
     };
   }, [
-    isOpen,
+    isOpenSurface,
     loadMessages,
     props.communityId,
     props.ensureSession,
@@ -569,17 +571,22 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
 
   return (
-    <aside className={`member-agent-dock${isOpen ? " is-open" : ""}`} aria-live="polite">
-      <button
-        type="button"
-        className={`member-agent-dock-launcher${turnIsActive ? " is-working" : ""}`}
-        onClick={() => setIsOpen((open) => !open)}
-        aria-label={isOpen ? "Close your agent" : "Open your agent"}
-        title={isOpen ? "Close your agent" : "Open your agent"}
-        aria-expanded={isOpen}
-      >
-        {isOpen ? <X aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
-      </button>
+    <aside
+      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}`}
+      aria-live="polite"
+    >
+      {!props.mobileRoot ? (
+        <button
+          type="button"
+          className={`member-agent-dock-launcher${turnIsActive ? " is-working" : ""}`}
+          onClick={() => setIsOpen((open) => !open)}
+          aria-label={isOpen ? "Close your agent" : "Open your agent"}
+          title={isOpen ? "Close your agent" : "Open your agent"}
+          aria-expanded={isOpen}
+        >
+          {isOpen ? <X aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
+        </button>
+      ) : null}
 
       <section className="member-agent-dock-panel" aria-label="Your Polynet agent">
         <header className="member-agent-dock-header">
@@ -602,9 +609,11 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             >
               <MessageSquarePlus aria-hidden="true" />
             </button>
-            <button type="button" onClick={() => setIsOpen(false)} aria-label="Close" title="Close">
-              <X aria-hidden="true" />
-            </button>
+            {!props.mobileRoot ? (
+              <button type="button" onClick={() => setIsOpen(false)} aria-label="Close" title="Close">
+                <X aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         </header>
 

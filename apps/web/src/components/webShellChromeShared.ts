@@ -12,8 +12,17 @@ import type {
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
 
-export type MobileOverlay = "agent" | "community" | "community_selector" | "members" | null;
-export type MobileRootPage = "threads" | "agent" | "community" | "members";
+export type MobileOverlay = "community" | "community_selector" | "members" | null;
+export type MobileRootPage = "agent" | "community" | "messages";
+
+export type MobileMemberFace = {
+  user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
+};
 
 export type CommunityLike = {
   id: string;
@@ -52,7 +61,10 @@ export type WebDesktopShellHeaderProps = {
 export type WebCommunityShellProps = {
   showMobileShell: boolean;
   mobileOverlay: MobileOverlay;
+  mobileRootPage: MobileRootPage;
+  forceMobileCommunityRoot: boolean;
   setMobileOverlay: (value: MobileOverlay) => void;
+  onSelectMobileRootPage: (page: MobileRootPage) => void;
   activeCommunity: CommunityLike | null;
   communityTab: CommunityTab;
   communityTabIndicators: Partial<Record<CommunityTab, boolean>>;
@@ -69,7 +81,6 @@ export type WebCommunityShellProps = {
   onOpenMobileAgentSettings: () => void;
   canOpenDirectMessages: boolean;
   directMessagesUnreadCount: number;
-  onOpenDirectMessages: () => void;
   onOpenDiscover: () => void;
   onOpenMobileCreateCommunity: () => void;
   communities: CommunityLike[];

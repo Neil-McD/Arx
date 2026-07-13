@@ -35,6 +35,25 @@
   --text-link: var(--accent-gold);
   --text-link-hover: var(--accent-gold-subtle);
 
+  /* Semantic color roles. Identity, selection, and attention are independent. */
+  --accent-brand: #d66a8a;
+  --accent-selection: var(--accent-gold);
+  --accent-agent: #a78bfa;
+  --accent-agent-strong: #8b5cf6;
+  --accent-agent-foreground: #c4b5fd;
+  --accent-agent-surface: rgba(167, 139, 250, 0.16);
+  --accent-attention: var(--accent-brand);
+  --focus-ring: color-mix(in srgb, var(--accent-selection) 62%, white 38%);
+
+  /* Compatibility aliases for older surfaces while semantic names become canonical. */
+  --accent-primary: var(--accent-selection);
+  --accent-pink: var(--accent-brand);
+  --accent-rose: var(--accent-brand);
+  --accent-success: #34d399;
+  --accent-error: #ef4444;
+  --accent-red: var(--accent-error);
+  --accent-green: var(--accent-success);
+
   /* Secondary accent */
   --accent-cyan: #4285f4;
   --accent-cyan-subtle: #2d6de0;
@@ -12674,6 +12693,35 @@ button.community-launch-knowledge-integration-chip:disabled {
   .community-dm-inbox-list {
     flex: 0 1 auto;
     max-height: min(52vh, 420px);
+  }
+
+  .web-direct-messages-host.mobile-root .community-dm-panel {
+    top: 0;
+    right: 0;
+    bottom: calc(var(--mobile-bottom-rail-height) + env(safe-area-inset-bottom, 0px));
+    left: 0;
+    z-index: 30;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    padding: calc(env(safe-area-inset-top, 0px) + 14px) 14px 12px;
+    border: 0;
+    border-radius: 0;
+    background: var(--bg-app, #121214);
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .web-direct-messages-host.mobile-root .community-dm-inbox-panel {
+    height: auto;
+    max-height: none;
+  }
+
+  .web-direct-messages-host.mobile-root .community-dm-inbox-list {
+    flex: 1 1 auto;
+    max-height: none;
   }
 }
 
@@ -30650,7 +30698,7 @@ button.message-citation-chip:hover {
 }
 
 .app-root.mobile-shell .community-chat .chat-messages-inner {
-  min-height: calc(100dvh - var(--mobile-topbar-clearance) - env(safe-area-inset-bottom, 0px) - 96px);
+  min-height: calc(100dvh - var(--mobile-topbar-clearance) - env(safe-area-inset-bottom, 0px) - var(--mobile-bottom-rail-height) - 18px);
 }
 
 .app-root.mobile-shell .community-chat .chat-empty-state {
@@ -30683,14 +30731,14 @@ button.message-citation-chip:hover {
 
 .app-root.mobile-shell .community-chat .chat-input-bar {
   padding: 12px 14px 10px;
-  margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 4px);
+  margin-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height) + 8px);
   border-radius: 24px;
   background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-workspace) 12%);
   border-color: color-mix(in srgb, var(--border-default) 84%, transparent);
 }
 
 .app-root.mobile-shell .community-chat .community-interaction-main-composer .chat-input-bar {
-  margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 4px);
+  margin-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height) + 8px);
 }
 
 .app-root.mobile-shell .community-chat .community-interaction-reply-input-bar {
@@ -30719,7 +30767,7 @@ button.message-citation-chip:hover {
   left: 50%;
   right: auto;
   top: auto;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 92px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height) + 18px);
   transform: translateX(-50%);
   width: 36px;
   min-width: 36px;
