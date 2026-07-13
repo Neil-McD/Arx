@@ -138,6 +138,11 @@ assert.deepEqual(
   normalizeToolArguments("member_conversation_read", { episode_id: "episode_1" }),
   { episodeId: "episode_1" },
 );
+assert.deepEqual(
+  normalizeToolArguments("member_conversation_read", { episodeId: "episode_1" }),
+  { episodeId: "episode_1" },
+  "member conversation read normalization must be idempotent across runtime dispatch",
+);
 assert.throws(
   () => normalizeToolArguments("member_conversation_read", {}),
   /requires episode_id/,

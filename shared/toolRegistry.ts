@@ -1537,7 +1537,7 @@ export function normalizeToolArguments(
     return limit ? { limit } : {};
   }
   if (toolName === "member_conversation_read") {
-    const episodeId = normalizeString(args.episode_id);
+    const episodeId = normalizeString(args.episode_id ?? args.episodeId);
     if (!episodeId) throw new Error("member_conversation_read requires episode_id.");
     return { episodeId: episodeId.slice(0, 160) };
   }
