@@ -20,6 +20,10 @@ import {
   splitBodyIntoMentionSegments,
   type ResolvedMentionForRendering,
 } from "../../../../shared/communityMentionRendering";
+import {
+  interactionPresentationForEmbeds,
+  selectRichInteractionEmbeds,
+} from "../../../../shared/communityInteractionLinkPresentation";
 import { renderChatInlineMarkdown } from "../../../../shared/chatInlineMarkdownUi";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
@@ -252,11 +256,7 @@ export function MessageActions(props: {
 }
 
 export function EmbedCards(props: { embeds: CommunityInteractionEmbed[] }) {
-  const visible = props.embeds.filter(
-    (embed) =>
-      (embed.status === "pending" || embed.status === "ready") &&
-      (embed.embed_kind === "link" || embed.embed_kind === "workspace_ref"),
-  );
+  const visible = selectRichInteractionEmbeds(props.embeds);
   if (visible.length === 0) return null;
   return (
     <div className="community-interaction-embeds">
@@ -679,14 +679,16 @@ export function interactionBodyRenderModeForActor(actorType: string): Interactio
   return actorType === "community_agent" || actorType === "personal_agent" ? "compact_markdown" : "plain";
 }
 
-export function InteractionBody(props: {
+export type InteractionBodyProps = {
   text: string;
   renderTextWithLinks: (text: string) => ReactNode;
   renderMarkdown?: (text: string) => ReactNode;
   renderMode?: InteractionBodyRenderMode;
   mentionContext?: InteractionMentionContext;
-}) {
-  const text = props.text.trim();
+};
+
+export function InteractionBody(props: InteractionBodyProps) {
+  const text = String(props.text ?? "").trim();
   if (!text) return null;
   if (props.renderMode === "compact_markdown" && props.renderMarkdown) {
     return (
@@ -727,6 +729,35 @@ export function InteractionBody(props: {
         <p key={`${index}:${part.slice(0, 24)}`}>{renderPart(part)}</p>
       ))}
     </div>
+  );
+}
+
+export function InteractionContent(
+  props: InteractionBodyProps & {
+    embeds: CommunityInteractionEmbed[];
+    afterBody?: ReactNode;
+  },
+) {
+  const presentation = interactionPresentationForEmbeds(props.text, props.embeds);
+  return (
+    <>
+      {presentation.bodySegments.map((segment, index) =>
+        segment.type === "embed" ? (
+          <EmbedCards key={`embed:${segment.embed.id}`} embeds={[segment.embed]} />
+        ) : (
+          <InteractionBody
+            key={`text:${index}`}
+            text={segment.text}
+            renderTextWithLinks={props.renderTextWithLinks}
+            renderMarkdown={props.renderMarkdown}
+            renderMode={props.renderMode}
+            mentionContext={props.mentionContext}
+          />
+        ),
+      )}
+      {props.afterBody}
+      <EmbedCards embeds={presentation.trailingEmbeds} />
+    </>
   );
 }
 
@@ -979,8 +1010,9 @@ export function CommunityInteractionFeedList(
                               />
                             ) : (
                               <>
-                                <InteractionBody
+                                <InteractionContent
                                   text={body}
+                                  embeds={bundle.embeds}
                                   renderTextWithLinks={props.renderTextWithLinks}
                                   renderMarkdown={props.renderMarkdown}
                                   renderMode={interactionBodyRenderModeForActor(root.actor_type)}
@@ -995,9 +1027,13 @@ export function CommunityInteractionFeedList(
                                     getInitials: props.getInitials,
                                     communityAgentDisplayName: props.activeCommunityName,
                                   }}
+                                  afterBody={(
+                                    <InteractionAttachments
+                                      attachments={bundle.attachments}
+                                      onOpenImage={props.onOpenCommunityChatLightbox}
+                                    />
+                                  )}
                                 />
-                                <InteractionAttachments attachments={bundle.attachments} onOpenImage={props.onOpenCommunityChatLightbox} />
-                                <EmbedCards embeds={bundle.embeds} />
                                 {root.edited_at ? (
                                   <span className="community-interaction-edited">(edited)</span>
                                 ) : null}

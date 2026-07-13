@@ -40,6 +40,7 @@ export function renderTextWithLinks(
     nodes.push(
       <a
         key={`link-${index}`}
+        className="chat-link"
         href={href}
         target="_blank"
         rel="noreferrer noopener"

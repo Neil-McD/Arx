@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  interactionPresentationForEmbeds,
+  selectRichInteractionEmbeds,
+} from "../shared/communityInteractionLinkPresentation.ts";
 
 const root = process.cwd();
 
@@ -43,6 +47,26 @@ const sendController = read("shared/useCommunityChatMutationController.ts");
 const interactions = read("convex/communityInteractions.ts");
 const baseCss = read("apps/web/src/base.css");
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
+const readyFirstLinkEmbed = {
+  embed_kind: "link",
+  status: "ready",
+  source_url: "https://example.com/first",
+  normalized_source_url: "https://example.com/first",
+};
+const readySecondLinkEmbed = {
+  embed_kind: "link",
+  status: "ready",
+  source_url: "https://example.com/second",
+  normalized_source_url: "https://example.com/second",
+};
+const failedFirstLinkEmbed = {
+  ...readyFirstLinkEmbed,
+  status: "failed",
+};
+const pendingFirstLinkEmbed = {
+  ...readyFirstLinkEmbed,
+  status: "pending",
+};
 const publicCommunityStatsMapper = sectionBetween(
   communityPublic,
   "function mapPublicCommunityStats",
@@ -148,7 +172,7 @@ assert.match(
 );
 assert.match(
   projection,
-  /renderMarkdown: \(text: string\) => ReactNode;[\s\S]*InteractionBody[\s\S]*renderMarkdown=\{props\.renderMarkdown\}[\s\S]*renderMode=\{interactionBodyRenderModeForActor\(selectedRoot\.root\.actor_type\)\}[\s\S]*InteractionBody[\s\S]*renderMarkdown=\{props\.renderMarkdown\}[\s\S]*renderMode=\{interactionBodyRenderModeForActor\(reply\.actor_type\)\}/,
+  /renderMarkdown: \(text: string\) => ReactNode;[\s\S]*InteractionContent[\s\S]*renderMarkdown=\{props\.renderMarkdown\}[\s\S]*renderMode=\{interactionBodyRenderModeForActor\(selectedRoot\.root\.actor_type\)\}[\s\S]*InteractionContent[\s\S]*renderMarkdown=\{props\.renderMarkdown\}[\s\S]*renderMode=\{interactionBodyRenderModeForActor\(reply\.actor_type\)\}/,
   "projection should render agent-authored root and reply bodies through compact markdown mode",
 );
 assert.match(
@@ -163,13 +187,101 @@ assert.match(
 );
 assert.match(
   feed,
-  /export function EmbedCards[\s\S]*embed\.status === "pending" \|\| embed\.status === "ready"[\s\S]*embed\.status === "pending"[\s\S]*embed\.status !== "ready"\) return null;[\s\S]*className="community-interaction-embed"/,
-  "interaction embeds should render pending skeletons and ready cards without adding a fallback card for failed previews",
+  /selectRichInteractionEmbeds[\s\S]*export function EmbedCards[\s\S]*const visible = selectRichInteractionEmbeds\(props\.embeds\)[\s\S]*embed\.status === "pending"[\s\S]*embed\.status !== "ready"\) return null;[\s\S]*className="community-interaction-embed"/,
+  "interaction embeds should use the shared single-preview policy before rendering pending skeletons or ready cards",
 );
 assert.doesNotMatch(
   feed,
   /community-interaction-embed is-bare/,
   "interaction embeds should not render failed previews as duplicate bare URL cards",
+);
+assert.match(
+  feed,
+  /export function InteractionContent[\s\S]*interactionPresentationForEmbeds\(props\.text, props\.embeds\)[\s\S]*presentation\.bodySegments\.map[\s\S]*segment\.type === "embed"[\s\S]*props\.afterBody[\s\S]*presentation\.trailingEmbeds/,
+  "interaction content should render authored-order text and embed segments before preserving attachments and trailing previews",
+);
+assert.match(
+  projection,
+  /<InteractionContent[\s\S]*embeds=\{selectedRoot\.embeds\}[\s\S]*afterBody=\{\([\s\S]*<InteractionAttachments[\s\S]*<InteractionContent[\s\S]*embeds=\{bundle\.embeds\}[\s\S]*afterBody=\{\([\s\S]*<InteractionAttachments/,
+  "thread roots and replies should share authored-order presentation while preserving attachment placement",
+);
+assert.equal(
+  selectRichInteractionEmbeds([readyFirstLinkEmbed, readySecondLinkEmbed]).length,
+  1,
+  "a message should render at most one rich embed",
+);
+assert.deepEqual(
+  interactionPresentationForEmbeds("Shared in context: https://example.com/first", [readyFirstLinkEmbed]),
+  {
+    bodySegments: [{ type: "text", text: "Shared in context: https://example.com/first" }],
+    trailingEmbeds: [readyFirstLinkEmbed],
+  },
+  "inline prose links should remain visible while their preview keeps its trailing position",
+);
+assert.deepEqual(
+  interactionPresentationForEmbeds(
+    "Useful context\nhttps://example.com/first\nhttps://example.com/first",
+    [readyFirstLinkEmbed],
+  ),
+  {
+    bodySegments: [
+      { type: "text", text: "Useful context" },
+      { type: "embed", embed: readyFirstLinkEmbed },
+    ],
+    trailingEmbeds: [],
+  },
+  "a ready preview should replace its standalone URL in authored order and collapse consecutive duplicates",
+);
+assert.deepEqual(
+  interactionPresentationForEmbeds(
+    "Read online:\nhttps://example.com/first\n\nDownload the PDF: https://example.com/second\n\nSafe to share.",
+    [readyFirstLinkEmbed, readySecondLinkEmbed],
+  ),
+  {
+    bodySegments: [
+      { type: "text", text: "Read online:" },
+      { type: "embed", embed: readyFirstLinkEmbed },
+      {
+        type: "text",
+        text: "Download the PDF: https://example.com/second\n\nSafe to share.",
+      },
+    ],
+    trailingEmbeds: [],
+  },
+  "a mid-message standalone URL should become an in-flow card without reordering the surrounding copy",
+);
+assert.deepEqual(
+  interactionPresentationForEmbeds(
+    "https://example.com/first\nhttps://example.com/first",
+    [failedFirstLinkEmbed],
+  ),
+  {
+    bodySegments: [{ type: "text", text: "https://example.com/first" }],
+    trailingEmbeds: [],
+  },
+  "failed previews should preserve one standalone URL fallback",
+);
+assert.deepEqual(
+  interactionPresentationForEmbeds("https://example.com/first", [pendingFirstLinkEmbed]),
+  {
+    bodySegments: [{ type: "text", text: "https://example.com/first" }],
+    trailingEmbeds: [pendingFirstLinkEmbed],
+  },
+  "pending previews should preserve the source link and existing trailing skeleton placement",
+);
+assert.deepEqual(
+  interactionPresentationForEmbeds(
+    "https://example.com/first\nhttps://example.com/second",
+    [readyFirstLinkEmbed, readySecondLinkEmbed],
+  ),
+  {
+    bodySegments: [
+      { type: "embed", embed: readyFirstLinkEmbed },
+      { type: "text", text: "https://example.com/second" },
+    ],
+    trailingEmbeds: [],
+  },
+  "additional ready links should remain as text when only the first rich preview is shown",
 );
 assert.match(
   communityAccessViewModel,
@@ -780,6 +892,21 @@ assert.match(
   baseCss,
   /\.community-interaction-body\.community-interaction-markdown\s*\{[\s\S]*display:\s*block;[\s\S]*\.community-interaction-markdown \.md-header\s*\{[\s\S]*font-size:\s*1em;[\s\S]*\.community-interaction-markdown \.md-list\s*\{[\s\S]*padding-left:\s*1\.36em;/,
   "projection markdown should use compact chat-thread typography for agent replies",
+);
+assert.match(
+  baseCss,
+  /--chat-link:\s*var\(--accent-cyan\);[\s\S]*--chat-link-hover:[\s\S]*\.chat-link:visited\s*\{[\s\S]*color:\s*var\(--chat-link\);[\s\S]*\.chat-link:focus-visible\s*\{/,
+  "both dark-family themes should inherit one accessible semantic treatment for chat links",
+);
+assert.match(
+  baseCss,
+  /\.community-interaction-embed\s*\{[\s\S]*max-width:\s*460px;[\s\S]*background:\s*var\(--surface-card\);[\s\S]*\.community-interaction-embed:focus-visible[\s\S]*\.community-interaction-embed-provider\s*\{[\s\S]*color:\s*var\(--text-ink-secondary\);[\s\S]*\.community-interaction-embed-desc\s*\{[\s\S]*-webkit-line-clamp:\s*3;/,
+  "embed cards should inherit theme surfaces while keeping provider and description text readable",
+);
+assert.match(
+  read("shared/linkEmbedUi.tsx"),
+  /className="chat-link"[\s\S]*target="_blank"[\s\S]*rel="noreferrer noopener"/,
+  "auto-linked chat URLs should receive the semantic link class without weakening external-link safety",
 );
 assert.match(
   baseCss,
