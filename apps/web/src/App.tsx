@@ -10765,7 +10765,6 @@ export default function App() {
       parseReplyPrefix,
       truncateReplyPreview,
       renderTextWithLinks,
-      renderMarkdown,
       onScrollToReplyMessage: scrollToCommunityMessage,
       onOpenCommunityChatLightbox: openCommunityChatLightbox,
       onToggleReaction: handleToggleReaction,
