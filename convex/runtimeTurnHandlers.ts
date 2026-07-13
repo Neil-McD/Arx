@@ -729,6 +729,7 @@ export async function handleRuntimeTurnRequest(args: {
       resolvedRuntimeHarnessProfile,
       runtimeExecutionMode: resolvedRuntimeExecutionMode,
       invocationSurface,
+      memberAgentSurfaceContext,
     } = resolved.value;
     const runId =
       String(input.idempotency_key ?? "").trim() ||
@@ -1657,6 +1658,7 @@ export async function handleRuntimeTurnRequest(args: {
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
         invocation_surface: invocationSurface,
+        member_agent_surface_context: memberAgentSurfaceContext,
       },
     });
     await appendRunEvent({
@@ -1689,6 +1691,7 @@ export async function handleRuntimeTurnRequest(args: {
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
         invocation_surface: invocationSurface,
+        member_agent_surface_context: memberAgentSurfaceContext,
       },
     });
     if (runtimeExecutionMode === "agentic") {
@@ -1997,6 +2000,7 @@ export async function handleRuntimeTurnRequest(args: {
             communityResourceLane: runtimeCommunityLensAuthority?.communityResourceLane ?? null,
             communityLensAuthority: runtimeCommunityLensAuthority,
             allowedToolNames: codexVisiblePolynetToolNames,
+            memberAgentSurfaceContext,
           });
           runtimeTurnEnvelopeForRun = codexRuntimeTurnEnvelope;
           let codexRuntimeTurnContext: RuntimeTurnContextPacket;
@@ -2045,6 +2049,8 @@ export async function handleRuntimeTurnRequest(args: {
               timeZone: codexPromptTimeZone,
             }).format(codexPromptGeneratedAt),
             currentTimeZone: codexPromptTimeZone,
+            invocationSurface,
+            memberAgentSurfaceContext,
           });
           await streamAppendRunEvent({
             eventType: "polynet_codex_worker_instructions_resolved",
@@ -2831,6 +2837,7 @@ export async function handleRuntimeTurnRequest(args: {
               threadWorkingState: ownedThread.workingState ?? null,
               allowedToolNames: polynetAllowedToolNamesForRun,
               invocationSurface,
+              memberAgentSurfaceContext,
               activeDaytonaRuntimeSubstrate:
                 activeDaytonaRuntimeSubstrateForPolynetTools,
               apiKeyOverride: providerApiKeyOverride,
@@ -3131,6 +3138,7 @@ export async function handleRuntimeTurnRequest(args: {
           threadWorkingState: ownedThread.workingState ?? null,
           allowedToolNames: polynetAllowedToolNamesForRun,
           invocationSurface,
+          memberAgentSurfaceContext,
           activeDaytonaRuntimeSubstrate:
             activeDaytonaRuntimeSubstrateForPolynetTools,
           apiKeyOverride: providerApiKeyOverride,

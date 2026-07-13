@@ -13,6 +13,8 @@ import {
   type RuntimeEngine,
 } from "../shared/runtimeEngine";
 import type { RuntimeAccountPlan } from "../shared/runtimePrompt";
+import type { RuntimeInvocationSurface } from "../shared/runtimeInvocationSurface";
+import type { MemberAgentSurfaceContextV1 } from "../shared/memberAgentSurfaceContext";
 
 export const POLYNET_CODEX_WORKER_ENGINE_ID = "polynet_codex_worker";
 export const POLYNET_RUNTIME_ENGINE_ID = "runtime_convex";
@@ -315,6 +317,8 @@ export function buildPolynetCodexWorkerTurnInputs(params: {
   currentDateTimeIso: string | null;
   currentDateLabel: string | null;
   currentTimeZone: string | null;
+  invocationSurface?: RuntimeInvocationSurface;
+  memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
 }): PolynetCodexWorkerTurnInputs {
   const projectContext = params.runtimeTurnContext.projectContext ?? null;
   return buildRuntimeCodexPromptProjection({
@@ -338,6 +342,8 @@ export function buildPolynetCodexWorkerTurnInputs(params: {
     currentDateTimeIso: params.currentDateTimeIso,
     currentDateLabel: params.currentDateLabel,
     currentTimeZone: params.currentTimeZone,
+    invocationSurface: params.invocationSurface,
+    memberAgentSurfaceContext: params.memberAgentSurfaceContext,
     conversationMessages: params.conversationMessages,
     latestUserText: params.latestUserText,
   });

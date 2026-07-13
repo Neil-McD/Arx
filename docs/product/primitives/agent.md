@@ -24,7 +24,7 @@ Without the agent, the community is mostly conversation and content. With the ag
 
 The member's personal agent should remain one continuous intelligent surface across Polynet, not become a separate agent for every community.
 
-The bottom-right agent belongs to the signed-in member. It keeps that member's episodic history while using the community selected by the current surface as a server-validated lens for subsequent turns.
+The bottom-right agent belongs to the signed-in member. It keeps that member's episodic history while orienting to the current Polynet surface. Community pages use that community as a server-validated lens for subsequent turns; Discover and generic platform pages carry no community lens.
 
 ## System Mental Model
 
@@ -34,11 +34,12 @@ The high-level order is:
 
 1. platform doctrine
 2. agent soul
-3. community lens, if backend validated
-4. workspace context
-5. agent operating policy
-6. repo instruction docs, where relevant to the active runtime lane
-7. user message content
+3. current Polynet surface
+4. community lens, if backend validated
+5. workspace context
+6. agent operating policy
+7. repo instruction docs, where relevant to the active runtime lane
+8. user message content
 
 Runtime inputs can include user/session state, thread history, community resources, skills, apps/MCP tools, and runtime policy. Those inputs do not outrank the authority stack.
 
@@ -51,6 +52,7 @@ The current product model supports:
 - on-demand episodic recall across that member's prior conversations
 - read-only recall compatibility for retained legacy per-community episodes
 - community lens switching inside threads
+- deterministic Discover, community-section, and generic platform-page orientation
 - community resources and skills as controlled context inputs
 - apps/MCPs as explicit capability surfaces
 - personal memory as an explicit user-owned context layer
@@ -69,11 +71,14 @@ The current product model supports:
 8. The agent should preserve broader user intent when the request is not actually community-scoped.
 9. Community navigation may change the next-turn lens, but it must not replace the member's agent or conversation.
 10. Retained legacy per-community episodes are historical recall sources only; new messages and runtime turns use the active global episode.
+11. Page context guides relevance but cannot grant community access or tools.
+12. Discover must not silently inherit Polynet or the last visited community as its active lens.
 
 ## Examples
 
 - A member asks a general question in a workspace thread with no community lens active.
 - A member switches into a community lens and asks the agent to use the community's resources.
+- A member asks for help comparing communities from Discover with no active community lens.
 - A builder configures a community agent to follow a specific methodology.
 - A selected skill shapes the output format for a repeated workflow.
 

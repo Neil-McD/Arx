@@ -46,6 +46,10 @@ import {
   buildMemberAgentConversationContext,
   type MemberAgentStoredMessage,
 } from "../shared/memberAgentConversationContext";
+import {
+  normalizeMemberAgentSurfaceContext,
+  type MemberAgentSurfaceContextV1,
+} from "../shared/memberAgentSurfaceContext";
 
 export type RuntimeCapabilityFamily = CapabilityFamily;
 
@@ -55,6 +59,7 @@ export type RuntimeTurnInput = {
   runtime_engine?: RuntimeEngine | null;
   surface?: "web";
   invocation_surface?: RuntimeInvocationSurface | null;
+  surface_context?: unknown;
   requested_agentic_tools?: boolean | null;
   requested_funding_source?:
     | "demo_public"
@@ -131,6 +136,7 @@ export type RuntimeTurnResolution = {
   resolvedRuntimeHarnessProfile: string;
   runtimeExecutionMode: "agentic" | "chat";
   invocationSurface: RuntimeInvocationSurface;
+  memberAgentSurfaceContext: MemberAgentSurfaceContextV1 | null;
 };
 
 function resolveRequestedAgenticTools(raw: unknown): boolean {
@@ -348,6 +354,21 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     requestedSurface: input.invocation_surface,
     threadKey,
   });
+  const memberAgentSurfaceContext =
+    invocationSurface === "member_agent_dock"
+      ? normalizeMemberAgentSurfaceContext(input.surface_context)
+      : null;
+  if (invocationSurface === "member_agent_dock" && !memberAgentSurfaceContext) {
+    return {
+      ok: false,
+      response: fail(400, {
+        ok: false,
+        code: "member_agent_surface_context_required",
+        error: "member_agent_surface_context_required",
+        message: "The member agent turn requires a valid current surface.",
+      }),
+    };
+  }
 
   setStage("messages");
   let conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
@@ -575,17 +596,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   let runtimeCommunitySystemPrompt: string | null = null;
   let runtimeCommunityLensAuthority: CommunityLensAuthority | null = null;
   const threadCommunityId = String(ownedThread.communityId ?? "").trim();
-  if (invocationSurface === "member_agent_dock" && !threadCommunityId) {
-    return {
-      ok: false,
-      response: fail(403, {
-        ok: false,
-        code: "member_agent_community_required",
-        error: "member_agent_community_required",
-        message: "The member agent dock requires an authorized community context.",
-      }),
-    };
-  }
   if (
     invocationSurface === "member_agent_dock" &&
     isReadOnlyLegacyMemberAgentThreadKey(threadKey)
@@ -659,6 +669,26 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       };
     }
   }
+  if (invocationSurface === "member_agent_dock" && memberAgentSurfaceContext) {
+    const surfaceCommunitySlug =
+      memberAgentSurfaceContext.kind === "community"
+        ? memberAgentSurfaceContext.community_slug
+        : null;
+    const lensMatchesSurface = surfaceCommunitySlug
+      ? runtimeCommunitySlug === surfaceCommunitySlug
+      : runtimeCommunityId === null;
+    if (!lensMatchesSurface) {
+      return {
+        ok: false,
+        response: fail(409, {
+          ok: false,
+          code: "member_agent_surface_lens_mismatch",
+          error: "member_agent_surface_lens_mismatch",
+          message: "The visible page changed before the member agent turn could start.",
+        }),
+      };
+    }
+  }
 
   const runtimeProjectId = String(ownedThread.projectId ?? "").trim() || null;
   const resolvedRuntimeCapabilityFamilies = restrictCapabilityFamiliesForInvocationSurface({
@@ -726,6 +756,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
       runtimeExecutionMode,
       invocationSurface,
+      memberAgentSurfaceContext,
     },
   };
 }

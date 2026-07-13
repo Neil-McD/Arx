@@ -20,6 +20,10 @@ import {
   buildRuntimeInvocationSurfacePrompt,
   type RuntimeInvocationSurface,
 } from "./runtimeInvocationSurface.ts";
+import {
+  renderMemberAgentSurfaceContextForPrompt,
+  type MemberAgentSurfaceContextV1,
+} from "./memberAgentSurfaceContext.ts";
 
 export type ThreadWorkingStatePrompt = {
   version?: number | null;
@@ -163,6 +167,7 @@ export type RuntimePlatformHarnessPromptParams = RuntimeCommunityPromptFields & 
   currentDateLabel?: string | null;
   currentTimeZone?: string | null;
   invocationSurface?: RuntimeInvocationSurface;
+  memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
   memberIdentityContextMd?: string | null;
 };
 
@@ -849,7 +854,20 @@ export function buildPlatformHarnessRuntimePromptBundle(
             layer: "scoped",
             owner: "runtime",
             source: "shared/runtimeInvocationSurface.ts#buildRuntimeInvocationSurfacePrompt",
-            text: buildRuntimeInvocationSurfacePrompt(params.invocationSurface),
+            text: buildRuntimeInvocationSurfacePrompt(
+              params.invocationSurface,
+              params.memberAgentSurfaceContext,
+            ),
+          }),
+          buildRuntimePromptSection({
+            id: "current_surface",
+            layer: "scoped",
+            owner: "runtime",
+            source: "shared/memberAgentSurfaceContext.ts#renderMemberAgentSurfaceContextForPrompt",
+            text: renderMemberAgentSurfaceContextForPrompt(
+              params.memberAgentSurfaceContext,
+              params.communityName,
+            ),
           }),
           buildRuntimePromptSection({
             id: "member_identity_context",

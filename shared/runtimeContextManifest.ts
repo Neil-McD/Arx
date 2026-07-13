@@ -11,6 +11,10 @@ import type { RuntimeTurnEnvelopeV1 } from "./runtimeTurnEnvelope.ts";
 import type { RuntimeTurnContextPacket } from "./runtimeTurnContextPacket.ts";
 import type { RuntimeInvocationSurface } from "./runtimeInvocationSurface.ts";
 import type { MemberIdentityContextStatus } from "./memberAgentIdentityContext.ts";
+import {
+  normalizeMemberAgentSurfaceContext,
+  type MemberAgentSurfaceContextV1,
+} from "./memberAgentSurfaceContext.ts";
 
 export type RuntimeContextManifestOwner =
   | "platform"
@@ -108,6 +112,7 @@ export type RuntimeContextManifestV1 = {
     resourceLane: CommunityResourceRuntimeLaneState["lane"];
     harnessName: string | null;
     inferenceSource: string | null;
+    memberAgentSurfaceContext: MemberAgentSurfaceContextV1 | null;
   };
   request: {
     latestUserText: string | null;
@@ -171,6 +176,7 @@ export type BuildRuntimeContextManifestInput = {
   selectedCommunitySkills?: readonly ManifestSkillInput[] | null;
   hasBrowserBuiltDemoPrompt?: boolean | null;
   invocationSurface?: RuntimeInvocationSurface | null;
+  memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
   memberIdentityContextMd?: string | null;
   memberIdentityContextStatus?: MemberIdentityContextStatus | null;
 };
@@ -438,6 +444,26 @@ function buildPromptEntries(params: BuildRuntimeContextManifestInput & {
       injected: true,
       source: "shared/runtimePrompt.ts",
       reason: "member-configured agent posture",
+    });
+  }
+  if (params.invocationSurface === "member_agent_dock") {
+    prompts.push({
+      id: "invocation_surface",
+      owner: "runtime",
+      authority: "runtime",
+      injected: true,
+      source: "shared/runtimeInvocationSurface.ts",
+      reason: "member-owned private agent surface boundary",
+    });
+  }
+  if (params.memberAgentSurfaceContext) {
+    prompts.push({
+      id: "current_surface",
+      owner: "runtime",
+      authority: "scoped",
+      injected: true,
+      source: "shared/memberAgentSurfaceContext.ts",
+      reason: "bounded current-page orientation without capability authority",
     });
   }
   if (hasMemberIdentityContext(params)) {
@@ -847,6 +873,9 @@ export function buildRuntimeContextManifest(
       resourceLane: resourceLane.lane,
       harnessName: compactText(input.harnessName, 80),
       inferenceSource: compactText(input.inferenceSource, 80),
+      memberAgentSurfaceContext: normalizeMemberAgentSurfaceContext(
+        input.memberAgentSurfaceContext,
+      ),
     },
     request: {
       latestUserText,

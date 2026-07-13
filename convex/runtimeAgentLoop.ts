@@ -104,6 +104,7 @@ import {
   renderMemberAgentIdentityContext,
   type MemberIdentityContextStatus,
 } from "../shared/memberAgentIdentityContext.ts";
+import type { MemberAgentSurfaceContextV1 } from "../shared/memberAgentSurfaceContext.ts";
 import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { parseProviderModelRef } from "./httpInferenceConfig";
@@ -1469,6 +1470,7 @@ async function executeRetrievalAgentLoop(
     loopBudget: RuntimeKernelBudget;
     allowedToolNames: readonly RetrievalToolName[];
     invocationSurface?: RuntimeInvocationSurface;
+    memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
     communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     projectId?: string | null;
@@ -1596,6 +1598,7 @@ async function executeRetrievalAgentLoop(
     communityResourceLane: resolvedHarness.communityResourceLane,
     communityLensAuthority: params.communityLensAuthority ?? null,
     allowedToolNames: effectiveAllowedToolNames,
+    memberAgentSurfaceContext: params.memberAgentSurfaceContext,
   });
   try {
     await params.refreshRuntimeContextSnapshot?.("started", runtimeTurnEnvelope);
@@ -1666,6 +1669,7 @@ async function executeRetrievalAgentLoop(
     selectedPersonalSkills: selectedUserPlatformSkills,
     selectedCommunitySkills,
     invocationSurface: params.invocationSurface,
+    memberAgentSurfaceContext: params.memberAgentSurfaceContext,
     memberIdentityContextMd,
     memberIdentityContextStatus,
   });
@@ -1691,6 +1695,7 @@ async function executeRetrievalAgentLoop(
     currentTimeZone: runtimeTimeZone,
     accountPlan: params.accountPlan,
     invocationSurface: params.invocationSurface ?? "workspace",
+    memberAgentSurfaceContext: params.memberAgentSurfaceContext,
     memberIdentityContextMd,
   });
   const promptSuffix = executionSession.buildPromptSuffix();
@@ -2788,6 +2793,7 @@ async function executeChatToolsAgentLoop(
     runId: string;
     allowedToolNames: readonly RetrievalToolName[];
     invocationSurface?: RuntimeInvocationSurface;
+    memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
     communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;

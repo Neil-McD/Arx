@@ -1441,7 +1441,7 @@ function buildMemberAgentChannelResponse(args: {
   channel: MemberAgentChannelLike;
   episode: MemberAgentEpisodeLike;
   thread: ThreadLike;
-  communityId: string;
+  communityId: string | null;
 }) {
   const threadKey = String(args.thread.threadKey ?? "").trim();
   if (!threadKey) throw new Error("member_agent_thread_key_missing");
@@ -1461,7 +1461,7 @@ function buildMemberAgentChannelResponse(args: {
 async function ensureGlobalMemberAgentChannelCore(args: {
   ctx: any;
   ownerId: any;
-  initialCommunity: any;
+  initialCommunity: any | null;
   nowMs: number;
 }) {
   const existingChannel = await getGlobalMemberAgentChannel({
@@ -1486,8 +1486,7 @@ async function ensureGlobalMemberAgentChannelCore(args: {
       episodeOrdinal: episode.ordinal,
       nowMs: args.nowMs,
     });
-    const communityId = String(thread.communityId ?? "").trim();
-    if (!communityId) throw new Error("member_agent_community_required");
+    const communityId = String(thread.communityId ?? "").trim() || null;
     return buildMemberAgentChannelResponse({
       channel: existingChannel,
       episode,
@@ -1496,7 +1495,7 @@ async function ensureGlobalMemberAgentChannelCore(args: {
     });
   }
 
-  const communityId = String(args.initialCommunity._id);
+  const communityId = String(args.initialCommunity?._id ?? "").trim() || null;
   const threadKey = buildGlobalMemberAgentEpisodeThreadKey(1);
   const collision = await getCloudThreadByThreadKeyInternal({
     ctx: args.ctx,
@@ -1508,7 +1507,7 @@ async function ensureGlobalMemberAgentChannelCore(args: {
     ownerId: args.ownerId,
     threadKey,
     titleSource: "auto",
-    communityId,
+    ...(communityId ? { communityId } : null),
     modelId: DEFAULT_ACTIVE_MODEL_ID,
     runtimeEngine: "polynet",
     contextVersion: 0,
@@ -1544,7 +1543,7 @@ export const ensureMemberAgentGlobalChannel = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
-    initialCommunityId: v.id("communities"),
+    initialCommunityId: v.optional(v.id("communities")),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -1553,11 +1552,15 @@ export const ensureMemberAgentGlobalChannel = mutation({
       ownerId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
-    const { community } = await requireCommunityChatAccess({
-      ctx,
-      communityId: args.initialCommunityId,
-      userId: ownerId,
-    });
+    const community = args.initialCommunityId
+      ? (
+          await requireCommunityChatAccess({
+            ctx,
+            communityId: args.initialCommunityId,
+            userId: ownerId,
+          })
+        ).community
+      : null;
     return await ensureGlobalMemberAgentChannelCore({
       ctx,
       ownerId,
@@ -1571,7 +1574,7 @@ export const startNewMemberAgentGlobalEpisode = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
-    initialCommunityId: v.id("communities"),
+    initialCommunityId: v.optional(v.id("communities")),
     expectedActiveEpisodeId: v.id("memberAgentEpisodes"),
     nowMs: v.optional(v.number()),
   },
@@ -1581,11 +1584,15 @@ export const startNewMemberAgentGlobalEpisode = mutation({
       ownerId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
-    const { community } = await requireCommunityChatAccess({
-      ctx,
-      communityId: args.initialCommunityId,
-      userId: ownerId,
-    });
+    const community = args.initialCommunityId
+      ? (
+          await requireCommunityChatAccess({
+            ctx,
+            communityId: args.initialCommunityId,
+            userId: ownerId,
+          })
+        ).community
+      : null;
     const nowMs = args.nowMs ?? Date.now();
     await ensureGlobalMemberAgentChannelCore({
       ctx,
@@ -1610,7 +1617,7 @@ export const startNewMemberAgentGlobalEpisode = mutation({
       currentEpisode.ordinal + 1,
       Number.isSafeInteger(channel.nextOrdinal) ? channel.nextOrdinal : 2,
     );
-    const communityId = String(community._id);
+    const communityId = String(community?._id ?? "").trim() || null;
     const threadKey = buildGlobalMemberAgentEpisodeThreadKey(ordinal);
     const collision = await getCloudThreadByThreadKeyInternal({ ctx, ownerId, threadKey });
     if (collision) throw new Error("member_agent_episode_thread_collision");
@@ -1618,7 +1625,7 @@ export const startNewMemberAgentGlobalEpisode = mutation({
       ownerId,
       threadKey,
       titleSource: "auto",
-      communityId,
+      ...(communityId ? { communityId } : null),
       modelId: DEFAULT_ACTIVE_MODEL_ID,
       runtimeEngine: "polynet",
       contextVersion: 0,

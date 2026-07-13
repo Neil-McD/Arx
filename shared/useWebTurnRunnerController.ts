@@ -741,6 +741,9 @@ export function useWebTurnRunnerController<
               stream: streamRuntimeTurn,
               surface: "web",
               invocation_surface: params.invocationSurface ?? "workspace",
+              ...(params.surfaceContext
+                ? { surface_context: params.surfaceContext }
+                : null),
               model_id: params.preferredModelId,
               ...(params.runtimeEngine
                 ? { runtime_engine: params.runtimeEngine }

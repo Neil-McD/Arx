@@ -530,6 +530,7 @@ import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebSt
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
 import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeHostProps";
+import type { MemberAgentSurfaceContextV1 } from "../../../shared/memberAgentSurfaceContext";
 
 const WebAppMainSurfaceHost = lazy(() =>
   import("./components/WebAppMainSurfaceHost").then((module) => ({
@@ -11581,21 +11582,40 @@ export default function App() {
           }
         : null,
   });
-  const canonicalPolynetMemberAgentCommunity =
-    communities.find(
-      (community) => String(community.slug ?? "").trim().toLowerCase() === "polynet",
-    ) ?? null;
-  const memberAgentDockCommunity =
-    activePage === "community"
-      ? activeCommunity
-      : canonicalPolynetMemberAgentCommunity;
+  const memberAgentDockCommunity = activePage === "community" ? activeCommunity : null;
+  const memberAgentSurfaceContext: MemberAgentSurfaceContextV1 | null =
+    activePage === "community" && memberAgentDockCommunity?.slug
+      ? {
+          version: 1,
+          kind: "community",
+          community_slug: memberAgentDockCommunity.slug,
+          section: communityTab,
+        }
+      : activePage === "discover"
+        ? { version: 1, kind: "discover", section: "communities" }
+        : activePage === "settings" ||
+            activePage === "docs" ||
+            activePage === "operator" ||
+            activePage === "workspace"
+          ? {
+              version: 1,
+              kind: "platform",
+              page: activePage,
+              section:
+                activePage === "settings"
+                  ? settingsPage
+                  : activePage === "operator"
+                    ? activeOperatorTab
+                    : null,
+            }
+          : null;
   const isMemberAgentDockVisible =
     Boolean(session) &&
     publicRoute.kind === "app" &&
     activePage !== "landing" &&
     activePage !== "onboarding" &&
     hasResolvedCommunities &&
-    Boolean(memberAgentDockCommunity?.id) &&
+    Boolean(memberAgentSurfaceContext) &&
     !isCommunityLaunchSetupModalOpen &&
     !isDirectMessagesOpen &&
     !isOnboardingModalOpen;
@@ -11606,7 +11626,8 @@ export default function App() {
         <WebMemberAgentDock
           isVisible={isMemberAgentDockVisible}
           communityId={memberAgentDockCommunity?.id ?? null}
-          communityName={memberAgentDockCommunity?.name ?? "Polynet"}
+          communityName={memberAgentDockCommunity?.name ?? null}
+          surfaceContext={memberAgentSurfaceContext}
           session={session}
           ensureSession={ensureUsableAuthSession}
           fetchPublic={fetchWithPublic}

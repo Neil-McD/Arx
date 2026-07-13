@@ -34,6 +34,10 @@ import {
   type CloudMessageTransportRow,
 } from "../../../../shared/cloudThreadsRead";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../../../../shared/modelCatalog";
+import {
+  describeMemberAgentSurface,
+  type MemberAgentSurfaceContextV1,
+} from "../../../../shared/memberAgentSurfaceContext";
 import { useWebTurnRunnerController } from "../../../../shared/useWebTurnRunnerController";
 import type {
   InferenceIssueModalState,
@@ -53,14 +57,15 @@ type AgentScope = {
 };
 
 type ActiveThreadContext = {
-  communityId: string;
+  communityId: string | null;
   contextVersion: number;
 };
 
 type WebMemberAgentDockProps = {
   isVisible: boolean;
   communityId: string | null;
-  communityName: string;
+  communityName: string | null;
+  surfaceContext: MemberAgentSurfaceContextV1 | null;
   session: AuthSession | null;
   ensureSession: (
     session?: AuthSession | null,
@@ -121,6 +126,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     generation: 0,
   });
   const scopeUserId = props.session?.user.id ?? null;
+  const surfaceKind = props.surfaceContext?.kind ?? null;
   if (agentScopeRef.current.userId !== scopeUserId) {
     agentScopeRef.current = {
       userId: scopeUserId,
@@ -247,7 +253,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   }, [props.isVisible]);
 
   useEffect(() => {
-    if (!isOpen || !props.isVisible || !props.communityId || !props.session) return;
+    if (!isOpen || !props.isVisible || !surfaceKind || !props.session) return;
     let cancelled = false;
     if (activeThreadKeyRef.current) return;
     const scope = agentScopeRef.current;
@@ -262,7 +268,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         if (!usableSession || cancelled || !isCurrentScope(scope)) return;
         const thread = await ensureCloudMemberAgentGlobalChannel({
           session: usableSession,
-          initialCommunityId: props.communityId!,
+          initialCommunityId: props.communityId,
         });
         if (cancelled || !isCurrentScope(scope)) return;
         activeThreadKeyRef.current = thread.thread_key;
@@ -277,7 +283,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       } catch (error) {
         if (cancelled || !isCurrentScope(scope)) return;
         console.warn("member_agent_dock_open_failed", error);
-        setLocalError("Your agent could not open in this community.");
+        setLocalError("Your agent could not open.");
       } finally {
         if (!cancelled && isCurrentScope(scope)) setIsPreparing(false);
       }
@@ -292,6 +298,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     props.ensureSession,
     props.isVisible,
     props.session,
+    surfaceKind,
     isCurrentScope,
   ]);
 
@@ -303,12 +310,11 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const visibleMessages = messages.filter((message) => message.role !== "system");
   const dockError = localError ?? formatInferenceIssue(inferenceIssue);
 
-  const observeThreadContext = useCallback((communityId: string, contextVersion: number) => {
+  const observeThreadContext = useCallback((communityId: string | null, contextVersion: number) => {
     const next = {
-      communityId: String(communityId ?? "").trim(),
+      communityId: String(communityId ?? "").trim() || null,
       contextVersion: Math.max(0, Math.floor(contextVersion)),
     };
-    if (!next.communityId) throw new Error("member_agent_community_required");
     activeThreadContextRef.current = next;
     setThreadContext(next);
   }, []);
@@ -317,7 +323,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     async (
       channel: CloudMemberAgentChannel,
       session: AuthSession,
-      desiredCommunityId: string,
+      desiredCommunityId: string | null,
     ): Promise<CloudMemberAgentChannel> => {
       if (channel.community_id === desiredCommunityId) {
         observeThreadContext(channel.community_id, channel.context_version);
@@ -382,7 +388,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       isPreparing ||
       isStartingNewChat ||
       !episodeId ||
-      !props.communityId ||
+      !props.surfaceContext ||
       !props.session
     ) {
       return;
@@ -446,7 +452,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       turnIsActive ||
       isPreparing ||
       isStartingNewChat ||
-      !props.communityId ||
+      !props.surfaceContext ||
       !props.session
     ) {
       return;
@@ -457,7 +463,13 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     const retry = retryRef.current;
     const messageId = retry?.text === text ? retry.messageId : crypto.randomUUID();
     const scope = agentScopeRef.current;
-    const desiredCommunityId = props.communityId;
+    const desiredCommunityId =
+      props.surfaceContext.kind === "community" ? props.communityId : null;
+    if (props.surfaceContext.kind === "community" && !desiredCommunityId) {
+      setInput(text);
+      setLocalError("This community context is still loading. Try again.");
+      return;
+    }
     let targetThreadKey: string | null = null;
     try {
       const usableSession = await props.ensureSession(
@@ -516,6 +528,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         userMessageKey: messageId,
         runtimeEngine: "polynet",
         invocationSurface: "member_agent_dock",
+        surfaceContext: props.surfaceContext,
         requestedFundingSource: "auto",
         requestedAgenticTools: true,
         replyToId: messageId,
@@ -545,7 +558,12 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     }
   };
 
-  if (!props.isVisible || !props.communityId) return null;
+  if (!props.isVisible || !props.surfaceContext) return null;
+
+  const surfaceLabel = describeMemberAgentSurface(
+    props.surfaceContext,
+    props.communityName,
+  );
 
   const shouldRenderStreamedText =
     Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
@@ -571,7 +589,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             </span>
             <span>
               <strong>Your agent</strong>
-              <small>{turnIsActive ? "Working" : `${props.communityName} context`}</small>
+              <small>{turnIsActive ? "Working" : `${surfaceLabel} context`}</small>
             </span>
           </div>
           <div className="member-agent-dock-header-actions">
@@ -597,7 +615,11 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
           !isStartingNewChat ? (
             <div className="member-agent-dock-empty">
               <MessageCircle aria-hidden="true" />
-              <p>Ask your agent about {props.communityName}.</p>
+              <p>
+                {props.surfaceContext.kind === "discover"
+                  ? "Ask your agent to help you explore communities."
+                  : `Ask your agent about ${surfaceLabel}.`}
+              </p>
             </div>
           ) : null}
 
@@ -639,7 +661,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
               ) : turnIsActive ? (
                 <div className="member-agent-dock-reasoning">
                   <LoaderCircle aria-hidden="true" />
-                  <span>Getting oriented in {props.communityName}</span>
+                  <span>Getting oriented in {surfaceLabel}</span>
                 </div>
               ) : null}
               {shouldRenderStreamedText ? (
@@ -664,7 +686,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
                 event.currentTarget.form?.requestSubmit();
               }
             }}
-            placeholder={`Message your agent in ${props.communityName}`}
+            placeholder={`Message your agent in ${surfaceLabel}`}
             aria-label="Message your agent"
             rows={1}
             maxLength={8000}

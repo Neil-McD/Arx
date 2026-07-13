@@ -23,8 +23,10 @@ personal agent runtime under the active community lens.
 1. `member_agent_dock`
    - belongs to the signed-in member, not the community
    - uses one stable private channel per member across Polynet; the channel points to one active hidden conversation episode backed by the existing thread/message runtime
-   - the active episode thread holds the current server-validated community lens; changing communities changes the lens for subsequent turns without changing the agent, channel, episode, or prior messages
-   - every runtime run captures immutable community-lens id and context-version provenance before execution
+   - every turn carries a bounded current-surface snapshot; community pages identify their exact section, Discover carries no community lens, and generic platform pages remain explicit instead of silently falling back to Polynet
+   - the active episode thread holds the optional server-validated community lens; changing communities changes the lens for subsequent turns without changing the agent, channel, episode, or prior messages, while entering Discover clears the lens before the next turn
+   - the server rejects community surface snapshots that do not match the thread's validated lens; page context guides relevance but never grants authority
+   - every runtime run captures immutable surface context plus community-lens id and context-version provenance before execution
    - `Start fresh conversation` closes the active episode and atomically moves the channel to a fresh episode without deleting or exposing a picker for prior transcripts
    - community deletion makes that community unavailable as a future lens but does not close the member's global channel or episodes
    - requester-funded and server-bound to an authorized community lens

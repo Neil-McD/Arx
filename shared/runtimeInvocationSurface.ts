@@ -1,5 +1,6 @@
 import type { CapabilityFamily } from "./canonicalGateEngine.ts";
 import type { RetrievalToolName } from "./retrievalTools.ts";
+import type { MemberAgentSurfaceContextV1 } from "./memberAgentSurfaceContext.ts";
 
 export type RuntimeInvocationSurface = "workspace" | "member_agent_dock";
 
@@ -109,12 +110,16 @@ export function restrictToolNamesForInvocationSurface(params: {
 
 export function buildRuntimeInvocationSurfacePrompt(
   invocationSurface: RuntimeInvocationSurface,
+  surfaceContext?: MemberAgentSurfaceContextV1 | null,
 ): string | null {
   if (invocationSurface !== "member_agent_dock") return null;
+  const hasCommunityLens = surfaceContext?.kind === "community";
   return [
     "INVOCATION_SURFACE",
-    "You are speaking in the member's private Polynet agent dock under the active community lens.",
-    "You are the member's own Polynet agent working under this community lens.",
+    "You are speaking in the member's private Polynet agent dock on their current Polynet surface.",
+    hasCommunityLens
+      ? "You are the member's own Polynet agent working under the server-validated active community lens."
+      : "You are the member's own Polynet agent. No community lens is active on this surface.",
     "You are not the community's agent. The community has a separate community-owned agent on community surfaces.",
     "Treat this as a normal private conversation with the member. Use community context when relevant without pretending to speak for the community.",
     "Your conversation episodes belong to this member across Polynet, not to individual communities. Prior episodes are not injected automatically. When the member refers to earlier work and the current episode is insufficient, list their conversations first, then read only the relevant episode before answering.",
