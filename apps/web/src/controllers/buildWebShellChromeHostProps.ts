@@ -33,11 +33,12 @@ export function buildWebShellChromeHostProps(params: {
   activeCommunity: CommunityLike | null;
   activeCommunityAttentionCount: number;
   activeCommunityMemberFaces: MobileMemberFace[];
-  activeCommunityMemberCount: number | null;
+  activeCommunityOnlineCount: number | null;
   openMobileDrawer: () => void;
   handleExitMobileSettings: () => void;
   handleCloseMobileThreadPage: () => void;
   handleSelectMobileRootPage: WebShellChromeHostProps["communityShell"]["onSelectMobileRootPage"];
+  openMobileAgent: () => void;
   setMobileOverlay: (value: MobileOverlay) => void;
   isPublicCommunityFunnel: boolean;
   isPublicFunnelPreviewRoute: boolean;
@@ -101,9 +102,7 @@ export function buildWebShellChromeHostProps(params: {
     mobileOverlay: params.mobileOverlay,
     mobileTopBarProps: {
       mode: params.showMobileSettingsShell ? "agent" : params.mobileShellMode,
-      rootPage: params.showMobileSettingsShell
-        ? "agent"
-        : params.forceMobileCommunityRoot
+      rootPage: params.forceMobileCommunityRoot
           ? "community"
           : params.mobileRootPage,
       isThreadPage: params.mobileThreadPageOpen,
@@ -124,7 +123,7 @@ export function buildWebShellChromeHostProps(params: {
       activeCommunityAttentionCount: params.activeCommunityAttentionCount,
       canViewMembers: params.canViewMembersActiveCommunity,
       memberFaces: params.activeCommunityMemberFaces,
-      memberCount: params.activeCommunityMemberCount,
+      onlineCount: params.activeCommunityOnlineCount,
       onOpenDrawer: params.openMobileDrawer,
       onBack: params.mobileThreadPageOpen
         ? params.handleCloseMobileThreadPage
@@ -153,6 +152,7 @@ export function buildWebShellChromeHostProps(params: {
       forceMobileCommunityRoot: params.forceMobileCommunityRoot,
       setMobileOverlay: params.setMobileOverlay,
       onSelectMobileRootPage: params.handleSelectMobileRootPage,
+      onOpenMobileAgent: params.openMobileAgent,
       activeCommunity: params.activeCommunity
         ? {
             id: params.activeCommunity.id,

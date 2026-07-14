@@ -179,7 +179,7 @@ assert.match(chatPanel, /aria-describedby/);
 assert.match(app, /onSelectCommunityTab: handleSelectCommunityTab/);
 assert.match(app, /<WebCommunityOnboardingController/);
 assert.match(app, /onOrientationCompleted=\{handleCommunityOnboardingOrientationCompleted\}/);
-assert.match(app, /onRequestOpen=\{\(\) => handleSelectMobileRootPage\("agent"\)\}/);
+assert.match(app, /onRequestOpen=\{\(\) => setMobileOverlay\("agent"\)\}/);
 assert.match(agentGuide, /Ask your agent for your next move/);
 assert.match(agentGuide, /It already has \{props\.communityName\} context/);
 assert.match(agentGuide, /Skip onboarding/);

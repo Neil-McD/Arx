@@ -67,8 +67,9 @@ type ActiveThreadContext = {
 type WebMemberAgentDockProps = {
   isVisible: boolean;
   mobileShellActive?: boolean;
-  mobileRoot?: boolean;
   onRequestOpen?: () => void;
+  mobileOverlay?: boolean;
+  onRequestCloseMobile?: () => void;
   communityId: string | null;
   communityName: string | null;
   surfaceContext: MemberAgentSurfaceContextV1 | null;
@@ -111,7 +112,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const onboarding = useWebCommunityOnboarding();
   const [isOpen, setIsOpen] = useState(false);
   const isOpenSurface = props.mobileShellActive
-    ? Boolean(props.mobileRoot)
+    ? Boolean(props.mobileOverlay)
     : isOpen;
   const [threadKey, setThreadKey] = useState<string | null>(null);
   const [episodeId, setEpisodeId] = useState<string | null>(null);
@@ -645,7 +646,8 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
 
   return (
     <aside
-      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${showOnboardingAgentGuide ? " is-onboarding" : ""}`}
+      id="polynet-member-agent-surface"
+      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileOverlay ? " mobile-overlay" : ""}${showOnboardingAgentGuide ? " is-onboarding" : ""}`}
       aria-live="polite"
     >
       {!props.mobileShellActive ? (
@@ -682,11 +684,14 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             >
               <MessageSquarePlus aria-hidden="true" />
             </button>
-            {!props.mobileShellActive ? (
-              <button type="button" onClick={() => setIsOpen(false)} aria-label="Close" title="Close">
-                <X aria-hidden="true" />
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={props.mobileShellActive ? props.onRequestCloseMobile : () => setIsOpen(false)}
+              aria-label="Close"
+              title="Close"
+            >
+              <X aria-hidden="true" />
+            </button>
           </div>
         </header>
 

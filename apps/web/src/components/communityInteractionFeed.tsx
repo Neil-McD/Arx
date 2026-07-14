@@ -219,7 +219,7 @@ export function EditForm(props: {
 
 export function MessageActions(props: {
   onReact: (emoji: string) => void;
-  onReply: () => void;
+  onReply?: () => void;
   replyLabel: string;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -243,15 +243,17 @@ export function MessageActions(props: {
         label="Add reaction"
         onPick={props.onReact}
       />
-      <button
-        type="button"
-        className="community-interaction-msg-action"
-        onClick={props.onReply}
-        aria-label={props.replyLabel}
-        title={props.replyLabel}
-      >
-        <MessageSquare size={15} aria-hidden="true" />
-      </button>
+      {props.onReply ? (
+        <button
+          type="button"
+          className="community-interaction-msg-action"
+          onClick={props.onReply}
+          aria-label={props.replyLabel}
+          title={props.replyLabel}
+        >
+          <MessageSquare size={15} aria-hidden="true" />
+        </button>
+      ) : null}
       <OverflowMenu onEdit={props.onEdit} onDelete={props.onDelete} />
     </div>
   );

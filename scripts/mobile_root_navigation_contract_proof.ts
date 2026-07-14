@@ -17,6 +17,8 @@ const communityShell = read(
 );
 const topBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const bottomRail = read("apps/web/src/components/WebMobileBottomRail.tsx");
+const presenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
+const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const memberAgentDockCss = read(
   "apps/web/src/components/WebMemberAgentDock.css",
@@ -34,13 +36,13 @@ const packageJson = read("package.json");
 
 assert.match(
   shared,
-  /export type MobileRootPage = "agent" \| "community" \| "messages";/,
-  "mobile root state should contain exactly the three persistent rail destinations",
+  /export type MobileRootPage = "community" \| "messages";/,
+  "only Community and Messages should be persistent mobile roots",
 );
 assert.match(
   shared,
-  /export type MobileOverlay = "community" \| "community_selector" \| "members" \| null;/,
-  "community navigation, the selector, and Members should remain overlays",
+  /export type MobileOverlay = "agent" \| "community" \| "community_selector" \| "members" \| null;/,
+  "AI, community navigation, the selector, and Members should remain dismissible overlays",
 );
 assert.match(
   app,
@@ -79,8 +81,8 @@ assert.match(
 );
 assert.match(
   app,
-  /mobileShellActive=\{showMobileShell\}[\s\S]*mobileRoot=\{showMobileShell && mobileRootPage === "agent"\}[\s\S]*<WebDirectMessagesHost[\s\S]*mobileRoot=\{showMobileShell && mobileRootPage === "messages"\}/,
-  "AI and Messages should reuse the current member-agent and DM surfaces as mobile roots",
+  /mobileShellActive=\{showMobileShell\}[\s\S]*mobileOverlay=\{showMobileShell && mobileOverlay === "agent"\}[\s\S]*onRequestCloseMobile=\{\(\) => setMobileOverlay\(null\)\}[\s\S]*<WebDirectMessagesHost[\s\S]*mobileRoot=\{showMobileShell && mobileRootPage === "messages"\}/,
+  "AI should reuse the member-agent surface as a dismissible overlay while Messages remains a root",
 );
 assert.match(
   app,
@@ -95,8 +97,13 @@ assert.match(
 );
 assert.match(
   controller,
-  /if \(nextRootPage === "agent"\) \{[\s\S]*params\.setMobileRootPage\("agent"\);[\s\S]*return;/,
-  "AI should select the global member-agent root without reviving Workspace",
+  /const openMobileAgent = useCallback\(\(\) => \{[\s\S]*params\.setMobileOverlay\("agent"\);/,
+  "AI should open without changing roots or closing the current thread or DM",
+);
+assert.doesNotMatch(
+  controller,
+  /setMobileRootPage\("agent"\)/,
+  "AI must not be represented as a mobile root",
 );
 assert.doesNotMatch(
   controller,
@@ -157,8 +164,13 @@ assert.match(
 );
 assert.match(
   bottomRail,
-  /<House aria-hidden="true" \/>[\s\S]*mobile-bottom-rail-ai[\s\S]*<Sparkles aria-hidden="true" \/>[\s\S]*<MessageCircle aria-hidden="true" \/>/,
+  /<House aria-hidden="true" \/>[\s\S]*className="mobile-bottom-rail-action mobile-bottom-rail-ai"[\s\S]*aria-expanded=\{communityShell\.mobileOverlay === "agent"\}[\s\S]*onClick=\{communityShell\.onOpenMobileAgent\}[\s\S]*<Sparkles aria-hidden="true" \/>[\s\S]*<MessageCircle aria-hidden="true" \/>/,
   "Community, centered AI, and Messages should render in that order",
+);
+assert.doesNotMatch(
+  bottomRail,
+  /activeRoot === "agent"|aria-current=\{activeRoot === "agent"/,
+  "opening AI must not change the center launcher's visual selected state",
 );
 assert.doesNotMatch(
   bottomRail,
@@ -188,19 +200,29 @@ assert.doesNotMatch(
 );
 assert.match(
   shellHost,
-  /const isMobileDedicatedRoot =[\s\S]*mobileRootPage === "agent"[\s\S]*mobileRootPage === "messages"[\s\S]*isMobileDedicatedRoot \? null : props\.mainSurface/,
-  "AI and Messages should replace, not stack over, the inactive community surface",
+  /const isMobileDedicatedRoot =[\s\S]*mobileRootPage === "messages"[\s\S]*isMobileDedicatedRoot \? null : props\.mainSurface/,
+  "only Messages should replace the inactive community surface",
+);
+assert.doesNotMatch(
+  shellHost,
+  /mobileRootPage === "agent"/,
+  "the shell host must keep the underlying community surface mounted beneath AI",
 );
 
 assert.match(
   memberAgentDock,
-  /mobileShellActive\?: boolean;[\s\S]*mobileRoot\?: boolean;[\s\S]*const isOpenSurface = props\.mobileShellActive[\s\S]*Boolean\(props\.mobileRoot\)[\s\S]*props\.mobileRoot \? " mobile-root"[\s\S]*!props\.mobileShellActive \? \(/,
-  "the existing global member-agent should support controlled mobile-root presentation without a duplicate launcher",
+  /mobileShellActive\?: boolean;[\s\S]*mobileOverlay\?: boolean;[\s\S]*onRequestCloseMobile\?: \(\) => void;[\s\S]*Boolean\(props\.mobileOverlay\)[\s\S]*props\.mobileOverlay \? " mobile-overlay"/,
+  "the existing member-agent should support controlled mobile overlay presentation",
+);
+assert.match(
+  memberAgentDock,
+  /onClick=\{props\.mobileShellActive \? props\.onRequestCloseMobile : \(\) => setIsOpen\(false\)\}[\s\S]*aria-label="Close"/,
+  "mobile AI must expose an explicit close action",
 );
 assert.match(
   memberAgentDockCss,
-  /\.member-agent-dock\.mobile-root \{[\s\S]*var\(--mobile-bottom-rail-height\)[\s\S]*\.member-agent-dock\.mobile-root \.member-agent-dock-panel \{[\s\S]*width: 100%;[\s\S]*height: 100%;[\s\S]*border-radius: 0;/,
-  "the member-agent root should fill the viewport above the persistent rail",
+  /\.member-agent-dock\.mobile-overlay \{[\s\S]*var\(--mobile-bottom-rail-height\)[\s\S]*\.member-agent-dock\.mobile-overlay \.member-agent-dock-panel \{[\s\S]*width: 100%;[\s\S]*height: 100%;[\s\S]*border-radius: 0;/,
+  "the member-agent overlay should fill the viewport above the persistent rail",
 );
 assert.match(
   directMessagesHost,
@@ -260,8 +282,28 @@ assert.match(
 );
 assert.match(
   indexCss,
-  /\.mobile-bottom-rail-ai \{[\s\S]*color: var\(--accent-agent-foreground\);[\s\S]*\.mobile-bottom-rail-ai-icon \{[\s\S]*background: var\(--accent-agent-surface\);[\s\S]*color: var\(--accent-agent\);[\s\S]*\.mobile-bottom-rail-ai\.active \.mobile-bottom-rail-ai-icon \{[\s\S]*background: var\(--accent-agent-strong\);/,
+  /\.mobile-bottom-rail-ai \{[\s\S]*color: var\(--accent-agent-foreground\);[\s\S]*\.mobile-bottom-rail-ai-icon \{[\s\S]*background: var\(--accent-agent-surface\);[\s\S]*color: var\(--accent-agent\);/,
   "AI should retain a fixed violet identity independent of theme selection",
+);
+assert.doesNotMatch(
+  indexCss,
+  /\.mobile-bottom-rail-ai\.active/,
+  "AI must not have a second active visual treatment",
+);
+assert.match(
+  topBar,
+  /import \{ ArrowLeft \} from "lucide-react";[\s\S]*<ArrowLeft aria-hidden="true" \/>/,
+  "thread navigation should use the canonical shafted Back icon",
+);
+assert.match(
+  presenceFacepile + contextPanel + topBar,
+  /export function CommunityPresenceFacepile[\s\S]*<CommunityPresenceFacepile[\s\S]*<CommunityPresenceFacepile/,
+  "the context panel and compact mobile header should share one presence facepile",
+);
+assert.doesNotMatch(
+  topBar,
+  /mobile-topbar-member-faces|mobile-topbar-member-face/,
+  "the mobile header must not maintain a bespoke profile-picture container",
 );
 assert.match(
   indexCss,

@@ -11,18 +11,12 @@ import type {
   SettingsGroup,
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
+import type { CommunityPresenceFace } from "./CommunityPresenceFacepile";
 
-export type MobileOverlay = "community" | "community_selector" | "members" | null;
-export type MobileRootPage = "agent" | "community" | "messages";
+export type MobileOverlay = "agent" | "community" | "community_selector" | "members" | null;
+export type MobileRootPage = "community" | "messages";
 
-export type MobileMemberFace = {
-  user_id: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-};
+export type MobileMemberFace = CommunityPresenceFace;
 
 export type CommunityLike = {
   id: string;
@@ -79,6 +73,7 @@ export type WebCommunityShellProps = {
   onSelectCommunityTabFromMobile: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink: (joinUrl: string) => Promise<void> | void;
   onOpenMobileAgentSettings: () => void;
+  onOpenMobileAgent: () => void;
   canOpenDirectMessages: boolean;
   directMessagesUnreadCount: number;
   onOpenDiscover: () => void;

@@ -10198,6 +10198,7 @@ export default function App() {
     };
     const {
       handleSelectMobileRootPage,
+      openMobileAgent,
       openMobileAgentSettings,
       handleExitMobileSettings,
       openMobileCreateCommunity,
@@ -11622,7 +11623,7 @@ export default function App() {
     hasResolvedCommunities &&
     Boolean(memberAgentSurfaceContext) &&
     !isCommunityLaunchSetupModalOpen &&
-    !isDirectMessagesOpen &&
+    (!isDirectMessagesOpen || mobileOverlay === "agent") &&
     !isOnboardingModalOpen;
   const globalOverlays = (
     <>
@@ -11631,8 +11632,9 @@ export default function App() {
         <WebMemberAgentDock
           isVisible={isMemberAgentDockVisible}
           mobileShellActive={showMobileShell}
-          mobileRoot={showMobileShell && mobileRootPage === "agent"}
-          onRequestOpen={() => handleSelectMobileRootPage("agent")}
+          mobileOverlay={showMobileShell && mobileOverlay === "agent"}
+          onRequestOpen={() => setMobileOverlay("agent")}
+          onRequestCloseMobile={() => setMobileOverlay(null)}
           communityId={memberAgentDockCommunity?.id ?? null}
           communityName={memberAgentDockCommunity?.name ?? null}
           surfaceContext={memberAgentSurfaceContext}
@@ -11826,17 +11828,17 @@ export default function App() {
       !isVisitorCommunitySurface && canViewMembersActiveCommunity
         ? activeCommunityPresenceSummary?.online_faces ?? []
         : [],
-    activeCommunityMemberCount:
+    activeCommunityOnlineCount:
       !isVisitorCommunitySurface && canViewMembersActiveCommunity
-        ? activeCommunityPresenceSummary?.member_count ??
-          communityDirectoryMemberCount ??
-          activeCommunitySocialMemberCount ??
-          null
+        ? activeCommunityPresenceSummary?.online_count ??
+          activeCommunityPresenceSummary?.online_faces?.length ??
+          0
         : null,
     openMobileDrawer,
     handleExitMobileSettings,
     handleCloseMobileThreadPage: handleCloseCommunityInteractionDrawer,
     handleSelectMobileRootPage,
+    openMobileAgent,
     setMobileOverlay,
     isPublicCommunityFunnel,
     isPublicFunnelPreviewRoute: publicRoute.kind === "community_funnel_preview",

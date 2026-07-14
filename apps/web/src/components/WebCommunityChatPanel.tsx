@@ -50,6 +50,7 @@ import { WebCommunityProfilePanel } from "./WebCommunityProfilePanel";
 import {
   MentionAutocompleteMenu,
   MentionComposerHighlight,
+  committedMentionFromCandidate,
   handleMentionTokenBackspace,
   useMentionAutocomplete,
   type CommittedMention,
@@ -68,6 +69,8 @@ type CommunityMentionMember = {
   user_id?: string | null;
 };
 type CommunityReplyTarget = Pick<CommunityChatMessage, "id" | "sender_id" | "body"> & {
+  reply_author_label?: string | null;
+  mention_candidate?: MentionCandidate | null;
   interaction_root_id?: string | null;
   interaction_reply_id?: string | null;
   legacy_message_id?: string | null;
@@ -227,23 +230,6 @@ function mergeMentionCandidates(
     merged.push(candidate);
   }
   return merged;
-}
-
-function buildUserMentionFromProfile(
-  userId: string,
-  profile: UserProfile | null,
-  fallbackDisplayName: string,
-): CommittedMention | null {
-  const normalizedUserId = String(userId ?? "").trim();
-  const handle = String(profile?.handle ?? "").trim().replace(/^@+/, "");
-  if (!normalizedUserId || !handle) return null;
-  const displayName = String(profile?.display_name ?? fallbackDisplayName ?? "").trim() || handle;
-  return {
-    userId: normalizedUserId,
-    displayName,
-    token: `@${handle}`,
-    kind: "user",
-  };
 }
 
 function mapCloudMentionCandidate(row: CloudCommunityMentionCandidateRow): MentionCandidate | null {
@@ -1504,7 +1490,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   );
 
   const drawerReplyPlaceholder = drawerReplyTarget?.sender_id
-    ? `Reply to ${displayName(drawerReplyTarget.sender_id).trim() || "this message"}...`
+    ? `Reply to ${drawerReplyTarget.reply_author_label?.trim() || displayName(drawerReplyTarget.sender_id).trim() || "this message"}...`
     : "Reply...";
   const drawerReplyComposer = drawerReplyTarget ? (
     <div className="community-interaction-reply-composer-panel">
@@ -1712,11 +1698,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                 formatChatTime={formatChatTime}
                 renderTextWithLinks={renderTextWithLinks}
                 onStartRootReply={(message) => {
-                  const seededMention = buildUserMentionFromProfile(
-                    message.sender_id,
-                    profilesByUserId[message.sender_id] ?? null,
-                    displayName(message.sender_id),
-                  );
+                  const seededMention = committedMentionFromCandidate(message.mention_candidate);
                   const autoSeedToken = drawerReplyAutoSeedTokenRef.current;
                   const canReplaceAutoSeed = Boolean(autoSeedToken && drawerReplyInput.trim() === autoSeedToken);
                   const canSeedMention = Boolean(
@@ -1728,6 +1710,16 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                     setDrawerReplyInput(`${seededMention.token} `);
                     setDrawerReplyMentions([seededMention]);
                     drawerReplyAutoSeedTokenRef.current = seededMention.token;
+                  } else if (
+                    seededMention &&
+                    !textContainsMentionToken(drawerReplyInput, seededMention.token)
+                  ) {
+                    setDrawerReplyInput(`${seededMention.token} ${drawerReplyInput.trimStart()}`);
+                    setDrawerReplyMentions((previous) => [
+                      ...previous.filter((mention) => mention.userId !== seededMention.userId),
+                      seededMention,
+                    ]);
+                    drawerReplyAutoSeedTokenRef.current = null;
                   } else if (!seededMention && canReplaceAutoSeed) {
                     setDrawerReplyInput("");
                     setDrawerReplyMentions([]);

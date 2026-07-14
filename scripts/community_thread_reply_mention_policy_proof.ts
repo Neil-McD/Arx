@@ -20,14 +20,19 @@ assert.match(
   "drawer reply targets must carry an explicit canonical interaction reply id",
 );
 assert.match(
-  chatPanel,
-  /function buildUserMentionFromProfile\([\s\S]*profile\?\.handle[\s\S]*replace\(\/\^@\+\/, ""\)[\s\S]*token: `@\$\{handle\}`,[\s\S]*kind: "user"/,
-  "reply-to-reply mention seeding must use the user's real handle token",
+  mentionAutocomplete,
+  /export function committedMentionFromCandidate\([\s\S]*kind === "user" && !normalizedHandle[\s\S]*kind === "community_agent"[\s\S]*agentKey: "community_agent"/,
+  "autocomplete and reply seeding must share one user/community-agent mention conversion",
 );
 assert.match(
   chatPanel,
-  /onStartRootReply=\{\(message\) => \{[\s\S]*const seededMention = buildUserMentionFromProfile\([\s\S]*message\.sender_id,[\s\S]*profilesByUserId\[message\.sender_id\][\s\S]*setDrawerReplyTarget\(message\);[\s\S]*if \(seededMention && canSeedMention\) \{[\s\S]*setDrawerReplyInput\(`\$\{seededMention\.token\} `\);[\s\S]*setDrawerReplyMentions\(\[seededMention\]\);/,
-  "clicking reply on a thread reply should seed @handle when the drawer composer can accept an auto seed",
+  /onStartRootReply=\{\(message\) => \{[\s\S]*const seededMention = committedMentionFromCandidate\(message\.mention_candidate\);[\s\S]*setDrawerReplyTarget\(message\);[\s\S]*setDrawerReplyInput\(`\$\{seededMention\.token\} `\);[\s\S]*setDrawerReplyMentions\(\[seededMention\]\);[\s\S]*!textContainsMentionToken\(drawerReplyInput, seededMention\.token\)[\s\S]*setDrawerReplyInput\(`\$\{seededMention\.token\} \$\{drawerReplyInput\.trimStart\(\)\}`\)/,
+  "clicking reply should seed the canonical human or community-agent token",
+);
+assert.doesNotMatch(
+  chatPanel,
+  /function buildUserMentionFromProfile/,
+  "reply seeding must not keep a parallel human-profile-only mention builder",
 );
 assert.doesNotMatch(
   chatPanel,
@@ -61,8 +66,18 @@ assert.match(
 );
 assert.match(
   interactionProjection,
-  /props\.onStartRootReply\?\.\(\{[\s\S]*id: reply\.legacy_message_id \?\? reply\.id,[\s\S]*interaction_root_id: reply\.root_id,[\s\S]*interaction_reply_id: reply\.id,[\s\S]*legacy_message_id: reply\.legacy_message_id \?\? null,/,
-  "reply actions inside the thread must pass the canonical reply id to the drawer composer",
+  /reply\.actor_type === "community_agent"[\s\S]*userId: "community_agent"[\s\S]*kind: "community_agent"[\s\S]*reply\.actor_user_id && normalizedHandle[\s\S]*kind: "user"/,
+  "thread reply actions must resolve both community-agent and human mention identities",
+);
+assert.match(
+  interactionProjection,
+  /onReply=\{replyMentionCandidate && props\.onStartRootReply[\s\S]*mention_candidate: replyMentionCandidate,[\s\S]*interaction_reply_id: reply\.id,[\s\S]*legacy_message_id: reply\.legacy_message_id \?\? null,/,
+  "mentionable thread replies must pass identity and canonical reply id together",
+);
+assert.doesNotMatch(
+  interactionProjection,
+  /if \(!reply\.actor_user_id\) return/,
+  "community-agent replies must not silently no-op behind a visible Reply action",
 );
 assert.match(
   mutationController,

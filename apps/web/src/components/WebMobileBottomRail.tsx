@@ -49,10 +49,11 @@ export function WebMobileBottomRail({
 
         <button
           type="button"
-          className={`mobile-bottom-rail-action mobile-bottom-rail-ai${activeRoot === "agent" ? " active" : ""}`}
-          aria-current={activeRoot === "agent" ? "page" : undefined}
+          className="mobile-bottom-rail-action mobile-bottom-rail-ai"
           aria-label="Open Polynet AI"
-          onClick={() => communityShell.onSelectMobileRootPage("agent")}
+          aria-expanded={communityShell.mobileOverlay === "agent"}
+          aria-controls="polynet-member-agent-surface"
+          onClick={communityShell.onOpenMobileAgent}
         >
           <span className="mobile-bottom-rail-ai-icon">
             <Sparkles aria-hidden="true" />
