@@ -312,7 +312,7 @@ assert.doesNotMatch(
 
 assert.match(
   indexCss,
-  /--mobile-bottom-rail-height: 70px;[\s\S]*\.mobile-bottom-rail-inner \{[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/,
+  /--mobile-bottom-rail-height: 62px;[\s\S]*\.mobile-bottom-rail-inner \{[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);[\s\S]*align-items: center;/,
   "mobile CSS should reserve one restrained three-column rail",
 );
 assert.match(
@@ -322,13 +322,18 @@ assert.match(
 );
 assert.match(
   indexCss,
-  /\.mobile-bottom-rail-action\.active \{[\s\S]*color: var\(--accent-selection\);[\s\S]*\.mobile-bottom-rail-unread \{[\s\S]*background: var\(--accent-attention\);[\s\S]*\.mobile-bottom-rail-dot \{[\s\S]*background: var\(--accent-attention\);/,
-  "routine selection and attention indicators should use different semantic roles",
+  /\.mobile-bottom-rail-action\.active \{[\s\S]*color: var\(--text-primary\);[\s\S]*\.mobile-bottom-rail-action\.active \.mobile-bottom-rail-icon-wrap > svg \{[\s\S]*fill: currentColor;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-icon-wrap > svg > path:first-child \{[\s\S]*fill: none;[\s\S]*\.mobile-bottom-rail-unread \{[\s\S]*background: var\(--accent-attention\);[\s\S]*\.mobile-bottom-rail-dot \{[\s\S]*background: var\(--accent-attention\);/,
+  "routine selection should use solid white icon forms while attention retains its semantic accent",
 );
 assert.match(
   indexCss,
-  /\.mobile-bottom-rail-ai \{[\s\S]*color: var\(--accent-agent-foreground\);[\s\S]*\.mobile-bottom-rail-ai-icon \{[\s\S]*background: var\(--accent-agent-surface\);[\s\S]*color: var\(--accent-agent\);/,
-  "AI should retain a fixed violet identity independent of theme selection",
+  /\.mobile-bottom-rail-ai \{[\s\S]*color: var\(--accent-agent\);[\s\S]*\.mobile-bottom-rail-ai-icon \{[\s\S]*width: 28px;[\s\S]*height: 28px;[\s\S]*display: inline-flex;/,
+  "AI should retain a fixed violet glyph without a promotional tile treatment",
+);
+assert.doesNotMatch(
+  indexCss,
+  /\.mobile-bottom-rail-ai-icon \{[^}]*(?:background|border|box-shadow):/,
+  "AI should not regain a persistent tile, border, or glow",
 );
 assert.doesNotMatch(
   indexCss,

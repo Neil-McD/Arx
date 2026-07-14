@@ -10,7 +10,7 @@
   --mobile-topbar-side-inset: 12px;
   --mobile-topbar-top-offset: 8px;
   --mobile-topbar-clearance: calc(env(safe-area-inset-top, 0px) + 54px);
-  --mobile-bottom-rail-height: 70px;
+  --mobile-bottom-rail-height: 62px;
   --mobile-left-panel-width: min(74vw, 304px);
   --web-rail-width: 72px;
   --web-rail-control-size: 44px;
@@ -2749,7 +2749,7 @@
   display: flex;
   align-items: flex-end;
   height: calc(var(--mobile-bottom-rail-height) + env(safe-area-inset-bottom, 0px));
-  padding: 3px 14px env(safe-area-inset-bottom, 0px);
+  padding: 2px 14px env(safe-area-inset-bottom, 0px);
   box-sizing: border-box;
   border-top: 1px solid color-mix(in srgb, var(--border-default) 68%, transparent);
   background: color-mix(in srgb, var(--surface-workspace, var(--bg-workspace)) 97%, black 3%);
@@ -2757,17 +2757,17 @@
 
 .mobile-bottom-rail-inner {
   width: min(100%, 520px);
-  height: calc(var(--mobile-bottom-rail-height) - 3px);
+  height: calc(var(--mobile-bottom-rail-height) - 2px);
   margin: 0 auto;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: end;
+  align-items: center;
 }
 
 .mobile-bottom-rail-action {
   min-width: 0;
   min-height: 48px;
-  height: 58px;
+  height: 54px;
   padding: 0 4px;
   border: 0;
   border-radius: 14px;
@@ -2779,21 +2779,36 @@
   justify-content: center;
   font: inherit;
   cursor: pointer;
+  transition:
+    color 140ms ease,
+    background-color 120ms ease;
 }
 
 .mobile-bottom-rail-action > svg,
 .mobile-bottom-rail-icon-wrap > svg {
-  width: 22px;
-  height: 22px;
+  width: 23px;
+  height: 23px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transition:
+    fill 140ms ease,
+    stroke 140ms ease;
 }
 
 .mobile-bottom-rail-action.active {
-  color: var(--accent-selection);
+  color: var(--text-primary);
+}
+
+.mobile-bottom-rail-action.active .mobile-bottom-rail-icon-wrap > svg {
+  fill: currentColor;
+}
+
+.mobile-bottom-rail-community.active .mobile-bottom-rail-icon-wrap > svg > path:first-child {
+  fill: none;
+  stroke: color-mix(in srgb, var(--surface-workspace, var(--bg-workspace)) 97%, black 3%);
 }
 
 .mobile-bottom-rail-action:active {
@@ -2846,20 +2861,15 @@
 }
 
 .mobile-bottom-rail-ai {
-  color: var(--accent-agent-foreground);
+  color: var(--accent-agent);
 }
 
 .mobile-bottom-rail-ai-icon {
-  width: 48px;
-  height: 48px;
-  border: 1px solid color-mix(in srgb, var(--accent-agent) 44%, var(--border-default));
-  border-radius: 17px;
-  background: var(--accent-agent-surface);
-  color: var(--accent-agent);
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-agent) 16%, transparent);
 }
 
 .mobile-bottom-rail-ai-icon svg {
@@ -2867,17 +2877,7 @@
   height: 25px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.9;
-}
-
-.mobile-bottom-rail-ai:focus-visible {
-  box-shadow: none;
-}
-
-.mobile-bottom-rail-ai:focus-visible .mobile-bottom-rail-ai-icon {
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--focus-ring) 58%, transparent),
-    0 8px 20px color-mix(in srgb, var(--accent-agent) 16%, transparent);
+  stroke-width: 2;
 }
 
 .mobile-drawer-shell {
