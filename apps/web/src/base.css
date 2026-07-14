@@ -33472,7 +33472,7 @@ button.message-citation-chip:hover {
 
 .community-onboarding-builder {
   display: grid;
-  grid-template-columns: minmax(300px, 0.82fr) minmax(420px, 1.18fr);
+  grid-template-columns: minmax(280px, 0.82fr) minmax(0, 1.18fr);
   align-items: start;
   gap: 32px;
 }
@@ -33575,6 +33575,8 @@ button.message-citation-chip:hover {
 }
 
 .community-onboarding-live-preview {
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   position: sticky;
   top: 22px;
@@ -33594,6 +33596,11 @@ button.message-citation-chip:hover {
 }
 
 .community-onboarding-inline-preview-frame {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
   padding: 10px;
   border: 1px solid var(--border-muted);
   border-radius: 22px;
@@ -33602,7 +33609,10 @@ button.message-citation-chip:hover {
 
 .community-onboarding-orientation-inline,
 .community-onboarding-orientation-inline:not(.has-video) {
+  box-sizing: border-box;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   max-height: none;
   border-radius: 16px;
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
@@ -33647,13 +33657,18 @@ button.message-citation-chip:hover {
 }
 
 .community-onboarding-orientation-inline .community-onboarding-orientation-actions {
+  min-width: 0;
+  flex-wrap: wrap;
   padding: 12px 16px;
 }
 
 .community-onboarding-orientation-inline .community-onboarding-orientation-actions button {
+  min-width: 0;
+  max-width: 100%;
   min-height: 36px;
   padding-inline: 12px;
   font-size: 11px;
+  white-space: normal;
 }
 
 @container onboarding-workflow (max-width: 880px) {
