@@ -2916,6 +2916,7 @@ export default defineSchema({
     lastUpdatedByAgentKey: v.optional(v.string()),
     lastValidatedAt: v.optional(v.number()),
     deprecatedByNodeId: v.optional(v.id("communityIntelligenceNodes")),
+    originChangeRequestId: v.optional(v.id("communityIntelligenceChangeRequests")),
     version: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),

@@ -45,9 +45,10 @@ const formingNodes = fixture.graph.nodes.filter((node: any) => node.kind === "fo
 assert.equal(formingNodes.length, 1, "fixture should include one forming-memory projection");
 assert.deepEqual(
   Object.keys(formingNodes[0]).sort(),
-  ["confidence", "created_at", "id", "kind", "label", "status", "type"].sort(),
+  ["confidence", "created_at", "id", "kind", "label", "lineage_id", "status", "type"].sort(),
   "forming memory should expose only the anonymous projection contract",
 );
+assert.match(formingNodes[0].lineage_id, /^change_request:/, "forming memory should expose stable lifecycle lineage");
 assert.equal(formingNodes[0].label, "Forming memory", "forming-memory content should stay anonymous");
 assert.equal(formingNodes[0].status, "forming", "forming memory should be visibly distinct from retained statuses");
 assert.doesNotMatch(
@@ -65,6 +66,7 @@ assert.deepEqual(
 const nodeIds = new Set(fixture.graph.nodes.map((node: any) => node.id));
 for (const node of directoryNodes) {
   assert.match(node.id, /^directory_node:/, "directory graph node ids should be projected directory ids");
+  assert.match(node.lineage_id, /^(change_request|directory_node):/, "directory nodes should expose stable lifecycle lineage");
   assert.ok(NODE_TYPES.has(node.type), `unexpected node type: ${node.type}`);
   assert.ok(ACCEPTED_STATUSES.has(node.status), `directory node should be accepted memory: ${node.status}`);
   assert.ok(!FORBIDDEN_STATUSES.has(node.status), `directory node should not expose airlock/dead status: ${node.status}`);

@@ -76,6 +76,7 @@ assert.match(readFormingNodes, /POLYNET_OVERVIEW_FORMING_STATUSES/, "forming mem
 assert.match(readFormingNodes, /\.take\(args\.limit \+ 1\)/, "forming-memory reads should be bounded with one overflow row");
 assert.doesNotMatch(readFormingNodes, /\.collect\(\)/, "forming-memory reads should never collect the airlock");
 assert.match(mapFormingNode, /kind: "forming_memory"/, "forming requests should project as a distinct graph-node kind");
+assert.match(mapFormingNode, /lineage_id: communityMemoryLineageId\(row\._id\)/, "forming memory should expose stable change-request lineage");
 assert.match(mapFormingNode, /label: "Forming memory"/, "forming requests should remain anonymous");
 assert.doesNotMatch(
   mapFormingNode,
@@ -91,6 +92,7 @@ assert.match(readEdges, /nodeIds\.has\(normalizeIdValue\(edge\.fromNodeId\)\)[\s
 assert.match(readEdges, /canViewerReadVisibility\(edge\.visibilityScope, args\.isManager\)/, "overview edges should keep visibility filtering");
 
 assert.match(mapNode, /kind: "directory_node"/, "overview graph should expose real directory nodes as directory_node graph nodes");
+assert.match(mapNode, /row\.originChangeRequestId[\s\S]*communityMemoryLineageId\(row\.originChangeRequestId\)/, "retained memory should preserve its forming-node lineage");
 assert.doesNotMatch(mapNode, /body_md|source_trace_ids|outcome_observation_ids/, "overview graph nodes should not expose source bodies or evidence ids");
 assert.match(mapEdge, /kind: "directory_edge"/, "overview graph edges should expose real directory node-to-node edges");
 assert.match(mapEdge, /from: directoryGraphNodeId\(row\.fromNodeId\)/, "overview edges should map from directory nodes");

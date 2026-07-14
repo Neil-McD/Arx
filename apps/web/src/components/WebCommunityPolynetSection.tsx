@@ -288,11 +288,13 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                     const dimmed = hasFocus ? !(isHovered || isNeighbor) : false;
                     const showLabel = isRoot || isSelected || isHovered || isNeighbor || showAllLabels;
                     const radius = isRoot ? 26 : isForming ? 8 : nodeRadius(node.confidence);
+                    const lineageId = node.lineage_id || node.id;
                     return (
                       <g
-                        key={node.id}
-                        className={`cp-node ${isRoot ? `root activity-${agentActivity}` : isForming ? "forming" : statusClass(node.status)}${isSelected ? " selected" : ""}${dimmed ? " dimmed" : ""}`}
-                        transform={`translate(${pos.x} ${pos.y})`}
+                        key={lineageId}
+                        data-lineage-id={lineageId}
+                        className={`cp-node ${isRoot ? `root activity-${agentActivity}` : isForming ? "forming" : statusClass(node.status)}${isSelected ? " selected" : ""}${dimmed ? " dimmed" : ""}${draggingNodeId === node.id ? " dragging" : ""}`}
+                        style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
                         role="button"
                         tabIndex={0}
                         aria-label={node.label}

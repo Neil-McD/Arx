@@ -17498,6 +17498,10 @@ button.chat-reply-quote:hover {
 /* The circle IS the node. No box, no inner hotspot, label annotates outside. */
 .cp-node {
   cursor: pointer;
+  transition: opacity 140ms ease, transform 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.cp-node.dragging {
   transition: opacity 140ms ease;
 }
 
@@ -17514,7 +17518,16 @@ button.chat-reply-quote:hover {
   fill: var(--text-secondary);
   stroke: color-mix(in srgb, var(--bg-app) 70%, transparent);
   stroke-width: 1;
-  transition: fill 160ms ease, opacity 160ms ease;
+  transition: fill 160ms ease, opacity 160ms ease, stroke 160ms ease, r 260ms ease;
+}
+
+.cp-preview-node {
+  transition: cx 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    cy 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    fill 160ms ease,
+    opacity 160ms ease,
+    stroke 160ms ease,
+    r 260ms ease;
 }
 
 .cp-node-circle.type-playbook { fill: #5b9bd5; }
@@ -17530,6 +17543,7 @@ button.chat-reply-quote:hover {
   stroke-width: 1.6;
   stroke-dasharray: 2.5 2;
   vector-effect: non-scaling-stroke;
+  transition: fill 160ms ease, opacity 160ms ease, stroke 160ms ease, r 260ms ease;
 }
 
 /* Status treatment, independent of the type color. */
@@ -17606,6 +17620,14 @@ button.chat-reply-quote:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .cp-node {
+    transition: opacity 140ms ease;
+  }
+
+  .cp-preview-node {
+    transition: opacity 140ms ease;
+  }
+
   .cp-root-circle.activity-running,
   .cp-root-circle.activity-considering,
   .cp-root-circle.activity-updated-directory {

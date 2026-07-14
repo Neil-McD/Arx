@@ -106,17 +106,19 @@ export function CommunityMemoryGraphPreview(props: { overview: CloudCommunityPol
         const pos = project(node.id);
         const isRoot = node.kind === "community";
         const isForming = node.kind === "forming_memory";
+        const lineageId = node.lineage_id || node.id;
         return (
           <circle
-            key={node.id}
+            key={lineageId}
+            data-lineage-id={lineageId}
             cx={pos.x}
             cy={pos.y}
             r={isRoot ? 7 : isForming ? 3.2 : nodeRadius(node.confidence)}
-            className={isRoot
+            className={`cp-preview-node ${isRoot
               ? `cp-root-circle activity-${agentActivityClass(overview.agent.activity_state)}`
               : isForming
                 ? "cp-forming-circle"
-                : `cp-node-circle type-${typeClass(node.type)} status-${statusClass(node.status)}`}
+                : `cp-node-circle type-${typeClass(node.type)} status-${statusClass(node.status)}`}`}
           />
         );
       })}

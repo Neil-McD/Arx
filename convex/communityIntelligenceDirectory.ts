@@ -120,6 +120,7 @@ type IntelligenceNodeRow = {
   lastUpdatedByAgentKey?: string;
   lastValidatedAt?: number;
   deprecatedByNodeId?: any;
+  originChangeRequestId?: any;
   version: number;
   createdAt: number;
   updatedAt: number;
@@ -728,6 +729,10 @@ function formingMemoryGraphNodeId(changeRequestId: any): string {
   return `forming_memory:${normalizeIdValue(changeRequestId)}`;
 }
 
+function communityMemoryLineageId(changeRequestId: any): string {
+  return `change_request:${normalizeIdValue(changeRequestId)}`;
+}
+
 function nodeStatusRank(status: NodeStatus): number {
   if (status === "canonical") return 5;
   if (status === "validated") return 4;
@@ -756,6 +761,9 @@ function emptyCountMap<T extends string>(values: readonly T[]): Record<T, number
 function mapPolynetOverviewNode(row: IntelligenceNodeRow) {
   return {
     id: directoryGraphNodeId(row._id),
+    lineage_id: row.originChangeRequestId
+      ? communityMemoryLineageId(row.originChangeRequestId)
+      : directoryGraphNodeId(row._id),
     kind: "directory_node",
     node_id: normalizeIdValue(row._id),
     type: row.type,
@@ -774,6 +782,7 @@ function mapPolynetOverviewNode(row: IntelligenceNodeRow) {
 function mapPolynetOverviewFormingNode(row: IntelligenceChangeRequestRow) {
   return {
     id: formingMemoryGraphNodeId(row._id),
+    lineage_id: communityMemoryLineageId(row._id),
     kind: "forming_memory",
     type: "forming_memory",
     label: "Forming memory",
@@ -2775,6 +2784,7 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       lastUpdatedByActorType: actor.actorType,
       ...actorUserPatch(actor, "lastUpdatedByUserId", "lastUpdatedByAgentKey"),
       ...(changeRequest.outcomeObservationIds?.length ? { lastValidatedAt: nowMs } : {}),
+      originChangeRequestId: changeRequest._id,
       version: 1,
       createdAt: nowMs,
       updatedAt: nowMs,
@@ -3184,6 +3194,7 @@ export const getCommunityPolynetOverview = query({
         nodes: [
           {
             id: communityGraphRootId(args.communityId),
+            lineage_id: communityGraphRootId(args.communityId),
             kind: "community",
             community_id: normalizeIdValue(args.communityId),
             label: community.name,
@@ -3266,6 +3277,7 @@ export const resolvePublicCommunityMemoryOverviewBySlug = query({
           nodes: [
             {
               id: communityGraphRootId(community._id),
+              lineage_id: communityGraphRootId(community._id),
               kind: "community",
               community_id: normalizeIdValue(community._id),
               label: community.name,
