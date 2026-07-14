@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   MessageCircle,
   MessageSquare,
@@ -96,6 +96,7 @@ export type WebCommunityInteractionProjectionProps = {
   isLoadingOlderRoots?: boolean;
   onLoadOlderRoots?: () => void;
   onCaughtUp?: () => void;
+  onMobileReadingModeChange?: (active: boolean) => void;
   onOpenCommunityChatLightbox?: (images: CommunityChatMediaImage[], index: number) => void;
   presenceSummary?: {
     member_count?: number | null;
@@ -144,6 +145,10 @@ export type WebCommunityInteractionProjectionProps = {
   onBanCommunityMember?: (membershipId: string) => Promise<void> | void;
   loadMemberBillingHistory?: (membershipId: string) => Promise<CloudCommunityMemberBillingHistory | null>;
 };
+
+const MOBILE_READING_MODE_HIDE_TRAVEL_PX = 36;
+const MOBILE_READING_MODE_SHOW_TRAVEL_PX = 12;
+const MOBILE_READING_MODE_BOTTOM_LOCK_PX = 96;
 
 import {
   ActorAvatar,
@@ -283,8 +288,15 @@ export function CommunityInteractionContextPanelSurface(
 
 
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
+  const mainRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
+  const isMobileReadingModeRef = useRef(false);
+  const isMainComposerFocusedRef = useRef(false);
+  const lastMobileScrollTopRef = useRef<number | null>(null);
+  const mobileScrollDirectionRef = useRef<-1 | 0 | 1>(0);
+  const mobileScrollTravelRef = useRef(0);
   const requestedOlderRootsRef = useRef(false);
   const pendingOlderAnchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const seenReplyIds = useRef<Set<string>>(new Set());
@@ -292,6 +304,17 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [editing, setEditing] = useState<{ type: "root" | "reply"; id: string } | null>(null);
   const [editText, setEditText] = useState("");
+
+  const setMobileReadingMode = useCallback((active: boolean) => {
+    if (isMobileReadingModeRef.current === active) return;
+    isMobileReadingModeRef.current = active;
+    props.onMobileReadingModeChange?.(active);
+  }, [props.onMobileReadingModeChange]);
+
+  const resetMobileScrollTravel = () => {
+    mobileScrollDirectionRef.current = 0;
+    mobileScrollTravelRef.current = 0;
+  };
 
   const startEdit = (type: "root" | "reply", id: string, body: string) => {
     setEditing({ type, id });
@@ -308,6 +331,8 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const scrollToLatest = () => {
     const el = scrollRef.current;
     if (!el) return;
+    setMobileReadingMode(false);
+    resetMobileScrollTravel();
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     setShowJumpToLatest(false);
   };
@@ -317,6 +342,40 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     isNearBottomRef.current = distanceFromBottom < 120;
+
+    const nextScrollTop = Math.max(0, el.scrollTop);
+    const previousScrollTop = lastMobileScrollTopRef.current;
+    lastMobileScrollTopRef.current = nextScrollTop;
+    if (props.onMobileReadingModeChange && previousScrollTop !== null) {
+      const delta = nextScrollTop - previousScrollTop;
+      if (
+        isMainComposerFocusedRef.current
+        || distanceFromBottom <= MOBILE_READING_MODE_BOTTOM_LOCK_PX
+      ) {
+        resetMobileScrollTravel();
+        setMobileReadingMode(false);
+      } else if (Math.abs(delta) >= 1) {
+        const direction: -1 | 1 = delta < 0 ? -1 : 1;
+        if (mobileScrollDirectionRef.current !== direction) {
+          mobileScrollDirectionRef.current = direction;
+          mobileScrollTravelRef.current = 0;
+        }
+        mobileScrollTravelRef.current += Math.abs(delta);
+        if (
+          direction === -1
+          && mobileScrollTravelRef.current >= MOBILE_READING_MODE_HIDE_TRAVEL_PX
+        ) {
+          setMobileReadingMode(true);
+          mobileScrollTravelRef.current = 0;
+        } else if (
+          direction === 1
+          && mobileScrollTravelRef.current >= MOBILE_READING_MODE_SHOW_TRAVEL_PX
+        ) {
+          setMobileReadingMode(false);
+          mobileScrollTravelRef.current = 0;
+        }
+      }
+    }
     if (distanceFromBottom < 120) {
       setShowJumpToLatest(false);
       props.onCaughtUp?.();
@@ -340,6 +399,34 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     if (!props.isLoadingOlderRoots) requestedOlderRootsRef.current = false;
   }, [props.isLoadingOlderRoots]);
 
+  useEffect(() => () => {
+    props.onMobileReadingModeChange?.(false);
+  }, [props.onMobileReadingModeChange]);
+
+  useLayoutEffect(() => {
+    const main = mainRef.current;
+    const composer = composerRef.current;
+    if (!main || !composer) {
+      main?.style.removeProperty("--mobile-community-composer-height");
+      return;
+    }
+
+    const syncComposerHeight = () => {
+      main.style.setProperty(
+        "--mobile-community-composer-height",
+        `${Math.ceil(composer.getBoundingClientRect().height)}px`,
+      );
+    };
+    syncComposerHeight();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(syncComposerHeight);
+    observer.observe(composer);
+    return () => {
+      observer.disconnect();
+      main.style.removeProperty("--mobile-community-composer-height");
+    };
+  }, [props.mainComposer]);
+
   const rootWindowSignature = useMemo(
     () => props.roots.map((bundle) => bundle.root.id).join("|"),
     [props.roots],
@@ -351,6 +438,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     const reason = props.rootChangeReason ?? "newer";
     if (reason === "reset") {
       pendingOlderAnchorRef.current = null;
+      lastMobileScrollTopRef.current = Math.max(0, el.scrollTop);
+      resetMobileScrollTravel();
+      setMobileReadingMode(false);
       setShowJumpToLatest(false);
       return;
     }
@@ -360,10 +450,15 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
       if (anchor) {
         el.scrollTop = Math.max(0, el.scrollHeight - anchor.scrollHeight + anchor.scrollTop);
       }
+      lastMobileScrollTopRef.current = Math.max(0, el.scrollTop);
+      resetMobileScrollTravel();
       return;
     }
     if (reason === "initial") {
       el.scrollTop = el.scrollHeight;
+      lastMobileScrollTopRef.current = Math.max(0, el.scrollTop);
+      resetMobileScrollTravel();
+      setMobileReadingMode(false);
       isNearBottomRef.current = true;
       setShowJumpToLatest(false);
       props.onCaughtUp?.();
@@ -372,6 +467,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     if (reason === "newer") {
       if (isNearBottomRef.current) {
         el.scrollTop = el.scrollHeight;
+        lastMobileScrollTopRef.current = Math.max(0, el.scrollTop);
+        resetMobileScrollTravel();
+        setMobileReadingMode(false);
         setShowJumpToLatest(false);
         props.onCaughtUp?.();
       } else {
@@ -411,7 +509,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   return (
     <>
     <div className={`community-interaction-projection${selectedRoot || props.profilePanel ? " has-drawer" : " has-context-panel"}${isMobileThreadPage ? " mobile-thread-page-open" : ""}`}>
-      <div className="community-interaction-main">
+      <div className="community-interaction-main" ref={mainRef}>
         <div className="community-interaction-feed-scroll" ref={scrollRef} onScroll={handleFeedScroll}>
           <CommunityInteractionFeedList
             {...props}
@@ -438,7 +536,22 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           getInitials={props.getInitials}
         />
         {props.mainComposer ? (
-          <div className="community-interaction-main-composer">{props.mainComposer}</div>
+          <div
+            className="community-interaction-main-composer"
+            ref={composerRef}
+            onFocusCapture={() => {
+              isMainComposerFocusedRef.current = true;
+              resetMobileScrollTravel();
+              setMobileReadingMode(false);
+            }}
+            onBlurCapture={(event) => {
+              const nextTarget = event.relatedTarget;
+              if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+              isMainComposerFocusedRef.current = false;
+            }}
+          >
+            {props.mainComposer}
+          </div>
         ) : null}
       </div>
 

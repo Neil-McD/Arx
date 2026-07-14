@@ -22,6 +22,8 @@ export type WebShellChromeHostProps = {
   showMobileSettingsShell: boolean;
   showMobilePublicFunnel: boolean;
   mobileOverlay: MobileOverlay;
+  mobileChromeAutoHideEnabled: boolean;
+  mobileChromeReadingMode: boolean;
   mobileTopBarProps: ComponentProps<typeof WebMobileTopBar>;
   desktopHeader: WebDesktopShellHeaderProps;
   communityShell: WebCommunityShellProps;
@@ -38,7 +40,8 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   const isMobileDedicatedRoot =
     props.showMobileAppShell &&
     !props.showMobileSettingsShell &&
-    props.communityShell.mobileRootPage === "messages";
+    (props.communityShell.mobileRootPage === "agent" ||
+      props.communityShell.mobileRootPage === "messages");
   const shellHeader = props.showMobileAppShell ? (
     isMobileDedicatedRoot ? null : (
       <WebMobileTopBar {...props.mobileTopBarProps} />
@@ -79,6 +82,8 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     showMobileSettingsShell: props.showMobileSettingsShell,
     showMobilePublicFunnel: props.showMobilePublicFunnel,
     mobileOverlay: Boolean(props.mobileOverlay),
+    mobileChromeAutoHideEnabled: props.mobileChromeAutoHideEnabled,
+    mobileChromeReadingMode: props.mobileChromeReadingMode,
     showDesktopCommunityRail: props.showDesktopCommunityRail,
     showDesktopCommunityNav: props.showDesktopCommunityNav,
     isGlobalSettings: props.isGlobalSettings,

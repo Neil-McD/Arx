@@ -1949,6 +1949,7 @@ export default function App() {
   const [communityOnboardingFirstPostFocusRequest, setCommunityOnboardingFirstPostFocusRequest] =
     useState(0);
   const [mobileSettingsView, setMobileSettingsView] = useState<"index" | "detail">("detail");
+  const [mobileChromeReadingMode, setMobileChromeReadingMode] = useState(false);
 
   const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "landing");
   const [activeView, setActiveView] = useState<AppView>(() => initialAppRoute?.view ?? "home");
@@ -9170,6 +9171,23 @@ export default function App() {
     && mobileRootPage === "community"
     && selectedCommunityInteractionRootId,
   );
+  const mobileChromeAutoHideEnabled = Boolean(
+    showMobileAppShell
+    && shellPublicRoute.kind === "app"
+    && activePage === "community"
+    && communityTab === "chat"
+    && mobileRootPage === "community"
+    && !mobileThreadPageOpen
+  );
+  useEffect(() => {
+    if (mobileChromeAutoHideEnabled && !mobileOverlay) return;
+    setMobileChromeReadingMode(false);
+  }, [mobileChromeAutoHideEnabled, mobileOverlay]);
+  const mobileChromeReadingModeActive = Boolean(
+    mobileChromeAutoHideEnabled
+    && !mobileOverlay
+    && mobileChromeReadingMode
+  );
   const dockedWorkspaceCenterWidth =
     workspaceViewportWidth -
     WEB_RAIL_WIDTH -
@@ -10209,7 +10227,6 @@ export default function App() {
     };
     const {
       handleSelectMobileRootPage,
-      openMobileAgent,
       openMobileAgentSettings,
       handleExitMobileSettings,
       openMobileCreateCommunity,
@@ -10845,6 +10862,9 @@ export default function App() {
       interactionProjection: {
         enabled: COMMUNITY_INTERACTION_PROJECTION_ENABLED,
         mobileThreadPage: mobileThreadPageOpen,
+        onMobileReadingModeChange: mobileChromeAutoHideEnabled
+          ? setMobileChromeReadingMode
+          : undefined,
         roots: appendPendingRoots(communityInteractionRoots, pendingCanonicalInteractions, activeCommunityId),
         selectedRootId: selectedCommunityInteractionRootId,
         replies: appendPendingReplies(
@@ -11660,7 +11680,7 @@ export default function App() {
     hasResolvedCommunities &&
     Boolean(memberAgentSurfaceContext) &&
     !isCommunityLaunchSetupModalOpen &&
-    (!isDirectMessagesOpen || mobileOverlay === "agent") &&
+    !isDirectMessagesOpen &&
     !isOnboardingModalOpen;
   const globalOverlays = (
     <>
@@ -11669,9 +11689,8 @@ export default function App() {
         <WebMemberAgentDock
           isVisible={isMemberAgentDockVisible}
           mobileShellActive={showMobileShell}
-          mobileOverlay={showMobileShell && mobileOverlay === "agent"}
-          onRequestOpen={() => setMobileOverlay("agent")}
-          onRequestCloseMobile={() => setMobileOverlay(null)}
+          mobileRoot={showMobileShell && mobileRootPage === "agent"}
+          onRequestOpen={() => setMobileRootPage("agent")}
           communityId={memberAgentDockCommunity?.id ?? null}
           communityName={memberAgentDockCommunity?.name ?? null}
           surfaceContext={memberAgentSurfaceContext}
@@ -11852,6 +11871,8 @@ export default function App() {
     showMobileSettingsShell,
     showMobilePublicFunnel,
     mobileOverlay,
+    mobileChromeAutoHideEnabled,
+    mobileChromeReadingMode: mobileChromeReadingModeActive,
     showMobileShell,
     mobileShellMode,
     mobileRootPage,
@@ -11883,7 +11904,6 @@ export default function App() {
     handleExitMobileSettings,
     handleCloseMobileThreadPage: handleCloseCommunityInteractionDrawer,
     handleSelectMobileRootPage,
-    openMobileAgent,
     setMobileOverlay,
     isPublicCommunityFunnel,
     isPublicFunnelPreviewRoute: publicRoute.kind === "community_funnel_preview",
