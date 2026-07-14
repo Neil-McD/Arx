@@ -314,6 +314,11 @@ assert.match(
   "selection, AI identity, attention, and focus should have independent semantic roles",
 );
 assert.match(
+  indexCss,
+  /--mobile-floating-chrome-bg:\s*color-mix\([\s\S]*var\(--surface-workspace, var\(--bg-workspace\)\) 90%,[\s\S]*transparent[\s\S]*\.mobile-topbar-left \{[\s\S]*background: var\(--mobile-floating-chrome-bg\);[\s\S]*\.mobile-topbar-center \{[\s\S]*background: var\(--mobile-floating-chrome-bg\);[\s\S]*\.mobile-topbar-members \{[\s\S]*background: var\(--mobile-floating-chrome-bg\);/,
+  "the three mobile header islands should share one dense workspace-derived glass material",
+);
+assert.match(
   bottomRail,
   /<House className="mobile-bottom-rail-community-base" aria-hidden="true" \/>[\s\S]*<House className="mobile-bottom-rail-community-cutout" aria-hidden="true" \/>/,
   "the active Home state should reuse canonical House geometry with a dedicated cutout layer",
