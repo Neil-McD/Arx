@@ -83,50 +83,23 @@ export function WebCommunityOnboardingWorkflowSection(props: {
   };
 
   return (
-    <section className="community-onboarding-workflow" aria-busy={isLoading}>
-      <div className="settings-section-title">Onboarding</div>
-      <div className="model-note">
-        Orient each newly activated member, help them post, and introduce their private personal agent.
-      </div>
-      {isLoading ? <div className="model-note">Loading onboarding…</div> : (
-        <>
-          <label className="community-onboarding-toggle-row">
-            <span>
-              <strong>Member onboarding</strong>
-              <small>Runs once per membership activation. Existing members are not backfilled.</small>
-            </span>
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(event) => setEnabled(event.target.checked)}
-            />
-          </label>
-          <label className="create-field">
-            <span>Welcome message</span>
-            <textarea
-              value={welcomeMessage}
-              maxLength={1200}
-              rows={4}
-              onChange={(event) => setWelcomeMessage(event.target.value)}
-            />
-          </label>
-          <label className="create-field">
-            <span>Personal agent guidance</span>
-            <textarea
-              value={instructions}
-              maxLength={4000}
-              rows={7}
-              onChange={(event) => setInstructions(event.target.value)}
-            />
-          </label>
-          {error ? <div className="auth-error">{error}</div> : null}
-          <div className="agent-preview-actions">
+    <section className="settings-section community-onboarding-workflow" aria-busy={isLoading}>
+      <header className="community-onboarding-header">
+        <div className="community-onboarding-heading-copy">
+          <div className="settings-section-title">Onboarding</div>
+          <div className="settings-section-desc community-onboarding-description">
+            Orient each newly activated member, help them post, and introduce their private
+            personal agent.
+          </div>
+        </div>
+        {!isLoading && config ? (
+          <div className="agent-preview-actions community-onboarding-actions">
             {isDirty ? (
               <button type="button" onClick={reset} disabled={isSaving}>
                 Cancel
               </button>
             ) : (
-              <button type="button" onClick={props.onPreview} disabled={isSaving || !config}>
+              <button type="button" onClick={props.onPreview} disabled={isSaving}>
                 Preview
               </button>
             )}
@@ -139,6 +112,56 @@ export function WebCommunityOnboardingWorkflowSection(props: {
               {isSaving ? "Saving…" : isDirty ? "Save workflow" : "Saved"}
             </button>
           </div>
+        ) : null}
+      </header>
+      {isLoading ? <div className="model-note">Loading onboarding…</div> : (
+        <>
+          <label className="community-onboarding-toggle-row">
+            <input
+              type="checkbox"
+              role="switch"
+              aria-label="Run onboarding for new members"
+              checked={enabled}
+              onChange={(event) => setEnabled(event.target.checked)}
+            />
+            <span className="community-onboarding-toggle-copy">
+              <strong>Run for new members</strong>
+              <small>Runs once when access activates. Existing members are not backfilled.</small>
+            </span>
+            <span className="community-onboarding-switch" aria-hidden="true" />
+          </label>
+          <label className="create-community-field community-onboarding-field">
+            <span>Welcome message</span>
+            <span className="community-onboarding-field-note">
+              Shown in the opening welcome step.
+            </span>
+            <textarea
+              className="community-onboarding-textarea"
+              value={welcomeMessage}
+              maxLength={1200}
+              rows={4}
+              onChange={(event) => setWelcomeMessage(event.target.value)}
+            />
+          </label>
+          <label
+            className={
+              "create-community-field community-onboarding-field " +
+              "community-onboarding-field-instructions"
+            }
+          >
+            <span>Personal agent guidance</span>
+            <span className="community-onboarding-field-note">
+              Guides the member’s private agent during this onboarding flow.
+            </span>
+            <textarea
+              className="community-onboarding-textarea"
+              value={instructions}
+              maxLength={4000}
+              rows={7}
+              onChange={(event) => setInstructions(event.target.value)}
+            />
+          </label>
+          {error ? <div className="auth-error">{error}</div> : null}
         </>
       )}
       {!isLoading && !error && !config ? <div className="auth-error">Onboarding is unavailable.</div> : null}

@@ -34,6 +34,7 @@ const agentGuide = read("apps/web/src/components/WebCommunityOnboardingAgentGuid
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const app = read("apps/web/src/App.tsx");
 const personalDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
+const baseCss = read("apps/web/src/base.css");
 
 function advance(
   session: CommunityOnboardingMilestoneRow,
@@ -148,6 +149,13 @@ assert.match(personalDock, /aria-describedby/);
 assert.match(settings, /"community", "workflows", "integrations"/);
 assert.match(workflowUi, /Existing members are not backfilled/);
 assert.match(workflowUi, /Personal agent guidance/);
+assert.match(workflowUi, /className="settings-section community-onboarding-workflow"/);
+assert.match(workflowUi, /className="create-community-field community-onboarding-field/);
+assert.doesNotMatch(workflowUi, /className="create-field"/);
+assert.match(workflowUi, /role="switch"/);
+assert.match(workflowUi, /className="community-onboarding-switch"/);
+assert.match(baseCss, /\.community-onboarding-field textarea \{[\s\S]*?width: 100%;[\s\S]*?font-family: inherit;/);
+assert.match(baseCss, /input:checked ~ \.community-onboarding-switch/);
 assert.doesNotMatch(communityHost, /WebCommunityOnboardingController/);
 assert.match(communityHost, /firstPostFocusRequest/);
 assert.match(communityHost, /onSelectCommunityTab\?\.\("chat"\)/);
