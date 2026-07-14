@@ -33,7 +33,7 @@ export function buildWebShellChromeHostProps(params: {
   activeCommunity: CommunityLike | null;
   activeCommunityAttentionCount: number;
   activeCommunityMemberFaces: MobileMemberFace[];
-  activeCommunityOnlineCount: number | null;
+  activeCommunityMemberCount: number | null;
   openMobileDrawer: () => void;
   handleExitMobileSettings: () => void;
   handleCloseMobileThreadPage: () => void;
@@ -123,7 +123,7 @@ export function buildWebShellChromeHostProps(params: {
       activeCommunityAttentionCount: params.activeCommunityAttentionCount,
       canViewMembers: params.canViewMembersActiveCommunity,
       memberFaces: params.activeCommunityMemberFaces,
-      onlineCount: params.activeCommunityOnlineCount,
+      memberCount: params.activeCommunityMemberCount,
       onOpenDrawer: params.openMobileDrawer,
       onBack: params.mobileThreadPageOpen
         ? params.handleCloseMobileThreadPage

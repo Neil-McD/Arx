@@ -11855,11 +11855,11 @@ export default function App() {
       !isVisitorCommunitySurface && canViewMembersActiveCommunity
         ? activeCommunityPresenceSummary?.online_faces ?? []
         : [],
-    activeCommunityOnlineCount:
+    activeCommunityMemberCount:
       !isVisitorCommunitySurface && canViewMembersActiveCommunity
-        ? activeCommunityPresenceSummary?.online_count ??
-          activeCommunityPresenceSummary?.online_faces?.length ??
-          0
+        ? communityDirectoryMemberCount ??
+          activeCommunityPresenceSummary?.member_count ??
+          null
         : null,
     openMobileDrawer,
     handleExitMobileSettings,

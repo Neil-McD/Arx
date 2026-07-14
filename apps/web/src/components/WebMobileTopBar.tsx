@@ -19,19 +19,17 @@ type WebMobileTopBarProps = {
   activeCommunityAttentionCount: number;
   canViewMembers: boolean;
   memberFaces: MobileMemberFace[];
-  onlineCount: number | null;
+  memberCount: number | null;
   onOpenDrawer: () => void;
   onBack?: (() => void) | null;
   onOpenCommunitySelector: () => void;
   onOpenMembers: () => void;
 };
 
-function formatOnlineCount(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "Online";
+function formatMemberCount(value: number | null): string | null {
+  if (value === null || !Number.isFinite(value)) return null;
   const count = Math.max(0, Math.floor(value));
-  if (count < 1_000) return String(count);
-  if (count < 10_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
-  return `${Math.floor(count / 1_000)}K`;
+  return count.toLocaleString();
 }
 
 export function WebMobileTopBar({
@@ -50,7 +48,7 @@ export function WebMobileTopBar({
   activeCommunityAttentionCount,
   canViewMembers,
   memberFaces,
-  onlineCount,
+  memberCount,
   onOpenDrawer,
   onBack = null,
   onOpenCommunitySelector,
@@ -60,7 +58,7 @@ export function WebMobileTopBar({
   const isAgent = mode === "agent";
   const isDiscover = mode === "discover";
   const selectorLabel = isDiscover ? "Discover" : communityLabel;
-  const onlineCountLabel = formatOnlineCount(onlineCount);
+  const memberCountLabel = formatMemberCount(memberCount);
   const showMembers =
     !isThreadPage &&
     rootPage === "community" && mode === "community" && hasActiveCommunity && canViewMembers;
@@ -142,9 +140,9 @@ export function WebMobileTopBar({
           <button
             type="button"
             className="mobile-topbar-members"
-            aria-label={onlineCount === null
+            aria-label={memberCountLabel === null
               ? "View community members"
-              : `View community members, ${onlineCountLabel} online`}
+              : `View ${memberCountLabel} community ${memberCount === 1 ? "member" : "members"}`}
             title="Community members"
             onClick={onOpenMembers}
           >
@@ -162,7 +160,9 @@ export function WebMobileTopBar({
                 <path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" />
               </svg>
             )}
-            <span className="mobile-topbar-member-count">{onlineCountLabel}</span>
+            {memberCountLabel !== null ? (
+              <span className="mobile-topbar-member-count">{memberCountLabel}</span>
+            ) : null}
           </button>
         ) : null}
       </div>
