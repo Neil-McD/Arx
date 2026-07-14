@@ -25,6 +25,7 @@ export type CommunityOnboardingConfig = {
   welcome_message: string;
   agent_instructions: string;
   intro_video_url: string | null;
+  concierge_display_name: string;
   version: number;
   updated_at: string | null;
 };
@@ -37,9 +38,9 @@ export type CommunityOnboardingSession = {
   welcome_message: string;
   agent_instructions: string;
   intro_video_url: string | null;
+  concierge_display_name: string;
   orientation_seeded_at: string | null;
-  orientation_seed_message_key: string | null;
-  orientation_seed_message_seq: number | null;
+  orientation_seed_reply_id: string | null;
   activated_at: string;
   opened_at: string | null;
   orientation_completed_at: string | null;
@@ -81,15 +82,21 @@ export function normalizeCommunityOnboardingVideoUrl(raw: unknown): string | nul
 export function buildCommunityOnboardingOrientationSeed(params: {
   communityName: string;
   welcomeMessage: string;
+  conciergeDisplayName: string;
+  hasIntroVideo?: boolean;
 }): string {
   const communityName = String(params.communityName ?? "").trim() || "this community";
+  const conciergeDisplayName = String(params.conciergeDisplayName ?? "").trim() || communityName;
   const welcomeMessage = normalizeCommunityOnboardingText(
     params.welcomeMessage,
     COMMUNITY_ONBOARDING_WELCOME_MAX_CHARS,
   );
   return [
     welcomeMessage,
-    `I’m your personal agent here in ${communityName}. I can help you understand the community, answer questions, and find a useful first step. What would you like to know before we continue?`,
+    `I’m ${conciergeDisplayName}, the community concierge for ${communityName}. I’ll help you get oriented and take your first useful step.`,
+    params.hasIntroVideo
+      ? "Start with the short founder video above. Then tell me what you hope to get from this community."
+      : "What brought you here: learning, meeting people, or building something?",
   ].filter(Boolean).join("\n\n");
 }
 
@@ -152,9 +159,9 @@ export function createCommunityOnboardingPreviewSession(params: {
     welcome_message: params.config.welcome_message,
     agent_instructions: params.config.agent_instructions,
     intro_video_url: params.config.intro_video_url,
+    concierge_display_name: params.config.concierge_display_name,
     orientation_seeded_at: params.nowIso,
-    orientation_seed_message_key: `preview:${params.previewId}:orientation`,
-    orientation_seed_message_seq: 0,
+    orientation_seed_reply_id: null,
     activated_at: params.nowIso,
     opened_at: params.nowIso,
     orientation_completed_at: null,

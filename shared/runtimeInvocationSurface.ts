@@ -4,9 +4,7 @@ import type { MemberAgentSurfaceContextV1 } from "./memberAgentSurfaceContext.ts
 
 export type RuntimeInvocationSurface = "workspace" | "member_agent_dock";
 
-export type MemberAgentRuntimeMode =
-  | "standard"
-  | "community_onboarding_preview_test";
+export type MemberAgentRuntimeMode = "standard";
 
 export const MEMBER_AGENT_THREAD_KEY_PREFIX = "member-agent";
 export const MEMBER_AGENT_GLOBAL_SCOPE_KEY = "global";
@@ -41,9 +39,6 @@ export function normalizeRuntimeInvocationSurface(raw: unknown): RuntimeInvocati
 export function normalizeMemberAgentRuntimeMode(raw: unknown): MemberAgentRuntimeMode | null {
   const value = String(raw ?? "").trim();
   if (!value || value === "standard") return "standard";
-  if (value === "community_onboarding_preview_test") {
-    return "community_onboarding_preview_test";
-  }
   return null;
 }
 

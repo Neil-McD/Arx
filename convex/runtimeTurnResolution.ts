@@ -410,21 +410,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
     };
   }
-  if (
-    memberAgentMode === "community_onboarding_preview_test" &&
-    memberAgentSurfaceContext?.kind !== "community"
-  ) {
-    return {
-      ok: false,
-      response: fail(400, {
-        ok: false,
-        code: "community_onboarding_test_context_required",
-        error: "community_onboarding_test_context_required",
-        message: "Onboarding agent testing requires a community surface.",
-      }),
-    };
-  }
-
   setStage("messages");
   let conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
   if (invocationSurface === "member_agent_dock") {
@@ -752,66 +737,28 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     memberAgentSurfaceContext?.kind === "community" &&
     runtimeCommunityId
   ) {
-    if (memberAgentMode === "community_onboarding_preview_test") {
-      try {
-        const onboardingGuidance = (await ctx.runQuery(
-          (internal as any).communityOnboarding.resolveManagerPersonalAgentTestGuidanceInternal,
-          {
-            userId: actor.dbUserId,
-            communityId: runtimeCommunityId as any,
-          },
-        )) as { configVersion?: unknown; instructions?: unknown } | null;
-        runtimeCommunityOnboardingInstructions =
-          String(onboardingGuidance?.instructions ?? "").trim() || null;
-        runtimeCommunityOnboardingConfigVersion = Number.isFinite(
-          Number(onboardingGuidance?.configVersion),
-        )
-          ? Math.max(0, Math.floor(Number(onboardingGuidance?.configVersion)))
-          : null;
-        if (!runtimeCommunityOnboardingInstructions) {
-          throw new Error("community_onboarding_test_guidance_unavailable");
-        }
-      } catch (error) {
-        console.warn("runtime_community_onboarding_test_guidance_resolution_failed", {
-          requestId,
-          threadId: String(ownedThread._id),
-          communityId: runtimeCommunityId,
-          message: error instanceof Error ? error.message : String(error),
-        });
-        return {
-          ok: false,
-          response: fail(403, {
-            ok: false,
-            code: "community_onboarding_test_forbidden",
-            error: "community_onboarding_test_forbidden",
-            message: "Only community owners and admins can test onboarding with their agent.",
-          }),
-        };
-      }
-    } else {
-      try {
-        const onboardingGuidance = (await ctx.runQuery(
-          (internal as any).communityOnboarding.resolveActivePersonalAgentGuidanceInternal,
-          {
-            userId: actor.dbUserId,
-            communityId: runtimeCommunityId as any,
-          },
-        )) as { configVersion?: unknown; instructions?: unknown } | null;
-        runtimeCommunityOnboardingInstructions =
-          String(onboardingGuidance?.instructions ?? "").trim() || null;
-        runtimeCommunityOnboardingConfigVersion = Number.isFinite(
-          Number(onboardingGuidance?.configVersion),
-        )
-          ? Math.max(0, Math.floor(Number(onboardingGuidance?.configVersion)))
-          : null;
-      } catch (error) {
-        console.warn("runtime_community_onboarding_guidance_resolution_failed", {
-          requestId,
-          threadId: String(ownedThread._id),
-          communityId: runtimeCommunityId,
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
+    try {
+      const onboardingGuidance = (await ctx.runQuery(
+        (internal as any).communityOnboarding.resolveActivePersonalAgentGuidanceInternal,
+        {
+          userId: actor.dbUserId,
+          communityId: runtimeCommunityId as any,
+        },
+      )) as { configVersion?: unknown; instructions?: unknown } | null;
+      runtimeCommunityOnboardingInstructions =
+        String(onboardingGuidance?.instructions ?? "").trim() || null;
+      runtimeCommunityOnboardingConfigVersion = Number.isFinite(
+        Number(onboardingGuidance?.configVersion),
+      )
+        ? Math.max(0, Math.floor(Number(onboardingGuidance?.configVersion)))
+        : null;
+    } catch (error) {
+      console.warn("runtime_community_onboarding_guidance_resolution_failed", {
+        requestId,
+        threadId: String(ownedThread._id),
+        communityId: runtimeCommunityId,
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

@@ -39,9 +39,7 @@ import {
   type MemberAgentSurfaceContextV1,
 } from "../../../../shared/memberAgentSurfaceContext";
 import {
-  buildCommunityOnboardingOrientationSeed,
   shouldPresentCommunityOnboardingAgentStep,
-  shouldPresentCommunityOnboardingOrientation,
 } from "../../../../shared/communityOnboarding";
 import { useWebTurnRunnerController } from "../../../../shared/useWebTurnRunnerController";
 import type {
@@ -52,7 +50,6 @@ import type {
 import { RuntimeLiveTimeline } from "./RuntimeLiveTimeline";
 import { WebCommunityOnboardingAgentGuide } from "./WebCommunityOnboardingAgentGuide";
 import { useWebCommunityOnboarding } from "./WebCommunityOnboardingController";
-import { WebCommunityOnboardingOrientationModal } from "./WebCommunityOnboardingOrientationModal";
 import "./WebMemberAgentDock.css";
 
 type MemberAgentMessage = Omit<CloudMessageTransportRow, "role"> & {
@@ -125,8 +122,6 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const [input, setInput] = useState("");
   const [isPreparing, setIsPreparing] = useState(false);
   const [isStartingNewChat, setIsStartingNewChat] = useState(false);
-  const [isPreviewAgentTestEnabled, setIsPreviewAgentTestEnabled] = useState(false);
-  const [isStartingPreviewAgentTest, setIsStartingPreviewAgentTest] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [inferenceIssue, setInferenceIssue] = useState<InferenceIssueModalState | null>(null);
   const [sendingByThread, setSendingByThread] = useState<Record<string, boolean>>({});
@@ -149,17 +144,8 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const surfaceKind = props.surfaceContext?.kind ?? null;
   const onboardingSession = onboarding?.activeSession ?? null;
   const isOnboardingPreview = onboarding?.mode === "preview";
-  const isBuilderAgentTest = isOnboardingPreview && isPreviewAgentTestEnabled;
-  const isVisualOnboardingPreview = isOnboardingPreview && !isBuilderAgentTest;
-  const showOnboardingOrientation = Boolean(
-    props.communityId &&
-    props.communityName &&
-    onboardingSession?.community_id === props.communityId &&
-    shouldPresentCommunityOnboardingOrientation(onboardingSession),
-  );
-  const isConversationSurfaceActive = isOpenSurface || (
-    showOnboardingOrientation && (onboarding?.mode === "live" || isBuilderAgentTest)
-  );
+  const isVisualOnboardingPreview = isOnboardingPreview;
+  const isConversationSurfaceActive = isOpenSurface;
   if (agentScopeRef.current.userId !== scopeUserId) {
     agentScopeRef.current = {
       userId: scopeUserId,
@@ -272,18 +258,11 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     setStreamingByThread({});
     setIsPreparing(false);
     setIsStartingNewChat(false);
-    setIsPreviewAgentTestEnabled(false);
-    setIsStartingPreviewAgentTest(false);
     setInput("");
     setLocalError(null);
     setInferenceIssue(null);
     retryRef.current = null;
   }, [props.session?.user.id, stopStreamingTurn]);
-
-  useEffect(() => {
-    setIsPreviewAgentTestEnabled(false);
-    setIsStartingPreviewAgentTest(false);
-  }, [onboarding?.mode, onboardingSession?.id]);
 
   useEffect(() => {
     if (!props.isVisible) {
@@ -365,73 +344,6 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     shouldPresentCommunityOnboardingAgentStep(onboardingSession),
   );
   const onboardingDescriptionId = "community-onboarding-agent-description";
-  const orientationSeedSeq = onboardingSession?.orientation_seed_message_seq ?? null;
-  const orientationMessages = isBuilderAgentTest
-    ? visibleMessages.map((message) => ({
-        id: message.id,
-        role: message.role === "user" ? "user" as const : "assistant" as const,
-        text: extractTextFromContentJson(message.content_json),
-      }))
-    : !isOnboardingPreview && orientationSeedSeq !== null
-      ? visibleMessages
-        .filter((message) => message.seq >= orientationSeedSeq)
-        .map((message) => ({
-          id: message.id,
-          role: message.role === "user" ? "user" as const : "assistant" as const,
-          text: extractTextFromContentJson(message.content_json),
-        }))
-      : [];
-  const orientationSeedPresentation = onboardingSession && props.communityName
-    ? {
-        id: onboardingSession.orientation_seed_message_key ?? `${onboardingSession.id}:seed`,
-        role: "assistant" as const,
-        text: buildCommunityOnboardingOrientationSeed({
-          communityName: props.communityName,
-          welcomeMessage: onboardingSession.welcome_message,
-        }),
-      }
-    : null;
-  const orientationPresentationMessages = isBuilderAgentTest
-    ? [orientationSeedPresentation, ...orientationMessages].filter(
-        (message): message is NonNullable<typeof message> => Boolean(message),
-      )
-    : orientationMessages.length > 0
-      ? orientationMessages
-      : orientationSeedPresentation
-        ? [orientationSeedPresentation]
-        : [];
-
-  useEffect(() => {
-    if (
-      isOnboardingPreview ||
-      !showOnboardingOrientation ||
-      orientationSeedSeq === null ||
-      !threadKey ||
-      !props.session
-    ) return;
-    let cancelled = false;
-    const scope = agentScopeRef.current;
-    void props.ensureSession(props.session, "member_agent_onboarding_seed_ready")
-      .then((usableSession) => {
-        if (!usableSession || cancelled || !isCurrentScope(scope)) return null;
-        return loadMessages(threadKey, usableSession);
-      })
-      .catch((error) => {
-        if (!cancelled) console.warn("member_agent_onboarding_seed_load_failed", error);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    isCurrentScope,
-    isOnboardingPreview,
-    loadMessages,
-    orientationSeedSeq,
-    props.ensureSession,
-    props.session,
-    showOnboardingOrientation,
-    threadKey,
-  ]);
 
   useEffect(() => {
     if (
@@ -547,50 +459,6 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     retryRef.current = null;
   }, [observeThreadContext]);
 
-  const startPreviewAgentTest = async () => {
-    if (
-      !isOnboardingPreview ||
-      isPreviewAgentTestEnabled ||
-      isStartingPreviewAgentTest ||
-      !props.communityId ||
-      !props.surfaceContext ||
-      props.surfaceContext.kind !== "community" ||
-      !props.session
-    ) {
-      return;
-    }
-    const scope = agentScopeRef.current;
-    setIsStartingPreviewAgentTest(true);
-    setLocalError(null);
-    setInferenceIssue(null);
-    try {
-      const usableSession = await props.ensureSession(
-        props.session,
-        "member_agent_onboarding_preview_test",
-      );
-      if (!usableSession || !isCurrentScope(scope)) return;
-      const current = await ensureCloudMemberAgentGlobalChannel({
-        session: usableSession,
-        initialCommunityId: props.communityId,
-      });
-      if (!isCurrentScope(scope)) return;
-      const thread = await startNewCloudMemberAgentGlobalEpisode({
-        session: usableSession,
-        initialCommunityId: props.communityId,
-        expectedActiveEpisodeId: current.episode_id,
-      });
-      if (!isCurrentScope(scope)) return;
-      activateEmptyEpisode(thread);
-      setIsPreviewAgentTestEnabled(true);
-    } catch (error) {
-      if (!isCurrentScope(scope)) return;
-      console.warn("member_agent_onboarding_preview_test_start_failed", error);
-      setLocalError("Your private agent test could not start. Try again.");
-    } finally {
-      if (isCurrentScope(scope)) setIsStartingPreviewAgentTest(false);
-    }
-  };
-
   useEffect(() => {
     if (!isOpen) return;
     const frame = window.requestAnimationFrame(() => {
@@ -674,7 +542,6 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       turnIsActive ||
       isPreparing ||
       isStartingNewChat ||
-      isStartingPreviewAgentTest ||
       !props.surfaceContext ||
       !props.session
     ) {
@@ -751,9 +618,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         userMessageKey: messageId,
         runtimeEngine: "polynet",
         invocationSurface: "member_agent_dock",
-        memberAgentMode: isBuilderAgentTest
-          ? "community_onboarding_preview_test"
-          : "standard",
+        memberAgentMode: "standard",
         surfaceContext: props.surfaceContext,
         requestedFundingSource: "auto",
         requestedAgenticTools: true,
@@ -823,11 +688,9 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             <span>
               <strong>Your agent</strong>
               <small>
-                {isBuilderAgentTest
-                  ? "Builder test · your limits"
-                  : isOnboardingPreview
+                {isOnboardingPreview
                     ? "Preview mode"
-                  : turnIsActive
+                    : turnIsActive
                     ? "Working"
                     : `${surfaceLabel} context`}
               </small>
@@ -958,15 +821,13 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
               placeholder={
                 isVisualOnboardingPreview
                   ? "Preview only — agent messages are disabled"
-                  : isBuilderAgentTest
-                    ? `Test your onboarding agent in ${surfaceLabel}`
                   : `Message your agent in ${surfaceLabel}`
               }
               aria-label="Message your agent"
               aria-describedby={showOnboardingAgentGuide ? onboardingDescriptionId : undefined}
               rows={1}
               maxLength={8000}
-              disabled={!isVisualOnboardingPreview && (turnIsActive || isPreparing || isStartingNewChat || isStartingPreviewAgentTest)}
+              disabled={!isVisualOnboardingPreview && (turnIsActive || isPreparing || isStartingNewChat)}
             />
             {!isVisualOnboardingPreview && turnIsActive && threadKey ? (
               <button
@@ -980,7 +841,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             ) : (
               <button
                 type="submit"
-                disabled={isVisualOnboardingPreview || !input.trim() || isPreparing || isStartingNewChat || isStartingPreviewAgentTest}
+                disabled={isVisualOnboardingPreview || !input.trim() || isPreparing || isStartingNewChat}
                 aria-label="Send"
                 title="Send"
               >
@@ -991,33 +852,6 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         </div>
       </section>
     </aside>
-    {showOnboardingOrientation && onboardingSession && props.communityName && onboarding ? (
-      <WebCommunityOnboardingOrientationModal
-        communityName={props.communityName}
-        session={onboardingSession}
-        messages={orientationPresentationMessages}
-        input={input}
-        isPreview={isOnboardingPreview}
-        isAgentTest={isBuilderAgentTest}
-        isStartingAgentTest={isStartingPreviewAgentTest}
-        isPreparing={
-          isPreparing ||
-          (!isOnboardingPreview && onboardingSession.orientation_seeded_at === null)
-        }
-        isWorking={turnIsActive}
-        streamedText={streamedText}
-        isPending={onboarding.pendingAction !== null}
-        error={onboarding.error ?? dockError}
-        onInputChange={setInput}
-        onStartAgentTest={() => void startPreviewAgentTest()}
-        onSubmit={submit}
-        onStop={() => {
-          if (threadKey) stopStreamingTurn(threadKey);
-        }}
-        onContinue={onboarding.completeOrientation}
-        onDismiss={onboarding.dismiss}
-      />
-    ) : null}
     </>
   );
 }

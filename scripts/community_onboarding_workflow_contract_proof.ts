@@ -59,8 +59,9 @@ assert.match(
   buildCommunityOnboardingOrientationSeed({
     communityName: "Practice",
     welcomeMessage: "Welcome to the room.",
+    conciergeDisplayName: "Practice Guide",
   }),
-  /Welcome to the room\.[\s\S]*personal agent[\s\S]*Practice/,
+  /Welcome to the room\.[\s\S]*Practice Guide[\s\S]*community concierge[\s\S]*Practice/,
 );
 assert.match(describeCommunityOnboardingPhaseObjective("orientation"), /orientation questions/);
 
@@ -102,7 +103,7 @@ assert.match(schema, /communityMemberships: defineTable\([\s\S]*activationSequen
 assert.match(schema, /communityOnboardingConfigs: defineTable/);
 assert.match(schema, /communityOnboardingSessions: defineTable/);
 assert.match(schema, /introVideoUrl: v\.optional\(v\.string\(\)\)/);
-assert.match(schema, /orientationSeedMessageKey: v\.optional\(v\.string\(\)\)/);
+assert.match(schema, /orientationSeedReplyId: v\.optional\(v\.id\("communityInteractionReplies"\)\)/);
 assert.match(schema, /v\.literal\("active"\)[\s\S]*v\.literal\("completed"\)[\s\S]*v\.literal\("dismissed"\)[\s\S]*v\.literal\("superseded"\)/);
 assert.doesNotMatch(schema, /communityOnboardingSessions:[\s\S]{0,1800}v\.literal\("queued"\)/);
 assert.match(schema, /\.index\("by_membership_activation", \["membershipId", "activationSequence"\]\)/);
@@ -131,24 +132,21 @@ assert.doesNotMatch(onboardingCore, /\.collect\(\)/, "onboarding reads must rema
 assert.match(onboarding, /completeMyCommunityOnboardingOrientation/);
 assert.match(onboarding, /recordPersonalAgentDockTurnInternal/);
 assert.match(onboarding, /resolveActivePersonalAgentGuidanceInternal/);
-assert.match(onboarding, /resolveManagerPersonalAgentTestGuidanceInternal/);
-assert.match(onboarding, /resolveManagerPersonalAgentTestGuidanceInternal[\s\S]*requireCommunityManager/);
+assert.doesNotMatch(onboarding, /resolveManagerPersonalAgentTestGuidanceInternal/);
 assert.match(onboarding, /deriveCommunityOnboardingPhase\(/);
 assert.match(onboarding, /deriveCommunityOnboardingPhase\(activeSession\) !== "first_agent_dock_turn"/);
-assert.match(onboarding, /community-onboarding:\$\{normalizeIdValue\(session\._id\)\}:orientation/);
-assert.match(onboarding, /by_owner_messageKey/);
-assert.match(onboarding, /orientationSeedMessageSeq/);
+assert.match(onboarding, /ensureCommunityAgentDockWelcomeCore/);
+assert.match(onboarding, /orientationSeedReplyId/);
 assert.match(onboarding, /buildCommunityOnboardingOrientationSeed/);
 assert.match(onboarding, /status: "dismissed"/);
-assert.doesNotMatch(onboarding, /communityAgent|Concierge|runChatgpt|provider/i);
+assert.doesNotMatch(onboarding, /ensureGlobalMemberAgentChannelWithCommunityLensCore|cloudMessages|polynet_onboarding/);
 assert.match(interactions, /milestone: "first_community_post"/);
 assert.match(runtime, /shouldRecordCommunityOnboardingAgentTurn/);
 assert.match(runtime, /recordPersonalAgentDockTurnInternal/);
 assert.match(runtimeInvocationSurface, /params\.memberAgentMode === "standard"/);
 assert.match(runtimeInvocationSurface, /params\.surfaceKind === "community"/);
 assert.match(runtimeResolution, /resolveActivePersonalAgentGuidanceInternal/);
-assert.match(runtimeResolution, /resolveManagerPersonalAgentTestGuidanceInternal/);
-assert.match(runtimeResolution, /community_onboarding_test_forbidden/);
+assert.doesNotMatch(runtimeResolution, /resolveManagerPersonalAgentTestGuidanceInternal|community_onboarding_test_forbidden/);
 assert.match(runtimeResolution, /memberAgentSurfaceContext\?\.kind === "community"/);
 assert.match(runtimeResolution, /runtimeCommunityOnboardingInstructions/);
 assert.doesNotMatch(
@@ -164,8 +162,9 @@ assert.match(threads, /ensureGlobalMemberAgentChannelWithCommunityLensCore/);
 assert.match(runtimeAgentLoop, /communityOnboardingInstructions: params\.communityOnboardingInstructions/);
 assert.match(codexWorkerBridge, /communityOnboardingInstructions: params\.communityOnboardingInstructions/);
 
-assert.doesNotMatch(conciergeIntake, /communityOnboarding|onboardingSession|requestMode/);
-assert.doesNotMatch(conciergeWorker, /communityOnboarding|onboardingSession|community_concierge/);
+assert.match(conciergeIntake, /onboardingMode/);
+assert.match(conciergeWorker, /ONBOARDING_ORIENTATION/);
+assert.match(conciergeWorker, /deriveCommunityOnboardingPhase\(session\) !== "orientation"/);
 assert.equal(
   existsSync("apps/web/src/components/WebCommunityOnboardingCard.tsx"),
   false,
@@ -174,18 +173,16 @@ assert.equal(
 assert.equal(existsSync("convex/communityAgentDockCore.ts"), false);
 assert.match(personalDock, /shouldPresentCommunityOnboardingAgentStep/);
 assert.match(personalDock, /WebCommunityOnboardingAgentGuide/);
-assert.match(personalDock, /WebCommunityOnboardingOrientationModal/);
-assert.match(personalDock, /Test your onboarding agent/);
-assert.match(personalDock, /memberAgentMode: isBuilderAgentTest/);
+assert.doesNotMatch(personalDock, /WebCommunityOnboardingOrientationModal|Test your onboarding agent/);
+assert.match(personalDock, /memberAgentMode: "standard"/);
 assert.match(personalDock, /requestedFundingSource: "auto"/);
-assert.match(personalDock, /orientationSeedSeq/);
 assert.match(personalDock, /onboardingOpenedSessionIdsRef/);
 assert.match(personalDock, /textareaRef/);
 assert.match(personalDock, /aria-describedby/);
 
 assert.match(settings, /"community", "workflows", "integrations"/);
 assert.match(workflowUi, /Existing members are not backfilled/);
-assert.match(workflowUi, /Personal agent guidance/);
+assert.match(workflowUi, /Concierge guidance/);
 assert.match(workflowUi, /Founder orientation video/);
 assert.match(workflowUi, /separate from the public funnel/);
 assert.match(workflowUi, /className="settings-section community-onboarding-workflow"/);
@@ -213,12 +210,15 @@ assert.match(onboardingController, /WebCommunityOnboardingContext\.Provider/);
 assert.match(onboardingController, /openCloudCommunityOnboardingSession/);
 assert.match(onboardingController, /completeCloudCommunityOnboardingOrientation/);
 assert.match(onboardingController, /dismissCloudCommunityOnboardingSession/);
-assert.doesNotMatch(onboardingController, /WebCommunityOnboardingOrientationModal/);
+assert.match(onboardingController, /WebCommunityOnboardingOrientationModal/);
+assert.match(onboardingController, /subscribeCloudCommunityAgentDockTranscript/);
+assert.match(onboardingController, /sendCloudCommunityAgentDockMessage/);
 assert.match(orientationModal, /role="dialog"/);
 assert.match(orientationModal, /aria-modal="true"/);
 assert.match(orientationModal, /WebCommunityOnboardingOrientationSurface/);
 assert.match(orientationSurface, /renderHeroMediaDefault\("video"/);
-assert.match(orientationSurface, /Your personal agent/);
+assert.match(orientationSurface, /community Concierge/);
+assert.match(orientationSurface, /props\.isPreparing \|\| props\.isWorking/);
 assert.match(orientationSurface, /onSubmit=\{props\.onSubmit\}/);
 assert.match(orientationSurface, /Skip onboarding/);
 assert.match(orientationSurface, /Continue to community chat/);
@@ -240,4 +240,4 @@ assert.match(agentGuide, /It already has \{props\.communityName\} context/);
 assert.match(agentGuide, /Skip onboarding/);
 assert.doesNotMatch(agentGuide, /setInput|startNewCloudMemberAgentGlobalEpisode|runAgentTurn/);
 
-console.log("PASS: onboarding is activation-bound, milestone-driven, and personal-agent scoped.");
+console.log("PASS: onboarding is activation-bound, milestone-driven, and Concierge-led.");

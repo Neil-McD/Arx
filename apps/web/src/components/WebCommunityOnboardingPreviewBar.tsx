@@ -30,8 +30,8 @@ export function WebCommunityOnboardingPreviewBar(props: {
             : props.isLoading
               ? "Loading the saved workflow…"
               : props.configuredEnabled === false
-                ? "Currently off · Member actions are disabled"
-                : "Member actions are disabled"}
+                ? "Currently off · Community posting is disabled"
+                : "Community posting is disabled · Concierge messages stay private"}
         </span>
       </div>
       <div className="community-onboarding-preview-bar-actions">

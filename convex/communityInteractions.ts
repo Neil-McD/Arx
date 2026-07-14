@@ -35,7 +35,11 @@ import {
 } from "./communitySourceUrlPolicy";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { intakeCommunityAgentMention } from "./communityAgentConciergeCore";
-import { recordCommunityOnboardingMilestone } from "./communityOnboardingCore";
+import {
+  findActiveCommunityOnboardingSession,
+  recordCommunityOnboardingMilestone,
+} from "./communityOnboardingCore";
+import { deriveCommunityOnboardingPhase } from "../shared/communityOnboarding";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import {
   buildCommunityAgentServeRunId,
@@ -1856,6 +1860,98 @@ export const createCommunityInteractionComposerMessage = mutation({
   },
 });
 
+export async function ensureCommunityAgentDockWelcomeCore(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+  onboardingSessionId: any;
+  text: string;
+  nowMs: number;
+}): Promise<any> {
+  const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
+  if (!text) throw new Error("community_onboarding_welcome_required");
+
+  const rootIdempotencyKey = communityAgentDockRootIdempotencyKey(args.userId);
+  let root = await getExistingRootByIdempotencyKey(
+    args.ctx,
+    args.communityId,
+    rootIdempotencyKey,
+  );
+  if (!root) {
+    const rootId = await args.ctx.db.insert("communityInteractionRoots" as any, {
+      communityId: args.communityId,
+      actorType: "system",
+      actorUserId: args.userId,
+      actorAgentKey: CANONICAL_COMMUNITY_AGENT_KEY,
+      kind: "agent_signal",
+      status: "live",
+      visibilityScope: "private",
+      contentSummary: "Private community agent conversation",
+      replyCount: 0,
+      reactionSummary: [],
+      idempotencyKey: rootIdempotencyKey,
+      createdAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+    root = (await args.ctx.db.get(rootId)) as InteractionRootRow | null;
+    if (!root) throw new Error("community_agent_dock_root_create_failed");
+  }
+  assertOwnedCommunityAgentDockRoot(root, args.userId);
+
+  const replyIdempotencyKey = `community_onboarding:welcome:${normalizeIdValue(args.onboardingSessionId)}`.slice(
+    0,
+    MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS,
+  );
+  const existingReply = await getExistingReplyByIdempotencyKey(
+    args.ctx,
+    args.communityId,
+    replyIdempotencyKey,
+  );
+  if (existingReply) {
+    if (
+      normalizeIdValue(existingReply.rootId) !== normalizeIdValue(root._id) ||
+      existingReply.actorType !== "community_agent" ||
+      existingReply.actorAgentKey !== CANONICAL_COMMUNITY_AGENT_KEY ||
+      existingReply.visibilityScope !== "private"
+    ) {
+      throw new Error("community_onboarding_welcome_idempotency_conflict");
+    }
+    return existingReply;
+  }
+
+  const seq = await nextReplySeq(args.ctx, root._id);
+  const replyId = await args.ctx.db.insert("communityInteractionReplies" as any, {
+    communityId: args.communityId,
+    rootId: root._id,
+    seq,
+    actorType: "community_agent",
+    actorAgentKey: CANONICAL_COMMUNITY_AGENT_KEY,
+    status: "live",
+    visibilityScope: "private",
+    contentSummary: text.slice(0, MAX_INTERACTION_SUMMARY_CHARS),
+    reactionSummary: [],
+    idempotencyKey: replyIdempotencyKey,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  await insertContentBlocksForTarget({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    replyId,
+    visibilityScope: "private",
+    blocks: [{ blockType: "markdown_text", text }],
+    nowMs: args.nowMs,
+  });
+  await args.ctx.db.patch(root._id, {
+    replyCount: Math.max(0, Math.floor(root.replyCount ?? 0)) + 1,
+    lastReplyAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  const reply = await args.ctx.db.get(replyId);
+  if (!reply) throw new Error("community_onboarding_welcome_create_failed");
+  return reply;
+}
+
 export const sendCommunityAgentDockMessage = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -1863,6 +1959,7 @@ export const sendCommunityAgentDockMessage = mutation({
     communityId: v.id("communities"),
     idempotencyKey: v.string(),
     text: v.string(),
+    onboardingPreview: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -1872,6 +1969,9 @@ export const sendCommunityAgentDockMessage = mutation({
     });
     await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
     await requireProfileSetupCompleteForUser(ctx, userId);
+    if (args.onboardingPreview) {
+      await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    }
 
     const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
     if (!text) throw new Error("interaction_content_required");
@@ -1972,10 +2072,27 @@ export const sendCommunityAgentDockMessage = mutation({
       mention = (await ctx.db.get(mentionId)) as MentionRow | null;
       if (!mention) throw new Error("community_agent_dock_mention_create_failed");
     }
+    const activeOnboardingSession = args.onboardingPreview
+      ? null
+      : await findActiveCommunityOnboardingSession({
+          ctx,
+          communityId: args.communityId,
+          userId,
+        });
+    const liveOnboardingSession =
+      activeOnboardingSession && deriveCommunityOnboardingPhase(activeOnboardingSession) === "orientation"
+        ? activeOnboardingSession
+        : null;
     const intake = await intakeCommunityAgentMention({
       ctx,
       mention,
       nowMs,
+      onboardingMode: args.onboardingPreview
+        ? "manager_preview"
+        : liveOnboardingSession
+          ? "live"
+          : undefined,
+      onboardingSessionId: liveOnboardingSession?._id,
     });
 
     return {

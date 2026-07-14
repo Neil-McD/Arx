@@ -2,6 +2,7 @@ import {
   buildCommunityOnboardingMilestonePatch,
   type CommunityOnboardingMilestone,
 } from "../shared/communityOnboarding";
+import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 
 type CommunityOnboardingSessionRow = Record<string, any> & {
   _id: any;
@@ -56,6 +57,10 @@ export async function createCommunityOnboardingSessionForActivation(args: {
   }
 
   const introVideoUrlSnapshot = String(config.introVideoUrl ?? "").trim() || undefined;
+  const agentContext = await readCanonicalCommunityAgentContext(args.ctx, args.communityId);
+  const conciergeDisplayNameSnapshot =
+    String(agentContext?.agentDisplayName ?? agentContext?.communityName ?? "Polynet").trim() ||
+    "Polynet";
 
   return await args.ctx.db.insert("communityOnboardingSessions" as any, {
     communityId: args.communityId,
@@ -66,6 +71,7 @@ export async function createCommunityOnboardingSessionForActivation(args: {
     welcomeMessageSnapshot: String(config.welcomeMessage ?? "").trim(),
     agentInstructionsSnapshot: String(config.agentInstructions ?? "").trim(),
     ...(introVideoUrlSnapshot ? { introVideoUrlSnapshot } : {}),
+    conciergeDisplayNameSnapshot,
     status: "active",
     activatedAt: args.activatedAt,
     createdAt: args.activatedAt,

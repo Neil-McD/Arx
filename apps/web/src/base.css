@@ -33935,34 +33935,6 @@ button.message-citation-chip:hover {
   gap: 2px;
 }
 
-.community-onboarding-orientation-agent-test {
-  min-height: 32px;
-  margin-left: auto;
-  padding: 0 11px;
-  border: 1px solid color-mix(in srgb, var(--accent-rose) 48%, var(--border-default));
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--accent-rose) 12%, transparent);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.community-onboarding-orientation-agent-test:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent-rose) 18%, transparent);
-}
-
-.community-onboarding-orientation-agent-test:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent-rose) 58%, transparent);
-  outline-offset: 2px;
-}
-
-.community-onboarding-orientation-agent-test:disabled {
-  cursor: wait;
-  opacity: 0.62;
-}
-
 .community-onboarding-orientation-agent-disclosure {
   padding: 9px 14px;
   border-bottom: 1px solid var(--border-muted);
@@ -34225,13 +34197,14 @@ button.message-citation-chip:hover {
 }
 
 .community-onboarding-orientation-actions .primary {
-  border: 1px solid color-mix(in srgb, var(--accent-rose) 72%, white 12%);
-  background: color-mix(in srgb, var(--accent-rose) 84%, #ffffff 8%);
-  color: #ffffff;
+  border: 1px solid var(--bg-button);
+  background: var(--bg-button);
+  color: var(--bg-button-text);
 }
 
 .community-onboarding-orientation-actions .primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent-rose) 90%, #ffffff 10%);
+  border-color: var(--bg-button-hover);
+  background: var(--bg-button-hover);
 }
 
 @keyframes community-onboarding-overlay-in {

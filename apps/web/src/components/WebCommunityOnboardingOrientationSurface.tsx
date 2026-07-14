@@ -16,8 +16,6 @@ export function WebCommunityOnboardingOrientationSurface(props: {
   messages: CommunityOnboardingOrientationMessage[];
   input: string;
   isPreview: boolean;
-  isAgentTest?: boolean;
-  isStartingAgentTest?: boolean;
   isPreparing: boolean;
   isWorking: boolean;
   streamedText: string;
@@ -27,12 +25,10 @@ export function WebCommunityOnboardingOrientationSurface(props: {
   titleId?: string;
   descriptionId?: string;
   composerRef?: Ref<HTMLTextAreaElement>;
-  continueButtonRef?: Ref<HTMLButtonElement>;
   transcriptRef?: Ref<HTMLDivElement>;
   onInputChange: (value: string) => void;
-  onStartAgentTest?: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onStop: () => void;
+  onStop?: () => void;
   onContinue: () => void;
   onDismiss: () => void;
 }) {
@@ -42,8 +38,9 @@ export function WebCommunityOnboardingOrientationSurface(props: {
         playHint: "Watch the founder welcome",
       })
     : null;
-  const controlsDisabled = Boolean(props.isInline) || props.isPending;
-  const isAgentInteractive = !props.isPreview || Boolean(props.isAgentTest);
+  const controlsDisabled =
+    Boolean(props.isInline) || props.isPending || props.isPreparing || props.isWorking;
+  const isAgentInteractive = !props.isInline;
 
   return (
     <>
@@ -58,39 +55,29 @@ export function WebCommunityOnboardingOrientationSurface(props: {
         <header className="community-onboarding-orientation-header">
           <div className="community-onboarding-orientation-eyebrow">Welcome to</div>
           <h1 id={props.titleId}>{props.communityName}</h1>
-          <p id={props.descriptionId}>Your personal agent will help you get oriented before you enter.</p>
+          <p id={props.descriptionId}>The community Concierge will help you get oriented before you enter.</p>
         </header>
 
-        <section className="community-onboarding-orientation-agent" aria-label="Orientation with your personal agent">
+        <section className="community-onboarding-orientation-agent" aria-label="Orientation with the community Concierge">
           <div className="community-onboarding-orientation-agent-header">
             <span className="community-onboarding-orientation-agent-avatar" aria-hidden="true">
               <Sparkles />
             </span>
             <span>
-              <strong>Your personal agent</strong>
+              <strong>{props.session.concierge_display_name}</strong>
               <small>
-                {props.isAgentTest
-                  ? "Builder test · uses your agent limits"
+                {props.isInline
+                  ? "Preview · no inference"
                   : props.isPreview
-                    ? "Preview · no inference"
-                    : `${props.communityName} context`}
+                    ? "Builder preview · community Concierge"
+                    : `${props.communityName} Concierge`}
               </small>
             </span>
-            {props.isPreview && !props.isInline && !props.isAgentTest && props.onStartAgentTest ? (
-              <button
-                type="button"
-                className="community-onboarding-orientation-agent-test"
-                onClick={props.onStartAgentTest}
-                disabled={props.isStartingAgentTest}
-              >
-                {props.isStartingAgentTest ? "Opening your agent…" : "Test with my agent"}
-              </button>
-            ) : null}
           </div>
 
-          {props.isAgentTest ? (
+          {props.isPreview && !props.isInline ? (
             <div className="community-onboarding-orientation-agent-disclosure" role="status">
-              Uses your connected provider and rate limits. Messages stay in your private agent history.
+              Messages use your connected provider and limits. They stay in your private Concierge history.
             </div>
           ) : null}
 
@@ -105,7 +92,7 @@ export function WebCommunityOnboardingOrientationSurface(props: {
             ))}
             {props.isPreparing ? (
               <div className="community-onboarding-orientation-status">
-                <LoaderCircle aria-hidden="true" /> Opening your private agent
+                <LoaderCircle aria-hidden="true" /> Opening the community Concierge
               </div>
             ) : null}
             {props.streamedText ? (
@@ -134,24 +121,22 @@ export function WebCommunityOnboardingOrientationSurface(props: {
               maxLength={8000}
               readOnly={!isAgentInteractive}
               tabIndex={props.isInline ? -1 : undefined}
-              disabled={isAgentInteractive && (props.isWorking || props.isPreparing || props.isStartingAgentTest)}
+              disabled={isAgentInteractive && (props.isWorking || props.isPreparing)}
               placeholder={
                 !isAgentInteractive
-                  ? "Preview only — member messages are disabled"
-                  : props.isAgentTest
-                    ? `Test your onboarding agent in ${props.communityName}`
-                  : `Ask anything about ${props.communityName}`
+                    ? "Preview only — member messages are disabled"
+                    : `Reply to ${props.session.concierge_display_name}`
               }
-              aria-label="Ask your personal agent about this community"
+              aria-label="Reply to the community Concierge"
             />
-            {isAgentInteractive && props.isWorking ? (
+            {isAgentInteractive && props.isWorking && props.onStop ? (
               <button type="button" onClick={props.onStop} aria-label="Stop" title="Stop">
                 <Square aria-hidden="true" />
               </button>
             ) : (
               <button
                 type="submit"
-                disabled={!isAgentInteractive || props.isPreparing || props.isStartingAgentTest || !props.input.trim()}
+                disabled={!isAgentInteractive || props.isPreparing || props.isWorking || !props.input.trim()}
                 aria-label="Send"
                 title="Send"
               >
@@ -171,7 +156,6 @@ export function WebCommunityOnboardingOrientationSurface(props: {
           Skip onboarding
         </button>
         <button
-          ref={props.continueButtonRef}
           type="button"
           className="primary"
           onClick={props.onContinue}

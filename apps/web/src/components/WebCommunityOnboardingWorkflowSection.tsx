@@ -74,6 +74,7 @@ export function WebCommunityOnboardingWorkflowSection(props: {
       welcome_message: welcomeMessage,
       agent_instructions: instructions,
       intro_video_url: normalizeCommunityOnboardingVideoUrl(introVideoUrl),
+      concierge_display_name: config?.concierge_display_name || props.communityName,
       version: config?.version ?? 0,
       updated_at: config?.updated_at ?? null,
     },
@@ -87,8 +88,10 @@ export function WebCommunityOnboardingWorkflowSection(props: {
     text: buildCommunityOnboardingOrientationSeed({
       communityName: props.communityName,
       welcomeMessage,
+      conciergeDisplayName: config?.concierge_display_name || props.communityName,
+      hasIntroVideo: Boolean(normalizeCommunityOnboardingVideoUrl(introVideoUrl)),
     }),
-  }], [props.communityName, welcomeMessage]);
+  }], [config?.concierge_display_name, introVideoUrl, props.communityName, welcomeMessage]);
 
   const reset = () => {
     if (!config) return;
@@ -206,7 +209,7 @@ export function WebCommunityOnboardingWorkflowSection(props: {
               <div className="community-onboarding-editor-heading">
                 <span>Step 1 of 3</span>
                 <h2>Welcome new members</h2>
-                <p>Add a founder video and set the opening message from the member’s personal agent.</p>
+                <p>Add a founder video and set the opening message from the community Concierge.</p>
               </div>
 
               <label className="create-community-field community-onboarding-field">
@@ -228,7 +231,7 @@ export function WebCommunityOnboardingWorkflowSection(props: {
               <label className="create-community-field community-onboarding-field">
                 <span>Welcome message</span>
                 <span className="community-onboarding-field-note">
-                  The first thing their personal agent says.
+                  The first thing the community Concierge says.
                 </span>
                 <textarea
                   className="community-onboarding-textarea"
@@ -243,12 +246,12 @@ export function WebCommunityOnboardingWorkflowSection(props: {
                 <summary>
                   <span>
                     <strong>Advanced agent instructions</strong>
-                    <small>Control how the personal agent guides this orientation.</small>
+                    <small>Control how the community Concierge guides this orientation.</small>
                   </span>
                   <span aria-hidden="true">+</span>
                 </summary>
                 <label className="create-community-field community-onboarding-field community-onboarding-field-instructions">
-                  <span>Personal agent guidance</span>
+                  <span>Concierge guidance</span>
                   <textarea
                     className="community-onboarding-textarea"
                     value={instructions}

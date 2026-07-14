@@ -21,17 +21,14 @@ export function WebCommunityOnboardingOrientationModal(props: {
   messages: CommunityOnboardingOrientationMessage[];
   input: string;
   isPreview: boolean;
-  isAgentTest?: boolean;
-  isStartingAgentTest?: boolean;
   isPreparing: boolean;
   isWorking: boolean;
   streamedText: string;
   isPending: boolean;
   error: string | null;
   onInputChange: (value: string) => void;
-  onStartAgentTest?: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onStop: () => void;
+  onStop?: () => void;
   onContinue: () => void;
   onDismiss: () => void;
 }) {
@@ -39,7 +36,6 @@ export function WebCommunityOnboardingOrientationModal(props: {
   const descriptionId = useId();
   const modalRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
-  const continueButtonRef = useRef<HTMLButtonElement | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const isPendingRef = useRef(props.isPending);
   const onDismissRef = useRef(props.onDismiss);
@@ -53,9 +49,7 @@ export function WebCommunityOnboardingOrientationModal(props: {
     const previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const focusFrame = window.requestAnimationFrame(() => {
-      (props.isPreview && !props.isAgentTest
-        ? continueButtonRef.current
-        : composerRef.current)?.focus();
+      composerRef.current?.focus();
     });
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -95,7 +89,7 @@ export function WebCommunityOnboardingOrientationModal(props: {
       document.body.style.overflow = previousBodyOverflow;
       previousActiveElement?.focus();
     };
-  }, [props.isAgentTest, props.isPreview]);
+  }, []);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -124,7 +118,6 @@ export function WebCommunityOnboardingOrientationModal(props: {
           titleId={titleId}
           descriptionId={descriptionId}
           composerRef={composerRef}
-          continueButtonRef={continueButtonRef}
           transcriptRef={transcriptRef}
         />
       </div>

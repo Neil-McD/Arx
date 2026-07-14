@@ -1347,7 +1347,11 @@ export default defineSchema({
     welcomeMessageSnapshot: v.string(),
     agentInstructionsSnapshot: v.string(),
     introVideoUrlSnapshot: v.optional(v.string()),
+    conciergeDisplayNameSnapshot: v.optional(v.string()),
     orientationSeededAt: v.optional(v.number()),
+    orientationSeedReplyId: v.optional(v.id("communityInteractionReplies")),
+    // Legacy personal-agent seed coordinates. Retained only so staging rows
+    // created by the superseded implementation remain schema-compatible.
     orientationSeedMessageKey: v.optional(v.string()),
     orientationSeedMessageSeq: v.optional(v.number()),
     status: v.union(
@@ -1938,6 +1942,10 @@ export default defineSchema({
     ),
     responseRootId: v.optional(v.id("communityInteractionRoots")),
     responseReplyId: v.optional(v.id("communityInteractionReplies")),
+    onboardingMode: v.optional(
+      v.union(v.literal("live"), v.literal("manager_preview")),
+    ),
+    onboardingSessionId: v.optional(v.id("communityOnboardingSessions")),
     attempt: v.optional(v.number()),
     runId: v.optional(v.id("communityAgentRuns")),
     sourceTraceId: v.optional(v.id("communitySourceTraces")),
