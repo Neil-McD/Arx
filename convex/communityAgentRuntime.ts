@@ -181,35 +181,34 @@ function safeParseObject(raw: string): Record<string, any> | null {
   }
 }
 
-function collectCandidateProposalIdFromToolOutput(outputText: string, out: Set<string>): void {
-  const parsed = safeParseObject(outputText);
-  const id = boundedText(parsed?.result?.proposal?.id, 128);
-  if (id) out.add(id);
+function collectAutonomousMemoryIdsFromToolOutput(args: {
+  outputText: string;
+  candidateProposalIds: Set<string>;
+  appliedChangeRequestIds: Set<string>;
+}): void {
+  const parsed = safeParseObject(args.outputText);
+  const retention = parsed?.result?.retention;
+  const id = boundedText(retention?.id, 128);
+  if (!id) return;
+  args.candidateProposalIds.add(id);
+  if (boundedText(retention?.status, 40) === "applied") {
+    args.appliedChangeRequestIds.add(id);
+  }
 }
 
 function collectWriteActionIdsFromToolOutput(args: {
   outputText: string;
   candidateProposalIds: Set<string>;
-  acceptedChangeRequestIds: Set<string>;
-  rejectedChangeRequestIds: Set<string>;
   appliedChangeRequestIds: Set<string>;
 }): void {
   const parsed = safeParseObject(args.outputText);
   const operation = boundedText(parsed?.operation, 120);
-  if (operation === "propose_directory_candidate_from_digest_item") {
-    collectCandidateProposalIdFromToolOutput(args.outputText, args.candidateProposalIds);
-    return;
-  }
-  const id = boundedText(parsed?.result?.id, 128);
-  if (!id) return;
-  if (operation === "decide_change_request") {
-    const status = boundedText(parsed?.result?.status, 40);
-    if (status === "accepted") args.acceptedChangeRequestIds.add(id);
-    if (status === "rejected") args.rejectedChangeRequestIds.add(id);
-    return;
-  }
-  if (operation === "apply_accepted_change_request") {
-    args.appliedChangeRequestIds.add(id);
+  if (operation === "retain_compiler_digest_item") {
+    collectAutonomousMemoryIdsFromToolOutput({
+      outputText: args.outputText,
+      candidateProposalIds: args.candidateProposalIds,
+      appliedChangeRequestIds: args.appliedChangeRequestIds,
+    });
   }
 }
 
@@ -269,20 +268,20 @@ const COMMUNITY_AGENT_SHARED_RULES = [
   "- Use only the tools provided in this run.",
   "- The filesystem exposes only /compiler and /directory.",
   "- Do not ask for raw activity. Activity must already be compiler evidence.",
-  "- Treat compiler digests and candidates as non-canonical.",
-  "- Use write, when available, only to propose a directory candidate from a compiler digest item.",
+  "- Treat compiler digests as non-canonical evidence summaries until a write validates and retains an item.",
+  "- Use write, when available, only to retain a compiler digest item as memory.",
   "- Never claim a directory node or edge was changed unless a tool result says so.",
-  "- Prefer no write over a weak or private-looking proposal.",
+  "- Prefer no write over weak, private-looking, or duplicate memory.",
   "- If no useful action is supported, finish with a short no-op summary.",
 ].join("\n");
 
-const COMMUNITY_AGENT_LEGACY_PROCEDURE = [
+const COMMUNITY_AGENT_DEFAULT_PROCEDURE = [
   "Operating procedure:",
   "1. Review the <compiler_window> and <directory_state> blocks provided in the wake message; fall back to reading /compiler/window only if they are absent.",
-  "2. If a digest exists, inspect its items and the existing candidate state before proposing.",
-  "3. Inspect directory state only when needed to avoid duplicate or stale proposals.",
-  "4. Propose at most three digest-derived candidates, only when evidence supports future workflow value.",
-  "5. Finish with a concise internal summary of what you inspected and what you proposed.",
+  "2. If a digest exists, inspect its items and existing memory before retaining anything.",
+  "3. Inspect directory state only when needed to avoid duplicate or stale memory.",
+  "4. Retain at most three digest-derived learnings, only when evidence supports future workflow value.",
+  "5. Finish with a concise internal summary of what you inspected and retained.",
 ].join("\n");
 
 function buildCommunityAgentMessages(params: {
@@ -319,7 +318,7 @@ function buildCommunityAgentMessages(params: {
         `<role_definition>\n${params.role.rolePrompt}\n</role_definition>`,
         renderCommunityAgentSkills(params.role.skillKeys),
       ].join("\n")
-    : COMMUNITY_AGENT_LEGACY_PROCEDURE;
+    : COMMUNITY_AGENT_DEFAULT_PROCEDURE;
   return [
     {
       role: "system",
@@ -354,7 +353,7 @@ function buildCommunityAgentMessages(params: {
 }
 
 // The steward does not need the full window (the ledger carries the analysis);
-// it needs the coordinates for the propose op: digest id + item indices/titles.
+// it needs the coordinates for the retain op: digest id + item indices/titles.
 function slimCompilerWindowForSteward(window: unknown): unknown {
   if (!window || typeof window !== "object") return window;
   const raw = window as Record<string, any>;
@@ -523,7 +522,7 @@ export const summarizeCommunityDirectoryStateInternal = internalQuery({
 });
 
 // Cycle ledger: the shared working document the sleep roles hand each other.
-// Deliberately separate from the directory airlock write mutation — ledger
+// Deliberately separate from the atomic directory write mutation — ledger
 // notes never touch directory truth.
 export const appendCommunityAgentCycleLedgerNoteInternal = internalMutation({
   args: {
@@ -914,7 +913,7 @@ export const runCommunityAgentLoopInternal = internalAction({
     // Best-effort: if any read fails, the agent falls back to its tools.
     // Per-role diffing: the observer gets the full compiler window; later roles
     // get the cycle ledger instead (the ledger IS the diff); the steward also
-    // gets a slim digest reference list so the propose op has its coordinates.
+    // gets a slim digest reference list so the retain op has its coordinates.
     const roleKey = roleDefinition?.roleKey;
     const wantsWindow = !roleKey || roleKey === "observer" || roleKey === "steward";
     const wantsLedger = roleKey === "questioner" || roleKey === "steward";
@@ -1018,8 +1017,6 @@ export const runCommunityAgentLoopInternal = internalAction({
             collectWriteActionIdsFromToolOutput({
               outputText: toolResult.outputText,
               candidateProposalIds,
-              acceptedChangeRequestIds,
-              rejectedChangeRequestIds,
               appliedChangeRequestIds,
             });
           }

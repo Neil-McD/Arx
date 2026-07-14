@@ -2785,25 +2785,65 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
   ctx: any;
   changeRequestId: any;
   actor: PolicyDecisionActor;
+  applicationMode?: "accepted_request" | "autonomous_compiler_memory";
   reason?: string;
   nowMs?: number;
 }): Promise<ReturnType<typeof mapChangeRequestRow>> {
   const changeRequest = await getChangeRequestOrThrow(args.ctx, args.changeRequestId);
-  if (changeRequest.status !== "accepted") {
+  const payload = payloadObject(changeRequest.requestedPayload);
+  const autonomousCompilerMemory = args.applicationMode === "autonomous_compiler_memory";
+  if (autonomousCompilerMemory) {
+    if (
+      (changeRequest.status !== "pending_decision" && changeRequest.status !== "accepted") ||
+      changeRequest.operation !== "create_node" ||
+      payload.source !== "compiler_digest_item_v1" ||
+      (changeRequest.createdByActorType !== "compiler" && changeRequest.createdByActorType !== "agent")
+    ) {
+      throw new Error("community_intelligence_autonomous_memory_policy_forbidden");
+    }
+  } else if (changeRequest.status !== "accepted") {
     throw new Error("community_intelligence_change_request_must_be_accepted");
   }
   const actor = normalizePolicyDecisionActor(args.actor);
-  const payload = payloadObject(changeRequest.requestedPayload);
+  if (
+    autonomousCompilerMemory &&
+    actor.actorType !== "compiler" &&
+    actor.actorType !== "agent"
+  ) {
+    throw new Error("community_intelligence_autonomous_memory_actor_forbidden");
+  }
+  const nowMs = args.nowMs ?? Date.now();
   await requireChangeRequestReferencesAllowedForApply(args.ctx, changeRequest);
-  const evidenceCitationIds = changeRequest.evidenceCitationIds ?? [];
+  let evidenceCitationIds = changeRequest.evidenceCitationIds ?? [];
+  let evidencePolicyVersion = changeRequest.evidencePolicyVersion;
+  if (
+    autonomousCompilerMemory &&
+    (changeRequest.sourceTraceIds ?? []).length > 0 &&
+    (evidencePolicyVersion !== COMMUNITY_EVIDENCE_POLICY_VERSION ||
+      evidenceCitationIds.length === 0)
+  ) {
+    evidenceCitationIds = await captureCommunityEvidenceCitationsForSourceTracesCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      sourceTraceIds: changeRequest.sourceTraceIds ?? [],
+      actorType: changeRequest.createdByActorType === "agent" ? "agent" : "compiler",
+      capturedAt: nowMs,
+    });
+    evidencePolicyVersion = COMMUNITY_EVIDENCE_POLICY_VERSION;
+    await args.ctx.db.patch(changeRequest._id as any, {
+      evidenceCitationIds,
+      evidencePolicyVersion,
+      updatedAt: nowMs,
+    });
+  }
   if (
     (changeRequest.sourceTraceIds ?? []).length > 0 &&
-    (changeRequest.evidencePolicyVersion !== COMMUNITY_EVIDENCE_POLICY_VERSION ||
+    (evidencePolicyVersion !== COMMUNITY_EVIDENCE_POLICY_VERSION ||
       evidenceCitationIds.length === 0)
   ) {
     throw new Error("community_evidence_citation_review_required");
   }
-  if (changeRequest.evidencePolicyVersion === COMMUNITY_EVIDENCE_POLICY_VERSION) {
+  if (evidencePolicyVersion === COMMUNITY_EVIDENCE_POLICY_VERSION) {
     await requireCommunityEvidenceCitationsActiveCore({
       ctx: args.ctx,
       communityId: changeRequest.communityId,
@@ -2840,7 +2880,6 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
     }
   }
 
-  const nowMs = args.nowMs ?? Date.now();
   let appliedMutationId: any = undefined;
   let appliedNodeIds = changeRequest.targetNodeIds ?? [];
   let appliedEdgeIds = changeRequest.targetEdgeIds ?? [];
@@ -2908,7 +2947,11 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       afterSnapshot: mapNodeRow(node),
       sourceTraceIds: changeRequest.sourceTraceIds ?? [],
       policyDecisionId: normalizeIdValue(changeRequest._id),
-      reason: args.reason ?? "accepted_change_request_create_node",
+      reason:
+        args.reason ??
+        (autonomousCompilerMemory
+          ? "autonomous_compiler_memory_create_node"
+          : "accepted_change_request_create_node"),
       nowMs,
     });
   } else if (changeRequest.operation === "create_edge") {
@@ -2989,7 +3032,11 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       afterSnapshot: mapEdgeRow(edge),
       sourceTraceIds: changeRequest.sourceTraceIds ?? [],
       policyDecisionId: normalizeIdValue(changeRequest._id),
-      reason: args.reason ?? "accepted_change_request_create_edge",
+      reason:
+        args.reason ??
+        (autonomousCompilerMemory
+          ? "autonomous_compiler_memory_create_edge"
+          : "accepted_change_request_create_edge"),
       nowMs,
     });
   } else {
@@ -3132,7 +3179,11 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       afterSnapshot: mapNodeRow(updated),
       sourceTraceIds: changeRequest.sourceTraceIds ?? [],
       policyDecisionId: normalizeIdValue(changeRequest._id),
-      reason: args.reason ?? "accepted_change_request_apply",
+      reason:
+        args.reason ??
+        (autonomousCompilerMemory
+          ? "autonomous_compiler_memory_apply"
+          : "accepted_change_request_apply"),
       nowMs,
     });
   }

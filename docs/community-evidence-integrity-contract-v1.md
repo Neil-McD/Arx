@@ -15,9 +15,10 @@ applied.
 3. `communityEvidenceCitations` records an immutable source ref, opaque source
    version, content hash, provenance hash, visibility snapshot, and capture
    time. It stores no raw source content.
-4. `communityIntelligenceChangeRequests` remains the governance airlock.
-5. Accepted nodes and edges retain the citation ids applied through that
-   airlock.
+4. `communityIntelligenceChangeRequests` is the immutable validation and audit
+   ledger. It is not a routine approval gate for compiler memory.
+5. Retained nodes and edges carry the exact citation ids validated during their
+   atomic apply.
 
 ## Resolution
 
@@ -46,7 +47,7 @@ foreign, hidden, deleted, or nonexistent source.
 
 ## Change-request enforcement
 
-- New source-backed change requests use `evidencePolicyVersion=citation_v1`.
+- New source-backed memory changes use `evidencePolicyVersion=citation_v1`.
 - Their source traces are resolved into immutable citations at proposal time.
 - Apply time resolves every citation again and compares source version,
   content hash, provenance hash, and visibility.
@@ -59,6 +60,8 @@ foreign, hidden, deleted, or nonexistent source.
   them; partial attachment requires retained v1 citations to remain active.
 - `observed`, `measured`, or `validated` evidence strength requires at least one
   citation.
+- Compiler-derived `create_node` memory may validate and apply atomically in one
+  transaction. This removes acceptance choreography, not evidence enforcement.
 
 ## Legacy compatibility
 

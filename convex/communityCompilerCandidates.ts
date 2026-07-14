@@ -1,15 +1,16 @@
-import { query } from "./_generated/server";
-import { v } from "convex/values";
 import {
   normalizeIdValue,
-  requireCommunityManager,
-  resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
-import { createTrustedCommunityIntelligenceChangeRequest } from "./communityIntelligenceDirectory";
+import {
+  applyTrustedCommunityIntelligenceChangeRequestCore,
+  createTrustedCommunityIntelligenceChangeRequest,
+} from "./communityIntelligenceDirectory";
 
 const COMMUNITY_COMPILER_CANDIDATE_AGENT_KEY = "community_compiler_candidate_v1";
 const COMMUNITY_COMPILER_CANDIDATE_PAYLOAD_SOURCE = "compiler_digest_item_v1";
+const AUTONOMOUS_MEMORY_POLICY_VERSION = "autonomous_memory_v1";
+const AUTONOMOUS_MEMORY_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK = 0.3;
 
 type DigestCategory =
   | "chat_activity"
@@ -467,7 +468,7 @@ function buildCandidateBody(args: {
     `Source types: ${sourceTypes}`,
     `Source ids: ${sourceIds}`,
     "",
-    "Review boundary: this is candidate intelligence only. It must be accepted and applied through the community intelligence airlock before it becomes directory truth.",
+    "Retention boundary: this compiler output is validated and retained atomically. Fully resolved community-readable evidence may become promising memory; incomplete or higher-risk output remains admin-visible forming memory.",
   ].join("\n");
 }
 
@@ -590,6 +591,66 @@ function mapCandidateProposal(row: ChangeRequestRow) {
   };
 }
 
+function autonomousMemoryPayload(args: {
+  payload: unknown;
+  sourceTraceIds: any[];
+  privacyRisk: number;
+}): Record<string, unknown> {
+  const payload = payloadObject(args.payload);
+  const sourceTraceResolution = payloadObject(payload.sourceTraceResolution);
+  const evidenceFullyResolved =
+    args.sourceTraceIds.length > 0 &&
+    sourceTraceResolution.status === "resolved" &&
+    (payload.sourceVisibility === "community" || payload.sourceVisibility === "public");
+  const retainForCommunity =
+    evidenceFullyResolved &&
+    args.privacyRisk <= AUTONOMOUS_MEMORY_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK;
+  return {
+    ...payload,
+    status: retainForCommunity ? "promising" : "candidate",
+    visibilityScope: retainForCommunity ? "community" : "admin",
+    autonomousMemoryPolicyVersion: AUTONOMOUS_MEMORY_POLICY_VERSION,
+    autonomousMemoryDisposition: retainForCommunity ? "retained" : "forming",
+  };
+}
+
+async function retainCompilerCandidateAutonomously(args: {
+  ctx: any;
+  row: ChangeRequestRow;
+  actorType: "compiler" | "agent";
+  actorAgentKey: string;
+  nowMs: number;
+}): Promise<ChangeRequestRow> {
+  if (args.row.status === "applied") return args.row;
+  if (args.row.status !== "pending_decision" && args.row.status !== "accepted") {
+    throw new Error("community_compiler_candidate_not_autonomously_applicable");
+  }
+  await args.ctx.db.patch(args.row._id as any, {
+    requestedPayload: autonomousMemoryPayload({
+      payload: args.row.requestedPayload,
+      sourceTraceIds: args.row.sourceTraceIds ?? [],
+      privacyRisk: args.row.privacyRisk,
+    }),
+    updatedAt: args.nowMs,
+  });
+  await applyTrustedCommunityIntelligenceChangeRequestCore({
+    ctx: args.ctx,
+    changeRequestId: args.row._id,
+    actor: {
+      actorType: args.actorType,
+      actorAgentKey: args.actorAgentKey,
+    },
+    applicationMode: "autonomous_compiler_memory",
+    reason: AUTONOMOUS_MEMORY_POLICY_VERSION,
+    nowMs: args.nowMs,
+  });
+  const applied = (await args.ctx.db.get(args.row._id as any)) as ChangeRequestRow | null;
+  if (!applied || applied.status !== "applied") {
+    throw new Error("community_compiler_candidate_autonomous_apply_failed");
+  }
+  return applied;
+}
+
 async function getDigestOrThrow(ctx: any, digestId: any): Promise<CompilerDigestRow> {
   const digest = (await ctx.db.get(digestId as any)) as CompilerDigestRow | null;
   if (!digest) throw new Error("community_compiler_digest_not_found");
@@ -616,7 +677,7 @@ async function findExistingDigestItemCandidate(args: {
   );
 }
 
-export async function proposeCommunityIntelligenceFromDigestItemCore(args: {
+export async function retainCommunityIntelligenceFromDigestItemCore(args: {
   ctx: any;
   communityId: any;
   digestId: any;
@@ -647,10 +708,17 @@ export async function proposeCommunityIntelligenceFromDigestItemCore(args: {
     itemIndex,
   });
   if (existing) {
+    const retained = await retainCompilerCandidateAutonomously({
+      ctx: args.ctx,
+      row: existing,
+      actorType: args.actorType ?? "compiler",
+      actorAgentKey: args.actorAgentKey ?? COMMUNITY_COMPILER_CANDIDATE_AGENT_KEY,
+      nowMs: args.nowMs ?? Date.now(),
+    });
     return {
       ok: true,
       reused_existing: true,
-      proposal: mapCandidateProposal(existing),
+      retention: mapCandidateProposal(retained),
     };
   }
   const sourceTraceResolution = await resolveSourceTraceIdsForDigestItem({
@@ -667,59 +735,37 @@ export async function proposeCommunityIntelligenceFromDigestItemCore(args: {
     proposedByCommunityAgentRunId: args.proposedByCommunityAgentRunId,
     proposedByCommunityAgentHeartbeatId: args.proposedByCommunityAgentHeartbeatId,
   });
-  const proposal = await createTrustedCommunityIntelligenceChangeRequest({
+  const nowMs = args.nowMs ?? Date.now();
+  const actorType = args.actorType ?? "compiler";
+  const actorAgentKey = args.actorAgentKey ?? COMMUNITY_COMPILER_CANDIDATE_AGENT_KEY;
+  const privacyRisk = clampScore(
+    0.25 + (sourceTraceResolution.sourceTraceIds.length === 0 && (item.sourceIds ?? []).length > 0 ? 0.1 : 0),
+    0.25,
+  );
+  const auditRecord = await createTrustedCommunityIntelligenceChangeRequest({
     ctx: args.ctx,
     communityId: args.communityId,
     operation: "create_node",
     sourceTraceIds: sourceTraceResolution.sourceTraceIds,
     requestedPayload,
     confidence: clampScore(item.confidence, 0.5),
-    privacyRisk: clampScore(
-      0.25 + (sourceTraceResolution.sourceTraceIds.length === 0 && (item.sourceIds ?? []).length > 0 ? 0.1 : 0),
-      0.25,
-    ),
-    actorType: args.actorType ?? "compiler",
-    actorAgentKey: args.actorAgentKey ?? COMMUNITY_COMPILER_CANDIDATE_AGENT_KEY,
-    nowMs: args.nowMs ?? Date.now(),
+    privacyRisk,
+    actorType,
+    actorAgentKey,
+    nowMs,
+  });
+  const auditRow = (await args.ctx.db.get(auditRecord.id as any)) as ChangeRequestRow | null;
+  if (!auditRow) throw new Error("community_compiler_candidate_create_failed");
+  const retained = await retainCompilerCandidateAutonomously({
+    ctx: args.ctx,
+    row: auditRow,
+    actorType,
+    actorAgentKey,
+    nowMs,
   });
   return {
     ok: true,
     reused_existing: false,
-    proposal,
+    retention: mapCandidateProposal(retained),
   };
 }
-
-export const listCommunityCompilerCandidateProposals = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    digestId: v.optional(v.id("communityCompilerDigests")),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
-    const digestId = args.digestId ? normalizeIdValue(args.digestId) : null;
-    const rows = (await ctx.db
-      .query("communityIntelligenceChangeRequests" as any)
-      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
-      .order("desc")
-      .take(Math.max(100, limit * 4))) as ChangeRequestRow[];
-    return rows
-      .filter((row) => row.operation === "create_node")
-      .filter((row) => {
-        const payload = payloadObject(row.requestedPayload);
-        if (payload.source !== COMMUNITY_COMPILER_CANDIDATE_PAYLOAD_SOURCE) return false;
-        if (!digestId) return true;
-        return payload.compilerDigestId === digestId;
-      })
-      .slice(0, limit)
-      .map(mapCandidateProposal);
-  },
-});

@@ -28,7 +28,7 @@ assert.match(runtime, /readCanonicalCommunityAgentContext/);
 assert.match(context, /communityAgentConfigs[\s\S]*by_community_updatedAt[\s\S]*\.order\("desc"\)[\s\S]*\.first\(\)/);
 assert.doesNotMatch(runtime, /query\("communityAgentConfigs"/);
 assert.match(boundary, /member_concierge[\s\S]*sponsor: "requester"[\s\S]*toolAuthority: "retrieval_only"/);
-assert.match(boundary, /autonomous_cognition[\s\S]*sponsor: "community_owner"[\s\S]*toolAuthority: "steward_airlock_only"/);
+assert.match(boundary, /autonomous_cognition[\s\S]*sponsor: "community_owner"[\s\S]*toolAuthority: "steward_memory_write_only"/);
 assert.match(runtime, /buildCommunityAgentIdentityPrompt\(\{ surface: "autonomous_cognition" \}\)/);
 assert.doesNotMatch(runtime, /export const runCommunityAgentLoop = action\(|export const .* = action\(/);
 assert.doesNotMatch(runtime, /userPrompt|prompt: v\.string|authSubject|userId: v\.optional/);
@@ -82,9 +82,10 @@ assert.match(
 );
 assert.match(
   protocol,
-  /operation:[\s\S]*enum: \[[\s\S]*"propose_directory_candidate_from_digest_item"[\s\S]*"decide_change_request"[\s\S]*"apply_accepted_change_request"/,
-  "write tool should support proposal, decision, and apply as operation values",
+  /operation:[\s\S]*enum: \["retain_compiler_digest_item"\]/,
+  "write tool should expose one atomic memory-retention operation",
 );
+assert.doesNotMatch(protocol, /decide_change_request|apply_accepted_change_request/);
 assert.doesNotMatch(protocol, /activity|communityId|authSubject|userId|crossCommunity|globalMemory/);
 
 assert.match(
@@ -108,9 +109,10 @@ assert.doesNotMatch(runtime, /listThreadMessages|listCommunityAiFeedBundle|listC
 
 assert.match(
   filesystem,
-  /writeCommunityAgentFilesystemInternal = internalMutation\([\s\S]*operation: v\.union\([\s\S]*v\.literal\("propose_directory_candidate_from_digest_item"\)[\s\S]*v\.literal\("decide_change_request"\)[\s\S]*v\.literal\("apply_accepted_change_request"\)[\s\S]*proposeCommunityIntelligenceFromDigestItemCore/,
-  "runtime write tool should land on the existing filesystem airlock",
+  /writeCommunityAgentFilesystemInternal = internalMutation\([\s\S]*operation: v\.literal\("retain_compiler_digest_item"\)[\s\S]*retainCommunityIntelligenceFromDigestItemCore/,
+  "runtime write tool should land on the atomic compiler-memory path",
 );
+assert.doesNotMatch(filesystem, /decide_change_request|apply_accepted_change_request/);
 assert.match(
   docs,
   /Ninth Implementation Slice[\s\S]*internal community-agent runtime loop[\s\S]*owner-sponsored ChatGPT inference[\s\S]*canonical `agentKey`: `community_agent`[\s\S]*must not accept `agentKey` as caller input[\s\S]*list`, `read`, `search`, and `write`[\s\S]*must not directly insert or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`[\s\S]*missing owner auth[\s\S]*must finish the run as an error/,
@@ -144,12 +146,12 @@ assert.match(
 
 // Role harness (Amendment v1.1): one agent entity, role prompts on the same
 // harness, chained per heartbeat cycle over a shared ledger. Authority is
-// structural: only the steward's tool list contains the airlock write tool.
+// structural: only the steward's tool list contains the memory write tool.
 const roles = readFileSync(join(root, "shared/communityAgentRoles.ts"), "utf8");
 assert.match(
   roles,
   /observer:[\s\S]*toolNames: \["list", "read", "search", "note"\][\s\S]*questioner:[\s\S]*toolNames: \["list", "read", "search", "note"\][\s\S]*steward:[\s\S]*toolNames: \["list", "read", "search", "note", "write"\]/,
-  "only the steward role may carry the airlock write tool",
+  "only the steward role may carry the memory write tool",
 );
 assert.match(
   roles,
@@ -164,7 +166,7 @@ assert.match(
 assert.match(
   runtime,
   /appendCommunityAgentCycleLedgerNoteInternal = internalMutation/,
-  "cycle ledger appends must be a separate mutation from the directory airlock write",
+  "cycle ledger appends must be separate from the atomic directory write",
 );
 assert.match(
   runtime,
@@ -184,14 +186,14 @@ assert.match(
   "a woken heartbeat should run the role cycle, not a single pass",
 );
 
-// Airlock decision ledger: successful write calls are collected into compact
-// action id arrays. Applying a change request is explicit filesystem behavior,
-// not an out-of-band same-cycle auto-apply helper.
+// Atomic memory ledger: one successful write records both the audit-row id and
+// its applied id. Legacy accepted/rejected arrays remain empty compatibility
+// fields for historical run rows.
 const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
 assert.match(
   runtime,
-  /function collectWriteActionIdsFromToolOutput[\s\S]*propose_directory_candidate_from_digest_item[\s\S]*decide_change_request[\s\S]*acceptedChangeRequestIds[\s\S]*rejectedChangeRequestIds[\s\S]*apply_accepted_change_request[\s\S]*appliedChangeRequestIds/,
-  "runtime should collect proposal, decision, and apply ids from successful write results",
+  /function collectAutonomousMemoryIdsFromToolOutput[\s\S]*retention\?\.status[\s\S]*=== "applied"[\s\S]*appliedChangeRequestIds\.add/,
+  "runtime should collect the same atomic write as both an audit proposal and applied memory",
 );
 assert.match(
   runtime,
@@ -201,17 +203,17 @@ assert.match(
 assert.match(
   runtime,
   /finishCommunityAgentRunInternal[\s\S]*acceptedChangeRequestIds: v\.array\(v\.string\(\)\)[\s\S]*rejectedChangeRequestIds: v\.array\(v\.string\(\)\)[\s\S]*appliedChangeRequestIds: v\.array\(v\.string\(\)\)/,
-  "finished runs should persist accepted/rejected/applied ids",
+  "finished runs should preserve legacy decision arrays and applied memory ids",
 );
 assert.match(
   runtime,
   /roleResults[\s\S]*accepted_change_request_ids: string\[\][\s\S]*rejected_change_request_ids: string\[\][\s\S]*applied_change_request_ids: string\[\]/,
-  "cycle results should expose action arrays per role",
+  "cycle results should preserve compatible action arrays per role",
 );
-assert.doesNotMatch(
-  `${runtime}\n${directory}`,
-  /autoApplyCommunityAgentProposalsInternal|STEWARD_AUTO_APPLY|steward_auto_apply/,
-  "same-cycle auto-apply should not remain in runtime or directory code",
+assert.match(
+  directory,
+  /applicationMode === "autonomous_compiler_memory"[\s\S]*community_intelligence_autonomous_memory_policy_forbidden/,
+  "same-transaction autonomy should be enforced by the canonical directory policy",
 );
 
 // Ignition (Amendment v1.1): the 6h sweep is triple-gated before spend —

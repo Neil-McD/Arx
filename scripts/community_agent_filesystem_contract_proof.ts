@@ -92,53 +92,38 @@ assert.match(filesystem, /"directory"[\s\S]*"change-requests"[\s\S]*readExpected
 assert.match(filesystem, /communityIntelligenceEdges[\s\S]*by_community[\s\S]*\.take\(Math\.max\(100, limit \* 4\)\)/);
 assert.match(
   filesystem,
-  /operation: v\.union\([\s\S]*v\.literal\("propose_directory_candidate_from_digest_item"\)[\s\S]*v\.literal\("decide_change_request"\)[\s\S]*v\.literal\("apply_accepted_change_request"\)/,
-  "write should expose proposal, decision, and apply as narrow operations on the same filesystem tool",
+  /operation: v\.literal\("retain_compiler_digest_item"\)/,
+  "write should expose one atomic compiler-memory operation",
 );
 assert.match(
   protocol,
-  /enum: \[[\s\S]*"propose_directory_candidate_from_digest_item"[\s\S]*"decide_change_request"[\s\S]*"apply_accepted_change_request"/,
-  "tool schema should expose decision/apply without adding new tools",
+  /enum: \["retain_compiler_digest_item"\]/,
+  "tool schema should expose only the atomic compiler-memory operation",
 );
-assert.match(candidates, /export async function proposeCommunityIntelligenceFromDigestItemCore/);
+assert.doesNotMatch(
+  `${filesystem}\n${protocol}`,
+  /decide_change_request|apply_accepted_change_request|same_run_self_review/,
+  "the autonomous memory surface should not retain acceptance choreography",
+);
+assert.match(candidates, /export async function retainCommunityIntelligenceFromDigestItemCore/);
 assert.match(
   filesystem,
-  /proposeCommunityIntelligenceFromDigestItemCore\([\s\S]*communityId: context\.communityId[\s\S]*actorType: "agent"[\s\S]*actorAgentKey: context\.agentKey[\s\S]*proposedByCommunityAgentRunId: context\.runId[\s\S]*proposedByCommunityAgentHeartbeatId: context\.heartbeatId/,
+  /retainCommunityIntelligenceFromDigestItemCore\([\s\S]*communityId: context\.communityId[\s\S]*actorType: "agent"[\s\S]*actorAgentKey: context\.agentKey[\s\S]*proposedByCommunityAgentRunId: context\.runId[\s\S]*proposedByCommunityAgentHeartbeatId: context\.heartbeatId/,
 );
 assert.match(
   candidates,
   /proposedByCommunityAgentRunId\?: string[\s\S]*proposedByCommunityAgentHeartbeatId\?: string[\s\S]*proposedByCommunityAgentRunId:[\s\S]*proposedByCommunityAgentHeartbeatId:/,
-  "agent-proposed candidates should carry run provenance for same-run self-review guards",
+  "agent-proposed memory should retain run provenance for auditability",
 );
 assert.match(
-  filesystem,
-  /function changeRequestIsCompilerCandidate[\s\S]*payload\.source === COMPILER_CANDIDATE_PAYLOAD_SOURCE[\s\S]*row\.createdByActorType === "agent" \|\| row\.createdByActorType === "compiler"/,
-  "decision/apply should only touch compiler-derived candidates",
-);
-assert.match(
-  filesystem,
-  /async function getWritableCompilerCandidate[\s\S]*expectedStatus: "pending_decision" \| "accepted"[\s\S]*community_agent_filesystem_compiler_candidate_required[\s\S]*community_agent_filesystem_same_run_self_review_forbidden/,
-  "decision/apply should resolve same-community compiler candidates and fail same-run self-review",
-);
-assert.match(
-  filesystem,
-  /decideTrustedCommunityIntelligenceChangeRequestCore\([\s\S]*status: args\.decision[\s\S]*actorType: "agent"[\s\S]*actorAgentKey: args\.context\.agentKey/,
-  "decision writes should reuse the trusted directory decision core with agent attribution",
-);
-assert.match(
-  filesystem,
-  /applyTrustedCommunityIntelligenceChangeRequestCore\([\s\S]*changeRequestId: row\._id[\s\S]*actorType: "agent"[\s\S]*actorAgentKey: args\.context\.agentKey/,
-  "apply writes should reuse the trusted directory apply core with agent attribution",
-);
-assert.match(
-  filesystem,
-  /COMPILER_CANDIDATE_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK = 0\.3[\s\S]*visibilityScope =[\s\S]*\? "community"[\s\S]*: "admin"[\s\S]*requestedPayload: \{[\s\S]*\.\.\.payload[\s\S]*status: "promising"[\s\S]*visibilityScope/,
-  "applied compiler candidates should land no higher than promising with privacy-gated visibility",
+  candidates,
+  /retainCompilerCandidateAutonomously[\s\S]*AUTONOMOUS_MEMORY_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK = 0\.3|AUTONOMOUS_MEMORY_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK = 0\.3[\s\S]*retainCompilerCandidateAutonomously/,
+  "compiler memory should be atomically retained under a bounded privacy policy",
 );
 assert.doesNotMatch(
-  filesystem,
-  /if \(payload\.status === undefined \|\| payload\.status === "candidate"\)/,
-  "apply should always force compiler candidates to promising, not trust payload status",
+  candidates,
+  /status: "accepted"|decideTrustedCommunityIntelligenceChangeRequestCore/,
+  "compiler memory should not synthesize an acceptance state",
 );
 assert.doesNotMatch(
   filesystem,

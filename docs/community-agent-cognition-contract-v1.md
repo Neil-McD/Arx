@@ -52,7 +52,7 @@ The community-owned runtime surfaces are:
    - entered only from internal heartbeat/event triggers
    - community-owner-funded
    - operates on the community compiler and directory filesystem
-   - only the Steward role receives the directory airlock write tool
+   - only the Steward role receives the atomic compiler-memory write tool
    - cannot be directly prompted by a member or administrator
 
 Both community-owned surfaces resolve community identity, owner/config state, agent display
@@ -94,18 +94,19 @@ The irreducible components:
 3. Compiler
    - transforms traces into candidate reusable intelligence
    - detects signal, novelty, failures, contradictions, and repeated questions
-   - proposes candidates, not truth
+   - produces bounded learning candidates for deterministic retention
 
-4. Policy decision gate
-   - blocks leakage, hallucination, low-signal claims, and false consensus
-   - decides what can become community intelligence
+4. Retention policy
+   - validates citations, provenance, community scope, privacy, and dedupe state
+   - assigns incomplete or higher-risk output to forming memory instead of an
+     approval queue
 
 5. Community intelligence directory
-   - stores accepted reusable knowledge
+   - stores retained reusable knowledge
    - visible, editable, inspectable, and linked to evidence
 
 6. Retrieval layer
-   - injects the right accepted intelligence into the current workflow
+   - injects the right retained intelligence into the current workflow
    - sometimes retrieves nothing
 
 7. Outcome layer
@@ -137,7 +138,7 @@ Product tables = source of truth
 Source traces = normalized evidence
 Embeddings = disposable search index
 Compiler = time-windowed interpretation
-Directory = accepted compiled intelligence
+Directory = retained compiled intelligence
 Retrieval = action-time memory routing
 ```
 
@@ -148,7 +149,7 @@ Temporal handling:
 30+ days = long-term memory retrieval only
 ```
 
-The compiler window is not a context dump. It is the bounded working set the community agent can inspect, filter, rank, summarize, and compile from. Activity older than the compiler window should only matter through accepted directory intelligence, source traces, archive/search, resources, outcome-linked memory, or other long-term retrieval systems.
+The compiler window is not a context dump. It is the bounded working set the community agent can inspect, filter, rank, summarize, and compile from. Activity older than the compiler window should only matter through retained directory intelligence, source traces, archive/search, resources, outcome-linked memory, or other long-term retrieval systems.
 
 Surface handling:
 
@@ -168,9 +169,9 @@ Rules:
 - Everything can become a permissioned source trace.
 - Some text-heavy sources can be embedded for recall.
 - Most activity should never become directory truth.
-- Directory entries are narrow, accepted community intelligence.
+- Directory entries are narrow, retained community intelligence.
 - Raw archive and embeddings can support evidence search, but they are not validated community intelligence.
-- Workflow retrieval should prefer accepted directory intelligence, then fall back to archive evidence when needed.
+- Workflow retrieval should prefer retained directory intelligence, then fall back to archive evidence when needed.
 - Events and members are mostly structural context and graph references, not blob-search content.
 - Event scheduling, member joins, presence, reactions, and generic activity are not learning signals by themselves.
 - Events and members enter the learning compiler only through evidence-bearing artifacts such as transcripts, recaps, feedback, outcomes, decisions, workflow runs, artifacts, or explicit contribution records.
@@ -335,8 +336,8 @@ Its job:
 - maintain hot state
 - run compiler sub-agents
 - detect patterns, failures, contradictions, and open questions
-- propose directory updates
-- promote validated operational patterns through policy decision gates
+- select high-signal compiler learnings for atomic retention
+- promote operational patterns through evidence and outcome validation
 - tune retrieval into future workflows
 - emit digests, alerts, and decision items
 - preserve provenance, permissions, and confidence
@@ -351,11 +352,12 @@ The bridge from personal activity to community memory is controlled promotion:
 personal agent action
   -> permissioned trace
   -> compiler candidate
-  -> community cognition / policy decision gate
+  -> deterministic evidence/privacy retention policy
   -> community memory
 ```
 
-Personal agents execute. The community agent learns. The compiler proposes. Community cognition and policy gates decide.
+Personal agents execute. The community agent learns. The compiler distills. The
+Steward selects, and deterministic policy assigns retained versus forming state.
 
 ## Community Agent Autonomy
 
@@ -514,7 +516,7 @@ There are two memory systems:
 
 ```txt
 Personal Memory = what this user and personal agent should remember.
-Community Memory = what this community has learned and accepted for reuse.
+Community Memory = what this community has learned and retained for reuse.
 ```
 
 They may interact through permissioned traces and promotion gates, but they are not the same store.
@@ -639,7 +641,7 @@ Compiler output is not canonical truth. It is candidate intelligence.
 
 ```txt
 Compiler output = candidate
-Directory approval = community intelligence
+Atomic validated retention = community intelligence
 Outcome validation = operational intelligence
 ```
 
@@ -674,7 +676,8 @@ The community agent can orchestrate specialized sub-agents:
 - Directory Lint Agent
 - Retrieval Tuning Agent
 
-Sub-agents should propose changes. They should not silently rewrite canonical community intelligence without policy decision gates.
+Sub-agents may suggest learnings, but only the trusted compiler-memory core may
+write directory state, with immutable citations and deterministic policy.
 
 ## Validated Operational Pattern
 
@@ -948,7 +951,7 @@ Rules:
 2. Separate source visibility from memory visibility.
 3. Show provenance where practical.
 4. Show confidence and status.
-5. Require policy-gated acceptance for canonical promotion.
+5. Require citation-backed, privacy-bounded autonomous retention for canonical promotion.
 6. Allow members to contest memory.
 7. Allow opt-out and scope controls.
 8. Do not create hidden social scores.
@@ -1027,7 +1030,8 @@ The first backend slice implements the directory substrate before compiler autom
 - `communityIntelligenceNodes`: compiled intelligence entries that have crossed the write gate.
 - `communityIntelligenceEdges`: typed operational links between nodes and references.
 - `communityIntelligenceMutations`: append-only audit trail for directory truth changes.
-- `communityIntelligenceChangeRequests`: candidate claims and requested directory mutations awaiting community cognition or policy acceptance.
+- `communityIntelligenceChangeRequests`: immutable validation and audit records
+  for memory changes; routine compiler memory does not wait there for approval.
 - `communityIntelligenceRetrievalLogs`: action-time retrieval provenance.
 - `communityOutcomeObservations`: evidence about whether retrieved intelligence helped.
 
@@ -1037,9 +1041,11 @@ The slice intentionally keeps writes narrow:
 No freeform prompt mutates directory truth.
 Activity and outcomes become evidence or change requests before they can become directory truth.
 Only typed admin/manual mutations can create or change intelligence nodes and edges directly.
-Agent, compiler, and system actors propose directory changes; they do not directly mutate canonical truth.
+Agent and compiler actors select digest learnings; the trusted directory core
+validates and atomically mutates canonical truth.
 Every node/edge truth mutation writes an audit record.
-Draft/candidate intelligence is manager-visible until promoted beyond the airlock.
+Draft/candidate intelligence is manager-visible forming memory until evidence
+or outcomes justify promotion.
 Change request application rejects stale targets when the target node or edge changed after change request creation.
 ```
 
@@ -1142,27 +1148,31 @@ Rules:
 
 ## Sixth Implementation Slice
 
-The sixth backend slice connects non-canonical compiler digests to the directory airlock:
+The compiler-memory path connects non-canonical digests to retained directory memory:
 
 ```txt
 Compiler digest
   -> selected digest item
-  -> candidate change request
-  -> future community cognition decision
-  -> future apply through the existing airlock
+  -> evidence and policy validation
+  -> atomic audit-ledger record plus directory apply
 ```
 
 Rules:
 
-- The digest-to-candidate pass is an internal compiler/community-agent operation that creates only `communityIntelligenceChangeRequests`.
-- Directory truth is still untouched: no direct `communityIntelligenceNodes` or `communityIntelligenceEdges` writes.
-- Candidate change requests use `operation: create_node`, `status: pending_decision`, and `createdByActorType: compiler`.
-- Candidate payloads default to `status: candidate` and `visibilityScope: admin`.
-- Public admin decisions are explicit repair/override paths. The normal reviewer is the community cognition loop.
+- The digest-to-memory pass is an internal compiler/community-agent operation.
+- It records a `communityIntelligenceChangeRequests` audit row and applies the
+  canonical directory mutation in the same transaction; no human acceptance is
+  required and no intermediate pending state is externally observable.
+- Fully resolved, community-readable, low-risk evidence lands as `promising`
+  community memory. Incomplete or higher-risk output lands as admin-visible
+  `candidate` memory instead of blocking on approval.
+- Public admin decisions remain repair/override paths for legacy or manually
+  proposed changes, not a dependency of autonomous cognition.
 - Digest `sourceIds` are clues; resolved `sourceTraceIds` are formal evidence.
 - The candidate pass resolves digest source ids into `communitySourceTraces` before creating the change request.
 - If formal trace evidence cannot be resolved, the candidate stays honest: `sourceVisibility: redacted`, lower evidence strength, and a `needs_trace_resolution` tag.
-- `pending_directory_decision` digest items are rejected because they are already inside the airlock.
+- `pending_directory_decision` digest items are not recompiled because they are
+  legacy/manual review records, not new evidence.
 - `event_activity` and `member_state` digest items are not learning candidates. They should not create directory proposals unless converted into evidence-bearing source traces by another product bridge.
 - Duplicate proposals for the same digest item should reuse the existing non-rejected change request instead of spamming the airlock.
 - Digest-derived candidate payloads should carry a PRefLexOR-style learning envelope:
@@ -1182,7 +1192,7 @@ The seventh backend slice adds the first internal single-community filesystem fo
 Community agent heartbeat/tool loop
   -> list/read/search/write
   -> compiler and directory only
-  -> existing directory airlock
+  -> atomic compiler-memory retention
 ```
 
 Rules:
@@ -1193,12 +1203,13 @@ Rules:
 - The only accepted v0 community-agent identity is `community_agent`; the filesystem must reject non-canonical agent keys.
 - Filesystem tools inherit community scope from this context. They must not accept `communityId` as a loose per-operation argument.
 - The root exposes only `/compiler` and `/directory`.
-- `/compiler` exposes bounded compiler state: latest window summary, digests, and digest-derived candidate proposals.
+- `/compiler` exposes bounded compiler state: latest window summary, digests, and digest-derived retention records.
 - `/directory` exposes long-term intelligence state: nodes, edges, and change requests.
 - The filesystem does not expose raw `/activity`; activity must flow into compiler evidence first.
-- The first write operation is deliberately narrow: propose a directory candidate from a compiler digest item.
-- Filesystem writes create or reuse `communityIntelligenceChangeRequests`; they do not directly create or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`.
-- Candidate proposals created through this surface are attributed to the community agent, not a member prompt.
+- The write operation is deliberately narrow: retain one compiler digest item.
+- The backend creates or reuses the audit row and applies the directory mutation
+  atomically through the trusted core.
+- Retention records created through this surface are attributed to the community agent, not a member prompt.
 
 ## Eighth Implementation Slice
 
@@ -1251,7 +1262,7 @@ Rules:
 - The runtime may use only four tools: `list`, `read`, `search`, and `write`.
 - Tool execution is bound to the single-community filesystem context: `communityId`, canonical `agentKey`, `runId`, and optional `heartbeatId`.
 - The runtime sees only `/compiler` and `/directory`; it does not read raw `/activity`.
-- The first runtime write is still only `propose_directory_candidate_from_digest_item`.
+- The runtime write is only `retain_compiler_digest_item`.
 - Runtime writes create or reuse directory change requests through the filesystem airlock.
 - The runtime must not directly insert or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`.
 - Each run is persisted in `communityAgentRuns` with sponsor, model, status, stop reason, tool count, candidate proposal ids, and timestamps.
@@ -1389,14 +1400,15 @@ Rules:
 - If `should_run` is true, the heartbeat calls `runCommunityAgentLoopInternal` with `triggerType: heartbeat`, the same `communityId`, the `heartbeatId`, and the compiler `wakeReason`/`wakeEvidence`.
 - A compiler evidence trigger wakes the community agent; it does not give members, admins, or prompts a direct wake path.
 - `wakeReason` is diagnostic context for the run, not canonical directory truth.
-- Directory mutation still requires the filesystem write airlock and candidate/review path.
+- Directory mutation still requires the typed filesystem write and canonical
+  evidence policy; it does not require human or later-cycle approval.
 
 ## Fourteenth Implementation Slice
 
 The fourteenth backend slice closes the first member-agent consumption loop:
 
 ```txt
-Accepted directory intelligence
+Retained directory intelligence
   -> member-agent community memory tools
   -> cited guidance inside a community-lensed turn
   -> outcome feedback from the member
@@ -1408,13 +1420,13 @@ Rules:
 
 - Member-agent memory tools are exposed only through the existing `community_tools` capability family.
 - The tools derive community scope from the active server-validated community lens. They must not accept a loose `communityId` argument from the model.
-- `community_memory_search` searches accepted community intelligence in `communityIntelligenceNodes`; it is not archive RAG and it does not use embeddings as truth.
-- `community_memory_search` defaults to `promising`, `validated`, and `canonical` statuses. Draft and candidate entries remain in the airlock.
+- `community_memory_search` searches retained community intelligence in `communityIntelligenceNodes`; it is not archive RAG and it does not use embeddings as truth.
+- `community_memory_search` defaults to `promising`, `validated`, and `canonical` statuses. Draft and candidate entries remain manager-visible forming memory.
 - `community_memory_read` reads one node and a bounded visibility-filtered subgraph bundle, then marks the node as injected in the retrieval log.
 - `community_record_outcome` records whether retrieved community memory worked, failed, or was mixed. Non-manager member paths still require a same-user retrieval log, and node-linked outcomes require the node to have been retrieved or injected in that log.
 - These tools may write retrieval logs and outcome observations. They must not directly create or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`.
 - The active-community context tool may expose a tiny memory orientation block with counts and recent validated titles, but it must not dump directory contents into the prompt.
-- Runtime prompt policy must distinguish accepted community memory from raw archive evidence: use `community_memory_search` for what the community has learned, use `community_search` for unvalidated recent/archive evidence.
+- Runtime prompt policy must distinguish retained community memory from raw archive evidence: use `community_memory_search` for what the community has learned, use `community_search` for unvalidated recent/archive evidence.
 - Raw evidence may support a new memory change only through the immutable citation and apply-time revalidation rules in `docs/community-evidence-integrity-contract-v1.md`; archive rows are candidates, never authority.
 - If community memory is used in prose, the agent should cite the entry title and status.
 
@@ -1436,9 +1448,9 @@ Rules:
 - Retrieval should use freshness-aware directory indexes: `by_community_status_updatedAt` for normal search and `by_community_type_status_updatedAt` when the model supplies type filters.
 - Runtime memory lookup remains deterministic and non-LLM. Embeddings and archive search may assist other flows later, but they are not canonical directory truth.
 
-## Sixteenth Implementation Slice
+## Superseded Approval Loop
 
-The sixteenth backend slice closes the first community-agent airlock decision loop:
+The earlier implementation used a multi-cycle approval loop:
 
 ```txt
 Compiler-derived pending candidate
@@ -1449,26 +1461,12 @@ Compiler-derived pending candidate
   -> directory mutation log
 ```
 
-Rules:
-
-- The community agent still uses the same four filesystem tools: `list`, `read`, `search`, and `write`.
-- The tool surface is not expanded with separate review tools. Decision and apply are narrow `write` operations.
-- The new write operations are:
-  - `decide_change_request`
-  - `apply_accepted_change_request`
-- These writes still inherit `communityId` from the single-community filesystem context. They must not accept a loose community id.
-- Decision/apply must first resolve the target change request inside the same community.
-- Decision/apply must reject non-compiler change requests with `community_agent_filesystem_compiler_candidate_required`.
-- The community agent may only decide/apply compiler-derived candidates. It must not autonomously review member-authored, admin-authored, manual, or arbitrary same-community change requests.
-- Decision/apply must reuse the canonical directory change-request validation and apply path.
-- Applying an accepted change request may create or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`, but only through the existing accepted-change-request apply core.
-- Filesystem writes themselves must not directly insert or patch directory truth.
-- Agent decisions are attributed to `createdByAgentKey` / `decidedByAgentKey` / mutation `actorAgentKey`, not to an admin user.
-- The community agent may accept, reject, and apply existing pending compiler candidates.
-- The community agent must not decide or apply a candidate it proposed in the same runtime run.
-- Digest-derived candidates proposed through the community-agent filesystem carry `proposedByCommunityAgentRunId` and optional `proposedByCommunityAgentHeartbeatId` in their payload metadata.
-- Same-run self-review must fail closed with `community_agent_filesystem_same_run_self_review_forbidden`.
-- This is the community organism acting as librarian/front gate, not a human admin review queue and not direct prompt mutation of truth.
+That loop is now deleted from the community-agent tool surface. The Steward has
+one memory write operation: select a compiler digest item. The backend then
+validates citations, community scope, provenance, privacy, and dedupe state and
+atomically records and applies the result. Legacy/manual change requests may
+still use explicit decision APIs, but autonomous compiler memory never waits on
+them.
 
 ## Seventeenth Implementation Slice
 
@@ -1775,11 +1773,11 @@ Serve role (member-triggered, realtime):
 > The roles that can write memory cannot be spoken to.
 > The role that can be spoken to cannot write memory.
 
-Sleep roles hold write authority via the airlock and wake only from heartbeats
+Sleep roles hold atomic compiler-memory authority and wake only from heartbeats
 and events; no member or admin prompt can steer them. The Concierge holds chat
 voice and zero write authority. A prompt injection in chat can at worst produce
 a bad chat reply; it can never reach the directory except the long way — traces
-through the compiler and its gates. This refines (does not break) the v1 rule
+through the compiler and its validation gates. This refines the v1 rule
 that no human prompts the community agent: the rule always protected the write
 path, and it still does.
 
@@ -1791,31 +1789,28 @@ notes; Questioner reads them and appends reflections; Steward reads both and
 acts. Every role can see the compiler window, the directory, and each other's
 notes. Nothing is hidden between roles; the ledger persists with the run record.
 
-### Promotion Policy (airlock, not same-cycle auto-apply)
+### Promotion Policy (autonomous retention, evidence-gated status)
 
-Agent-proposed `create_node` candidates are not auto-decided in the same runtime
-run that created them. They remain compiler-derived change requests until a later
-steward pass explicitly acts through the same filesystem `write` tool:
-
-```txt
-decide_change_request
-apply_accepted_change_request
-```
+The Steward selects a digest item once. In that same database transaction, the
+system captures immutable citations, revalidates canonical evidence, records an
+audit row, and applies the memory. There is no acceptance state between proposal
+and application.
 
 Guardrails:
 
-- only compiler-derived candidates are eligible
-- same-run self-review fails closed
+- only compiler-derived `create_node` memory is eligible for autonomous apply
 - duplicate and weak-evidence discipline stays in the steward prompt
-- accepted candidates apply through the trusted directory apply core
-- applied compiler candidates land no higher than `promising`
-- applied compiler candidates become community-visible only when privacy risk is
-  low enough; otherwise they remain admin-visible
+- all writes apply through the trusted directory core and citation checks
+- fully resolved low-risk evidence lands no higher than `promising`
+- incomplete, unresolved, or higher-risk output is retained only as
+  admin-visible forming memory
+- any validation failure rolls back both the audit record and directory write
 
 Promotion above "promising" is earned, not clicked: validated by outcome
 evidence, canonical by sustained validation. Owners retain curation verbs
 (deprecate, mark contested, fast-track promote) as optional tools, never as a
-gate the loop depends on. There is no member-facing accept/reject queue.
+gate the loop depends on. There is no member-facing accept/reject queue and no
+hidden agent acceptance queue.
 
 ### Agent Identity
 

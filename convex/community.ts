@@ -193,9 +193,6 @@ import {
   listCommunityCompilerDigests as listCommunityCompilerDigestsImpl,
   runCommunityCompilerDigestPass as runCommunityCompilerDigestPassImpl,
 } from "./communityCompilerDigest";
-import {
-  listCommunityCompilerCandidateProposals as listCommunityCompilerCandidateProposalsImpl,
-} from "./communityCompilerCandidates";
 import { readCommunityCompilerWindow as readCommunityCompilerWindowImpl } from "./communityCompilerWindow";
 import {
   applyCommunityIntelligenceChangeRequest as applyCommunityIntelligenceChangeRequestImpl,
@@ -384,4 +381,3 @@ export const listCommunityCompilerInputs = listCommunityCompilerInputsImpl;
 export const readCommunityCompilerWindow = readCommunityCompilerWindowImpl;
 export const runCommunityCompilerDigestPass = runCommunityCompilerDigestPassImpl;
 export const listCommunityCompilerDigests = listCommunityCompilerDigestsImpl;
-export const listCommunityCompilerCandidateProposals = listCommunityCompilerCandidateProposalsImpl;

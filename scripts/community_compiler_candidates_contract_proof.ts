@@ -11,27 +11,27 @@ const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1
 assert.match(
   directory,
   /export async function createTrustedCommunityIntelligenceChangeRequest/,
-  "directory should expose a trusted helper for compiler-owned airlock requests",
+  "directory should expose a trusted helper for compiler-owned audit records",
 );
 assert.match(
   directory,
   /createTrustedCommunityIntelligenceChangeRequest[\s\S]*requireTraceIdsBelongToCommunity[\s\S]*insertChangeRequest/,
-  "trusted airlock helper should validate evidence and reuse the change request path",
+  "trusted audit helper should validate evidence and reuse the change request path",
 );
 assert.match(
   candidates,
-  /export async function proposeCommunityIntelligenceFromDigestItemCore/,
+  /export async function retainCommunityIntelligenceFromDigestItemCore/,
   "compiler candidate core should exist for the internal community-agent filesystem",
 );
 assert.doesNotMatch(
   candidates,
-  /export const proposeCommunityIntelligenceFromDigestItem = mutation/,
+  /export const retainCommunityIntelligenceFromDigestItem = mutation/,
   "compiler candidate proposal should not be a public manager mutation",
 );
-assert.match(
+assert.doesNotMatch(
   candidates,
-  /export const listCommunityCompilerCandidateProposals = query/,
-  "compiler candidate proposal list query should exist",
+  /listCommunityCompilerCandidateProposals|requireCommunityManager|authSubject/,
+  "the dead manager proposal queue should not remain beside the canonical audit ledger",
 );
 assert.match(
   candidates,
@@ -45,8 +45,23 @@ assert.match(
 );
 assert.match(
   candidates,
-  /createTrustedCommunityIntelligenceChangeRequest\([\s\S]*operation: "create_node"[\s\S]*actorType: args\.actorType \?\? "compiler"/,
+  /const actorType = args\.actorType \?\? "compiler"[\s\S]*createTrustedCommunityIntelligenceChangeRequest\([\s\S]*operation: "create_node"[\s\S]*actorType,/,
   "candidate core should create compiler-attributed change requests unless a trusted community-agent caller is supplied",
+);
+assert.match(
+  candidates,
+  /retainCompilerCandidateAutonomously[\s\S]*applicationMode: "autonomous_compiler_memory"[\s\S]*status !== "applied"/,
+  "compiler memory should validate and apply atomically without a later acceptance operation",
+);
+assert.match(
+  directory,
+  /applicationMode\?: "accepted_request" \| "autonomous_compiler_memory"[\s\S]*community_intelligence_autonomous_memory_policy_forbidden/,
+  "the canonical apply core should narrowly authorize only compiler-derived create-node autonomy",
+);
+assert.match(
+  directory,
+  /autonomousCompilerMemory[\s\S]*captureCommunityEvidenceCitationsForSourceTracesCore[\s\S]*evidencePolicyVersion = COMMUNITY_EVIDENCE_POLICY_VERSION/,
+  "legacy compiler candidates should recapture current evidence instead of remaining stuck behind the old queue",
 );
 assert.match(
   candidates,
@@ -120,8 +135,8 @@ assert.doesNotMatch(
 );
 assert.match(
   candidates,
-  /status: "candidate"[\s\S]*visibilityScope: "admin"/,
-  "digest candidates should default to admin-visible candidate nodes",
+  /evidenceFullyResolved[\s\S]*retainForCommunity[\s\S]*status: retainForCommunity \? "promising" : "candidate"[\s\S]*visibilityScope: retainForCommunity \? "community" : "admin"/,
+  "autonomous memory should use evidence and privacy to select retained versus forming status",
 );
 assert.match(
   candidates,
@@ -138,20 +153,20 @@ assert.doesNotMatch(
   /person_expertise|trustScore|qualityScore|reliabilityScore|privateProfile|behavioralJudgment/,
   "compiler candidates should not introduce people scoring or expertise nodes",
 );
-assert.match(
+assert.doesNotMatch(
   communityExports,
-  /listCommunityCompilerCandidateProposalsImpl[\s\S]*export const listCommunityCompilerCandidateProposals = listCommunityCompilerCandidateProposalsImpl/,
-  "community module should re-export compiler candidate list query",
+  /listCommunityCompilerCandidateProposals/,
+  "community exports should not expose the deleted proposal queue",
 );
 assert.doesNotMatch(
   communityExports,
-  /proposeCommunityIntelligenceFromDigestItemImpl|export const proposeCommunityIntelligenceFromDigestItem/,
+  /retainCommunityIntelligenceFromDigestItemImpl|export const retainCommunityIntelligenceFromDigestItem/,
   "community module should not expose public digest-to-candidate mutation",
 );
 assert.match(
   docs,
-  /Sixth Implementation Slice[\s\S]*Compiler digest[\s\S]*candidate change request[\s\S]*Directory truth is still untouched[\s\S]*learningQuestion[\s\S]*falsificationCriteria/,
-  "architecture doc should capture digest-to-candidate learning-envelope slice",
+  /compiler-memory path[\s\S]*Compiler digest[\s\S]*atomic audit-ledger record plus directory apply[\s\S]*learningQuestion[\s\S]*falsificationCriteria/,
+  "architecture doc should capture autonomous digest-to-memory retention",
 );
 assert.match(
   docs,

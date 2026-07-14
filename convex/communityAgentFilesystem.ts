@@ -1,16 +1,11 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { normalizeIdValue, toIsoString } from "./communityCore";
-import { proposeCommunityIntelligenceFromDigestItemCore } from "./communityCompilerCandidates";
-import {
-  applyTrustedCommunityIntelligenceChangeRequestCore,
-  decideTrustedCommunityIntelligenceChangeRequestCore,
-} from "./communityIntelligenceDirectory";
+import { retainCommunityIntelligenceFromDigestItemCore } from "./communityCompilerCandidates";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 
 const COMPILER_CANDIDATE_PAYLOAD_SOURCE = "compiler_digest_item_v1";
 const DEFAULT_LIMIT = 50;
-const COMPILER_CANDIDATE_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK = 0.3;
 
 type CommunityAgentFilesystemContext = {
   communityId: any;
@@ -365,101 +360,6 @@ function changeRequestIsCompilerCandidate(row: ChangeRequestRow): boolean {
   );
 }
 
-async function getWritableCompilerCandidate(args: {
-  ctx: any;
-  context: ResolvedCommunityAgentFilesystemContext;
-  changeRequestId: any;
-  expectedStatus: "pending_decision" | "accepted";
-}): Promise<ChangeRequestRow> {
-  const id = normalizeIdValue(args.changeRequestId);
-  if (!id) throw new Error("community_agent_filesystem_change_request_required");
-  if (!args.context.runId) throw new Error("community_agent_filesystem_run_required");
-  const row = await readExpectedRow(
-    args.ctx,
-    args.context.communityId,
-    id,
-    "community_intelligence_change_request_not_found",
-    isChangeRequestRow,
-  );
-  if (!changeRequestIsCompilerCandidate(row)) {
-    throw new Error("community_agent_filesystem_compiler_candidate_required");
-  }
-  if (row.status !== args.expectedStatus) {
-    throw new Error(
-      args.expectedStatus === "pending_decision"
-        ? "community_agent_filesystem_change_request_pending_required"
-        : "community_agent_filesystem_change_request_accepted_required",
-    );
-  }
-  const payload = payloadObject(row.requestedPayload);
-  if (payload.proposedByCommunityAgentRunId === args.context.runId) {
-    throw new Error("community_agent_filesystem_same_run_self_review_forbidden");
-  }
-  return row;
-}
-
-async function decideCompilerCandidate(args: {
-  ctx: any;
-  context: ResolvedCommunityAgentFilesystemContext;
-  changeRequestId: any;
-  decision: "accepted" | "rejected";
-  reason?: string;
-}) {
-  const row = await getWritableCompilerCandidate({
-    ctx: args.ctx,
-    context: args.context,
-    changeRequestId: args.changeRequestId,
-    expectedStatus: "pending_decision",
-  });
-  return await decideTrustedCommunityIntelligenceChangeRequestCore({
-    ctx: args.ctx,
-    changeRequestId: row._id,
-    status: args.decision,
-    decisionReason: args.reason,
-    actor: {
-      actorType: "agent",
-      actorAgentKey: args.context.agentKey,
-    },
-  });
-}
-
-async function applyAcceptedCompilerCandidate(args: {
-  ctx: any;
-  context: ResolvedCommunityAgentFilesystemContext;
-  changeRequestId: any;
-  reason?: string;
-}) {
-  const row = await getWritableCompilerCandidate({
-    ctx: args.ctx,
-    context: args.context,
-    changeRequestId: args.changeRequestId,
-    expectedStatus: "accepted",
-  });
-  const payload = payloadObject(row.requestedPayload);
-  const privacyRisk = Number.isFinite(Number(row.privacyRisk)) ? Number(row.privacyRisk) : 1;
-  const visibilityScope =
-    privacyRisk <= COMPILER_CANDIDATE_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK
-      ? "community"
-      : "admin";
-  await args.ctx.db.patch(row._id as any, {
-    requestedPayload: {
-      ...payload,
-      status: "promising",
-      visibilityScope,
-    },
-    updatedAt: Date.now(),
-  });
-  return await applyTrustedCommunityIntelligenceChangeRequestCore({
-    ctx: args.ctx,
-    changeRequestId: row._id,
-    actor: {
-      actorType: "agent",
-      actorAgentKey: args.context.agentKey,
-    },
-    reason: args.reason,
-  });
-}
-
 async function latestDigests(ctx: any, communityId: any, limit: number): Promise<DigestRow[]> {
   return (await ctx.db
     .query("communityCompilerDigests" as any)
@@ -745,11 +645,7 @@ export const searchCommunityAgentFilesystemInternal = internalQuery({
 export const writeCommunityAgentFilesystemInternal = internalMutation({
   args: {
     context: communityAgentFilesystemContextValidator,
-    operation: v.union(
-      v.literal("propose_directory_candidate_from_digest_item"),
-      v.literal("decide_change_request"),
-      v.literal("apply_accepted_change_request"),
-    ),
+    operation: v.literal("retain_compiler_digest_item"),
     payload: v.object({
       digestId: v.optional(v.id("communityCompilerDigests")),
       itemIndex: v.optional(v.number()),
@@ -763,43 +659,15 @@ export const writeCommunityAgentFilesystemInternal = internalMutation({
           v.literal("open_question"),
         ),
       ),
-      changeRequestId: v.optional(v.id("communityIntelligenceChangeRequests")),
-      decision: v.optional(v.union(v.literal("accepted"), v.literal("rejected"))),
-      reason: v.optional(v.string()),
     }),
   },
   handler: async (ctx, args) => {
     const context = await resolveFilesystemContext(ctx, args.context);
     const payload = args.payload ?? {};
-    if (args.operation === "decide_change_request") {
-      if (!payload.changeRequestId || !payload.decision) {
-        throw new Error("community_agent_filesystem_decision_required");
-      }
-      const result = await decideCompilerCandidate({
-        ctx,
-        context,
-        changeRequestId: payload.changeRequestId,
-        decision: payload.decision,
-        reason: payload.reason,
-      });
-      return { ok: true, operation: args.operation, ...contextMetadata(context), result };
-    }
-    if (args.operation === "apply_accepted_change_request") {
-      if (!payload.changeRequestId) {
-        throw new Error("community_agent_filesystem_change_request_required");
-      }
-      const result = await applyAcceptedCompilerCandidate({
-        ctx,
-        context,
-        changeRequestId: payload.changeRequestId,
-        reason: payload.reason,
-      });
-      return { ok: true, operation: args.operation, ...contextMetadata(context), result };
-    }
     if (!payload.digestId || typeof payload.itemIndex !== "number") {
       throw new Error("community_agent_filesystem_digest_item_required");
     }
-    const result = await proposeCommunityIntelligenceFromDigestItemCore({
+    const result = await retainCommunityIntelligenceFromDigestItemCore({
       ctx,
       communityId: context.communityId,
       digestId: payload.digestId,
