@@ -37,9 +37,11 @@ import {
 } from "./httpRuntimeSupport";
 import {
   isReadOnlyLegacyMemberAgentThreadKey,
+  normalizeMemberAgentRuntimeMode,
   resolveRuntimeInvocationSurfaceForThread,
   restrictCapabilityFamiliesForInvocationSurface,
   restrictToolNamesForInvocationSurface,
+  type MemberAgentRuntimeMode,
   type RuntimeInvocationSurface,
 } from "../shared/runtimeInvocationSurface";
 import {
@@ -59,6 +61,7 @@ export type RuntimeTurnInput = {
   runtime_engine?: RuntimeEngine | null;
   surface?: "web";
   invocation_surface?: RuntimeInvocationSurface | null;
+  member_agent_mode?: MemberAgentRuntimeMode | null;
   surface_context?: unknown;
   requested_agentic_tools?: boolean | null;
   requested_funding_source?:
@@ -129,6 +132,7 @@ export type RuntimeTurnResolution = {
   runtimeCommunityAbout: string | null;
   runtimeCommunitySystemPrompt: string | null;
   runtimeCommunityOnboardingInstructions: string | null;
+  runtimeCommunityOnboardingConfigVersion: number | null;
   runtimeCommunityLensAuthority: CommunityLensAuthority | null;
   runtimeProjectId: string | null;
   runtimeSandboxMode: "sandbox_write" | "workspace_write" | undefined;
@@ -137,6 +141,7 @@ export type RuntimeTurnResolution = {
   resolvedRuntimeHarnessProfile: string;
   runtimeExecutionMode: "agentic" | "chat";
   invocationSurface: RuntimeInvocationSurface;
+  memberAgentMode: MemberAgentRuntimeMode;
   memberAgentSurfaceContext: MemberAgentSurfaceContextV1 | null;
 };
 
@@ -355,6 +360,41 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     requestedSurface: input.invocation_surface,
     threadKey,
   });
+  const requestedMemberAgentMode = normalizeMemberAgentRuntimeMode(input.member_agent_mode);
+  if (
+    input.member_agent_mode !== undefined &&
+    input.member_agent_mode !== null &&
+    !requestedMemberAgentMode
+  ) {
+    return {
+      ok: false,
+      response: fail(400, {
+        ok: false,
+        code: "member_agent_mode_invalid",
+        error: "member_agent_mode_invalid",
+        message: "The requested member agent mode is invalid.",
+      }),
+    };
+  }
+  if (
+    invocationSurface !== "member_agent_dock" &&
+    requestedMemberAgentMode &&
+    requestedMemberAgentMode !== "standard"
+  ) {
+    return {
+      ok: false,
+      response: fail(400, {
+        ok: false,
+        code: "member_agent_mode_surface_invalid",
+        error: "member_agent_mode_surface_invalid",
+        message: "Member agent modes require the member agent surface.",
+      }),
+    };
+  }
+  const memberAgentMode: MemberAgentRuntimeMode =
+    invocationSurface === "member_agent_dock"
+      ? requestedMemberAgentMode ?? "standard"
+      : "standard";
   const memberAgentSurfaceContext =
     invocationSurface === "member_agent_dock"
       ? normalizeMemberAgentSurfaceContext(input.surface_context)
@@ -367,6 +407,20 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         code: "member_agent_surface_context_required",
         error: "member_agent_surface_context_required",
         message: "The member agent turn requires a valid current surface.",
+      }),
+    };
+  }
+  if (
+    memberAgentMode === "community_onboarding_preview_test" &&
+    memberAgentSurfaceContext?.kind !== "community"
+  ) {
+    return {
+      ok: false,
+      response: fail(400, {
+        ok: false,
+        code: "community_onboarding_test_context_required",
+        error: "community_onboarding_test_context_required",
+        message: "Onboarding agent testing requires a community surface.",
       }),
     };
   }
@@ -692,28 +746,72 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   }
 
   let runtimeCommunityOnboardingInstructions: string | null = null;
+  let runtimeCommunityOnboardingConfigVersion: number | null = null;
   if (
     invocationSurface === "member_agent_dock" &&
     memberAgentSurfaceContext?.kind === "community" &&
     runtimeCommunityId
   ) {
-    try {
-      const onboardingGuidance = (await ctx.runQuery(
-        (internal as any).communityOnboarding.resolveActivePersonalAgentGuidanceInternal,
-        {
-          userId: actor.dbUserId,
-          communityId: runtimeCommunityId as any,
-        },
-      )) as { instructions?: unknown } | null;
-      runtimeCommunityOnboardingInstructions =
-        String(onboardingGuidance?.instructions ?? "").trim() || null;
-    } catch (error) {
-      console.warn("runtime_community_onboarding_guidance_resolution_failed", {
-        requestId,
-        threadId: String(ownedThread._id),
-        communityId: runtimeCommunityId,
-        message: error instanceof Error ? error.message : String(error),
-      });
+    if (memberAgentMode === "community_onboarding_preview_test") {
+      try {
+        const onboardingGuidance = (await ctx.runQuery(
+          (internal as any).communityOnboarding.resolveManagerPersonalAgentTestGuidanceInternal,
+          {
+            userId: actor.dbUserId,
+            communityId: runtimeCommunityId as any,
+          },
+        )) as { configVersion?: unknown; instructions?: unknown } | null;
+        runtimeCommunityOnboardingInstructions =
+          String(onboardingGuidance?.instructions ?? "").trim() || null;
+        runtimeCommunityOnboardingConfigVersion = Number.isFinite(
+          Number(onboardingGuidance?.configVersion),
+        )
+          ? Math.max(0, Math.floor(Number(onboardingGuidance?.configVersion)))
+          : null;
+        if (!runtimeCommunityOnboardingInstructions) {
+          throw new Error("community_onboarding_test_guidance_unavailable");
+        }
+      } catch (error) {
+        console.warn("runtime_community_onboarding_test_guidance_resolution_failed", {
+          requestId,
+          threadId: String(ownedThread._id),
+          communityId: runtimeCommunityId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return {
+          ok: false,
+          response: fail(403, {
+            ok: false,
+            code: "community_onboarding_test_forbidden",
+            error: "community_onboarding_test_forbidden",
+            message: "Only community owners and admins can test onboarding with their agent.",
+          }),
+        };
+      }
+    } else {
+      try {
+        const onboardingGuidance = (await ctx.runQuery(
+          (internal as any).communityOnboarding.resolveActivePersonalAgentGuidanceInternal,
+          {
+            userId: actor.dbUserId,
+            communityId: runtimeCommunityId as any,
+          },
+        )) as { configVersion?: unknown; instructions?: unknown } | null;
+        runtimeCommunityOnboardingInstructions =
+          String(onboardingGuidance?.instructions ?? "").trim() || null;
+        runtimeCommunityOnboardingConfigVersion = Number.isFinite(
+          Number(onboardingGuidance?.configVersion),
+        )
+          ? Math.max(0, Math.floor(Number(onboardingGuidance?.configVersion)))
+          : null;
+      } catch (error) {
+        console.warn("runtime_community_onboarding_guidance_resolution_failed", {
+          requestId,
+          threadId: String(ownedThread._id),
+          communityId: runtimeCommunityId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 
@@ -774,6 +872,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeCommunityAbout,
       runtimeCommunitySystemPrompt,
       runtimeCommunityOnboardingInstructions,
+      runtimeCommunityOnboardingConfigVersion,
       runtimeCommunityLensAuthority,
       runtimeProjectId,
       runtimeSandboxMode: resolvedRuntimeCapabilityFamilies.includes("workspace_tools")
@@ -789,6 +888,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
       runtimeExecutionMode,
       invocationSurface,
+      memberAgentMode,
       memberAgentSurfaceContext,
     },
   };

@@ -16,6 +16,8 @@ export function WebCommunityOnboardingOrientationSurface(props: {
   messages: CommunityOnboardingOrientationMessage[];
   input: string;
   isPreview: boolean;
+  isAgentTest?: boolean;
+  isStartingAgentTest?: boolean;
   isPreparing: boolean;
   isWorking: boolean;
   streamedText: string;
@@ -28,6 +30,7 @@ export function WebCommunityOnboardingOrientationSurface(props: {
   continueButtonRef?: Ref<HTMLButtonElement>;
   transcriptRef?: Ref<HTMLDivElement>;
   onInputChange: (value: string) => void;
+  onStartAgentTest?: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onStop: () => void;
   onContinue: () => void;
@@ -40,6 +43,7 @@ export function WebCommunityOnboardingOrientationSurface(props: {
       })
     : null;
   const controlsDisabled = Boolean(props.isInline) || props.isPending;
+  const isAgentInteractive = !props.isPreview || Boolean(props.isAgentTest);
 
   return (
     <>
@@ -64,9 +68,31 @@ export function WebCommunityOnboardingOrientationSurface(props: {
             </span>
             <span>
               <strong>Your personal agent</strong>
-              <small>{props.isPreview ? "Preview · no inference" : `${props.communityName} context`}</small>
+              <small>
+                {props.isAgentTest
+                  ? "Builder test · uses your agent limits"
+                  : props.isPreview
+                    ? "Preview · no inference"
+                    : `${props.communityName} context`}
+              </small>
             </span>
+            {props.isPreview && !props.isInline && !props.isAgentTest && props.onStartAgentTest ? (
+              <button
+                type="button"
+                className="community-onboarding-orientation-agent-test"
+                onClick={props.onStartAgentTest}
+                disabled={props.isStartingAgentTest}
+              >
+                {props.isStartingAgentTest ? "Opening your agent…" : "Test with my agent"}
+              </button>
+            ) : null}
           </div>
+
+          {props.isAgentTest ? (
+            <div className="community-onboarding-orientation-agent-disclosure" role="status">
+              Uses your connected provider and rate limits. Messages stay in your private agent history.
+            </div>
+          ) : null}
 
           <div className="community-onboarding-orientation-transcript" ref={props.transcriptRef}>
             {props.messages.map((message) => (
@@ -106,24 +132,26 @@ export function WebCommunityOnboardingOrientationSurface(props: {
               }}
               rows={1}
               maxLength={8000}
-              readOnly={props.isPreview}
+              readOnly={!isAgentInteractive}
               tabIndex={props.isInline ? -1 : undefined}
-              disabled={!props.isPreview && (props.isWorking || props.isPreparing)}
+              disabled={isAgentInteractive && (props.isWorking || props.isPreparing || props.isStartingAgentTest)}
               placeholder={
-                props.isPreview
+                !isAgentInteractive
                   ? "Preview only — member messages are disabled"
+                  : props.isAgentTest
+                    ? `Test your onboarding agent in ${props.communityName}`
                   : `Ask anything about ${props.communityName}`
               }
               aria-label="Ask your personal agent about this community"
             />
-            {!props.isPreview && props.isWorking ? (
+            {isAgentInteractive && props.isWorking ? (
               <button type="button" onClick={props.onStop} aria-label="Stop" title="Stop">
                 <Square aria-hidden="true" />
               </button>
             ) : (
               <button
                 type="submit"
-                disabled={props.isPreview || props.isPreparing || !props.input.trim()}
+                disabled={!isAgentInteractive || props.isPreparing || props.isStartingAgentTest || !props.input.trim()}
                 aria-label="Send"
                 title="Send"
               >

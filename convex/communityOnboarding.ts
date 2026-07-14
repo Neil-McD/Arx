@@ -67,6 +67,21 @@ function mapSession(row: Record<string, any>) {
   };
 }
 
+function buildPersonalAgentGuidance(params: {
+  phase: ReturnType<typeof deriveCommunityOnboardingPhase>;
+  instructions: string;
+}) {
+  return {
+    phase: params.phase,
+    objective: describeCommunityOnboardingPhaseObjective(params.phase),
+    instructions: [
+      `Current onboarding phase: ${params.phase}.`,
+      `Phase objective: ${describeCommunityOnboardingPhaseObjective(params.phase)}`,
+      `Community guidance: ${params.instructions}`,
+    ].join("\n"),
+  };
+}
+
 async function requireOwnedActiveSession(args: {
   ctx: any;
   sessionId: any;
@@ -356,13 +371,36 @@ export const resolveActivePersonalAgentGuidanceInternal = internalQuery({
     if (!instructions) return null;
     return {
       sessionId: session._id,
-      phase,
-      objective: describeCommunityOnboardingPhaseObjective(phase),
-      instructions: [
-        `Current onboarding phase: ${phase}.`,
-        `Phase objective: ${describeCommunityOnboardingPhaseObjective(phase)}`,
-        `Community guidance: ${instructions}`,
-      ].join("\n"),
+      configVersion: Math.max(1, Math.floor(Number(session.configVersion ?? 1))),
+      ...buildPersonalAgentGuidance({ phase, instructions }),
+    };
+  },
+});
+
+export const resolveManagerPersonalAgentTestGuidanceInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const row = await ctx.db
+      .query("communityOnboardingConfigs")
+      .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
+      .first();
+    const config = mapConfig(row);
+    const instructions = normalizeCommunityOnboardingText(
+      config.agent_instructions,
+      COMMUNITY_ONBOARDING_AGENT_INSTRUCTIONS_MAX_CHARS,
+    );
+    if (!instructions) return null;
+    return {
+      configVersion: config.version,
+      ...buildPersonalAgentGuidance({ phase: "orientation", instructions }),
     };
   },
 });

@@ -2,7 +2,10 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
 import type { PaidUsageBillingMode } from "./paidUsageBilling";
 import type { RuntimeEngine } from "./runtimeEngine";
-import type { RuntimeInvocationSurface } from "./runtimeInvocationSurface";
+import type {
+  MemberAgentRuntimeMode,
+  RuntimeInvocationSurface,
+} from "./runtimeInvocationSurface";
 import type { MemberAgentSurfaceContextV1 } from "./memberAgentSurfaceContext";
 import type { PaidToolKind } from "./workspaceCredits";
 
@@ -115,6 +118,7 @@ export type RunAgentTurnParams = {
   inferenceSource?: "free" | "user_key" | "chatgpt";
   runtimeEngine?: RuntimeEngine;
   invocationSurface?: RuntimeInvocationSurface;
+  memberAgentMode?: MemberAgentRuntimeMode;
   surfaceContext?: MemberAgentSurfaceContextV1 | null;
   requestedFundingSource:
     | "demo_public"

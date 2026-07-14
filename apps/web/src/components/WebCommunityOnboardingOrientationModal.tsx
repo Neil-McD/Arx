@@ -21,12 +21,15 @@ export function WebCommunityOnboardingOrientationModal(props: {
   messages: CommunityOnboardingOrientationMessage[];
   input: string;
   isPreview: boolean;
+  isAgentTest?: boolean;
+  isStartingAgentTest?: boolean;
   isPreparing: boolean;
   isWorking: boolean;
   streamedText: string;
   isPending: boolean;
   error: string | null;
   onInputChange: (value: string) => void;
+  onStartAgentTest?: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onStop: () => void;
   onContinue: () => void;
@@ -50,7 +53,9 @@ export function WebCommunityOnboardingOrientationModal(props: {
     const previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const focusFrame = window.requestAnimationFrame(() => {
-      (props.isPreview ? continueButtonRef.current : composerRef.current)?.focus();
+      (props.isPreview && !props.isAgentTest
+        ? continueButtonRef.current
+        : composerRef.current)?.focus();
     });
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -90,7 +95,7 @@ export function WebCommunityOnboardingOrientationModal(props: {
       document.body.style.overflow = previousBodyOverflow;
       previousActiveElement?.focus();
     };
-  }, [props.isPreview]);
+  }, [props.isAgentTest, props.isPreview]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {

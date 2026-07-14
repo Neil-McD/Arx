@@ -12,6 +12,10 @@ import {
   readAppRouteFromLocation,
   readPublicRouteFromLocation,
 } from "../shared/webAppRouteState.ts";
+import {
+  normalizeMemberAgentRuntimeMode,
+  shouldRecordCommunityOnboardingAgentTurn,
+} from "../shared/runtimeInvocationSurface.ts";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const app = read("apps/web/src/App.tsx");
@@ -24,6 +28,9 @@ const orientation = read("apps/web/src/components/WebCommunityOnboardingOrientat
 const orientationSurface = read("apps/web/src/components/WebCommunityOnboardingOrientationSurface.tsx");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const convexOnboarding = read("convex/communityOnboarding.ts");
+const runtimeResolution = read("convex/runtimeTurnResolution.ts");
+const runtimeHandlers = read("convex/runtimeTurnHandlers.ts");
+const turnRunner = read("shared/useWebTurnRunnerController.ts");
 const schema = read("convex/schema.ts");
 
 const originalWindow = globalThis.window;
@@ -87,6 +94,48 @@ assert.equal(complete.status, "completed");
 assert.equal(shouldPresentCommunityOnboardingOrientation(complete), false);
 assert.equal(shouldPresentCommunityOnboardingFirstPost(complete), false);
 assert.equal(shouldPresentCommunityOnboardingAgentStep(complete), false);
+assert.equal(normalizeMemberAgentRuntimeMode(undefined), "standard");
+assert.equal(
+  normalizeMemberAgentRuntimeMode("community_onboarding_preview_test"),
+  "community_onboarding_preview_test",
+);
+assert.equal(normalizeMemberAgentRuntimeMode("browser_supplied_prompt"), null);
+assert.equal(
+  shouldRecordCommunityOnboardingAgentTurn({
+    invocationSurface: "member_agent_dock",
+    memberAgentMode: "standard",
+    surfaceKind: "community",
+    hasCommunityId: true,
+  }),
+  true,
+);
+assert.equal(
+  shouldRecordCommunityOnboardingAgentTurn({
+    invocationSurface: "member_agent_dock",
+    memberAgentMode: "community_onboarding_preview_test",
+    surfaceKind: "community",
+    hasCommunityId: true,
+  }),
+  false,
+);
+assert.equal(
+  shouldRecordCommunityOnboardingAgentTurn({
+    invocationSurface: "workspace",
+    memberAgentMode: "standard",
+    surfaceKind: "community",
+    hasCommunityId: true,
+  }),
+  false,
+);
+assert.equal(
+  shouldRecordCommunityOnboardingAgentTurn({
+    invocationSurface: "member_agent_dock",
+    memberAgentMode: "standard",
+    surfaceKind: "community",
+    hasCommunityId: false,
+  }),
+  false,
+);
 
 assert.match(workflow, /Cancel changes/);
 assert.match(workflow, /onClick=\{props\.onPreview\}/);
@@ -126,14 +175,31 @@ assert.match(previewBar, /Finish preview/);
 
 assert.match(chat, /const canUseComposer = canPresentComposer && !isCommunityOnboardingPreview/);
 assert.match(dock, /onboarding\?\.mode === "preview" \|\|\s*!isConversationSurfaceActive/);
-assert.match(dock, /const visibleMessages = isOnboardingPreview[\s\S]*\? \[\]/);
+assert.match(dock, /const isVisualOnboardingPreview = isOnboardingPreview && !isBuilderAgentTest/);
+assert.match(dock, /const visibleMessages = isVisualOnboardingPreview[\s\S]*\? \[\]/);
 assert.match(dock, /const startNewChat = async \(\) => \{[\s\S]*isOnboardingPreview \|\|/);
-assert.match(dock, /const submit = async \(event: FormEvent\) => \{[\s\S]*isOnboardingPreview \|\|/);
+assert.match(dock, /const startPreviewAgentTest = async \(\) => \{/);
+assert.match(dock, /startNewCloudMemberAgentGlobalEpisode/);
+assert.match(dock, /const submit = async \(event: FormEvent\) => \{[\s\S]*isVisualOnboardingPreview \|\|/);
+assert.match(dock, /memberAgentMode: isBuilderAgentTest/);
+assert.match(dock, /requestedFundingSource: "auto"/);
 assert.match(orientation, /WebCommunityOnboardingOrientationSurface/);
-assert.match(orientationSurface, /readOnly=\{props\.isPreview\}/);
-assert.match(orientationSurface, /disabled=\{props\.isPreview \|\| props\.isPreparing \|\| !props\.input\.trim\(\)\}/);
+assert.match(orientationSurface, /Test with my agent/);
+assert.match(orientationSurface, /uses your agent limits/i);
+assert.match(orientationSurface, /Messages stay in your private agent history/);
+assert.match(orientationSurface, /readOnly=\{!isAgentInteractive\}/);
+assert.match(orientationSurface, /disabled=\{!isAgentInteractive/);
 
 assert.doesNotMatch(convexOnboarding, /previewCommunityOnboarding|onboardingPreview/);
+assert.match(convexOnboarding, /resolveManagerPersonalAgentTestGuidanceInternal/);
+assert.match(convexOnboarding, /resolveManagerPersonalAgentTestGuidanceInternal[\s\S]*requireCommunityManager/);
+assert.match(runtimeResolution, /community_onboarding_preview_test/);
+assert.match(runtimeResolution, /resolveManagerPersonalAgentTestGuidanceInternal/);
+assert.match(runtimeResolution, /community_onboarding_test_forbidden/);
+assert.match(runtimeHandlers, /shouldRecordCommunityOnboardingAgentTurn/);
+assert.match(runtimeHandlers, /member_agent_mode: memberAgentMode/);
+assert.match(runtimeHandlers, /community_onboarding_config_version/);
+assert.match(turnRunner, /member_agent_mode: params\.memberAgentMode/);
 assert.doesNotMatch(schema, /communityOnboardingPreviews/);
 
-console.log("PASS: onboarding preview is route-backed, manager-read-only, local, and zero-write.");
+console.log("PASS: onboarding visual preview stays local while manager agent testing uses the personal-agent runtime without onboarding progress writes.");

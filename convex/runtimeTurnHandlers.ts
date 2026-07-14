@@ -31,6 +31,9 @@ import {
   composePlatformChatRuntimeSystemPrompt,
 } from "../shared/runtimePrompt";
 import {
+  shouldRecordCommunityOnboardingAgentTurn,
+} from "../shared/runtimeInvocationSurface";
+import {
   isRecoverableRuntimeKernelStopReason,
 } from "../shared/runtimeKernelTypes";
 import {
@@ -722,6 +725,7 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeCommunityAbout,
       runtimeCommunitySystemPrompt,
       runtimeCommunityOnboardingInstructions,
+      runtimeCommunityOnboardingConfigVersion,
       runtimeCommunityLensAuthority,
       runtimeProjectId,
       runtimeSandboxMode,
@@ -730,17 +734,19 @@ export async function handleRuntimeTurnRequest(args: {
       resolvedRuntimeHarnessProfile,
       runtimeExecutionMode: resolvedRuntimeExecutionMode,
       invocationSurface,
+      memberAgentMode,
       memberAgentSurfaceContext,
     } = resolved.value;
     const runId =
       String(input.idempotency_key ?? "").trim() ||
       `convex_runtime:${crypto.randomUUID()}`;
     const recordCommunityOnboardingAgentDockTurnBestEffort = async (): Promise<void> => {
-      if (
-        invocationSurface !== "member_agent_dock" ||
-        memberAgentSurfaceContext?.kind !== "community" ||
-        !runtimeCommunityId
-      ) {
+      if (!shouldRecordCommunityOnboardingAgentTurn({
+        invocationSurface,
+        memberAgentMode,
+        surfaceKind: memberAgentSurfaceContext?.kind ?? null,
+        hasCommunityId: Boolean(runtimeCommunityId),
+      })) {
         return;
       }
       try {
@@ -1675,6 +1681,10 @@ export async function handleRuntimeTurnRequest(args: {
         community_context_version: runtimeCommunityId ? runtimeCommunityContextVersion : null,
         community_lens_authority:
           buildCommunityLensAuthorityReceipt(runtimeCommunityLensAuthority),
+        community_onboarding_guidance_applied:
+          Boolean(runtimeCommunityOnboardingInstructions),
+        community_onboarding_config_version:
+          runtimeCommunityOnboardingConfigVersion,
         runtime_engine_requested:
           runtimeEngineResolution.requestedRuntimeEngine ?? null,
         runtime_engine_resolved: runtimeEngineResolution.resolvedRuntimeEngine,
@@ -1684,6 +1694,7 @@ export async function handleRuntimeTurnRequest(args: {
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
         invocation_surface: invocationSurface,
+        member_agent_mode: memberAgentMode,
         member_agent_surface_context: memberAgentSurfaceContext,
       },
     });
@@ -1717,6 +1728,7 @@ export async function handleRuntimeTurnRequest(args: {
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
         invocation_surface: invocationSurface,
+        member_agent_mode: memberAgentMode,
         member_agent_surface_context: memberAgentSurfaceContext,
       },
     });

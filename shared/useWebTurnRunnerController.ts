@@ -741,6 +741,9 @@ export function useWebTurnRunnerController<
               stream: streamRuntimeTurn,
               surface: "web",
               invocation_surface: params.invocationSurface ?? "workspace",
+              ...(params.memberAgentMode && params.memberAgentMode !== "standard"
+                ? { member_agent_mode: params.memberAgentMode }
+                : null),
               ...(params.surfaceContext
                 ? { surface_context: params.surfaceContext }
                 : null),
