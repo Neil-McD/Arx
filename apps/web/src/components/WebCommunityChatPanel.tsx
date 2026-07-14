@@ -1718,7 +1718,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                 onMessageUser={canOpenDirectMessageFromCommunity ? openDirectMessage : undefined}
                 profilePanel={profilePanelElement}
                 onCloseProfile={() => setProfilePanelUserId(null)}
-                mainComposer={mainCommunityComposer}
+                mainComposer={interactionProjection.mobileThreadPage ? null : mainCommunityComposer}
                 drawerComposer={drawerReplyComposer}
               />
             </div>

@@ -24,6 +24,7 @@ export function useWebMobileShellController(params: {
   showMobileSettingsShell: boolean;
   canOpenDirectMessages: boolean;
   isDirectMessagesOpen: boolean;
+  isThreadPageOpen: boolean;
   setMobileOverlay: Dispatch<SetStateAction<MobileOverlay | null>>;
   setMobileRootPage: Dispatch<SetStateAction<MobileRootPage>>;
   setMobileSettingsView: Dispatch<SetStateAction<MobileSettingsView>>;
@@ -35,6 +36,7 @@ export function useWebMobileShellController(params: {
   handleOpenDiscover: () => void;
   openDirectMessages: () => void;
   closeDirectMessages: () => void;
+  closeThreadPage: () => void;
   hasCommunityCreateAccess: boolean;
   openCommunityCreateFlow: () => void;
   setIsFreeAccountInfoOpen: Dispatch<SetStateAction<boolean>>;
@@ -57,6 +59,8 @@ export function useWebMobileShellController(params: {
 
   const handleSelectMobileRootPage = useCallback(
     (nextRootPage: MobileRootPage) => {
+      if (params.isThreadPageOpen) params.closeThreadPage();
+
       if (params.forceCommunityRoot) {
         params.closeDirectMessages();
         params.setMobileRootPage("community");
@@ -86,7 +90,9 @@ export function useWebMobileShellController(params: {
     [
       params.canOpenDirectMessages,
       params.closeDirectMessages,
+      params.closeThreadPage,
       params.forceCommunityRoot,
+      params.isThreadPageOpen,
       params.openDirectMessages,
       params.setMobileOverlay,
       params.setMobileRootPage,

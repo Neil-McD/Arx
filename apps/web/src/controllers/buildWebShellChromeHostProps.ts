@@ -26,6 +26,7 @@ export function buildWebShellChromeHostProps(params: {
   showMobileShell: boolean;
   mobileShellMode: WebShellChromeHostProps["mobileTopBarProps"]["mode"];
   mobileRootPage: WebShellChromeHostProps["mobileTopBarProps"]["rootPage"];
+  mobileThreadPageOpen: boolean;
   forceMobileCommunityRoot: boolean;
   showMobileSettingsIndex: boolean;
   activePage: AppPage;
@@ -35,6 +36,7 @@ export function buildWebShellChromeHostProps(params: {
   activeCommunityMemberCount: number | null;
   openMobileDrawer: () => void;
   handleExitMobileSettings: () => void;
+  handleCloseMobileThreadPage: () => void;
   handleSelectMobileRootPage: WebShellChromeHostProps["communityShell"]["onSelectMobileRootPage"];
   setMobileOverlay: (value: MobileOverlay) => void;
   isPublicCommunityFunnel: boolean;
@@ -104,9 +106,10 @@ export function buildWebShellChromeHostProps(params: {
         : params.forceMobileCommunityRoot
           ? "community"
           : params.mobileRootPage,
-      showBackButton: params.showMobileSettingsIndex,
+      isThreadPage: params.mobileThreadPageOpen,
+      showBackButton: params.showMobileSettingsIndex || params.mobileThreadPageOpen,
       showDrawerButton:
-        !params.showMobileSettingsShell,
+        !params.showMobileSettingsShell && !params.mobileThreadPageOpen,
       hasActiveCommunity: Boolean(params.activeCommunity),
       activeCommunityName: params.activeCommunity?.name ?? null,
       activeCommunityAvatarUrl: params.activeCommunity?.avatar_url ?? null,
@@ -123,9 +126,11 @@ export function buildWebShellChromeHostProps(params: {
       memberFaces: params.activeCommunityMemberFaces,
       memberCount: params.activeCommunityMemberCount,
       onOpenDrawer: params.openMobileDrawer,
-      onBack: params.showMobileSettingsIndex
-        ? params.handleExitMobileSettings
-        : null,
+      onBack: params.mobileThreadPageOpen
+        ? params.handleCloseMobileThreadPage
+        : params.showMobileSettingsIndex
+          ? params.handleExitMobileSettings
+          : null,
       onOpenCommunitySelector: () => params.setMobileOverlay("community_selector"),
       onOpenMembers: () => params.setMobileOverlay("members"),
     },

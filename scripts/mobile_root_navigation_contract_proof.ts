@@ -49,6 +49,16 @@ assert.match(
 );
 assert.match(
   app,
+  /const mobileThreadPageOpen = Boolean\([\s\S]*showMobileShell[\s\S]*mobileRootPage === "community"[\s\S]*selectedCommunityInteractionRootId[\s\S]*\);/,
+  "a selected reply thread should become a page only inside the mobile Community root",
+);
+assert.match(
+  app,
+  /if \(!COMMUNITY_INTERACTION_PROJECTION_ENABLED \|\| !activeCommunityId\) return;[\s\S]*if \(shellVariant === "mobile"\) return;[\s\S]*readStoredInteractionSelectedRoot/,
+  "mobile Community should not reopen a stale thread selection from storage",
+);
+assert.match(
+  app,
   /mobileMembersOverlayOpen: showMobileShell && mobileOverlay === "members"[\s\S]*onCloseMobileMembersOverlay: \(\) => setMobileOverlay\(null\)/,
   "the existing Members drawer should remain the canonical mobile member surface",
 );
@@ -100,6 +110,11 @@ assert.match(
 );
 assert.match(
   controller,
+  /if \(params\.isThreadPageOpen\) params\.closeThreadPage\(\);[\s\S]*if \(params\.forceCommunityRoot\)/,
+  "selecting any persistent mobile root should exit the transient thread page first",
+);
+assert.match(
+  controller,
   /if \(params\.canOpenDirectMessages \|\| params\.mobileRootPage !== "messages"\) return;[\s\S]*params\.setMobileRootPage\("community"\);/,
   "a lost session should fail closed from Messages back to Community",
 );
@@ -118,6 +133,16 @@ assert.match(
   topBar,
   /className="mobile-topbar-members"[\s\S]*onClick=\{onOpenMembers\}/,
   "Members should have an explicit header-right affordance",
+);
+assert.match(
+  topBar,
+  /isThreadPage \? \([\s\S]*mobile-topbar-context-label">Thread<[\s\S]*: isAgent \? \(/,
+  "the mobile thread page should replace the community selector with a dedicated Thread title",
+);
+assert.match(
+  shellChromeProps,
+  /isThreadPage: params\.mobileThreadPageOpen,[\s\S]*showBackButton: params\.showMobileSettingsIndex \|\| params\.mobileThreadPageOpen,[\s\S]*onBack: params\.mobileThreadPageOpen[\s\S]*params\.handleCloseMobileThreadPage/,
+  "the shared mobile header should own thread Back navigation",
 );
 assert.doesNotMatch(
   topBar,
@@ -192,6 +217,16 @@ assert.match(
   /export function CommunityInteractionContextPanelSurface[\s\S]*<CommunityContextPanel/,
   "member context should be reused without duplicating its state",
 );
+assert.match(
+  interactionProjection,
+  /const isMobileThreadPage = Boolean\(props\.mobileThreadPage && selectedRoot && !props\.profilePanel\);[\s\S]*const ThreadSurface = isMobileThreadPage \? "section" : "aside";[\s\S]*community-interaction-thread-page/,
+  "mobile replies should reuse the canonical thread body as a page while desktop keeps its aside",
+);
+assert.match(
+  chatPanel,
+  /mainComposer=\{interactionProjection\.mobileThreadPage \? null : mainCommunityComposer\}[\s\S]*drawerComposer=\{drawerReplyComposer\}/,
+  "the mobile thread page should mount only the reply composer",
+);
 assert.equal(
   existsSync("apps/web/src/components/WebWorkspaceShellPanels.tsx"),
   false,
@@ -247,6 +282,11 @@ assert.match(
   baseCss,
   /\.app-root\.mobile-shell \.community-chat \.chat-input-bar \{[\s\S]*var\(--mobile-bottom-rail-height\)/,
   "the community composer should reserve the shared rail height",
+);
+assert.match(
+  baseCss,
+  /\.app-root\.mobile-shell \.community-chat \.mobile-thread-page-open \.community-interaction-main \{[\s\S]*display: none;[\s\S]*\.community-interaction-thread-page \{[\s\S]*width: 100%;[\s\S]*\.community-interaction-thread-page \.community-interaction-drawer-scroll \{[\s\S]*flex: 1 1 auto;[\s\S]*\.community-interaction-thread-page \.community-interaction-drawer-composer \{[\s\S]*var\(--mobile-bottom-rail-height\)/,
+  "the thread page should fill mobile width, own the scroll region, and anchor its composer above the rail",
 );
 assert.match(
   baseCss,

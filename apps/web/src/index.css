@@ -2535,6 +2535,10 @@
   max-width: min(40vw, 180px);
 }
 
+.mobile-topbar.is-thread-page .mobile-topbar-center {
+  max-width: min(52vw, 232px);
+}
+
 .mobile-topbar-community-selector {
   min-width: 0;
   max-width: 100%;

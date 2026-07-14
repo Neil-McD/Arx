@@ -5,6 +5,7 @@ import type { MobileMemberFace, MobileRootPage } from "./webShellChromeShared";
 type WebMobileTopBarProps = {
   mode: "agent" | "discover" | "community";
   rootPage: MobileRootPage;
+  isThreadPage?: boolean;
   showDrawerButton?: boolean;
   showBackButton?: boolean;
   hasActiveCommunity: boolean;
@@ -35,6 +36,7 @@ function formatMemberCount(value: number | null): string {
 export function WebMobileTopBar({
   mode,
   rootPage,
+  isThreadPage = false,
   showDrawerButton = true,
   showBackButton = false,
   hasActiveCommunity,
@@ -60,11 +62,12 @@ export function WebMobileTopBar({
   const visibleMemberFaces = memberFaces.slice(0, 2);
   const memberCountLabel = formatMemberCount(memberCount);
   const showMembers =
+    !isThreadPage &&
     rootPage === "community" && mode === "community" && hasActiveCommunity && canViewMembers;
   const drawerLabel = isAgent ? "Open threads" : "Open community navigation";
 
   return (
-    <header className={`mobile-topbar${showMembers ? " has-members" : ""}`}>
+    <header className={`mobile-topbar${showMembers ? " has-members" : ""}${isThreadPage ? " is-thread-page" : ""}`}>
       <div className="mobile-topbar-left">
         {showBackButton && onBack ? (
           <button
@@ -94,7 +97,9 @@ export function WebMobileTopBar({
       </div>
 
       <div className="mobile-topbar-center">
-        {isAgent ? (
+        {isThreadPage ? (
+          <span className="mobile-topbar-context-label">Thread</span>
+        ) : isAgent ? (
           <span className="mobile-topbar-context-label">Polynet AI</span>
         ) : (
           <button

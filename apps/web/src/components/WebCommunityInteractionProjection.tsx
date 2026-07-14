@@ -45,6 +45,7 @@ export type WebCommunityInteractionProjectionProps = {
   activeCommunityName: string;
   roots: CommunityInteractionRootBundle[];
   selectedRootId: string | null;
+  mobileThreadPage?: boolean;
   replies: CommunityInteractionReplyBundle[];
   isLoadingRoots: boolean;
   isLoadingReplies: boolean;
@@ -395,12 +396,14 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     : "";
   const selectedRootChip = selectedRoot ? kindChipLabel(selectedRoot.root.kind) : null;
   const selectedRootBadge = selectedRoot ? agentBadgeLabel(selectedRoot.root.actor_type) : null;
+  const isMobileThreadPage = Boolean(props.mobileThreadPage && selectedRoot && !props.profilePanel);
+  const ThreadSurface = isMobileThreadPage ? "section" : "aside";
 
   const replyById = new Map(props.replies.map((bundle) => [bundle.reply.id, bundle] as const));
 
   return (
     <>
-    <div className={`community-interaction-projection${selectedRoot || props.profilePanel ? " has-drawer" : " has-context-panel"}`}>
+    <div className={`community-interaction-projection${selectedRoot || props.profilePanel ? " has-drawer" : " has-context-panel"}${isMobileThreadPage ? " mobile-thread-page-open" : ""}`}>
       <div className="community-interaction-main">
         <div className="community-interaction-feed-scroll" ref={scrollRef} onScroll={handleFeedScroll}>
           <CommunityInteractionFeedList
@@ -450,8 +453,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           <div className="community-interaction-drawer-scroll">{props.profilePanel}</div>
         </aside>
       ) : selectedRoot ? (
-        <aside className="community-interaction-drawer" aria-label="Thread replies">
-          <div className="community-interaction-drawer-back">
+        <ThreadSurface
+          className={`community-interaction-drawer${isMobileThreadPage ? " community-interaction-thread-page" : ""}`}
+          aria-label={isMobileThreadPage ? "Thread" : "Thread replies"}
+        >
+          {!isMobileThreadPage ? <div className="community-interaction-drawer-back">
             <button
               className="back-to-workspace"
               type="button"
@@ -463,7 +469,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               </svg>
               <span className="back-path">thread</span>
             </button>
-          </div>
+          </div> : null}
           <div className="community-interaction-drawer-scroll">
             <div className="community-interaction-drawer-root">
               <div className="community-interaction-thread-anchor">
@@ -722,7 +728,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           {props.drawerComposer ? (
             <div className="community-interaction-drawer-composer">{props.drawerComposer}</div>
           ) : null}
-        </aside>
+        </ThreadSurface>
       ) : (
         <CommunityInteractionContextPanelSurface {...props} />
       )}

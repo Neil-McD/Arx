@@ -2944,6 +2944,7 @@ export default function App() {
   const restoredInteractionSelectionForCommunityRef = useRef<string | null>(null);
   useEffect(() => {
     if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId) return;
+    if (shellVariant === "mobile") return;
     if (restoredInteractionSelectionForCommunityRef.current === activeCommunityId) return;
     // Restore only once the feed's roots are actually loaded FOR THIS community,
     // i.e. after the boot-time resets have settled — otherwise the master reset
@@ -2957,7 +2958,7 @@ export default function App() {
     if (stored && communityInteractionRoots.some((bundle) => bundle.root.id === stored)) {
       setSelectedCommunityInteractionRootId((current) => current ?? stored);
     }
-  }, [activeCommunityId, communityInteractionRoots]);
+  }, [activeCommunityId, communityInteractionRoots, shellVariant]);
 
   const handleToggleCommunityInteractionReaction = useCallback(async (
     targetType: "root" | "reply",
@@ -9150,6 +9151,11 @@ export default function App() {
     mobileShellMode,
     showHeaderIslands,
   } = shellProjection;
+  const mobileThreadPageOpen = Boolean(
+    showMobileShell
+    && mobileRootPage === "community"
+    && selectedCommunityInteractionRootId,
+  );
   const dockedWorkspaceCenterWidth =
     workspaceViewportWidth -
     WEB_RAIL_WIDTH -
@@ -10208,6 +10214,7 @@ export default function App() {
       showMobileSettingsShell,
       canOpenDirectMessages: Boolean(session),
       isDirectMessagesOpen,
+      isThreadPageOpen: mobileThreadPageOpen,
       setMobileOverlay,
       setMobileRootPage,
       setMobileSettingsView,
@@ -10216,6 +10223,7 @@ export default function App() {
       handleOpenDiscover,
       openDirectMessages: handleOpenDirectMessages,
       closeDirectMessages: handleCloseDirectMessages,
+      closeThreadPage: handleCloseCommunityInteractionDrawer,
       hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
       openCommunityCreateFlow: openCommunityLaunchCreateFlow,
       setIsFreeAccountInfoOpen,
@@ -10801,6 +10809,7 @@ export default function App() {
       },
       interactionProjection: {
         enabled: COMMUNITY_INTERACTION_PROJECTION_ENABLED,
+        mobileThreadPage: mobileThreadPageOpen,
         roots: appendPendingRoots(communityInteractionRoots, pendingCanonicalInteractions, activeCommunityId),
         selectedRootId: selectedCommunityInteractionRootId,
         replies: appendPendingReplies(
@@ -11797,6 +11806,7 @@ export default function App() {
     showMobileShell,
     mobileShellMode,
     mobileRootPage,
+    mobileThreadPageOpen,
     forceMobileCommunityRoot: showMobileShell && isVisitorCommunitySurface,
     showMobileSettingsIndex,
     activePage,
@@ -11815,6 +11825,7 @@ export default function App() {
         : null,
     openMobileDrawer,
     handleExitMobileSettings,
+    handleCloseMobileThreadPage: handleCloseCommunityInteractionDrawer,
     handleSelectMobileRootPage,
     setMobileOverlay,
     isPublicCommunityFunnel,
