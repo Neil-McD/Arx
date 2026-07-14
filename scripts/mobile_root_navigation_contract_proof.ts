@@ -321,9 +321,14 @@ assert.match(
   "selection, AI identity, attention, and focus should have independent semantic roles",
 );
 assert.match(
+  bottomRail,
+  /<House className="mobile-bottom-rail-community-base" aria-hidden="true" \/>[\s\S]*<House className="mobile-bottom-rail-community-cutout" aria-hidden="true" \/>/,
+  "the active Home state should reuse canonical House geometry with a dedicated cutout layer",
+);
+assert.match(
   indexCss,
-  /\.mobile-bottom-rail-action\.active \{[\s\S]*color: var\(--text-primary\);[\s\S]*\.mobile-bottom-rail-action\.active \.mobile-bottom-rail-icon-wrap > svg \{[\s\S]*fill: currentColor;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-icon-wrap > svg > path:first-child \{[\s\S]*fill: none;[\s\S]*\.mobile-bottom-rail-unread \{[\s\S]*background: var\(--accent-attention\);[\s\S]*\.mobile-bottom-rail-dot \{[\s\S]*background: var\(--accent-attention\);/,
-  "routine selection should use solid white icon forms while attention retains its semantic accent",
+  /\.mobile-bottom-rail-action\.active \{[\s\S]*color: var\(--text-primary\);[\s\S]*\.mobile-bottom-rail-action\.active \.mobile-bottom-rail-icon-wrap > svg \{[\s\S]*fill: currentColor;[\s\S]*\.mobile-bottom-rail-community-cutout \{[\s\S]*position: absolute;[\s\S]*display: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-icon-wrap > \.mobile-bottom-rail-community-cutout \{[\s\S]*display: block;[\s\S]*fill: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-community-cutout > path:first-child \{[\s\S]*fill: color-mix[\s\S]*stroke: color-mix[\s\S]*\.mobile-bottom-rail-unread \{[\s\S]*background: var\(--accent-attention\);[\s\S]*\.mobile-bottom-rail-dot \{[\s\S]*background: var\(--accent-attention\);/,
+  "routine selection should use solid white icon forms with a real Home cutout while attention retains its semantic accent",
 );
 assert.match(
   indexCss,

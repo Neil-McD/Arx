@@ -2806,8 +2806,20 @@
   fill: currentColor;
 }
 
-.mobile-bottom-rail-community.active .mobile-bottom-rail-icon-wrap > svg > path:first-child {
+.mobile-bottom-rail-community-cutout {
+  position: absolute;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+}
+
+.mobile-bottom-rail-community.active .mobile-bottom-rail-icon-wrap > .mobile-bottom-rail-community-cutout {
+  display: block;
   fill: none;
+}
+
+.mobile-bottom-rail-community.active .mobile-bottom-rail-community-cutout > path:first-child {
+  fill: color-mix(in srgb, var(--surface-workspace, var(--bg-workspace)) 97%, black 3%);
   stroke: color-mix(in srgb, var(--surface-workspace, var(--bg-workspace)) 97%, black 3%);
 }
 
