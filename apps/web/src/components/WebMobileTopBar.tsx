@@ -151,7 +151,6 @@ export function WebMobileTopBar({
             {memberFaces.length > 0 ? (
               <CommunityPresenceFacepile
                 faces={memberFaces}
-                onlineCount={onlineCount}
                 limit={2}
                 compact
                 decorative
@@ -163,6 +162,7 @@ export function WebMobileTopBar({
                 <path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" />
               </svg>
             )}
+            <span className="mobile-topbar-member-count">{onlineCountLabel}</span>
           </button>
         ) : null}
       </div>
