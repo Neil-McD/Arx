@@ -6,7 +6,7 @@ type CloudCommunityPolynetGatewayParams<SessionT> = {
 
 export type CloudCommunityPolynetOverviewNode = {
   id: string;
-  kind: "community" | "directory_node";
+  kind: "community" | "forming_memory" | "directory_node";
   community_id?: string;
   node_id?: string;
   type: string;
@@ -19,6 +19,7 @@ export type CloudCommunityPolynetOverviewNode = {
   retrieval_usefulness_score?: number;
   outcome_impact_score?: number;
   updated_at?: string;
+  created_at?: string;
 };
 
 export type CloudCommunityPolynetOverviewEdge = {
@@ -81,6 +82,8 @@ export type CloudCommunityPolynetOverview = {
     edge_limit: number;
     has_more_nodes: boolean;
     has_more_edges: boolean;
+    forming_node_limit: number;
+    has_more_forming_nodes: boolean;
   };
   memory: {
     total_visible_nodes: number;

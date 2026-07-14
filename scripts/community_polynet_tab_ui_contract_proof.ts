@@ -118,6 +118,12 @@ assert.match(
   /cp-node-circle|cp-root-circle/,
   "Polynet graph nodes should render as circle dot primitives",
 );
+assert.match(section, /node\.kind === "forming_memory"/, "Polynet graph should distinguish forming memory from retained memory");
+assert.match(section, /cp-forming-circle/, "Polynet graph should render forming memory as a dedicated circle treatment");
+assert.match(section, /agentActivityClass\(overview\?\.agent\.activity_state\)/, "Polynet root should reflect the projected community-agent state");
+assert.match(section, /The community is forming its first memory\./, "empty graph should explain visible formation truthfully");
+assert.match(section, /The community agent is examining recent activity\./, "empty graph should expose active inspection without claiming memory");
+assert.match(section, /No retained memories yet\./, "resting empty graph should state retained-memory truth plainly");
 assert.doesNotMatch(
   section,
   /Backfill archive|Process pending|Retry failed|Total docs|Embedded|PDF docs|archive health|archive memory/i,
@@ -179,6 +185,9 @@ assert.match(
   /\.cp-root-circle \{[\s\S]*fill: var\(--accent-gold\)/,
   "Polynet root node should be a compact dot in the theme accent",
 );
+assert.match(css, /\.cp-forming-circle \{[\s\S]*fill:[\s\S]*transparent[\s\S]*stroke:/, "forming memory should be a hollow graph node");
+assert.match(css, /\.cp-root-circle\.activity-running/, "community root should pulse only for active agent states");
+assert.match(css, /@media \(prefers-reduced-motion: reduce\)/, "community-agent graph motion should respect reduced-motion preferences");
 assert.doesNotMatch(
   css,
   /min-width: 92px;[\s\S]{0,80}padding: 0 14px;/,

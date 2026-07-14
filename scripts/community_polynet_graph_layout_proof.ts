@@ -55,18 +55,25 @@ for (const [id, pos] of populated) {
   assert.ok(distance > 50, `directory node ${id} should orbit the root, got ${distance}`);
 }
 
-// Non-directory, non-root kinds are ignored (only retained memory becomes graph material).
+// Forming memory is placed close to the core; unrelated activity remains ignored.
 const withNoise = computePolynetLayout(
   [
     { id: ROOT_ID, kind: "community" },
     { id: "chat:1", kind: "chat_activity" },
+    { id: "forming:1", kind: "forming_memory" },
     { id: "node:a", kind: "directory_node" },
   ],
   ROOT_ID,
 );
-assert.equal(withNoise.size, 2, "only root + directory nodes should be placed");
+assert.equal(withNoise.size, 3, "root, forming memory, and directory memory should be placed");
 assert.ok(withNoise.has("node:a"), "directory node should be placed");
+assert.ok(withNoise.has("forming:1"), "forming memory should be placed");
 assert.ok(!withNoise.has("chat:1"), "non-directory activity should not be placed");
+assert.ok(
+  Math.hypot(withNoise.get("forming:1")!.x, withNoise.get("forming:1")!.y)
+    < Math.hypot(withNoise.get("node:a")!.x, withNoise.get("node:a")!.y),
+  "forming memory should remain closer to the community core than retained memory",
+);
 
 // --- bounds ---
 const seedBounds = computePolynetBounds(computePolynetLayout(makeNodes(0), ROOT_ID));
