@@ -1,4 +1,13 @@
-import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
+import type { ConvexReactClient } from "convex/react";
+
+import { api } from "../convex/_generated/api";
+import { resolveAuthSubject, resolveConvexRuntimeToken } from "./authSession";
+import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
+import {
+  createAuthenticatedConvexRealtimeClient,
+  type ConvexRealtimeAuthState,
+  type ConvexRealtimeEnsureSession,
+} from "./convexRealtimeAuth";
 
 type CloudCommunityPolynetGatewayParams<SessionT> = {
   session: SessionT;
@@ -6,7 +15,8 @@ type CloudCommunityPolynetGatewayParams<SessionT> = {
 
 export type CloudCommunityPolynetOverviewNode = {
   id: string;
-  kind: "community" | "directory_node";
+  lineage_id: string;
+  kind: "community" | "forming_memory" | "directory_node";
   community_id?: string;
   node_id?: string;
   type: string;
@@ -19,6 +29,7 @@ export type CloudCommunityPolynetOverviewNode = {
   retrieval_usefulness_score?: number;
   outcome_impact_score?: number;
   updated_at?: string;
+  created_at?: string;
 };
 
 export type CloudCommunityPolynetOverviewEdge = {
@@ -81,6 +92,8 @@ export type CloudCommunityPolynetOverview = {
     edge_limit: number;
     has_more_nodes: boolean;
     has_more_edges: boolean;
+    forming_node_limit: number;
+    has_more_forming_nodes: boolean;
   };
   memory: {
     total_visible_nodes: number;
@@ -92,6 +105,73 @@ export type CloudCommunityPolynetOverview = {
     edge_counts_are_lower_bound: boolean;
   };
 };
+
+export type CloudCommunityPolynetLiveClient = {
+  client: ConvexReactClient;
+  authSubject: string;
+  close: () => void;
+};
+
+function coerceCommunityPolynetOverview(payload: unknown): CloudCommunityPolynetOverview | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  return payload as CloudCommunityPolynetOverview;
+}
+
+function resolveSessionRuntimeToken(sessionRaw: unknown): string {
+  return String(resolveConvexRuntimeToken((sessionRaw ?? null) as any) ?? "").trim();
+}
+
+export function createCloudCommunityPolynetLiveClient<SessionT>(
+  params: CloudCommunityPolynetGatewayParams<SessionT> & {
+    ensureSession?: ConvexRealtimeEnsureSession<SessionT>;
+  },
+): CloudCommunityPolynetLiveClient {
+  const authSubject = resolveAuthSubject(params.session as any);
+  if (!authSubject) throw new Error("convex_auth_subject_required");
+  if (!resolveSessionRuntimeToken(params.session)) throw new Error("convex_identity_token_required");
+
+  const authState: ConvexRealtimeAuthState<SessionT> = {
+    sessionRef: { current: params.session },
+    ensureSessionRef: { current: params.ensureSession },
+  };
+  const realtimeClient = createAuthenticatedConvexRealtimeClient({
+    convexUrl: requireConvexUrl(),
+    authState,
+    source: "community_polynet_live",
+  });
+  return {
+    client: realtimeClient.client,
+    authSubject,
+    close: realtimeClient.close,
+  };
+}
+
+export function subscribeCloudCommunityPolynetOverview(params: {
+  liveClient: CloudCommunityPolynetLiveClient;
+  communityId: string;
+  nodeLimit?: number;
+  onUpdate: (overview: CloudCommunityPolynetOverview) => void;
+  onError?: (error: unknown) => void;
+}): () => void {
+  const watch = params.liveClient.client.watchQuery(
+    api.community.getCommunityPolynetOverview,
+    {
+      authSubject: params.liveClient.authSubject,
+      communityId: params.communityId as any,
+      ...(typeof params.nodeLimit === "number" ? { nodeLimit: params.nodeLimit } : {}),
+    } as any,
+  );
+  const publish = () => {
+    try {
+      const overview = coerceCommunityPolynetOverview(watch.localQueryResult());
+      if (overview) params.onUpdate(overview);
+    } catch (error) {
+      params.onError?.(error);
+    }
+  };
+  publish();
+  return watch.onUpdate(publish);
+}
 
 export async function fetchCloudCommunityPolynetOverview<SessionT>(
   params: CloudCommunityPolynetGatewayParams<SessionT> & {
@@ -105,6 +185,5 @@ export async function fetchCloudCommunityPolynetOverview<SessionT>(
     communityId: params.communityId,
     ...(typeof params.nodeLimit === "number" ? { nodeLimit: params.nodeLimit } : {}),
   });
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
-  return payload as CloudCommunityPolynetOverview;
+  return coerceCommunityPolynetOverview(payload);
 }

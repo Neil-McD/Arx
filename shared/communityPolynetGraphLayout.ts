@@ -9,7 +9,7 @@
 
 export type PolynetLayoutNodeInput = {
   id: string;
-  kind: "community" | "directory_node" | string;
+  kind: "community" | "forming_memory" | "directory_node" | string;
 };
 
 export type PolynetLayoutEdgeInput = {
@@ -28,6 +28,8 @@ const FIRST_RING_RADIUS = 150;
 const BASE_RING_CAPACITY = 6;
 const ANGLE_JITTER = 0.42; // radians of wobble around the evenly-spaced slot
 const RADIUS_JITTER = 0.3; // fraction of RING_GAP
+const FORMING_RING_RADIUS = 92;
+const FORMING_RADIUS_JITTER = 10;
 
 // Force-relaxation tuning (Fruchterman-Reingold). The ring layout above is only a
 // deterministic *seed*; when edges are supplied we relax it so linked nodes cluster
@@ -67,6 +69,9 @@ export function computePolynetLayout(
   const directoryNodes = nodes.filter(
     (node) => node.kind === "directory_node" && node.id !== rootNodeId,
   );
+  const formingNodes = nodes
+    .filter((node) => node.kind === "forming_memory" && node.id !== rootNodeId)
+    .sort((a, b) => a.id.localeCompare(b.id));
 
   let ringIndex = 1;
   let positionInRing = 0;
@@ -98,6 +103,17 @@ export function computePolynetLayout(
 
   // Relax the seed with edge springs so connected memory clusters pull together.
   relaxPolynetLayout(positions, rootNodeId, edges);
+
+  // Transient formation belongs close to the organism core and must not move
+  // retained memory. Place it after durable nodes have finished relaxing.
+  formingNodes.forEach((node, index) => {
+    const angle = -Math.PI / 2 + (index / Math.max(1, formingNodes.length)) * Math.PI * 2;
+    const radius = FORMING_RING_RADIUS + (hashUnit(`${node.id}#forming`) - 0.5) * 2 * FORMING_RADIUS_JITTER;
+    positions.set(node.id, {
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+    });
+  });
 
   return positions;
 }

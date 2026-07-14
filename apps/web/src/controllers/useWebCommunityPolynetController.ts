@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
 import {
+  createCloudCommunityPolynetLiveClient,
   fetchCloudCommunityPolynetOverview,
+  subscribeCloudCommunityPolynetOverview,
   type CloudCommunityPolynetOverview,
 } from "../../../../shared/cloudCommunityPolynetGateway";
 
@@ -134,6 +136,90 @@ export function useWebCommunityPolynetController<SessionT>(
     args.session,
     loadOverview,
     resetPolynetState,
+  ]);
+
+  useEffect(() => {
+    if (
+      !shouldLoadCommunityPolynet(args.activePage, args.communityTab)
+      || !args.activeCommunityId
+      || !args.session
+      || !args.canViewPolynet
+    ) {
+      return;
+    }
+
+    const communityId = args.activeCommunityId;
+    const communityTab = args.communityTab;
+    const nodeLimit = resolveCommunityPolynetNodeLimit(communityTab);
+    let cancelled = false;
+    let unsubscribe: (() => void) | null = null;
+    let closeLiveClient: (() => void) | null = null;
+
+    void (async () => {
+      try {
+        const latest = argsRef.current;
+        const usableSession = await latest.ensureSession(args.session);
+        if (cancelled || !usableSession) return;
+        const current = argsRef.current;
+        if (
+          !shouldLoadCommunityPolynet(current.activePage, current.communityTab)
+          || current.communityTab !== communityTab
+          || current.activeCommunityId !== communityId
+          || !current.canViewPolynet
+        ) {
+          return;
+        }
+
+        const liveClient = createCloudCommunityPolynetLiveClient({
+          session: usableSession,
+          ensureSession: current.ensureSession,
+        });
+        closeLiveClient = liveClient.close;
+        unsubscribe = subscribeCloudCommunityPolynetOverview({
+          liveClient,
+          communityId,
+          ...(typeof nodeLimit === "number" ? { nodeLimit } : {}),
+          onUpdate: (nextOverview) => {
+            const latestArgs = argsRef.current;
+            if (
+              cancelled
+              || !shouldLoadCommunityPolynet(latestArgs.activePage, latestArgs.communityTab)
+              || latestArgs.communityTab !== communityTab
+              || latestArgs.activeCommunityId !== communityId
+              || !latestArgs.canViewPolynet
+            ) {
+              return;
+            }
+            // Realtime truth wins over an older in-flight HTTP refresh.
+            requestSeqRef.current += 1;
+            setOverview(nextOverview);
+            setError(null);
+            setIsLoading(false);
+          },
+          onError: (err) => {
+            if (cancelled) return;
+            setError(formatCommunityPolynetError(err instanceof Error ? err.message : err));
+          },
+        });
+      } catch (err) {
+        if (cancelled) return;
+        closeLiveClient?.();
+        closeLiveClient = null;
+        setError(formatCommunityPolynetError(err instanceof Error ? err.message : err));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+      closeLiveClient?.();
+    };
+  }, [
+    args.activeCommunityId,
+    args.activePage,
+    args.canViewPolynet,
+    args.communityTab,
+    args.session,
   ]);
 
   return {

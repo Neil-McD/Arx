@@ -65,6 +65,10 @@ export type WebCommunityInteractionProjectionProps = {
     legacy_message_id?: string | null;
   }) => void;
   mainComposer?: ReactNode;
+  firstRootBodyExpansion?: {
+    expanded: boolean;
+    onToggle: () => void;
+  };
   drawerComposer?: ReactNode;
   onRetryRoots: () => void;
   onRetryReplies: (rootId: string) => void;

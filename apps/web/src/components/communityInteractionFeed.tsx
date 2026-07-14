@@ -976,6 +976,8 @@ export function CommunityInteractionFeedList(
                         );
                         const isEditingRoot = editing?.type === "root" && editing.id === root.id;
                         const isNewRoot = rootsLoadedOnce.current && !seenRootIds.current.has(root.id);
+                        const isFirstRoot = root.id === props.roots[0]?.root.id;
+                        const firstRootBodyExpansion = isFirstRoot ? props.firstRootBodyExpansion : undefined;
                         return (
                           <div
                             key={root.id}
@@ -1012,28 +1014,46 @@ export function CommunityInteractionFeedList(
                               />
                             ) : (
                               <>
-                                <InteractionContent
-                                  text={body}
-                                  embeds={bundle.embeds}
-                                  renderTextWithLinks={props.renderTextWithLinks}
-                                  mentionContext={{
-                                    mentions: bundle.mentions ?? [],
-                                    displayName: props.displayName,
-                                    profilesByUserId: props.profilesByUserId,
-                                    currentUserId: props.currentUserId,
-                                    onOpenProfile: props.onOpenProfile,
-                                    onMessageUser: props.onMessageUser,
-                                    getAvatarColor: props.getAvatarColor,
-                                    getInitials: props.getInitials,
-                                    communityAgentDisplayName: props.activeCommunityName,
-                                  }}
-                                  afterBody={(
-                                    <InteractionAttachments
-                                      attachments={bundle.attachments}
-                                      onOpenImage={props.onOpenCommunityChatLightbox}
-                                    />
-                                  )}
-                                />
+                                <div
+                                  className={`community-interaction-root-body${
+                                    firstRootBodyExpansion && !firstRootBodyExpansion.expanded
+                                      ? " is-mobile-collapsed"
+                                      : ""
+                                  }`}
+                                >
+                                  <InteractionContent
+                                    text={body}
+                                    embeds={bundle.embeds}
+                                    renderTextWithLinks={props.renderTextWithLinks}
+                                    mentionContext={{
+                                      mentions: bundle.mentions ?? [],
+                                      displayName: props.displayName,
+                                      profilesByUserId: props.profilesByUserId,
+                                      currentUserId: props.currentUserId,
+                                      onOpenProfile: props.onOpenProfile,
+                                      onMessageUser: props.onMessageUser,
+                                      getAvatarColor: props.getAvatarColor,
+                                      getInitials: props.getInitials,
+                                      communityAgentDisplayName: props.activeCommunityName,
+                                    }}
+                                    afterBody={(
+                                      <InteractionAttachments
+                                        attachments={bundle.attachments}
+                                        onOpenImage={props.onOpenCommunityChatLightbox}
+                                      />
+                                    )}
+                                  />
+                                </div>
+                                {firstRootBodyExpansion && !firstRootBodyExpansion.expanded ? (
+                                  <button
+                                    type="button"
+                                    className="community-interaction-root-expand"
+                                    aria-expanded={false}
+                                    onClick={firstRootBodyExpansion.onToggle}
+                                  >
+                                    Show more
+                                  </button>
+                                ) : null}
                                 {root.edited_at ? (
                                   <span className="community-interaction-edited">(edited)</span>
                                 ) : null}

@@ -2965,6 +2965,7 @@ export default defineSchema({
     lastUpdatedByAgentKey: v.optional(v.string()),
     lastValidatedAt: v.optional(v.number()),
     deprecatedByNodeId: v.optional(v.id("communityIntelligenceNodes")),
+    originChangeRequestId: v.optional(v.id("communityIntelligenceChangeRequests")),
     version: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -3142,6 +3143,13 @@ export default defineSchema({
     .index("by_community_status", ["communityId", "status"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_type_status", ["communityId", "operation", "status"])
+    .index("by_community_operation_status_agent_createdAt", [
+      "communityId",
+      "operation",
+      "status",
+      "createdByAgentKey",
+      "createdAt",
+    ])
     .index("by_primaryTargetNode", ["primaryTargetNodeId"])
     .index("by_primaryTargetEdge", ["primaryTargetEdgeId"]),
 

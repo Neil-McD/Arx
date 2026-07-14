@@ -2,6 +2,7 @@
    The gate is the community's front door — logo, banner, VSL, member count,
    who's online, the one-liner, Join, and "View it first". Nothing else. */
 import type { ReactNode } from "react";
+import { Lock } from "lucide-react";
 
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { formatCompactStat } from "../../../../shared/communityFunnelUi";
@@ -101,6 +102,9 @@ export function CommunityVisitorJoinRope(props: {
               <path d="M12 5v14M5 12h14" />
             </svg>
           </span>
+          <span className="cvs-composer-lock" aria-hidden="true">
+            <Lock size={16} strokeWidth={1.9} />
+          </span>
           <textarea
             className="chat-input"
             placeholder={props.ropePrompt}
@@ -129,6 +133,30 @@ export function CommunityVisitorJoinRope(props: {
         {!props.isFreePricing ? " · cancel anytime" : ""} · instant access
       </div>
       <ActionStatusCards action={action} />
+    </div>
+  );
+}
+
+export function CommunityVisitorMobileJoinDock(props: {
+  action: CommunityFunnelSurfaceAction;
+  pricingLabel: string;
+  isFreePricing: boolean;
+}) {
+  const { action } = props;
+  return (
+    <div className="cvs-mobile-join-dock">
+      <button
+        className="cfg-join cvs-mobile-join-action"
+        type="button"
+        disabled={action.isPrimaryActionDisabled}
+        onClick={action.onPrimaryAction}
+      >
+        {action.primaryActionLabel}
+      </button>
+      <span>
+        {props.isFreePricing ? "Free to join" : props.pricingLabel}
+        {!props.isFreePricing ? " · cancel anytime" : ""} · instant access
+      </span>
     </div>
   );
 }

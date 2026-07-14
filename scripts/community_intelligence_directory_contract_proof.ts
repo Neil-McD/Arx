@@ -69,6 +69,17 @@ for (const tableName of [
 
 assert.match(
   schema,
+  /communityIntelligenceNodes: defineTable\([\s\S]*originChangeRequestId: v\.optional\(v\.id\("communityIntelligenceChangeRequests"\)\)/,
+  "retained nodes should preserve the change request that created them",
+);
+assert.match(
+  exportedAsyncFunctionBlock(directory, "applyTrustedCommunityIntelligenceChangeRequestCore"),
+  /originChangeRequestId: changeRequest\._id/,
+  "create-node apply should persist stable lifecycle lineage",
+);
+
+assert.match(
+  schema,
   /operation: v\.union\([\s\S]*v\.literal\("create_node"\)[\s\S]*v\.literal\("create_edge"\)[\s\S]*v\.literal\("attach_outcome"\)/,
   "directory mutations should be typed operations",
 );

@@ -41,6 +41,21 @@ assert.equal(rootNodes[0].id, rootNodeId, "synthetic root node should match root
 assert.equal(rootNodes[0].community_id, fixture.community.id, "synthetic root should stay inside the fixture community");
 
 const directoryNodes = fixture.graph.nodes.filter((node: any) => node.kind === "directory_node");
+const formingNodes = fixture.graph.nodes.filter((node: any) => node.kind === "forming_memory");
+assert.equal(formingNodes.length, 1, "fixture should include one forming-memory projection");
+assert.deepEqual(
+  Object.keys(formingNodes[0]).sort(),
+  ["confidence", "created_at", "id", "kind", "label", "lineage_id", "status", "type"].sort(),
+  "forming memory should expose only the anonymous projection contract",
+);
+assert.match(formingNodes[0].lineage_id, /^change_request:/, "forming memory should expose stable lifecycle lineage");
+assert.equal(formingNodes[0].label, "Forming memory", "forming-memory content should stay anonymous");
+assert.equal(formingNodes[0].status, "forming", "forming memory should be visibly distinct from retained statuses");
+assert.doesNotMatch(
+  JSON.stringify(formingNodes[0]),
+  /requestedPayload|sourceTraceIds|outcomeObservationIds|createdByUserId|decisionReason|privacyRisk/i,
+  "forming memory should not leak airlock internals",
+);
 assert.ok(directoryNodes.length >= 5, "fixture should have enough real directory nodes to exercise the graph");
 assert.deepEqual(
   new Set(directoryNodes.map((node: any) => node.type)),
@@ -51,6 +66,7 @@ assert.deepEqual(
 const nodeIds = new Set(fixture.graph.nodes.map((node: any) => node.id));
 for (const node of directoryNodes) {
   assert.match(node.id, /^directory_node:/, "directory graph node ids should be projected directory ids");
+  assert.match(node.lineage_id, /^(change_request|directory_node):/, "directory nodes should expose stable lifecycle lineage");
   assert.ok(NODE_TYPES.has(node.type), `unexpected node type: ${node.type}`);
   assert.ok(ACCEPTED_STATUSES.has(node.status), `directory node should be accepted memory: ${node.status}`);
   assert.ok(!FORBIDDEN_STATUSES.has(node.status), `directory node should not expose airlock/dead status: ${node.status}`);
@@ -64,6 +80,8 @@ const typeCountTotal = Object.values(fixture.memory.counts_by_type).reduce((sum:
 const statusCountTotal = Object.values(fixture.memory.counts_by_status).reduce((sum: number, count: any) => sum + Number(count), 0);
 assert.equal(typeCountTotal, directoryNodes.length, "type counts should match directory node count");
 assert.equal(statusCountTotal, directoryNodes.length, "status counts should match directory node count");
+assert.equal(fixture.graph.forming_node_limit, 12, "fixture should expose the bounded forming-node limit");
+assert.equal(fixture.graph.has_more_forming_nodes, false, "fixture should report forming-node truncation independently");
 
 assert.ok(fixture.graph.edges.length >= 3, "fixture should have enough real edges to exercise the graph");
 for (const edge of fixture.graph.edges) {
@@ -85,6 +103,7 @@ assert.match(section, /function edgeClass/, "tab should classify edges by edge t
 assert.doesNotMatch(section, /statusClass\(edge\.type\)/, "tab should not classify typed edges as node statuses");
 assert.match(css, /\.cp-edge\.supports/, "CSS should style support edges directly");
 assert.match(css, /\.cp-edge\.contradicts/, "CSS should style contradiction edges directly");
+assert.match(css, /\.cp-forming-circle/, "CSS should style forming memory as a distinct hollow node");
 assert.doesNotMatch(css, /\.community-polynet-meta\b|\.community-polynet-meta-error\b/, "old archive-panel CSS leftovers should be removed");
 
 console.log("Community Polynet seeded overview fixture proof passed");

@@ -5,6 +5,7 @@ import { join } from "node:path";
 const root = process.cwd();
 const controller = readFileSync(join(root, "apps/web/src/controllers/useWebCommunityPolynetController.ts"), "utf8");
 const section = readFileSync(join(root, "apps/web/src/components/WebCommunityPolynetSection.tsx"), "utf8");
+const preview = readFileSync(join(root, "apps/web/src/components/CommunityMemoryGraphPreview.tsx"), "utf8");
 const gateway = readFileSync(join(root, "shared/cloudCommunityPolynetGateway.ts"), "utf8");
 const activeCommunityShell = readFileSync(join(root, "apps/web/src/controllers/useWebActiveCommunityShellController.ts"), "utf8");
 const contextPanel = readFileSync(join(root, "apps/web/src/components/CommunityContextPanel.tsx"), "utf8");
@@ -48,6 +49,9 @@ assert.match(
   /client\.query\("community:getCommunityPolynetOverview" as any/,
   "Polynet gateway should read the overview projection",
 );
+assert.match(gateway, /createAuthenticatedConvexRealtimeClient/, "Polynet live updates should reuse authenticated Convex realtime infrastructure");
+assert.match(gateway, /watchQuery\([\s\S]*api\.community\.getCommunityPolynetOverview/, "Polynet live updates should subscribe to the same overview projection");
+assert.doesNotMatch(gateway, /setInterval|setTimeout/, "Polynet overview continuity should use subscriptions instead of polling");
 assert.doesNotMatch(
   gateway,
   /mutation\(|action\(|getCommunityArchiveHealth|requestCommunityArchiveBackfill|processCommunityArchivePending|retryCommunityArchiveFailures/,
@@ -55,6 +59,9 @@ assert.doesNotMatch(
 );
 
 assert.match(controller, /fetchCloudCommunityPolynetOverview/, "Polynet controller should load the overview projection");
+assert.match(controller, /subscribeCloudCommunityPolynetOverview/, "Polynet controller should subscribe while the community surface is active");
+assert.match(controller, /unsubscribe\?\.\(\)/, "Polynet controller should dispose the overview subscription");
+assert.match(controller, /closeLiveClient\?\.\(\)/, "Polynet controller should close its realtime client");
 assert.match(controller, /canViewPolynet/, "Polynet controller should model view access, not manage access");
 assert.match(
   controller,
@@ -107,6 +114,11 @@ assert.match(
   "Polynet back action should route to the same community chat without relying on browser history",
 );
 assert.match(section, /overview\.graph\.nodes\.map/, "Polynet graph should render backend-projected nodes");
+assert.match(section, /key=\{lineageId\}/, "Polynet nodes should preserve React identity across forming-to-retained promotion");
+assert.match(section, /data-lineage-id=\{lineageId\}/, "Polynet nodes should expose lifecycle lineage for visual acceptance tests");
+assert.match(section, /style=\{\{ transform: `translate\(\$\{pos\.x\}px, \$\{pos\.y\}px\)` \}\}/, "Polynet node movement should be CSS-transitionable");
+assert.match(preview, /key=\{lineageId\}/, "The compact memory graph should preserve forming-to-retained node identity");
+assert.match(preview, /data-lineage-id=\{lineageId\}/, "The compact memory graph should expose lifecycle lineage for acceptance tests");
 assert.match(section, /overview\.graph\.edges\.map/, "Polynet graph should render backend-projected edges");
 assert.match(
   section,
@@ -118,6 +130,12 @@ assert.match(
   /cp-node-circle|cp-root-circle/,
   "Polynet graph nodes should render as circle dot primitives",
 );
+assert.match(section, /node\.kind === "forming_memory"/, "Polynet graph should distinguish forming memory from retained memory");
+assert.match(section, /cp-forming-circle/, "Polynet graph should render forming memory as a dedicated circle treatment");
+assert.match(section, /agentActivityClass\(overview\?\.agent\.activity_state\)/, "Polynet root should reflect the projected community-agent state");
+assert.match(section, /The community is forming its first memory\./, "empty graph should explain visible formation truthfully");
+assert.match(section, /The community agent is examining recent activity\./, "empty graph should expose active inspection without claiming memory");
+assert.match(section, /No retained memories yet\./, "resting empty graph should state retained-memory truth plainly");
 assert.doesNotMatch(
   section,
   /Backfill archive|Process pending|Retry failed|Total docs|Embedded|PDF docs|archive health|archive memory/i,
@@ -179,6 +197,10 @@ assert.match(
   /\.cp-root-circle \{[\s\S]*fill: var\(--accent-gold\)/,
   "Polynet root node should be a compact dot in the theme accent",
 );
+assert.match(css, /\.cp-forming-circle \{[\s\S]*fill:[\s\S]*transparent[\s\S]*stroke:/, "forming memory should be a hollow graph node");
+assert.match(css, /\.cp-node \{[\s\S]*transition:[^;]*transform 380ms/, "memory promotion should animate one node into its retained position");
+assert.match(css, /\.cp-root-circle\.activity-running/, "community root should pulse only for active agent states");
+assert.match(css, /@media \(prefers-reduced-motion: reduce\)/, "community-agent graph motion should respect reduced-motion preferences");
 assert.doesNotMatch(
   css,
   /min-width: 92px;[\s\S]{0,80}padding: 0 14px;/,

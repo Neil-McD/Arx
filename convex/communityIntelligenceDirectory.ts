@@ -120,6 +120,7 @@ type IntelligenceNodeRow = {
   lastUpdatedByAgentKey?: string;
   lastValidatedAt?: number;
   deprecatedByNodeId?: any;
+  originChangeRequestId?: any;
   version: number;
   createdAt: number;
   updatedAt: number;
@@ -235,6 +236,8 @@ const POLYNET_OVERVIEW_MAX_NODE_LIMIT = 120;
 const POLYNET_OVERVIEW_EDGE_LIMIT = 160;
 const POLYNET_OVERVIEW_EDGES_PER_NODE_LIMIT = 8;
 const POLYNET_OVERVIEW_RUN_LIMIT = 6;
+const POLYNET_OVERVIEW_FORMING_NODE_LIMIT = 12;
+const POLYNET_OVERVIEW_FORMING_STATUSES: ChangeRequestStatus[] = ["pending_decision", "accepted"];
 const NODE_TYPES = new Set<NodeType>([
   "playbook",
   "insight",
@@ -722,6 +725,14 @@ function communityGraphRootId(communityId: any): string {
   return `community:${normalizeIdValue(communityId)}`;
 }
 
+function formingMemoryGraphNodeId(changeRequestId: any): string {
+  return `forming_memory:${normalizeIdValue(changeRequestId)}`;
+}
+
+function communityMemoryLineageId(changeRequestId: any): string {
+  return `change_request:${normalizeIdValue(changeRequestId)}`;
+}
+
 function nodeStatusRank(status: NodeStatus): number {
   if (status === "canonical") return 5;
   if (status === "validated") return 4;
@@ -750,6 +761,9 @@ function emptyCountMap<T extends string>(values: readonly T[]): Record<T, number
 function mapPolynetOverviewNode(row: IntelligenceNodeRow) {
   return {
     id: directoryGraphNodeId(row._id),
+    lineage_id: row.originChangeRequestId
+      ? communityMemoryLineageId(row.originChangeRequestId)
+      : directoryGraphNodeId(row._id),
     kind: "directory_node",
     node_id: normalizeIdValue(row._id),
     type: row.type,
@@ -762,6 +776,19 @@ function mapPolynetOverviewNode(row: IntelligenceNodeRow) {
     retrieval_usefulness_score: row.retrievalUsefulnessScore,
     outcome_impact_score: row.outcomeImpactScore,
     updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+function mapPolynetOverviewFormingNode(row: IntelligenceChangeRequestRow) {
+  return {
+    id: formingMemoryGraphNodeId(row._id),
+    lineage_id: communityMemoryLineageId(row._id),
+    kind: "forming_memory",
+    type: "forming_memory",
+    label: "Forming memory",
+    status: "forming",
+    confidence: clampScore(row.confidence),
+    created_at: toIsoString(row.createdAt),
   };
 }
 
@@ -847,6 +874,39 @@ async function readPolynetOverviewNodes(args: {
       .slice(0, args.limit),
     hasMoreNodes,
   };
+}
+
+async function readPolynetOverviewFormingNodes(args: {
+  ctx: any;
+  communityId: any;
+  limit: number;
+}): Promise<{ formingNodes: IntelligenceChangeRequestRow[]; hasMoreFormingNodes: boolean }> {
+  const rows: IntelligenceChangeRequestRow[] = [];
+  let hasMoreFormingNodes = false;
+
+  for (const status of POLYNET_OVERVIEW_FORMING_STATUSES) {
+    const bucket = (await args.ctx.db
+      .query("communityIntelligenceChangeRequests" as any)
+      .withIndex("by_community_operation_status_agent_createdAt", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("operation", "create_node")
+          .eq("status", status)
+          .eq("createdByAgentKey", "community_agent"),
+      )
+      .order("desc")
+      .take(args.limit + 1)) as IntelligenceChangeRequestRow[];
+    if (bucket.length > args.limit) hasMoreFormingNodes = true;
+    rows.push(...bucket.slice(0, args.limit));
+  }
+
+  const formingNodes = rows
+    .filter((row) => row.createdByActorType === "agent" && row.createdByAgentKey === "community_agent")
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, args.limit);
+  if (rows.length > args.limit) hasMoreFormingNodes = true;
+
+  return { formingNodes, hasMoreFormingNodes };
 }
 
 async function readPolynetOverviewEdges(args: {
@@ -2724,6 +2784,7 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       lastUpdatedByActorType: actor.actorType,
       ...actorUserPatch(actor, "lastUpdatedByUserId", "lastUpdatedByAgentKey"),
       ...(changeRequest.outcomeObservationIds?.length ? { lastValidatedAt: nowMs } : {}),
+      originChangeRequestId: changeRequest._id,
       version: 1,
       createdAt: nowMs,
       updatedAt: nowMs,
@@ -3074,6 +3135,15 @@ export const getCommunityPolynetOverview = query({
       isManager,
       limit: nodeLimit,
     });
+    const formingNodeLimit = Math.min(
+      POLYNET_OVERVIEW_FORMING_NODE_LIMIT,
+      Math.max(3, Math.ceil(nodeLimit / 4)),
+    );
+    const { formingNodes, hasMoreFormingNodes } = await readPolynetOverviewFormingNodes({
+      ctx,
+      communityId: args.communityId,
+      limit: formingNodeLimit,
+    });
     const { edges, hasMoreEdges } = await readPolynetOverviewEdges({
       ctx,
       communityId: args.communityId,
@@ -3124,18 +3194,22 @@ export const getCommunityPolynetOverview = query({
         nodes: [
           {
             id: communityGraphRootId(args.communityId),
+            lineage_id: communityGraphRootId(args.communityId),
             kind: "community",
             community_id: normalizeIdValue(args.communityId),
             label: community.name,
             type: "community",
           },
           ...nodes.map(mapPolynetOverviewNode),
+          ...formingNodes.map(mapPolynetOverviewFormingNode),
         ],
         edges: edges.map(mapPolynetOverviewEdge),
         node_limit: nodeLimit,
         edge_limit: POLYNET_OVERVIEW_EDGE_LIMIT,
         has_more_nodes: hasMoreNodes,
         has_more_edges: hasMoreEdges,
+        forming_node_limit: formingNodeLimit,
+        has_more_forming_nodes: hasMoreFormingNodes,
       },
       memory: summarizePolynetOverviewMemory(nodes, hasMoreNodes, hasMoreEdges),
     };
@@ -3203,6 +3277,7 @@ export const resolvePublicCommunityMemoryOverviewBySlug = query({
           nodes: [
             {
               id: communityGraphRootId(community._id),
+              lineage_id: communityGraphRootId(community._id),
               kind: "community",
               community_id: normalizeIdValue(community._id),
               label: community.name,

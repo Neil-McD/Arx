@@ -10219,7 +10219,11 @@ export default function App() {
       selectedActiveCommunitySlug,
       mobileRootPage,
       hasSelectedCommunity,
-      canViewMembers: hasSelectedCommunity && canViewMembersActiveCommunity,
+      canViewMembers:
+        (hasSelectedCommunity && canViewMembersActiveCommunity) ||
+        ((shellPublicRoute.kind === "community_funnel" ||
+          shellPublicRoute.kind === "community_funnel_preview") &&
+          Boolean(resolvedPublicCommunity)),
       forceCommunityRoot:
         showMobileShell &&
         (shellPublicRoute.kind === "community_funnel" ||
@@ -11481,6 +11485,12 @@ export default function App() {
       shellVariant,
       isPreviewMode: isPublicFunnelPreviewRoute,
       gateOpenNonce: visitorGateNonce,
+      mobileMembersOverlayOpen:
+        showMobileShell &&
+        (publicRoute.kind === "community_funnel" ||
+          publicRoute.kind === "community_funnel_preview") &&
+        mobileOverlay === "members",
+      onCloseMobileMembersOverlay: () => setMobileOverlay(null),
       publicVisibilityLabel,
       selectedPublicCommunityPlanLabel: selectedPublicCommunityPlan
         ? formatPlanPrice(selectedPublicCommunityPlan)
@@ -11852,15 +11862,23 @@ export default function App() {
     activeCommunity: isVisitorCommunitySurface ? visitorShellActiveCommunity : activeCommunity,
     activeCommunityAttentionCount,
     activeCommunityMemberFaces:
-      !isVisitorCommunitySurface && canViewMembersActiveCommunity
+      isVisitorCommunitySurface
+        ? resolvedPublicCommunity?.online_faces ?? []
+        : canViewMembersActiveCommunity
         ? activeCommunityPresenceSummary?.online_faces ?? []
         : [],
     activeCommunityMemberCount:
-      !isVisitorCommunitySurface && canViewMembersActiveCommunity
+      isVisitorCommunitySurface
+        ? resolvedPublicCommunity?.member_count ?? null
+        : canViewMembersActiveCommunity
         ? communityDirectoryMemberCount ??
           activeCommunityPresenceSummary?.member_count ??
           null
         : null,
+    canOpenMobileMembers:
+      isVisitorCommunitySurface
+        ? Boolean(resolvedPublicCommunity)
+        : canViewMembersActiveCommunity,
     openMobileDrawer,
     handleExitMobileSettings,
     handleCloseMobileThreadPage: handleCloseCommunityInteractionDrawer,

@@ -61,16 +61,30 @@
     "edge_limit": 160,
     "has_more_nodes": false,
     "has_more_edges": false,
+    "forming_node_limit": 12,
+    "has_more_forming_nodes": false,
     "nodes": [
       {
         "id": "community:community_distribution_engine_fixture",
+        "lineage_id": "community:community_distribution_engine_fixture",
         "kind": "community",
         "community_id": "community_distribution_engine_fixture",
         "type": "community",
         "label": "Distribution Engineer"
       },
       {
+        "id": "forming_memory:forming_creator_offer_pattern",
+        "lineage_id": "change_request:forming_creator_offer_pattern",
+        "kind": "forming_memory",
+        "type": "forming_memory",
+        "label": "Forming memory",
+        "status": "forming",
+        "confidence": 0.61,
+        "created_at": "2026-06-16T09:02:00.000Z"
+      },
+      {
         "id": "directory_node:node_creator_outreach_playbook",
+        "lineage_id": "change_request:creator_outreach_playbook",
         "kind": "directory_node",
         "node_id": "node_creator_outreach_playbook",
         "type": "playbook",
@@ -86,6 +100,7 @@
       },
       {
         "id": "directory_node:node_direct_outcome_hooks",
+        "lineage_id": "change_request:direct_outcome_hooks",
         "kind": "directory_node",
         "node_id": "node_direct_outcome_hooks",
         "type": "insight",
@@ -101,6 +116,7 @@
       },
       {
         "id": "directory_node:node_sarah_dm_example",
+        "lineage_id": "change_request:sarah_dm_example",
         "kind": "directory_node",
         "node_id": "node_sarah_dm_example",
         "type": "example",
@@ -116,6 +132,7 @@
       },
       {
         "id": "directory_node:node_founder_story_warning",
+        "lineage_id": "change_request:founder_story_warning",
         "kind": "directory_node",
         "node_id": "node_founder_story_warning",
         "type": "warning_failure",
@@ -131,6 +148,7 @@
       },
       {
         "id": "directory_node:node_offer_context_open_question",
+        "lineage_id": "change_request:offer_context_open_question",
         "kind": "directory_node",
         "node_id": "node_offer_context_open_question",
         "type": "open_question",

@@ -103,6 +103,11 @@
   pointer-events: none;
 }
 
+.cvs-composer-lock {
+  display: none;
+  color: var(--text-muted, #71717a);
+}
+
 .cvs-composer-join {
   white-space: nowrap;
   transition: box-shadow 160ms ease, transform 160ms ease;
@@ -110,17 +115,77 @@
 
 @media (max-width: 700px) {
   .cvs-composer-row {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .cvs-composer-row .cvs-composer-join {
-    flex: 1 1 100%;
+    display: none;
+  }
+
+  .cvs-composer {
+    padding: 8px 12px 10px;
+  }
+
+  .cvs-composer > .cfg-terms,
+  .cvs-composer > .cfg-status-card,
+  .cvs-composer > .cfg-preview-note {
+    display: none;
+  }
+
+  .cvs-composer-bar .ask-plus,
+  .cvs-composer-bar .chat-send {
+    display: none;
+  }
+
+  .cvs-composer-lock {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .app-root.mobile-shell .cvs-chat .community-interaction-main-composer {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
+  }
+
+  .app-root.mobile-shell .cvs-chat .community-interaction-main-composer .chat-input-bar {
+    min-height: 48px;
+    margin: 0;
+    border-radius: 16px;
+    padding: 10px 14px;
+  }
+
+  .app-root.mobile-shell .cvs-chat .community-interaction-feed-scroll {
+    padding-bottom: 10px;
   }
 }
 
 .cvs-composer-row:has(.cvs-composer-bar:hover) .cvs-composer-join {
   box-shadow: 0 0 0 2px var(--accent-gold, #d66a8a), 0 0 18px 0 color-mix(in srgb, var(--accent-gold, #d66a8a) 55%, transparent);
   transform: translateY(-1px);
+}
+
+.community-interaction-root-expand {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-agent, #9b87f5);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+@media (max-width: 700px) {
+  .community-interaction-root-body.is-mobile-collapsed {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 8;
+  }
 }
 
 /* The visitor feed reads top-down like a page: pinned post first. */
@@ -230,6 +295,55 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+
+.cvs-mobile-join-dock {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .cvs-mobile-join-dock {
+    position: fixed;
+    z-index: 34;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    gap: 5px;
+    padding: 10px 14px calc(env(safe-area-inset-bottom, 0px) + 9px);
+    border-top: 1px solid color-mix(in srgb, var(--border-default) 86%, transparent);
+    background: color-mix(in srgb, var(--bg-workspace, #121214) 94%, transparent);
+    backdrop-filter: blur(18px) saturate(1.15);
+    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  }
+
+  .cvs-mobile-join-action {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .cvs-mobile-join-dock > span {
+    color: var(--text-muted, #71717a);
+    font-size: 11px;
+    line-height: 1.25;
+    text-align: center;
+  }
+}
+
+.cvs-members-drawer .community-context-rail {
+  min-height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+.cvs-members-drawer .community-context-members {
+  padding-bottom: 18px;
+}
+
+.cvs-members-join {
+  width: 100%;
+  min-height: 46px;
+  margin: 10px 0 12px;
 }
 
 /* ---- The gate card's second state: the bridge (identity + inference, one page). ---- */
