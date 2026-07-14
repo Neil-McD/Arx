@@ -2536,7 +2536,46 @@
 }
 
 .mobile-topbar.is-thread-page .mobile-topbar-center {
-  max-width: min(52vw, 232px);
+  position: static;
+  min-height: 44px;
+  max-width: min(70vw, 280px);
+  transform: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.mobile-topbar.is-thread-page {
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+}
+
+.mobile-topbar.is-thread-page .mobile-topbar-left {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.mobile-topbar.is-thread-page .mobile-topbar-back {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.mobile-topbar.is-thread-page .mobile-topbar-back svg {
+  width: 21px;
+  height: 21px;
+}
+
+.mobile-topbar.is-thread-page .mobile-topbar-context-label {
+  padding: 0;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .mobile-topbar-community-selector {
@@ -2580,8 +2619,7 @@
   overflow: hidden;
 }
 
-.mobile-topbar-community-avatar img,
-.mobile-topbar-member-face img {
+.mobile-topbar-community-avatar img {
   width: 100%;
   height: 100%;
   display: block;
@@ -2666,35 +2704,21 @@
   cursor: pointer;
 }
 
-.mobile-topbar-member-faces {
-  display: inline-flex;
-  align-items: center;
-  padding-left: 4px;
+.mobile-topbar-members .community-context-facepile {
+  padding: 0 0 0 4px;
+  border: 0;
 }
 
-.mobile-topbar-member-face {
-  position: relative;
-  display: grid;
-  place-items: center;
+.mobile-topbar-members .community-context-face {
   width: 24px;
   height: 24px;
-  margin-left: -6px;
-  overflow: hidden;
   border: 2px solid var(--surface-workspace, var(--bg-workspace));
-  border-radius: 999px;
   background: var(--surface-panel);
-  color: var(--text-primary);
   font-size: 8px;
-  font-weight: 760;
 }
 
-.mobile-topbar-member-count {
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.mobile-topbar-members .community-context-face + .community-context-face {
+  margin-left: -7px;
 }
 
 .mobile-topbar-members-icon {
@@ -2842,12 +2866,6 @@
   fill: none;
   stroke: currentColor;
   stroke-width: 1.9;
-}
-
-.mobile-bottom-rail-ai.active .mobile-bottom-rail-ai-icon {
-  background: var(--accent-agent-strong);
-  color: white;
-  border-color: color-mix(in srgb, var(--accent-agent-strong) 82%, white 18%);
 }
 
 .mobile-bottom-rail-ai:focus-visible {

@@ -39,6 +39,35 @@ export type CommittedMention = {
   emailCooldownUntil?: string | null;
 };
 
+export function committedMentionFromCandidate(
+  candidate: MentionCandidate,
+): CommittedMention | null {
+  const kind = candidate.kind ?? "user";
+  const normalizedHandle = String(candidate.handle ?? "").trim().replace(/^@+/, "");
+  if (kind === "user" && !normalizedHandle) return null;
+
+  const token = kind === "role"
+    ? `@${candidate.roleKey ?? "everybody"}`
+    : kind === "community_agent"
+      ? `@${candidate.displayName}`
+      : `@${normalizedHandle}`;
+
+  return {
+    userId: candidate.userId,
+    displayName: candidate.displayName,
+    token,
+    kind,
+    ...(kind === "community_agent" ? { agentKey: "community_agent" } : {}),
+    ...(kind === "role"
+      ? {
+          roleKey: candidate.roleKey ?? "everybody",
+          emailMode: candidate.emailMode ?? null,
+          emailCooldownUntil: candidate.emailCooldownUntil ?? null,
+        }
+      : {}),
+  };
+}
+
 // Max characters we'll scan back from the caret as a mention query. Display names can
 // contain spaces ("Neil McDevitt"), so we allow them, but cap the span so an `@` early
 // in a long message doesn't keep the menu open across an entire paragraph.
@@ -248,36 +277,18 @@ export function useMentionAutocomplete(params: {
       const caret = textarea.selectionStart ?? value.length;
       const before = value.slice(0, active.atIndex);
       const after = value.slice(caret);
-      // Users tokenize by handle only. Non-user candidates use canonical role/agent labels.
-      if ((candidate.kind ?? "user") === "user" && !candidate.handle) {
+      const committedMention = committedMentionFromCandidate(candidate);
+      if (!committedMention) {
         close();
         return;
       }
-      const token =
-        candidate.kind === "role"
-          ? `@${candidate.roleKey ?? "everybody"}`
-          : candidate.kind === "community_agent"
-            ? `@${candidate.displayName}`
-            : `@${candidate.handle}`;
+      const token = committedMention.token;
       const needsSpace = !after.startsWith(" ");
       const nextValue = `${before}${token}${needsSpace ? " " : ""}${after}`;
       const nextCaret = before.length + token.length + 1;
 
       applyText(nextValue, textarea);
-      onCommitMention({
-        userId: candidate.userId,
-        displayName: candidate.displayName,
-        token,
-        kind: candidate.kind ?? "user",
-        ...(candidate.kind === "community_agent" ? { agentKey: "community_agent" } : {}),
-        ...(candidate.kind === "role"
-          ? {
-              roleKey: candidate.roleKey ?? "everybody",
-              emailMode: candidate.emailMode ?? null,
-              emailCooldownUntil: candidate.emailCooldownUntil ?? null,
-            }
-          : {}),
-      });
+      onCommitMention(committedMention);
       close();
 
       // Restore the caret after React re-renders the controlled value.

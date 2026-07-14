@@ -27,6 +27,7 @@ import {
   type CommunityPresenceFace,
   type CommunityRailMember,
 } from "./CommunityContextPanel";
+import type { MentionCandidate } from "./communityMentionAutocomplete";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
 import type { CloudCommunityMemberBillingHistory } from "../../../../shared/cloudCommunityAdminGateway";
@@ -57,6 +58,8 @@ export type WebCommunityInteractionProjectionProps = {
     id: string;
     sender_id: string;
     body: string;
+    reply_author_label: string;
+    mention_candidate: MentionCandidate;
     interaction_root_id: string;
     interaction_reply_id?: string | null;
     legacy_message_id?: string | null;
@@ -586,6 +589,26 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                     bundle.attachments.length > 0,
                   );
                   const badge = agentBadgeLabel(reply.actor_type);
+                  const normalizedHandle = String(profile?.handle ?? "").trim().replace(/^@+/, "");
+                  const replyMentionCandidate: MentionCandidate | null =
+                    reply.actor_type === "community_agent"
+                      ? {
+                          userId: "community_agent",
+                          displayName: props.activeCommunityName,
+                          handle: null,
+                          avatarUrl: null,
+                          kind: "community_agent",
+                        }
+                      : reply.actor_user_id && normalizedHandle
+                        ? {
+                            userId: reply.actor_user_id,
+                            displayName: label,
+                            handle: normalizedHandle,
+                            avatarUrl: profile?.avatar_url ?? null,
+                            premiumBadge: profile?.premium_badge ?? null,
+                            kind: "user",
+                          }
+                        : null;
                   const isOwnReply = Boolean(
                     props.currentUserId && reply.actor_user_id && reply.actor_user_id === props.currentUserId,
                   );
@@ -596,17 +619,18 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                       {bundle.pending ? null : (
                         <MessageActions
                           onReact={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
-                          onReply={() => {
-                            if (!reply.actor_user_id) return;
-                            props.onStartRootReply?.({
-                              id: reply.legacy_message_id ?? reply.id,
-                              sender_id: reply.actor_user_id,
-                              body,
-                              interaction_root_id: reply.root_id,
-                              interaction_reply_id: reply.id,
-                              legacy_message_id: reply.legacy_message_id ?? null,
-                            });
-                          }}
+                          onReply={replyMentionCandidate && props.onStartRootReply
+                            ? () => props.onStartRootReply?.({
+                                id: reply.legacy_message_id ?? reply.id,
+                                sender_id: reply.actor_user_id ?? "community_agent",
+                                body,
+                                reply_author_label: replyMentionCandidate.displayName,
+                                mention_candidate: replyMentionCandidate,
+                                interaction_root_id: reply.root_id,
+                                interaction_reply_id: reply.id,
+                                legacy_message_id: reply.legacy_message_id ?? null,
+                              })
+                            : undefined}
                           replyLabel="Reply to this message"
                           onEdit={
                             isOwnReply && props.onEditMessage

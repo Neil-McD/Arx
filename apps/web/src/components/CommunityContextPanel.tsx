@@ -5,6 +5,10 @@ import { UserAvatar } from "../../../../shared/UserAvatar";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import type { PremiumMemberBadgeSummary } from "../../../../shared/communityTypes";
 import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
+import {
+  CommunityPresenceFacepile,
+  type CommunityPresenceFace,
+} from "./CommunityPresenceFacepile";
 import type {
   CloudCommunityPolynetOverview,
   CloudCommunityPolynetOverviewNode,
@@ -12,13 +16,7 @@ import type {
 
 const PENDING_JOIN_REQUEST_DISPLAY_LIMIT = 200;
 
-export type CommunityPresenceFace = {
-  user_id: string;
-  display_name?: string | null;
-  avatar_url?: string | null;
-  avatar_color?: string | null;
-  initials?: string | null;
-};
+export type { CommunityPresenceFace } from "./CommunityPresenceFacepile";
 
 export type CommunityRailMember = {
   id: string;
@@ -96,7 +94,6 @@ type CommunityContextPanelProps = {
   getAvatarColor: (seed: string) => string;
 };
 
-const FACE_LIMIT = 7;
 const LOAD_MORE_SCROLL_THRESHOLD_PX = 96;
 
 function isAdminRole(member: CommunityRailMember, ownerId?: string | null): boolean {
@@ -148,15 +145,15 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   }>(() => ({ scopeKey: activityScopeKey, byUserId: {} }));
   const observedLastActiveAtByUserId =
     observedActivity.scopeKey === activityScopeKey ? observedActivity.byUserId : {};
-  const faces = (props.onlineFaces ?? []).slice(0, FACE_LIMIT);
   const pendingJoinRequests = props.pendingJoinRequests ?? [];
   const hasPendingJoinRequestOverflow =
     pendingJoinRequests.length > PENDING_JOIN_REQUEST_DISPLAY_LIMIT;
   const visiblePendingJoinRequests = hasPendingJoinRequestOverflow
     ? pendingJoinRequests.slice(0, PENDING_JOIN_REQUEST_DISPLAY_LIMIT)
     : pendingJoinRequests;
-  const onlineTotal = typeof props.onlineCount === "number" ? props.onlineCount : faces.length;
-  const extraFaces = Math.max(0, onlineTotal - faces.length);
+  const onlineTotal = typeof props.onlineCount === "number"
+    ? props.onlineCount
+    : (props.onlineFaces ?? []).length;
   const knownMemberCount = typeof props.memberCount === "number" ? props.memberCount : null;
   const loadedMemberCount = members.length;
   const memberCountLabel = knownMemberCount !== null
@@ -490,23 +487,10 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         <span className="community-context-rail-name">{props.communityName}</span>
       </div>
 
-      {faces.length > 0 ? (
-        <div className="community-context-facepile">
-          {faces.map((face) => (
-            <span
-              key={face.user_id}
-              className="community-context-face"
-              style={!face.avatar_url && face.avatar_color ? { color: face.avatar_color } : undefined}
-              title={face.display_name ?? undefined}
-            >
-              {face.avatar_url ? <img src={face.avatar_url} alt="" /> : <span>{face.initials ?? "?"}</span>}
-            </span>
-          ))}
-          {extraFaces > 0 ? (
-            <span className="community-context-face community-context-face-more">+{extraFaces}</span>
-          ) : null}
-        </div>
-      ) : null}
+      <CommunityPresenceFacepile
+        faces={props.onlineFaces}
+        onlineCount={props.onlineCount}
+      />
 
       <div className="community-context-memory">
         <div className="community-context-memory-head">

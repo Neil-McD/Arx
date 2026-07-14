@@ -38,8 +38,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   const isMobileDedicatedRoot =
     props.showMobileAppShell &&
     !props.showMobileSettingsShell &&
-    (props.communityShell.mobileRootPage === "agent" ||
-      props.communityShell.mobileRootPage === "messages");
+    props.communityShell.mobileRootPage === "messages";
   const shellHeader = props.showMobileAppShell ? (
     isMobileDedicatedRoot ? null : (
       <WebMobileTopBar {...props.mobileTopBarProps} />

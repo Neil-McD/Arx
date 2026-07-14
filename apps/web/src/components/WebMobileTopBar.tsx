@@ -1,5 +1,6 @@
+import { ArrowLeft } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
-import { UserAvatar } from "../../../../shared/UserAvatar";
+import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
 import type { MobileMemberFace, MobileRootPage } from "./webShellChromeShared";
 
 type WebMobileTopBarProps = {
@@ -18,15 +19,15 @@ type WebMobileTopBarProps = {
   activeCommunityAttentionCount: number;
   canViewMembers: boolean;
   memberFaces: MobileMemberFace[];
-  memberCount: number | null;
+  onlineCount: number | null;
   onOpenDrawer: () => void;
   onBack?: (() => void) | null;
   onOpenCommunitySelector: () => void;
   onOpenMembers: () => void;
 };
 
-function formatMemberCount(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "Members";
+function formatOnlineCount(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "Online";
   const count = Math.max(0, Math.floor(value));
   if (count < 1_000) return String(count);
   if (count < 10_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
@@ -49,18 +50,17 @@ export function WebMobileTopBar({
   activeCommunityAttentionCount,
   canViewMembers,
   memberFaces,
-  memberCount,
+  onlineCount,
   onOpenDrawer,
   onBack = null,
   onOpenCommunitySelector,
   onOpenMembers,
 }: WebMobileTopBarProps) {
   const communityLabel = (activeCommunityName ?? "").trim() || "Community";
-  const isAgent = rootPage === "agent";
+  const isAgent = mode === "agent";
   const isDiscover = mode === "discover";
   const selectorLabel = isDiscover ? "Discover" : communityLabel;
-  const visibleMemberFaces = memberFaces.slice(0, 2);
-  const memberCountLabel = formatMemberCount(memberCount);
+  const onlineCountLabel = formatOnlineCount(onlineCount);
   const showMembers =
     !isThreadPage &&
     rootPage === "community" && mode === "community" && hasActiveCommunity && canViewMembers;
@@ -77,9 +77,7 @@ export function WebMobileTopBar({
             title="Back to community"
             onClick={onBack}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M15 18 9 12l6-6" />
-            </svg>
+            <ArrowLeft aria-hidden="true" />
           </button>
         ) : showDrawerButton ? (
           <button
@@ -144,27 +142,20 @@ export function WebMobileTopBar({
           <button
             type="button"
             className="mobile-topbar-members"
-            aria-label={memberCount === null ? "View community members" : `View ${memberCountLabel} community members`}
+            aria-label={onlineCount === null
+              ? "View community members"
+              : `View community members, ${onlineCountLabel} online`}
             title="Community members"
             onClick={onOpenMembers}
           >
-            {visibleMemberFaces.length > 0 ? (
-              <span className="mobile-topbar-member-faces" aria-hidden="true">
-                {visibleMemberFaces.map((face) => (
-                  <UserAvatar
-                    key={face.user_id}
-                    className="mobile-topbar-member-face"
-                    readyClassName="has-image"
-                    name={(face.display_name ?? "").trim() || "Member"}
-                    imageUrl={face.avatar_url}
-                    focusX={face.avatar_focus_x}
-                    focusY={face.avatar_focus_y}
-                    zoom={face.avatar_zoom}
-                    alt=""
-                    aria-hidden
-                  />
-                ))}
-              </span>
+            {memberFaces.length > 0 ? (
+              <CommunityPresenceFacepile
+                faces={memberFaces}
+                onlineCount={onlineCount}
+                limit={2}
+                compact
+                decorative
+              />
             ) : (
               <svg className="mobile-topbar-members-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -172,7 +163,6 @@ export function WebMobileTopBar({
                 <path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" />
               </svg>
             )}
-            <span className="mobile-topbar-member-count">{memberCountLabel}</span>
           </button>
         ) : null}
       </div>

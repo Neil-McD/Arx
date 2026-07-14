@@ -79,11 +79,6 @@ export function useWebMobileShellController(params: {
       params.closeDirectMessages();
       params.setMobileOverlay(null);
 
-      if (nextRootPage === "agent") {
-        params.setMobileRootPage("agent");
-        return;
-      }
-
       params.setMobileRootPage("community");
       openMobileCommunitySurface();
     },
@@ -99,6 +94,11 @@ export function useWebMobileShellController(params: {
       openMobileCommunitySurface,
     ],
   );
+
+  const openMobileAgent = useCallback(() => {
+    if (params.forceCommunityRoot) return;
+    params.setMobileOverlay("agent");
+  }, [params.forceCommunityRoot, params.setMobileOverlay]);
 
   const openMobileAgentSettings = useCallback(() => {
     params.closeDirectMessages();
@@ -177,13 +177,16 @@ export function useWebMobileShellController(params: {
     if (!params.showMobileShell) return;
     if (params.forceCommunityRoot) {
       if (params.isDirectMessagesOpen) params.closeDirectMessages();
+      if (params.mobileOverlay === "agent") params.setMobileOverlay(null);
       if (params.mobileRootPage !== "community") {
         params.setMobileRootPage("community");
       }
       return;
     }
     if (params.isDirectMessagesOpen && params.canOpenDirectMessages) {
-      if (params.mobileOverlay) params.setMobileOverlay(null);
+      if (params.mobileOverlay && params.mobileOverlay !== "agent") {
+        params.setMobileOverlay(null);
+      }
       if (params.mobileRootPage !== "messages") {
         params.setMobileRootPage("messages");
       }
@@ -206,6 +209,7 @@ export function useWebMobileShellController(params: {
 
   return {
     handleSelectMobileRootPage,
+    openMobileAgent,
     openMobileAgentSettings,
     handleExitMobileSettings,
     openMobileCreateCommunity,
