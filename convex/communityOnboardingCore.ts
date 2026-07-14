@@ -2,7 +2,6 @@ import {
   buildCommunityOnboardingMilestonePatch,
   type CommunityOnboardingMilestone,
 } from "../shared/communityOnboarding";
-import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 
 type CommunityOnboardingSessionRow = Record<string, any> & {
   _id: any;
@@ -11,12 +10,10 @@ type CommunityOnboardingSessionRow = Record<string, any> & {
   userId: any;
   activationSequence: number;
   status: "active" | "completed" | "dismissed" | "superseded";
-  openedAt?: number;
   orientationCompletedAt?: number;
   firstCommunityPostAt?: number;
   firstAgentDockTurnAt?: number;
   completedAt?: number;
-  orientationSeededAt?: number;
   createdAt: number;
 };
 
@@ -57,21 +54,13 @@ export async function createCommunityOnboardingSessionForActivation(args: {
   }
 
   const introVideoUrlSnapshot = String(config.introVideoUrl ?? "").trim() || undefined;
-  const agentContext = await readCanonicalCommunityAgentContext(args.ctx, args.communityId);
-  const conciergeDisplayNameSnapshot =
-    String(agentContext?.agentDisplayName ?? agentContext?.communityName ?? "Polynet").trim() ||
-    "Polynet";
-
   return await args.ctx.db.insert("communityOnboardingSessions" as any, {
     communityId: args.communityId,
     membershipId: args.membershipId,
     userId: args.userId,
     activationSequence: args.activationSequence,
-    configVersion: Math.max(1, Math.floor(Number(config.version ?? 1))),
     welcomeMessageSnapshot: String(config.welcomeMessage ?? "").trim(),
-    agentInstructionsSnapshot: String(config.agentInstructions ?? "").trim(),
     ...(introVideoUrlSnapshot ? { introVideoUrlSnapshot } : {}),
-    conciergeDisplayNameSnapshot,
     status: "active",
     activatedAt: args.activatedAt,
     createdAt: args.activatedAt,

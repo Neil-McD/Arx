@@ -35,10 +35,7 @@ export async function readCanonicalCommunityAgentContext(
     communityAbout: boundedText(community.about, 4_000) || null,
     ownerUserId: community.ownerId ?? null,
     agentEnabled: config?.agentEnabled !== false,
-    agentDisplayName:
-      boundedText(config?.agentDisplayName, 120) ||
-      boundedText(community.name, 120) ||
-      "Polynet",
+    agentDisplayName: boundedText(config?.agentDisplayName, 120) || "Polynet",
     communitySystemPrompt: boundedText(config?.systemPrompt, 40_000) || null,
   };
 }

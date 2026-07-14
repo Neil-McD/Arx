@@ -277,7 +277,6 @@ export async function sendCloudCommunityAgentDockMessage<SessionT>(
     communityId: string;
     idempotencyKey: string;
     text: string;
-    onboardingPreview?: boolean;
   },
 ): Promise<{
   root_id: string;
@@ -293,7 +292,6 @@ export async function sendCloudCommunityAgentDockMessage<SessionT>(
     communityId: params.communityId,
     idempotencyKey: params.idempotencyKey,
     text: params.text,
-    onboardingPreview: params.onboardingPreview ?? false,
   }) as any;
 }
 

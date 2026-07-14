@@ -4,8 +4,6 @@ import type { MemberAgentSurfaceContextV1 } from "./memberAgentSurfaceContext.ts
 
 export type RuntimeInvocationSurface = "workspace" | "member_agent_dock";
 
-export type MemberAgentRuntimeMode = "standard";
-
 export const MEMBER_AGENT_THREAD_KEY_PREFIX = "member-agent";
 export const MEMBER_AGENT_GLOBAL_SCOPE_KEY = "global";
 
@@ -36,21 +34,13 @@ export function normalizeRuntimeInvocationSurface(raw: unknown): RuntimeInvocati
     : "workspace";
 }
 
-export function normalizeMemberAgentRuntimeMode(raw: unknown): MemberAgentRuntimeMode | null {
-  const value = String(raw ?? "").trim();
-  if (!value || value === "standard") return "standard";
-  return null;
-}
-
 export function shouldRecordCommunityOnboardingAgentTurn(params: {
   invocationSurface: RuntimeInvocationSurface;
-  memberAgentMode: MemberAgentRuntimeMode;
   surfaceKind: string | null;
   hasCommunityId: boolean;
 }): boolean {
   return (
     params.invocationSurface === "member_agent_dock" &&
-    params.memberAgentMode === "standard" &&
     params.surfaceKind === "community" &&
     params.hasCommunityId
   );

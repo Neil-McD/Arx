@@ -132,8 +132,6 @@ async function insertServeRequest(args: {
   sourceVisibilityScope?: VisibilityScope;
   responseVisibilityScope?: VisibilityScope;
   skipReason?: string;
-  onboardingMode?: "live" | "manager_preview";
-  onboardingSessionId?: any;
   nowMs: number;
 }): Promise<any> {
   const sponsorUserId = args.requesterUserId;
@@ -157,8 +155,6 @@ async function insertServeRequest(args: {
     ...(args.sourceVisibilityScope ? { sourceVisibilityScope: args.sourceVisibilityScope } : {}),
     ...(args.responseVisibilityScope ? { responseVisibilityScope: args.responseVisibilityScope } : {}),
     ...(args.skipReason ? { skipReason: boundedText(args.skipReason, 240) } : {}),
-    ...(args.onboardingMode ? { onboardingMode: args.onboardingMode } : {}),
-    ...(args.onboardingSessionId ? { onboardingSessionId: args.onboardingSessionId } : {}),
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
@@ -250,8 +246,6 @@ async function resolveMentionSource(ctx: any, mention: ConciergeMentionRow): Pro
 export async function intakeCommunityAgentMention(args: {
   ctx: any;
   mention: ConciergeMentionRow;
-  onboardingMode?: "live" | "manager_preview";
-  onboardingSessionId?: any;
   nowMs: number;
 }): Promise<ConciergeIntakeResult> {
   const existing = await existingServeRequestForMention(args.ctx, args.mention._id);
@@ -402,8 +396,6 @@ export async function intakeCommunityAgentMention(args: {
     requesterUserId: source.requesterUserId,
     sourceVisibilityScope: source.visibilityScope,
     responseVisibilityScope: source.visibilityScope,
-    onboardingMode: args.onboardingMode,
-    onboardingSessionId: args.onboardingSessionId,
     nowMs: args.nowMs,
   });
   await settleMentionFromServeRequest({

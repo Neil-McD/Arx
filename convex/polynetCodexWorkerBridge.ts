@@ -308,7 +308,6 @@ export function buildPolynetCodexWorkerTurnInputs(params: {
   communityOneLiner: string | null;
   communityAbout: string | null;
   communitySystemPrompt: string | null;
-  communityOnboardingInstructions: string | null;
   communityLensAuthority: CommunityLensAuthority | null;
   agentName: string | null;
   agentSoul: string | null;
@@ -332,7 +331,6 @@ export function buildPolynetCodexWorkerTurnInputs(params: {
     communityOneLiner: params.communityOneLiner,
     communityAbout: params.communityAbout,
     communitySystemPrompt: params.communitySystemPrompt,
-    communityOnboardingInstructions: params.communityOnboardingInstructions,
     communityLensAuthority: params.communityLensAuthority,
     communityResourceLane: params.communityLensAuthority?.communityResourceLane ?? null,
     agentName: params.agentName,

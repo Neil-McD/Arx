@@ -167,7 +167,6 @@ export type BuildRuntimeContextManifestInput = {
   mountedTools?: readonly ManifestMountedToolInput[] | null;
   communityResourceLane?: CommunityResourceRuntimeLaneState | null;
   communitySystemPrompt?: string | null;
-  communityOnboardingInstructions?: string | null;
   communityAbout?: string | null;
   agentSoul?: string | null;
   runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
@@ -507,16 +506,6 @@ function buildPromptEntries(params: BuildRuntimeContextManifestInput & {
       injected: true,
       source: "shared/runtimePrompt.ts",
       reason: "community owner/admin instructions under platform policy",
-    });
-  }
-  if (hasText(params.communityOnboardingInstructions)) {
-    prompts.push({
-      id: "community_onboarding_guidance",
-      owner: "community",
-      authority: "scoped",
-      injected: true,
-      source: "shared/runtimePrompt.ts",
-      reason: "activation-snapshotted guidance for the member's active onboarding phase",
     });
   }
   if (params.resourceLane.lane !== "none") {

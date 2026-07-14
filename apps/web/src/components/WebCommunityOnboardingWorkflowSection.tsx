@@ -1,11 +1,8 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  buildCommunityOnboardingOrientationSeed,
-  COMMUNITY_ONBOARDING_AGENT_INSTRUCTIONS_MAX_CHARS,
   COMMUNITY_ONBOARDING_VIDEO_URL_MAX_CHARS,
   COMMUNITY_ONBOARDING_WELCOME_MAX_CHARS,
   createCommunityOnboardingPreviewSession,
-  DEFAULT_COMMUNITY_ONBOARDING_AGENT_INSTRUCTIONS,
   DEFAULT_COMMUNITY_ONBOARDING_WELCOME,
   normalizeCommunityOnboardingVideoUrl,
   type CommunityOnboardingConfig,
@@ -16,9 +13,6 @@ import {
 } from "../../../../shared/cloudCommunityOnboardingGateway";
 import { WebCommunityOnboardingOrientationSurface } from "./WebCommunityOnboardingOrientationSurface";
 
-const preventInlinePreviewSubmit = (event: FormEvent<HTMLFormElement>) => {
-  event.preventDefault();
-};
 const ignoreInlinePreviewAction = () => undefined;
 
 export function WebCommunityOnboardingWorkflowSection(props: {
@@ -30,7 +24,6 @@ export function WebCommunityOnboardingWorkflowSection(props: {
   const [config, setConfig] = useState<CommunityOnboardingConfig | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState(DEFAULT_COMMUNITY_ONBOARDING_WELCOME);
-  const [instructions, setInstructions] = useState(DEFAULT_COMMUNITY_ONBOARDING_AGENT_INSTRUCTIONS);
   const [introVideoUrl, setIntroVideoUrl] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -48,7 +41,6 @@ export function WebCommunityOnboardingWorkflowSection(props: {
       setConfig(next);
       setEnabled(next.enabled);
       setWelcomeMessage(next.welcome_message);
-      setInstructions(next.agent_instructions);
       setIntroVideoUrl(next.intro_video_url ?? "");
     }).catch(() => {
       if (!canceled) setError("Couldn’t load the onboarding workflow.");
@@ -63,47 +55,31 @@ export function WebCommunityOnboardingWorkflowSection(props: {
   const isDirty = useMemo(() => Boolean(config) && (
     enabled !== config?.enabled ||
     welcomeMessage.trim() !== config?.welcome_message ||
-    instructions.trim() !== config?.agent_instructions ||
     introVideoUrl.trim() !== (config?.intro_video_url ?? "")
-  ), [config, enabled, instructions, introVideoUrl, welcomeMessage]);
+  ), [config, enabled, introVideoUrl, welcomeMessage]);
 
   const inlinePreviewSession = useMemo(() => createCommunityOnboardingPreviewSession({
     communityId: props.communityId,
     config: {
       enabled,
       welcome_message: welcomeMessage,
-      agent_instructions: instructions,
       intro_video_url: normalizeCommunityOnboardingVideoUrl(introVideoUrl),
-      concierge_display_name: config?.concierge_display_name || props.communityName,
-      version: config?.version ?? 0,
       updated_at: config?.updated_at ?? null,
     },
     nowIso: config?.updated_at ?? "1970-01-01T00:00:00.000Z",
     previewId: "settings-inline",
-  }), [config?.updated_at, config?.version, enabled, instructions, introVideoUrl, props.communityId, welcomeMessage]);
-
-  const inlinePreviewMessages = useMemo(() => [{
-    id: "settings-inline-welcome",
-    role: "assistant" as const,
-    text: buildCommunityOnboardingOrientationSeed({
-      communityName: props.communityName,
-      welcomeMessage,
-      conciergeDisplayName: config?.concierge_display_name || props.communityName,
-      hasIntroVideo: Boolean(normalizeCommunityOnboardingVideoUrl(introVideoUrl)),
-    }),
-  }], [config?.concierge_display_name, introVideoUrl, props.communityName, welcomeMessage]);
+  }), [config?.updated_at, enabled, introVideoUrl, props.communityId, welcomeMessage]);
 
   const reset = () => {
     if (!config) return;
     setEnabled(config.enabled);
     setWelcomeMessage(config.welcome_message);
-    setInstructions(config.agent_instructions);
     setIntroVideoUrl(config.intro_video_url ?? "");
     setError(null);
   };
 
   const save = async () => {
-    if (!welcomeMessage.trim() || !instructions.trim()) return;
+    if (!welcomeMessage.trim()) return;
     setIsSaving(true);
     setError(null);
     try {
@@ -112,13 +88,11 @@ export function WebCommunityOnboardingWorkflowSection(props: {
         communityId: props.communityId,
         enabled,
         welcomeMessage,
-        agentInstructions: instructions,
         introVideoUrl: introVideoUrl.trim() || null,
       });
       setConfig(next);
       setEnabled(next.enabled);
       setWelcomeMessage(next.welcome_message);
-      setInstructions(next.agent_instructions);
       setIntroVideoUrl(next.intro_video_url ?? "");
     } catch {
       setError("Couldn’t save the onboarding workflow.");
@@ -154,7 +128,7 @@ export function WebCommunityOnboardingWorkflowSection(props: {
             <button
               className={`platform-save-button${isDirty ? " is-dirty" : " is-saved"}`}
               type="button"
-              disabled={!isDirty || isSaving || !welcomeMessage.trim() || !instructions.trim()}
+              disabled={!isDirty || isSaving || !welcomeMessage.trim()}
               onClick={() => void save()}
             >
               {isSaving ? "Saving…" : isDirty ? "Save changes" : "Saved"}
@@ -209,7 +183,7 @@ export function WebCommunityOnboardingWorkflowSection(props: {
               <div className="community-onboarding-editor-heading">
                 <span>Step 1 of 3</span>
                 <h2>Welcome new members</h2>
-                <p>Add a founder video and set the opening message from the community Concierge.</p>
+                <p>Add an optional founder video and the welcome members see before entering.</p>
               </div>
 
               <label className="create-community-field community-onboarding-field">
@@ -231,7 +205,7 @@ export function WebCommunityOnboardingWorkflowSection(props: {
               <label className="create-community-field community-onboarding-field">
                 <span>Welcome message</span>
                 <span className="community-onboarding-field-note">
-                  The first thing the community Concierge says.
+                  Shown exactly as written. Markdown is supported.
                 </span>
                 <textarea
                   className="community-onboarding-textarea"
@@ -242,25 +216,6 @@ export function WebCommunityOnboardingWorkflowSection(props: {
                 />
               </label>
 
-              <details className="community-onboarding-advanced">
-                <summary>
-                  <span>
-                    <strong>Advanced agent instructions</strong>
-                    <small>Control how the community Concierge guides this orientation.</small>
-                  </span>
-                  <span aria-hidden="true">+</span>
-                </summary>
-                <label className="create-community-field community-onboarding-field community-onboarding-field-instructions">
-                  <span>Concierge guidance</span>
-                  <textarea
-                    className="community-onboarding-textarea"
-                    value={instructions}
-                    maxLength={COMMUNITY_ONBOARDING_AGENT_INSTRUCTIONS_MAX_CHARS}
-                    rows={7}
-                    onChange={(event) => setInstructions(event.target.value)}
-                  />
-                </label>
-              </details>
             </div>
 
             <aside className="community-onboarding-live-preview" aria-label="Live member welcome preview">
@@ -273,18 +228,11 @@ export function WebCommunityOnboardingWorkflowSection(props: {
                   <WebCommunityOnboardingOrientationSurface
                     communityName={props.communityName}
                     session={inlinePreviewSession}
-                    messages={inlinePreviewMessages}
-                    input=""
                     isPreview
                     isPreparing={false}
-                    isWorking={false}
-                    streamedText=""
                     isPending={false}
                     isInline
                     error={null}
-                    onInputChange={ignoreInlinePreviewAction}
-                    onSubmit={preventInlinePreviewSubmit}
-                    onStop={ignoreInlinePreviewAction}
                     onContinue={ignoreInlinePreviewAction}
                     onDismiss={ignoreInlinePreviewAction}
                   />

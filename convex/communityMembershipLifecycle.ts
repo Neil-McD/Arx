@@ -25,7 +25,6 @@ export async function activateCommunityMembershipCore(args: {
   membership: CommunityMembershipLike;
   accessGranted: boolean;
   activationMarker: string | null;
-  onboardingSessionId: any | null;
 }> {
   const rows = (await args.ctx.db
     .query("communityMemberships" as any)
@@ -48,7 +47,6 @@ export async function activateCommunityMembershipCore(args: {
       membership: refreshed,
       accessGranted: false,
       activationMarker: null,
-      onboardingSessionId: null,
     };
   }
 
@@ -87,9 +85,8 @@ export async function activateCommunityMembershipCore(args: {
   const membership = (await args.ctx.db.get(membershipId)) as CommunityMembershipLike | null;
   if (!membership) throw new Error("community_membership_activation_failed");
   await syncCommunityActiveMemberCount({ ctx: args.ctx, communityId: args.communityId });
-  let onboardingSessionId: any | null = null;
   try {
-    onboardingSessionId = await createCommunityOnboardingSessionForActivation({
+    await createCommunityOnboardingSessionForActivation({
       ctx: args.ctx,
       communityId: args.communityId,
       membershipId,
@@ -105,6 +102,5 @@ export async function activateCommunityMembershipCore(args: {
     membership,
     accessGranted: true,
     activationMarker: `${String(membershipId)}:${activationSequence}:${args.activationReason}`,
-    onboardingSessionId,
   };
 }

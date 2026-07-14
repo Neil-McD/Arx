@@ -1,11 +1,7 @@
 export const DEFAULT_COMMUNITY_ONBOARDING_WELCOME =
   "Welcome! Let’s get you oriented and help you take your first useful steps in this community.";
 
-export const DEFAULT_COMMUNITY_ONBOARDING_AGENT_INSTRUCTIONS =
-  "Orient the member to this community. Be concise, use only permission-approved community context, and suggest one concrete next action.";
-
 export const COMMUNITY_ONBOARDING_WELCOME_MAX_CHARS = 1_200;
-export const COMMUNITY_ONBOARDING_AGENT_INSTRUCTIONS_MAX_CHARS = 4_000;
 export const COMMUNITY_ONBOARDING_VIDEO_URL_MAX_CHARS = 2_000;
 
 export type CommunityOnboardingStatus =
@@ -23,10 +19,7 @@ export type CommunityOnboardingPhase =
 export type CommunityOnboardingConfig = {
   enabled: boolean;
   welcome_message: string;
-  agent_instructions: string;
   intro_video_url: string | null;
-  concierge_display_name: string;
-  version: number;
   updated_at: string | null;
 };
 
@@ -36,13 +29,8 @@ export type CommunityOnboardingSession = {
   status: CommunityOnboardingStatus;
   phase: CommunityOnboardingPhase;
   welcome_message: string;
-  agent_instructions: string;
   intro_video_url: string | null;
-  concierge_display_name: string;
-  orientation_seeded_at: string | null;
-  orientation_seed_reply_id: string | null;
   activated_at: string;
-  opened_at: string | null;
   orientation_completed_at: string | null;
   first_community_post_at: string | null;
   first_agent_dock_turn_at: string | null;
@@ -51,7 +39,6 @@ export type CommunityOnboardingSession = {
 
 export type CommunityOnboardingMilestoneRow = {
   status: CommunityOnboardingStatus;
-  openedAt?: number;
   orientationCompletedAt?: number;
   firstCommunityPostAt?: number;
   firstAgentDockTurnAt?: number;
@@ -59,7 +46,6 @@ export type CommunityOnboardingMilestoneRow = {
 };
 
 export type CommunityOnboardingMilestone =
-  | "opened"
   | "orientation_completed"
   | "first_community_post"
   | "first_agent_dock_turn";
@@ -77,27 +63,6 @@ export function normalizeCommunityOnboardingVideoUrl(raw: unknown): string | nul
   } catch {
     return null;
   }
-}
-
-export function buildCommunityOnboardingOrientationSeed(params: {
-  communityName: string;
-  welcomeMessage: string;
-  conciergeDisplayName: string;
-  hasIntroVideo?: boolean;
-}): string {
-  const communityName = String(params.communityName ?? "").trim() || "this community";
-  const conciergeDisplayName = String(params.conciergeDisplayName ?? "").trim() || communityName;
-  const welcomeMessage = normalizeCommunityOnboardingText(
-    params.welcomeMessage,
-    COMMUNITY_ONBOARDING_WELCOME_MAX_CHARS,
-  );
-  return [
-    welcomeMessage,
-    `I’m ${conciergeDisplayName}, the community concierge for ${communityName}. I’ll help you get oriented and take your first useful step.`,
-    params.hasIntroVideo
-      ? "Start with the short founder video above. Then tell me what you hope to get from this community."
-      : "What brought you here: learning, meeting people, or building something?",
-  ].filter(Boolean).join("\n\n");
 }
 
 export function buildCommunityOnboardingIntroductionDraft(params: {
@@ -121,21 +86,6 @@ export function isCommunityOnboardingIntroductionReady(params: {
     ? text.slice(seededDraft.length).trim()
     : text;
   return memberContribution.length >= 3;
-}
-
-export function describeCommunityOnboardingPhaseObjective(
-  phase: CommunityOnboardingPhase,
-): string {
-  if (phase === "orientation") {
-    return "Help the member understand this community and answer their orientation questions before they continue.";
-  }
-  if (phase === "first_community_post") {
-    return "Help the member make one useful, authentic first contribution in the community chat.";
-  }
-  if (phase === "first_agent_dock_turn") {
-    return "Help the member use their private personal agent for one concrete next action in this community.";
-  }
-  return "Onboarding is complete; respond normally under the active community lens.";
 }
 
 export function deriveCommunityOnboardingPhase(
@@ -175,18 +125,13 @@ export function createCommunityOnboardingPreviewSession(params: {
   previewId: string;
 }): CommunityOnboardingSession {
   return {
-    id: `preview:${params.communityId}:${params.config.version}:${params.previewId}`,
+    id: `preview:${params.communityId}:${params.previewId}`,
     community_id: params.communityId,
     status: "active",
     phase: "orientation",
     welcome_message: params.config.welcome_message,
-    agent_instructions: params.config.agent_instructions,
     intro_video_url: params.config.intro_video_url,
-    concierge_display_name: params.config.concierge_display_name,
-    orientation_seeded_at: params.nowIso,
-    orientation_seed_reply_id: null,
     activated_at: params.nowIso,
-    opened_at: params.nowIso,
     orientation_completed_at: null,
     first_community_post_at: null,
     first_agent_dock_turn_at: null,
@@ -238,9 +183,7 @@ export function buildCommunityOnboardingMilestonePatch(
   const timestamp = Math.max(0, Math.floor(nowMs));
   const patch: Partial<CommunityOnboardingMilestoneRow> = {};
 
-  if (milestone === "opened" && !session.openedAt) patch.openedAt = timestamp;
   if (milestone === "orientation_completed") {
-    if (!session.openedAt) patch.openedAt = timestamp;
     if (!session.orientationCompletedAt) patch.orientationCompletedAt = timestamp;
   }
   if (milestone === "first_community_post" && !session.firstCommunityPostAt) {

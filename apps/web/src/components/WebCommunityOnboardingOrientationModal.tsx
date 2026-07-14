@@ -1,10 +1,7 @@
-import { useEffect, useId, useRef, type FormEvent } from "react";
+import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { CommunityOnboardingSession } from "../../../../shared/communityOnboarding";
-import {
-  WebCommunityOnboardingOrientationSurface,
-  type CommunityOnboardingOrientationMessage,
-} from "./WebCommunityOnboardingOrientationSurface";
+import { WebCommunityOnboardingOrientationSurface } from "./WebCommunityOnboardingOrientationSurface";
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
@@ -18,25 +15,16 @@ const FOCUSABLE_SELECTOR = [
 export function WebCommunityOnboardingOrientationModal(props: {
   communityName: string;
   session: CommunityOnboardingSession;
-  messages: CommunityOnboardingOrientationMessage[];
-  input: string;
   isPreview: boolean;
   isPreparing: boolean;
-  isWorking: boolean;
-  streamedText: string;
   isPending: boolean;
   error: string | null;
-  onInputChange: (value: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onStop?: () => void;
   onContinue: () => void;
   onDismiss: () => void;
 }) {
   const titleId = useId();
   const descriptionId = useId();
   const modalRef = useRef<HTMLDivElement | null>(null);
-  const composerRef = useRef<HTMLTextAreaElement | null>(null);
-  const transcriptRef = useRef<HTMLDivElement | null>(null);
   const isPendingRef = useRef(props.isPending);
   const onDismissRef = useRef(props.onDismiss);
   isPendingRef.current = props.isPending;
@@ -49,7 +37,7 @@ export function WebCommunityOnboardingOrientationModal(props: {
     const previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const focusFrame = window.requestAnimationFrame(() => {
-      composerRef.current?.focus();
+      modalRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
     });
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -91,16 +79,6 @@ export function WebCommunityOnboardingOrientationModal(props: {
     };
   }, []);
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      transcriptRef.current?.scrollTo({
-        top: transcriptRef.current.scrollHeight,
-        behavior: "smooth",
-      });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [props.messages.length, props.streamedText]);
-
   return createPortal(
     <div className="community-onboarding-orientation-overlay" role="presentation">
       <div
@@ -117,8 +95,6 @@ export function WebCommunityOnboardingOrientationModal(props: {
           {...props}
           titleId={titleId}
           descriptionId={descriptionId}
-          composerRef={composerRef}
-          transcriptRef={transcriptRef}
         />
       </div>
     </div>,

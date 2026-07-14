@@ -1330,9 +1330,10 @@ export default defineSchema({
     communityId: v.id("communities"),
     enabled: v.boolean(),
     welcomeMessage: v.string(),
-    agentInstructions: v.string(),
     introVideoUrl: v.optional(v.string()),
-    version: v.number(),
+    // One-release migration compatibility only. Runtime code neither reads nor writes these.
+    agentInstructions: v.optional(v.string()),
+    version: v.optional(v.number()),
     updatedByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1343,15 +1344,14 @@ export default defineSchema({
     membershipId: v.id("communityMemberships"),
     userId: v.id("users"),
     activationSequence: v.number(),
-    configVersion: v.number(),
     welcomeMessageSnapshot: v.string(),
-    agentInstructionsSnapshot: v.string(),
     introVideoUrlSnapshot: v.optional(v.string()),
+    // One-release migration compatibility only. Remove after the bounded cleanup.
+    configVersion: v.optional(v.number()),
+    agentInstructionsSnapshot: v.optional(v.string()),
     conciergeDisplayNameSnapshot: v.optional(v.string()),
     orientationSeededAt: v.optional(v.number()),
     orientationSeedReplyId: v.optional(v.id("communityInteractionReplies")),
-    // Legacy personal-agent seed coordinates. Retained only so staging rows
-    // created by the superseded implementation remain schema-compatible.
     orientationSeedMessageKey: v.optional(v.string()),
     orientationSeedMessageSeq: v.optional(v.number()),
     status: v.union(
@@ -1942,6 +1942,7 @@ export default defineSchema({
     ),
     responseRootId: v.optional(v.id("communityInteractionRoots")),
     responseReplyId: v.optional(v.id("communityInteractionReplies")),
+    // One-release migration compatibility only. Runtime code ignores these.
     onboardingMode: v.optional(
       v.union(v.literal("live"), v.literal("manager_preview")),
     ),

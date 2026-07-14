@@ -1484,9 +1484,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       {showOnboardingFirstPostGuide && activeCommunity && communityOnboarding ? (
         <WebCommunityOnboardingFirstPostGuide
           communityName={activeCommunity.name}
-          conciergeDisplayName={
-            activeOnboardingSession?.concierge_display_name?.trim() || "Community Concierge"
-          }
           descriptionId={COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID}
           isComplete={isOnboardingFirstPostAcknowledgement}
           isPending={communityOnboarding.pendingAction !== null}

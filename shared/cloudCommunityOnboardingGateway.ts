@@ -22,7 +22,6 @@ export async function saveCloudCommunityOnboardingConfig<SessionT>(params: {
   communityId: string;
   enabled: boolean;
   welcomeMessage: string;
-  agentInstructions: string;
   introVideoUrl: string | null;
 }): Promise<CommunityOnboardingConfig> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -31,7 +30,6 @@ export async function saveCloudCommunityOnboardingConfig<SessionT>(params: {
     communityId: params.communityId,
     enabled: params.enabled,
     welcomeMessage: params.welcomeMessage,
-    agentInstructions: params.agentInstructions,
     introVideoUrl: params.introVideoUrl ?? "",
   }) as CommunityOnboardingConfig;
 }
@@ -41,7 +39,6 @@ async function mutateCloudCommunityOnboardingSession<ResultT, SessionT>(params: 
   communityId: string;
   sessionId: string;
   mutationName:
-    | "communityOnboarding:openMyCommunityOnboardingSession"
     | "communityOnboarding:completeMyCommunityOnboardingOrientation"
     | "communityOnboarding:dismissMyCommunityOnboardingSession";
 }): Promise<ResultT> {
@@ -51,17 +48,6 @@ async function mutateCloudCommunityOnboardingSession<ResultT, SessionT>(params: 
     communityId: params.communityId,
     sessionId: params.sessionId,
   }) as ResultT;
-}
-
-export async function openCloudCommunityOnboardingSession<SessionT>(params: {
-  session: SessionT;
-  communityId: string;
-  sessionId: string;
-}): Promise<CommunityOnboardingSession | null> {
-  return await mutateCloudCommunityOnboardingSession<CommunityOnboardingSession | null, SessionT>({
-    ...params,
-    mutationName: "communityOnboarding:openMyCommunityOnboardingSession",
-  });
 }
 
 export async function completeCloudCommunityOnboardingOrientation<SessionT>(params: {

@@ -1,6 +1,5 @@
 export function WebCommunityOnboardingFirstPostGuide(props: {
   communityName: string;
-  conciergeDisplayName: string;
   descriptionId: string;
   isComplete: boolean;
   isPending: boolean;
@@ -24,7 +23,7 @@ export function WebCommunityOnboardingFirstPostGuide(props: {
           </svg>
         </div>
         <div className="community-onboarding-first-post-copy">
-          <span>{props.conciergeDisplayName}</span>
+          <span>Step 2 of 3</span>
           <strong>
             {props.isComplete
               ? props.isPreview
@@ -34,7 +33,7 @@ export function WebCommunityOnboardingFirstPostGuide(props: {
           </strong>
           <p id={props.descriptionId}>
             {props.isComplete
-              ? "You’ve taken your first community action. Next, I’ll introduce you to your personal agent."
+              ? "You’ve taken your first community action. Next, use your personal agent in this community."
               : "The composer is ready for you. Finish or edit the introduction in your own words, then send it to the community."}
           </p>
           {props.isPreview && !props.isComplete ? (

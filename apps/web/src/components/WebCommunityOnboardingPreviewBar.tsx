@@ -26,8 +26,8 @@ export function WebCommunityOnboardingPreviewBar(props: {
             : props.isLoading
               ? "Loading the saved workflow…"
               : props.configuredEnabled === false
-                ? "Currently off · Preview actions are simulated"
-                : "Community posts are simulated · Concierge messages stay private"}
+                ? "Currently off · Community posts are simulated"
+                : "Community posts are simulated · Your personal agent uses your account"}
         </span>
       </div>
       <div className="community-onboarding-preview-bar-actions">

@@ -741,11 +741,11 @@ export function useWebTurnRunnerController<
               stream: streamRuntimeTurn,
               surface: "web",
               invocation_surface: params.invocationSurface ?? "workspace",
-              ...(params.memberAgentMode && params.memberAgentMode !== "standard"
-                ? { member_agent_mode: params.memberAgentMode }
-                : null),
               ...(params.surfaceContext
                 ? { surface_context: params.surfaceContext }
+                : null),
+              ...(params.suppressOnboardingProgress
+                ? { suppress_onboarding_progress: true }
                 : null),
               model_id: params.preferredModelId,
               ...(params.runtimeEngine
