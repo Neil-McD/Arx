@@ -307,11 +307,11 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
   },
   polynet_community_search: {
     name: "polynet_community_search",
-    title: "Search Polynet Community Memory",
+    title: "Search Polynet Community Evidence",
     description:
-      "Search a Polynet community's recent live context and compiled archive memory by community slug.",
+      "Search canonically revalidated raw evidence from a Polynet community by community slug. Results are not accepted community memory.",
     annotations: {
-      title: "Search Polynet Community Memory",
+      title: "Search Polynet Community Evidence",
       readOnlyHint: true,
       openWorldHint: true,
     },

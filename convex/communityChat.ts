@@ -15,7 +15,11 @@ import {
 import {
   deleteArchiveDocumentBySource,
 } from "./communityArchiveDocuments";
-import { recordLegacyChatMessageInteractionBestEffort } from "./communityInteractions";
+import {
+  recordLegacyChatMessageInteractionBestEffort,
+  syncLegacyChatMessageDeleteToInteractionCore,
+  syncLegacyChatMessageEditToInteractionCore,
+} from "./communityInteractions";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
 
@@ -557,6 +561,15 @@ export const patchOwnMessageContent = mutation({
     if (!nextText && nextAttachments.length === 0) {
       throw new Error("message_payload_required");
     }
+    await syncLegacyChatMessageEditToInteractionCore({
+      ctx,
+      communityId: thread.communityId,
+      messageId: message._id,
+      text: nextText,
+      attachments: nextAttachments,
+      actorUserId: userId,
+      nowMs,
+    });
     await ctx.db.patch(message._id as any, {
       contentJson: nextAttachments.length > 0 ? { text: nextText, attachments: nextAttachments } : { text: nextText },
       updatedAt: nowMs,
@@ -607,6 +620,13 @@ export const deleteOwnMessage = mutation({
     for (const reaction of reactions) {
       await ctx.db.delete(reaction._id as any);
     }
+    await syncLegacyChatMessageDeleteToInteractionCore({
+      ctx,
+      communityId: thread.communityId,
+      messageId: message._id,
+      actorUserId: userId,
+      nowMs,
+    });
     await ctx.db.delete(message._id as any);
     await deleteArchiveDocumentBySource(ctx, {
       communityId: thread.communityId,

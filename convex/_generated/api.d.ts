@@ -75,6 +75,8 @@ import type * as communityCore from "../communityCore.js";
 import type * as communityDirectory from "../communityDirectory.js";
 import type * as communityEvents from "../communityEvents.js";
 import type * as communityEvidenceAudit from "../communityEvidenceAudit.js";
+import type * as communityEvidenceCitations from "../communityEvidenceCitations.js";
+import type * as communityEvidenceCore from "../communityEvidenceCore.js";
 import type * as communityExperience from "../communityExperience.js";
 import type * as communityFeatured from "../communityFeatured.js";
 import type * as communityFunnel from "../communityFunnel.js";
@@ -299,6 +301,8 @@ declare const fullApi: ApiFromModules<{
   communityDirectory: typeof communityDirectory;
   communityEvents: typeof communityEvents;
   communityEvidenceAudit: typeof communityEvidenceAudit;
+  communityEvidenceCitations: typeof communityEvidenceCitations;
+  communityEvidenceCore: typeof communityEvidenceCore;
   communityExperience: typeof communityExperience;
   communityFeatured: typeof communityFeatured;
   communityFunnel: typeof communityFunnel;

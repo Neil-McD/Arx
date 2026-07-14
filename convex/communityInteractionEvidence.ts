@@ -51,6 +51,9 @@ type CommunityRow = {
 
 type ContentBlockRow = {
   _id: any;
+  communityId: any;
+  rootId?: any;
+  replyId?: any;
   blockOrder: number;
   blockType: string;
   text?: string;
@@ -61,6 +64,9 @@ type ContentBlockRow = {
 
 type AttachmentRow = {
   _id: any;
+  communityId: any;
+  rootId?: any;
+  replyId?: any;
   attachmentKind: string;
   status: string;
   name: string;
@@ -71,8 +77,12 @@ type AttachmentRow = {
 
 type EmbedRow = {
   _id: any;
+  communityId: any;
+  rootId?: any;
+  replyId?: any;
   embedKind: string;
   status: string;
+  visibilityScope: "private" | "admin" | "community" | "public";
   sourceUrl?: string;
   workspaceRefKind?: string;
   workspaceRefId?: string;
@@ -95,6 +105,27 @@ type EvidencePromotionReason =
 const RECENT_ROOT_SCAN_LIMIT = 80;
 const RECENT_REPLY_SCAN_LIMIT = 160;
 const INTERACTION_ARCHIVE_VECTOR_LIMIT = Math.max(ARCHIVE_VECTOR_LIMIT, 32);
+
+function interactionChildBelongsToEvidence(args: {
+  child: { communityId: any; rootId?: any; replyId?: any };
+  communityId: any;
+  objectType: CommunityInteractionEvidenceObjectType;
+  objectId: any;
+}): boolean {
+  if (normalizeIdValue(args.child.communityId) !== normalizeIdValue(args.communityId)) {
+    return false;
+  }
+  if (args.objectType === "root") {
+    return (
+      normalizeIdValue(args.child.rootId) === normalizeIdValue(args.objectId) &&
+      !normalizeIdValue(args.child.replyId)
+    );
+  }
+  return (
+    normalizeIdValue(args.child.replyId) === normalizeIdValue(args.objectId) &&
+    !normalizeIdValue(args.child.rootId)
+  );
+}
 
 function tokenizeQuery(raw: unknown): string[] {
   return Array.from(
@@ -363,6 +394,19 @@ export const readCommunityInteractionEvidenceInternal = internalQuery({
         )
         .take(32),
     ])) as [ContentBlockRow[], AttachmentRow[], EmbedRow[]];
+    if (
+      [...blocks, ...attachments, ...embeds].some(
+        (child) =>
+          !interactionChildBelongsToEvidence({
+            child,
+            communityId: args.communityId,
+            objectType: parsed.objectType,
+            objectId: row._id,
+          }),
+      )
+    ) {
+      throw new Error("community_interaction_evidence_not_readable");
+    }
     const summary = await mapEvidenceSearchItem({
       ctx,
       community,
@@ -398,7 +442,11 @@ export const readCommunityInteractionEvidenceInternal = internalQuery({
           external_url: attachment.externalUrl ?? null,
         })),
       embeds: embeds
-        .filter((embed) => embed.status !== "redacted")
+        .filter(
+          (embed) =>
+            embed.status !== "redacted" &&
+            communityInteractionVisibilityIsEvidenceReadable(embed.visibilityScope),
+        )
         .map((embed) => ({
           id: normalizeIdValue(embed._id),
           kind: embed.embedKind,

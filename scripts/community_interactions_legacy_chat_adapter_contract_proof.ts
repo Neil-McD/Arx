@@ -310,7 +310,7 @@ assert.doesNotMatch(
 
 assert.match(
   communityChat,
-  /import \{ recordLegacyChatMessageInteractionBestEffort \} from "\.\/communityInteractions";/,
+  /import \{[\s\S]*recordLegacyChatMessageInteractionBestEffort,[\s\S]*syncLegacyChatMessageDeleteToInteractionCore,[\s\S]*syncLegacyChatMessageEditToInteractionCore,[\s\S]*\} from "\.\/communityInteractions";/,
   "legacy chat mutation should import the interaction adapter",
 );
 const createThreadUserMessage = exportedConstBlock(communityChat, "createThreadUserMessage");
@@ -323,6 +323,16 @@ assert.doesNotMatch(
   createThreadUserMessage,
   /upsertArchiveDocumentForChatMessage/,
   "legacy chat send should not write obsolete legacy archive authority",
+);
+assert.match(
+  exportedConstBlock(communityChat, "patchOwnMessageContent"),
+  /await syncLegacyChatMessageEditToInteractionCore\(/,
+  "legacy chat edits should update the canonical interaction in the same transaction",
+);
+assert.match(
+  exportedConstBlock(communityChat, "deleteOwnMessage"),
+  /await syncLegacyChatMessageDeleteToInteractionCore\(/,
+  "legacy chat deletion should tombstone the canonical interaction in the same transaction",
 );
 assert.doesNotMatch(
   createThreadUserMessage,

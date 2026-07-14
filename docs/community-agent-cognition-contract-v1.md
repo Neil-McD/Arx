@@ -1415,6 +1415,7 @@ Rules:
 - These tools may write retrieval logs and outcome observations. They must not directly create or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`.
 - The active-community context tool may expose a tiny memory orientation block with counts and recent validated titles, but it must not dump directory contents into the prompt.
 - Runtime prompt policy must distinguish accepted community memory from raw archive evidence: use `community_memory_search` for what the community has learned, use `community_search` for unvalidated recent/archive evidence.
+- Raw evidence may support a new memory change only through the immutable citation and apply-time revalidation rules in `docs/community-evidence-integrity-contract-v1.md`; archive rows are candidates, never authority.
 - If community memory is used in prose, the agent should cite the entry title and status.
 
 ## Fifteenth Implementation Slice

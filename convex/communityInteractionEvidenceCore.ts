@@ -29,6 +29,7 @@ export type ResolvedCommunityInteractionEvidence = {
   objectType: CommunityInteractionEvidenceObjectType;
   row: CommunityInteractionEvidenceRow;
   root: CommunityInteractionEvidenceRow;
+  targetReply?: CommunityInteractionEvidenceRow;
 };
 
 function evidenceTableForObjectType(
@@ -78,7 +79,23 @@ export async function resolveCommunityInteractionEvidenceSource(args: {
   ) {
     return null;
   }
-  return { objectType: args.objectType, row, root };
+  if (!row.targetReplyId) {
+    return { objectType: args.objectType, row, root };
+  }
+  const targetReplyId = args.ctx.db.normalizeId(
+    "communityInteractionReplies" as any,
+    normalizeIdValue(row.targetReplyId),
+  );
+  if (!targetReplyId) return null;
+  const targetReply = (await args.ctx.db.get(targetReplyId)) as CommunityInteractionEvidenceRow | null;
+  if (
+    !targetReply ||
+    normalizeIdValue(targetReply.communityId) !== normalizeIdValue(args.communityId) ||
+    normalizeIdValue(targetReply.rootId) !== normalizeIdValue(root._id)
+  ) {
+    return null;
+  }
+  return { objectType: args.objectType, row, root, targetReply };
 }
 
 export function communityInteractionEvidenceSourceIsReadable(

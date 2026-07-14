@@ -108,7 +108,7 @@ type SourceTraceResolution = {
 };
 
 const RESOLVABLE_SOURCE_TRACE_TYPES = new Set([
-  "chat",
+  "interaction",
   "ai_feed",
   "resource",
   "workflow_run",
@@ -270,6 +270,14 @@ async function resolveSourceTraceIdsForDigestItem(args: {
         sourceType: "source_trace",
         sourceId: normalizeIdValue(traceId),
         reason: "trace_not_found",
+      });
+      continue;
+    }
+    if (trace.sourceType === "chat") {
+      out.unresolvedSourceReferences.push({
+        sourceType: "chat",
+        sourceId: trace.sourceId ?? normalizeIdValue(trace._id),
+        reason: "no_resolvable_source_type",
       });
       continue;
     }

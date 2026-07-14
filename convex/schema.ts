@@ -2848,6 +2848,31 @@ export default defineSchema({
     .index("by_community_source", ["communityId", "sourceType", "sourceId"])
     .index("by_community_workflow", ["communityId", "workflowId"]),
 
+  communityEvidenceCitations: defineTable({
+    communityId: v.id("communities"),
+    sourceKind: v.union(
+      v.literal("interaction"),
+      v.literal("resource"),
+      v.literal("ai_feed"),
+      v.literal("source_trace"),
+    ),
+    sourceRef: v.string(),
+    sourceTraceId: v.optional(v.id("communitySourceTraces")),
+    sourceVersion: v.string(),
+    contentHash: v.string(),
+    provenanceHash: v.string(),
+    capturedVisibility: v.union(
+      v.literal("private"),
+      v.literal("admin"),
+      v.literal("community"),
+      v.literal("public"),
+    ),
+    capturedAt: v.number(),
+  })
+    .index("by_community_ref_version", ["communityId", "sourceRef", "sourceVersion"])
+    .index("by_community_ref_capturedAt", ["communityId", "sourceRef", "capturedAt"])
+    .index("by_sourceTrace", ["sourceTraceId"]),
+
   communityEvidenceRetrievalLogs: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
@@ -2924,6 +2949,8 @@ export default defineSchema({
     workflowIds: v.array(v.string()),
     tags: v.array(v.string()),
     sourceTraceIds: v.array(v.id("communitySourceTraces")),
+    evidenceCitationIds: v.optional(v.array(v.id("communityEvidenceCitations"))),
+    evidencePolicyVersion: v.optional(v.literal("citation_v1")),
     outcomeObservationIds: v.array(v.id("communityOutcomeObservations")),
     stalenessScore: v.number(),
     retrievalUsefulnessScore: v.number(),
@@ -2988,6 +3015,8 @@ export default defineSchema({
     ),
     confidence: v.number(),
     evidenceTraceIds: v.array(v.id("communitySourceTraces")),
+    evidenceCitationIds: v.optional(v.array(v.id("communityEvidenceCitations"))),
+    evidencePolicyVersion: v.optional(v.literal("citation_v1")),
     visibilityScope: v.union(
       v.literal("private"),
       v.literal("admin"),
@@ -3076,6 +3105,8 @@ export default defineSchema({
       v.literal("applied"),
     ),
     sourceTraceIds: v.array(v.id("communitySourceTraces")),
+    evidenceCitationIds: v.optional(v.array(v.id("communityEvidenceCitations"))),
+    evidencePolicyVersion: v.optional(v.literal("citation_v1")),
     outcomeObservationIds: v.array(v.id("communityOutcomeObservations")),
     targetNodeIds: v.array(v.id("communityIntelligenceNodes")),
     targetEdgeIds: v.array(v.id("communityIntelligenceEdges")),

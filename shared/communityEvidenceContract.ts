@@ -22,6 +22,7 @@ export type CommunityInteractionEvidenceObjectType = "root" | "reply";
 
 export type CommunityResourceEvidenceRef = `resource:${string}`;
 export type CommunityAiFeedEvidenceRef = `ai_feed:${string}`;
+export type CommunitySourceTraceEvidenceRef = `trace:${string}`;
 
 export type CommunityAiFeedLineageEnvelope = {
   actor: {
@@ -49,6 +50,35 @@ export type CommunityResourceLineageEnvelope = {
 
 export type CommunityInteractionEvidenceRef =
   `interaction:${CommunityInteractionEvidenceObjectType}:${string}`;
+
+export type CommunityEvidenceRef =
+  | CommunityInteractionEvidenceRef
+  | CommunityResourceEvidenceRef
+  | CommunityAiFeedEvidenceRef
+  | CommunitySourceTraceEvidenceRef;
+
+export type ParsedCommunityEvidenceRef =
+  | {
+      source_type: "interaction";
+      ref: CommunityInteractionEvidenceRef;
+      object_type: CommunityInteractionEvidenceObjectType;
+      object_id: string;
+    }
+  | {
+      source_type: "resource";
+      ref: CommunityResourceEvidenceRef;
+      resource_id: string;
+    }
+  | {
+      source_type: "ai_feed";
+      ref: CommunityAiFeedEvidenceRef;
+      post_id: string;
+    }
+  | {
+      source_type: "source_trace";
+      ref: CommunitySourceTraceEvidenceRef;
+      source_trace_id: string;
+    };
 
 export type CommunityInteractionLineageActorType =
   | "human"
@@ -138,6 +168,58 @@ export function parseCommunityAiFeedEvidenceRef(raw: unknown): string | null {
   const value = String(raw ?? "").trim();
   const match = /^ai_feed:([^\s:]+)$/.exec(value);
   return match?.[1] ?? null;
+}
+
+export function buildCommunitySourceTraceEvidenceRef(
+  sourceTraceId: string,
+): CommunitySourceTraceEvidenceRef {
+  const normalized = String(sourceTraceId ?? "").trim();
+  if (!normalized) throw new Error("community_source_trace_evidence_id_required");
+  return `trace:${normalized}`;
+}
+
+export function parseCommunitySourceTraceEvidenceRef(raw: unknown): string | null {
+  const value = String(raw ?? "").trim();
+  const match = /^trace:([^\s:]+)$/.exec(value);
+  return match?.[1] ?? null;
+}
+
+export function parseCommunityEvidenceRef(raw: unknown): ParsedCommunityEvidenceRef | null {
+  const value = String(raw ?? "").trim();
+  const interaction = parseCommunityInteractionEvidenceRef(value);
+  if (interaction) {
+    return {
+      source_type: "interaction",
+      ref: value as CommunityInteractionEvidenceRef,
+      object_type: interaction.objectType,
+      object_id: interaction.objectId,
+    };
+  }
+  const resourceId = parseCommunityResourceEvidenceRef(value);
+  if (resourceId) {
+    return {
+      source_type: "resource",
+      ref: value as CommunityResourceEvidenceRef,
+      resource_id: resourceId,
+    };
+  }
+  const postId = parseCommunityAiFeedEvidenceRef(value);
+  if (postId) {
+    return {
+      source_type: "ai_feed",
+      ref: value as CommunityAiFeedEvidenceRef,
+      post_id: postId,
+    };
+  }
+  const sourceTraceId = parseCommunitySourceTraceEvidenceRef(value);
+  if (sourceTraceId) {
+    return {
+      source_type: "source_trace",
+      ref: value as CommunitySourceTraceEvidenceRef,
+      source_trace_id: sourceTraceId,
+    };
+  }
+  return null;
 }
 
 /**

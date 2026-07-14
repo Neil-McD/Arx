@@ -13,6 +13,12 @@ import {
   compilerStateForSourceTraceLifecycle,
   type SourceTraceCompilerState,
 } from "./communityCompilerEvidenceCore";
+import {
+  COMMUNITY_EVIDENCE_POLICY_VERSION,
+  captureCommunityEvidenceCitationsForSourceTracesCore,
+  requireCommunityEvidenceCitationVisibilityCore,
+  requireCommunityEvidenceCitationsActiveCore,
+} from "./communityEvidenceCitations";
 
 type ActorType = "member" | "admin" | "agent" | "compiler" | "system";
 type VisibilityScope = "private" | "admin" | "community" | "public";
@@ -108,6 +114,8 @@ type IntelligenceNodeRow = {
   workflowIds: string[];
   tags: string[];
   sourceTraceIds: any[];
+  evidenceCitationIds?: any[];
+  evidencePolicyVersion?: "citation_v1";
   outcomeObservationIds: any[];
   stalenessScore: number;
   retrievalUsefulnessScore: number;
@@ -136,6 +144,8 @@ type IntelligenceEdgeRow = {
   type: string;
   confidence: number;
   evidenceTraceIds: any[];
+  evidenceCitationIds?: any[];
+  evidencePolicyVersion?: "citation_v1";
   visibilityScope: VisibilityScope;
   createdByActorType: ActorType;
   createdByUserId?: any;
@@ -186,6 +196,8 @@ type IntelligenceChangeRequestRow = {
   operation: MutationOperation;
   status: ChangeRequestStatus;
   sourceTraceIds: any[];
+  evidenceCitationIds?: any[];
+  evidencePolicyVersion?: "citation_v1";
   outcomeObservationIds: any[];
   targetNodeIds: any[];
   targetEdgeIds: any[];
@@ -229,6 +241,12 @@ const POLYNET_OVERVIEW_STATUSES: NodeStatus[] = [
   "contested",
   "stale",
 ];
+const EVIDENCE_SENSITIVE_NODE_OPERATIONS = new Set<MutationOperation>([
+  "update_node",
+  "promote_status",
+  "update_confidence",
+  "update_visibility",
+]);
 const ACCEPTED_MEMORY_MAX_CANDIDATE_ROWS = 240;
 const ACCEPTED_MEMORY_MIN_CANDIDATE_ROWS = 48;
 const POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT = 80;
@@ -622,6 +640,16 @@ function mapTraceRow(row: SourceTraceRow) {
   };
 }
 
+function evidencePolicyLabel(args: {
+  evidencePolicyVersion?: "citation_v1";
+  sourceTraceIds?: any[];
+}): "citation_v1" | "legacy_unversioned" | "none" {
+  if (args.evidencePolicyVersion === COMMUNITY_EVIDENCE_POLICY_VERSION) {
+    return COMMUNITY_EVIDENCE_POLICY_VERSION;
+  }
+  return (args.sourceTraceIds ?? []).length > 0 ? "legacy_unversioned" : "none";
+}
+
 function mapNodeRow(row: IntelligenceNodeRow) {
   return {
     id: normalizeIdValue(row._id),
@@ -639,6 +667,8 @@ function mapNodeRow(row: IntelligenceNodeRow) {
     workflow_ids: row.workflowIds ?? [],
     tags: row.tags ?? [],
     source_trace_ids: (row.sourceTraceIds ?? []).map(normalizeIdValue),
+    evidence_citation_ids: (row.evidenceCitationIds ?? []).map(normalizeIdValue),
+    evidence_policy_version: evidencePolicyLabel(row),
     outcome_observation_ids: (row.outcomeObservationIds ?? []).map(normalizeIdValue),
     staleness_score: row.stalenessScore,
     retrieval_usefulness_score: row.retrievalUsefulnessScore,
@@ -668,6 +698,11 @@ function mapEdgeRow(row: IntelligenceEdgeRow) {
     type: row.type,
     confidence: row.confidence,
     evidence_trace_ids: (row.evidenceTraceIds ?? []).map(normalizeIdValue),
+    evidence_citation_ids: (row.evidenceCitationIds ?? []).map(normalizeIdValue),
+    evidence_policy_version: evidencePolicyLabel({
+      evidencePolicyVersion: row.evidencePolicyVersion,
+      sourceTraceIds: row.evidenceTraceIds,
+    }),
     visibility_scope: row.visibilityScope,
     created_by_actor_type: row.createdByActorType,
     created_by_user_id: row.createdByUserId ? normalizeIdValue(row.createdByUserId) : null,
@@ -988,6 +1023,8 @@ function mapCompactMemoryNode(row: IntelligenceNodeRow) {
     grade: communityMemoryGrade(row.status),
     confidence: row.confidence,
     evidence_strength: row.evidenceStrength,
+    evidence_citation_ids: (row.evidenceCitationIds ?? []).map(normalizeIdValue),
+    evidence_policy_version: evidencePolicyLabel(row),
     applies_when: row.appliesWhen ?? null,
     tags: row.tags ?? [],
     updated_at: toIsoString(row.updatedAt),
@@ -1011,6 +1048,8 @@ function mapChangeRequestRow(row: IntelligenceChangeRequestRow) {
     operation: row.operation,
     status: row.status,
     source_trace_ids: (row.sourceTraceIds ?? []).map(normalizeIdValue),
+    evidence_citation_ids: (row.evidenceCitationIds ?? []).map(normalizeIdValue),
+    evidence_policy_version: evidencePolicyLabel(row),
     outcome_observation_ids: (row.outcomeObservationIds ?? []).map(normalizeIdValue),
     target_node_ids: (row.targetNodeIds ?? []).map(normalizeIdValue),
     target_edge_ids: (row.targetEdgeIds ?? []).map(normalizeIdValue),
@@ -1731,13 +1770,23 @@ async function insertChangeRequest(args: {
 }): Promise<any> {
   const targetNodeIds = args.targetNodeIds ?? [];
   const targetEdgeIds = args.targetEdgeIds ?? [];
+  const sourceTraceIds = args.sourceTraceIds ?? [];
+  const evidenceCitationIds = await captureCommunityEvidenceCitationsForSourceTracesCore({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    sourceTraceIds,
+    actorType: args.actorType,
+    capturedAt: args.nowMs,
+  });
   const targetNodeSnapshots = await getNodeSnapshots(args.ctx, args.communityId, targetNodeIds);
   const targetEdgeSnapshots = await getEdgeSnapshots(args.ctx, args.communityId, targetEdgeIds);
   return await args.ctx.db.insert("communityIntelligenceChangeRequests" as any, {
     communityId: args.communityId,
     operation: args.operation,
     status: "pending_decision",
-    sourceTraceIds: args.sourceTraceIds ?? [],
+    sourceTraceIds,
+    evidenceCitationIds,
+    evidencePolicyVersion: COMMUNITY_EVIDENCE_POLICY_VERSION,
     outcomeObservationIds: args.outcomeObservationIds ?? [],
     targetNodeIds,
     targetEdgeIds,
@@ -2744,11 +2793,54 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
     throw new Error("community_intelligence_change_request_must_be_accepted");
   }
   const actor = normalizePolicyDecisionActor(args.actor);
+  const payload = payloadObject(changeRequest.requestedPayload);
   await requireChangeRequestReferencesAllowedForApply(args.ctx, changeRequest);
+  const evidenceCitationIds = changeRequest.evidenceCitationIds ?? [];
+  if (
+    (changeRequest.sourceTraceIds ?? []).length > 0 &&
+    (changeRequest.evidencePolicyVersion !== COMMUNITY_EVIDENCE_POLICY_VERSION ||
+      evidenceCitationIds.length === 0)
+  ) {
+    throw new Error("community_evidence_citation_review_required");
+  }
+  if (changeRequest.evidencePolicyVersion === COMMUNITY_EVIDENCE_POLICY_VERSION) {
+    await requireCommunityEvidenceCitationsActiveCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      citationIds: evidenceCitationIds,
+    });
+  }
+  if (
+    evidenceCitationIds.length === 0 &&
+    (payload.evidenceStrength === "observed" ||
+      payload.evidenceStrength === "measured" ||
+      payload.evidenceStrength === "validated")
+  ) {
+    throw new Error("community_evidence_citation_required");
+  }
   await requireChangeRequestTargetsCurrent(args.ctx, changeRequest);
+  if (EVIDENCE_SENSITIVE_NODE_OPERATIONS.has(changeRequest.operation)) {
+    for (const nodeId of changeRequest.targetNodeIds ?? []) {
+      const node = await getIntelligenceNodeOrThrow(args.ctx, nodeId);
+      const nodeCitationIds = node.evidenceCitationIds ?? [];
+      if (
+        (node.sourceTraceIds ?? []).length > 0 &&
+        (node.evidencePolicyVersion !== COMMUNITY_EVIDENCE_POLICY_VERSION ||
+          nodeCitationIds.length === 0)
+      ) {
+        throw new Error("community_evidence_citation_review_required");
+      }
+      if (node.evidencePolicyVersion === COMMUNITY_EVIDENCE_POLICY_VERSION) {
+        await requireCommunityEvidenceCitationsActiveCore({
+          ctx: args.ctx,
+          communityId: changeRequest.communityId,
+          citationIds: nodeCitationIds,
+        });
+      }
+    }
+  }
 
   const nowMs = args.nowMs ?? Date.now();
-  const payload = payloadObject(changeRequest.requestedPayload);
   let appliedMutationId: any = undefined;
   let appliedNodeIds = changeRequest.targetNodeIds ?? [];
   let appliedEdgeIds = changeRequest.targetEdgeIds ?? [];
@@ -2759,6 +2851,18 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       status,
       requestedVisibility: payloadVisibility(payload.visibilityScope),
       requestedSourceVisibility: payloadSourceVisibility(payload.sourceVisibility),
+    });
+    await requireCommunityEvidenceCitationVisibilityCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      citationIds: evidenceCitationIds,
+      outputVisibility: nodeVisibility.visibilityScope,
+    });
+    await requireCommunityEvidenceCitationVisibilityCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      citationIds: evidenceCitationIds,
+      outputVisibility: nodeVisibility.sourceVisibility,
     });
     const nodeId = await args.ctx.db.insert("communityIntelligenceNodes" as any, {
       communityId: changeRequest.communityId,
@@ -2775,6 +2879,8 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       workflowIds: normalizeStringList(payload.workflowIds, 50, 256),
       tags: normalizeStringList(payload.tags, 50, 80),
       sourceTraceIds: changeRequest.sourceTraceIds ?? [],
+      evidenceCitationIds,
+      evidencePolicyVersion: COMMUNITY_EVIDENCE_POLICY_VERSION,
       outcomeObservationIds: changeRequest.outcomeObservationIds ?? [],
       stalenessScore: clampScore(payload.stalenessScore, 0),
       retrievalUsefulnessScore: clampScore(payload.retrievalUsefulnessScore, 0),
@@ -2840,6 +2946,13 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
     const edgeType =
       typeof payload.type === "string" && EDGE_TYPES.has(payload.type) ? payload.type : undefined;
     if (!edgeType) throw new Error("community_intelligence_edge_type_required");
+    const edgeVisibility = payloadVisibility(payload.visibilityScope) ?? "community";
+    await requireCommunityEvidenceCitationVisibilityCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      citationIds: evidenceCitationIds,
+      outputVisibility: edgeVisibility,
+    });
     const edgeId = await args.ctx.db.insert("communityIntelligenceEdges" as any, {
       communityId: changeRequest.communityId,
       fromNodeId,
@@ -2849,7 +2962,9 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       type: edgeType,
       confidence: clampScore(payload.confidence, changeRequest.confidence),
       evidenceTraceIds: changeRequest.sourceTraceIds ?? [],
-      visibilityScope: payloadVisibility(payload.visibilityScope) ?? "community",
+      evidenceCitationIds,
+      evidencePolicyVersion: COMMUNITY_EVIDENCE_POLICY_VERSION,
+      visibilityScope: edgeVisibility,
       createdByActorType: actor.actorType,
       ...actorUserPatch(actor, "createdByUserId", "createdByAgentKey"),
       ...(typeof payload.compilerRunId === "string"
@@ -2888,6 +3003,38 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       changeRequest.operation === "attach_evidence"
         ? Array.from(new Set([...(existing.sourceTraceIds ?? []), ...(changeRequest.sourceTraceIds ?? [])]))
         : existing.sourceTraceIds ?? [];
+    const requestTraceIds = new Set((changeRequest.sourceTraceIds ?? []).map(normalizeIdValue));
+    const requestRecapturesAllExistingTraces = (existing.sourceTraceIds ?? []).every((traceId) =>
+      requestTraceIds.has(normalizeIdValue(traceId)),
+    );
+    const nextEvidenceCitationIds =
+      changeRequest.operation === "attach_evidence"
+        ? requestRecapturesAllExistingTraces
+          ? evidenceCitationIds
+          : Array.from(
+              new Set([...(existing.evidenceCitationIds ?? []), ...evidenceCitationIds]),
+            )
+        : existing.evidenceCitationIds ?? [];
+    if (
+      changeRequest.operation === "attach_evidence" &&
+      !requestRecapturesAllExistingTraces &&
+      existing.evidencePolicyVersion === COMMUNITY_EVIDENCE_POLICY_VERSION
+    ) {
+      await requireCommunityEvidenceCitationsActiveCore({
+        ctx: args.ctx,
+        communityId: changeRequest.communityId,
+        citationIds: existing.evidenceCitationIds ?? [],
+      });
+    }
+    const effectiveEvidenceCitationIds = Array.from(
+      new Set([...nextEvidenceCitationIds, ...evidenceCitationIds]),
+    );
+    const nextEvidencePolicyVersion =
+      existing.evidencePolicyVersion === COMMUNITY_EVIDENCE_POLICY_VERSION ||
+      ((existing.sourceTraceIds ?? []).length === 0 && evidenceCitationIds.length > 0) ||
+      (changeRequest.operation === "attach_evidence" && requestRecapturesAllExistingTraces)
+        ? COMMUNITY_EVIDENCE_POLICY_VERSION
+        : undefined;
     const nextOutcomeIds =
       changeRequest.operation === "attach_outcome"
         ? Array.from(new Set([...(existing.outcomeObservationIds ?? []), ...(changeRequest.outcomeObservationIds ?? [])]))
@@ -2906,12 +3053,26 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       requestedVisibility: payloadVisibility(payload.visibilityScope) ?? existing.visibilityScope,
       requestedSourceVisibility: payloadSourceVisibility(payload.sourceVisibility) ?? existing.sourceVisibility,
     });
+    await requireCommunityEvidenceCitationVisibilityCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      citationIds: effectiveEvidenceCitationIds,
+      outputVisibility: nodeVisibility.visibilityScope,
+    });
+    await requireCommunityEvidenceCitationVisibilityCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      citationIds: effectiveEvidenceCitationIds,
+      outputVisibility: nodeVisibility.sourceVisibility,
+    });
     const patch: Record<string, unknown> = {
       updatedAt: nowMs,
       version: Number(existing.version ?? 1) + 1,
       lastUpdatedByActorType: actor.actorType,
       ...actorUserPatch(actor, "lastUpdatedByUserId", "lastUpdatedByAgentKey"),
       sourceTraceIds: nextSourceTraceIds,
+      evidenceCitationIds: nextEvidenceCitationIds,
+      ...(nextEvidencePolicyVersion ? { evidencePolicyVersion: nextEvidencePolicyVersion } : {}),
       outcomeObservationIds: nextOutcomeIds,
     };
     if (payload.title !== undefined) {

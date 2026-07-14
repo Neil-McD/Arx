@@ -587,9 +587,11 @@ function sanitizeCommunitySearchItem(raw: unknown) {
   const sourceType = normalizeString(row.source_type, 32)?.toLowerCase();
   return {
     source_type:
-      sourceType === "chat" || sourceType === "ai_feed" || sourceType === "resource"
+      sourceType === "interaction" || sourceType === "chat" || sourceType === "ai_feed" || sourceType === "resource"
         ? sourceType
         : "resource",
+    ref: normalizeString(row.ref, 512),
+    source_id: normalizeString(row.source_id, 512),
     title: normalizeString(row.title, 180),
     snippet,
     created_at: normalizeString(row.created_at, 64),

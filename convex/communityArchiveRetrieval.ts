@@ -4,7 +4,11 @@ import type { ArchiveDocLike } from "./communityArchiveDocuments";
 import { normalizeOptionalText, truncateText } from "./communityArchiveDocuments";
 import { embedGeminiQuery, resolveGeminiEmbeddingConfig } from "./communityArchiveEmbeddingPipeline";
 import { ARCHIVE_VECTOR_LIMIT } from "./communityArchiveShared";
-import { buildCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract";
+import {
+  buildCommunityAiFeedEvidenceRef,
+  buildCommunityInteractionEvidenceRef,
+  buildCommunityResourceEvidenceRef,
+} from "../shared/communityEvidenceContract";
 
 async function resolveTrustedSearchUserId(args: {
   ctx: any;
@@ -37,11 +41,17 @@ function mapArchiveDocToItem(doc: ArchiveDocLike, score: number | null) {
         objectType: interactionMatch[1] as "root" | "reply",
         objectId: interactionMatch[2],
       })
-    : doc.sourceId;
+    : doc.sourceType === "resource"
+      ? buildCommunityResourceEvidenceRef(doc.sourceId)
+      : doc.sourceType === "ai_feed"
+        ? buildCommunityAiFeedEvidenceRef(doc.sourceId)
+        : doc.sourceId;
   return {
     source_type: doc.sourceType,
     source_id: sourceId,
-    ...(doc.sourceType === "interaction" ? { ref: sourceId } : null),
+    ...(doc.sourceType === "interaction" || doc.sourceType === "resource" || doc.sourceType === "ai_feed"
+      ? { ref: sourceId }
+      : null),
     title: normalizeOptionalText(doc.title, 180),
     snippet: doc.snippet,
     created_at: toIsoString(doc.createdAt),
@@ -53,6 +63,11 @@ function mapArchiveDocToItem(doc: ArchiveDocLike, score: number | null) {
     ...(doc.resourceRole ? { resource_role: doc.resourceRole } : null),
     ...(doc.resourceStatus ? { resource_status: doc.resourceStatus } : null),
   };
+}
+
+function canonicalEvidenceItemKey(item: Record<string, any>): string {
+  const ref = String(item.ref ?? "").trim();
+  return ref || `${String(item.source_type ?? "")}:${String(item.source_id ?? "")}`;
 }
 
 export async function searchCommunityKnowledge(args: {
@@ -145,7 +160,7 @@ export async function searchCommunityKnowledge(args: {
 
     const seenRecent = new Set<string>(
       Array.isArray((recent as any).recent_context)
-        ? (recent as any).recent_context.map((item: any) => `${item.source_type}:${item.source_id}`)
+        ? (recent as any).recent_context.map((item: any) => canonicalEvidenceItemKey(item))
         : [],
     );
     const orderedDocs = docs
@@ -157,33 +172,53 @@ export async function searchCommunityKnowledge(args: {
             Number(scoreById.get(normalizeIdValue(a._id)) ?? 0) ||
           b.createdAt - a.createdAt,
       );
-    const interactionRefs = orderedDocs
-      .filter((doc) => doc.sourceType === "interaction")
-      .map((doc) => String(mapArchiveDocToItem(doc, null).source_id));
-    const readableInteractionItems = interactionRefs.length > 0
-      ? ((await args.ctx.runQuery(
-          (internal as any).communityInteractionEvidence.readCommunityInteractionEvidenceItemsInternal,
-          {
-            userId,
-            communityId: args.communityId,
-            refs: interactionRefs,
-          },
-        )) as Array<Record<string, any>>)
-      : [];
-    const readableInteractionByRef = new Map(
-      readableInteractionItems.map((item) => [String(item.ref ?? ""), item]),
+    const refsBySourceType = {
+      interaction: orderedDocs
+        .filter((doc) => doc.sourceType === "interaction")
+        .map((doc) => String(mapArchiveDocToItem(doc, null).ref ?? "")),
+      resource: orderedDocs
+        .filter((doc) => doc.sourceType === "resource")
+        .map((doc) => String(mapArchiveDocToItem(doc, null).ref ?? "")),
+      ai_feed: orderedDocs
+        .filter((doc) => doc.sourceType === "ai_feed")
+        .map((doc) => String(mapArchiveDocToItem(doc, null).ref ?? "")),
+    };
+    const [readableInteractionItems, readableResourceItems, readableAiFeedItems] = await Promise.all([
+      refsBySourceType.interaction.length > 0
+        ? args.ctx.runQuery(
+            (internal as any).communityInteractionEvidence.readCommunityInteractionEvidenceItemsInternal,
+            { userId, communityId: args.communityId, refs: refsBySourceType.interaction },
+          )
+        : [],
+      refsBySourceType.resource.length > 0
+        ? args.ctx.runQuery(
+            (internal as any).communityResourceEvidence.readCommunityResourceEvidenceItemsInternal,
+            { userId, communityId: args.communityId, refs: refsBySourceType.resource },
+          )
+        : [],
+      refsBySourceType.ai_feed.length > 0
+        ? args.ctx.runQuery(
+            (internal as any).communityAiFeedEvidence.readCommunityAiFeedEvidenceItemsInternal,
+            { userId, communityId: args.communityId, refs: refsBySourceType.ai_feed },
+          )
+        : [],
+    ]) as [Array<Record<string, any>>, Array<Record<string, any>>, Array<Record<string, any>>];
+    const readableByRef = new Map(
+      [...readableInteractionItems, ...readableResourceItems, ...readableAiFeedItems].map((item) => [
+        String(item.ref ?? ""),
+        item,
+      ]),
     );
     const archiveItems = orderedDocs
       .map((doc) => {
         const score = Number(scoreById.get(normalizeIdValue(doc._id)) ?? 0);
         const basicItem = mapArchiveDocToItem(doc, score);
-        const item = doc.sourceType === "interaction"
-          ? readableInteractionByRef.get(String(basicItem.source_id))
-          : basicItem;
+        const item = readableByRef.get(String(basicItem.ref ?? ""));
         if (!item) return null;
+        const itemWithScore: Record<string, any> = { ...item, score };
         return {
-          key: `${item.source_type}:${item.source_id}`,
-          item: doc.sourceType === "interaction" ? { ...item, score } : item,
+          key: canonicalEvidenceItemKey(item),
+          item: itemWithScore,
         };
       })
       .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
