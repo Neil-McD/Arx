@@ -128,6 +128,7 @@ export type RuntimeTurnResolution = {
   runtimeCommunityOneLiner: string | null;
   runtimeCommunityAbout: string | null;
   runtimeCommunitySystemPrompt: string | null;
+  runtimeCommunityOnboardingInstructions: string | null;
   runtimeCommunityLensAuthority: CommunityLensAuthority | null;
   runtimeProjectId: string | null;
   runtimeSandboxMode: "sandbox_write" | "workspace_write" | undefined;
@@ -690,6 +691,32 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     }
   }
 
+  let runtimeCommunityOnboardingInstructions: string | null = null;
+  if (
+    invocationSurface === "member_agent_dock" &&
+    memberAgentSurfaceContext?.kind === "community" &&
+    runtimeCommunityId
+  ) {
+    try {
+      const onboardingGuidance = (await ctx.runQuery(
+        (internal as any).communityOnboarding.resolveActivePersonalAgentGuidanceInternal,
+        {
+          userId: actor.dbUserId,
+          communityId: runtimeCommunityId as any,
+        },
+      )) as { instructions?: unknown } | null;
+      runtimeCommunityOnboardingInstructions =
+        String(onboardingGuidance?.instructions ?? "").trim() || null;
+    } catch (error) {
+      console.warn("runtime_community_onboarding_guidance_resolution_failed", {
+        requestId,
+        threadId: String(ownedThread._id),
+        communityId: runtimeCommunityId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   const runtimeProjectId = String(ownedThread.projectId ?? "").trim() || null;
   const resolvedRuntimeCapabilityFamilies = restrictCapabilityFamiliesForInvocationSurface({
     invocationSurface,
@@ -746,6 +773,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeCommunityOneLiner,
       runtimeCommunityAbout,
       runtimeCommunitySystemPrompt,
+      runtimeCommunityOnboardingInstructions,
       runtimeCommunityLensAuthority,
       runtimeProjectId,
       runtimeSandboxMode: resolvedRuntimeCapabilityFamilies.includes("workspace_tools")

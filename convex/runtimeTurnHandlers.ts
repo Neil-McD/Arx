@@ -721,6 +721,7 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeCommunityOneLiner,
       runtimeCommunityAbout,
       runtimeCommunitySystemPrompt,
+      runtimeCommunityOnboardingInstructions,
       runtimeCommunityLensAuthority,
       runtimeProjectId,
       runtimeSandboxMode,
@@ -2061,6 +2062,7 @@ export async function handleRuntimeTurnRequest(args: {
             communityOneLiner: runtimeCommunityOneLiner,
             communityAbout: runtimeCommunityAbout,
             communitySystemPrompt: runtimeCommunitySystemPrompt,
+            communityOnboardingInstructions: runtimeCommunityOnboardingInstructions,
             communityLensAuthority: runtimeCommunityLensAuthority,
             agentName: runtimeAgentProfile.agentName,
             agentSoul: runtimeAgentProfile.agentSoul,
@@ -2853,6 +2855,7 @@ export async function handleRuntimeTurnRequest(args: {
               communityOneLiner: runtimeCommunityOneLiner,
               communityAbout: runtimeCommunityAbout,
               communitySystemPrompt: runtimeCommunitySystemPrompt,
+              communityOnboardingInstructions: runtimeCommunityOnboardingInstructions,
               communityLensAuthority: runtimeCommunityLensAuthority,
               communityContextVersion: runtimeCommunityId
                 ? runtimeCommunityContextVersion
@@ -3154,6 +3157,7 @@ export async function handleRuntimeTurnRequest(args: {
           communityOneLiner: runtimeCommunityOneLiner,
           communityAbout: runtimeCommunityAbout,
           communitySystemPrompt: runtimeCommunitySystemPrompt,
+          communityOnboardingInstructions: runtimeCommunityOnboardingInstructions,
           communityLensAuthority: runtimeCommunityLensAuthority,
           communityContextVersion: runtimeCommunityId
             ? runtimeCommunityContextVersion
@@ -3329,6 +3333,7 @@ export async function handleRuntimeTurnRequest(args: {
           communityOneLiner: runtimeCommunityOneLiner,
           communityAbout: runtimeCommunityAbout,
           communitySystemPrompt: runtimeCommunitySystemPrompt,
+          communityOnboardingInstructions: runtimeCommunityOnboardingInstructions,
           communityLensAuthority: runtimeCommunityLensAuthority,
           agentName: runtimeAgentProfile.agentName,
           agentSoul: runtimeAgentProfile.agentSoul,

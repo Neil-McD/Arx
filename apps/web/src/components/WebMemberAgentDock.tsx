@@ -38,6 +38,7 @@ import {
   describeMemberAgentSurface,
   type MemberAgentSurfaceContextV1,
 } from "../../../../shared/memberAgentSurfaceContext";
+import { shouldPresentCommunityOnboardingAgentStep } from "../../../../shared/communityOnboarding";
 import { useWebTurnRunnerController } from "../../../../shared/useWebTurnRunnerController";
 import type {
   InferenceIssueModalState,
@@ -45,6 +46,8 @@ import type {
   ThreadStreamingState,
 } from "../../../../shared/webTurnRunnerCore";
 import { RuntimeLiveTimeline } from "./RuntimeLiveTimeline";
+import { WebCommunityOnboardingAgentGuide } from "./WebCommunityOnboardingAgentGuide";
+import { useWebCommunityOnboarding } from "./WebCommunityOnboardingController";
 import "./WebMemberAgentDock.css";
 
 type MemberAgentMessage = Omit<CloudMessageTransportRow, "role"> & {
@@ -65,6 +68,7 @@ type WebMemberAgentDockProps = {
   isVisible: boolean;
   mobileShellActive?: boolean;
   mobileRoot?: boolean;
+  onRequestOpen?: () => void;
   communityId: string | null;
   communityName: string | null;
   surfaceContext: MemberAgentSurfaceContextV1 | null;
@@ -104,6 +108,7 @@ function formatInferenceIssue(issue: InferenceIssueModalState | null): string | 
 }
 
 export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
+  const onboarding = useWebCommunityOnboarding();
   const [isOpen, setIsOpen] = useState(false);
   const isOpenSurface = props.mobileShellActive
     ? Boolean(props.mobileRoot)
@@ -123,6 +128,9 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   >({});
   const [, setRuntimeEventsByRunId] = useState<Record<string, ThreadStreamingRuntimeEvent[]>>({});
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const onboardingOpenedSessionIdsRef = useRef(new Set<string>());
+  const onboardingFocusSessionIdRef = useRef<string | null>(null);
   const retryRef = useRef<{ text: string; messageId: string } | null>(null);
   const activeThreadKeyRef = useRef<string | null>(null);
   const activeThreadContextRef = useRef<ActiveThreadContext | null>(null);
@@ -314,6 +322,68 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const turnIsActive = isSending || Boolean(streamingState);
   const visibleMessages = messages.filter((message) => message.role !== "system");
   const dockError = localError ?? formatInferenceIssue(inferenceIssue);
+  const onboardingSession = onboarding?.activeSession ?? null;
+  const showOnboardingAgentGuide = Boolean(
+    props.communityId &&
+    props.communityName &&
+    onboardingSession?.community_id === props.communityId &&
+    shouldPresentCommunityOnboardingAgentStep(onboardingSession),
+  );
+  const onboardingDescriptionId = "community-onboarding-agent-description";
+
+  useEffect(() => {
+    if (
+      !showOnboardingAgentGuide ||
+      !onboardingSession ||
+      !props.isVisible ||
+      onboardingOpenedSessionIdsRef.current.has(onboardingSession.id)
+    ) {
+      return;
+    }
+    onboardingOpenedSessionIdsRef.current.add(onboardingSession.id);
+    onboardingFocusSessionIdRef.current = onboardingSession.id;
+    if (props.mobileShellActive) {
+      props.onRequestOpen?.();
+      return;
+    }
+    setIsOpen(true);
+  }, [
+    onboardingSession,
+    props.isVisible,
+    props.mobileShellActive,
+    props.onRequestOpen,
+    showOnboardingAgentGuide,
+  ]);
+
+  useEffect(() => {
+    if (
+      !showOnboardingAgentGuide ||
+      !onboardingSession ||
+      onboardingFocusSessionIdRef.current !== onboardingSession.id ||
+      !isOpenSurface ||
+      !threadKey ||
+      turnIsActive ||
+      isPreparing ||
+      isStartingNewChat
+    ) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea || textarea.disabled || !document.contains(textarea)) return;
+      textarea.focus({ preventScroll: true });
+      onboardingFocusSessionIdRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    isOpenSurface,
+    isPreparing,
+    isStartingNewChat,
+    onboardingSession,
+    showOnboardingAgentGuide,
+    threadKey,
+    turnIsActive,
+  ]);
 
   const observeThreadContext = useCallback((communityId: string | null, contextVersion: number) => {
     const next = {
@@ -575,13 +645,13 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
 
   return (
     <aside
-      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}`}
+      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${showOnboardingAgentGuide ? " is-onboarding" : ""}`}
       aria-live="polite"
     >
       {!props.mobileShellActive ? (
         <button
           type="button"
-          className={`member-agent-dock-launcher${turnIsActive ? " is-working" : ""}`}
+          className={`member-agent-dock-launcher${turnIsActive ? " is-working" : ""}${showOnboardingAgentGuide ? " is-onboarding" : ""}`}
           onClick={() => setIsOpen((open) => !open)}
           aria-label={isOpen ? "Close your agent" : "Open your agent"}
           title={isOpen ? "Close your agent" : "Open your agent"}
@@ -688,42 +758,58 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
           {dockError ? <p className="member-agent-dock-error">{dockError}</p> : null}
         </div>
 
-        <form className="member-agent-dock-composer" onSubmit={submit}>
-          <textarea
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                event.currentTarget.form?.requestSubmit();
-              }
-            }}
-            placeholder={`Message your agent in ${surfaceLabel}`}
-            aria-label="Message your agent"
-            rows={1}
-            maxLength={8000}
-            disabled={turnIsActive || isPreparing || isStartingNewChat}
-          />
-          {turnIsActive && threadKey ? (
-            <button
-              type="button"
-              onClick={() => stopStreamingTurn(threadKey)}
-              aria-label="Stop"
-              title="Stop"
-            >
-              <Square aria-hidden="true" />
-            </button>
-          ) : (
-            <button
-              type="submit"
-              disabled={!input.trim() || isPreparing || isStartingNewChat}
-              aria-label="Send"
-              title="Send"
-            >
-              <Send aria-hidden="true" />
-            </button>
-          )}
-        </form>
+        <div className="member-agent-dock-composer-stack">
+          {showOnboardingAgentGuide && props.communityName && onboarding ? (
+            <WebCommunityOnboardingAgentGuide
+              communityName={props.communityName}
+              descriptionId={onboardingDescriptionId}
+              isPending={onboarding.pendingAction !== null}
+              error={onboarding.error}
+              onDismiss={onboarding.dismiss}
+            />
+          ) : null}
+          <form
+            className={`member-agent-dock-composer${showOnboardingAgentGuide ? " is-onboarding" : ""}`}
+            onSubmit={submit}
+          >
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+              placeholder={`Message your agent in ${surfaceLabel}`}
+              aria-label="Message your agent"
+              aria-describedby={showOnboardingAgentGuide ? onboardingDescriptionId : undefined}
+              rows={1}
+              maxLength={8000}
+              disabled={turnIsActive || isPreparing || isStartingNewChat}
+            />
+            {turnIsActive && threadKey ? (
+              <button
+                type="button"
+                onClick={() => stopStreamingTurn(threadKey)}
+                aria-label="Stop"
+                title="Stop"
+              >
+                <Square aria-hidden="true" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!input.trim() || isPreparing || isStartingNewChat}
+                aria-label="Send"
+                title="Send"
+              >
+                <Send aria-hidden="true" />
+              </button>
+            )}
+          </form>
+        </div>
       </section>
     </aside>
   );

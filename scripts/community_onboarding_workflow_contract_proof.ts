@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import {
   buildCommunityOnboardingMilestonePatch,
   deriveCommunityOnboardingPhase,
+  shouldPresentCommunityOnboardingAgentStep,
   shouldPresentCommunityOnboardingFirstPost,
   shouldPresentCommunityOnboardingOrientation,
   type CommunityOnboardingMilestone,
@@ -18,12 +19,18 @@ const conciergeIntake = read("convex/communityAgentConciergeCore.ts");
 const conciergeWorker = read("convex/communityAgentServeWorker.ts");
 const interactions = read("convex/communityInteractions.ts");
 const runtime = read("convex/runtimeTurnHandlers.ts");
+const runtimeResolution = read("convex/runtimeTurnResolution.ts");
+const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
+const runtimePrompt = read("shared/runtimePrompt.ts");
+const runtimeManifest = read("shared/runtimeContextManifest.ts");
+const codexWorkerBridge = read("convex/polynetCodexWorkerBridge.ts");
 const settings = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
 const workflowUi = read("apps/web/src/components/WebCommunityOnboardingWorkflowSection.tsx");
 const communityHost = read("apps/web/src/components/WebCommunityHost.tsx");
 const onboardingController = read("apps/web/src/components/WebCommunityOnboardingController.tsx");
 const orientationModal = read("apps/web/src/components/WebCommunityOnboardingOrientationModal.tsx");
 const firstPostGuide = read("apps/web/src/components/WebCommunityOnboardingFirstPostGuide.tsx");
+const agentGuide = read("apps/web/src/components/WebCommunityOnboardingAgentGuide.tsx");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const app = read("apps/web/src/App.tsx");
 const personalDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
@@ -46,6 +53,9 @@ assert.equal(shouldPresentCommunityOnboardingOrientation({ status: "dismissed", 
 assert.equal(shouldPresentCommunityOnboardingFirstPost({ status: "active", phase: "first_community_post" }), true);
 assert.equal(shouldPresentCommunityOnboardingFirstPost({ status: "active", phase: "first_agent_dock_turn" }), false);
 assert.equal(shouldPresentCommunityOnboardingFirstPost({ status: "completed", phase: "first_community_post" }), false);
+assert.equal(shouldPresentCommunityOnboardingAgentStep({ status: "active", phase: "first_agent_dock_turn" }), true);
+assert.equal(shouldPresentCommunityOnboardingAgentStep({ status: "active", phase: "first_community_post" }), false);
+assert.equal(shouldPresentCommunityOnboardingAgentStep({ status: "dismissed", phase: "first_agent_dock_turn" }), false);
 session = advance(session, "opened", 10);
 assert.equal(session.openedAt, 10);
 session = advance(session, "opened", 20);
@@ -97,12 +107,29 @@ assert.doesNotMatch(onboardingCore, /\.collect\(\)/, "onboarding reads must rema
 
 assert.match(onboarding, /completeMyCommunityOnboardingOrientation/);
 assert.match(onboarding, /recordPersonalAgentDockTurnInternal/);
+assert.match(onboarding, /resolveActivePersonalAgentGuidanceInternal/);
+assert.match(onboarding, /deriveCommunityOnboardingPhase\(/);
+assert.match(onboarding, /\}\) !== "first_agent_dock_turn"/);
 assert.match(onboarding, /status: "dismissed"/);
 assert.doesNotMatch(onboarding, /communityAgent|Concierge|runChatgpt|provider/i);
 assert.match(interactions, /milestone: "first_community_post"/);
 assert.match(runtime, /invocationSurface !== "member_agent_dock"/);
 assert.match(runtime, /memberAgentSurfaceContext\?\.kind !== "community"/);
 assert.match(runtime, /recordPersonalAgentDockTurnInternal/);
+assert.match(runtimeResolution, /resolveActivePersonalAgentGuidanceInternal/);
+assert.match(runtimeResolution, /memberAgentSurfaceContext\?\.kind === "community"/);
+assert.match(runtimeResolution, /runtimeCommunityOnboardingInstructions/);
+assert.doesNotMatch(
+  runtimeResolution.slice(runtimeResolution.indexOf("export type RuntimeTurnInput"), runtimeResolution.indexOf("export type PublicTurnInput")),
+  /onboarding/i,
+  "the browser turn payload must not supply onboarding system guidance",
+);
+assert.match(runtimePrompt, /MEMBER_ONBOARDING_GUIDANCE/);
+assert.match(runtimePrompt, /grants no tools, data, permissions, or authority/);
+assert.match(runtimePrompt, /id: "community_onboarding_guidance"/);
+assert.match(runtimeManifest, /id: "community_onboarding_guidance"/);
+assert.match(runtimeAgentLoop, /communityOnboardingInstructions: params\.communityOnboardingInstructions/);
+assert.match(codexWorkerBridge, /communityOnboardingInstructions: params\.communityOnboardingInstructions/);
 
 assert.doesNotMatch(conciergeIntake, /communityOnboarding|onboardingSession|requestMode/);
 assert.doesNotMatch(conciergeWorker, /communityOnboarding|onboardingSession|community_concierge/);
@@ -112,13 +139,17 @@ assert.equal(
   "the discarded custom Concierge transcript must remain deleted",
 );
 assert.equal(existsSync("convex/communityAgentDockCore.ts"), false);
-assert.doesNotMatch(personalDock, /communityOnboarding|CommunityOnboarding|communityAgentDock/);
+assert.match(personalDock, /shouldPresentCommunityOnboardingAgentStep/);
+assert.match(personalDock, /WebCommunityOnboardingAgentGuide/);
+assert.match(personalDock, /onboardingOpenedSessionIdsRef/);
+assert.match(personalDock, /textareaRef/);
+assert.match(personalDock, /aria-describedby/);
 
 assert.match(settings, /"community", "workflows", "integrations"/);
 assert.match(workflowUi, /Existing members are not backfilled/);
 assert.match(workflowUi, /Personal agent guidance/);
-assert.match(communityHost, /WebCommunityOnboardingController/);
-assert.match(communityHost, /onOrientationCompleted/);
+assert.doesNotMatch(communityHost, /WebCommunityOnboardingController/);
+assert.match(communityHost, /firstPostFocusRequest/);
 assert.match(communityHost, /onSelectCommunityTab\?\.\("chat"\)/);
 assert.match(communityHost, /chatInputRef\.current/);
 assert.match(onboardingController, /subscribeCloudCommunityOnboardingSession/);
@@ -146,5 +177,12 @@ assert.match(chatPanel, /WebCommunityOnboardingFirstPostGuide/);
 assert.match(chatPanel, /is-onboarding-first-post/);
 assert.match(chatPanel, /aria-describedby/);
 assert.match(app, /onSelectCommunityTab: handleSelectCommunityTab/);
+assert.match(app, /<WebCommunityOnboardingController/);
+assert.match(app, /onOrientationCompleted=\{handleCommunityOnboardingOrientationCompleted\}/);
+assert.match(app, /onRequestOpen=\{\(\) => handleSelectMobileRootPage\("agent"\)\}/);
+assert.match(agentGuide, /Ask your agent for your next move/);
+assert.match(agentGuide, /It already has \{props\.communityName\} context/);
+assert.match(agentGuide, /Skip onboarding/);
+assert.doesNotMatch(agentGuide, /setInput|startNewCloudMemberAgentGlobalEpisode|runAgentTurn/);
 
 console.log("PASS: onboarding is activation-bound, milestone-driven, and personal-agent scoped.");

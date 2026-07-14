@@ -47,6 +47,20 @@ It never prefills or intercepts the draft. Only the canonical successful post or
 reply mutation advances the session to `first_agent_dock_turn`; failed and local
 drafts do not.
 
+During `first_agent_dock_turn`, the existing member-owned agent dock opens once
+for the session and focuses its canonical composer after the private channel is
+ready. A compact final-step guide explains that the agent has the current
+community lens and offers the same persistent skip action. The guide never
+prefills a draft, starts a new episode, or creates proactive inference.
+
+For that phase only, runtime resolution loads the activation-snapshotted
+personal-agent guidance by authenticated member and server-validated community.
+It is injected as bounded community-owned context below platform policy and the
+member's agent identity. The browser cannot supply or elevate it, and it grants
+no data, tools, permissions, or transcript access. A successful private agent
+turn records `firstAgentDockTurnAt` and completes the session; a failed turn
+leaves the phase active for retry.
+
 ## Status
 
 `active -> completed`
@@ -69,4 +83,5 @@ welcome artifact to deliver.
 
 No generic workflow graph, arbitrary triggers, public welcome, admin transcript,
 community-funded onboarding inference, onboarding-specific member ontology lens,
-composer inference, backfill, or agent-dock spotlight exists in this slice.
+composer inference, backfill, generated prompt suggestions, onboarding-only
+conversation, or proactive agent greeting exists in this slice.

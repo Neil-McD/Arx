@@ -1,4 +1,4 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   normalizeIdValue,
@@ -258,6 +258,39 @@ export const dismissMyCommunityOnboardingSession = mutation({
       updatedAt: nowMs,
     });
     return { dismissed: true };
+  },
+});
+
+export const resolveActivePersonalAgentGuidanceInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const session = await findActiveCommunityOnboardingSession({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    if (
+      !session ||
+      deriveCommunityOnboardingPhase({
+        orientationCompletedAt: session.orientationCompletedAt,
+        firstCommunityPostAt: session.firstCommunityPostAt,
+        firstAgentDockTurnAt: session.firstAgentDockTurnAt,
+      }) !== "first_agent_dock_turn"
+    ) {
+      return null;
+    }
+    const instructions = normalizeCommunityOnboardingText(
+      session.agentInstructionsSnapshot,
+      COMMUNITY_ONBOARDING_AGENT_INSTRUCTIONS_MAX_CHARS,
+    );
+    if (!instructions) return null;
+    return {
+      sessionId: session._id,
+      instructions,
+    };
   },
 });
 

@@ -73,6 +73,12 @@
   animation: none;
 }
 
+.member-agent-dock-launcher.is-onboarding:not(.is-working) {
+  color: var(--member-agent-accent-strong);
+  border-color: rgba(167, 139, 250, 0.58);
+  animation: member-agent-dock-onboarding-pulse 1.8s ease-in-out infinite;
+}
+
 .member-agent-dock-launcher:hover svg,
 .member-agent-dock-launcher:focus-visible svg {
   opacity: 1;
@@ -324,6 +330,86 @@
   line-height: 1.45;
 }
 
+.member-agent-dock-composer-stack {
+  display: grid;
+}
+
+.community-onboarding-agent-guide {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 16px 9px;
+  padding: 2px 0 2px 11px;
+  border-left: 2px solid var(--member-agent-accent);
+  animation: member-agent-dock-guide-in 180ms ease-out both;
+}
+
+.community-onboarding-agent-guide-copy {
+  min-width: 0;
+}
+
+.community-onboarding-agent-guide-copy > span,
+.community-onboarding-agent-guide-copy > strong,
+.community-onboarding-agent-guide-copy > p,
+.community-onboarding-agent-guide-copy > small {
+  display: block;
+}
+
+.community-onboarding-agent-guide-copy > span {
+  color: var(--member-agent-accent-strong);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.community-onboarding-agent-guide-copy > strong {
+  margin-top: 3px;
+  color: var(--text-ink-primary);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1.35;
+}
+
+.community-onboarding-agent-guide-copy > p {
+  margin: 3px 0 0;
+  color: var(--text-ink-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.community-onboarding-agent-guide-copy > small {
+  margin-top: 5px;
+  color: #e8b4c4;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.community-onboarding-agent-guide > button {
+  min-height: 28px;
+  flex: 0 0 auto;
+  padding: 0 8px;
+  color: var(--text-ink-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.community-onboarding-agent-guide > button:hover:not(:disabled) {
+  color: var(--text-ink-primary);
+  background: var(--hover-overlay);
+}
+
+.community-onboarding-agent-guide > button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
 .member-agent-dock-composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 34px;
@@ -338,6 +424,12 @@
 
 .member-agent-dock-composer:focus-within {
   border-color: var(--stroke-strong);
+}
+
+.member-agent-dock-composer.is-onboarding {
+  border-color: color-mix(in srgb, var(--member-agent-accent) 58%, var(--stroke-default));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--member-agent-accent) 10%, transparent);
+  animation: member-agent-dock-composer-focus 420ms ease-out both;
 }
 
 .member-agent-dock-composer textarea {
@@ -406,6 +498,33 @@
   }
 }
 
+@keyframes member-agent-dock-onboarding-pulse {
+  0%, 100% {
+    box-shadow:
+      0 8px 24px rgba(0, 0, 0, 0.46),
+      0 0 0 1px rgba(167, 139, 250, 0.12),
+      0 0 12px rgba(167, 139, 250, 0.2),
+      inset 0 1px 0 rgba(196, 181, 253, 0.1);
+  }
+  50% {
+    box-shadow:
+      0 8px 24px rgba(0, 0, 0, 0.46),
+      0 0 0 1px rgba(167, 139, 250, 0.3),
+      0 0 22px rgba(167, 139, 250, 0.38),
+      inset 0 1px 0 rgba(196, 181, 253, 0.1);
+  }
+}
+
+@keyframes member-agent-dock-guide-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes member-agent-dock-composer-focus {
+  from { box-shadow: 0 0 0 7px color-mix(in srgb, var(--member-agent-accent) 18%, transparent); }
+  to { box-shadow: 0 0 0 3px color-mix(in srgb, var(--member-agent-accent) 10%, transparent); }
+}
+
 @media (max-width: 700px) {
   .member-agent-dock {
     right: 12px;
@@ -436,6 +555,11 @@
   .member-agent-dock.mobile-root .member-agent-dock-header {
     padding-top: calc(10px + env(safe-area-inset-top, 0px));
   }
+
+  .community-onboarding-agent-guide {
+    gap: 10px;
+    margin-inline: 14px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -447,6 +571,8 @@
   .member-agent-dock-reasoning svg,
   .member-agent-dock-launcher,
   .member-agent-dock-caret,
+  .community-onboarding-agent-guide,
+  .member-agent-dock-composer.is-onboarding,
   .is-spinning {
     animation: none;
   }

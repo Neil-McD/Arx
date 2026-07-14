@@ -531,6 +531,7 @@ import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOver
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
 import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeHostProps";
 import type { MemberAgentSurfaceContextV1 } from "../../../shared/memberAgentSurfaceContext";
+import { WebCommunityOnboardingController } from "./components/WebCommunityOnboardingController";
 
 const WebAppMainSurfaceHost = lazy(() =>
   import("./components/WebAppMainSurfaceHost").then((module) => ({
@@ -1943,6 +1944,8 @@ export default function App() {
   const [shellVariant, setShellVariant] = useState<AppShellVariant>(() => initialShellVariant);
   const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay>(null);
   const [mobileRootPage, setMobileRootPage] = useState<MobileRootPage>("community");
+  const [communityOnboardingFirstPostFocusRequest, setCommunityOnboardingFirstPostFocusRequest] =
+    useState(0);
   const [mobileSettingsView, setMobileSettingsView] = useState<"index" | "detail">("detail");
 
   const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "landing");
@@ -11221,6 +11224,10 @@ export default function App() {
     setMobileOverlay(null);
     handleSelectCommunityTab(tab);
   }, [handleSelectCommunityTab]);
+  const handleCommunityOnboardingOrientationCompleted = useCallback(() => {
+    setCommunityOnboardingFirstPostFocusRequest((current) => current + 1);
+    handleSelectCommunityTab("chat");
+  }, [handleSelectCommunityTab]);
 
   const standalonePublicRouteViewProps = buildWebStandalonePublicRouteViewProps({
     publicRouteKind: publicRoute.kind,
@@ -11529,8 +11536,8 @@ export default function App() {
     },
     communityHostProps: {
       communityTab,
-      ensureSession: ensureUsableAuthSession,
       onSelectCommunityTab: handleSelectCommunityTab,
+      firstPostFocusRequest: communityOnboardingFirstPostFocusRequest,
       chatPanelProps: {
         ...communityChatPanelProps,
         mobileMembersOverlayOpen: showMobileShell && mobileOverlay === "members",
@@ -11625,6 +11632,7 @@ export default function App() {
           isVisible={isMemberAgentDockVisible}
           mobileShellActive={showMobileShell}
           mobileRoot={showMobileShell && mobileRootPage === "agent"}
+          onRequestOpen={() => handleSelectMobileRootPage("agent")}
           communityId={memberAgentDockCommunity?.id ?? null}
           communityName={memberAgentDockCommunity?.name ?? null}
           surfaceContext={memberAgentSurfaceContext}
@@ -11922,8 +11930,19 @@ export default function App() {
   });
 
   return (
-    <>
+    <WebCommunityOnboardingController
+      session={communityChatPanelProps.session}
+      ensureSession={ensureUsableAuthSession}
+      communityId={memberAgentDockCommunity?.id ?? null}
+      communityName={memberAgentDockCommunity?.name ?? null}
+      isEnabled={Boolean(
+        memberAgentDockCommunity &&
+        communityChatPanelProps.hasAuthenticatedPresentation &&
+        communityChatPanelProps.hasSession
+      )}
+      onOrientationCompleted={handleCommunityOnboardingOrientationCompleted}
+    >
       <WebShellChromeHost {...shellChromeHostProps} />
-    </>
+    </WebCommunityOnboardingController>
   );
 }

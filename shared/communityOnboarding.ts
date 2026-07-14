@@ -86,6 +86,12 @@ export function shouldPresentCommunityOnboardingFirstPost(
   return session?.status === "active" && session.phase === "first_community_post";
 }
 
+export function shouldPresentCommunityOnboardingAgentStep(
+  session: Pick<CommunityOnboardingSession, "status" | "phase"> | null | undefined,
+): boolean {
+  return session?.status === "active" && session.phase === "first_agent_dock_turn";
+}
+
 /**
  * Pure, idempotent milestone transition used by the Convex write paths and the
  * behavioral contract proof. A milestone never rewrites an earlier timestamp.
