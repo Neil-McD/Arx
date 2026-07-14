@@ -267,7 +267,13 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   }, [props.isVisible]);
 
   useEffect(() => {
-    if (!isOpenSurface || !props.isVisible || !surfaceKind || !props.session) return;
+    if (
+      onboarding?.mode === "preview" ||
+      !isOpenSurface ||
+      !props.isVisible ||
+      !surfaceKind ||
+      !props.session
+    ) return;
     let cancelled = false;
     if (activeThreadKeyRef.current) return;
     const scope = agentScopeRef.current;
@@ -314,6 +320,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     props.session,
     surfaceKind,
     isCurrentScope,
+    onboarding?.mode,
   ]);
 
   const streamingState = threadKey ? streamingByThread[threadKey] ?? null : null;
@@ -321,7 +328,10 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const streamedText = streamingState?.content?.trim() ?? "";
   const isSending = Boolean(threadKey && sendingByThread[threadKey]);
   const turnIsActive = isSending || Boolean(streamingState);
-  const visibleMessages = messages.filter((message) => message.role !== "system");
+  const isOnboardingPreview = onboarding?.mode === "preview";
+  const visibleMessages = isOnboardingPreview
+    ? []
+    : messages.filter((message) => message.role !== "system");
   const dockError = localError ?? formatInferenceIssue(inferenceIssue);
   const onboardingSession = onboarding?.activeSession ?? null;
   const showOnboardingAgentGuide = Boolean(
@@ -362,10 +372,8 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       !onboardingSession ||
       onboardingFocusSessionIdRef.current !== onboardingSession.id ||
       !isOpenSurface ||
-      !threadKey ||
-      turnIsActive ||
-      isPreparing ||
-      isStartingNewChat
+      (!isOnboardingPreview && !threadKey) ||
+      (!isOnboardingPreview && (turnIsActive || isPreparing || isStartingNewChat))
     ) {
       return;
     }
@@ -380,6 +388,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     isOpenSurface,
     isPreparing,
     isStartingNewChat,
+    isOnboardingPreview,
     onboardingSession,
     showOnboardingAgentGuide,
     threadKey,
@@ -460,6 +469,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
 
   const startNewChat = async () => {
     if (
+      isOnboardingPreview ||
       turnIsActive ||
       isPreparing ||
       isStartingNewChat ||
@@ -524,6 +534,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     event.preventDefault();
     const text = input.trim();
     if (
+      isOnboardingPreview ||
       !text ||
       turnIsActive ||
       isPreparing ||
@@ -671,14 +682,26 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             </span>
             <span>
               <strong>Your agent</strong>
-              <small>{turnIsActive ? "Working" : `${surfaceLabel} context`}</small>
+              <small>
+                {isOnboardingPreview
+                  ? "Preview mode"
+                  : turnIsActive
+                    ? "Working"
+                    : `${surfaceLabel} context`}
+              </small>
             </span>
           </div>
           <div className="member-agent-dock-header-actions">
             <button
               type="button"
               onClick={() => void startNewChat()}
-              disabled={turnIsActive || isPreparing || isStartingNewChat || !episodeId}
+              disabled={
+                isOnboardingPreview ||
+                turnIsActive ||
+                isPreparing ||
+                isStartingNewChat ||
+                !episodeId
+              }
               aria-label="Start fresh conversation"
               title="Start fresh conversation"
             >
@@ -697,15 +720,15 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
 
         <div className="member-agent-dock-transcript" ref={scrollRef}>
           {visibleMessages.length === 0 &&
-          !turnIsActive &&
-          !isPreparing &&
-          !isStartingNewChat ? (
+          (isOnboardingPreview || (!turnIsActive && !isPreparing && !isStartingNewChat)) ? (
             <div className="member-agent-dock-empty">
               <MessageCircle aria-hidden="true" />
               <p>
                 {props.surfaceContext.kind === "discover"
                   ? "Ask your agent to help you explore communities."
-                  : `Ask your agent about ${surfaceLabel}.`}
+                  : isOnboardingPreview
+                    ? `A member can ask their private agent about ${surfaceLabel} here.`
+                    : `Ask your agent about ${surfaceLabel}.`}
               </p>
             </div>
           ) : null}
@@ -735,7 +758,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             </div>
           ) : null}
 
-          {turnIsActive || shouldRenderStreamedText ? (
+          {!isOnboardingPreview && (turnIsActive || shouldRenderStreamedText) ? (
             <div className="member-agent-dock-live-turn">
               {runtimeEvents.length > 0 ? (
                 <RuntimeLiveTimeline
@@ -760,7 +783,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             </div>
           ) : null}
 
-          {dockError ? <p className="member-agent-dock-error">{dockError}</p> : null}
+          {!isOnboardingPreview && dockError ? <p className="member-agent-dock-error">{dockError}</p> : null}
         </div>
 
         <div className="member-agent-dock-composer-stack">
@@ -781,20 +804,25 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
               ref={textareaRef}
               value={input}
               onChange={(event) => setInput(event.target.value)}
+              readOnly={isOnboardingPreview}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
                   event.currentTarget.form?.requestSubmit();
                 }
               }}
-              placeholder={`Message your agent in ${surfaceLabel}`}
+              placeholder={
+                isOnboardingPreview
+                  ? "Preview only — agent messages are disabled"
+                  : `Message your agent in ${surfaceLabel}`
+              }
               aria-label="Message your agent"
               aria-describedby={showOnboardingAgentGuide ? onboardingDescriptionId : undefined}
               rows={1}
               maxLength={8000}
-              disabled={turnIsActive || isPreparing || isStartingNewChat}
+              disabled={!isOnboardingPreview && (turnIsActive || isPreparing || isStartingNewChat)}
             />
-            {turnIsActive && threadKey ? (
+            {!isOnboardingPreview && turnIsActive && threadKey ? (
               <button
                 type="button"
                 onClick={() => stopStreamingTurn(threadKey)}
@@ -806,7 +834,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             ) : (
               <button
                 type="submit"
-                disabled={!input.trim() || isPreparing || isStartingNewChat}
+                disabled={isOnboardingPreview || !input.trim() || isPreparing || isStartingNewChat}
                 aria-label="Send"
                 title="Send"
               >

@@ -12,7 +12,7 @@ import {
 export function WebCommunityOnboardingWorkflowSection(props: {
   session: unknown;
   communityId: string;
-  communityName: string;
+  onPreview: () => void;
 }) {
   const [config, setConfig] = useState<CommunityOnboardingConfig | null>(null);
   const [enabled, setEnabled] = useState(false);
@@ -50,6 +50,14 @@ export function WebCommunityOnboardingWorkflowSection(props: {
     welcomeMessage.trim() !== config?.welcome_message ||
     instructions.trim() !== config?.agent_instructions
   ), [config, enabled, instructions, welcomeMessage]);
+
+  const reset = () => {
+    if (!config) return;
+    setEnabled(config.enabled);
+    setWelcomeMessage(config.welcome_message);
+    setInstructions(config.agent_instructions);
+    setError(null);
+  };
 
   const save = async () => {
     if (!welcomeMessage.trim() || !instructions.trim()) return;
@@ -111,12 +119,17 @@ export function WebCommunityOnboardingWorkflowSection(props: {
               onChange={(event) => setInstructions(event.target.value)}
             />
           </label>
-          <div className="community-onboarding-preview">
-            <span>Orientation preview · {props.communityName}</span>
-            <p>{welcomeMessage.trim() || DEFAULT_COMMUNITY_ONBOARDING_WELCOME}</p>
-          </div>
           {error ? <div className="auth-error">{error}</div> : null}
-          <div className="create-community-actions">
+          <div className="agent-preview-actions">
+            {isDirty ? (
+              <button type="button" onClick={reset} disabled={isSaving}>
+                Cancel
+              </button>
+            ) : (
+              <button type="button" onClick={props.onPreview} disabled={isSaving || !config}>
+                Preview
+              </button>
+            )}
             <button
               className={`platform-save-button${isDirty ? " is-dirty" : " is-saved"}`}
               type="button"

@@ -507,9 +507,11 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   } = props;
   const communityOnboarding = useWebCommunityOnboarding();
   const isProfileSetupGateActive = hasSession && Boolean(activeCommunity) && canPostMessages && !isProfileSetupComplete;
-  const canUseComposer = canPostMessages && !isProfileSetupGateActive;
+  const canPresentComposer = canPostMessages && !isProfileSetupGateActive;
+  const isCommunityOnboardingPreview = communityOnboarding?.mode === "preview";
+  const canUseComposer = canPresentComposer && !isCommunityOnboardingPreview;
   const showOnboardingFirstPostGuide = Boolean(
-    canUseComposer &&
+    canPresentComposer &&
     activeCommunity &&
     communityOnboarding?.activeSession?.community_id === activeCommunity.id &&
     shouldPresentCommunityOnboardingFirstPost(communityOnboarding.activeSession),

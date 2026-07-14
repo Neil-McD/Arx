@@ -267,6 +267,7 @@ import { deriveOpenDiscoverTransition } from "../../../shared/appNavTransitions"
 import {
   type AppShellVariant,
   type AppRouteState,
+  type CommunityExperienceMode,
   type PublicRoute,
   STANDALONE_APP_LAUNCH_SEARCH_PARAM,
   STANDALONE_APP_LAUNCH_SEARCH_VALUE,
@@ -275,6 +276,7 @@ import {
   applyShellVariantToKnownPath,
   buildAppRoutePath,
   buildCommunityFunnelPath,
+  buildCommunityOnboardingPreviewPath,
   buildCommunityTabPath,
   buildSettingsPath,
   buildCommunityFunnelPreviewPath,
@@ -2279,6 +2281,11 @@ export default function App() {
     });
   const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
   const [communityTab, setCommunityTab] = useState<CommunityTab>(() => initialAppRoute?.communityTab ?? "chat");
+  const [communityExperienceMode, setCommunityExperienceMode] = useState<CommunityExperienceMode>(() =>
+    initialAppRoute?.page === "community"
+      ? initialAppRoute.communityExperienceMode ?? "standard"
+      : "standard",
+  );
   const [communityResourceModuleId, setCommunityResourceModuleId] = useState<string | null>(() =>
     initialAppRoute?.page === "community" && initialAppRoute.communityTab === "resources"
       ? initialAppRoute.communityResourceModuleId ?? null
@@ -4308,6 +4315,7 @@ export default function App() {
       setActiveOperatorTab(nextAppRoute.operatorTab ?? "platform");
     }
     if (nextAppRoute.page === "community") {
+      setCommunityExperienceMode(nextAppRoute.communityExperienceMode ?? "standard");
       applyCommunityShellState({
         communitySlug: normalizedCommunitySlug,
         communityTab: nextAppRoute.communityTab,
@@ -4319,12 +4327,14 @@ export default function App() {
         nextAppRoute.communityTab === "settings" ? nextAppRoute.communitySettingsPane ?? "community" : "community",
       );
     } else if (nextAppRoute.page === "workspace" && nextAppRoute.view === "home") {
+      setCommunityExperienceMode("standard");
       applyCommunityShellState({
         communitySlug: nextThreadId ? undefined : normalizedCommunitySlug,
       });
       setCommunityResourceModuleId(null);
       setCommunitySettingsPane("community");
     } else {
+      setCommunityExperienceMode("standard");
       setCommunityResourceModuleId(null);
       setCommunitySettingsPane("community");
     }
@@ -6244,6 +6254,7 @@ export default function App() {
     settingsPage,
     activeCommunitySlug: selectedActiveCommunitySlug,
     communityTab,
+    communityExperienceMode,
     communityResourceModuleId,
     communitySettingsPane,
     docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
@@ -10290,6 +10301,21 @@ export default function App() {
     navigateTo(settingsPath, opts?.replace ? { replace: true } : {});
   }, [activeCommunity?.slug, navigateTo, selectedActiveCommunitySlug]);
 
+  const isCommunityOnboardingPreviewMode =
+    publicRoute.kind === "app" &&
+    activePage === "community" &&
+    communityExperienceMode === "onboarding_preview";
+  const handlePreviewCommunityOnboarding = useCallback(() => {
+    const slug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
+    const path = buildCommunityOnboardingPreviewPath(slug);
+    if (path) navigateTo(path);
+  }, [activeCommunity?.slug, navigateTo, selectedActiveCommunitySlug]);
+  const handleExitCommunityOnboardingPreview = useCallback(() => {
+    const slug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
+    const path = buildCommunityTabPath(slug, "settings", null, "workflows");
+    if (path) navigateTo(path, { replace: true });
+  }, [activeCommunity?.slug, navigateTo, selectedActiveCommunitySlug]);
+
   const isCommunityFunnelAboutDirty =
     Boolean(activeCommunity) && communitySettingsAbout !== (activeCommunity?.about ?? "");
 
@@ -10421,6 +10447,7 @@ export default function App() {
       communitySettingsLayer,
       communitySettingsPane,
       onSelectCommunitySettingsPane: handleSelectCommunitySettingsPane,
+      onPreviewCommunityOnboarding: handlePreviewCommunityOnboarding,
       canManageCommunitySettings,
       canDeleteActiveCommunity,
       requireSignIn,
@@ -11227,8 +11254,8 @@ export default function App() {
   }, [handleSelectCommunityTab]);
   const handleCommunityOnboardingOrientationCompleted = useCallback(() => {
     setCommunityOnboardingFirstPostFocusRequest((current) => current + 1);
-    handleSelectCommunityTab("chat");
-  }, [handleSelectCommunityTab]);
+    if (!isCommunityOnboardingPreviewMode) handleSelectCommunityTab("chat");
+  }, [handleSelectCommunityTab, isCommunityOnboardingPreviewMode]);
 
   const standalonePublicRouteViewProps = buildWebStandalonePublicRouteViewProps({
     publicRouteKind: publicRoute.kind,
@@ -11942,6 +11969,9 @@ export default function App() {
         communityChatPanelProps.hasAuthenticatedPresentation &&
         communityChatPanelProps.hasSession
       )}
+      previewMode={isCommunityOnboardingPreviewMode}
+      canPreview={canManageCommunitySettings}
+      onExitPreview={handleExitCommunityOnboardingPreview}
       onOrientationCompleted={handleCommunityOnboardingOrientationCompleted}
     >
       <WebShellChromeHost {...shellChromeHostProps} />

@@ -92,6 +92,61 @@ export function shouldPresentCommunityOnboardingAgentStep(
   return session?.status === "active" && session.phase === "first_agent_dock_turn";
 }
 
+export function createCommunityOnboardingPreviewSession(params: {
+  communityId: string;
+  config: CommunityOnboardingConfig;
+  introVideoUrl?: string | null;
+  nowIso: string;
+  previewId: string;
+}): CommunityOnboardingSession {
+  return {
+    id: `preview:${params.communityId}:${params.config.version}:${params.previewId}`,
+    community_id: params.communityId,
+    status: "active",
+    phase: "orientation",
+    welcome_message: params.config.welcome_message,
+    agent_instructions: params.config.agent_instructions,
+    intro_video_url: String(params.introVideoUrl ?? "").trim() || null,
+    activated_at: params.nowIso,
+    opened_at: params.nowIso,
+    orientation_completed_at: null,
+    first_community_post_at: null,
+    first_agent_dock_turn_at: null,
+    completed_at: null,
+  };
+}
+
+export function advanceCommunityOnboardingPreviewSession(
+  session: CommunityOnboardingSession,
+  nowIso: string,
+): CommunityOnboardingSession {
+  if (session.status !== "active") return session;
+  if (session.phase === "orientation") {
+    return {
+      ...session,
+      phase: "first_community_post",
+      orientation_completed_at: session.orientation_completed_at ?? nowIso,
+    };
+  }
+  if (session.phase === "first_community_post") {
+    return {
+      ...session,
+      phase: "first_agent_dock_turn",
+      first_community_post_at: session.first_community_post_at ?? nowIso,
+    };
+  }
+  if (session.phase === "first_agent_dock_turn") {
+    return {
+      ...session,
+      status: "completed",
+      phase: "complete",
+      first_agent_dock_turn_at: session.first_agent_dock_turn_at ?? nowIso,
+      completed_at: session.completed_at ?? nowIso,
+    };
+  }
+  return session;
+}
+
 /**
  * Pure, idempotent milestone transition used by the Convex write paths and the
  * behavioral contract proof. A milestone never rewrites an earlier timestamp.

@@ -51,6 +51,7 @@ type WebCommunitySettingsSectionProps = {
   communitySettingsLayer: CommunitySettingsLayer;
   activePane: CommunitySettingsPane;
   onSelectPane: (pane: CommunitySettingsPane, opts?: { replace?: boolean }) => void;
+  onPreviewCommunityOnboarding: () => void;
   canManageCommunitySettings: boolean;
   canDeleteCommunity: boolean;
   requireSignIn: () => void;
@@ -1103,7 +1104,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               <WebCommunityOnboardingWorkflowSection
                 session={props.session}
                 communityId={activeCommunity.id}
-                communityName={activeCommunity.name}
+                onPreview={props.onPreviewCommunityOnboarding}
               />
             ) : null}
             {selectedSettingsPane === "danger" && canDeleteCommunity ? (

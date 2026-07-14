@@ -32,6 +32,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communitySettingsLayer: WebCommunitySecondaryPanelsProps["settings"]["communitySettingsLayer"];
   communitySettingsPane: CommunitySettingsPane;
   onSelectCommunitySettingsPane: (pane: CommunitySettingsPane, opts?: { replace?: boolean }) => void;
+  onPreviewCommunityOnboarding: WebCommunitySecondaryPanelsProps["settings"]["onPreviewCommunityOnboarding"];
   canManageCommunitySettings: WebCommunitySecondaryPanelsProps["settings"]["canManageCommunitySettings"];
   canDeleteActiveCommunity: WebCommunitySecondaryPanelsProps["settings"]["canDeleteCommunity"];
   requireSignIn: WebCommunitySecondaryPanelsProps["settings"]["requireSignIn"];
@@ -182,6 +183,7 @@ export function buildWebCommunitySurfaceProjection(
       communitySettingsLayer: params.communitySettingsLayer,
       activePane: params.communitySettingsPane,
       onSelectPane: params.onSelectCommunitySettingsPane,
+      onPreviewCommunityOnboarding: params.onPreviewCommunityOnboarding,
       canManageCommunitySettings: params.canManageCommunitySettings,
       canDeleteCommunity: params.canDeleteActiveCommunity,
       requireSignIn: params.requireSignIn,

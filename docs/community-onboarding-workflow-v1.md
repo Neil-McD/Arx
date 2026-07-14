@@ -61,6 +61,27 @@ no data, tools, permissions, or transcript access. A successful private agent
 turn records `firstAgentDockTurnAt` and completes the session; a failed turn
 leaves the phase active for retry.
 
+## Manager preview
+
+Owners and admins can open the saved workflow at
+`/c/:slug/onboarding/preview`. Preview is an authenticated community route, not
+a public funnel route and not a membership activation. It reads the saved
+manager-authorized onboarding configuration plus the saved funnel video, then
+constructs an ephemeral browser session that drives the same orientation,
+first-post, and personal-agent presentation components.
+
+Preview progress is deliberately local and resets on refresh. The live session
+subscription and milestone mutations are bypassed. Community composers, new
+personal-agent conversations, agent turns, and inference are disabled; existing
+private agent messages are not projected into the preview. Preview creates no
+membership, onboarding session, message, thread, analytics event, or inference
+usage. Exit and preview skip return directly to the Workflows settings pane.
+
+Preview is available even when onboarding is configured off so a manager can
+inspect it before activation. The preview chrome must label that state clearly.
+Direct route access still fails closed behind the existing community-manager
+configuration and funnel reads.
+
 ## Status
 
 `active -> completed`
