@@ -10213,7 +10213,6 @@ export default function App() {
     };
     const {
       handleSelectMobileRootPage,
-      openMobileAgent,
       openMobileAgentSettings,
       handleExitMobileSettings,
       openMobileCreateCommunity,
@@ -11645,7 +11644,7 @@ export default function App() {
     hasResolvedCommunities &&
     Boolean(memberAgentSurfaceContext) &&
     !isCommunityLaunchSetupModalOpen &&
-    (!isDirectMessagesOpen || mobileOverlay === "agent") &&
+    !isDirectMessagesOpen &&
     !isOnboardingModalOpen;
   const globalOverlays = (
     <>
@@ -11654,8 +11653,7 @@ export default function App() {
         <WebMemberAgentDock
           isVisible={isMemberAgentDockVisible}
           mobileShellActive={showMobileShell}
-          mobileOverlay={showMobileShell && mobileOverlay === "agent"}
-          onRequestCloseMobile={() => setMobileOverlay(null)}
+          mobileRoot={showMobileShell && mobileRootPage === "agent"}
           communityId={memberAgentDockCommunity?.id ?? null}
           communityName={memberAgentDockCommunity?.name ?? null}
           surfaceContext={memberAgentSurfaceContext}
@@ -11869,7 +11867,6 @@ export default function App() {
     handleExitMobileSettings,
     handleCloseMobileThreadPage: handleCloseCommunityInteractionDrawer,
     handleSelectMobileRootPage,
-    openMobileAgent,
     setMobileOverlay,
     isPublicCommunityFunnel,
     isPublicFunnelPreviewRoute: publicRoute.kind === "community_funnel_preview",

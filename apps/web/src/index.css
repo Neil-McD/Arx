@@ -2942,7 +2942,7 @@
   stroke-width: 2;
 }
 
-.mobile-bottom-rail-ai[aria-expanded="true"] .mobile-bottom-rail-ai-icon svg {
+.mobile-bottom-rail-ai.active .mobile-bottom-rail-ai-icon svg {
   fill: currentColor;
 }
 

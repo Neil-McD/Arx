@@ -64,8 +64,7 @@ type ActiveThreadContext = {
 type WebMemberAgentDockProps = {
   isVisible: boolean;
   mobileShellActive?: boolean;
-  mobileOverlay?: boolean;
-  onRequestCloseMobile?: () => void;
+  mobileRoot?: boolean;
   communityId: string | null;
   communityName: string | null;
   surfaceContext: MemberAgentSurfaceContextV1 | null;
@@ -107,7 +106,7 @@ function formatInferenceIssue(issue: InferenceIssueModalState | null): string | 
 export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isOpenSurface = props.mobileShellActive
-    ? Boolean(props.mobileOverlay)
+    ? Boolean(props.mobileRoot)
     : isOpen;
   const [threadKey, setThreadKey] = useState<string | null>(null);
   const [episodeId, setEpisodeId] = useState<string | null>(null);
@@ -577,7 +576,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   return (
     <aside
       id="polynet-member-agent-surface"
-      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileOverlay ? " mobile-overlay" : ""}`}
+      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}`}
       aria-live="polite"
     >
       {!props.mobileShellActive ? (
@@ -614,14 +613,16 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             >
               <MessageSquarePlus aria-hidden="true" />
             </button>
-            <button
-              type="button"
-              onClick={props.mobileShellActive ? props.onRequestCloseMobile : () => setIsOpen(false)}
-              aria-label="Close"
-              title="Close"
-            >
-              <X aria-hidden="true" />
-            </button>
+            {!props.mobileShellActive ? (
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                aria-label="Close"
+                title="Close"
+              >
+                <X aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         </header>
 

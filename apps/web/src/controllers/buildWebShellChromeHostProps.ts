@@ -41,7 +41,6 @@ export function buildWebShellChromeHostProps(params: {
   handleExitMobileSettings: () => void;
   handleCloseMobileThreadPage: () => void;
   handleSelectMobileRootPage: WebShellChromeHostProps["communityShell"]["onSelectMobileRootPage"];
-  openMobileAgent: () => void;
   setMobileOverlay: (value: MobileOverlay) => void;
   isPublicCommunityFunnel: boolean;
   isPublicFunnelPreviewRoute: boolean;
@@ -157,7 +156,6 @@ export function buildWebShellChromeHostProps(params: {
       forceMobileCommunityRoot: params.forceMobileCommunityRoot,
       setMobileOverlay: params.setMobileOverlay,
       onSelectMobileRootPage: params.handleSelectMobileRootPage,
-      onOpenMobileAgent: params.openMobileAgent,
       activeCommunity: params.activeCommunity
         ? {
             id: params.activeCommunity.id,
