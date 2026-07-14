@@ -1331,9 +1331,6 @@ export default defineSchema({
     enabled: v.boolean(),
     welcomeMessage: v.string(),
     introVideoUrl: v.optional(v.string()),
-    // One-release migration compatibility only. Runtime code neither reads nor writes these.
-    agentInstructions: v.optional(v.string()),
-    version: v.optional(v.number()),
     updatedByUserId: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1346,14 +1343,6 @@ export default defineSchema({
     activationSequence: v.number(),
     welcomeMessageSnapshot: v.string(),
     introVideoUrlSnapshot: v.optional(v.string()),
-    // One-release migration compatibility only. Remove after the bounded cleanup.
-    configVersion: v.optional(v.number()),
-    agentInstructionsSnapshot: v.optional(v.string()),
-    conciergeDisplayNameSnapshot: v.optional(v.string()),
-    orientationSeededAt: v.optional(v.number()),
-    orientationSeedReplyId: v.optional(v.id("communityInteractionReplies")),
-    orientationSeedMessageKey: v.optional(v.string()),
-    orientationSeedMessageSeq: v.optional(v.number()),
     status: v.union(
       v.literal("active"),
       v.literal("completed"),
@@ -1361,7 +1350,6 @@ export default defineSchema({
       v.literal("superseded"),
     ),
     activatedAt: v.number(),
-    openedAt: v.optional(v.number()),
     orientationCompletedAt: v.optional(v.number()),
     firstCommunityPostAt: v.optional(v.number()),
     firstAgentDockTurnAt: v.optional(v.number()),
@@ -1942,11 +1930,6 @@ export default defineSchema({
     ),
     responseRootId: v.optional(v.id("communityInteractionRoots")),
     responseReplyId: v.optional(v.id("communityInteractionReplies")),
-    // One-release migration compatibility only. Runtime code ignores these.
-    onboardingMode: v.optional(
-      v.union(v.literal("live"), v.literal("manager_preview")),
-    ),
-    onboardingSessionId: v.optional(v.id("communityOnboardingSessions")),
     attempt: v.optional(v.number()),
     runId: v.optional(v.id("communityAgentRuns")),
     sourceTraceId: v.optional(v.id("communitySourceTraces")),

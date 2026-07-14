@@ -60,15 +60,6 @@ permissions.
 Preview creates no onboarding session, public post, community-agent message, or
 special runtime prompt. It is available while onboarding is off.
 
-## One-release data cleanup
-
-Staging rows created by the discarded inference-backed implementation may still
-contain retired fields. The schema temporarily accepts those fields as optional,
-but runtime code does not read or write them. After deploying this transition,
-run each bounded function in `communityOnboardingRetirementMigration.ts` until
-it returns `isDone: true`, then delete the compatibility validators and the
-migration module in the next cut.
-
 ## Authority
 
 - Owner/admin: read and save configuration; run preview.

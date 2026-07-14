@@ -18,7 +18,6 @@ const schema = read("convex/schema.ts");
 const lifecycle = read("convex/communityMembershipLifecycle.ts");
 const core = read("convex/communityOnboardingCore.ts");
 const onboarding = read("convex/communityOnboarding.ts");
-const retirementMigration = read("convex/communityOnboardingRetirementMigration.ts");
 const interactions = read("convex/communityInteractions.ts");
 const concierge = read("convex/communityAgentConciergeCore.ts");
 const conciergeWorker = read("convex/communityAgentServeWorker.ts");
@@ -75,18 +74,11 @@ const sessionSchema = tableSource("communityOnboardingSessions", "communityInter
 assert.match(configSchema, /enabled: v\.boolean\(\)/);
 assert.match(configSchema, /welcomeMessage: v\.string\(\)/);
 assert.match(configSchema, /introVideoUrl: v\.optional\(v\.string\(\)\)/);
-assert.match(configSchema, /agentInstructions: v\.optional\(v\.string\(\)\)/);
-assert.match(configSchema, /version: v\.optional\(v\.number\(\)\)/);
+assert.doesNotMatch(configSchema, /agentInstructions|version:/);
 assert.match(sessionSchema, /membershipId: v\.id\("communityMemberships"\)/);
 assert.match(sessionSchema, /activationSequence: v\.number\(\)/);
 assert.match(sessionSchema, /welcomeMessageSnapshot: v\.string\(\)/);
-assert.match(sessionSchema, /agentInstructionsSnapshot: v\.optional\(v\.string\(\)\)/);
-assert.match(sessionSchema, /configVersion: v\.optional\(v\.number\(\)\)/);
-assert.match(retirementMigration, /MAX_BATCH_SIZE = 100/);
-assert.match(retirementMigration, /clearConfigFieldsPageInternal/);
-assert.match(retirementMigration, /clearSessionFieldsPageInternal/);
-assert.match(retirementMigration, /clearServeRequestFieldsPageInternal/);
-assert.doesNotMatch(retirementMigration, /\.collect\(\)/);
+assert.doesNotMatch(sessionSchema, /agentInstructions|configVersion|concierge|Seed|openedAt/);
 
 for (const file of readdirSync("convex").filter((name) => name.endsWith(".ts"))) {
   if (file === "communityMembershipLifecycle.ts") continue;
