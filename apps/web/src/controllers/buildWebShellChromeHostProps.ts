@@ -23,6 +23,8 @@ export function buildWebShellChromeHostProps(params: {
   showMobileSettingsShell: boolean;
   showMobilePublicFunnel: boolean;
   mobileOverlay: MobileOverlay;
+  mobileChromeAutoHideEnabled: boolean;
+  mobileChromeReadingMode: boolean;
   showMobileShell: boolean;
   mobileShellMode: WebShellChromeHostProps["mobileTopBarProps"]["mode"];
   mobileRootPage: WebShellChromeHostProps["mobileTopBarProps"]["rootPage"];
@@ -101,6 +103,8 @@ export function buildWebShellChromeHostProps(params: {
     showMobileSettingsShell: params.showMobileSettingsShell,
     showMobilePublicFunnel: params.showMobilePublicFunnel,
     mobileOverlay: params.mobileOverlay,
+    mobileChromeAutoHideEnabled: params.mobileChromeAutoHideEnabled,
+    mobileChromeReadingMode: params.mobileChromeReadingMode,
     mobileTopBarProps: {
       mode: params.showMobileSettingsShell ? "agent" : params.mobileShellMode,
       rootPage: params.forceMobileCommunityRoot

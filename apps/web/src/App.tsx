@@ -1944,6 +1944,7 @@ export default function App() {
   const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay>(null);
   const [mobileRootPage, setMobileRootPage] = useState<MobileRootPage>("community");
   const [mobileSettingsView, setMobileSettingsView] = useState<"index" | "detail">("detail");
+  const [mobileChromeReadingMode, setMobileChromeReadingMode] = useState(false);
 
   const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "landing");
   const [activeView, setActiveView] = useState<AppView>(() => initialAppRoute?.view ?? "home");
@@ -9156,6 +9157,23 @@ export default function App() {
     && mobileRootPage === "community"
     && selectedCommunityInteractionRootId,
   );
+  const mobileChromeAutoHideEnabled = Boolean(
+    showMobileAppShell
+    && shellPublicRoute.kind === "app"
+    && activePage === "community"
+    && communityTab === "chat"
+    && mobileRootPage === "community"
+    && !mobileThreadPageOpen
+  );
+  useEffect(() => {
+    if (mobileChromeAutoHideEnabled && !mobileOverlay) return;
+    setMobileChromeReadingMode(false);
+  }, [mobileChromeAutoHideEnabled, mobileOverlay]);
+  const mobileChromeReadingModeActive = Boolean(
+    mobileChromeAutoHideEnabled
+    && !mobileOverlay
+    && mobileChromeReadingMode
+  );
   const dockedWorkspaceCenterWidth =
     workspaceViewportWidth -
     WEB_RAIL_WIDTH -
@@ -10815,6 +10833,9 @@ export default function App() {
       interactionProjection: {
         enabled: COMMUNITY_INTERACTION_PROJECTION_ENABLED,
         mobileThreadPage: mobileThreadPageOpen,
+        onMobileReadingModeChange: mobileChromeAutoHideEnabled
+          ? setMobileChromeReadingMode
+          : undefined,
         roots: appendPendingRoots(communityInteractionRoots, pendingCanonicalInteractions, activeCommunityId),
         selectedRootId: selectedCommunityInteractionRootId,
         replies: appendPendingReplies(
@@ -11815,6 +11836,8 @@ export default function App() {
     showMobileSettingsShell,
     showMobilePublicFunnel,
     mobileOverlay,
+    mobileChromeAutoHideEnabled,
+    mobileChromeReadingMode: mobileChromeReadingModeActive,
     showMobileShell,
     mobileShellMode,
     mobileRootPage,

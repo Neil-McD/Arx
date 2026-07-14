@@ -12,6 +12,9 @@ const shellHost = read("apps/web/src/components/WebShellChromeHost.tsx");
 const shellChromeProps = read(
   "apps/web/src/controllers/buildWebShellChromeHostProps.ts",
 );
+const shellClassNames = read(
+  "apps/web/src/controllers/buildWebShellChromeClassNames.ts",
+);
 const communityShell = read(
   "apps/web/src/components/WebMobileCommunityShell.tsx",
 );
@@ -332,8 +335,8 @@ assert.match(
 );
 assert.match(
   indexCss,
-  /\.mobile-bottom-rail-ai \{[\s\S]*color: var\(--accent-agent\);[\s\S]*\.mobile-bottom-rail-ai-icon \{[\s\S]*width: 28px;[\s\S]*height: 28px;[\s\S]*display: inline-flex;/,
-  "AI should retain a fixed violet glyph without a promotional tile treatment",
+  /\.mobile-bottom-rail-ai \{[\s\S]*color: var\(--accent-agent\);[\s\S]*\.mobile-bottom-rail-ai-icon \{[\s\S]*width: 28px;[\s\S]*height: 28px;[\s\S]*display: inline-flex;[\s\S]*\.mobile-bottom-rail-ai-icon svg \{[\s\S]*fill: currentColor;[\s\S]*stroke: currentColor;/,
+  "AI should retain a fixed filled violet glyph without a promotional tile treatment",
 );
 assert.doesNotMatch(
   indexCss,
@@ -349,6 +352,31 @@ assert.doesNotMatch(
   indexCss,
   /\.mobile-bottom-rail-ai\.active/,
   "AI must not have a second active visual treatment",
+);
+assert.match(
+  app,
+  /const \[mobileChromeReadingMode, setMobileChromeReadingMode\] = useState\(false\);[\s\S]*const mobileChromeAutoHideEnabled = Boolean\([\s\S]*activePage === "community"[\s\S]*communityTab === "chat"[\s\S]*mobileRootPage === "community"[\s\S]*onMobileReadingModeChange: mobileChromeAutoHideEnabled[\s\S]*setMobileChromeReadingMode/,
+  "mobile reading mode should be enabled only for the bottom-anchored Community chat root",
+);
+assert.match(
+  interactionProjection,
+  /MOBILE_READING_MODE_HIDE_TRAVEL_PX = 36;[\s\S]*MOBILE_READING_MODE_SHOW_TRAVEL_PX = 12;[\s\S]*MOBILE_READING_MODE_BOTTOM_LOCK_PX = 96;[\s\S]*direction === -1[\s\S]*setMobileReadingMode\(true\)[\s\S]*direction === 1[\s\S]*setMobileReadingMode\(false\)/,
+  "upward history travel should hide chrome with hysteresis while downward travel restores it quickly",
+);
+assert.match(
+  interactionProjection,
+  /new ResizeObserver\(syncComposerHeight\)[\s\S]*isMainComposerFocusedRef\.current = true;[\s\S]*setMobileReadingMode\(false\);/,
+  "composer focus should force chrome visible while its measured overlay preserves feed space",
+);
+assert.match(
+  shellClassNames,
+  /params\.mobileChromeAutoHideEnabled \? " mobile-chrome-auto-hide"[\s\S]*params\.mobileChromeReadingMode \? " mobile-reading-mode"/,
+  "the shell root should expose explicit enabled and active reading-mode states",
+);
+assert.match(
+  indexCss,
+  /\.app-root\.mobile-shell\.mobile-chrome-auto-hide \.community-chat \.community-interaction-main-composer \{[\s\S]*position: absolute;[\s\S]*\.app-root\.mobile-shell\.mobile-reading-mode \.mobile-topbar \{[\s\S]*translateY[\s\S]*\.app-root\.mobile-shell\.mobile-reading-mode \.mobile-bottom-rail \{[\s\S]*translateY\(100%\)[\s\S]*\.app-root\.mobile-shell\.mobile-reading-mode \.community-chat \.community-interaction-main-composer \{[\s\S]*pointer-events: none;[\s\S]*@media \(prefers-reduced-motion: reduce\)/,
+  "reading mode should clear both rails and the composer without shifting the scroll container",
 );
 assert.match(
   topBar,

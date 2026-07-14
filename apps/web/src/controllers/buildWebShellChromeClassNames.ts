@@ -4,6 +4,8 @@ type BuildWebShellChromeClassNamesParams = {
   showMobileSettingsShell: boolean;
   showMobilePublicFunnel: boolean;
   mobileOverlay: boolean;
+  mobileChromeAutoHideEnabled: boolean;
+  mobileChromeReadingMode: boolean;
   showDesktopCommunityRail: boolean;
   showDesktopCommunityNav: boolean;
   isGlobalSettings: boolean;
@@ -22,7 +24,9 @@ export function buildWebShellChromeClassNames(
     params.showMobileAppShell ? " mobile-shell" : ""
   }${params.showMobileSettingsShell ? " mobile-settings-shell" : ""}${
     params.showMobilePublicFunnel ? " public-funnel-mobile" : ""
-  }${params.mobileOverlay ? " mobile-overlay-open" : ""}`;
+  }${params.mobileOverlay ? " mobile-overlay-open" : ""}${
+    params.mobileChromeAutoHideEnabled ? " mobile-chrome-auto-hide" : ""
+  }${params.mobileChromeReadingMode ? " mobile-reading-mode" : ""}`;
 
   const shellClassName = `app-shell${
     params.showDesktopCommunityRail ? " with-community-rail" : ""
