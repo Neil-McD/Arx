@@ -2937,9 +2937,13 @@
 .mobile-bottom-rail-ai-icon svg {
   width: 25px;
   height: 25px;
-  fill: currentColor;
+  fill: none;
   stroke: currentColor;
   stroke-width: 2;
+}
+
+.mobile-bottom-rail-ai[aria-expanded="true"] .mobile-bottom-rail-ai-icon svg {
+  fill: currentColor;
 }
 
 .mobile-drawer-shell {
