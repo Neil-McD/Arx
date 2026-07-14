@@ -39,7 +39,8 @@ export function WebMobileBottomRail({
           onClick={() => communityShell.onSelectMobileRootPage("community")}
         >
           <span className="mobile-bottom-rail-icon-wrap">
-            <House aria-hidden="true" />
+            <House className="mobile-bottom-rail-community-base" aria-hidden="true" />
+            <House className="mobile-bottom-rail-community-cutout" aria-hidden="true" />
             {hasCommunityAttention ? (
               <span
                 className="mobile-bottom-rail-dot"
