@@ -734,6 +734,28 @@ export async function handleRuntimeTurnRequest(args: {
     const runId =
       String(input.idempotency_key ?? "").trim() ||
       `convex_runtime:${crypto.randomUUID()}`;
+    const recordCommunityOnboardingAgentDockTurnBestEffort = async (): Promise<void> => {
+      if (
+        invocationSurface !== "member_agent_dock" ||
+        memberAgentSurfaceContext?.kind !== "community" ||
+        !runtimeCommunityId
+      ) {
+        return;
+      }
+      try {
+        await ctx.runMutation(
+          (internal as any).communityOnboarding.recordPersonalAgentDockTurnInternal as any,
+          {
+            userId: actor.dbUserId,
+            communityId: runtimeCommunityId,
+            occurredAt: Date.now(),
+          },
+        );
+      } catch {
+        // Onboarding progress must never make an otherwise successful personal
+        // agent turn fail. A later successful dock turn retries idempotently.
+      }
+    };
     const runtimeExecutionMode: "agentic" | "chat" = resolvedRuntimeExecutionMode;
     const runtimeAgentProfile = await loadUserAgentProfileForRuntime(ctx, actor.dbUserId);
     startedRunId = runId;
@@ -1182,6 +1204,9 @@ export async function handleRuntimeTurnRequest(args: {
           contextSnapshot,
         });
       } finally {
+        if (params.status === "ok") {
+          await recordCommunityOnboardingAgentDockTurnBestEffort();
+        }
         await settlePolynetDaytonaRuntimeCreditsBestEffort(
           params.status === "ok"
             ? "completed"

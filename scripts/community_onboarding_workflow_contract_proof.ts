@@ -1,0 +1,150 @@
+import assert from "node:assert/strict";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import {
+  buildCommunityOnboardingMilestonePatch,
+  deriveCommunityOnboardingPhase,
+  shouldPresentCommunityOnboardingFirstPost,
+  shouldPresentCommunityOnboardingOrientation,
+  type CommunityOnboardingMilestone,
+  type CommunityOnboardingMilestoneRow,
+} from "../shared/communityOnboarding.ts";
+
+const read = (path: string) => readFileSync(path, "utf8");
+const schema = read("convex/schema.ts");
+const lifecycle = read("convex/communityMembershipLifecycle.ts");
+const onboarding = read("convex/communityOnboarding.ts");
+const onboardingCore = read("convex/communityOnboardingCore.ts");
+const conciergeIntake = read("convex/communityAgentConciergeCore.ts");
+const conciergeWorker = read("convex/communityAgentServeWorker.ts");
+const interactions = read("convex/communityInteractions.ts");
+const runtime = read("convex/runtimeTurnHandlers.ts");
+const settings = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
+const workflowUi = read("apps/web/src/components/WebCommunityOnboardingWorkflowSection.tsx");
+const communityHost = read("apps/web/src/components/WebCommunityHost.tsx");
+const onboardingController = read("apps/web/src/components/WebCommunityOnboardingController.tsx");
+const orientationModal = read("apps/web/src/components/WebCommunityOnboardingOrientationModal.tsx");
+const firstPostGuide = read("apps/web/src/components/WebCommunityOnboardingFirstPostGuide.tsx");
+const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+const app = read("apps/web/src/App.tsx");
+const personalDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
+
+function advance(
+  session: CommunityOnboardingMilestoneRow,
+  milestone: CommunityOnboardingMilestone,
+  nowMs: number,
+): CommunityOnboardingMilestoneRow {
+  return { ...session, ...(buildCommunityOnboardingMilestonePatch(session, milestone, nowMs) ?? {}) };
+}
+
+// Behavioral state-machine proof: milestones are idempotent, phase is derived,
+// and completion occurs only after all three member outcomes exist.
+let session: CommunityOnboardingMilestoneRow = { status: "active" };
+assert.equal(deriveCommunityOnboardingPhase(session), "orientation");
+assert.equal(shouldPresentCommunityOnboardingOrientation({ status: "active", phase: "orientation" }), true);
+assert.equal(shouldPresentCommunityOnboardingOrientation({ status: "active", phase: "first_community_post" }), false);
+assert.equal(shouldPresentCommunityOnboardingOrientation({ status: "dismissed", phase: "orientation" }), false);
+assert.equal(shouldPresentCommunityOnboardingFirstPost({ status: "active", phase: "first_community_post" }), true);
+assert.equal(shouldPresentCommunityOnboardingFirstPost({ status: "active", phase: "first_agent_dock_turn" }), false);
+assert.equal(shouldPresentCommunityOnboardingFirstPost({ status: "completed", phase: "first_community_post" }), false);
+session = advance(session, "opened", 10);
+assert.equal(session.openedAt, 10);
+session = advance(session, "opened", 20);
+assert.equal(session.openedAt, 10, "opening twice must not rewrite the first timestamp");
+session = advance(session, "orientation_completed", 30);
+assert.equal(session.orientationCompletedAt, 30);
+assert.equal(deriveCommunityOnboardingPhase(session), "first_community_post");
+session = advance(session, "first_agent_dock_turn", 40);
+assert.equal(session.status, "active", "agent use before the first post must not complete onboarding");
+assert.equal(deriveCommunityOnboardingPhase(session), "first_community_post");
+session = advance(session, "first_community_post", 50);
+assert.equal(session.firstCommunityPostAt, 50);
+assert.equal(session.firstAgentDockTurnAt, 40);
+assert.equal(session.status, "completed");
+assert.equal(session.completedAt, 50);
+assert.equal(deriveCommunityOnboardingPhase(session), "complete");
+assert.equal(
+  buildCommunityOnboardingMilestonePatch(session, "first_community_post", 60),
+  null,
+  "terminal sessions must reject later milestone writes",
+);
+
+assert.match(schema, /communityMemberships: defineTable\([\s\S]*activationSequence:[\s\S]*activatedAt:/);
+assert.match(schema, /communityOnboardingConfigs: defineTable/);
+assert.match(schema, /communityOnboardingSessions: defineTable/);
+assert.match(schema, /v\.literal\("active"\)[\s\S]*v\.literal\("completed"\)[\s\S]*v\.literal\("dismissed"\)[\s\S]*v\.literal\("superseded"\)/);
+assert.doesNotMatch(schema, /communityOnboardingSessions:[\s\S]{0,1800}v\.literal\("queued"\)/);
+assert.match(schema, /\.index\("by_membership_activation", \["membershipId", "activationSequence"\]\)/);
+assert.match(schema, /by_user_community_status_createdAt/);
+
+for (const file of readdirSync("convex").filter((name) => name.endsWith(".ts"))) {
+  const source = read(`convex/${file}`);
+  if (file === "communityMembershipLifecycle.ts") continue;
+  assert.doesNotMatch(
+    source,
+    /insert\("communityMemberships"[\s\S]{0,500}active:\s*true/,
+    `direct active membership insertion must route through lifecycle helper: ${file}`,
+  );
+}
+
+assert.match(lifecycle, /createCommunityOnboardingSessionForActivation/);
+assert.match(lifecycle, /activationSequence[\s\S]*\+ 1/);
+assert.match(onboardingCore, /if \(!config\?\.enabled\) return null/);
+assert.match(onboardingCore, /by_membership_activation/);
+assert.match(onboardingCore, /status: "superseded"/);
+assert.match(onboardingCore, /heroMediaKind === "video"/);
+assert.doesNotMatch(onboardingCore, /scheduler|deliverCommunityOnboardingWelcome/);
+assert.doesNotMatch(onboardingCore, /\.collect\(\)/, "onboarding reads must remain bounded");
+
+assert.match(onboarding, /completeMyCommunityOnboardingOrientation/);
+assert.match(onboarding, /recordPersonalAgentDockTurnInternal/);
+assert.match(onboarding, /status: "dismissed"/);
+assert.doesNotMatch(onboarding, /communityAgent|Concierge|runChatgpt|provider/i);
+assert.match(interactions, /milestone: "first_community_post"/);
+assert.match(runtime, /invocationSurface !== "member_agent_dock"/);
+assert.match(runtime, /memberAgentSurfaceContext\?\.kind !== "community"/);
+assert.match(runtime, /recordPersonalAgentDockTurnInternal/);
+
+assert.doesNotMatch(conciergeIntake, /communityOnboarding|onboardingSession|requestMode/);
+assert.doesNotMatch(conciergeWorker, /communityOnboarding|onboardingSession|community_concierge/);
+assert.equal(
+  existsSync("apps/web/src/components/WebCommunityOnboardingCard.tsx"),
+  false,
+  "the discarded custom Concierge transcript must remain deleted",
+);
+assert.equal(existsSync("convex/communityAgentDockCore.ts"), false);
+assert.doesNotMatch(personalDock, /communityOnboarding|CommunityOnboarding|communityAgentDock/);
+
+assert.match(settings, /"community", "workflows", "integrations"/);
+assert.match(workflowUi, /Existing members are not backfilled/);
+assert.match(workflowUi, /Personal agent guidance/);
+assert.match(communityHost, /WebCommunityOnboardingController/);
+assert.match(communityHost, /onOrientationCompleted/);
+assert.match(communityHost, /onSelectCommunityTab\?\.\("chat"\)/);
+assert.match(communityHost, /chatInputRef\.current/);
+assert.match(onboardingController, /subscribeCloudCommunityOnboardingSession/);
+assert.equal(
+  onboardingController.match(/subscribeCloudCommunityOnboardingSession\(/g)?.length,
+  1,
+  "orientation and first-post guidance must share one live onboarding subscription",
+);
+assert.match(onboardingController, /WebCommunityOnboardingContext\.Provider/);
+assert.match(onboardingController, /openCloudCommunityOnboardingSession/);
+assert.match(onboardingController, /completeCloudCommunityOnboardingOrientation/);
+assert.match(onboardingController, /dismissCloudCommunityOnboardingSession/);
+assert.match(onboardingController, /shouldPresentCommunityOnboardingOrientation/);
+assert.match(orientationModal, /role="dialog"/);
+assert.match(orientationModal, /aria-modal="true"/);
+assert.match(orientationModal, /renderHeroMediaDefault\("video"/);
+assert.match(orientationModal, /Skip onboarding/);
+assert.match(orientationModal, /Continue to the community/);
+assert.match(firstPostGuide, /Introduce yourself to \{props\.communityName\}/);
+assert.match(firstPostGuide, /what you’re working on, why you joined/);
+assert.match(firstPostGuide, /Skip onboarding/);
+assert.doesNotMatch(firstPostGuide, /onCommunityMessageInputChange|onSendCommunityMessage|runChatgpt|provider/i);
+assert.match(chatPanel, /shouldPresentCommunityOnboardingFirstPost/);
+assert.match(chatPanel, /WebCommunityOnboardingFirstPostGuide/);
+assert.match(chatPanel, /is-onboarding-first-post/);
+assert.match(chatPanel, /aria-describedby/);
+assert.match(app, /onSelectCommunityTab: handleSelectCommunityTab/);
+
+console.log("PASS: onboarding is activation-bound, milestone-driven, and personal-agent scoped.");

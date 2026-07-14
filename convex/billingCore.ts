@@ -2,8 +2,6 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { internal } from "./_generated/api";
 import {
-  adjustCommunityActiveMemberCountForMembershipTransition,
-  communityMembershipRowIsActive,
   communitySubscriptionStatusGrantsAccess,
   normalizeCommunitySubscriptionStatus,
   requireCommunityUserNotBlocked,
@@ -13,6 +11,7 @@ import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { attachStripeCustomerToUser } from "./stripeCustomers";
+import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 
 export type CommunityLike = {
   _id: any;
@@ -211,72 +210,28 @@ export async function ensureCommunityMembership(args: {
   accessSourceOverride?: "free_grant" | "manual_grant" | "paid_subscription";
   nowMs: number;
 }): Promise<{ membership: CommunityMembershipLike; accessGranted: boolean }> {
-  const existing = await args.ctx.db
-    .query("communityMemberships")
-    .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
-    .first() as CommunityMembershipLike | null;
   const defaultAccessSource = "paid_subscription";
   const accessSource = args.accessSourceOverride ?? defaultAccessSource;
-  if (existing) {
-    const wasActive = communityMembershipRowIsActive(existing);
-    const patch: Record<string, unknown> = {
-      accessSource,
-      active: true,
-      revokedAt: undefined,
-      revokedReason: undefined,
-      updatedAt: args.nowMs,
-    };
-    if (args.pricePointId) patch.pricePointId = args.pricePointId;
-    await args.ctx.db.patch(existing._id, patch);
-    const refreshed = (await args.ctx.db.get(existing._id)) as CommunityMembershipLike | null;
-    if (!refreshed) throw new Error("community_membership_not_found");
-    await adjustCommunityActiveMemberCountForMembershipTransition({
-      ctx: args.ctx,
-      communityId: args.communityId,
-      before: existing,
-      after: refreshed,
-    });
-    await scheduleCommunityAppGrantSeedingBestEffort({
-      ctx: args.ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-      nowMs: args.nowMs,
-      reason: "community_membership_ensured_existing",
-    });
-    return {
-      membership: refreshed,
-      accessGranted: !wasActive,
-    };
-  }
-  const membershipId = await args.ctx.db.insert("communityMemberships", {
+  const activation = await activateCommunityMembershipCore({
+    ctx: args.ctx,
     communityId: args.communityId,
     userId: args.userId,
     role: "member",
     accessSource,
     pricePointId: args.pricePointId,
-    active: true,
-    createdAt: args.nowMs,
-    updatedAt: args.nowMs,
-  });
-  const created = (await args.ctx.db.get(membershipId)) as CommunityMembershipLike | null;
-  if (!created) throw new Error("community_membership_create_failed");
-  await adjustCommunityActiveMemberCountForMembershipTransition({
-    ctx: args.ctx,
-    communityId: args.communityId,
-    before: null,
-    after: created,
+    activationReason: "billing_entitlement",
+    nowMs: args.nowMs,
   });
   await scheduleCommunityAppGrantSeedingBestEffort({
     ctx: args.ctx,
     communityId: args.communityId,
     userId: args.userId,
     nowMs: args.nowMs,
-    reason: "community_membership_ensured_created",
+    reason: activation.accessGranted
+      ? "community_membership_ensured_activated"
+      : "community_membership_ensured_existing",
   });
-  return {
-    membership: created,
-    accessGranted: true,
-  };
+  return { membership: activation.membership, accessGranted: activation.accessGranted };
 }
 
 export async function createCommunitySubscriptionForMembership(args: {

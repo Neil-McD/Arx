@@ -1313,6 +1313,8 @@ export default defineSchema({
     ),
     pricePointId: v.optional(v.id("communityPricePoints")),
     active: v.optional(v.boolean()),
+    activationSequence: v.optional(v.number()),
+    activatedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
     revokedReason: v.optional(v.string()),
     createdAt: v.number(),
@@ -1322,6 +1324,49 @@ export default defineSchema({
     .index("by_user_createdAt", ["userId", "createdAt"])
     .index("by_community", ["communityId"])
     .index("by_community_user", ["communityId", "userId"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
+
+  communityOnboardingConfigs: defineTable({
+    communityId: v.id("communities"),
+    enabled: v.boolean(),
+    welcomeMessage: v.string(),
+    agentInstructions: v.string(),
+    version: v.number(),
+    updatedByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_community", ["communityId"]),
+
+  communityOnboardingSessions: defineTable({
+    communityId: v.id("communities"),
+    membershipId: v.id("communityMemberships"),
+    userId: v.id("users"),
+    activationSequence: v.number(),
+    configVersion: v.number(),
+    welcomeMessageSnapshot: v.string(),
+    agentInstructionsSnapshot: v.string(),
+    introVideoUrlSnapshot: v.optional(v.string()),
+    status: v.union(
+      v.literal("active"),
+      v.literal("completed"),
+      v.literal("dismissed"),
+      v.literal("superseded"),
+    ),
+    activatedAt: v.number(),
+    openedAt: v.optional(v.number()),
+    orientationCompletedAt: v.optional(v.number()),
+    firstCommunityPostAt: v.optional(v.number()),
+    firstAgentDockTurnAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    dismissedAt: v.optional(v.number()),
+    supersededAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_membership_activation", ["membershipId", "activationSequence"])
+    .index("by_user_community", ["userId", "communityId"])
+    .index("by_user_community_status_createdAt", ["userId", "communityId", "status", "createdAt"])
+    .index("by_status_createdAt", ["status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"]),
 
   communityPresence: defineTable({

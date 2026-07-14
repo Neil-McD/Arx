@@ -32,11 +32,14 @@ import {
   type ReplyPrefix,
 } from "../../../../shared/communityMessageParsing";
 import { textContainsMentionToken } from "../../../../shared/communityMentionRendering";
+import { shouldPresentCommunityOnboardingFirstPost } from "../../../../shared/communityOnboarding";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import { WebCommunityChatLightboxModal } from "./WebCommunityChatLightboxModal";
+import { WebCommunityOnboardingFirstPostGuide } from "./WebCommunityOnboardingFirstPostGuide";
+import { useWebCommunityOnboarding } from "./WebCommunityOnboardingController";
 import { WebMobileDrawer } from "./WebMobileDrawer";
 import {
   CommunityInteractionContextPanelSurface,
@@ -149,6 +152,7 @@ const COMMUNITY_ATTACHMENT_ACCEPT =
 const COMMUNITY_COMPOSER_FOCUS_MEDIA_QUERY = "(min-width: 901px)";
 const COMMUNITY_COMPOSER_IDEA_PLACEHOLDER_INTERVAL_MS = 6500;
 const COMMUNITY_COMPOSER_REDUCED_MOTION_MEDIA_QUERY = "(prefers-reduced-motion: reduce)";
+const COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID = "community-onboarding-first-post-description";
 
 function syncMentionComposerHighlightScroll(textarea: HTMLTextAreaElement): void {
   textarea.parentElement?.style.setProperty("--mention-composer-scroll-top", `${textarea.scrollTop}px`);
@@ -515,8 +519,15 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     onCloseMobileMembersOverlay,
     interactionProjection,
   } = props;
+  const communityOnboarding = useWebCommunityOnboarding();
   const isProfileSetupGateActive = hasSession && Boolean(activeCommunity) && canPostMessages && !isProfileSetupComplete;
   const canUseComposer = canPostMessages && !isProfileSetupGateActive;
+  const showOnboardingFirstPostGuide = Boolean(
+    canUseComposer &&
+    activeCommunity &&
+    communityOnboarding?.activeSession?.community_id === activeCommunity.id &&
+    shouldPresentCommunityOnboardingFirstPost(communityOnboarding.activeSession),
+  );
   const [profilePanelUserId, setProfilePanelUserId] = useState<string | null>(null);
   const [profileCommunityContextByUserId, setProfileCommunityContextByUserId] = useState<
     Record<string, ProfileCommunityContext>
@@ -1378,7 +1389,17 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
       {renderCommunityAgentServeNotice()}
 
-      <div className="chat-input-bar">
+      {showOnboardingFirstPostGuide && activeCommunity && communityOnboarding ? (
+        <WebCommunityOnboardingFirstPostGuide
+          communityName={activeCommunity.name}
+          descriptionId={COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID}
+          isPending={communityOnboarding.pendingAction !== null}
+          error={communityOnboarding.error}
+          onDismiss={communityOnboarding.dismiss}
+        />
+      ) : null}
+
+      <div className={`chat-input-bar${showOnboardingFirstPostGuide ? " is-onboarding-first-post" : ""}`}>
         <MentionAutocompleteMenu
           autocomplete={mainMention}
           getAvatarColor={getAvatarColor}
@@ -1422,6 +1443,11 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               chatInputRef.current = node;
             }}
             className="chat-input"
+            aria-describedby={
+              showOnboardingFirstPostGuide
+                ? COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID
+                : undefined
+            }
             placeholder={mainCommunityComposerPlaceholder}
             value={communityMessageInput}
             onChange={(event) => {

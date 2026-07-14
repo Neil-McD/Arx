@@ -30,10 +30,12 @@ import type {
   ConnectUserPlatformAppInput,
   ConnectUserPlatformAppResult,
 } from "../../../../shared/userPlatformAppMountTypes";
+import { WebCommunityOnboardingWorkflowSection } from "./WebCommunityOnboardingWorkflowSection";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
 type ActiveCommunity = {
+  id: string;
   name: string;
   slug: string;
   visibility: string;
@@ -43,6 +45,7 @@ type ActiveCommunity = {
 
 type WebCommunitySettingsSectionProps = {
   activeCommunity: ActiveCommunity | null;
+  session: unknown;
   hasSession: boolean;
   canViewActiveCommunitySettings: boolean;
   communitySettingsLayer: CommunitySettingsLayer;
@@ -199,6 +202,7 @@ function buildPersonalOptInInput(args: {
 
 const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
   community: "Community",
+  workflows: "Workflows",
   integrations: "Integrations",
   danger: "Danger",
 };
@@ -984,8 +988,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
   } = props;
   const isOwnerSettingsLayer = communitySettingsLayer === "owner";
   const ownerSettingsPanes: CommunitySettingsPane[] = canDeleteCommunity
-    ? ["community", "integrations", "danger"]
-    : ["community", "integrations"];
+    ? ["community", "workflows", "integrations", "danger"]
+    : ["community", "workflows", "integrations"];
   const availableSettingsPanes = canManageCommunitySettings ? ownerSettingsPanes : [];
   const selectedSettingsPane = availableSettingsPanes.includes(activePane)
     ? activePane
@@ -1093,6 +1097,13 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 hasSession={hasSession}
                 requireSignIn={requireSignIn}
                 integrations={communityIntegrations}
+              />
+            ) : null}
+            {selectedSettingsPane === "workflows" ? (
+              <WebCommunityOnboardingWorkflowSection
+                session={props.session}
+                communityId={activeCommunity.id}
+                communityName={activeCommunity.name}
               />
             ) : null}
             {selectedSettingsPane === "danger" && canDeleteCommunity ? (

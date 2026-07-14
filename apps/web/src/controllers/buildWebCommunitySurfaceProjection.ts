@@ -176,6 +176,7 @@ export function buildWebCommunitySurfaceProjection(
     communityTab: params.communityTab,
     settings: {
       activeCommunity: params.activeCommunity,
+      session: params.session,
       hasSession: params.hasAuthenticatedPresentation,
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       communitySettingsLayer: params.communitySettingsLayer,

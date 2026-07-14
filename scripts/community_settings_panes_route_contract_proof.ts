@@ -13,14 +13,14 @@ const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfac
 const settingsSection = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
 const accessViewModel = read("shared/communityAccessViewModel.ts");
 
-for (const pane of ["community", "integrations", "danger"] as const) {
+for (const pane of ["community", "workflows", "integrations", "danger"] as const) {
   assert.match(navigation, new RegExp(`"${pane}"`), `navigation contract missing ${pane} pane slug`);
   assert.match(settingsSection, new RegExp(`${pane}`), `settings UI missing ${pane} pane`);
 }
 
 assert.match(
   navigation,
-  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"integrations"[\s\S]*"danger"[\s\S]*\] as const/,
+  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*"integrations"[\s\S]*"danger"[\s\S]*\] as const/,
   "community settings panes must be a shared slug union",
 );
 assert.doesNotMatch(
@@ -112,6 +112,11 @@ assert.match(
   settingsSection,
   /activePane: CommunitySettingsPane/,
   "settings section must receive the active pane as a controlled prop",
+);
+assert.match(
+  settingsSection,
+  /selectedSettingsPane === "workflows"[\s\S]*WebCommunityOnboardingWorkflowSection/,
+  "the route-backed Workflows pane must render the onboarding workflow",
 );
 assert.match(
   settingsSection,

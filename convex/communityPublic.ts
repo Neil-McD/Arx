@@ -3,7 +3,6 @@ import { extractMessageText } from "./communityChat";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
-  adjustCommunityActiveMemberCountForMembershipTransition,
   communityJoinRequestCanReapply,
   type CommunityJoinRequestLike,
   type CommunityLike,
@@ -43,6 +42,7 @@ import {
 } from "./platformHomeCommunity";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { hashBusinessVisitorKey } from "./businessAnalyticsCore";
+import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 
 const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
@@ -736,58 +736,18 @@ async function joinPublicCommunityInternal(args: {
   let grantedMembershipMarker: string | null = null;
 
   const grantFreeMembership = async () => {
-    if (existingMembership && !communityMembershipRowIsActive(existingMembership)) {
-      const restoredMembership = {
-        ...existingMembership,
-        role: normalizeCommunityRoleForOutput(existingMembership.role) || "member",
-        accessSource: "free_grant",
-        active: true,
-        revokedAt: undefined,
-        revokedReason: undefined,
-        updatedAt: args.nowMs,
-      } as CommunityMembershipLike;
-      await args.ctx.db.patch(existingMembership._id as any, {
-        role: restoredMembership.role,
-        accessSource: "free_grant",
-        active: true,
-        revokedAt: undefined,
-        revokedReason: undefined,
-        updatedAt: args.nowMs,
-      });
-      await adjustCommunityActiveMemberCountForMembershipTransition({
-        ctx: args.ctx,
-        communityId: args.community._id,
-        before: existingMembership,
-        after: restoredMembership,
-      });
-      grantedMembershipMarker = `${String(existingMembership._id)}:${args.nowMs}`;
-    } else if (!existingMembership) {
-      const membershipId = await args.ctx.db.insert("communityMemberships", {
-        communityId: args.community._id,
-        userId: args.userId,
-        role: "member",
-        accessSource: "free_grant",
-        active: true,
-        createdAt: args.nowMs,
-        updatedAt: args.nowMs,
-      });
-      await adjustCommunityActiveMemberCountForMembershipTransition({
-        ctx: args.ctx,
-        communityId: args.community._id,
-        before: null,
-        after: {
-          _id: membershipId,
-          communityId: args.community._id,
-          userId: args.userId,
-          role: "member",
-          accessSource: "free_grant",
-          active: true,
-          createdAt: args.nowMs,
-          updatedAt: args.nowMs,
-        },
-      });
-      grantedMembershipMarker = `${String(membershipId)}:${args.nowMs}`;
-    }
+    const activation = await activateCommunityMembershipCore({
+      ctx: args.ctx,
+      communityId: args.community._id,
+      userId: args.userId,
+      role: existingMembership
+        ? normalizeCommunityRoleForOutput(existingMembership.role) || "member"
+        : "member",
+      accessSource: "free_grant",
+      activationReason: "public_join",
+      nowMs: args.nowMs,
+    });
+    grantedMembershipMarker = activation.activationMarker;
     if (grantedMembershipMarker) {
       await enqueueCommunityAccessGrantedEmailInternal({
         ctx: args.ctx,

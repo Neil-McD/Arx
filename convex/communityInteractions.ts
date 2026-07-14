@@ -35,6 +35,7 @@ import {
 } from "./communitySourceUrlPolicy";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { intakeCommunityAgentMention } from "./communityAgentConciergeCore";
+import { recordCommunityOnboardingMilestone } from "./communityOnboardingCore";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import {
   buildCommunityAgentServeRunId,
@@ -1726,6 +1727,18 @@ export const createCommunityInteractionComposerMessage = mutation({
         deduped = false;
       }
 
+      try {
+        await recordCommunityOnboardingMilestone({
+          ctx,
+          communityId: args.communityId,
+          userId,
+          milestone: "first_community_post",
+          nowMs,
+        });
+      } catch {
+        // A progress marker must never make a canonical community post fail.
+      }
+
       return {
         rows: [],
         interaction: {
@@ -1816,6 +1829,18 @@ export const createCommunityInteractionComposerMessage = mutation({
         contentHashPrefix: `community-composer:${idempotencyKey}`,
       });
       deduped = false;
+    }
+
+    try {
+      await recordCommunityOnboardingMilestone({
+        ctx,
+        communityId: args.communityId,
+        userId,
+        milestone: "first_community_post",
+        nowMs,
+      });
+    } catch {
+      // A progress marker must never make a canonical community reply fail.
     }
 
     return {

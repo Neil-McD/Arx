@@ -1,6 +1,5 @@
 import { internal } from "./_generated/api";
 import {
-  adjustCommunityActiveMemberCountForMembershipTransition,
   type CommunityLike,
   type CommunityJoinRequestLike,
   type CommunityMembershipLike,
@@ -11,6 +10,7 @@ import {
   pickMostRelevantCommunityMembership,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
+import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 
 const PLATFORM_HOME_COMMUNITY_SLUG = "polynet";
 const PLATFORM_HOME_AUTOJOIN_OPT_OUT_MESSAGE = "platform_home_autojoin_opt_out";
@@ -224,29 +224,14 @@ export async function ensurePlatformHomeCommunityMembership(args: {
     return { status: "already_member", communityId };
   }
 
-  const membershipId = await args.ctx.db.insert("communityMemberships", {
+  await activateCommunityMembershipCore({
+    ctx: args.ctx,
     communityId: community._id,
     userId: args.userId,
     role: existingMembership ? normalizeCommunityRoleForOutput(existingMembership.role) || "member" : "member",
     accessSource: "free_grant",
-    active: true,
-    createdAt: args.nowMs,
-    updatedAt: args.nowMs,
-  });
-  await adjustCommunityActiveMemberCountForMembershipTransition({
-    ctx: args.ctx,
-    communityId: community._id,
-    before: null,
-    after: {
-      _id: membershipId,
-      communityId: community._id,
-      userId: args.userId,
-      role: existingMembership ? normalizeCommunityRoleForOutput(existingMembership.role) || "member" : "member",
-      accessSource: "free_grant",
-      active: true,
-      createdAt: args.nowMs,
-      updatedAt: args.nowMs,
-    },
+    activationReason: "platform_home_autojoin",
+    nowMs: args.nowMs,
   });
   await scheduleCommunityAppGrantSeedingBestEffort({
     ctx: args.ctx,

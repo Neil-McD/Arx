@@ -11529,6 +11529,8 @@ export default function App() {
     },
     communityHostProps: {
       communityTab,
+      ensureSession: ensureUsableAuthSession,
+      onSelectCommunityTab: handleSelectCommunityTab,
       chatPanelProps: {
         ...communityChatPanelProps,
         mobileMembersOverlayOpen: showMobileShell && mobileOverlay === "members",
