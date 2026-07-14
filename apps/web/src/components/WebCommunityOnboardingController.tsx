@@ -11,7 +11,6 @@ import {
 import {
   advanceCommunityOnboardingPreviewSession,
   createCommunityOnboardingPreviewSession,
-  shouldPresentCommunityOnboardingOrientation,
   type CommunityOnboardingSession,
 } from "../../../../shared/communityOnboarding";
 import {
@@ -21,13 +20,10 @@ import {
   openCloudCommunityOnboardingSession,
   subscribeCloudCommunityOnboardingSession,
 } from "../../../../shared/cloudCommunityOnboardingGateway";
-import { fetchCloudCommunityFunnelConfig } from "../../../../shared/cloudCommunityFunnelGateway";
-import type { CommunityFunnelConfig } from "../../../../shared/communityTypes";
 import {
   createCloudCommunityChatLiveClient,
   type CloudCommunityChatLiveClient,
 } from "../../../../shared/cloudCommunityChatGateway";
-import { WebCommunityOnboardingOrientationModal } from "./WebCommunityOnboardingOrientationModal";
 import { WebCommunityOnboardingPreviewBar } from "./WebCommunityOnboardingPreviewBar";
 
 type PendingAction = "continue" | "dismiss" | null;
@@ -37,6 +33,7 @@ type WebCommunityOnboardingContextValue = {
   activeSession: CommunityOnboardingSession | null;
   pendingAction: PendingAction;
   error: string | null;
+  completeOrientation: () => void;
   dismiss: () => void;
 };
 
@@ -68,12 +65,27 @@ export function WebCommunityOnboardingController(props: {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [error, setError] = useState<string | null>(null);
   const openedSessionIdsRef = useRef(new Set<string>());
+  const openAttemptsRef = useRef(new Map<string, number>());
+  // Auth refresh replaces session objects. Keep the latest credentials without
+  // treating that object churn as a new preview entry.
+  const previewAuthSessionRef = useRef(props.session);
+  const previewEnsureSessionRef = useRef(props.ensureSession);
+  previewAuthSessionRef.current = props.session;
+  previewEnsureSessionRef.current = props.ensureSession;
+
+  const previewCommunityId = props.communityId;
+  const canPreview = Boolean(props.canPreview);
+  const hasPreviewAuthSession = Boolean(props.session);
+  const previewSessionPrincipalId = String(
+    (props.session as { user?: { id?: unknown } } | null)?.user?.id ?? "",
+  ).trim();
 
   useEffect(() => {
     setActiveSession(null);
     setUsableSession(null);
     setPendingAction(null);
     setError(null);
+    openAttemptsRef.current.clear();
     if (isPreviewMode || !props.isEnabled || !props.session || !props.communityId) return;
 
     let cancelled = false;
@@ -123,11 +135,11 @@ export function WebCommunityOnboardingController(props: {
     setPreviewError(null);
     setIsPreviewLoading(false);
     if (!isPreviewMode) return;
-    if (!props.canPreview) {
+    if (!canPreview) {
       setPreviewError("Preview is available to community owners and admins.");
       return;
     }
-    if (!props.session || !props.communityId) {
+    if (!hasPreviewAuthSession || !previewCommunityId) {
       setPreviewError("The saved onboarding workflow is unavailable.");
       return;
     }
@@ -136,28 +148,22 @@ export function WebCommunityOnboardingController(props: {
     setIsPreviewLoading(true);
     void (async () => {
       try {
-        const nextUsableSession = props.ensureSession
-          ? await props.ensureSession(props.session)
-          : props.session;
+        const authSession = previewAuthSessionRef.current;
+        const ensureSession = previewEnsureSessionRef.current;
+        if (!authSession) return;
+        const nextUsableSession = ensureSession
+          ? await ensureSession(authSession)
+          : authSession;
         if (!nextUsableSession || cancelled) return;
-        const [config, funnel] = await Promise.all([
-          fetchCloudCommunityOnboardingConfig({
-            session: nextUsableSession,
-            communityId: props.communityId!,
-          }),
-          fetchCloudCommunityFunnelConfig<unknown, CommunityFunnelConfig>({
-            session: nextUsableSession,
-            communityId: props.communityId!,
-          }),
-        ]);
+        const config = await fetchCloudCommunityOnboardingConfig({
+          session: nextUsableSession,
+          communityId: previewCommunityId,
+        });
         if (cancelled) return;
-        const introVideoUrl =
-          funnel?.hero_media_kind === "video" ? funnel.hero_media_url ?? null : null;
         setPreviewConfiguredEnabled(config.enabled);
         setPreviewSession(createCommunityOnboardingPreviewSession({
-          communityId: props.communityId!,
+          communityId: previewCommunityId,
           config,
-          introVideoUrl,
           nowIso: new Date().toISOString(),
           previewId: crypto.randomUUID(),
         }));
@@ -174,11 +180,11 @@ export function WebCommunityOnboardingController(props: {
       cancelled = true;
     };
   }, [
+    canPreview,
+    hasPreviewAuthSession,
     isPreviewMode,
-    props.canPreview,
-    props.communityId,
-    props.ensureSession,
-    props.session,
+    previewCommunityId,
+    previewSessionPrincipalId,
   ]);
 
   useEffect(() => {
@@ -186,7 +192,7 @@ export function WebCommunityOnboardingController(props: {
       isPreviewMode ||
       !activeSession ||
       activeSession.community_id !== props.communityId ||
-      activeSession.opened_at ||
+      (activeSession.opened_at && activeSession.orientation_seeded_at) ||
       !usableSession ||
       !props.communityId ||
       openedSessionIdsRef.current.has(activeSession.id)
@@ -194,20 +200,33 @@ export function WebCommunityOnboardingController(props: {
       return;
     }
     openedSessionIdsRef.current.add(activeSession.id);
+    const attempt = (openAttemptsRef.current.get(activeSession.id) ?? 0) + 1;
+    openAttemptsRef.current.set(activeSession.id, attempt);
     let cancelled = false;
+    let retryTimer: number | null = null;
     void openCloudCommunityOnboardingSession({
       session: usableSession,
       communityId: props.communityId,
       sessionId: activeSession.id,
     }).then((next) => {
       if (!cancelled && next) {
+        openAttemptsRef.current.delete(activeSession.id);
+        setError(null);
         setActiveSession((current) => current?.id === next.id ? next : current);
       }
     }).catch((openError) => {
       console.warn("community_onboarding_open_marker_failed", openError);
+      openedSessionIdsRef.current.delete(activeSession.id);
+      setError("We couldn’t open your orientation. Please try again.");
+      if (!cancelled && attempt < 3) {
+        retryTimer = window.setTimeout(() => {
+          setActiveSession((current) => current?.id === activeSession.id ? { ...current } : current);
+        }, 1_500);
+      }
     });
     return () => {
       cancelled = true;
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
     };
   }, [activeSession, isPreviewMode, props.communityId, usableSession]);
 
@@ -295,8 +314,10 @@ export function WebCommunityOnboardingController(props: {
       presentedSession?.community_id === props.communityId ? presentedSession : null,
     pendingAction: presentedPendingAction,
     error: presentedError,
+    completeOrientation: handleContinue,
     dismiss: handleDismiss,
   }), [
+    handleContinue,
     handleDismiss,
     isPreviewMode,
     presentedError,
@@ -305,25 +326,9 @@ export function WebCommunityOnboardingController(props: {
     props.communityId,
   ]);
 
-  const showOrientation = Boolean(
-    props.communityName &&
-    contextValue.activeSession &&
-    shouldPresentCommunityOnboardingOrientation(contextValue.activeSession),
-  );
-
   return (
     <WebCommunityOnboardingContext.Provider value={contextValue}>
       {props.children}
-      {showOrientation && props.communityName && contextValue.activeSession ? (
-        <WebCommunityOnboardingOrientationModal
-          communityName={props.communityName}
-          session={contextValue.activeSession}
-          isPending={presentedPendingAction !== null}
-          error={presentedError}
-          onContinue={handleContinue}
-          onDismiss={handleDismiss}
-        />
-      ) : null}
       {isPreviewMode ? (
         <WebCommunityOnboardingPreviewBar
           session={contextValue.activeSession}

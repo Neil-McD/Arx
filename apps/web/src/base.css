@@ -33248,7 +33248,7 @@ button.message-citation-chip:hover {
 
 .community-onboarding-toggle-copy small,
 .community-onboarding-field-note {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 400;
   line-height: 1.45;
@@ -33306,6 +33306,35 @@ button.message-citation-chip:hover {
   margin: 0;
   font-family: inherit;
   font-weight: 400;
+}
+
+.community-onboarding-field > span:first-child {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.community-onboarding-video-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 46px;
+  margin: 0;
+  padding: 0 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.community-onboarding-video-input::placeholder {
+  color: var(--text-muted);
+}
+
+.community-onboarding-video-input:focus {
+  border-color: color-mix(in srgb, var(--accent-rose) 68%, var(--border-default));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-rose) 13%, transparent);
 }
 
 .community-onboarding-field-instructions textarea {
@@ -33412,14 +33441,14 @@ button.message-citation-chip:hover {
 }
 
 .community-onboarding-orientation-modal {
-  width: min(720px, calc(100vw - 32px));
-  max-height: min(92svh, 800px);
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(94svh, 880px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border: 1px solid color-mix(in srgb, var(--border-default) 82%, var(--accent-gold) 18%);
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--bg-modal, var(--bg-panel)) 96%, var(--accent-gold) 4%);
+  border: 1px solid color-mix(in srgb, var(--border-default) 80%, var(--accent-rose) 20%);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--bg-modal, var(--bg-panel)) 97%, var(--accent-rose) 3%);
   color: var(--text-primary);
   box-shadow: 0 34px 100px rgba(0, 0, 0, 0.58);
   outline: none;
@@ -33427,23 +33456,42 @@ button.message-citation-chip:hover {
 }
 
 .community-onboarding-orientation-modal:not(.has-video) {
-  width: min(620px, calc(100vw - 32px));
+  width: min(680px, calc(100vw - 32px));
+}
+
+.community-onboarding-orientation-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 22px;
+  border-bottom: 1px solid var(--border-muted);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.community-onboarding-orientation-topbar span:last-child {
+  color: var(--accent-rose);
 }
 
 .community-onboarding-orientation-scroll {
   min-height: 0;
   overflow: auto;
-  padding: 26px 30px 18px;
+  padding: 24px 30px 22px;
   scrollbar-width: thin;
 }
 
 .community-onboarding-orientation-header {
   max-width: 600px;
+  margin-top: 22px;
 }
 
 .community-onboarding-orientation-eyebrow {
   margin-bottom: 7px;
-  color: var(--accent-gold);
+  color: var(--accent-rose);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -33469,15 +33517,181 @@ button.message-citation-chip:hover {
 }
 
 .community-onboarding-orientation-media {
-  max-width: 560px;
-  margin: 18px auto 0;
+  max-width: 100%;
+  margin: 0;
 }
 
 .community-onboarding-orientation-media .public-funnel-media-shell,
 .community-onboarding-orientation-media .public-funnel-media-deferred {
-  border-radius: 14px;
+  border-radius: 16px;
   border-color: color-mix(in srgb, var(--border-default) 84%, white 16%);
   background: #09090c;
+}
+
+.community-onboarding-orientation-agent {
+  margin-top: 22px;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-card) 94%, transparent);
+}
+
+.community-onboarding-orientation-agent-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.community-onboarding-orientation-agent-avatar {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent-rose) 36%, var(--border-default));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-rose) 10%, transparent);
+  color: var(--accent-rose);
+}
+
+.community-onboarding-orientation-agent-avatar svg {
+  width: 15px;
+  height: 15px;
+}
+
+.community-onboarding-orientation-agent-header > span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.community-onboarding-orientation-agent-header strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.community-onboarding-orientation-agent-header small {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.community-onboarding-orientation-transcript {
+  min-height: 128px;
+  max-height: 260px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 15px;
+  scrollbar-width: thin;
+}
+
+.community-onboarding-orientation-message {
+  width: fit-content;
+  max-width: min(88%, 580px);
+  padding: 10px 12px;
+  border-radius: 13px;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.community-onboarding-orientation-message > :first-child {
+  margin-top: 0;
+}
+
+.community-onboarding-orientation-message > :last-child {
+  margin-bottom: 0;
+}
+
+.community-onboarding-orientation-message.is-assistant {
+  align-self: flex-start;
+  border: 1px solid var(--border-muted);
+  border-bottom-left-radius: 4px;
+  background: color-mix(in srgb, var(--bg-card-alt) 86%, transparent);
+}
+
+.community-onboarding-orientation-message.is-user {
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+  background: color-mix(in srgb, var(--accent-rose) 18%, var(--surface-card));
+}
+
+.community-onboarding-orientation-message p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.community-onboarding-orientation-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.community-onboarding-orientation-status svg {
+  width: 13px;
+  height: 13px;
+  animation: spin 900ms linear infinite;
+}
+
+.community-onboarding-orientation-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: end;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--border-muted);
+}
+
+.community-onboarding-orientation-composer textarea {
+  min-height: 38px;
+  max-height: 120px;
+  resize: vertical;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-card-alt) 88%, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  outline: none;
+}
+
+.community-onboarding-orientation-composer textarea:focus {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-rose) 58%, var(--border-default));
+}
+
+.community-onboarding-orientation-composer textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.community-onboarding-orientation-composer button {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent-rose) 48%, var(--border-default));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-rose) 16%, var(--surface-card));
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.community-onboarding-orientation-composer button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.community-onboarding-orientation-composer button svg {
+  width: 15px;
+  height: 15px;
 }
 
 .community-onboarding-orientation-media .public-funnel-media-hint {
@@ -33605,13 +33819,13 @@ button.message-citation-chip:hover {
 }
 
 .community-onboarding-orientation-actions .primary {
-  border: 1px solid color-mix(in srgb, var(--text-primary) 88%, transparent);
-  background: var(--text-primary);
-  color: var(--bg-app);
+  border: 1px solid color-mix(in srgb, var(--accent-rose) 72%, white 12%);
+  background: color-mix(in srgb, var(--accent-rose) 84%, #ffffff 8%);
+  color: #ffffff;
 }
 
 .community-onboarding-orientation-actions .primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-primary) 92%, white 8%);
+  background: color-mix(in srgb, var(--accent-rose) 90%, #ffffff 10%);
 }
 
 @keyframes community-onboarding-overlay-in {
@@ -33654,7 +33868,19 @@ button.message-citation-chip:hover {
   }
 
   .community-onboarding-orientation-scroll {
-    padding: 24px 20px 20px;
+    padding: 18px 16px 16px;
+  }
+
+  .community-onboarding-orientation-topbar {
+    padding-inline: 16px;
+  }
+
+  .community-onboarding-orientation-header {
+    margin-top: 18px;
+  }
+
+  .community-onboarding-orientation-transcript {
+    max-height: 220px;
   }
 
   .community-onboarding-orientation-path {

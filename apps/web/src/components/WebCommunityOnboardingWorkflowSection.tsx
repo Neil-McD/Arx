@@ -18,6 +18,7 @@ export function WebCommunityOnboardingWorkflowSection(props: {
   const [enabled, setEnabled] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState(DEFAULT_COMMUNITY_ONBOARDING_WELCOME);
   const [instructions, setInstructions] = useState(DEFAULT_COMMUNITY_ONBOARDING_AGENT_INSTRUCTIONS);
+  const [introVideoUrl, setIntroVideoUrl] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +36,7 @@ export function WebCommunityOnboardingWorkflowSection(props: {
       setEnabled(next.enabled);
       setWelcomeMessage(next.welcome_message);
       setInstructions(next.agent_instructions);
+      setIntroVideoUrl(next.intro_video_url ?? "");
     }).catch(() => {
       if (!canceled) setError("Couldn’t load the onboarding workflow.");
     }).finally(() => {
@@ -48,14 +50,16 @@ export function WebCommunityOnboardingWorkflowSection(props: {
   const isDirty = useMemo(() => Boolean(config) && (
     enabled !== config?.enabled ||
     welcomeMessage.trim() !== config?.welcome_message ||
-    instructions.trim() !== config?.agent_instructions
-  ), [config, enabled, instructions, welcomeMessage]);
+    instructions.trim() !== config?.agent_instructions ||
+    introVideoUrl.trim() !== (config?.intro_video_url ?? "")
+  ), [config, enabled, instructions, introVideoUrl, welcomeMessage]);
 
   const reset = () => {
     if (!config) return;
     setEnabled(config.enabled);
     setWelcomeMessage(config.welcome_message);
     setInstructions(config.agent_instructions);
+    setIntroVideoUrl(config.intro_video_url ?? "");
     setError(null);
   };
 
@@ -70,11 +74,13 @@ export function WebCommunityOnboardingWorkflowSection(props: {
         enabled,
         welcomeMessage,
         agentInstructions: instructions,
+        introVideoUrl: introVideoUrl.trim() || null,
       });
       setConfig(next);
       setEnabled(next.enabled);
       setWelcomeMessage(next.welcome_message);
       setInstructions(next.agent_instructions);
+      setIntroVideoUrl(next.intro_video_url ?? "");
     } catch {
       setError("Couldn’t save the onboarding workflow.");
     } finally {
@@ -129,6 +135,21 @@ export function WebCommunityOnboardingWorkflowSection(props: {
               <small>Runs once when access activates. Existing members are not backfilled.</small>
             </span>
             <span className="community-onboarding-switch" aria-hidden="true" />
+          </label>
+          <label className="create-community-field community-onboarding-field">
+            <span>Founder orientation video</span>
+            <span className="community-onboarding-field-note">
+              Optional. Shown only during member onboarding and kept separate from the public funnel.
+            </span>
+            <input
+              className="community-onboarding-video-input"
+              type="url"
+              inputMode="url"
+              value={introVideoUrl}
+              maxLength={2000}
+              placeholder="https://youtube.com/watch?v=…"
+              onChange={(event) => setIntroVideoUrl(event.target.value)}
+            />
           </label>
           <label className="create-community-field community-onboarding-field">
             <span>Welcome message</span>

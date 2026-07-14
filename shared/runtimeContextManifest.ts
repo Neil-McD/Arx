@@ -516,7 +516,7 @@ function buildPromptEntries(params: BuildRuntimeContextManifestInput & {
       authority: "scoped",
       injected: true,
       source: "shared/runtimePrompt.ts",
-      reason: "activation-snapshotted guidance for the member's first private agent turn",
+      reason: "activation-snapshotted guidance for the member's active onboarding phase",
     });
   }
   if (params.resourceLane.lane !== "none") {

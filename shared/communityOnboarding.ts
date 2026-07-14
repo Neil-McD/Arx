@@ -6,6 +6,7 @@ export const DEFAULT_COMMUNITY_ONBOARDING_AGENT_INSTRUCTIONS =
 
 export const COMMUNITY_ONBOARDING_WELCOME_MAX_CHARS = 1_200;
 export const COMMUNITY_ONBOARDING_AGENT_INSTRUCTIONS_MAX_CHARS = 4_000;
+export const COMMUNITY_ONBOARDING_VIDEO_URL_MAX_CHARS = 2_000;
 
 export type CommunityOnboardingStatus =
   | "active"
@@ -23,6 +24,7 @@ export type CommunityOnboardingConfig = {
   enabled: boolean;
   welcome_message: string;
   agent_instructions: string;
+  intro_video_url: string | null;
   version: number;
   updated_at: string | null;
 };
@@ -35,6 +37,9 @@ export type CommunityOnboardingSession = {
   welcome_message: string;
   agent_instructions: string;
   intro_video_url: string | null;
+  orientation_seeded_at: string | null;
+  orientation_seed_message_key: string | null;
+  orientation_seed_message_seq: number | null;
   activated_at: string;
   opened_at: string | null;
   orientation_completed_at: string | null;
@@ -60,6 +65,47 @@ export type CommunityOnboardingMilestone =
 
 export function normalizeCommunityOnboardingText(raw: unknown, maxChars: number): string {
   return String(raw ?? "").trim().slice(0, maxChars);
+}
+
+export function normalizeCommunityOnboardingVideoUrl(raw: unknown): string | null {
+  const value = normalizeCommunityOnboardingText(raw, COMMUNITY_ONBOARDING_VIDEO_URL_MAX_CHARS);
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function buildCommunityOnboardingOrientationSeed(params: {
+  communityName: string;
+  welcomeMessage: string;
+}): string {
+  const communityName = String(params.communityName ?? "").trim() || "this community";
+  const welcomeMessage = normalizeCommunityOnboardingText(
+    params.welcomeMessage,
+    COMMUNITY_ONBOARDING_WELCOME_MAX_CHARS,
+  );
+  return [
+    welcomeMessage,
+    `I’m your personal agent here in ${communityName}. I can help you understand the community, answer questions, and find a useful first step. What would you like to know before we continue?`,
+  ].filter(Boolean).join("\n\n");
+}
+
+export function describeCommunityOnboardingPhaseObjective(
+  phase: CommunityOnboardingPhase,
+): string {
+  if (phase === "orientation") {
+    return "Help the member understand this community and answer their orientation questions before they continue.";
+  }
+  if (phase === "first_community_post") {
+    return "Help the member make one useful, authentic first contribution in the community chat.";
+  }
+  if (phase === "first_agent_dock_turn") {
+    return "Help the member use their private personal agent for one concrete next action in this community.";
+  }
+  return "Onboarding is complete; respond normally under the active community lens.";
 }
 
 export function deriveCommunityOnboardingPhase(
@@ -95,7 +141,6 @@ export function shouldPresentCommunityOnboardingAgentStep(
 export function createCommunityOnboardingPreviewSession(params: {
   communityId: string;
   config: CommunityOnboardingConfig;
-  introVideoUrl?: string | null;
   nowIso: string;
   previewId: string;
 }): CommunityOnboardingSession {
@@ -106,7 +151,10 @@ export function createCommunityOnboardingPreviewSession(params: {
     phase: "orientation",
     welcome_message: params.config.welcome_message,
     agent_instructions: params.config.agent_instructions,
-    intro_video_url: String(params.introVideoUrl ?? "").trim() || null,
+    intro_video_url: params.config.intro_video_url,
+    orientation_seeded_at: params.nowIso,
+    orientation_seed_message_key: `preview:${params.previewId}:orientation`,
+    orientation_seed_message_seq: 0,
     activated_at: params.nowIso,
     opened_at: params.nowIso,
     orientation_completed_at: null,

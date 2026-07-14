@@ -1331,6 +1331,7 @@ export default defineSchema({
     enabled: v.boolean(),
     welcomeMessage: v.string(),
     agentInstructions: v.string(),
+    introVideoUrl: v.optional(v.string()),
     version: v.number(),
     updatedByUserId: v.id("users"),
     createdAt: v.number(),
@@ -1346,6 +1347,9 @@ export default defineSchema({
     welcomeMessageSnapshot: v.string(),
     agentInstructionsSnapshot: v.string(),
     introVideoUrlSnapshot: v.optional(v.string()),
+    orientationSeededAt: v.optional(v.number()),
+    orientationSeedMessageKey: v.optional(v.string()),
+    orientationSeedMessageSeq: v.optional(v.number()),
     status: v.union(
       v.literal("active"),
       v.literal("completed"),

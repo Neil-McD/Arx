@@ -38,7 +38,11 @@ import {
   describeMemberAgentSurface,
   type MemberAgentSurfaceContextV1,
 } from "../../../../shared/memberAgentSurfaceContext";
-import { shouldPresentCommunityOnboardingAgentStep } from "../../../../shared/communityOnboarding";
+import {
+  buildCommunityOnboardingOrientationSeed,
+  shouldPresentCommunityOnboardingAgentStep,
+  shouldPresentCommunityOnboardingOrientation,
+} from "../../../../shared/communityOnboarding";
 import { useWebTurnRunnerController } from "../../../../shared/useWebTurnRunnerController";
 import type {
   InferenceIssueModalState,
@@ -48,6 +52,7 @@ import type {
 import { RuntimeLiveTimeline } from "./RuntimeLiveTimeline";
 import { WebCommunityOnboardingAgentGuide } from "./WebCommunityOnboardingAgentGuide";
 import { useWebCommunityOnboarding } from "./WebCommunityOnboardingController";
+import { WebCommunityOnboardingOrientationModal } from "./WebCommunityOnboardingOrientationModal";
 import "./WebMemberAgentDock.css";
 
 type MemberAgentMessage = Omit<CloudMessageTransportRow, "role"> & {
@@ -141,6 +146,16 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   });
   const scopeUserId = props.session?.user.id ?? null;
   const surfaceKind = props.surfaceContext?.kind ?? null;
+  const onboardingSession = onboarding?.activeSession ?? null;
+  const showOnboardingOrientation = Boolean(
+    props.communityId &&
+    props.communityName &&
+    onboardingSession?.community_id === props.communityId &&
+    shouldPresentCommunityOnboardingOrientation(onboardingSession),
+  );
+  const isConversationSurfaceActive = isOpenSurface || (
+    showOnboardingOrientation && onboarding?.mode === "live"
+  );
   if (agentScopeRef.current.userId !== scopeUserId) {
     agentScopeRef.current = {
       userId: scopeUserId,
@@ -269,7 +284,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   useEffect(() => {
     if (
       onboarding?.mode === "preview" ||
-      !isOpenSurface ||
+      !isConversationSurfaceActive ||
       !props.isVisible ||
       !surfaceKind ||
       !props.session
@@ -312,7 +327,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       cancelled = true;
     };
   }, [
-    isOpenSurface,
+    isConversationSurfaceActive,
     loadMessages,
     props.communityId,
     props.ensureSession,
@@ -333,7 +348,6 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     ? []
     : messages.filter((message) => message.role !== "system");
   const dockError = localError ?? formatInferenceIssue(inferenceIssue);
-  const onboardingSession = onboarding?.activeSession ?? null;
   const showOnboardingAgentGuide = Boolean(
     props.communityId &&
     props.communityName &&
@@ -341,6 +355,60 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     shouldPresentCommunityOnboardingAgentStep(onboardingSession),
   );
   const onboardingDescriptionId = "community-onboarding-agent-description";
+  const orientationSeedSeq = onboardingSession?.orientation_seed_message_seq ?? null;
+  const orientationMessages = !isOnboardingPreview && orientationSeedSeq !== null
+    ? visibleMessages
+        .filter((message) => message.seq >= orientationSeedSeq)
+        .map((message) => ({
+          id: message.id,
+          role: message.role === "user" ? "user" as const : "assistant" as const,
+          text: extractTextFromContentJson(message.content_json),
+        }))
+    : [];
+  const orientationPresentationMessages = orientationMessages.length > 0
+    ? orientationMessages
+    : onboardingSession && props.communityName
+      ? [{
+          id: onboardingSession.orientation_seed_message_key ?? `${onboardingSession.id}:seed`,
+          role: "assistant" as const,
+          text: buildCommunityOnboardingOrientationSeed({
+            communityName: props.communityName,
+            welcomeMessage: onboardingSession.welcome_message,
+          }),
+        }]
+      : [];
+
+  useEffect(() => {
+    if (
+      isOnboardingPreview ||
+      !showOnboardingOrientation ||
+      orientationSeedSeq === null ||
+      !threadKey ||
+      !props.session
+    ) return;
+    let cancelled = false;
+    const scope = agentScopeRef.current;
+    void props.ensureSession(props.session, "member_agent_onboarding_seed_ready")
+      .then((usableSession) => {
+        if (!usableSession || cancelled || !isCurrentScope(scope)) return null;
+        return loadMessages(threadKey, usableSession);
+      })
+      .catch((error) => {
+        if (!cancelled) console.warn("member_agent_onboarding_seed_load_failed", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isCurrentScope,
+    isOnboardingPreview,
+    loadMessages,
+    orientationSeedSeq,
+    props.ensureSession,
+    props.session,
+    showOnboardingOrientation,
+    threadKey,
+  ]);
 
   useEffect(() => {
     if (
@@ -656,6 +724,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
 
   return (
+    <>
     <aside
       id="polynet-member-agent-surface"
       className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileOverlay ? " mobile-overlay" : ""}${showOnboardingAgentGuide ? " is-onboarding" : ""}`}
@@ -845,5 +914,30 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         </div>
       </section>
     </aside>
+    {showOnboardingOrientation && onboardingSession && props.communityName && onboarding ? (
+      <WebCommunityOnboardingOrientationModal
+        communityName={props.communityName}
+        session={onboardingSession}
+        messages={orientationPresentationMessages}
+        input={input}
+        isPreview={isOnboardingPreview}
+        isPreparing={
+          isPreparing ||
+          (!isOnboardingPreview && onboardingSession.orientation_seeded_at === null)
+        }
+        isWorking={turnIsActive}
+        streamedText={streamedText}
+        isPending={onboarding.pendingAction !== null}
+        error={onboarding.error ?? dockError}
+        onInputChange={setInput}
+        onSubmit={submit}
+        onStop={() => {
+          if (threadKey) stopStreamingTurn(threadKey);
+        }}
+        onContinue={onboarding.completeOrientation}
+        onDismiss={onboarding.dismiss}
+      />
+    ) : null}
+    </>
   );
 }

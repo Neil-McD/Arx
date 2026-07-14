@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import {
   advanceCommunityOnboardingPreviewSession,
   createCommunityOnboardingPreviewSession,
+  shouldPresentCommunityOnboardingAgentStep,
+  shouldPresentCommunityOnboardingFirstPost,
+  shouldPresentCommunityOnboardingOrientation,
 } from "../shared/communityOnboarding.ts";
 import {
   buildCommunityOnboardingPreviewPath,
@@ -17,6 +20,7 @@ const workflow = read("apps/web/src/components/WebCommunityOnboardingWorkflowSec
 const previewBar = read("apps/web/src/components/WebCommunityOnboardingPreviewBar.tsx");
 const chat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const dock = read("apps/web/src/components/WebMemberAgentDock.tsx");
+const orientation = read("apps/web/src/components/WebCommunityOnboardingOrientationModal.tsx");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const convexOnboarding = read("convex/communityOnboarding.ts");
 const schema = read("convex/schema.ts");
@@ -53,23 +57,35 @@ const started = createCommunityOnboardingPreviewSession({
     enabled: false,
     welcome_message: "Welcome to the room.",
     agent_instructions: "Suggest one next move.",
+    intro_video_url: "https://example.com/welcome",
     version: 3,
     updated_at: null,
   },
-  introVideoUrl: "https://example.com/welcome",
   nowIso: "2026-07-14T12:00:00.000Z",
   previewId: "entry-1",
 });
 assert.equal(started.phase, "orientation");
 assert.equal(started.id, "preview:community-1:3:entry-1");
 assert.equal(started.intro_video_url, "https://example.com/welcome");
+assert.equal(shouldPresentCommunityOnboardingOrientation(started), true);
+assert.equal(shouldPresentCommunityOnboardingFirstPost(started), false);
+assert.equal(shouldPresentCommunityOnboardingAgentStep(started), false);
 const firstPost = advanceCommunityOnboardingPreviewSession(started, "2026-07-14T12:01:00.000Z");
 assert.equal(firstPost.phase, "first_community_post");
+assert.equal(shouldPresentCommunityOnboardingOrientation(firstPost), false);
+assert.equal(shouldPresentCommunityOnboardingFirstPost(firstPost), true);
+assert.equal(shouldPresentCommunityOnboardingAgentStep(firstPost), false);
 const agent = advanceCommunityOnboardingPreviewSession(firstPost, "2026-07-14T12:02:00.000Z");
 assert.equal(agent.phase, "first_agent_dock_turn");
+assert.equal(shouldPresentCommunityOnboardingOrientation(agent), false);
+assert.equal(shouldPresentCommunityOnboardingFirstPost(agent), false);
+assert.equal(shouldPresentCommunityOnboardingAgentStep(agent), true);
 const complete = advanceCommunityOnboardingPreviewSession(agent, "2026-07-14T12:03:00.000Z");
 assert.equal(complete.phase, "complete");
 assert.equal(complete.status, "completed");
+assert.equal(shouldPresentCommunityOnboardingOrientation(complete), false);
+assert.equal(shouldPresentCommunityOnboardingFirstPost(complete), false);
+assert.equal(shouldPresentCommunityOnboardingAgentStep(complete), false);
 
 assert.match(workflow, /isDirty \? \([\s\S]*Cancel[\s\S]*\) : \([\s\S]*onClick=\{props\.onPreview\}[\s\S]*Preview/);
 assert.doesNotMatch(workflow, /community-onboarding-preview/);
@@ -80,22 +96,36 @@ assert.match(routeLifecycle, /communityExperienceMode/);
 
 assert.match(controller, /if \(isPreviewMode \|\| !props\.isEnabled/);
 assert.match(controller, /fetchCloudCommunityOnboardingConfig/);
-assert.match(controller, /fetchCloudCommunityFunnelConfig/);
+assert.doesNotMatch(controller, /fetchCloudCommunityFunnelConfig/);
 assert.match(controller, /createCommunityOnboardingPreviewSession/);
 assert.match(controller, /advanceCommunityOnboardingPreviewSession/);
 assert.match(controller, /mode: isPreviewMode \? "preview" : "live"/);
 assert.match(controller, /if \(isPreviewMode\) \{[\s\S]*props\.onExitPreview\?\.\(\);/);
+assert.match(controller, /const previewAuthSessionRef = useRef\(props\.session\)/);
+assert.match(controller, /const previewEnsureSessionRef = useRef\(props\.ensureSession\)/);
+const previewLifecycleEffect = controller.match(
+  /useEffect\(\(\) => \{\s*setPreviewSession\(null\);[\s\S]*?\n  \}, \[([\s\S]*?)\n  \]\);/,
+);
+assert.ok(previewLifecycleEffect, "preview lifecycle effect must remain explicit");
+const previewLifecycleDependencies = previewLifecycleEffect[1] ?? "";
+assert.match(previewLifecycleDependencies, /canPreview/);
+assert.match(previewLifecycleDependencies, /hasPreviewAuthSession/);
+assert.match(previewLifecycleDependencies, /isPreviewMode/);
+assert.match(previewLifecycleDependencies, /previewCommunityId/);
+assert.match(previewLifecycleDependencies, /previewSessionPrincipalId/);
+assert.doesNotMatch(previewLifecycleDependencies, /props\.session/);
+assert.doesNotMatch(previewLifecycleDependencies, /props\.ensureSession/);
 assert.match(previewBar, /Member actions are disabled/);
 assert.match(previewBar, /Preview agent step/);
 assert.match(previewBar, /Finish preview/);
 
 assert.match(chat, /const canUseComposer = canPresentComposer && !isCommunityOnboardingPreview/);
-assert.match(dock, /if \(\s*onboarding\?\.mode === "preview" \|\|\s*!isOpenSurface/);
+assert.match(dock, /onboarding\?\.mode === "preview" \|\|\s*!isConversationSurfaceActive/);
 assert.match(dock, /const visibleMessages = isOnboardingPreview[\s\S]*\? \[\]/);
 assert.match(dock, /const startNewChat = async \(\) => \{[\s\S]*isOnboardingPreview \|\|/);
 assert.match(dock, /const submit = async \(event: FormEvent\) => \{[\s\S]*isOnboardingPreview \|\|/);
-assert.match(dock, /readOnly=\{isOnboardingPreview\}/);
-assert.match(dock, /disabled=\{isOnboardingPreview \|\| !input\.trim\(\)/);
+assert.match(orientation, /readOnly=\{props\.isPreview\}/);
+assert.match(orientation, /disabled=\{props\.isPreview \|\| props\.isPreparing \|\| !props\.input\.trim\(\)\}/);
 
 assert.doesNotMatch(convexOnboarding, /previewCommunityOnboarding|onboardingPreview/);
 assert.doesNotMatch(schema, /communityOnboardingPreviews/);

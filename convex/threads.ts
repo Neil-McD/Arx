@@ -1458,7 +1458,7 @@ function buildMemberAgentChannelResponse(args: {
   };
 }
 
-async function ensureGlobalMemberAgentChannelCore(args: {
+export async function ensureGlobalMemberAgentChannelCore(args: {
   ctx: any;
   ownerId: any;
   initialCommunity: any | null;
@@ -1537,6 +1537,41 @@ async function ensureGlobalMemberAgentChannelCore(args: {
   const thread = (await args.ctx.db.get(threadId)) as ThreadLike | null;
   if (!channel || !episode || !thread) throw new Error("member_agent_channel_create_failed");
   return buildMemberAgentChannelResponse({ channel, episode, thread, communityId });
+}
+
+export async function ensureGlobalMemberAgentChannelWithCommunityLensCore(args: {
+  ctx: any;
+  ownerId: any;
+  community: any;
+  nowMs: number;
+}) {
+  const desiredCommunityId = String(args.community?._id ?? "").trim();
+  if (!desiredCommunityId) throw new Error("community_required");
+  const channel = await ensureGlobalMemberAgentChannelCore({
+    ctx: args.ctx,
+    ownerId: args.ownerId,
+    initialCommunity: args.community,
+    nowMs: args.nowMs,
+  });
+  if (channel.community_id === desiredCommunityId) return channel;
+  const thread = (await args.ctx.db.get(channel.thread_id as any)) as ThreadLike | null;
+  if (!thread || thread.ownerId !== args.ownerId) throw new Error("member_agent_thread_not_found");
+  const context = await setCloudThreadContextForOwnedThread({
+    ctx: args.ctx,
+    ownerId: args.ownerId,
+    existing: thread,
+    expectedContextVersion: channel.context_version,
+    communityId: desiredCommunityId,
+    nowMs: args.nowMs,
+  });
+  if (!context || context.community_id !== desiredCommunityId) {
+    throw new Error("member_agent_community_lens_not_confirmed");
+  }
+  return {
+    ...channel,
+    community_id: context.community_id,
+    context_version: context.context_version,
+  };
 }
 
 export const ensureMemberAgentGlobalChannel = mutation({

@@ -23,6 +23,7 @@ export async function saveCloudCommunityOnboardingConfig<SessionT>(params: {
   enabled: boolean;
   welcomeMessage: string;
   agentInstructions: string;
+  introVideoUrl: string | null;
 }): Promise<CommunityOnboardingConfig> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   return await client.mutation("communityOnboarding:saveCommunityOnboardingConfig" as any, {
@@ -31,6 +32,7 @@ export async function saveCloudCommunityOnboardingConfig<SessionT>(params: {
     enabled: params.enabled,
     welcomeMessage: params.welcomeMessage,
     agentInstructions: params.agentInstructions,
+    introVideoUrl: params.introVideoUrl ?? "",
   }) as CommunityOnboardingConfig;
 }
 

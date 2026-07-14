@@ -10,6 +10,12 @@ type CommunityOnboardingSessionRow = Record<string, any> & {
   userId: any;
   activationSequence: number;
   status: "active" | "completed" | "dismissed" | "superseded";
+  openedAt?: number;
+  orientationCompletedAt?: number;
+  firstCommunityPostAt?: number;
+  firstAgentDockTurnAt?: number;
+  completedAt?: number;
+  orientationSeededAt?: number;
   createdAt: number;
 };
 
@@ -49,12 +55,7 @@ export async function createCommunityOnboardingSessionForActivation(args: {
     });
   }
 
-  const funnel = (await args.ctx.db
-    .query("communityFunnels" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-    .first()) as Record<string, any> | null;
-  const introVideoUrlSnapshot =
-    funnel?.heroMediaKind === "video" ? String(funnel.heroMediaUrl ?? "").trim() || undefined : undefined;
+  const introVideoUrlSnapshot = String(config.introVideoUrl ?? "").trim() || undefined;
 
   return await args.ctx.db.insert("communityOnboardingSessions" as any, {
     communityId: args.communityId,

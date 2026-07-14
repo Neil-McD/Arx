@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import {
+  buildCommunityOnboardingOrientationSeed,
   buildCommunityOnboardingMilestonePatch,
+  describeCommunityOnboardingPhaseObjective,
   deriveCommunityOnboardingPhase,
+  normalizeCommunityOnboardingVideoUrl,
   shouldPresentCommunityOnboardingAgentStep,
   shouldPresentCommunityOnboardingFirstPost,
   shouldPresentCommunityOnboardingOrientation,
@@ -15,6 +18,7 @@ const schema = read("convex/schema.ts");
 const lifecycle = read("convex/communityMembershipLifecycle.ts");
 const onboarding = read("convex/communityOnboarding.ts");
 const onboardingCore = read("convex/communityOnboardingCore.ts");
+const threads = read("convex/threads.ts");
 const conciergeIntake = read("convex/communityAgentConciergeCore.ts");
 const conciergeWorker = read("convex/communityAgentServeWorker.ts");
 const interactions = read("convex/communityInteractions.ts");
@@ -44,6 +48,20 @@ function advance(
   return { ...session, ...(buildCommunityOnboardingMilestonePatch(session, milestone, nowMs) ?? {}) };
 }
 
+assert.equal(
+  normalizeCommunityOnboardingVideoUrl("https://example.com/founder-welcome"),
+  "https://example.com/founder-welcome",
+);
+assert.equal(normalizeCommunityOnboardingVideoUrl("javascript:alert(1)"), null);
+assert.match(
+  buildCommunityOnboardingOrientationSeed({
+    communityName: "Practice",
+    welcomeMessage: "Welcome to the room.",
+  }),
+  /Welcome to the room\.[\s\S]*personal agent[\s\S]*Practice/,
+);
+assert.match(describeCommunityOnboardingPhaseObjective("orientation"), /orientation questions/);
+
 // Behavioral state-machine proof: milestones are idempotent, phase is derived,
 // and completion occurs only after all three member outcomes exist.
 let session: CommunityOnboardingMilestoneRow = { status: "active" };
@@ -64,12 +82,11 @@ assert.equal(session.openedAt, 10, "opening twice must not rewrite the first tim
 session = advance(session, "orientation_completed", 30);
 assert.equal(session.orientationCompletedAt, 30);
 assert.equal(deriveCommunityOnboardingPhase(session), "first_community_post");
-session = advance(session, "first_agent_dock_turn", 40);
-assert.equal(session.status, "active", "agent use before the first post must not complete onboarding");
-assert.equal(deriveCommunityOnboardingPhase(session), "first_community_post");
-session = advance(session, "first_community_post", 50);
-assert.equal(session.firstCommunityPostAt, 50);
-assert.equal(session.firstAgentDockTurnAt, 40);
+session = advance(session, "first_community_post", 40);
+assert.equal(session.firstCommunityPostAt, 40);
+assert.equal(deriveCommunityOnboardingPhase(session), "first_agent_dock_turn");
+session = advance(session, "first_agent_dock_turn", 50);
+assert.equal(session.firstAgentDockTurnAt, 50);
 assert.equal(session.status, "completed");
 assert.equal(session.completedAt, 50);
 assert.equal(deriveCommunityOnboardingPhase(session), "complete");
@@ -82,6 +99,8 @@ assert.equal(
 assert.match(schema, /communityMemberships: defineTable\([\s\S]*activationSequence:[\s\S]*activatedAt:/);
 assert.match(schema, /communityOnboardingConfigs: defineTable/);
 assert.match(schema, /communityOnboardingSessions: defineTable/);
+assert.match(schema, /introVideoUrl: v\.optional\(v\.string\(\)\)/);
+assert.match(schema, /orientationSeedMessageKey: v\.optional\(v\.string\(\)\)/);
 assert.match(schema, /v\.literal\("active"\)[\s\S]*v\.literal\("completed"\)[\s\S]*v\.literal\("dismissed"\)[\s\S]*v\.literal\("superseded"\)/);
 assert.doesNotMatch(schema, /communityOnboardingSessions:[\s\S]{0,1800}v\.literal\("queued"\)/);
 assert.match(schema, /\.index\("by_membership_activation", \["membershipId", "activationSequence"\]\)/);
@@ -102,7 +121,8 @@ assert.match(lifecycle, /activationSequence[\s\S]*\+ 1/);
 assert.match(onboardingCore, /if \(!config\?\.enabled\) return null/);
 assert.match(onboardingCore, /by_membership_activation/);
 assert.match(onboardingCore, /status: "superseded"/);
-assert.match(onboardingCore, /heroMediaKind === "video"/);
+assert.match(onboardingCore, /config\.introVideoUrl/);
+assert.doesNotMatch(onboardingCore, /communityFunnels|heroMediaKind/);
 assert.doesNotMatch(onboardingCore, /scheduler|deliverCommunityOnboardingWelcome/);
 assert.doesNotMatch(onboardingCore, /\.collect\(\)/, "onboarding reads must remain bounded");
 
@@ -110,7 +130,11 @@ assert.match(onboarding, /completeMyCommunityOnboardingOrientation/);
 assert.match(onboarding, /recordPersonalAgentDockTurnInternal/);
 assert.match(onboarding, /resolveActivePersonalAgentGuidanceInternal/);
 assert.match(onboarding, /deriveCommunityOnboardingPhase\(/);
-assert.match(onboarding, /\}\) !== "first_agent_dock_turn"/);
+assert.match(onboarding, /deriveCommunityOnboardingPhase\(activeSession\) !== "first_agent_dock_turn"/);
+assert.match(onboarding, /community-onboarding:\$\{normalizeIdValue\(session\._id\)\}:orientation/);
+assert.match(onboarding, /by_owner_messageKey/);
+assert.match(onboarding, /orientationSeedMessageSeq/);
+assert.match(onboarding, /buildCommunityOnboardingOrientationSeed/);
 assert.match(onboarding, /status: "dismissed"/);
 assert.doesNotMatch(onboarding, /communityAgent|Concierge|runChatgpt|provider/i);
 assert.match(interactions, /milestone: "first_community_post"/);
@@ -129,6 +153,7 @@ assert.match(runtimePrompt, /MEMBER_ONBOARDING_GUIDANCE/);
 assert.match(runtimePrompt, /grants no tools, data, permissions, or authority/);
 assert.match(runtimePrompt, /id: "community_onboarding_guidance"/);
 assert.match(runtimeManifest, /id: "community_onboarding_guidance"/);
+assert.match(threads, /ensureGlobalMemberAgentChannelWithCommunityLensCore/);
 assert.match(runtimeAgentLoop, /communityOnboardingInstructions: params\.communityOnboardingInstructions/);
 assert.match(codexWorkerBridge, /communityOnboardingInstructions: params\.communityOnboardingInstructions/);
 
@@ -142,6 +167,8 @@ assert.equal(
 assert.equal(existsSync("convex/communityAgentDockCore.ts"), false);
 assert.match(personalDock, /shouldPresentCommunityOnboardingAgentStep/);
 assert.match(personalDock, /WebCommunityOnboardingAgentGuide/);
+assert.match(personalDock, /WebCommunityOnboardingOrientationModal/);
+assert.match(personalDock, /orientationSeedSeq/);
 assert.match(personalDock, /onboardingOpenedSessionIdsRef/);
 assert.match(personalDock, /textareaRef/);
 assert.match(personalDock, /aria-describedby/);
@@ -149,6 +176,8 @@ assert.match(personalDock, /aria-describedby/);
 assert.match(settings, /"community", "workflows", "integrations"/);
 assert.match(workflowUi, /Existing members are not backfilled/);
 assert.match(workflowUi, /Personal agent guidance/);
+assert.match(workflowUi, /Founder orientation video/);
+assert.match(workflowUi, /separate from the public funnel/);
 assert.match(workflowUi, /className="settings-section community-onboarding-workflow"/);
 assert.match(workflowUi, /className="create-community-field community-onboarding-field/);
 assert.doesNotMatch(workflowUi, /className="create-field"/);
@@ -170,12 +199,14 @@ assert.match(onboardingController, /WebCommunityOnboardingContext\.Provider/);
 assert.match(onboardingController, /openCloudCommunityOnboardingSession/);
 assert.match(onboardingController, /completeCloudCommunityOnboardingOrientation/);
 assert.match(onboardingController, /dismissCloudCommunityOnboardingSession/);
-assert.match(onboardingController, /shouldPresentCommunityOnboardingOrientation/);
+assert.doesNotMatch(onboardingController, /WebCommunityOnboardingOrientationModal/);
 assert.match(orientationModal, /role="dialog"/);
 assert.match(orientationModal, /aria-modal="true"/);
 assert.match(orientationModal, /renderHeroMediaDefault\("video"/);
+assert.match(orientationModal, /Your personal agent/);
+assert.match(orientationModal, /onSubmit=\{props\.onSubmit\}/);
 assert.match(orientationModal, /Skip onboarding/);
-assert.match(orientationModal, /Continue to the community/);
+assert.match(orientationModal, /Continue to community chat/);
 assert.match(firstPostGuide, /Introduce yourself to \{props\.communityName\}/);
 assert.match(firstPostGuide, /what you’re working on, why you joined/);
 assert.match(firstPostGuide, /Skip onboarding/);
