@@ -1104,6 +1104,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               <WebCommunityOnboardingWorkflowSection
                 session={props.session}
                 communityId={activeCommunity.id}
+                communityName={activeCommunity.name}
                 onPreview={props.onPreviewCommunityOnboarding}
               />
             ) : null}

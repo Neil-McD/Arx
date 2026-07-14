@@ -33239,7 +33239,9 @@ button.message-citation-chip:hover {
 /* Community onboarding workflow settings. */
 .community-onboarding-workflow {
   display: grid;
-  gap: 18px;
+  gap: 24px;
+  container-name: onboarding-workflow;
+  container-type: inline-size;
 }
 
 .community-onboarding-header {
@@ -33256,13 +33258,17 @@ button.message-citation-chip:hover {
 }
 
 .community-onboarding-description {
-  max-width: 64ch;
+  max-width: 58ch;
   margin: 0;
   line-height: 1.5;
 }
 
 .community-onboarding-actions {
   flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .settings-panel .community-onboarding-actions > button {
@@ -33277,7 +33283,7 @@ button.message-citation-chip:hover {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
-  padding: 15px 0;
+  padding: 16px 0;
   border-top: 1px solid var(--border-muted);
   border-bottom: 1px solid var(--border-muted);
   cursor: pointer;
@@ -33305,7 +33311,7 @@ button.message-citation-chip:hover {
 
 .community-onboarding-toggle-copy small,
 .community-onboarding-field-note {
-  color: var(--text-secondary);
+  color: color-mix(in srgb, var(--text-secondary) 88%, var(--text-primary) 12%);
   font-size: 12px;
   font-weight: 400;
   line-height: 1.45;
@@ -33353,7 +33359,7 @@ button.message-citation-chip:hover {
 }
 
 .community-onboarding-field {
-  gap: 7px;
+  gap: 8px;
 }
 
 .community-onboarding-field textarea {
@@ -33398,7 +33404,276 @@ button.message-citation-chip:hover {
   min-height: 168px;
 }
 
-@media (max-width: 700px) {
+.community-onboarding-journey {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.community-onboarding-journey li {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px 12px 0;
+  border-top: 1px solid var(--border-muted);
+}
+
+.community-onboarding-journey li:not(:first-child) {
+  padding-left: 18px;
+}
+
+.community-onboarding-journey li.is-current {
+  border-top-color: color-mix(in srgb, var(--accent-rose) 72%, var(--border-default));
+}
+
+.community-onboarding-journey li > span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-card) 88%, transparent);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.community-onboarding-journey li.is-current > span {
+  border-color: color-mix(in srgb, var(--accent-rose) 58%, var(--border-default));
+  background: color-mix(in srgb, var(--accent-rose) 12%, var(--surface-card));
+  color: var(--text-primary);
+}
+
+.community-onboarding-journey strong,
+.community-onboarding-journey small {
+  display: block;
+}
+
+.community-onboarding-journey strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.community-onboarding-journey small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.community-onboarding-builder {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.82fr) minmax(420px, 1.18fr);
+  align-items: start;
+  gap: 32px;
+}
+
+.community-onboarding-editor {
+  min-width: 0;
+  display: grid;
+  gap: 24px;
+  padding-right: 32px;
+  border-right: 1px solid var(--border-muted);
+}
+
+.community-onboarding-editor-heading {
+  display: grid;
+  gap: 6px;
+}
+
+.community-onboarding-editor-heading > span,
+.community-onboarding-live-preview-heading > span {
+  color: var(--accent-rose);
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.community-onboarding-editor-heading h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.community-onboarding-editor-heading p {
+  max-width: 48ch;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.community-onboarding-editor .community-onboarding-textarea {
+  min-height: 132px;
+}
+
+.community-onboarding-advanced {
+  padding-block: 4px;
+  border-top: 1px solid var(--border-muted);
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.community-onboarding-advanced summary {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  color: var(--text-primary);
+  cursor: pointer;
+  list-style: none;
+}
+
+.community-onboarding-advanced summary::-webkit-details-marker {
+  display: none;
+}
+
+.community-onboarding-advanced summary > span:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.community-onboarding-advanced summary strong {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.community-onboarding-advanced summary small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.community-onboarding-advanced summary > span:last-child {
+  color: var(--text-secondary);
+  font-size: 18px;
+  font-weight: 300;
+  transition: transform 140ms ease;
+}
+
+.community-onboarding-advanced[open] summary > span:last-child {
+  transform: rotate(45deg);
+}
+
+.community-onboarding-advanced .community-onboarding-field {
+  padding: 4px 0 18px;
+}
+
+.community-onboarding-live-preview {
+  min-width: 0;
+  position: sticky;
+  top: 22px;
+}
+
+.community-onboarding-live-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.community-onboarding-live-preview-heading small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.community-onboarding-inline-preview-frame {
+  padding: 10px;
+  border: 1px solid var(--border-muted);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--bg-card-alt) 54%, transparent);
+}
+
+.community-onboarding-orientation-inline,
+.community-onboarding-orientation-inline:not(.has-video) {
+  width: 100%;
+  max-height: none;
+  border-radius: 16px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
+  animation: none;
+}
+
+.community-onboarding-orientation-inline .community-onboarding-orientation-topbar {
+  padding: 11px 16px;
+}
+
+.community-onboarding-orientation-inline .community-onboarding-orientation-scroll {
+  overflow: visible;
+  padding: 18px 20px;
+}
+
+.community-onboarding-orientation-inline .community-onboarding-orientation-header {
+  margin-top: 16px;
+}
+
+.community-onboarding-orientation-inline .community-onboarding-orientation-header h1 {
+  font-size: clamp(23px, 3cqi, 30px);
+}
+
+.community-onboarding-orientation-inline .community-onboarding-orientation-header p {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.community-onboarding-orientation-inline .community-onboarding-orientation-agent {
+  margin-top: 18px;
+}
+
+.community-onboarding-orientation-inline .community-onboarding-orientation-transcript {
+  min-height: 96px;
+  max-height: none;
+  padding: 12px;
+}
+
+.community-onboarding-orientation-inline .community-onboarding-orientation-message {
+  max-width: 94%;
+  font-size: 12px;
+}
+
+.community-onboarding-orientation-inline .community-onboarding-orientation-actions {
+  padding: 12px 16px;
+}
+
+.community-onboarding-orientation-inline .community-onboarding-orientation-actions button {
+  min-height: 36px;
+  padding-inline: 12px;
+  font-size: 11px;
+}
+
+@container onboarding-workflow (max-width: 880px) {
+  .community-onboarding-builder {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .community-onboarding-editor {
+    padding-right: 0;
+    padding-bottom: 28px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-muted);
+  }
+
+  .community-onboarding-live-preview {
+    position: static;
+  }
+}
+
+@container onboarding-workflow (max-width: 620px) {
   .community-onboarding-header {
     align-items: stretch;
     flex-direction: column;
@@ -33410,6 +33685,27 @@ button.message-citation-chip:hover {
   }
 
   .settings-panel .community-onboarding-actions > button {
+    width: 100%;
+  }
+
+  .community-onboarding-journey {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .community-onboarding-journey li,
+  .community-onboarding-journey li:not(:first-child) {
+    padding: 10px 0;
+  }
+
+  .community-onboarding-orientation-inline .community-onboarding-orientation-actions {
+    flex-direction: column;
+  }
+
+  .community-onboarding-orientation-inline .community-onboarding-orientation-actions .primary {
+    order: -1;
+  }
+
+  .community-onboarding-orientation-inline .community-onboarding-orientation-actions button {
     width: 100%;
   }
 }

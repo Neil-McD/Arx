@@ -21,6 +21,7 @@ const previewBar = read("apps/web/src/components/WebCommunityOnboardingPreviewBa
 const chat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const dock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const orientation = read("apps/web/src/components/WebCommunityOnboardingOrientationModal.tsx");
+const orientationSurface = read("apps/web/src/components/WebCommunityOnboardingOrientationSurface.tsx");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const convexOnboarding = read("convex/communityOnboarding.ts");
 const schema = read("convex/schema.ts");
@@ -87,7 +88,11 @@ assert.equal(shouldPresentCommunityOnboardingOrientation(complete), false);
 assert.equal(shouldPresentCommunityOnboardingFirstPost(complete), false);
 assert.equal(shouldPresentCommunityOnboardingAgentStep(complete), false);
 
-assert.match(workflow, /isDirty \? \([\s\S]*Cancel[\s\S]*\) : \([\s\S]*onClick=\{props\.onPreview\}[\s\S]*Preview/);
+assert.match(workflow, /Cancel changes/);
+assert.match(workflow, /onClick=\{props\.onPreview\}/);
+assert.match(workflow, /disabled=\{isSaving \|\| isDirty\}/);
+assert.match(workflow, /Preview full flow/);
+assert.match(workflow, /WebCommunityOnboardingOrientationSurface/);
 assert.doesNotMatch(workflow, /community-onboarding-preview/);
 assert.match(app, /buildCommunityOnboardingPreviewPath/);
 assert.match(app, /onExitPreview=\{handleExitCommunityOnboardingPreview\}/);
@@ -124,8 +129,9 @@ assert.match(dock, /onboarding\?\.mode === "preview" \|\|\s*!isConversationSurfa
 assert.match(dock, /const visibleMessages = isOnboardingPreview[\s\S]*\? \[\]/);
 assert.match(dock, /const startNewChat = async \(\) => \{[\s\S]*isOnboardingPreview \|\|/);
 assert.match(dock, /const submit = async \(event: FormEvent\) => \{[\s\S]*isOnboardingPreview \|\|/);
-assert.match(orientation, /readOnly=\{props\.isPreview\}/);
-assert.match(orientation, /disabled=\{props\.isPreview \|\| props\.isPreparing \|\| !props\.input\.trim\(\)\}/);
+assert.match(orientation, /WebCommunityOnboardingOrientationSurface/);
+assert.match(orientationSurface, /readOnly=\{props\.isPreview\}/);
+assert.match(orientationSurface, /disabled=\{props\.isPreview \|\| props\.isPreparing \|\| !props\.input\.trim\(\)\}/);
 
 assert.doesNotMatch(convexOnboarding, /previewCommunityOnboarding|onboardingPreview/);
 assert.doesNotMatch(schema, /communityOnboardingPreviews/);

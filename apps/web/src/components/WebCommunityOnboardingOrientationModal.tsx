@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { LoaderCircle, Send, Sparkles, Square } from "lucide-react";
 import type { CommunityOnboardingSession } from "../../../../shared/communityOnboarding";
-import { renderMarkdown } from "../../../../shared/markdownUi";
-import { renderHeroMediaDefault } from "./CommunityFunnelSurface";
+import {
+  WebCommunityOnboardingOrientationSurface,
+  type CommunityOnboardingOrientationMessage,
+} from "./WebCommunityOnboardingOrientationSurface";
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
@@ -13,12 +14,6 @@ const FOCUSABLE_SELECTOR = [
   "textarea:not([disabled])",
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
-
-export type CommunityOnboardingOrientationMessage = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-};
 
 export function WebCommunityOnboardingOrientationModal(props: {
   communityName: string;
@@ -107,18 +102,11 @@ export function WebCommunityOnboardingOrientationModal(props: {
     return () => window.cancelAnimationFrame(frame);
   }, [props.messages.length, props.streamedText]);
 
-  const video = props.session.intro_video_url
-    ? renderHeroMediaDefault("video", props.session.intro_video_url, {
-        eager: true,
-        playHint: "Watch the founder welcome",
-      })
-    : null;
-
   return createPortal(
     <div className="community-onboarding-orientation-overlay" role="presentation">
       <div
         ref={modalRef}
-        className={`community-onboarding-orientation-modal${video ? " has-video" : ""}`}
+        className={`community-onboarding-orientation-modal${props.session.intro_video_url ? " has-video" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -126,114 +114,14 @@ export function WebCommunityOnboardingOrientationModal(props: {
         aria-busy={props.isPending}
         tabIndex={-1}
       >
-        <div className="community-onboarding-orientation-topbar">
-          <span>Member orientation</span>
-          <span>1 of 3</span>
-        </div>
-
-        <div className="community-onboarding-orientation-scroll">
-          {video ? <div className="community-onboarding-orientation-media">{video}</div> : null}
-
-          <header className="community-onboarding-orientation-header">
-            <div className="community-onboarding-orientation-eyebrow">Welcome to</div>
-            <h1 id={titleId}>{props.communityName}</h1>
-            <p id={descriptionId}>Your personal agent will help you get oriented before you enter.</p>
-          </header>
-
-          <section className="community-onboarding-orientation-agent" aria-label="Orientation with your personal agent">
-            <div className="community-onboarding-orientation-agent-header">
-              <span className="community-onboarding-orientation-agent-avatar" aria-hidden="true">
-                <Sparkles />
-              </span>
-              <span>
-                <strong>Your personal agent</strong>
-                <small>{props.isPreview ? "Preview · no inference" : `${props.communityName} context`}</small>
-              </span>
-            </div>
-
-            <div className="community-onboarding-orientation-transcript" ref={transcriptRef}>
-              {props.messages.map((message) => (
-                <article
-                  key={message.id}
-                  className={`community-onboarding-orientation-message is-${message.role}`}
-                >
-                  {message.role === "assistant" ? renderMarkdown(message.text) : <p>{message.text}</p>}
-                </article>
-              ))}
-              {props.isPreparing ? (
-                <div className="community-onboarding-orientation-status">
-                  <LoaderCircle aria-hidden="true" /> Opening your private agent
-                </div>
-              ) : null}
-              {props.streamedText ? (
-                <article className="community-onboarding-orientation-message is-assistant is-streaming">
-                  {renderMarkdown(props.streamedText)}
-                </article>
-              ) : props.isWorking ? (
-                <div className="community-onboarding-orientation-status">
-                  <LoaderCircle aria-hidden="true" /> Thinking in {props.communityName}
-                </div>
-              ) : null}
-            </div>
-
-            <form className="community-onboarding-orientation-composer" onSubmit={props.onSubmit}>
-              <textarea
-                ref={composerRef}
-                value={props.input}
-                onChange={(event) => props.onInputChange(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    event.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                rows={1}
-                maxLength={8000}
-                readOnly={props.isPreview}
-                disabled={!props.isPreview && (props.isWorking || props.isPreparing)}
-                placeholder={
-                  props.isPreview
-                    ? "Preview only — member messages are disabled"
-                    : `Ask anything about ${props.communityName}`
-                }
-                aria-label="Ask your personal agent about this community"
-              />
-              {!props.isPreview && props.isWorking ? (
-                <button type="button" onClick={props.onStop} aria-label="Stop" title="Stop">
-                  <Square aria-hidden="true" />
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={props.isPreview || props.isPreparing || !props.input.trim()}
-                  aria-label="Send"
-                  title="Send"
-                >
-                  <Send aria-hidden="true" />
-                </button>
-              )}
-            </form>
-          </section>
-
-          {props.error ? (
-            <div className="community-onboarding-orientation-error" role="alert">{props.error}</div>
-          ) : null}
-        </div>
-
-        <footer className="community-onboarding-orientation-actions">
-          <button type="button" className="secondary" onClick={props.onDismiss} disabled={props.isPending}>
-            Skip onboarding
-          </button>
-          <button
-            ref={continueButtonRef}
-            type="button"
-            className="primary"
-            onClick={props.onContinue}
-            disabled={props.isPending}
-          >
-            {props.isPending ? "Saving…" : "Continue to community chat"}
-          </button>
-        </footer>
+        <WebCommunityOnboardingOrientationSurface
+          {...props}
+          titleId={titleId}
+          descriptionId={descriptionId}
+          composerRef={composerRef}
+          continueButtonRef={continueButtonRef}
+          transcriptRef={transcriptRef}
+        />
       </div>
     </div>,
     document.body,
