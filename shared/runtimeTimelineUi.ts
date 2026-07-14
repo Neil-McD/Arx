@@ -325,6 +325,10 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   if (toolName === "community_resource_builder_stage_changeset") return "Resource changeset";
   if (toolName === "community_resource_builder_apply_changeset") return "Apply resource changeset";
   if (toolName === "community_search") return `Community search${query ? `: ${query}` : ""}`;
+  if (toolName === "community_chat_search") return `Chat search${query ? `: ${query}` : ""}`;
+  if (toolName === "community_chat_read") return "Read chat evidence";
+  if (toolName === "community_ai_feed_search") return `AI Feed search${query ? `: ${query}` : ""}`;
+  if (toolName === "community_ai_feed_read") return "Read AI Feed evidence";
   if (toolName === "community_write") return "Community write";
   if (toolName === "member_profile_confirm_facts") return "Profile facts";
   if (toolName === "list_dir") return `Listed ${path || "."}`;

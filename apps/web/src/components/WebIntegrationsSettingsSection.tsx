@@ -21,7 +21,7 @@ import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
 
 const POLYNET_MCP_ENDPOINT_URL = "https://www.polynet.ai/runtime/mcp";
-const POLYNET_MCP_TOOL_COUNT_LABEL = "15 workspace tools";
+const POLYNET_MCP_TOOL_COUNT_LABEL = "17 workspace tools";
 const POLYNET_MCP_CLAUDE_CODE_ADD_COMMAND = `claude mcp add --transport http polynet ${POLYNET_MCP_ENDPOINT_URL}`;
 const POLYNET_MCP_CODEX_ADD_COMMAND = `codex mcp add polynet --url ${POLYNET_MCP_ENDPOINT_URL}`;
 const POLYNET_MCP_CODEX_LOGIN_FALLBACK_COMMAND =

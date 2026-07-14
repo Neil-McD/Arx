@@ -47,7 +47,7 @@ type DigestItem = {
 
 type ArchiveActivityRow = {
   _id: any;
-  sourceType: "chat" | "ai_feed" | "resource";
+  sourceType: "chat" | "interaction" | "ai_feed" | "resource";
   sourceId: string;
   title?: string;
   snippet: string;
@@ -344,12 +344,26 @@ async function runCommunityCompilerDigestPassCore(
     ]);
 
     const selectedSourceTraceRows = compilerEvidence.selectedRows;
-    const chatRows = archiveRows.filter((row) => row.sourceType === "chat");
+    const chatRows = archiveRows.filter((row) => row.sourceType === "interaction");
     const resourceRows = archiveRows.filter((row) => row.sourceType === "resource");
     const archiveAiFeedRows = archiveRows.filter((row) => row.sourceType === "ai_feed");
     const aiFeedRows = aiFeedRowsRaw
       .slice()
       .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0) || b.createdAt - a.createdAt);
+    const aiFeedIds = new Set(aiFeedRows.map((row) => normalizeIdValue(row._id)));
+    // AI Feed publication already has a dedicated canonical signal
+    // projection. Its source trace is the governance/promotion record, not a
+    // second independent learning signal.
+    const selectedAiFeedSourceTraceRows = selectedSourceTraceRows.filter(
+      (row) =>
+        row.sourceType === "ai_feed" &&
+        aiFeedIds.has(String(row.sourceId ?? "").trim()),
+    );
+    const selectedDistinctSourceTraceRows = selectedSourceTraceRows.filter(
+      (row) =>
+        row.sourceType !== "ai_feed" ||
+        !aiFeedIds.has(String(row.sourceId ?? "").trim()),
+    );
     const postingMemberKeys = new Set(
       chatRows
         .map((row) => String(row.authorLabel ?? "").trim())
@@ -405,16 +419,16 @@ async function runCommunityCompilerDigestPassCore(
         sourceIds: outcomeRows.slice(0, MAX_SOURCE_IDS_PER_ITEM).map((row) => normalizeIdValue(row._id)),
       }));
     }
-    const nextSourceTraceItem = selectedSourceTraceRows.length > 0
+    const nextSourceTraceItem = selectedDistinctSourceTraceRows.length > 0
       ? makeItem({
         category: "source_trace_signal",
-        title: `${selectedSourceTraceRows.length} selected pending source traces compiled`,
-        summary: `${selectedSourceTraceRows.length} selected pending source traces were represented in this digest and can now be marked compiled. ${compilerEvidence.measurement.pending_total} eligible source traces were pending when measured.`,
-        priority: Math.min(1, 0.45 + selectedSourceTraceRows.length / 80),
+        title: `${selectedDistinctSourceTraceRows.length} selected pending source traces compiled`,
+        summary: `${selectedDistinctSourceTraceRows.length} distinct pending source traces were represented in this digest and can now be marked compiled. ${selectedAiFeedSourceTraceRows.length} AI Feed promotion traces were deduplicated against their canonical AI Feed signal. ${compilerEvidence.measurement.pending_total} eligible source traces were pending when measured.`,
+        priority: Math.min(1, 0.45 + selectedDistinctSourceTraceRows.length / 80),
         confidence: 0.8,
-        sourceTypes: Array.from(new Set(selectedSourceTraceRows.map((row) => row.sourceType))).slice(0, 12),
-        sourceIds: selectedSourceTraceRows.map((row) => String(row.sourceId ?? normalizeIdValue(row._id))).filter(Boolean).slice(0, MAX_SOURCE_IDS_PER_ITEM),
-        sourceTraceIds: sourceTraceIds(selectedSourceTraceRows),
+        sourceTypes: Array.from(new Set(selectedDistinctSourceTraceRows.map((row) => row.sourceType))).slice(0, 12),
+        sourceIds: selectedDistinctSourceTraceRows.map((row) => String(row.sourceId ?? normalizeIdValue(row._id))).filter(Boolean).slice(0, MAX_SOURCE_IDS_PER_ITEM),
+        sourceTraceIds: sourceTraceIds(selectedDistinctSourceTraceRows),
       })
       : null;
     const sourceTraceItem = mergeSourceTraceDigestItem({
@@ -422,9 +436,12 @@ async function runCommunityCompilerDigestPassCore(
       next: nextSourceTraceItem,
     });
     const representedSourceTraceIds = new Set((sourceTraceItem?.sourceTraceIds ?? []).map(normalizeIdValue));
-    const representedSelectedSourceTraceRows = selectedSourceTraceRows.filter((row) =>
-      representedSourceTraceIds.has(normalizeIdValue(row._id)),
-    );
+    const representedSelectedSourceTraceRows = [
+      ...selectedDistinctSourceTraceRows.filter((row) =>
+        representedSourceTraceIds.has(normalizeIdValue(row._id)),
+      ),
+      ...selectedAiFeedSourceTraceRows,
+    ];
     if (sourceTraceItem) {
       items.push(sourceTraceItem);
     }

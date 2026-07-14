@@ -83,6 +83,7 @@ import {
   normalizeToolArguments as normalizeRegistryToolArguments,
   type ResponsesApiFunctionTool,
 } from "../shared/toolRegistry";
+import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContract";
 import {
   buildPlatformHarnessRuntimePromptBundle,
   type RuntimeAccountPlan,
@@ -269,6 +270,7 @@ export async function executeRetrievalHarnessTool(params: {
   communityId: string | null;
   toolName: RetrievalToolName;
   args: Record<string, unknown>;
+  evidenceSurface?: CommunityEvidenceSurface;
   workspaceSession?: RuntimeWorkspaceSession | null;
   activeDaytonaRuntimeSubstrate?: ActiveDaytonaRuntimeSubstrateForTools | null;
   executeDaytonaWorkspaceTool?: (params: {
@@ -629,6 +631,174 @@ export async function executeRetrievalHarnessTool(params: {
     }
   }
 
+  if (params.toolName === "community_chat_search") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage: "community_chat_search requires an active community context.",
+      };
+    }
+    try {
+      const payload = await params.ctx.runAction(
+        (internal as any).communityInteractionEvidence.searchCommunityInteractionEvidenceInternal,
+        {
+          userId: params.userId,
+          authSubject: params.authSubject ?? undefined,
+          communityId: params.communityId,
+          query: String(normalizedArgs.query ?? "").trim(),
+          limit:
+            typeof normalizedArgs.limit === "number"
+              ? normalizedArgs.limit
+              : undefined,
+          surface: params.evidenceSurface ?? "member_agent_dock",
+        },
+      );
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput(payload),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_chat_search_failed",
+        errorMessage: message || "Community chat search failed.",
+      };
+    }
+  }
+
+  if (params.toolName === "community_chat_read") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage: "community_chat_read requires an active community context.",
+      };
+    }
+    try {
+      const payload = await params.ctx.runAction(
+        (internal as any).communityInteractionEvidence.readCommunityInteractionEvidenceForToolInternal,
+        {
+          userId: params.userId,
+          authSubject: params.authSubject ?? undefined,
+          communityId: params.communityId,
+          ref: String(normalizedArgs.ref ?? "").trim(),
+          surface: params.evidenceSurface ?? "member_agent_dock",
+        },
+      );
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput(payload),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_chat_read_failed",
+        errorMessage: message || "Community chat read failed.",
+      };
+    }
+  }
+
+  if (params.toolName === "community_ai_feed_search") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage: "community_ai_feed_search requires an active community context.",
+      };
+    }
+    try {
+      const payload = await params.ctx.runAction(
+        (internal as any).communityAiFeedEvidence.searchCommunityAiFeedEvidenceInternal,
+        {
+          userId: params.userId,
+          authSubject: params.authSubject ?? undefined,
+          communityId: params.communityId,
+          query: String(normalizedArgs.query ?? "").trim(),
+          limit:
+            typeof normalizedArgs.limit === "number"
+              ? normalizedArgs.limit
+              : undefined,
+          surface: params.evidenceSurface ?? "member_agent_dock",
+        },
+      );
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput(payload),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_ai_feed_search_failed",
+        errorMessage: message || "Community AI Feed search failed.",
+      };
+    }
+  }
+
+  if (params.toolName === "community_ai_feed_read") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage: "community_ai_feed_read requires an active community context.",
+      };
+    }
+    try {
+      const payload = await params.ctx.runAction(
+        (internal as any).communityAiFeedEvidence.readCommunityAiFeedEvidenceForToolInternal,
+        {
+          userId: params.userId,
+          authSubject: params.authSubject ?? undefined,
+          communityId: params.communityId,
+          ref: String(normalizedArgs.ref ?? "").trim(),
+          surface: params.evidenceSurface ?? "member_agent_dock",
+        },
+      );
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput(payload),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_ai_feed_read_failed",
+        errorMessage: message || "Community AI Feed read failed.",
+      };
+    }
+  }
+
   if (params.toolName === "community_resources_map") {
     if (!params.communityId) {
       return {
@@ -686,8 +856,8 @@ export async function executeRetrievalHarnessTool(params: {
       };
     }
     try {
-      const payload = await params.ctx.runQuery(
-        internal.communityResources.readCommunityResourcesForToolInternal as any,
+      const payload = await params.ctx.runAction(
+        (internal as any).communityResourceEvidence.readCommunityResourcesEvidenceForToolInternal,
         {
           userId: params.userId,
           authSubject: params.authSubject ?? undefined,
@@ -703,6 +873,7 @@ export async function executeRetrievalHarnessTool(params: {
             typeof normalizedArgs.perResourceChars === "number"
               ? normalizedArgs.perResourceChars
               : undefined,
+          surface: params.evidenceSurface ?? "member_agent_dock",
         },
       );
       return {
@@ -781,8 +952,8 @@ export async function executeRetrievalHarnessTool(params: {
       };
     }
     try {
-      const payload = await params.ctx.runQuery(
-        internal.communityResources.readCommunityResourceDirectoryInternal as any,
+      const payload = await params.ctx.runAction(
+        (internal as any).communityResourceEvidence.readCommunityResourceEvidenceForToolInternal,
         {
           userId: params.userId,
           authSubject: params.authSubject ?? undefined,
@@ -796,6 +967,7 @@ export async function executeRetrievalHarnessTool(params: {
             typeof normalizedArgs.limit === "number"
               ? normalizedArgs.limit
               : undefined,
+          surface: params.evidenceSurface ?? "member_agent_dock",
         },
       );
       return {
@@ -828,8 +1000,8 @@ export async function executeRetrievalHarnessTool(params: {
       };
     }
     try {
-      const payload = await params.ctx.runQuery(
-        internal.communityResources.searchCommunityResourceDirectoryInternal as any,
+      const payload = await params.ctx.runAction(
+        (internal as any).communityResourceEvidence.searchCommunityResourceEvidenceInternal,
         {
           userId: params.userId,
           authSubject: params.authSubject ?? undefined,
@@ -839,6 +1011,7 @@ export async function executeRetrievalHarnessTool(params: {
             typeof normalizedArgs.limit === "number"
               ? normalizedArgs.limit
               : undefined,
+          surface: params.evidenceSurface ?? "member_agent_dock",
         },
       );
       return {
@@ -2617,6 +2790,10 @@ async function executeRetrievalAgentLoop(
                 runId: params.runId,
                 toolName: toolName as RetrievalToolName,
                 args: normalizedArgs,
+                evidenceSurface:
+                  params.invocationSurface === "member_agent_dock"
+                    ? "member_agent_dock"
+                    : "external_mcp",
                 workspaceSession: executionSession.getWorkspaceSession(),
                 activeDaytonaRuntimeSubstrate,
                 executeDaytonaWorkspaceTool: async (toolParams) =>

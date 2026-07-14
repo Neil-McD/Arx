@@ -1,6 +1,4 @@
 import {
-  type CommunityChatMessageLike,
-  type CommunityChatThreadLike,
   type CommunityResourceModuleLike,
   type CommunityResourceLike,
   communityResourceIsLiveModulePage,
@@ -12,8 +10,13 @@ import {
 import {
   hydrateCommunityResourceBody,
 } from "./communityResourceContent";
+import {
+  communityInteractionEvidenceSourceIsReadable,
+  resolveCommunityInteractionEvidenceSource,
+  type CommunityInteractionEvidenceRow,
+} from "./communityInteractionEvidenceCore";
 
-export type ArchiveSourceType = "chat" | "ai_feed" | "resource";
+export type ArchiveSourceType = "chat" | "interaction" | "ai_feed" | "resource";
 export type ArchiveEmbeddingStatus = "pending" | "embedded" | "failed";
 export type ArchivePostType = "observation" | "recommendation" | "action";
 
@@ -28,6 +31,23 @@ export type FeedPostRow = {
   status: "live" | "hidden";
   createdAt: number;
   updatedAt: number;
+};
+
+type InteractionContentBlockRow = {
+  blockOrder: number;
+  blockType: string;
+  text?: string;
+  url?: string;
+  workspaceRefKind?: string;
+  workspaceRefId?: string;
+  mentionedAgentKey?: string;
+  mentionedRoleKey?: string;
+};
+
+type InteractionAttachmentRow = {
+  status: "uploaded" | "processing" | "failed" | "deleted";
+  name: string;
+  externalUrl?: string;
 };
 
 export type ArchiveDocLike = {
@@ -118,31 +138,6 @@ export function isPdfUrl(raw: unknown): boolean {
   return normalized.includes(".pdf");
 }
 
-function extractChatAttachmentTexts(contentJson: unknown): string[] {
-  if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) return [];
-  const attachments = Array.isArray((contentJson as Record<string, unknown>).attachments)
-    ? ((contentJson as Record<string, unknown>).attachments as unknown[])
-    : [];
-  const texts: string[] = [];
-  for (const attachment of attachments) {
-    if (!attachment || typeof attachment !== "object" || Array.isArray(attachment)) continue;
-    const text = truncateText((attachment as Record<string, unknown>).text ?? "", 8_000);
-    if (text) texts.push(text);
-  }
-  return texts;
-}
-
-function extractChatMessageText(contentJson: unknown): string {
-  if (typeof contentJson === "string") return collapseWhitespace(contentJson);
-  if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) return "";
-  const record = contentJson as Record<string, unknown>;
-  const parts = [
-    truncateText(record.text ?? "", 20_000),
-    ...extractChatAttachmentTexts(record),
-  ].filter(Boolean);
-  return truncateText(parts.join("\n\n"), MAX_ARCHIVE_TEXT_LENGTH);
-}
-
 export function buildArchiveSnippet(title: string | null, text: string): string {
   const parts = [title ?? "", text].filter(Boolean);
   return truncateText(parts.join(" — "), MAX_ARCHIVE_SNIPPET_LENGTH);
@@ -154,36 +149,6 @@ export function buildArchiveText(parts: Array<string | null | undefined>): strin
     .map((part) => collapseWhitespace(part))
     .filter(Boolean);
   return truncateText(normalized.join("\n\n"), MAX_ARCHIVE_TEXT_LENGTH);
-}
-
-function buildChatArchiveDoc(params: {
-  communityId: any;
-  message: CommunityChatMessageLike;
-}): Omit<
-  ArchiveDocLike,
-  "_id" | "embeddingStatus" | "embedding" | "embeddingError" | "embeddingModel" | "embeddingDimensions" | "embeddingUpdatedAt"
-> | null {
-  const sourceText = extractChatMessageText(params.message.contentJson);
-  if (!sourceText) return null;
-  return {
-    communityId: params.communityId,
-    sourceType: "chat",
-    sourceId: normalizeIdValue(params.message._id),
-    title: undefined,
-    sourceText,
-    pdfText: undefined,
-    text: sourceText,
-    snippet: buildArchiveSnippet(null, sourceText),
-    url: undefined,
-    authorLabel: params.message.senderUserId ? `member:${normalizeIdValue(params.message.senderUserId)}` : "member",
-    postType: undefined,
-    resourceType: undefined,
-    resourceRole: undefined,
-    resourceStatus: undefined,
-    isPdf: false,
-    createdAt: params.message.createdAt,
-    updatedAt: params.message.updatedAt,
-  };
 }
 
 function buildAiFeedArchiveDoc(post: FeedPostRow): Omit<
@@ -261,6 +226,127 @@ function buildResourceArchiveDoc(params: {
     createdAt: params.resource.createdAt,
     updatedAt: params.resource.updatedAt,
   };
+}
+
+function interactionAuthorLabel(row: CommunityInteractionEvidenceRow): string {
+  if (row.actorType === "human") {
+    return row.actorUserId ? `member:${normalizeIdValue(row.actorUserId)}` : "member";
+  }
+  return row.actorAgentKey
+    ? `${row.actorType}:${row.actorAgentKey}`
+    : row.actorType;
+}
+
+function interactionBlockText(row: InteractionContentBlockRow): string {
+  if (row.blockType === "markdown_text") return String(row.text ?? "").trim();
+  if (row.blockType === "link") return String(row.text ?? row.url ?? "").trim();
+  if (row.blockType === "workspace_ref") {
+    return String(
+      row.text ??
+        [row.workspaceRefKind, row.workspaceRefId].filter(Boolean).join(":"),
+    ).trim();
+  }
+  if (row.blockType === "mention") {
+    return String(
+      row.text ?? `@${row.mentionedRoleKey ?? row.mentionedAgentKey ?? "member"}`,
+    ).trim();
+  }
+  return String(row.text ?? row.url ?? "").trim();
+}
+
+async function listInteractionArchiveText(args: {
+  ctx: { db: any };
+  objectType: "root" | "reply";
+  objectId: any;
+}): Promise<string> {
+  const [blocks, attachments] = await Promise.all([
+    args.ctx.db
+      .query("communityInteractionContentBlocks" as any)
+      .withIndex(
+        args.objectType === "root" ? "by_root_order" : "by_reply_order",
+        (q: any) =>
+          q.eq(args.objectType === "root" ? "rootId" : "replyId", args.objectId),
+      )
+      .take(64),
+    args.ctx.db
+      .query("communityInteractionAttachments" as any)
+      .withIndex(args.objectType === "root" ? "by_root" : "by_reply", (q: any) =>
+        q.eq(args.objectType === "root" ? "rootId" : "replyId", args.objectId),
+      )
+      .take(32),
+  ]) as [InteractionContentBlockRow[], InteractionAttachmentRow[]];
+  return buildArchiveText([
+    ...blocks
+      .slice()
+      .sort((a, b) => a.blockOrder - b.blockOrder)
+      .map(interactionBlockText),
+    ...attachments
+      .filter((attachment) => attachment.status !== "deleted")
+      .map((attachment) =>
+        [attachment.name, attachment.externalUrl].filter(Boolean).join(" "),
+      ),
+  ]);
+}
+
+function interactionSourceId(
+  objectType: "root" | "reply",
+  objectId: unknown,
+): string {
+  return `${objectType}:${normalizeIdValue(objectId)}`;
+}
+
+export async function syncArchiveDocumentForInteraction(args: {
+  ctx: { db: any };
+  communityId: any;
+  objectType: "root" | "reply";
+  objectId: any;
+}): Promise<{ indexed: boolean; sourceId: string }> {
+  const sourceId = interactionSourceId(args.objectType, args.objectId);
+  const deleteCurrent = async () => {
+    await deleteArchiveDocumentBySource(args.ctx, {
+      communityId: args.communityId,
+      sourceType: "interaction",
+      sourceId,
+    });
+    return { indexed: false, sourceId };
+  };
+  const source = await resolveCommunityInteractionEvidenceSource(args);
+  if (!source || !communityInteractionEvidenceSourceIsReadable(source)) {
+    return await deleteCurrent();
+  }
+  const { row, root } = source;
+
+  const sourceText = await listInteractionArchiveText({
+    ctx: args.ctx,
+    objectType: args.objectType,
+    objectId: row._id,
+  });
+  const text = sourceText || buildArchiveText([row.contentSummary]);
+  if (!text) return await deleteCurrent();
+  const title = normalizeOptionalText(
+    args.objectType === "root" ? row.title : root.title,
+    180,
+  );
+  await upsertArchiveDoc(args.ctx, {
+    communityId: row.communityId,
+    sourceType: "interaction",
+    sourceId,
+    title: title ?? undefined,
+    sourceText: text,
+    pdfText: undefined,
+    text,
+    snippet: buildArchiveSnippet(title, text),
+    url: undefined,
+    authorLabel: interactionAuthorLabel(row),
+    postType: undefined,
+    resourceType: undefined,
+    resourceRole: undefined,
+    resourceStatus: undefined,
+    isPdf: false,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  });
+  return { indexed: true, sourceId };
 }
 
 async function getExistingArchiveDoc(ctx: { db: any }, params: {
@@ -352,19 +438,6 @@ export async function deleteArchiveDocumentBySource(ctx: { db: any }, params: {
   await ctx.db.delete(existing._id as any);
 }
 
-export async function upsertArchiveDocumentForChatMessage(ctx: { db: any }, params: {
-  thread: CommunityChatThreadLike;
-  message: CommunityChatMessageLike;
-}): Promise<void> {
-  await upsertArchiveDoc(
-    ctx,
-    buildChatArchiveDoc({
-      communityId: params.thread.communityId,
-      message: params.message,
-    }),
-  );
-}
-
 export async function upsertArchiveDocumentForAiFeedPost(ctx: { db: any }, post: FeedPostRow): Promise<void> {
   const nextDoc = buildAiFeedArchiveDoc(post);
   if (!nextDoc) {
@@ -419,33 +492,12 @@ export async function upsertArchiveDocumentForResource(ctx: { db: any }, resourc
 }
 
 export async function backfillCommunityArchive(ctx: { db: any }, communityId: any): Promise<{
-  chat: number;
+  interaction: "paginated_async";
+  legacy_chat_deleted: number;
   ai_feed: number;
   resource: number;
 }> {
   const activeSourceKeys = new Set<string>();
-  const threads = (await ctx.db
-    .query("communityChatThreads" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .collect()) as CommunityChatThreadLike[];
-  let chatCount = 0;
-  for (const thread of threads) {
-    const rows = (await ctx.db
-      .query("communityChatMessages" as any)
-      .withIndex("by_thread_seq", (q: any) => q.eq("threadId", thread._id))
-      .collect()) as CommunityChatMessageLike[];
-    for (const row of rows) {
-      activeSourceKeys.add(
-        archiveSourceKey({
-          sourceType: "chat",
-          sourceId: normalizeIdValue(row._id),
-        }),
-      );
-      await upsertArchiveDocumentForChatMessage(ctx, { thread, message: row });
-      chatCount += 1;
-    }
-  }
-
   const aiFeedRows = (await ctx.db
     .query("communityAiFeedPosts" as any)
     .withIndex("by_community_status_createdAt", (q: any) => q.eq("communityId", communityId).eq("status", "live"))
@@ -478,17 +530,24 @@ export async function backfillCommunityArchive(ctx: { db: any }, communityId: an
     .query("communityArchiveDocuments" as any)
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
     .collect()) as ArchiveDocLike[];
+  let legacyChatDeleted = 0;
   for (const doc of existingArchiveDocs) {
+    // Canonical interaction cleanup is handled by the paginated evidence
+    // backfill scheduled by the caller; do not turn this legacy archive sweep
+    // back into an unbounded interaction scan.
+    if (doc.sourceType === "interaction") continue;
     const key = archiveSourceKey({
       sourceType: doc.sourceType,
       sourceId: doc.sourceId,
     });
     if (activeSourceKeys.has(key)) continue;
     await ctx.db.delete(doc._id as any);
+    if (doc.sourceType === "chat") legacyChatDeleted += 1;
   }
 
   return {
-    chat: chatCount,
+    interaction: "paginated_async",
+    legacy_chat_deleted: legacyChatDeleted,
     ai_feed: aiFeedRows.length,
     resource: resources.length,
   };

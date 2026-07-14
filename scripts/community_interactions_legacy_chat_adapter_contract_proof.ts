@@ -316,8 +316,13 @@ assert.match(
 const createThreadUserMessage = exportedConstBlock(communityChat, "createThreadUserMessage");
 assert.match(
   createThreadUserMessage,
-  /await upsertArchiveDocumentForChatMessage\(ctx,[\s\S]*await recordLegacyChatMessageInteractionBestEffort\(\{[\s\S]*ctx,[\s\S]*thread,[\s\S]*message: row,[\s\S]*nowMs,[\s\S]*\}\);[\s\S]*return await mapCommunityChatMessageRow\(ctx, row\);/,
-  "legacy chat send should dual-write best-effort before returning the unchanged legacy response",
+  /await recordLegacyChatMessageInteractionBestEffort\(\{[\s\S]*ctx,[\s\S]*thread,[\s\S]*message: row,[\s\S]*nowMs,[\s\S]*\}\);[\s\S]*return await mapCommunityChatMessageRow\(ctx, row\);/,
+  "legacy chat send should materialize canonical interaction evidence before returning the unchanged legacy response",
+);
+assert.doesNotMatch(
+  createThreadUserMessage,
+  /upsertArchiveDocumentForChatMessage/,
+  "legacy chat send should not write obsolete legacy archive authority",
 );
 assert.doesNotMatch(
   createThreadUserMessage,

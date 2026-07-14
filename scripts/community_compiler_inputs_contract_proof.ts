@@ -67,8 +67,8 @@ assert.match(
 );
 assert.match(
   aiFeed,
-  /hideFeedPost[\s\S]*upsertHiddenSourceTraceForAiFeedPost[\s\S]*actorAgentKey: "ai_feed_prune"/,
-  "pruned AI feed posts should update source traces as system-retained evidence",
+  /upsertHiddenSourceTraceForAiFeedPost[\s\S]*Redaction changes readability, not source authorship[\s\S]*actorUserId: args\.post\.authorUserId[\s\S]*actorAgentKey: args\.post\.agentKey[\s\S]*hideFeedPost[\s\S]*upsertHiddenSourceTraceForAiFeedPost/,
+  "hidden or pruned AI feed posts should narrow visibility without replacing source attribution",
 );
 assert.match(
   aiFeed,

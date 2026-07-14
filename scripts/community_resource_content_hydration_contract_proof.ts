@@ -15,6 +15,7 @@ const controller = read("shared/useCommunityResourceController.ts");
 const panel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const viewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
 const resources = read("convex/communityResources.ts");
+const resourceEvidence = read("convex/communityResourceEvidence.ts");
 const core = read("convex/communityCore.ts");
 const content = read("convex/communityResourceContent.ts");
 const markdown = read("shared/markdownUi.tsx");
@@ -70,13 +71,13 @@ assert.match(
   "batch resource reads must hydrate split body content before applying context budgets",
 );
 assert.match(
-  resources,
-  /export const searchCommunityResourceDirectoryInternal = internalQuery\([\s\S]*const hydratedResources = await Promise\.all\([\s\S]*hydrateCommunityResourceBody\(ctx, row\)[\s\S]*resourceSearchScore\(row, query, terms\)/,
-  "resource search must hydrate split body content before scoring and excerpting",
+  resourceEvidence,
+  /export const searchRecentCommunityResourceEvidenceInternal = internalQuery\([\s\S]*const hydrated = await Promise\.all\([\s\S]*hydrateCommunityResourceBody\(ctx, row\)[\s\S]*scoreResource\(resource, tokens\)/,
+  "bounded resource evidence search must hydrate split body content before scoring and excerpting",
 );
 assert.match(
   resources,
-  /export const readCommunityResourceBuilderResource = query\([\s\S]*target_type: "resource"[\s\S]*resource: await mapCommunityResourceRowWithBody\(ctx, resolved\.resource\)/,
+  /async function readCommunityResourceBuilderResourceCore[\s\S]*target_type: "resource"[\s\S]*resource: await mapCommunityResourceRowWithBody\(args\.ctx, resolved\.resource\)/,
   "builder resource reads must hydrate split body content before exposing draft or source rows",
 );
 assert.match(

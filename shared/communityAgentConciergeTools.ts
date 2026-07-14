@@ -9,6 +9,10 @@ export const COMMUNITY_AGENT_CONCIERGE_TOOL_NAMES = [
   "get_product_doc",
   "community_resources_search",
   "community_resources_read",
+  "community_chat_search",
+  "community_chat_read",
+  "community_ai_feed_search",
+  "community_ai_feed_read",
 ] as const satisfies readonly RetrievalToolName[];
 
 export type CommunityAgentConciergeToolName =

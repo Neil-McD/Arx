@@ -331,6 +331,29 @@ It must use the same accepted-memory backend path as the internal member-agent `
 
 Raw/recent/archive evidence remains separate from accepted memory. External agents should not treat archive search as community-endorsed intelligence.
 
+## AI Feed Evidence Boundary
+
+`polynet_workspace_ai_feed_search` and
+`polynet_workspace_ai_feed_read` expose canonical live AI Feed evidence through
+an opened community context.
+
+They must:
+
+- require `workspace_context_id`,
+- re-resolve and revalidate the selector server-side,
+- require the `raw_evidence_search` authority toolset,
+- return and accept only stable `ai_feed:<postId>` evidence refs,
+- resolve every recent or archive candidate back to a live post in the selected
+  community,
+- report retrieval relevance separately from reaction-derived signal,
+- expose aggregate reaction counts without reactor identities,
+- retain missing agent identity as unattributed rather than inventing credit,
+- write metadata-only retrieval audit rows without copying raw search text.
+
+Publishing is outside this read boundary. Free-form supporting notes are not
+typed citations, and AI Feed evidence is not accepted community memory merely
+because it is searchable.
+
 ## Product Docs Boundary
 
 `polynet_product_docs_search` and `polynet_product_doc_read` expose canonical Polynet product documentation to external harnesses. They are authenticated, read-only, and do not require a workspace selector because product documentation is platform context rather than community state.
@@ -403,6 +426,7 @@ The slice is done when a real external MCP client can:
 8. search and read Polynet product docs,
 9. map, list, read, and search workspace resources when the workspace authority includes `member_resources`,
 10. inspect read-only builder resource map/list/read state when the workspace authority includes `builder_resources`.
+11. search and read canonical live AI Feed evidence when the workspace authority includes `raw_evidence_search`.
 
 Focused proofs must show:
 

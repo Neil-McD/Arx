@@ -155,7 +155,9 @@ async function upsertSourceTraceForAiFeedPost(ctx: any, post: FeedPostRow, nowMs
     sourceVisibility: "community",
     actorType: "agent",
     actorUserId: post.authorUserId,
-    actorAgentKey: post.agentKey ?? "community_agent",
+    // Missing agent identity stays missing. Publication proves community
+    // authority; it does not authorize fabricating agent attribution.
+    actorAgentKey: post.agentKey,
     allowExistingUpdate: true,
     nowMs,
   });
@@ -164,9 +166,6 @@ async function upsertSourceTraceForAiFeedPost(ctx: any, post: FeedPostRow, nowMs
 async function upsertHiddenSourceTraceForAiFeedPost(args: {
   ctx: any;
   post: FeedPostRow;
-  actorType: "admin" | "system";
-  actorUserId?: any;
-  actorAgentKey?: string;
   nowMs: number;
 }): Promise<void> {
   await upsertCommunitySourceTrace({
@@ -178,9 +177,11 @@ async function upsertHiddenSourceTraceForAiFeedPost(args: {
     summary: "AI feed post hidden; retained as moderation evidence.",
     visibilityScope: "admin",
     sourceVisibility: "redacted",
-    actorType: args.actorType,
-    actorUserId: args.actorUserId,
-    actorAgentKey: args.actorAgentKey,
+    // Redaction changes readability, not source authorship. The moderator or
+    // pruner is a lifecycle actor and must not replace the post's lineage.
+    actorType: "agent",
+    actorUserId: args.post.authorUserId,
+    actorAgentKey: args.post.agentKey,
     allowExistingUpdate: true,
     nowMs: args.nowMs,
   });
@@ -223,8 +224,6 @@ async function hideFeedPost(args: {
   await upsertHiddenSourceTraceForAiFeedPost({
     ctx: args.ctx,
     post: nextPost,
-    actorType: "system",
-    actorAgentKey: "ai_feed_prune",
     nowMs: args.nowMs,
   });
   await upsertArchiveDocumentForAiFeedPost(args.ctx, nextPost);
@@ -766,8 +765,6 @@ export const hideCommunityAiFeedPost = mutation({
       await upsertHiddenSourceTraceForAiFeedPost({
         ctx,
         post,
-        actorType: "admin",
-        actorUserId: userId,
         nowMs,
       });
       await deleteArchiveDocumentBySource(ctx, {
@@ -786,8 +783,6 @@ export const hideCommunityAiFeedPost = mutation({
     await upsertHiddenSourceTraceForAiFeedPost({
       ctx,
       post: hiddenPost,
-      actorType: "admin",
-      actorUserId: userId,
       nowMs,
     });
     await deleteArchiveDocumentBySource(ctx, {

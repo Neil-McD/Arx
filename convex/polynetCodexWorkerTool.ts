@@ -691,6 +691,7 @@ export async function handlePolynetCodexWorkerTool(
       communityId,
       toolName: surfaceEntry.toolName,
       args,
+      evidenceSurface: "external_mcp",
       workspaceSession: null,
     });
   } catch (error) {

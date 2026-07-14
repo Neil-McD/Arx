@@ -44,7 +44,8 @@ The community-owned runtime surfaces are:
    - entered from a direct community-agent mention
    - requester-funded through the requester's provider connection
    - revalidates community access and source visibility for every turn
-   - receives only product-doc and community-resource retrieval tools
+   - receives only product-doc, community-resource, canonical chat-evidence,
+     and canonical AI-Feed-evidence retrieval tools
    - cannot write community memory or invoke autonomous cognition
 
 2. `autonomous_cognition`
@@ -188,7 +189,7 @@ Dedicated surface tools answer:
 What canonical surface state or evidence should the agent inspect now?
 ```
 
-This layer should arrive surface by surface as each boundary becomes stable. The platform-harness resource surface can map, batch-read, list, read, and search pages inside active-community Resources. Member runs see live modules and pages only; manager runs can additionally inspect builder-visible draft/source/health state. Neither lane exposes raw storage keys. Other direct surface tools remain deferred until their source and privacy contracts are equally clear.
+This layer should arrive surface by surface as each boundary becomes stable. The platform-harness resource surface can map, batch-read, list, read, and search pages inside active-community Resources. Canonical chat and AI Feed evidence now have typed search/read paths for the member agent, community Concierge, and external workspace MCP. Member runs see live modules and pages only; manager runs can additionally inspect builder-visible draft/source/health state. Neither lane exposes raw storage keys. Events and members remain deferred until their source and privacy contracts are equally clear.
 
 | Surface | Future direct read role | Compiler-window role |
 | --- | --- | --- |
@@ -1058,8 +1059,11 @@ AI Feed post
 Rules:
 
 - Publishing an AI Feed post ensures a matching `communitySourceTraces` row.
+- AI Feed publication is the explicit moderator-authorized promotion event into compiler evidence; it is not accepted directory truth.
 - The trace is keyed by `communityId + sourceType + sourceId` so retries and `noveltyKey` reuse do not duplicate evidence.
+- Missing `agentKey` remains unattributed and receives no invented agent credit. `authorUserId` records the accountable sponsor, not authorship.
 - Compiler input reads recent source traces, ranked live AI Feed signals, pending change request count, and recent outcome observations.
+- Compiler projections deduplicate the live post, source trace, and archive record by canonical `ai_feed:<postId>` identity so one publication is one semantic signal.
 - The bridge does not create or update `communityIntelligenceNodes`.
 - The bridge does not decide truth. It only makes existing signal available to the future compiler and community cognition loop.
 
@@ -1078,7 +1082,9 @@ Rules:
 
 - The compiler window is fixed at 30 days; it is not user-selectable.
 - The window reads bounded evidence bundles, not raw unbounded community history.
-- Chat, AI Feed, and Resources enter the window through archive activity records.
+- Chat and Resources may enter through archive activity. AI Feed uses the ranked
+  canonical live-post projection first; source-trace and archive copies are
+  retained only as fallback/governance projections and are deduplicated.
 - Source traces, ranked AI Feed signals, live event updates, outcomes, and pending change requests are included as compiler working state.
 - The compiler window is manager-scoped in this backend slice because it exposes compiler state and pending directory proposals.
 - The compiler window does not mutate directory truth.
@@ -1350,7 +1356,9 @@ Rules:
 
 - The digest pass must use the same pending-evidence selector exposed by `measureCommunityCompilerEvidenceInternal`.
 - The digest pass may still read the 30-day activity window for chat, AI feed, resources, outcomes, and pending directory decisions, but source-trace consumption comes only from selected pending source traces.
-- A `source_trace_signal` digest item represents the selected pending traces that the pass handled.
+- A `source_trace_signal` digest item represents distinct selected pending
+  traces that the pass handled. An AI Feed promotion trace is consumed with its
+  canonical AI Feed signal and must not create a second digest signal.
 - Selected source traces are marked `compiled` only after the digest row exists.
 - The compiled patch sets `compilerLastHandledAt` and `compilerLastDigestId`.
 - The compiled patch stays inside the same explicit `communityId`.

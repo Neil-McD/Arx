@@ -12,6 +12,7 @@ import {
   COMPILER_EVIDENCE_VISIBILITY_SCOPES,
   isCommunityCompilerEvidenceTrace,
 } from "./communityCompilerEvidenceCore";
+import { buildCommunityAiFeedEvidenceRef } from "../shared/communityEvidenceContract";
 
 const COMMUNITY_COMPILER_WINDOW_DAYS = 30;
 const COMMUNITY_COMPILER_WINDOW_MS = COMMUNITY_COMPILER_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -30,7 +31,7 @@ const MAX_LATEST_NEW_MEMBERS = 25;
 type ArchiveActivityRow = {
   _id: any;
   communityId: any;
-  sourceType: "chat" | "ai_feed" | "resource";
+  sourceType: "chat" | "interaction" | "ai_feed" | "resource";
   sourceId: string;
   title?: string;
   snippet: string;
@@ -212,6 +213,7 @@ function mapTrace(row: SourceTraceRow) {
 function mapAiFeedSignal(row: AiFeedPostRow) {
   return {
     id: normalizeIdValue(row._id),
+    evidence_ref: buildCommunityAiFeedEvidenceRef(normalizeIdValue(row._id)),
     post_type: row.type,
     title: row.title ?? null,
     body: row.body,
@@ -405,18 +407,50 @@ export const readCommunityCompilerWindow = query({
           .take(MAX_AI_FEED_REACTION_FETCH) as Promise<AiFeedReactionRow[]>,
       ]);
 
-    const archiveActivity = archiveRows.slice(0, archiveActivityLimit);
     const traceCandidateRows = traceRowsByVisibility
       .flatMap((rows) => rows)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, sourceTraceFetchLimit);
-    const sourceTraces = traceCandidateRows
-      .filter((row) => isCommunityCompilerEvidenceTrace(row))
-      .slice(0, sourceTraceLimit);
     const rankedAiFeedSignals = aiFeedRows
       .slice()
       .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0) || b.createdAt - a.createdAt)
       .slice(0, aiFeedLimit);
+    const rankedAiFeedIds = new Set(
+      rankedAiFeedSignals.map((row) => normalizeIdValue(row._id)),
+    );
+    const eligibleSourceTraces = traceCandidateRows.filter((row) =>
+      isCommunityCompilerEvidenceTrace(row),
+    );
+    const sourceTraces = eligibleSourceTraces
+      .filter(
+        (row) =>
+          row.sourceType !== "ai_feed" ||
+          !rankedAiFeedIds.has(String(row.sourceId ?? "").trim()),
+      )
+      .slice(0, sourceTraceLimit);
+    const representedAiFeedIds = new Set(rankedAiFeedIds);
+    for (const trace of sourceTraces) {
+      if (trace.sourceType === "ai_feed" && trace.sourceId) {
+        representedAiFeedIds.add(String(trace.sourceId).trim());
+      }
+    }
+    const archiveActivity = archiveRows
+      .filter(
+        (row) =>
+          row.sourceType !== "ai_feed" ||
+          !representedAiFeedIds.has(String(row.sourceId ?? "").trim()),
+      )
+      .slice(0, archiveActivityLimit);
+    const duplicateAiFeedTraceCount = eligibleSourceTraces.filter(
+      (row) =>
+        row.sourceType === "ai_feed" &&
+        rankedAiFeedIds.has(String(row.sourceId ?? "").trim()),
+    ).length;
+    const duplicateAiFeedArchiveCount = archiveRows.filter(
+      (row) =>
+        row.sourceType === "ai_feed" &&
+        representedAiFeedIds.has(String(row.sourceId ?? "").trim()),
+    ).length;
     const activeNewMemberRows = newMemberRows.filter(communityMembershipRowIsActive);
     const activePresenceUserIds = new Set(activePresenceRows.map((row) => normalizeIdValue(row.userId)).filter(Boolean));
     const reactingMemberKeys = new Set(
@@ -426,7 +460,7 @@ export const readCommunityCompilerWindow = query({
     );
     const postingMemberKeys = new Set(
       archiveRows
-        .filter((row) => row.sourceType === "chat")
+        .filter((row) => row.sourceType === "interaction")
         .map((row) => String(row.authorLabel ?? "").trim())
         .filter((label) => label.startsWith("member:")),
     );
@@ -480,6 +514,8 @@ export const readCommunityCompilerWindow = query({
         archive_activity_returned: archiveActivity.length,
         source_traces_considered: traceCandidateRows.length,
         source_traces_returned: sourceTraces.length,
+        duplicate_ai_feed_trace_projections_removed: duplicateAiFeedTraceCount,
+        duplicate_ai_feed_archive_projections_removed: duplicateAiFeedArchiveCount,
         ai_feed_signals_considered: aiFeedRows.length,
         ai_feed_signals_returned: rankedAiFeedSignals.length,
         events_returned: eventRows.length,

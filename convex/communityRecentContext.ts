@@ -1,20 +1,22 @@
 import { internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  type CommunityChatMessageLike,
-  type CommunityChatThreadLike,
   type CommunityLike,
   type CommunityResourceModuleLike,
   type CommunityResourceLike,
   communityResourceIsLiveModulePage,
   communityResourceModuleIsLive,
+  normalizeIdValue,
   normalizeResourceRole,
   normalizeResourceStatus,
   requireCommunityChatAccess,
-  resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import {
+  buildCommunityInteractionEvidenceRef,
+  communityInteractionVisibilityIsEvidenceReadable,
+} from "../shared/communityEvidenceContract";
 
 type FeedPostRow = {
   _id: any;
@@ -29,7 +31,7 @@ type FeedPostRow = {
   updatedAt: number;
 };
 
-type RecentContextSourceType = "chat" | "ai_feed" | "resource";
+type RecentContextSourceType = "interaction" | "ai_feed" | "resource";
 
 type RecentContextItem = {
   source_type: RecentContextSourceType;
@@ -46,7 +48,8 @@ type RecentContextItem = {
   resource_status?: "draft" | "review" | "published" | "processing" | "failed" | null;
 };
 
-const CHAT_WINDOW_LIMIT = 24;
+const INTERACTION_ROOT_WINDOW_LIMIT = 24;
+const INTERACTION_REPLY_WINDOW_LIMIT = 48;
 const AI_FEED_WINDOW_LIMIT = 12;
 const RESOURCE_WINDOW_LIMIT = 12;
 const RESOURCE_SCAN_LIMIT = 48;
@@ -78,15 +81,6 @@ function truncateText(raw: unknown, maxLen: number): string {
   return value.length <= maxLen ? value : `${value.slice(0, Math.max(0, maxLen - 1)).trimEnd()}…`;
 }
 
-function extractMessageText(contentJson: unknown): string {
-  if (typeof contentJson === "string") return String(contentJson).trim();
-  if (contentJson && typeof contentJson === "object" && !Array.isArray(contentJson)) {
-    const text = String((contentJson as Record<string, unknown>).text ?? "").trim();
-    if (text) return text;
-  }
-  return "";
-}
-
 function scoreText(snippet: string, tokens: string[]): number {
   const normalized = snippet.toLowerCase();
   if (tokens.length === 0) return 0.5;
@@ -98,49 +92,96 @@ function scoreText(snippet: string, tokens: string[]): number {
   return Number((matches / tokens.length).toFixed(4));
 }
 
-async function getCanonicalChatThread(ctx: any, communityId: any): Promise<CommunityChatThreadLike | null> {
-  const rows = (await ctx.db
-    .query("communityChatThreads" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .collect()) as CommunityChatThreadLike[];
-  return (
-    rows
-      .slice()
-      .sort((a, b) => a.createdAt - b.createdAt || a.updatedAt - b.updatedAt)[0] ?? null
-  );
+type InteractionContextRow = {
+  _id: any;
+  communityId: any;
+  rootId?: any;
+  actorType: "human" | "personal_agent" | "community_agent" | "system";
+  actorUserId?: any;
+  actorAgentKey?: string;
+  status: "live" | "hidden" | "deleted";
+  visibilityScope: "private" | "admin" | "community" | "public";
+  title?: string;
+  contentSummary: string;
+  createdAt: number;
+};
+
+function interactionAuthorLabel(row: InteractionContextRow): string {
+  if (row.actorType === "human") {
+    return row.actorUserId ? `member:${String(row.actorUserId)}` : "member";
+  }
+  return row.actorAgentKey ? `${row.actorType}:${row.actorAgentKey}` : row.actorType;
 }
 
-async function listRecentChatItems(args: {
+async function listRecentInteractionItems(args: {
   ctx: any;
   communityId: any;
   tokens: string[];
 }): Promise<{ items: RecentContextItem[]; considered: number }> {
-  const thread = await getCanonicalChatThread(args.ctx, args.communityId);
-  if (!thread) return { items: [], considered: 0 };
-  const rows = (await args.ctx.db
-    .query("communityChatMessages" as any)
-    .withIndex("by_thread_seq", (q: any) => q.eq("threadId", thread._id))
-    .order("desc")
-    .take(CHAT_WINDOW_LIMIT)) as CommunityChatMessageLike[];
-  const userIdCache = new Map<string, string | null>();
-  const items = await Promise.all(
-    rows.map(async (row) => {
-      const snippet = truncateText(extractMessageText(row.contentJson), 280);
-      const senderId = row.senderUserId
-        ? await resolvePublicUserId(args.ctx, row.senderUserId, userIdCache)
-        : null;
-      return {
-        source_type: "chat" as const,
-        source_id: String(row._id),
-        title: null,
-        snippet,
-        created_at: toIsoString(row.createdAt),
-        score: scoreText(snippet, args.tokens),
-        author_label: senderId ? `member:${senderId}` : "member",
-      };
-    }),
+  const [roots, replies] = (await Promise.all([
+    args.ctx.db
+      .query("communityInteractionRoots" as any)
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("status", "live"),
+      )
+      .order("desc")
+      .take(INTERACTION_ROOT_WINDOW_LIMIT),
+    args.ctx.db
+      .query("communityInteractionReplies" as any)
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("status", "live"),
+      )
+      .order("desc")
+      .take(INTERACTION_REPLY_WINDOW_LIMIT),
+  ])) as [InteractionContextRow[], InteractionContextRow[]];
+  const readableRoots = new Map(
+    roots
+      .filter((root) => communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope))
+      .map((root) => [String(root._id), root]),
   );
-  return { items, considered: rows.length };
+  for (const rootId of new Set(replies.map((reply) => String(reply.rootId ?? "")).filter(Boolean))) {
+    if (readableRoots.has(rootId)) continue;
+    const root = (await args.ctx.db.get(rootId as any)) as InteractionContextRow | null;
+    if (
+      root?.status === "live" &&
+      normalizeIdValue(root.communityId) === normalizeIdValue(args.communityId) &&
+      communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope)
+    ) {
+      readableRoots.set(rootId, root);
+    }
+  }
+  const rootItems = Array.from(readableRoots.values()).map((root) => {
+    const snippet = truncateText(root.contentSummary, 280);
+    return {
+      source_type: "interaction" as const,
+      source_id: buildCommunityInteractionEvidenceRef({ objectType: "root", objectId: String(root._id) }),
+      title: String(root.title ?? "").trim() || null,
+      snippet,
+      created_at: toIsoString(root.createdAt),
+      score: scoreText(`${root.title ?? ""} ${snippet}`, args.tokens),
+      author_label: interactionAuthorLabel(root),
+    };
+  });
+  const replyItems = replies
+    .filter(
+      (reply) =>
+        communityInteractionVisibilityIsEvidenceReadable(reply.visibilityScope) &&
+        readableRoots.has(String(reply.rootId ?? "")),
+    )
+    .map((reply) => {
+      const root = readableRoots.get(String(reply.rootId))!;
+      const snippet = truncateText(reply.contentSummary, 280);
+      return {
+        source_type: "interaction" as const,
+        source_id: buildCommunityInteractionEvidenceRef({ objectType: "reply", objectId: String(reply._id) }),
+        title: String(root.title ?? "").trim() || null,
+        snippet,
+        created_at: toIsoString(reply.createdAt),
+        score: scoreText(snippet, args.tokens),
+        author_label: interactionAuthorLabel(reply),
+      };
+    });
+  return { items: [...rootItems, ...replyItems], considered: roots.length + replies.length };
 }
 
 async function listRecentAiFeedItems(args: {
@@ -266,26 +307,26 @@ async function readCommunityRecentContextForUser(args: {
   const queryText = normalizeQueryText(args.query);
   const tokens = tokenizeQuery(queryText);
 
-  let chatFetchOk = false;
+  let interactionFetchOk = false;
   let aiFeedFetchOk = false;
   let resourceFetchOk = false;
-  let chatItems: RecentContextItem[] = [];
+  let interactionItems: RecentContextItem[] = [];
   let aiFeedItems: RecentContextItem[] = [];
   let resourceItems: RecentContextItem[] = [];
-  let chatConsidered = 0;
+  let interactionConsidered = 0;
   let aiFeedConsidered = 0;
   let resourceConsidered = 0;
 
-  const [chatResult, aiFeedResult, resourceResult] = await Promise.allSettled([
-    listRecentChatItems({ ctx, communityId, tokens }),
+  const [interactionResult, aiFeedResult, resourceResult] = await Promise.allSettled([
+    listRecentInteractionItems({ ctx, communityId, tokens }),
     listRecentAiFeedItems({ ctx, communityId, tokens }),
     listRecentResourceItems({ ctx, communityId, tokens }),
   ]);
 
-  if (chatResult.status === "fulfilled") {
-    chatFetchOk = true;
-    chatItems = chatResult.value.items;
-    chatConsidered = chatResult.value.considered;
+  if (interactionResult.status === "fulfilled") {
+    interactionFetchOk = true;
+    interactionItems = interactionResult.value.items;
+    interactionConsidered = interactionResult.value.considered;
   }
   if (aiFeedResult.status === "fulfilled") {
     aiFeedFetchOk = true;
@@ -298,7 +339,7 @@ async function readCommunityRecentContextForUser(args: {
     resourceConsidered = resourceResult.value.considered;
   }
 
-  const selected = selectRecentContextItems([...chatItems, ...aiFeedItems, ...resourceItems]);
+  const selected = selectRecentContextItems([...interactionItems, ...aiFeedItems, ...resourceItems]);
   const retrievalLatencyMs = Math.max(0, Date.now() - startedAt);
 
   return {
@@ -308,23 +349,23 @@ async function readCommunityRecentContextForUser(args: {
     retrieved_at: toIsoString(Date.now()),
     query: queryText,
     source_window: {
-      chat_messages_considered: chatConsidered,
+      interaction_items_considered: interactionConsidered,
       ai_feed_items_considered: aiFeedConsidered,
       resources_considered: resourceConsidered,
     },
     source_counts: {
-      chat: selected.items.filter((item) => item.source_type === "chat").length,
+      interaction: selected.items.filter((item) => item.source_type === "interaction").length,
       ai_feed: selected.items.filter((item) => item.source_type === "ai_feed").length,
       resource: selected.items.filter((item) => item.source_type === "resource").length,
     },
     recent_context: selected.items,
     diagnostics: {
       version: 1,
-      retrieval_version: "recent_context_v1",
+      retrieval_version: "recent_context_v2",
       retrieval_latency_ms: retrievalLatencyMs,
       retrieved_items_used: selected.items.length,
       fallback_used: selected.fallbackUsed,
-      chat_fetch_ok: chatFetchOk,
+      interaction_fetch_ok: interactionFetchOk,
       ai_feed_fetch_ok: aiFeedFetchOk,
       resource_fetch_ok: resourceFetchOk,
     },

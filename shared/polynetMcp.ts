@@ -19,6 +19,8 @@ export type PolynetMcpToolName =
   | "polynet_list_communities"
   | "polynet_get_community"
   | "polynet_community_search"
+  | "polynet_community_chat_search"
+  | "polynet_community_chat_read"
   | "polynet_product_docs_search"
   | "polynet_product_doc_read"
   | "polynet_list_workspaces"
@@ -27,6 +29,8 @@ export type PolynetMcpToolName =
   | "polynet_workspace_memory_search"
   | "polynet_workspace_memory_read"
   | "polynet_workspace_record_outcome"
+  | "polynet_workspace_ai_feed_search"
+  | "polynet_workspace_ai_feed_read"
   | "polynet_workspace_resources_map"
   | "polynet_workspace_resources_list"
   | "polynet_workspace_resource_read"
@@ -362,6 +366,72 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
       },
     },
   },
+  polynet_community_chat_search: {
+    name: "polynet_community_chat_search",
+    title: "Search Polynet Community Chat",
+    description:
+      "Search authorized canonical chat interactions in a Polynet community and return stable evidence refs. Results are raw evidence, not community-endorsed memory.",
+    annotations: {
+      title: "Search Polynet Community Chat",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["community_slug", "query"],
+      properties: {
+        community_slug: {
+          type: "string",
+          minLength: 1,
+          maxLength: 160,
+          description: "The canonical community slug.",
+        },
+        query: {
+          type: "string",
+          minLength: 1,
+          maxLength: 240,
+          description: "A focused query over canonical community chat interactions.",
+        },
+        limit: {
+          type: "integer",
+          description: "Optional result limit from 1 to 20.",
+        },
+      },
+    },
+  },
+  polynet_community_chat_read: {
+    name: "polynet_community_chat_read",
+    title: "Read Polynet Community Chat Evidence",
+    description:
+      "Read one authorized canonical community chat interaction by a stable evidence ref returned from polynet_community_chat_search.",
+    annotations: {
+      title: "Read Polynet Community Chat Evidence",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["community_slug", "ref"],
+      properties: {
+        community_slug: {
+          type: "string",
+          minLength: 1,
+          maxLength: 160,
+          description: "The canonical community slug.",
+        },
+        ref: {
+          type: "string",
+          minLength: 1,
+          maxLength: 512,
+          description: "A stable interaction:root:<id> or interaction:reply:<id> evidence ref.",
+        },
+      },
+    },
+  },
   polynet_product_docs_search: {
     name: "polynet_product_docs_search",
     title: "Search Polynet Product Docs",
@@ -683,11 +753,85 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
       },
     },
   },
+  polynet_workspace_ai_feed_search: {
+    name: "polynet_workspace_ai_feed_search",
+    title: "Search Polynet Community AI Feed",
+    description:
+      "Search authorized canonical live AI Feed posts in a selected Polynet community context and return stable evidence refs. Retrieval relevance and community reaction signal are separate fields.",
+    annotations: {
+      title: "Search Polynet Community AI Feed",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspace_context_id", "query"],
+      properties: {
+        workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
+        query: {
+          type: "string",
+          minLength: 1,
+          maxLength: 240,
+          description: "A focused query over canonical live AI Feed posts.",
+        },
+        limit: {
+          type: "number",
+          description: "Optional result limit, clamped by the server to 20.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace", "ai_feed"],
+      properties: {
+        workspace: WORKSPACE_SUMMARY_SCHEMA,
+        ai_feed: { type: "object", additionalProperties: true },
+      },
+    },
+  },
+  polynet_workspace_ai_feed_read: {
+    name: "polynet_workspace_ai_feed_read",
+    title: "Read Polynet Community AI Feed Evidence",
+    description:
+      "Read one authorized canonical live AI Feed post in a selected Polynet community context by a stable ai_feed:<id> evidence ref.",
+    annotations: {
+      title: "Read Polynet Community AI Feed Evidence",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["workspace_context_id", "ref"],
+      properties: {
+        workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
+        ref: {
+          type: "string",
+          minLength: 1,
+          maxLength: 512,
+          description: "A stable ai_feed:<id> evidence ref returned by AI Feed search.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["workspace", "ai_feed"],
+      properties: {
+        workspace: WORKSPACE_SUMMARY_SCHEMA,
+        ai_feed: { type: "object", additionalProperties: true },
+      },
+    },
+  },
   polynet_workspace_resources_map: {
     name: "polynet_workspace_resources_map",
     title: "Map Polynet Community Resources",
     description:
-      "Map resource structure for a selected Polynet community context. Members see live resources; builders may receive builder-visible structure and health according to server authority.",
+      "Map member-visible resource structure for a selected Polynet community context. Members see live resources only; use the explicit builder resource tools for draft, source-inbox, or health state.",
     annotations: {
       title: "Map Polynet Community Resources",
       readOnlyHint: true,
@@ -765,7 +909,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
     name: "polynet_workspace_resource_read",
     title: "Read Polynet Community Resource",
     description:
-      "Read one live member-visible resource from a selected Polynet community context by resource id, directory path, or directory URI.",
+      "Read one live member-visible resource from a selected Polynet community context by stable resource ref, resource id, directory path, or directory URI.",
     annotations: {
       title: "Read Polynet Community Resource",
       readOnlyHint: true,
@@ -780,7 +924,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
           type: "string",
           minLength: 1,
           maxLength: 1024,
-          description: "Resource id, readable directory path, or resource directory URI returned by resource listing/search.",
+          description: "Stable resource ref, resource id, readable directory path, or resource directory URI returned by resource listing/search.",
         },
         offset: {
           type: "number",
@@ -828,7 +972,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
         },
         limit: {
           type: "number",
-          description: "Maximum matching resources to return, clamped by the server.",
+          description: "Maximum matching resources to return, clamped by the server to 20.",
         },
       },
     },

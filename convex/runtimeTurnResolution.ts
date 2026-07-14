@@ -275,6 +275,10 @@ export function resolveAllowedToolNames(params: {
       "community_resource_read",
       "community_resources_search",
       "community_search",
+      "community_chat_search",
+      "community_chat_read",
+      "community_ai_feed_search",
+      "community_ai_feed_read",
       "community_write",
     );
   }

@@ -26,6 +26,7 @@ const runtimePrompt = read("shared/runtimePrompt.ts");
 const runtimeTurnResolution = read("convex/runtimeTurnResolution.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const resources = read("convex/communityResources.ts");
+const resourceEvidence = read("convex/communityResourceEvidence.ts");
 const httpMcp = read("convex/httpMcp.ts");
 const polynetMcp = read("shared/polynetMcp.ts");
 const timelineUi = read("shared/runtimeTimelineUi.ts");
@@ -111,7 +112,7 @@ assert.deepEqual(
   }),
   {
     query: "process swim lanes",
-    limit: 100,
+    limit: 20,
   },
   "resource search arguments should be bounded",
 );
@@ -172,15 +173,18 @@ assert.match(resources, /export const mapCommunityResourcesForToolInternal = int
 assert.match(resources, /export const readCommunityResourcesForToolInternal = internalQuery/);
 assert.match(resources, /export const listCommunityResourceDirectoryInternal = internalQuery/);
 assert.match(resources, /export const readCommunityResourceDirectoryInternal = internalQuery/);
-assert.match(resources, /export const searchCommunityResourceDirectoryInternal = internalQuery/);
+assert.match(resources, /export const mapCommunityResourceBuilderForToolInternal = internalQuery/);
+assert.doesNotMatch(resources, /export const searchCommunityResourceDirectoryInternal = internalQuery/);
+assert.match(resourceEvidence, /export const searchCommunityResourceEvidenceInternal = internalAction/);
 assert.equal(
   (resources.match(/await requireCommunityResourceDirectoryToolAccess/g) ?? []).length,
   5,
-  "each resource tool query should revalidate community chat access",
+  "four member resource queries and the explicit builder map should revalidate community access",
 );
 assert.match(resources, /resolveUserIdForAuthenticatedRequest/);
 assert.match(resources, /requireCommunityChatAccess/);
-assert.match(resources, /canManageCommunityResources[\s\S]*scope: canManage \? "builder" : "member"/);
+assert.match(resources, /export const mapCommunityResourcesForToolInternal[\s\S]*scope: "member"/);
+assert.match(resources, /export const mapCommunityResourceBuilderForToolInternal[\s\S]*requireCommunityManager[\s\S]*scope: "builder"/);
 assert.match(
   resources,
   /listResourceDirectoryLiveModules[\s\S]*listResourceDirectoryLivePageResources[\s\S]*communityResourceIsLiveModulePage/,
@@ -240,7 +244,7 @@ assert.match(
 );
 assert.match(
   runtimeAgentLoop,
-  /internal\.communityResources\.readCommunityResourcesForToolInternal/,
+  /communityResourceEvidence\.readCommunityResourcesEvidenceForToolInternal/,
 );
 assert.match(
   runtimeAgentLoop,
@@ -248,11 +252,11 @@ assert.match(
 );
 assert.match(
   runtimeAgentLoop,
-  /internal\.communityResources\.readCommunityResourceDirectoryInternal/,
+  /communityResourceEvidence\.readCommunityResourceEvidenceForToolInternal/,
 );
 assert.match(
   runtimeAgentLoop,
-  /internal\.communityResources\.searchCommunityResourceDirectoryInternal/,
+  /communityResourceEvidence\.searchCommunityResourceEvidenceInternal/,
 );
 
 assert.match(runtimePrompt, /When available, use community resource tools when canonical resource navigation/);
@@ -293,12 +297,12 @@ assert.match(
 );
 assert.match(
   httpMcp,
-  /polynet_workspace_resource_read[\s\S]*readCommunityResourceDirectoryInternal/,
+  /polynet_workspace_resource_read[\s\S]*readCommunityResourceEvidenceForToolInternal/,
   "PolyMCP resource read should use the member-visible directory read internal",
 );
 assert.match(
   httpMcp,
-  /polynet_workspace_resources_search[\s\S]*searchCommunityResourceDirectoryInternal/,
+  /polynet_workspace_resources_search[\s\S]*searchCommunityResourceEvidenceInternal/,
   "PolyMCP resource search should use the member-visible directory search internal",
 );
 assert.match(
@@ -308,7 +312,7 @@ assert.match(
 );
 assert.match(
   httpMcp,
-  /toolName === "polynet_workspace_builder_resources_map"[\s\S]*requireWorkspaceAuthorityToolset[\s\S]*"builder_resources"[\s\S]*mapCommunityResourcesForToolInternal/,
+  /toolName === "polynet_workspace_builder_resources_map"[\s\S]*requireWorkspaceAuthorityToolset[\s\S]*"builder_resources"[\s\S]*mapCommunityResourceBuilderForToolInternal/,
   "PolyMCP builder resource map should require builder resources and use the map internal",
 );
 assert.match(

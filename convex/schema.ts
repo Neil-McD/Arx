@@ -2726,7 +2726,12 @@ export default defineSchema({
 
   communityArchiveDocuments: defineTable({
     communityId: v.id("communities"),
-    sourceType: v.union(v.literal("chat"), v.literal("ai_feed"), v.literal("resource")),
+    sourceType: v.union(
+      v.literal("chat"),
+      v.literal("interaction"),
+      v.literal("ai_feed"),
+      v.literal("resource"),
+    ),
     sourceId: v.string(),
     title: v.optional(v.string()),
     sourceText: v.string(),
@@ -2842,6 +2847,33 @@ export default defineSchema({
     ])
     .index("by_community_source", ["communityId", "sourceType", "sourceId"])
     .index("by_community_workflow", ["communityId", "workflowId"]),
+
+  communityEvidenceRetrievalLogs: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    surface: v.union(
+      v.literal("member_agent_dock"),
+      v.literal("external_mcp"),
+      v.literal("community_concierge"),
+    ),
+    capability: v.union(
+      v.literal("community_chat_search"),
+      v.literal("community_chat_read"),
+      v.literal("community_resources_search"),
+      v.literal("community_resources_read"),
+      v.literal("community_resource_read"),
+      v.literal("community_ai_feed_search"),
+      v.literal("community_ai_feed_read"),
+    ),
+    // Compatibility only for rows written before the metadata-only audit
+    // contract. New retrieval logs must not copy raw search text.
+    query: v.optional(v.string()),
+    resultRefs: v.array(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_user_createdAt", ["userId", "createdAt"])
+    .index("by_community_surface_createdAt", ["communityId", "surface", "createdAt"]),
 
   communityIntelligenceNodes: defineTable({
     communityId: v.id("communities"),

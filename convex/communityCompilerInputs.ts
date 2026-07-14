@@ -10,6 +10,7 @@ import {
   COMPILER_EVIDENCE_VISIBILITY_SCOPES,
   isCommunityCompilerEvidenceTrace,
 } from "./communityCompilerEvidenceCore";
+import { buildCommunityAiFeedEvidenceRef } from "../shared/communityEvidenceContract";
 
 type SourceTraceRow = {
   _id: any;
@@ -109,6 +110,7 @@ function mapTrace(row: SourceTraceRow) {
 function mapAiFeedSignal(row: AiFeedPostRow) {
   return {
     id: normalizeIdValue(row._id),
+    evidence_ref: buildCommunityAiFeedEvidenceRef(normalizeIdValue(row._id)),
     post_type: row.type,
     title: row.title ?? null,
     body: row.body,
@@ -207,14 +209,28 @@ export const listCommunityCompilerInputs = query({
       .flatMap((rows) => rows)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, sourceTraceFetchLimit);
-    const traceRows = traceCandidateRows
-      .filter((row) => isCommunityCompilerEvidenceTrace(row))
-      .slice(0, sourceTraceLimit);
-
     const rankedAiFeedSignals = aiFeedRows
       .slice()
       .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0) || b.createdAt - a.createdAt)
       .slice(0, aiFeedLimit);
+    const rankedAiFeedIds = new Set(
+      rankedAiFeedSignals.map((row) => normalizeIdValue(row._id)),
+    );
+    const eligibleTraceRows = traceCandidateRows.filter((row) =>
+      isCommunityCompilerEvidenceTrace(row),
+    );
+    const traceRows = eligibleTraceRows
+      .filter(
+        (row) =>
+          row.sourceType !== "ai_feed" ||
+          !rankedAiFeedIds.has(String(row.sourceId ?? "").trim()),
+      )
+      .slice(0, sourceTraceLimit);
+    const duplicateAiFeedTraceCount = eligibleTraceRows.filter(
+      (row) =>
+        row.sourceType === "ai_feed" &&
+        rankedAiFeedIds.has(String(row.sourceId ?? "").trim()),
+    ).length;
 
     return {
       ok: true,
@@ -233,6 +249,7 @@ export const listCommunityCompilerInputs = query({
         outcome_limit: outcomeLimit,
         source_traces_considered: traceCandidateRows.length,
         source_traces_returned: traceRows.length,
+        duplicate_ai_feed_trace_projections_removed: duplicateAiFeedTraceCount,
         ai_feed_signals_considered: aiFeedRows.length,
         ai_feed_signals_returned: rankedAiFeedSignals.length,
         outcome_observations_returned: outcomeRows.length,

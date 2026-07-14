@@ -48,6 +48,7 @@ import {
   scheduleEverybodyMentionBroadcast,
   textContainsEverybodyMentionToken,
 } from "./communityMentionBroadcasts";
+import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 
 type InteractionActorType = "human" | "personal_agent" | "community_agent" | "system";
 type InteractionRootKind = "discussion" | "announcement" | "question" | "resource_share" | "agent_signal";
@@ -1115,6 +1116,12 @@ export async function materializeLegacyChatRootInteractionPlan(ctx: any, plan: L
         nowMs: plan.nowMs,
       });
     }
+    await scheduleCommunityInteractionEvidenceSync({
+      ctx,
+      communityId: plan.communityId,
+      objectType: "root",
+      objectId: plan.root._id,
+    });
     return await mapRootBundle(ctx, plan.root, true);
   }
 
@@ -1159,6 +1166,12 @@ export async function materializeLegacyChatRootInteractionPlan(ctx: any, plan: L
 
   const root = (await ctx.db.get(rootId as any)) as InteractionRootRow | null;
   if (!root) throw new Error("legacy_chat_interaction_root_create_failed");
+  await scheduleCommunityInteractionEvidenceSync({
+    ctx,
+    communityId: plan.communityId,
+    objectType: "root",
+    objectId: rootId,
+  });
   return await mapRootBundle(ctx, root, false);
 }
 
@@ -1301,6 +1314,12 @@ export async function materializeLegacyChatReplyInteractionPlan(ctx: any, plan: 
         nowMs: plan.nowMs,
       });
     }
+    await scheduleCommunityInteractionEvidenceSync({
+      ctx,
+      communityId: plan.communityId,
+      objectType: "reply",
+      objectId: plan.reply._id,
+    });
     return await mapReplyBundle(ctx, plan.reply, true);
   }
 
@@ -1353,6 +1372,12 @@ export async function materializeLegacyChatReplyInteractionPlan(ctx: any, plan: 
 
   const reply = (await ctx.db.get(replyId as any)) as InteractionReplyRow | null;
   if (!reply) throw new Error("legacy_chat_interaction_reply_create_failed");
+  await scheduleCommunityInteractionEvidenceSync({
+    ctx,
+    communityId: plan.communityId,
+    objectType: "reply",
+    objectId: replyId,
+  });
   return await mapReplyBundle(ctx, reply, false);
 }
 
@@ -1726,6 +1751,13 @@ export const createCommunityInteractionComposerMessage = mutation({
         deduped = false;
       }
 
+      await scheduleCommunityInteractionEvidenceSync({
+        ctx,
+        communityId: args.communityId,
+        objectType: "root",
+        objectId: root._id,
+      });
+
       return {
         rows: [],
         interaction: {
@@ -1817,6 +1849,13 @@ export const createCommunityInteractionComposerMessage = mutation({
       });
       deduped = false;
     }
+
+    await scheduleCommunityInteractionEvidenceSync({
+      ctx,
+      communityId: root.communityId,
+      objectType: "reply",
+      objectId: reply._id,
+    });
 
     return {
       rows: [],
@@ -2389,6 +2428,12 @@ export const editCommunityInteractionMessage = mutation({
       actorUserId: userId,
       createdAt: nowMs,
     });
+    await scheduleCommunityInteractionEvidenceSync({
+      ctx,
+      communityId,
+      objectType: args.targetType,
+      objectId: target._id,
+    });
     return { ok: true };
   },
 });
@@ -2463,6 +2508,12 @@ export const deleteCommunityInteractionMessage = mutation({
       previousStatus,
       nextStatus: "deleted",
       createdAt: nowMs,
+    });
+    await scheduleCommunityInteractionEvidenceSync({
+      ctx,
+      communityId,
+      objectType: args.targetType,
+      objectId: target._id,
     });
     return { ok: true };
   },

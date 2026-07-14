@@ -14,7 +14,6 @@ import {
 } from "./communityCore";
 import {
   deleteArchiveDocumentBySource,
-  upsertArchiveDocumentForChatMessage,
 } from "./communityArchiveDocuments";
 import { recordLegacyChatMessageInteractionBestEffort } from "./communityInteractions";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
@@ -508,10 +507,6 @@ export const createThreadUserMessage = mutation({
     });
     const row = (await ctx.db.get(messageId as any)) as CommunityChatMessageLike | null;
     if (!row) throw new Error("message_create_failed");
-    await upsertArchiveDocumentForChatMessage(ctx, {
-      thread,
-      message: row,
-    });
     await recordLegacyChatMessageInteractionBestEffort({
       ctx,
       thread,
@@ -566,13 +561,6 @@ export const patchOwnMessageContent = mutation({
       contentJson: nextAttachments.length > 0 ? { text: nextText, attachments: nextAttachments } : { text: nextText },
       updatedAt: nowMs,
     });
-    const updated = (await ctx.db.get(message._id as any)) as CommunityChatMessageLike | null;
-    if (updated) {
-      await upsertArchiveDocumentForChatMessage(ctx, {
-        thread,
-        message: updated,
-      });
-    }
     return { ok: true };
   },
 });

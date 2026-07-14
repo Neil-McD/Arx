@@ -121,13 +121,13 @@ assert.match(
 );
 assert.match(
   digest,
-  /selectedSourceTraceRows\.length > 0[\s\S]*category: "source_trace_signal"[\s\S]*sourceTraceIds: sourceTraceIds\(selectedSourceTraceRows\)/,
-  "compiler digest should represent selected pending traces in a source_trace_signal item",
+  /selectedDistinctSourceTraceRows\.length > 0[\s\S]*category: "source_trace_signal"[\s\S]*sourceTraceIds: sourceTraceIds\(selectedDistinctSourceTraceRows\)/,
+  "compiler digest should represent distinct selected pending traces in a source_trace_signal item",
 );
 assert.match(
   digest,
-  /representedSourceTraceIds[\s\S]*representedSelectedSourceTraceRows = selectedSourceTraceRows\.filter[\s\S]*traceRows: representedSelectedSourceTraceRows/,
-  "compiler digest should only mark selected traces compiled when they are represented in the digest item",
+  /selectedAiFeedSourceTraceRows[\s\S]*representedSourceTraceIds[\s\S]*representedSelectedSourceTraceRows = \[[\s\S]*selectedDistinctSourceTraceRows\.filter[\s\S]*\.\.\.selectedAiFeedSourceTraceRows[\s\S]*traceRows: representedSelectedSourceTraceRows/,
+  "compiler digest should mark distinct trace-item evidence and deduplicated AI Feed promotion traces only after semantic representation",
 );
 assert.match(
   digest,

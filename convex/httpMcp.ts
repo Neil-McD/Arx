@@ -45,6 +45,11 @@ type HttpActionLike = (handler: (ctx: unknown, req: Request) => Promise<Response
 
 type JsonResponseFn = (req: Request, status: number, payload: unknown) => Response;
 
+type ListAccessibleCommunities = (
+  ctx: any,
+  authSubject: string,
+) => Promise<CommunityMembershipProjection[]>;
+
 type RequireAuthenticatedActor = (
   ctx: unknown,
   req: Request,
@@ -702,6 +707,10 @@ function normalizeWorkspaceResourceLimit(value: unknown): number | undefined {
   return normalizeBoundedInteger(value, 1, 100);
 }
 
+function normalizeWorkspaceResourceSearchLimit(value: unknown): number | undefined {
+  return normalizeBoundedInteger(value, 1, 20);
+}
+
 function normalizeWorkspaceResourceMapLimit(value: unknown): number | undefined {
   return normalizeBoundedInteger(value, 1, 250);
 }
@@ -730,8 +739,12 @@ async function handleToolCall(args: {
   };
   toolName: string;
   toolArgs: Record<string, unknown>;
+  listAccessibleCommunities?: ListAccessibleCommunities;
+  resolveWorkspaceContext?: typeof resolveWorkspaceContext;
 }): Promise<{ ok: true; result: Record<string, unknown> } | { ok: false; type: "tool"; message: string } | { ok: false; type: "protocol"; message: string }> {
   const { ctx, authSubject, actor, toolName, toolArgs } = args;
+  const listAccessible = args.listAccessibleCommunities ?? listAccessibleCommunities;
+  const resolveWorkspaceContextForCall = args.resolveWorkspaceContext ?? resolveWorkspaceContext;
 
   if (toolName === "polynet_list_communities") {
     const listed = await listCommunityReadSummaries({
@@ -854,7 +867,7 @@ async function handleToolCall(args: {
       return { ok: false, type: "tool", message: "community_slug is required." };
     }
     const workspaceContextId = buildWorkspaceContextId(communitySlug);
-    const resolved = await resolveWorkspaceContext({
+    const resolved = await resolveWorkspaceContextForCall({
       ctx,
       authSubject,
       workspaceContextId,
@@ -874,7 +887,7 @@ async function handleToolCall(args: {
   }
 
   if (toolName === "polynet_get_workspace_context") {
-    const resolved = await resolveWorkspaceContext({
+    const resolved = await resolveWorkspaceContextForCall({
       ctx,
       authSubject,
       workspaceContextId: toolArgs.workspace_context_id,
@@ -893,8 +906,113 @@ async function handleToolCall(args: {
     };
   }
 
+  if (toolName === "polynet_workspace_ai_feed_search") {
+    const resolved = await resolveWorkspaceContextForCall({
+      ctx,
+      authSubject,
+      workspaceContextId: toolArgs.workspace_context_id,
+    });
+    if (!resolved.ok) {
+      return { ok: false, type: "tool", message: resolved.message };
+    }
+    const authority = requireWorkspaceAuthorityToolset(
+      resolved.context.authority,
+      "raw_evidence_search",
+    );
+    if (!authority.ok) {
+      return { ok: false, type: "tool", message: authority.message };
+    }
+    const query = normalizeString(toolArgs.query, 240);
+    if (!query) {
+      return { ok: false, type: "tool", message: "query is required." };
+    }
+    try {
+      const aiFeed = (await ctx.runAction(
+        (internal as any).communityAiFeedEvidence.searchCommunityAiFeedEvidenceInternal,
+        {
+          userId: actor.dbUserId,
+          authSubject,
+          communityId: resolved.context.communityId,
+          query,
+          limit: normalizeWorkspaceResourceSearchLimit(toolArgs.limit),
+          surface: "external_mcp",
+        },
+      )) as Record<string, unknown> | null;
+      if (!aiFeed || typeof aiFeed !== "object") {
+        return { ok: false, type: "tool", message: "Workspace AI Feed search failed." };
+      }
+      const structuredContent = {
+        workspace: sanitizeWorkspaceSummary(resolved.context.row),
+        ai_feed: aiFeed,
+      };
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(structuredContent),
+          structuredContent,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, type: "tool", message: message || "Workspace AI Feed search failed." };
+    }
+  }
+
+  if (toolName === "polynet_workspace_ai_feed_read") {
+    const resolved = await resolveWorkspaceContextForCall({
+      ctx,
+      authSubject,
+      workspaceContextId: toolArgs.workspace_context_id,
+    });
+    if (!resolved.ok) {
+      return { ok: false, type: "tool", message: resolved.message };
+    }
+    const authority = requireWorkspaceAuthorityToolset(
+      resolved.context.authority,
+      "raw_evidence_search",
+    );
+    if (!authority.ok) {
+      return { ok: false, type: "tool", message: authority.message };
+    }
+    const ref = normalizeString(toolArgs.ref, 512);
+    if (!ref) {
+      return { ok: false, type: "tool", message: "ref is required." };
+    }
+    try {
+      const aiFeed = (await ctx.runAction(
+        (internal as any).communityAiFeedEvidence.readCommunityAiFeedEvidenceForToolInternal,
+        {
+          userId: actor.dbUserId,
+          authSubject,
+          communityId: resolved.context.communityId,
+          ref,
+          surface: "external_mcp",
+        },
+      )) as Record<string, unknown> | null;
+      if (!aiFeed || typeof aiFeed !== "object") {
+        return { ok: false, type: "tool", message: "Workspace AI Feed evidence read failed." };
+      }
+      const structuredContent = {
+        workspace: sanitizeWorkspaceSummary(resolved.context.row),
+        ai_feed: aiFeed,
+      };
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(structuredContent),
+          structuredContent,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, type: "tool", message: message || "Workspace AI Feed evidence read failed." };
+    }
+  }
+
   if (toolName === "polynet_workspace_resources_map") {
-    const resolved = await resolveWorkspaceContext({
+    const resolved = await resolveWorkspaceContextForCall({
       ctx,
       authSubject,
       workspaceContextId: toolArgs.workspace_context_id,
@@ -939,7 +1057,7 @@ async function handleToolCall(args: {
   }
 
   if (toolName === "polynet_workspace_resources_list") {
-    const resolved = await resolveWorkspaceContext({
+    const resolved = await resolveWorkspaceContextForCall({
       ctx,
       authSubject,
       workspaceContextId: toolArgs.workspace_context_id,
@@ -985,7 +1103,7 @@ async function handleToolCall(args: {
   }
 
   if (toolName === "polynet_workspace_resource_read") {
-    const resolved = await resolveWorkspaceContext({
+    const resolved = await resolveWorkspaceContextForCall({
       ctx,
       authSubject,
       workspaceContextId: toolArgs.workspace_context_id,
@@ -1002,8 +1120,8 @@ async function handleToolCall(args: {
       return { ok: false, type: "tool", message: "ref is required." };
     }
     try {
-      const resource = (await ctx.runQuery(
-        internal.communityResources.readCommunityResourceDirectoryInternal as any,
+      const resource = (await ctx.runAction(
+        (internal as any).communityResourceEvidence.readCommunityResourceEvidenceForToolInternal,
         {
           userId: actor.dbUserId,
           authSubject,
@@ -1011,6 +1129,7 @@ async function handleToolCall(args: {
           ref,
           offset: normalizeWorkspaceResourceReadOffset(toolArgs.offset),
           limit: normalizeWorkspaceResourceReadLimit(toolArgs.limit),
+          surface: "external_mcp",
         },
       )) as Record<string, unknown> | null;
       if (!resource || typeof resource !== "object") {
@@ -1035,7 +1154,7 @@ async function handleToolCall(args: {
   }
 
   if (toolName === "polynet_workspace_resources_search") {
-    const resolved = await resolveWorkspaceContext({
+    const resolved = await resolveWorkspaceContextForCall({
       ctx,
       authSubject,
       workspaceContextId: toolArgs.workspace_context_id,
@@ -1052,14 +1171,15 @@ async function handleToolCall(args: {
       return { ok: false, type: "tool", message: "query is required." };
     }
     try {
-      const resources = (await ctx.runQuery(
-        internal.communityResources.searchCommunityResourceDirectoryInternal as any,
+      const resources = (await ctx.runAction(
+        (internal as any).communityResourceEvidence.searchCommunityResourceEvidenceInternal,
         {
           userId: actor.dbUserId,
           authSubject,
           communityId: resolved.context.communityId,
           query,
-          limit: normalizeWorkspaceResourceLimit(toolArgs.limit),
+          limit: normalizeWorkspaceResourceSearchLimit(toolArgs.limit),
+          surface: "external_mcp",
         },
       )) as Record<string, unknown> | null;
       if (!resources || typeof resources !== "object") {
@@ -1084,7 +1204,7 @@ async function handleToolCall(args: {
   }
 
   if (toolName === "polynet_workspace_builder_resources_map") {
-    const resolved = await resolveWorkspaceContext({
+    const resolved = await resolveWorkspaceContextForCall({
       ctx,
       authSubject,
       workspaceContextId: toolArgs.workspace_context_id,
@@ -1098,7 +1218,7 @@ async function handleToolCall(args: {
     }
     try {
       const resources = (await ctx.runQuery(
-        internal.communityResources.mapCommunityResourcesForToolInternal as any,
+        internal.communityResources.mapCommunityResourceBuilderForToolInternal as any,
         {
           userId: actor.dbUserId,
           authSubject,
@@ -1129,7 +1249,7 @@ async function handleToolCall(args: {
   }
 
   if (toolName === "polynet_workspace_builder_resources_list") {
-    const resolved = await resolveWorkspaceContext({
+    const resolved = await resolveWorkspaceContextForCall({
       ctx,
       authSubject,
       workspaceContextId: toolArgs.workspace_context_id,
@@ -1173,7 +1293,7 @@ async function handleToolCall(args: {
   }
 
   if (toolName === "polynet_workspace_builder_resource_read") {
-    const resolved = await resolveWorkspaceContext({
+    const resolved = await resolveWorkspaceContextForCall({
       ctx,
       authSubject,
       workspaceContextId: toolArgs.workspace_context_id,
@@ -1220,13 +1340,115 @@ async function handleToolCall(args: {
     }
   }
 
+  if (toolName === "polynet_community_chat_search") {
+    const communitySlug = normalizeString(toolArgs.community_slug, 160);
+    const query = normalizeString(toolArgs.query, 240);
+    if (!communitySlug || !query) {
+      return { ok: false, type: "tool", message: "community_slug and query are required." };
+    }
+    const rows = await listAccessible(ctx, authSubject);
+    const row = findCommunityBySlug(rows, communitySlug);
+    if (!row) {
+      return { ok: false, type: "tool", message: "Community not found or not accessible." };
+    }
+    try {
+      const raw = (await ctx.runAction(
+        (internal as any).communityInteractionEvidence.searchCommunityInteractionEvidenceInternal,
+        {
+          userId: actor.dbUserId,
+          authSubject,
+          communityId: row.community_id,
+          query,
+          limit: Math.max(1, Math.min(20, Math.floor(Number(toolArgs.limit ?? 10)))),
+          surface: "external_mcp",
+        },
+      )) as Record<string, unknown> | null;
+      if (!raw || typeof raw !== "object") {
+        return { ok: false, type: "tool", message: "Community chat search failed." };
+      }
+      const structuredContent = {
+        community: {
+          slug: String(row.communities?.slug ?? "").trim(),
+          name: String(row.communities?.name ?? "").trim() || "Community",
+        },
+        query,
+        results: Array.isArray(raw.results) ? raw.results : [],
+        retrieval_id: normalizeString(raw.retrieval_id, 160),
+      };
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(structuredContent),
+          structuredContent,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        type: "tool",
+        message: error instanceof Error ? error.message : "Community chat search failed.",
+      };
+    }
+  }
+
+  if (toolName === "polynet_community_chat_read") {
+    const communitySlug = normalizeString(toolArgs.community_slug, 160);
+    const ref = normalizeString(toolArgs.ref, 512);
+    if (!communitySlug || !ref) {
+      return { ok: false, type: "tool", message: "community_slug and ref are required." };
+    }
+    const rows = await listAccessible(ctx, authSubject);
+    const row = findCommunityBySlug(rows, communitySlug);
+    if (!row) {
+      return { ok: false, type: "tool", message: "Community not found or not accessible." };
+    }
+    try {
+      const raw = (await ctx.runAction(
+        (internal as any).communityInteractionEvidence.readCommunityInteractionEvidenceForToolInternal,
+        {
+          userId: actor.dbUserId,
+          authSubject,
+          communityId: row.community_id,
+          ref,
+          surface: "external_mcp",
+        },
+      )) as Record<string, unknown> | null;
+      if (!raw || typeof raw !== "object") {
+        return { ok: false, type: "tool", message: "Community chat evidence read failed." };
+      }
+      const structuredContent = {
+        community: {
+          slug: String(row.communities?.slug ?? "").trim(),
+          name: String(row.communities?.name ?? "").trim() || "Community",
+        },
+        evidence: raw.evidence ?? null,
+        retrieval_id: normalizeString(raw.retrieval_id, 160),
+      };
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(structuredContent),
+          structuredContent,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        type: "tool",
+        message: error instanceof Error ? error.message : "Community chat evidence read failed.",
+      };
+    }
+  }
+
   if (toolName === "polynet_community_search") {
     const communitySlug = normalizeString(toolArgs.community_slug, 160);
     const query = normalizeString(toolArgs.query, 240);
     if (!communitySlug || !query) {
       return { ok: false, type: "tool", message: "community_slug and query are required." };
     }
-    const rows = await listAccessibleCommunities(ctx, authSubject);
+    const rows = await listAccessible(ctx, authSubject);
     const row = findCommunityBySlug(rows, communitySlug);
     if (!row) {
       return { ok: false, type: "tool", message: "Community not found or not accessible." };
@@ -1286,7 +1508,7 @@ async function handleToolCall(args: {
   }
 
   if (toolName === "polynet_workspace_memory_search") {
-    const resolved = await resolveWorkspaceContext({
+    const resolved = await resolveWorkspaceContextForCall({
       ctx,
       authSubject,
       workspaceContextId: toolArgs.workspace_context_id,
@@ -1329,7 +1551,7 @@ async function handleToolCall(args: {
   }
 
   if (toolName === "polynet_workspace_memory_read") {
-    const resolved = await resolveWorkspaceContext({
+    const resolved = await resolveWorkspaceContextForCall({
       ctx,
       authSubject,
       workspaceContextId: toolArgs.workspace_context_id,
@@ -1376,7 +1598,7 @@ async function handleToolCall(args: {
   }
 
   if (toolName === "polynet_workspace_record_outcome") {
-    const resolved = await resolveWorkspaceContext({
+    const resolved = await resolveWorkspaceContextForCall({
       ctx,
       authSubject,
       workspaceContextId: toolArgs.workspace_context_id,
@@ -1440,11 +1662,13 @@ async function handleToolCall(args: {
   };
 }
 
-async function handleMcpPost(args: {
+export async function handleMcpPost(args: {
   ctx: any;
   req: Request;
   jsonResponse: JsonResponseFn;
   requireAuthenticatedActor: RequireAuthenticatedActor;
+  listAccessibleCommunities?: ListAccessibleCommunities;
+  resolveWorkspaceContext?: typeof resolveWorkspaceContext;
 }): Promise<Response> {
   const { ctx, req, jsonResponse, requireAuthenticatedActor } = args;
   const originCheck = validateMcpOrigin(req);
@@ -1587,6 +1811,8 @@ async function handleMcpPost(args: {
       actor: { dbUserId: actor.dbUserId },
       toolName,
       toolArgs,
+      listAccessibleCommunities: args.listAccessibleCommunities,
+      resolveWorkspaceContext: args.resolveWorkspaceContext,
     });
     if (!result.ok && result.type === "protocol") {
       return jsonRpcErrorResponse(req, jsonResponse, id, -32601, result.message);

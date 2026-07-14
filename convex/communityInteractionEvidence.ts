@@ -1,0 +1,1003 @@
+import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
+import {
+  normalizeIdValue,
+  requireCommunityChatAccess,
+  resolvePublicUserId,
+  toIsoString,
+} from "./communityCore";
+import {
+  deleteArchiveDocumentBySource,
+  normalizeOptionalText,
+  syncArchiveDocumentForInteraction,
+  truncateText,
+  type ArchiveDocLike,
+} from "./communityArchiveDocuments";
+import {
+  embedGeminiQuery,
+  resolveGeminiEmbeddingConfig,
+} from "./communityArchiveEmbeddingPipeline";
+import { ARCHIVE_VECTOR_LIMIT } from "./communityArchiveShared";
+import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
+import {
+  communityInteractionEvidenceSourceIsReadable,
+  resolveCommunityInteractionEvidenceSource,
+  type CommunityInteractionEvidenceRow,
+  type ResolvedCommunityInteractionEvidence,
+} from "./communityInteractionEvidenceCore";
+import {
+  communityEvidenceSurfaceValidator,
+  resolveTrustedCommunityEvidenceUserId,
+} from "./communityEvidenceAudit";
+import {
+  buildCommunityInteractionEvidenceRef,
+  communityInteractionVisibilityIsEvidenceReadable,
+  deriveCommunityInteractionLineageEnvelope,
+  normalizeCommunityEvidenceSearchLimit,
+  parseCommunityInteractionEvidenceRef,
+  type CommunityEvidenceSurface,
+  type CommunityInteractionEvidenceObjectType,
+} from "../shared/communityEvidenceContract";
+
+type InteractionRow = CommunityInteractionEvidenceRow;
+
+type CommunityRow = {
+  _id: any;
+  name?: string;
+  slug?: string;
+};
+
+type ContentBlockRow = {
+  _id: any;
+  blockOrder: number;
+  blockType: string;
+  text?: string;
+  url?: string;
+  workspaceRefKind?: string;
+  workspaceRefId?: string;
+};
+
+type AttachmentRow = {
+  _id: any;
+  attachmentKind: string;
+  status: string;
+  name: string;
+  mimeType?: string;
+  sizeBytes: number;
+  externalUrl?: string;
+};
+
+type EmbedRow = {
+  _id: any;
+  embedKind: string;
+  status: string;
+  sourceUrl?: string;
+  workspaceRefKind?: string;
+  workspaceRefId?: string;
+  title?: string;
+  description?: string;
+};
+
+const evidenceObjectTypeValidator = v.union(v.literal("root"), v.literal("reply"));
+const evidencePromotionReasonValidator = v.union(
+  v.literal("manual"),
+  v.literal("moderator"),
+  v.literal("high_signal"),
+  v.literal("agent_signal"),
+);
+type EvidencePromotionReason =
+  | "manual"
+  | "moderator"
+  | "high_signal"
+  | "agent_signal";
+const RECENT_ROOT_SCAN_LIMIT = 80;
+const RECENT_REPLY_SCAN_LIMIT = 160;
+const INTERACTION_ARCHIVE_VECTOR_LIMIT = Math.max(ARCHIVE_VECTOR_LIMIT, 32);
+
+function tokenizeQuery(raw: unknown): string[] {
+  return Array.from(
+    new Set(
+      String(raw ?? "")
+        .toLowerCase()
+        .split(/[^a-z0-9]+/g)
+        .map((token) => token.trim())
+        .filter((token) => token.length >= 2),
+    ),
+  ).slice(0, 16);
+}
+
+function scoreEvidenceText(raw: unknown, tokens: string[]): number {
+  const text = String(raw ?? "").toLowerCase();
+  if (!text || tokens.length === 0) return 0;
+  let matches = 0;
+  for (const token of tokens) {
+    if (text.includes(token)) matches += 1;
+  }
+  return matches === 0 ? 0 : Number((matches / tokens.length).toFixed(4));
+}
+
+function archiveSourceIdToRef(sourceId: string): string | null {
+  const match = /^(root|reply):([^\s:]+)$/.exec(String(sourceId ?? "").trim());
+  if (!match) return null;
+  return buildCommunityInteractionEvidenceRef({
+    objectType: match[1] as CommunityInteractionEvidenceObjectType,
+    objectId: match[2],
+  });
+}
+
+async function loadReadableInteraction(args: {
+  ctx: any;
+  communityId: any;
+  objectType: CommunityInteractionEvidenceObjectType;
+  objectId: any;
+}): Promise<{ row: InteractionRow; root: InteractionRow }> {
+  const source = await resolveCommunityInteractionEvidenceSource(args);
+  if (!source) {
+    throw new Error("community_interaction_evidence_not_found");
+  }
+  if (!communityInteractionEvidenceSourceIsReadable(source)) {
+    throw new Error("community_interaction_evidence_not_readable");
+  }
+  return { row: source.row, root: source.root };
+}
+
+async function mapEvidenceSearchItem(args: {
+  ctx: any;
+  community: CommunityRow;
+  objectType: CommunityInteractionEvidenceObjectType;
+  row: InteractionRow;
+  root: InteractionRow;
+  score: number | null;
+  source: "recent" | "archive";
+  userIdCache?: Map<string, string | null>;
+}) {
+  const publicActorUserId = args.row.actorUserId
+    ? await resolvePublicUserId(args.ctx, args.row.actorUserId, args.userIdCache)
+    : null;
+  const ref = buildCommunityInteractionEvidenceRef({
+    objectType: args.objectType,
+    objectId: normalizeIdValue(args.row._id),
+  });
+  const actorUserId =
+    publicActorUserId ??
+    (args.row.actorUserId ? normalizeIdValue(args.row.actorUserId) : null);
+  const lineage = deriveCommunityInteractionLineageEnvelope({
+    actorType: args.row.actorType,
+    actorUserId,
+    actorAgentKey: args.row.actorAgentKey ?? null,
+    communityId: normalizeIdValue(args.community._id),
+    objectType: args.objectType,
+    objectId: normalizeIdValue(args.row._id),
+    rootId: normalizeIdValue(args.root._id),
+    targetReplyId: args.row.targetReplyId
+      ? normalizeIdValue(args.row.targetReplyId)
+      : null,
+  });
+  const slug = String(args.community.slug ?? "").trim();
+  return {
+    ref,
+    source_type: "interaction" as const,
+    source_id: ref,
+    object_type: args.objectType,
+    object_id: normalizeIdValue(args.row._id),
+    root_id: normalizeIdValue(args.root._id),
+    version: Math.max(1, Math.floor(Number(args.row.updatedAt) || 1)),
+    visibility_scope: args.row.visibilityScope,
+    title: normalizeOptionalText(args.root.title, 180),
+    snippet: truncateText(args.row.contentSummary, 500),
+    actor: {
+      type: args.row.actorType,
+      user_id: actorUserId,
+      agent_key: args.row.actorAgentKey ?? null,
+    },
+    lineage,
+    created_at: toIsoString(args.row.createdAt),
+    updated_at: toIsoString(args.row.updatedAt),
+    score: args.score,
+    retrieval_source: args.source,
+    deep_link: slug
+      ? `/c/${encodeURIComponent(slug)}/chat?evidence=${encodeURIComponent(ref)}`
+      : null,
+  };
+}
+
+async function searchRecentCommunityInteractionEvidence(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+  query: string;
+  limit: number;
+}) {
+  await requireCommunityChatAccess({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  const community = (await args.ctx.db.get(args.communityId)) as CommunityRow | null;
+  if (!community) throw new Error("community_not_found");
+  const [roots, replies] = (await Promise.all([
+    args.ctx.db
+      .query("communityInteractionRoots" as any)
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("status", "live"),
+      )
+      .order("desc")
+      .take(RECENT_ROOT_SCAN_LIMIT),
+    args.ctx.db
+      .query("communityInteractionReplies" as any)
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("status", "live"),
+      )
+      .order("desc")
+      .take(RECENT_REPLY_SCAN_LIMIT),
+  ])) as [InteractionRow[], InteractionRow[]];
+  const readableRoots = new Map(
+    roots
+      .filter((row) => communityInteractionVisibilityIsEvidenceReadable(row.visibilityScope))
+      .map((row) => [normalizeIdValue(row._id), row]),
+  );
+  const missingRootIds = Array.from(
+    new Set(
+      replies
+        .map((reply) => normalizeIdValue(reply.rootId))
+        .filter((rootId) => rootId && !readableRoots.has(rootId)),
+    ),
+  );
+  for (const rootId of missingRootIds) {
+    const canonicalRootId = args.ctx.db.normalizeId(
+      "communityInteractionRoots" as any,
+      rootId,
+    );
+    const root = canonicalRootId
+      ? ((await args.ctx.db.get(canonicalRootId)) as InteractionRow | null)
+      : null;
+    if (
+      root?.status === "live" &&
+      normalizeIdValue(root.communityId) === normalizeIdValue(args.communityId) &&
+      communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope)
+    ) {
+      readableRoots.set(rootId, root);
+    }
+  }
+  const tokens = tokenizeQuery(args.query);
+  const candidates = [
+    ...Array.from(readableRoots.values()).map((row) => ({
+      objectType: "root" as const,
+      row,
+      root: row,
+      score: scoreEvidenceText(`${row.title ?? ""} ${row.contentSummary}`, tokens),
+    })),
+    ...replies
+      .filter((row) => communityInteractionVisibilityIsEvidenceReadable(row.visibilityScope))
+      .map((row) => ({
+        objectType: "reply" as const,
+        row,
+        root: readableRoots.get(normalizeIdValue(row.rootId)),
+        score: scoreEvidenceText(row.contentSummary, tokens),
+      }))
+      .filter((entry): entry is typeof entry & { root: InteractionRow } => Boolean(entry.root)),
+  ]
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || b.row.createdAt - a.row.createdAt)
+    .slice(0, args.limit);
+  const userIdCache = new Map<string, string | null>();
+  return {
+    community: {
+      id: normalizeIdValue(community._id),
+      slug: String(community.slug ?? "").trim() || null,
+      name: String(community.name ?? "").trim() || "Community",
+    },
+    results: await Promise.all(
+      candidates.map((entry) =>
+        mapEvidenceSearchItem({
+          ctx: args.ctx,
+          community,
+          objectType: entry.objectType,
+          row: entry.row,
+          root: entry.root,
+          score: entry.score,
+          source: "recent",
+          userIdCache,
+        }),
+      ),
+    ),
+  };
+}
+
+export const searchRecentCommunityInteractionEvidenceInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    query: v.string(),
+    limit: v.number(),
+  },
+  handler: async (ctx, args) =>
+    await searchRecentCommunityInteractionEvidence({
+      ctx,
+      userId: args.userId,
+      communityId: args.communityId,
+      query: args.query,
+      limit: normalizeCommunityEvidenceSearchLimit(args.limit),
+    }),
+});
+
+export const readCommunityInteractionEvidenceInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    ref: v.string(),
+  },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
+    const parsed = parseCommunityInteractionEvidenceRef(args.ref);
+    if (!parsed) throw new Error("community_interaction_evidence_ref_invalid");
+    const { row, root } = await loadReadableInteraction({
+      ctx,
+      communityId: args.communityId,
+      objectType: parsed.objectType,
+      objectId: parsed.objectId,
+    });
+    const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
+    if (!community) throw new Error("community_not_found");
+    const [blocks, attachments, embeds] = (await Promise.all([
+      ctx.db
+        .query("communityInteractionContentBlocks" as any)
+        .withIndex(
+          parsed.objectType === "root" ? "by_root_order" : "by_reply_order",
+          (q: any) =>
+            q.eq(parsed.objectType === "root" ? "rootId" : "replyId", row._id),
+        )
+        .take(64),
+      ctx.db
+        .query("communityInteractionAttachments" as any)
+        .withIndex(parsed.objectType === "root" ? "by_root" : "by_reply", (q: any) =>
+          q.eq(parsed.objectType === "root" ? "rootId" : "replyId", row._id),
+        )
+        .take(32),
+      ctx.db
+        .query("communityInteractionEmbeds" as any)
+        .withIndex(parsed.objectType === "root" ? "by_root" : "by_reply", (q: any) =>
+          q.eq(parsed.objectType === "root" ? "rootId" : "replyId", row._id),
+        )
+        .take(32),
+    ])) as [ContentBlockRow[], AttachmentRow[], EmbedRow[]];
+    const summary = await mapEvidenceSearchItem({
+      ctx,
+      community,
+      objectType: parsed.objectType,
+      row,
+      root,
+      score: null,
+      source: "recent",
+    });
+    return {
+      ...summary,
+      content_blocks: blocks
+        .slice()
+        .sort((a, b) => a.blockOrder - b.blockOrder)
+        .map((block) => ({
+          id: normalizeIdValue(block._id),
+          order: block.blockOrder,
+          type: block.blockType,
+          text: block.text ?? null,
+          url: block.url ?? null,
+          workspace_ref_kind: block.workspaceRefKind ?? null,
+          workspace_ref_id: block.workspaceRefId ?? null,
+        })),
+      attachments: attachments
+        .filter((attachment) => attachment.status !== "deleted")
+        .map((attachment) => ({
+          id: normalizeIdValue(attachment._id),
+          kind: attachment.attachmentKind,
+          status: attachment.status,
+          name: attachment.name,
+          mime_type: attachment.mimeType ?? null,
+          size_bytes: attachment.sizeBytes,
+          external_url: attachment.externalUrl ?? null,
+        })),
+      embeds: embeds
+        .filter((embed) => embed.status !== "redacted")
+        .map((embed) => ({
+          id: normalizeIdValue(embed._id),
+          kind: embed.embedKind,
+          status: embed.status,
+          source_url: embed.sourceUrl ?? null,
+          workspace_ref_kind: embed.workspaceRefKind ?? null,
+          workspace_ref_id: embed.workspaceRefId ?? null,
+          title: embed.title ?? null,
+          description: embed.description ?? null,
+        })),
+      edited_at: typeof row.editedAt === "number" ? toIsoString(row.editedAt) : null,
+    };
+  },
+});
+
+export const readCommunityInteractionEvidenceItemsInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    refs: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
+    const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
+    if (!community) throw new Error("community_not_found");
+    const rows = [];
+    for (const ref of args.refs.slice(0, 40)) {
+      const parsed = parseCommunityInteractionEvidenceRef(ref);
+      if (!parsed) continue;
+      try {
+        const { row, root } = await loadReadableInteraction({
+          ctx,
+          communityId: args.communityId,
+          objectType: parsed.objectType,
+          objectId: parsed.objectId,
+        });
+        rows.push({ parsed, row, root });
+      } catch {
+        // Stale derived indexes fail closed and are repaired by evidence sync.
+      }
+    }
+    const userIdCache = new Map<string, string | null>();
+    return await Promise.all(
+      rows.map(({ parsed, row, root }) =>
+        mapEvidenceSearchItem({
+          ctx,
+          community,
+          objectType: parsed.objectType,
+          row,
+          root,
+          score: null,
+          source: "archive",
+          userIdCache,
+        }),
+      ),
+    );
+  },
+});
+
+export const searchCommunityInteractionEvidenceInternal = internalAction({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    query: v.string(),
+    limit: v.optional(v.number()),
+    surface: communityEvidenceSurfaceValidator,
+  },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    const userId = await resolveTrustedCommunityEvidenceUserId({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject,
+    });
+    const query = truncateText(args.query, 240);
+    if (!query) throw new Error("community_chat_search_query_required");
+    const limit = normalizeCommunityEvidenceSearchLimit(args.limit);
+    const recent = (await ctx.runQuery(
+      (internal as any).communityInteractionEvidence.searchRecentCommunityInteractionEvidenceInternal,
+      { userId, communityId: args.communityId, query, limit },
+    )) as { community: Record<string, unknown>; results: Array<Record<string, unknown>> };
+    const results = [...recent.results];
+    const seen = new Set(results.map((result) => String(result.ref ?? "")));
+    let archiveAvailable = false;
+    let archiveError: string | null = null;
+    const config = resolveGeminiEmbeddingConfig();
+    if (config.ok && results.length < limit) {
+      try {
+        const queryEmbedding = await embedGeminiQuery({
+          apiKey: config.apiKey,
+          model: config.model,
+          text: query,
+        });
+        const hits = await ctx.vectorSearch(
+          "communityArchiveDocuments" as any,
+          "by_embedding" as any,
+          {
+            vector: queryEmbedding,
+            limit: INTERACTION_ARCHIVE_VECTOR_LIMIT,
+            // Convex vector filters support equality and OR, not AND. Keep the
+            // authorization boundary in-index and narrow to interaction docs
+            // after fetching canonical rows.
+            filter: (q: any) => q.eq("communityId", args.communityId),
+          },
+        );
+        archiveAvailable = true;
+        const scoreById = new Map<string, number>();
+        for (const hit of hits) {
+          scoreById.set(normalizeIdValue(hit._id), Number(hit._score ?? 0));
+        }
+        const docs = (await ctx.runQuery(
+          (internal as any).communityArchive.getCommunityArchiveDocumentsByIdsInternal,
+          { ids: hits.map((hit: any) => hit._id) },
+        )) as ArchiveDocLike[];
+        const refs = docs
+          .filter((doc) => doc.sourceType === "interaction")
+          .sort(
+            (a, b) =>
+              Number(scoreById.get(normalizeIdValue(b._id)) ?? 0) -
+              Number(scoreById.get(normalizeIdValue(a._id)) ?? 0),
+          )
+          .map((doc) => archiveSourceIdToRef(doc.sourceId))
+          .filter((ref): ref is string => Boolean(ref && !seen.has(ref)))
+          .slice(0, limit - results.length);
+        const archiveItems = (await ctx.runQuery(
+          (internal as any).communityInteractionEvidence.readCommunityInteractionEvidenceItemsInternal,
+          { userId, communityId: args.communityId, refs },
+        )) as Array<Record<string, unknown>>;
+        for (const item of archiveItems) {
+          const ref = String(item.ref ?? "");
+          if (!ref || seen.has(ref)) continue;
+          seen.add(ref);
+          const doc = docs.find((candidate) => archiveSourceIdToRef(candidate.sourceId) === ref);
+          results.push({
+            ...item,
+            score: doc ? Number(scoreById.get(normalizeIdValue(doc._id)) ?? 0) : null,
+          });
+          if (results.length >= limit) break;
+        }
+      } catch (error) {
+        archiveAvailable = false;
+        archiveError = truncateText(
+          error instanceof Error ? error.message : String(error),
+          240,
+        ) || "community_interaction_archive_search_failed";
+      }
+    }
+    const resultRefs = results.map((result) => String(result.ref ?? "")).filter(Boolean);
+    const retrievalId: any = await ctx.runMutation(
+      (internal as any).communityEvidenceAudit.recordCommunityEvidenceRetrievalInternal,
+      {
+        communityId: args.communityId,
+        userId,
+        surface: args.surface,
+        capability: "community_chat_search",
+        resultRefs,
+      },
+    );
+    return {
+      ok: true,
+      community: recent.community,
+      query,
+      results,
+      retrieval_id: normalizeIdValue(retrievalId),
+      diagnostics: {
+        version: 1,
+        recent_source: "community_interactions",
+        archive_source: "community_interaction_archive",
+        archive_available: archiveAvailable,
+        archive_error: archiveError,
+      },
+    };
+  },
+});
+
+export const readCommunityInteractionEvidenceForToolInternal = internalAction({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    ref: v.string(),
+    surface: communityEvidenceSurfaceValidator,
+  },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    const userId = await resolveTrustedCommunityEvidenceUserId({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject,
+    });
+    const ref = truncateText(args.ref, 512);
+    if (!parseCommunityInteractionEvidenceRef(ref)) {
+      throw new Error("community_interaction_evidence_ref_invalid");
+    }
+    const evidence: any = await ctx.runQuery(
+      (internal as any).communityInteractionEvidence.readCommunityInteractionEvidenceInternal,
+      { userId, communityId: args.communityId, ref },
+    );
+    const retrievalId: any = await ctx.runMutation(
+      (internal as any).communityEvidenceAudit.recordCommunityEvidenceRetrievalInternal,
+      {
+        communityId: args.communityId,
+        userId,
+        surface: args.surface,
+        capability: "community_chat_read",
+        resultRefs: [ref],
+      },
+    );
+    return {
+      ok: true,
+      evidence,
+      retrieval_id: normalizeIdValue(retrievalId),
+    };
+  },
+});
+
+function sourceTraceActor(row: InteractionRow): {
+  actorType: "member" | "agent" | "system";
+  actorUserId?: any;
+  actorAgentKey?: string;
+} {
+  if (row.actorType === "human" && row.actorUserId) {
+    return { actorType: "member", actorUserId: row.actorUserId };
+  }
+  if (row.actorType === "personal_agent" || row.actorType === "community_agent") {
+    return {
+      actorType: "agent",
+      ...(row.actorUserId ? { actorUserId: row.actorUserId } : null),
+      actorAgentKey: row.actorAgentKey ?? row.actorType,
+    };
+  }
+  return {
+    actorType: "system",
+    actorAgentKey: row.actorAgentKey ?? "community_interaction_evidence_sync",
+  };
+}
+
+async function removeInteractionSourceTrace(args: {
+  ctx: any;
+  communityId: any;
+  ref: string;
+  nowMs: number;
+}) {
+  const parsed = parseCommunityInteractionEvidenceRef(args.ref);
+  if (parsed) {
+    await deleteArchiveDocumentBySource(args.ctx, {
+      communityId: args.communityId,
+      sourceType: "interaction",
+      sourceId: `${parsed.objectType}:${parsed.objectId}`,
+    });
+  }
+  const link = await args.ctx.db
+    .query("communityInteractionSourceTraceLinks" as any)
+    .withIndex("by_community_sourceId", (q: any) =>
+      q.eq("communityId", args.communityId).eq("sourceTraceSourceId", args.ref),
+    )
+    .first();
+  if (!link) return;
+  if (link.sourceTraceId) {
+    const trace = await args.ctx.db.get(link.sourceTraceId as any);
+    if (trace) {
+      await args.ctx.db.patch(link.sourceTraceId as any, {
+        sourceVisibility: "redacted",
+        visibilityScope: "admin",
+        compilerState: "excluded_by_visibility",
+        compilerPendingSince: undefined,
+        compilerLastHandledAt: args.nowMs,
+        compilerLastDigestId: undefined,
+        updatedAt: args.nowMs,
+      });
+    }
+  }
+  await args.ctx.db.patch(link._id as any, {
+    linkState: "removed",
+    updatedAt: args.nowMs,
+  });
+}
+
+async function findInteractionSourceTraceLink(args: {
+  ctx: any;
+  communityId: any;
+  ref: string;
+}) {
+  return await args.ctx.db
+    .query("communityInteractionSourceTraceLinks" as any)
+    .withIndex("by_community_sourceId", (q: any) =>
+      q.eq("communityId", args.communityId).eq("sourceTraceSourceId", args.ref),
+    )
+    .first();
+}
+
+async function upsertPromotedInteractionSourceTrace(args: {
+  ctx: any;
+  communityId: any;
+  source: ResolvedCommunityInteractionEvidence;
+  promotionReason: EvidencePromotionReason | "compiler_candidate";
+  nowMs: number;
+}) {
+  const { row, root, objectType } = args.source;
+  const ref = buildCommunityInteractionEvidenceRef({
+    objectType,
+    objectId: normalizeIdValue(row._id),
+  });
+  const actor = sourceTraceActor(row);
+  const trace = await recordTrustedCommunitySourceTraceCore({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    sourceType: "interaction",
+    sourceId: ref,
+    title: objectType === "root" ? row.title : root.title,
+    summary: row.contentSummary,
+    visibilityScope: row.visibilityScope,
+    sourceVisibility: row.visibilityScope,
+    actorType: actor.actorType,
+    actorUserId: actor.actorUserId,
+    actorAgentKey: actor.actorAgentKey,
+    nowMs: args.nowMs,
+  });
+  const existingLink = await findInteractionSourceTraceLink({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    ref,
+  });
+  const linkPatch = {
+    communityId: args.communityId,
+    rootId: root._id,
+    ...(objectType === "reply" ? { replyId: row._id } : { replyId: undefined }),
+    sourceTraceId: (trace as any).id,
+    sourceTraceSourceId: ref,
+    linkState: "active",
+    promotionReason: args.promotionReason,
+    actorType: row.actorType,
+    ...(row.actorUserId ? { actorUserId: row.actorUserId } : { actorUserId: undefined }),
+    ...(row.actorAgentKey ? { actorAgentKey: row.actorAgentKey } : { actorAgentKey: undefined }),
+    updatedAt: args.nowMs,
+  };
+  if (existingLink) {
+    await args.ctx.db.patch(existingLink._id as any, linkPatch);
+  } else {
+    await args.ctx.db.insert("communityInteractionSourceTraceLinks" as any, {
+      ...linkPatch,
+      createdAt: args.nowMs,
+    });
+  }
+  return { ref, sourceTraceId: (trace as any).id };
+}
+
+export const syncCommunityInteractionEvidenceInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    objectType: evidenceObjectTypeValidator,
+    objectId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const ref = buildCommunityInteractionEvidenceRef({
+      objectType: args.objectType,
+      objectId: args.objectId,
+    });
+    const source = await resolveCommunityInteractionEvidenceSource({
+      ctx,
+      communityId: args.communityId,
+      objectType: args.objectType,
+      objectId: args.objectId,
+    });
+    const archive = await syncArchiveDocumentForInteraction({
+      ctx,
+      communityId: args.communityId,
+      objectType: args.objectType,
+      objectId: args.objectId,
+    });
+    if (!source || !communityInteractionEvidenceSourceIsReadable(source)) {
+      await removeInteractionSourceTrace({
+        ctx,
+        communityId: args.communityId,
+        ref,
+        nowMs,
+      });
+      if (args.objectType === "root") {
+        await ctx.scheduler.runAfter(
+          0,
+          (internal as any).communityInteractionEvidence.redactCommunityInteractionEvidenceChildrenInternal,
+          {
+            communityId: args.communityId,
+            rootId: args.objectId,
+          },
+        );
+      }
+      return { ok: true, indexed: false, promoted: false, ref };
+    }
+    const existingLink = await findInteractionSourceTraceLink({
+      ctx,
+      communityId: args.communityId,
+      ref,
+    });
+    if (!existingLink || existingLink.linkState !== "active") {
+      return { ok: true, indexed: archive.indexed, promoted: false, ref };
+    }
+    const promoted = await upsertPromotedInteractionSourceTrace({
+      ctx,
+      communityId: args.communityId,
+      source,
+      promotionReason: existingLink.promotionReason,
+      nowMs,
+    });
+    return {
+      ok: true,
+      indexed: archive.indexed,
+      promoted: true,
+      ref,
+      source_trace_id: promoted.sourceTraceId,
+    };
+  },
+});
+
+export const promoteCommunityInteractionEvidenceInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    ref: v.string(),
+    promotionReason: evidencePromotionReasonValidator,
+  },
+  handler: async (ctx, args) => {
+    const parsed = parseCommunityInteractionEvidenceRef(args.ref);
+    if (!parsed) throw new Error("community_interaction_evidence_ref_invalid");
+    const source = await resolveCommunityInteractionEvidenceSource({
+      ctx,
+      communityId: args.communityId,
+      objectType: parsed.objectType,
+      objectId: parsed.objectId,
+    });
+    if (!source) throw new Error("community_interaction_evidence_not_found");
+    if (!communityInteractionEvidenceSourceIsReadable(source)) {
+      throw new Error("community_interaction_evidence_not_readable");
+    }
+    await syncArchiveDocumentForInteraction({
+      ctx,
+      communityId: args.communityId,
+      objectType: parsed.objectType,
+      objectId: parsed.objectId,
+    });
+    const promoted = await upsertPromotedInteractionSourceTrace({
+      ctx,
+      communityId: args.communityId,
+      source,
+      promotionReason: args.promotionReason,
+      nowMs: Date.now(),
+    });
+    return {
+      ok: true,
+      ref: promoted.ref,
+      promotion_reason: args.promotionReason,
+      source_trace_id: promoted.sourceTraceId,
+    };
+  },
+});
+
+export const redactCommunityInteractionEvidenceChildrenInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    rootId: v.string(),
+    cursor: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    const rootId = ctx.db.normalizeId("communityInteractionRoots", args.rootId);
+    if (!rootId) throw new Error("community_interaction_evidence_root_not_found");
+    const root = await ctx.db.get(rootId);
+    if (
+      root &&
+      normalizeIdValue((root as any).communityId) !== normalizeIdValue(args.communityId)
+    ) {
+      throw new Error("community_interaction_evidence_root_not_found");
+    }
+    const batch = await ctx.db
+      .query("communityInteractionReplies" as any)
+      .withIndex("by_root_createdAt", (q: any) => q.eq("rootId", rootId))
+      .paginate({
+        numItems: 50,
+        cursor: args.cursor ?? null,
+      });
+    let redacted = 0;
+    for (const reply of batch.page) {
+      const ref = buildCommunityInteractionEvidenceRef({
+        objectType: "reply",
+        objectId: normalizeIdValue(reply._id),
+      });
+      await removeInteractionSourceTrace({
+        ctx,
+        communityId: args.communityId,
+        ref,
+        nowMs: Date.now(),
+      });
+      redacted += 1;
+    }
+    if (!batch.isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        (internal as any).communityInteractionEvidence.redactCommunityInteractionEvidenceChildrenInternal,
+        {
+          communityId: args.communityId,
+          rootId: normalizeIdValue(rootId),
+          cursor: batch.continueCursor,
+        },
+      );
+    }
+    return {
+      ok: true,
+      redacted,
+      complete: batch.isDone,
+      continue_cursor: batch.continueCursor,
+    };
+  },
+});
+
+export const listCommunityInteractionEvidenceBackfillBatchInternal = internalQuery({
+  args: {
+    communityId: v.id("communities"),
+    objectType: evidenceObjectTypeValidator,
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query(
+        args.objectType === "root"
+          ? ("communityInteractionRoots" as any)
+          : ("communityInteractionReplies" as any),
+      )
+      .withIndex("by_community_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId),
+      )
+      .order("asc")
+      .paginate(args.paginationOpts);
+  },
+});
+
+export const backfillCommunityInteractionEvidenceInternal = internalAction({
+  args: {
+    communityId: v.id("communities"),
+    objectType: evidenceObjectTypeValidator,
+    cursor: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    const batch: any = await ctx.runQuery(
+      (internal as any).communityInteractionEvidence.listCommunityInteractionEvidenceBackfillBatchInternal,
+      {
+        communityId: args.communityId,
+        objectType: args.objectType,
+        paginationOpts: {
+          numItems: 50,
+          cursor: args.cursor ?? null,
+        },
+      },
+    );
+    let synced = 0;
+    for (const row of Array.isArray(batch?.page) ? batch.page : []) {
+      await ctx.runMutation(
+        (internal as any).communityInteractionEvidence.syncCommunityInteractionEvidenceInternal,
+        {
+          communityId: args.communityId,
+          objectType: args.objectType,
+          objectId: normalizeIdValue(row._id),
+        },
+      );
+      synced += 1;
+    }
+    if (!batch?.isDone && batch?.continueCursor) {
+      await ctx.scheduler.runAfter(
+        0,
+        (internal as any).communityInteractionEvidence.backfillCommunityInteractionEvidenceInternal,
+        {
+          communityId: args.communityId,
+          objectType: args.objectType,
+          cursor: batch.continueCursor,
+        },
+      );
+    }
+    return {
+      ok: true,
+      object_type: args.objectType,
+      synced,
+      complete: Boolean(batch?.isDone),
+      continue_cursor: batch?.continueCursor ?? null,
+    };
+  },
+});
+
+export async function scheduleCommunityInteractionEvidenceSync(args: {
+  ctx: { scheduler: { runAfter: (...args: any[]) => Promise<unknown> } };
+  communityId: any;
+  objectType: CommunityInteractionEvidenceObjectType;
+  objectId: any;
+}): Promise<void> {
+  await args.ctx.scheduler.runAfter(
+    0,
+    (internal as any).communityInteractionEvidence.syncCommunityInteractionEvidenceInternal,
+    {
+      communityId: args.communityId,
+      objectType: args.objectType,
+      objectId: normalizeIdValue(args.objectId),
+    },
+  );
+}
+
+export type { CommunityEvidenceSurface };
