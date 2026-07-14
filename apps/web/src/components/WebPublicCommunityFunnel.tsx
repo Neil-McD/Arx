@@ -104,6 +104,8 @@ type WebPublicCommunityFunnelProps = {
   showSignIn: boolean;
   /** Bumped by the shell when a locked nav tab is tapped (visitor lens). */
   gateOpenNonce?: number;
+  mobileMembersOverlayOpen?: boolean;
+  onCloseMobileMembersOverlay?: () => void;
   /** Present when the signed-in viewer still owes platform credentials —
       renders the gate card's second state instead of the pitch gate. */
   bridge?: WebCommunityBridgeCardProps | null;
@@ -348,6 +350,9 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       alertMessages={!isLoadingPublicCommunity ? funnelErrors : []}
       gateSlugKey={publicCommunity?.slug ?? publicRouteSlug ?? null}
       gateOpenNonce={gateOpenNonce}
+      isMobileLayout={shellVariant === "mobile"}
+      mobileMembersOverlayOpen={props.mobileMembersOverlayOpen}
+      onCloseMobileMembersOverlay={props.onCloseMobileMembersOverlay}
       bridge={props.bridge ?? null}
     />
   );

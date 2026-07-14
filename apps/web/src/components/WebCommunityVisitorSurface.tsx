@@ -26,9 +26,12 @@ import {
   CommunityVisitorGate,
   CommunityVisitorGhostThread,
   CommunityVisitorJoinRope,
+  CommunityVisitorMobileJoinDock,
 } from "./CommunityVisitorChrome";
+import { CommunityContextPanel } from "./CommunityContextPanel";
 import { WebCommunityBridgeCard, type WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
 import { WebCommunityInteractionProjection } from "./WebCommunityInteractionProjection";
+import { WebMobileDrawer } from "./WebMobileDrawer";
 import "./CommunityVisitorChrome.css";
 
 type VisitorPublicFace = {
@@ -66,6 +69,9 @@ type WebCommunityVisitorSurfaceProps = {
   gateSlugKey?: string | null;
   /** Bumped by the shell when a locked nav tab is tapped — reopens the gate. */
   gateOpenNonce?: number;
+  isMobileLayout?: boolean;
+  mobileMembersOverlayOpen?: boolean;
+  onCloseMobileMembersOverlay?: () => void;
   /** The gate card's second state: signed-in, setup incomplete — collect
       identity + inference in place, then enter. Unskippable while present. */
   bridge?: WebCommunityBridgeCardProps | null;
@@ -102,6 +108,7 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
   const gateEligible = Boolean(gateSlugKey);
   const [gateOpen, setGateOpen] = useState(false);
   const [gateMounted, setGateMounted] = useState(false);
+  const [isHostIntroExpanded, setIsHostIntroExpanded] = useState(false);
   const lastGateNonceRef = useRef(props.gateOpenNonce ?? 0);
 
   /* The gate shows on EVERY arrival — "View it first" dismisses for this
@@ -112,6 +119,10 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
     setGateOpen(true);
   }, [gateEligible]);
 
+  useEffect(() => {
+    setIsHostIntroExpanded(false);
+  }, [title, aboutText]);
+
   const dismissGate = () => {
     setGateOpen(false);
     window.setTimeout(() => setGateMounted(false), 450);
@@ -120,6 +131,11 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
   const reopenGate = () => {
     setGateMounted(true);
     window.setTimeout(() => setGateOpen(true), 20);
+  };
+
+  const closeMembersAndReopenGate = () => {
+    props.onCloseMobileMembersOverlay?.();
+    reopenGate();
   };
 
   useEffect(() => {
@@ -171,9 +187,11 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
     [stats.memberFacesPreview],
   );
 
-  const ropePrompt = props.featuredMessages?.length
-    ? `Reply to ${profilesByUserId["visitor-sender-0"]?.display_name ?? "the room"}, ask the room anything…`
-    : "This is where you'd talk — and where the community answers you, any hour…";
+  const ropePrompt = props.isMobileLayout
+    ? "Join to participate"
+    : props.featuredMessages?.length
+      ? `Reply to ${profilesByUserId["visitor-sender-0"]?.display_name ?? "the room"}, ask the room anything…`
+      : "This is where you'd talk — and where the community answers you, any hour…";
 
   /* The frost: everything in the feed below the pinned host post sits behind
      glass. Measured against the real DOM (static content, remeasured on
@@ -271,6 +289,10 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
                   onRopeFieldActivate={reopenGate}
                 />
               }
+              firstRootBodyExpansion={props.isMobileLayout ? {
+                expanded: isHostIntroExpanded,
+                onToggle: () => setIsHostIntroExpanded((expanded) => !expanded),
+              } : undefined}
               presenceSummary={{
                 member_count: stats.memberCount,
                 online_count: stats.onlineCount,
@@ -308,6 +330,50 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
           </div>
         </div>
       </div>
+
+      {props.isMobileLayout ? (
+        <CommunityVisitorMobileJoinDock
+          action={action}
+          pricingLabel={pricingLabel}
+          isFreePricing={isFreePricing}
+        />
+      ) : null}
+
+      <WebMobileDrawer
+        isOpen={Boolean(props.mobileMembersOverlayOpen)}
+        ariaLabel={`${title} members`}
+        title="Members"
+        side="right"
+        className="mobile-members-drawer cvs-members-drawer"
+        footer={(
+          <button
+            className="cfg-join cvs-members-join"
+            type="button"
+            disabled={action.isPrimaryActionDisabled}
+            onClick={() => {
+              props.onCloseMobileMembersOverlay?.();
+              action.onPrimaryAction();
+            }}
+          >
+            {action.primaryActionLabel}
+          </button>
+        )}
+        onClose={props.onCloseMobileMembersOverlay ?? NOOP}
+      >
+        <CommunityContextPanel
+          communityName={title}
+          onlineFaces={presenceFaces}
+          onlineCount={stats.onlineCount}
+          memberCount={stats.memberCount}
+          lockedSections={{ members: true }}
+          onLockedSectionActivate={closeMembersAndReopenGate}
+          membersPreview={memberPreviewFaces}
+          displayName={() => "Member"}
+          getInitials={getInitialsFromLabel}
+          getAvatarColor={() => "var(--accent-gold, #d66a8a)"}
+          sectionMode="members"
+        />
+      </WebMobileDrawer>
 
       {props.bridge ? (
         /* Bridge state: the front door asks for credentials. No backdrop

@@ -92,6 +92,7 @@ type CommunityContextPanelProps = {
   displayName: (userId: string) => string;
   getInitials: (value: string) => string;
   getAvatarColor: (seed: string) => string;
+  sectionMode?: "all" | "members";
 };
 
 const LOAD_MORE_SCROLL_THRESHOLD_PX = 96;
@@ -136,6 +137,7 @@ function isDirectoryMemoryNode(node: CloudCommunityPolynetOverviewNode): boolean
 // a face pile of who's online (Skool), a memory section that fills in as the room
 // accumulates knowledge (Polynet), and a grouped member roster (Discord).
 export function CommunityContextPanel(props: CommunityContextPanelProps) {
+  const sectionMode = props.sectionMode ?? "all";
   const online = props.onlineUserIds ?? new Set<string>();
   const members = props.members ?? [];
   const activityScopeKey = props.activityScopeKey ?? null;
@@ -492,7 +494,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         onlineCount={props.onlineCount}
       />
 
-      <div className="community-context-memory">
+      {sectionMode === "all" ? <div className="community-context-memory">
         <div className="community-context-memory-head">
           <div className="community-context-section">{memorySectionLabel}</div>
         </div>
@@ -580,7 +582,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             <span>Builds as the room shares knowledge</span>
           </div>
         )}
-      </div>
+      </div> : null}
 
       <div
         ref={membersViewportRef}

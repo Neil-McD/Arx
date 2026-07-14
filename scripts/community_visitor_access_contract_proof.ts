@@ -9,6 +9,10 @@ const communityPublic = read("convex/communityPublic.ts");
 const communityExperience = read("convex/communityExperience.ts");
 const communityModule = read("convex/community.ts");
 const communityCore = read("convex/communityCore.ts");
+const appSource = read("apps/web/src/App.tsx");
+const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
+const visitorChrome = read("apps/web/src/components/CommunityVisitorChrome.tsx");
+const publicFunnel = read("apps/web/src/components/WebPublicCommunityFunnel.tsx");
 
 function sliceExport(source: string, name: string): string {
   const start = source.indexOf(`export const ${name}`);
@@ -127,6 +131,42 @@ assert.match(
   communityPublic,
   /const PUBLIC_MEMORY_NOTE_STATUSES = \["promising", "validated", "canonical", "contested", "stale"\]/,
   "public memory statuses must stay in parity with MEMBER_READABLE_STATUSES in communityIntelligenceDirectory",
+);
+
+assert.match(
+  appSource,
+  /isVisitorCommunitySurface[\s\S]*resolvedPublicCommunity\?\.online_faces \?\? \[\][\s\S]*resolvedPublicCommunity\?\.member_count \?\? null/,
+  "the visitor mobile top bar must use public online faces but the total community member count",
+);
+assert.match(
+  appSource,
+  /canViewMembers:[\s\S]*shellPublicRoute\.kind === "community_funnel"[\s\S]*Boolean\(resolvedPublicCommunity\)/,
+  "the mobile shell must allow the visitor-safe Members drawer without granting private directory access",
+);
+assert.match(
+  publicFunnel,
+  /mobileMembersOverlayOpen=\{props\.mobileMembersOverlayOpen\}[\s\S]*onCloseMobileMembersOverlay=\{props\.onCloseMobileMembersOverlay\}/,
+  "the public funnel must carry the shared mobile overlay state into the visitor surface",
+);
+assert.match(
+  visitorSurface,
+  /<WebMobileDrawer[\s\S]*className="mobile-members-drawer cvs-members-drawer"[\s\S]*lockedSections=\{\{ members: true \}\}[\s\S]*membersPreview=\{memberPreviewFaces\}/,
+  "the visitor Members drawer must reuse the canonical drawer and render only locked public member preview data",
+);
+assert.match(
+  visitorSurface,
+  /firstRootBodyExpansion=\{props\.isMobileLayout/,
+  "the mobile visitor funnel must bound the host-intro preview",
+);
+assert.match(
+  visitorSurface,
+  /<CommunityVisitorMobileJoinDock/,
+  "the mobile visitor funnel must expose one persistent join dock",
+);
+assert.match(
+  visitorChrome,
+  /className="cvs-mobile-join-dock"[\s\S]*action\.primaryActionLabel/,
+  "the persistent mobile conversion action must use the canonical funnel action label and handler",
 );
 assert.match(
   communityPublic,
