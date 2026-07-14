@@ -143,13 +143,33 @@ assert.match(
 );
 assert.match(
   topBar,
-  /<CommunityPresenceFacepile[\s\S]*<span className="mobile-topbar-member-count">\{onlineCountLabel\}<\/span>/,
-  "the mobile Members affordance should keep its visible online count when presence faces render",
+  /<CommunityPresenceFacepile[\s\S]*<span className="mobile-topbar-member-count">\{memberCountLabel\}<\/span>/,
+  "the mobile Members affordance should keep its total member count visible when presence faces render",
 );
 assert.doesNotMatch(
   topBar,
   /<CommunityPresenceFacepile\s[\s\S]{0,240}onlineCount=/,
   "the compact header facepile should not duplicate the separate visible total with its own overflow count",
+);
+assert.match(
+  shellChromeProps,
+  /activeCommunityMemberCount: number \| null;[\s\S]*memberFaces: params\.activeCommunityMemberFaces,[\s\S]*memberCount: params\.activeCommunityMemberCount,/,
+  "the mobile top bar should receive total membership independently from online faces",
+);
+assert.match(
+  app,
+  /activeCommunityMemberCount:[\s\S]*communityDirectoryMemberCount \?\?[\s\S]*activeCommunityPresenceSummary\?\.member_count \?\?[\s\S]*null/,
+  "the header count should use canonical directory or presence membership totals",
+);
+assert.doesNotMatch(
+  topBar,
+  /onlineCount|onlineCountLabel|online`/,
+  "the mobile Members affordance should not present online presence as total membership",
+);
+assert.match(
+  topBar,
+  /function formatMemberCount[\s\S]*return count\.toLocaleString\(\);/,
+  "the mobile Members affordance should show the full localized membership total",
 );
 assert.match(
   indexCss,
