@@ -10811,8 +10811,9 @@ export default function App() {
       onCommunityAttachmentDragLeave: handleCommunityAttachmentDragLeave,
       onCommunityAttachmentPaste: handleCommunityAttachmentPaste,
       isCommunityAttachmentDragOver,
-      onCommunityMessageInputChange: (value: string, textarea: HTMLTextAreaElement) => {
+      onCommunityMessageInputChange: (value: string, textarea?: HTMLTextAreaElement) => {
         setCommunityMessageInput(value);
+        if (!textarea) return;
         textarea.style.height = "auto";
         textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
       },

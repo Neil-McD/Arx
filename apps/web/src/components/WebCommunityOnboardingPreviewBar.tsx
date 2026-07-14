@@ -10,11 +10,7 @@ export function WebCommunityOnboardingPreviewBar(props: {
 }) {
   const phase = props.session?.phase ?? null;
   const actionLabel =
-    phase === "first_community_post"
-      ? "Preview agent step"
-      : phase === "first_agent_dock_turn"
-        ? "Finish preview"
-        : null;
+    phase === "first_agent_dock_turn" ? "Finish preview" : null;
 
   return (
     <div className="community-onboarding-preview-bar">
@@ -30,8 +26,8 @@ export function WebCommunityOnboardingPreviewBar(props: {
             : props.isLoading
               ? "Loading the saved workflow…"
               : props.configuredEnabled === false
-                ? "Currently off · Community posting is disabled"
-                : "Community posting is disabled · Concierge messages stay private"}
+                ? "Currently off · Preview actions are simulated"
+                : "Community posts are simulated · Concierge messages stay private"}
         </span>
       </div>
       <div className="community-onboarding-preview-bar-actions">

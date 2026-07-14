@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import {
+  buildCommunityOnboardingIntroductionDraft,
   buildCommunityOnboardingOrientationSeed,
   buildCommunityOnboardingMilestonePatch,
   describeCommunityOnboardingPhaseObjective,
   deriveCommunityOnboardingPhase,
+  isCommunityOnboardingIntroductionReady,
   normalizeCommunityOnboardingVideoUrl,
   shouldPresentCommunityOnboardingAgentStep,
   shouldPresentCommunityOnboardingFirstPost,
@@ -64,6 +66,22 @@ assert.match(
   /Welcome to the room\.[\s\S]*Practice Guide[\s\S]*community concierge[\s\S]*Practice/,
 );
 assert.match(describeCommunityOnboardingPhaseObjective("orientation"), /orientation questions/);
+assert.equal(buildCommunityOnboardingIntroductionDraft({ displayName: "Neil McDevitt" }), "Hi, I’m Neil. I joined because ");
+assert.equal(buildCommunityOnboardingIntroductionDraft({ displayName: "" }), "Hi! I joined because ");
+assert.equal(
+  isCommunityOnboardingIntroductionReady({
+    text: "Hi, I’m Neil. I joined because collective intelligence matters.",
+    seededDraft: "Hi, I’m Neil. I joined because ",
+  }),
+  true,
+);
+assert.equal(
+  isCommunityOnboardingIntroductionReady({
+    text: "Hi, I’m Neil. I joined because ",
+    seededDraft: "Hi, I’m Neil. I joined because ",
+  }),
+  false,
+);
 
 // Behavioral state-machine proof: milestones are idempotent, phase is derived,
 // and completion occurs only after all three member outcomes exist.
@@ -213,6 +231,10 @@ assert.match(onboardingController, /dismissCloudCommunityOnboardingSession/);
 assert.match(onboardingController, /WebCommunityOnboardingOrientationModal/);
 assert.match(onboardingController, /subscribeCloudCommunityAgentDockTranscript/);
 assert.match(onboardingController, /sendCloudCommunityAgentDockMessage/);
+assert.match(onboardingController, /firstPostAcknowledgementPending/);
+assert.match(onboardingController, /detectedLiveFirstPostCompletion/);
+assert.match(onboardingController, /completeFirstPostPreview/);
+assert.match(onboardingController, /continueAfterFirstPost/);
 assert.match(orientationModal, /role="dialog"/);
 assert.match(orientationModal, /aria-modal="true"/);
 assert.match(orientationModal, /WebCommunityOnboardingOrientationSurface/);
@@ -222,14 +244,22 @@ assert.match(orientationSurface, /props\.isPreparing \|\| props\.isWorking/);
 assert.match(orientationSurface, /onSubmit=\{props\.onSubmit\}/);
 assert.match(orientationSurface, /Skip onboarding/);
 assert.match(orientationSurface, /Continue to community chat/);
-assert.match(firstPostGuide, /Introduce yourself to \{props\.communityName\}/);
-assert.match(firstPostGuide, /what you’re working on, why you joined/);
+assert.match(firstPostGuide, /Introduce yourself to \$\{props\.communityName\}/);
+assert.match(firstPostGuide, /The composer is ready for you/);
+assert.match(firstPostGuide, /Meet my personal agent/);
+assert.match(firstPostGuide, /community-onboarding-first-post-overlay/);
 assert.match(firstPostGuide, /Skip onboarding/);
 assert.doesNotMatch(firstPostGuide, /onCommunityMessageInputChange|onSendCommunityMessage|runChatgpt|provider/i);
 assert.match(chatPanel, /shouldPresentCommunityOnboardingFirstPost/);
+assert.match(chatPanel, /buildCommunityOnboardingIntroductionDraft/);
+assert.match(chatPanel, /isCommunityOnboardingIntroductionReady/);
 assert.match(chatPanel, /WebCommunityOnboardingFirstPostGuide/);
+assert.match(chatPanel, /completeFirstPostPreview/);
+assert.match(chatPanel, /handleMainCommunityComposerSubmit/);
+assert.match(chatPanel, /restorePreviewComposerSnapshot/);
 assert.match(chatPanel, /is-onboarding-first-post/);
 assert.match(chatPanel, /aria-describedby/);
+assert.match(personalDock, /!onboarding\?\.firstPostAcknowledgementPending/);
 assert.match(app, /onSelectCommunityTab: handleSelectCommunityTab/);
 assert.match(app, /<WebCommunityOnboardingController/);
 assert.match(app, /onOrientationCompleted=\{handleCommunityOnboardingOrientationCompleted\}/);

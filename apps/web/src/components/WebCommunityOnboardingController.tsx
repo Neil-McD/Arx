@@ -42,9 +42,12 @@ type PendingAction = "continue" | "dismiss" | null;
 type WebCommunityOnboardingContextValue = {
   mode: "live" | "preview";
   activeSession: CommunityOnboardingSession | null;
+  firstPostAcknowledgementPending: boolean;
   pendingAction: PendingAction;
   error: string | null;
   completeOrientation: () => void;
+  completeFirstPostPreview: () => void;
+  continueAfterFirstPost: () => void;
   dismiss: () => void;
 };
 
@@ -75,6 +78,7 @@ export function WebCommunityOnboardingController(props: {
   const [usableSession, setUsableSession] = useState<unknown | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [error, setError] = useState<string | null>(null);
+  const [firstPostAcknowledgementSessionId, setFirstPostAcknowledgementSessionId] = useState<string | null>(null);
   const [conciergeTranscript, setConciergeTranscript] = useState<CommunityAgentDockTranscript>({
     root_id: null,
     messages: [],
@@ -88,6 +92,7 @@ export function WebCommunityOnboardingController(props: {
   const [conciergeError, setConciergeError] = useState<string | null>(null);
   const openedSessionIdsRef = useRef(new Set<string>());
   const openAttemptsRef = useRef(new Map<string, number>());
+  const previousPresentedSessionRef = useRef<Pick<CommunityOnboardingSession, "id" | "phase"> | null>(null);
   // Auth refresh replaces session objects. Keep the latest credentials without
   // treating that object churn as a new preview entry.
   const previewAuthSessionRef = useRef(props.session);
@@ -448,17 +453,69 @@ export function WebCommunityOnboardingController(props: {
   const presentedSession = isPreviewMode ? previewSession : activeSession;
   const presentedError = isPreviewMode ? previewError : error;
   const presentedPendingAction = isPreviewMode ? null : pendingAction;
+  const previousPresentedSession = previousPresentedSessionRef.current;
+  const detectedLiveFirstPostCompletion = Boolean(
+    !isPreviewMode &&
+    presentedSession &&
+    previousPresentedSession?.id === presentedSession.id &&
+    previousPresentedSession.phase === "first_community_post" &&
+    presentedSession.phase === "first_agent_dock_turn",
+  );
+  const firstPostAcknowledgementPending = Boolean(
+    presentedSession &&
+    (
+      firstPostAcknowledgementSessionId === presentedSession.id ||
+      detectedLiveFirstPostCompletion
+    ),
+  );
+
+  useEffect(() => {
+    if (detectedLiveFirstPostCompletion && presentedSession) {
+      setFirstPostAcknowledgementSessionId(presentedSession.id);
+    }
+    previousPresentedSessionRef.current = presentedSession
+      ? { id: presentedSession.id, phase: presentedSession.phase }
+      : null;
+  }, [detectedLiveFirstPostCompletion, presentedSession?.id, presentedSession?.phase]);
+
+  useEffect(() => {
+    setFirstPostAcknowledgementSessionId(null);
+    previousPresentedSessionRef.current = null;
+  }, [isPreviewMode, props.communityId]);
+
+  const handleCompleteFirstPostPreview = useCallback(() => {
+    if (
+      !isPreviewMode ||
+      !previewSession ||
+      previewSession.phase !== "first_community_post"
+    ) {
+      return;
+    }
+    setFirstPostAcknowledgementSessionId(previewSession.id);
+  }, [isPreviewMode, previewSession]);
+
+  const handleContinueAfterFirstPost = useCallback(() => {
+    if (!presentedSession || !firstPostAcknowledgementPending) return;
+    setFirstPostAcknowledgementSessionId(null);
+    if (isPreviewMode) handlePreviewAdvance();
+  }, [firstPostAcknowledgementPending, handlePreviewAdvance, isPreviewMode, presentedSession]);
 
   const contextValue = useMemo<WebCommunityOnboardingContextValue>(() => ({
     mode: isPreviewMode ? "preview" : "live",
     activeSession:
       presentedSession?.community_id === props.communityId ? presentedSession : null,
+    firstPostAcknowledgementPending,
     pendingAction: presentedPendingAction,
     error: presentedError,
     completeOrientation: handleContinue,
+    completeFirstPostPreview: handleCompleteFirstPostPreview,
+    continueAfterFirstPost: handleContinueAfterFirstPost,
     dismiss: handleDismiss,
   }), [
+    firstPostAcknowledgementPending,
+    handleCompleteFirstPostPreview,
     handleContinue,
+    handleContinueAfterFirstPost,
     handleDismiss,
     isPreviewMode,
     presentedError,

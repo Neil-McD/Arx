@@ -100,6 +100,29 @@ export function buildCommunityOnboardingOrientationSeed(params: {
   ].filter(Boolean).join("\n\n");
 }
 
+export function buildCommunityOnboardingIntroductionDraft(params: {
+  displayName?: string | null;
+}): string {
+  const displayName = String(params.displayName ?? "").trim();
+  const firstName = displayName.split(/\s+/)[0]?.trim() ?? "";
+  return firstName
+    ? `Hi, I’m ${firstName}. I joined because `
+    : "Hi! I joined because ";
+}
+
+export function isCommunityOnboardingIntroductionReady(params: {
+  text: string;
+  seededDraft: string;
+}): boolean {
+  const text = String(params.text ?? "").trim();
+  const seededDraft = String(params.seededDraft ?? "").trim();
+  if (!text || text === seededDraft) return false;
+  const memberContribution = text.startsWith(seededDraft)
+    ? text.slice(seededDraft.length).trim()
+    : text;
+  return memberContribution.length >= 3;
+}
+
 export function describeCommunityOnboardingPhaseObjective(
   phase: CommunityOnboardingPhase,
 ): string {

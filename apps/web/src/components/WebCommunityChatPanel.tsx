@@ -32,7 +32,11 @@ import {
   type ReplyPrefix,
 } from "../../../../shared/communityMessageParsing";
 import { textContainsMentionToken } from "../../../../shared/communityMentionRendering";
-import { shouldPresentCommunityOnboardingFirstPost } from "../../../../shared/communityOnboarding";
+import {
+  buildCommunityOnboardingIntroductionDraft,
+  isCommunityOnboardingIntroductionReady,
+  shouldPresentCommunityOnboardingFirstPost,
+} from "../../../../shared/communityOnboarding";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
@@ -332,7 +336,7 @@ export type WebCommunityChatPanelProps = {
   onCommunityAttachmentDragLeave: DragEventHandler<HTMLDivElement>;
   onCommunityAttachmentPaste: ClipboardEventHandler<HTMLTextAreaElement>;
   isCommunityAttachmentDragOver: boolean;
-  onCommunityMessageInputChange: (value: string, textarea: HTMLTextAreaElement) => void;
+  onCommunityMessageInputChange: (value: string, textarea?: HTMLTextAreaElement) => void;
   onSendCommunityMessage: (draft?: CommunityChatSendDraft) => void | Promise<void>;
   displayName: (userId: string) => string;
   shouldShowCommunitySenderMeta: (messages: CommunityChatMessage[], index: number) => boolean;
@@ -509,13 +513,36 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const isProfileSetupGateActive = hasSession && Boolean(activeCommunity) && canPostMessages && !isProfileSetupComplete;
   const canPresentComposer = canPostMessages && !isProfileSetupGateActive;
   const isCommunityOnboardingPreview = communityOnboarding?.mode === "preview";
-  const canUseComposer = canPresentComposer && !isCommunityOnboardingPreview;
+  const activeOnboardingSession =
+    activeCommunity && communityOnboarding?.activeSession?.community_id === activeCommunity.id
+      ? communityOnboarding.activeSession
+      : null;
+  const isOnboardingFirstPostPhase = Boolean(
+    activeOnboardingSession && shouldPresentCommunityOnboardingFirstPost(activeOnboardingSession),
+  );
+  const isOnboardingFirstPostAcknowledgement = Boolean(
+    activeOnboardingSession && communityOnboarding?.firstPostAcknowledgementPending,
+  );
+  const isOnboardingFirstPostInteraction =
+    isOnboardingFirstPostPhase && !isOnboardingFirstPostAcknowledgement;
+  const canUseComposer =
+    canPresentComposer &&
+    !isOnboardingFirstPostAcknowledgement &&
+    (!isCommunityOnboardingPreview || isOnboardingFirstPostInteraction);
+  const canUseCommunityAttachments = canUseComposer && !isCommunityOnboardingPreview;
   const showOnboardingFirstPostGuide = Boolean(
     canPresentComposer &&
     activeCommunity &&
-    communityOnboarding?.activeSession?.community_id === activeCommunity.id &&
-    shouldPresentCommunityOnboardingFirstPost(communityOnboarding.activeSession),
+    activeOnboardingSession &&
+    (isOnboardingFirstPostPhase || isOnboardingFirstPostAcknowledgement),
   );
+  const onboardingIntroductionDraft = buildCommunityOnboardingIntroductionDraft({
+    displayName: sessionUserId ? displayName(sessionUserId) : null,
+  });
+  const isOnboardingIntroductionReady = isCommunityOnboardingIntroductionReady({
+    text: communityMessageInput,
+    seededDraft: onboardingIntroductionDraft,
+  });
   const [profilePanelUserId, setProfilePanelUserId] = useState<string | null>(null);
   const [profileCommunityContextByUserId, setProfileCommunityContextByUserId] = useState<
     Record<string, ProfileCommunityContext>
@@ -529,6 +556,10 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const drawerReplyFileInputRef = useRef<HTMLInputElement | null>(null);
   const drawerReplyInputRef = useRef<HTMLTextAreaElement | null>(null);
   const lastCommunityComposerFocusTargetRef = useRef<string | null>(null);
+  const seededOnboardingIntroductionSessionIdsRef = useRef(new Set<string>());
+  const previewComposerSnapshotRef = useRef<{ sessionId: string; text: string } | null>(null);
+  const onCommunityMessageInputChangeRef = useRef(onCommunityMessageInputChange);
+  onCommunityMessageInputChangeRef.current = onCommunityMessageInputChange;
   const [isDesktopCommunityFocusViewport, setIsDesktopCommunityFocusViewport] = useState(() =>
     typeof window === "undefined" ? false : window.matchMedia(COMMUNITY_COMPOSER_FOCUS_MEDIA_QUERY).matches,
   );
@@ -654,6 +685,79 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     });
     return true;
   }, [isDesktopCommunityFocusViewport]);
+
+  const restorePreviewComposerSnapshot = useCallback((sessionId?: string) => {
+    const snapshot = previewComposerSnapshotRef.current;
+    if (!snapshot || (sessionId && snapshot.sessionId !== sessionId)) return;
+    previewComposerSnapshotRef.current = null;
+    onCommunityMessageInputChangeRef.current(snapshot.text);
+  }, []);
+
+  useEffect(() => {
+    const sessionId = activeOnboardingSession?.id ?? null;
+    if (!isCommunityOnboardingPreview || !sessionId) return;
+    return () => restorePreviewComposerSnapshot(sessionId);
+  }, [activeOnboardingSession?.id, isCommunityOnboardingPreview, restorePreviewComposerSnapshot]);
+
+  useEffect(() => {
+    if (!activeOnboardingSession || !isOnboardingFirstPostInteraction) return;
+    const sessionId = activeOnboardingSession.id;
+    if (seededOnboardingIntroductionSessionIdsRef.current.has(sessionId)) return;
+    seededOnboardingIntroductionSessionIdsRef.current.add(sessionId);
+
+    if (isCommunityOnboardingPreview && !previewComposerSnapshotRef.current) {
+      previewComposerSnapshotRef.current = {
+        sessionId,
+        text: communityMessageInput,
+      };
+    }
+    if (
+      communityMessageInput.trim() ||
+      replyingToMessage ||
+      communityAttachments.length > 0 ||
+      communityMessageMentions.length > 0
+    ) {
+      return;
+    }
+
+    onCommunityMessageInputChangeRef.current(onboardingIntroductionDraft);
+    window.requestAnimationFrame(() => {
+      focusCommunityComposerSafely(chatInputRef, { force: true, maxHeightPx: 120 });
+    });
+  }, [
+    activeOnboardingSession?.id,
+    communityAttachments.length,
+    communityMessageInput,
+    communityMessageMentions.length,
+    focusCommunityComposerSafely,
+    isCommunityOnboardingPreview,
+    isOnboardingFirstPostInteraction,
+    onboardingIntroductionDraft,
+    replyingToMessage,
+  ]);
+
+  const handleMainCommunityComposerSubmit = useCallback(async () => {
+    if (isOnboardingFirstPostInteraction) {
+      if (!isOnboardingIntroductionReady || isSendingCommunityMessage) return;
+      if (isCommunityOnboardingPreview) {
+        const sessionId = activeOnboardingSession?.id;
+        if (!sessionId) return;
+        restorePreviewComposerSnapshot(sessionId);
+        communityOnboarding?.completeFirstPostPreview();
+        return;
+      }
+    }
+    await onSendCommunityMessage();
+  }, [
+    activeOnboardingSession?.id,
+    communityOnboarding,
+    isCommunityOnboardingPreview,
+    isOnboardingFirstPostInteraction,
+    isOnboardingIntroductionReady,
+    isSendingCommunityMessage,
+    onSendCommunityMessage,
+    restorePreviewComposerSnapshot,
+  ]);
 
   const mainComposerIdeaPlaceholders = useMemo(
     () =>
@@ -1380,9 +1484,15 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       {showOnboardingFirstPostGuide && activeCommunity && communityOnboarding ? (
         <WebCommunityOnboardingFirstPostGuide
           communityName={activeCommunity.name}
+          conciergeDisplayName={
+            activeOnboardingSession?.concierge_display_name?.trim() || "Community Concierge"
+          }
           descriptionId={COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID}
+          isComplete={isOnboardingFirstPostAcknowledgement}
           isPending={communityOnboarding.pendingAction !== null}
+          isPreview={isCommunityOnboardingPreview}
           error={communityOnboarding.error}
+          onContinue={communityOnboarding.continueAfterFirstPost}
           onDismiss={communityOnboarding.dismiss}
         />
       ) : null}
@@ -1401,7 +1511,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             isAuthRecoveringSignedIn ||
             !hasSession ||
             !activeCommunity ||
-            !canUseComposer ||
+            !canUseCommunityAttachments ||
             isSendingCommunityMessage
           }
           aria-label="Attach files"
@@ -1440,16 +1550,19 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             value={communityMessageInput}
             onChange={(event) => {
               onCommunityMessageInputChange(event.target.value, event.target);
-              mainMention.syncFromTextarea(event.target);
+              if (!isCommunityOnboardingPreview) mainMention.syncFromTextarea(event.target);
               syncMentionComposerHighlightScroll(event.target);
             }}
-            onClick={(event) => mainMention.syncFromTextarea(event.currentTarget)}
+            onClick={(event) => {
+              if (!isCommunityOnboardingPreview) mainMention.syncFromTextarea(event.currentTarget);
+            }}
             onBlur={() => mainMention.close()}
             onScroll={(event) => syncMentionComposerHighlightScroll(event.currentTarget)}
-            onPaste={onCommunityAttachmentPaste}
+            onPaste={isCommunityOnboardingPreview ? undefined : onCommunityAttachmentPaste}
             onKeyDown={(event) => {
-              if (mainMention.handleKeyDown(event)) return;
+              if (!isCommunityOnboardingPreview && mainMention.handleKeyDown(event)) return;
               if (
+                !isCommunityOnboardingPreview &&
                 handleMentionTokenBackspace({
                   event,
                   mentions: communityMessageMentions,
@@ -1460,23 +1573,38 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 if (isAuthRecoveringSignedIn) return;
-                void onSendCommunityMessage();
+                void handleMainCommunityComposerSubmit();
               }
             }}
-            disabled={isAuthRecoveringSignedIn || !hasSession || !activeCommunity || !canUseComposer}
+            disabled={
+              isAuthRecoveringSignedIn ||
+              !hasSession ||
+              !activeCommunity ||
+              !canUseComposer ||
+              isOnboardingFirstPostAcknowledgement
+            }
             rows={1}
           />
         </div>
-        <VoiceInputButton {...voiceButtonProps} />
+        <VoiceInputButton
+          {...voiceButtonProps}
+          disabled={
+            voiceButtonProps.disabled ||
+            isCommunityOnboardingPreview ||
+            isOnboardingFirstPostAcknowledgement
+          }
+        />
         <button
           className="chat-send ask-send-btn ask-send-btn-v2"
-          onClick={() => void onSendCommunityMessage()}
+          onClick={() => void handleMainCommunityComposerSubmit()}
           disabled={
             isAuthRecoveringSignedIn ||
             !hasSession ||
             !activeCommunity ||
             !canUseComposer ||
+            isOnboardingFirstPostAcknowledgement ||
             isSendingCommunityMessage ||
+            (isOnboardingFirstPostInteraction && !isOnboardingIntroductionReady) ||
             (communityMessageInput.trim().length === 0 && communityAttachments.length === 0)
           }
           type="button"
@@ -1666,12 +1794,12 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     <>
       <div
         className={`community-chat community-attachment-drop-surface${isCommunityAttachmentDragOver ? " drag-over" : ""}`}
-        onDrop={canUseComposer ? onCommunityAttachmentDrop : undefined}
-        onDragEnter={canUseComposer ? onCommunityAttachmentDragEnter : undefined}
-        onDragOver={canUseComposer ? onCommunityAttachmentDragOver : undefined}
-        onDragLeave={canUseComposer ? onCommunityAttachmentDragLeave : undefined}
+        onDrop={canUseCommunityAttachments ? onCommunityAttachmentDrop : undefined}
+        onDragEnter={canUseCommunityAttachments ? onCommunityAttachmentDragEnter : undefined}
+        onDragOver={canUseCommunityAttachments ? onCommunityAttachmentDragOver : undefined}
+        onDragLeave={canUseCommunityAttachments ? onCommunityAttachmentDragLeave : undefined}
       >
-        {canUseComposer && isCommunityAttachmentDragOver ? (
+        {canUseCommunityAttachments && isCommunityAttachmentDragOver ? (
           <div className="drop-overlay community-drop-overlay" aria-hidden="true">
             <svg viewBox="0 0 24 24">
               <path d="M12 5v14" />

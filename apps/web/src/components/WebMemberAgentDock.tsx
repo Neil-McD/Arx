@@ -341,6 +341,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     props.communityId &&
     props.communityName &&
     onboardingSession?.community_id === props.communityId &&
+    !onboarding?.firstPostAcknowledgementPending &&
     shouldPresentCommunityOnboardingAgentStep(onboardingSession),
   );
   const onboardingDescriptionId = "community-onboarding-agent-description";
