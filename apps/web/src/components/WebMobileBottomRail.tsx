@@ -32,6 +32,9 @@ export function WebMobileBottomRail({
         <button
           type="button"
           className={`mobile-bottom-rail-action mobile-bottom-rail-community${activeRoot === "community" ? " active" : ""}`}
+          aria-label={
+            hasCommunityAttention ? "Community, updates available" : "Community"
+          }
           aria-current={activeRoot === "community" ? "page" : undefined}
           onClick={() => communityShell.onSelectMobileRootPage("community")}
         >
@@ -44,7 +47,6 @@ export function WebMobileBottomRail({
               />
             ) : null}
           </span>
-          <span>Community</span>
         </button>
 
         <button
@@ -58,7 +60,6 @@ export function WebMobileBottomRail({
           <span className="mobile-bottom-rail-ai-icon">
             <Sparkles aria-hidden="true" />
           </span>
-          <span>AI</span>
         </button>
 
         <button
@@ -79,7 +80,6 @@ export function WebMobileBottomRail({
               <span className="mobile-bottom-rail-unread">{unreadDisplay}</span>
             ) : null}
           </span>
-          <span>Messages</span>
         </button>
       </div>
     </nav>

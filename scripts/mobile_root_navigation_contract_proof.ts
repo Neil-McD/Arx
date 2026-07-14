@@ -143,6 +143,21 @@ assert.match(
 );
 assert.match(
   topBar,
+  /<CommunityPresenceFacepile[\s\S]*<span className="mobile-topbar-member-count">\{onlineCountLabel\}<\/span>/,
+  "the mobile Members affordance should keep its visible online count when presence faces render",
+);
+assert.doesNotMatch(
+  topBar,
+  /<CommunityPresenceFacepile\s[\s\S]{0,240}onlineCount=/,
+  "the compact header facepile should not duplicate the separate visible total with its own overflow count",
+);
+assert.match(
+  indexCss,
+  /\.mobile-topbar-member-count\s*\{[\s\S]*?font-size:\s*11px;[\s\S]*?text-overflow:\s*ellipsis;/,
+  "the visible Members count should retain compact header typography and safe truncation",
+);
+assert.match(
+  topBar,
   /isThreadPage \? \([\s\S]*mobile-topbar-context-label">Thread<[\s\S]*: isAgent \? \(/,
   "the mobile thread page should replace the community selector with a dedicated Thread title",
 );
@@ -166,6 +181,16 @@ assert.match(
   bottomRail,
   /<House aria-hidden="true" \/>[\s\S]*className="mobile-bottom-rail-action mobile-bottom-rail-ai"[\s\S]*aria-expanded=\{communityShell\.mobileOverlay === "agent"\}[\s\S]*onClick=\{communityShell\.onOpenMobileAgent\}[\s\S]*<Sparkles aria-hidden="true" \/>[\s\S]*<MessageCircle aria-hidden="true" \/>/,
   "Community, centered AI, and Messages should render in that order",
+);
+assert.match(
+  bottomRail,
+  /aria-label=\{[\s\S]*hasCommunityAttention \? "Community, updates available" : "Community"[\s\S]*\}[\s\S]*aria-label="Open Polynet AI"[\s\S]*: "Messages"/,
+  "the icon-only rail should retain accessible names for all three actions",
+);
+assert.doesNotMatch(
+  bottomRail,
+  /<span>Community<\/span>|<span>AI<\/span>|<span>Messages<\/span>/,
+  "the mobile rail should not render visible text labels",
 );
 assert.doesNotMatch(
   bottomRail,
@@ -284,6 +309,11 @@ assert.match(
   indexCss,
   /\.mobile-bottom-rail-ai \{[\s\S]*color: var\(--accent-agent-foreground\);[\s\S]*\.mobile-bottom-rail-ai-icon \{[\s\S]*background: var\(--accent-agent-surface\);[\s\S]*color: var\(--accent-agent\);/,
   "AI should retain a fixed violet identity independent of theme selection",
+);
+assert.doesNotMatch(
+  indexCss,
+  /\.mobile-bottom-rail-ai \{[^}]*height:|\.mobile-bottom-rail-ai \{[^}]*padding|\.mobile-bottom-rail-ai-icon \{[^}]*margin-top:/,
+  "the AI action should share the rail geometry instead of being pulled upward",
 );
 assert.doesNotMatch(
   indexCss,
