@@ -628,49 +628,6 @@ export const runCommunityAiFeedEvidenceAcceptance = action({
       failures.push(`ai_feed_archive_adapter_failed:${error instanceof Error ? error.message : String(error)}`);
     }
 
-    const compilerInputs: any = await ctx.runQuery(
-      apiRefs.communityCompilerInputs.listCommunityCompilerInputs,
-      {
-        userId: fixture.ownerId,
-        authSubject: fixture.authSubject,
-        communityId: fixture.communityId,
-        sourceTraceLimit: 100,
-        aiFeedLimit: 100,
-        outcomeLimit: 10,
-      },
-    );
-    const compilerWindow: any = await ctx.runQuery(
-      apiRefs.communityCompilerWindow.readCommunityCompilerWindow,
-      {
-        userId: fixture.ownerId,
-        authSubject: fixture.authSubject,
-        communityId: fixture.communityId,
-        archiveActivityLimit: 200,
-        sourceTraceLimit: 200,
-        aiFeedLimit: 100,
-      },
-    );
-    for (const postId of [String(fixture.agentPostId), String(fixture.missingAgentPostId)]) {
-      const inputRepresentations = [
-        ...(compilerInputs.ranked_ai_feed_signals ?? []).filter((row: any) => row.id === postId),
-        ...(compilerInputs.recent_source_traces ?? []).filter(
-          (row: any) => row.source_type === "ai_feed" && row.source_id === postId,
-        ),
-      ];
-      const windowRepresentations = [
-        ...(compilerWindow.ranked_ai_feed_signals ?? []).filter((row: any) => row.id === postId),
-        ...(compilerWindow.recent_source_traces ?? []).filter(
-          (row: any) => row.source_type === "ai_feed" && row.source_id === postId,
-        ),
-        ...(compilerWindow.archive_activity ?? []).filter(
-          (row: any) => row.source_type === "ai_feed" && row.source_id === postId,
-        ),
-      ];
-      if (inputRepresentations.length !== 1 || windowRepresentations.length !== 1) {
-        failures.push(`ai_feed_compiler_projection_not_deduplicated:${postId}`);
-      }
-    }
-
     const beforeHide: any = await ctx.runQuery(
       internalRefs.communityAiFeedEvidenceAcceptance.readCommunityAiFeedEvidenceAcceptanceStateInternal,
       {
@@ -753,10 +710,6 @@ export const runCommunityAiFeedEvidenceAcceptance = action({
       archiveOnlyResult,
       outsiderDenied,
       deniedRefs,
-      compilerDiagnostics: {
-        inputs: compilerInputs.diagnostics,
-        window: compilerWindow.diagnostics,
-      },
       hiddenReadDenied,
       beforeHide,
       afterHide,

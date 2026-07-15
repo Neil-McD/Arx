@@ -442,7 +442,6 @@ export const readCommunityLineageAcceptanceStateInternal = internalQuery({
   },
   handler: async (ctx, args) => {
     const traces = [];
-    const links = [];
     for (const ref of args.refs) {
       const trace = await ctx.db
         .query("communitySourceTraces")
@@ -460,26 +459,9 @@ export const readCommunityLineageAcceptanceStateInternal = internalQuery({
               actorAgentKey: trace.actorAgentKey ?? null,
               sourceVisibility: trace.sourceVisibility,
               compilerState: trace.compilerState ?? null,
+              compilerGroupKey: trace.compilerGroupKey ?? null,
             }
           : { ref, id: null },
-      );
-      const link = await ctx.db
-        .query("communityInteractionSourceTraceLinks")
-        .withIndex("by_community_sourceId", (q) =>
-          q.eq("communityId", args.communityId).eq("sourceTraceSourceId", ref),
-        )
-        .first();
-      links.push(
-        link
-          ? {
-              ref,
-              state: link.linkState,
-              promotionReason: link.promotionReason,
-              actorType: link.actorType,
-              actorUserId: link.actorUserId ? String(link.actorUserId) : null,
-              actorAgentKey: link.actorAgentKey ?? null,
-            }
-          : { ref, state: null },
       );
     }
     const archives = [];
@@ -499,7 +481,6 @@ export const readCommunityLineageAcceptanceStateInternal = internalQuery({
       .take(50);
     return {
       traces,
-      links,
       archives,
       retrievalLogs: retrievalLogs.map((row) => ({
         surface: row.surface,
@@ -552,7 +533,7 @@ export const runCommunityLineageAcceptance = action({
     const failures: string[] = [];
     if (
       syncResults.slice(0, 3).some(
-        (row: any) => !row.indexed || !row.traced || row.promoted,
+        (row: any) => !row.indexed || !row.traced,
       )
     ) {
       failures.push("ordinary_evidence_archive_trace_boundary_invalid");
@@ -572,15 +553,12 @@ export const runCommunityLineageAcceptance = action({
       `reply:${String(fixture.humanReplyId)}`,
       `reply:${String(fixture.agentReplyId)}`,
     ];
-    const unpromotedState: any = await ctx.runQuery(
+    const tracedState: any = await ctx.runQuery(
       internalRefs.communityLineageAcceptance.readCommunityLineageAcceptanceStateInternal,
       { communityId: fixture.communityId, refs, archiveSourceIds },
     );
-    if (unpromotedState.traces.some((row: any) => !row.id)) {
+    if (tracedState.traces.some((row: any) => !row.id)) {
       failures.push("ordinary_evidence_not_automatically_traced");
-    }
-    if (unpromotedState.links.some((row: any) => row.state)) {
-      failures.push("ordinary_evidence_link_created_without_promotion");
     }
 
     let wrongTypeDenied = false;
@@ -636,23 +614,6 @@ export const runCommunityLineageAcceptance = action({
     if (!recentContextForeignParentDenied) {
       failures.push("recent_context_cross_community_parent_not_denied");
     }
-
-    await ctx.runMutation(
-      internalRefs.communityInteractionEvidence.promoteCommunityInteractionEvidenceInternal,
-      {
-        communityId: fixture.communityId,
-        ref: fixture.refs.root,
-        promotionReason: "high_signal",
-      },
-    );
-    await ctx.runMutation(
-      internalRefs.communityInteractionEvidence.promoteCommunityInteractionEvidenceInternal,
-      {
-        communityId: fixture.communityId,
-        ref: fixture.refs.agentReply,
-        promotionReason: "agent_signal",
-      },
-    );
 
     const embedding = await processPendingArchiveDocuments({
       ctx,
@@ -792,14 +753,16 @@ export const runCommunityLineageAcceptance = action({
     if (
       rootTrace?.actorType !== "member" ||
       rootTrace?.actorUserId !== String(fixture.ownerId) ||
-      rootTrace?.compilerState !== "pending"
+      rootTrace?.compilerState !== "pending" ||
+      !String(rootTrace?.compilerGroupKey ?? "").startsWith("interaction_episode:")
     ) {
       failures.push("human_source_trace_attribution_invalid");
     }
     if (
       humanReplyTrace?.actorType !== "member" ||
       humanReplyTrace?.actorUserId !== String(fixture.ownerId) ||
-      humanReplyTrace?.compilerState !== "pending"
+      humanReplyTrace?.compilerState !== "pending" ||
+      humanReplyTrace?.compilerGroupKey !== rootTrace?.compilerGroupKey
     ) {
       failures.push("human_reply_source_trace_attribution_invalid");
     }
@@ -809,11 +772,6 @@ export const runCommunityLineageAcceptance = action({
       agentTrace?.compilerState !== "excluded_self_authored"
     ) {
       failures.push("agent_source_trace_attribution_invalid");
-    }
-    const rootLink = beforeRedaction.links.find((row: any) => row.ref === fixture.refs.root);
-    const agentLink = beforeRedaction.links.find((row: any) => row.ref === fixture.refs.agentReply);
-    if (rootLink?.promotionReason !== "high_signal" || agentLink?.promotionReason !== "agent_signal") {
-      failures.push("explicit_promotion_reason_not_preserved");
     }
     const crossArchive = beforeRedaction.archives.find(
       (row: any) => row.sourceId === `reply:${String(fixture.crossCommunityReplyId)}`,
@@ -920,7 +878,7 @@ export const runCommunityLineageAcceptance = action({
       recentContextForeignParentDenied,
       redactedReadDenied,
       hiddenParentTypeConfusionDenied,
-      unpromotedState,
+      tracedState,
       beforeRedaction,
       afterRedaction,
     };

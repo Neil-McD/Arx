@@ -220,7 +220,7 @@ The first backend slice adds canonical tables beside legacy chat:
 - `communityInteractionReactions`
 - `communityInteractionReadStates`
 - `communityInteractionModerationEvents`
-- `communityInteractionSourceTraceLinks`
+- `communityInteractionSourceTraceLinks` (historical compatibility only; no current writer or reader)
 - `communityInteractionLegacyChatLinks`
 
 It also adds `interaction` as a product-owned `communitySourceTraces.sourceType`. Public source-trace writes must still be limited to `manual` and `external`; interaction traces are created only through trusted product bridges.
@@ -431,7 +431,7 @@ Rules:
 - personal-agent dock and community Concierge calls stay bound to the active community; external MCP calls select a community by slug and the server validates access
 - every search/read appends a `communityEvidenceRetrievalLogs` row with actor, surface, capability, and returned refs
 - live `community` or `public` interactions asynchronously upsert `sourceType: interaction` archive documents; this never creates a source trace by itself
-- only the explicit promotion mutation may create or reactivate an interaction source trace and source-trace link
+- every readable interaction sync creates or updates one exact source trace; related root and reply traces share an episode scheduling key without collapsing identity
 - private, admin-only, hidden, deleted, missing, or parent-hidden evidence is excluded or redacted and fails closed at read time even if a derived index is stale
 - interaction writes do not wait for embedding or compiler work; idempotent derived synchronization is scheduled after canonical mutation success
 - archive backfill reads canonical interactions and deletes obsolete legacy `chat` archive documents

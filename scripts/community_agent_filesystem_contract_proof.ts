@@ -31,7 +31,7 @@ assert.match(
 );
 assert.match(
   protocol,
-  /enum: \["settle_compiler_digest_items"\][\s\S]*required: \["digestId", "decisions"\][\s\S]*maxItems: 8/,
+  /enum: \["settle_compiler_digest_items"\][\s\S]*required: \["digestId", "decisions"\][\s\S]*maxItems: 96/,
   "the model tool should submit one bounded decision batch",
 );
 assert.match(

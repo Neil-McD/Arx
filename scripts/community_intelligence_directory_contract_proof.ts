@@ -158,39 +158,11 @@ assert.match(
   /recordTrustedCommunitySourceTraceCore[\s\S]*outcomeObservationIds = args\.outcomeObservationIds \?\? \[\][\s\S]*requireOutcomeIdsBelongToCommunity\(args\.ctx, args\.communityId, outcomeObservationIds\)/,
   "trusted source traces should validate attached outcomes belong to the same community",
 );
-{
-  const block = exportedFunctionBlock(directory, "recordCommunitySourceTrace");
-  assert.match(
-    block,
-    /sourceType: v\.union\(v\.literal\("manual"\), v\.literal\("external"\)\)/,
-    "public source trace writes should be limited to manual/external evidence",
-  );
-  assert.doesNotMatch(
-    block,
-    /v\.literal\("chat"\)|v\.literal\("ai_feed"\)|v\.literal\("resource"\)|v\.literal\("workflow_run"\)|v\.literal\("agent_run"\)|v\.literal\("artifact"\)|v\.literal\("tool_call"\)|v\.literal\("outcome"\)|v\.literal\("feedback"\)|v\.literal\("transcript"\)/,
-    "public source trace writes should not impersonate product-owned source types",
-  );
-  assert.match(
-    block,
-    /actorType: v\.optional\(\s*v\.union\(\s*v\.literal\("member"\),\s*v\.literal\("admin"\),?\s*\)/,
-    "public source trace writes should only allow member/admin actor identity",
-  );
-  assert.doesNotMatch(
-    block,
-    /v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)/,
-    "public source trace writes should not claim autonomous actor identity",
-  );
-  assert.doesNotMatch(
-    block,
-    /actorAgentKey/,
-    "public source trace writes should not accept agent attribution",
-  );
-  assert.match(
-    block,
-    /allowExistingUpdate: actor\.isManager/,
-    "public source trace writes should only update existing source ids when the caller is a manager",
-  );
-}
+assert.doesNotMatch(
+  directory,
+  /export const recordCommunitySourceTrace = mutation/,
+  "raw source-trace intake must not be a public mutation; product bridges own evidence admission",
+);
 assert.match(
   directory,
   /allowExistingUpdate\?: boolean[\s\S]*if \(existing\) \{[\s\S]*if \(!args\.allowExistingUpdate\) \{[\s\S]*community_source_trace_source_conflict/,

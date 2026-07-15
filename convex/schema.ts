@@ -2155,6 +2155,7 @@ export default defineSchema({
     wakeEvidence: v.optional(v.object({
       reason: v.string(),
       pendingTotal: v.number(),
+      pendingTraceTotal: v.optional(v.number()),
       pendingStandard: v.number(),
       pendingStrong: v.number(),
       pendingCritical: v.number(),
@@ -2828,6 +2829,9 @@ export default defineSchema({
     ),
     actorUserId: v.optional(v.id("users")),
     actorAgentKey: v.optional(v.string()),
+    // Optional scheduling affinity. Exact trace identity and settlement stay
+    // per row; related traces may share one bounded compiler admission packet.
+    compilerGroupKey: v.optional(v.string()),
     compilerState: v.optional(
       v.union(
         v.literal("pending"),
@@ -3341,6 +3345,9 @@ export default defineSchema({
         sourceTypes: v.array(v.string()),
         sourceIds: v.array(v.string()),
         sourceTraceIds: v.array(v.id("communitySourceTraces")),
+        // Scheduling provenance only. Work identity, citations, and terminal
+        // disposition remain exact to this item's single source trace.
+        compilerGroupKey: v.optional(v.string()),
         // Exact material revisions represented by this immutable work item.
         // Historical digest rows omit the field.
         sourceRevisions: v.optional(v.array(v.string())),

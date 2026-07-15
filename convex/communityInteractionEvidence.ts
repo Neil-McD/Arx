@@ -91,17 +91,6 @@ type EmbedRow = {
 };
 
 const evidenceObjectTypeValidator = v.union(v.literal("root"), v.literal("reply"));
-const evidencePromotionReasonValidator = v.union(
-  v.literal("manual"),
-  v.literal("moderator"),
-  v.literal("high_signal"),
-  v.literal("agent_signal"),
-);
-type EvidencePromotionReason =
-  | "manual"
-  | "moderator"
-  | "high_signal"
-  | "agent_signal";
 const RECENT_ROOT_SCAN_LIMIT = 80;
 const RECENT_REPLY_SCAN_LIMIT = 160;
 const INTERACTION_ARCHIVE_VECTOR_LIMIT = Math.max(ARCHIVE_VECTOR_LIMIT, 32);
@@ -697,60 +686,31 @@ async function removeInteractionSourceTrace(args: {
       sourceId: `${parsed.objectType}:${parsed.objectId}`,
     });
   }
-  const link = await args.ctx.db
-    .query("communityInteractionSourceTraceLinks" as any)
-    .withIndex("by_community_sourceId", (q: any) =>
-      q.eq("communityId", args.communityId).eq("sourceTraceSourceId", args.ref),
-    )
-    .first();
   const directTrace = await args.ctx.db
     .query("communitySourceTraces" as any)
     .withIndex("by_community_source", (q: any) =>
       q.eq("communityId", args.communityId).eq("sourceType", "interaction").eq("sourceId", args.ref),
     )
     .first();
-  const traceId = directTrace?._id ?? link?.sourceTraceId;
+  const traceId = directTrace?._id;
   if (traceId) {
-    const trace = directTrace ?? await args.ctx.db.get(traceId as any);
-    if (trace) {
-      await args.ctx.db.patch(traceId as any, {
-        sourceVisibility: "redacted",
-        visibilityScope: "admin",
-        compilerState: "excluded_by_visibility",
-        compilerPendingSince: undefined,
-        compilerLastHandledAt: args.nowMs,
-        compilerLastDigestId: undefined,
-        compilerDecision: undefined,
-        updatedAt: args.nowMs,
-      });
-    }
-  }
-  if (link) {
-    await args.ctx.db.patch(link._id as any, {
-      linkState: "removed",
+    await args.ctx.db.patch(traceId as any, {
+      sourceVisibility: "redacted",
+      visibilityScope: "admin",
+      compilerState: "excluded_by_visibility",
+      compilerPendingSince: undefined,
+      compilerLastHandledAt: args.nowMs,
+      compilerLastDigestId: undefined,
+      compilerDecision: undefined,
       updatedAt: args.nowMs,
     });
   }
-}
-
-async function findInteractionSourceTraceLink(args: {
-  ctx: any;
-  communityId: any;
-  ref: string;
-}) {
-  return await args.ctx.db
-    .query("communityInteractionSourceTraceLinks" as any)
-    .withIndex("by_community_sourceId", (q: any) =>
-      q.eq("communityId", args.communityId).eq("sourceTraceSourceId", args.ref),
-    )
-    .first();
 }
 
 async function upsertInteractionSourceTrace(args: {
   ctx: any;
   communityId: any;
   source: ResolvedCommunityInteractionEvidence;
-  promotionReason?: EvidencePromotionReason | "compiler_candidate";
   nowMs: number;
 }) {
   const { row, root, objectType } = args.source;
@@ -771,36 +731,9 @@ async function upsertInteractionSourceTrace(args: {
     actorType: actor.actorType,
     actorUserId: actor.actorUserId,
     actorAgentKey: actor.actorAgentKey,
+    compilerGroupKey: `interaction_episode:${normalizeIdValue(root._id)}`,
     nowMs: args.nowMs,
   });
-  if (args.promotionReason) {
-    const existingLink = await findInteractionSourceTraceLink({
-      ctx: args.ctx,
-      communityId: args.communityId,
-      ref,
-    });
-    const linkPatch = {
-      communityId: args.communityId,
-      rootId: root._id,
-      ...(objectType === "reply" ? { replyId: row._id } : { replyId: undefined }),
-      sourceTraceId: (trace as any).id,
-      sourceTraceSourceId: ref,
-      linkState: "active",
-      promotionReason: args.promotionReason,
-      actorType: row.actorType,
-      ...(row.actorUserId ? { actorUserId: row.actorUserId } : { actorUserId: undefined }),
-      ...(row.actorAgentKey ? { actorAgentKey: row.actorAgentKey } : { actorAgentKey: undefined }),
-      updatedAt: args.nowMs,
-    };
-    if (existingLink) {
-      await args.ctx.db.patch(existingLink._id as any, linkPatch);
-    } else {
-      await args.ctx.db.insert("communityInteractionSourceTraceLinks" as any, {
-        ...linkPatch,
-        createdAt: args.nowMs,
-      });
-    }
-  }
   return { ref, sourceTraceId: (trace as any).id };
 }
 
@@ -845,68 +778,20 @@ export const syncCommunityInteractionEvidenceInternal = internalMutation({
           },
         );
       }
-      return { ok: true, indexed: false, promoted: false, ref };
+      return { ok: true, indexed: false, traced: false, ref };
     }
-    const existingLink = await findInteractionSourceTraceLink({
-      ctx,
-      communityId: args.communityId,
-      ref,
-    });
     const traced = await upsertInteractionSourceTrace({
       ctx,
       communityId: args.communityId,
       source,
-      promotionReason: existingLink?.linkState === "active" ? existingLink.promotionReason : undefined,
       nowMs,
     });
     return {
       ok: true,
       indexed: archive.indexed,
       traced: true,
-      promoted: existingLink?.linkState === "active",
       ref,
       source_trace_id: traced.sourceTraceId,
-    };
-  },
-});
-
-export const promoteCommunityInteractionEvidenceInternal = internalMutation({
-  args: {
-    communityId: v.id("communities"),
-    ref: v.string(),
-    promotionReason: evidencePromotionReasonValidator,
-  },
-  handler: async (ctx, args) => {
-    const parsed = parseCommunityInteractionEvidenceRef(args.ref);
-    if (!parsed) throw new Error("community_interaction_evidence_ref_invalid");
-    const source = await resolveCommunityInteractionEvidenceSource({
-      ctx,
-      communityId: args.communityId,
-      objectType: parsed.objectType,
-      objectId: parsed.objectId,
-    });
-    if (!source) throw new Error("community_interaction_evidence_not_found");
-    if (!communityInteractionEvidenceSourceIsReadable(source)) {
-      throw new Error("community_interaction_evidence_not_readable");
-    }
-    await syncArchiveDocumentForInteraction({
-      ctx,
-      communityId: args.communityId,
-      objectType: parsed.objectType,
-      objectId: parsed.objectId,
-    });
-    const promoted = await upsertInteractionSourceTrace({
-      ctx,
-      communityId: args.communityId,
-      source,
-      promotionReason: args.promotionReason,
-      nowMs: Date.now(),
-    });
-    return {
-      ok: true,
-      ref: promoted.ref,
-      promotion_reason: args.promotionReason,
-      source_trace_id: promoted.sourceTraceId,
     };
   },
 });

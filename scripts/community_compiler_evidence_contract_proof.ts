@@ -21,10 +21,13 @@ assert.doesNotMatch(evidence, /export const .* = query\(|export const .* = mutat
 assert.match(evidence, /measureCommunityCompilerEvidenceForCommunity/);
 assert.doesNotMatch(`${evidence}\n${evidenceCore}`, /userId|authSubject|userPrompt|prompt: v\.string|agentKey/);
 
-assert.match(evidenceCore, /COMPILER_EVIDENCE_BATCH_THRESHOLD = 20/);
+assert.match(evidenceCore, /COMPILER_EVIDENCE_BATCH_THRESHOLD = 8/);
 assert.match(evidenceCore, /COMPILER_EVIDENCE_STRONG_THRESHOLD = 5/);
 assert.match(evidenceCore, /COMPILER_EVIDENCE_AGE_THRESHOLD_MS = 72 \* 60 \* 60 \* 1000/);
-assert.match(evidenceCore, /COMPILER_EVIDENCE_RUN_LIMIT = 100/);
+assert.match(
+  evidenceCore,
+  /COMPILER_EVIDENCE_PACKET_LIMIT = 8[\s\S]*COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT = 12[\s\S]*COMPILER_EVIDENCE_RUN_LIMIT =[\s\S]*COMPILER_EVIDENCE_PACKET_LIMIT \* COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT/,
+);
 assert.match(evidenceCore, /COMPILER_EVIDENCE_SCAN_LIMIT = 500/);
 assert.match(
   evidenceCore,
@@ -42,15 +45,15 @@ assert.match(
   /row\.sourceType === "outcome" \|\| row\.sourceType === "feedback"[\s\S]*return "critical"/,
   "outcome and feedback evidence should be critical",
 );
-assert.match(
+assert.doesNotMatch(
   evidenceCore,
-  /containsCriticalLanguage\(row\)[\s\S]*return "critical"/,
-  "failure, contradiction, stale, and blocker language should wake the compiler",
+  /containsCriticalLanguage/,
+  "member-authored keywords must not escalate the compiler",
 );
 assert.match(
   evidenceCore,
-  /row\.sourceType === "workflow_run"[\s\S]*row\.sourceType === "agent_run"[\s\S]*row\.sourceType === "transcript"[\s\S]*return "strong"/,
-  "workflow, agent-run, and transcript evidence should be strong",
+  /row\.sourceType === "ai_feed"[\s\S]*row\.sourceType === "workflow_run"[\s\S]*row\.sourceType === "agent_run"[\s\S]*row\.sourceType === "transcript"[\s\S]*return "strong"/,
+  "trusted feed, workflow, agent-run, and transcript evidence should be strong",
 );
 
 assert.match(
@@ -65,7 +68,7 @@ assert.match(
 );
 assert.match(
   evidenceCore,
-  /hasMorePending =[\s\S]*pendingRowsByVisibility\.some\(\(rows\) => rows\.length > COMPILER_EVIDENCE_SCAN_LIMIT\)[\s\S]*legacyRowsByVisibility\.some\(\(rows\) => rows\.length > COMPILER_EVIDENCE_SCAN_LIMIT\)/,
+  /fetchHasMorePending =[\s\S]*pendingRowsByVisibility\.some\(\(rows\) => rows\.length > COMPILER_EVIDENCE_SCAN_LIMIT\)[\s\S]*legacyRowsByVisibility\.some\(\(rows\) => rows\.length > COMPILER_EVIDENCE_SCAN_LIMIT\)[\s\S]*hasMorePending = fetchHasMorePending \|\| eligibleTraceRows\.length > COMPILER_EVIDENCE_SCAN_LIMIT/,
   "scan-cap lower-bound reporting should be conservative whenever the bounded fetch may hide more rows",
 );
 assert.match(
@@ -85,7 +88,7 @@ assert.doesNotMatch(
 );
 assert.match(
   evidenceCore,
-  /reason !== "no_trigger"[\s\S]*has_more_pending[\s\S]*counts_are_lower_bound[\s\S]*selected_trace_ids[\s\S]*selected_evidence_units[\s\S]*thresholds/,
+  /reason !== "no_trigger"[\s\S]*pending_trace_total[\s\S]*has_more_pending[\s\S]*selected_packet_count[\s\S]*selected_trace_ids[\s\S]*selected_evidence_units[\s\S]*thresholds/,
   "measurement should return trigger state, selected ids, evidence units, and thresholds",
 );
 assert.match(

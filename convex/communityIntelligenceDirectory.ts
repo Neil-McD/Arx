@@ -92,6 +92,7 @@ type SourceTraceRow = {
   actorType: ActorType;
   actorUserId?: any;
   actorAgentKey?: string;
+  compilerGroupKey?: string;
   compilerState?: SourceTraceCompilerState;
   compilerPendingSince?: number;
   compilerLastHandledAt?: number;
@@ -392,6 +393,7 @@ function sourceTraceMaterialChanged(existing: SourceTraceRow, next: {
   actorType: ActorType;
   actorUserId?: any;
   actorAgentKey?: string;
+  compilerGroupKey?: string;
 }): boolean {
   return (
     (existing.title ?? undefined) !== (next.title ?? undefined) ||
@@ -645,25 +647,6 @@ function retrievalLogBelongsToUser(log: RetrievalLogRow, userId: any, isManager:
   return isManager || normalizeIdValue(log.userId) === normalizeIdValue(userId);
 }
 
-function resolveTraceVisibility(args: {
-  requestedVisibility?: VisibilityScope;
-  requestedSourceVisibility?: SourceVisibility;
-  isManager: boolean;
-}): { visibilityScope: VisibilityScope; sourceVisibility: SourceVisibility } {
-  if (args.isManager) {
-    const visibilityScope = args.requestedVisibility ?? "community";
-    return {
-      visibilityScope,
-      sourceVisibility: args.requestedSourceVisibility ?? visibilityScope,
-    };
-  }
-  const visibilityScope = args.requestedVisibility === "private" ? "private" : "community";
-  return {
-    visibilityScope,
-    sourceVisibility: visibilityScope,
-  };
-}
-
 function mapTraceRow(row: SourceTraceRow) {
   const compilerState = sourceTraceCompilerState(row);
   return {
@@ -681,6 +664,7 @@ function mapTraceRow(row: SourceTraceRow) {
     actor_type: row.actorType,
     actor_user_id: row.actorUserId ? normalizeIdValue(row.actorUserId) : null,
     actor_agent_key: row.actorAgentKey ?? null,
+    compiler_group_key: row.compilerGroupKey ?? null,
     compiler_state: compilerState,
     compiler_pending_since: typeof row.compilerPendingSince === "number"
       ? toIsoString(row.compilerPendingSince)
@@ -1603,6 +1587,7 @@ export async function upsertCommunitySourceTrace(args: {
   actorType: ActorType;
   actorUserId?: any;
   actorAgentKey?: string;
+  compilerGroupKey?: string;
   allowExistingUpdate?: boolean;
   nowMs: number;
 }): Promise<ReturnType<typeof mapTraceRow>> {
@@ -1621,6 +1606,7 @@ export async function upsertCommunitySourceTrace(args: {
     ? args.outcomeObservationIds
     : undefined;
   const actorAgentKey = normalizeActorKey(args.actorAgentKey);
+  const compilerGroupKey = normalizeOptionalLongText(args.compilerGroupKey, 512);
 
   const existing = sourceId
     ? ((await args.ctx.db
@@ -1646,6 +1632,7 @@ export async function upsertCommunitySourceTrace(args: {
       actorType: args.actorType,
       actorUserId: args.actorUserId,
       actorAgentKey,
+      compilerGroupKey,
     });
     const compilerLifecyclePatch = sourceTraceCompilerLifecyclePatch({
       existing,
@@ -1666,6 +1653,7 @@ export async function upsertCommunitySourceTrace(args: {
       actorType: args.actorType,
       ...(args.actorUserId ? { actorUserId: args.actorUserId } : { actorUserId: undefined }),
       ...(actorAgentKey ? { actorAgentKey } : { actorAgentKey: undefined }),
+      ...(compilerGroupKey ? { compilerGroupKey } : { compilerGroupKey: undefined }),
       ...compilerLifecyclePatch,
       // Evidence versions are content-addressed. A no-op source sync must not
       // supersede otherwise-active citations by advancing a transport clock.
@@ -1697,6 +1685,7 @@ export async function upsertCommunitySourceTrace(args: {
     actorType: args.actorType,
     ...(args.actorUserId ? { actorUserId: args.actorUserId } : {}),
     ...(actorAgentKey ? { actorAgentKey } : {}),
+    ...(compilerGroupKey ? { compilerGroupKey } : {}),
     ...compilerLifecyclePatch,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
@@ -1721,6 +1710,7 @@ export async function recordTrustedCommunitySourceTraceCore(args: {
   actorType?: ActorType;
   actorUserId?: any;
   actorAgentKey?: string;
+  compilerGroupKey?: string;
   nowMs?: number;
 }): Promise<ReturnType<typeof mapTraceRow>> {
   const community = await args.ctx.db.get(args.communityId);
@@ -1761,6 +1751,7 @@ export async function recordTrustedCommunitySourceTraceCore(args: {
       actorType === "agent" || actorType === "compiler" || actorType === "system"
         ? args.actorAgentKey ?? "trusted_evidence_bridge"
         : args.actorAgentKey,
+    compilerGroupKey: args.compilerGroupKey,
     allowExistingUpdate: true,
     nowMs: args.nowMs ?? Date.now(),
   });
@@ -2170,73 +2161,6 @@ async function retrieveAcceptedCommunityMemoryNodes(args: {
     .slice(0, args.limit)
     .map((entry) => entry.node);
 }
-
-export const recordCommunitySourceTrace = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    sourceType: v.union(v.literal("manual"), v.literal("external")),
-    sourceId: v.optional(v.string()),
-    title: v.optional(v.string()),
-    summary: v.string(),
-    visibilityScope: v.optional(
-      v.union(v.literal("private"), v.literal("admin"), v.literal("community"), v.literal("public")),
-    ),
-    sourceVisibility: v.optional(
-      v.union(
-        v.literal("private"),
-        v.literal("admin"),
-        v.literal("community"),
-        v.literal("public"),
-        v.literal("redacted"),
-      ),
-    ),
-    workflowId: v.optional(v.string()),
-    artifactIds: v.optional(v.array(v.string())),
-    actorType: v.optional(
-      v.union(
-        v.literal("member"),
-        v.literal("admin"),
-      ),
-    ),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const actor = await resolveWriteActor({
-      ctx,
-      communityId: args.communityId,
-      userId,
-      requestedActorType: args.actorType,
-    });
-    const traceVisibility = resolveTraceVisibility({
-      requestedVisibility: args.visibilityScope,
-      requestedSourceVisibility: args.sourceVisibility,
-      isManager: actor.isManager,
-    });
-    return await upsertCommunitySourceTrace({
-      ctx,
-      communityId: args.communityId,
-      sourceType: args.sourceType,
-      sourceId: args.sourceId,
-      title: args.title,
-      summary: args.summary,
-      visibilityScope: traceVisibility.visibilityScope,
-      sourceVisibility: traceVisibility.sourceVisibility,
-      workflowId: args.workflowId,
-      artifactIds: args.artifactIds,
-      actorType: actor.actorType,
-      actorUserId: actor.actorUserId,
-      allowExistingUpdate: actor.isManager,
-      nowMs: Date.now(),
-    });
-  },
-});
 
 export const createCommunityIntelligenceNode = internalMutation({
   args: {

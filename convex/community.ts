@@ -188,12 +188,10 @@ import {
   markCommunitySurfaceSeen as markCommunitySurfaceSeenImpl,
   markCommunityChatReadAt as markCommunityChatReadAtImpl,
 } from "./communityAttention";
-import { listCommunityCompilerInputs as listCommunityCompilerInputsImpl } from "./communityCompilerInputs";
 import {
   listCommunityCompilerDigests as listCommunityCompilerDigestsImpl,
   runCommunityCompilerDigestPass as runCommunityCompilerDigestPassImpl,
 } from "./communityCompilerDigest";
-import { readCommunityCompilerWindow as readCommunityCompilerWindowImpl } from "./communityCompilerWindow";
 import {
   applyCommunityIntelligenceChangeRequest as applyCommunityIntelligenceChangeRequestImpl,
   createCommunityIntelligenceChangeRequest as createCommunityIntelligenceChangeRequestImpl,
@@ -205,7 +203,6 @@ import {
   listCommunityIntelligenceChangeRequests as listCommunityIntelligenceChangeRequestsImpl,
   recordCommunityIntelligenceRetrievalFeedback as recordCommunityIntelligenceRetrievalFeedbackImpl,
   recordCommunityOutcomeObservation as recordCommunityOutcomeObservationImpl,
-  recordCommunitySourceTrace as recordCommunitySourceTraceImpl,
   decideCommunityIntelligenceChangeRequest as decideCommunityIntelligenceChangeRequestImpl,
   retrieveCommunityIntelligenceForWorkflow as retrieveCommunityIntelligenceForWorkflowImpl,
 } from "./communityIntelligenceDirectory";
@@ -364,7 +361,6 @@ export const saveCommunityPublicPresentation = saveCommunityPublicPresentationIm
 export const listMyCommunityAttention = listMyCommunityAttentionImpl;
 export const markCommunitySurfaceSeen = markCommunitySurfaceSeenImpl;
 export const markCommunityChatReadAt = markCommunityChatReadAtImpl;
-export const recordCommunitySourceTrace = recordCommunitySourceTraceImpl;
 export const createCommunityIntelligenceChangeRequest = createCommunityIntelligenceChangeRequestImpl;
 export const getCommunityPolynetOverview = getCommunityPolynetOverviewImpl;
 export const resolvePublicCommunityMemoryOverviewBySlug = resolvePublicCommunityMemoryOverviewBySlugImpl;
@@ -377,7 +373,5 @@ export const retrieveCommunityIntelligenceForWorkflow = retrieveCommunityIntelli
 export const recordCommunityIntelligenceRetrievalFeedback = recordCommunityIntelligenceRetrievalFeedbackImpl;
 export const recordCommunityOutcomeObservation = recordCommunityOutcomeObservationImpl;
 export const listCommunityIntelligenceMutations = listCommunityIntelligenceMutationsImpl;
-export const listCommunityCompilerInputs = listCommunityCompilerInputsImpl;
-export const readCommunityCompilerWindow = readCommunityCompilerWindowImpl;
 export const runCommunityCompilerDigestPass = runCommunityCompilerDigestPassImpl;
 export const listCommunityCompilerDigests = listCommunityCompilerDigestsImpl;

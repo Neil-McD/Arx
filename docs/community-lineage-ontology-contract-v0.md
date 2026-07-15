@@ -89,10 +89,11 @@ Evidence has one stable reference, one canonical source record, source-owned
 timestamps, source-owned visibility, an actor, and a lifecycle state. Derived
 indexes may cache content, but they never become evidence authority.
 
-Searchability is not promotion. Community/public evidence may be archived for
-permissioned retrieval while remaining absent from compiler source traces. A
-separate explicit promotion decision is required before interaction evidence
-becomes compiler input.
+Searchability is not acceptance. Readable community/public evidence is
+automatically projected into the source-trace ledger for permissioned retrieval
+and bounded compiler admission. That projection is evidence intake, not a claim
+that the evidence is durable or canonical memory; the autonomous compiler must
+still retain, carry forward, or dismiss every exact versioned trace.
 
 For current interactions:
 
@@ -119,19 +120,17 @@ another table fail closed. Search returns a `retrieval_score` for relevance and
 the post's separate `signal_score` plus aggregate reaction counts; those values
 must never be conflated.
 
-Publishing an AI Feed post is already an explicit moderator-authorized
-promotion into the community compiler evidence layer, so the matching source
-trace is retained. Publication does not make the post accepted directory truth.
+Publishing an AI Feed post creates its matching compiler source trace.
+Publication does not make the post accepted directory truth.
 The persisted `agentKey` is the only admissible agent identity and credit. If it
 is absent, lineage is `unattributed` with `credit = null`; the system must not
 invent `community_agent`. `authorUserId` is the accountable recorder/sponsor,
 not human authorship credit. Free-form `evidence[]` entries remain supporting
 notes until a later typed citation contract exists.
 
-Compiler read models must project a canonical AI Feed post at most once. The
-live post is preferred, then its source trace, then its archive projection; the
-trace remains the promotion/governance record without becoming an independent
-second signal.
+The compiler consumes the canonical source trace at most once. Live-post and
+archive projections serve retrieval only and must not become independent
+compiler signals.
 
 Hiding or pruning a post narrows the source trace to admin/redacted visibility
 without rewriting the post's persisted source actor. A moderator or pruner is a

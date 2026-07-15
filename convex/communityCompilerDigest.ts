@@ -20,7 +20,7 @@ import {
 const COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS = 30;
 const COMMUNITY_COMPILER_DIGEST_WINDOW_MS = COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 const COMMUNITY_COMPILER_DIGEST_AGENT_KEY = "community_compiler_digest_v1";
-const MAX_DIGEST_ITEMS = 8;
+const MAX_DIGEST_ITEMS = 96;
 
 type DigestCategory =
   | "chat_activity"
@@ -42,6 +42,7 @@ type DigestItem = {
   sourceIds: string[];
   sourceTraceIds: any[];
   sourceRevisions?: string[];
+  compilerGroupKey?: string;
 };
 
 type CompilerDigestRow = {
@@ -90,6 +91,7 @@ function makeItem(args: {
   sourceIds?: string[];
   sourceTraceIds?: any[];
   sourceRevisions?: string[];
+  compilerGroupKey?: string;
 }): DigestItem {
   return {
     category: args.category,
@@ -101,6 +103,7 @@ function makeItem(args: {
     sourceIds: (args.sourceIds ?? []).map((value) => truncateText(value, 512)).filter(Boolean).slice(0, 1),
     sourceTraceIds: (args.sourceTraceIds ?? []).slice(0, 1),
     sourceRevisions: (args.sourceRevisions ?? []).map((value) => truncateText(value, 180)).filter(Boolean).slice(0, 1),
+    ...(args.compilerGroupKey ? { compilerGroupKey: truncateText(args.compilerGroupKey, 512) } : {}),
   };
 }
 
@@ -217,6 +220,7 @@ async function runCommunityCompilerDigestPassCore(
         sourceIds: [String(row.sourceId ?? traceId)],
         sourceTraceIds: [row._id],
         sourceRevisions: [revision],
+        compilerGroupKey: row.compilerGroupKey,
       });
     }));
     const keyedItems = await Promise.all(
@@ -263,7 +267,7 @@ async function runCommunityCompilerDigestPassCore(
     };
     const summary = truncateText(
       [
-        `${compilerEvidence.measurement.pending_total} eligible source traces were pending when measured.`,
+        `${compilerEvidence.measurement.pending_total} eligible evidence packets (${compilerEvidence.measurement.pending_trace_total} exact traces) were pending when measured.`,
         `${representedSelectedSourceTraceRows.length} exact versioned evidence items are represented by this immutable digest.`,
         "Every item must reach retained, carried-forward, or dismissed-low-signal before the handoff is complete.",
         "This digest is non-canonical compiler output.",

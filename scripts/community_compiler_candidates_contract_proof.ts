@@ -184,7 +184,7 @@ assert.match(
 );
 assert.match(
   acceptance,
-  /communityAgentRunEvents[\s\S]*communityAgentRuns[\s\S]*communityInteractionSourceTraceLinks[\s\S]*if \(args\.preserveOwner !== true\)/,
+  /communityAgentRunEvents[\s\S]*communityAgentRuns[\s\S]*communityInteractionRoots[\s\S]*if \(args\.preserveOwner !== true\)/,
   "fixture cleanup must remove model-run and interaction-link residue without deleting a preserved sponsor",
 );
 

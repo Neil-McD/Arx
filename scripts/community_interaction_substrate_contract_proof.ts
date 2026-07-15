@@ -264,7 +264,6 @@ assertIncludes(
   directory,
   '| "interaction"',
 );
-const publicSourceTraceBlock = exportedConstBlock(directoryPath, directory, "recordCommunitySourceTrace");
-assertExcludes(directoryPath, publicSourceTraceBlock, 'v.literal("interaction")');
+assertExcludes(directoryPath, directory, "export const recordCommunitySourceTrace = mutation");
 
 console.log("community_interaction_substrate_contract_proof: ok");

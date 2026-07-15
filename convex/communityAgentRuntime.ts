@@ -62,6 +62,7 @@ type CommunityAgentFilesystemContext = {
 type CommunityAgentWakeEvidence = {
   reason: string;
   pendingTotal: number;
+  pendingTraceTotal?: number;
   pendingStandard: number;
   pendingStrong: number;
   pendingCritical: number;
@@ -126,19 +127,20 @@ function renderCompilerWindowForPrompt(raw: unknown): string {
   const digest = recordValue(root?.latest_digest);
   const items = Array.isArray(digest?.items) ? digest.items : null;
   if (!root || !digest || !items) return boundedText(JSON.stringify(raw), 20_000);
-  const compactItems = items.slice(0, 8).map((rawItem) => {
+  const compactItems = items.slice(0, 96).map((rawItem) => {
     const item = recordValue(rawItem) ?? {};
     return {
       work_key: boundedText(item.workKey, 128),
       category: boundedText(item.category, 80),
-      title: boundedText(item.title, 240),
-      summary: boundedText(item.summary, 1_200),
+      title: boundedText(item.title, 160),
+      summary: boundedText(item.summary, 320),
       priority: Number(item.priority ?? 0),
       confidence: Number(item.confidence ?? 0),
       source_type: boundedText(item.sourceTypes?.[0], 64),
-      source_id: boundedText(item.sourceIds?.[0], 512),
+      source_id: boundedText(item.sourceIds?.[0], 180),
       source_trace_id: boundedText(item.sourceTraceIds?.[0], 128),
       source_revision: boundedText(item.sourceRevisions?.[0], 180),
+      compiler_group_key: boundedText(item.compilerGroupKey, 180),
     };
   });
   return JSON.stringify({
@@ -166,6 +168,7 @@ function normalizeModelId(raw: unknown): string {
 const communityAgentWakeEvidenceValidator = v.object({
   reason: v.string(),
   pendingTotal: v.number(),
+  pendingTraceTotal: v.optional(v.number()),
   pendingStandard: v.number(),
   pendingStrong: v.number(),
   pendingCritical: v.number(),
@@ -355,7 +358,7 @@ function buildCommunityAgentMessages(params: {
         `Trigger: ${params.triggerType}`,
         params.wakeReason ? `Wake reason: ${params.wakeReason}` : "",
         params.wakeEvidence
-          ? `Evidence state: pending ${params.wakeEvidence.pendingTotal}, critical ${params.wakeEvidence.pendingCritical}, strong ${params.wakeEvidence.pendingStrong}, lower-bound ${params.wakeEvidence.countsAreLowerBound ? "yes" : "no"}.`
+          ? `Evidence state: ${params.wakeEvidence.pendingTotal} pending packets (${params.wakeEvidence.pendingTraceTotal ?? params.wakeEvidence.pendingTotal} exact traces), critical ${params.wakeEvidence.pendingCritical}, strong ${params.wakeEvidence.pendingStrong}, lower-bound ${params.wakeEvidence.countsAreLowerBound ? "yes" : "no"}.`
           : "",
         params.wakeEvidence?.compilerDigestId
           ? `Claimed compiler digest: ${params.wakeEvidence.compilerDigestId} (${params.wakeEvidence.compilerDigestVersionKey ?? "unknown version"}, ${params.wakeEvidence.compilerWorkItemCount ?? 0} work items).`

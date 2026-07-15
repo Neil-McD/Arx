@@ -1,47 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import ts from "typescript";
+import { existsSync, readFileSync } from "node:fs";
 
 function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
-}
-
-function assertFiltersCompilerEvidenceTraces(source: string, label: string): void {
-  const sourceFile = ts.createSourceFile(
-    `${label}.ts`,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
-  let found = false;
-  const visit = (node: ts.Node): void => {
-    if (
-      ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression) &&
-      node.expression.name.text === "filter"
-    ) {
-      const callback = node.arguments[0];
-      const inspectCallback = (candidate: ts.Node): void => {
-        if (
-          ts.isCallExpression(candidate) &&
-          ts.isIdentifier(candidate.expression) &&
-          candidate.expression.text === "isCommunityCompilerEvidenceTrace"
-        ) {
-          found = true;
-        }
-        ts.forEachChild(candidate, inspectCallback);
-      };
-      if (callback) inspectCallback(callback);
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(sourceFile);
-  assert.equal(
-    found,
-    true,
-    `${label} must filter candidate source traces through isCommunityCompilerEvidenceTrace`,
-  );
 }
 
 const packageJson = read("package.json");
@@ -50,8 +11,6 @@ const evidenceCore = read("convex/communityCompilerEvidenceCore.ts");
 const directory = read("convex/communityIntelligenceDirectory.ts");
 const digest = read("convex/communityCompilerDigest.ts");
 const heartbeat = read("convex/communityAgentHeartbeat.ts");
-const windowSource = read("convex/communityCompilerWindow.ts");
-const inputs = read("convex/communityCompilerInputs.ts");
 
 assert.match(
   packageJson,
@@ -108,14 +67,26 @@ assert.match(
 
 assert.match(
   evidenceCore,
-  /\.filter\(\(row\) => compilerState\(row\) === "pending"\)[\s\S]*\.filter\(\(row\) => isCommunityCompilerEvidenceTrace\(row\)\)[\s\S]*const pending = traceRows\.map/,
+  /\.filter\(\(row\) => compilerState\(row\) === "pending"\)[\s\S]*\.filter\(\(row\) => isCommunityCompilerEvidenceTrace\(row\)\)[\s\S]*const pending: PendingEvidence\[\] = traceRows\.map/,
   "measurement must exclude self-authored traces before priority classification, trigger counts, and selection",
 );
 
 assert.match(
   evidenceCore,
-  /decideTrigger\(\{[\s\S]*totalCount: pending\.length/,
-  "trigger computation must use the filtered pending evidence count",
+  /decideTrigger\(\{[\s\S]*totalCount: packets\.length/,
+  "trigger computation must use bounded evidence packet count",
+);
+
+assert.doesNotMatch(
+  evidenceCore,
+  /containsCriticalLanguage/,
+  "member-authored keywords must not escalate an owner-funded compiler cycle",
+);
+
+assert.match(
+  evidenceCore,
+  /COMPILER_EVIDENCE_PACKET_LIMIT = 8[\s\S]*COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT = 12/,
+  "compiler admission must be bounded by episode packets and exact traces per packet",
 );
 
 assert.match(
@@ -136,7 +107,15 @@ assert.match(
   "heartbeat must drain self-authored pending traces before the canonical planner measures wake work",
 );
 
-assertFiltersCompilerEvidenceTraces(windowSource, "community compiler window");
-assertFiltersCompilerEvidenceTraces(inputs, "manager compiler inputs");
+assert.equal(
+  existsSync(new URL("../convex/communityCompilerWindow.ts", import.meta.url)),
+  false,
+  "obsolete aggregate compiler window must stay deleted",
+);
+assert.equal(
+  existsSync(new URL("../convex/communityCompilerInputs.ts", import.meta.url)),
+  false,
+  "obsolete aggregate compiler inputs must stay deleted",
+);
 
 console.log("community_compiler_evidence_diet_contract_proof: ok");

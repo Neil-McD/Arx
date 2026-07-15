@@ -71,23 +71,22 @@ assert.match(evidence, /sourceVisibility: "redacted"/);
 assert.match(evidence, /compilerState: "excluded_by_visibility"/);
 assert.match(evidence, /compilerDecision: undefined/);
 assert.match(evidence, /redactCommunityInteractionEvidenceChildrenInternal/);
-assert.match(evidence, /promoteCommunityInteractionEvidenceInternal/);
 assert.match(evidence, /async function upsertInteractionSourceTrace/);
-assert.match(evidence, /promotionReason: evidencePromotionReasonValidator/);
+assert.match(evidence, /compilerGroupKey: `interaction_episode:\$\{normalizeIdValue\(root\._id\)\}`/);
+assert.doesNotMatch(evidence, /promoteCommunityInteractionEvidenceInternal/);
+assert.doesNotMatch(evidence, /communityInteractionSourceTraceLinks/);
 assert.match(evidenceCore, /normalizeId\(table as any/);
 assert.match(evidenceCore, /normalizeId\([\s\S]*"communityInteractionRoots" as any/);
 assert.match(evidenceCore, /normalizeIdValue\(root\.communityId\) !== normalizeIdValue\(args\.communityId\)/);
 assert.match(evidenceCore, /normalizeIdValue\(root\.communityId\) !== normalizeIdValue\(row\.communityId\)/);
 
 const syncStart = evidence.indexOf("export const syncCommunityInteractionEvidenceInternal");
-const promotionStart = evidence.indexOf("export const promoteCommunityInteractionEvidenceInternal");
-assert.ok(syncStart >= 0 && promotionStart > syncStart, "sync and promotion blocks must exist");
-const syncBlock = evidence.slice(syncStart, promotionStart);
-assert.doesNotMatch(syncBlock, /promotionReason: row\.actorType/);
-assert.doesNotMatch(syncBlock, /"compiler_candidate"/);
+const redactionStart = evidence.indexOf("export const redactCommunityInteractionEvidenceChildrenInternal");
+assert.ok(syncStart >= 0 && redactionStart > syncStart, "sync and redaction blocks must exist");
+const syncBlock = evidence.slice(syncStart, redactionStart);
 assert.match(
   syncBlock,
-  /const traced = await upsertInteractionSourceTrace\([\s\S]*promotionReason: existingLink\?\.linkState === "active"[\s\S]*traced: true/,
+  /const traced = await upsertInteractionSourceTrace\([\s\S]*traced: true/,
   "every live readable interaction should enter the compiler evidence ledger without a promotion gate",
 );
 
@@ -95,7 +94,6 @@ assert.match(audit, /export const recordCommunityEvidenceRetrievalInternal/);
 assert.doesNotMatch(audit, /query: v\.optional/);
 assert.doesNotMatch(audit, /args\.query/);
 
-const redactionStart = evidence.indexOf("export const redactCommunityInteractionEvidenceChildrenInternal");
 const backfillStart = evidence.indexOf("export const listCommunityInteractionEvidenceBackfillBatchInternal");
 const redactionBlock = evidence.slice(redactionStart, backfillStart);
 assert.match(redactionBlock, /query\("communityInteractionReplies" as any\)/);
@@ -140,7 +138,7 @@ assert.match(mcp, /polynet_community_chat_search/);
 assert.match(mcp, /polynet_community_chat_read/);
 assert.match(httpMcp, /surface: "external_mcp"/);
 assert.match(lineageContract, /profile projection: `source_only`/);
-assert.match(lineageContract, /Searchability is not promotion/);
+assert.match(lineageContract, /Searchability is not acceptance/);
 assert.match(acceptance, /executeRetrievalHarnessTool/);
 assert.match(acceptance, /executeConciergeTool/);
 assert.match(acceptance, /handleMcpPost/);

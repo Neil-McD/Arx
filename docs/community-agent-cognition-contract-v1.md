@@ -2,7 +2,7 @@
 
 Status: active architecture; core runtime boundary implemented on Work 3 staging
 Scope: product architecture, memory system, community agent loop
-Last updated: 2026-07-12
+Last updated: 2026-07-15
 
 ## Purpose
 
@@ -1127,21 +1127,16 @@ The fifth backend slice hardens authority over source evidence:
 ```txt
 Product source tables
   -> trusted bridge-owned source traces
-  -> compiler window
-
-Member/manual evidence
-  -> manual or external source traces only
-  -> compiler window
+  -> bounded compiler admission packets
+  -> exact versioned digest work
 ```
 
 Rules:
 
-- Public `recordCommunitySourceTrace` calls may only write `manual` or `external` traces.
-- Public source trace writes cannot impersonate product-owned sources such as chat, AI Feed, resources, workflow runs, tool calls, artifacts, outcomes, feedback, or transcripts.
+- There is no public raw source-trace mutation. Evidence enters only through a source-specific product bridge.
 - Product-source traces are bridge-owned. `chat`, `ai_feed`, `resource`, workflow-derived, artifact-derived, outcome-derived, feedback-derived, and transcript-derived traces must come from trusted product/runtime bridge code.
 - There is no generic internal product-source trace mutation. Source-specific bridges must validate their own authority and call the trusted source-trace core helper directly.
 - The trusted source-trace bridge requires a stable product `sourceId` and defaults new product-owned evidence to admin visibility unless the product path explicitly widens it.
-- Public source trace writes cannot claim `agent`, `compiler`, or `system` actor identity.
 - AI Feed agent publication is governance-scoped in this slice so normal members cannot create fake `Community agent` evidence.
 - Compiler reruns reuse identical immutable digest versions and create a new
   version only when canonical work or material evidence content changes.
@@ -1965,8 +1960,9 @@ cycle and the rule that digest inclusion means compilation.
 ### Canonical path
 
 1. Every live, evidence-readable community interaction is normalized into a
-   `communitySourceTraces` row during ordinary evidence sync. Explicit
-   promotion remains a historical compatibility action, not an ingestion gate.
+   `communitySourceTraces` row during ordinary evidence sync. Historical
+   promotion-link rows remain readable database history only; no current
+   promotion action or runtime link read/write exists.
 2. Pending source traces are the only compiler queue truth. Parallel archive,
    feed, resource, event, and member-activity aggregate inputs are not compiler
    work unless they first become governed source traces.
@@ -2005,8 +2001,9 @@ governed administrative view.
 
 ### Bounded economics
 
-- at most eight source traces per digest
-- at most 2,000 characters of evidence summary per item
+- at most eight episode packets per digest
+- at most twelve exact source traces per packet and 96 per digest
+- at most 320 characters of evidence summary per item in the model prompt
 - one founder-funded inference pass per claimed digest
 - one structured batch write
 - existing two-cycle-per-day owner-funded guard remains in force
@@ -2043,3 +2040,25 @@ or handoff settlement mutations directly. A real provider trace is evidence
 for later deletion decisions: if the Steward never needs `list` or `read`, they
 should be removed from the compiler role; if it needs no lookup at all, the
 multi-step tool kernel should be replaced by one strict decision response.
+
+## Twenty-Eighth Implementation Slice: Bounded Episode Admission
+
+This slice deletes the manager-only aggregate compiler-input and compiler-window
+views. Pending `communitySourceTraces` are the sole queue and immutable digest
+items are the sole autonomous handoff.
+
+- Interaction roots and replies share `interaction_episode:<rootId>` as a
+  scheduling affinity only. Every trace retains its own source id, content
+  revision, work key, citation, and terminal disposition.
+- Admission selects at most eight packets and twelve exact traces from each.
+  Legacy traces without a group key remain compatible as one-trace packets.
+- Eight pending packets, one full twelve-trace packet, five trusted strong
+  packets, one outcome/feedback packet, or 72-hour age wakes the compiler.
+- Free-form evidence wording never creates critical priority. Member text such
+  as "broken" or "unsafe" is untrusted content, not a billing or urgency gate.
+- AI Feed, workflow, agent-run, and transcript packets are strong;
+  outcome/feedback packets are critical; ordinary interactions are standard.
+- Scheduling affinity is operational metadata. Changing it does not change the
+  semantic source revision or reopen already-settled evidence.
+- There is no public raw source-trace mutation. Source-specific trusted product
+  bridges own evidence admission and attribution.

@@ -735,7 +735,7 @@ export const writeCommunityAgentFilesystemInternal = internalMutation({
   handler: async (ctx, args) => {
     const context = await resolveFilesystemContext(ctx, args.context);
     const payload = args.payload ?? {};
-    if (payload.decisions.length === 0 || payload.decisions.length > 8) {
+    if (payload.decisions.length === 0 || payload.decisions.length > 96) {
       throw new Error("community_agent_filesystem_digest_decisions_required");
     }
     if (!context.compilerDigestId || !context.compilerDigestVersionKey || !context.heartbeatId) {

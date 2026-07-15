@@ -481,15 +481,6 @@ export const cleanupCommunityChatMemoryCompilerAcceptanceInternal = internalMuta
         .collect();
       for (const row of rows) await ctx.db.delete(row._id);
     }
-    for (const linkState of ["pending", "active", "removed"] as const) {
-      const links = await ctx.db
-        .query("communityInteractionSourceTraceLinks")
-        .withIndex("by_community_state_createdAt", (q) =>
-          q.eq("communityId", args.communityId).eq("linkState", linkState),
-        )
-        .collect();
-      for (const row of links) await ctx.db.delete(row._id);
-    }
     const citations = await ctx.db
       .query("communityEvidenceCitations")
       .filter((q) => q.eq(q.field("communityId"), args.communityId))

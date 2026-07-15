@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildCommunitySourceTraceRevision } from "../convex/communityCompilerEvidenceCore.ts";
+import { buildCommunitySourceTraceRevision } from "../shared/communitySourceTraceRevision.ts";
 
 const root = process.cwd();
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
@@ -19,7 +19,7 @@ assert.match(
   /communitySourceTraces: defineTable\([\s\S]*compilerDecision: v\.optional\([\s\S]*v\.literal\("retain"\)[\s\S]*v\.literal\("carried_forward"\)[\s\S]*v\.literal\("dismiss_low_signal"\)/,
   "source traces should persist the explicit terminal compiler decision",
 );
-assert.match(digest, /const MAX_DIGEST_ITEMS = 8/);
+assert.match(digest, /const MAX_DIGEST_ITEMS = 96/);
 assert.match(
   digest,
   /measureCommunityCompilerEvidenceForCommunity[\s\S]*selectedSourceTraceRows = compilerEvidence\.selectedRows\.slice\(0, MAX_DIGEST_ITEMS\)/,
@@ -106,6 +106,11 @@ assert.notEqual(
   stableRevision,
   await buildCommunitySourceTraceRevision({ ...traceMaterial, summary: "A materially edited decision" }),
   "material evidence edits must invalidate prior compiler work",
+);
+assert.equal(
+  stableRevision,
+  await buildCommunitySourceTraceRevision({ ...traceMaterial, compilerGroupKey: "interaction_episode:root_1" }),
+  "scheduling affinity must not change semantic evidence revision",
 );
 const associatedEvidenceRevision = await buildCommunitySourceTraceRevision({
   ...traceMaterial,

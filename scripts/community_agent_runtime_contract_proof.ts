@@ -31,7 +31,7 @@ assert.match(
 assert.doesNotMatch(runtime, /slimCompilerWindowForSteward/);
 assert.match(
   runtime,
-  /renderCompilerWindowForPrompt[\s\S]*items\.slice\(0, 8\)[\s\S]*work_key:[\s\S]*source_revision:[\s\S]*renderCompilerWindowForPrompt\(params\.compilerWindow\)/,
+  /renderCompilerWindowForPrompt[\s\S]*items\.slice\(0, 96\)[\s\S]*work_key:[\s\S]*source_revision:[\s\S]*compiler_group_key:[\s\S]*renderCompilerWindowForPrompt\(params\.compilerWindow\)/,
   "prompt compaction must preserve every bounded work identity instead of truncating serialized JSON",
 );
 assert.doesNotMatch(

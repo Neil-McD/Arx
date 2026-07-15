@@ -135,7 +135,7 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
             decisions: {
               type: "array",
               minItems: 1,
-              maxItems: 8,
+              maxItems: 96,
               items: {
                 type: "object",
                 additionalProperties: false,
@@ -234,7 +234,7 @@ export function normalizeCommunityAgentToolArguments(
       throw new Error("community_agent_tool_operation_invalid");
     }
     const payload = payloadObject(args.payload);
-    if (!Array.isArray(payload.decisions) || payload.decisions.length === 0 || payload.decisions.length > 8) {
+    if (!Array.isArray(payload.decisions) || payload.decisions.length === 0 || payload.decisions.length > 96) {
       throw new Error("community_agent_tool_decisions_invalid");
     }
     const decisions = payload.decisions.map((decision) =>

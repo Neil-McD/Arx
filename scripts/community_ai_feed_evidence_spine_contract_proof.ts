@@ -160,8 +160,7 @@ function proveImplementationBoundaries() {
   const schema = read("convex/schema.ts");
   const runtime = read("convex/runtimeAgentLoop.ts");
   const mcp = read("convex/httpMcp.ts");
-  const compilerInputs = read("convex/communityCompilerInputs.ts");
-  const compilerWindow = read("convex/communityCompilerWindow.ts");
+  const directory = read("convex/communityIntelligenceDirectory.ts");
   const compilerDigest = read("convex/communityCompilerDigest.ts");
   const contract = read("docs/community-lineage-ontology-contract-v0.md");
 
@@ -191,9 +190,8 @@ function proveImplementationBoundaries() {
     assertIncludes(mcp, `toolName === "${toolName}"`, `${toolName} MCP dispatch`);
   }
   assertIncludes(mcp, '"raw_evidence_search"', "workspace MCP evidence authority gate");
-  assertIncludes(compilerInputs, "duplicate_ai_feed_trace_projections_removed", "compiler input dedupe");
-  assertIncludes(compilerWindow, "duplicate_ai_feed_archive_projections_removed", "compiler window archive dedupe");
-  assertIncludes(compilerDigest, "selectedAiFeedSourceTraceRows", "digest promotion-trace dedupe");
+  assertIncludes(directory, "upsertCommunitySourceTrace", "canonical source trace ledger");
+  assertIncludes(compilerDigest, "selectedSourceTraceRows", "digest consumes canonical source traces once");
   assertIncludes(contract, "at most once", "lineage compiler invariant");
   console.log("PASS: canonical retrieval, metadata-only audit, attribution, and compiler dedupe are wired");
 }

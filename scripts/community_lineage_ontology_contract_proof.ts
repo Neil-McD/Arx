@@ -117,7 +117,8 @@ assert.match(acceptance, /"member_agent_dock"[\s\S]*"community_concierge"[\s\S]*
 assert.match(acceptance, /executeRetrievalHarnessTool/);
 assert.match(acceptance, /executeConciergeTool/);
 assert.match(acceptance, /handleMcpPost/);
-assert.match(acceptance, /promoteCommunityInteractionEvidenceInternal/);
+assert.doesNotMatch(acceptance, /promoteCommunityInteractionEvidenceInternal/);
+assert.match(acceptance, /compilerGroupKey/);
 assert.match(acceptance, /wrongTypeDenied/);
 assert.match(acceptance, /crossCommunityParentDenied/);
 assert.match(acceptance, /recentContextForeignParentDenied/);
@@ -128,7 +129,7 @@ assert.match(acceptance, /retrieval_audit_copied_raw_query/);
 assert.match(liveCertificate, /Run: `integration-20260714-b`/);
 assert.match(liveCertificate, /recentContextForeignParentDenied=true/);
 assert.match(liveCertificate, /code=community_lineage_acceptance_passed/);
-assert.match(liveCertificate, /archive\/searchability is automatic[\s\S]*promotion is explicit/);
+assert.match(liveCertificate, /archive\/searchability is automatic/);
 assert.match(liveCertificate, /none copied the[\s\S]*raw query text/);
 assert.match(liveCertificate, /at least five existing[\s\S]*sourceType=chat/);
 

@@ -1,9 +1,13 @@
 import { normalizeIdValue, toIsoString } from "./communityCore";
+export { buildCommunitySourceTraceRevision } from "../shared/communitySourceTraceRevision.ts";
 
-export const COMPILER_EVIDENCE_BATCH_THRESHOLD = 20;
+export const COMPILER_EVIDENCE_BATCH_THRESHOLD = 8;
 export const COMPILER_EVIDENCE_STRONG_THRESHOLD = 5;
 export const COMPILER_EVIDENCE_AGE_THRESHOLD_MS = 72 * 60 * 60 * 1000;
-export const COMPILER_EVIDENCE_RUN_LIMIT = 100;
+export const COMPILER_EVIDENCE_PACKET_LIMIT = 8;
+export const COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT = 12;
+export const COMPILER_EVIDENCE_RUN_LIMIT =
+  COMPILER_EVIDENCE_PACKET_LIMIT * COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT;
 export const COMPILER_EVIDENCE_SCAN_LIMIT = 500;
 export const COMPILER_EVIDENCE_VISIBILITY_SCOPES = ["admin", "community", "public"] as const;
 export const COMMUNITY_AGENT_SELF_AUTHORED_TRACE_AGENT_KEY = "community_agent";
@@ -19,6 +23,7 @@ export type SourceTraceCompilerState =
 type CompilerEligibleVisibility = typeof COMPILER_EVIDENCE_VISIBILITY_SCOPES[number];
 type TriggerReason =
   | "critical_evidence"
+  | "full_packet"
   | "strong_evidence_threshold"
   | "batch_threshold"
   | "oldest_pending_age"
@@ -39,6 +44,7 @@ export type SourceTraceRow = {
   actorType: string;
   actorUserId?: any;
   actorAgentKey?: string;
+  compilerGroupKey?: string;
   compilerState?: SourceTraceCompilerState;
   compilerPendingSince?: number;
   compilerLastHandledAt?: number;
@@ -47,51 +53,6 @@ export type SourceTraceRow = {
   createdAt: number;
   updatedAt: number;
 };
-
-export async function buildCommunitySourceTraceRevision(
-  row: Pick<
-    SourceTraceRow,
-    | "_id"
-    | "communityId"
-    | "sourceType"
-    | "sourceId"
-    | "title"
-    | "summary"
-    | "visibilityScope"
-    | "sourceVisibility"
-    | "workflowId"
-    | "artifactIds"
-    | "outcomeObservationIds"
-    | "actorType"
-    | "actorUserId"
-    | "actorAgentKey"
-  >,
-): Promise<string> {
-  const material = JSON.stringify({
-    version: 1,
-    traceId: normalizeIdValue(row._id),
-    communityId: normalizeIdValue(row.communityId),
-    sourceType: row.sourceType,
-    sourceId: row.sourceId ?? null,
-    title: row.title ?? null,
-    summary: row.summary,
-    visibilityScope: row.visibilityScope,
-    sourceVisibility: row.sourceVisibility,
-    workflowId: row.workflowId ?? null,
-    artifactIds: Array.from(new Set(row.artifactIds ?? [])).sort(),
-    outcomeObservationIds: Array.from(
-      new Set((row.outcomeObservationIds ?? []).map(normalizeIdValue)),
-    ).sort(),
-    actorType: row.actorType,
-    actorUserId: row.actorUserId ? normalizeIdValue(row.actorUserId) : null,
-    actorAgentKey: row.actorAgentKey ?? null,
-  });
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(material));
-  const hex = Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-  return `trace_revision:v1:${hex}`;
-}
 
 export function isCommunityCompilerEligibleVisibility(visibilityScope: string): visibilityScope is CompilerEligibleVisibility {
   return COMPILER_EVIDENCE_VISIBILITY_SCOPES.includes(visibilityScope as CompilerEligibleVisibility);
@@ -141,15 +102,10 @@ export function compilerPendingSince(row: SourceTraceRow): number {
   return row.createdAt;
 }
 
-function containsCriticalLanguage(row: SourceTraceRow): boolean {
-  const text = `${row.title ?? ""} ${row.summary ?? ""}`.toLowerCase();
-  return /\b(failed|failure|blocker|blocked|wrong|stale|contradict|contradiction|regression|broken|invalid|unsafe)\b/.test(text);
-}
-
 function classifyEvidencePriority(row: SourceTraceRow): EvidencePriority {
   if (row.sourceType === "outcome" || row.sourceType === "feedback") return "critical";
-  if (containsCriticalLanguage(row)) return "critical";
   if (
+    row.sourceType === "ai_feed" ||
     row.sourceType === "workflow_run" ||
     row.sourceType === "agent_run" ||
     row.sourceType === "transcript"
@@ -169,10 +125,12 @@ function decideTrigger(args: {
   criticalCount: number;
   strongCount: number;
   totalCount: number;
+  largestPacketSize: number;
   oldestPendingAt: number | null;
   nowMs: number;
 }): TriggerReason {
   if (args.criticalCount >= 1) return "critical_evidence";
+  if (args.largestPacketSize >= COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT) return "full_packet";
   if (args.strongCount >= COMPILER_EVIDENCE_STRONG_THRESHOLD) return "strong_evidence_threshold";
   if (args.totalCount >= COMPILER_EVIDENCE_BATCH_THRESHOLD) return "batch_threshold";
   if (args.oldestPendingAt !== null && args.nowMs - args.oldestPendingAt >= COMPILER_EVIDENCE_AGE_THRESHOLD_MS) {
@@ -186,6 +144,7 @@ function mapEvidenceUnit(row: SourceTraceRow, priority: EvidencePriority) {
     trace_id: normalizeIdValue(row._id),
     source_type: row.sourceType,
     source_id: row.sourceId ?? null,
+    compiler_group_key: compilerGroupKey(row),
     priority,
     title: row.title ?? null,
     workflow_id: row.workflowId ?? null,
@@ -198,6 +157,50 @@ function mapEvidenceUnit(row: SourceTraceRow, priority: EvidencePriority) {
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
   };
+}
+
+function compilerGroupKey(row: SourceTraceRow): string {
+  const explicit = String(row.compilerGroupKey ?? "").trim();
+  return explicit || `source_trace:${normalizeIdValue(row._id)}`;
+}
+
+type PendingEvidence = { row: SourceTraceRow; priority: EvidencePriority };
+type EvidencePacket = {
+  key: string;
+  priority: EvidencePriority;
+  oldestPendingAt: number;
+  items: PendingEvidence[];
+};
+
+function groupPendingEvidence(pending: PendingEvidence[]): EvidencePacket[] {
+  const byKey = new Map<string, PendingEvidence[]>();
+  for (const item of pending) {
+    const key = compilerGroupKey(item.row);
+    const bucket = byKey.get(key) ?? [];
+    bucket.push(item);
+    byKey.set(key, bucket);
+  }
+  return Array.from(byKey.entries()).map(([key, items]) => {
+    const sortedItems = items.slice().sort((a, b) =>
+      priorityRank(a.priority) - priorityRank(b.priority) ||
+      compilerPendingSince(a.row) - compilerPendingSince(b.row) ||
+      a.row.createdAt - b.row.createdAt ||
+      normalizeIdValue(a.row._id).localeCompare(normalizeIdValue(b.row._id))
+    );
+    return {
+      key,
+      priority: sortedItems.reduce<EvidencePriority>(
+        (best, item) => priorityRank(item.priority) < priorityRank(best) ? item.priority : best,
+        "standard",
+      ),
+      oldestPendingAt: Math.min(...sortedItems.map((item) => compilerPendingSince(item.row))),
+      items: sortedItems,
+    };
+  }).sort((a, b) =>
+    priorityRank(a.priority) - priorityRank(b.priority) ||
+    a.oldestPendingAt - b.oldestPendingAt ||
+    a.key.localeCompare(b.key)
+  );
 }
 
 function uniqueTraceRows(rows: SourceTraceRow[]): SourceTraceRow[] {
@@ -249,40 +252,47 @@ export async function measureCommunityCompilerEvidenceForCommunity(args: {
   const legacyPendingRows = legacyRowsFetch.filter((row) =>
     row.compilerState === undefined && isCommunityCompilerEvidenceTrace(row)
   );
-  const hasMorePending =
+  const fetchHasMorePending =
     pendingRowsByVisibility.some((rows) => rows.length > COMPILER_EVIDENCE_SCAN_LIMIT) ||
     legacyRowsByVisibility.some((rows) => rows.length > COMPILER_EVIDENCE_SCAN_LIMIT);
-  const traceRows = uniqueTraceRows([
+  const eligibleTraceRows = uniqueTraceRows([
     ...pendingRowsFetch,
     ...legacyPendingRows,
   ])
     .filter((row) => compilerState(row) === "pending")
     .filter((row) => isCommunityCompilerEvidenceTrace(row))
-    .sort((a, b) => compilerPendingSince(a) - compilerPendingSince(b) || a.createdAt - b.createdAt || a.updatedAt - b.updatedAt)
-    .slice(0, COMPILER_EVIDENCE_SCAN_LIMIT);
-  const pending = traceRows.map((row) => ({ row, priority: classifyEvidencePriority(row) }));
+    .sort((a, b) =>
+      compilerPendingSince(a) - compilerPendingSince(b) ||
+      a.createdAt - b.createdAt ||
+      a.updatedAt - b.updatedAt ||
+      normalizeIdValue(a._id).localeCompare(normalizeIdValue(b._id))
+    );
+  const hasMorePending = fetchHasMorePending || eligibleTraceRows.length > COMPILER_EVIDENCE_SCAN_LIMIT;
+  const traceRows = eligibleTraceRows.slice(0, COMPILER_EVIDENCE_SCAN_LIMIT);
+  const pending: PendingEvidence[] = traceRows.map((row) => ({ row, priority: classifyEvidencePriority(row) }));
+  const packets = groupPendingEvidence(pending);
 
-  const standardCount = pending.filter((item) => item.priority === "standard").length;
-  const strongCount = pending.filter((item) => item.priority === "strong").length;
-  const criticalCount = pending.filter((item) => item.priority === "critical").length;
-  const oldestPendingAt = pending.length > 0
-    ? Math.min(...pending.map((item) => Number(compilerPendingSince(item.row))).filter(Number.isFinite))
+  const standardCount = packets.filter((packet) => packet.priority === "standard").length;
+  const strongCount = packets.filter((packet) => packet.priority === "strong").length;
+  const criticalCount = packets.filter((packet) => packet.priority === "critical").length;
+  const oldestPendingAt = packets.length > 0
+    ? Math.min(...packets.map((packet) => packet.oldestPendingAt).filter(Number.isFinite))
     : null;
   const reason = decideTrigger({
     criticalCount,
     strongCount,
-    totalCount: pending.length,
+    totalCount: packets.length,
+    largestPacketSize: packets.reduce((largest, packet) => Math.max(largest, packet.items.length), 0),
     oldestPendingAt,
     nowMs: args.nowMs,
   });
-  const selected = pending
-    .slice()
-    .sort((a, b) =>
-      priorityRank(a.priority) - priorityRank(b.priority) ||
-      compilerPendingSince(a.row) - compilerPendingSince(b.row) ||
-      a.row.createdAt - b.row.createdAt
-    )
-    .slice(0, COMPILER_EVIDENCE_RUN_LIMIT);
+  const selectedPackets = packets.slice(0, COMPILER_EVIDENCE_PACKET_LIMIT);
+  const selected = selectedPackets.flatMap((packet) =>
+    packet.items.slice(0, COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT)
+  );
+  const selectionHasMore =
+    packets.length > selectedPackets.length ||
+    selectedPackets.some((packet) => packet.items.length > COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT);
 
   return {
     measurement: {
@@ -291,13 +301,16 @@ export async function measureCommunityCompilerEvidenceForCommunity(args: {
       measured_at: toIsoString(args.nowMs),
       should_run: reason !== "no_trigger",
       reason,
-      pending_total: pending.length,
+      pending_total: packets.length,
+      pending_trace_total: pending.length,
       pending_standard: standardCount,
       pending_strong: strongCount,
       pending_critical: criticalCount,
       oldest_pending_at: oldestPendingAt === null ? null : toIsoString(oldestPendingAt),
-      has_more_pending: hasMorePending,
+      has_more_pending: hasMorePending || selectionHasMore,
       counts_are_lower_bound: hasMorePending,
+      selected_packet_count: selectedPackets.length,
+      selected_packet_keys: selectedPackets.map((packet) => packet.key),
       selected_trace_ids: selected.map((item) => normalizeIdValue(item.row._id)),
       selected_evidence_units: selected.map((item) => mapEvidenceUnit(item.row, item.priority)),
       thresholds: {
@@ -306,6 +319,8 @@ export async function measureCommunityCompilerEvidenceForCommunity(args: {
         critical: 1,
         oldest_pending_age_hours: COMPILER_EVIDENCE_AGE_THRESHOLD_MS / (60 * 60 * 1000),
         run_limit: COMPILER_EVIDENCE_RUN_LIMIT,
+        packet_limit: COMPILER_EVIDENCE_PACKET_LIMIT,
+        traces_per_packet_limit: COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT,
         scan_limit: COMPILER_EVIDENCE_SCAN_LIMIT,
       },
     },
