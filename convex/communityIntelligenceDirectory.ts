@@ -19,6 +19,7 @@ import {
   requireCommunityEvidenceCitationVisibilityCore,
   requireCommunityEvidenceCitationsActiveCore,
 } from "./communityEvidenceCitations";
+import { isCommunityMemoryWorkKey } from "./communityMemoryWorkKey";
 
 type ActorType = "member" | "admin" | "agent" | "compiler" | "system";
 type VisibilityScope = "private" | "admin" | "community" | "public";
@@ -193,6 +194,7 @@ type OutcomeObservationRow = {
 type IntelligenceChangeRequestRow = {
   _id: any;
   communityId: any;
+  workKey?: string;
   operation: MutationOperation;
   status: ChangeRequestStatus;
   sourceTraceIds: any[];
@@ -254,8 +256,6 @@ const POLYNET_OVERVIEW_MAX_NODE_LIMIT = 120;
 const POLYNET_OVERVIEW_EDGE_LIMIT = 160;
 const POLYNET_OVERVIEW_EDGES_PER_NODE_LIMIT = 8;
 const POLYNET_OVERVIEW_RUN_LIMIT = 6;
-const POLYNET_OVERVIEW_FORMING_NODE_LIMIT = 12;
-const POLYNET_OVERVIEW_FORMING_STATUSES: ChangeRequestStatus[] = ["pending_decision", "accepted"];
 const NODE_TYPES = new Set<NodeType>([
   "playbook",
   "insight",
@@ -760,10 +760,6 @@ function communityGraphRootId(communityId: any): string {
   return `community:${normalizeIdValue(communityId)}`;
 }
 
-function formingMemoryGraphNodeId(changeRequestId: any): string {
-  return `forming_memory:${normalizeIdValue(changeRequestId)}`;
-}
-
 function communityMemoryLineageId(changeRequestId: any): string {
   return `change_request:${normalizeIdValue(changeRequestId)}`;
 }
@@ -814,19 +810,6 @@ function mapPolynetOverviewNode(row: IntelligenceNodeRow) {
   };
 }
 
-function mapPolynetOverviewFormingNode(row: IntelligenceChangeRequestRow) {
-  return {
-    id: formingMemoryGraphNodeId(row._id),
-    lineage_id: communityMemoryLineageId(row._id),
-    kind: "forming_memory",
-    type: "forming_memory",
-    label: "Forming memory",
-    status: "forming",
-    confidence: clampScore(row.confidence),
-    created_at: toIsoString(row.createdAt),
-  };
-}
-
 function mapPolynetOverviewEdge(row: IntelligenceEdgeRow) {
   return {
     id: `directory_edge:${normalizeIdValue(row._id)}`,
@@ -846,13 +829,6 @@ function communityAgentActivityState(row: Record<string, any> | null): string {
   if (row.status === "error") return "error";
   if (row.status === "skipped") return "resting";
   if (normalizeIdList(row.appliedChangeRequestIds).length > 0) return "updated_directory";
-  if (
-    normalizeIdList(row.acceptedChangeRequestIds).length > 0 ||
-    normalizeIdList(row.rejectedChangeRequestIds).length > 0
-  ) {
-    return "reviewed_candidates";
-  }
-  if (normalizeIdList(row.candidateProposalIds).length > 0) return "proposed_candidates";
   return "resting";
 }
 
@@ -866,9 +842,6 @@ function mapPolynetOverviewRun(row: Record<string, any>) {
     wake_reason: row.wakeReason ?? null,
     stop_reason: row.stopReason ?? null,
     tool_step_count: typeof row.toolStepCount === "number" ? row.toolStepCount : 0,
-    candidate_proposal_count: normalizeIdList(row.candidateProposalIds).length,
-    accepted_change_request_count: normalizeIdList(row.acceptedChangeRequestIds).length,
-    rejected_change_request_count: normalizeIdList(row.rejectedChangeRequestIds).length,
     applied_change_request_count: normalizeIdList(row.appliedChangeRequestIds).length,
     started_at: typeof row.startedAt === "number" ? toIsoString(row.startedAt) : null,
     finished_at: typeof row.finishedAt === "number" ? toIsoString(row.finishedAt) : null,
@@ -909,39 +882,6 @@ async function readPolynetOverviewNodes(args: {
       .slice(0, args.limit),
     hasMoreNodes,
   };
-}
-
-async function readPolynetOverviewFormingNodes(args: {
-  ctx: any;
-  communityId: any;
-  limit: number;
-}): Promise<{ formingNodes: IntelligenceChangeRequestRow[]; hasMoreFormingNodes: boolean }> {
-  const rows: IntelligenceChangeRequestRow[] = [];
-  let hasMoreFormingNodes = false;
-
-  for (const status of POLYNET_OVERVIEW_FORMING_STATUSES) {
-    const bucket = (await args.ctx.db
-      .query("communityIntelligenceChangeRequests" as any)
-      .withIndex("by_community_operation_status_agent_createdAt", (q: any) =>
-        q
-          .eq("communityId", args.communityId)
-          .eq("operation", "create_node")
-          .eq("status", status)
-          .eq("createdByAgentKey", "community_agent"),
-      )
-      .order("desc")
-      .take(args.limit + 1)) as IntelligenceChangeRequestRow[];
-    if (bucket.length > args.limit) hasMoreFormingNodes = true;
-    rows.push(...bucket.slice(0, args.limit));
-  }
-
-  const formingNodes = rows
-    .filter((row) => row.createdByActorType === "agent" && row.createdByAgentKey === "community_agent")
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, args.limit);
-  if (rows.length > args.limit) hasMoreFormingNodes = true;
-
-  return { formingNodes, hasMoreFormingNodes };
 }
 
 async function readPolynetOverviewEdges(args: {
@@ -1045,6 +985,7 @@ function mapChangeRequestRow(row: IntelligenceChangeRequestRow) {
   return {
     id: normalizeIdValue(row._id),
     community_id: normalizeIdValue(row.communityId),
+    work_key: row.workKey ?? null,
     operation: row.operation,
     status: row.status,
     source_trace_ids: (row.sourceTraceIds ?? []).map(normalizeIdValue),
@@ -1755,6 +1696,7 @@ export async function recordTrustedCommunitySourceTraceCore(args: {
 async function insertChangeRequest(args: {
   ctx: any;
   communityId: any;
+  workKey?: string;
   operation: MutationOperation;
   sourceTraceIds?: any[];
   outcomeObservationIds?: any[];
@@ -1782,6 +1724,7 @@ async function insertChangeRequest(args: {
   const targetEdgeSnapshots = await getEdgeSnapshots(args.ctx, args.communityId, targetEdgeIds);
   return await args.ctx.db.insert("communityIntelligenceChangeRequests" as any, {
     communityId: args.communityId,
+    ...(args.workKey ? { workKey: args.workKey } : {}),
     operation: args.operation,
     status: "pending_decision",
     sourceTraceIds,
@@ -1805,9 +1748,10 @@ async function insertChangeRequest(args: {
   });
 }
 
-export async function createTrustedCommunityIntelligenceChangeRequest(args: {
+export async function createOrReuseTrustedCommunityIntelligenceChangeRequest(args: {
   ctx: any;
   communityId: any;
+  workKey?: string;
   operation: MutationOperation;
   sourceTraceIds?: any[];
   outcomeObservationIds?: any[];
@@ -1820,7 +1764,35 @@ export async function createTrustedCommunityIntelligenceChangeRequest(args: {
   actorUserId?: any;
   actorAgentKey?: string;
   nowMs: number;
-}): Promise<ReturnType<typeof mapChangeRequestRow>> {
+}): Promise<{
+  changeRequest: ReturnType<typeof mapChangeRequestRow>;
+  reusedExisting: boolean;
+}> {
+  const workKey = String(args.workKey ?? "").trim() || undefined;
+  if (workKey && !isCommunityMemoryWorkKey(workKey)) {
+    throw new Error("community_intelligence_work_key_invalid");
+  }
+  if (workKey) {
+    const existingRows = (await args.ctx.db
+      .query("communityIntelligenceChangeRequests" as any)
+      .withIndex("by_community_workKey", (q: any) =>
+        q.eq("communityId", args.communityId).eq("workKey", workKey),
+      )
+      .take(2)) as IntelligenceChangeRequestRow[];
+    if (existingRows.length > 1) {
+      throw new Error("community_intelligence_work_key_duplicate");
+    }
+    const existing = existingRows[0];
+    if (existing) {
+      if (existing.operation !== args.operation) {
+        throw new Error("community_intelligence_work_key_conflict");
+      }
+      return {
+        changeRequest: mapChangeRequestRow(existing),
+        reusedExisting: true,
+      };
+    }
+  }
   const sourceTraceIds = args.sourceTraceIds ?? [];
   const outcomeObservationIds = args.outcomeObservationIds ?? [];
   const targetNodeIds = args.targetNodeIds ?? [];
@@ -1847,6 +1819,7 @@ export async function createTrustedCommunityIntelligenceChangeRequest(args: {
   const changeRequestId = await insertChangeRequest({
     ctx: args.ctx,
     communityId: args.communityId,
+    workKey,
     operation: args.operation,
     sourceTraceIds,
     outcomeObservationIds,
@@ -1864,7 +1837,10 @@ export async function createTrustedCommunityIntelligenceChangeRequest(args: {
     nowMs: args.nowMs,
   });
   const changeRequest = await getChangeRequestOrThrow(args.ctx, changeRequestId);
-  return mapChangeRequestRow(changeRequest);
+  return {
+    changeRequest: mapChangeRequestRow(changeRequest),
+    reusedExisting: false,
+  };
 }
 
 async function resolveWriteActor(args: {
@@ -3347,15 +3323,6 @@ export const getCommunityPolynetOverview = query({
       isManager,
       limit: nodeLimit,
     });
-    const formingNodeLimit = Math.min(
-      POLYNET_OVERVIEW_FORMING_NODE_LIMIT,
-      Math.max(3, Math.ceil(nodeLimit / 4)),
-    );
-    const { formingNodes, hasMoreFormingNodes } = await readPolynetOverviewFormingNodes({
-      ctx,
-      communityId: args.communityId,
-      limit: formingNodeLimit,
-    });
     const { edges, hasMoreEdges } = await readPolynetOverviewEdges({
       ctx,
       communityId: args.communityId,
@@ -3373,13 +3340,10 @@ export const getCommunityPolynetOverview = query({
     const recentRuns = recentRunRows.map(mapPolynetOverviewRun);
     const recentActionSummary = recentRunRows.reduce(
       (acc, row) => {
-        acc.proposed += normalizeIdList(row.candidateProposalIds).length;
-        acc.accepted += normalizeIdList(row.acceptedChangeRequestIds).length;
-        acc.rejected += normalizeIdList(row.rejectedChangeRequestIds).length;
         acc.applied += normalizeIdList(row.appliedChangeRequestIds).length;
         return acc;
       },
-      { proposed: 0, accepted: 0, rejected: 0, applied: 0 },
+      { applied: 0 },
     );
 
     return {
@@ -3413,15 +3377,12 @@ export const getCommunityPolynetOverview = query({
             type: "community",
           },
           ...nodes.map(mapPolynetOverviewNode),
-          ...formingNodes.map(mapPolynetOverviewFormingNode),
         ],
         edges: edges.map(mapPolynetOverviewEdge),
         node_limit: nodeLimit,
         edge_limit: POLYNET_OVERVIEW_EDGE_LIMIT,
         has_more_nodes: hasMoreNodes,
         has_more_edges: hasMoreEdges,
-        forming_node_limit: formingNodeLimit,
-        has_more_forming_nodes: hasMoreFormingNodes,
       },
       memory: summarizePolynetOverviewMemory(nodes, hasMoreNodes, hasMoreEdges),
     };
@@ -3481,7 +3442,7 @@ export const resolvePublicCommunityMemoryOverviewBySlug = query({
           last_run_at: null,
           last_run_status: null,
           last_wake_reason: null,
-          recent_actions_summary: { proposed: 0, accepted: 0, rejected: 0, applied: 0 },
+          recent_actions_summary: { applied: 0 },
           recent_runs: [],
         },
         graph: {

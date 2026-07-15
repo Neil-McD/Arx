@@ -5,6 +5,7 @@ import { join } from "node:path";
 const root = process.cwd();
 const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
 const communityExports = readFileSync(join(root, "convex/community.ts"), "utf8");
+const gateway = readFileSync(join(root, "shared/cloudCommunityPolynetGateway.ts"), "utf8");
 
 function exportedFunctionBlock(source: string, exportName: string): string {
   const startToken = `export const ${exportName} =`;
@@ -43,10 +44,8 @@ function asyncFunctionBlock(source: string, functionName: string): string {
 
 const overview = exportedFunctionBlock(directory, "getCommunityPolynetOverview");
 const readNodes = asyncFunctionBlock(directory, "readPolynetOverviewNodes");
-const readFormingNodes = asyncFunctionBlock(directory, "readPolynetOverviewFormingNodes");
 const readEdges = asyncFunctionBlock(directory, "readPolynetOverviewEdges");
 const mapNode = functionBlock(directory, "mapPolynetOverviewNode");
-const mapFormingNode = functionBlock(directory, "mapPolynetOverviewFormingNode");
 const mapEdge = functionBlock(directory, "mapPolynetOverviewEdge");
 const overviewStatusesStart = directory.indexOf("const POLYNET_OVERVIEW_STATUSES");
 const overviewStatusesEnd = directory.indexOf("];", overviewStatusesStart);
@@ -68,20 +67,10 @@ assert.match(readNodes, /canViewerReadNode/, "overview nodes should reuse direct
 assert.match(readNodes, /POLYNET_OVERVIEW_STATUSES/, "overview should use a deliberately narrow accepted-memory status set");
 assert.doesNotMatch(overviewStatuses, /"draft"|"candidate"|"archived"|"deprecated"/, "overview should not expose draft, candidate, archived, or deprecated nodes");
 
-assert.match(readFormingNodes, /communityIntelligenceChangeRequests/, "forming memory should project from the existing change-request airlock");
-assert.match(readFormingNodes, /by_community_operation_status_agent_createdAt/, "forming memory should use the exact community/operation/status/agent index");
-assert.match(readFormingNodes, /\.eq\("operation", "create_node"\)/, "forming memory should include create-node requests only");
-assert.match(readFormingNodes, /\.eq\("createdByAgentKey", "community_agent"\)/, "forming memory should include only the canonical community agent");
-assert.match(readFormingNodes, /POLYNET_OVERVIEW_FORMING_STATUSES/, "forming memory should use the narrow active status set");
-assert.match(readFormingNodes, /\.take\(args\.limit \+ 1\)/, "forming-memory reads should be bounded with one overflow row");
-assert.doesNotMatch(readFormingNodes, /\.collect\(\)/, "forming-memory reads should never collect the airlock");
-assert.match(mapFormingNode, /kind: "forming_memory"/, "forming requests should project as a distinct graph-node kind");
-assert.match(mapFormingNode, /lineage_id: communityMemoryLineageId\(row\._id\)/, "forming memory should expose stable change-request lineage");
-assert.match(mapFormingNode, /label: "Forming memory"/, "forming requests should remain anonymous");
 assert.doesNotMatch(
-  mapFormingNode,
-  /requestedPayload|sourceTraceIds|outcomeObservationIds|createdByUserId|decisionReason|privacyRisk/,
-  "forming nodes must not expose payload, evidence, identity, decisions, or privacy metadata",
+  overview,
+  /formingNodes|forming_node|forming_memory|communityIntelligenceChangeRequests/,
+  "member-facing Polynet should not project the deleted approval plane as forming memory",
 );
 
 assert.match(readEdges, /by_fromNode/, "overview edges should be read from selected directory nodes");
@@ -99,7 +88,7 @@ assert.match(mapEdge, /from: directoryGraphNodeId\(row\.fromNodeId\)/, "overview
 assert.match(mapEdge, /to: directoryGraphNodeId\(row\.toNodeId\)/, "overview edges should map to directory nodes");
 
 assert.match(overview, /communityGraphRootId\(args\.communityId\)/, "overview should include one synthetic community root node for UI layout");
-assert.match(overview, /nodes: \[[\s\S]*kind: "community"[\s\S]*\.\.\.nodes\.map\(mapPolynetOverviewNode\)[\s\S]*\.\.\.formingNodes\.map\(mapPolynetOverviewFormingNode\)/, "overview graph should contain the community root, real directory nodes, and anonymous forming nodes");
+assert.match(overview, /nodes: \[[\s\S]*kind: "community"[\s\S]*\.\.\.nodes\.map\(mapPolynetOverviewNode\)/, "overview graph should contain the community root and retained directory nodes");
 assert.match(overview, /edges: edges\.map\(mapPolynetOverviewEdge\)/, "overview graph should expose mapped directory edges only");
 assert.doesNotMatch(overview, /communityCompilerDigests|communitySourceTraces|readCommunityCompilerWindow/, "overview should not expose compiler or raw-trace internals");
 assert.doesNotMatch(overview, /wakeEvidence|errorMessage|body_md|source_trace_ids/, "overview should stay compact and member-safe");
@@ -110,6 +99,11 @@ assert.match(overview, /by_community_createdAt/, "overview should read recent ag
 assert.match(overview, /\.take\(POLYNET_OVERVIEW_RUN_LIMIT \* 2\)/, "overview agent run read should be bounded");
 assert.match(overview, /row\.agentKey === "community_agent"/, "overview should show only the canonical community agent");
 assert.match(overview, /recent_actions_summary/, "overview should summarize recent community-agent actions for the future tab");
+assert.doesNotMatch(
+  `${overview}\n${gateway}`,
+  /candidate_proposal_count|accepted_change_request_count|rejected_change_request_count|proposed:\s*number|accepted:\s*number|rejected:\s*number/,
+  "Polynet overview should expose applied writes without restoring approval-plane counters",
+);
 assert.match(overview, /summarizePolynetOverviewMemory/, "overview should expose memory health counts from visible directory nodes");
 
 console.log("Community Polynet overview contract proof passed");

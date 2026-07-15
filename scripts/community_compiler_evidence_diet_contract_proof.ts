@@ -127,8 +127,8 @@ assert.match(
 
 assert.match(
   heartbeat,
-  /drainSelfAuthoredPendingSourceTracesInternal[\s\S]*measureCommunityCompilerEvidenceInternal/,
-  "heartbeat trigger measurement must drain self-authored pending traces before deciding whether to wake",
+  /drainSelfAuthoredPendingSourceTracesInternal[\s\S]*assessCommunityAgentCycleInternal[\s\S]*measureCommunityCompilerEvidenceForCommunity/,
+  "heartbeat must drain self-authored pending traces before the canonical planner measures wake work",
 );
 
 assertFiltersCompilerEvidenceTraces(windowSource, "community compiler window");

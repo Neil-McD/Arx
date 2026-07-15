@@ -114,10 +114,10 @@ assert.match(
   "Polynet back action should route to the same community chat without relying on browser history",
 );
 assert.match(section, /overview\.graph\.nodes\.map/, "Polynet graph should render backend-projected nodes");
-assert.match(section, /key=\{lineageId\}/, "Polynet nodes should preserve React identity across forming-to-retained promotion");
+assert.match(section, /key=\{lineageId\}/, "Polynet nodes should preserve React identity across retained-memory updates");
 assert.match(section, /data-lineage-id=\{lineageId\}/, "Polynet nodes should expose lifecycle lineage for visual acceptance tests");
 assert.match(section, /style=\{\{ transform: `translate\(\$\{pos\.x\}px, \$\{pos\.y\}px\)` \}\}/, "Polynet node movement should be CSS-transitionable");
-assert.match(preview, /key=\{lineageId\}/, "The compact memory graph should preserve forming-to-retained node identity");
+assert.match(preview, /key=\{lineageId\}/, "The compact memory graph should preserve retained-memory node identity");
 assert.match(preview, /data-lineage-id=\{lineageId\}/, "The compact memory graph should expose lifecycle lineage for acceptance tests");
 assert.match(section, /overview\.graph\.edges\.map/, "Polynet graph should render backend-projected edges");
 assert.match(
@@ -130,10 +130,12 @@ assert.match(
   /cp-node-circle|cp-root-circle/,
   "Polynet graph nodes should render as circle dot primitives",
 );
-assert.match(section, /node\.kind === "forming_memory"/, "Polynet graph should distinguish forming memory from retained memory");
-assert.match(section, /cp-forming-circle/, "Polynet graph should render forming memory as a dedicated circle treatment");
+assert.doesNotMatch(
+  `${section}\n${preview}\n${gateway}`,
+  /forming_memory|forming_node|cp-forming-circle/,
+  "Polynet UI contracts should not retain the deleted approval-plane projection",
+);
 assert.match(section, /agentActivityClass\(overview\?\.agent\.activity_state\)/, "Polynet root should reflect the projected community-agent state");
-assert.match(section, /The community is forming its first memory\./, "empty graph should explain visible formation truthfully");
 assert.match(section, /The community agent is examining recent activity\./, "empty graph should expose active inspection without claiming memory");
 assert.match(section, /No retained memories yet\./, "resting empty graph should state retained-memory truth plainly");
 assert.doesNotMatch(
@@ -197,8 +199,8 @@ assert.match(
   /\.cp-root-circle \{[\s\S]*fill: var\(--accent-gold\)/,
   "Polynet root node should be a compact dot in the theme accent",
 );
-assert.match(css, /\.cp-forming-circle \{[\s\S]*fill:[\s\S]*transparent[\s\S]*stroke:/, "forming memory should be a hollow graph node");
-assert.match(css, /\.cp-node \{[\s\S]*transition:[^;]*transform 380ms/, "memory promotion should animate one node into its retained position");
+assert.doesNotMatch(css, /\.cp-forming-circle/, "deleted forming-memory treatment should not remain in CSS");
+assert.match(css, /\.cp-node \{[\s\S]*transition:[^;]*transform 380ms/, "retained-memory layout changes should animate smoothly");
 assert.match(css, /\.cp-root-circle\.activity-running/, "community root should pulse only for active agent states");
 assert.match(css, /@media \(prefers-reduced-motion: reduce\)/, "community-agent graph motion should respect reduced-motion preferences");
 assert.doesNotMatch(

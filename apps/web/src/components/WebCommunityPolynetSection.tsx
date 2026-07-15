@@ -54,7 +54,6 @@ function statusClass(raw: string | null | undefined): string {
 function agentActivityClass(raw: string | null | undefined): string {
   const activity = String(raw ?? "").trim().toLowerCase();
   if (activity === "running") return "running";
-  if (activity === "proposed_candidates" || activity === "reviewed_candidates") return "considering";
   if (activity === "updated_directory") return "updated-directory";
   if (activity === "error") return "error";
   return "resting";
@@ -150,7 +149,6 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
   const showAllLabels = transform.scale > SHOW_ALL_LABELS_SCALE;
   const selectedNode = overview?.graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const directoryNodeCount = overview?.graph.nodes.filter((node) => node.kind === "directory_node").length ?? 0;
-  const formingNodeCount = overview?.graph.nodes.filter((node) => node.kind === "forming_memory").length ?? 0;
   const agentActivity = agentActivityClass(overview?.agent.activity_state);
   const focusNeighbors = hoveredNodeId ? adjacency.get(hoveredNodeId) ?? null : null;
   // Only dim when the hovered node actually has neighbors to focus. Hovering the
@@ -281,19 +279,18 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                     const layoutPos = layout.get(node.id) ?? { x: 0, y: 0 };
                     const pos = worldPositionFor(node.id, layoutPos);
                     const isRoot = node.kind === "community";
-                    const isForming = node.kind === "forming_memory";
                     const isSelected = selectedNodeId === node.id;
                     const isHovered = hoveredNodeId === node.id;
                     const isNeighbor = focusNeighbors ? focusNeighbors.has(node.id) : false;
                     const dimmed = hasFocus ? !(isHovered || isNeighbor) : false;
                     const showLabel = isRoot || isSelected || isHovered || isNeighbor || showAllLabels;
-                    const radius = isRoot ? 26 : isForming ? 8 : nodeRadius(node.confidence);
+                    const radius = isRoot ? 26 : nodeRadius(node.confidence);
                     const lineageId = node.lineage_id || node.id;
                     return (
                       <g
                         key={lineageId}
                         data-lineage-id={lineageId}
-                        className={`cp-node ${isRoot ? `root activity-${agentActivity}` : isForming ? "forming" : statusClass(node.status)}${isSelected ? " selected" : ""}${dimmed ? " dimmed" : ""}${draggingNodeId === node.id ? " dragging" : ""}`}
+                        className={`cp-node ${isRoot ? `root activity-${agentActivity}` : statusClass(node.status)}${isSelected ? " selected" : ""}${dimmed ? " dimmed" : ""}${draggingNodeId === node.id ? " dragging" : ""}`}
                         style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
                         role="button"
                         tabIndex={0}
@@ -312,9 +309,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                         <circle
                           className={isRoot
                             ? `cp-root-circle activity-${agentActivity}`
-                            : isForming
-                              ? "cp-forming-circle"
-                              : `cp-node-circle type-${typeClass(node.type)} status-${statusClass(node.status)}`}
+                            : `cp-node-circle type-${typeClass(node.type)} status-${statusClass(node.status)}`}
                           r={radius}
                           filter="url(#cp-node-glow)"
                         />
@@ -337,11 +332,9 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
               </svg>
               {directoryNodeCount === 0 ? (
                 <div className="community-polynet-empty-graph">
-                  {formingNodeCount > 0
-                    ? "The community is forming its first memory."
-                    : agentActivity === "running" || agentActivity === "considering"
-                      ? "The community agent is examining recent activity."
-                      : "No retained memories yet."}
+                  {agentActivity === "running"
+                    ? "The community agent is examining recent activity."
+                    : "No retained memories yet."}
                 </div>
               ) : null}
               <div className="community-polynet-graph-controls">

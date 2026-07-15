@@ -71,12 +71,6 @@ type OutcomeObservationRow = {
   updatedAt: number;
 };
 
-type ChangeRequestRow = {
-  _id: any;
-  communityId: any;
-  status: "pending_decision" | "accepted" | "rejected" | "applied";
-};
-
 const SOURCE_TRACE_INPUT_OVERFETCH_MULTIPLIER = 3;
 const MAX_SOURCE_TRACE_INPUT_FETCH = 600;
 const MAX_AI_FEED_INPUT_FETCH = 300;
@@ -174,7 +168,7 @@ export const listCommunityCompilerInputs = query({
     );
     const aiFeedFetchLimit = Math.min(MAX_AI_FEED_INPUT_FETCH, aiFeedLimit * 3);
 
-    const [traceRowsByVisibility, aiFeedRows, outcomeRows, pendingChangeRequests] = await Promise.all([
+    const [traceRowsByVisibility, aiFeedRows, outcomeRows] = await Promise.all([
       Promise.all(
         COMPILER_EVIDENCE_VISIBILITY_SCOPES.map((visibilityScope) =>
           ctx.db
@@ -198,12 +192,6 @@ export const listCommunityCompilerInputs = query({
         .withIndex("by_community_observedAt", (q: any) => q.eq("communityId", args.communityId))
         .order("desc")
         .take(outcomeLimit) as Promise<OutcomeObservationRow[]>,
-      ctx.db
-        .query("communityIntelligenceChangeRequests" as any)
-        .withIndex("by_community_status", (q: any) =>
-          q.eq("communityId", args.communityId).eq("status", "pending_decision"),
-        )
-        .take(1000) as Promise<ChangeRequestRow[]>,
     ]);
     const traceCandidateRows = traceRowsByVisibility
       .flatMap((rows) => rows)
@@ -239,7 +227,6 @@ export const listCommunityCompilerInputs = query({
       recent_source_traces: traceRows.map(mapTrace),
       ranked_ai_feed_signals: rankedAiFeedSignals.map(mapAiFeedSignal),
       recent_outcome_observations: outcomeRows.map(mapOutcome),
-      pending_change_requests_count: pendingChangeRequests.length,
       diagnostics: {
         version: 1,
         source_trace_limit: sourceTraceLimit,

@@ -93,6 +93,7 @@ import type * as communityLifecycle from "../communityLifecycle.js";
 import type * as communityLineageAcceptance from "../communityLineageAcceptance.js";
 import type * as communityMemoryHealth from "../communityMemoryHealth.js";
 import type * as communityMemoryMetabolizer from "../communityMemoryMetabolizer.js";
+import type * as communityMemoryWorkKey from "../communityMemoryWorkKey.js";
 import type * as communityMentionBroadcasts from "../communityMentionBroadcasts.js";
 import type * as communityMentionEmails from "../communityMentionEmails.js";
 import type * as communityMentionLifecycle from "../communityMentionLifecycle.js";
@@ -319,6 +320,7 @@ declare const fullApi: ApiFromModules<{
   communityLineageAcceptance: typeof communityLineageAcceptance;
   communityMemoryHealth: typeof communityMemoryHealth;
   communityMemoryMetabolizer: typeof communityMemoryMetabolizer;
+  communityMemoryWorkKey: typeof communityMemoryWorkKey;
   communityMentionBroadcasts: typeof communityMentionBroadcasts;
   communityMentionEmails: typeof communityMentionEmails;
   communityMentionLifecycle: typeof communityMentionLifecycle;

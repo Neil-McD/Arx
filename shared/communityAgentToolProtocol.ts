@@ -141,17 +141,17 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
         payload: {
           type: "object",
           additionalProperties: false,
-          required: ["digestId", "itemIndex", "nodeType"],
+          required: ["digestId", "workKey", "nodeType"],
           properties: {
             digestId: {
               type: ["string", "null"],
               minLength: 1,
               maxLength: 128,
             },
-            itemIndex: {
-              type: ["integer", "null"],
-              minimum: 0,
-              maximum: 100,
+            workKey: {
+              type: ["string", "null"],
+              minLength: 1,
+              maxLength: 128,
             },
             nodeType: NODE_TYPE_SCHEMA,
           },
@@ -241,13 +241,9 @@ export function normalizeCommunityAgentToolArguments(
       throw new Error("community_agent_tool_operation_invalid");
     }
     const payload = payloadObject(args.payload);
-    const itemIndex = Math.floor(Number(payload.itemIndex));
-    if (!Number.isFinite(itemIndex) || itemIndex < 0 || itemIndex > 100) {
-      throw new Error("community_agent_tool_item_index_invalid");
-    }
     const normalizedPayload: Record<string, unknown> = {
       digestId: requireNonEmptyString(payload.digestId, "digest_id", 128),
-      itemIndex,
+      workKey: requireNonEmptyString(payload.workKey, "work_key", 128),
     };
     const nodeType = normalizeNodeType(payload.nodeType);
     if (nodeType) normalizedPayload.nodeType = nodeType;

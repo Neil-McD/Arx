@@ -2162,10 +2162,15 @@ export default defineSchema({
       oldestPendingAt: v.optional(v.string()),
       hasMorePending: v.boolean(),
       countsAreLowerBound: v.boolean(),
+      compilerDigestId: v.optional(v.string()),
+      compilerDigestVersionKey: v.optional(v.string()),
+      compilerWorkItemCount: v.optional(v.number()),
     })),
     stopReason: v.optional(v.string()),
     toolStepCount: v.number(),
-    candidateProposalIds: v.array(v.string()),
+    // Legacy approval-loop fields remain optional until historical rows are
+    // cleared. New runs write only appliedChangeRequestIds.
+    candidateProposalIds: v.optional(v.array(v.string())),
     acceptedChangeRequestIds: v.optional(v.array(v.string())),
     rejectedChangeRequestIds: v.optional(v.array(v.string())),
     appliedChangeRequestIds: v.optional(v.array(v.string())),
@@ -2178,6 +2183,12 @@ export default defineSchema({
   })
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_community_role_triggerType_createdAt", [
+      "communityId",
+      "role",
+      "triggerType",
+      "createdAt",
+    ])
     .index("by_sponsor_createdAt", ["sponsorUserId", "createdAt"]),
 
   // Shared working ledger for one heartbeat cycle: the observer, questioner,
@@ -3085,6 +3096,9 @@ export default defineSchema({
 
   communityIntelligenceChangeRequests: defineTable({
     communityId: v.id("communities"),
+    // Canonical autonomous-memory identity. Optional only for historical and
+    // manual audit rows; every new compiler-memory write requires it.
+    workKey: v.optional(v.string()),
     operation: v.union(
       v.literal("create_node"),
       v.literal("update_node"),
@@ -3154,6 +3168,7 @@ export default defineSchema({
     decidedAt: v.optional(v.number()),
     appliedAt: v.optional(v.number()),
   })
+    .index("by_community_workKey", ["communityId", "workKey"])
     .index("by_community_status", ["communityId", "status"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_type_status", ["communityId", "operation", "status"])
@@ -3263,12 +3278,31 @@ export default defineSchema({
   communityCompilerDigests: defineTable({
     communityId: v.id("communities"),
     dedupeKey: v.string(),
+    // New compiler output is immutable per canonical work set. Historical
+    // daily-upsert rows omit this field and are never claimed as agent work.
+    versionKey: v.optional(v.string()),
+    // Autonomous compiler-to-agent work lifecycle. This is execution state,
+    // not a human approval gate.
+    agentHandoffState: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("running"),
+        v.literal("handled"),
+      ),
+    ),
+    agentClaimId: v.optional(v.string()),
+    agentClaimedAt: v.optional(v.number()),
+    agentHandledAt: v.optional(v.number()),
+    agentAttemptCount: v.optional(v.number()),
     windowStartedAt: v.number(),
     windowEndedAt: v.number(),
     summary: v.string(),
     itemCount: v.number(),
     items: v.array(
       v.object({
+        // Historical digest rows predate canonical work identity. Every new
+        // compiler pass writes this field and autonomous writes require it.
+        workKey: v.optional(v.string()),
         category: v.union(
           v.literal("chat_activity"),
           v.literal("ai_feed_signal"),
@@ -3277,6 +3311,8 @@ export default defineSchema({
           v.literal("member_state"),
           v.literal("outcome_signal"),
           v.literal("source_trace_signal"),
+          // Read compatibility for pre-deletion digest rows. New compiler
+          // passes never emit this category.
           v.literal("pending_directory_decision"),
         ),
         title: v.string(),
@@ -3295,7 +3331,8 @@ export default defineSchema({
       events: v.number(),
       sourceTraces: v.number(),
       outcomes: v.number(),
-      pendingChangeRequests: v.number(),
+      // Read compatibility for pre-deletion digest rows.
+      pendingChangeRequests: v.optional(v.number()),
       newMembers: v.number(),
       activeMembers: v.number(),
       postingMembers: v.number(),
@@ -3314,7 +3351,12 @@ export default defineSchema({
   })
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_windowEndedAt", ["communityId", "windowEndedAt"])
-    .index("by_community_dedupeKey", ["communityId", "dedupeKey"]),
+    .index("by_community_versionKey", ["communityId", "versionKey"])
+    .index("by_community_agentHandoffState_createdAt", [
+      "communityId",
+      "agentHandoffState",
+      "createdAt",
+    ]),
 
   memberAgentChannels: defineTable({
     ownerId: v.id("users"),

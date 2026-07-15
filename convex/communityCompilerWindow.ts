@@ -22,7 +22,6 @@ const MAX_SOURCE_TRACE_FETCH = 600;
 const MAX_AI_FEED_FETCH = 300;
 const MAX_EVENT_FETCH = 150;
 const MAX_OUTCOME_FETCH = 150;
-const MAX_CHANGE_REQUEST_FETCH = 200;
 const MAX_NEW_MEMBER_FETCH = 1_000;
 const MAX_ACTIVE_MEMBER_FETCH = 2_000;
 const MAX_AI_FEED_REACTION_FETCH = 1_000;
@@ -117,20 +116,6 @@ type OutcomeObservationRow = {
   observedByUserId?: any;
   observedByAgentKey?: string;
   observedAt: number;
-  createdAt: number;
-  updatedAt: number;
-};
-
-type ChangeRequestRow = {
-  _id: any;
-  communityId: any;
-  operation: string;
-  status: "pending_decision" | "accepted" | "rejected" | "applied";
-  confidence: number;
-  privacyRisk: number;
-  createdByActorType: string;
-  createdByUserId?: any;
-  createdByAgentKey?: string;
   createdAt: number;
   updatedAt: number;
 };
@@ -269,21 +254,6 @@ function mapOutcome(row: OutcomeObservationRow) {
   };
 }
 
-function mapChangeRequest(row: ChangeRequestRow) {
-  return {
-    id: normalizeIdValue(row._id),
-    operation: row.operation,
-    status: row.status,
-    confidence: Number(row.confidence ?? 0),
-    privacy_risk: Number(row.privacyRisk ?? 0),
-    created_by_actor_type: row.createdByActorType,
-    created_by_user_id: row.createdByUserId ? normalizeIdValue(row.createdByUserId) : null,
-    created_by_agent_key: row.createdByAgentKey ?? null,
-    created_at: toIsoString(row.createdAt),
-    updated_at: toIsoString(row.updatedAt),
-  };
-}
-
 async function mapLatestNewMember(ctx: any, row: MembershipRow, userIdCache: Map<string, string | null>) {
   return {
     public_user_id: (await resolvePublicUserId(ctx, row.userId, userIdCache)) ?? normalizeIdValue(row.userId),
@@ -302,7 +272,6 @@ export const readCommunityCompilerWindow = query({
     aiFeedLimit: v.optional(v.number()),
     eventLimit: v.optional(v.number()),
     outcomeLimit: v.optional(v.number()),
-    changeRequestLimit: v.optional(v.number()),
     latestMemberLimit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -320,7 +289,6 @@ export const readCommunityCompilerWindow = query({
     const aiFeedLimit = boundedLimit(args.aiFeedLimit, 30, 100);
     const eventLimit = boundedLimit(args.eventLimit, 25, 75);
     const outcomeLimit = boundedLimit(args.outcomeLimit, 25, 75);
-    const changeRequestLimit = boundedLimit(args.changeRequestLimit, 25, 100);
     const latestMemberLimit = boundedLimit(args.latestMemberLimit, 10, MAX_LATEST_NEW_MEMBERS);
     const sourceTraceFetchLimit = Math.min(MAX_SOURCE_TRACE_FETCH, sourceTraceLimit * 3);
 
@@ -330,7 +298,6 @@ export const readCommunityCompilerWindow = query({
       aiFeedRows,
       eventRows,
       outcomeRows,
-      pendingChangeRequestRows,
       newMemberRows,
       activePresenceRows,
       aiFeedReactionRows,
@@ -378,12 +345,6 @@ export const readCommunityCompilerWindow = query({
           )
           .order("desc")
           .take(Math.min(MAX_OUTCOME_FETCH, outcomeLimit)) as Promise<OutcomeObservationRow[]>,
-        ctx.db
-          .query("communityIntelligenceChangeRequests" as any)
-          .withIndex("by_community_status", (q: any) =>
-            q.eq("communityId", args.communityId).eq("status", "pending_decision"),
-          )
-          .take(Math.min(MAX_CHANGE_REQUEST_FETCH, changeRequestLimit)) as Promise<ChangeRequestRow[]>,
         ctx.db
           .query("communityMemberships" as any)
           .withIndex("by_community_createdAt", (q: any) =>
@@ -500,7 +461,6 @@ export const readCommunityCompilerWindow = query({
         },
       },
       recent_outcome_observations: outcomeRows.map(mapOutcome),
-      pending_change_requests: pendingChangeRequestRows.map(mapChangeRequest),
       diagnostics: {
         version: 1,
         archive_activity_limit: archiveActivityLimit,
@@ -508,7 +468,6 @@ export const readCommunityCompilerWindow = query({
         ai_feed_limit: aiFeedLimit,
         event_limit: eventLimit,
         outcome_limit: outcomeLimit,
-        change_request_limit: changeRequestLimit,
         latest_member_limit: latestMemberLimit,
         archive_activity_considered: archiveRows.length,
         archive_activity_returned: archiveActivity.length,
@@ -520,7 +479,6 @@ export const readCommunityCompilerWindow = query({
         ai_feed_signals_returned: rankedAiFeedSignals.length,
         events_returned: eventRows.length,
         outcome_observations_returned: outcomeRows.length,
-        pending_change_requests_returned: pendingChangeRequestRows.length,
         new_members_considered: newMemberRows.length,
         active_presence_rows_considered: activePresenceRows.length,
         ai_feed_reactions_considered: aiFeedReactionRows.length,

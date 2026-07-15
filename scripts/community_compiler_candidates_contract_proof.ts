@@ -5,23 +5,44 @@ import { join } from "node:path";
 const root = process.cwd();
 const candidates = readFileSync(join(root, "convex/communityCompilerCandidates.ts"), "utf8");
 const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
+const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const communityExports = readFileSync(join(root, "convex/community.ts"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
 
 assert.match(
   directory,
-  /export async function createTrustedCommunityIntelligenceChangeRequest/,
+  /export async function createOrReuseTrustedCommunityIntelligenceChangeRequest/,
   "directory should expose a trusted helper for compiler-owned audit records",
 );
 assert.match(
   directory,
-  /createTrustedCommunityIntelligenceChangeRequest[\s\S]*requireTraceIdsBelongToCommunity[\s\S]*insertChangeRequest/,
+  /createOrReuseTrustedCommunityIntelligenceChangeRequest[\s\S]*requireTraceIdsBelongToCommunity[\s\S]*insertChangeRequest/,
   "trusted audit helper should validate evidence and reuse the change request path",
 );
 assert.match(
   candidates,
   /export async function retainCommunityIntelligenceFromDigestItemCore/,
   "compiler candidate core should exist for the internal community-agent filesystem",
+);
+assert.match(
+  candidates,
+  /workKey: string[\s\S]*matchingItems = digest\.items\.filter\(\(candidate\) => candidate\.workKey === workKey\)[\s\S]*buildCommunityMemoryWorkKey[\s\S]*expectedWorkKey !== workKey/,
+  "compiler memory should locate by canonical key and re-derive it before writing",
+);
+assert.doesNotMatch(
+  candidates,
+  /itemIndex|digestItemIndex|findExistingDigestItemCandidate|candidatePayloadMatchesDigestItem|\.take\(500\)/,
+  "compiler memory should not retain positional identity or bounded payload scans",
+);
+assert.match(
+  schema,
+  /communityIntelligenceChangeRequests: defineTable\(\{[\s\S]*workKey: v\.optional\(v\.string\(\)\)[\s\S]*\.index\("by_community_workKey", \["communityId", "workKey"\]\)/,
+  "audit rows should support indexed community-scoped work identity",
+);
+assert.match(
+  directory,
+  /withIndex\("by_community_workKey"[\s\S]*\.take\(2\)[\s\S]*community_intelligence_work_key_duplicate[\s\S]*reusedExisting: true/,
+  "trusted audit creation should detect duplicate keys and reuse one existing row",
 );
 assert.doesNotMatch(
   candidates,
@@ -45,7 +66,7 @@ assert.match(
 );
 assert.match(
   candidates,
-  /const actorType = args\.actorType \?\? "compiler"[\s\S]*createTrustedCommunityIntelligenceChangeRequest\([\s\S]*operation: "create_node"[\s\S]*actorType,/,
+  /const actorType = args\.actorType \?\? "compiler"[\s\S]*createOrReuseTrustedCommunityIntelligenceChangeRequest\([\s\S]*operation: "create_node"[\s\S]*actorType,/,
   "candidate core should create compiler-attributed change requests unless a trusted community-agent caller is supplied",
 );
 assert.match(
@@ -138,10 +159,10 @@ assert.match(
   /evidenceFullyResolved[\s\S]*retainForCommunity[\s\S]*status: retainForCommunity \? "promising" : "candidate"[\s\S]*visibilityScope: retainForCommunity \? "community" : "admin"/,
   "autonomous memory should use evidence and privacy to select retained versus forming status",
 );
-assert.match(
+assert.doesNotMatch(
   candidates,
-  /pending_directory_decision[\s\S]*community_compiler_digest_item_already_in_airlock/,
-  "pending-directory-decision digest items should not create another candidate",
+  /pending_directory_decision|community_compiler_digest_item_already_in_airlock/,
+  "autonomous memory should not retain the superseded pending-decision digest category",
 );
 assert.match(
   candidates,
@@ -172,6 +193,11 @@ assert.match(
   docs,
   /Fifth Implementation Slice[\s\S]*feedback[\s\S]*transcripts[\s\S]*trusted product\/runtime bridge code/,
   "docs should describe feedback and transcript evidence bridge ownership",
+);
+assert.match(
+  docs,
+  /Canonical Memory Work Identity[\s\S]*community_memory_work:v1:<sha256>[\s\S]*digestId \+ workKey[\s\S]*Array position is not an API/,
+  "architecture docs should make canonical work identity and non-positional writes explicit",
 );
 
 console.log("community_compiler_candidates_contract_proof: ok");

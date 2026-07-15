@@ -17583,15 +17583,6 @@ button.chat-reply-quote:hover {
 .cp-node-circle.type-decision { fill: var(--accent-gold); }
 .cp-node-circle.type-question { fill: #8b93a7; }
 
-.cp-forming-circle {
-  fill: color-mix(in srgb, #a78bfa 7%, transparent);
-  stroke: color-mix(in srgb, #c4b5fd 78%, transparent);
-  stroke-width: 1.6;
-  stroke-dasharray: 2.5 2;
-  vector-effect: non-scaling-stroke;
-  transition: fill 160ms ease, opacity 160ms ease, stroke 160ms ease, r 260ms ease;
-}
-
 /* Status treatment, independent of the type color. */
 .cp-node-circle.status-promising { opacity: 0.8; }
 .cp-node-circle.status-stale { opacity: 0.42; }
@@ -17609,8 +17600,7 @@ button.chat-reply-quote:hover {
   transform-origin: center;
 }
 
-.cp-root-circle.activity-running,
-.cp-root-circle.activity-considering {
+.cp-root-circle.activity-running {
   animation: community-polynet-pulse 2.2s ease-in-out infinite;
 }
 
@@ -17675,7 +17665,6 @@ button.chat-reply-quote:hover {
   }
 
   .cp-root-circle.activity-running,
-  .cp-root-circle.activity-considering,
   .cp-root-circle.activity-updated-directory {
     animation: none;
   }

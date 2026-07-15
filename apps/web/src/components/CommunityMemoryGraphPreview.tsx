@@ -38,7 +38,6 @@ function statusClass(raw: string | null | undefined): string {
 function agentActivityClass(raw: string | null | undefined): string {
   const activity = String(raw ?? "").trim().toLowerCase();
   if (activity === "running") return "running";
-  if (activity === "proposed_candidates" || activity === "reviewed_candidates") return "considering";
   if (activity === "updated_directory") return "updated-directory";
   if (activity === "error") return "error";
   return "resting";
@@ -105,7 +104,6 @@ export function CommunityMemoryGraphPreview(props: { overview: CloudCommunityPol
       {overview.graph.nodes.map((node) => {
         const pos = project(node.id);
         const isRoot = node.kind === "community";
-        const isForming = node.kind === "forming_memory";
         const lineageId = node.lineage_id || node.id;
         return (
           <circle
@@ -113,12 +111,10 @@ export function CommunityMemoryGraphPreview(props: { overview: CloudCommunityPol
             data-lineage-id={lineageId}
             cx={pos.x}
             cy={pos.y}
-            r={isRoot ? 7 : isForming ? 3.2 : nodeRadius(node.confidence)}
+            r={isRoot ? 7 : nodeRadius(node.confidence)}
             className={`cp-preview-node ${isRoot
               ? `cp-root-circle activity-${agentActivityClass(overview.agent.activity_state)}`
-              : isForming
-                ? "cp-forming-circle"
-                : `cp-node-circle type-${typeClass(node.type)} status-${statusClass(node.status)}`}`}
+              : `cp-node-circle type-${typeClass(node.type)} status-${statusClass(node.status)}`}`}
           />
         );
       })}

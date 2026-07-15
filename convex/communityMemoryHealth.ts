@@ -18,7 +18,6 @@ type HealthFlag =
   | "no_compiler_digest"
   | "no_agent_run"
   | "last_agent_run_failed"
-  | "pending_airlock_backlog"
   | "no_directory_nodes"
   | "directory_count_lower_bound"
   | "no_retrieval_logs"
@@ -28,14 +27,10 @@ type HealthFlag =
 
 const COMMUNITY_AGENT_KEY = "community_agent";
 const RECENT_RUN_LIMIT = 20;
-const CHANGE_REQUEST_COUNT_LIMIT = 1000;
 const DIRECTORY_COUNT_LIMIT = 1000;
 const RETRIEVAL_LOG_LIMIT = 200;
 const OUTCOME_LIMIT = 200;
 const METABOLIZER_RUN_LIMIT = 10;
-const AIRLOCK_BACKLOG_THRESHOLD = 10;
-
-const CHANGE_REQUEST_STATUSES = ["pending_decision", "accepted", "rejected", "applied"] as const;
 const DIRECTORY_NODE_STATUSES = [
   "draft",
   "candidate",
@@ -78,9 +73,6 @@ function mapAgentRun(row: Record<string, any> | null) {
     wake_reason: row.wakeReason ?? null,
     stop_reason: row.stopReason ?? null,
     tool_step_count: Math.max(0, Number(row.toolStepCount ?? 0)),
-    proposed_count: countIdList(row.candidateProposalIds),
-    accepted_count: countIdList(row.acceptedChangeRequestIds),
-    rejected_count: countIdList(row.rejectedChangeRequestIds),
     applied_count: countIdList(row.appliedChangeRequestIds),
     error_code: row.errorCode ?? null,
     error_message: row.errorMessage ?? null,
@@ -153,20 +145,6 @@ function mapMetabolizerRun(row: Record<string, any> | null) {
     finished_at: isoOrNull(row.finishedAt),
     created_at: isoOrNull(row.createdAt),
   };
-}
-
-async function countChangeRequestsByStatus(ctx: any, communityId: any) {
-  const byStatus = emptyCountMap(CHANGE_REQUEST_STATUSES);
-  const lowerBoundByStatus = emptyCountMap(CHANGE_REQUEST_STATUSES);
-  for (const status of CHANGE_REQUEST_STATUSES) {
-    const rows = (await ctx.db
-      .query("communityIntelligenceChangeRequests" as any)
-      .withIndex("by_community_status", (q: any) => q.eq("communityId", communityId).eq("status", status))
-      .take(CHANGE_REQUEST_COUNT_LIMIT)) as Record<string, any>[];
-    byStatus[status] = rows.length;
-    lowerBoundByStatus[status] = rows.length >= CHANGE_REQUEST_COUNT_LIMIT ? 1 : 0;
-  }
-  return { byStatus, lowerBoundByStatus };
 }
 
 async function countDirectoryNodes(ctx: any, communityId: any) {
@@ -255,13 +233,12 @@ export const getCommunityMemoryHealthProbe = query({
     const latestRun = communityAgentRuns[0] ?? null;
     const latestMetabolizerRun = metabolizerRuns[0] ?? null;
 
-    const [compilerEvidence, changeRequests, directory, retrievalLogs, outcomes] = await Promise.all([
+    const [compilerEvidence, directory, retrievalLogs, outcomes] = await Promise.all([
       measureCommunityCompilerEvidenceForCommunity({
         ctx,
         communityId: args.communityId,
         nowMs,
       }),
-      countChangeRequestsByStatus(ctx, args.communityId),
       countDirectoryNodes(ctx, args.communityId),
       ctx.db
         .query("communityIntelligenceRetrievalLogs" as any)
@@ -292,7 +269,6 @@ export const getCommunityMemoryHealthProbe = query({
     if (!latestDigest) healthFlags.push("no_compiler_digest");
     if (!latestRun) healthFlags.push("no_agent_run");
     if (latestRun?.status === "error") healthFlags.push("last_agent_run_failed");
-    if (changeRequests.byStatus.pending_decision >= AIRLOCK_BACKLOG_THRESHOLD) healthFlags.push("pending_airlock_backlog");
     if (directory.totalLowerBound === 0) healthFlags.push("no_directory_nodes");
     if (directory.countsAreLowerBound) healthFlags.push("directory_count_lower_bound");
     if (retrievalLogs.length === 0) healthFlags.push("no_retrieval_logs");
@@ -326,11 +302,6 @@ export const getCommunityMemoryHealthProbe = query({
         latest_digest: mapCompilerDigest(latestDigest),
         evidence: compilerEvidenceMeasurement,
       },
-      airlock: {
-        by_status: changeRequests.byStatus,
-        lower_bound_by_status: changeRequests.lowerBoundByStatus,
-        pending_decision_count: changeRequests.byStatus.pending_decision,
-      },
       directory: {
         node_count_lower_bound: directory.totalLowerBound,
         counts_are_lower_bound: directory.countsAreLowerBound,
@@ -356,7 +327,6 @@ export const getCommunityMemoryHealthProbe = query({
       health_flags: healthFlags,
       read_limits: {
         recent_run_limit: RECENT_RUN_LIMIT,
-        change_request_count_limit: CHANGE_REQUEST_COUNT_LIMIT,
         directory_count_limit_per_status: DIRECTORY_COUNT_LIMIT,
         retrieval_log_limit: RETRIEVAL_LOG_LIMIT,
         outcome_limit: OUTCOME_LIMIT,

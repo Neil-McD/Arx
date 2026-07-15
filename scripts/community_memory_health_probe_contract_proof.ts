@@ -43,7 +43,6 @@ for (const table of [
   "communitySourceTraces",
   "communityCompilerDigests",
   "communityAgentRuns",
-  "communityIntelligenceChangeRequests",
   "communityIntelligenceNodes",
   "communityIntelligenceRetrievalLogs",
   "communityOutcomeObservations",
@@ -93,10 +92,10 @@ assert.match(
   /communityAgentRuns[\s\S]*withIndex\("by_community_createdAt"[\s\S]*\.order\("desc"\)[\s\S]*\.take\(RECENT_RUN_LIMIT \* 2\)/,
   "probe should read recent agent runs through a bounded same-community index",
 );
-assert.match(
+assert.doesNotMatch(
   health,
-  /communityIntelligenceChangeRequests[\s\S]*withIndex\("by_community_status"[\s\S]*\.take\(CHANGE_REQUEST_COUNT_LIMIT\)/,
-  "probe should count airlock rows using bounded same-community status reads",
+  /communityIntelligenceChangeRequests|pending_airlock_backlog|CHANGE_REQUEST_COUNT_LIMIT|AIRLOCK_BACKLOG_THRESHOLD/,
+  "health should not treat obsolete approval state as compiler health",
 );
 assert.match(
   health,
@@ -135,7 +134,6 @@ for (const flag of [
   "no_compiler_digest",
   "no_agent_run",
   "last_agent_run_failed",
-  "pending_airlock_backlog",
   "no_directory_nodes",
   "directory_count_lower_bound",
   "no_retrieval_logs",

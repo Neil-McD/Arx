@@ -2,9 +2,12 @@ import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { normalizeIdValue } from "./communityCore";
+import { measureCommunityCompilerEvidenceForCommunity } from "./communityCompilerEvidenceCore";
 
 const COMMUNITY_AGENT_HEARTBEAT_MAX_DELAY_MS = 24 * 60 * 60 * 1000;
 const COMMUNITY_AGENT_HEARTBEAT_MAX_TOOL_STEPS = 8;
+const COMMUNITY_AGENT_CYCLES_PER_DAY_CAP = 2;
+const COMMUNITY_AGENT_HANDOFF_LEASE_MS = 30 * 60 * 1000;
 const internalRefs = internal as any;
 
 function boundedText(raw: unknown, maxLength: number): string {
@@ -28,7 +31,10 @@ function buildHeartbeatId(communityId: unknown, nowMs: number): string {
   return `community:${normalizeIdValue(communityId)}:${nowMs}`;
 }
 
-function wakeEvidenceFromMeasurement(measurement: Record<string, any>) {
+function wakeEvidenceFromMeasurement(
+  measurement: Record<string, any>,
+  handoff?: { digestId?: unknown; versionKey?: unknown; itemCount?: unknown },
+) {
   return {
     reason: boundedText(measurement.reason, 120) || "no_trigger",
     pendingTotal: Math.max(0, Number(measurement.pending_total ?? 0)),
@@ -38,6 +44,45 @@ function wakeEvidenceFromMeasurement(measurement: Record<string, any>) {
     oldestPendingAt: boundedText(measurement.oldest_pending_at, 80) || undefined,
     hasMorePending: Boolean(measurement.has_more_pending),
     countsAreLowerBound: Boolean(measurement.counts_are_lower_bound),
+    compilerDigestId: boundedText(handoff?.digestId, 128) || undefined,
+    compilerDigestVersionKey: boundedText(handoff?.versionKey, 128) || undefined,
+    compilerWorkItemCount: handoff?.itemCount === undefined
+      ? undefined
+      : Math.max(0, Number(handoff.itemCount ?? 0)),
+  };
+}
+
+async function readCommunityAgentControlGate(args: {
+  ctx: any;
+  communityId: any;
+  nowMs: number;
+}) {
+  const dayStartMs = new Date(new Date(args.nowMs).toISOString().slice(0, 10)).getTime();
+  const [config, observerRunsToday] = await Promise.all([
+    args.ctx.db
+      .query("communityAgentConfigs" as any)
+      .withIndex("by_community_updatedAt", (q: any) => q.eq("communityId", args.communityId))
+      .order("desc")
+      .first() as Promise<Record<string, any> | null>,
+    args.ctx.db
+      .query("communityAgentRuns" as any)
+      .withIndex("by_community_role_triggerType_createdAt", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("role", "observer")
+          .eq("triggerType", "heartbeat")
+          .gte("createdAt", dayStartMs),
+      )
+      .take(COMMUNITY_AGENT_CYCLES_PER_DAY_CAP) as Promise<Array<Record<string, any>>>,
+  ]);
+  const cyclesToday = observerRunsToday.length;
+  return {
+    cyclesToday,
+    reason: config?.agentEnabled === false
+      ? "agent_disabled"
+      : cyclesToday >= COMMUNITY_AGENT_CYCLES_PER_DAY_CAP
+        ? "daily_cycle_cap_reached"
+        : null,
   };
 }
 
@@ -75,6 +120,129 @@ export const enqueueCommunityAgentHeartbeatInternal = internalMutation({
   },
 });
 
+export const claimCommunityCompilerDigestHandoffInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    claimId: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const claimId = boundedText(args.claimId, 200);
+    if (!claimId) throw new Error("community_compiler_handoff_claim_required");
+    const controlGate = await readCommunityAgentControlGate({
+      ctx,
+      communityId: args.communityId,
+      nowMs,
+    });
+    if (controlGate.reason) {
+      return { claimed: false, reason: controlGate.reason, digest_id: null };
+    }
+    const runningRows = (await ctx.db
+      .query("communityCompilerDigests" as any)
+      .withIndex("by_community_agentHandoffState_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("agentHandoffState", "running"),
+      )
+      .order("asc")
+      .take(20)) as Array<Record<string, any>>;
+    const freshRunning = runningRows.find(
+      (row) => Number(row.agentClaimedAt ?? 0) >= nowMs - COMMUNITY_AGENT_HANDOFF_LEASE_MS,
+    );
+    if (freshRunning) {
+      return {
+        claimed: false,
+        reason: "handoff_already_running",
+        digest_id: normalizeIdValue(freshRunning._id),
+      };
+    }
+    const pending = (await ctx.db
+      .query("communityCompilerDigests" as any)
+      .withIndex("by_community_agentHandoffState_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("agentHandoffState", "pending"),
+      )
+      .order("asc")
+      .first()) as Record<string, any> | null;
+    const staleRunning = runningRows.find(
+      (row) => Number(row.agentClaimedAt ?? 0) < nowMs - COMMUNITY_AGENT_HANDOFF_LEASE_MS,
+    ) ?? null;
+    const digest = [pending, staleRunning]
+      .filter((row): row is Record<string, any> => Boolean(row))
+      .sort((a, b) => Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0))[0] ?? null;
+    if (!digest) {
+      return { claimed: false, reason: "no_pending_compiler_handoff", digest_id: null };
+    }
+    const versionKey = boundedText(digest.versionKey, 128);
+    if (!versionKey || !Array.isArray(digest.items) || Number(digest.itemCount ?? 0) <= 0) {
+      throw new Error("community_compiler_handoff_invalid");
+    }
+    await ctx.db.patch(digest._id as any, {
+      agentHandoffState: "running" as const,
+      agentClaimId: claimId,
+      agentClaimedAt: nowMs,
+      agentHandledAt: undefined,
+      agentAttemptCount: Math.max(0, Number(digest.agentAttemptCount ?? 0)) + 1,
+      updatedAt: nowMs,
+    });
+    return {
+      claimed: true,
+      reason: staleRunning && normalizeIdValue(staleRunning._id) === normalizeIdValue(digest._id)
+        ? "stale_handoff_reclaimed"
+        : "pending_compiler_handoff",
+      digest_id: normalizeIdValue(digest._id),
+      version_key: versionKey,
+      item_count: Math.max(0, Number(digest.itemCount ?? 0)),
+    };
+  },
+});
+
+export const settleCommunityCompilerDigestHandoffInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    digestId: v.id("communityCompilerDigests"),
+    versionKey: v.string(),
+    claimId: v.string(),
+    outcome: v.union(v.literal("handled"), v.literal("retry")),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const digest = (await ctx.db.get(args.digestId)) as Record<string, any> | null;
+    if (!digest || normalizeIdValue(digest.communityId) !== normalizeIdValue(args.communityId)) {
+      throw new Error("community_compiler_handoff_not_found");
+    }
+    if (boundedText(digest.versionKey, 128) !== boundedText(args.versionKey, 128)) {
+      throw new Error("community_compiler_handoff_version_mismatch");
+    }
+    if (
+      digest.agentHandoffState !== "running" ||
+      boundedText(digest.agentClaimId, 200) !== boundedText(args.claimId, 200)
+    ) {
+      throw new Error("community_compiler_handoff_claim_mismatch");
+    }
+    const nowMs = args.nowMs ?? Date.now();
+    await ctx.db.patch(args.digestId, args.outcome === "handled"
+      ? {
+          agentHandoffState: "handled" as const,
+          agentClaimId: undefined,
+          agentClaimedAt: undefined,
+          agentHandledAt: nowMs,
+          updatedAt: nowMs,
+        }
+      : {
+          agentHandoffState: "pending" as const,
+          agentClaimId: undefined,
+          agentClaimedAt: undefined,
+          agentHandledAt: undefined,
+          updatedAt: nowMs,
+        });
+    return {
+      ok: true,
+      digest_id: normalizeIdValue(args.digestId),
+      version_key: boundedText(args.versionKey, 128),
+      state: args.outcome === "handled" ? "handled" : "pending",
+    };
+  },
+});
+
 export const runCommunityAgentHeartbeatInternal = internalAction({
   args: {
     communityId: v.id("communities"),
@@ -83,7 +251,7 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
     maxToolSteps: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const heartbeatId = boundedText(args.heartbeatId, 200) || undefined;
+    const heartbeatId = boundedText(args.heartbeatId, 200) || buildHeartbeatId(args.communityId, Date.now());
     const modelId = boundedText(args.modelId, 128) || undefined;
     await ctx.runMutation(
       internalRefs.communityCompilerEvidence.drainSelfAuthoredPendingSourceTracesInternal,
@@ -91,14 +259,20 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
         communityId: args.communityId,
       },
     );
-    const compilerEvidence = (await ctx.runQuery(
-      internalRefs.communityCompilerEvidence.measureCommunityCompilerEvidenceInternal,
-      {
-        communityId: args.communityId,
-      },
+    const assessment = (await ctx.runQuery(
+      internalRefs.communityAgentHeartbeat.assessCommunityAgentCycleInternal,
+      { communityId: args.communityId },
     )) as Record<string, any>;
-    const wakeEvidence = wakeEvidenceFromMeasurement(compilerEvidence);
-    if (!compilerEvidence.should_run) {
+    const compilerEvidence = assessment.compiler_evidence ?? {};
+    const initialWakeEvidence = {
+      ...wakeEvidenceFromMeasurement(compilerEvidence, {
+        digestId: assessment.pending_handoff_id,
+        versionKey: assessment.pending_handoff_version_key,
+        itemCount: assessment.pending_handoff_item_count,
+      }),
+      reason: boundedText(assessment.reason, 120) || "no_compiler_work",
+    };
+    const recordSkipped = async (reason: string, wakeEvidence = initialWakeEvidence) => {
       const skippedRun = await ctx.runMutation(
         internalRefs.communityAgentRuntime.recordCommunityAgentSkippedRunInternal,
         {
@@ -106,49 +280,123 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
           triggerType: "heartbeat",
           heartbeatId,
           modelId,
-          wakeReason: wakeEvidence.reason,
-          wakeEvidence,
+          wakeReason: reason,
+          wakeEvidence: { ...wakeEvidence, reason },
         },
       );
       return {
         ok: true,
         skipped: true,
         run: skippedRun,
-        stop_reason: wakeEvidence.reason,
+        stop_reason: reason,
         tool_step_count: 0,
-        candidate_proposal_ids: [],
-        accepted_change_request_ids: [],
-        rejected_change_request_ids: [],
         applied_change_request_ids: [],
+        wake_reason: reason,
+        wake_evidence: { ...wakeEvidence, reason },
+      };
+    };
+    if (!assessment.enqueue) {
+      return await recordSkipped(initialWakeEvidence.reason);
+    }
+    const resolved = (await ctx.runQuery(
+      internalRefs.communityAgentRuntime.resolveCommunityAgentRunContextInternal,
+      { communityId: args.communityId },
+    )) as Record<string, any>;
+    const connection = (await ctx.runQuery(
+      internalRefs.providerConnections.getChatgptConnectionForUserInternal,
+      { userId: resolved.sponsorUserId },
+    )) as Record<string, any> | null;
+    if (!connection?.encryptedSecretHex) {
+      return await recordSkipped("owner_connection_missing");
+    }
+    if (compilerEvidence.should_run) {
+      try {
+        await ctx.runMutation(
+          internalRefs.communityCompilerDigest.runCommunityCompilerDigestPassInternal,
+          { communityId: args.communityId, requireTrigger: true },
+        );
+      } catch {
+        if (!assessment.has_pending_handoff) {
+          return await recordSkipped("compiler_digest_failed");
+        }
+      }
+    }
+    const claim = (await ctx.runMutation(
+      internalRefs.communityAgentHeartbeat.claimCommunityCompilerDigestHandoffInternal,
+      {
+        communityId: args.communityId,
+        claimId: heartbeatId,
+      },
+    )) as Record<string, any>;
+    if (!claim.claimed) {
+      return await recordSkipped(boundedText(claim.reason, 120) || "no_pending_compiler_handoff");
+    }
+    const wakeEvidence = {
+      ...wakeEvidenceFromMeasurement(compilerEvidence, {
+        digestId: claim.digest_id,
+        versionKey: claim.version_key,
+        itemCount: claim.item_count,
+      }),
+      reason: boundedText(assessment.reason, 120) || "pending_compiler_handoff",
+    };
+    try {
+      const cycle = (await ctx.runAction(
+        internalRefs.communityAgentRuntime.runCommunityAgentCycleInternal,
+        {
+          communityId: args.communityId,
+          triggerType: "heartbeat",
+          heartbeatId,
+          modelId,
+          maxToolSteps: clampToolSteps(args.maxToolSteps),
+          compilerDigestId: claim.digest_id,
+          compilerDigestVersionKey: claim.version_key,
+          wakeReason: wakeEvidence.reason,
+          wakeEvidence,
+        },
+      )) as Record<string, any>;
+      const handled = cycle.ok === true && cycle.completed === true;
+      await ctx.runMutation(
+        internalRefs.communityAgentHeartbeat.settleCommunityCompilerDigestHandoffInternal,
+        {
+          communityId: args.communityId,
+          digestId: claim.digest_id,
+          versionKey: claim.version_key,
+          claimId: heartbeatId,
+          outcome: handled ? "handled" : "retry",
+        },
+      );
+      return {
+        ...cycle,
+        compiler_digest_id: claim.digest_id,
+        compiler_digest_version_key: claim.version_key,
+        compiler_handoff_state: handled ? "handled" : "pending",
         wake_reason: wakeEvidence.reason,
         wake_evidence: wakeEvidence,
       };
+    } catch (error) {
+      try {
+        await ctx.runMutation(
+          internalRefs.communityAgentHeartbeat.settleCommunityCompilerDigestHandoffInternal,
+          {
+            communityId: args.communityId,
+            digestId: claim.digest_id,
+            versionKey: claim.version_key,
+            claimId: heartbeatId,
+            outcome: "retry",
+          },
+        );
+      } catch {
+        // The lease makes an orphaned running claim retryable.
+      }
+      throw error;
     }
-    // A woken heartbeat runs the full role cycle (observer -> questioner ->
-    // steward over a shared ledger); the observer ends the cycle early when
-    // the window holds no real signal.
-    return await ctx.runAction(internalRefs.communityAgentRuntime.runCommunityAgentCycleInternal, {
-      communityId: args.communityId,
-      triggerType: "heartbeat",
-      heartbeatId,
-      modelId,
-      wakeReason: wakeEvidence.reason,
-      wakeEvidence,
-    });
   },
 });
 
 // ---------------------------------------------------------------------------
-// Ignition: the 6-hour memory sweep.
-//
-// Economics (contract Amendment v1.1): memory is founder-funded, so the sweep
-// is gated three ways before any tokens can be spent — owner off-switch,
-// daily cycle cap, and a delta check so unchanged signal never re-wakes the
-// roles. The compiler pass itself is deterministic (no LLM) and free.
+// Ignition: the 6-hour memory sweep. The sweep only discovers work and
+// schedules heartbeats. The heartbeat owns compile -> claim -> run -> settle.
 // ---------------------------------------------------------------------------
-
-const COMMUNITY_AGENT_CYCLES_PER_DAY_CAP = 2;
-const COMMUNITY_AGENT_SWEEP_HEARTBEAT_DELAY_MS = 10 * 60 * 1000;
 
 export const listCommunityMemorySweepTargetsInternal = internalQuery({
   args: {
@@ -166,55 +414,92 @@ export const listCommunityMemorySweepTargetsInternal = internalQuery({
   },
 });
 
-// Decides whether a community earns a cycle attempt this sweep. Pure reads.
+// One read-only planner for both the sweep preflight and the heartbeat's final
+// cost gate. Compiler evidence means the compiler has work. A pending or stale
+// digest handoff means the agent has work. Raw source timestamps are neither.
 export const assessCommunityAgentCycleInternal = internalQuery({
   args: {
     communityId: v.id("communities"),
+    nowMs: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<{ enqueue: boolean; reason: string }> => {
-    // Owner off-switch (absent config or absent flag means enabled).
-    const configRows = (await ctx.db
-      .query("communityAgentConfigs" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .take(5)) as Array<Record<string, any>>;
-    const config = configRows
-      .slice()
-      .sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))[0] ?? null;
-    if (config?.agentEnabled === false) {
-      return { enqueue: false, reason: "agent_disabled" };
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const controlGate = await readCommunityAgentControlGate({
+      ctx,
+      communityId: args.communityId,
+      nowMs,
+    });
+    if (controlGate.reason) {
+      return {
+        enqueue: false,
+        reason: controlGate.reason,
+        cycles_today: controlGate.cyclesToday,
+        has_pending_handoff: false,
+        pending_handoff_id: null,
+        pending_handoff_version_key: null,
+        pending_handoff_item_count: 0,
+        compiler_evidence: {
+          should_run: false,
+          reason: "not_measured_control_gate",
+          pending_total: 0,
+          pending_standard: 0,
+          pending_strong: 0,
+          pending_critical: 0,
+          oldest_pending_at: null,
+          has_more_pending: false,
+          counts_are_lower_bound: false,
+        },
+      };
     }
-    // Daily cap: count observer-role heartbeat runs since UTC midnight. Every
-    // attempted cycle counts, so an erroring community cannot burn extra spend.
-    const dayStartMs = new Date(new Date().toISOString().slice(0, 10)).getTime();
-    const recentRuns = (await ctx.db
-      .query("communityAgentRuns" as any)
-      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
-      .order("desc")
-      .take(60)) as Array<Record<string, any>>;
-    const cyclesToday = recentRuns.filter(
-      (row) =>
-        row.role === "observer" &&
-        row.triggerType === "heartbeat" &&
-        Number(row.createdAt ?? 0) >= dayStartMs,
-    ).length;
-    if (cyclesToday >= COMMUNITY_AGENT_CYCLES_PER_DAY_CAP) {
-      return { enqueue: false, reason: "daily_cycle_cap_reached" };
+    const [pendingHandoff, runningHandoffs, compilerEvidenceResult] = await Promise.all([
+      ctx.db
+        .query("communityCompilerDigests" as any)
+        .withIndex("by_community_agentHandoffState_createdAt", (q: any) =>
+          q.eq("communityId", args.communityId).eq("agentHandoffState", "pending"),
+        )
+        .order("asc")
+        .first() as Promise<Record<string, any> | null>,
+      ctx.db
+        .query("communityCompilerDigests" as any)
+        .withIndex("by_community_agentHandoffState_createdAt", (q: any) =>
+          q.eq("communityId", args.communityId).eq("agentHandoffState", "running"),
+        )
+        .order("asc")
+        .take(20) as Promise<Array<Record<string, any>>>,
+      measureCommunityCompilerEvidenceForCommunity({
+        ctx,
+        communityId: args.communityId,
+        nowMs,
+      }),
+    ]);
+    const compilerEvidence = compilerEvidenceResult.measurement;
+    const freshRunningHandoff = runningHandoffs.find(
+      (row) => Number(row.agentClaimedAt ?? 0) >= nowMs - COMMUNITY_AGENT_HANDOFF_LEASE_MS,
+    ) ?? null;
+    const staleRunningHandoff = runningHandoffs.find(
+      (row) => Number(row.agentClaimedAt ?? 0) < nowMs - COMMUNITY_AGENT_HANDOFF_LEASE_MS,
+    ) ?? null;
+    const plannedHandoff = [pendingHandoff, staleRunningHandoff]
+      .filter((row): row is Record<string, any> => Boolean(row))
+      .sort((a, b) => Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0))[0] ?? null;
+    const base = {
+      compiler_evidence: compilerEvidence,
+      cycles_today: controlGate.cyclesToday,
+      has_pending_handoff: Boolean(plannedHandoff),
+      pending_handoff_id: plannedHandoff ? normalizeIdValue(plannedHandoff._id) : null,
+      pending_handoff_version_key: boundedText(plannedHandoff?.versionKey, 128) || null,
+      pending_handoff_item_count: Math.max(0, Number(plannedHandoff?.itemCount ?? 0)),
+    };
+    if (freshRunningHandoff) {
+      return { ...base, enqueue: false, reason: "handoff_already_running" };
     }
-    // Delta gate: only new raw signal since the last successful observer pass
-    // earns a wake. Unchanged material never re-wakes the roles.
-    const newestTrace = (await ctx.db
-      .query("communitySourceTraces" as any)
-      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
-      .order("desc")
-      .first()) as Record<string, any> | null;
-    if (!newestTrace) {
-      return { enqueue: false, reason: "no_source_traces" };
+    if (plannedHandoff) {
+      return { ...base, enqueue: true, reason: "pending_compiler_handoff" };
     }
-    const lastOkObserver = recentRuns.find((row) => row.role === "observer" && row.status === "ok");
-    if (lastOkObserver && Number(newestTrace.createdAt ?? 0) <= Number(lastOkObserver.startedAt ?? 0)) {
-      return { enqueue: false, reason: "no_new_signal" };
+    if (compilerEvidence.should_run) {
+      return { ...base, enqueue: true, reason: compilerEvidence.reason };
     }
-    return { enqueue: true, reason: lastOkObserver ? "new_signal" : "first_cycle" };
+    return { ...base, enqueue: false, reason: "no_compiler_work" };
   },
 });
 
@@ -230,32 +515,7 @@ export const runCommunityMemorySweepInternal = internalAction({
     let metabolized = 0;
     const skipped: Record<string, number> = {};
     for (const target of targets) {
-      const assessment = (await ctx.runQuery(internalRefs.communityAgentHeartbeat.assessCommunityAgentCycleInternal, {
-        communityId: target.communityId,
-      })) as { enqueue: boolean; reason: string };
-      if (!assessment.enqueue) {
-        skipped[assessment.reason] = (skipped[assessment.reason] ?? 0) + 1;
-        continue;
-      }
-      // Founder-funded: no usable owner connection means no cycle, checked
-      // cheaply (row existence, no decryption, no refresh).
-      const connection = (await ctx.runQuery(internalRefs.providerConnections.getChatgptConnectionForUserInternal, {
-        userId: target.ownerId,
-      })) as Record<string, any> | null;
-      if (!connection?.encryptedSecretHex) {
-        skipped.owner_connection_missing = (skipped.owner_connection_missing ?? 0) + 1;
-        continue;
-      }
-      // Fresh digest first (free), then the cycle knock 10 minutes behind so
-      // the roles always wake to current material. The evidence gate inside
-      // the heartbeat still has the final word.
-      try {
-        await ctx.runMutation(internalRefs.communityCompilerDigest.runCommunityCompilerDigestPassInternal, {
-          communityId: target.communityId,
-        });
-      } catch {
-        // A failed digest pass should not block the knock; the gate decides.
-      }
+      // Mechanical memory metabolism is independent of paid cognition work.
       try {
         const metabolizerResult = (await ctx.runMutation(
           internalRefs.communityMemoryMetabolizer.settleCommunityMemorySignalsInternal,
@@ -282,9 +542,25 @@ export const runCommunityMemorySweepInternal = internalAction({
           // Error ledger failure must not block the heartbeat either.
         }
       }
+      const assessment = (await ctx.runQuery(internalRefs.communityAgentHeartbeat.assessCommunityAgentCycleInternal, {
+        communityId: target.communityId,
+      })) as { enqueue: boolean; reason: string };
+      if (!assessment.enqueue) {
+        skipped[assessment.reason] = (skipped[assessment.reason] ?? 0) + 1;
+        continue;
+      }
+      // Founder-funded: no usable owner connection means no cycle, checked
+      // cheaply here and rechecked by the heartbeat immediately before work.
+      const connection = (await ctx.runQuery(internalRefs.providerConnections.getChatgptConnectionForUserInternal, {
+        userId: target.ownerId,
+      })) as Record<string, any> | null;
+      if (!connection?.encryptedSecretHex) {
+        skipped.owner_connection_missing = (skipped.owner_connection_missing ?? 0) + 1;
+        continue;
+      }
       await ctx.runMutation(internalRefs.communityAgentHeartbeat.enqueueCommunityAgentHeartbeatInternal, {
         communityId: target.communityId,
-        runAfterMs: COMMUNITY_AGENT_SWEEP_HEARTBEAT_DELAY_MS,
+        runAfterMs: 0,
       });
       enqueued += 1;
     }

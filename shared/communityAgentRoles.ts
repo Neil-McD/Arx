@@ -34,7 +34,7 @@ const ROLE_DEFINITIONS: Record<CommunityAgentRoleKey, CommunityAgentRoleDefiniti
     rolePrompt: [
       "Role: Observer. You triage the compiler window for this cycle.",
       "For each digest item, judge: is it meaningful, novel, repeated, sensitive, or private?",
-      "Append one ledger note per item worth the cycle's attention, referencing the item index.",
+      "Append one ledger note per item worth the cycle's attention, referencing its work key.",
       `If nothing merits attention, append exactly one note starting with ${COMMUNITY_AGENT_NO_SIGNAL_MARKER} and finish.`,
       "You do not evaluate or retain learnings — later roles do.",
     ].join("\n"),

@@ -12,8 +12,13 @@ const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1
 assert.match(schema, /communityCompilerDigests: defineTable/, "compiler digest table should exist");
 assert.match(
   schema,
-  /communityCompilerDigests: defineTable\([\s\S]*dedupeKey: v\.string\(\)[\s\S]*items: v\.array\([\s\S]*category: v\.union\([\s\S]*v\.literal\("chat_activity"\)[\s\S]*v\.literal\("pending_directory_decision"\)/,
+  /communityCompilerDigests: defineTable\([\s\S]*dedupeKey: v\.string\(\)[\s\S]*items: v\.array\([\s\S]*workKey: v\.optional\(v\.string\(\)\)[\s\S]*category: v\.union\([\s\S]*v\.literal\("chat_activity"\)[\s\S]*v\.literal\("source_trace_signal"\)/,
   "compiler digest table should store bounded typed non-canonical digest items",
+);
+assert.match(
+  schema,
+  /communityCompilerDigests: defineTable\([\s\S]*versionKey: v\.optional\(v\.string\(\)\)[\s\S]*agentHandoffState: v\.optional\([\s\S]*v\.literal\("pending"\)[\s\S]*v\.literal\("running"\)[\s\S]*v\.literal\("handled"\)/,
+  "compiler digest table should carry autonomous handoff state without an approval queue",
 );
 assert.match(
   schema,
@@ -22,8 +27,8 @@ assert.match(
 );
 assert.match(
   schema,
-  /\.index\("by_community_dedupeKey", \["communityId", "dedupeKey"\]\)/,
-  "compiler digest table should support idempotent per-community digest upserts",
+  /\.index\("by_community_versionKey", \["communityId", "versionKey"\]\)/,
+  "compiler digest table should support idempotent immutable work-set lookup",
 );
 assert.match(
   digest,
@@ -59,7 +64,6 @@ for (const tableName of [
   "communityArchiveDocuments",
   "communityAiFeedPosts",
   "communityOutcomeObservations",
-  "communityIntelligenceChangeRequests",
 ]) {
   assert.match(
     digest,
@@ -67,10 +71,20 @@ for (const tableName of [
     `compiler digest pass should read ${tableName} through a bounded query`,
   );
 }
+assert.doesNotMatch(
+  digest,
+  /pending_directory_decision|pendingChangeRequests|pending directory decisions|policy airlock/,
+  "compiler digests should not ingest the superseded approval plane",
+);
 assert.match(
   digest,
   /measureCommunityCompilerEvidenceForCommunity[\s\S]*selectedSourceTraceRows = compilerEvidence\.selectedRows/,
   "compiler digest pass should consume the shared pending-evidence selector",
+);
+assert.match(
+  digest,
+  /runCommunityCompilerDigestPassInternal[\s\S]*requireTrigger: v\.optional\(v\.boolean\(\)\)[\s\S]*args\.requireTrigger && !compilerEvidence\.measurement\.should_run[\s\S]*skipped: true/,
+  "heartbeat compiler retries should no-op when another transaction already consumed the trigger",
 );
 assert.match(
   evidenceCore,
@@ -96,13 +110,33 @@ for (const tableName of [
 }
 assert.match(
   digest,
-  /dedupeKey = `community_compiler_digest:v1:/,
-  "compiler digest pass should use a deterministic digest dedupe key",
+  /buildCommunityMemoryDigestVersionKey\([\s\S]*workKeys: sortedItems\.map[\s\S]*dedupeKey = `community_compiler_digest:v2:/,
+  "compiler digest pass should derive immutable version identity from canonical work keys",
 );
 assert.match(
   digest,
-  /ctx\.db\.patch\(existing\._id[\s\S]*ctx\.db\.insert\("communityCompilerDigests"/,
-  "compiler digest pass should upsert one digest per dedupe key",
+  /contentRevisions:[\s\S]*sortedItems\.map\(digestItemContentRevision\)[\s\S]*row\.updatedAt \?\? row\.createdAt/,
+  "digest version identity should change when the same evidence is materially revised",
+);
+assert.match(
+  digest,
+  /withIndex\("by_community_versionKey"[\s\S]*existing\?\._id \?\? await ctx\.db\.insert\("communityCompilerDigests"/,
+  "compiler digest pass should reuse or insert immutable digest content by version",
+);
+assert.doesNotMatch(
+  digest,
+  /ctx\.db\.patch\(existing\._id|mergeSourceTraceDigestItem|existingSourceTraceItem/,
+  "new compiler passes must not mutate daily digest content or merge snapshots",
+);
+assert.match(
+  digest,
+  /buildCommunityMemoryWorkKey\([\s\S]*communityId: args\.communityId[\s\S]*category: item\.category[\s\S]*sourceTraceIds: item\.sourceTraceIds/,
+  "every new digest item should receive a community-scoped evidence work key",
+);
+assert.match(
+  digest,
+  /seenWorkKeys[\s\S]*seenWorkKeys\.has\(item\.workKey\)[\s\S]*seenWorkKeys\.add\(item\.workKey\)/,
+  "one digest should collapse duplicate work keys before persistence",
 );
 assert.match(
   digest,
@@ -111,22 +145,12 @@ assert.match(
 );
 assert.match(
   digest,
-  /mergeSourceTraceDigestItem[\s\S]*existingSourceTraceItem\(existing\)[\s\S]*sourceTraceItem/,
-  "compiler digest reruns should preserve same-day source-trace evidence already represented by the digest",
-);
-assert.match(
-  digest,
-  /uniqueDigestTraceIds\(args\.next\.sourceTraceIds, args\.existing\.sourceTraceIds\)/,
-  "same-day source-trace merging should prioritize traces selected by the current compiler pass",
-);
-assert.match(
-  digest,
   /selectedDistinctSourceTraceRows\.length > 0[\s\S]*category: "source_trace_signal"[\s\S]*sourceTraceIds: sourceTraceIds\(selectedDistinctSourceTraceRows\)/,
   "compiler digest should represent distinct selected pending traces in a source_trace_signal item",
 );
 assert.match(
   digest,
-  /selectedAiFeedSourceTraceRows[\s\S]*representedSourceTraceIds[\s\S]*representedSelectedSourceTraceRows = \[[\s\S]*selectedDistinctSourceTraceRows\.filter[\s\S]*\.\.\.selectedAiFeedSourceTraceRows[\s\S]*traceRows: representedSelectedSourceTraceRows/,
+  /representedSourceTraceIds[\s\S]*representedAiFeedSourceIds[\s\S]*representedSelectedSourceTraceRows = selectedSourceTraceRows\.filter[\s\S]*traceRows: representedSelectedSourceTraceRows/,
   "compiler digest should mark distinct trace-item evidence and deduplicated AI Feed promotion traces only after semantic representation",
 );
 assert.match(
@@ -139,23 +163,11 @@ assert.match(
   /markSelectedSourceTracesCompiled[\s\S]*normalizeIdValue\(fresh\.communityId\) !== normalizeIdValue\(args\.communityId\)[\s\S]*fresh\.compilerState !== undefined && fresh\.compilerState !== "pending"[\s\S]*compilerState: "compiled" as const[\s\S]*compilerLastHandledAt: args\.nowMs[\s\S]*compilerLastDigestId: args\.digestId/,
   "compiled marking should stay same-community and only close still-pending traces",
 );
-{
-  const payloadStart = digest.indexOf("const payload = {");
-  assert.notEqual(payloadStart, -1, "compiler digest pass should build a patch payload");
-  const payloadEnd = digest.indexOf("\n    let digestId", payloadStart);
-  assert.notEqual(payloadEnd, -1, "compiler digest patch payload should end before upsert branching");
-  const patchPayload = digest.slice(payloadStart, payloadEnd);
-  assert.doesNotMatch(
-    patchPayload,
-    /createdByActorType|createdByUserId|createdByAgentKey|createdAt/,
-    "compiler digest reruns should not rewrite original creation attribution",
-  );
-  assert.match(
-    digest,
-    /ctx\.db\.insert\("communityCompilerDigests"[\s\S]*createdByActorType: "compiler" as const[\s\S]*createdByAgentKey: COMMUNITY_COMPILER_DIGEST_AGENT_KEY[\s\S]*createdAt: nowMs/,
-    "new compiler digests should still record creation attribution",
-  );
-}
+assert.match(
+  digest,
+  /ctx\.db\.insert\("communityCompilerDigests"[\s\S]*agentHandoffState: sortedItems\.length > 0 \? "pending" as const : "handled" as const[\s\S]*createdByActorType: "compiler" as const[\s\S]*createdByAgentKey: COMMUNITY_COMPILER_DIGEST_AGENT_KEY[\s\S]*createdAt: nowMs/,
+  "new non-empty digest versions should create pending autonomous handoffs with compiler attribution",
+);
 assert.match(
   digest,
   /This digest is non-canonical compiler output/,

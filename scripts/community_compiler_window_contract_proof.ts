@@ -33,7 +33,6 @@ for (const tableName of [
   "communityAiFeedPosts",
   "communityEvents",
   "communityOutcomeObservations",
-  "communityIntelligenceChangeRequests",
   "communityMemberships",
   "communityPresence",
   "communityAiFeedReactions",
@@ -44,6 +43,11 @@ for (const tableName of [
     `compiler window should read ${tableName} through a bounded query`,
   );
 }
+assert.doesNotMatch(
+  compilerWindow,
+  /communityIntelligenceChangeRequests|pending_change_requests|pendingChangeRequests|changeRequestLimit/,
+  "compiler window should not restore the deleted approval-plane backlog",
+);
 assert.match(
   compilerWindow,
   /query\("communityArchiveDocuments"[\s\S]*withIndex\("by_community_createdAt"[\s\S]*gte\("createdAt", windowStartedAtMs\)[\s\S]*\.take\(/,

@@ -99,7 +99,6 @@ for (const tableName of [
   "communitySourceTraces",
   "communityAiFeedPosts",
   "communityOutcomeObservations",
-  "communityIntelligenceChangeRequests",
 ]) {
   assert.match(
     compilerInputs,
@@ -107,6 +106,11 @@ for (const tableName of [
     `compiler input read model should read ${tableName}`,
   );
 }
+assert.doesNotMatch(
+  compilerInputs,
+  /communityIntelligenceChangeRequests|pending_change_requests|pendingChangeRequests/,
+  "compiler inputs should not restore the deleted approval-plane backlog",
+);
 assert.match(
   compilerInputs,
   /query\("communityAiFeedPosts"[\s\S]*withIndex\("by_community_status_score_createdAt"[\s\S]*\.take\(aiFeedFetchLimit\)/,
