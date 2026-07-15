@@ -132,6 +132,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const onboardingOpenedSessionIdsRef = useRef(new Set<string>());
+  const onboardingSeededSessionIdsRef = useRef(new Set<string>());
   const onboardingFocusSessionIdRef = useRef<string | null>(null);
   const retryRef = useRef<{ text: string; messageId: string } | null>(null);
   const activeThreadKeyRef = useRef<string | null>(null);
@@ -366,6 +367,24 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     props.onRequestOpen,
     showOnboardingAgentFocus,
   ]);
+
+  useEffect(() => {
+    if (
+      !showOnboardingAgentFocus ||
+      !shouldPresentCommunityOnboardingAgentStep(onboardingSession) ||
+      !onboardingSession ||
+      !props.communityName ||
+      onboardingSeededSessionIdsRef.current.has(onboardingSession.id)
+    ) {
+      return;
+    }
+    onboardingSeededSessionIdsRef.current.add(onboardingSession.id);
+    setInput((current) =>
+      current.trim()
+        ? current
+        : `What is one useful first action I should take in ${props.communityName}?`,
+    );
+  }, [onboardingSession, props.communityName, showOnboardingAgentFocus]);
 
   useEffect(() => {
     if (
@@ -698,6 +717,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
               type="button"
               onClick={() => void startNewChat()}
               disabled={
+                showOnboardingAgentFocus ||
                 turnIsActive ||
                 isPreparing ||
                 isStartingNewChat ||
@@ -712,6 +732,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
+                disabled={showOnboardingAgentFocus}
                 aria-label="Close"
                 title="Close"
               >

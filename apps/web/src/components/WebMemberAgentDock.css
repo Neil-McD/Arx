@@ -14,6 +14,13 @@
   z-index: 9997;
 }
 
+.member-agent-dock.is-onboarding .member-agent-dock-panel {
+  border-color: color-mix(in srgb, var(--member-agent-accent) 42%, var(--stroke-strong));
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.5),
+    0 0 0 1px color-mix(in srgb, var(--member-agent-accent) 12%, transparent);
+}
+
 .member-agent-dock-launcher {
   position: absolute;
   right: 0;
@@ -350,32 +357,6 @@
   border-radius: 8px;
 }
 
-.member-agent-dock.is-onboarding .member-agent-dock-header,
-.member-agent-dock.is-onboarding .member-agent-dock-transcript {
-  position: relative;
-}
-
-.member-agent-dock.is-onboarding .member-agent-dock-transcript {
-  overflow-y: hidden;
-}
-
-.member-agent-dock.is-onboarding .member-agent-dock-header::after,
-.member-agent-dock.is-onboarding .member-agent-dock-transcript::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  background: rgba(5, 5, 8, 0.66);
-  backdrop-filter: blur(4px) saturate(92%);
-  -webkit-backdrop-filter: blur(4px) saturate(92%);
-  pointer-events: auto;
-}
-
-.member-agent-dock.is-onboarding .member-agent-dock-composer-stack {
-  position: relative;
-  z-index: 6;
-}
-
 .member-agent-dock-composer:focus-within {
   border-color: var(--stroke-strong);
 }
@@ -474,6 +455,12 @@
   to { box-shadow: 0 0 0 3px color-mix(in srgb, var(--member-agent-accent) 10%, transparent); }
 }
 
+@media (max-width: 920px) and (min-width: 701px) {
+  .member-agent-dock.is-onboarding .member-agent-dock-panel {
+    width: min(420px, calc(100vw - 32px));
+  }
+}
+
 @media (max-width: 700px) {
   .member-agent-dock {
     right: 12px;
@@ -489,6 +476,15 @@
     inset: 0 0 calc(var(--mobile-bottom-rail-height) + env(safe-area-inset-bottom, 0px));
     z-index: 30;
     pointer-events: auto;
+  }
+
+  .member-agent-dock.mobile-root.is-onboarding {
+    top: calc(298px + env(safe-area-inset-top, 0px));
+    z-index: 9997;
+  }
+
+  .member-agent-dock.is-onboarding:not(.mobile-root) .member-agent-dock-panel {
+    height: max(260px, calc(100svh - 310px - env(safe-area-inset-top, 0px)));
   }
 
   .member-agent-dock.mobile-root .member-agent-dock-panel {

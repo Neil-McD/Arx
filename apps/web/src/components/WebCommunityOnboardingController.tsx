@@ -481,6 +481,10 @@ export function WebCommunityOnboardingController(props: {
       ) ? (
         <WebCommunityOnboardingAgentGuide
           communityName={props.communityName}
+          communityAvatarUrl={props.communityAvatarUrl}
+          communityAvatarFocusX={props.communityAvatarFocusX}
+          communityAvatarFocusY={props.communityAvatarFocusY}
+          communityAvatarZoom={props.communityAvatarZoom}
           descriptionId="community-onboarding-agent-description"
           isComplete={shouldPresentCommunityOnboardingAgentReview(contextValue.activeSession)}
           isPending={contextValue.pendingAction !== null}

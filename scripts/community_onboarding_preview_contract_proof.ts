@@ -23,7 +23,9 @@ const workflow = read("apps/web/src/components/WebCommunityOnboardingWorkflowSec
 const previewBar = read("apps/web/src/components/WebCommunityOnboardingPreviewBar.tsx");
 const chat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const dock = read("apps/web/src/components/WebMemberAgentDock.tsx");
+const dockCss = read("apps/web/src/components/WebMemberAgentDock.css");
 const orientation = read("apps/web/src/components/WebCommunityOnboardingOrientationSurface.tsx");
+const agentGuide = read("apps/web/src/components/WebCommunityOnboardingAgentGuide.tsx");
 const mcpGuide = read("apps/web/src/components/WebCommunityOnboardingMcpGuide.tsx");
 
 const originalWindow = globalThis.window;
@@ -83,8 +85,12 @@ assert.match(dock, /requestedFundingSource: "auto"/);
 assert.match(dock, /suppressOnboardingProgress: onboarding\?\.mode === "preview"/);
 assert.match(dock, /onboarding\.completeAgentTurnPreview\(\)/);
 assert.match(dock, /shouldPresentCommunityOnboardingAgentReview/);
+assert.match(dock, /onboardingSeededSessionIdsRef/);
 assert.doesNotMatch(dock, /Preview only|isVisualOnboardingPreview|memberAgentMode/);
+assert.doesNotMatch(dockCss, /member-agent-dock-header::after|member-agent-dock-transcript::after/);
 assert.doesNotMatch(orientation, /connected provider|Concierge history|textarea/);
+assert.match(agentGuide, /WebCommunityOnboardingConciergeSurface/);
+assert.match(agentGuide, /Step 3 of 4/);
 assert.match(mcpGuide, /POLYNET_MCP_SETUP_BUNDLE/);
 assert.match(mcpGuide, /Step 4 of 4/);
 
