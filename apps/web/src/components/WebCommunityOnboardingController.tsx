@@ -63,6 +63,11 @@ export function WebCommunityOnboardingController(props: {
   ensureSession?: (session: any) => Promise<any | null>;
   communityId: string | null;
   communityName: string | null;
+  communityOneLiner?: string | null;
+  communityAvatarUrl?: string | null;
+  communityAvatarFocusX?: number | null;
+  communityAvatarFocusY?: number | null;
+  communityAvatarZoom?: number | null;
   isEnabled: boolean;
   previewMode?: boolean;
   canPreview?: boolean;
@@ -454,8 +459,12 @@ export function WebCommunityOnboardingController(props: {
       shouldPresentCommunityOnboardingOrientation(contextValue.activeSession) ? (
         <WebCommunityOnboardingOrientationModal
           communityName={props.communityName}
+          communityOneLiner={props.communityOneLiner}
+          communityAvatarUrl={props.communityAvatarUrl}
+          communityAvatarFocusX={props.communityAvatarFocusX}
+          communityAvatarFocusY={props.communityAvatarFocusY}
+          communityAvatarZoom={props.communityAvatarZoom}
           session={contextValue.activeSession}
-          isPreview={isPreviewMode}
           isPreparing={isPreviewLoading}
           isPending={contextValue.pendingAction !== null}
           error={contextValue.error}

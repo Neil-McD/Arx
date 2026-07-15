@@ -12003,6 +12003,11 @@ export default function App() {
       ensureSession={ensureUsableAuthSession}
       communityId={memberAgentDockCommunity?.id ?? null}
       communityName={memberAgentDockCommunity?.name ?? null}
+      communityOneLiner={memberAgentDockCommunity?.one_liner ?? null}
+      communityAvatarUrl={memberAgentDockCommunity?.avatar_url ?? null}
+      communityAvatarFocusX={memberAgentDockCommunity?.avatar_focus_x ?? null}
+      communityAvatarFocusY={memberAgentDockCommunity?.avatar_focus_y ?? null}
+      communityAvatarZoom={memberAgentDockCommunity?.avatar_zoom ?? null}
       isEnabled={Boolean(
         memberAgentDockCommunity &&
         communityChatPanelProps.hasAuthenticatedPresentation &&

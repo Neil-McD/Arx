@@ -41,6 +41,10 @@ type ActiveCommunity = {
   visibility: string;
   one_liner: string | null;
   about: string | null;
+  avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
 };
 
 type WebCommunitySettingsSectionProps = {
@@ -1105,6 +1109,11 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 session={props.session}
                 communityId={activeCommunity.id}
                 communityName={activeCommunity.name}
+                communityOneLiner={activeCommunity.one_liner}
+                communityAvatarUrl={activeCommunity.avatar_url}
+                communityAvatarFocusX={activeCommunity.avatar_focus_x}
+                communityAvatarFocusY={activeCommunity.avatar_focus_y}
+                communityAvatarZoom={activeCommunity.avatar_zoom}
                 onPreview={props.onPreviewCommunityOnboarding}
               />
             ) : null}

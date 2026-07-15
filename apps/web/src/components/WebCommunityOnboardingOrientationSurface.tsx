@@ -1,12 +1,46 @@
-import { LoaderCircle } from "lucide-react";
 import type { CommunityOnboardingSession } from "../../../../shared/communityOnboarding";
-import { renderMarkdown } from "../../../../shared/markdownUi";
 import { renderHeroMediaDefault } from "./CommunityFunnelSurface";
+import { WebCommunityOnboardingConciergeSurface } from "./WebCommunityOnboardingConciergeSurface";
+
+function finishSentence(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || /[.!?]$/.test(trimmed)) return trimmed;
+  return `${trimmed}.`;
+}
+
+export function buildCommunityOnboardingOrientationTranscript(params: {
+  communityName: string;
+  communityOneLiner?: string | null;
+  welcomeMessage: string;
+  hasVideo: boolean;
+}): string {
+  const paragraphs: string[] = [];
+  const appendUnique = (value: string | null | undefined) => {
+    const trimmed = String(value ?? "").trim();
+    if (!trimmed) return;
+    const normalized = trimmed.toLocaleLowerCase().replace(/\s+/g, " ");
+    if (paragraphs.some((entry) => entry.toLocaleLowerCase().replace(/\s+/g, " ") === normalized)) return;
+    paragraphs.push(trimmed);
+  };
+
+  appendUnique(`Welcome to ${params.communityName}.`);
+  appendUnique(params.communityOneLiner ? finishSentence(params.communityOneLiner) : null);
+  appendUnique(params.welcomeMessage);
+  appendUnique(params.hasVideo
+    ? "The founder recorded a short welcome for you. Watch it below, then I’ll help you introduce yourself."
+    : "I’ll help you make your first introduction, then introduce you to your personal agent.");
+
+  return paragraphs.join("\n\n");
+}
 
 export function WebCommunityOnboardingOrientationSurface(props: {
   communityName: string;
+  communityOneLiner?: string | null;
+  communityAvatarUrl?: string | null;
+  communityAvatarFocusX?: number | null;
+  communityAvatarFocusY?: number | null;
+  communityAvatarZoom?: number | null;
   session: CommunityOnboardingSession;
-  isPreview: boolean;
   isPreparing: boolean;
   isPending: boolean;
   isInline?: boolean;
@@ -23,56 +57,36 @@ export function WebCommunityOnboardingOrientationSurface(props: {
       })
     : null;
   const controlsDisabled = Boolean(props.isInline) || props.isPending || props.isPreparing;
+  const transcript = buildCommunityOnboardingOrientationTranscript({
+    communityName: props.communityName,
+    communityOneLiner: props.communityOneLiner,
+    welcomeMessage: props.session.welcome_message,
+    hasVideo: Boolean(video),
+  });
 
   return (
-    <>
-      <div className="community-onboarding-orientation-topbar">
-        <span>Member orientation</span>
-        <span>1 of 4</span>
-      </div>
-
-      <div className="community-onboarding-orientation-scroll">
-        {video ? <div className="community-onboarding-orientation-media">{video}</div> : null}
-
-        <header className="community-onboarding-orientation-header">
-          <div className="community-onboarding-orientation-eyebrow">Welcome to</div>
-          <h1 id={props.titleId}>{props.communityName}</h1>
-          <p id={props.descriptionId}>
-            {video
-              ? "Start with the founder’s welcome, then enter the community."
-              : "Here’s what to know before you enter the community."}
-          </p>
-        </header>
-
-        <section className="community-onboarding-orientation-welcome" aria-label="Community welcome">
-          {props.isPreparing ? (
-            <div className="community-onboarding-orientation-status" role="status">
-              <LoaderCircle aria-hidden="true" /> Loading orientation
-            </div>
-          ) : (
-            renderMarkdown(props.session.welcome_message)
-          )}
-        </section>
-
-        {props.isPreview && !props.isInline ? (
-          <p className="community-onboarding-orientation-preview-note">
-            Previewing the exact saved member experience. No inference is used.
-          </p>
-        ) : null}
-
-        {props.error ? (
-          <div className="community-onboarding-orientation-error" role="alert">{props.error}</div>
-        ) : null}
-      </div>
-
-      <footer className="community-onboarding-orientation-actions">
-        <button type="button" className="secondary" onClick={props.onDismiss} disabled={controlsDisabled}>
-          Skip onboarding
-        </button>
-        <button type="button" className="primary" onClick={props.onContinue} disabled={controlsDisabled}>
-          {props.isPending ? "Saving…" : "Continue to community chat"}
-        </button>
-      </footer>
-    </>
+    <WebCommunityOnboardingConciergeSurface
+      communityName={props.communityName}
+      communityAvatarUrl={props.communityAvatarUrl}
+      communityAvatarFocusX={props.communityAvatarFocusX}
+      communityAvatarFocusY={props.communityAvatarFocusY}
+      communityAvatarZoom={props.communityAvatarZoom}
+      stepLabel="Step 1 of 4"
+      transcript={transcript}
+      titleId={props.titleId}
+      descriptionId={props.descriptionId}
+      isPreparing={props.isPreparing}
+      isPending={props.isPending}
+      controlsDisabled={controlsDisabled}
+      error={props.error}
+      primaryLabel="Continue"
+      pendingPrimaryLabel="Saving…"
+      secondaryLabel="Skip"
+      pendingSecondaryLabel="Skipping…"
+      onPrimary={props.onContinue}
+      onSecondary={props.onDismiss}
+    >
+      {video ? <div className="community-onboarding-orientation-media">{video}</div> : null}
+    </WebCommunityOnboardingConciergeSurface>
   );
 }

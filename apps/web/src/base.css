@@ -33565,38 +33565,27 @@ button.message-citation-chip:hover {
   animation: none;
 }
 
-.community-onboarding-orientation-inline .community-onboarding-orientation-topbar {
-  padding: 11px 16px;
-}
-
-.community-onboarding-orientation-inline .community-onboarding-orientation-scroll {
+.community-onboarding-orientation-inline .community-onboarding-concierge-body {
   overflow: visible;
-  padding: 18px 20px;
 }
 
-.community-onboarding-orientation-inline .community-onboarding-orientation-header {
-  margin-top: 16px;
+.community-onboarding-orientation-inline .community-onboarding-concierge-copy {
+  padding-block: 13px 11px;
 }
 
-.community-onboarding-orientation-inline .community-onboarding-orientation-header h1 {
-  font-size: clamp(23px, 3cqi, 30px);
-}
-
-.community-onboarding-orientation-inline .community-onboarding-orientation-header p {
-  margin-top: 8px;
+.community-onboarding-orientation-inline .community-onboarding-concierge-transcript {
   font-size: 12px;
+  line-height: 1.52;
 }
 
-.community-onboarding-orientation-inline .community-onboarding-orientation-actions {
+.community-onboarding-orientation-inline .community-onboarding-concierge-actions {
   min-width: 0;
   flex-wrap: wrap;
-  padding: 12px 16px;
 }
 
-.community-onboarding-orientation-inline .community-onboarding-orientation-actions button {
+.community-onboarding-orientation-inline .community-onboarding-concierge-actions button {
   min-width: 0;
   max-width: 100%;
-  min-height: 36px;
   padding-inline: 12px;
   font-size: 11px;
   white-space: normal;
@@ -33643,15 +33632,15 @@ button.message-citation-chip:hover {
     padding: 10px 0;
   }
 
-  .community-onboarding-orientation-inline .community-onboarding-orientation-actions {
+  .community-onboarding-orientation-inline .community-onboarding-concierge-actions {
     flex-direction: column;
   }
 
-  .community-onboarding-orientation-inline .community-onboarding-orientation-actions .primary {
+  .community-onboarding-orientation-inline .community-onboarding-concierge-actions .primary {
     order: -1;
   }
 
-  .community-onboarding-orientation-inline .community-onboarding-orientation-actions button {
+  .community-onboarding-orientation-inline .community-onboarding-concierge-actions button {
     width: 100%;
   }
 }
@@ -33725,7 +33714,7 @@ button.message-citation-chip:hover {
   opacity: 0.58;
 }
 
-/* Member onboarding orientation: one calm layer above the live community. */
+/* Member onboarding orientation: the same warm concierge voice as the guided steps. */
 .community-onboarding-orientation-overlay {
   position: fixed;
   inset: 0;
@@ -33740,84 +33729,29 @@ button.message-citation-chip:hover {
 }
 
 .community-onboarding-orientation-modal {
-  width: min(760px, calc(100vw - 32px));
+  width: min(720px, calc(100vw - 32px));
   max-height: min(94svh, 880px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border: 1px solid color-mix(in srgb, var(--border-default) 80%, var(--accent-rose) 20%);
-  border-radius: 22px;
-  background: color-mix(in srgb, var(--bg-modal, var(--bg-panel)) 97%, var(--accent-rose) 3%);
+  padding: 19px 20px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 38%, var(--border-default));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg-modal, var(--bg-panel)) 96%, var(--accent-gold) 4%);
   color: var(--text-primary);
-  box-shadow: 0 34px 100px rgba(0, 0, 0, 0.58);
+  box-shadow: 0 32px 96px rgba(0, 0, 0, 0.56);
   outline: none;
   animation: community-onboarding-modal-in 220ms cubic-bezier(0.2, 0.78, 0.25, 1) both;
 }
 
 .community-onboarding-orientation-modal:not(.has-video) {
-  width: min(680px, calc(100vw - 32px));
-}
-
-.community-onboarding-orientation-topbar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 13px 22px;
-  border-bottom: 1px solid var(--border-muted);
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.community-onboarding-orientation-topbar span:last-child {
-  color: var(--accent-rose);
-}
-
-.community-onboarding-orientation-scroll {
-  min-height: 0;
-  overflow: auto;
-  padding: 24px 30px 22px;
-  scrollbar-width: thin;
-}
-
-.community-onboarding-orientation-header {
-  max-width: 600px;
-  margin-top: 22px;
-}
-
-.community-onboarding-orientation-eyebrow {
-  margin-bottom: 7px;
-  color: var(--accent-rose);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.community-onboarding-orientation-header h1 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: clamp(26px, 4vw, 38px);
-  font-weight: 680;
-  letter-spacing: -0.035em;
-  line-height: 1.08;
-}
-
-.community-onboarding-orientation-header p {
-  max-width: 580px;
-  margin: 10px 0 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.5;
-  white-space: pre-wrap;
+  width: min(640px, calc(100vw - 32px));
 }
 
 .community-onboarding-orientation-media {
   max-width: 100%;
-  margin: 0;
+  margin: 2px 0 15px;
+  animation: community-onboarding-orientation-content-in 200ms ease-out both;
 }
 
 .community-onboarding-orientation-media .public-funnel-media-shell,
@@ -33825,46 +33759,6 @@ button.message-citation-chip:hover {
   border-radius: 16px;
   border-color: color-mix(in srgb, var(--border-default) 84%, white 16%);
   background: #09090c;
-}
-
-.community-onboarding-orientation-welcome {
-  margin-top: 22px;
-  padding: 16px 18px;
-  border: 1px solid var(--border-default);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--surface-card) 94%, transparent);
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.community-onboarding-orientation-welcome > :first-child {
-  margin-top: 0;
-}
-
-.community-onboarding-orientation-welcome > :last-child {
-  margin-bottom: 0;
-}
-
-.community-onboarding-orientation-preview-note {
-  margin: 12px 0 0;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.community-onboarding-orientation-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.community-onboarding-orientation-status svg {
-  width: 13px;
-  height: 13px;
-  animation: spin 900ms linear infinite;
 }
 
 .community-onboarding-orientation-media .public-funnel-media-hint {
@@ -33880,68 +33774,23 @@ button.message-citation-chip:hover {
   pointer-events: none;
 }
 
-.community-onboarding-orientation-error {
-  margin-top: 18px;
-  color: var(--danger-text, #f3a6a6);
-  font-size: 12px;
-  line-height: 1.45;
+.community-onboarding-orientation-modal .community-onboarding-concierge-body {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
 }
 
-.community-onboarding-orientation-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 14px 22px;
-  border-top: 1px solid var(--border-default);
-  background: color-mix(in srgb, var(--bg-modal, var(--bg-panel)) 94%, transparent);
+.community-onboarding-orientation-modal .community-onboarding-concierge-copy {
+  padding-block: 18px 15px;
 }
 
-.community-onboarding-orientation-actions button {
-  min-height: 40px;
-  padding: 0 16px;
-  border-radius: 10px;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 650;
-  cursor: pointer;
-  transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
+.community-onboarding-orientation-modal .community-onboarding-concierge-transcript {
+  max-width: 62ch;
 }
 
-.community-onboarding-orientation-actions button:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.community-onboarding-orientation-actions button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent-gold) 62%, transparent);
-  outline-offset: 2px;
-}
-
-.community-onboarding-orientation-actions button:disabled {
-  cursor: wait;
-  opacity: 0.62;
-}
-
-.community-onboarding-orientation-actions .secondary {
-  border: 1px solid var(--border-default);
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.community-onboarding-orientation-actions .secondary:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--border-default) 68%, var(--text-muted) 32%);
-  background: var(--hover-overlay);
-  color: var(--text-primary);
-}
-
-.community-onboarding-orientation-actions .primary {
-  border: 1px solid var(--bg-button);
-  background: var(--bg-button);
-  color: var(--bg-button-text);
-}
-
-.community-onboarding-orientation-actions .primary:hover:not(:disabled) {
-  border-color: var(--bg-button-hover);
-  background: var(--bg-button-hover);
+.community-onboarding-orientation-modal .community-onboarding-concierge-actions {
+  flex: 0 0 auto;
 }
 
 @keyframes community-onboarding-overlay-in {
@@ -33952,6 +33801,11 @@ button.message-citation-chip:hover {
 @keyframes community-onboarding-modal-in {
   from { opacity: 0; transform: translateY(10px) scale(0.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes community-onboarding-orientation-content-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (max-width: 640px) {
@@ -33980,32 +33834,8 @@ button.message-citation-chip:hover {
   .community-onboarding-orientation-modal:not(.has-video) {
     width: calc(100vw - 20px);
     max-height: calc(100svh - 20px);
+    padding: 15px 14px 12px;
     border-radius: 16px;
-  }
-
-  .community-onboarding-orientation-scroll {
-    padding: 18px 16px 16px;
-  }
-
-  .community-onboarding-orientation-topbar {
-    padding-inline: 16px;
-  }
-
-  .community-onboarding-orientation-header {
-    margin-top: 18px;
-  }
-
-  .community-onboarding-orientation-actions {
-    flex-direction: column;
-    padding: 14px 16px 16px;
-  }
-
-  .community-onboarding-orientation-actions button {
-    width: 100%;
-  }
-
-  .community-onboarding-orientation-actions .primary {
-    order: -1;
   }
 }
 
@@ -34015,8 +33845,8 @@ button.message-citation-chip:hover {
     animation: none;
   }
 
-  .community-onboarding-orientation-actions button {
-    transition: none;
+  .community-onboarding-orientation-media {
+    animation: none;
   }
 }
 
@@ -34253,6 +34083,10 @@ button.message-citation-chip:hover {
   min-width: 0;
 }
 
+.community-onboarding-concierge-body {
+  min-width: 0;
+}
+
 .community-onboarding-concierge-avatar {
   width: 40px;
   height: 40px;
@@ -34330,7 +34164,19 @@ button.message-citation-chip:hover {
   text-wrap: pretty;
 }
 
-.community-onboarding-concierge-transcript.is-speaking > span[aria-hidden="true"]::after {
+.community-onboarding-concierge-transcript > div[aria-hidden="true"] > :first-child {
+  margin-top: 0;
+}
+
+.community-onboarding-concierge-transcript > div[aria-hidden="true"] > :last-child {
+  margin-bottom: 0;
+}
+
+.community-onboarding-concierge-transcript > div[aria-hidden="true"] > p {
+  margin-block: 0 0.75em;
+}
+
+.community-onboarding-concierge-transcript.is-speaking > div[aria-hidden="true"] > :last-child::after {
   content: "";
   display: inline-block;
   width: 1px;
@@ -34339,6 +34185,10 @@ button.message-citation-chip:hover {
   background: currentColor;
   vertical-align: -0.12em;
   animation: community-onboarding-concierge-caret 640ms steps(1, end) infinite;
+}
+
+.community-onboarding-concierge-content {
+  animation: community-onboarding-concierge-action-in 180ms ease-out both;
 }
 
 .community-onboarding-concierge-sr-only {
@@ -34483,7 +34333,8 @@ button.message-citation-chip:hover {
   .community-onboarding-concierge-overlay,
   .community-onboarding-concierge-guide,
   .community-onboarding-concierge-avatar.is-speaking,
-  .community-onboarding-concierge-transcript.is-speaking > span[aria-hidden="true"]::after,
+  .community-onboarding-concierge-transcript.is-speaking > div[aria-hidden="true"] > :last-child::after,
+  .community-onboarding-concierge-content,
   .community-onboarding-concierge-actions button.primary {
     animation: none;
   }

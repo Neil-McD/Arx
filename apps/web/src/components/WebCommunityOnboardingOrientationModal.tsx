@@ -14,8 +14,12 @@ const FOCUSABLE_SELECTOR = [
 
 export function WebCommunityOnboardingOrientationModal(props: {
   communityName: string;
+  communityOneLiner?: string | null;
+  communityAvatarUrl?: string | null;
+  communityAvatarFocusX?: number | null;
+  communityAvatarFocusY?: number | null;
+  communityAvatarZoom?: number | null;
   session: CommunityOnboardingSession;
-  isPreview: boolean;
   isPreparing: boolean;
   isPending: boolean;
   error: string | null;

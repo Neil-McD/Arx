@@ -19,6 +19,11 @@ export function WebCommunityOnboardingWorkflowSection(props: {
   session: unknown;
   communityId: string;
   communityName: string;
+  communityOneLiner?: string | null;
+  communityAvatarUrl?: string | null;
+  communityAvatarFocusX?: number | null;
+  communityAvatarFocusY?: number | null;
+  communityAvatarZoom?: number | null;
   onPreview: () => void;
 }) {
   const [config, setConfig] = useState<CommunityOnboardingConfig | null>(null);
@@ -234,8 +239,12 @@ export function WebCommunityOnboardingWorkflowSection(props: {
                 <div className={`community-onboarding-orientation-modal community-onboarding-orientation-inline${inlinePreviewSession.intro_video_url ? " has-video" : ""}`}>
                   <WebCommunityOnboardingOrientationSurface
                     communityName={props.communityName}
+                    communityOneLiner={props.communityOneLiner}
+                    communityAvatarUrl={props.communityAvatarUrl}
+                    communityAvatarFocusX={props.communityAvatarFocusX}
+                    communityAvatarFocusY={props.communityAvatarFocusY}
+                    communityAvatarZoom={props.communityAvatarZoom}
                     session={inlinePreviewSession}
-                    isPreview
                     isPreparing={false}
                     isPending={false}
                     isInline
