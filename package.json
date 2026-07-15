@@ -101,6 +101,7 @@
     "check:community-interaction-projection-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interaction_projection_ui_contract_proof.ts",
     "check:chat-block-markdown-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/chat_block_markdown_proof.ts",
     "check:mobile-root-navigation-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/mobile_root_navigation_contract_proof.ts",
+    "check:mobile-reading-mode-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/mobile_reading_mode_policy_proof.ts",
     "check:community-activity-events-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_activity_events_contract_proof.ts",
     "check:community-resources-knowledge-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_resources_knowledge_contract_proof.ts",
     "check:community-resource-markdown-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_resource_markdown_ui_proof.ts",

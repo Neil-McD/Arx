@@ -41,6 +41,15 @@ import type {
   CloudCommunityPolynetOverview,
   CloudCommunityPolynetOverviewNode,
 } from "../../../../shared/cloudCommunityPolynetGateway";
+import {
+  MOBILE_READING_MODE_POLICY,
+  advanceMobileReadingMode,
+  beginMobileReadingModeGesture,
+  createMobileReadingModeState,
+  forceMobileReadingMode as forceMobileReadingModeState,
+  settleMobileReadingMode,
+  suppressProgrammaticMobileScroll,
+} from "./mobileReadingModePolicy";
 
 export type WebCommunityInteractionProjectionProps = {
   activeCommunityName: string;
@@ -146,10 +155,6 @@ export type WebCommunityInteractionProjectionProps = {
   onBanCommunityMember?: (membershipId: string) => Promise<void> | void;
   loadMemberBillingHistory?: (membershipId: string) => Promise<CloudCommunityMemberBillingHistory | null>;
 };
-
-const MOBILE_READING_MODE_HIDE_TRAVEL_PX = 36;
-const MOBILE_READING_MODE_SHOW_TRAVEL_PX = 12;
-const MOBILE_READING_MODE_BOTTOM_LOCK_PX = 96;
 
 import {
   ActorAvatar,
@@ -296,11 +301,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const drawerScrollRef = useRef<HTMLDivElement | null>(null);
   const drawerComposerRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
-  const isMobileReadingModeRef = useRef(false);
   const isMainComposerFocusedRef = useRef(false);
-  const lastMobileScrollTopRef = useRef<number | null>(null);
-  const mobileScrollDirectionRef = useRef<-1 | 0 | 1>(0);
-  const mobileScrollTravelRef = useRef(0);
+  const mobileReadingModeStateRef = useRef(createMobileReadingModeState());
+  const pendingMobileScrollFrameRef = useRef<number | null>(null);
+  const mobileScrollSettleTimerRef = useRef<number | null>(null);
   const requestedOlderRootsRef = useRef(false);
   const pendingOlderAnchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const seenReplyIds = useRef<Set<string>>(new Set());
@@ -309,16 +313,33 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const [editing, setEditing] = useState<{ type: "root" | "reply"; id: string } | null>(null);
   const [editText, setEditText] = useState("");
 
-  const setMobileReadingMode = useCallback((active: boolean) => {
-    if (isMobileReadingModeRef.current === active) return;
-    isMobileReadingModeRef.current = active;
+  const publishMobileReadingMode = useCallback((active: boolean) => {
     props.onMobileReadingModeChange?.(active);
   }, [props.onMobileReadingModeChange]);
 
-  const resetMobileScrollTravel = () => {
-    mobileScrollDirectionRef.current = 0;
-    mobileScrollTravelRef.current = 0;
-  };
+  const forceMobileReadingMode = useCallback((active: boolean) => {
+    const result = forceMobileReadingModeState(
+      mobileReadingModeStateRef.current,
+      active,
+      performance.now(),
+    );
+    mobileReadingModeStateRef.current = result.state;
+    if (result.changed) publishMobileReadingMode(result.state.active);
+  }, [publishMobileReadingMode]);
+
+  const prepareProgrammaticMobileScroll = useCallback((
+    durationMs: number,
+    forceVisible = false,
+  ) => {
+    const result = suppressProgrammaticMobileScroll(
+      mobileReadingModeStateRef.current,
+      performance.now(),
+      durationMs,
+      forceVisible,
+    );
+    mobileReadingModeStateRef.current = result.state;
+    if (result.changed) publishMobileReadingMode(result.state.active);
+  }, [publishMobileReadingMode]);
 
   const startEdit = (type: "root" | "reply", id: string, body: string) => {
     setEditing({ type, id });
@@ -335,50 +356,32 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const scrollToLatest = () => {
     const el = scrollRef.current;
     if (!el) return;
-    setMobileReadingMode(false);
-    resetMobileScrollTravel();
+    prepareProgrammaticMobileScroll(
+      MOBILE_READING_MODE_POLICY.smoothProgrammaticScrollLockMs,
+      true,
+    );
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     setShowJumpToLatest(false);
   };
 
-  const handleFeedScroll = () => {
+  const processFeedScroll = () => {
+    pendingMobileScrollFrameRef.current = null;
     const el = scrollRef.current;
     if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const maxScrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    const clampedScrollTop = Math.min(Math.max(0, el.scrollTop), maxScrollTop);
+    const distanceFromBottom = maxScrollTop - clampedScrollTop;
     isNearBottomRef.current = distanceFromBottom < 120;
 
-    const nextScrollTop = Math.max(0, el.scrollTop);
-    const previousScrollTop = lastMobileScrollTopRef.current;
-    lastMobileScrollTopRef.current = nextScrollTop;
-    if (props.onMobileReadingModeChange && previousScrollTop !== null) {
-      const delta = nextScrollTop - previousScrollTop;
-      if (
-        isMainComposerFocusedRef.current
-        || distanceFromBottom <= MOBILE_READING_MODE_BOTTOM_LOCK_PX
-      ) {
-        resetMobileScrollTravel();
-        setMobileReadingMode(false);
-      } else if (Math.abs(delta) >= 1) {
-        const direction: -1 | 1 = delta < 0 ? -1 : 1;
-        if (mobileScrollDirectionRef.current !== direction) {
-          mobileScrollDirectionRef.current = direction;
-          mobileScrollTravelRef.current = 0;
-        }
-        mobileScrollTravelRef.current += Math.abs(delta);
-        if (
-          direction === -1
-          && mobileScrollTravelRef.current >= MOBILE_READING_MODE_HIDE_TRAVEL_PX
-        ) {
-          setMobileReadingMode(true);
-          mobileScrollTravelRef.current = 0;
-        } else if (
-          direction === 1
-          && mobileScrollTravelRef.current >= MOBILE_READING_MODE_SHOW_TRAVEL_PX
-        ) {
-          setMobileReadingMode(false);
-          mobileScrollTravelRef.current = 0;
-        }
-      }
+    if (props.onMobileReadingModeChange) {
+      const result = advanceMobileReadingMode(mobileReadingModeStateRef.current, {
+        scrollTop: el.scrollTop,
+        maxScrollTop,
+        nowMs: performance.now(),
+        composerFocused: isMainComposerFocusedRef.current,
+      });
+      mobileReadingModeStateRef.current = result.state;
+      if (result.changed) publishMobileReadingMode(result.state.active);
     }
     if (distanceFromBottom < 120) {
       setShowJumpToLatest(false);
@@ -399,11 +402,63 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     }
   };
 
+  const handleFeedScroll = () => {
+    if (props.onMobileReadingModeChange) {
+      if (mobileScrollSettleTimerRef.current !== null) {
+        window.clearTimeout(mobileScrollSettleTimerRef.current);
+      }
+      mobileScrollSettleTimerRef.current = window.setTimeout(() => {
+        mobileScrollSettleTimerRef.current = null;
+        const el = scrollRef.current;
+        if (!el) return;
+        const result = settleMobileReadingMode(mobileReadingModeStateRef.current, {
+          scrollTop: el.scrollTop,
+          maxScrollTop: Math.max(0, el.scrollHeight - el.clientHeight),
+          nowMs: performance.now(),
+          composerFocused: isMainComposerFocusedRef.current,
+        });
+        mobileReadingModeStateRef.current = result.state;
+        if (result.changed) publishMobileReadingMode(result.state.active);
+      }, MOBILE_READING_MODE_POLICY.scrollSettleMs);
+    }
+    if (pendingMobileScrollFrameRef.current !== null) return;
+    pendingMobileScrollFrameRef.current = requestAnimationFrame(processFeedScroll);
+  };
+
+  const handleFeedTouchStart = () => {
+    if (!props.onMobileReadingModeChange) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    if (mobileScrollSettleTimerRef.current !== null) {
+      window.clearTimeout(mobileScrollSettleTimerRef.current);
+      mobileScrollSettleTimerRef.current = null;
+    }
+    mobileReadingModeStateRef.current = beginMobileReadingModeGesture(
+      mobileReadingModeStateRef.current,
+      el.scrollTop,
+      Math.max(0, el.scrollHeight - el.clientHeight),
+      performance.now(),
+    );
+  };
+
   useEffect(() => {
     if (!props.isLoadingOlderRoots) requestedOlderRootsRef.current = false;
   }, [props.isLoadingOlderRoots]);
 
+  useEffect(() => {
+    if (props.onMobileReadingModeChange) return;
+    mobileReadingModeStateRef.current = createMobileReadingModeState();
+  }, [props.onMobileReadingModeChange]);
+
   useEffect(() => () => {
+    if (pendingMobileScrollFrameRef.current !== null) {
+      cancelAnimationFrame(pendingMobileScrollFrameRef.current);
+      pendingMobileScrollFrameRef.current = null;
+    }
+    if (mobileScrollSettleTimerRef.current !== null) {
+      window.clearTimeout(mobileScrollSettleTimerRef.current);
+      mobileScrollSettleTimerRef.current = null;
+    }
     props.onMobileReadingModeChange?.(false);
   }, [props.onMobileReadingModeChange]);
 
@@ -423,7 +478,13 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
       if (props.floatingComposers && isNearBottomRef.current) {
         requestAnimationFrame(() => {
           const scroll = scrollRef.current;
-          if (scroll) scroll.scrollTop = scroll.scrollHeight;
+          if (scroll) {
+            prepareProgrammaticMobileScroll(
+              MOBILE_READING_MODE_POLICY.instantProgrammaticScrollLockMs,
+              true,
+            );
+            scroll.scrollTop = scroll.scrollHeight;
+          }
         });
       }
     };
@@ -435,7 +496,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
       observer.disconnect();
       main.style.removeProperty("--mobile-community-composer-height");
     };
-  }, [props.floatingComposers, props.mainComposer]);
+  }, [prepareProgrammaticMobileScroll, props.floatingComposers, props.mainComposer]);
 
   useLayoutEffect(() => {
     const drawer = drawerRef.current;
@@ -483,9 +544,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     const reason = props.rootChangeReason ?? "newer";
     if (reason === "reset") {
       pendingOlderAnchorRef.current = null;
-      lastMobileScrollTopRef.current = Math.max(0, el.scrollTop);
-      resetMobileScrollTravel();
-      setMobileReadingMode(false);
+      prepareProgrammaticMobileScroll(
+        MOBILE_READING_MODE_POLICY.instantProgrammaticScrollLockMs,
+        true,
+      );
       setShowJumpToLatest(false);
       return;
     }
@@ -493,17 +555,19 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
       const anchor = pendingOlderAnchorRef.current;
       pendingOlderAnchorRef.current = null;
       if (anchor) {
+        prepareProgrammaticMobileScroll(
+          MOBILE_READING_MODE_POLICY.instantProgrammaticScrollLockMs,
+        );
         el.scrollTop = Math.max(0, el.scrollHeight - anchor.scrollHeight + anchor.scrollTop);
       }
-      lastMobileScrollTopRef.current = Math.max(0, el.scrollTop);
-      resetMobileScrollTravel();
       return;
     }
     if (reason === "initial") {
+      prepareProgrammaticMobileScroll(
+        MOBILE_READING_MODE_POLICY.instantProgrammaticScrollLockMs,
+        true,
+      );
       el.scrollTop = el.scrollHeight;
-      lastMobileScrollTopRef.current = Math.max(0, el.scrollTop);
-      resetMobileScrollTravel();
-      setMobileReadingMode(false);
       isNearBottomRef.current = true;
       setShowJumpToLatest(false);
       props.onCaughtUp?.();
@@ -511,17 +575,18 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     }
     if (reason === "newer") {
       if (isNearBottomRef.current) {
+        prepareProgrammaticMobileScroll(
+          MOBILE_READING_MODE_POLICY.instantProgrammaticScrollLockMs,
+          true,
+        );
         el.scrollTop = el.scrollHeight;
-        lastMobileScrollTopRef.current = Math.max(0, el.scrollTop);
-        resetMobileScrollTravel();
-        setMobileReadingMode(false);
         setShowJumpToLatest(false);
         props.onCaughtUp?.();
       } else {
         setShowJumpToLatest(true);
       }
     }
-  }, [props.rootChangeReason, rootWindowSignature]);
+  }, [prepareProgrammaticMobileScroll, props.rootChangeReason, rootWindowSignature]);
 
   // Reset reply animation tracking on thread switch so a thread's initial replies don't animate.
   useEffect(() => {
@@ -555,7 +620,12 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     <>
     <div className={`community-interaction-projection${selectedRoot || props.profilePanel ? " has-drawer" : " has-context-panel"}${isMobileThreadPage ? " mobile-thread-page-open" : ""}`}>
       <div className="community-interaction-main" ref={mainRef}>
-        <div className="community-interaction-feed-scroll" ref={scrollRef} onScroll={handleFeedScroll}>
+        <div
+          className="community-interaction-feed-scroll"
+          ref={scrollRef}
+          onScroll={handleFeedScroll}
+          onTouchStart={handleFeedTouchStart}
+        >
           <CommunityInteractionFeedList
             {...props}
             density="full"
@@ -588,8 +658,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             ref={composerRef}
             onFocusCapture={() => {
               isMainComposerFocusedRef.current = true;
-              resetMobileScrollTravel();
-              setMobileReadingMode(false);
+              forceMobileReadingMode(false);
             }}
             onBlurCapture={(event) => {
               const nextTarget = event.relatedTarget;

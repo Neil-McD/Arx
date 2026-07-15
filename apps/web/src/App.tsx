@@ -9174,13 +9174,16 @@ export default function App() {
     && mobileRootPage === "community"
     && !mobileThreadPageOpen
   );
+  const mobileChromeScrollTrackingEnabled = Boolean(
+    mobileChromeAutoHideEnabled
+    && !mobileOverlay
+  );
   useEffect(() => {
     if (mobileChromeAutoHideEnabled && !mobileOverlay) return;
     setMobileChromeReadingMode(false);
   }, [mobileChromeAutoHideEnabled, mobileOverlay]);
   const mobileChromeReadingModeActive = Boolean(
-    mobileChromeAutoHideEnabled
-    && !mobileOverlay
+    mobileChromeScrollTrackingEnabled
     && mobileChromeReadingMode
   );
   const dockedWorkspaceCenterWidth =
@@ -10841,7 +10844,7 @@ export default function App() {
       interactionProjection: {
         enabled: COMMUNITY_INTERACTION_PROJECTION_ENABLED,
         mobileThreadPage: mobileThreadPageOpen,
-        onMobileReadingModeChange: mobileChromeAutoHideEnabled
+        onMobileReadingModeChange: mobileChromeScrollTrackingEnabled
           ? setMobileChromeReadingMode
           : undefined,
         roots: appendPendingRoots(communityInteractionRoots, pendingCanonicalInteractions, activeCommunityId),

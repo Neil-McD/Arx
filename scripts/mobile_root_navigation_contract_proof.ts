@@ -33,6 +33,9 @@ const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const interactionProjection = read(
   "apps/web/src/components/WebCommunityInteractionProjection.tsx",
 );
+const mobileReadingModePolicy = read(
+  "apps/web/src/components/mobileReadingModePolicy.ts",
+);
 const indexCss = read("apps/web/src/index.css");
 const baseCss = read("apps/web/src/base.css");
 const packageJson = read("package.json");
@@ -350,17 +353,22 @@ assert.match(
 );
 assert.match(
   app,
-  /const \[mobileChromeReadingMode, setMobileChromeReadingMode\] = useState\(false\);[\s\S]*const mobileChromeAutoHideEnabled = Boolean\([\s\S]*activePage === "community"[\s\S]*communityTab === "chat"[\s\S]*mobileRootPage === "community"[\s\S]*onMobileReadingModeChange: mobileChromeAutoHideEnabled[\s\S]*setMobileChromeReadingMode/,
+  /const \[mobileChromeReadingMode, setMobileChromeReadingMode\] = useState\(false\);[\s\S]*const mobileChromeAutoHideEnabled = Boolean\([\s\S]*activePage === "community"[\s\S]*communityTab === "chat"[\s\S]*mobileRootPage === "community"[\s\S]*const mobileChromeScrollTrackingEnabled = Boolean\([\s\S]*!mobileOverlay[\s\S]*onMobileReadingModeChange: mobileChromeScrollTrackingEnabled[\s\S]*setMobileChromeReadingMode/,
   "mobile reading mode should be enabled only for the bottom-anchored Community chat root",
 );
 assert.match(
   interactionProjection,
-  /MOBILE_READING_MODE_HIDE_TRAVEL_PX = 36;[\s\S]*MOBILE_READING_MODE_SHOW_TRAVEL_PX = 12;[\s\S]*MOBILE_READING_MODE_BOTTOM_LOCK_PX = 96;[\s\S]*direction === -1[\s\S]*setMobileReadingMode\(true\)[\s\S]*direction === 1[\s\S]*setMobileReadingMode\(false\)/,
-  "upward history travel should hide chrome with hysteresis while downward travel restores it quickly",
+  /advanceMobileReadingMode[\s\S]*beginMobileReadingModeGesture[\s\S]*suppressProgrammaticMobileScroll[\s\S]*requestAnimationFrame\(processFeedScroll\)[\s\S]*onTouchStart=\{handleFeedTouchStart\}/,
+  "the feed should batch scroll evaluation and bind transitions to physical touch gestures",
+);
+assert.match(
+  mobileReadingModePolicy,
+  /hideTravelPx: 48[\s\S]*showTravelPx: 28[\s\S]*bottomLockEnterPx: 96[\s\S]*bottomLockExitPx: 160[\s\S]*transitionLockMs: 220[\s\S]*scrollSettleMs: 240[\s\S]*gestureAnchorScrollTop[\s\S]*gestureTransitioned[\s\S]*programmaticLockedUntilMs/,
+  "reading mode should use deliberate thresholds, bottom hysteresis, gesture gating, and programmatic suppression",
 );
 assert.match(
   interactionProjection,
-  /new ResizeObserver\(syncComposerHeight\)[\s\S]*isMainComposerFocusedRef\.current = true;[\s\S]*setMobileReadingMode\(false\);/,
+  /new ResizeObserver\(syncComposerHeight\)[\s\S]*isMainComposerFocusedRef\.current = true;[\s\S]*forceMobileReadingMode\(false\);/,
   "composer focus should force chrome visible while its measured overlay preserves feed space",
 );
 assert.match(
