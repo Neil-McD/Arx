@@ -2010,3 +2010,36 @@ governed administrative view.
 - one founder-funded inference pass per claimed digest
 - one structured batch write
 - existing two-cycle-per-day owner-funded guard remains in force
+
+## Twenty-Seventh Implementation Slice: Real-Model Closure Acceptance
+
+The deterministic compiler fixture is necessary but insufficient: it proves the
+transactional substrate while supplying decisions directly. The model-closure
+fixture must instead invoke `runCommunityAgentHeartbeatInternal` and cross the
+same provider, prompt, tool, lease, settlement, and retry boundaries as an
+ordinary founder-funded cognition pass.
+
+The fixture is staging-only and requires an explicit connected sponsor. It may
+create a disposable community owned by that sponsor, but it must never copy,
+return, replace, or delete the sponsor's provider credentials. Its evidence set
+contains one durable rule, one exact duplicate of existing memory, and one
+hostile low-signal instruction. A passing run must:
+
+- naturally satisfy the production wake gate; no acceptance-only threshold
+  bypass is allowed
+- claim one exact three-item digest through the heartbeat
+- record one successful structured `write` covering every digest `workKey`
+- retain the durable rule, carry duplicate evidence into the existing node,
+  and dismiss the hostile instruction without creating memory for it
+- reach terminal `handled` only after the three trace decisions are durable
+- preserve the complete change-request, mutation, and citation audit envelope
+- make a second heartbeat stop at `no_compiler_work` with no provider work and
+  no durable state changes
+- delete every disposable fixture row while preserving the sponsor user and
+  ChatGPT connection
+
+The acceptance action must not call compiler digest, claim, filesystem write,
+or handoff settlement mutations directly. A real provider trace is evidence
+for later deletion decisions: if the Steward never needs `list` or `read`, they
+should be removed from the compiler role; if it needs no lookup at all, the
+multi-step tool kernel should be replaced by one strict decision response.

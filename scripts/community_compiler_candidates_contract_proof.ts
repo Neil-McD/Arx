@@ -11,6 +11,9 @@ const acceptance = readFileSync(
   join(root, "convex/communityChatMemoryCompilerAcceptance.ts"),
   "utf8",
 );
+const modelAcceptance = acceptance.slice(
+  acceptance.indexOf("export const runCommunityChatMemoryCompilerModelAcceptance"),
+);
 
 const retained = normalizeCommunityMemoryDecision({
   workKey: "community_memory_work:v1:" + "a".repeat(64),
@@ -158,6 +161,31 @@ assert.match(
   acceptance,
   /searchCommunityChatMemoryCompilerMemberMemoryInternal[\s\S]*searchCommunityMemoryCore/,
   "acceptance should exercise the production accepted-memory search core without bypassing access checks",
+);
+assert.match(
+  modelAcceptance,
+  /MODEL_ACCEPTANCE_CONFIRMATION[\s\S]*readCommunityChatMemoryCompilerSponsorReadinessInternal[\s\S]*sponsor_connection_missing/,
+  "the real-model fixture must require explicit staging confirmation and a connected sponsor",
+);
+assert.match(
+  modelAcceptance,
+  /runCommunityAgentHeartbeatInternal[\s\S]*model_tool_trace_not_one_complete_write[\s\S]*model_prompt_injection_was_not_safely_dismissed[\s\S]*second_heartbeat_reprocessed_settled_work/,
+  "the model fixture must prove the real heartbeat, one complete write, injection resistance, and no reprocessing",
+);
+assert.doesNotMatch(
+  modelAcceptance,
+  /writeCommunityAgentFilesystemInternal|claimCommunityCompilerDigestHandoffInternal|settleCommunityCompilerDigestHandoffInternal|runCommunityCompilerDigestPassInternal/,
+  "the model fixture must not bypass the production heartbeat with direct compiler or settlement calls",
+);
+assert.match(
+  modelAcceptance,
+  /preserveOwner: true[\s\S]*sponsorStatePreserved/,
+  "fixture cleanup must preserve the connected sponsor and provider state",
+);
+assert.match(
+  acceptance,
+  /communityAgentRunEvents[\s\S]*communityAgentRuns[\s\S]*communityInteractionSourceTraceLinks[\s\S]*if \(args\.preserveOwner !== true\)/,
+  "fixture cleanup must remove model-run and interaction-link residue without deleting a preserved sponsor",
 );
 
 console.log("community_compiler_candidates_contract_proof: ok");
