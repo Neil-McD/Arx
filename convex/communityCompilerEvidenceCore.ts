@@ -43,16 +43,69 @@ export type SourceTraceRow = {
   compilerPendingSince?: number;
   compilerLastHandledAt?: number;
   compilerLastDigestId?: any;
+  compilerDecision?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
 };
+
+export async function buildCommunitySourceTraceRevision(
+  row: Pick<
+    SourceTraceRow,
+    | "_id"
+    | "communityId"
+    | "sourceType"
+    | "sourceId"
+    | "title"
+    | "summary"
+    | "visibilityScope"
+    | "sourceVisibility"
+    | "workflowId"
+    | "artifactIds"
+    | "outcomeObservationIds"
+    | "actorType"
+    | "actorUserId"
+    | "actorAgentKey"
+  >,
+): Promise<string> {
+  const material = JSON.stringify({
+    version: 1,
+    traceId: normalizeIdValue(row._id),
+    communityId: normalizeIdValue(row.communityId),
+    sourceType: row.sourceType,
+    sourceId: row.sourceId ?? null,
+    title: row.title ?? null,
+    summary: row.summary,
+    visibilityScope: row.visibilityScope,
+    sourceVisibility: row.sourceVisibility,
+    workflowId: row.workflowId ?? null,
+    artifactIds: Array.from(new Set(row.artifactIds ?? [])).sort(),
+    outcomeObservationIds: Array.from(
+      new Set((row.outcomeObservationIds ?? []).map(normalizeIdValue)),
+    ).sort(),
+    actorType: row.actorType,
+    actorUserId: row.actorUserId ? normalizeIdValue(row.actorUserId) : null,
+    actorAgentKey: row.actorAgentKey ?? null,
+  });
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(material));
+  const hex = Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  return `trace_revision:v1:${hex}`;
+}
 
 export function isCommunityCompilerEligibleVisibility(visibilityScope: string): visibilityScope is CompilerEligibleVisibility {
   return COMPILER_EVIDENCE_VISIBILITY_SCOPES.includes(visibilityScope as CompilerEligibleVisibility);
 }
 
-export function compilerStateForSourceTraceVisibility(visibilityScope: string): SourceTraceCompilerState {
-  return isCommunityCompilerEligibleVisibility(visibilityScope) ? "pending" : "excluded_by_visibility";
+export function compilerStateForSourceTraceVisibility(
+  visibilityScope: string,
+  sourceVisibility = visibilityScope,
+): SourceTraceCompilerState {
+  return (
+    isCommunityCompilerEligibleVisibility(visibilityScope) &&
+    sourceVisibility !== "private" &&
+    sourceVisibility !== "redacted"
+  ) ? "pending" : "excluded_by_visibility";
 }
 
 export function isCommunityAgentSelfAuthoredTrace(row: { actorAgentKey?: string }): boolean {
@@ -61,17 +114,22 @@ export function isCommunityAgentSelfAuthoredTrace(row: { actorAgentKey?: string 
 
 export function compilerStateForSourceTraceLifecycle(args: {
   visibilityScope: string;
+  sourceVisibility?: string;
   actorAgentKey?: string;
 }): SourceTraceCompilerState {
   if (isCommunityAgentSelfAuthoredTrace(args)) return "excluded_self_authored";
-  return compilerStateForSourceTraceVisibility(args.visibilityScope);
+  return compilerStateForSourceTraceVisibility(args.visibilityScope, args.sourceVisibility);
 }
 
 export function isCommunityCompilerEvidenceTrace(row: {
   visibilityScope: string;
+  sourceVisibility?: string;
   actorAgentKey?: string;
 }): boolean {
-  return !isCommunityAgentSelfAuthoredTrace(row) && isCommunityCompilerEligibleVisibility(row.visibilityScope);
+  return (
+    !isCommunityAgentSelfAuthoredTrace(row) &&
+    compilerStateForSourceTraceVisibility(row.visibilityScope, row.sourceVisibility) === "pending"
+  );
 }
 
 function compilerState(row: SourceTraceRow): SourceTraceCompilerState {

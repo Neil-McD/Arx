@@ -7,6 +7,7 @@ export type CommunityMemoryWorkIdentityInput = {
   sourceTypes?: unknown[];
   sourceIds?: unknown[];
   sourceTraceIds?: unknown[];
+  contentRevisions?: unknown[];
 };
 
 function normalizeIdentityValue(raw: unknown): string {
@@ -34,6 +35,7 @@ export function canonicalCommunityMemoryWorkIdentity(
   const sourceTypes = sortedUniqueIdentityValues(input.sourceTypes);
   const sourceIds = sortedUniqueIdentityValues(input.sourceIds);
   const sourceTraceIds = sortedUniqueIdentityValues(input.sourceTraceIds);
+  const contentRevisions = sortedUniqueIdentityValues(input.contentRevisions);
   if (sourceIds.length === 0 && sourceTraceIds.length === 0) {
     throw new Error("community_memory_work_evidence_identity_required");
   }
@@ -45,6 +47,7 @@ export function canonicalCommunityMemoryWorkIdentity(
     sourceTypes,
     sourceIds,
     sourceTraceIds,
+    contentRevisions,
   });
 }
 

@@ -1,3 +1,9 @@
+import {
+  COMMUNITY_MEMORY_DECISION_DISPOSITIONS,
+  COMMUNITY_MEMORY_NODE_TYPES,
+  normalizeCommunityMemoryDecision,
+} from "./communityMemoryDecisionContract";
+
 type JsonSchema =
   | {
       type?: string | string[];
@@ -7,6 +13,10 @@ type JsonSchema =
       maximum?: number;
       minLength?: number;
       maxLength?: number;
+      minItems?: number;
+      maxItems?: number;
+      items?: JsonSchema;
+      anyOf?: JsonSchema[];
       required?: string[];
       additionalProperties?: boolean;
       properties?: Record<string, JsonSchema>;
@@ -14,11 +24,11 @@ type JsonSchema =
   | boolean
   | Record<string, unknown>;
 
-export type CommunityAgentToolName = "list" | "read" | "search" | "note" | "write";
+export type CommunityAgentToolName = "list" | "read" | "search" | "write";
 
 export const CANONICAL_COMMUNITY_AGENT_KEY = "community_agent" as const;
 
-export const COMMUNITY_AGENT_TOOL_NAMES = ["list", "read", "search", "note", "write"] as const;
+export const COMMUNITY_AGENT_TOOL_NAMES = ["list", "read", "search", "write"] as const;
 
 export type CommunityAgentFunctionTool = {
   type: "function";
@@ -39,15 +49,7 @@ const LIMIT_SCHEMA: JsonSchema = {
 
 const NODE_TYPE_SCHEMA: JsonSchema = {
   type: ["string", "null"],
-  enum: [
-    "playbook",
-    "insight",
-    "example",
-    "warning_failure",
-    "decision_judgment",
-    "open_question",
-    null,
-  ],
+  enum: [...COMMUNITY_MEMORY_NODE_TYPES, null],
 };
 
 const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionTool> = {
@@ -106,28 +108,10 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
       },
     },
   },
-  note: {
-    type: "function",
-    name: "note",
-    description: "Append a note to this cycle's shared ledger. Notes are how roles hand context to each other; they never touch the directory.",
-    strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      required: ["note"],
-      properties: {
-        note: {
-          type: "string",
-          minLength: 1,
-          maxLength: 2000,
-        },
-      },
-    },
-  },
   write: {
     type: "function",
     name: "write",
-    description: "Atomically validate and retain one compiler digest item as community memory. Strong evidence becomes promising memory; incomplete or higher-risk evidence remains forming memory.",
+    description: "Atomically settle versioned compiler work as retained memory, evidence carried into existing memory, or an explicit low-signal no-op.",
     strict: true,
     parameters: {
       type: "object",
@@ -136,24 +120,54 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
       properties: {
         operation: {
           type: "string",
-          enum: ["retain_compiler_digest_item"],
+          enum: ["settle_compiler_digest_items"],
         },
         payload: {
           type: "object",
           additionalProperties: false,
-          required: ["digestId", "workKey", "nodeType"],
+          required: ["digestId", "decisions"],
           properties: {
             digestId: {
               type: ["string", "null"],
               minLength: 1,
               maxLength: 128,
             },
-            workKey: {
-              type: ["string", "null"],
-              minLength: 1,
-              maxLength: 128,
+            decisions: {
+              type: "array",
+              minItems: 1,
+              maxItems: 8,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: [
+                  "workKey",
+                  "disposition",
+                  "nodeType",
+                  "title",
+                  "bodyMd",
+                  "appliesWhen",
+                  "doesNotApplyWhen",
+                  "confidence",
+                  "existingNodeId",
+                  "reason",
+                ],
+                properties: {
+                  workKey: { type: "string", minLength: 1, maxLength: 128 },
+                  disposition: {
+                    type: "string",
+                    enum: [...COMMUNITY_MEMORY_DECISION_DISPOSITIONS],
+                  },
+                  nodeType: NODE_TYPE_SCHEMA,
+                  title: { type: ["string", "null"], maxLength: 240 },
+                  bodyMd: { type: ["string", "null"], maxLength: 12_000 },
+                  appliesWhen: { type: ["string", "null"], maxLength: 4_000 },
+                  doesNotApplyWhen: { type: ["string", "null"], maxLength: 4_000 },
+                  confidence: { type: ["number", "null"], minimum: 0, maximum: 1 },
+                  existingNodeId: { type: ["string", "null"], maxLength: 128 },
+                  reason: { type: "string", minLength: 1, maxLength: 1_000 },
+                },
+              },
             },
-            nodeType: NODE_TYPE_SCHEMA,
           },
         },
       },
@@ -183,24 +197,8 @@ function requireNonEmptyString(raw: unknown, field: string, maxLength: number): 
   return value;
 }
 
-function normalizeNodeType(raw: unknown): string | undefined {
-  const value = boundedString(raw, 80);
-  if (!value) return undefined;
-  const allowed = new Set([
-    "playbook",
-    "insight",
-    "example",
-    "warning_failure",
-    "decision_judgment",
-    "open_question",
-  ]);
-  if (!allowed.has(value)) throw new Error("community_agent_tool_node_type_invalid");
-  return value;
-}
-
-// Role-filtered builder: pass a role's tool allowlist and only those schemas
-// are sent to the model. Authority by absence — a role that cannot write never
-// sees the write tool at all. No argument returns the complete current set.
+// The role supplies its bounded tool list; no argument returns the complete
+// current set for compatibility with direct internal runs.
 export function buildCommunityAgentFunctionTools(
   toolNames?: readonly CommunityAgentToolName[],
 ): CommunityAgentFunctionTool[] {
@@ -230,26 +228,27 @@ export function normalizeCommunityAgentToolArguments(
       limit: boundedLimit(args.limit),
     };
   }
-  if (toolName === "note") {
-    return {
-      note: requireNonEmptyString(args.note, "note", 2000),
-    };
-  }
   if (toolName === "write") {
     const operation = requireNonEmptyString(args.operation, "operation", 120);
-    if (operation !== "retain_compiler_digest_item") {
+    if (operation !== "settle_compiler_digest_items") {
       throw new Error("community_agent_tool_operation_invalid");
     }
     const payload = payloadObject(args.payload);
-    const normalizedPayload: Record<string, unknown> = {
-      digestId: requireNonEmptyString(payload.digestId, "digest_id", 128),
-      workKey: requireNonEmptyString(payload.workKey, "work_key", 128),
-    };
-    const nodeType = normalizeNodeType(payload.nodeType);
-    if (nodeType) normalizedPayload.nodeType = nodeType;
+    if (!Array.isArray(payload.decisions) || payload.decisions.length === 0 || payload.decisions.length > 8) {
+      throw new Error("community_agent_tool_decisions_invalid");
+    }
+    const decisions = payload.decisions.map((decision) =>
+      normalizeCommunityMemoryDecision(payloadObject(decision)),
+    );
+    if (new Set(decisions.map((decision) => decision.workKey)).size !== decisions.length) {
+      throw new Error("community_agent_tool_decision_work_key_duplicate");
+    }
     return {
       operation,
-      payload: normalizedPayload,
+      payload: {
+        digestId: requireNonEmptyString(payload.digestId, "digest_id", 128),
+        decisions,
+      },
     };
   }
   throw new Error("community_agent_tool_unknown");

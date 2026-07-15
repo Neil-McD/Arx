@@ -98,8 +98,23 @@ assert.match(
 );
 assert.match(
   heartbeat,
+  /classifyCommunityCompilerDigestWork[\s\S]*"claimable" \| "settled" \| "superseded"[\s\S]*buildCommunitySourceTraceRevision[\s\S]*agentTerminalReason: workState/,
+  "stale or already-settled immutable work must drain instead of poisoning the oldest handoff forever",
+);
+assert.match(
+  schema,
+  /agentTerminalReason: v\.optional\([\s\S]*v\.literal\("settled"\)[\s\S]*v\.literal\("superseded"\)/,
+  "terminal handoff drainage should remain auditable",
+);
+assert.match(
+  heartbeat,
   /settleCommunityCompilerDigestHandoffInternal = internalMutation[\s\S]*v\.literal\("handled"\)[\s\S]*v\.literal\("retry"\)[\s\S]*community_compiler_handoff_version_mismatch[\s\S]*community_compiler_handoff_claim_mismatch/,
   "settlement should fail closed on stale version or claim identity",
+);
+assert.match(
+  heartbeat,
+  /args\.outcome === "handled"[\s\S]*classifyCommunityCompilerDigestWork[\s\S]*workState !== "settled"[\s\S]*community_compiler_handoff_unsettled/,
+  "the storage boundary must reject a handled handoff until every exact work item is durably settled",
 );
 assert.match(
   heartbeat,
@@ -172,7 +187,7 @@ assert.match(
 );
 assert.match(
   heartbeat,
-  /by_community_role_triggerType_createdAt[\s\S]*\.eq\("role", "observer"\)[\s\S]*\.eq\("triggerType", "heartbeat"\)[\s\S]*\.gte\("createdAt", dayStartMs\)[\s\S]*\.take\(COMMUNITY_AGENT_CYCLES_PER_DAY_CAP\)/,
+  /by_community_role_triggerType_createdAt[\s\S]*\.eq\("role", "steward"\)[\s\S]*\.eq\("triggerType", "heartbeat"\)[\s\S]*\.gte\("createdAt", dayStartMs\)[\s\S]*\.take\(COMMUNITY_AGENT_CYCLES_PER_DAY_CAP\)/,
   "daily cost gating should use an exact bounded index instead of a recent-row scan",
 );
 assert.match(

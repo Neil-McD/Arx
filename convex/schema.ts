@@ -2135,8 +2135,7 @@ export default defineSchema({
   communityAgentRuns: defineTable({
     communityId: v.id("communities"),
     agentKey: v.string(),
-    // Which role prompt this run executed (observer/questioner/steward);
-    // absent for legacy single-pass runs.
+    // Current runs use `steward`; other values are historical compatibility.
     role: v.optional(v.string()),
     triggerType: v.union(
       v.literal("manual_internal"),
@@ -2191,9 +2190,8 @@ export default defineSchema({
     ])
     .index("by_sponsor_createdAt", ["sponsorUserId", "createdAt"]),
 
-  // Shared working ledger for one heartbeat cycle: the observer, questioner,
-  // and steward roles append notes here and read each other's context. The
-  // cycleId is the heartbeatId that woke the cycle.
+  // Historical compatibility only. The straight-through compiler no longer
+  // reads or writes the former multi-role handoff ledger.
   communityAgentCycleLedgers: defineTable({
     communityId: v.id("communities"),
     cycleId: v.string(),
@@ -2843,6 +2841,21 @@ export default defineSchema({
     compilerPendingSince: v.optional(v.number()),
     compilerLastHandledAt: v.optional(v.number()),
     compilerLastDigestId: v.optional(v.id("communityCompilerDigests")),
+    compilerDecision: v.optional(
+      v.object({
+        version: v.literal(1),
+        workKey: v.string(),
+        disposition: v.union(
+          v.literal("retain"),
+          v.literal("carried_forward"),
+          v.literal("dismiss_low_signal"),
+        ),
+        reason: v.string(),
+        runId: v.optional(v.string()),
+        targetNodeId: v.optional(v.id("communityIntelligenceNodes")),
+        decidedAt: v.number(),
+      }),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -3293,6 +3306,12 @@ export default defineSchema({
     agentClaimId: v.optional(v.string()),
     agentClaimedAt: v.optional(v.number()),
     agentHandledAt: v.optional(v.number()),
+    agentTerminalReason: v.optional(
+      v.union(
+        v.literal("settled"),
+        v.literal("superseded"),
+      ),
+    ),
     agentAttemptCount: v.optional(v.number()),
     windowStartedAt: v.number(),
     windowEndedAt: v.number(),
@@ -3322,6 +3341,9 @@ export default defineSchema({
         sourceTypes: v.array(v.string()),
         sourceIds: v.array(v.string()),
         sourceTraceIds: v.array(v.id("communitySourceTraces")),
+        // Exact material revisions represented by this immutable work item.
+        // Historical digest rows omit the field.
+        sourceRevisions: v.optional(v.array(v.string())),
       }),
     ),
     signalCounts: v.object({

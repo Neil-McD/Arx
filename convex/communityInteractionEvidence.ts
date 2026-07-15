@@ -703,25 +703,34 @@ async function removeInteractionSourceTrace(args: {
       q.eq("communityId", args.communityId).eq("sourceTraceSourceId", args.ref),
     )
     .first();
-  if (!link) return;
-  if (link.sourceTraceId) {
-    const trace = await args.ctx.db.get(link.sourceTraceId as any);
+  const directTrace = await args.ctx.db
+    .query("communitySourceTraces" as any)
+    .withIndex("by_community_source", (q: any) =>
+      q.eq("communityId", args.communityId).eq("sourceType", "interaction").eq("sourceId", args.ref),
+    )
+    .first();
+  const traceId = directTrace?._id ?? link?.sourceTraceId;
+  if (traceId) {
+    const trace = directTrace ?? await args.ctx.db.get(traceId as any);
     if (trace) {
-      await args.ctx.db.patch(link.sourceTraceId as any, {
+      await args.ctx.db.patch(traceId as any, {
         sourceVisibility: "redacted",
         visibilityScope: "admin",
         compilerState: "excluded_by_visibility",
         compilerPendingSince: undefined,
         compilerLastHandledAt: args.nowMs,
         compilerLastDigestId: undefined,
+        compilerDecision: undefined,
         updatedAt: args.nowMs,
       });
     }
   }
-  await args.ctx.db.patch(link._id as any, {
-    linkState: "removed",
-    updatedAt: args.nowMs,
-  });
+  if (link) {
+    await args.ctx.db.patch(link._id as any, {
+      linkState: "removed",
+      updatedAt: args.nowMs,
+    });
+  }
 }
 
 async function findInteractionSourceTraceLink(args: {
@@ -737,11 +746,11 @@ async function findInteractionSourceTraceLink(args: {
     .first();
 }
 
-async function upsertPromotedInteractionSourceTrace(args: {
+async function upsertInteractionSourceTrace(args: {
   ctx: any;
   communityId: any;
   source: ResolvedCommunityInteractionEvidence;
-  promotionReason: EvidencePromotionReason | "compiler_candidate";
+  promotionReason?: EvidencePromotionReason | "compiler_candidate";
   nowMs: number;
 }) {
   const { row, root, objectType } = args.source;
@@ -764,31 +773,33 @@ async function upsertPromotedInteractionSourceTrace(args: {
     actorAgentKey: actor.actorAgentKey,
     nowMs: args.nowMs,
   });
-  const existingLink = await findInteractionSourceTraceLink({
-    ctx: args.ctx,
-    communityId: args.communityId,
-    ref,
-  });
-  const linkPatch = {
-    communityId: args.communityId,
-    rootId: root._id,
-    ...(objectType === "reply" ? { replyId: row._id } : { replyId: undefined }),
-    sourceTraceId: (trace as any).id,
-    sourceTraceSourceId: ref,
-    linkState: "active",
-    promotionReason: args.promotionReason,
-    actorType: row.actorType,
-    ...(row.actorUserId ? { actorUserId: row.actorUserId } : { actorUserId: undefined }),
-    ...(row.actorAgentKey ? { actorAgentKey: row.actorAgentKey } : { actorAgentKey: undefined }),
-    updatedAt: args.nowMs,
-  };
-  if (existingLink) {
-    await args.ctx.db.patch(existingLink._id as any, linkPatch);
-  } else {
-    await args.ctx.db.insert("communityInteractionSourceTraceLinks" as any, {
-      ...linkPatch,
-      createdAt: args.nowMs,
+  if (args.promotionReason) {
+    const existingLink = await findInteractionSourceTraceLink({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      ref,
     });
+    const linkPatch = {
+      communityId: args.communityId,
+      rootId: root._id,
+      ...(objectType === "reply" ? { replyId: row._id } : { replyId: undefined }),
+      sourceTraceId: (trace as any).id,
+      sourceTraceSourceId: ref,
+      linkState: "active",
+      promotionReason: args.promotionReason,
+      actorType: row.actorType,
+      ...(row.actorUserId ? { actorUserId: row.actorUserId } : { actorUserId: undefined }),
+      ...(row.actorAgentKey ? { actorAgentKey: row.actorAgentKey } : { actorAgentKey: undefined }),
+      updatedAt: args.nowMs,
+    };
+    if (existingLink) {
+      await args.ctx.db.patch(existingLink._id as any, linkPatch);
+    } else {
+      await args.ctx.db.insert("communityInteractionSourceTraceLinks" as any, {
+        ...linkPatch,
+        createdAt: args.nowMs,
+      });
+    }
   }
   return { ref, sourceTraceId: (trace as any).id };
 }
@@ -841,22 +852,20 @@ export const syncCommunityInteractionEvidenceInternal = internalMutation({
       communityId: args.communityId,
       ref,
     });
-    if (!existingLink || existingLink.linkState !== "active") {
-      return { ok: true, indexed: archive.indexed, promoted: false, ref };
-    }
-    const promoted = await upsertPromotedInteractionSourceTrace({
+    const traced = await upsertInteractionSourceTrace({
       ctx,
       communityId: args.communityId,
       source,
-      promotionReason: existingLink.promotionReason,
+      promotionReason: existingLink?.linkState === "active" ? existingLink.promotionReason : undefined,
       nowMs,
     });
     return {
       ok: true,
       indexed: archive.indexed,
-      promoted: true,
+      traced: true,
+      promoted: existingLink?.linkState === "active",
       ref,
-      source_trace_id: promoted.sourceTraceId,
+      source_trace_id: traced.sourceTraceId,
     };
   },
 });
@@ -886,7 +895,7 @@ export const promoteCommunityInteractionEvidenceInternal = internalMutation({
       objectType: parsed.objectType,
       objectId: parsed.objectId,
     });
-    const promoted = await upsertPromotedInteractionSourceTrace({
+    const promoted = await upsertInteractionSourceTrace({
       ctx,
       communityId: args.communityId,
       source,

@@ -50,8 +50,8 @@ function traceIsAdmissibleForActor(
   if (trace.sourceVisibility === "redacted") return false;
   if (actorType === "agent" || actorType === "compiler" || actorType === "system") {
     return (
-      (trace.visibilityScope === "community" || trace.visibilityScope === "public") &&
-      (trace.sourceVisibility === "community" || trace.sourceVisibility === "public")
+      trace.visibilityScope !== "private" &&
+      trace.sourceVisibility !== "private"
     );
   }
   return true;

@@ -69,9 +69,10 @@ assert.match(evidence, /syncArchiveDocumentForInteraction/);
 assert.match(evidence, /backfillCommunityInteractionEvidenceInternal/);
 assert.match(evidence, /sourceVisibility: "redacted"/);
 assert.match(evidence, /compilerState: "excluded_by_visibility"/);
+assert.match(evidence, /compilerDecision: undefined/);
 assert.match(evidence, /redactCommunityInteractionEvidenceChildrenInternal/);
 assert.match(evidence, /promoteCommunityInteractionEvidenceInternal/);
-assert.match(evidence, /existingLink\.linkState !== "active"/);
+assert.match(evidence, /async function upsertInteractionSourceTrace/);
 assert.match(evidence, /promotionReason: evidencePromotionReasonValidator/);
 assert.match(evidenceCore, /normalizeId\(table as any/);
 assert.match(evidenceCore, /normalizeId\([\s\S]*"communityInteractionRoots" as any/);
@@ -84,7 +85,11 @@ assert.ok(syncStart >= 0 && promotionStart > syncStart, "sync and promotion bloc
 const syncBlock = evidence.slice(syncStart, promotionStart);
 assert.doesNotMatch(syncBlock, /promotionReason: row\.actorType/);
 assert.doesNotMatch(syncBlock, /"compiler_candidate"/);
-assert.match(syncBlock, /if \(!existingLink \|\| existingLink\.linkState !== "active"\)/);
+assert.match(
+  syncBlock,
+  /const traced = await upsertInteractionSourceTrace\([\s\S]*promotionReason: existingLink\?\.linkState === "active"[\s\S]*traced: true/,
+  "every live readable interaction should enter the compiler evidence ledger without a promotion gate",
+);
 
 assert.match(audit, /export const recordCommunityEvidenceRetrievalInternal/);
 assert.doesNotMatch(audit, /query: v\.optional/);
@@ -143,7 +148,7 @@ assert.match(acceptance, /wrong_table_reference_not_denied/);
 assert.match(acceptance, /cross_community_parent_not_denied/);
 assert.match(acceptance, /recent_context_cross_community_parent_not_denied/);
 assert.match(acceptance, /archive_only_retrieval_not_proven/);
-assert.match(acceptance, /ordinary_evidence_automatically_promoted/);
+assert.match(acceptance, /ordinary_evidence_not_automatically_traced/);
 
 const rootRef = buildCommunityInteractionEvidenceRef({ objectType: "root", objectId: "root_123" });
 assert.equal(rootRef, "interaction:root:root_123");

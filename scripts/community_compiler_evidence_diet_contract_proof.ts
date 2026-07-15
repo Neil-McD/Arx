@@ -88,10 +88,15 @@ assert.match(
   /compilerStateForSourceTraceLifecycle[\s\S]*isCommunityAgentSelfAuthoredTrace\(args\)[\s\S]*return "excluded_self_authored"[\s\S]*compilerStateForSourceTraceVisibility/,
   "self-authored traces must be born terminal before visibility-derived pending classification",
 );
+assert.match(
+  evidenceCore,
+  /compilerStateForSourceTraceVisibility[\s\S]*sourceVisibility !== "private"[\s\S]*sourceVisibility !== "redacted"/,
+  "redacted or private source content must never poison the pending compiler queue",
+);
 
 assert.match(
   directory,
-  /sourceTraceCompilerLifecyclePatch[\s\S]*compilerStateForSourceTraceLifecycle\(\{[\s\S]*actorAgentKey[\s\S]*nextState === "excluded_by_visibility" \|\| nextState === "excluded_self_authored"[\s\S]*compilerPendingSince: undefined/,
+  /sourceTraceCompilerLifecyclePatch[\s\S]*compilerStateForSourceTraceLifecycle\(\{[\s\S]*sourceVisibility[\s\S]*actorAgentKey[\s\S]*nextState === "excluded_by_visibility" \|\| nextState === "excluded_self_authored"[\s\S]*compilerPendingSince: undefined/,
   "source trace upserts must use lifecycle classification and keep self-authored traces out of pending",
 );
 

@@ -2,7 +2,10 @@ import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { normalizeIdValue } from "./communityCore";
-import { measureCommunityCompilerEvidenceForCommunity } from "./communityCompilerEvidenceCore";
+import {
+  buildCommunitySourceTraceRevision,
+  measureCommunityCompilerEvidenceForCommunity,
+} from "./communityCompilerEvidenceCore";
 
 const COMMUNITY_AGENT_HEARTBEAT_MAX_DELAY_MS = 24 * 60 * 60 * 1000;
 const COMMUNITY_AGENT_HEARTBEAT_MAX_TOOL_STEPS = 8;
@@ -52,13 +55,50 @@ function wakeEvidenceFromMeasurement(
   };
 }
 
+async function classifyCommunityCompilerDigestWork(
+  ctx: any,
+  communityId: any,
+  digest: Record<string, any>,
+): Promise<"claimable" | "settled" | "superseded"> {
+  const items = Array.isArray(digest.items) ? digest.items : [];
+  if (!boundedText(digest.versionKey, 128) || items.length === 0) return "superseded";
+  let settledCount = 0;
+  for (const item of items) {
+    const workKey = boundedText(item?.workKey, 128);
+    const traceIds = Array.isArray(item?.sourceTraceIds) ? item.sourceTraceIds : [];
+    const revisions = Array.isArray(item?.sourceRevisions) ? item.sourceRevisions : [];
+    if (!workKey || traceIds.length !== 1 || revisions.length !== 1) return "superseded";
+    const trace = (await ctx.db.get(traceIds[0] as any)) as Record<string, any> | null;
+    if (!trace || normalizeIdValue(trace.communityId) !== normalizeIdValue(communityId)) {
+      return "superseded";
+    }
+    if (await buildCommunitySourceTraceRevision(trace as any) !== String(revisions[0])) {
+      return "superseded";
+    }
+    if (boundedText(trace.compilerDecision?.workKey, 128) === workKey) {
+      settledCount += 1;
+      continue;
+    }
+    if (
+      trace.compilerState !== "pending" ||
+      trace.visibilityScope === "private" ||
+      trace.sourceVisibility === "private" ||
+      trace.sourceVisibility === "redacted"
+    ) {
+      return "superseded";
+    }
+  }
+  if (settledCount === items.length) return "settled";
+  return settledCount === 0 ? "claimable" : "superseded";
+}
+
 async function readCommunityAgentControlGate(args: {
   ctx: any;
   communityId: any;
   nowMs: number;
 }) {
   const dayStartMs = new Date(new Date(args.nowMs).toISOString().slice(0, 10)).getTime();
-  const [config, observerRunsToday] = await Promise.all([
+  const [config, stewardRunsToday] = await Promise.all([
     args.ctx.db
       .query("communityAgentConfigs" as any)
       .withIndex("by_community_updatedAt", (q: any) => q.eq("communityId", args.communityId))
@@ -69,13 +109,13 @@ async function readCommunityAgentControlGate(args: {
       .withIndex("by_community_role_triggerType_createdAt", (q: any) =>
         q
           .eq("communityId", args.communityId)
-          .eq("role", "observer")
+          .eq("role", "steward")
           .eq("triggerType", "heartbeat")
           .gte("createdAt", dayStartMs),
       )
       .take(COMMUNITY_AGENT_CYCLES_PER_DAY_CAP) as Promise<Array<Record<string, any>>>,
   ]);
-  const cyclesToday = observerRunsToday.length;
+  const cyclesToday = stewardRunsToday.length;
   return {
     cyclesToday,
     reason: config?.agentEnabled === false
@@ -155,43 +195,53 @@ export const claimCommunityCompilerDigestHandoffInternal = internalMutation({
         digest_id: normalizeIdValue(freshRunning._id),
       };
     }
-    const pending = (await ctx.db
+    const pendingRows = (await ctx.db
       .query("communityCompilerDigests" as any)
       .withIndex("by_community_agentHandoffState_createdAt", (q: any) =>
         q.eq("communityId", args.communityId).eq("agentHandoffState", "pending"),
       )
       .order("asc")
-      .first()) as Record<string, any> | null;
+      .take(20)) as Array<Record<string, any>>;
     const staleRunning = runningRows.find(
       (row) => Number(row.agentClaimedAt ?? 0) < nowMs - COMMUNITY_AGENT_HANDOFF_LEASE_MS,
     ) ?? null;
-    const digest = [pending, staleRunning]
+    const candidates = [...pendingRows, staleRunning]
       .filter((row): row is Record<string, any> => Boolean(row))
-      .sort((a, b) => Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0))[0] ?? null;
-    if (!digest) {
-      return { claimed: false, reason: "no_pending_compiler_handoff", digest_id: null };
+      .sort((a, b) => Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0));
+    for (const digest of candidates) {
+      const workState = await classifyCommunityCompilerDigestWork(ctx, args.communityId, digest);
+      if (workState !== "claimable") {
+        await ctx.db.patch(digest._id as any, {
+          agentHandoffState: "handled" as const,
+          agentClaimId: undefined,
+          agentClaimedAt: undefined,
+          agentHandledAt: nowMs,
+          agentTerminalReason: workState,
+          updatedAt: nowMs,
+        });
+        continue;
+      }
+      const versionKey = boundedText(digest.versionKey, 128);
+      await ctx.db.patch(digest._id as any, {
+        agentHandoffState: "running" as const,
+        agentClaimId: claimId,
+        agentClaimedAt: nowMs,
+        agentHandledAt: undefined,
+        agentTerminalReason: undefined,
+        agentAttemptCount: Math.max(0, Number(digest.agentAttemptCount ?? 0)) + 1,
+        updatedAt: nowMs,
+      });
+      return {
+        claimed: true,
+        reason: staleRunning && normalizeIdValue(staleRunning._id) === normalizeIdValue(digest._id)
+          ? "stale_handoff_reclaimed"
+          : "pending_compiler_handoff",
+        digest_id: normalizeIdValue(digest._id),
+        version_key: versionKey,
+        item_count: Math.max(0, Number(digest.itemCount ?? 0)),
+      };
     }
-    const versionKey = boundedText(digest.versionKey, 128);
-    if (!versionKey || !Array.isArray(digest.items) || Number(digest.itemCount ?? 0) <= 0) {
-      throw new Error("community_compiler_handoff_invalid");
-    }
-    await ctx.db.patch(digest._id as any, {
-      agentHandoffState: "running" as const,
-      agentClaimId: claimId,
-      agentClaimedAt: nowMs,
-      agentHandledAt: undefined,
-      agentAttemptCount: Math.max(0, Number(digest.agentAttemptCount ?? 0)) + 1,
-      updatedAt: nowMs,
-    });
-    return {
-      claimed: true,
-      reason: staleRunning && normalizeIdValue(staleRunning._id) === normalizeIdValue(digest._id)
-        ? "stale_handoff_reclaimed"
-        : "pending_compiler_handoff",
-      digest_id: normalizeIdValue(digest._id),
-      version_key: versionKey,
-      item_count: Math.max(0, Number(digest.itemCount ?? 0)),
-    };
+    return { claimed: false, reason: "no_pending_compiler_handoff", digest_id: null };
   },
 });
 
@@ -219,12 +269,19 @@ export const settleCommunityCompilerDigestHandoffInternal = internalMutation({
       throw new Error("community_compiler_handoff_claim_mismatch");
     }
     const nowMs = args.nowMs ?? Date.now();
+    if (args.outcome === "handled") {
+      const workState = await classifyCommunityCompilerDigestWork(ctx, args.communityId, digest);
+      if (workState !== "settled") {
+        throw new Error("community_compiler_handoff_unsettled");
+      }
+    }
     await ctx.db.patch(args.digestId, args.outcome === "handled"
       ? {
           agentHandoffState: "handled" as const,
           agentClaimId: undefined,
           agentClaimedAt: undefined,
           agentHandledAt: nowMs,
+          agentTerminalReason: "settled",
           updatedAt: nowMs,
         }
       : {
@@ -232,6 +289,7 @@ export const settleCommunityCompilerDigestHandoffInternal = internalMutation({
           agentClaimId: undefined,
           agentClaimedAt: undefined,
           agentHandledAt: undefined,
+          agentTerminalReason: undefined,
           updatedAt: nowMs,
         });
     return {

@@ -7,6 +7,7 @@ import {
   toIsoString,
 } from "./communityCore";
 import {
+  buildCommunitySourceTraceRevision,
   drainSelfAuthoredPendingSourceTracesForCommunity,
   measureCommunityCompilerEvidenceForCommunity,
   type SourceTraceRow,
@@ -19,13 +20,7 @@ import {
 const COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS = 30;
 const COMMUNITY_COMPILER_DIGEST_WINDOW_MS = COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 const COMMUNITY_COMPILER_DIGEST_AGENT_KEY = "community_compiler_digest_v1";
-
-const MAX_ARCHIVE_ACTIVITY_FETCH = 600;
-const MAX_AI_FEED_FETCH = 100;
-const MAX_OUTCOME_FETCH = 100;
-const MAX_DIGEST_ITEMS = 12;
-const MAX_SOURCE_IDS_PER_ITEM = 12;
-const MAX_SOURCE_TRACE_IDS_PER_ITEM = 500;
+const MAX_DIGEST_ITEMS = 8;
 
 type DigestCategory =
   | "chat_activity"
@@ -46,36 +41,7 @@ type DigestItem = {
   sourceTypes: string[];
   sourceIds: string[];
   sourceTraceIds: any[];
-};
-
-type ArchiveActivityRow = {
-  _id: any;
-  sourceType: "chat" | "interaction" | "ai_feed" | "resource";
-  sourceId: string;
-  title?: string;
-  snippet: string;
-  authorLabel?: string;
-  createdAt: number;
-};
-
-type AiFeedPostRow = {
-  _id: any;
-  type: "observation" | "recommendation" | "action";
-  title?: string;
-  body: string;
-  evidence?: string[];
-  score: number;
-  goodCount: number;
-  lowSignalCount: number;
-  createdAt: number;
-};
-
-type OutcomeObservationRow = {
-  _id: any;
-  resultStatus: "worked" | "failed" | "mixed" | "unknown";
-  evidenceStrength: "none" | "anecdotal" | "observed" | "measured" | "validated";
-  workflowId?: string;
-  observedAt: number;
+  sourceRevisions?: string[];
 };
 
 type CompilerDigestRow = {
@@ -87,6 +53,7 @@ type CompilerDigestRow = {
   agentClaimId?: string;
   agentClaimedAt?: number;
   agentHandledAt?: number;
+  agentTerminalReason?: "settled" | "superseded";
   agentAttemptCount?: number;
   windowStartedAt: number;
   windowEndedAt: number;
@@ -113,59 +80,6 @@ function clampScore(raw: unknown, fallback: number): number {
   return Math.max(0, Math.min(1, parsed));
 }
 
-function sourceIds(rows: Array<{ sourceId?: string; _id?: any }>): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const row of rows) {
-    const id = String(row.sourceId ?? normalizeIdValue(row._id) ?? "").trim();
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    out.push(id);
-    if (out.length >= MAX_SOURCE_IDS_PER_ITEM) break;
-  }
-  return out;
-}
-
-function sourceTraceIds(rows: SourceTraceRow[]): any[] {
-  const out: any[] = [];
-  const seen = new Set<string>();
-  for (const row of rows) {
-    const id = normalizeIdValue(row._id);
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    out.push(row._id);
-    if (out.length >= MAX_SOURCE_TRACE_IDS_PER_ITEM) break;
-  }
-  return out;
-}
-
-async function markSelectedSourceTracesCompiled(args: {
-  ctx: any;
-  communityId: any;
-  traceRows: SourceTraceRow[];
-  digestId: any;
-  nowMs: number;
-}): Promise<number> {
-  let handled = 0;
-  const seen = new Set<string>();
-  for (const row of args.traceRows) {
-    const id = normalizeIdValue(row._id);
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    const fresh = (await args.ctx.db.get(row._id as any)) as SourceTraceRow | null;
-    if (!fresh || normalizeIdValue(fresh.communityId) !== normalizeIdValue(args.communityId)) continue;
-    if (fresh.compilerState !== undefined && fresh.compilerState !== "pending") continue;
-    await args.ctx.db.patch(row._id as any, {
-      compilerState: "compiled" as const,
-      compilerPendingSince: typeof fresh.compilerPendingSince === "number" ? fresh.compilerPendingSince : fresh.createdAt,
-      compilerLastHandledAt: args.nowMs,
-      compilerLastDigestId: args.digestId,
-    });
-    handled += 1;
-  }
-  return handled;
-}
-
 function makeItem(args: {
   category: DigestCategory;
   title: string;
@@ -175,16 +89,18 @@ function makeItem(args: {
   sourceTypes?: string[];
   sourceIds?: string[];
   sourceTraceIds?: any[];
+  sourceRevisions?: string[];
 }): DigestItem {
   return {
     category: args.category,
-    title: truncateText(args.title, 180) || "Compiler signal",
-    summary: truncateText(args.summary, 700) || "The compiler detected a bounded non-canonical signal.",
+    title: truncateText(args.title, 240) || "Compiler signal",
+    summary: truncateText(args.summary, 2_000) || "The compiler detected a bounded non-canonical signal.",
     priority: clampScore(args.priority, 0.5),
     confidence: clampScore(args.confidence, 0.5),
-    sourceTypes: (args.sourceTypes ?? []).map((value) => truncateText(value, 64)).filter(Boolean).slice(0, 12),
-    sourceIds: (args.sourceIds ?? []).map((value) => truncateText(value, 96)).filter(Boolean).slice(0, MAX_SOURCE_IDS_PER_ITEM),
-    sourceTraceIds: (args.sourceTraceIds ?? []).slice(0, MAX_SOURCE_TRACE_IDS_PER_ITEM),
+    sourceTypes: (args.sourceTypes ?? []).map((value) => truncateText(value, 64)).filter(Boolean).slice(0, 1),
+    sourceIds: (args.sourceIds ?? []).map((value) => truncateText(value, 512)).filter(Boolean).slice(0, 1),
+    sourceTraceIds: (args.sourceTraceIds ?? []).slice(0, 1),
+    sourceRevisions: (args.sourceRevisions ?? []).map((value) => truncateText(value, 180)).filter(Boolean).slice(0, 1),
   };
 }
 
@@ -198,6 +114,7 @@ function digestItemContentRevision(item: DigestItem & { workKey: string }): stri
     sourceTypes: [...item.sourceTypes].sort(),
     sourceIds: [...item.sourceIds].sort(),
     sourceTraceIds: item.sourceTraceIds.map(normalizeIdValue).sort(),
+    sourceRevisions: [...(item.sourceRevisions ?? [])].sort(),
   });
 }
 
@@ -208,6 +125,7 @@ function mapDigestRow(row: CompilerDigestRow) {
     dedupe_key: row.dedupeKey,
     version_key: row.versionKey ?? null,
     agent_handoff_state: row.agentHandoffState ?? null,
+    agent_terminal_reason: row.agentTerminalReason ?? null,
     agent_attempt_count: Number(row.agentAttemptCount ?? 0),
     window_started_at: toIsoString(row.windowStartedAt),
     window_ended_at: toIsoString(row.windowEndedAt),
@@ -270,41 +188,11 @@ async function runCommunityCompilerDigestPassCore(
       communityId: args.communityId,
       nowMs,
     });
-    const compilerEvidencePromise = measureCommunityCompilerEvidenceForCommunity({
+    const compilerEvidence = await measureCommunityCompilerEvidenceForCommunity({
       ctx,
       communityId: args.communityId,
       nowMs,
     });
-
-    const [
-      compilerEvidence,
-      archiveRows,
-      aiFeedRowsRaw,
-      outcomeRows,
-    ] = await Promise.all([
-      compilerEvidencePromise,
-      ctx.db
-        .query("communityArchiveDocuments" as any)
-        .withIndex("by_community_createdAt", (q: any) =>
-          q.eq("communityId", args.communityId).gte("createdAt", windowStartedAtMs),
-        )
-        .order("desc")
-        .take(MAX_ARCHIVE_ACTIVITY_FETCH) as Promise<ArchiveActivityRow[]>,
-      ctx.db
-        .query("communityAiFeedPosts" as any)
-        .withIndex("by_community_status_createdAt", (q: any) =>
-          q.eq("communityId", args.communityId).eq("status", "live").gte("createdAt", windowStartedAtMs),
-        )
-        .order("desc")
-        .take(MAX_AI_FEED_FETCH) as Promise<AiFeedPostRow[]>,
-      ctx.db
-        .query("communityOutcomeObservations" as any)
-        .withIndex("by_community_observedAt", (q: any) =>
-          q.eq("communityId", args.communityId).gte("observedAt", windowStartedAtMs),
-        )
-        .order("desc")
-        .take(MAX_OUTCOME_FETCH) as Promise<OutcomeObservationRow[]>,
-    ]);
     if (args.requireTrigger && !compilerEvidence.measurement.should_run) {
       return {
         ok: true,
@@ -314,100 +202,23 @@ async function runCommunityCompilerDigestPassCore(
       };
     }
 
-    const selectedSourceTraceRows = compilerEvidence.selectedRows;
-    const chatRows = archiveRows.filter((row) => row.sourceType === "interaction");
-    const resourceRows = archiveRows.filter((row) => row.sourceType === "resource");
-    const archiveAiFeedRows = archiveRows.filter((row) => row.sourceType === "ai_feed");
-    const aiFeedRows = aiFeedRowsRaw
-      .slice()
-      .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0) || b.createdAt - a.createdAt);
-    const aiFeedIds = new Set(aiFeedRows.map((row) => normalizeIdValue(row._id)));
-    // AI Feed publication already has a dedicated canonical signal
-    // projection. Its source trace is the governance/promotion record, not a
-    // second independent learning signal.
-    const selectedAiFeedSourceTraceRows = selectedSourceTraceRows.filter(
-      (row) =>
-        row.sourceType === "ai_feed" &&
-        aiFeedIds.has(String(row.sourceId ?? "").trim()),
-    );
-    const selectedDistinctSourceTraceRows = selectedSourceTraceRows.filter(
-      (row) =>
-        row.sourceType !== "ai_feed" ||
-        !aiFeedIds.has(String(row.sourceId ?? "").trim()),
-    );
-    const postingMemberKeys = new Set(
-      chatRows
-        .map((row) => String(row.authorLabel ?? "").trim())
-        .filter((label) => label.startsWith("member:")),
-    );
-    const outcomesByStatus = outcomeRows.reduce<Record<string, number>>((counts, row) => {
-      counts[row.resultStatus] = (counts[row.resultStatus] ?? 0) + 1;
-      return counts;
-    }, {});
-
-    const items: DigestItem[] = [];
-    if (chatRows.length > 0) {
-      items.push(makeItem({
-        category: "chat_activity",
-        title: `${chatRows.length} chat signals in the compiler window`,
-        summary: `${postingMemberKeys.size} members posted in archived chat activity. Treat this as raw conversation evidence, not accepted community truth.`,
-        priority: Math.min(1, 0.35 + chatRows.length / 80),
-        confidence: 0.75,
-        sourceTypes: ["chat"],
-        sourceIds: sourceIds(chatRows),
-      }));
-    }
-    for (const post of aiFeedRows.slice(0, 3)) {
-      items.push(makeItem({
-        category: "ai_feed_signal",
-        title: post.title || `${post.type} from AI Feed`,
-        summary: post.body,
-        priority: Math.min(1, 0.45 + Number(post.score ?? 0) / 2),
-        confidence: 0.7,
-        sourceTypes: ["ai_feed"],
-        sourceIds: [normalizeIdValue(post._id)],
-      }));
-    }
-    if (resourceRows.length > 0) {
-      items.push(makeItem({
-        category: "resource_activity",
-        title: `${resourceRows.length} resource records changed or entered archive activity`,
-        summary: "Resources are durable reference evidence. The digest records the resource activity signal; agents should use dedicated resource/search retrieval for full content.",
-        priority: Math.min(1, 0.3 + resourceRows.length / 50),
-        confidence: 0.7,
-        sourceTypes: ["resource"],
-        sourceIds: sourceIds(resourceRows),
-      }));
-    }
-    if (outcomeRows.length > 0) {
-      items.push(makeItem({
-        category: "outcome_signal",
-        title: `${outcomeRows.length} outcome observations recorded`,
-        summary: `Outcome observations by status: worked ${outcomesByStatus.worked ?? 0}, failed ${outcomesByStatus.failed ?? 0}, mixed ${outcomesByStatus.mixed ?? 0}, unknown ${outcomesByStatus.unknown ?? 0}. Outcomes can later support or contest directory intelligence through typed memory writes.`,
-        priority: Math.min(1, 0.55 + outcomeRows.length / 40),
-        confidence: 0.8,
-        sourceTypes: ["outcome"],
-        sourceIds: outcomeRows.slice(0, MAX_SOURCE_IDS_PER_ITEM).map((row) => normalizeIdValue(row._id)),
-      }));
-    }
-    const sourceTraceItem = selectedDistinctSourceTraceRows.length > 0
-      ? makeItem({
+    const selectedSourceTraceRows = compilerEvidence.selectedRows.slice(0, MAX_DIGEST_ITEMS);
+    const sortedItemCandidates = await Promise.all(selectedSourceTraceRows.map(async (row) => {
+      const traceId = normalizeIdValue(row._id);
+      const revision = await buildCommunitySourceTraceRevision(row);
+      const elevated = row.sourceType === "outcome" || row.sourceType === "feedback";
+      return makeItem({
         category: "source_trace_signal",
-        title: `${selectedDistinctSourceTraceRows.length} selected pending source traces compiled`,
-        summary: `${selectedDistinctSourceTraceRows.length} distinct pending source traces were represented in this digest and can now be marked compiled. ${selectedAiFeedSourceTraceRows.length} AI Feed promotion traces were deduplicated against their canonical AI Feed signal. ${compilerEvidence.measurement.pending_total} eligible source traces were pending when measured.`,
-        priority: Math.min(1, 0.45 + selectedDistinctSourceTraceRows.length / 80),
+        title: row.title || `${row.sourceType} evidence`,
+        summary: row.summary,
+        priority: elevated ? 0.9 : 0.7,
         confidence: 0.8,
-        sourceTypes: Array.from(new Set(selectedDistinctSourceTraceRows.map((row) => row.sourceType))).slice(0, 12),
-        sourceIds: selectedDistinctSourceTraceRows.map((row) => String(row.sourceId ?? normalizeIdValue(row._id))).filter(Boolean).slice(0, MAX_SOURCE_IDS_PER_ITEM),
-        sourceTraceIds: sourceTraceIds(selectedDistinctSourceTraceRows),
-      })
-      : null;
-    if (sourceTraceItem) {
-      items.push(sourceTraceItem);
-    }
-    const sortedItemCandidates = items
-      .sort((a, b) => b.priority - a.priority || b.confidence - a.confidence)
-      .slice(0, MAX_DIGEST_ITEMS);
+        sourceTypes: [row.sourceType],
+        sourceIds: [String(row.sourceId ?? traceId)],
+        sourceTraceIds: [row._id],
+        sourceRevisions: [revision],
+      });
+    }));
     const keyedItems = await Promise.all(
       sortedItemCandidates.map(async (item) => ({
         ...item,
@@ -417,6 +228,7 @@ async function runCommunityCompilerDigestPassCore(
           sourceTypes: item.sourceTypes,
           sourceIds: item.sourceIds,
           sourceTraceIds: item.sourceTraceIds,
+          contentRevisions: item.sourceRevisions,
         }),
       })),
     );
@@ -426,25 +238,24 @@ async function runCommunityCompilerDigestPassCore(
       seenWorkKeys.add(item.workKey);
       return true;
     });
-    const representedSourceTraceIds = new Set(
-      sortedItems.flatMap((item) => item.sourceTraceIds).map(normalizeIdValue),
-    );
-    const representedAiFeedSourceIds = new Set(
-      sortedItems
-        .filter((item) => item.category === "ai_feed_signal")
-        .flatMap((item) => item.sourceIds),
-    );
     const representedSelectedSourceTraceRows = selectedSourceTraceRows.filter((row) =>
-      representedSourceTraceIds.has(normalizeIdValue(row._id)) ||
-      (row.sourceType === "ai_feed" && representedAiFeedSourceIds.has(String(row.sourceId ?? "").trim())),
+      sortedItems.some((item) => item.sourceTraceIds.some((traceId) =>
+        normalizeIdValue(traceId) === normalizeIdValue(row._id),
+      )),
+    );
+    const postingMemberKeys = new Set(
+      representedSelectedSourceTraceRows
+        .filter((row) => row.sourceType === "interaction")
+        .map((row) => normalizeIdValue(row.actorUserId))
+        .filter(Boolean),
     );
     const signalCounts = {
-      chat: chatRows.length,
-      aiFeed: Math.max(aiFeedRows.length, archiveAiFeedRows.length),
-      resources: resourceRows.length,
+      chat: representedSelectedSourceTraceRows.filter((row) => row.sourceType === "interaction").length,
+      aiFeed: representedSelectedSourceTraceRows.filter((row) => row.sourceType === "ai_feed").length,
+      resources: representedSelectedSourceTraceRows.filter((row) => row.sourceType === "resource").length,
       events: 0,
-      sourceTraces: sourceTraceItem?.sourceTraceIds.length ?? 0,
-      outcomes: outcomeRows.length,
+      sourceTraces: representedSelectedSourceTraceRows.length,
+      outcomes: representedSelectedSourceTraceRows.filter((row) => row.sourceType === "outcome").length,
       newMembers: 0,
       activeMembers: 0,
       postingMembers: postingMemberKeys.size,
@@ -452,11 +263,9 @@ async function runCommunityCompilerDigestPassCore(
     };
     const summary = truncateText(
       [
-        `Compiler window covered ${COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS} days.`,
-        `${chatRows.length} chat, ${signalCounts.aiFeed} AI feed, and ${resourceRows.length} resource learning signals were considered.`,
-        "Events, member joins, presence, reactions, and generic activity are excluded from learning digests unless they produce transcripts, feedback, outcomes, decisions, artifacts, or source traces.",
-        `${selectedSourceTraceRows.length} selected pending source traces and ${outcomeRows.length} outcomes are in the working set.`,
-        `${representedSelectedSourceTraceRows.length} selected source traces are represented by this immutable digest version.`,
+        `${compilerEvidence.measurement.pending_total} eligible source traces were pending when measured.`,
+        `${representedSelectedSourceTraceRows.length} exact versioned evidence items are represented by this immutable digest.`,
+        "Every item must reach retained, carried-forward, or dismissed-low-signal before the handoff is complete.",
         "This digest is non-canonical compiler output.",
       ].join(" "),
       1_200,
@@ -466,9 +275,7 @@ async function runCommunityCompilerDigestPassCore(
       workKeys: sortedItems.map((item) => item.workKey),
       contentRevisions: [
         ...sortedItems.map(digestItemContentRevision),
-        ...representedSelectedSourceTraceRows.map((row) =>
-          `trace:${normalizeIdValue(row._id)}:${Number(row.updatedAt ?? row.createdAt)}`,
-        ),
+        ...sortedItems.flatMap((item) => item.sourceRevisions ?? []),
       ],
     });
     const dedupeKey = `community_compiler_digest:v2:${versionKey}`;
@@ -503,15 +310,6 @@ async function runCommunityCompilerDigestPassCore(
     });
     const row = (await ctx.db.get(digestId)) as CompilerDigestRow | null;
     if (!row) throw new Error("community_compiler_digest_write_failed");
-    if (representedSelectedSourceTraceRows.length > 0) {
-      await markSelectedSourceTracesCompiled({
-        ctx,
-        communityId: args.communityId,
-        traceRows: representedSelectedSourceTraceRows,
-        digestId,
-        nowMs,
-      });
-    }
     return mapDigestRow(row);
 }
 

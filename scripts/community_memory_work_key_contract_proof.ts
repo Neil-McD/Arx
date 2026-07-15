@@ -46,6 +46,11 @@ assert.notEqual(
   await buildCommunityMemoryWorkKey({ ...base, sourceTraceIds: ["trace_c"] }),
   "different evidence must produce a different identity",
 );
+assert.notEqual(
+  key,
+  await buildCommunityMemoryWorkKey({ ...base, contentRevisions: ["trace:trace_a:2"] }),
+  "a material revision of the same source must become new compiler work",
+);
 
 assert.throws(
   () => canonicalCommunityMemoryWorkIdentity({
@@ -91,7 +96,7 @@ assert.notEqual(
     workKeys: [key, secondKey],
     contentRevisions: ["trace:trace_a:2"],
   }),
-  "material evidence revisions must create a new immutable digest version without changing retention identity",
+  "material evidence revisions must create a new immutable digest version",
 );
 await assert.rejects(
   buildCommunityMemoryDigestVersionKey({

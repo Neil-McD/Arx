@@ -1956,3 +1956,57 @@ own execution.
 - Concierge evidence reach: directory + resources first; raw archive search
   later, behind guardrails (the archive RAG lane is the recorded attack
   surface).
+
+## Twenty-Sixth Implementation Slice: Straight-Through Evidence Compiler
+
+This slice supersedes the mandatory Observer -> Questioner -> Steward sleep
+cycle and the rule that digest inclusion means compilation.
+
+### Canonical path
+
+1. Every live, evidence-readable community interaction is normalized into a
+   `communitySourceTraces` row during ordinary evidence sync. Explicit
+   promotion remains a historical compatibility action, not an ingestion gate.
+2. Pending source traces are the only compiler queue truth. Parallel archive,
+   feed, resource, event, and member-activity aggregate inputs are not compiler
+   work unless they first become governed source traces.
+3. A digest is an immutable, leased work manifest. Each new item contains one
+   exact trace, its bounded title and summary, and a material source revision.
+   Digest creation never changes `compilerState`.
+4. One community-owned Steward pass receives the exact bounded digest and
+   existing directory context. Evidence content is untrusted data, never an
+   instruction channel.
+5. The Steward calls one structured write with exactly one disposition per work
+   key: `retain`, `carried_forward`, or `dismiss_low_signal`.
+6. The write transaction revalidates community, digest lease, work identity,
+   source revision, visibility, citations, and any target node. It then applies
+   the audit/memory mutation and terminal source-trace decision atomically.
+7. A digest handoff becomes `handled` only when every work item has a durable
+   matching `compilerDecision`. Model completion by itself is not completion.
+
+### Autonomous retention
+
+There is no human acceptance gate and no same-run self-review prohibition.
+`retain` creates cited memory through the existing change-request audit
+envelope and lands fully resolved, community-readable evidence no higher than
+`promising`. `carried_forward` attaches the new citation to an existing
+same-community node. `dismiss_low_signal` creates no node but records a durable
+reason. Admin-readable evidence may produce only admin-scoped candidate memory;
+the citation visibility boundary forbids widening it into community memory.
+Private or redacted evidence remains ineligible. Any failure leaves work
+retryable.
+
+### Revocation
+
+Member memory search and read revalidate live source-trace visibility for nodes
+tagged `compiler_memory`. Hiding or redacting the underlying evidence therefore
+fails closed even after a memory was created. Managers retain the existing
+governed administrative view.
+
+### Bounded economics
+
+- at most eight source traces per digest
+- at most 2,000 characters of evidence summary per item
+- one founder-funded inference pass per claimed digest
+- one structured batch write
+- existing two-cycle-per-day owner-funded guard remains in force

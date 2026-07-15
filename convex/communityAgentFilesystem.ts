@@ -1,8 +1,9 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { normalizeIdValue, toIsoString } from "./communityCore";
-import { retainCommunityIntelligenceFromDigestItemCore } from "./communityCompilerCandidates";
+import { settleCommunityIntelligenceFromDigestItemsCore } from "./communityCompilerCandidates";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
+import { normalizeCommunityMemoryDecision } from "../shared/communityMemoryDecisionContract";
 
 const DEFAULT_LIMIT = 50;
 
@@ -24,20 +25,13 @@ type ResolvedCommunityAgentFilesystemContext = {
   compilerDigestVersionKey?: string;
 };
 
-type NodeType =
-  | "playbook"
-  | "insight"
-  | "example"
-  | "warning_failure"
-  | "decision_judgment"
-  | "open_question";
-
 type DigestRow = {
   _id: any;
   communityId: any;
   dedupeKey: string;
   versionKey?: string;
   agentHandoffState?: "pending" | "running" | "handled";
+  agentTerminalReason?: "settled" | "superseded";
   agentClaimId?: string;
   windowStartedAt: number;
   windowEndedAt: number;
@@ -316,6 +310,7 @@ function mapDigest(row: DigestRow) {
     dedupe_key: row.dedupeKey,
     version_key: row.versionKey ?? null,
     agent_handoff_state: row.agentHandoffState ?? null,
+    agent_terminal_reason: row.agentTerminalReason ?? null,
     window_started_at: toIsoString(row.windowStartedAt),
     window_ended_at: toIsoString(row.windowEndedAt),
     summary: row.summary,
@@ -664,47 +659,103 @@ export const searchCommunityAgentFilesystemInternal = internalQuery({
   },
 });
 
+export const inspectCommunityCompilerDigestSettlementInternal = internalQuery({
+  args: {
+    communityId: v.id("communities"),
+    digestId: v.id("communityCompilerDigests"),
+    versionKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const digest = await ctx.db.get(args.digestId);
+    if (
+      !digest ||
+      normalizeIdValue((digest as any).communityId) !== normalizeIdValue(args.communityId) ||
+      String((digest as any).versionKey ?? "") !== args.versionKey
+    ) {
+      throw new Error("community_compiler_digest_not_found");
+    }
+    const items = Array.isArray((digest as any).items) ? (digest as any).items : [];
+    const unsettledWorkKeys: string[] = [];
+    for (const item of items) {
+      const workKey = String(item?.workKey ?? "").trim();
+      const traceIds = Array.isArray(item?.sourceTraceIds) ? item.sourceTraceIds : [];
+      if (!workKey || traceIds.length !== 1) {
+        unsettledWorkKeys.push(workKey || "missing_work_key");
+        continue;
+      }
+      const trace = await ctx.db.get(traceIds[0] as any);
+      if (
+        !trace ||
+        normalizeIdValue((trace as any).communityId) !== normalizeIdValue(args.communityId) ||
+        String((trace as any).compilerDecision?.workKey ?? "") !== workKey
+      ) {
+        unsettledWorkKeys.push(workKey);
+      }
+    }
+    return {
+      complete: items.length > 0 && unsettledWorkKeys.length === 0,
+      item_count: items.length,
+      unsettled_work_keys: unsettledWorkKeys,
+    };
+  },
+});
+
 export const writeCommunityAgentFilesystemInternal = internalMutation({
   args: {
     context: communityAgentFilesystemContextValidator,
-    operation: v.literal("retain_compiler_digest_item"),
+    operation: v.literal("settle_compiler_digest_items"),
     payload: v.object({
-      digestId: v.optional(v.id("communityCompilerDigests")),
-      workKey: v.optional(v.string()),
-      nodeType: v.optional(
-        v.union(
+      digestId: v.id("communityCompilerDigests"),
+      decisions: v.array(v.object({
+        workKey: v.string(),
+        disposition: v.union(
+          v.literal("retain"),
+          v.literal("carried_forward"),
+          v.literal("dismiss_low_signal"),
+        ),
+        nodeType: v.union(
           v.literal("playbook"),
           v.literal("insight"),
           v.literal("example"),
           v.literal("warning_failure"),
           v.literal("decision_judgment"),
           v.literal("open_question"),
+          v.null(),
         ),
-      ),
+        title: v.union(v.string(), v.null()),
+        bodyMd: v.union(v.string(), v.null()),
+        appliesWhen: v.union(v.string(), v.null()),
+        doesNotApplyWhen: v.union(v.string(), v.null()),
+        confidence: v.union(v.number(), v.null()),
+        existingNodeId: v.union(v.string(), v.null()),
+        reason: v.string(),
+      })),
     }),
   },
   handler: async (ctx, args) => {
     const context = await resolveFilesystemContext(ctx, args.context);
     const payload = args.payload ?? {};
-    if (!payload.digestId || !payload.workKey) {
-      throw new Error("community_agent_filesystem_digest_item_required");
+    if (payload.decisions.length === 0 || payload.decisions.length > 8) {
+      throw new Error("community_agent_filesystem_digest_decisions_required");
     }
-    if (
-      context.compilerDigestId &&
-      normalizeIdValue(context.compilerDigestId) !== normalizeIdValue(payload.digestId)
-    ) {
+    if (!context.compilerDigestId || !context.compilerDigestVersionKey || !context.heartbeatId) {
+      throw new Error("community_agent_filesystem_digest_claim_required");
+    }
+    if (normalizeIdValue(context.compilerDigestId) !== normalizeIdValue(payload.digestId)) {
       throw new Error("community_agent_filesystem_digest_outside_claim");
     }
-    const result = await retainCommunityIntelligenceFromDigestItemCore({
+    const decisions = payload.decisions.map((decision) =>
+      normalizeCommunityMemoryDecision(decision),
+    );
+    const result = await settleCommunityIntelligenceFromDigestItemsCore({
       ctx,
       communityId: context.communityId,
       digestId: payload.digestId,
-      workKey: payload.workKey,
-      nodeType: payload.nodeType as NodeType | undefined,
+      decisions,
       actorType: "agent",
       actorAgentKey: context.agentKey,
-      proposedByCommunityAgentRunId: context.runId,
-      proposedByCommunityAgentHeartbeatId: context.heartbeatId,
+      runId: context.runId,
+      heartbeatId: context.heartbeatId,
     });
     return { ok: true, operation: args.operation, ...contextMetadata(context), result };
   },

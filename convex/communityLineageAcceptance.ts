@@ -550,8 +550,12 @@ export const runCommunityLineageAcceptance = action({
     }
 
     const failures: string[] = [];
-    if (syncResults.slice(0, 3).some((row: any) => !row.indexed || row.promoted)) {
-      failures.push("ordinary_evidence_archive_promotion_boundary_invalid");
+    if (
+      syncResults.slice(0, 3).some(
+        (row: any) => !row.indexed || !row.traced || row.promoted,
+      )
+    ) {
+      failures.push("ordinary_evidence_archive_trace_boundary_invalid");
     }
     if (syncResults[3]?.indexed || syncResults[4]?.indexed) {
       failures.push("private_or_cross_community_evidence_indexed");
@@ -572,8 +576,8 @@ export const runCommunityLineageAcceptance = action({
       internalRefs.communityLineageAcceptance.readCommunityLineageAcceptanceStateInternal,
       { communityId: fixture.communityId, refs, archiveSourceIds },
     );
-    if (unpromotedState.traces.some((row: any) => row.id)) {
-      failures.push("ordinary_evidence_automatically_promoted");
+    if (unpromotedState.traces.some((row: any) => !row.id)) {
+      failures.push("ordinary_evidence_not_automatically_traced");
     }
     if (unpromotedState.links.some((row: any) => row.state)) {
       failures.push("ordinary_evidence_link_created_without_promotion");
@@ -792,7 +796,13 @@ export const runCommunityLineageAcceptance = action({
     ) {
       failures.push("human_source_trace_attribution_invalid");
     }
-    if (humanReplyTrace?.id) failures.push("unpromoted_reply_source_trace_present");
+    if (
+      humanReplyTrace?.actorType !== "member" ||
+      humanReplyTrace?.actorUserId !== String(fixture.ownerId) ||
+      humanReplyTrace?.compilerState !== "pending"
+    ) {
+      failures.push("human_reply_source_trace_attribution_invalid");
+    }
     if (
       agentTrace?.actorType !== "agent" ||
       agentTrace?.actorAgentKey !== "community_agent" ||
@@ -870,7 +880,7 @@ export const runCommunityLineageAcceptance = action({
     );
     const redactedTraces = afterRedaction.traces.filter((row: any) => row.id);
     if (
-      redactedTraces.length !== 2 ||
+      redactedTraces.length !== 3 ||
       redactedTraces.some(
         (row: any) =>
           row.sourceVisibility !== "redacted" ||

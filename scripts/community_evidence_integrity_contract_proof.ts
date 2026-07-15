@@ -398,16 +398,17 @@ async function main() {
     createdAt: nowMs,
     updatedAt: nowMs,
   });
-  await assert.rejects(
-    () =>
-      captureCommunityEvidenceCitationsForSourceTracesCore({
-        ctx,
-        communityId,
-        sourceTraceIds: [privateTraceId],
-        actorType: "compiler",
-        capturedAt: nowMs,
-      }),
-    /community_evidence_source_trace_not_admissible/,
+  const compilerAdminCitationIds = await captureCommunityEvidenceCitationsForSourceTracesCore({
+    ctx,
+    communityId,
+    sourceTraceIds: [privateTraceId],
+    actorType: "compiler",
+    capturedAt: nowMs,
+  });
+  assert.equal(
+    compilerAdminCitationIds.length,
+    1,
+    "the autonomous compiler may cite admin evidence when its output remains admin-scoped",
   );
   const adminCitationIds = await captureCommunityEvidenceCitationsForSourceTracesCore({
     ctx,
@@ -416,6 +417,7 @@ async function main() {
     actorType: "admin",
     capturedAt: nowMs,
   });
+  assert.deepEqual(adminCitationIds, compilerAdminCitationIds);
   await assert.rejects(
     () =>
       requireCommunityEvidenceCitationVisibilityCore({
@@ -473,11 +475,15 @@ async function main() {
   assert.match(archive, /readCommunityResourceEvidenceItemsInternal/);
   assert.match(archive, /readCommunityAiFeedEvidenceItemsInternal/);
   assert.match(legacyChat, /syncLegacyChatMessageDeleteToInteractionCore/);
-  const resolvableTypes = compilerCandidates.match(
-    /const RESOLVABLE_SOURCE_TRACE_TYPES = new Set\(\[([\s\S]*?)\]\);/,
-  )?.[1] ?? "";
-  assert.match(resolvableTypes, /"interaction"/);
-  assert.doesNotMatch(resolvableTypes, /"chat"/);
+  assert.match(
+    compilerCandidates,
+    /resolveCurrentDigestItemTrace[\s\S]*sourceTraceIds\.length !== 1[\s\S]*sourceRevisions/,
+  );
+  assert.doesNotMatch(
+    compilerCandidates,
+    /RESOLVABLE_SOURCE_TRACE_TYPES|RESOLVABLE_COMPILER_SOURCE_TYPES/,
+    "the compiler should settle the exact normalized trace, not reconstruct evidence from a source-type allowlist",
+  );
 
   console.log("community_evidence_integrity_contract_proof: ok");
 }
