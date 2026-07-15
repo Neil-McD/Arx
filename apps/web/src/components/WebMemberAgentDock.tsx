@@ -553,11 +553,16 @@ function WebMemberAgentDock(props, ref) {
       return;
     }
     onboardingSeededSessionIdsRef.current.add(onboardingSession.id);
-    setInput((current) =>
-      current.trim()
-        ? current
-        : `What is one useful first action I should take in ${props.communityName}?`,
-    );
+    setInput((current) => {
+      if (current.trim()) {
+        draftTextRef.current = current;
+        return current;
+      }
+      const seededPrompt =
+        `What is one useful first action I should take in ${props.communityName}?`;
+      draftTextRef.current = seededPrompt;
+      return seededPrompt;
+    });
   }, [onboardingSession, props.communityName, showOnboardingAgentFocus]);
 
   useEffect(() => {

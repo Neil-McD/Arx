@@ -923,6 +923,11 @@ assert.match(
   /if \(submitInFlightRef\.current\) return;[\s\S]*submitInFlightRef\.current = true;/,
   "submission must use a synchronous lock, immutable draft snapshot, and post-commit completion boundary",
 );
+assert.match(
+  component,
+  /onboardingSeededSessionIdsRef\.current\.add[\s\S]*const seededPrompt[\s\S]*draftTextRef\.current = seededPrompt;[\s\S]*return seededPrompt;/,
+  "programmatic onboarding prompts must update the submit ref as well as the rendered textarea",
+);
 assert.match(component, /Detach the submitted snapshot immediately/);
 assert.match(component, /committed = true;/);
 assert.match(component, /Finish its captured turn even if navigation/);
