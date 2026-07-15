@@ -171,7 +171,20 @@ export const backfillCommunityArchiveInternal = internalMutation({
     communityId: v.id("communities"),
   },
   handler: async (ctx, args) => {
-    return await backfillCommunityArchive(ctx, args.communityId);
+    const result = await backfillCommunityArchive(ctx, args.communityId);
+    await Promise.all([
+      ctx.scheduler.runAfter(
+        0,
+        (internal as any).communityInteractionEvidence.backfillCommunityInteractionEvidenceInternal,
+        { communityId: args.communityId, objectType: "root" },
+      ),
+      ctx.scheduler.runAfter(
+        0,
+        (internal as any).communityInteractionEvidence.backfillCommunityInteractionEvidenceInternal,
+        { communityId: args.communityId, objectType: "reply" },
+      ),
+    ]);
+    return result;
   },
 });
 
@@ -477,13 +490,14 @@ export const getCommunityArchiveHealth = query({
     let latestFailureMessage: string | null = null;
     let latestFailureUpdatedAt = 0;
     const statusCounts = { pending: 0, embedded: 0, failed: 0 };
-    const sourceCounts = { chat: 0, ai_feed: 0, resource: 0 };
+    const sourceCounts = { interaction: 0, legacy_chat: 0, ai_feed: 0, resource: 0 };
     let pdfDocuments = 0;
     for (const row of rows) {
       if (row.embeddingStatus === "pending") statusCounts.pending += 1;
       else if (row.embeddingStatus === "embedded") statusCounts.embedded += 1;
       else if (row.embeddingStatus === "failed") statusCounts.failed += 1;
-      if (row.sourceType === "chat") sourceCounts.chat += 1;
+      if (row.sourceType === "interaction") sourceCounts.interaction += 1;
+      else if (row.sourceType === "chat") sourceCounts.legacy_chat += 1;
       else if (row.sourceType === "ai_feed") sourceCounts.ai_feed += 1;
       else if (row.sourceType === "resource") sourceCounts.resource += 1;
       if (row.isPdf) pdfDocuments += 1;
@@ -530,7 +544,20 @@ export const requestCommunityArchiveBackfill = mutation({
       communityId: args.communityId,
       userId,
     });
-    return await backfillCommunityArchive(ctx, args.communityId);
+    const result = await backfillCommunityArchive(ctx, args.communityId);
+    await Promise.all([
+      ctx.scheduler.runAfter(
+        0,
+        (internal as any).communityInteractionEvidence.backfillCommunityInteractionEvidenceInternal,
+        { communityId: args.communityId, objectType: "root" },
+      ),
+      ctx.scheduler.runAfter(
+        0,
+        (internal as any).communityInteractionEvidence.backfillCommunityInteractionEvidenceInternal,
+        { communityId: args.communityId, objectType: "reply" },
+      ),
+    ]);
+    return result;
   },
 });
 

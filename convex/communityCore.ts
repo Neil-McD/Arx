@@ -3,6 +3,10 @@ import {
   buildCommunityResourceDirectoryFields,
   buildCommunityResourceModuleDirectoryFields,
 } from "../shared/communityResourceDirectory";
+import {
+  communityResourceIsMemberVisiblePage,
+  communityResourceModuleIsMemberLive,
+} from "../shared/communityResourceVisibility";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
@@ -631,20 +635,14 @@ export function communityResourceHasUsableKnowledgeContent(row: CommunityResourc
 }
 
 export function communityResourceModuleIsLive(row: CommunityResourceModuleLike): boolean {
-  return normalizeResourceModuleStatus(row.status) === "live";
+  return communityResourceModuleIsMemberLive(row);
 }
 
 export function communityResourceIsLiveModulePage(
   row: CommunityResourceLike,
   liveModuleIds: Set<string>,
 ): boolean {
-  const moduleId = normalizeIdValue(row.moduleId);
-  return Boolean(
-    moduleId &&
-      liveModuleIds.has(moduleId) &&
-      normalizeResourceRole(row.role) === "page" &&
-      communityResourceHasUsableKnowledgeContent(row),
-  );
+  return communityResourceIsMemberVisiblePage(row, liveModuleIds);
 }
 
 export function normalizeOptionalUrl(raw: unknown): string | undefined {

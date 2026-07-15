@@ -10,6 +10,7 @@ import {
   COMPILER_EVIDENCE_VISIBILITY_SCOPES,
   isCommunityCompilerEvidenceTrace,
 } from "./communityCompilerEvidenceCore";
+import { buildCommunityAiFeedEvidenceRef } from "../shared/communityEvidenceContract";
 
 type SourceTraceRow = {
   _id: any;
@@ -70,12 +71,6 @@ type OutcomeObservationRow = {
   updatedAt: number;
 };
 
-type ChangeRequestRow = {
-  _id: any;
-  communityId: any;
-  status: "pending_decision" | "accepted" | "rejected" | "applied";
-};
-
 const SOURCE_TRACE_INPUT_OVERFETCH_MULTIPLIER = 3;
 const MAX_SOURCE_TRACE_INPUT_FETCH = 600;
 const MAX_AI_FEED_INPUT_FETCH = 300;
@@ -109,6 +104,7 @@ function mapTrace(row: SourceTraceRow) {
 function mapAiFeedSignal(row: AiFeedPostRow) {
   return {
     id: normalizeIdValue(row._id),
+    evidence_ref: buildCommunityAiFeedEvidenceRef(normalizeIdValue(row._id)),
     post_type: row.type,
     title: row.title ?? null,
     body: row.body,
@@ -172,7 +168,7 @@ export const listCommunityCompilerInputs = query({
     );
     const aiFeedFetchLimit = Math.min(MAX_AI_FEED_INPUT_FETCH, aiFeedLimit * 3);
 
-    const [traceRowsByVisibility, aiFeedRows, outcomeRows, pendingChangeRequests] = await Promise.all([
+    const [traceRowsByVisibility, aiFeedRows, outcomeRows] = await Promise.all([
       Promise.all(
         COMPILER_EVIDENCE_VISIBILITY_SCOPES.map((visibilityScope) =>
           ctx.db
@@ -196,25 +192,33 @@ export const listCommunityCompilerInputs = query({
         .withIndex("by_community_observedAt", (q: any) => q.eq("communityId", args.communityId))
         .order("desc")
         .take(outcomeLimit) as Promise<OutcomeObservationRow[]>,
-      ctx.db
-        .query("communityIntelligenceChangeRequests" as any)
-        .withIndex("by_community_status", (q: any) =>
-          q.eq("communityId", args.communityId).eq("status", "pending_decision"),
-        )
-        .take(1000) as Promise<ChangeRequestRow[]>,
     ]);
     const traceCandidateRows = traceRowsByVisibility
       .flatMap((rows) => rows)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, sourceTraceFetchLimit);
-    const traceRows = traceCandidateRows
-      .filter((row) => isCommunityCompilerEvidenceTrace(row))
-      .slice(0, sourceTraceLimit);
-
     const rankedAiFeedSignals = aiFeedRows
       .slice()
       .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0) || b.createdAt - a.createdAt)
       .slice(0, aiFeedLimit);
+    const rankedAiFeedIds = new Set(
+      rankedAiFeedSignals.map((row) => normalizeIdValue(row._id)),
+    );
+    const eligibleTraceRows = traceCandidateRows.filter((row) =>
+      isCommunityCompilerEvidenceTrace(row),
+    );
+    const traceRows = eligibleTraceRows
+      .filter(
+        (row) =>
+          row.sourceType !== "ai_feed" ||
+          !rankedAiFeedIds.has(String(row.sourceId ?? "").trim()),
+      )
+      .slice(0, sourceTraceLimit);
+    const duplicateAiFeedTraceCount = eligibleTraceRows.filter(
+      (row) =>
+        row.sourceType === "ai_feed" &&
+        rankedAiFeedIds.has(String(row.sourceId ?? "").trim()),
+    ).length;
 
     return {
       ok: true,
@@ -223,7 +227,6 @@ export const listCommunityCompilerInputs = query({
       recent_source_traces: traceRows.map(mapTrace),
       ranked_ai_feed_signals: rankedAiFeedSignals.map(mapAiFeedSignal),
       recent_outcome_observations: outcomeRows.map(mapOutcome),
-      pending_change_requests_count: pendingChangeRequests.length,
       diagnostics: {
         version: 1,
         source_trace_limit: sourceTraceLimit,
@@ -233,6 +236,7 @@ export const listCommunityCompilerInputs = query({
         outcome_limit: outcomeLimit,
         source_traces_considered: traceCandidateRows.length,
         source_traces_returned: traceRows.length,
+        duplicate_ai_feed_trace_projections_removed: duplicateAiFeedTraceCount,
         ai_feed_signals_considered: aiFeedRows.length,
         ai_feed_signals_returned: rankedAiFeedSignals.length,
         outcome_observations_returned: outcomeRows.length,

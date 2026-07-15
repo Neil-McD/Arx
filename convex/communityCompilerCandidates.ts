@@ -1,15 +1,20 @@
-import { query } from "./_generated/server";
-import { v } from "convex/values";
 import {
   normalizeIdValue,
-  requireCommunityManager,
-  resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
-import { createTrustedCommunityIntelligenceChangeRequest } from "./communityIntelligenceDirectory";
+import {
+  applyTrustedCommunityIntelligenceChangeRequestCore,
+  createOrReuseTrustedCommunityIntelligenceChangeRequest,
+} from "./communityIntelligenceDirectory";
+import {
+  buildCommunityMemoryWorkKey,
+  isCommunityMemoryWorkKey,
+} from "./communityMemoryWorkKey";
 
 const COMMUNITY_COMPILER_CANDIDATE_AGENT_KEY = "community_compiler_candidate_v1";
 const COMMUNITY_COMPILER_CANDIDATE_PAYLOAD_SOURCE = "compiler_digest_item_v1";
+const AUTONOMOUS_MEMORY_POLICY_VERSION = "autonomous_memory_v1";
+const AUTONOMOUS_MEMORY_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK = 0.3;
 
 type DigestCategory =
   | "chat_activity"
@@ -18,8 +23,7 @@ type DigestCategory =
   | "event_activity"
   | "member_state"
   | "outcome_signal"
-  | "source_trace_signal"
-  | "pending_directory_decision";
+  | "source_trace_signal";
 
 type NodeType =
   | "playbook"
@@ -30,6 +34,7 @@ type NodeType =
   | "open_question";
 
 type DigestItem = {
+  workKey?: string;
   category: DigestCategory;
   title: string;
   summary: string;
@@ -60,6 +65,7 @@ type CompilerDigestRow = {
 type ChangeRequestRow = {
   _id: any;
   communityId: any;
+  workKey?: string;
   operation: string;
   status: "pending_decision" | "accepted" | "rejected" | "applied";
   sourceTraceIds: any[];
@@ -108,7 +114,7 @@ type SourceTraceResolution = {
 };
 
 const RESOLVABLE_SOURCE_TRACE_TYPES = new Set([
-  "chat",
+  "interaction",
   "ai_feed",
   "resource",
   "workflow_run",
@@ -134,14 +140,6 @@ function truncateText(raw: unknown, maxLen: number): string {
   return value.length <= maxLen ? value : `${value.slice(0, Math.max(0, maxLen - 1)).trimEnd()}…`;
 }
 
-function normalizeItemIndex(raw: unknown): number {
-  const parsed = Math.floor(Number(raw));
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error("community_compiler_digest_item_index_invalid");
-  }
-  return parsed;
-}
-
 function payloadObject(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   return raw as Record<string, unknown>;
@@ -160,9 +158,6 @@ function normalizeNodeTypeOverride(args: {
   category: DigestCategory;
   override?: NodeType;
 }): NodeType {
-  if (args.category === "pending_directory_decision") {
-    throw new Error("community_compiler_digest_item_already_in_airlock");
-  }
   if (args.category === "event_activity" || args.category === "member_state") {
     throw new Error("community_compiler_digest_item_not_learning_signal");
   }
@@ -270,6 +265,14 @@ async function resolveSourceTraceIdsForDigestItem(args: {
         sourceType: "source_trace",
         sourceId: normalizeIdValue(traceId),
         reason: "trace_not_found",
+      });
+      continue;
+    }
+    if (trace.sourceType === "chat") {
+      out.unresolvedSourceReferences.push({
+        sourceType: "chat",
+        sourceId: trace.sourceId ?? normalizeIdValue(trace._id),
+        reason: "no_resolvable_source_type",
       });
       continue;
     }
@@ -419,7 +422,6 @@ function buildLearningEnvelope(args: {
 function buildCandidateBody(args: {
   digest: CompilerDigestRow;
   item: DigestItem;
-  itemIndex: number;
   learningEnvelope: LearningEnvelope;
 }): string {
   const sourceTypes = (args.item.sourceTypes ?? []).filter(Boolean).join(", ") || "none";
@@ -428,7 +430,7 @@ function buildCandidateBody(args: {
     "Compiler candidate generated from a non-canonical compiler digest item.",
     "",
     `Digest: ${normalizeIdValue(args.digest._id)}`,
-    `Digest item index: ${args.itemIndex}`,
+    `Work key: ${args.item.workKey}`,
     `Digest category: ${args.item.category}`,
     `Digest window: ${toIsoString(args.digest.windowStartedAt)} to ${toIsoString(args.digest.windowEndedAt)}`,
     "",
@@ -459,14 +461,13 @@ function buildCandidateBody(args: {
     `Source types: ${sourceTypes}`,
     `Source ids: ${sourceIds}`,
     "",
-    "Review boundary: this is candidate intelligence only. It must be accepted and applied through the community intelligence airlock before it becomes directory truth.",
+    "Retention boundary: this compiler output is validated and retained atomically. Fully resolved community-readable evidence may become promising memory; incomplete or higher-risk output remains admin-visible forming memory.",
   ].join("\n");
 }
 
 function buildCandidatePayload(args: {
   digest: CompilerDigestRow;
   item: DigestItem;
-  itemIndex: number;
   nodeType: NodeType;
   sourceTraceResolution: SourceTraceResolution;
   proposedByCommunityAgentRunId?: string;
@@ -492,7 +493,6 @@ function buildCandidatePayload(args: {
     falsificationCriteria: learningEnvelope.falsificationCriteria,
     compilerDigestId: normalizeIdValue(args.digest._id),
     compilerDigestDedupeKey: args.digest.dedupeKey,
-    digestItemIndex: args.itemIndex,
     digestItemCategory: args.item.category,
     ...(args.proposedByCommunityAgentRunId
       ? { proposedByCommunityAgentRunId: args.proposedByCommunityAgentRunId }
@@ -519,7 +519,6 @@ function buildCandidatePayload(args: {
     bodyMd: buildCandidateBody({
       digest: args.digest,
       item: args.item,
-      itemIndex: args.itemIndex,
       learningEnvelope,
     }),
     status: "candidate",
@@ -540,15 +539,6 @@ function buildCandidatePayload(args: {
   };
 }
 
-function candidatePayloadMatchesDigestItem(payload: unknown, digestId: string, itemIndex: number): boolean {
-  const record = payloadObject(payload);
-  return (
-    record.source === COMMUNITY_COMPILER_CANDIDATE_PAYLOAD_SOURCE &&
-    record.compilerDigestId === digestId &&
-    Number(record.digestItemIndex) === itemIndex
-  );
-}
-
 function mapCandidateProposal(row: ChangeRequestRow) {
   const payload = payloadObject(row.requestedPayload);
   const sourceTraceResolution = payloadObject(payload.sourceTraceResolution);
@@ -557,10 +547,10 @@ function mapCandidateProposal(row: ChangeRequestRow) {
     community_id: normalizeIdValue(row.communityId),
     operation: row.operation,
     status: row.status,
+    work_key: row.workKey ?? null,
     candidate_source: payload.source ?? null,
     compiler_digest_id: typeof payload.compilerDigestId === "string" ? payload.compilerDigestId : null,
     compiler_digest_dedupe_key: typeof payload.compilerDigestDedupeKey === "string" ? payload.compilerDigestDedupeKey : null,
-    digest_item_index: typeof payload.digestItemIndex === "number" ? payload.digestItemIndex : null,
     digest_item_category: typeof payload.digestItemCategory === "string" ? payload.digestItemCategory : null,
     candidate_type: typeof payload.type === "string" ? payload.type : null,
     title: typeof payload.title === "string" ? payload.title : null,
@@ -582,37 +572,77 @@ function mapCandidateProposal(row: ChangeRequestRow) {
   };
 }
 
+function autonomousMemoryPayload(args: {
+  payload: unknown;
+  sourceTraceIds: any[];
+  privacyRisk: number;
+}): Record<string, unknown> {
+  const payload = payloadObject(args.payload);
+  const sourceTraceResolution = payloadObject(payload.sourceTraceResolution);
+  const evidenceFullyResolved =
+    args.sourceTraceIds.length > 0 &&
+    sourceTraceResolution.status === "resolved" &&
+    (payload.sourceVisibility === "community" || payload.sourceVisibility === "public");
+  const retainForCommunity =
+    evidenceFullyResolved &&
+    args.privacyRisk <= AUTONOMOUS_MEMORY_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK;
+  return {
+    ...payload,
+    status: retainForCommunity ? "promising" : "candidate",
+    visibilityScope: retainForCommunity ? "community" : "admin",
+    autonomousMemoryPolicyVersion: AUTONOMOUS_MEMORY_POLICY_VERSION,
+    autonomousMemoryDisposition: retainForCommunity ? "retained" : "forming",
+  };
+}
+
+async function retainCompilerCandidateAutonomously(args: {
+  ctx: any;
+  row: ChangeRequestRow;
+  actorType: "compiler" | "agent";
+  actorAgentKey: string;
+  nowMs: number;
+}): Promise<ChangeRequestRow> {
+  if (args.row.status === "applied") return args.row;
+  if (args.row.status !== "pending_decision" && args.row.status !== "accepted") {
+    throw new Error("community_compiler_candidate_not_autonomously_applicable");
+  }
+  await args.ctx.db.patch(args.row._id as any, {
+    requestedPayload: autonomousMemoryPayload({
+      payload: args.row.requestedPayload,
+      sourceTraceIds: args.row.sourceTraceIds ?? [],
+      privacyRisk: args.row.privacyRisk,
+    }),
+    updatedAt: args.nowMs,
+  });
+  await applyTrustedCommunityIntelligenceChangeRequestCore({
+    ctx: args.ctx,
+    changeRequestId: args.row._id,
+    actor: {
+      actorType: args.actorType,
+      actorAgentKey: args.actorAgentKey,
+    },
+    applicationMode: "autonomous_compiler_memory",
+    reason: AUTONOMOUS_MEMORY_POLICY_VERSION,
+    nowMs: args.nowMs,
+  });
+  const applied = (await args.ctx.db.get(args.row._id as any)) as ChangeRequestRow | null;
+  if (!applied || applied.status !== "applied") {
+    throw new Error("community_compiler_candidate_autonomous_apply_failed");
+  }
+  return applied;
+}
+
 async function getDigestOrThrow(ctx: any, digestId: any): Promise<CompilerDigestRow> {
   const digest = (await ctx.db.get(digestId as any)) as CompilerDigestRow | null;
   if (!digest) throw new Error("community_compiler_digest_not_found");
   return digest;
 }
 
-async function findExistingDigestItemCandidate(args: {
-  ctx: any;
-  communityId: any;
-  digestId: string;
-  itemIndex: number;
-}): Promise<ChangeRequestRow | null> {
-  const rows = (await args.ctx.db
-    .query("communityIntelligenceChangeRequests" as any)
-    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
-    .order("desc")
-    .take(500)) as ChangeRequestRow[];
-  return (
-    rows.find((row) =>
-      row.operation === "create_node" &&
-      row.status !== "rejected" &&
-      candidatePayloadMatchesDigestItem(row.requestedPayload, args.digestId, args.itemIndex)
-    ) ?? null
-  );
-}
-
-export async function proposeCommunityIntelligenceFromDigestItemCore(args: {
+export async function retainCommunityIntelligenceFromDigestItemCore(args: {
   ctx: any;
   communityId: any;
   digestId: any;
-  itemIndex: number;
+  workKey: string;
   nodeType?: NodeType;
   actorType?: "compiler" | "agent";
   actorAgentKey?: string;
@@ -624,27 +654,33 @@ export async function proposeCommunityIntelligenceFromDigestItemCore(args: {
   if (normalizeIdValue(digest.communityId) !== normalizeIdValue(args.communityId)) {
     throw new Error("community_compiler_digest_not_found");
   }
-  const itemIndex = normalizeItemIndex(args.itemIndex);
-  const item = digest.items[itemIndex];
-  if (!item) throw new Error("community_compiler_digest_item_not_found");
+  const workKey = String(args.workKey ?? "").trim();
+  if (!isCommunityMemoryWorkKey(workKey)) {
+    throw new Error("community_compiler_digest_work_key_invalid");
+  }
+  const matchingItems = digest.items.filter((candidate) => candidate.workKey === workKey);
+  if (matchingItems.length !== 1) {
+    throw new Error(
+      matchingItems.length === 0
+        ? "community_compiler_digest_item_not_found"
+        : "community_compiler_digest_work_key_duplicate",
+    );
+  }
+  const item = matchingItems[0];
+  const expectedWorkKey = await buildCommunityMemoryWorkKey({
+    communityId: args.communityId,
+    category: item.category,
+    sourceTypes: item.sourceTypes,
+    sourceIds: item.sourceIds,
+    sourceTraceIds: item.sourceTraceIds,
+  });
+  if (expectedWorkKey !== workKey) {
+    throw new Error("community_compiler_digest_work_key_mismatch");
+  }
   const nodeType = normalizeNodeTypeOverride({
     category: item.category,
     override: args.nodeType,
   });
-  const digestId = normalizeIdValue(digest._id);
-  const existing = await findExistingDigestItemCandidate({
-    ctx: args.ctx,
-    communityId: args.communityId,
-    digestId,
-    itemIndex,
-  });
-  if (existing) {
-    return {
-      ok: true,
-      reused_existing: true,
-      proposal: mapCandidateProposal(existing),
-    };
-  }
   const sourceTraceResolution = await resolveSourceTraceIdsForDigestItem({
     ctx: args.ctx,
     communityId: args.communityId,
@@ -653,65 +689,43 @@ export async function proposeCommunityIntelligenceFromDigestItemCore(args: {
   const requestedPayload = buildCandidatePayload({
     digest,
     item,
-    itemIndex,
     nodeType,
     sourceTraceResolution,
     proposedByCommunityAgentRunId: args.proposedByCommunityAgentRunId,
     proposedByCommunityAgentHeartbeatId: args.proposedByCommunityAgentHeartbeatId,
   });
-  const proposal = await createTrustedCommunityIntelligenceChangeRequest({
+  const nowMs = args.nowMs ?? Date.now();
+  const actorType = args.actorType ?? "compiler";
+  const actorAgentKey = args.actorAgentKey ?? COMMUNITY_COMPILER_CANDIDATE_AGENT_KEY;
+  const privacyRisk = clampScore(
+    0.25 + (sourceTraceResolution.sourceTraceIds.length === 0 && (item.sourceIds ?? []).length > 0 ? 0.1 : 0),
+    0.25,
+  );
+  const auditRecord = await createOrReuseTrustedCommunityIntelligenceChangeRequest({
     ctx: args.ctx,
     communityId: args.communityId,
+    workKey,
     operation: "create_node",
     sourceTraceIds: sourceTraceResolution.sourceTraceIds,
     requestedPayload,
     confidence: clampScore(item.confidence, 0.5),
-    privacyRisk: clampScore(
-      0.25 + (sourceTraceResolution.sourceTraceIds.length === 0 && (item.sourceIds ?? []).length > 0 ? 0.1 : 0),
-      0.25,
-    ),
-    actorType: args.actorType ?? "compiler",
-    actorAgentKey: args.actorAgentKey ?? COMMUNITY_COMPILER_CANDIDATE_AGENT_KEY,
-    nowMs: args.nowMs ?? Date.now(),
+    privacyRisk,
+    actorType,
+    actorAgentKey,
+    nowMs,
+  });
+  const auditRow = (await args.ctx.db.get(auditRecord.changeRequest.id as any)) as ChangeRequestRow | null;
+  if (!auditRow) throw new Error("community_compiler_candidate_create_failed");
+  const retained = await retainCompilerCandidateAutonomously({
+    ctx: args.ctx,
+    row: auditRow,
+    actorType,
+    actorAgentKey,
+    nowMs,
   });
   return {
     ok: true,
-    reused_existing: false,
-    proposal,
+    reused_existing: auditRecord.reusedExisting,
+    retention: mapCandidateProposal(retained),
   };
 }
-
-export const listCommunityCompilerCandidateProposals = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    digestId: v.optional(v.id("communityCompilerDigests")),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
-    const digestId = args.digestId ? normalizeIdValue(args.digestId) : null;
-    const rows = (await ctx.db
-      .query("communityIntelligenceChangeRequests" as any)
-      .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
-      .order("desc")
-      .take(Math.max(100, limit * 4))) as ChangeRequestRow[];
-    return rows
-      .filter((row) => row.operation === "create_node")
-      .filter((row) => {
-        const payload = payloadObject(row.requestedPayload);
-        if (payload.source !== COMMUNITY_COMPILER_CANDIDATE_PAYLOAD_SOURCE) return false;
-        if (!digestId) return true;
-        return payload.compilerDigestId === digestId;
-      })
-      .slice(0, limit)
-      .map(mapCandidateProposal);
-  },
-});

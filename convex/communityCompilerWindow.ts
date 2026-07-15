@@ -12,6 +12,7 @@ import {
   COMPILER_EVIDENCE_VISIBILITY_SCOPES,
   isCommunityCompilerEvidenceTrace,
 } from "./communityCompilerEvidenceCore";
+import { buildCommunityAiFeedEvidenceRef } from "../shared/communityEvidenceContract";
 
 const COMMUNITY_COMPILER_WINDOW_DAYS = 30;
 const COMMUNITY_COMPILER_WINDOW_MS = COMMUNITY_COMPILER_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -21,7 +22,6 @@ const MAX_SOURCE_TRACE_FETCH = 600;
 const MAX_AI_FEED_FETCH = 300;
 const MAX_EVENT_FETCH = 150;
 const MAX_OUTCOME_FETCH = 150;
-const MAX_CHANGE_REQUEST_FETCH = 200;
 const MAX_NEW_MEMBER_FETCH = 1_000;
 const MAX_ACTIVE_MEMBER_FETCH = 2_000;
 const MAX_AI_FEED_REACTION_FETCH = 1_000;
@@ -30,7 +30,7 @@ const MAX_LATEST_NEW_MEMBERS = 25;
 type ArchiveActivityRow = {
   _id: any;
   communityId: any;
-  sourceType: "chat" | "ai_feed" | "resource";
+  sourceType: "chat" | "interaction" | "ai_feed" | "resource";
   sourceId: string;
   title?: string;
   snippet: string;
@@ -120,20 +120,6 @@ type OutcomeObservationRow = {
   updatedAt: number;
 };
 
-type ChangeRequestRow = {
-  _id: any;
-  communityId: any;
-  operation: string;
-  status: "pending_decision" | "accepted" | "rejected" | "applied";
-  confidence: number;
-  privacyRisk: number;
-  createdByActorType: string;
-  createdByUserId?: any;
-  createdByAgentKey?: string;
-  createdAt: number;
-  updatedAt: number;
-};
-
 type MembershipRow = {
   _id: any;
   communityId: any;
@@ -212,6 +198,7 @@ function mapTrace(row: SourceTraceRow) {
 function mapAiFeedSignal(row: AiFeedPostRow) {
   return {
     id: normalizeIdValue(row._id),
+    evidence_ref: buildCommunityAiFeedEvidenceRef(normalizeIdValue(row._id)),
     post_type: row.type,
     title: row.title ?? null,
     body: row.body,
@@ -267,21 +254,6 @@ function mapOutcome(row: OutcomeObservationRow) {
   };
 }
 
-function mapChangeRequest(row: ChangeRequestRow) {
-  return {
-    id: normalizeIdValue(row._id),
-    operation: row.operation,
-    status: row.status,
-    confidence: Number(row.confidence ?? 0),
-    privacy_risk: Number(row.privacyRisk ?? 0),
-    created_by_actor_type: row.createdByActorType,
-    created_by_user_id: row.createdByUserId ? normalizeIdValue(row.createdByUserId) : null,
-    created_by_agent_key: row.createdByAgentKey ?? null,
-    created_at: toIsoString(row.createdAt),
-    updated_at: toIsoString(row.updatedAt),
-  };
-}
-
 async function mapLatestNewMember(ctx: any, row: MembershipRow, userIdCache: Map<string, string | null>) {
   return {
     public_user_id: (await resolvePublicUserId(ctx, row.userId, userIdCache)) ?? normalizeIdValue(row.userId),
@@ -300,7 +272,6 @@ export const readCommunityCompilerWindow = query({
     aiFeedLimit: v.optional(v.number()),
     eventLimit: v.optional(v.number()),
     outcomeLimit: v.optional(v.number()),
-    changeRequestLimit: v.optional(v.number()),
     latestMemberLimit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -318,7 +289,6 @@ export const readCommunityCompilerWindow = query({
     const aiFeedLimit = boundedLimit(args.aiFeedLimit, 30, 100);
     const eventLimit = boundedLimit(args.eventLimit, 25, 75);
     const outcomeLimit = boundedLimit(args.outcomeLimit, 25, 75);
-    const changeRequestLimit = boundedLimit(args.changeRequestLimit, 25, 100);
     const latestMemberLimit = boundedLimit(args.latestMemberLimit, 10, MAX_LATEST_NEW_MEMBERS);
     const sourceTraceFetchLimit = Math.min(MAX_SOURCE_TRACE_FETCH, sourceTraceLimit * 3);
 
@@ -328,7 +298,6 @@ export const readCommunityCompilerWindow = query({
       aiFeedRows,
       eventRows,
       outcomeRows,
-      pendingChangeRequestRows,
       newMemberRows,
       activePresenceRows,
       aiFeedReactionRows,
@@ -377,12 +346,6 @@ export const readCommunityCompilerWindow = query({
           .order("desc")
           .take(Math.min(MAX_OUTCOME_FETCH, outcomeLimit)) as Promise<OutcomeObservationRow[]>,
         ctx.db
-          .query("communityIntelligenceChangeRequests" as any)
-          .withIndex("by_community_status", (q: any) =>
-            q.eq("communityId", args.communityId).eq("status", "pending_decision"),
-          )
-          .take(Math.min(MAX_CHANGE_REQUEST_FETCH, changeRequestLimit)) as Promise<ChangeRequestRow[]>,
-        ctx.db
           .query("communityMemberships" as any)
           .withIndex("by_community_createdAt", (q: any) =>
             q.eq("communityId", args.communityId).gte("createdAt", windowStartedAtMs),
@@ -405,18 +368,50 @@ export const readCommunityCompilerWindow = query({
           .take(MAX_AI_FEED_REACTION_FETCH) as Promise<AiFeedReactionRow[]>,
       ]);
 
-    const archiveActivity = archiveRows.slice(0, archiveActivityLimit);
     const traceCandidateRows = traceRowsByVisibility
       .flatMap((rows) => rows)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, sourceTraceFetchLimit);
-    const sourceTraces = traceCandidateRows
-      .filter((row) => isCommunityCompilerEvidenceTrace(row))
-      .slice(0, sourceTraceLimit);
     const rankedAiFeedSignals = aiFeedRows
       .slice()
       .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0) || b.createdAt - a.createdAt)
       .slice(0, aiFeedLimit);
+    const rankedAiFeedIds = new Set(
+      rankedAiFeedSignals.map((row) => normalizeIdValue(row._id)),
+    );
+    const eligibleSourceTraces = traceCandidateRows.filter((row) =>
+      isCommunityCompilerEvidenceTrace(row),
+    );
+    const sourceTraces = eligibleSourceTraces
+      .filter(
+        (row) =>
+          row.sourceType !== "ai_feed" ||
+          !rankedAiFeedIds.has(String(row.sourceId ?? "").trim()),
+      )
+      .slice(0, sourceTraceLimit);
+    const representedAiFeedIds = new Set(rankedAiFeedIds);
+    for (const trace of sourceTraces) {
+      if (trace.sourceType === "ai_feed" && trace.sourceId) {
+        representedAiFeedIds.add(String(trace.sourceId).trim());
+      }
+    }
+    const archiveActivity = archiveRows
+      .filter(
+        (row) =>
+          row.sourceType !== "ai_feed" ||
+          !representedAiFeedIds.has(String(row.sourceId ?? "").trim()),
+      )
+      .slice(0, archiveActivityLimit);
+    const duplicateAiFeedTraceCount = eligibleSourceTraces.filter(
+      (row) =>
+        row.sourceType === "ai_feed" &&
+        rankedAiFeedIds.has(String(row.sourceId ?? "").trim()),
+    ).length;
+    const duplicateAiFeedArchiveCount = archiveRows.filter(
+      (row) =>
+        row.sourceType === "ai_feed" &&
+        representedAiFeedIds.has(String(row.sourceId ?? "").trim()),
+    ).length;
     const activeNewMemberRows = newMemberRows.filter(communityMembershipRowIsActive);
     const activePresenceUserIds = new Set(activePresenceRows.map((row) => normalizeIdValue(row.userId)).filter(Boolean));
     const reactingMemberKeys = new Set(
@@ -426,7 +421,7 @@ export const readCommunityCompilerWindow = query({
     );
     const postingMemberKeys = new Set(
       archiveRows
-        .filter((row) => row.sourceType === "chat")
+        .filter((row) => row.sourceType === "interaction")
         .map((row) => String(row.authorLabel ?? "").trim())
         .filter((label) => label.startsWith("member:")),
     );
@@ -466,7 +461,6 @@ export const readCommunityCompilerWindow = query({
         },
       },
       recent_outcome_observations: outcomeRows.map(mapOutcome),
-      pending_change_requests: pendingChangeRequestRows.map(mapChangeRequest),
       diagnostics: {
         version: 1,
         archive_activity_limit: archiveActivityLimit,
@@ -474,17 +468,17 @@ export const readCommunityCompilerWindow = query({
         ai_feed_limit: aiFeedLimit,
         event_limit: eventLimit,
         outcome_limit: outcomeLimit,
-        change_request_limit: changeRequestLimit,
         latest_member_limit: latestMemberLimit,
         archive_activity_considered: archiveRows.length,
         archive_activity_returned: archiveActivity.length,
         source_traces_considered: traceCandidateRows.length,
         source_traces_returned: sourceTraces.length,
+        duplicate_ai_feed_trace_projections_removed: duplicateAiFeedTraceCount,
+        duplicate_ai_feed_archive_projections_removed: duplicateAiFeedArchiveCount,
         ai_feed_signals_considered: aiFeedRows.length,
         ai_feed_signals_returned: rankedAiFeedSignals.length,
         events_returned: eventRows.length,
         outcome_observations_returned: outcomeRows.length,
-        pending_change_requests_returned: pendingChangeRequestRows.length,
         new_members_considered: newMemberRows.length,
         active_presence_rows_considered: activePresenceRows.length,
         ai_feed_reactions_considered: aiFeedReactionRows.length,

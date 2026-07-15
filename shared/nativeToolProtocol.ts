@@ -51,6 +51,21 @@ export type NativeToolAwareMessage =
       content: string;
     };
 
+export function extractTextFromNativeToolMessageContent(
+  content: string | NativeToolInputContentPart[] | null | undefined,
+): string {
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((part): part is Extract<NativeToolInputContentPart, { type: "text" }> =>
+      Boolean(part && part.type === "text"),
+    )
+    .map((part) => String(part.text ?? "").trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
 export type NativeToolAssistantMessage = Extract<NativeToolAwareMessage, { role: "assistant" }>;
 
 export type NativeToolCallRequest<TToolName extends string = RetrievalToolName> = {

@@ -16,7 +16,7 @@ type CloudCommunityPolynetGatewayParams<SessionT> = {
 export type CloudCommunityPolynetOverviewNode = {
   id: string;
   lineage_id: string;
-  kind: "community" | "forming_memory" | "directory_node";
+  kind: "community" | "directory_node";
   community_id?: string;
   node_id?: string;
   type: string;
@@ -52,9 +52,6 @@ export type CloudCommunityPolynetOverviewRun = {
   wake_reason: string | null;
   stop_reason: string | null;
   tool_step_count: number;
-  candidate_proposal_count: number;
-  accepted_change_request_count: number;
-  rejected_change_request_count: number;
   applied_change_request_count: number;
   started_at: string | null;
   finished_at: string | null;
@@ -77,9 +74,6 @@ export type CloudCommunityPolynetOverview = {
     last_run_status: string | null;
     last_wake_reason: string | null;
     recent_actions_summary: {
-      proposed: number;
-      accepted: number;
-      rejected: number;
       applied: number;
     };
     recent_runs: CloudCommunityPolynetOverviewRun[];
@@ -92,8 +86,6 @@ export type CloudCommunityPolynetOverview = {
     edge_limit: number;
     has_more_nodes: boolean;
     has_more_edges: boolean;
-    forming_node_limit: number;
-    has_more_forming_nodes: boolean;
   };
   memory: {
     total_visible_nodes: number;

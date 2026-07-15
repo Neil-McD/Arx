@@ -35,6 +35,11 @@ assert.match(
 );
 assert.match(
   filesystem,
+  /compilerDigestId: v\.optional\(v\.id\("communityCompilerDigests"\)\)[\s\S]*compilerDigestVersionKey: v\.optional\(v\.string\(\)\)/,
+  "claimed cognition contexts should carry exact compiler digest identity",
+);
+assert.match(
+  filesystem,
   /async function resolveFilesystemContext\([\s\S]*ctx: any[\s\S]*context: CommunityAgentFilesystemContext[\s\S]*ctx\.db\.get\(communityId\)[\s\S]*community_not_found[\s\S]*community_agent_filesystem_context_agent_required[\s\S]*agentKey !== CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*community_agent_filesystem_context_agent_not_canonical/,
   "filesystem context resolution should fail closed without an existing community and canonical agent identity",
 );
@@ -47,6 +52,11 @@ assert.match(
   filesystem,
   /const agentKey = normalizeContextToken\(context\.agentKey, 120\)[\s\S]*runId: normalizeContextToken\(context\.runId, 200\)[\s\S]*heartbeatId: normalizeContextToken\(context\.heartbeatId, 200\)/,
   "agent/run heartbeat context should be normalized and bounded",
+);
+assert.match(
+  filesystem,
+  /community_agent_filesystem_digest_identity_incomplete[\s\S]*community_agent_filesystem_digest_identity_mismatch[\s\S]*digest\.agentHandoffState !== "running"[\s\S]*digest\.agentClaimId[\s\S]*community_agent_filesystem_digest_claim_mismatch/,
+  "claimed digest id and version must be complete, same-community, current, and owned by the active heartbeat",
 );
 assert.match(
   filesystem,
@@ -82,63 +92,68 @@ assert.doesNotMatch(filesystem, /args\.communityId/, "filesystem operations shou
 assert.doesNotMatch(filesystem, /userId: v\.optional|authSubject: v\.optional|communityIds|crossCommunity|globalMemory/);
 assert.match(filesystem, /"\/compiler"[\s\S]*"\/directory"/, "root should expose compiler and directory only");
 assert.doesNotMatch(filesystem, /"\/activity"|\/activity|listThreadMessages|listCommunityAiFeedBundle|listCommunityResources|listCommunityEvents/);
-assert.match(filesystem, /"\/compiler\/digests"[\s\S]*"\/compiler\/candidates"/);
+assert.match(filesystem, /"\/compiler\/digests"/);
+assert.match(
+  filesystem,
+  /compilerDigestsForContext[\s\S]*context\.compilerDigestId[\s\S]*digest\.versionKey !== context\.compilerDigestVersionKey[\s\S]*community_agent_filesystem_digest_outside_claim/,
+  "claimed cycles should read only their exact immutable digest version",
+);
+assert.doesNotMatch(filesystem, /"\/compiler\/candidates"|community_compiler_candidate_not_found/);
 assert.match(filesystem, /"\/directory\/nodes"[\s\S]*"\/directory\/edges"[\s\S]*"\/directory\/change-requests"/);
 assert.match(filesystem, /"compiler"[\s\S]*"digests"[\s\S]*readExpectedRow\([\s\S]*"community_compiler_digest_not_found"[\s\S]*isDigestRow/);
-assert.match(filesystem, /"compiler"[\s\S]*"candidates"[\s\S]*readExpectedRow\([\s\S]*"community_compiler_candidate_not_found"[\s\S]*isChangeRequestRow/);
 assert.match(filesystem, /"directory"[\s\S]*"nodes"[\s\S]*readExpectedRow\([\s\S]*"community_intelligence_node_not_found"[\s\S]*isNodeRow/);
 assert.match(filesystem, /"directory"[\s\S]*"edges"[\s\S]*readExpectedRow\([\s\S]*"community_intelligence_edge_not_found"[\s\S]*isEdgeRow/);
 assert.match(filesystem, /"directory"[\s\S]*"change-requests"[\s\S]*readExpectedRow\([\s\S]*"community_intelligence_change_request_not_found"[\s\S]*isChangeRequestRow/);
 assert.match(filesystem, /communityIntelligenceEdges[\s\S]*by_community[\s\S]*\.take\(Math\.max\(100, limit \* 4\)\)/);
 assert.match(
   filesystem,
-  /operation: v\.union\([\s\S]*v\.literal\("propose_directory_candidate_from_digest_item"\)[\s\S]*v\.literal\("decide_change_request"\)[\s\S]*v\.literal\("apply_accepted_change_request"\)/,
-  "write should expose proposal, decision, and apply as narrow operations on the same filesystem tool",
+  /operation: v\.literal\("retain_compiler_digest_item"\)/,
+  "write should expose one atomic compiler-memory operation",
 );
 assert.match(
   protocol,
-  /enum: \[[\s\S]*"propose_directory_candidate_from_digest_item"[\s\S]*"decide_change_request"[\s\S]*"apply_accepted_change_request"/,
-  "tool schema should expose decision/apply without adding new tools",
+  /enum: \["retain_compiler_digest_item"\]/,
+  "tool schema should expose only the atomic compiler-memory operation",
 );
-assert.match(candidates, /export async function proposeCommunityIntelligenceFromDigestItemCore/);
+assert.match(
+  protocol,
+  /required: \["digestId", "workKey", "nodeType"\]/,
+  "tool schema should identify compiler work by canonical key",
+);
+assert.doesNotMatch(
+  `${filesystem}\n${protocol}\n${candidates}`,
+  /itemIndex|digestItemIndex|digest_item_index/,
+  "the autonomous filesystem should not expose positional digest identity",
+);
+assert.doesNotMatch(
+  `${filesystem}\n${protocol}`,
+  /decide_change_request|apply_accepted_change_request|same_run_self_review/,
+  "the autonomous memory surface should not retain acceptance choreography",
+);
+assert.match(candidates, /export async function retainCommunityIntelligenceFromDigestItemCore/);
 assert.match(
   filesystem,
-  /proposeCommunityIntelligenceFromDigestItemCore\([\s\S]*communityId: context\.communityId[\s\S]*actorType: "agent"[\s\S]*actorAgentKey: context\.agentKey[\s\S]*proposedByCommunityAgentRunId: context\.runId[\s\S]*proposedByCommunityAgentHeartbeatId: context\.heartbeatId/,
+  /retainCommunityIntelligenceFromDigestItemCore\([\s\S]*communityId: context\.communityId[\s\S]*workKey: payload\.workKey[\s\S]*actorType: "agent"[\s\S]*actorAgentKey: context\.agentKey[\s\S]*proposedByCommunityAgentRunId: context\.runId[\s\S]*proposedByCommunityAgentHeartbeatId: context\.heartbeatId/,
+);
+assert.match(
+  filesystem,
+  /context\.compilerDigestId[\s\S]*normalizeIdValue\(context\.compilerDigestId\) !== normalizeIdValue\(payload\.digestId\)[\s\S]*community_agent_filesystem_digest_outside_claim/,
+  "claimed cycles must not retain work from another digest",
 );
 assert.match(
   candidates,
   /proposedByCommunityAgentRunId\?: string[\s\S]*proposedByCommunityAgentHeartbeatId\?: string[\s\S]*proposedByCommunityAgentRunId:[\s\S]*proposedByCommunityAgentHeartbeatId:/,
-  "agent-proposed candidates should carry run provenance for same-run self-review guards",
+  "agent-proposed memory should retain run provenance for auditability",
 );
 assert.match(
-  filesystem,
-  /function changeRequestIsCompilerCandidate[\s\S]*payload\.source === COMPILER_CANDIDATE_PAYLOAD_SOURCE[\s\S]*row\.createdByActorType === "agent" \|\| row\.createdByActorType === "compiler"/,
-  "decision/apply should only touch compiler-derived candidates",
-);
-assert.match(
-  filesystem,
-  /async function getWritableCompilerCandidate[\s\S]*expectedStatus: "pending_decision" \| "accepted"[\s\S]*community_agent_filesystem_compiler_candidate_required[\s\S]*community_agent_filesystem_same_run_self_review_forbidden/,
-  "decision/apply should resolve same-community compiler candidates and fail same-run self-review",
-);
-assert.match(
-  filesystem,
-  /decideTrustedCommunityIntelligenceChangeRequestCore\([\s\S]*status: args\.decision[\s\S]*actorType: "agent"[\s\S]*actorAgentKey: args\.context\.agentKey/,
-  "decision writes should reuse the trusted directory decision core with agent attribution",
-);
-assert.match(
-  filesystem,
-  /applyTrustedCommunityIntelligenceChangeRequestCore\([\s\S]*changeRequestId: row\._id[\s\S]*actorType: "agent"[\s\S]*actorAgentKey: args\.context\.agentKey/,
-  "apply writes should reuse the trusted directory apply core with agent attribution",
-);
-assert.match(
-  filesystem,
-  /COMPILER_CANDIDATE_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK = 0\.3[\s\S]*visibilityScope =[\s\S]*\? "community"[\s\S]*: "admin"[\s\S]*requestedPayload: \{[\s\S]*\.\.\.payload[\s\S]*status: "promising"[\s\S]*visibilityScope/,
-  "applied compiler candidates should land no higher than promising with privacy-gated visibility",
+  candidates,
+  /retainCompilerCandidateAutonomously[\s\S]*AUTONOMOUS_MEMORY_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK = 0\.3|AUTONOMOUS_MEMORY_COMMUNITY_VISIBILITY_MAX_PRIVACY_RISK = 0\.3[\s\S]*retainCompilerCandidateAutonomously/,
+  "compiler memory should be atomically retained under a bounded privacy policy",
 );
 assert.doesNotMatch(
-  filesystem,
-  /if \(payload\.status === undefined \|\| payload\.status === "candidate"\)/,
-  "apply should always force compiler candidates to promising, not trust payload status",
+  candidates,
+  /status: "accepted"|decideTrustedCommunityIntelligenceChangeRequestCore/,
+  "compiler memory should not synthesize an acceptance state",
 );
 assert.doesNotMatch(
   filesystem,

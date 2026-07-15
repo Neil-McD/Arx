@@ -28,7 +28,7 @@ assert.match(runtime, /readCanonicalCommunityAgentContext/);
 assert.match(context, /communityAgentConfigs[\s\S]*by_community_updatedAt[\s\S]*\.order\("desc"\)[\s\S]*\.first\(\)/);
 assert.doesNotMatch(runtime, /query\("communityAgentConfigs"/);
 assert.match(boundary, /member_concierge[\s\S]*sponsor: "requester"[\s\S]*toolAuthority: "retrieval_only"/);
-assert.match(boundary, /autonomous_cognition[\s\S]*sponsor: "community_owner"[\s\S]*toolAuthority: "steward_airlock_only"/);
+assert.match(boundary, /autonomous_cognition[\s\S]*sponsor: "community_owner"[\s\S]*toolAuthority: "steward_memory_write_only"/);
 assert.match(runtime, /buildCommunityAgentIdentityPrompt\(\{ surface: "autonomous_cognition" \}\)/);
 assert.doesNotMatch(runtime, /export const runCommunityAgentLoop = action\(|export const .* = action\(/);
 assert.doesNotMatch(runtime, /userPrompt|prompt: v\.string|authSubject|userId: v\.optional/);
@@ -36,7 +36,7 @@ assert.doesNotMatch(runtime, /agentKey: v\.(?:optional\()?string/, "runtime acti
 
 assert.match(
   schema,
-  /communityAgentRuns: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)[\s\S]*agentKey: v\.string\(\)[\s\S]*triggerType: v\.union\([\s\S]*v\.literal\("manual_internal"\)[\s\S]*v\.literal\("heartbeat"\)[\s\S]*v\.literal\("event"\)[\s\S]*heartbeatId: v\.optional\(v\.string\(\)\)[\s\S]*sponsorUserId: v\.id\("users"\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("skipped"\)[\s\S]*v\.literal\("running"\)[\s\S]*v\.literal\("ok"\)[\s\S]*v\.literal\("error"\)[\s\S]*wakeReason: v\.optional\(v\.string\(\)\)[\s\S]*wakeEvidence: v\.optional\(v\.object[\s\S]*candidateProposalIds: v\.array\(v\.string\(\)\)[\s\S]*acceptedChangeRequestIds: v\.optional\(v\.array\(v\.string\(\)\)\)[\s\S]*rejectedChangeRequestIds: v\.optional\(v\.array\(v\.string\(\)\)\)[\s\S]*appliedChangeRequestIds: v\.optional\(v\.array\(v\.string\(\)\)\)[\s\S]*\.index\("by_community_createdAt", \["communityId", "createdAt"\]\)/,
+  /communityAgentRuns: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)[\s\S]*agentKey: v\.string\(\)[\s\S]*triggerType: v\.union\([\s\S]*v\.literal\("manual_internal"\)[\s\S]*v\.literal\("heartbeat"\)[\s\S]*v\.literal\("event"\)[\s\S]*heartbeatId: v\.optional\(v\.string\(\)\)[\s\S]*sponsorUserId: v\.id\("users"\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("skipped"\)[\s\S]*v\.literal\("running"\)[\s\S]*v\.literal\("ok"\)[\s\S]*v\.literal\("error"\)[\s\S]*wakeReason: v\.optional\(v\.string\(\)\)[\s\S]*wakeEvidence: v\.optional\(v\.object[\s\S]*appliedChangeRequestIds: v\.optional\(v\.array\(v\.string\(\)\)\)[\s\S]*\.index\("by_community_createdAt", \["communityId", "createdAt"\]\)/,
   "schema should include a single-community agent run ledger",
 );
 
@@ -82,9 +82,12 @@ assert.match(
 );
 assert.match(
   protocol,
-  /operation:[\s\S]*enum: \[[\s\S]*"propose_directory_candidate_from_digest_item"[\s\S]*"decide_change_request"[\s\S]*"apply_accepted_change_request"/,
-  "write tool should support proposal, decision, and apply as operation values",
+  /operation:[\s\S]*enum: \["retain_compiler_digest_item"\]/,
+  "write tool should expose one atomic memory-retention operation",
 );
+assert.match(protocol, /required: \["digestId", "workKey", "nodeType"\]/);
+assert.doesNotMatch(protocol, /itemIndex|digestItemIndex/);
+assert.doesNotMatch(protocol, /decide_change_request|apply_accepted_change_request/);
 assert.doesNotMatch(protocol, /activity|communityId|authSubject|userId|crossCommunity|globalMemory/);
 
 assert.match(
@@ -108,9 +111,10 @@ assert.doesNotMatch(runtime, /listThreadMessages|listCommunityAiFeedBundle|listC
 
 assert.match(
   filesystem,
-  /writeCommunityAgentFilesystemInternal = internalMutation\([\s\S]*operation: v\.union\([\s\S]*v\.literal\("propose_directory_candidate_from_digest_item"\)[\s\S]*v\.literal\("decide_change_request"\)[\s\S]*v\.literal\("apply_accepted_change_request"\)[\s\S]*proposeCommunityIntelligenceFromDigestItemCore/,
-  "runtime write tool should land on the existing filesystem airlock",
+  /writeCommunityAgentFilesystemInternal = internalMutation\([\s\S]*operation: v\.literal\("retain_compiler_digest_item"\)[\s\S]*retainCommunityIntelligenceFromDigestItemCore/,
+  "runtime write tool should land on the atomic compiler-memory path",
 );
+assert.doesNotMatch(filesystem, /decide_change_request|apply_accepted_change_request/);
 assert.match(
   docs,
   /Ninth Implementation Slice[\s\S]*internal community-agent runtime loop[\s\S]*owner-sponsored ChatGPT inference[\s\S]*canonical `agentKey`: `community_agent`[\s\S]*must not accept `agentKey` as caller input[\s\S]*list`, `read`, `search`, and `write`[\s\S]*must not directly insert or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`[\s\S]*missing owner auth[\s\S]*must finish the run as an error/,
@@ -144,12 +148,12 @@ assert.match(
 
 // Role harness (Amendment v1.1): one agent entity, role prompts on the same
 // harness, chained per heartbeat cycle over a shared ledger. Authority is
-// structural: only the steward's tool list contains the airlock write tool.
+// structural: only the steward's tool list contains the memory write tool.
 const roles = readFileSync(join(root, "shared/communityAgentRoles.ts"), "utf8");
 assert.match(
   roles,
   /observer:[\s\S]*toolNames: \["list", "read", "search", "note"\][\s\S]*questioner:[\s\S]*toolNames: \["list", "read", "search", "note"\][\s\S]*steward:[\s\S]*toolNames: \["list", "read", "search", "note", "write"\]/,
-  "only the steward role may carry the airlock write tool",
+  "only the steward role may carry the memory write tool",
 );
 assert.match(
   roles,
@@ -163,8 +167,19 @@ assert.match(
 );
 assert.match(
   runtime,
+  /compilerDigestId: v\.optional\(v\.id\("communityCompilerDigests"\)\)[\s\S]*compilerDigestVersionKey: v\.optional\(v\.string\(\)\)[\s\S]*community_agent_runtime_digest_identity_incomplete[\s\S]*\/compiler\/digests\/\$\{exactDigestId\}[\s\S]*community_agent_runtime_digest_version_mismatch/,
+  "heartbeat roles should fail closed unless they read the exact claimed digest version",
+);
+assert.match(
+  runtime,
+  /latest_digest_version_key: digest\.version_key[\s\S]*work_key: item\?\.workKey/,
+  "steward context should carry canonical digest and work-key coordinates",
+);
+assert.doesNotMatch(runtime, /item indices|item index/);
+assert.match(
+  runtime,
   /appendCommunityAgentCycleLedgerNoteInternal = internalMutation/,
-  "cycle ledger appends must be a separate mutation from the directory airlock write",
+  "cycle ledger appends must be separate from the atomic directory write",
 );
 assert.match(
   runtime,
@@ -184,39 +199,42 @@ assert.match(
   "a woken heartbeat should run the role cycle, not a single pass",
 );
 
-// Airlock decision ledger: successful write calls are collected into compact
-// action id arrays. Applying a change request is explicit filesystem behavior,
-// not an out-of-band same-cycle auto-apply helper.
+// Atomic memory ledger: one successful write records one applied audit-row id.
+// Approval-loop arrays remain schema-only compatibility for historical rows.
 const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
 assert.match(
   runtime,
-  /function collectWriteActionIdsFromToolOutput[\s\S]*propose_directory_candidate_from_digest_item[\s\S]*decide_change_request[\s\S]*acceptedChangeRequestIds[\s\S]*rejectedChangeRequestIds[\s\S]*apply_accepted_change_request[\s\S]*appliedChangeRequestIds/,
-  "runtime should collect proposal, decision, and apply ids from successful write results",
+  /function collectAppliedMemoryIdFromToolOutput[\s\S]*retention\?\.status[\s\S]*=== "applied"[\s\S]*appliedChangeRequestIds\.add/,
+  "runtime should collect only successfully applied autonomous memory ids",
 );
 assert.match(
   runtime,
-  /acceptedChangeRequestIds: \[\][\s\S]*rejectedChangeRequestIds: \[\][\s\S]*appliedChangeRequestIds: \[\]/,
-  "new and skipped runs should initialize all action arrays",
+  /ctx\.db\.insert\("communityAgentRuns"[\s\S]*appliedChangeRequestIds: \[\]/,
+  "new and skipped runs should initialize the applied action ledger",
 );
 assert.match(
   runtime,
-  /finishCommunityAgentRunInternal[\s\S]*acceptedChangeRequestIds: v\.array\(v\.string\(\)\)[\s\S]*rejectedChangeRequestIds: v\.array\(v\.string\(\)\)[\s\S]*appliedChangeRequestIds: v\.array\(v\.string\(\)\)/,
-  "finished runs should persist accepted/rejected/applied ids",
+  /finishCommunityAgentRunInternal[\s\S]*appliedChangeRequestIds: v\.array\(v\.string\(\)\)/,
+  "finished runs should preserve applied memory ids",
 );
 assert.match(
   runtime,
-  /roleResults[\s\S]*accepted_change_request_ids: string\[\][\s\S]*rejected_change_request_ids: string\[\][\s\S]*applied_change_request_ids: string\[\]/,
-  "cycle results should expose action arrays per role",
+  /roleResults[\s\S]*applied_change_request_ids: string\[\]/,
+  "cycle results should preserve applied memory ids per role",
 );
 assert.doesNotMatch(
-  `${runtime}\n${directory}`,
-  /autoApplyCommunityAgentProposalsInternal|STEWARD_AUTO_APPLY|steward_auto_apply/,
-  "same-cycle auto-apply should not remain in runtime or directory code",
+  runtime,
+  /candidateProposalIds|acceptedChangeRequestIds|rejectedChangeRequestIds|candidate_proposal_ids|accepted_change_request_ids|rejected_change_request_ids/,
+  "runtime behavior should not retain approval-loop state",
+);
+assert.match(
+  directory,
+  /applicationMode === "autonomous_compiler_memory"[\s\S]*community_intelligence_autonomous_memory_policy_forbidden/,
+  "same-transaction autonomy should be enforced by the canonical directory policy",
 );
 
-// Ignition (Amendment v1.1): the 6h sweep is triple-gated before spend —
-// owner off-switch, 2-cycles/day cap, delta check on new signal — and memory
-// is founder-funded (no owner connection, no cycle).
+// Ignition: work truth comes from compiler evidence and durable digest
+// handoffs; cost truth remains owner off-switch, daily cap, and connection.
 assert.match(
   heartbeat,
   /COMMUNITY_AGENT_CYCLES_PER_DAY_CAP = 2/,
@@ -224,9 +242,10 @@ assert.match(
 );
 assert.match(
   heartbeat,
-  /agent_disabled[\s\S]*daily_cycle_cap_reached[\s\S]*no_source_traces[\s\S]*no_new_signal/,
-  "the sweep assessment must gate on off-switch, cap, and signal delta",
+  /agent_disabled[\s\S]*daily_cycle_cap_reached[\s\S]*pending_compiler_handoff[\s\S]*no_compiler_work/,
+  "the planner must separate cost gates from durable work truth",
 );
+assert.doesNotMatch(heartbeat, /newestTrace|lastOkObserver|no_new_signal|no_source_traces/);
 assert.match(
   heartbeat,
   /getChatgptConnectionForUserInternal[\s\S]*owner_connection_missing/,
@@ -234,8 +253,8 @@ assert.match(
 );
 assert.match(
   heartbeat,
-  /runCommunityCompilerDigestPassInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
-  "the sweep refreshes the digest before knocking for a cycle",
+  /runCommunityCompilerDigestPassInternal[\s\S]*claimCommunityCompilerDigestHandoffInternal[\s\S]*runCommunityAgentCycleInternal[\s\S]*settleCommunityCompilerDigestHandoffInternal/,
+  "the heartbeat owns compile, claim, role cycle, and settlement",
 );
 const cronsFile = readFileSync(join(root, "convex/crons.ts"), "utf8");
 assert.match(

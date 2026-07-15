@@ -70,8 +70,13 @@ export function normalizeInteractionAttachmentInputs(rawAttachments: unknown[]):
     const sizeRaw = Number(record.size);
     const sizeBytes = Number.isFinite(sizeRaw) ? Math.max(0, Math.floor(sizeRaw)) : 0;
     let dataUrl: string | undefined;
-    if (typeof record.data_url === "string") {
-      const normalizedDataUrl = record.data_url.trim();
+    const dataUrlRaw = typeof record.data_url === "string"
+      ? record.data_url
+      : typeof record.dataUrl === "string"
+        ? record.dataUrl
+        : "";
+    if (dataUrlRaw) {
+      const normalizedDataUrl = dataUrlRaw.trim();
       if (
         normalizedDataUrl.startsWith("data:image/")
         && normalizedDataUrl.length <= MAX_LEGACY_IMAGE_DATA_URL_CHARS

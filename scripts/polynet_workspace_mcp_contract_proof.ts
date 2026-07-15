@@ -105,6 +105,16 @@ assertIncludes(
 );
 assertIncludes(
   contract,
+  "## AI Feed Evidence Boundary",
+  "workspace MCP AI Feed evidence boundary",
+);
+assertIncludes(
+  contract,
+  "require the `raw_evidence_search` authority toolset",
+  "workspace MCP AI Feed authority gate",
+);
+assertIncludes(
+  contract,
   "## Product Docs Boundary",
   "workspace MCP product docs boundary",
 );
@@ -232,7 +242,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "15 workspace tools",
+  "17 workspace tools",
   "PolyMCP integration tool count",
 );
 assertIncludes(
@@ -619,6 +629,8 @@ for (const toolName of [
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_ai_feed_search",
+  "polynet_workspace_ai_feed_read",
   "polynet_workspace_resources_map",
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
@@ -642,6 +654,8 @@ for (const toolName of [
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
+  "polynet_workspace_ai_feed_search",
+  "polynet_workspace_ai_feed_read",
   "polynet_workspace_resources_map",
   "polynet_workspace_resources_list",
   "polynet_workspace_resource_read",
@@ -825,7 +839,7 @@ for (const toolName of [
 const resourceMapDefinition = toolDefinitionBlock(polynetMcp, "polynet_workspace_resources_map");
 assertIncludes(resourceMapDefinition, "readOnlyHint: true", "resource map read-only annotation");
 assertIncludes(resourceMapDefinition, "Members see live resources", "resource map member-visible description");
-assertIncludes(resourceMapDefinition, "builders may receive builder-visible", "resource map builder authority description");
+assertIncludes(resourceMapDefinition, "explicit builder resource tools", "resource map explicit builder boundary");
 
 const resourceMapDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_resources_map");
 assertIncludes(resourceMapDispatch, "resolveWorkspaceContext", "resource map workspace revalidation");
@@ -843,11 +857,13 @@ const resourceListDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_resou
 assertIncludes(resourceListDispatch, "listCommunityResourceDirectoryInternal", "resource list member directory path");
 
 const resourceReadDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_resource_read");
-assertIncludes(resourceReadDispatch, "readCommunityResourceDirectoryInternal", "resource read member directory path");
+assertIncludes(resourceReadDispatch, "readCommunityResourceEvidenceForToolInternal", "resource read evidence path");
+assertIncludes(resourceReadDispatch, "surface: \"external_mcp\"", "resource read audit surface");
 assertIncludes(resourceReadDispatch, "ref is required", "resource read ref validation");
 
 const resourceSearchDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_resources_search");
-assertIncludes(resourceSearchDispatch, "searchCommunityResourceDirectoryInternal", "resource search member directory path");
+assertIncludes(resourceSearchDispatch, "searchCommunityResourceEvidenceInternal", "resource search evidence path");
+assertIncludes(resourceSearchDispatch, "surface: \"external_mcp\"", "resource search audit surface");
 assertIncludes(resourceSearchDispatch, "query is required", "resource search query validation");
 
 const builderResourceMapDefinition = toolDefinitionBlock(polynetMcp, "polynet_workspace_builder_resources_map");
@@ -860,7 +876,7 @@ const builderResourceMapDispatch = toolDispatchBlock(httpMcp, "polynet_workspace
 assertIncludes(builderResourceMapDispatch, "resolveWorkspaceContext", "builder resource map workspace revalidation");
 assertIncludes(builderResourceMapDispatch, "requireWorkspaceAuthorityToolset", "builder resource map authority toolset gate");
 assertIncludes(builderResourceMapDispatch, "\"builder_resources\"", "builder resource map builder toolset gate");
-assertIncludes(builderResourceMapDispatch, "mapCommunityResourcesForToolInternal", "builder resource map internal path");
+assertIncludes(builderResourceMapDispatch, "mapCommunityResourceBuilderForToolInternal", "builder resource map internal path");
 assertIncludes(builderResourceMapDispatch, "perModuleLimit", "builder resource map per-module limit");
 assertNotIncludes(builderResourceMapDispatch, "readCommunityResourcesForToolInternal", "builder resource map no batch read path");
 assertNotIncludes(builderResourceMapDispatch, "listCommunityResourceBuilderDirectory", "builder resource map no builder list path");

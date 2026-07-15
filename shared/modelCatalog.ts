@@ -28,6 +28,7 @@ export type PremiumModelCatalogEntry = {
 type CatalogModelEntry = PremiumModelCatalogEntry & {
   surfaces: readonly ModelCatalogSurface[];
   defaultEnabled: boolean;
+  supportsImageInput: boolean;
 };
 
 type FreeModelEntry = {
@@ -36,6 +37,7 @@ type FreeModelEntry = {
   description: string;
   openRouterModelRef: string;
   supportedFundingSources: readonly ModelFundingSource[];
+  supportsImageInput: boolean;
 };
 
 export const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.6-sol";
@@ -48,17 +50,18 @@ const FREE_MODELS: readonly FreeModelEntry[] = [
     description: "OpenRouter free tier",
     openRouterModelRef: "openai/gpt-oss-120b:free",
     supportedFundingSources: ["demo_public", "user_key"],
+    supportsImageInput: false,
   },
 ];
 
 const PREMIUM_MODELS: readonly CatalogModelEntry[] = [
-  { id: DEFAULT_ACTIVE_MODEL_ID, label: DEFAULT_ACTIVE_MODEL_LABEL, section: "openai", description: "OpenAI", supportedFundingSources: ["user_key", "user_chatgpt"], surfaces: ["web"], defaultEnabled: true },
-  { id: "gpt-5.5", label: "GPT 5.5", section: "openai", description: "OpenAI compatibility", supportedFundingSources: ["user_key", "user_chatgpt"], surfaces: ["web"], defaultEnabled: false },
-  { id: "sonnet-4.6", label: "Sonnet 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true },
-  { id: "opus-4.6", label: "Opus 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true },
-  { id: "gemini-3-flash", label: "Gemini 3 Flash", section: "google", description: "Google", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true },
-  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro", section: "google", description: "Google", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true },
-  { id: "grok-4.1", label: "Grok 4.1", section: "x-ai", description: "xAI", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true },
+  { id: DEFAULT_ACTIVE_MODEL_ID, label: DEFAULT_ACTIVE_MODEL_LABEL, section: "openai", description: "OpenAI", supportedFundingSources: ["user_key", "user_chatgpt"], surfaces: ["web"], defaultEnabled: true, supportsImageInput: true },
+  { id: "gpt-5.5", label: "GPT 5.5", section: "openai", description: "OpenAI compatibility", supportedFundingSources: ["user_key", "user_chatgpt"], surfaces: ["web"], defaultEnabled: false, supportsImageInput: true },
+  { id: "sonnet-4.6", label: "Sonnet 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true, supportsImageInput: true },
+  { id: "opus-4.6", label: "Opus 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true, supportsImageInput: true },
+  { id: "gemini-3-flash", label: "Gemini 3 Flash", section: "google", description: "Google", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true, supportsImageInput: true },
+  { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro", section: "google", description: "Google", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true, supportsImageInput: true },
+  { id: "grok-4.1", label: "Grok 4.1", section: "x-ai", description: "xAI", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true, supportsImageInput: true },
 ];
 
 export const DEFAULT_GUEST_MODEL_ID = FREE_MODELS[0]!.id;
@@ -137,6 +140,14 @@ export function supportsModelFundingSource(
   fundingSource: ModelFundingSource,
 ): boolean {
   return getSupportedFundingSourcesForModel(modelId).includes(fundingSource);
+}
+
+export function supportsModelImageInput(modelId: string | null | undefined): boolean {
+  const id = normalizeModelId(modelId);
+  if (!id) return false;
+  const freeModel = FREE_MODELS.find((model) => model.id === id);
+  if (freeModel) return freeModel.supportsImageInput;
+  return PREMIUM_MODELS.find((model) => model.id === id)?.supportsImageInput === true;
 }
 
 export function isModelAvailableOnSurface(modelId: string | null | undefined, surface: ModelCatalogSurface): boolean {

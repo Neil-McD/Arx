@@ -1,8 +1,47 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import ts from "typescript";
 
 function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
+}
+
+function assertFiltersCompilerEvidenceTraces(source: string, label: string): void {
+  const sourceFile = ts.createSourceFile(
+    `${label}.ts`,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  let found = false;
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "filter"
+    ) {
+      const callback = node.arguments[0];
+      const inspectCallback = (candidate: ts.Node): void => {
+        if (
+          ts.isCallExpression(candidate) &&
+          ts.isIdentifier(candidate.expression) &&
+          candidate.expression.text === "isCommunityCompilerEvidenceTrace"
+        ) {
+          found = true;
+        }
+        ts.forEachChild(candidate, inspectCallback);
+      };
+      if (callback) inspectCallback(callback);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  assert.equal(
+    found,
+    true,
+    `${label} must filter candidate source traces through isCommunityCompilerEvidenceTrace`,
+  );
 }
 
 const packageJson = read("package.json");
@@ -88,20 +127,11 @@ assert.match(
 
 assert.match(
   heartbeat,
-  /drainSelfAuthoredPendingSourceTracesInternal[\s\S]*measureCommunityCompilerEvidenceInternal/,
-  "heartbeat trigger measurement must drain self-authored pending traces before deciding whether to wake",
+  /drainSelfAuthoredPendingSourceTracesInternal[\s\S]*assessCommunityAgentCycleInternal[\s\S]*measureCommunityCompilerEvidenceForCommunity/,
+  "heartbeat must drain self-authored pending traces before the canonical planner measures wake work",
 );
 
-assert.match(
-  windowSource,
-  /isCommunityCompilerEvidenceTrace[\s\S]*sourceTraces = traceCandidateRows[\s\S]*\.filter\(\(row\) => isCommunityCompilerEvidenceTrace\(row\)\)/,
-  "community compiler window must not present self-authored source traces as compiler input",
-);
-
-assert.match(
-  inputs,
-  /isCommunityCompilerEvidenceTrace[\s\S]*traceRows = traceCandidateRows[\s\S]*\.filter\(\(row\) => isCommunityCompilerEvidenceTrace\(row\)\)/,
-  "manager compiler inputs must use the same source trace evidence diet",
-);
+assertFiltersCompilerEvidenceTraces(windowSource, "community compiler window");
+assertFiltersCompilerEvidenceTraces(inputs, "manager compiler inputs");
 
 console.log("community_compiler_evidence_diet_contract_proof: ok");

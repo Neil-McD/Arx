@@ -14,9 +14,12 @@ import {
 } from "./communityCore";
 import {
   deleteArchiveDocumentBySource,
-  upsertArchiveDocumentForChatMessage,
 } from "./communityArchiveDocuments";
-import { recordLegacyChatMessageInteractionBestEffort } from "./communityInteractions";
+import {
+  recordLegacyChatMessageInteractionBestEffort,
+  syncLegacyChatMessageDeleteToInteractionCore,
+  syncLegacyChatMessageEditToInteractionCore,
+} from "./communityInteractions";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
 
@@ -508,10 +511,6 @@ export const createThreadUserMessage = mutation({
     });
     const row = (await ctx.db.get(messageId as any)) as CommunityChatMessageLike | null;
     if (!row) throw new Error("message_create_failed");
-    await upsertArchiveDocumentForChatMessage(ctx, {
-      thread,
-      message: row,
-    });
     await recordLegacyChatMessageInteractionBestEffort({
       ctx,
       thread,
@@ -562,17 +561,19 @@ export const patchOwnMessageContent = mutation({
     if (!nextText && nextAttachments.length === 0) {
       throw new Error("message_payload_required");
     }
+    await syncLegacyChatMessageEditToInteractionCore({
+      ctx,
+      communityId: thread.communityId,
+      messageId: message._id,
+      text: nextText,
+      attachments: nextAttachments,
+      actorUserId: userId,
+      nowMs,
+    });
     await ctx.db.patch(message._id as any, {
       contentJson: nextAttachments.length > 0 ? { text: nextText, attachments: nextAttachments } : { text: nextText },
       updatedAt: nowMs,
     });
-    const updated = (await ctx.db.get(message._id as any)) as CommunityChatMessageLike | null;
-    if (updated) {
-      await upsertArchiveDocumentForChatMessage(ctx, {
-        thread,
-        message: updated,
-      });
-    }
     return { ok: true };
   },
 });
@@ -619,6 +620,13 @@ export const deleteOwnMessage = mutation({
     for (const reaction of reactions) {
       await ctx.db.delete(reaction._id as any);
     }
+    await syncLegacyChatMessageDeleteToInteractionCore({
+      ctx,
+      communityId: thread.communityId,
+      messageId: message._id,
+      actorUserId: userId,
+      nowMs,
+    });
     await ctx.db.delete(message._id as any);
     await deleteArchiveDocumentBySource(ctx, {
       communityId: thread.communityId,

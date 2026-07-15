@@ -58,11 +58,18 @@
     inset 0 1px 0 rgba(196, 181, 253, 0.14);
 }
 
-.member-agent-dock-launcher:focus-visible,
-.member-agent-dock button:focus-visible,
-.member-agent-dock textarea:focus-visible {
+.member-agent-dock-launcher:focus-visible {
   outline: 2px solid var(--member-agent-accent);
   outline-offset: 2px;
+}
+
+.member-agent-dock button:focus-visible {
+  outline: 2px solid var(--composer-focus-ring, rgba(232, 232, 234, 0.44));
+  outline-offset: 2px;
+}
+
+.member-agent-dock textarea:focus-visible {
+  outline: none;
 }
 
 .member-agent-dock-launcher svg {
@@ -279,6 +286,21 @@
   margin: 0;
 }
 
+.member-agent-dock-message.is-media-only {
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.member-agent-dock-media-grid {
+  width: min(280px, 72vw);
+  margin-top: 8px;
+}
+
+.member-agent-dock-message.is-media-only .member-agent-dock-media-grid {
+  margin-top: 0;
+}
+
 .member-agent-dock-message.is-pending {
   opacity: 0.72;
 }
@@ -341,24 +363,88 @@
   line-height: 1.45;
 }
 
-.member-agent-dock-composer-stack {
+.member-agent-dock-composer-shell {
   display: grid;
+  gap: 8px;
+  margin: 0 12px 12px;
+}
+
+.member-agent-dock-composer-attachments {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0 3px;
+}
+
+.member-agent-dock-composer-image {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--surface-card-alt);
+  border: 1px solid var(--stroke-default);
+  border-radius: 10px;
+}
+
+.member-agent-dock-composer-image > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.member-agent-dock-composer-image > span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-ink-primary);
+  background: rgba(10, 10, 12, 0.46);
+}
+
+.member-agent-dock-composer-image > span svg {
+  width: 18px;
+  height: 18px;
+  animation: member-agent-dock-spin 900ms linear infinite;
+}
+
+.member-agent-dock-composer-image > button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: #fff;
+  background: rgba(8, 8, 10, 0.78);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.member-agent-dock-composer-image > button svg {
+  width: 13px;
+  height: 13px;
 }
 
 .member-agent-dock-composer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-columns: 34px minmax(0, 1fr) 34px 34px;
   align-items: end;
-  gap: 8px;
-  margin: 0 12px 12px;
-  padding: 8px 8px 8px 11px;
-  background: var(--surface-input);
-  border: 1px solid var(--stroke-default);
-  border-radius: 8px;
+  gap: 4px;
+  padding: 7px 7px;
+  background: var(--composer-surface, var(--bg-card-solid, #17171a));
+  border: 1px solid var(--composer-border, var(--stroke-default));
+  border-radius: var(--composer-radius, 24px);
+  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
-.member-agent-dock-composer:focus-within {
+.member-agent-dock-composer.is-dragging {
   border-color: var(--stroke-strong);
+  background: var(--surface-card-alt);
+}
+
+.member-agent-dock-file-input {
+  display: none;
 }
 
 .member-agent-dock-composer.is-onboarding {
@@ -385,27 +471,67 @@
   color: var(--text-ink-faint);
 }
 
-.member-agent-dock-composer button {
+.member-agent-dock-composer > button {
   display: grid;
   width: 34px;
   height: 34px;
   place-items: center;
-  color: var(--bg-button-text);
-  background: var(--bg-button);
+  color: var(--icon-default);
+  background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: 999px;
   cursor: pointer;
 }
 
-.member-agent-dock-composer button:disabled {
+.member-agent-dock-composer > button:hover:not(:disabled) {
+  color: var(--icon-hover);
+  background: var(--hover-overlay);
+}
+
+.member-agent-dock-composer > button:focus-visible,
+.member-agent-dock-composer .ask-icon-btn:focus-visible {
+  outline: none;
+  color: var(--icon-hover);
+  background: var(--hover-overlay);
+}
+
+.member-agent-dock-composer .member-agent-dock-send:focus-visible {
+  color: var(--bg-button-text);
+  background: var(--bg-button-hover, var(--bg-button));
+}
+
+.member-agent-dock-composer > button:disabled {
   color: var(--text-ink-faint);
-  background: var(--surface-card-alt);
+  background: transparent;
   cursor: default;
 }
 
-.member-agent-dock-composer button svg {
+.member-agent-dock-composer > button svg {
   width: 16px;
   height: 16px;
+}
+
+.member-agent-dock-composer .ask-icon-btn {
+  width: 34px;
+  height: 34px;
+  color: var(--icon-default);
+  background: transparent;
+  border: 0;
+}
+
+.member-agent-dock-composer .member-agent-dock-send {
+  color: var(--bg-button-text);
+  background: var(--bg-button);
+}
+
+.member-agent-dock-composer .member-agent-dock-send:hover:not(:disabled) {
+  color: var(--bg-button-text);
+  background: var(--bg-button-hover, var(--bg-button));
+}
+
+.member-agent-dock-composer .member-agent-dock-send:disabled {
+  color: var(--text-ink-faint);
+  background: var(--surface-card-alt);
 }
 
 @keyframes member-agent-dock-spin {

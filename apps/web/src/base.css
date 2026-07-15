@@ -113,6 +113,10 @@
   --stroke-active: var(--border-active);
   --stroke-selected: color-mix(in srgb, var(--accent-gold) 46%, var(--stroke-default));
   --stroke-divider-accent: var(--divider-accent, var(--border-muted));
+  --composer-surface: var(--bg-card-solid, #17171a);
+  --composer-border: color-mix(in srgb, var(--stroke-default) 88%, transparent);
+  --composer-focus-ring: color-mix(in srgb, var(--text-ink-primary) 44%, transparent);
+  --composer-radius: 24px;
   --text-ink-primary: var(--text-primary);
   --text-ink-secondary: var(--text-secondary);
   --text-ink-muted: var(--text-muted);
@@ -9654,6 +9658,77 @@ button.community-launch-knowledge-integration-chip:disabled {
   min-height: 24px;
 }
 
+/* Member communication composers share one solid floating material. The
+   visitor funnel intentionally reuses the interaction projection without the
+   member root class, so these rules cannot leak into .cvs-chat. */
+.community-member-chat .community-interaction-feed-scroll {
+  padding-bottom: calc(var(--mobile-community-composer-height, 0px) + 18px);
+}
+
+.community-member-chat .community-interaction-main-composer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 12;
+  padding-top: 0;
+  border-top: 0;
+  background: transparent;
+}
+
+.community-member-chat .community-interaction-thread-drawer .community-interaction-drawer-scroll {
+  padding-bottom: calc(var(--community-thread-composer-height, 0px) + 18px);
+}
+
+.community-member-chat .community-interaction-drawer-composer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 4;
+  padding: 0 12px 12px;
+  background: transparent;
+}
+
+/* Keep the scrolling layer cheap: a static layer behind each floating pill
+   softens content at the viewport edge without masking or repainting the feed. */
+.community-member-chat .community-interaction-main-composer::before,
+.community-member-chat .community-interaction-drawer-composer::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: -1;
+  height: calc(100% + 22px);
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0,
+    color-mix(in srgb, var(--bg-workspace) 76%, transparent) 100%
+  );
+}
+
+.community-member-chat .community-interaction-main-composer .chat-input-bar,
+.community-member-chat .community-interaction-drawer-composer .chat-input-bar {
+  border-radius: var(--composer-radius);
+  background: var(--composer-surface);
+  border-color: var(--composer-border);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+}
+
+.community-member-chat .community-interaction-main-composer .chat-input-bar {
+  padding: 12px 14px 10px;
+}
+
+.community-member-chat .community-interaction-drawer-composer .chat-input-bar {
+  padding: 12px 14px 10px;
+}
+
+.community-member-chat .community-interaction-reply-input-bar {
+  border-radius: var(--composer-radius);
+}
+
 .community-interaction-feed-header {
   display: flex;
   align-items: center;
@@ -11599,8 +11674,6 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-dm-panel-header,
-.community-dm-composer-attachments,
-.community-dm-panel-composer,
 .community-dm-inbox-header,
 .community-dm-recipient-search {
   position: relative;
@@ -11620,9 +11693,37 @@ button.community-launch-knowledge-integration-chip:disabled {
   border-bottom: 1px solid color-mix(in srgb, var(--border-default) 80%, transparent);
 }
 
-.community-dm-panel-composer {
-  padding-top: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--border-default) 80%, transparent);
+.community-dm-composer-float {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  left: 14px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.community-dm-composer-float::before {
+  content: "";
+  position: absolute;
+  right: -14px;
+  bottom: -14px;
+  left: -14px;
+  z-index: -1;
+  height: calc(100% + 32px);
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0,
+    color-mix(in srgb, var(--bg-workspace) 76%, transparent) 100%
+  );
+}
+
+.community-dm-composer-float > * {
+  pointer-events: auto;
 }
 
 .community-dm-panel-back {
@@ -11718,8 +11819,8 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex-direction: column;
   gap: 0;
   overflow: auto;
-  margin: -8px -12px -8px 0;
-  padding: 10px 14px 12px 2px;
+  margin: -8px -12px -14px 0;
+  padding: 10px 14px calc(var(--community-dm-composer-float-height, 62px) + 26px) 2px;
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
@@ -12212,8 +12313,14 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-dm-panel-composer {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--composer-border);
+  border-radius: var(--composer-radius);
+  background: var(--composer-surface);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
 }
 
 .community-dm-panel-file-input {
@@ -12225,18 +12332,19 @@ button.community-launch-knowledge-integration-chip:disabled {
   width: 38px;
   height: 38px;
   min-height: 38px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 72%, transparent);
+  padding: 0;
+  border: 0;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-card) 38%, transparent);
+  background: transparent;
 }
 
 .community-dm-panel-attach:hover:not(:disabled) {
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--text-secondary) 32%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 
 .community-dm-panel-attach:disabled {
@@ -12254,14 +12362,14 @@ button.community-launch-knowledge-integration-chip:disabled {
   width: 38px;
   height: 38px;
   min-height: 38px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 72%, transparent);
+  border: 0;
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-card) 38%, transparent);
+  background: transparent;
 }
 
 .community-dm-panel-composer .ask-mic:hover:not(:disabled) {
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--text-secondary) 32%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 
 .community-dm-panel-composer .ask-mic svg {
@@ -12271,31 +12379,32 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-dm-panel-input {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 38px;
   max-height: 148px;
   overflow-y: auto;
-  padding: 9px 12px;
+  padding: 9px 4px;
   resize: none;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 80%, transparent);
-  border-radius: 18px;
+  border: 0;
+  border-radius: 0;
   outline: none;
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-card) 42%, transparent);
+  background: transparent;
   font: inherit;
   font-size: 13px;
   line-height: 1.35;
 }
 
 .community-dm-panel-input:focus {
-  border-color: color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 80%, transparent);
   box-shadow: none;
 }
 
 .community-dm-panel-send {
-  flex: 0 0 38px;
-  width: 38px;
-  height: 38px;
-  min-height: 38px;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  border-radius: 999px;
 }
 
 .community-dm-inbox-panel {
@@ -12712,6 +12821,32 @@ button.community-launch-knowledge-integration-chip:disabled {
     box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+
+  .web-direct-messages-host.mobile-root .community-dm-composer-float {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+  }
+
+  .web-direct-messages-host.mobile-root .community-dm-panel-composer {
+    padding: 10px 12px;
+    border-radius: 24px;
+  }
+
+  .web-direct-messages-host.mobile-root .community-dm-panel-attach,
+  .web-direct-messages-host.mobile-root .community-dm-panel-composer .ask-mic,
+  .web-direct-messages-host.mobile-root .community-dm-panel-send {
+    flex-basis: 44px;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+
+  .web-direct-messages-host.mobile-root .community-dm-panel-input {
+    min-height: 44px;
+    padding: 11px 4px;
+    font-size: 15px;
   }
 
   .web-direct-messages-host.mobile-root .community-dm-inbox-panel {
@@ -17537,15 +17672,6 @@ button.chat-reply-quote:hover {
 .cp-node-circle.type-decision { fill: var(--accent-gold); }
 .cp-node-circle.type-question { fill: #8b93a7; }
 
-.cp-forming-circle {
-  fill: color-mix(in srgb, #a78bfa 7%, transparent);
-  stroke: color-mix(in srgb, #c4b5fd 78%, transparent);
-  stroke-width: 1.6;
-  stroke-dasharray: 2.5 2;
-  vector-effect: non-scaling-stroke;
-  transition: fill 160ms ease, opacity 160ms ease, stroke 160ms ease, r 260ms ease;
-}
-
 /* Status treatment, independent of the type color. */
 .cp-node-circle.status-promising { opacity: 0.8; }
 .cp-node-circle.status-stale { opacity: 0.42; }
@@ -17563,8 +17689,7 @@ button.chat-reply-quote:hover {
   transform-origin: center;
 }
 
-.cp-root-circle.activity-running,
-.cp-root-circle.activity-considering {
+.cp-root-circle.activity-running {
   animation: community-polynet-pulse 2.2s ease-in-out infinite;
 }
 
@@ -17629,7 +17754,6 @@ button.chat-reply-quote:hover {
   }
 
   .cp-root-circle.activity-running,
-  .cp-root-circle.activity-considering,
   .cp-root-circle.activity-updated-directory {
     animation: none;
   }
@@ -30833,6 +30957,22 @@ button.message-citation-chip:hover {
 .app-root.mobile-shell .community-chat .community-interaction-reply-input-bar {
   margin: 0;
   border-radius: 18px;
+}
+
+.app-root.mobile-shell .community-member-chat .community-interaction-thread-page .community-interaction-drawer-composer {
+  padding: 8px 12px calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height) + 8px);
+  border-top: 0;
+  background: transparent;
+}
+
+.app-root.mobile-shell .community-member-chat .chat-input-bar {
+  border-radius: var(--composer-radius);
+  background: var(--composer-surface);
+  border-color: var(--composer-border);
+}
+
+.app-root.mobile-shell .community-member-chat .community-interaction-reply-input-bar {
+  border-radius: var(--composer-radius);
 }
 
 .app-root.mobile-shell .community-chat .chat-input {

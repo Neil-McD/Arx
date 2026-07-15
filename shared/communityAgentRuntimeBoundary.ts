@@ -11,7 +11,7 @@ export const COMMUNITY_AGENT_RUNTIME_BOUNDARIES = {
     sponsor: "community_owner",
     audience: "internal",
     contextScope: "community_compiler_and_directory",
-    toolAuthority: "steward_airlock_only",
+    toolAuthority: "steward_memory_write_only",
   },
 } as const satisfies Record<
   CommunityAgentRuntimeSurface,
@@ -19,7 +19,7 @@ export const COMMUNITY_AGENT_RUNTIME_BOUNDARIES = {
     sponsor: "requester" | "community_owner";
     audience: "member" | "internal";
     contextScope: "source_visibility_bounded" | "community_compiler_and_directory";
-    toolAuthority: "retrieval_only" | "steward_airlock_only";
+    toolAuthority: "retrieval_only" | "steward_memory_write_only";
   }
 >;
 

@@ -27,7 +27,7 @@ const SKILLS: Record<CommunityAgentSkillKey, string> = {
     "many times the pattern appears in chat or feed activity.",
   ].join(" "),
   ledger_discipline: [
-    "Ledger notes must be self-contained: reference the digest item index they concern,",
+    "Ledger notes must be self-contained: reference the digest item work key they concern,",
     "state a clear verdict or question, and give the reason in one or two sentences.",
     "The next role sees only the ledger and the directory state — write for that reader.",
   ].join(" "),

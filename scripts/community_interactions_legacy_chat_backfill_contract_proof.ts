@@ -42,8 +42,8 @@ assert.match(
 );
 assert.match(
   contract,
-  /backfill write\/materialization failures are not caught after writes begin[\s\S]*backfill does not migrate reactions, edits, deletes, or moderation state[\s\S]*backfill does not promote source traces, write archive truth, call the compiler, schedule jobs, or change UI behavior/,
-  "contract should delete adjacent migrations and forbid catch-after-write behavior",
+  /backfill write\/materialization failures are not caught after writes begin[\s\S]*backfill does not migrate reactions, edits, deletes, or moderation state[\s\S]*backfill does not promote source traces, write archive truth, or call the compiler synchronously; materialized interactions schedule idempotent derived-evidence sync and do not change UI behavior/,
+  "contract should keep canonical derived-evidence scheduling while forbidding direct archive/compiler writes and catch-after-write behavior",
 );
 
 assert.doesNotMatch(

@@ -64,6 +64,11 @@ import {
   buildCommunityResourceModuleDirectoryFields,
   parseCommunityResourceDirectoryUri,
 } from "../shared/communityResourceDirectory";
+import {
+  buildCommunityResourceEvidenceRef,
+  deriveCommunityResourceLineageEnvelope,
+  parseCommunityResourceEvidenceRef,
+} from "../shared/communityEvidenceContract";
 import type {
   CommunitySourceCrawlJobStatus,
   CommunitySourceCrawlerExistingSource,
@@ -88,7 +93,6 @@ const COMMUNITY_RESOURCE_DIRECTORY_TOOL_SCAN_LIMIT = 5000;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_MODULE_SCAN_LIMIT = 500;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_DEFAULT_CHARS = 12_000;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_MAX_CHARS = 20_000;
-const COMMUNITY_RESOURCE_DIRECTORY_TOOL_SNIPPET_CHARS = 420;
 const COMMUNITY_RESOURCE_MAP_DEFAULT_LIMIT = 100;
 const COMMUNITY_RESOURCE_MAP_MAX_LIMIT = 250;
 const COMMUNITY_RESOURCE_MAP_DEFAULT_PER_MODULE_LIMIT = 8;
@@ -3438,9 +3442,11 @@ function buildResourceDirectoryEntry(
   moduleNameMap: Map<string, string>,
 ) {
   const directory = buildResourceDirectoryFieldsForTool(row, moduleNameMap);
+  const resourceId = normalizeIdValue(row._id);
   return {
     type: "resource",
-    resource_id: normalizeIdValue(row._id),
+    ref: buildCommunityResourceEvidenceRef(resourceId),
+    resource_id: resourceId,
     resource_role: normalizeResourceRole(row.role),
     resource_status: normalizeResourceStatus(row.status),
     title: row.title,
@@ -3450,6 +3456,13 @@ function buildResourceDirectoryEntry(
     url: row.url ?? null,
     has_file: Boolean(row.fileKey),
     summary: compactResourceSummary(row),
+    lineage: deriveCommunityResourceLineageEnvelope({
+      communityId: normalizeIdValue(row.communityId),
+      resourceId,
+      recordedByUserId: row.createdByUserId
+        ? normalizeIdValue(row.createdByUserId)
+        : null,
+    }),
     updated_at: toIsoString(row.updatedAt),
   };
 }
@@ -3920,6 +3933,16 @@ async function resolveResourceByRef(args: {
   const ref = String(args.ref ?? "").trim();
   if (!ref) throw new Error("community_resource_ref_required");
 
+  const typedResourceId = parseCommunityResourceEvidenceRef(ref);
+  if (typedResourceId) {
+    const typed = resolveVisibleResourceById({
+      resources: args.resources,
+      resourceId: typedResourceId,
+    });
+    if (!typed) throw new Error("community_resource_not_found");
+    return { ok: true, resource: typed };
+  }
+
   const parsed = parseCommunityResourceDirectoryUri(ref);
   if (parsed?.resourceId) {
     if (parsed.communityId !== normalizeIdValue(args.communityId)) {
@@ -4022,7 +4045,7 @@ async function buildBatchReadResourceResult(args: {
   const body = String(row.bodyMd ?? "");
   const contentLimit = Math.max(0, Math.floor(args.contentLimit));
   const bodySlice = body && contentLimit > 0 ? body.slice(0, contentLimit) : null;
-  const source = row.sourceResourceId
+  const source = args.builder && row.sourceResourceId
     ? await buildSourceResourceMetadata({
         ctx: args.ctx,
         communityId: args.communityId,
@@ -4050,51 +4073,6 @@ async function buildBatchReadResourceResult(args: {
       unavailable_reason: readContentUnavailableReason(row),
     },
   };
-}
-
-function normalizeSearchQueryTerms(query: string): string[] {
-  return query
-    .toLowerCase()
-    .split(/\s+/)
-    .map((term) => term.trim())
-    .filter(Boolean)
-    .slice(0, 12);
-}
-
-function resourceSearchText(row: CommunityResourceLike): string {
-  return [row.title, row.bodyMd ?? "", row.url ?? ""].join("\n").toLowerCase();
-}
-
-function resourceSearchScore(row: CommunityResourceLike, query: string, terms: string[]): number {
-  const text = resourceSearchText(row);
-  if (!terms.every((term) => text.includes(term))) return 0;
-  const title = String(row.title ?? "").toLowerCase();
-  const body = String(row.bodyMd ?? "").toLowerCase();
-  let score = 1;
-  if (text.includes(query)) score += 4;
-  if (title.includes(query)) score += 6;
-  for (const term of terms) {
-    if (title.includes(term)) score += 2;
-    if (body.includes(term)) score += 1;
-  }
-  if (row.pinned) score += 0.5;
-  return score;
-}
-
-function excerptAroundQuery(row: CommunityResourceLike, query: string, terms: string[]): string | null {
-  const source = String(row.bodyMd ?? row.url ?? row.title ?? "").replace(/\s+/g, " ").trim();
-  if (!source) return null;
-  const lower = source.toLowerCase();
-  const needles = [query, ...terms].filter(Boolean);
-  const index = needles
-    .map((needle) => lower.indexOf(needle))
-    .filter((value) => value >= 0)
-    .sort((a, b) => a - b)[0] ?? 0;
-  const start = Math.max(0, index - 120);
-  const excerpt = source.slice(start, start + COMMUNITY_RESOURCE_DIRECTORY_TOOL_SNIPPET_CHARS).trim();
-  const prefix = start > 0 ? "..." : "";
-  const suffix = start + COMMUNITY_RESOURCE_DIRECTORY_TOOL_SNIPPET_CHARS < source.length ? "..." : "";
-  return `${prefix}${excerpt}${suffix}`;
 }
 
 export const listCommunityResourceDirectoryInternal = internalQuery({
@@ -4187,34 +4165,67 @@ export const mapCommunityResourcesForToolInternal = internalQuery({
     perModuleLimit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    await requireCommunityResourceDirectoryToolAccess({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+      communityId: args.communityId,
+    });
+    const limit = boundedMapLimit(args.limit);
+    const perModuleLimit = boundedMapPerModuleLimit(args.perModuleLimit);
+    const modules = await listResourceDirectoryLiveModules(ctx, args.communityId);
+    const resources = await listResourceDirectoryLivePageResources(
+      ctx,
+      args.communityId,
+      new Set(modules.map((module) => normalizeIdValue(module._id))),
+    );
+    return buildCommunityResourceMapPayload({
+      communityId: args.communityId,
+      modules,
+      resources,
+      scope: "member",
+      limit,
+      perModuleLimit,
+      nowMs: Date.now(),
+    });
+  },
+});
+
+/**
+ * Explicit manager-only map. Generic resource tools never infer builder scope
+ * from the caller's role; callers must select this separate capability.
+ */
+export const mapCommunityResourceBuilderForToolInternal = internalQuery({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    limit: v.optional(v.number()),
+    perModuleLimit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
     const userId = await requireCommunityResourceDirectoryToolAccess({
       ctx,
       userId: args.userId,
       authSubject: args.authSubject ?? null,
       communityId: args.communityId,
     });
-    const canManage = await canManageCommunityResources({
+    await requireCommunityManager({
       ctx,
       communityId: args.communityId,
       userId,
     });
     const limit = boundedMapLimit(args.limit);
     const perModuleLimit = boundedMapPerModuleLimit(args.perModuleLimit);
-    const modules = canManage
-      ? await listResourceDirectoryModules(ctx, args.communityId)
-      : await listResourceDirectoryLiveModules(ctx, args.communityId);
-    const resources = canManage
-      ? await listResourceDirectoryAllResources(ctx, args.communityId)
-      : await listResourceDirectoryLivePageResources(
-          ctx,
-          args.communityId,
-          new Set(modules.map((module) => normalizeIdValue(module._id))),
-        );
+    const [modules, resources] = await Promise.all([
+      listResourceDirectoryModules(ctx, args.communityId),
+      listResourceDirectoryAllResources(ctx, args.communityId),
+    ]);
     return buildCommunityResourceMapPayload({
       communityId: args.communityId,
       modules,
       resources,
-      scope: canManage ? "builder" : "member",
+      scope: "builder",
       limit,
       perModuleLimit,
       nowMs: Date.now(),
@@ -4261,20 +4272,11 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
     const offset = boundedReadOffset(args.offset);
     const limit = boundedReadLimit(args.limit);
     const bodySlice = body ? body.slice(offset, offset + limit) : null;
-    const source = row.sourceResourceId
-      ? await buildSourceResourceMetadata({
-          ctx,
-          communityId: args.communityId,
-          sourceResourceId: row.sourceResourceId,
-          resources,
-          moduleNameMap,
-        })
-      : null;
     return {
       ok: true,
       kind: "community_resource_read",
       resource: buildResourceDirectoryEntry(row, moduleNameMap),
-      source,
+      source: null,
       content: {
         body_md: bodySlice,
         offset,
@@ -4297,30 +4299,21 @@ export const readCommunityResourcesForToolInternal = internalQuery({
     perResourceChars: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = await requireCommunityResourceDirectoryToolAccess({
+    await requireCommunityResourceDirectoryToolAccess({
       ctx,
       userId: args.userId,
       authSubject: args.authSubject ?? null,
       communityId: args.communityId,
     });
-    const canManage = await canManageCommunityResources({
-      ctx,
-      communityId: args.communityId,
-      userId,
-    });
     const refs = normalizeBatchReadRefs(args.refs);
     const maxChars = boundedBatchReadMaxChars(args.maxChars);
     const perResourceChars = boundedBatchReadPerResourceChars(args.perResourceChars, maxChars);
-    const modules = canManage
-      ? await listResourceDirectoryModules(ctx, args.communityId)
-      : await listResourceDirectoryLiveModules(ctx, args.communityId);
-    const resources = canManage
-      ? await listResourceDirectoryAllResources(ctx, args.communityId)
-      : await listResourceDirectoryLivePageResources(
-          ctx,
-          args.communityId,
-          new Set(modules.map((module) => normalizeIdValue(module._id))),
-        );
+    const modules = await listResourceDirectoryLiveModules(ctx, args.communityId);
+    const resources = await listResourceDirectoryLivePageResources(
+      ctx,
+      args.communityId,
+      new Set(modules.map((module) => normalizeIdValue(module._id))),
+    );
     const moduleNameMap = buildModuleNameMap(modules);
     let remainingChars = maxChars;
     const results = [];
@@ -4341,7 +4334,7 @@ export const readCommunityResourcesForToolInternal = internalQuery({
           ref,
           resources,
           moduleNameMap,
-          builder: canManage,
+          builder: false,
           contentLimit: Math.min(perResourceChars, remainingChars),
         });
         if (item.ok && "content" in item && item.content) {
@@ -4356,61 +4349,13 @@ export const readCommunityResourcesForToolInternal = internalQuery({
     return {
       ok: true,
       kind: "community_resources_read",
-      scope: canManage ? "builder" : "member",
+      scope: "member",
       requested_refs: refs,
       max_chars: maxChars,
       per_resource_chars: perResourceChars,
       remaining_chars: remainingChars,
       returned_count: results.filter((item) => item.ok).length,
       resources: results,
-    };
-  },
-});
-
-export const searchCommunityResourceDirectoryInternal = internalQuery({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    query: v.string(),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    await requireCommunityResourceDirectoryToolAccess({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-      communityId: args.communityId,
-    });
-    const query = String(args.query ?? "").trim().toLowerCase();
-    if (!query) throw new Error("community_resource_search_query_required");
-    const limit = boundedToolLimit(args.limit);
-    const modules = await listResourceDirectoryLiveModules(ctx, args.communityId);
-    const moduleNameMap = buildModuleNameMap(modules);
-    const terms = normalizeSearchQueryTerms(query);
-    const liveModuleIds = new Set(modules.map((module) => normalizeIdValue(module._id)));
-    const liveResources = await listResourceDirectoryLivePageResources(ctx, args.communityId, liveModuleIds);
-    const hydratedResources = await Promise.all(
-      liveResources.map((row) => hydrateCommunityResourceBody(ctx, row).then((hydrated) => hydrated ?? row)),
-    );
-    const matches = hydratedResources
-      .map((row) => ({
-        row,
-        score: resourceSearchScore(row, query, terms),
-      }))
-      .filter((match) => match.score > 0)
-      .sort((a, b) => b.score - a.score || b.row.updatedAt - a.row.updatedAt)
-      .slice(0, limit)
-      .map((match) => ({
-        ...buildResourceDirectoryEntry(match.row, moduleNameMap),
-        score: Number(match.score.toFixed(2)),
-        snippet: excerptAroundQuery(match.row, query, terms),
-      }));
-    return {
-      ok: true,
-      kind: "community_resources_search",
-      query: args.query,
-      matches,
     };
   },
 });

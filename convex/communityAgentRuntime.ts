@@ -56,6 +56,8 @@ type CommunityAgentFilesystemContext = {
   agentKey: string;
   runId: string;
   heartbeatId?: string;
+  compilerDigestId?: any;
+  compilerDigestVersionKey?: string;
 };
 
 type CommunityAgentWakeEvidence = {
@@ -67,6 +69,9 @@ type CommunityAgentWakeEvidence = {
   oldestPendingAt?: string;
   hasMorePending: boolean;
   countsAreLowerBound: boolean;
+  compilerDigestId?: string;
+  compilerDigestVersionKey?: string;
+  compilerWorkItemCount?: number;
 };
 
 type CommunityAgentRunView = {
@@ -83,9 +88,6 @@ type CommunityAgentRunView = {
   wake_evidence: CommunityAgentWakeEvidence | null;
   stop_reason: string | null;
   tool_step_count: number;
-  candidate_proposal_ids: string[];
-  accepted_change_request_ids: string[];
-  rejected_change_request_ids: string[];
   applied_change_request_ids: string[];
   error_code: string | null;
   error_message: string | null;
@@ -101,9 +103,6 @@ type CommunityAgentRuntimeResult = {
   run: unknown;
   stop_reason: string;
   tool_step_count: number;
-  candidate_proposal_ids: string[];
-  accepted_change_request_ids: string[];
-  rejected_change_request_ids: string[];
   applied_change_request_ids: string[];
 };
 
@@ -136,6 +135,9 @@ const communityAgentWakeEvidenceValidator = v.object({
   oldestPendingAt: v.optional(v.string()),
   hasMorePending: v.boolean(),
   countsAreLowerBound: v.boolean(),
+  compilerDigestId: v.optional(v.string()),
+  compilerDigestVersionKey: v.optional(v.string()),
+  compilerWorkItemCount: v.optional(v.number()),
 });
 
 function clampToolSteps(raw: unknown): number {
@@ -181,35 +183,29 @@ function safeParseObject(raw: string): Record<string, any> | null {
   }
 }
 
-function collectCandidateProposalIdFromToolOutput(outputText: string, out: Set<string>): void {
-  const parsed = safeParseObject(outputText);
-  const id = boundedText(parsed?.result?.proposal?.id, 128);
-  if (id) out.add(id);
+function collectAppliedMemoryIdFromToolOutput(args: {
+  outputText: string;
+  appliedChangeRequestIds: Set<string>;
+}): void {
+  const parsed = safeParseObject(args.outputText);
+  const retention = parsed?.result?.retention;
+  const id = boundedText(retention?.id, 128);
+  if (id && boundedText(retention?.status, 40) === "applied") {
+    args.appliedChangeRequestIds.add(id);
+  }
 }
 
 function collectWriteActionIdsFromToolOutput(args: {
   outputText: string;
-  candidateProposalIds: Set<string>;
-  acceptedChangeRequestIds: Set<string>;
-  rejectedChangeRequestIds: Set<string>;
   appliedChangeRequestIds: Set<string>;
 }): void {
   const parsed = safeParseObject(args.outputText);
   const operation = boundedText(parsed?.operation, 120);
-  if (operation === "propose_directory_candidate_from_digest_item") {
-    collectCandidateProposalIdFromToolOutput(args.outputText, args.candidateProposalIds);
-    return;
-  }
-  const id = boundedText(parsed?.result?.id, 128);
-  if (!id) return;
-  if (operation === "decide_change_request") {
-    const status = boundedText(parsed?.result?.status, 40);
-    if (status === "accepted") args.acceptedChangeRequestIds.add(id);
-    if (status === "rejected") args.rejectedChangeRequestIds.add(id);
-    return;
-  }
-  if (operation === "apply_accepted_change_request") {
-    args.appliedChangeRequestIds.add(id);
+  if (operation === "retain_compiler_digest_item") {
+    collectAppliedMemoryIdFromToolOutput({
+      outputText: args.outputText,
+      appliedChangeRequestIds: args.appliedChangeRequestIds,
+    });
   }
 }
 
@@ -269,20 +265,20 @@ const COMMUNITY_AGENT_SHARED_RULES = [
   "- Use only the tools provided in this run.",
   "- The filesystem exposes only /compiler and /directory.",
   "- Do not ask for raw activity. Activity must already be compiler evidence.",
-  "- Treat compiler digests and candidates as non-canonical.",
-  "- Use write, when available, only to propose a directory candidate from a compiler digest item.",
+  "- Treat compiler digests as non-canonical evidence summaries until a write validates and retains an item.",
+  "- Use write, when available, only to retain a compiler digest item as memory.",
   "- Never claim a directory node or edge was changed unless a tool result says so.",
-  "- Prefer no write over a weak or private-looking proposal.",
+  "- Prefer no write over weak, private-looking, or duplicate memory.",
   "- If no useful action is supported, finish with a short no-op summary.",
 ].join("\n");
 
-const COMMUNITY_AGENT_LEGACY_PROCEDURE = [
+const COMMUNITY_AGENT_DEFAULT_PROCEDURE = [
   "Operating procedure:",
   "1. Review the <compiler_window> and <directory_state> blocks provided in the wake message; fall back to reading /compiler/window only if they are absent.",
-  "2. If a digest exists, inspect its items and the existing candidate state before proposing.",
-  "3. Inspect directory state only when needed to avoid duplicate or stale proposals.",
-  "4. Propose at most three digest-derived candidates, only when evidence supports future workflow value.",
-  "5. Finish with a concise internal summary of what you inspected and what you proposed.",
+  "2. If a digest exists, inspect its items and existing memory before retaining anything.",
+  "3. Inspect directory state only when needed to avoid duplicate or stale memory.",
+  "4. Retain at most three digest-derived learnings, only when evidence supports future workflow value.",
+  "5. Finish with a concise internal summary of what you inspected and retained.",
 ].join("\n");
 
 function buildCommunityAgentMessages(params: {
@@ -319,7 +315,7 @@ function buildCommunityAgentMessages(params: {
         `<role_definition>\n${params.role.rolePrompt}\n</role_definition>`,
         renderCommunityAgentSkills(params.role.skillKeys),
       ].join("\n")
-    : COMMUNITY_AGENT_LEGACY_PROCEDURE;
+    : COMMUNITY_AGENT_DEFAULT_PROCEDURE;
   return [
     {
       role: "system",
@@ -342,6 +338,9 @@ function buildCommunityAgentMessages(params: {
         params.wakeEvidence
           ? `Evidence state: pending ${params.wakeEvidence.pendingTotal}, critical ${params.wakeEvidence.pendingCritical}, strong ${params.wakeEvidence.pendingStrong}, lower-bound ${params.wakeEvidence.countsAreLowerBound ? "yes" : "no"}.`
           : "",
+        params.wakeEvidence?.compilerDigestId
+          ? `Claimed compiler digest: ${params.wakeEvidence.compilerDigestId} (${params.wakeEvidence.compilerDigestVersionKey ?? "unknown version"}, ${params.wakeEvidence.compilerWorkItemCount ?? 0} work items).`
+          : "",
         params.resolved.communityOneLiner ? `One-liner: ${params.resolved.communityOneLiner}` : "",
         params.resolved.communityAbout ? `About: ${params.resolved.communityAbout}` : "",
         compilerWindowBlock,
@@ -354,7 +353,7 @@ function buildCommunityAgentMessages(params: {
 }
 
 // The steward does not need the full window (the ledger carries the analysis);
-// it needs the coordinates for the propose op: digest id + item indices/titles.
+// it needs the canonical coordinates for the retain op: digest id + work key.
 function slimCompilerWindowForSteward(window: unknown): unknown {
   if (!window || typeof window !== "object") return window;
   const raw = window as Record<string, any>;
@@ -363,9 +362,9 @@ function slimCompilerWindowForSteward(window: unknown): unknown {
   const items = Array.isArray(digest.items) ? digest.items : [];
   return {
     latest_digest_id: digest.id ?? null,
-    pending_change_request_count: raw.pending_change_request_count ?? null,
-    digest_items: items.slice(0, 40).map((item: Record<string, any>, index: number) => ({
-      index,
+    latest_digest_version_key: digest.version_key ?? null,
+    digest_items: items.slice(0, 40).map((item: Record<string, any>) => ({
+      work_key: item?.workKey ?? null,
       category: item?.category ?? null,
       title: typeof item?.title === "string" ? item.title.slice(0, 160) : null,
     })),
@@ -443,13 +442,6 @@ function mapRun(row: Record<string, any>): CommunityAgentRunView {
     wake_evidence: row.wakeEvidence ?? null,
     stop_reason: row.stopReason ?? null,
     tool_step_count: row.toolStepCount,
-    candidate_proposal_ids: Array.isArray(row.candidateProposalIds) ? row.candidateProposalIds.map(String) : [],
-    accepted_change_request_ids: Array.isArray(row.acceptedChangeRequestIds)
-      ? row.acceptedChangeRequestIds.map(String)
-      : [],
-    rejected_change_request_ids: Array.isArray(row.rejectedChangeRequestIds)
-      ? row.rejectedChangeRequestIds.map(String)
-      : [],
     applied_change_request_ids: Array.isArray(row.appliedChangeRequestIds)
       ? row.appliedChangeRequestIds.map(String)
       : [],
@@ -523,7 +515,7 @@ export const summarizeCommunityDirectoryStateInternal = internalQuery({
 });
 
 // Cycle ledger: the shared working document the sleep roles hand each other.
-// Deliberately separate from the directory airlock write mutation — ledger
+// Deliberately separate from the atomic directory write mutation — ledger
 // notes never touch directory truth.
 export const appendCommunityAgentCycleLedgerNoteInternal = internalMutation({
   args: {
@@ -641,9 +633,6 @@ export const createCommunityAgentRunInternal = internalMutation({
       wakeEvidence: args.wakeEvidence,
       status: "running",
       toolStepCount: 0,
-      candidateProposalIds: [],
-      acceptedChangeRequestIds: [],
-      rejectedChangeRequestIds: [],
       appliedChangeRequestIds: [],
       startedAt: nowMs,
       createdAt: nowMs,
@@ -669,6 +658,9 @@ export const recordCommunityAgentSkippedRunInternal = internalMutation({
     ),
     heartbeatId: v.optional(v.string()),
     modelId: v.optional(v.string()),
+    maxToolSteps: v.optional(v.number()),
+    compilerDigestId: v.optional(v.id("communityCompilerDigests")),
+    compilerDigestVersionKey: v.optional(v.string()),
     wakeReason: v.optional(v.string()),
     wakeEvidence: v.optional(communityAgentWakeEvidenceValidator),
     nowMs: v.optional(v.number()),
@@ -694,9 +686,6 @@ export const recordCommunityAgentSkippedRunInternal = internalMutation({
       wakeEvidence: args.wakeEvidence,
       stopReason: wakeReason,
       toolStepCount: 0,
-      candidateProposalIds: [],
-      acceptedChangeRequestIds: [],
-      rejectedChangeRequestIds: [],
       appliedChangeRequestIds: [],
       startedAt: nowMs,
       finishedAt: nowMs,
@@ -715,9 +704,6 @@ export const finishCommunityAgentRunInternal = internalMutation({
     status: v.union(v.literal("ok"), v.literal("error")),
     stopReason: v.optional(v.string()),
     toolStepCount: v.number(),
-    candidateProposalIds: v.array(v.string()),
-    acceptedChangeRequestIds: v.array(v.string()),
-    rejectedChangeRequestIds: v.array(v.string()),
     appliedChangeRequestIds: v.array(v.string()),
     errorCode: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
@@ -733,18 +719,6 @@ export const finishCommunityAgentRunInternal = internalMutation({
       status,
       stopReason: boundedText(args.stopReason, 120) || undefined,
       toolStepCount: Math.max(0, Math.floor(args.toolStepCount)),
-      candidateProposalIds: args.candidateProposalIds
-        .map((id) => boundedText(id, 128))
-        .filter(Boolean)
-        .slice(0, 20),
-      acceptedChangeRequestIds: args.acceptedChangeRequestIds
-        .map((id) => boundedText(id, 128))
-        .filter(Boolean)
-        .slice(0, 20),
-      rejectedChangeRequestIds: args.rejectedChangeRequestIds
-        .map((id) => boundedText(id, 128))
-        .filter(Boolean)
-        .slice(0, 20),
       appliedChangeRequestIds: args.appliedChangeRequestIds
         .map((id) => boundedText(id, 128))
         .filter(Boolean)
@@ -831,6 +805,8 @@ export const runCommunityAgentLoopInternal = internalAction({
     heartbeatId: v.optional(v.string()),
     modelId: v.optional(v.string()),
     maxToolSteps: v.optional(v.number()),
+    compilerDigestId: v.optional(v.id("communityCompilerDigests")),
+    compilerDigestVersionKey: v.optional(v.string()),
     role: v.optional(v.string()),
     wakeReason: v.optional(v.string()),
     wakeEvidence: v.optional(communityAgentWakeEvidenceValidator),
@@ -845,6 +821,34 @@ export const runCommunityAgentLoopInternal = internalAction({
     const resolved = (await ctx.runQuery(internalRefs.communityAgentRuntime.resolveCommunityAgentRunContextInternal as any, {
       communityId: args.communityId,
     })) as CommunityAgentResolvedContext;
+    const exactDigestId = boundedText(args.compilerDigestId, 128) || undefined;
+    const exactDigestVersionKey = boundedText(args.compilerDigestVersionKey, 128) || undefined;
+    if (Boolean(exactDigestId) !== Boolean(exactDigestVersionKey)) {
+      throw new Error("community_agent_runtime_digest_identity_incomplete");
+    }
+    let exactCompilerWindow: unknown;
+    if (exactDigestId && exactDigestVersionKey) {
+      const exact = (await ctx.runQuery(
+        internalRefs.communityAgentFilesystem.readCommunityAgentFilesystemInternal as any,
+        {
+          context: {
+            communityId: args.communityId,
+            agentKey,
+            heartbeatId: boundedText(args.heartbeatId, 200) || undefined,
+            compilerDigestId: args.compilerDigestId,
+            compilerDigestVersionKey: exactDigestVersionKey,
+          },
+          path: `/compiler/digests/${exactDigestId}`,
+        },
+      )) as Record<string, any>;
+      if (boundedText(exact?.digest?.version_key, 128) !== exactDigestVersionKey) {
+        throw new Error("community_agent_runtime_digest_version_mismatch");
+      }
+      exactCompilerWindow = {
+        kind: "claimed_compiler_handoff",
+        latest_digest: exact.digest,
+      };
+    }
     const createdRun = (await ctx.runMutation(internalRefs.communityAgentRuntime.createCommunityAgentRunInternal as any, {
       communityId: args.communityId,
       triggerType,
@@ -862,9 +866,6 @@ export const runCommunityAgentLoopInternal = internalAction({
         run: createdRun.run,
         stop_reason: createdRun.skipped_reason ?? "running_run_exists",
         tool_step_count: createdRun.run.tool_step_count,
-        candidate_proposal_ids: createdRun.run.candidate_proposal_ids,
-        accepted_change_request_ids: createdRun.run.accepted_change_request_ids,
-        rejected_change_request_ids: createdRun.run.rejected_change_request_ids,
         applied_change_request_ids: createdRun.run.applied_change_request_ids,
       };
     }
@@ -874,10 +875,9 @@ export const runCommunityAgentLoopInternal = internalAction({
       agentKey,
       runId,
       heartbeatId: boundedText(args.heartbeatId, 200) || undefined,
+      compilerDigestId: args.compilerDigestId,
+      compilerDigestVersionKey: exactDigestVersionKey,
     };
-    const candidateProposalIds = new Set<string>();
-    const acceptedChangeRequestIds = new Set<string>();
-    const rejectedChangeRequestIds = new Set<string>();
     const appliedChangeRequestIds = new Set<string>();
     // Sequential run-event log. Persistence failures are swallowed: the audit
     // trail must never be the reason a memory run dies.
@@ -910,11 +910,11 @@ export const runCommunityAgentLoopInternal = internalAction({
         // ignore: observability is best-effort
       }
     };
-    // Front-load the exact content the agent's first tool steps would fetch.
-    // Best-effort: if any read fails, the agent falls back to its tools.
+    // Front-load the exact claimed digest. Legacy/manual callers without an
+    // explicit digest identity retain the best-effort latest-window fallback.
     // Per-role diffing: the observer gets the full compiler window; later roles
     // get the cycle ledger instead (the ledger IS the diff); the steward also
-    // gets a slim digest reference list so the propose op has its coordinates.
+    // gets a slim digest reference list so the retain op has its coordinates.
     const roleKey = roleDefinition?.roleKey;
     const wantsWindow = !roleKey || roleKey === "observer" || roleKey === "steward";
     const wantsLedger = roleKey === "questioner" || roleKey === "steward";
@@ -922,13 +922,17 @@ export const runCommunityAgentLoopInternal = internalAction({
     let directorySummary: unknown;
     let cycleLedger: string | undefined;
     if (wantsWindow) {
-      try {
-        compilerWindow = await ctx.runQuery(internalRefs.communityAgentFilesystem.readCommunityAgentFilesystemInternal as any, {
-          context: filesystemContext,
-          path: "/compiler/window",
-        });
-      } catch {
-        compilerWindow = undefined;
+      if (exactCompilerWindow) {
+        compilerWindow = exactCompilerWindow;
+      } else {
+        try {
+          compilerWindow = await ctx.runQuery(internalRefs.communityAgentFilesystem.readCommunityAgentFilesystemInternal as any, {
+            context: filesystemContext,
+            path: "/compiler/window",
+          });
+        } catch {
+          compilerWindow = undefined;
+        }
       }
     }
     try {
@@ -1017,9 +1021,6 @@ export const runCommunityAgentLoopInternal = internalAction({
           if (step.toolName === "write" && toolResult.status === "ok") {
             collectWriteActionIdsFromToolOutput({
               outputText: toolResult.outputText,
-              candidateProposalIds,
-              acceptedChangeRequestIds,
-              rejectedChangeRequestIds,
               appliedChangeRequestIds,
             });
           }
@@ -1064,9 +1065,6 @@ export const runCommunityAgentLoopInternal = internalAction({
         status: result.ok ? "ok" : "error",
         stopReason: result.stopReason,
         toolStepCount: result.stepCount,
-        candidateProposalIds: [...candidateProposalIds],
-        acceptedChangeRequestIds: [...acceptedChangeRequestIds],
-        rejectedChangeRequestIds: [...rejectedChangeRequestIds],
         appliedChangeRequestIds: [...appliedChangeRequestIds],
         errorCode: result.ok ? undefined : result.code,
         errorMessage: result.ok ? undefined : result.message,
@@ -1077,9 +1075,6 @@ export const runCommunityAgentLoopInternal = internalAction({
         run: finished,
         stop_reason: result.stopReason,
         tool_step_count: result.stepCount,
-        candidate_proposal_ids: [...candidateProposalIds],
-        accepted_change_request_ids: [...acceptedChangeRequestIds],
-        rejected_change_request_ids: [...rejectedChangeRequestIds],
         applied_change_request_ids: [...appliedChangeRequestIds],
       };
     } catch (error) {
@@ -1092,9 +1087,6 @@ export const runCommunityAgentLoopInternal = internalAction({
         status: "error",
         stopReason: "runtime_exception",
         toolStepCount: 0,
-        candidateProposalIds: [...candidateProposalIds],
-        acceptedChangeRequestIds: [...acceptedChangeRequestIds],
-        rejectedChangeRequestIds: [...rejectedChangeRequestIds],
         appliedChangeRequestIds: [...appliedChangeRequestIds],
         errorCode: "community_agent_runtime_exception",
         errorMessage: message,
@@ -1105,9 +1097,6 @@ export const runCommunityAgentLoopInternal = internalAction({
         run: finished,
         stop_reason: "runtime_exception",
         tool_step_count: 0,
-        candidate_proposal_ids: [...candidateProposalIds],
-        accepted_change_request_ids: [...acceptedChangeRequestIds],
-        rejected_change_request_ids: [...rejectedChangeRequestIds],
         applied_change_request_ids: [...appliedChangeRequestIds],
       };
     }
@@ -1129,6 +1118,9 @@ export const runCommunityAgentCycleInternal = internalAction({
     ),
     heartbeatId: v.optional(v.string()),
     modelId: v.optional(v.string()),
+    maxToolSteps: v.optional(v.number()),
+    compilerDigestId: v.optional(v.id("communityCompilerDigests")),
+    compilerDigestVersionKey: v.optional(v.string()),
     wakeReason: v.optional(v.string()),
     wakeEvidence: v.optional(communityAgentWakeEvidenceValidator),
   },
@@ -1139,11 +1131,9 @@ export const runCommunityAgentCycleInternal = internalAction({
     const roleResults: Array<{
       role: CommunityAgentRoleKey;
       ok: boolean;
+      skipped: boolean;
       stop_reason: string | null;
       tool_step_count: number;
-      candidate_proposal_ids: string[];
-      accepted_change_request_ids: string[];
-      rejected_change_request_ids: string[];
       applied_change_request_ids: string[];
     }> = [];
     let endedEarly: string | null = null;
@@ -1153,6 +1143,9 @@ export const runCommunityAgentCycleInternal = internalAction({
         triggerType: args.triggerType,
         heartbeatId: cycleId,
         modelId: args.modelId,
+        maxToolSteps: args.maxToolSteps,
+        compilerDigestId: args.compilerDigestId,
+        compilerDigestVersionKey: args.compilerDigestVersionKey,
         role: roleKey,
         wakeReason: boundedText(args.wakeReason, 120) || undefined,
         wakeEvidence: args.wakeEvidence,
@@ -1160,11 +1153,9 @@ export const runCommunityAgentCycleInternal = internalAction({
       roleResults.push({
         role: roleKey,
         ok: result.ok,
+        skipped: result.skipped,
         stop_reason: result.stop_reason ?? null,
         tool_step_count: result.tool_step_count,
-        candidate_proposal_ids: result.candidate_proposal_ids,
-        accepted_change_request_ids: result.accepted_change_request_ids,
-        rejected_change_request_ids: result.rejected_change_request_ids,
         applied_change_request_ids: result.applied_change_request_ids,
       });
       // Budget exhaustion is a soft end: the role's notes are already banked in
@@ -1192,11 +1183,18 @@ export const runCommunityAgentCycleInternal = internalAction({
         }
       }
     }
+    const completed =
+      roleResults.length > 0 &&
+      roleResults.every((entry) => entry.ok && !entry.skipped);
     return {
-      ok: roleResults.every((entry) => entry.ok),
+      ok: completed,
+      completed,
       cycle_id: cycleId,
       ended_early: endedEarly,
       roles: roleResults,
+      applied_change_request_ids: Array.from(
+        new Set(roleResults.flatMap((entry) => entry.applied_change_request_ids)),
+      ),
     };
   },
 });

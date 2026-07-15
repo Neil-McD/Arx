@@ -47,6 +47,10 @@ const FIXED_TOOL_FAMILIES = {
     "community_resource_builder_stage_changeset",
     "community_resource_builder_apply_changeset",
     "community_search",
+    "community_chat_search",
+    "community_chat_read",
+    "community_ai_feed_search",
+    "community_ai_feed_read",
     "community_write",
     "member_profile_confirm_facts",
   ],
@@ -191,6 +195,10 @@ function proveFixedPolicyBoundaries() {
     "community_resource_builder_list",
     "community_resource_builder_read",
     "community_search",
+    "community_chat_search",
+    "community_chat_read",
+    "community_ai_feed_search",
+    "community_ai_feed_read",
     "web_research",
     "list_dir",
     "read",
@@ -253,6 +261,10 @@ function proveFixedPolicyBoundaries() {
     "community_resources_search",
     "community_resource_builder_list",
     "community_resource_builder_read",
+    "community_chat_search",
+    "community_chat_read",
+    "community_ai_feed_search",
+    "community_ai_feed_read",
   ] as const satisfies readonly RetrievalToolName[]) {
     assert.equal(getFixedRuntimeToolPolicy(toolName).category, "community");
     assert.equal(getFixedRuntimeToolPolicy(toolName).requiresCommunity, true);

@@ -74,7 +74,7 @@ type CommunityResourceRow = {
 
 type CommunityArchiveDocumentRow = {
   _id: any;
-  sourceType: "chat" | "ai_feed" | "resource";
+  sourceType: "chat" | "interaction" | "ai_feed" | "resource";
   title?: string;
   snippet: string;
   url?: string;
@@ -183,6 +183,7 @@ function formatDigestDateLabel(periodStartDay: string, periodEndDay: string): st
 function sourceTypeLabel(sourceType: CommunityArchiveDocumentRow["sourceType"]): string {
   if (sourceType === "ai_feed") return "AI signal";
   if (sourceType === "resource") return "Resource";
+  if (sourceType === "interaction") return "Community chat";
   return "Discussion";
 }
 

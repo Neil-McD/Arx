@@ -1,9 +1,14 @@
 import {
   useCallback,
   useEffect,
+  useImperativeHandle,
   useRef,
   useState,
+  forwardRef,
+  type ClipboardEvent,
+  type ComponentProps,
   type Dispatch,
+  type DragEvent,
   type FormEvent,
   type SetStateAction,
 } from "react";
@@ -11,14 +16,26 @@ import {
   LoaderCircle,
   MessageCircle,
   MessageSquarePlus,
-  Send,
+  Paperclip,
   Sparkles,
   Square,
   X,
 } from "lucide-react";
 import { getAuthUrl, type AuthSession } from "../auth";
 import { renderMarkdown } from "../../../../shared/markdownUi";
-import { extractTextFromContentJson } from "../../../../shared/communityMessageParsing";
+import {
+  extractTextFromContentJson,
+  parseMessageAttachments,
+} from "../../../../shared/communityMessageParsing";
+import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGrid";
+import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
+import {
+  MEMBER_AGENT_IMAGE_ACCEPT,
+  validateMemberAgentImageDrafts,
+  type MemberAgentImageAttachment,
+} from "../../../../shared/memberAgentAttachments";
+import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
+import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import {
   ensureCloudMemberAgentGlobalChannel,
   startNewCloudMemberAgentGlobalEpisode,
@@ -34,6 +51,7 @@ import {
   type CloudMessageTransportRow,
 } from "../../../../shared/cloudThreadsRead";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../../../../shared/modelCatalog";
+import { uploadCloudMemberAgentImageFile } from "../../../../shared/cloudThreadsGateway";
 import {
   describeMemberAgentSurface,
   type MemberAgentSurfaceContextV1,
@@ -58,12 +76,31 @@ type MemberAgentMessage = Omit<CloudMessageTransportRow, "role"> & {
 
 type AgentScope = {
   userId: string | null;
+  surfaceKey: string;
   generation: number;
 };
 
 type ActiveThreadContext = {
   communityId: string | null;
   contextVersion: number;
+};
+
+export type WebMemberAgentDockHandle = {
+  appendTranscript: (transcript: string) => void;
+  focusInput: () => void;
+};
+
+type MemberAgentImageDraft = Omit<MemberAgentImageAttachment, "storage_id"> & {
+  file: File;
+  previewUrl: string;
+  storage_id?: string | null;
+};
+
+type MemberAgentRetryState = {
+  signature: string;
+  text: string;
+  messageId: string;
+  attachments: MemberAgentImageDraft[];
 };
 
 type WebMemberAgentDockProps = {
@@ -86,7 +123,37 @@ type WebMemberAgentDockProps = {
     init: RequestInit,
     session: AuthSession,
   ) => Promise<Response>;
+  voiceButtonProps: ComponentProps<typeof VoiceInputButton>;
+  finalizeVoiceInputForSubmit?: () => Promise<string>;
 };
+
+function buildDraftSignature(text: string, attachments: readonly MemberAgentImageDraft[]): string {
+  return `${text}\u0000${attachments.map((attachment) => attachment.id).join(",")}`;
+}
+
+function MemberAgentAttachmentViews(props: {
+  attachments: ReturnType<typeof parseMessageAttachments>;
+}) {
+  const { imageAttachments } = partitionCommunityAttachments(props.attachments);
+  if (imageAttachments.length === 0) return null;
+  const images = imageAttachments.map((item) => ({
+    id: item.attachment.id,
+    url: item.url,
+    previewUrl: item.previewUrl,
+    fullUrl: item.fullUrl,
+    name: item.name,
+  }));
+  return (
+    <CommunityChatMediaGrid
+      images={images}
+      className="member-agent-dock-media-grid"
+      onOpenImage={(items, index) => {
+        const url = String(items[index]?.fullUrl ?? items[index]?.url ?? "").trim();
+        if (url) window.open(url, "_blank", "noopener,noreferrer");
+      }}
+    />
+  );
+}
 
 function normalizeMessages(rows: CloudMessageTransportRow[]): MemberAgentMessage[] {
   return rows
@@ -109,7 +176,8 @@ function formatInferenceIssue(issue: InferenceIssueModalState | null): string | 
   return issue.message?.trim() || "Your agent could not complete this turn. Try again.";
 }
 
-export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
+export const WebMemberAgentDock = forwardRef<WebMemberAgentDockHandle, WebMemberAgentDockProps>(
+function WebMemberAgentDock(props, ref) {
   const onboarding = useWebCommunityOnboarding();
   const [isOpen, setIsOpen] = useState(false);
   const isOpenSurface = props.mobileShellActive
@@ -120,6 +188,10 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const [, setThreadContext] = useState<ActiveThreadContext | null>(null);
   const [messages, setMessages] = useState<MemberAgentMessage[]>([]);
   const [input, setInput] = useState("");
+  const [attachments, setAttachments] = useState<MemberAgentImageDraft[]>([]);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAttachmentDragOver, setIsAttachmentDragOver] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isStartingNewChat, setIsStartingNewChat] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -134,23 +206,68 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const onboardingOpenedSessionIdsRef = useRef(new Set<string>());
   const onboardingSeededSessionIdsRef = useRef(new Set<string>());
   const onboardingFocusSessionIdRef = useRef<string | null>(null);
-  const retryRef = useRef<{ text: string; messageId: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const attachmentsRef = useRef<MemberAgentImageDraft[]>([]);
+  const draftTextRef = useRef("");
+  const submitInFlightRef = useRef(false);
+  const retryRef = useRef<MemberAgentRetryState | null>(null);
+  const runUiScopeRef = useRef<AgentScope | null>(null);
   const activeThreadKeyRef = useRef<string | null>(null);
   const activeThreadContextRef = useRef<ActiveThreadContext | null>(null);
+  const surfaceKey = JSON.stringify([
+    props.surfaceContext,
+    props.communityId,
+  ]);
   const agentScopeRef = useRef<AgentScope>({
     userId: props.session?.user.id ?? null,
+    surfaceKey,
     generation: 0,
   });
   const scopeUserId = props.session?.user.id ?? null;
   const surfaceKind = props.surfaceContext?.kind ?? null;
   const onboardingSession = onboarding?.activeSession ?? null;
   const isConversationSurfaceActive = isOpenSurface;
-  if (agentScopeRef.current.userId !== scopeUserId) {
+  if (
+    agentScopeRef.current.userId !== scopeUserId ||
+    agentScopeRef.current.surfaceKey !== surfaceKey
+  ) {
     agentScopeRef.current = {
       userId: scopeUserId,
+      surfaceKey,
       generation: agentScopeRef.current.generation + 1,
     };
   }
+
+  const setAttachmentDrafts = useCallback((next: MemberAgentImageDraft[]) => {
+    attachmentsRef.current = next;
+    setAttachments(next);
+  }, []);
+
+  const revokeDraftPreviews = useCallback((drafts: readonly MemberAgentImageDraft[]) => {
+    for (const draft of drafts) URL.revokeObjectURL(draft.previewUrl);
+  }, []);
+
+  const clearAttachmentDrafts = useCallback(() => {
+    const current = attachmentsRef.current;
+    attachmentsRef.current = [];
+    setAttachments([]);
+    revokeDraftPreviews(current);
+  }, [revokeDraftPreviews]);
+
+  useImperativeHandle(ref, () => ({
+    appendTranscript: (transcript: string) => {
+      const next = mergeVoiceTranscript(draftTextRef.current, transcript);
+      draftTextRef.current = next;
+      setInput(next);
+    },
+    focusInput: () => {
+      const inputElement = textareaRef.current;
+      if (!inputElement) return;
+      inputElement.style.height = "auto";
+      inputElement.style.height = `${Math.min(inputElement.scrollHeight, 112)}px`;
+      inputElement.focus();
+    },
+  }), []);
 
   const isCurrentScope = useCallback((scope: AgentScope): boolean => {
     const current = agentScopeRef.current;
@@ -199,6 +316,30 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     });
   }, []);
 
+  const allowRunUiWrite = useCallback((): boolean => {
+    const runScope = runUiScopeRef.current;
+    return !runScope || isCurrentScope(runScope);
+  }, [isCurrentScope]);
+
+  const setScopedSendingByThread = useCallback<Dispatch<SetStateAction<Record<string, boolean>>>>(
+    (value) => {
+      if (allowRunUiWrite()) setSendingByThread(value);
+    },
+    [allowRunUiWrite],
+  );
+
+  const setScopedStreamingByThread = useCallback<
+    Dispatch<SetStateAction<Record<string, ThreadStreamingState<never, never, never>>>>
+  >((value) => {
+    if (allowRunUiWrite()) setStreamingByThread(value);
+  }, [allowRunUiWrite]);
+
+  const setScopedRuntimeEventsByRunId = useCallback<
+    Dispatch<SetStateAction<Record<string, ThreadStreamingRuntimeEvent[]>>>
+  >((value) => {
+    if (allowRunUiWrite()) setRuntimeEventsByRunId(value);
+  }, [allowRunUiWrite]);
+
   const {
     createThreadMessage,
     runAgentTurn,
@@ -233,15 +374,20 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     parseHistoryUsedArray: () => [],
     extractCommunityEvidenceUsedV1: () => null,
     loadThreadMessages: async (targetThreadKey, session) => {
+      if (!allowRunUiWrite()) return;
       await loadMessages(targetThreadKey, session);
     },
     loadThreads: async () => undefined,
     showMemoryToastMessage: () => undefined,
-    setThreadErrorForThread: setThreadError,
-    setInferenceIssueModal: setInferenceIssueForActiveThread,
-    setThreadSendingStateById: setSendingByThread,
-    setThreadStreamingStateById: setStreamingByThread,
-    setRuntimeEventsByRunId,
+    setThreadErrorForThread: (targetThreadKey, value) => {
+      if (allowRunUiWrite()) setThreadError(targetThreadKey, value);
+    },
+    setInferenceIssueModal: (value) => {
+      if (allowRunUiWrite()) setInferenceIssueForActiveThread(value);
+    },
+    setThreadSendingStateById: setScopedSendingByThread,
+    setThreadStreamingStateById: setScopedStreamingByThread,
+    setRuntimeEventsByRunId: setScopedRuntimeEventsByRunId,
   });
 
   useEffect(() => {
@@ -257,11 +403,38 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     setStreamingByThread({});
     setIsPreparing(false);
     setIsStartingNewChat(false);
+    submitInFlightRef.current = false;
+    setIsSubmitting(false);
+    draftTextRef.current = "";
     setInput("");
+    clearAttachmentDrafts();
+    setIsUploadingAttachments(false);
     setLocalError(null);
     setInferenceIssue(null);
     retryRef.current = null;
-  }, [props.session?.user.id, stopStreamingTurn]);
+  }, [clearAttachmentDrafts, props.session?.user.id, stopStreamingTurn]);
+
+  const previousSurfaceKeyRef = useRef(surfaceKey);
+  useEffect(() => {
+    if (previousSurfaceKeyRef.current === surfaceKey) return;
+    previousSurfaceKeyRef.current = surfaceKey;
+    setSendingByThread({});
+    setStreamingByThread({});
+    setInferenceIssue(null);
+    draftTextRef.current = "";
+    setInput("");
+    clearAttachmentDrafts();
+    setIsUploadingAttachments(false);
+    setIsAttachmentDragOver(false);
+    retryRef.current = null;
+    setLocalError(null);
+  }, [clearAttachmentDrafts, surfaceKey]);
+
+  useEffect(() => {
+    return () => {
+      revokeDraftPreviews(attachmentsRef.current);
+    };
+  }, [revokeDraftPreviews]);
 
   useEffect(() => {
     if (!props.isVisible) {
@@ -330,6 +503,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const streamedText = streamingState?.content?.trim() ?? "";
   const isSending = Boolean(threadKey && sendingByThread[threadKey]);
   const turnIsActive = isSending || Boolean(streamingState);
+  const composerIsBusy = turnIsActive || isUploadingAttachments || isSubmitting;
   const visibleMessages = messages.filter((message) => message.role !== "system");
   const dockError = localError ?? formatInferenceIssue(inferenceIssue);
   const showOnboardingAgentFocus = Boolean(
@@ -472,14 +646,17 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     setThreadKey(thread.thread_key);
     setEpisodeId(thread.episode_id);
     setMessages([]);
+    draftTextRef.current = "";
     setInput("");
+    clearAttachmentDrafts();
+    setIsUploadingAttachments(false);
     setSendingByThread({});
     setStreamingByThread({});
     retryRef.current = null;
-  }, [observeThreadContext]);
+  }, [clearAttachmentDrafts, observeThreadContext]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpenSurface) return;
     const frame = window.requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({
         top: scrollRef.current.scrollHeight,
@@ -487,11 +664,11 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [isOpen, messages.length, runtimeEvents.length, streamedText]);
+  }, [isOpenSurface, messages.length, runtimeEvents.length, streamedText]);
 
   const startNewChat = async () => {
     if (
-      turnIsActive ||
+      composerIsBusy ||
       isPreparing ||
       isStartingNewChat ||
       !episodeId ||
@@ -551,36 +728,114 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     }
   };
 
+  const ingestAttachmentFiles = useCallback((files: readonly File[]) => {
+    if (files.length === 0) return;
+    const error = validateMemberAgentImageDrafts(files, attachmentsRef.current);
+    if (error) {
+      setLocalError(error);
+      return;
+    }
+    const next = [
+      ...attachmentsRef.current,
+      ...files.map((file) => ({
+        id: crypto.randomUUID(),
+        name: file.name || "image",
+        type: "image" as const,
+        mime: file.type,
+        size: file.size,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        storage_id: null,
+      })),
+    ];
+    setLocalError(null);
+    setAttachmentDrafts(next);
+  }, [setAttachmentDrafts]);
+
+  const removeAttachment = useCallback((id: string) => {
+    const removed = attachmentsRef.current.find((attachment) => attachment.id === id);
+    if (removed) URL.revokeObjectURL(removed.previewUrl);
+    setAttachmentDrafts(
+      attachmentsRef.current.filter((attachment) => attachment.id !== id),
+    );
+    retryRef.current = null;
+  }, [setAttachmentDrafts]);
+
+  const handleAttachmentPaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files ?? []).filter(
+      (file): file is File => file instanceof File,
+    );
+    if (files.length === 0) return;
+    event.preventDefault();
+    ingestAttachmentFiles(files);
+  }, [ingestAttachmentFiles]);
+
+  const handleAttachmentDrop = useCallback((event: DragEvent<HTMLFormElement>) => {
+    const files = Array.from(event.dataTransfer.files ?? []).filter(
+      (file): file is File => file instanceof File,
+    );
+    if (files.length === 0) return;
+    event.preventDefault();
+    setIsAttachmentDragOver(false);
+    ingestAttachmentFiles(files);
+  }, [ingestAttachmentFiles]);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const text = input.trim();
+    if (submitInFlightRef.current) return;
+    const surfaceContext = props.surfaceContext;
+    const session = props.session;
     if (
-      !text ||
-      turnIsActive ||
+      composerIsBusy ||
       isPreparing ||
       isStartingNewChat ||
-      !props.surfaceContext ||
-      !props.session
+      !surfaceContext ||
+      !session
     ) {
       return;
     }
-    setLocalError(null);
-    setInferenceIssue(null);
-    setInput("");
-    const retry = retryRef.current;
-    const messageId = retry?.text === text ? retry.messageId : crypto.randomUUID();
-    const scope = agentScopeRef.current;
     const desiredCommunityId =
-      props.surfaceContext.kind === "community" ? props.communityId : null;
-    if (props.surfaceContext.kind === "community" && !desiredCommunityId) {
-      setInput(text);
+      surfaceContext.kind === "community" ? props.communityId : null;
+    if (surfaceContext.kind === "community" && !desiredCommunityId) {
       setLocalError("This community context is still loading. Try again.");
       return;
     }
+
+    submitInFlightRef.current = true;
+    setIsSubmitting(true);
+    setLocalError(null);
+    setInferenceIssue(null);
+    const scope = agentScopeRef.current;
+    let text = "";
+    let workingDrafts: MemberAgentImageDraft[] = [];
+    let signature = "";
+    let messageId = "";
+    let committed = false;
     let targetThreadKey: string | null = null;
+
     try {
+      const voiceTranscript = await props.finalizeVoiceInputForSubmit?.() ?? "";
+      if (!isCurrentScope(scope)) return;
+      text = mergeVoiceTranscript(draftTextRef.current, voiceTranscript).trim();
+      workingDrafts = attachmentsRef.current.slice();
+      if (!text && workingDrafts.length === 0) return;
+
+      signature = buildDraftSignature(text, workingDrafts);
+      const retry = retryRef.current;
+      messageId = retry?.signature === signature ? retry.messageId : crypto.randomUUID();
+      if (retry?.signature === signature) workingDrafts = retry.attachments.slice();
+
+      // Detach the submitted snapshot immediately. Anything entered after this
+      // point belongs to the next turn and must never be cleared by this one.
+      draftTextRef.current = "";
+      setInput("");
+      attachmentsRef.current = [];
+      setAttachments([]);
+      retryRef.current = null;
+      setIsUploadingAttachments(workingDrafts.some((attachment) => !attachment.storage_id));
+
       const usableSession = await props.ensureSession(
-        props.session,
+        session,
         "member_agent_dock_send",
       );
       if (!usableSession) throw new Error("auth_session_required");
@@ -604,30 +859,79 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         setEpisodeId(thread.episode_id);
       }
       targetThreadKey = thread.thread_key;
+      for (let index = 0; index < workingDrafts.length; index += 1) {
+        const draft = workingDrafts[index]!;
+        if (draft.storage_id) continue;
+        const claimed = await uploadCloudMemberAgentImageFile({
+          session: usableSession,
+          threadId: thread.thread_key,
+          messageId,
+          file: draft.file,
+        });
+        if (!isCurrentScope(scope)) return;
+        workingDrafts = workingDrafts.map((candidate) =>
+          candidate.id === draft.id
+            ? {
+                ...candidate,
+                name: claimed.name,
+                mime: claimed.mime,
+                size: claimed.size,
+                storage_id: claimed.storage_id,
+              }
+            : candidate,
+        );
+      }
+      if (!isCurrentScope(scope)) return;
+      const storedAttachments = workingDrafts.map((attachment) => ({
+        id: attachment.id,
+        name: attachment.name,
+        type: "image" as const,
+        mime: attachment.mime,
+        size: attachment.size,
+        storage_id: String(attachment.storage_id ?? "").trim(),
+      }));
       setSendingByThread((previous) => ({ ...previous, [thread.thread_key]: true }));
       await createThreadMessage(usableSession, {
         id: messageId,
         threadId: thread.thread_key,
         role: "user",
-        content_json: { text },
+        content_json: {
+          text,
+          ...(storedAttachments.length > 0 ? { attachments: storedAttachments } : null),
+        },
       });
-      if (!isCurrentScope(scope)) return;
+      committed = true;
+
+      const optimisticAttachments = storedAttachments.map((attachment) => ({
+        ...attachment,
+        url: workingDrafts.find((draft) => draft.id === attachment.id)?.previewUrl ?? null,
+      }));
       const optimisticMessage: MemberAgentMessage = {
         id: messageId,
         thread_id: thread.thread_key,
         seq: activeMessages.length + 1,
         role: "user",
-        content_json: { text },
+        content_json: {
+          text,
+          ...(optimisticAttachments.length > 0
+            ? { attachments: optimisticAttachments }
+            : null),
+        },
         engine_id: null,
         model_id: null,
         run_id: null,
         created_at: new Date().toISOString(),
       };
-      const optimisticMessages = activeMessages.some((message) => message.id === messageId)
-        ? activeMessages
-        : [...activeMessages, optimisticMessage];
-      setMessages(optimisticMessages);
-      retryRef.current = null;
+      if (isCurrentScope(scope)) {
+        const optimisticMessages = activeMessages.some((message) => message.id === messageId)
+          ? activeMessages
+          : [...activeMessages, optimisticMessage];
+        setMessages(optimisticMessages);
+      }
+
+      // The message is durable now. Finish its captured turn even if navigation
+      // changes; only the visible UI writes remain scoped to the current surface.
+      runUiScopeRef.current = scope;
       const result = await runAgentTurn(usableSession, thread.thread_key, {
         preferredModelId: thread.model_id || DEFAULT_ACTIVE_MODEL_ID,
         mode: "respond",
@@ -635,28 +939,51 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         userMessageKey: messageId,
         runtimeEngine: "polynet",
         invocationSurface: "member_agent_dock",
-        surfaceContext: props.surfaceContext,
+        surfaceContext,
         suppressOnboardingProgress: onboarding?.mode === "preview",
         requestedFundingSource: "auto",
         requestedAgenticTools: true,
         replyToId: messageId,
         messages: [optimisticMessage],
+        suppressStreamingUi: !isCurrentScope(scope),
       });
       if (result.error) throw new Error(result.error);
-      if (!isCurrentScope(scope)) return;
-      await loadMessages(thread.thread_key, usableSession);
-      if (onboarding?.mode === "preview") onboarding.completeAgentTurnPreview();
+      if (isCurrentScope(scope)) {
+        await loadMessages(thread.thread_key, usableSession);
+        if (onboarding?.mode === "preview") onboarding.completeAgentTurnPreview();
+      }
+      revokeDraftPreviews(workingDrafts);
     } catch (error) {
-      if (!isCurrentScope(scope)) return;
+      if (!isCurrentScope(scope)) {
+        if (committed) revokeDraftPreviews(workingDrafts);
+        return;
+      }
       console.warn("member_agent_dock_send_failed", error);
-      setInput(text);
-      retryRef.current = { text, messageId };
+      const currentText = draftTextRef.current.trim();
+      const restoredText = currentText ? `${text}\n${currentText}` : text;
+      draftTextRef.current = restoredText;
+      setInput(restoredText);
+      const currentDrafts = attachmentsRef.current;
+      const restoredDrafts = [
+        ...workingDrafts,
+        ...currentDrafts.filter(
+          (candidate) => !workingDrafts.some((draft) => draft.id === candidate.id),
+        ),
+      ];
+      setAttachmentDrafts(restoredDrafts);
+      if (text || workingDrafts.length > 0) {
+        retryRef.current = { signature, text, messageId, attachments: workingDrafts };
+      }
       setLocalError(
         error instanceof Error && error.message.trim()
           ? error.message
           : "Your message was not sent. Try again.",
       );
     } finally {
+      submitInFlightRef.current = false;
+      runUiScopeRef.current = null;
+      setIsSubmitting(false);
+      setIsUploadingAttachments(false);
       if (targetThreadKey) {
         setSendingByThread((previous) => {
           const next = { ...previous };
@@ -687,7 +1014,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       {!props.mobileShellActive ? (
         <button
           type="button"
-          className={`member-agent-dock-launcher${turnIsActive ? " is-working" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
+          className={`member-agent-dock-launcher${composerIsBusy ? " is-working" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
           onClick={() => setIsOpen((open) => !open)}
           aria-label={isOpen ? "Close your agent" : "Open your agent"}
           title={isOpen ? "Close your agent" : "Open your agent"}
@@ -706,7 +1033,9 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             <span>
               <strong>Your agent</strong>
               <small>
-                {turnIsActive
+                {isUploadingAttachments
+                  ? "Uploading images"
+                  : turnIsActive
                     ? "Working"
                     : `${surfaceLabel} context`}
               </small>
@@ -718,7 +1047,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
               onClick={() => void startNewChat()}
               disabled={
                 showOnboardingAgentFocus ||
-                turnIsActive ||
+                composerIsBusy ||
                 isPreparing ||
                 isStartingNewChat ||
                 !episodeId
@@ -743,7 +1072,10 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         </header>
 
         <div className="member-agent-dock-transcript" ref={scrollRef}>
-          {visibleMessages.length === 0 && !turnIsActive && !isPreparing && !isStartingNewChat ? (
+          {visibleMessages.length === 0 &&
+          !composerIsBusy &&
+          !isPreparing &&
+          !isStartingNewChat ? (
             <div className="member-agent-dock-empty">
               <MessageCircle aria-hidden="true" />
               <p>
@@ -754,16 +1086,23 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
             </div>
           ) : null}
 
-          {visibleMessages.map((message) => (
-            <article
-              key={message.id}
-              className={`member-agent-dock-message is-${message.role}`}
-            >
-              {message.role === "assistant"
-                ? renderMarkdown(extractTextFromContentJson(message.content_json))
-                : <p>{extractTextFromContentJson(message.content_json)}</p>}
-            </article>
-          ))}
+          {visibleMessages.map((message) => {
+            const text = extractTextFromContentJson(message.content_json);
+            const messageAttachments = parseMessageAttachments(message.content_json);
+            return (
+              <article
+                key={message.id}
+                className={`member-agent-dock-message is-${message.role}${text ? "" : " is-media-only"}`}
+              >
+                {text
+                  ? message.role === "assistant"
+                    ? renderMarkdown(text)
+                    : <p>{text}</p>
+                  : null}
+                <MemberAgentAttachmentViews attachments={messageAttachments} />
+              </article>
+            );
+          })}
 
           {isPreparing ? (
             <div className="member-agent-dock-reasoning">
@@ -807,15 +1146,82 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
           {dockError ? <p className="member-agent-dock-error">{dockError}</p> : null}
         </div>
 
-        <div className="member-agent-dock-composer-stack">
+        <div className="member-agent-dock-composer-shell">
+          {attachments.length > 0 ? (
+            <div className="member-agent-dock-composer-attachments">
+              {attachments.map((attachment) => (
+                <div className="member-agent-dock-composer-image" key={attachment.id}>
+                  <img src={attachment.previewUrl} alt={attachment.name} />
+                  {isUploadingAttachments && !attachment.storage_id ? (
+                    <span aria-label={`Uploading ${attachment.name}`}>
+                      <LoaderCircle aria-hidden="true" />
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(attachment.id)}
+                    disabled={composerIsBusy}
+                    aria-label={`Remove ${attachment.name}`}
+                    title="Remove"
+                  >
+                    <X aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <form
-            className={`member-agent-dock-composer${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
+            className={`member-agent-dock-composer${isAttachmentDragOver ? " is-dragging" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
             onSubmit={submit}
+            onDragEnter={(event) => {
+              if (!Array.from(event.dataTransfer.types ?? []).includes("Files")) return;
+              event.preventDefault();
+              setIsAttachmentDragOver(true);
+            }}
+            onDragOver={(event) => {
+              if (!Array.from(event.dataTransfer.types ?? []).includes("Files")) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+              setIsAttachmentDragOver(true);
+            }}
+            onDragLeave={(event) => {
+              if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+              setIsAttachmentDragOver(false);
+            }}
+            onDrop={handleAttachmentDrop}
           >
+            <input
+              ref={fileInputRef}
+              className="member-agent-dock-file-input"
+              type="file"
+              multiple
+              accept={MEMBER_AGENT_IMAGE_ACCEPT}
+              onChange={(event) => {
+                const files = Array.from(event.currentTarget.files ?? []);
+                ingestAttachmentFiles(files);
+                event.currentTarget.value = "";
+              }}
+            />
+            <button
+              className="member-agent-dock-attach"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={composerIsBusy || isPreparing || isStartingNewChat}
+              aria-label="Attach images"
+              title="Attach images"
+            >
+              <Paperclip aria-hidden="true" />
+            </button>
             <textarea
               ref={textareaRef}
               value={input}
-              onChange={(event) => setInput(event.target.value)}
+              onChange={(event) => {
+                draftTextRef.current = event.target.value;
+                setInput(event.target.value);
+                event.currentTarget.style.height = "auto";
+                event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 112)}px`;
+              }}
+              onPaste={handleAttachmentPaste}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
@@ -827,10 +1233,20 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
               aria-describedby={showOnboardingAgentFocus ? onboardingDescriptionId : undefined}
               rows={1}
               maxLength={8000}
-              disabled={turnIsActive || isPreparing || isStartingNewChat}
+              disabled={composerIsBusy || isPreparing || isStartingNewChat}
+            />
+            <VoiceInputButton
+              {...props.voiceButtonProps}
+              disabled={
+                props.voiceButtonProps.disabled ||
+                composerIsBusy ||
+                isPreparing ||
+                isStartingNewChat
+              }
             />
             {turnIsActive && threadKey ? (
               <button
+                className="member-agent-dock-send chat-send ask-send-btn ask-send-btn-v2"
                 type="button"
                 onClick={() => stopStreamingTurn(threadKey)}
                 aria-label="Stop"
@@ -840,12 +1256,20 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
               </button>
             ) : (
               <button
+                className="member-agent-dock-send chat-send ask-send-btn ask-send-btn-v2"
                 type="submit"
-                disabled={!input.trim() || isPreparing || isStartingNewChat}
-                aria-label="Send"
+                disabled={
+                  (!input.trim() && attachments.length === 0) ||
+                  isUploadingAttachments ||
+                  isPreparing ||
+                  isStartingNewChat
+                }
+                aria-label="Send message"
                 title="Send"
               >
-                <Send aria-hidden="true" />
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
+                </svg>
               </button>
             )}
           </form>
@@ -854,4 +1278,4 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     </aside>
     </>
   );
-}
+});

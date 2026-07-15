@@ -63,36 +63,62 @@ assert.match(
 );
 assert.match(
   heartbeat,
-  /ctx\.runAction\(internalRefs\.communityAgentRuntime\.runCommunityAgentCycleInternal[\s\S]*communityId: args\.communityId[\s\S]*triggerType: "heartbeat"[\s\S]*heartbeatId/,
+  /ctx\.runAction\([\s\S]*internalRefs\.communityAgentRuntime\.runCommunityAgentCycleInternal[\s\S]*communityId: args\.communityId[\s\S]*triggerType: "heartbeat"[\s\S]*heartbeatId/,
   "heartbeat action should bridge into the canonical runtime with heartbeat trigger",
 );
 assert.match(
   heartbeat,
-  /drainSelfAuthoredPendingSourceTracesInternal[\s\S]*measureCommunityCompilerEvidenceInternal/,
-  "heartbeat action should drain self-authored pending traces before measuring trigger evidence",
+  /drainSelfAuthoredPendingSourceTracesInternal[\s\S]*assessCommunityAgentCycleInternal/,
+  "heartbeat action should drain self-authored traces before using the canonical work planner",
 );
 assert.match(
   heartbeat,
-  /measureCommunityCompilerEvidenceInternal[\s\S]*communityId: args\.communityId/,
-  "heartbeat action should measure eligible compiler evidence for exactly one community before runtime",
+  /assessCommunityAgentCycleInternal = internalQuery[\s\S]*by_community_agentHandoffState_createdAt[\s\S]*measureCommunityCompilerEvidenceForCommunity/,
+  "one planner should join durable digest handoff work with compiler evidence",
 );
 assert.match(
   heartbeat,
-  /if \(!compilerEvidence\.should_run\) \{[\s\S]*recordCommunityAgentSkippedRunInternal[\s\S]*triggerType: "heartbeat"[\s\S]*wakeReason: wakeEvidence\.reason[\s\S]*wakeEvidence/,
-  "heartbeat action should persist a skipped run when compiler evidence does not warrant a wake",
+  /agent_disabled[\s\S]*daily_cycle_cap_reached[\s\S]*handoff_already_running[\s\S]*pending_compiler_handoff[\s\S]*no_compiler_work/,
+  "planner should keep control gates independent from compiler and handoff work truth",
+);
+assert.doesNotMatch(
+  heartbeat,
+  /newestTrace|lastOkObserver|no_new_signal|no_source_traces|first_cycle|reason: "new_signal"/,
+  "raw trace and observer timestamps must not decide durable work",
 );
 assert.match(
   heartbeat,
-  /runCommunityAgentCycleInternal[\s\S]*wakeReason: wakeEvidence\.reason[\s\S]*wakeEvidence/,
-  "heartbeat action should pass wake reason and evidence into real community-agent runs",
+  /runCommunityCompilerDigestPassInternal[\s\S]*requireTrigger: true[\s\S]*claimCommunityCompilerDigestHandoffInternal[\s\S]*runCommunityAgentCycleInternal[\s\S]*compilerDigestId: claim\.digest_id[\s\S]*compilerDigestVersionKey: claim\.version_key[\s\S]*settleCommunityCompilerDigestHandoffInternal/,
+  "heartbeat should own compile, exact claim, cycle, and terminal settlement",
+);
+assert.match(
+  heartbeat,
+  /claimCommunityCompilerDigestHandoffInternal = internalMutation[\s\S]*agentHandoffState: "running" as const[\s\S]*agentClaimId: claimId[\s\S]*agentAttemptCount/,
+  "handoff claim should atomically lease one exact digest version",
+);
+assert.match(
+  heartbeat,
+  /settleCommunityCompilerDigestHandoffInternal = internalMutation[\s\S]*v\.literal\("handled"\)[\s\S]*v\.literal\("retry"\)[\s\S]*community_compiler_handoff_version_mismatch[\s\S]*community_compiler_handoff_claim_mismatch/,
+  "settlement should fail closed on stale version or claim identity",
+);
+assert.match(
+  heartbeat,
+  /cycle\.ok === true && cycle\.completed === true[\s\S]*outcome: handled \? "handled" : "retry"/,
+  "only a completed role cycle should terminally handle a digest",
 );
 
 const sweepBlock = exportedFunctionBlock(heartbeat, "runCommunityMemorySweepInternal");
 assert.match(
   sweepBlock,
-  /runCommunityCompilerDigestPassInternal[\s\S]*settleCommunityMemorySignalsInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
-  "memory sweep should refresh digest, settle metabolizer scores, then enqueue the delayed heartbeat",
+  /settleCommunityMemorySignalsInternal[\s\S]*assessCommunityAgentCycleInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
+  "memory sweep should metabolize independently, plan work, and enqueue immediately",
 );
+assert.doesNotMatch(
+  sweepBlock,
+  /runCommunityCompilerDigestPassInternal|COMMUNITY_AGENT_SWEEP_HEARTBEAT_DELAY_MS/,
+  "memory sweep must not compile or own an arbitrary delay",
+);
+assert.match(sweepBlock, /enqueueCommunityAgentHeartbeatInternal[\s\S]*runAfterMs: 0/);
 assert.match(
   sweepBlock,
   /settleCommunityMemorySignalsInternal[\s\S]*communityId: target\.communityId/,
@@ -100,7 +126,7 @@ assert.match(
 );
 assert.match(
   sweepBlock,
-  /catch \{[\s\S]*Score settlement is mechanical memory metabolism[\s\S]*block the heartbeat's evidence gate/,
+  /catch \(error\) \{[\s\S]*Score settlement is mechanical memory metabolism[\s\S]*block the heartbeat's evidence gate/,
   "metabolizer failures should not block heartbeat evidence assessment",
 );
 assert.match(
@@ -145,14 +171,24 @@ assert.match(
   "schema should support same-community running-run lookup",
 );
 assert.match(
+  heartbeat,
+  /by_community_role_triggerType_createdAt[\s\S]*\.eq\("role", "observer"\)[\s\S]*\.eq\("triggerType", "heartbeat"\)[\s\S]*\.gte\("createdAt", dayStartMs\)[\s\S]*\.take\(COMMUNITY_AGENT_CYCLES_PER_DAY_CAP\)/,
+  "daily cost gating should use an exact bounded index instead of a recent-row scan",
+);
+assert.match(
+  schema,
+  /communityCompilerDigests: defineTable\([\s\S]*versionKey: v\.optional\(v\.string\(\)\)[\s\S]*agentHandoffState: v\.optional\([\s\S]*v\.literal\("pending"\)[\s\S]*v\.literal\("running"\)[\s\S]*v\.literal\("handled"\)[\s\S]*by_community_versionKey[\s\S]*by_community_agentHandoffState_createdAt/,
+  "schema should persist versioned autonomous digest handoffs with bounded lookup indexes",
+);
+assert.match(
   docs,
   /Tenth Implementation Slice[\s\S]*single-community heartbeat bridge[\s\S]*`enqueueCommunityAgentHeartbeatInternal`[\s\S]*one explicit `communityId`[\s\S]*`runCommunityAgentHeartbeatInternal`[\s\S]*`triggerType`: `heartbeat`[\s\S]*fresh running run exists[\s\S]*`running_run_exists`[\s\S]*stale running runs/,
   "docs should describe the heartbeat bridge and concurrency guard",
 );
 assert.match(
   docs,
-  /Thirteenth Implementation Slice[\s\S]*measure eligible pending evidence[\s\S]*status: skipped[\s\S]*wakeReason[\s\S]*wakeEvidence[\s\S]*does not give members, admins, or prompts a direct wake path/,
-  "docs should describe heartbeat evidence measurement and skipped-run persistence",
+  /Canonical Compiler-to-Agent Handoff[\s\S]*immutable digest version[\s\S]*`pending` is claimable[\s\S]*`running` has a bounded lease[\s\S]*`handled` is\s+terminal[\s\S]*never compiles evidence itself/,
+  "docs should describe the durable autonomous handoff contract",
 );
 
 console.log("community_agent_heartbeat_contract_proof: ok");

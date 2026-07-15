@@ -13,6 +13,13 @@ import {
   compilerStateForSourceTraceLifecycle,
   type SourceTraceCompilerState,
 } from "./communityCompilerEvidenceCore";
+import {
+  COMMUNITY_EVIDENCE_POLICY_VERSION,
+  captureCommunityEvidenceCitationsForSourceTracesCore,
+  requireCommunityEvidenceCitationVisibilityCore,
+  requireCommunityEvidenceCitationsActiveCore,
+} from "./communityEvidenceCitations";
+import { isCommunityMemoryWorkKey } from "./communityMemoryWorkKey";
 
 type ActorType = "member" | "admin" | "agent" | "compiler" | "system";
 type VisibilityScope = "private" | "admin" | "community" | "public";
@@ -108,6 +115,8 @@ type IntelligenceNodeRow = {
   workflowIds: string[];
   tags: string[];
   sourceTraceIds: any[];
+  evidenceCitationIds?: any[];
+  evidencePolicyVersion?: "citation_v1";
   outcomeObservationIds: any[];
   stalenessScore: number;
   retrievalUsefulnessScore: number;
@@ -136,6 +145,8 @@ type IntelligenceEdgeRow = {
   type: string;
   confidence: number;
   evidenceTraceIds: any[];
+  evidenceCitationIds?: any[];
+  evidencePolicyVersion?: "citation_v1";
   visibilityScope: VisibilityScope;
   createdByActorType: ActorType;
   createdByUserId?: any;
@@ -183,9 +194,12 @@ type OutcomeObservationRow = {
 type IntelligenceChangeRequestRow = {
   _id: any;
   communityId: any;
+  workKey?: string;
   operation: MutationOperation;
   status: ChangeRequestStatus;
   sourceTraceIds: any[];
+  evidenceCitationIds?: any[];
+  evidencePolicyVersion?: "citation_v1";
   outcomeObservationIds: any[];
   targetNodeIds: any[];
   targetEdgeIds: any[];
@@ -229,6 +243,12 @@ const POLYNET_OVERVIEW_STATUSES: NodeStatus[] = [
   "contested",
   "stale",
 ];
+const EVIDENCE_SENSITIVE_NODE_OPERATIONS = new Set<MutationOperation>([
+  "update_node",
+  "promote_status",
+  "update_confidence",
+  "update_visibility",
+]);
 const ACCEPTED_MEMORY_MAX_CANDIDATE_ROWS = 240;
 const ACCEPTED_MEMORY_MIN_CANDIDATE_ROWS = 48;
 const POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT = 80;
@@ -236,8 +256,6 @@ const POLYNET_OVERVIEW_MAX_NODE_LIMIT = 120;
 const POLYNET_OVERVIEW_EDGE_LIMIT = 160;
 const POLYNET_OVERVIEW_EDGES_PER_NODE_LIMIT = 8;
 const POLYNET_OVERVIEW_RUN_LIMIT = 6;
-const POLYNET_OVERVIEW_FORMING_NODE_LIMIT = 12;
-const POLYNET_OVERVIEW_FORMING_STATUSES: ChangeRequestStatus[] = ["pending_decision", "accepted"];
 const NODE_TYPES = new Set<NodeType>([
   "playbook",
   "insight",
@@ -622,6 +640,16 @@ function mapTraceRow(row: SourceTraceRow) {
   };
 }
 
+function evidencePolicyLabel(args: {
+  evidencePolicyVersion?: "citation_v1";
+  sourceTraceIds?: any[];
+}): "citation_v1" | "legacy_unversioned" | "none" {
+  if (args.evidencePolicyVersion === COMMUNITY_EVIDENCE_POLICY_VERSION) {
+    return COMMUNITY_EVIDENCE_POLICY_VERSION;
+  }
+  return (args.sourceTraceIds ?? []).length > 0 ? "legacy_unversioned" : "none";
+}
+
 function mapNodeRow(row: IntelligenceNodeRow) {
   return {
     id: normalizeIdValue(row._id),
@@ -639,6 +667,8 @@ function mapNodeRow(row: IntelligenceNodeRow) {
     workflow_ids: row.workflowIds ?? [],
     tags: row.tags ?? [],
     source_trace_ids: (row.sourceTraceIds ?? []).map(normalizeIdValue),
+    evidence_citation_ids: (row.evidenceCitationIds ?? []).map(normalizeIdValue),
+    evidence_policy_version: evidencePolicyLabel(row),
     outcome_observation_ids: (row.outcomeObservationIds ?? []).map(normalizeIdValue),
     staleness_score: row.stalenessScore,
     retrieval_usefulness_score: row.retrievalUsefulnessScore,
@@ -668,6 +698,11 @@ function mapEdgeRow(row: IntelligenceEdgeRow) {
     type: row.type,
     confidence: row.confidence,
     evidence_trace_ids: (row.evidenceTraceIds ?? []).map(normalizeIdValue),
+    evidence_citation_ids: (row.evidenceCitationIds ?? []).map(normalizeIdValue),
+    evidence_policy_version: evidencePolicyLabel({
+      evidencePolicyVersion: row.evidencePolicyVersion,
+      sourceTraceIds: row.evidenceTraceIds,
+    }),
     visibility_scope: row.visibilityScope,
     created_by_actor_type: row.createdByActorType,
     created_by_user_id: row.createdByUserId ? normalizeIdValue(row.createdByUserId) : null,
@@ -725,10 +760,6 @@ function communityGraphRootId(communityId: any): string {
   return `community:${normalizeIdValue(communityId)}`;
 }
 
-function formingMemoryGraphNodeId(changeRequestId: any): string {
-  return `forming_memory:${normalizeIdValue(changeRequestId)}`;
-}
-
 function communityMemoryLineageId(changeRequestId: any): string {
   return `change_request:${normalizeIdValue(changeRequestId)}`;
 }
@@ -779,19 +810,6 @@ function mapPolynetOverviewNode(row: IntelligenceNodeRow) {
   };
 }
 
-function mapPolynetOverviewFormingNode(row: IntelligenceChangeRequestRow) {
-  return {
-    id: formingMemoryGraphNodeId(row._id),
-    lineage_id: communityMemoryLineageId(row._id),
-    kind: "forming_memory",
-    type: "forming_memory",
-    label: "Forming memory",
-    status: "forming",
-    confidence: clampScore(row.confidence),
-    created_at: toIsoString(row.createdAt),
-  };
-}
-
 function mapPolynetOverviewEdge(row: IntelligenceEdgeRow) {
   return {
     id: `directory_edge:${normalizeIdValue(row._id)}`,
@@ -811,13 +829,6 @@ function communityAgentActivityState(row: Record<string, any> | null): string {
   if (row.status === "error") return "error";
   if (row.status === "skipped") return "resting";
   if (normalizeIdList(row.appliedChangeRequestIds).length > 0) return "updated_directory";
-  if (
-    normalizeIdList(row.acceptedChangeRequestIds).length > 0 ||
-    normalizeIdList(row.rejectedChangeRequestIds).length > 0
-  ) {
-    return "reviewed_candidates";
-  }
-  if (normalizeIdList(row.candidateProposalIds).length > 0) return "proposed_candidates";
   return "resting";
 }
 
@@ -831,9 +842,6 @@ function mapPolynetOverviewRun(row: Record<string, any>) {
     wake_reason: row.wakeReason ?? null,
     stop_reason: row.stopReason ?? null,
     tool_step_count: typeof row.toolStepCount === "number" ? row.toolStepCount : 0,
-    candidate_proposal_count: normalizeIdList(row.candidateProposalIds).length,
-    accepted_change_request_count: normalizeIdList(row.acceptedChangeRequestIds).length,
-    rejected_change_request_count: normalizeIdList(row.rejectedChangeRequestIds).length,
     applied_change_request_count: normalizeIdList(row.appliedChangeRequestIds).length,
     started_at: typeof row.startedAt === "number" ? toIsoString(row.startedAt) : null,
     finished_at: typeof row.finishedAt === "number" ? toIsoString(row.finishedAt) : null,
@@ -874,39 +882,6 @@ async function readPolynetOverviewNodes(args: {
       .slice(0, args.limit),
     hasMoreNodes,
   };
-}
-
-async function readPolynetOverviewFormingNodes(args: {
-  ctx: any;
-  communityId: any;
-  limit: number;
-}): Promise<{ formingNodes: IntelligenceChangeRequestRow[]; hasMoreFormingNodes: boolean }> {
-  const rows: IntelligenceChangeRequestRow[] = [];
-  let hasMoreFormingNodes = false;
-
-  for (const status of POLYNET_OVERVIEW_FORMING_STATUSES) {
-    const bucket = (await args.ctx.db
-      .query("communityIntelligenceChangeRequests" as any)
-      .withIndex("by_community_operation_status_agent_createdAt", (q: any) =>
-        q
-          .eq("communityId", args.communityId)
-          .eq("operation", "create_node")
-          .eq("status", status)
-          .eq("createdByAgentKey", "community_agent"),
-      )
-      .order("desc")
-      .take(args.limit + 1)) as IntelligenceChangeRequestRow[];
-    if (bucket.length > args.limit) hasMoreFormingNodes = true;
-    rows.push(...bucket.slice(0, args.limit));
-  }
-
-  const formingNodes = rows
-    .filter((row) => row.createdByActorType === "agent" && row.createdByAgentKey === "community_agent")
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, args.limit);
-  if (rows.length > args.limit) hasMoreFormingNodes = true;
-
-  return { formingNodes, hasMoreFormingNodes };
 }
 
 async function readPolynetOverviewEdges(args: {
@@ -988,6 +963,8 @@ function mapCompactMemoryNode(row: IntelligenceNodeRow) {
     grade: communityMemoryGrade(row.status),
     confidence: row.confidence,
     evidence_strength: row.evidenceStrength,
+    evidence_citation_ids: (row.evidenceCitationIds ?? []).map(normalizeIdValue),
+    evidence_policy_version: evidencePolicyLabel(row),
     applies_when: row.appliesWhen ?? null,
     tags: row.tags ?? [],
     updated_at: toIsoString(row.updatedAt),
@@ -1008,9 +985,12 @@ function mapChangeRequestRow(row: IntelligenceChangeRequestRow) {
   return {
     id: normalizeIdValue(row._id),
     community_id: normalizeIdValue(row.communityId),
+    work_key: row.workKey ?? null,
     operation: row.operation,
     status: row.status,
     source_trace_ids: (row.sourceTraceIds ?? []).map(normalizeIdValue),
+    evidence_citation_ids: (row.evidenceCitationIds ?? []).map(normalizeIdValue),
+    evidence_policy_version: evidencePolicyLabel(row),
     outcome_observation_ids: (row.outcomeObservationIds ?? []).map(normalizeIdValue),
     target_node_ids: (row.targetNodeIds ?? []).map(normalizeIdValue),
     target_edge_ids: (row.targetEdgeIds ?? []).map(normalizeIdValue),
@@ -1716,6 +1696,7 @@ export async function recordTrustedCommunitySourceTraceCore(args: {
 async function insertChangeRequest(args: {
   ctx: any;
   communityId: any;
+  workKey?: string;
   operation: MutationOperation;
   sourceTraceIds?: any[];
   outcomeObservationIds?: any[];
@@ -1731,13 +1712,24 @@ async function insertChangeRequest(args: {
 }): Promise<any> {
   const targetNodeIds = args.targetNodeIds ?? [];
   const targetEdgeIds = args.targetEdgeIds ?? [];
+  const sourceTraceIds = args.sourceTraceIds ?? [];
+  const evidenceCitationIds = await captureCommunityEvidenceCitationsForSourceTracesCore({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    sourceTraceIds,
+    actorType: args.actorType,
+    capturedAt: args.nowMs,
+  });
   const targetNodeSnapshots = await getNodeSnapshots(args.ctx, args.communityId, targetNodeIds);
   const targetEdgeSnapshots = await getEdgeSnapshots(args.ctx, args.communityId, targetEdgeIds);
   return await args.ctx.db.insert("communityIntelligenceChangeRequests" as any, {
     communityId: args.communityId,
+    ...(args.workKey ? { workKey: args.workKey } : {}),
     operation: args.operation,
     status: "pending_decision",
-    sourceTraceIds: args.sourceTraceIds ?? [],
+    sourceTraceIds,
+    evidenceCitationIds,
+    evidencePolicyVersion: COMMUNITY_EVIDENCE_POLICY_VERSION,
     outcomeObservationIds: args.outcomeObservationIds ?? [],
     targetNodeIds,
     targetEdgeIds,
@@ -1756,9 +1748,10 @@ async function insertChangeRequest(args: {
   });
 }
 
-export async function createTrustedCommunityIntelligenceChangeRequest(args: {
+export async function createOrReuseTrustedCommunityIntelligenceChangeRequest(args: {
   ctx: any;
   communityId: any;
+  workKey?: string;
   operation: MutationOperation;
   sourceTraceIds?: any[];
   outcomeObservationIds?: any[];
@@ -1771,7 +1764,35 @@ export async function createTrustedCommunityIntelligenceChangeRequest(args: {
   actorUserId?: any;
   actorAgentKey?: string;
   nowMs: number;
-}): Promise<ReturnType<typeof mapChangeRequestRow>> {
+}): Promise<{
+  changeRequest: ReturnType<typeof mapChangeRequestRow>;
+  reusedExisting: boolean;
+}> {
+  const workKey = String(args.workKey ?? "").trim() || undefined;
+  if (workKey && !isCommunityMemoryWorkKey(workKey)) {
+    throw new Error("community_intelligence_work_key_invalid");
+  }
+  if (workKey) {
+    const existingRows = (await args.ctx.db
+      .query("communityIntelligenceChangeRequests" as any)
+      .withIndex("by_community_workKey", (q: any) =>
+        q.eq("communityId", args.communityId).eq("workKey", workKey),
+      )
+      .take(2)) as IntelligenceChangeRequestRow[];
+    if (existingRows.length > 1) {
+      throw new Error("community_intelligence_work_key_duplicate");
+    }
+    const existing = existingRows[0];
+    if (existing) {
+      if (existing.operation !== args.operation) {
+        throw new Error("community_intelligence_work_key_conflict");
+      }
+      return {
+        changeRequest: mapChangeRequestRow(existing),
+        reusedExisting: true,
+      };
+    }
+  }
   const sourceTraceIds = args.sourceTraceIds ?? [];
   const outcomeObservationIds = args.outcomeObservationIds ?? [];
   const targetNodeIds = args.targetNodeIds ?? [];
@@ -1798,6 +1819,7 @@ export async function createTrustedCommunityIntelligenceChangeRequest(args: {
   const changeRequestId = await insertChangeRequest({
     ctx: args.ctx,
     communityId: args.communityId,
+    workKey,
     operation: args.operation,
     sourceTraceIds,
     outcomeObservationIds,
@@ -1815,7 +1837,10 @@ export async function createTrustedCommunityIntelligenceChangeRequest(args: {
     nowMs: args.nowMs,
   });
   const changeRequest = await getChangeRequestOrThrow(args.ctx, changeRequestId);
-  return mapChangeRequestRow(changeRequest);
+  return {
+    changeRequest: mapChangeRequestRow(changeRequest),
+    reusedExisting: false,
+  };
 }
 
 async function resolveWriteActor(args: {
@@ -2736,19 +2761,101 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
   ctx: any;
   changeRequestId: any;
   actor: PolicyDecisionActor;
+  applicationMode?: "accepted_request" | "autonomous_compiler_memory";
   reason?: string;
   nowMs?: number;
 }): Promise<ReturnType<typeof mapChangeRequestRow>> {
   const changeRequest = await getChangeRequestOrThrow(args.ctx, args.changeRequestId);
-  if (changeRequest.status !== "accepted") {
+  const payload = payloadObject(changeRequest.requestedPayload);
+  const autonomousCompilerMemory = args.applicationMode === "autonomous_compiler_memory";
+  if (autonomousCompilerMemory) {
+    if (
+      (changeRequest.status !== "pending_decision" && changeRequest.status !== "accepted") ||
+      changeRequest.operation !== "create_node" ||
+      payload.source !== "compiler_digest_item_v1" ||
+      (changeRequest.createdByActorType !== "compiler" && changeRequest.createdByActorType !== "agent")
+    ) {
+      throw new Error("community_intelligence_autonomous_memory_policy_forbidden");
+    }
+  } else if (changeRequest.status !== "accepted") {
     throw new Error("community_intelligence_change_request_must_be_accepted");
   }
   const actor = normalizePolicyDecisionActor(args.actor);
-  await requireChangeRequestReferencesAllowedForApply(args.ctx, changeRequest);
-  await requireChangeRequestTargetsCurrent(args.ctx, changeRequest);
-
+  if (
+    autonomousCompilerMemory &&
+    actor.actorType !== "compiler" &&
+    actor.actorType !== "agent"
+  ) {
+    throw new Error("community_intelligence_autonomous_memory_actor_forbidden");
+  }
   const nowMs = args.nowMs ?? Date.now();
-  const payload = payloadObject(changeRequest.requestedPayload);
+  await requireChangeRequestReferencesAllowedForApply(args.ctx, changeRequest);
+  let evidenceCitationIds = changeRequest.evidenceCitationIds ?? [];
+  let evidencePolicyVersion = changeRequest.evidencePolicyVersion;
+  if (
+    autonomousCompilerMemory &&
+    (changeRequest.sourceTraceIds ?? []).length > 0 &&
+    (evidencePolicyVersion !== COMMUNITY_EVIDENCE_POLICY_VERSION ||
+      evidenceCitationIds.length === 0)
+  ) {
+    evidenceCitationIds = await captureCommunityEvidenceCitationsForSourceTracesCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      sourceTraceIds: changeRequest.sourceTraceIds ?? [],
+      actorType: changeRequest.createdByActorType === "agent" ? "agent" : "compiler",
+      capturedAt: nowMs,
+    });
+    evidencePolicyVersion = COMMUNITY_EVIDENCE_POLICY_VERSION;
+    await args.ctx.db.patch(changeRequest._id as any, {
+      evidenceCitationIds,
+      evidencePolicyVersion,
+      updatedAt: nowMs,
+    });
+  }
+  if (
+    (changeRequest.sourceTraceIds ?? []).length > 0 &&
+    (evidencePolicyVersion !== COMMUNITY_EVIDENCE_POLICY_VERSION ||
+      evidenceCitationIds.length === 0)
+  ) {
+    throw new Error("community_evidence_citation_review_required");
+  }
+  if (evidencePolicyVersion === COMMUNITY_EVIDENCE_POLICY_VERSION) {
+    await requireCommunityEvidenceCitationsActiveCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      citationIds: evidenceCitationIds,
+    });
+  }
+  if (
+    evidenceCitationIds.length === 0 &&
+    (payload.evidenceStrength === "observed" ||
+      payload.evidenceStrength === "measured" ||
+      payload.evidenceStrength === "validated")
+  ) {
+    throw new Error("community_evidence_citation_required");
+  }
+  await requireChangeRequestTargetsCurrent(args.ctx, changeRequest);
+  if (EVIDENCE_SENSITIVE_NODE_OPERATIONS.has(changeRequest.operation)) {
+    for (const nodeId of changeRequest.targetNodeIds ?? []) {
+      const node = await getIntelligenceNodeOrThrow(args.ctx, nodeId);
+      const nodeCitationIds = node.evidenceCitationIds ?? [];
+      if (
+        (node.sourceTraceIds ?? []).length > 0 &&
+        (node.evidencePolicyVersion !== COMMUNITY_EVIDENCE_POLICY_VERSION ||
+          nodeCitationIds.length === 0)
+      ) {
+        throw new Error("community_evidence_citation_review_required");
+      }
+      if (node.evidencePolicyVersion === COMMUNITY_EVIDENCE_POLICY_VERSION) {
+        await requireCommunityEvidenceCitationsActiveCore({
+          ctx: args.ctx,
+          communityId: changeRequest.communityId,
+          citationIds: nodeCitationIds,
+        });
+      }
+    }
+  }
+
   let appliedMutationId: any = undefined;
   let appliedNodeIds = changeRequest.targetNodeIds ?? [];
   let appliedEdgeIds = changeRequest.targetEdgeIds ?? [];
@@ -2759,6 +2866,18 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       status,
       requestedVisibility: payloadVisibility(payload.visibilityScope),
       requestedSourceVisibility: payloadSourceVisibility(payload.sourceVisibility),
+    });
+    await requireCommunityEvidenceCitationVisibilityCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      citationIds: evidenceCitationIds,
+      outputVisibility: nodeVisibility.visibilityScope,
+    });
+    await requireCommunityEvidenceCitationVisibilityCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      citationIds: evidenceCitationIds,
+      outputVisibility: nodeVisibility.sourceVisibility,
     });
     const nodeId = await args.ctx.db.insert("communityIntelligenceNodes" as any, {
       communityId: changeRequest.communityId,
@@ -2775,6 +2894,8 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       workflowIds: normalizeStringList(payload.workflowIds, 50, 256),
       tags: normalizeStringList(payload.tags, 50, 80),
       sourceTraceIds: changeRequest.sourceTraceIds ?? [],
+      evidenceCitationIds,
+      evidencePolicyVersion: COMMUNITY_EVIDENCE_POLICY_VERSION,
       outcomeObservationIds: changeRequest.outcomeObservationIds ?? [],
       stalenessScore: clampScore(payload.stalenessScore, 0),
       retrievalUsefulnessScore: clampScore(payload.retrievalUsefulnessScore, 0),
@@ -2802,7 +2923,11 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       afterSnapshot: mapNodeRow(node),
       sourceTraceIds: changeRequest.sourceTraceIds ?? [],
       policyDecisionId: normalizeIdValue(changeRequest._id),
-      reason: args.reason ?? "accepted_change_request_create_node",
+      reason:
+        args.reason ??
+        (autonomousCompilerMemory
+          ? "autonomous_compiler_memory_create_node"
+          : "accepted_change_request_create_node"),
       nowMs,
     });
   } else if (changeRequest.operation === "create_edge") {
@@ -2840,6 +2965,13 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
     const edgeType =
       typeof payload.type === "string" && EDGE_TYPES.has(payload.type) ? payload.type : undefined;
     if (!edgeType) throw new Error("community_intelligence_edge_type_required");
+    const edgeVisibility = payloadVisibility(payload.visibilityScope) ?? "community";
+    await requireCommunityEvidenceCitationVisibilityCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      citationIds: evidenceCitationIds,
+      outputVisibility: edgeVisibility,
+    });
     const edgeId = await args.ctx.db.insert("communityIntelligenceEdges" as any, {
       communityId: changeRequest.communityId,
       fromNodeId,
@@ -2849,7 +2981,9 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       type: edgeType,
       confidence: clampScore(payload.confidence, changeRequest.confidence),
       evidenceTraceIds: changeRequest.sourceTraceIds ?? [],
-      visibilityScope: payloadVisibility(payload.visibilityScope) ?? "community",
+      evidenceCitationIds,
+      evidencePolicyVersion: COMMUNITY_EVIDENCE_POLICY_VERSION,
+      visibilityScope: edgeVisibility,
       createdByActorType: actor.actorType,
       ...actorUserPatch(actor, "createdByUserId", "createdByAgentKey"),
       ...(typeof payload.compilerRunId === "string"
@@ -2874,7 +3008,11 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       afterSnapshot: mapEdgeRow(edge),
       sourceTraceIds: changeRequest.sourceTraceIds ?? [],
       policyDecisionId: normalizeIdValue(changeRequest._id),
-      reason: args.reason ?? "accepted_change_request_create_edge",
+      reason:
+        args.reason ??
+        (autonomousCompilerMemory
+          ? "autonomous_compiler_memory_create_edge"
+          : "accepted_change_request_create_edge"),
       nowMs,
     });
   } else {
@@ -2888,6 +3026,38 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       changeRequest.operation === "attach_evidence"
         ? Array.from(new Set([...(existing.sourceTraceIds ?? []), ...(changeRequest.sourceTraceIds ?? [])]))
         : existing.sourceTraceIds ?? [];
+    const requestTraceIds = new Set((changeRequest.sourceTraceIds ?? []).map(normalizeIdValue));
+    const requestRecapturesAllExistingTraces = (existing.sourceTraceIds ?? []).every((traceId) =>
+      requestTraceIds.has(normalizeIdValue(traceId)),
+    );
+    const nextEvidenceCitationIds =
+      changeRequest.operation === "attach_evidence"
+        ? requestRecapturesAllExistingTraces
+          ? evidenceCitationIds
+          : Array.from(
+              new Set([...(existing.evidenceCitationIds ?? []), ...evidenceCitationIds]),
+            )
+        : existing.evidenceCitationIds ?? [];
+    if (
+      changeRequest.operation === "attach_evidence" &&
+      !requestRecapturesAllExistingTraces &&
+      existing.evidencePolicyVersion === COMMUNITY_EVIDENCE_POLICY_VERSION
+    ) {
+      await requireCommunityEvidenceCitationsActiveCore({
+        ctx: args.ctx,
+        communityId: changeRequest.communityId,
+        citationIds: existing.evidenceCitationIds ?? [],
+      });
+    }
+    const effectiveEvidenceCitationIds = Array.from(
+      new Set([...nextEvidenceCitationIds, ...evidenceCitationIds]),
+    );
+    const nextEvidencePolicyVersion =
+      existing.evidencePolicyVersion === COMMUNITY_EVIDENCE_POLICY_VERSION ||
+      ((existing.sourceTraceIds ?? []).length === 0 && evidenceCitationIds.length > 0) ||
+      (changeRequest.operation === "attach_evidence" && requestRecapturesAllExistingTraces)
+        ? COMMUNITY_EVIDENCE_POLICY_VERSION
+        : undefined;
     const nextOutcomeIds =
       changeRequest.operation === "attach_outcome"
         ? Array.from(new Set([...(existing.outcomeObservationIds ?? []), ...(changeRequest.outcomeObservationIds ?? [])]))
@@ -2906,12 +3076,26 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       requestedVisibility: payloadVisibility(payload.visibilityScope) ?? existing.visibilityScope,
       requestedSourceVisibility: payloadSourceVisibility(payload.sourceVisibility) ?? existing.sourceVisibility,
     });
+    await requireCommunityEvidenceCitationVisibilityCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      citationIds: effectiveEvidenceCitationIds,
+      outputVisibility: nodeVisibility.visibilityScope,
+    });
+    await requireCommunityEvidenceCitationVisibilityCore({
+      ctx: args.ctx,
+      communityId: changeRequest.communityId,
+      citationIds: effectiveEvidenceCitationIds,
+      outputVisibility: nodeVisibility.sourceVisibility,
+    });
     const patch: Record<string, unknown> = {
       updatedAt: nowMs,
       version: Number(existing.version ?? 1) + 1,
       lastUpdatedByActorType: actor.actorType,
       ...actorUserPatch(actor, "lastUpdatedByUserId", "lastUpdatedByAgentKey"),
       sourceTraceIds: nextSourceTraceIds,
+      evidenceCitationIds: nextEvidenceCitationIds,
+      ...(nextEvidencePolicyVersion ? { evidencePolicyVersion: nextEvidencePolicyVersion } : {}),
       outcomeObservationIds: nextOutcomeIds,
     };
     if (payload.title !== undefined) {
@@ -2971,7 +3155,11 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
       afterSnapshot: mapNodeRow(updated),
       sourceTraceIds: changeRequest.sourceTraceIds ?? [],
       policyDecisionId: normalizeIdValue(changeRequest._id),
-      reason: args.reason ?? "accepted_change_request_apply",
+      reason:
+        args.reason ??
+        (autonomousCompilerMemory
+          ? "autonomous_compiler_memory_apply"
+          : "accepted_change_request_apply"),
       nowMs,
     });
   }
@@ -3135,15 +3323,6 @@ export const getCommunityPolynetOverview = query({
       isManager,
       limit: nodeLimit,
     });
-    const formingNodeLimit = Math.min(
-      POLYNET_OVERVIEW_FORMING_NODE_LIMIT,
-      Math.max(3, Math.ceil(nodeLimit / 4)),
-    );
-    const { formingNodes, hasMoreFormingNodes } = await readPolynetOverviewFormingNodes({
-      ctx,
-      communityId: args.communityId,
-      limit: formingNodeLimit,
-    });
     const { edges, hasMoreEdges } = await readPolynetOverviewEdges({
       ctx,
       communityId: args.communityId,
@@ -3161,13 +3340,10 @@ export const getCommunityPolynetOverview = query({
     const recentRuns = recentRunRows.map(mapPolynetOverviewRun);
     const recentActionSummary = recentRunRows.reduce(
       (acc, row) => {
-        acc.proposed += normalizeIdList(row.candidateProposalIds).length;
-        acc.accepted += normalizeIdList(row.acceptedChangeRequestIds).length;
-        acc.rejected += normalizeIdList(row.rejectedChangeRequestIds).length;
         acc.applied += normalizeIdList(row.appliedChangeRequestIds).length;
         return acc;
       },
-      { proposed: 0, accepted: 0, rejected: 0, applied: 0 },
+      { applied: 0 },
     );
 
     return {
@@ -3201,15 +3377,12 @@ export const getCommunityPolynetOverview = query({
             type: "community",
           },
           ...nodes.map(mapPolynetOverviewNode),
-          ...formingNodes.map(mapPolynetOverviewFormingNode),
         ],
         edges: edges.map(mapPolynetOverviewEdge),
         node_limit: nodeLimit,
         edge_limit: POLYNET_OVERVIEW_EDGE_LIMIT,
         has_more_nodes: hasMoreNodes,
         has_more_edges: hasMoreEdges,
-        forming_node_limit: formingNodeLimit,
-        has_more_forming_nodes: hasMoreFormingNodes,
       },
       memory: summarizePolynetOverviewMemory(nodes, hasMoreNodes, hasMoreEdges),
     };
@@ -3269,7 +3442,7 @@ export const resolvePublicCommunityMemoryOverviewBySlug = query({
           last_run_at: null,
           last_run_status: null,
           last_wake_reason: null,
-          recent_actions_summary: { proposed: 0, accepted: 0, rejected: 0, applied: 0 },
+          recent_actions_summary: { applied: 0 },
           recent_runs: [],
         },
         graph: {

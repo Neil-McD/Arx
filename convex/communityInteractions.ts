@@ -51,6 +51,7 @@ import {
   scheduleEverybodyMentionBroadcast,
   textContainsEverybodyMentionToken,
 } from "./communityMentionBroadcasts";
+import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 
 type InteractionActorType = "human" | "personal_agent" | "community_agent" | "system";
 type InteractionRootKind = "discussion" | "announcement" | "question" | "resource_share" | "agent_signal";
@@ -1118,6 +1119,12 @@ export async function materializeLegacyChatRootInteractionPlan(ctx: any, plan: L
         nowMs: plan.nowMs,
       });
     }
+    await scheduleCommunityInteractionEvidenceSync({
+      ctx,
+      communityId: plan.communityId,
+      objectType: "root",
+      objectId: plan.root._id,
+    });
     return await mapRootBundle(ctx, plan.root, true);
   }
 
@@ -1162,6 +1169,12 @@ export async function materializeLegacyChatRootInteractionPlan(ctx: any, plan: L
 
   const root = (await ctx.db.get(rootId as any)) as InteractionRootRow | null;
   if (!root) throw new Error("legacy_chat_interaction_root_create_failed");
+  await scheduleCommunityInteractionEvidenceSync({
+    ctx,
+    communityId: plan.communityId,
+    objectType: "root",
+    objectId: rootId,
+  });
   return await mapRootBundle(ctx, root, false);
 }
 
@@ -1304,6 +1317,12 @@ export async function materializeLegacyChatReplyInteractionPlan(ctx: any, plan: 
         nowMs: plan.nowMs,
       });
     }
+    await scheduleCommunityInteractionEvidenceSync({
+      ctx,
+      communityId: plan.communityId,
+      objectType: "reply",
+      objectId: plan.reply._id,
+    });
     return await mapReplyBundle(ctx, plan.reply, true);
   }
 
@@ -1356,6 +1375,12 @@ export async function materializeLegacyChatReplyInteractionPlan(ctx: any, plan: 
 
   const reply = (await ctx.db.get(replyId as any)) as InteractionReplyRow | null;
   if (!reply) throw new Error("legacy_chat_interaction_reply_create_failed");
+  await scheduleCommunityInteractionEvidenceSync({
+    ctx,
+    communityId: plan.communityId,
+    objectType: "reply",
+    objectId: replyId,
+  });
   return await mapReplyBundle(ctx, reply, false);
 }
 
@@ -1729,6 +1754,12 @@ export const createCommunityInteractionComposerMessage = mutation({
         deduped = false;
       }
 
+      await scheduleCommunityInteractionEvidenceSync({
+        ctx,
+        communityId: args.communityId,
+        objectType: "root",
+        objectId: root._id,
+      });
       try {
         await recordCommunityOnboardingMilestone({
           ctx,
@@ -1833,6 +1864,12 @@ export const createCommunityInteractionComposerMessage = mutation({
       deduped = false;
     }
 
+    await scheduleCommunityInteractionEvidenceSync({
+      ctx,
+      communityId: root.communityId,
+      objectType: "reply",
+      objectId: reply._id,
+    });
     try {
       await recordCommunityOnboardingMilestone({
         ctx,
@@ -2331,6 +2368,248 @@ export const toggleCommunityInteractionReaction = mutation({
   },
 });
 
+async function editCommunityInteractionTargetCore(args: {
+  ctx: any;
+  targetType: "root" | "reply";
+  target: InteractionRootRow | InteractionReplyRow;
+  communityId: any;
+  text: string;
+  actorUserId: any;
+  nowMs: number;
+  syncLegacyMessage: boolean;
+  legacyMessageId?: any;
+  legacyAttachments?: unknown[];
+}): Promise<void> {
+  if (args.target.status !== "live") throw new Error("interaction_not_editable");
+  const blocks: NormalizedContentBlock[] = args.text
+    ? [{ blockType: "markdown_text", text: args.text }]
+    : [];
+  const existingBlocks =
+    args.targetType === "root"
+      ? await listContentBlocksForRoot(args.ctx, args.target._id)
+      : await listContentBlocksForReply(args.ctx, args.target._id);
+  if (textContainsEverybodyMentionToken(args.text)) {
+    if (args.targetType === "reply") {
+      throw new Error("interaction_mention_everybody_reply_not_allowed");
+    }
+    const previousText = existingBlocks
+      .filter((block) => block.blockType === "markdown_text")
+      .map((block) => block.text)
+      .join("\n\n");
+    if (!textContainsEverybodyMentionToken(previousText)) {
+      throw new Error("interaction_mention_everybody_edit_create_not_allowed");
+    }
+  }
+  for (const block of existingBlocks) await args.ctx.db.delete(block._id);
+  await insertContentBlocksForTarget({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    ...(args.targetType === "root" ? { rootId: args.target._id } : { replyId: args.target._id }),
+    visibilityScope: args.target.visibilityScope,
+    blocks,
+    nowMs: args.nowMs,
+  });
+  await args.ctx.db.patch(args.target._id, {
+    contentSummary: contentSummary(blocks),
+    editedAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  if (Array.isArray(args.legacyAttachments)) {
+    const parentField = args.targetType === "root" ? "rootId" : "replyId";
+    const parentIndex = args.targetType === "root" ? "by_root" : "by_reply";
+    const existingAttachments = await args.ctx.db
+      .query("communityInteractionAttachments" as any)
+      .withIndex(parentIndex, (q: any) => q.eq(parentField, args.target._id))
+      .take(33);
+    if (existingAttachments.length > 32) {
+      throw new Error("interaction_attachment_replace_limit_exceeded");
+    }
+    for (const attachment of existingAttachments) {
+      await args.ctx.db.delete(attachment._id as any);
+    }
+    const normalizedAttachments = normalizeInteractionAttachmentInputs(args.legacyAttachments);
+    await insertCanonicalInteractionAttachmentsForTarget({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      ...(args.targetType === "root" ? { rootId: args.target._id } : { replyId: args.target._id }),
+      attachments: normalizedAttachments,
+      actorUserId: args.actorUserId,
+      nowMs: args.nowMs,
+      contentHashPrefix: `legacy-chat-edit:${normalizeIdValue(args.legacyMessageId) || normalizeIdValue(args.target._id)}`,
+    });
+  }
+  await suppressPendingMentionsMissingFromInteractionText({
+    ctx: args.ctx,
+    targetType: args.targetType,
+    targetId: args.target._id,
+    text: args.text,
+    nowMs: args.nowMs,
+  });
+  if (args.syncLegacyMessage) {
+    const legacyLink =
+      args.targetType === "root"
+        ? await getLegacyChatLinkByRoot(args.ctx, args.target._id)
+        : await getLegacyChatLinkByReply(args.ctx, args.target._id);
+    if (legacyLink?.messageId) {
+      const message = await args.ctx.db.get(legacyLink.messageId as any);
+      if (message) {
+        await args.ctx.db.patch(legacyLink.messageId as any, {
+          contentJson: { text: args.text },
+          updatedAt: args.nowMs,
+        });
+      }
+    }
+  }
+  await args.ctx.db.insert("communityInteractionModerationEvents" as any, {
+    communityId: args.communityId,
+    targetType: args.targetType,
+    ...(args.targetType === "root" ? { rootId: args.target._id } : { replyId: args.target._id }),
+    eventType: "edit",
+    actorType: "human",
+    actorUserId: args.actorUserId,
+    createdAt: args.nowMs,
+  });
+  await scheduleCommunityInteractionEvidenceSync({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    objectType: args.targetType,
+    objectId: args.target._id,
+  });
+}
+
+export async function syncLegacyChatMessageEditToInteractionCore(args: {
+  ctx: any;
+  communityId: any;
+  messageId: any;
+  text: string;
+  attachments: unknown[];
+  actorUserId: any;
+  nowMs: number;
+}): Promise<{ synced: boolean }> {
+  const link = await getLegacyChatLinkByMessage(args.ctx, args.messageId);
+  if (!link) return { synced: false };
+  if (normalizeIdValue(link.communityId) !== normalizeIdValue(args.communityId)) {
+    throw new Error("legacy_chat_interaction_link_conflict");
+  }
+  const targetType = link.linkKind === "root" ? "root" : "reply";
+  const targetId = targetType === "root" ? link.rootId : link.replyId;
+  if (!targetId) throw new Error("legacy_chat_interaction_link_target_missing");
+  const { target, communityId } = await loadCommunityInteractionTarget({
+    ctx: args.ctx,
+    targetType,
+    targetId: normalizeIdValue(targetId),
+  });
+  if (normalizeIdValue(communityId) !== normalizeIdValue(args.communityId)) {
+    throw new Error("legacy_chat_interaction_link_target_invalid");
+  }
+  await editCommunityInteractionTargetCore({
+    ctx: args.ctx,
+    targetType,
+    target,
+    communityId,
+    text: args.text,
+    actorUserId: args.actorUserId,
+    nowMs: args.nowMs,
+    syncLegacyMessage: false,
+    legacyMessageId: args.messageId,
+    legacyAttachments: args.attachments,
+  });
+  return { synced: true };
+}
+
+async function tombstoneCommunityInteractionTargetCore(args: {
+  ctx: any;
+  targetType: "root" | "reply";
+  target: InteractionRootRow | InteractionReplyRow;
+  communityId: any;
+  actorUserId: any;
+  nowMs: number;
+}): Promise<void> {
+  if (args.target.status === "deleted") return;
+  const previousStatus = args.target.status;
+  await args.ctx.db.patch(args.target._id, {
+    status: "deleted",
+    deletedAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  await suppressPendingMentionsForDeletedInteractionTarget({
+    ctx: args.ctx,
+    targetType: args.targetType,
+    targetId: args.target._id,
+    nowMs: args.nowMs,
+  });
+  if (args.targetType === "reply") {
+    const replyTarget = args.target as InteractionReplyRow;
+    const root = (await args.ctx.db.get(replyTarget.rootId as any)) as InteractionRootRow | null;
+    if (root) {
+      const lastLive = (await args.ctx.db
+        .query("communityInteractionReplies" as any)
+        .withIndex("by_root_status_createdAt", (q: any) =>
+          q.eq("rootId", root._id).eq("status", "live"),
+        )
+        .order("desc")
+        .first()) as InteractionReplyRow | null;
+      const rootPatch: any = {
+        replyCount: Math.max(0, Math.floor(root.replyCount ?? 0) - 1),
+        updatedAt: args.nowMs,
+      };
+      if (lastLive) rootPatch.lastReplyAt = lastLive.createdAt;
+      await args.ctx.db.patch(root._id, rootPatch);
+    }
+  }
+  await args.ctx.db.insert("communityInteractionModerationEvents" as any, {
+    communityId: args.communityId,
+    targetType: args.targetType,
+    ...(args.targetType === "root" ? { rootId: args.target._id } : { replyId: args.target._id }),
+    eventType: "tombstone",
+    actorType: "human",
+    actorUserId: args.actorUserId,
+    previousStatus,
+    nextStatus: "deleted",
+    createdAt: args.nowMs,
+  });
+  await scheduleCommunityInteractionEvidenceSync({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    objectType: args.targetType,
+    objectId: args.target._id,
+  });
+}
+
+export async function syncLegacyChatMessageDeleteToInteractionCore(args: {
+  ctx: any;
+  communityId: any;
+  messageId: any;
+  actorUserId: any;
+  nowMs: number;
+}): Promise<{ synced: boolean }> {
+  const link = await getLegacyChatLinkByMessage(args.ctx, args.messageId);
+  if (!link) return { synced: false };
+  if (normalizeIdValue(link.communityId) !== normalizeIdValue(args.communityId)) {
+    throw new Error("legacy_chat_interaction_link_conflict");
+  }
+  const targetType = link.linkKind === "root" ? "root" : "reply";
+  const targetId = targetType === "root" ? link.rootId : link.replyId;
+  if (!targetId) throw new Error("legacy_chat_interaction_link_target_missing");
+  const { target, communityId } = await loadCommunityInteractionTarget({
+    ctx: args.ctx,
+    targetType,
+    targetId: normalizeIdValue(targetId),
+  });
+  if (normalizeIdValue(communityId) !== normalizeIdValue(args.communityId)) {
+    throw new Error("legacy_chat_interaction_link_target_invalid");
+  }
+  await tombstoneCommunityInteractionTargetCore({
+    ctx: args.ctx,
+    targetType,
+    target,
+    communityId,
+    actorUserId: args.actorUserId,
+    nowMs: args.nowMs,
+  });
+  return { synced: true };
+}
+
 export const editCommunityInteractionMessage = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -2359,61 +2638,15 @@ export const editCommunityInteractionMessage = mutation({
     }
     if (target.status !== "live") throw new Error("interaction_not_editable");
 
-    const nowMs = Date.now();
-    const blocks: NormalizedContentBlock[] = [{ blockType: "markdown_text", text }];
-    const existingBlocks =
-      args.targetType === "root"
-        ? await listContentBlocksForRoot(ctx, target._id)
-        : await listContentBlocksForReply(ctx, target._id);
-    if (textContainsEverybodyMentionToken(text)) {
-      if (args.targetType === "reply") {
-        throw new Error("interaction_mention_everybody_reply_not_allowed");
-      }
-      const previousText = existingBlocks
-        .filter((block) => block.blockType === "markdown_text")
-        .map((block) => block.text)
-        .join("\n\n");
-      if (!textContainsEverybodyMentionToken(previousText)) {
-        throw new Error("interaction_mention_everybody_edit_create_not_allowed");
-      }
-    }
-    for (const block of existingBlocks) await ctx.db.delete(block._id);
-    await insertContentBlocksForTarget({
-      ctx,
-      communityId,
-      ...(args.targetType === "root" ? { rootId: target._id } : { replyId: target._id }),
-      visibilityScope: target.visibilityScope,
-      blocks,
-      nowMs,
-    });
-    await ctx.db.patch(target._id, {
-      contentSummary: contentSummary(blocks),
-      editedAt: nowMs,
-      updatedAt: nowMs,
-    });
-    await suppressPendingMentionsMissingFromInteractionText({
+    await editCommunityInteractionTargetCore({
       ctx,
       targetType: args.targetType,
-      targetId: target._id,
+      target,
+      communityId,
       text,
-      nowMs,
-    });
-    const legacyLink =
-      args.targetType === "root"
-        ? await getLegacyChatLinkByRoot(ctx, target._id)
-        : await getLegacyChatLinkByReply(ctx, target._id);
-    if (legacyLink?.messageId) {
-      const message = await ctx.db.get(legacyLink.messageId as any);
-      if (message) await ctx.db.patch(legacyLink.messageId as any, { contentJson: { text }, updatedAt: nowMs });
-    }
-    await ctx.db.insert("communityInteractionModerationEvents" as any, {
-      communityId,
-      targetType: args.targetType,
-      ...(args.targetType === "root" ? { rootId: target._id } : { replyId: target._id }),
-      eventType: "edit",
-      actorType: "human",
       actorUserId: userId,
-      createdAt: nowMs,
+      nowMs: Date.now(),
+      syncLegacyMessage: true,
     });
     return { ok: true };
   },
@@ -2449,46 +2682,13 @@ export const deleteCommunityInteractionMessage = mutation({
       }
       if (!isModerator) throw new Error("interaction_delete_forbidden");
     }
-    if (target.status === "deleted") return { ok: true };
-
-    const nowMs = Date.now();
-    const previousStatus = target.status;
-    await ctx.db.patch(target._id, { status: "deleted", deletedAt: nowMs, updatedAt: nowMs });
-    await suppressPendingMentionsForDeletedInteractionTarget({
+    await tombstoneCommunityInteractionTargetCore({
       ctx,
       targetType: args.targetType,
-      targetId: target._id,
-      nowMs,
-    });
-    if (args.targetType === "reply") {
-      const replyTarget = target as InteractionReplyRow;
-      const root = (await ctx.db.get(replyTarget.rootId as any)) as InteractionRootRow | null;
-      if (root) {
-        const lastLive = (await ctx.db
-          .query("communityInteractionReplies" as any)
-          .withIndex("by_root_status_createdAt", (q: any) =>
-            q.eq("rootId", root._id).eq("status", "live"),
-          )
-          .order("desc")
-          .first()) as InteractionReplyRow | null;
-        const rootPatch: any = {
-          replyCount: Math.max(0, Math.floor(root.replyCount ?? 0) - 1),
-          updatedAt: nowMs,
-        };
-        if (lastLive) rootPatch.lastReplyAt = lastLive.createdAt;
-        await ctx.db.patch(root._id, rootPatch);
-      }
-    }
-    await ctx.db.insert("communityInteractionModerationEvents" as any, {
+      target,
       communityId,
-      targetType: args.targetType,
-      ...(args.targetType === "root" ? { rootId: target._id } : { replyId: target._id }),
-      eventType: "tombstone",
-      actorType: "human",
       actorUserId: userId,
-      previousStatus,
-      nextStatus: "deleted",
-      createdAt: nowMs,
+      nowMs: Date.now(),
     });
     return { ok: true };
   },

@@ -4,6 +4,11 @@ import type { ArchiveDocLike } from "./communityArchiveDocuments";
 import { normalizeOptionalText, truncateText } from "./communityArchiveDocuments";
 import { embedGeminiQuery, resolveGeminiEmbeddingConfig } from "./communityArchiveEmbeddingPipeline";
 import { ARCHIVE_VECTOR_LIMIT } from "./communityArchiveShared";
+import {
+  buildCommunityAiFeedEvidenceRef,
+  buildCommunityInteractionEvidenceRef,
+  buildCommunityResourceEvidenceRef,
+} from "../shared/communityEvidenceContract";
 
 async function resolveTrustedSearchUserId(args: {
   ctx: any;
@@ -28,9 +33,25 @@ async function resolveTrustedSearchUserId(args: {
 }
 
 function mapArchiveDocToItem(doc: ArchiveDocLike, score: number | null) {
+  const interactionMatch = doc.sourceType === "interaction"
+    ? /^(root|reply):([^\s:]+)$/.exec(doc.sourceId)
+    : null;
+  const sourceId = interactionMatch
+    ? buildCommunityInteractionEvidenceRef({
+        objectType: interactionMatch[1] as "root" | "reply",
+        objectId: interactionMatch[2],
+      })
+    : doc.sourceType === "resource"
+      ? buildCommunityResourceEvidenceRef(doc.sourceId)
+      : doc.sourceType === "ai_feed"
+        ? buildCommunityAiFeedEvidenceRef(doc.sourceId)
+        : doc.sourceId;
   return {
     source_type: doc.sourceType,
-    source_id: doc.sourceId,
+    source_id: sourceId,
+    ...(doc.sourceType === "interaction" || doc.sourceType === "resource" || doc.sourceType === "ai_feed"
+      ? { ref: sourceId }
+      : null),
     title: normalizeOptionalText(doc.title, 180),
     snippet: doc.snippet,
     created_at: toIsoString(doc.createdAt),
@@ -42,6 +63,11 @@ function mapArchiveDocToItem(doc: ArchiveDocLike, score: number | null) {
     ...(doc.resourceRole ? { resource_role: doc.resourceRole } : null),
     ...(doc.resourceStatus ? { resource_status: doc.resourceStatus } : null),
   };
+}
+
+function canonicalEvidenceItemKey(item: Record<string, any>): string {
+  const ref = String(item.ref ?? "").trim();
+  return ref || `${String(item.source_type ?? "")}:${String(item.source_id ?? "")}`;
 }
 
 export async function searchCommunityKnowledge(args: {
@@ -68,7 +94,7 @@ export async function searchCommunityKnowledge(args: {
   const config = resolveGeminiEmbeddingConfig();
   const diagnostics = {
     ...(recent as any).diagnostics,
-    retrieval_version: "recent_context_plus_archive_v1",
+    retrieval_version: "recent_context_plus_archive_v2",
     archive_fetch_ok: false,
     archive_items_used: 0,
     archive_documents_available: 0,
@@ -83,7 +109,7 @@ export async function searchCommunityKnowledge(args: {
     return {
       ...(recent as any),
       archive_context: [],
-      archive_source_counts: { chat: 0, ai_feed: 0, resource: 0 },
+      archive_source_counts: { interaction: 0, ai_feed: 0, resource: 0 },
       diagnostics,
     };
   }
@@ -119,7 +145,7 @@ export async function searchCommunityKnowledge(args: {
       return {
         ...(recent as any),
         archive_context: [],
-        archive_source_counts: { chat: 0, ai_feed: 0, resource: 0 },
+        archive_source_counts: { interaction: 0, ai_feed: 0, resource: 0 },
         diagnostics,
       };
     }
@@ -134,21 +160,68 @@ export async function searchCommunityKnowledge(args: {
 
     const seenRecent = new Set<string>(
       Array.isArray((recent as any).recent_context)
-        ? (recent as any).recent_context.map((item: any) => `${item.source_type}:${item.source_id}`)
+        ? (recent as any).recent_context.map((item: any) => canonicalEvidenceItemKey(item))
         : [],
     );
-    const archiveItems = docs
+    const orderedDocs = docs
+      .filter((doc) => doc.sourceType !== "chat")
       .slice()
       .sort(
         (a, b) =>
           Number(scoreById.get(normalizeIdValue(b._id)) ?? 0) -
             Number(scoreById.get(normalizeIdValue(a._id)) ?? 0) ||
           b.createdAt - a.createdAt,
-      )
-      .map((doc) => ({
-        key: `${doc.sourceType}:${doc.sourceId}`,
-        item: mapArchiveDocToItem(doc, Number(scoreById.get(normalizeIdValue(doc._id)) ?? 0)),
-      }))
+      );
+    const refsBySourceType = {
+      interaction: orderedDocs
+        .filter((doc) => doc.sourceType === "interaction")
+        .map((doc) => String(mapArchiveDocToItem(doc, null).ref ?? "")),
+      resource: orderedDocs
+        .filter((doc) => doc.sourceType === "resource")
+        .map((doc) => String(mapArchiveDocToItem(doc, null).ref ?? "")),
+      ai_feed: orderedDocs
+        .filter((doc) => doc.sourceType === "ai_feed")
+        .map((doc) => String(mapArchiveDocToItem(doc, null).ref ?? "")),
+    };
+    const [readableInteractionItems, readableResourceItems, readableAiFeedItems] = await Promise.all([
+      refsBySourceType.interaction.length > 0
+        ? args.ctx.runQuery(
+            (internal as any).communityInteractionEvidence.readCommunityInteractionEvidenceItemsInternal,
+            { userId, communityId: args.communityId, refs: refsBySourceType.interaction },
+          )
+        : [],
+      refsBySourceType.resource.length > 0
+        ? args.ctx.runQuery(
+            (internal as any).communityResourceEvidence.readCommunityResourceEvidenceItemsInternal,
+            { userId, communityId: args.communityId, refs: refsBySourceType.resource },
+          )
+        : [],
+      refsBySourceType.ai_feed.length > 0
+        ? args.ctx.runQuery(
+            (internal as any).communityAiFeedEvidence.readCommunityAiFeedEvidenceItemsInternal,
+            { userId, communityId: args.communityId, refs: refsBySourceType.ai_feed },
+          )
+        : [],
+    ]) as [Array<Record<string, any>>, Array<Record<string, any>>, Array<Record<string, any>>];
+    const readableByRef = new Map(
+      [...readableInteractionItems, ...readableResourceItems, ...readableAiFeedItems].map((item) => [
+        String(item.ref ?? ""),
+        item,
+      ]),
+    );
+    const archiveItems = orderedDocs
+      .map((doc) => {
+        const score = Number(scoreById.get(normalizeIdValue(doc._id)) ?? 0);
+        const basicItem = mapArchiveDocToItem(doc, score);
+        const item = readableByRef.get(String(basicItem.ref ?? ""));
+        if (!item) return null;
+        const itemWithScore: Record<string, any> = { ...item, score };
+        return {
+          key: canonicalEvidenceItemKey(item),
+          item: itemWithScore,
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
       .filter(({ key }) => !seenRecent.has(key));
 
     const archive_context = archiveItems.map((entry) => entry.item);
@@ -157,7 +230,7 @@ export async function searchCommunityKnowledge(args: {
       ...(recent as any),
       archive_context,
       archive_source_counts: {
-        chat: archive_context.filter((item) => item.source_type === "chat").length,
+        interaction: archive_context.filter((item) => item.source_type === "interaction").length,
         ai_feed: archive_context.filter((item) => item.source_type === "ai_feed").length,
         resource: archive_context.filter((item) => item.source_type === "resource").length,
       },
@@ -175,7 +248,7 @@ export async function searchCommunityKnowledge(args: {
   return {
     ...(recent as any),
     archive_context: [],
-    archive_source_counts: { chat: 0, ai_feed: 0, resource: 0 },
+    archive_source_counts: { interaction: 0, ai_feed: 0, resource: 0 },
     diagnostics,
   };
 }

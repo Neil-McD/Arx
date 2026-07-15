@@ -11,6 +11,10 @@ import {
   measureCommunityCompilerEvidenceForCommunity,
   type SourceTraceRow,
 } from "./communityCompilerEvidenceCore";
+import {
+  buildCommunityMemoryDigestVersionKey,
+  buildCommunityMemoryWorkKey,
+} from "./communityMemoryWorkKey";
 
 const COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS = 30;
 const COMMUNITY_COMPILER_DIGEST_WINDOW_MS = COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -19,7 +23,6 @@ const COMMUNITY_COMPILER_DIGEST_AGENT_KEY = "community_compiler_digest_v1";
 const MAX_ARCHIVE_ACTIVITY_FETCH = 600;
 const MAX_AI_FEED_FETCH = 100;
 const MAX_OUTCOME_FETCH = 100;
-const MAX_CHANGE_REQUEST_FETCH = 100;
 const MAX_DIGEST_ITEMS = 12;
 const MAX_SOURCE_IDS_PER_ITEM = 12;
 const MAX_SOURCE_TRACE_IDS_PER_ITEM = 500;
@@ -31,10 +34,10 @@ type DigestCategory =
   | "event_activity"
   | "member_state"
   | "outcome_signal"
-  | "source_trace_signal"
-  | "pending_directory_decision";
+  | "source_trace_signal";
 
 type DigestItem = {
+  workKey?: string;
   category: DigestCategory;
   title: string;
   summary: string;
@@ -47,7 +50,7 @@ type DigestItem = {
 
 type ArchiveActivityRow = {
   _id: any;
-  sourceType: "chat" | "ai_feed" | "resource";
+  sourceType: "chat" | "interaction" | "ai_feed" | "resource";
   sourceId: string;
   title?: string;
   snippet: string;
@@ -75,18 +78,16 @@ type OutcomeObservationRow = {
   observedAt: number;
 };
 
-type ChangeRequestRow = {
-  _id: any;
-  operation: string;
-  confidence: number;
-  privacyRisk: number;
-  createdAt: number;
-};
-
 type CompilerDigestRow = {
   _id: any;
   communityId: any;
   dedupeKey: string;
+  versionKey?: string;
+  agentHandoffState?: "pending" | "running" | "handled";
+  agentClaimId?: string;
+  agentClaimedAt?: number;
+  agentHandledAt?: number;
+  agentAttemptCount?: number;
   windowStartedAt: number;
   windowEndedAt: number;
   summary: string;
@@ -110,10 +111,6 @@ function clampScore(raw: unknown, fallback: number): number {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(0, Math.min(1, parsed));
-}
-
-function utcDayKey(timestampMs: number): string {
-  return new Date(timestampMs).toISOString().slice(0, 10);
 }
 
 function sourceIds(rows: Array<{ sourceId?: string; _id?: any }>): string[] {
@@ -140,44 +137,6 @@ function sourceTraceIds(rows: SourceTraceRow[]): any[] {
     if (out.length >= MAX_SOURCE_TRACE_IDS_PER_ITEM) break;
   }
   return out;
-}
-
-function uniqueDigestTraceIds(...groups: any[][]): any[] {
-  const out: any[] = [];
-  const seen = new Set<string>();
-  for (const group of groups) {
-    for (const traceId of group) {
-      const id = normalizeIdValue(traceId);
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      out.push(traceId);
-      if (out.length >= MAX_SOURCE_TRACE_IDS_PER_ITEM) return out;
-    }
-  }
-  return out;
-}
-
-function existingSourceTraceItem(row: CompilerDigestRow | null): DigestItem | null {
-  return row?.items.find((item) => item.category === "source_trace_signal") ?? null;
-}
-
-function mergeSourceTraceDigestItem(args: {
-  existing: DigestItem | null;
-  next: DigestItem | null;
-}): DigestItem | null {
-  if (!args.existing) return args.next;
-  if (!args.next) return args.existing;
-  const sourceTraceIds = uniqueDigestTraceIds(args.next.sourceTraceIds, args.existing.sourceTraceIds);
-  return makeItem({
-    category: "source_trace_signal",
-    title: `${sourceTraceIds.length} selected pending source traces compiled`,
-    summary: `${args.next.summary} This item preserves same-day source-trace evidence already represented by the digest.`,
-    priority: Math.max(args.existing.priority, args.next.priority),
-    confidence: Math.max(args.existing.confidence, args.next.confidence),
-    sourceTypes: Array.from(new Set([...args.existing.sourceTypes, ...args.next.sourceTypes])).slice(0, 12),
-    sourceIds: Array.from(new Set([...args.existing.sourceIds, ...args.next.sourceIds])).slice(0, MAX_SOURCE_IDS_PER_ITEM),
-    sourceTraceIds,
-  });
 }
 
 async function markSelectedSourceTracesCompiled(args: {
@@ -229,11 +188,27 @@ function makeItem(args: {
   };
 }
 
+function digestItemContentRevision(item: DigestItem & { workKey: string }): string {
+  return JSON.stringify({
+    workKey: item.workKey,
+    title: item.title,
+    summary: item.summary,
+    priority: item.priority,
+    confidence: item.confidence,
+    sourceTypes: [...item.sourceTypes].sort(),
+    sourceIds: [...item.sourceIds].sort(),
+    sourceTraceIds: item.sourceTraceIds.map(normalizeIdValue).sort(),
+  });
+}
+
 function mapDigestRow(row: CompilerDigestRow) {
   return {
     id: normalizeIdValue(row._id),
     community_id: normalizeIdValue(row.communityId),
     dedupe_key: row.dedupeKey,
+    version_key: row.versionKey ?? null,
+    agent_handoff_state: row.agentHandoffState ?? null,
+    agent_attempt_count: Number(row.agentAttemptCount ?? 0),
     window_started_at: toIsoString(row.windowStartedAt),
     window_ended_at: toIsoString(row.windowEndedAt),
     summary: row.summary,
@@ -273,31 +248,28 @@ export const runCommunityCompilerDigestPass = mutation({
 export const runCommunityCompilerDigestPassInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
+    requireTrigger: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    return await runCommunityCompilerDigestPassCore(ctx, { communityId: args.communityId });
+    return await runCommunityCompilerDigestPassCore(ctx, {
+      communityId: args.communityId,
+      requireTrigger: args.requireTrigger,
+    });
   },
 });
 
 async function runCommunityCompilerDigestPassCore(
   ctx: any,
-  args: { communityId: any; triggeredByUserId?: any },
+  args: { communityId: any; triggeredByUserId?: any; requireTrigger?: boolean },
 ) {
     const userId = args.triggeredByUserId ?? undefined;
     const nowMs = Date.now();
     const windowStartedAtMs = nowMs - COMMUNITY_COMPILER_DIGEST_WINDOW_MS;
-    const dedupeKey = `community_compiler_digest:v1:${normalizeIdValue(args.communityId)}:${utcDayKey(nowMs)}`;
     await drainSelfAuthoredPendingSourceTracesForCommunity({
       ctx,
       communityId: args.communityId,
       nowMs,
     });
-    const existingDigestPromise = ctx.db
-      .query("communityCompilerDigests" as any)
-      .withIndex("by_community_dedupeKey", (q: any) =>
-        q.eq("communityId", args.communityId).eq("dedupeKey", dedupeKey),
-      )
-      .first() as Promise<CompilerDigestRow | null>;
     const compilerEvidencePromise = measureCommunityCompilerEvidenceForCommunity({
       ctx,
       communityId: args.communityId,
@@ -305,14 +277,11 @@ async function runCommunityCompilerDigestPassCore(
     });
 
     const [
-      existing,
       compilerEvidence,
       archiveRows,
       aiFeedRowsRaw,
       outcomeRows,
-      pendingChangeRequests,
     ] = await Promise.all([
-      existingDigestPromise,
       compilerEvidencePromise,
       ctx.db
         .query("communityArchiveDocuments" as any)
@@ -335,21 +304,37 @@ async function runCommunityCompilerDigestPassCore(
         )
         .order("desc")
         .take(MAX_OUTCOME_FETCH) as Promise<OutcomeObservationRow[]>,
-      ctx.db
-        .query("communityIntelligenceChangeRequests" as any)
-        .withIndex("by_community_status", (q: any) =>
-          q.eq("communityId", args.communityId).eq("status", "pending_decision"),
-        )
-        .take(MAX_CHANGE_REQUEST_FETCH) as Promise<ChangeRequestRow[]>,
     ]);
+    if (args.requireTrigger && !compilerEvidence.measurement.should_run) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: compilerEvidence.measurement.reason,
+        community_id: normalizeIdValue(args.communityId),
+      };
+    }
 
     const selectedSourceTraceRows = compilerEvidence.selectedRows;
-    const chatRows = archiveRows.filter((row) => row.sourceType === "chat");
+    const chatRows = archiveRows.filter((row) => row.sourceType === "interaction");
     const resourceRows = archiveRows.filter((row) => row.sourceType === "resource");
     const archiveAiFeedRows = archiveRows.filter((row) => row.sourceType === "ai_feed");
     const aiFeedRows = aiFeedRowsRaw
       .slice()
       .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0) || b.createdAt - a.createdAt);
+    const aiFeedIds = new Set(aiFeedRows.map((row) => normalizeIdValue(row._id)));
+    // AI Feed publication already has a dedicated canonical signal
+    // projection. Its source trace is the governance/promotion record, not a
+    // second independent learning signal.
+    const selectedAiFeedSourceTraceRows = selectedSourceTraceRows.filter(
+      (row) =>
+        row.sourceType === "ai_feed" &&
+        aiFeedIds.has(String(row.sourceId ?? "").trim()),
+    );
+    const selectedDistinctSourceTraceRows = selectedSourceTraceRows.filter(
+      (row) =>
+        row.sourceType !== "ai_feed" ||
+        !aiFeedIds.has(String(row.sourceId ?? "").trim()),
+    );
     const postingMemberKeys = new Set(
       chatRows
         .map((row) => String(row.authorLabel ?? "").trim())
@@ -398,51 +383,61 @@ async function runCommunityCompilerDigestPassCore(
       items.push(makeItem({
         category: "outcome_signal",
         title: `${outcomeRows.length} outcome observations recorded`,
-        summary: `Outcome observations by status: worked ${outcomesByStatus.worked ?? 0}, failed ${outcomesByStatus.failed ?? 0}, mixed ${outcomesByStatus.mixed ?? 0}, unknown ${outcomesByStatus.unknown ?? 0}. Outcomes can later support or contest directory intelligence through the airlock.`,
+        summary: `Outcome observations by status: worked ${outcomesByStatus.worked ?? 0}, failed ${outcomesByStatus.failed ?? 0}, mixed ${outcomesByStatus.mixed ?? 0}, unknown ${outcomesByStatus.unknown ?? 0}. Outcomes can later support or contest directory intelligence through typed memory writes.`,
         priority: Math.min(1, 0.55 + outcomeRows.length / 40),
         confidence: 0.8,
         sourceTypes: ["outcome"],
         sourceIds: outcomeRows.slice(0, MAX_SOURCE_IDS_PER_ITEM).map((row) => normalizeIdValue(row._id)),
       }));
     }
-    const nextSourceTraceItem = selectedSourceTraceRows.length > 0
+    const sourceTraceItem = selectedDistinctSourceTraceRows.length > 0
       ? makeItem({
         category: "source_trace_signal",
-        title: `${selectedSourceTraceRows.length} selected pending source traces compiled`,
-        summary: `${selectedSourceTraceRows.length} selected pending source traces were represented in this digest and can now be marked compiled. ${compilerEvidence.measurement.pending_total} eligible source traces were pending when measured.`,
-        priority: Math.min(1, 0.45 + selectedSourceTraceRows.length / 80),
+        title: `${selectedDistinctSourceTraceRows.length} selected pending source traces compiled`,
+        summary: `${selectedDistinctSourceTraceRows.length} distinct pending source traces were represented in this digest and can now be marked compiled. ${selectedAiFeedSourceTraceRows.length} AI Feed promotion traces were deduplicated against their canonical AI Feed signal. ${compilerEvidence.measurement.pending_total} eligible source traces were pending when measured.`,
+        priority: Math.min(1, 0.45 + selectedDistinctSourceTraceRows.length / 80),
         confidence: 0.8,
-        sourceTypes: Array.from(new Set(selectedSourceTraceRows.map((row) => row.sourceType))).slice(0, 12),
-        sourceIds: selectedSourceTraceRows.map((row) => String(row.sourceId ?? normalizeIdValue(row._id))).filter(Boolean).slice(0, MAX_SOURCE_IDS_PER_ITEM),
-        sourceTraceIds: sourceTraceIds(selectedSourceTraceRows),
+        sourceTypes: Array.from(new Set(selectedDistinctSourceTraceRows.map((row) => row.sourceType))).slice(0, 12),
+        sourceIds: selectedDistinctSourceTraceRows.map((row) => String(row.sourceId ?? normalizeIdValue(row._id))).filter(Boolean).slice(0, MAX_SOURCE_IDS_PER_ITEM),
+        sourceTraceIds: sourceTraceIds(selectedDistinctSourceTraceRows),
       })
       : null;
-    const sourceTraceItem = mergeSourceTraceDigestItem({
-      existing: existingSourceTraceItem(existing),
-      next: nextSourceTraceItem,
-    });
-    const representedSourceTraceIds = new Set((sourceTraceItem?.sourceTraceIds ?? []).map(normalizeIdValue));
-    const representedSelectedSourceTraceRows = selectedSourceTraceRows.filter((row) =>
-      representedSourceTraceIds.has(normalizeIdValue(row._id)),
-    );
     if (sourceTraceItem) {
       items.push(sourceTraceItem);
     }
-    if (pendingChangeRequests.length > 0) {
-      items.push(makeItem({
-        category: "pending_directory_decision",
-        title: `${pendingChangeRequests.length} pending directory decisions`,
-        summary: "These are already inside the policy airlock. They still need an accepted decision before any canonical directory mutation can happen.",
-        priority: Math.min(1, 0.65 + pendingChangeRequests.length / 25),
-        confidence: 0.85,
-        sourceTypes: ["change_request"],
-        sourceIds: pendingChangeRequests.slice(0, MAX_SOURCE_IDS_PER_ITEM).map((row) => normalizeIdValue(row._id)),
-      }));
-    }
-
-    const sortedItems = items
+    const sortedItemCandidates = items
       .sort((a, b) => b.priority - a.priority || b.confidence - a.confidence)
       .slice(0, MAX_DIGEST_ITEMS);
+    const keyedItems = await Promise.all(
+      sortedItemCandidates.map(async (item) => ({
+        ...item,
+        workKey: await buildCommunityMemoryWorkKey({
+          communityId: args.communityId,
+          category: item.category,
+          sourceTypes: item.sourceTypes,
+          sourceIds: item.sourceIds,
+          sourceTraceIds: item.sourceTraceIds,
+        }),
+      })),
+    );
+    const seenWorkKeys = new Set<string>();
+    const sortedItems = keyedItems.filter((item) => {
+      if (seenWorkKeys.has(item.workKey)) return false;
+      seenWorkKeys.add(item.workKey);
+      return true;
+    });
+    const representedSourceTraceIds = new Set(
+      sortedItems.flatMap((item) => item.sourceTraceIds).map(normalizeIdValue),
+    );
+    const representedAiFeedSourceIds = new Set(
+      sortedItems
+        .filter((item) => item.category === "ai_feed_signal")
+        .flatMap((item) => item.sourceIds),
+    );
+    const representedSelectedSourceTraceRows = selectedSourceTraceRows.filter((row) =>
+      representedSourceTraceIds.has(normalizeIdValue(row._id)) ||
+      (row.sourceType === "ai_feed" && representedAiFeedSourceIds.has(String(row.sourceId ?? "").trim())),
+    );
     const signalCounts = {
       chat: chatRows.length,
       aiFeed: Math.max(aiFeedRows.length, archiveAiFeedRows.length),
@@ -450,7 +445,6 @@ async function runCommunityCompilerDigestPassCore(
       events: 0,
       sourceTraces: sourceTraceItem?.sourceTraceIds.length ?? 0,
       outcomes: outcomeRows.length,
-      pendingChangeRequests: pendingChangeRequests.length,
       newMembers: 0,
       activeMembers: 0,
       postingMembers: postingMemberKeys.size,
@@ -461,15 +455,27 @@ async function runCommunityCompilerDigestPassCore(
         `Compiler window covered ${COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS} days.`,
         `${chatRows.length} chat, ${signalCounts.aiFeed} AI feed, and ${resourceRows.length} resource learning signals were considered.`,
         "Events, member joins, presence, reactions, and generic activity are excluded from learning digests unless they produce transcripts, feedback, outcomes, decisions, artifacts, or source traces.",
-        `${selectedSourceTraceRows.length} selected pending source traces, ${outcomeRows.length} outcomes, and ${pendingChangeRequests.length} pending directory decisions are in the working set.`,
-        `${sourceTraceItem?.sourceTraceIds.length ?? 0} source traces are represented by the digest after same-day merging.`,
+        `${selectedSourceTraceRows.length} selected pending source traces and ${outcomeRows.length} outcomes are in the working set.`,
+        `${representedSelectedSourceTraceRows.length} selected source traces are represented by this immutable digest version.`,
         "This digest is non-canonical compiler output.",
       ].join(" "),
       1_200,
     );
+    const versionKey = await buildCommunityMemoryDigestVersionKey({
+      communityId: args.communityId,
+      workKeys: sortedItems.map((item) => item.workKey),
+      contentRevisions: [
+        ...sortedItems.map(digestItemContentRevision),
+        ...representedSelectedSourceTraceRows.map((row) =>
+          `trace:${normalizeIdValue(row._id)}:${Number(row.updatedAt ?? row.createdAt)}`,
+        ),
+      ],
+    });
+    const dedupeKey = `community_compiler_digest:v2:${versionKey}`;
     const payload = {
       communityId: args.communityId,
       dedupeKey,
+      versionKey,
       windowStartedAt: windowStartedAtMs,
       windowEndedAt: nowMs,
       summary,
@@ -479,19 +485,22 @@ async function runCommunityCompilerDigestPassCore(
       updatedAt: nowMs,
     };
 
-    let digestId: any;
-    if (existing) {
-      digestId = existing._id;
-      await ctx.db.patch(existing._id as any, payload);
-    } else {
-      digestId = await ctx.db.insert("communityCompilerDigests" as any, {
-        ...payload,
-        createdByActorType: "compiler" as const,
-        createdByUserId: userId,
-        createdByAgentKey: COMMUNITY_COMPILER_DIGEST_AGENT_KEY,
-        createdAt: nowMs,
-      });
-    }
+    const existing = (await ctx.db
+      .query("communityCompilerDigests" as any)
+      .withIndex("by_community_versionKey", (q: any) =>
+        q.eq("communityId", args.communityId).eq("versionKey", versionKey),
+      )
+      .first()) as CompilerDigestRow | null;
+    const digestId = existing?._id ?? await ctx.db.insert("communityCompilerDigests" as any, {
+      ...payload,
+      agentHandoffState: sortedItems.length > 0 ? "pending" as const : "handled" as const,
+      agentAttemptCount: 0,
+      ...(sortedItems.length > 0 ? {} : { agentHandledAt: nowMs }),
+      createdByActorType: "compiler" as const,
+      createdByUserId: userId,
+      createdByAgentKey: COMMUNITY_COMPILER_DIGEST_AGENT_KEY,
+      createdAt: nowMs,
+    });
     const row = (await ctx.db.get(digestId)) as CompilerDigestRow | null;
     if (!row) throw new Error("community_compiler_digest_write_failed");
     if (representedSelectedSourceTraceRows.length > 0) {

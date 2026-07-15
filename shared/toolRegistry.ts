@@ -153,6 +153,70 @@ const COMMUNITY_SEARCH_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const COMMUNITY_CHAT_SEARCH_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["query"],
+  properties: {
+    query: {
+      type: "string",
+      minLength: 1,
+      maxLength: 240,
+    },
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 20,
+    },
+  },
+};
+
+const COMMUNITY_CHAT_READ_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["ref"],
+  properties: {
+    ref: {
+      type: "string",
+      minLength: 1,
+      maxLength: 512,
+      description: "A stable interaction:root:<id> or interaction:reply:<id> evidence ref returned by community_chat_search.",
+    },
+  },
+};
+
+const COMMUNITY_AI_FEED_SEARCH_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["query"],
+  properties: {
+    query: {
+      type: "string",
+      minLength: 1,
+      maxLength: 240,
+    },
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 20,
+    },
+  },
+};
+
+const COMMUNITY_AI_FEED_READ_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["ref"],
+  properties: {
+    ref: {
+      type: "string",
+      minLength: 1,
+      maxLength: 512,
+      description: "A stable ai_feed:<id> evidence ref returned by community_ai_feed_search.",
+    },
+  },
+};
+
 const MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -222,7 +286,7 @@ const COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA: JsonSchema = {
     limit: {
       type: "integer",
       minimum: 1,
-      maximum: 100,
+      maximum: 20,
     },
   },
 };
@@ -937,17 +1001,17 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   community_resources_map: {
     name: "community_resources_map",
-    description: "Map the active community's Resources wiki structure in one call. Members see live categories/pages; managers also see draft/source/health state.",
+    description: "Map the active community's member-visible Resources wiki structure in one call. Use the explicit manager-only builder tools for draft, source-inbox, or health state.",
     inputSchema: COMMUNITY_RESOURCES_MAP_TOOL_SCHEMA,
   },
   community_resources_read: {
     name: "community_resources_read",
-    description: "Batch-read active community Resources by resource id, resources:// URI, or readable path under a bounded character budget. Members see live resources; managers can read builder-visible resources.",
+    description: "Batch-read member-visible active community Resources by stable resource ref, resource id, resources:// URI, or readable path under a bounded character budget.",
     inputSchema: COMMUNITY_RESOURCES_READ_TOOL_SCHEMA,
   },
   community_resource_read: {
     name: "community_resource_read",
-    description: "Read one member-visible resource from a live wiki category by resource id, resources:// directory URI, or readable resource path.",
+    description: "Read one member-visible resource from a live wiki category by stable resource ref, resource id, resources:// directory URI, or readable resource path.",
     inputSchema: COMMUNITY_RESOURCE_READ_TOOL_SCHEMA,
   },
   community_resources_search: {
@@ -979,6 +1043,26 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     name: "community_search",
     description: "Search the active community's recent context and archived memory for relevant chat, AI feed, resource, and PDF-linked knowledge.",
     inputSchema: COMMUNITY_SEARCH_TOOL_SCHEMA,
+  },
+  community_chat_search: {
+    name: "community_chat_search",
+    description: "Search authorized canonical chat interactions in the active community and return stable evidence refs. This reads raw evidence, not community-endorsed memory.",
+    inputSchema: COMMUNITY_CHAT_SEARCH_TOOL_SCHEMA,
+  },
+  community_chat_read: {
+    name: "community_chat_read",
+    description: "Read one authorized canonical community chat interaction by a stable evidence ref returned from community_chat_search.",
+    inputSchema: COMMUNITY_CHAT_READ_TOOL_SCHEMA,
+  },
+  community_ai_feed_search: {
+    name: "community_ai_feed_search",
+    description: "Search authorized canonical live AI Feed posts in the active community and return stable evidence refs. Retrieval relevance and community reaction signal are reported separately.",
+    inputSchema: COMMUNITY_AI_FEED_SEARCH_TOOL_SCHEMA,
+  },
+  community_ai_feed_read: {
+    name: "community_ai_feed_read",
+    description: "Read one authorized canonical live AI Feed post by a stable evidence ref returned from community_ai_feed_search.",
+    inputSchema: COMMUNITY_AI_FEED_READ_TOOL_SCHEMA,
   },
   community_write: {
     name: "community_write",
@@ -1563,6 +1647,38 @@ export function normalizeToolArguments(
     if (!query) throw new Error("community_search requires query.");
     return { query: query.slice(0, 240) };
   }
+  if (toolName === "community_chat_search") {
+    const query = normalizeString(args.query);
+    if (!query) throw new Error("community_chat_search requires query.");
+    const limit = normalizeBoundedInteger(args.limit, "community_chat_search limit", 1, 20);
+    return {
+      query: query.slice(0, 240),
+      ...(limit ? { limit } : null),
+    };
+  }
+  if (toolName === "community_chat_read") {
+    const ref = normalizeString(args.ref);
+    if (!ref || !/^interaction:(root|reply):[^\s:]+$/.test(ref)) {
+      throw new Error("community_chat_read requires a valid interaction evidence ref.");
+    }
+    return { ref: ref.slice(0, 512) };
+  }
+  if (toolName === "community_ai_feed_search") {
+    const query = normalizeString(args.query);
+    if (!query) throw new Error("community_ai_feed_search requires query.");
+    const limit = normalizeBoundedInteger(args.limit, "community_ai_feed_search limit", 1, 20);
+    return {
+      query: query.slice(0, 240),
+      ...(limit ? { limit } : null),
+    };
+  }
+  if (toolName === "community_ai_feed_read") {
+    const ref = normalizeString(args.ref);
+    if (!ref || !/^ai_feed:[^\s:]+$/.test(ref)) {
+      throw new Error("community_ai_feed_read requires a valid AI Feed evidence ref.");
+    }
+    return { ref: ref.slice(0, 512) };
+  }
   if (toolName === "member_conversations_list") {
     const limit = normalizeBoundedInteger(args.limit, "member_conversations_list limit", 1, 12);
     return limit ? { limit } : {};
@@ -1647,7 +1763,7 @@ export function normalizeToolArguments(
   if (toolName === "community_resources_search") {
     const query = normalizeString(args.query);
     if (!query) throw new Error("community_resources_search requires query.");
-    const limit = normalizeBoundedInteger(args.limit, "community_resources_search limit", 1, 100);
+    const limit = normalizeBoundedInteger(args.limit, "community_resources_search limit", 1, 20);
     return {
       query: query.slice(0, 240),
       ...(limit ? { limit } : null),

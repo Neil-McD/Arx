@@ -67,8 +67,8 @@ assert.match(
 );
 assert.match(
   aiFeed,
-  /hideFeedPost[\s\S]*upsertHiddenSourceTraceForAiFeedPost[\s\S]*actorAgentKey: "ai_feed_prune"/,
-  "pruned AI feed posts should update source traces as system-retained evidence",
+  /upsertHiddenSourceTraceForAiFeedPost[\s\S]*Redaction changes readability, not source authorship[\s\S]*actorUserId: args\.post\.authorUserId[\s\S]*actorAgentKey: args\.post\.agentKey[\s\S]*hideFeedPost[\s\S]*upsertHiddenSourceTraceForAiFeedPost/,
+  "hidden or pruned AI feed posts should narrow visibility without replacing source attribution",
 );
 assert.match(
   aiFeed,
@@ -99,7 +99,6 @@ for (const tableName of [
   "communitySourceTraces",
   "communityAiFeedPosts",
   "communityOutcomeObservations",
-  "communityIntelligenceChangeRequests",
 ]) {
   assert.match(
     compilerInputs,
@@ -107,6 +106,11 @@ for (const tableName of [
     `compiler input read model should read ${tableName}`,
   );
 }
+assert.doesNotMatch(
+  compilerInputs,
+  /communityIntelligenceChangeRequests|pending_change_requests|pendingChangeRequests/,
+  "compiler inputs should not restore the deleted approval-plane backlog",
+);
 assert.match(
   compilerInputs,
   /query\("communityAiFeedPosts"[\s\S]*withIndex\("by_community_status_score_createdAt"[\s\S]*\.take\(aiFeedFetchLimit\)/,

@@ -214,6 +214,10 @@ const COMMUNITY_RESOURCE_TOOL_NAMES = new Set<RetrievalToolName>([
 
 const COMMUNITY_ACTIVITY_TOOL_NAMES = new Set<RetrievalToolName>([
   "community_search",
+  "community_chat_search",
+  "community_chat_read",
+  "community_ai_feed_search",
+  "community_ai_feed_read",
 ]);
 
 const COMMUNITY_WRITE_TOOL_NAMES = new Set<RetrievalToolName>([

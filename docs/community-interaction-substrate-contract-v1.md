@@ -178,7 +178,12 @@ Optional bridge from interaction to community cognition.
 Rules:
 
 - Creating an interaction does not automatically create community truth.
-- High-signal or promoted interactions may create permissioned `communitySourceTraces`.
+- Community/public interactions may enter a permissioned retrieval archive without
+  becoming compiler input.
+- Only explicitly promoted or deterministically high-signal interactions create
+  permissioned `communitySourceTraces`.
+- Archive synchronization and source-trace promotion are separate idempotent
+  operations. Backfill synchronizes the archive but never promotes evidence.
 - Source traces must preserve actor, visibility, evidence, and provenance.
 - Directory truth is still created only through compiler and policy gates.
 
@@ -371,7 +376,7 @@ The compatibility adapter keeps the legacy chat mutation alive while dual-writin
 - adapter write/materialization failures are not swallowed after writes begin; Convex must abort the transaction instead of committing partial canonical rows
 - adapter writes do not call the public interaction mutations
 - adapter writes do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously
-- adapter writes do not promote source traces, write archive truth, or call the compiler
+- adapter writes do not promote source traces, write archive truth, or call the compiler synchronously; they schedule the same idempotent derived-evidence sync as canonical writes
 - the legacy adapter shadow-writes bounded canonical `communityInteractionAttachments` rows from legacy message payloads
 - attachment-only legacy messages become bounded markdown summaries so projection does not silently drop them
 - legacy chat response shape is unchanged
@@ -396,4 +401,38 @@ Rules:
 - running the batch repeatedly must not duplicate roots or replies
 - backfill write/materialization failures are not caught after writes begin
 - backfill does not migrate reactions, edits, deletes, or moderation state
-- backfill does not promote source traces, write archive truth, call the compiler, schedule jobs, or change UI behavior
+- backfill does not promote source traces, write archive truth, or call the compiler synchronously; materialized interactions schedule idempotent derived-evidence sync and do not change UI behavior
+
+## Canonical Interaction Evidence Spine
+
+Canonical roots and replies are the only chat evidence identity used by memory retrieval and agents.
+
+Published Resources use a parallel evidence boundary:
+
+- `resource:<communityResourceId>` is the stable evidence reference; directory paths and `resources://` URIs are moveable location projections
+- generic personal-agent, Concierge, and external-MCP tools expose only page rows in live modules, even when the caller is a community owner
+- draft modules, source-inbox rows, ingestion state, and source linkage remain behind explicit builder tools
+- resource search combines a bounded recent-source scan with the permissioned resource archive, then revalidates canonical visibility before returning every result
+- retrieval logs record actor, surface, capability, and returned refs, but never copy the raw query
+- published resources are community-authoritative and may name an accountable recorder, but do not infer human contribution credit
+- archive synchronization does not create compiler source traces; searchability is not promotion
+Attribution, episode, and profile-discoverability semantics are defined by
+`docs/community-lineage-ontology-contract-v0.md`.
+
+Rules:
+
+- stable refs are `interaction:root:<id>` and `interaction:reply:<id>`
+- recent chat retrieval reads `communityInteractionRoots` and `communityInteractionReplies`, never `communityChatMessages`
+- `community_chat_search` returns bounded, authorized evidence summaries and stable refs
+- `community_chat_read` reads one stable ref and rechecks community access, status, visibility, and root readability
+- search/read return a deterministic lineage envelope containing actor, authority, credit, origin, root episode, reply target, and `source_only` profile projection
+- current direct-human evidence credits the human; current community-agent evidence credits the agent; personal-agent evidence never infers human credit from user authority
+- the interaction root is the conversation episode; replies point to their targeted reply when present and otherwise to the root
+- personal-agent dock and community Concierge calls stay bound to the active community; external MCP calls select a community by slug and the server validates access
+- every search/read appends a `communityEvidenceRetrievalLogs` row with actor, surface, capability, and returned refs
+- live `community` or `public` interactions asynchronously upsert `sourceType: interaction` archive documents; this never creates a source trace by itself
+- only the explicit promotion mutation may create or reactivate an interaction source trace and source-trace link
+- private, admin-only, hidden, deleted, missing, or parent-hidden evidence is excluded or redacted and fails closed at read time even if a derived index is stale
+- interaction writes do not wait for embedding or compiler work; idempotent derived synchronization is scheduled after canonical mutation success
+- archive backfill reads canonical interactions and deletes obsolete legacy `chat` archive documents
+- legacy chat tables and links remain migration substrate for unrelated compatibility consumers, but they are no longer memory/archive search authority

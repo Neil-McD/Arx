@@ -56,6 +56,11 @@ async function deleteRowsByIndex(ctx: any, tableName: string, indexName: string,
   return rows.length;
 }
 
+async function deleteStorageObjectIfPresent(ctx: any, storageId: any): Promise<void> {
+  const metadata = await ctx.db.system.get("_storage", storageId);
+  if (metadata) await ctx.storage.delete(storageId);
+}
+
 async function listRowsByPartnerStatus(ctx: any, tableName: string, partnerId: any, statuses: string[]) {
   const groups = await Promise.all(
     statuses.map((status) =>
@@ -530,6 +535,27 @@ export const deleteOwnAccount = mutation({
       await ctx.db.delete(row._id);
     }
     await record("runtimeRuns", runtimeRuns.length);
+
+    const cloudThreadAttachments = await ctx.db
+      .query("cloudThreadAttachments")
+      .withIndex("by_owner_createdAt", (q: any) => q.eq("ownerId", userId))
+      .collect();
+    for (const row of cloudThreadAttachments) {
+      await deleteStorageObjectIfPresent(ctx, row.storageId);
+      await ctx.db.delete(row._id);
+    }
+    await record("cloudThreadAttachments", cloudThreadAttachments.length);
+
+    await record(
+      "cloudThreadAttachmentUploadTickets",
+      await deleteRowsByIndex(
+        ctx,
+        "cloudThreadAttachmentUploadTickets",
+        "by_owner_createdAt",
+        "ownerId",
+        userId,
+      ),
+    );
 
     const cloudMessages = await ctx.db
       .query("cloudMessages")

@@ -1,6 +1,6 @@
 import { ArrowLeft, Ban, Bell, BellOff, MessageCircle, MoreHorizontal, Paperclip, RotateCcw } from "lucide-react";
 import type { ChangeEvent, ComponentProps, DragEvent, FormEvent, MutableRefObject, ReactNode } from "react";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   DirectMessage,
   DirectMessageAttachment,
@@ -349,6 +349,7 @@ function formatDirectTypingLabel(
 
 export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  const composerFloatRef = useRef<HTMLDivElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragDepthRef = useRef(0);
@@ -472,8 +473,33 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
     messagesElement.scrollTop = messagesElement.scrollHeight;
   }, []);
 
-  // Grow the composer upward as the draft wraps; the attach/mic/send buttons
-  // stay pinned via the composer's flex-end alignment.
+  useLayoutEffect(() => {
+    const messagesElement = messagesRef.current;
+    const composerFloat = composerFloatRef.current;
+    if (!messagesElement || !composerFloat) return;
+
+    const syncComposerClearance = () => {
+      messagesElement.style.setProperty(
+        "--community-dm-composer-float-height",
+        `${Math.ceil(composerFloat.getBoundingClientRect().height)}px`,
+      );
+      if (shouldFollowMessagesRef.current) {
+        requestAnimationFrame(scrollMessagesToBottom);
+      }
+    };
+
+    syncComposerClearance();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(syncComposerClearance);
+    observer.observe(composerFloat);
+    return () => {
+      observer.disconnect();
+      messagesElement.style.removeProperty("--community-dm-composer-float-height");
+    };
+  }, [scrollMessagesToBottom]);
+
+  // Grow the composer upward as the draft wraps; the measured floating layer
+  // keeps the feed clearance synchronized with the rendered pill height.
   useEffect(() => {
     const textarea = composerTextareaRef.current;
     if (!textarea) return;
@@ -786,96 +812,98 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         )}
       </div>
 
-      <div
-        className={`community-dm-panel-typing${typingLabel ? "" : " is-empty"}`}
-        aria-live="polite"
-      >
-        {typingLabel}
-      </div>
-
-      {props.error ? <div className="community-dm-panel-error">{props.error}</div> : null}
-
-      {isPeerBlocked ? (
-        <div className="community-dm-panel-blocked-notice">
-          <span>You blocked this person. Unblock to message them.</span>
-          {props.onToggleBlockPeer ? (
-            <button
-              type="button"
-              onClick={() => {
-                void props.onToggleBlockPeer?.();
-              }}
-            >
-              Unblock
-            </button>
-          ) : null}
+      <div className="community-dm-composer-float" ref={composerFloatRef}>
+        <div
+          className={`community-dm-panel-typing${typingLabel ? "" : " is-empty"}`}
+          aria-live="polite"
+        >
+          {typingLabel}
         </div>
-      ) : null}
 
-      {props.attachments.length > 0 ? (
-        <div className="community-dm-composer-attachments">
-          <DirectMessageAttachmentViews
-            attachments={props.attachments}
-            isComposer={true}
-            onRetryAttachment={props.onRetryAttachment}
-            onRemoveAttachment={props.onRemoveAttachment}
+        {props.error ? <div className="community-dm-panel-error">{props.error}</div> : null}
+
+        {isPeerBlocked ? (
+          <div className="community-dm-panel-blocked-notice">
+            <span>You blocked this person. Unblock to message them.</span>
+            {props.onToggleBlockPeer ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void props.onToggleBlockPeer?.();
+                }}
+              >
+                Unblock
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {props.attachments.length > 0 ? (
+          <div className="community-dm-composer-attachments">
+            <DirectMessageAttachmentViews
+              attachments={props.attachments}
+              isComposer={true}
+              onRetryAttachment={props.onRetryAttachment}
+              onRemoveAttachment={props.onRemoveAttachment}
+            />
+          </div>
+        ) : null}
+
+        <form className="community-dm-panel-composer" onSubmit={onSubmit}>
+          <input
+            ref={fileInputRef}
+            className="community-dm-panel-file-input"
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/markdown,text/csv,application/json,.csv,.doc,.docx,.json,.md,.pdf,.ppt,.pptx,.rtf,.txt,.xls,.xlsx"
+            onChange={onFileInputChange}
           />
-        </div>
-      ) : null}
-
-      <form className="community-dm-panel-composer" onSubmit={onSubmit}>
-        <input
-          ref={fileInputRef}
-          className="community-dm-panel-file-input"
-          type="file"
-          multiple
-          accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/markdown,text/csv,application/json,.csv,.doc,.docx,.json,.md,.pdf,.ppt,.pptx,.rtf,.txt,.xls,.xlsx"
-          onChange={onFileInputChange}
-        />
-        <button
-          className="community-dm-panel-attach"
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={props.isSending || isPeerBlocked}
-          aria-label="Attach files"
-          title="Attach files"
-        >
-          <Paperclip aria-hidden="true" />
-        </button>
-        <textarea
-          ref={(node) => {
-            composerTextareaRef.current = node;
-            if (props.inputRef) props.inputRef.current = node;
-          }}
-          className="community-dm-panel-input"
-          value={props.input}
-          onChange={(event) => props.onInputChange(event.target.value)}
-          onBlur={() => {
-            void props.onComposerBlur?.();
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              if (!canSendDirectMessage) return;
-              void props.onSend();
-            }
-          }}
-          placeholder={isPeerBlocked ? "You blocked this person" : `Message ${peerLabel}`}
-          rows={1}
-          disabled={props.isSending || isPeerBlocked}
-        />
-        {props.voiceButtonProps ? <VoiceInputButton {...props.voiceButtonProps} /> : null}
-        <button
-          className="community-dm-panel-send chat-send ask-send-btn ask-send-btn-v2"
-          type="submit"
-          disabled={!canSendDirectMessage}
-          aria-label="Send direct message"
-          title="Send"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
-          </svg>
-        </button>
-      </form>
+          <button
+            className="community-dm-panel-attach"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={props.isSending || isPeerBlocked}
+            aria-label="Attach files"
+            title="Attach files"
+          >
+            <Paperclip aria-hidden="true" />
+          </button>
+          <textarea
+            ref={(node) => {
+              composerTextareaRef.current = node;
+              if (props.inputRef) props.inputRef.current = node;
+            }}
+            className="community-dm-panel-input"
+            value={props.input}
+            onChange={(event) => props.onInputChange(event.target.value)}
+            onBlur={() => {
+              void props.onComposerBlur?.();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                if (!canSendDirectMessage) return;
+                void props.onSend();
+              }
+            }}
+            placeholder={isPeerBlocked ? "You blocked this person" : `Message ${peerLabel}`}
+            rows={1}
+            disabled={props.isSending || isPeerBlocked}
+          />
+          {props.voiceButtonProps ? <VoiceInputButton {...props.voiceButtonProps} /> : null}
+          <button
+            className="community-dm-panel-send chat-send ask-send-btn ask-send-btn-v2"
+            type="submit"
+            disabled={!canSendDirectMessage}
+            aria-label="Send direct message"
+            title="Send"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
+            </svg>
+          </button>
+        </form>
+      </div>
     </aside>
   );
 }

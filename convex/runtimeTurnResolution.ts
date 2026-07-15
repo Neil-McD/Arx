@@ -23,7 +23,10 @@ import {
   normalizeCommunityLensAuthority,
   type CommunityLensAuthority,
 } from "../shared/communityLensAuthority";
-import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
+import {
+  DEFAULT_ACTIVE_MODEL_ID,
+  supportsModelImageInput,
+} from "../shared/modelCatalog";
 import {
   asRuntimeMessages,
   gateDeniedResponse,
@@ -50,6 +53,7 @@ import {
   normalizeMemberAgentSurfaceContext,
   type MemberAgentSurfaceContextV1,
 } from "../shared/memberAgentSurfaceContext";
+import type { NativeToolInputContentPart } from "../shared/nativeToolProtocol";
 
 export type RuntimeCapabilityFamily = CapabilityFamily;
 
@@ -113,7 +117,10 @@ export type RuntimeTurnResolution = {
     projectId?: unknown;
     workingState?: ThreadWorkingStatePrompt | null;
   };
-  conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
+  conversationMessages: Array<{
+    role: "user" | "assistant";
+    content: string | NativeToolInputContentPart[];
+  }>;
   requestedModelId: string;
   lane: "public" | "platform" | "chatgpt";
   modelRef: string;
@@ -276,6 +283,10 @@ export function resolveAllowedToolNames(params: {
       "community_resource_read",
       "community_resources_search",
       "community_search",
+      "community_chat_search",
+      "community_chat_read",
+      "community_ai_feed_search",
+      "community_ai_feed_read",
       "community_write",
     );
   }
@@ -371,7 +382,11 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     };
   }
   setStage("messages");
-  let conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
+  let conversationMessages: Array<{
+    role: "user" | "assistant";
+    content: string | NativeToolInputContentPart[];
+  }>;
+  let hasMemberAgentImageInput = false;
   if (invocationSurface === "member_agent_dock") {
     const expectedUserMessageKey = String(input.user_message_key ?? "").trim();
     if (!expectedUserMessageKey) {
@@ -400,6 +415,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       });
       if (!context.ok) throw new Error(context.code);
       conversationMessages = context.messages;
+      hasMemberAgentImageInput = context.hasImageInput;
     } catch {
       return {
         ok: false,
@@ -434,6 +450,17 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   const publicMap = loadPublicModelMap();
   const platformMap = loadPlatformModelMap();
   const requestedModelId = String(input.model_id ?? "").trim() || DEFAULT_ACTIVE_MODEL_ID;
+  if (hasMemberAgentImageInput && !supportsModelImageInput(requestedModelId)) {
+    return {
+      ok: false,
+      response: fail(400, {
+        ok: false,
+        code: "member_agent_image_model_unsupported",
+        error: "member_agent_image_model_unsupported",
+        message: "This model cannot inspect images. Remove the image or use an image-capable model.",
+      }),
+    };
+  }
   const publicRef = publicMap[requestedModelId];
   const requestedRuntimeEngine = normalizeRuntimeEngine(input.runtime_engine);
   if (
@@ -449,6 +476,17 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         code: "invalid_runtime_engine",
         error: "invalid_runtime_engine",
         message: "runtime_engine must be either polynet or codex.",
+      }),
+    };
+  }
+  if (hasMemberAgentImageInput && requestedRuntimeEngine === "codex") {
+    return {
+      ok: false,
+      response: fail(400, {
+        ok: false,
+        code: "member_agent_image_runtime_unsupported",
+        error: "member_agent_image_runtime_unsupported",
+        message: "Image turns use the Polynet runtime. Start a new image turn with that runtime selected.",
       }),
     };
   }
@@ -720,6 +758,17 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     requestedAgenticTools && allowedToolNames.length > 0
       ? "agentic"
       : "chat";
+  if (hasMemberAgentImageInput && runtimeExecutionMode !== "agentic") {
+    return {
+      ok: false,
+      response: fail(400, {
+        ok: false,
+        code: "member_agent_image_runtime_unsupported",
+        error: "member_agent_image_runtime_unsupported",
+        message: "Image turns require the Polynet agent runtime.",
+      }),
+    };
+  }
   return {
     ok: true,
     value: {
