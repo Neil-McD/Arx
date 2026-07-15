@@ -314,6 +314,19 @@ async function runCommunityCompilerDigestPassCore(
     });
     const row = (await ctx.db.get(digestId)) as CompilerDigestRow | null;
     if (!row) throw new Error("community_compiler_digest_write_failed");
+    // Carry already-observed overflow into the next bounded pass. The trace
+    // remains the queue truth; this scheduling bit survives the paid-cycle cap
+    // without changing evidence timestamps, revisions, or work identity.
+    for (const continuationRow of compilerEvidence.continuationRows.slice(0, MAX_DIGEST_ITEMS)) {
+      if (
+        (continuationRow.compilerState === undefined || continuationRow.compilerState === "pending") &&
+        continuationRow.compilerContinuationReady !== true
+      ) {
+        await ctx.db.patch(continuationRow._id as any, {
+          compilerContinuationReady: true,
+        });
+      }
+    }
     return mapDigestRow(row);
 }
 

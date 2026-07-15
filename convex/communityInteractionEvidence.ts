@@ -699,6 +699,7 @@ async function removeInteractionSourceTrace(args: {
       visibilityScope: "admin",
       compilerState: "excluded_by_visibility",
       compilerPendingSince: undefined,
+      compilerContinuationReady: undefined,
       compilerLastHandledAt: args.nowMs,
       compilerLastDigestId: undefined,
       compilerDecision: undefined,

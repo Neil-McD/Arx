@@ -23,6 +23,7 @@ export type SourceTraceCompilerState =
 type CompilerEligibleVisibility = typeof COMPILER_EVIDENCE_VISIBILITY_SCOPES[number];
 type TriggerReason =
   | "critical_evidence"
+  | "bounded_continuation"
   | "full_packet"
   | "strong_evidence_threshold"
   | "batch_threshold"
@@ -45,6 +46,7 @@ export type SourceTraceRow = {
   actorUserId?: any;
   actorAgentKey?: string;
   compilerGroupKey?: string;
+  compilerContinuationReady?: boolean;
   compilerState?: SourceTraceCompilerState;
   compilerPendingSince?: number;
   compilerLastHandledAt?: number;
@@ -121,8 +123,16 @@ function priorityRank(priority: EvidencePriority): number {
   return 2;
 }
 
+function admissionRank(item: PendingEvidence): number {
+  if (item.priority === "critical") return 0;
+  if (item.row.compilerContinuationReady === true) return 1;
+  if (item.priority === "strong") return 2;
+  return 3;
+}
+
 function decideTrigger(args: {
   criticalCount: number;
+  continuationCount: number;
   strongCount: number;
   totalCount: number;
   largestPacketSize: number;
@@ -130,6 +140,7 @@ function decideTrigger(args: {
   nowMs: number;
 }): TriggerReason {
   if (args.criticalCount >= 1) return "critical_evidence";
+  if (args.continuationCount >= 1) return "bounded_continuation";
   if (args.largestPacketSize >= COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT) return "full_packet";
   if (args.strongCount >= COMPILER_EVIDENCE_STRONG_THRESHOLD) return "strong_evidence_threshold";
   if (args.totalCount >= COMPILER_EVIDENCE_BATCH_THRESHOLD) return "batch_threshold";
@@ -145,6 +156,7 @@ function mapEvidenceUnit(row: SourceTraceRow, priority: EvidencePriority) {
     source_type: row.sourceType,
     source_id: row.sourceId ?? null,
     compiler_group_key: compilerGroupKey(row),
+    compiler_continuation_ready: row.compilerContinuationReady === true,
     priority,
     title: row.title ?? null,
     workflow_id: row.workflowId ?? null,
@@ -168,6 +180,7 @@ type PendingEvidence = { row: SourceTraceRow; priority: EvidencePriority };
 type EvidencePacket = {
   key: string;
   priority: EvidencePriority;
+  admissionRank: number;
   oldestPendingAt: number;
   items: PendingEvidence[];
 };
@@ -182,7 +195,7 @@ function groupPendingEvidence(pending: PendingEvidence[]): EvidencePacket[] {
   }
   return Array.from(byKey.entries()).map(([key, items]) => {
     const sortedItems = items.slice().sort((a, b) =>
-      priorityRank(a.priority) - priorityRank(b.priority) ||
+      admissionRank(a) - admissionRank(b) ||
       compilerPendingSince(a.row) - compilerPendingSince(b.row) ||
       a.row.createdAt - b.row.createdAt ||
       normalizeIdValue(a.row._id).localeCompare(normalizeIdValue(b.row._id))
@@ -193,11 +206,12 @@ function groupPendingEvidence(pending: PendingEvidence[]): EvidencePacket[] {
         (best, item) => priorityRank(item.priority) < priorityRank(best) ? item.priority : best,
         "standard",
       ),
+      admissionRank: Math.min(...sortedItems.map(admissionRank)),
       oldestPendingAt: Math.min(...sortedItems.map((item) => compilerPendingSince(item.row))),
       items: sortedItems,
     };
   }).sort((a, b) =>
-    priorityRank(a.priority) - priorityRank(b.priority) ||
+    a.admissionRank - b.admissionRank ||
     a.oldestPendingAt - b.oldestPendingAt ||
     a.key.localeCompare(b.key)
   );
@@ -275,11 +289,15 @@ export async function measureCommunityCompilerEvidenceForCommunity(args: {
   const standardCount = packets.filter((packet) => packet.priority === "standard").length;
   const strongCount = packets.filter((packet) => packet.priority === "strong").length;
   const criticalCount = packets.filter((packet) => packet.priority === "critical").length;
+  const continuationCount = packets.filter((packet) =>
+    packet.items.some((item) => item.row.compilerContinuationReady === true)
+  ).length;
   const oldestPendingAt = packets.length > 0
     ? Math.min(...packets.map((packet) => packet.oldestPendingAt).filter(Number.isFinite))
     : null;
   const reason = decideTrigger({
     criticalCount,
+    continuationCount,
     strongCount,
     totalCount: packets.length,
     largestPacketSize: packets.reduce((largest, packet) => Math.max(largest, packet.items.length), 0),
@@ -290,6 +308,11 @@ export async function measureCommunityCompilerEvidenceForCommunity(args: {
   const selected = selectedPackets.flatMap((packet) =>
     packet.items.slice(0, COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT)
   );
+  const selectedTraceIds = new Set(selected.map((item) => normalizeIdValue(item.row._id)));
+  const continuation = packets
+    .flatMap((packet) => packet.items)
+    .filter((item) => !selectedTraceIds.has(normalizeIdValue(item.row._id)))
+    .slice(0, COMPILER_EVIDENCE_RUN_LIMIT);
   const selectionHasMore =
     packets.length > selectedPackets.length ||
     selectedPackets.some((packet) => packet.items.length > COMPILER_EVIDENCE_TRACES_PER_PACKET_LIMIT);
@@ -306,6 +329,7 @@ export async function measureCommunityCompilerEvidenceForCommunity(args: {
       pending_standard: standardCount,
       pending_strong: strongCount,
       pending_critical: criticalCount,
+      pending_continuation: continuationCount,
       oldest_pending_at: oldestPendingAt === null ? null : toIsoString(oldestPendingAt),
       has_more_pending: hasMorePending || selectionHasMore,
       counts_are_lower_bound: hasMorePending,
@@ -325,6 +349,7 @@ export async function measureCommunityCompilerEvidenceForCommunity(args: {
       },
     },
     selectedRows: selected.map((item) => item.row),
+    continuationRows: continuation.map((item) => item.row),
   };
 }
 
@@ -350,6 +375,7 @@ export async function drainSelfAuthoredPendingSourceTracesForCommunity(args: {
       await args.ctx.db.patch(row._id as any, {
         compilerState: "excluded_self_authored" as const,
         compilerPendingSince: undefined,
+        compilerContinuationReady: undefined,
         compilerLastHandledAt: args.nowMs,
         compilerLastDigestId: undefined,
         updatedAt: args.nowMs,

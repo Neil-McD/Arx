@@ -50,6 +50,20 @@ assert.doesNotMatch(
   /markSelectedSourceTracesCompiled|compilerState: "compiled"/,
   "digest creation must never claim that semantic compilation happened",
 );
+const continuationPatch = digest.slice(
+  digest.indexOf("for (const continuationRow"),
+  digest.indexOf("return mapDigestRow(row)"),
+);
+assert.match(
+  continuationPatch,
+  /continuationRows\.slice\(0, MAX_DIGEST_ITEMS\)[\s\S]*compilerState === "pending"[\s\S]*compilerContinuationReady: true/,
+  "digest creation should mark only bounded, still-pending overflow for the next pass",
+);
+assert.doesNotMatch(
+  continuationPatch,
+  /updatedAt|compilerPendingSince|compilerLastHandledAt|compilerDecision/,
+  "continuation scheduling must not mutate semantic evidence or lifecycle timestamps",
+);
 for (const forbiddenSource of [
   "communityArchiveDocuments",
   "communityAiFeedPosts",
@@ -111,6 +125,11 @@ assert.equal(
   stableRevision,
   await buildCommunitySourceTraceRevision({ ...traceMaterial, compilerGroupKey: "interaction_episode:root_1" }),
   "scheduling affinity must not change semantic evidence revision",
+);
+assert.equal(
+  stableRevision,
+  await buildCommunitySourceTraceRevision({ ...traceMaterial, compilerContinuationReady: true }),
+  "continuation readiness must not change semantic evidence revision",
 );
 const associatedEvidenceRevision = await buildCommunitySourceTraceRevision({
   ...traceMaterial,

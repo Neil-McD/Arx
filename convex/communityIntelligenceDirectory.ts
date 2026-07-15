@@ -93,6 +93,7 @@ type SourceTraceRow = {
   actorUserId?: any;
   actorAgentKey?: string;
   compilerGroupKey?: string;
+  compilerContinuationReady?: boolean;
   compilerState?: SourceTraceCompilerState;
   compilerPendingSince?: number;
   compilerLastHandledAt?: number;
@@ -446,12 +447,14 @@ function sourceTraceCompilerLifecyclePatch(args: {
       compilerLastHandledAt: undefined,
       compilerLastDigestId: undefined,
       compilerDecision: undefined,
+      compilerContinuationReady: undefined,
     };
   }
   if (!args.existing) {
     return {
       compilerState: "pending" as const,
       compilerPendingSince: args.nowMs,
+      compilerContinuationReady: undefined,
     };
   }
   if (!shouldMarkSourceTracePending(args.existing, args.materialChanged)) return {};
@@ -461,6 +464,7 @@ function sourceTraceCompilerLifecyclePatch(args: {
     compilerLastHandledAt: undefined,
     compilerLastDigestId: undefined,
     compilerDecision: undefined,
+    compilerContinuationReady: undefined,
   };
 }
 
@@ -665,6 +669,7 @@ function mapTraceRow(row: SourceTraceRow) {
     actor_user_id: row.actorUserId ? normalizeIdValue(row.actorUserId) : null,
     actor_agent_key: row.actorAgentKey ?? null,
     compiler_group_key: row.compilerGroupKey ?? null,
+    compiler_continuation_ready: row.compilerContinuationReady === true,
     compiler_state: compilerState,
     compiler_pending_since: typeof row.compilerPendingSince === "number"
       ? toIsoString(row.compilerPendingSince)

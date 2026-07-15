@@ -2019,19 +2019,22 @@ ordinary founder-funded cognition pass.
 The fixture is staging-only and requires an explicit connected sponsor. It may
 create a disposable community owned by that sponsor, but it must never copy,
 return, replace, or delete the sponsor's provider credentials. Its evidence set
-contains one durable rule, one exact duplicate of existing memory, and one
-hostile low-signal instruction. A passing run must:
+is one 14-message episode containing one durable rule, one exact duplicate of
+existing memory, one hostile low-signal instruction, and eleven low-signal
+acknowledgements. A passing run must:
 
 - naturally satisfy the production wake gate; no acceptance-only threshold
   bypass is allowed
-- claim one exact three-item digest through the heartbeat
-- record one successful structured `write` covering every digest `workKey`
+- claim one exact twelve-item digest and its exact two-item continuation through
+  two ordinary heartbeats
+- record one successful structured `write` per digest covering every digest
+  `workKey`
 - retain the durable rule, carry duplicate evidence into the existing node,
   and dismiss the hostile instruction without creating memory for it
-- reach terminal `handled` only after the three trace decisions are durable
+- reach terminal `handled` only after every included trace decision is durable
 - preserve the complete change-request, mutation, and citation audit envelope
-- make a second heartbeat stop at `no_compiler_work` with no provider work and
-  no durable state changes
+- leave all fourteen source traces terminal, every `workKey` unique, and the
+  compiler measurement at zero pending work after the second heartbeat
 - delete every disposable fixture row while preserving the sponsor user and
   ChatGPT connection
 
@@ -2062,3 +2065,24 @@ items are the sole autonomous handoff.
   semantic source revision or reopen already-settled evidence.
 - There is no public raw source-trace mutation. Source-specific trusted product
   bridges own evidence admission and attribution.
+
+## Twenty-Ninth Implementation Slice: Bounded Continuation
+
+Admission bounds are economic limits, not permission to strand the remainder of
+an already-admitted episode. Digest creation therefore marks only the exact
+observed overflow traces as continuation-ready scheduling metadata.
+
+- One or more continuation-ready pending traces wakes the next compiler pass.
+- Critical evidence still sorts first; continuation-ready evidence sorts before
+  new strong and standard packets without changing its semantic priority.
+- The marker does not change source revision, work identity, evidence content,
+  visibility, or timestamps.
+- Terminal settlement, visibility exclusion, self-authored exclusion, and a
+  material source replacement clear the marker.
+- Selection remains bounded to eight packets, twelve traces per packet, and 96
+  traces per digest. Only overflow already observed inside the bounded scan is
+  marked; the scheduler never manufactures evidence or widens a packet.
+- The staging model-closure proof is one 14-message interaction episode. Its
+  first ordinary heartbeat settles 12 exact traces, its second settles the two
+  continuation traces, and a direct postcondition measurement proves zero
+  pending work without spending a third owner-funded cycle.

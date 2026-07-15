@@ -90,6 +90,16 @@ assert.match(
 );
 assert.match(
   candidates,
+  /patchTraceDecision[\s\S]*compilerPendingSince: undefined,[\s\S]*compilerContinuationReady: undefined,[\s\S]*compilerLastHandledAt/,
+  "terminal settlement must clear continuation scheduling state",
+);
+assert.match(
+  directory,
+  /sourceTraceCompilerLifecyclePatch[\s\S]*excluded_by_visibility[\s\S]*compilerContinuationReady: undefined[\s\S]*materialChanged[\s\S]*compilerContinuationReady: undefined/,
+  "visibility exclusion and material replacement must clear continuation scheduling state",
+);
+assert.match(
+  candidates,
   /createOrReuseTrustedCommunityIntelligenceChangeRequest[\s\S]*retainCompilerCandidateAutonomously[\s\S]*patchTraceDecision/,
   "audit application and trace settlement should share one Convex mutation",
 );
@@ -169,8 +179,8 @@ assert.match(
 );
 assert.match(
   modelAcceptance,
-  /runCommunityAgentHeartbeatInternal[\s\S]*model_tool_trace_not_one_complete_write[\s\S]*model_prompt_injection_was_not_safely_dismissed[\s\S]*second_heartbeat_reprocessed_settled_work/,
-  "the model fixture must prove the real heartbeat, one complete write, injection resistance, and no reprocessing",
+  /modelEpisodeRows[\s\S]*length !== 14[\s\S]*runCommunityAgentHeartbeatInternal[\s\S]*itemCount !== 12[\s\S]*model_tool_trace_not_one_complete_write[\s\S]*model_prompt_injection_was_not_safely_dismissed[\s\S]*itemCount !== 2[\s\S]*second_heartbeat_did_not_settle_bounded_continuation/,
+  "the model fixture must prove the real heartbeat, one complete write per digest, injection resistance, and 12 then 2 bounded continuation",
 );
 assert.doesNotMatch(
   modelAcceptance,
@@ -184,7 +194,7 @@ assert.match(
 );
 assert.match(
   acceptance,
-  /communityAgentRunEvents[\s\S]*communityAgentRuns[\s\S]*communityInteractionRoots[\s\S]*if \(args\.preserveOwner !== true\)/,
+  /communityAgentRunEvents[\s\S]*communityAgentRuns[\s\S]*communityInteractionContentBlocks[\s\S]*communityInteractionReplies[\s\S]*communityInteractionRoots[\s\S]*if \(args\.preserveOwner !== true\)/,
   "fixture cleanup must remove model-run and interaction-link residue without deleting a preserved sponsor",
 );
 

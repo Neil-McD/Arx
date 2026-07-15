@@ -63,6 +63,7 @@ type CommunityAgentWakeEvidence = {
   reason: string;
   pendingTotal: number;
   pendingTraceTotal?: number;
+  pendingContinuation?: number;
   pendingStandard: number;
   pendingStrong: number;
   pendingCritical: number;
@@ -169,6 +170,7 @@ const communityAgentWakeEvidenceValidator = v.object({
   reason: v.string(),
   pendingTotal: v.number(),
   pendingTraceTotal: v.optional(v.number()),
+  pendingContinuation: v.optional(v.number()),
   pendingStandard: v.number(),
   pendingStrong: v.number(),
   pendingCritical: v.number(),

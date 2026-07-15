@@ -42,6 +42,7 @@ function wakeEvidenceFromMeasurement(
     reason: boundedText(measurement.reason, 120) || "no_trigger",
     pendingTotal: Math.max(0, Number(measurement.pending_total ?? 0)),
     pendingTraceTotal: Math.max(0, Number(measurement.pending_trace_total ?? measurement.pending_total ?? 0)),
+    pendingContinuation: Math.max(0, Number(measurement.pending_continuation ?? 0)),
     pendingStandard: Math.max(0, Number(measurement.pending_standard ?? 0)),
     pendingStrong: Math.max(0, Number(measurement.pending_strong ?? 0)),
     pendingCritical: Math.max(0, Number(measurement.pending_critical ?? 0)),

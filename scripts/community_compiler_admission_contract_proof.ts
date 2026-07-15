@@ -97,7 +97,32 @@ const fullEpisode = await measure(
 assert.equal(fullEpisode.measurement.reason, "full_packet");
 assert.equal(fullEpisode.measurement.selected_packet_count, 1);
 assert.equal(fullEpisode.selectedRows.length, 12);
+assert.equal(fullEpisode.continuationRows.length, 2);
 assert.equal(fullEpisode.measurement.has_more_pending, true);
+
+const selectedFullEpisodeIds = new Set(fullEpisode.selectedRows.map((row) => String(row._id)));
+const continuedEpisode = await measure(
+  Array.from({ length: 14 }, (_, index) =>
+    trace({ id: `episode-a-${index}`, group: "interaction_episode:a", createdAt: 1_000 + index })
+  )
+    .filter((row) => !selectedFullEpisodeIds.has(String(row._id)))
+    .map((row) => ({ ...row, compilerContinuationReady: true })),
+);
+assert.equal(continuedEpisode.measurement.reason, "bounded_continuation");
+assert.equal(continuedEpisode.measurement.pending_continuation, 1);
+assert.equal(continuedEpisode.selectedRows.length, 2);
+assert.equal(continuedEpisode.continuationRows.length, 0);
+
+const criticalBeforeContinuation = await measure([
+  { ...trace({ id: "continued-standard", group: "continued" }), compilerContinuationReady: true },
+  trace({ id: "critical-outcome", sourceType: "outcome", group: "critical" }),
+  trace({ id: "new-strong", sourceType: "ai_feed", group: "strong" }),
+]);
+assert.equal(criticalBeforeContinuation.measurement.reason, "critical_evidence");
+assert.deepEqual(
+  criticalBeforeContinuation.selectedRows.map((row) => String(row._id)),
+  ["critical-outcome", "continued-standard", "new-strong"],
+);
 
 const nineEpisodes = await measure(
   Array.from({ length: 9 }, (_, index) =>
@@ -109,6 +134,7 @@ assert.equal(nineEpisodes.measurement.pending_total, 9);
 assert.equal(nineEpisodes.measurement.pending_trace_total, 9);
 assert.equal(nineEpisodes.measurement.selected_packet_count, 8);
 assert.equal(nineEpisodes.selectedRows.length, 8);
+assert.equal(nineEpisodes.continuationRows.length, 1);
 assert.equal(nineEpisodes.measurement.has_more_pending, true);
 
 const critical = await measure([trace({ id: "outcome", sourceType: "outcome" })]);
@@ -141,5 +167,6 @@ const distributedScanOverflow = await measure(
 assert.equal(distributedScanOverflow.measurement.pending_total, 500);
 assert.equal(distributedScanOverflow.measurement.counts_are_lower_bound, true);
 assert.equal(distributedScanOverflow.measurement.has_more_pending, true);
+assert.equal(distributedScanOverflow.continuationRows.length, 96);
 
 console.log("community_compiler_admission_contract_proof: ok");

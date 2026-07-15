@@ -92,6 +92,7 @@ type SourceTraceRow = {
   actorUserId?: any;
   actorAgentKey?: string;
   compilerState?: string;
+  compilerContinuationReady?: boolean;
   compilerDecision?: {
     version?: number;
     workKey?: string;
@@ -289,6 +290,7 @@ async function patchTraceDecision(args: {
   await args.ctx.db.patch(args.trace._id as any, {
     compilerState,
     compilerPendingSince: undefined,
+    compilerContinuationReady: undefined,
     compilerLastHandledAt: args.nowMs,
     compilerLastDigestId: args.digestId,
     compilerDecision: {

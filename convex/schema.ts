@@ -2156,6 +2156,7 @@ export default defineSchema({
       reason: v.string(),
       pendingTotal: v.number(),
       pendingTraceTotal: v.optional(v.number()),
+      pendingContinuation: v.optional(v.number()),
       pendingStandard: v.number(),
       pendingStrong: v.number(),
       pendingCritical: v.number(),
@@ -2832,6 +2833,9 @@ export default defineSchema({
     // Optional scheduling affinity. Exact trace identity and settlement stay
     // per row; related traces may share one bounded compiler admission packet.
     compilerGroupKey: v.optional(v.string()),
+    // Durable scheduling state for already-observed overflow. This is not
+    // evidence content and never participates in work identity or citations.
+    compilerContinuationReady: v.optional(v.boolean()),
     compilerState: v.optional(
       v.union(
         v.literal("pending"),

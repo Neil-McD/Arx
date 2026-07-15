@@ -14,6 +14,7 @@ export type CommunitySourceTraceRevisionMaterial = {
   actorUserId?: unknown;
   actorAgentKey?: string;
   compilerGroupKey?: string;
+  compilerContinuationReady?: boolean;
 };
 
 function normalizeIdValue(raw: unknown): string {
