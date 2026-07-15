@@ -61,6 +61,7 @@ import {
   resolveAuthenticatedRuntimeTurn,
   RuntimeTurnInput,
 } from "./runtimeTurnResolution";
+import { extractTextFromNativeToolMessageContent } from "../shared/nativeToolProtocol";
 import {
   ensureRuntimeRunStarted,
   lookupExistingRuntimeReplay,
@@ -742,9 +743,20 @@ export async function handleRuntimeTurnRequest(args: {
     const userMessageKeyForRun =
       explicitUserMessageKey || `user:${threadKey}:${runId}`;
     const assistantMessageKeyForRun = `assistant:${threadKey}:${runId}`;
-    const latestUserText = String(
-      conversationMessages[conversationMessages.length - 1]?.content ?? "",
-    ).trim();
+    const latestUserContent = conversationMessages[conversationMessages.length - 1]?.content;
+    const latestUserText =
+      extractTextFromNativeToolMessageContent(latestUserContent) ||
+      (Array.isArray(latestUserContent) && latestUserContent.some((part) => part.type === "image")
+        ? "[Image attached]"
+        : "");
+    const conversationTextMessages = conversationMessages.map((message) => ({
+      role: message.role,
+      content:
+        extractTextFromNativeToolMessageContent(message.content) ||
+        (Array.isArray(message.content) && message.content.some((part) => part.type === "image")
+          ? "[Image attached]"
+          : ""),
+    }));
     const runtimeCommunityContextVersion = Number.isFinite(Number(ownedThread.contextVersion ?? 0))
       ? Math.max(0, Math.floor(Number(ownedThread.contextVersion ?? 0)))
       : 0;
@@ -2029,7 +2041,7 @@ export async function handleRuntimeTurnRequest(args: {
           }
           await persistContextSnapshotBestEffort("started", codexRuntimeTurnEnvelope);
           const workerTurnInputs = buildPolynetCodexWorkerTurnInputs({
-            conversationMessages,
+            conversationMessages: conversationTextMessages,
             latestUserText,
             communityName: runtimeCommunityName,
             communitySlug: runtimeCommunitySlug,
@@ -3319,7 +3331,7 @@ export async function handleRuntimeTurnRequest(args: {
         });
       const chatMessages = [
         { role: "system" as const, content: authenticatedScopedSystemPrompt },
-        ...conversationMessages,
+        ...conversationTextMessages,
       ];
       if (stream) {
         return runtimeSseResponse(async (writer) => {

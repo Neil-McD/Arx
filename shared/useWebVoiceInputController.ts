@@ -12,7 +12,7 @@ import {
   mergeVoiceTranscript,
 } from "./voiceCapture";
 
-export type VoiceSurface = "workspace" | "community" | "direct_message";
+export type VoiceSurface = "workspace" | "community" | "direct_message" | "member_agent";
 export type VoiceUiState = "idle" | "recording" | "transcribing";
 
 type VoiceInputIntent = {
@@ -85,6 +85,8 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   chatInputRef?: MutableRefObject<HTMLTextAreaElement | null>;
   appendDirectMessageTranscript?: (transcript: string) => void;
   focusDirectMessageInput?: () => void;
+  appendMemberAgentTranscript?: (transcript: string) => void;
+  focusMemberAgentInput?: () => void;
 };
 
 function getBrowserSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | null {
@@ -253,6 +255,13 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
       }, 0);
       return;
     }
+    if (surface === "member_agent") {
+      args.appendMemberAgentTranscript?.(transcript);
+      window.setTimeout(() => {
+        args.focusMemberAgentInput?.();
+      }, 0);
+      return;
+    }
     const communityTarget = args.resolveCommunityTranscriptTarget?.() ?? null;
     if (communityTarget) {
       communityTarget.appendTranscript(transcript);
@@ -376,9 +385,12 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     args.showAppToastMessage("Listening... tap mic again when you're done.");
   }
 
-  async function stopVoiceCaptureAndTranscribe(surface: VoiceSurface): Promise<void> {
+  async function stopVoiceCaptureAndTranscribe(
+    surface: VoiceSurface,
+    applyTranscriptToComposer = true,
+  ): Promise<string> {
     const recognition = speechRecognitionRef.current;
-    if (!recognition || activeVoiceSurface !== surface) return;
+    if (!recognition || activeVoiceSurface !== surface) return "";
     speechManualStopRef.current = true;
     setIsVoiceTranscribing(true);
     try {
@@ -402,15 +414,22 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
       });
       if (!transcript) {
         args.showAppToastMessage("No speech detected.");
-        return;
+        return "";
       }
-      applyVoiceTranscript(surface, transcript);
-      args.showAppToastMessage("Transcript inserted.");
+      if (applyTranscriptToComposer) {
+        applyVoiceTranscript(surface, transcript);
+        args.showAppToastMessage("Transcript inserted.");
+      }
+      return transcript;
     } finally {
       releaseVoiceCaptureResources();
       setIsVoiceTranscribing(false);
       setActiveVoiceSurface(null);
     }
+  }
+
+  async function finishVoiceInputForSubmit(surface: VoiceSurface): Promise<string> {
+    return await stopVoiceCaptureAndTranscribe(surface, false);
   }
 
   async function handleVoiceInputClick(surface: VoiceSurface) {
@@ -437,18 +456,23 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
   const workspaceVoiceIntent = resolveVoiceInputIntent("workspace");
   const communityVoiceIntent = resolveVoiceInputIntent("community");
   const directMessageVoiceIntent = resolveVoiceInputIntent("direct_message");
+  const memberAgentVoiceIntent = resolveVoiceInputIntent("member_agent");
   const workspaceVoiceUiState = resolveVoiceUiState("workspace");
   const communityVoiceUiState = resolveVoiceUiState("community");
   const directMessageVoiceUiState = resolveVoiceUiState("direct_message");
+  const memberAgentVoiceUiState = resolveVoiceUiState("member_agent");
 
   return {
     workspaceVoiceIntent,
     communityVoiceIntent,
     directMessageVoiceIntent,
+    memberAgentVoiceIntent,
     workspaceVoiceUiState,
     communityVoiceUiState,
     directMessageVoiceUiState,
+    memberAgentVoiceUiState,
     handleVoiceInputClick,
+    finishVoiceInputForSubmit,
     cancelVoiceInput,
   };
 }

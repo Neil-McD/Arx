@@ -37,6 +37,7 @@ import {
   projectCommunityMembershipReadSummary,
   projectPublicDiscoverCommunityReadSummary,
 } from "../shared/communityReadContract.ts";
+import { supportsModelImageInput } from "../shared/modelCatalog.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -55,6 +56,13 @@ const threadReadGateway = read("shared/cloudThreadsRead.ts");
 const component = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const styles = read("apps/web/src/components/WebMemberAgentDock.css");
 const app = read("apps/web/src/App.tsx");
+const attachmentPolicy = read("shared/memberAgentAttachments.ts");
+const voiceController = read("shared/useWebVoiceInputController.ts");
+const cloudThreadsGateway = read("shared/cloudThreadsGateway.ts");
+const modelCatalog = read("shared/modelCatalog.ts");
+const nativeToolProtocol = read("shared/nativeToolProtocol.ts");
+const openRouterTransport = read("convex/openRouterNativeTransport.ts");
+const runtimeTurnResolution = read("convex/runtimeTurnResolution.ts");
 const cognitionContract = read("docs/community-agent-cognition-contract-v1.md");
 const account = read("convex/account.ts");
 const anonymousUserCleanup = read("convex/anonymousUserCleanup.ts");
@@ -64,6 +72,8 @@ const runtimePrompt = read("shared/runtimePrompt.ts");
 const timelineUi = read("shared/runtimeTimelineUi.ts");
 const communityReadKernel = read("convex/communityReadKernel.ts");
 const httpMcp = read("convex/httpMcp.ts");
+const http = read("convex/http.ts");
+const httpMemberAgentAttachments = read("convex/httpMemberAgentAttachments.ts");
 const polynetMcp = read("shared/polynetMcp.ts");
 
 assert.match(
@@ -498,8 +508,8 @@ assert.match(
 );
 assert.equal(
   (threads.match(/requireWritableMemberAgentThread\(\{/g) ?? []).length,
-  2,
-  "both message creation paths must reject every new write to retained legacy episodes",
+  4,
+  "both message creation paths plus upload-ticket issuance and claims must reject retained legacy episodes",
 );
 assert.match(
   account,
@@ -726,7 +736,7 @@ assert.match(
 );
 assert.match(component, /<span>Starting fresh<\/span>/);
 assert.match(component, /invocationSurface: "member_agent_dock"/);
-assert.match(component, /surfaceContext: props\.surfaceContext/);
+assert.match(component, /const surfaceContext = props\.surfaceContext[\s\S]*surfaceContext,/);
 assert.match(component, /agentScopeRef[\s\S]*isCurrentScope/);
 assert.doesNotMatch(component, /\}, \[props\.communityId, props\.session\?\.user\.id, stopStreamingTurn\]\);/);
 assert.match(
@@ -736,7 +746,7 @@ assert.match(
 );
 assert.match(
   component,
-  /props\.surfaceContext\.kind === "community" \? props\.communityId : null/,
+  /surfaceContext\.kind === "community" \? props\.communityId : null/,
   "Discover and generic platform pages must clear the active community lens",
 );
 assert.doesNotMatch(
@@ -787,7 +797,7 @@ assert.match(
 );
 assert.match(
   component,
-  /member-agent-dock-launcher\$\{turnIsActive \? " is-working" : ""\}/,
+  /member-agent-dock-launcher\$\{composerIsBusy \? " is-working" : ""\}/,
   "the launcher must derive its working presence from the existing turn lifecycle",
 );
 assert.match(
@@ -859,6 +869,118 @@ assert.match(
   /<WebMemberAgentDock[\s\S]*isVisible=\{isMemberAgentDockVisible\}[\s\S]*communityId=\{memberAgentDockCommunity\?\.id \?\? null\}[\s\S]*surfaceContext=\{memberAgentSurfaceContext\}/,
 );
 assert.match(
+  component,
+  /Paperclip[\s\S]*type="file"[\s\S]*accept=\{MEMBER_AGENT_IMAGE_ACCEPT\}[\s\S]*VoiceInputButton[\s\S]*member-agent-dock-send/,
+  "the dock composer must expose the canonical attachment, microphone, and send controls",
+);
+assert.match(
+  component,
+  /handleAttachmentPaste[\s\S]*handleAttachmentDrop[\s\S]*member-agent-dock-composer-attachments/,
+  "member-agent image drafts must support paste, drop, preview, and removal",
+);
+assert.match(
+  attachmentPolicy,
+  /MEMBER_AGENT_MAX_IMAGE_ATTACHMENTS = 4[\s\S]*MEMBER_AGENT_MAX_IMAGE_BYTES = 10 \* 1024 \* 1024[\s\S]*MEMBER_AGENT_MAX_IMAGE_TOTAL_BYTES = 25 \* 1024 \* 1024/,
+  "the member-agent image policy must be explicit and bounded",
+);
+assert.match(
+  voiceController,
+  /VoiceSurface = [^;]*"member_agent"[\s\S]*appendMemberAgentTranscript[\s\S]*memberAgentVoiceUiState/,
+  "member-agent voice must participate in the shared single-capture controller",
+);
+assert.match(
+  cloudThreadsGateway,
+  /uploadCloudMemberAgentImageFile[\s\S]*MEMBER_AGENT_ATTACHMENT_UPLOAD_PATH[\s\S]*Authorization: `Bearer \$\{runtimeToken\}`[\s\S]*X-Polynet-Thread-Id[\s\S]*X-Polynet-Message-Key/,
+  "member-agent images must use the authenticated server-owned upload endpoint",
+);
+assert.match(
+  threads,
+  /prepareCloudMemberAgentAttachmentUploadInternal = internalMutation[\s\S]*MEMBER_AGENT_ATTACHMENT_UPLOAD_RATE_LIMIT[\s\S]*cloudThreadAttachmentUploadTickets[\s\S]*claimStoredCloudMemberAgentAttachmentInternal = internalMutation[\s\S]*ticket\.messageKey !== messageKey[\s\S]*ctx\.db\.system\.get\("_storage"[\s\S]*MEMBER_AGENT_ATTACHMENT_MAX_PENDING_COUNT[\s\S]*MEMBER_AGENT_ATTACHMENT_MAX_PENDING_BYTES[\s\S]*cloudThreadAttachments/,
+  "the server must rate-limit issuance and bind every verified upload to its owner, thread, and planned message",
+);
+assert.match(
+  httpMemberAgentAttachments,
+  /requireAuthenticatedActor\(ctx, req\)[\s\S]*prepareCloudMemberAgentAttachmentUploadInternal[\s\S]*req\.arrayBuffer\(\)[\s\S]*inferImageMime\(body\) !== mime[\s\S]*ctx\.storage\.store[\s\S]*claimStoredCloudMemberAgentAttachmentInternal[\s\S]*finally[\s\S]*ctx\.storage\.delete\(storageId\)[\s\S]*cancelCloudMemberAgentAttachmentUploadInternal/,
+  "the HTTP action must own upload, validation, claim, and failed-upload deletion as one server operation",
+);
+assert.match(
+  http,
+  /registerMemberAgentAttachmentRoutes\(\{[\s\S]*requireAuthenticatedActor/,
+  "the authenticated member-agent upload endpoint must be mounted on the canonical HTTP router",
+);
+assert.doesNotMatch(
+  cloudThreadsGateway,
+  /generateCloudMemberAgentAttachmentUploadUrl|claimCloudThreadAttachmentUpload/,
+  "the browser must not retain the abandoned signed-upload path",
+);
+assert.match(
+  threads,
+  /normalizeMemberAgentMessageContent[\s\S]*claim\.messageKey !== args\.messageKey[\s\S]*member_agent_attachment_message_mismatch[\s\S]*attachMemberAgentClaimsToMessage[\s\S]*status: "attached"/,
+  "persisted member-agent image metadata must consume a claim bound to the exact message",
+);
+assert.match(
+  component,
+  /if \(submitInFlightRef\.current\) return;[\s\S]*submitInFlightRef\.current = true;/,
+  "submission must use a synchronous lock, immutable draft snapshot, and post-commit completion boundary",
+);
+assert.match(component, /Detach the submitted snapshot immediately/);
+assert.match(component, /committed = true;/);
+assert.match(component, /Finish its captured turn even if navigation/);
+assert.match(
+  component,
+  /runUiScopeRef[\s\S]*allowRunUiWrite[\s\S]*setScopedStreamingByThread[\s\S]*suppressStreamingUi: !isCurrentScope\(scope\)/,
+  "a committed turn may finish after navigation without writing stale streaming state into the new surface",
+);
+assert.match(
+  voiceController,
+  /finishVoiceInputForSubmit[\s\S]*stopVoiceCaptureAndTranscribe\(surface, false\)/,
+  "submit must finalize an active voice capture into the immutable draft snapshot",
+);
+assert.match(
+  threads,
+  /cleanupPendingCloudThreadAttachment = internalMutation[\s\S]*attachment\.status !== "pending"[\s\S]*deleteCloudStorageObjectIfPresent[\s\S]*deleteCloudThreadMessage[\s\S]*deleteMemberAgentClaimsForMessage/,
+  "pending claims and deleted messages must delete their storage blobs",
+);
+assert.match(
+  threads,
+  /generateCloudThreadAttachmentUploadUrl = mutation[\s\S]*member_agent_attachment_upload_ticket_required[\s\S]*prepareCloudMemberAgentAttachmentUploadInternal = internalMutation/,
+  "the generic thread uploader must not bypass server-owned upload preparation on member-agent threads",
+);
+assert.match(
+  account,
+  /cloudThreadAttachments[\s\S]*deleteStorageObjectIfPresent\(ctx, row\.storageId\)[\s\S]*cloudThreadAttachmentUploadTickets[\s\S]*const cloudMessages/,
+  "account deletion must remove attachment blobs and tickets before messages and threads",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock-composer:focus-within[\s\S]*background: color-mix[\s\S]*\.member-agent-dock-composer > button:focus-visible[\s\S]*outline: none;[\s\S]*background: var\(--hover-overlay\)/,
+  "composer focus must remain visible through surface state without drawing a ring",
+);
+assert.match(
+  nativeToolProtocol,
+  /extractTextFromNativeToolMessageContent/,
+  "runtime metadata must derive bounded text without stringifying multimodal content",
+);
+assert.match(
+  openRouterTransport,
+  /normalizeMessagesForOpenRouter[\s\S]*type: "image_url"[\s\S]*image_url: \{ url: imageUrl \}/,
+  "OpenRouter must receive its provider-native image_url content shape",
+);
+assert.match(
+  modelCatalog,
+  /supportsImageInput: boolean[\s\S]*supportsModelImageInput[\s\S]*supportsImageInput === true/,
+  "image-capable model selection must be an explicit catalog policy",
+);
+assert.equal(supportsModelImageInput("gpt-5.6-sol"), true);
+assert.equal(supportsModelImageInput("gpt-oss-120b-free"), false);
+assert.equal(supportsModelImageInput("unknown-future-model"), false);
+assert.match(packageJson, /"@hey-api\/openapi-ts": "0\.97\.3"[\s\S]*"js-yaml": "4\.2\.0"/);
+assert.match(
+  runtimeTurnResolution,
+  /member_agent_image_model_unsupported[\s\S]*member_agent_image_runtime_unsupported[\s\S]*hasMemberAgentImageInput && runtimeExecutionMode !== "agentic"/,
+  "image turns must fail closed before any text-only model or runtime path can discard the image",
+);
+assert.match(
   cognitionContract,
   /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*one stable private channel per member across Polynet[\s\S]*changing communities changes the lens for subsequent turns[\s\S]*Start fresh conversation[\s\S]*community deletion makes that community unavailable as a future lens[\s\S]*retained legacy per-community episodes are read-only recall artifacts[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
 );
@@ -877,6 +999,7 @@ assert.deepEqual(canonicalContext, {
   ok: true,
   expectedUserSeq: 3,
   characterCount: 33,
+  hasImageInput: false,
   messages: [
     { role: "user", content: "prior question" },
     { role: "assistant", content: "prior answer" },
@@ -896,7 +1019,49 @@ assert.deepEqual(boundedContext, {
   ok: true,
   expectedUserSeq: 2,
   characterCount: 8,
+  hasImageInput: false,
   messages: [{ role: "user", content: "12345678" }],
+});
+const imageOnlyContext = buildMemberAgentConversationContext({
+  expectedUserMessageKey: "user-image",
+  rows: [
+    {
+      messageKey: "user-image",
+      seq: 1,
+      role: "user",
+      contentJson: {
+        text: "",
+        attachments: [
+          {
+            id: "image-1",
+            name: "diagram.png",
+            type: "image",
+            mime: "image/png",
+            size: 120,
+            storage_id: "storage-1",
+            url: "https://storage.example/diagram.png",
+          },
+        ],
+      },
+    },
+  ],
+});
+assert.deepEqual(imageOnlyContext, {
+  ok: true,
+  expectedUserSeq: 1,
+  characterCount: 0,
+  hasImageInput: true,
+  messages: [
+    {
+      role: "user",
+      content: [
+        {
+          type: "image",
+          imageUrl: "https://storage.example/diagram.png",
+        },
+      ],
+    },
+  ],
 });
 assert.deepEqual(
   buildMemberAgentConversationContext({

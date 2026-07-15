@@ -1,10 +1,16 @@
 import { type AuthSessionLike } from "./authSession";
+import { resolveConvexRuntimeToken } from "./authSession";
 import { type ConvexClient } from "./convexAuthenticatedClient";
+import { readConvexRuntimeUrl } from "./convexRuntime";
 import {
   bootstrapGatewayAuthContextIfAvailable,
   readGatewayConvexIdMaybe,
 } from "./cloudGateway";
 import type { RuntimeEngine } from "./runtimeEngine";
+import {
+  MEMBER_AGENT_ATTACHMENT_UPLOAD_PATH,
+  type MemberAgentImageAttachment,
+} from "./memberAgentAttachments";
 
 export type CloudThreadRecordInput = {
   threadId: string;
@@ -192,6 +198,65 @@ export async function uploadCloudThreadAttachmentFile(params: {
   const storageId = String(payload?.storageId ?? "").trim();
   if (!storageId) throw new Error("Failed to upload attachment.");
   return storageId;
+}
+
+export async function uploadCloudMemberAgentImageFile(params: {
+  session: AuthSessionLike;
+  threadId: string;
+  messageId: string;
+  file: File;
+}): Promise<MemberAgentImageAttachment> {
+  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
+  if (!bootstrapped) throw new Error("Failed to start image upload.");
+  const { client, authSubject } = bootstrapped;
+  const threadKey = String(params.threadId ?? "").trim();
+  const internalThreadId = await resolveInternalThreadId({
+    client,
+    authSubject,
+    threadKey,
+  });
+  if (!internalThreadId) throw new Error("Failed to start image upload.");
+  const runtimeToken = resolveConvexRuntimeToken(params.session);
+  const runtimeBaseUrl = String(readConvexRuntimeUrl() ?? "").replace(/\/+$/, "");
+  const messageKey = String(params.messageId ?? "").trim();
+  if (!runtimeToken || !runtimeBaseUrl || !messageKey) {
+    throw new Error("Failed to start image upload.");
+  }
+  const response = await fetch(`${runtimeBaseUrl}${MEMBER_AGENT_ATTACHMENT_UPLOAD_PATH}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${runtimeToken}`,
+      "Content-Type": params.file.type || "application/octet-stream",
+      "X-Polynet-Thread-Id": internalThreadId,
+      "X-Polynet-Message-Key": messageKey,
+      "X-Polynet-File-Name": encodeURIComponent(params.file.name),
+    },
+    body: params.file,
+  });
+  if (!response.ok) throw new Error("Failed to upload image.");
+  const payload = (await response.json()) as {
+    attachment?: {
+    storageId?: string | null;
+    name?: string | null;
+    mime?: string | null;
+    size?: number | null;
+    } | null;
+  } | null;
+  const attachment = payload?.attachment ?? null;
+  const claimedStorageId = String(attachment?.storageId ?? "").trim();
+  const mime = String(attachment?.mime ?? "").trim();
+  const size = Number(attachment?.size);
+  if (!claimedStorageId || !mime || !Number.isFinite(size) || size <= 0) {
+    throw new Error("Failed to verify image upload.");
+  }
+  return {
+    id: crypto.randomUUID(),
+    name: String(attachment?.name ?? params.file.name).trim() || "image",
+    type: "image",
+    mime,
+    size: Math.floor(size),
+    storage_id: claimedStorageId,
+  };
 }
 
 export async function deleteCloudThreadMessage(params: {

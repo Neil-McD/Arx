@@ -25,6 +25,7 @@ import {
   POLYNET_CODEX_WORKER_TOOL_PATH,
 } from "./polynetCodexWorkerTool";
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
+import { registerMemberAgentAttachmentRoutes } from "./httpMemberAgentAttachments";
 import type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
 import { normalizeEmailForVerification, resolveTrustedEmailVerification } from "./workosEmailVerification";
 
@@ -347,6 +348,14 @@ registerEmailRoutes({
 });
 
 registerRuntimeVoiceRoutes({
+  http,
+  httpAction,
+  jsonResponse,
+  optionsResponse,
+  requireAuthenticatedActor,
+});
+
+registerMemberAgentAttachmentRoutes({
   http,
   httpAction,
   jsonResponse,

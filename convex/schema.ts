@@ -3464,6 +3464,38 @@ export default defineSchema({
     .index("by_thread_seq", ["threadId", "seq"])
     .index("by_owner_messageKey", ["ownerId", "messageKey"]),
 
+  cloudThreadAttachments: defineTable({
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    storageId: v.id("_storage"),
+    messageKey: v.string(),
+    status: v.union(v.literal("pending"), v.literal("attached")),
+    attachedMessageId: v.optional(v.id("cloudMessages")),
+    name: v.string(),
+    mime: v.string(),
+    size: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_owner_thread_storage", ["ownerId", "threadId", "storageId"])
+    .index("by_owner_messageKey", ["ownerId", "messageKey"])
+    .index("by_owner_createdAt", ["ownerId", "createdAt"])
+    .index("by_storage", ["storageId"])
+    .index("by_thread", ["threadId"]),
+
+  cloudThreadAttachmentUploadTickets: defineTable({
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    ticketKey: v.string(),
+    messageKey: v.string(),
+    claimedStorageId: v.optional(v.id("_storage")),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    claimedAt: v.optional(v.number()),
+  })
+    .index("by_owner_ticketKey", ["ownerId", "ticketKey"])
+    .index("by_owner_createdAt", ["ownerId", "createdAt"])
+    .index("by_thread", ["threadId"]),
+
   polynetCodexWorkerCapacityLeases: defineTable({
     runId: v.string(),
     ownerId: v.id("users"),

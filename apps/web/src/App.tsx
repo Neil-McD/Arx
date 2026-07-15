@@ -531,6 +531,7 @@ import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOver
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
 import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeHostProps";
 import type { MemberAgentSurfaceContextV1 } from "../../../shared/memberAgentSurfaceContext";
+import type { WebMemberAgentDockHandle } from "./components/WebMemberAgentDock";
 
 const WebAppMainSurfaceHost = lazy(() =>
   import("./components/WebAppMainSurfaceHost").then((module) => ({
@@ -2365,6 +2366,7 @@ export default function App() {
     if (!communityMessageInput) setCommunityMessageMentions([]);
   }, [communityMessageInput]);
   const workspaceComposerApiRef = useRef<WorkspaceComposerApi | null>(null);
+  const memberAgentComposerApiRef = useRef<WebMemberAgentDockHandle | null>(null);
   const workspaceStarterPromptConsumedRef = useRef(false);
   const workspaceComposerDraftRef = useRef<WorkspaceComposerDraft>({
     text: "",
@@ -8679,7 +8681,11 @@ export default function App() {
     communityVoiceIntent,
     workspaceVoiceUiState,
     communityVoiceUiState,
+    memberAgentVoiceIntent,
+    memberAgentVoiceUiState,
     handleVoiceInputClick,
+    finishVoiceInputForSubmit,
+    cancelVoiceInput,
   } = useWebVoiceInputController<AuthSession>({
     ...authenticatedSessionArg,
     sessionRef: sessionRef,
@@ -8693,6 +8699,9 @@ export default function App() {
     resolveCommunityTranscriptTarget: () => communityVoiceTranscriptTargetRef.current,
     setCommunityMessageInput,
     chatInputRef,
+    appendMemberAgentTranscript: (transcript) =>
+      memberAgentComposerApiRef.current?.appendTranscript(transcript),
+    focusMemberAgentInput: () => memberAgentComposerApiRef.current?.focusInput(),
   });
 
   const handleCommunityVoiceInputClick = useCallback((
@@ -11646,11 +11655,30 @@ export default function App() {
     !isCommunityLaunchSetupModalOpen &&
     !isDirectMessagesOpen &&
     !isOnboardingModalOpen;
+  const memberAgentVoiceScopeKey = `${activePage}:${communityTab}:${memberAgentDockCommunity?.id ?? "platform"}`;
+  const previousMemberAgentVoiceScopeKeyRef = useRef(memberAgentVoiceScopeKey);
+  useEffect(() => {
+    const scopeChanged =
+      previousMemberAgentVoiceScopeKeyRef.current !== memberAgentVoiceScopeKey;
+    previousMemberAgentVoiceScopeKeyRef.current = memberAgentVoiceScopeKey;
+    if (
+      memberAgentVoiceUiState !== "idle" &&
+      (!isMemberAgentDockVisible || scopeChanged)
+    ) {
+      cancelVoiceInput();
+    }
+  }, [
+    cancelVoiceInput,
+    isMemberAgentDockVisible,
+    memberAgentVoiceScopeKey,
+    memberAgentVoiceUiState,
+  ]);
   const globalOverlays = (
     <>
       <WebGlobalOverlayHost {...globalOverlayHostProps} />
       <Suspense fallback={null}>
         <WebMemberAgentDock
+          ref={memberAgentComposerApiRef}
           isVisible={isMemberAgentDockVisible}
           mobileShellActive={showMobileShell}
           mobileRoot={showMobileShell && mobileRootPage === "agent"}
@@ -11661,6 +11689,16 @@ export default function App() {
           ensureSession={ensureUsableAuthSession}
           fetchPublic={fetchWithPublic}
           fetchAuth={fetchWithAuth}
+          voiceButtonProps={{
+            state: memberAgentVoiceUiState,
+            title: memberAgentVoiceIntent.title,
+            onClick: () => {
+              void handleVoiceInputClick("member_agent");
+            },
+          }}
+          finalizeVoiceInputForSubmit={() =>
+            finishVoiceInputForSubmit("member_agent")
+          }
         />
       </Suspense>
       <WebDirectMessagesHost

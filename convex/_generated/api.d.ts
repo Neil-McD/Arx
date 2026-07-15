@@ -143,6 +143,7 @@ import type * as httpContext from "../httpContext.js";
 import type * as httpEmail from "../httpEmail.js";
 import type * as httpInferenceConfig from "../httpInferenceConfig.js";
 import type * as httpMcp from "../httpMcp.js";
+import type * as httpMemberAgentAttachments from "../httpMemberAgentAttachments.js";
 import type * as httpRuntimeRoutes from "../httpRuntimeRoutes.js";
 import type * as httpRuntimeSupport from "../httpRuntimeSupport.js";
 import type * as httpRuntimeTurnState from "../httpRuntimeTurnState.js";
@@ -370,6 +371,7 @@ declare const fullApi: ApiFromModules<{
   httpEmail: typeof httpEmail;
   httpInferenceConfig: typeof httpInferenceConfig;
   httpMcp: typeof httpMcp;
+  httpMemberAgentAttachments: typeof httpMemberAgentAttachments;
   httpRuntimeRoutes: typeof httpRuntimeRoutes;
   httpRuntimeSupport: typeof httpRuntimeSupport;
   httpRuntimeTurnState: typeof httpRuntimeTurnState;

@@ -60,9 +60,11 @@ import {
 } from "../shared/communityContextTool.ts";
 import type { ProductDocsSearchIndex } from "../shared/productDocsSearch.ts";
 import {
+  extractTextFromNativeToolMessageContent,
   getNativeToolCompletionToolCalls,
   type NativeToolAwareCompletionSuccess,
   type NativeToolAwareMessage,
+  type NativeToolInputContentPart,
   type NativeToolChoice,
 } from "../shared/nativeToolProtocol";
 import {
@@ -154,7 +156,7 @@ import {
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
   role: InferenceRole;
-  content: string;
+  content: string | NativeToolInputContentPart[];
 };
 
 type RuntimeAgentLoopSuccess = RuntimeKernelSuccess<string>;
@@ -1785,7 +1787,7 @@ async function executeRetrievalAgentLoop(
         communityId: params.communityId ? (params.communityId as any) : undefined,
         messages: params.messages.map((message) => ({
           role: String(message.role ?? ""),
-          content: String(message.content ?? ""),
+          content: extractTextFromNativeToolMessageContent(message.content),
         })),
       },
     ),
@@ -1836,10 +1838,14 @@ async function executeRetrievalAgentLoop(
       } | null,
   });
 
+  const latestUserContent = [...params.messages]
+    .reverse()
+    .find((message) => message.role === "user")?.content;
   const latestUserTextForRuntimeContext =
-    ([...params.messages].reverse().find((message) => message.role === "user")
-      ?.content ??
-      null);
+    extractTextFromNativeToolMessageContent(latestUserContent) ||
+    (Array.isArray(latestUserContent) && latestUserContent.some((part) => part.type === "image")
+      ? "[Image attached]"
+      : null);
   const runtimeTurnEnvelope = buildRuntimeTurnEnvelope({
     latestUserText: latestUserTextForRuntimeContext,
     threadWorkingState: params.threadWorkingState,
@@ -1907,7 +1913,10 @@ async function executeRetrievalAgentLoop(
     harnessName: params.harnessName,
     inferenceSource: params.inferenceSource,
     latestUserText: latestUserTextForRuntimeContext,
-    messages: params.messages,
+    messages: params.messages.map((message) => ({
+      role: message.role,
+      content: extractTextFromNativeToolMessageContent(message.content),
+    })),
     allowedToolNames: effectiveAllowedToolNames,
     mountedTools: resolvedHarness.runtimeMountedTools,
     communityResourceLane: resolvedHarness.communityResourceLane,
@@ -1956,10 +1965,21 @@ async function executeRetrievalAgentLoop(
       role: "system",
       content: systemPrompt,
     },
-    ...params.messages.map((message) => ({
-      role: message.role,
-      content: message.content,
-    })),
+    ...params.messages.map((message): NativeToolAwareMessage => {
+      if (message.role === "user") {
+        return { role: "user", content: message.content };
+      }
+      if (message.role === "assistant") {
+        return {
+          role: "assistant",
+          content: extractTextFromNativeToolMessageContent(message.content),
+        };
+      }
+      return {
+        role: "system",
+        content: extractTextFromNativeToolMessageContent(message.content),
+      };
+    }),
   ];
   const buildActiveProviderTools = () =>
     executionSession.buildProviderTools({

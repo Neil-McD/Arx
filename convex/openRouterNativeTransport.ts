@@ -40,6 +40,31 @@ function buildOpenRouterToolChoice(choice: NativeToolChoice | undefined): unknow
   };
 }
 
+export function normalizeMessagesForOpenRouter(
+  messages: NativeToolAwareMessage[],
+): unknown[] {
+  return messages.map((message) => {
+    if (message.role !== "user" || !Array.isArray(message.content)) return message;
+    const content = message.content.map((part) => {
+      if (part.type === "text") {
+        const text = String(part.text ?? "").trim();
+        if (!text) throw new Error("openrouter_user_text_part_empty");
+        return { type: "text", text };
+      }
+      const imageUrl = String(part.imageUrl ?? "").trim();
+      if (!imageUrl || !/^(https:\/\/|data:image\/)/i.test(imageUrl)) {
+        throw new Error("openrouter_user_image_url_invalid");
+      }
+      return {
+        type: "image_url",
+        image_url: { url: imageUrl },
+      };
+    });
+    if (content.length === 0) throw new Error("openrouter_user_content_empty");
+    return { role: "user", content };
+  });
+}
+
 export async function runOpenRouterNativeToolCompletion(params: {
   modelRef: string;
   messages: NativeToolAwareMessage[];
@@ -73,7 +98,7 @@ export async function runOpenRouterNativeToolCompletion(params: {
   const referer = readEnv("ARX_OPENROUTER_REFERER") || "https://arx.app";
   const requestBody: Record<string, unknown> = {
     model: params.modelRef,
-    messages: params.messages,
+    messages: normalizeMessagesForOpenRouter(params.messages),
     max_tokens: params.maxTokens,
     stream: false,
     tools: params.tools,
