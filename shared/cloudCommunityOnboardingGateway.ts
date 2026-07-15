@@ -3,6 +3,7 @@ import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient"
 import type { CloudCommunityChatLiveClient } from "./cloudCommunityChatGateway";
 import type {
   CommunityOnboardingConfig,
+  CommunityOnboardingOrientationNarration,
   CommunityOnboardingSession,
 } from "./communityOnboarding";
 
@@ -32,6 +33,42 @@ export async function saveCloudCommunityOnboardingConfig<SessionT>(params: {
     welcomeMessage: params.welcomeMessage,
     introVideoUrl: params.introVideoUrl ?? "",
   }) as CommunityOnboardingConfig;
+}
+
+export async function generateCloudCommunityOnboardingOrientationPreview<SessionT>(params: {
+  session: SessionT;
+  communityId: string;
+}): Promise<Pick<
+  CommunityOnboardingOrientationNarration,
+  "status" | "text"
+>> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.action(
+    "communityOnboardingConcierge:generateOrientationNarrationPreview" as any,
+    {
+      authSubject,
+      communityId: params.communityId,
+    },
+  ) as Pick<
+    CommunityOnboardingOrientationNarration,
+    "status" | "text"
+  >;
+}
+
+export async function requestCloudCommunityOnboardingOrientation<SessionT>(params: {
+  session: SessionT;
+  communityId: string;
+  sessionId: string;
+}): Promise<Pick<CommunityOnboardingOrientationNarration, "status" | "text">> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.action(
+    "communityOnboardingConcierge:requestMyOrientationNarration" as any,
+    {
+      authSubject,
+      communityId: params.communityId,
+      sessionId: params.sessionId,
+    },
+  ) as Pick<CommunityOnboardingOrientationNarration, "status" | "text">;
 }
 
 async function mutateCloudCommunityOnboardingSession<ResultT, SessionT>(params: {

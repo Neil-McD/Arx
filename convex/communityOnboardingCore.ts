@@ -1,7 +1,12 @@
 import {
   buildCommunityOnboardingMilestonePatch,
+  DEFAULT_COMMUNITY_ONBOARDING_WELCOME,
   type CommunityOnboardingMilestone,
 } from "../shared/communityOnboarding";
+import {
+  COMMUNITY_ONBOARDING_ORIENTATION_PROMPT_VERSION,
+  buildCommunityOnboardingOrientationFallback,
+} from "../shared/communityOnboardingConcierge";
 
 type CommunityOnboardingSessionRow = Record<string, any> & {
   _id: any;
@@ -56,13 +61,30 @@ export async function createCommunityOnboardingSessionForActivation(args: {
   }
 
   const introVideoUrlSnapshot = String(config.introVideoUrl ?? "").trim() || undefined;
+  const community = await args.ctx.db.get(args.communityId) as Record<string, any> | null;
+  const welcomeMessageSnapshot = String(
+    config.welcomeMessage ?? DEFAULT_COMMUNITY_ONBOARDING_WELCOME,
+  ).trim();
+  const orientationFallback = buildCommunityOnboardingOrientationFallback({
+    communityName: String(community?.name ?? "this community"),
+    communityOneLiner: String(community?.oneLiner ?? "").trim() || null,
+    welcomeMessage: welcomeMessageSnapshot,
+    hasVideo: Boolean(introVideoUrlSnapshot),
+  });
   return await args.ctx.db.insert("communityOnboardingSessions" as any, {
     communityId: args.communityId,
     membershipId: args.membershipId,
     userId: args.userId,
     activationSequence: args.activationSequence,
-    welcomeMessageSnapshot: String(config.welcomeMessage ?? "").trim(),
+    welcomeMessageSnapshot,
     ...(introVideoUrlSnapshot ? { introVideoUrlSnapshot } : {}),
+    conciergeNarration: {
+      orientation: {
+        status: "idle",
+        text: orientationFallback,
+        promptVersion: COMMUNITY_ONBOARDING_ORIENTATION_PROMPT_VERSION,
+      },
+    },
     status: "active",
     activatedAt: args.activatedAt,
     createdAt: args.activatedAt,

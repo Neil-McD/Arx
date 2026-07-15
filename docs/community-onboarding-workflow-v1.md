@@ -7,14 +7,18 @@ creates exactly one onboarding session for that activation. Repeated writes to
 an already-active membership do not create a session. A later reactivation
 supersedes any unfinished active session.
 
-The session snapshots only the configured welcome message and optional founder
-orientation video. Onboarding media is separate from public funnel media.
-Existing members are not backfilled, and later configuration changes do not
-rewrite an active session.
+The session snapshots the configured concierge welcome guidance, optional
+founder orientation video, and a deterministic orientation fallback. On the
+member's first authorized view, the application may replace that fallback once
+with bounded concierge narration generated for that member. Onboarding media is separate from public funnel media. Existing
+members are not backfilled, and later configuration changes do not rewrite an
+active session.
 
-Onboarding is deterministic UI orchestration. It does not create an onboarding
-agent, a community-agent conversation, hidden prompts, or a separate inference
-mode.
+Onboarding keeps a deterministic control plane. The community concierge may
+generate only the prose used by the orientation surface. It cannot choose an
+action, permission, route, seeded composer value, prompt, or state transition.
+No onboarding-agent identity, community-agent conversation, or new inference
+mode is created.
 
 ## State machine
 
@@ -41,13 +45,21 @@ After all five exist, the session becomes `completed` and receives
 
 ## Member experience
 
-Steps 1 and 2 share one deterministic community-concierge presentation. Step 1
-uses the community avatar, name, one-liner, saved welcome, and an optional
-founder video in a focused overlay. Its saved Markdown streams into view before
-the video and Continue action appear. Step 2 moves the same concierge voice to
-the canonical community composer, reveals brief scripted guidance, and seeds
-an editable introduction draft. Neither presentation invokes an agent or
-consumes inference. Step 3 shades the page, opens the existing
+Steps 1 and 2 share one community-concierge presentation. For step 1, the
+member immediately receives the stored deterministic welcome. Their first
+authorized view claims one best-effort no-tools `member_concierge` call that writes 2-4 short sentences from the
+community identity, saved founder guidance, member first name, and founder-video
+availability. The joining member sponsors that call with their ordinary
+personal-agent funding policy and limits: ChatGPT when connected, otherwise the
+member's OpenAI key. Membership activation never triggers inference. The result
+is stored once on the onboarding session and replayed on refresh. Missing
+access, a disabled agent, missing provider, timeout, invalid output, or a stale
+claim resolves to the stored deterministic fallback. Skip and Continue remain
+available while the optional narration is preparing, so inference can never
+lock onboarding. The chosen prose streams into view through the existing
+client-side reveal. Step 2 moves
+the same concierge voice to the canonical community composer, reveals brief
+scripted guidance, and seeds an editable introduction draft. Step 3 shades the page, opens the existing
 personal agent dock under the community lens, and keeps only its composer and a
 matching guidance card in focus. After the agent finishes, the same card asks
 the member to confirm the response makes sense. Step 4 appears only after that
@@ -63,9 +75,11 @@ The MCP step does not attempt to detect or attest to external installation.
 
 Owners and admins can open `/c/:slug/onboarding/preview`. Preview reads the
 saved manager-authorized configuration and renders the same onboarding
-surfaces. Preview state is local and resets on refresh. Community post sends are
-simulated, while the personal-agent step uses the builder's real personal agent,
-provider, history, and limits so the agent experience is honest.
+surfaces. Its orientation call uses the builder's provider and limits but is
+returned ephemerally: it creates no member session or milestone. Preview state
+is local and resets on refresh. Community post sends are simulated, while the
+personal-agent step uses the builder's real personal agent, provider, history,
+and limits so the agent experience is honest.
 
 A successful preview agent turn advances locally to the same response-review
 card. Choosing Next reveals the MCP handoff. Copying uses the same canonical
@@ -77,8 +91,8 @@ builder's real personal-agent turn cannot advance an unrelated live onboarding
 session they may own. It does not alter prompts, tools, inference, history, or
 permissions.
 
-Preview creates no onboarding session, public post, community-agent message, or
-special runtime prompt. It is available while onboarding is off.
+Preview creates no onboarding session, public post, or community-agent message.
+It is available while onboarding is off.
 
 ## Authority
 
@@ -86,12 +100,17 @@ special runtime prompt. It is available while onboarding is off.
 - Active member: read, advance, or dismiss only their own session.
 - Canonical community composer: record the first-post outcome.
 - Canonical member-agent runtime: record a successful personal-agent outcome.
+- Active member's first onboarding view: claim one bounded orientation prose
+  generation, sponsored by that member for live onboarding.
+- Owner/admin preview: generate the same bounded prose ephemerally with the
+  builder's ordinary personal-agent funding policy.
 - Active member: acknowledge their completed agent turn and complete their own
   MCP handoff after a successful clipboard copy.
 
 ## Deliberately absent
 
-No generic workflow graph, arbitrary triggers, public welcome, inference-backed
-onboarding concierge, community-funded inference, admin transcript, composer inference,
-backfill, generated prompt suggestions, browser-supplied system prompt, external
-installation detector, or harness-specific onboarding wizard exists in this slice.
+No generic workflow graph, arbitrary triggers, public welcome, community-funded
+inference, concierge tools, concierge conversation history, admin transcript,
+composer inference, backfill, generated prompt suggestions, browser-supplied
+system prompt, external installation detector, or harness-specific onboarding
+wizard exists in this slice.

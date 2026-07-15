@@ -89,6 +89,7 @@ import type * as communityMentionBroadcasts from "../communityMentionBroadcasts.
 import type * as communityMentionEmails from "../communityMentionEmails.js";
 import type * as communityMentionLifecycle from "../communityMentionLifecycle.js";
 import type * as communityOnboarding from "../communityOnboarding.js";
+import type * as communityOnboardingConcierge from "../communityOnboardingConcierge.js";
 import type * as communityOnboardingCore from "../communityOnboardingCore.js";
 import type * as communityPublic from "../communityPublic.js";
 import type * as communityReadKernel from "../communityReadKernel.js";
@@ -306,6 +307,7 @@ declare const fullApi: ApiFromModules<{
   communityMentionEmails: typeof communityMentionEmails;
   communityMentionLifecycle: typeof communityMentionLifecycle;
   communityOnboarding: typeof communityOnboarding;
+  communityOnboardingConcierge: typeof communityOnboardingConcierge;
   communityOnboardingCore: typeof communityOnboardingCore;
   communityPublic: typeof communityPublic;
   communityReadKernel: typeof communityReadKernel;

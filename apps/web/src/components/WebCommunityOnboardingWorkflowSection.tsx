@@ -195,7 +195,7 @@ export function WebCommunityOnboardingWorkflowSection(props: {
               <div className="community-onboarding-editor-heading">
                 <span>Step 1 of 4</span>
                 <h2>Welcome new members</h2>
-                <p>Add an optional founder video and the welcome members see before entering.</p>
+                <p>Add an optional founder video and guidance for the community concierge.</p>
               </div>
 
               <label className="create-community-field community-onboarding-field">
@@ -215,9 +215,9 @@ export function WebCommunityOnboardingWorkflowSection(props: {
               </label>
 
               <label className="create-community-field community-onboarding-field">
-                <span>Welcome message</span>
+                <span>Concierge welcome guidance</span>
                 <span className="community-onboarding-field-note">
-                  Shown exactly as written. Markdown is supported.
+                  Shapes the generated welcome and becomes the exact fallback if inference is unavailable.
                 </span>
                 <textarea
                   className="community-onboarding-textarea"
@@ -233,7 +233,7 @@ export function WebCommunityOnboardingWorkflowSection(props: {
             <aside className="community-onboarding-live-preview" aria-label="Live member welcome preview">
               <div className="community-onboarding-live-preview-heading">
                 <span>Member view</span>
-                <small>Live draft · no inference</small>
+                <small>Fallback preview · full preview tests the concierge</small>
               </div>
               <div className="community-onboarding-inline-preview-frame">
                 <div className={`community-onboarding-orientation-modal community-onboarding-orientation-inline${inlinePreviewSession.intro_video_url ? " has-video" : ""}`}>

@@ -25,6 +25,11 @@ export type CommunityOnboardingConfig = {
   updated_at: string | null;
 };
 
+export type CommunityOnboardingOrientationNarration = {
+  status: "idle" | "running" | "ready" | "fallback";
+  text: string | null;
+};
+
 export type CommunityOnboardingSession = {
   id: string;
   community_id: string;
@@ -32,6 +37,7 @@ export type CommunityOnboardingSession = {
   phase: CommunityOnboardingPhase;
   welcome_message: string;
   intro_video_url: string | null;
+  orientation_narration: CommunityOnboardingOrientationNarration | null;
   activated_at: string;
   orientation_completed_at: string | null;
   first_community_post_at: string | null;
@@ -159,6 +165,7 @@ export function createCommunityOnboardingPreviewSession(params: {
     phase: "orientation",
     welcome_message: params.config.welcome_message,
     intro_video_url: params.config.intro_video_url,
+    orientation_narration: null,
     activated_at: params.nowIso,
     orientation_completed_at: null,
     first_community_post_at: null,

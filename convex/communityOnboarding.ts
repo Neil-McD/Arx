@@ -29,6 +29,15 @@ function mapConfig(row: Record<string, any> | null) {
   };
 }
 
+function mapOrientationNarration(row: Record<string, any>) {
+  const narration = row.conciergeNarration?.orientation as Record<string, any> | undefined;
+  if (!narration) return null;
+  return {
+    status: narration.status === "queued" ? "idle" : narration.status,
+    text: String(narration.text ?? "").trim() || null,
+  };
+}
+
 function mapSession(row: Record<string, any>) {
   return {
     id: normalizeIdValue(row._id),
@@ -37,6 +46,7 @@ function mapSession(row: Record<string, any>) {
     phase: deriveCommunityOnboardingPhase(row),
     welcome_message: String(row.welcomeMessageSnapshot ?? ""),
     intro_video_url: String(row.introVideoUrlSnapshot ?? "").trim() || null,
+    orientation_narration: mapOrientationNarration(row),
     activated_at: toIsoString(row.activatedAt),
     orientation_completed_at: row.orientationCompletedAt
       ? toIsoString(row.orientationCompletedAt)

@@ -85,6 +85,7 @@ export function WebCommunityOnboardingConciergeSurface(props: {
   titleId?: string;
   descriptionId?: string;
   isPreparing?: boolean;
+  allowActionsWhilePreparing?: boolean;
   isPending: boolean;
   controlsDisabled?: boolean;
   error: string | null;
@@ -101,9 +102,10 @@ export function WebCommunityOnboardingConciergeSurface(props: {
   const transcript = props.isPreparing ? "Loading your community welcome…" : props.transcript;
   const { displayText, isComplete: transcriptIsComplete } =
     useDeterministicConciergeTranscript(transcript);
-  const controlsDisabled = Boolean(props.controlsDisabled) || props.isPending || Boolean(props.isPreparing);
-  const showPrimary = (props.showPrimary ?? true) && transcriptIsComplete && !props.isPreparing;
-  const showContent = transcriptIsComplete && !props.isPreparing && Boolean(props.children);
+  const preparingBlocksActions = Boolean(props.isPreparing) && !props.allowActionsWhilePreparing;
+  const controlsDisabled = Boolean(props.controlsDisabled) || props.isPending || preparingBlocksActions;
+  const showPrimary = (props.showPrimary ?? true) && transcriptIsComplete && !preparingBlocksActions;
+  const showContent = transcriptIsComplete && !preparingBlocksActions && Boolean(props.children);
 
   return (
     <>

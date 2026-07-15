@@ -23,6 +23,8 @@ import {
   completeCloudCommunityOnboardingOrientation,
   dismissCloudCommunityOnboardingSession,
   fetchCloudCommunityOnboardingConfig,
+  generateCloudCommunityOnboardingOrientationPreview,
+  requestCloudCommunityOnboardingOrientation,
   subscribeCloudCommunityOnboardingSession,
 } from "../../../../shared/cloudCommunityOnboardingGateway";
 import {
@@ -35,6 +37,7 @@ import { WebCommunityOnboardingMcpGuide } from "./WebCommunityOnboardingMcpGuide
 import { WebCommunityOnboardingPreviewBar } from "./WebCommunityOnboardingPreviewBar";
 
 type PendingAction = "continue" | "dismiss" | "agent_review" | "mcp_handoff" | null;
+const ORIENTATION_REQUEST_RETRY_MS = 11_000;
 
 type WebCommunityOnboardingContextValue = {
   mode: "live" | "preview";
@@ -83,7 +86,11 @@ export function WebCommunityOnboardingController(props: {
   const [usableSession, setUsableSession] = useState<unknown | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [error, setError] = useState<string | null>(null);
+  const [orientationRequestPendingSessionId, setOrientationRequestPendingSessionId] = useState<string | null>(null);
+  const [orientationRequestFailedSessionId, setOrientationRequestFailedSessionId] = useState<string | null>(null);
+  const [orientationRequestTick, setOrientationRequestTick] = useState(0);
   const [firstPostAcknowledgementSessionId, setFirstPostAcknowledgementSessionId] = useState<string | null>(null);
+  const orientationRequestAttemptedAtRef = useRef(new Map<string, number>());
   const previousPresentedSessionRef = useRef<Pick<CommunityOnboardingSession, "id" | "phase"> | null>(null);
   // Auth refresh replaces session objects. Keep the latest credentials without
   // treating that object churn as a new preview entry.
@@ -102,6 +109,8 @@ export function WebCommunityOnboardingController(props: {
     setActiveSession(null);
     setUsableSession(null);
     setPendingAction(null);
+    setOrientationRequestPendingSessionId(null);
+    setOrientationRequestFailedSessionId(null);
     setError(null);
     if (isPreviewMode || !props.isEnabled || !props.session || !props.communityId) return;
 
@@ -147,6 +156,68 @@ export function WebCommunityOnboardingController(props: {
   }, [isPreviewMode, props.communityId, props.ensureSession, props.isEnabled, props.session]);
 
   useEffect(() => {
+    if (
+      isPreviewMode ||
+      !usableSession ||
+      !props.communityId ||
+      !activeSession ||
+      activeSession.phase !== "orientation"
+    ) {
+      return;
+    }
+    const narration = activeSession.orientation_narration;
+    if (!narration || (narration.status !== "idle" && narration.status !== "running")) return;
+    if (orientationRequestPendingSessionId === activeSession.id) return;
+
+    const nowMs = Date.now();
+    const lastAttemptAt = orientationRequestAttemptedAtRef.current.get(activeSession.id) ?? 0;
+    const retryInMs = Math.max(0, ORIENTATION_REQUEST_RETRY_MS - (nowMs - lastAttemptAt));
+    if (retryInMs > 0) {
+      const timerId = window.setTimeout(
+        () => setOrientationRequestTick((current) => current + 1),
+        retryInMs,
+      );
+      return () => window.clearTimeout(timerId);
+    }
+
+    const sessionId = activeSession.id;
+    orientationRequestAttemptedAtRef.current.set(sessionId, nowMs);
+    setOrientationRequestPendingSessionId(sessionId);
+    void requestCloudCommunityOnboardingOrientation({
+      session: usableSession,
+      communityId: props.communityId,
+      sessionId,
+    }).then((nextNarration) => {
+      if (nextNarration.status !== "running") {
+        setOrientationRequestFailedSessionId((current) => current === sessionId ? null : current);
+      }
+      setActiveSession((current) => current?.id === sessionId
+        ? {
+            ...current,
+            orientation_narration: {
+              status: nextNarration.status,
+              text: nextNarration.text || current.orientation_narration?.text || null,
+            },
+          }
+        : current);
+    }).catch((requestError) => {
+      console.warn("community_onboarding_orientation_request_failed", requestError);
+      setOrientationRequestFailedSessionId(sessionId);
+    }).finally(() => {
+      setOrientationRequestPendingSessionId((current) => current === sessionId ? null : current);
+    });
+  }, [
+    activeSession?.id,
+    activeSession?.orientation_narration?.status,
+    activeSession?.phase,
+    isPreviewMode,
+    orientationRequestPendingSessionId,
+    orientationRequestTick,
+    props.communityId,
+    usableSession,
+  ]);
+
+  useEffect(() => {
     setPreviewSession(null);
     setPreviewConfiguredEnabled(null);
     setPreviewError(null);
@@ -179,12 +250,31 @@ export function WebCommunityOnboardingController(props: {
         });
         if (cancelled) return;
         setPreviewConfiguredEnabled(config.enabled);
-        setPreviewSession(createCommunityOnboardingPreviewSession({
+        const createdPreviewSession = createCommunityOnboardingPreviewSession({
           communityId: previewCommunityId,
           config,
           nowIso: new Date().toISOString(),
           previewId: crypto.randomUUID(),
-        }));
+        });
+        setPreviewSession(createdPreviewSession);
+        try {
+          const narration = await generateCloudCommunityOnboardingOrientationPreview({
+            session: nextUsableSession,
+            communityId: previewCommunityId,
+          });
+          if (cancelled) return;
+          setPreviewSession((current) => current?.id === createdPreviewSession.id
+            ? {
+                ...current,
+                orientation_narration: {
+                  status: narration.status === "ready" ? "ready" : "fallback",
+                  text: narration.text,
+                },
+              }
+            : current);
+        } catch (generationError) {
+          console.warn("community_onboarding_preview_narration_failed", generationError);
+        }
       } catch (loadError) {
         if (cancelled) return;
         console.warn("community_onboarding_preview_load_failed", loadError);
@@ -465,7 +555,17 @@ export function WebCommunityOnboardingController(props: {
           communityAvatarFocusY={props.communityAvatarFocusY}
           communityAvatarZoom={props.communityAvatarZoom}
           session={contextValue.activeSession}
-          isPreparing={isPreviewLoading}
+          isPreparing={
+            isPreviewLoading ||
+            (
+              orientationRequestFailedSessionId !== contextValue.activeSession.id &&
+              (
+                orientationRequestPendingSessionId === contextValue.activeSession.id ||
+                contextValue.activeSession.orientation_narration?.status === "idle" ||
+                contextValue.activeSession.orientation_narration?.status === "running"
+              )
+            )
+          }
           isPending={contextValue.pendingAction !== null}
           error={contextValue.error}
           onContinue={contextValue.completeOrientation}

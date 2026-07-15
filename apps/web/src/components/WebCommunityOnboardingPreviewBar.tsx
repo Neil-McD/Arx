@@ -8,6 +8,7 @@ export function WebCommunityOnboardingPreviewBar(props: {
   onExit: () => void;
 }) {
   const phase = props.session?.phase ?? null;
+  const orientationNarrationStatus = props.session?.orientation_narration?.status ?? null;
 
   return (
     <div className="community-onboarding-preview-bar">
@@ -21,9 +22,13 @@ export function WebCommunityOnboardingPreviewBar(props: {
           {props.error
             ? props.error
             : props.isLoading
-              ? "Loading the saved workflow…"
+              ? "Preparing the saved concierge welcome…"
               : phase === "complete"
                 ? "Preview complete · No community post was created"
+              : phase === "orientation" && orientationNarrationStatus === "fallback"
+                ? "Concierge fallback shown · Community posts are simulated"
+              : phase === "orientation" && orientationNarrationStatus === "ready"
+                ? "Concierge generated with your account · Community posts are simulated"
               : props.configuredEnabled === false
                 ? "Currently off · Community posts are simulated"
                 : "Community posts are simulated · Your personal agent uses your account"}
