@@ -622,6 +622,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
       if (result.error) throw new Error(result.error);
       if (!isCurrentScope(scope)) return;
       await loadMessages(thread.thread_key, usableSession);
+      if (onboarding?.mode === "preview") onboarding.completeAgentTurnPreview();
     } catch (error) {
       if (!isCurrentScope(scope)) return;
       console.warn("member_agent_dock_send_failed", error);

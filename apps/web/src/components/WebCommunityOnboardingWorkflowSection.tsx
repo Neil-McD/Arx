@@ -176,12 +176,19 @@ export function WebCommunityOnboardingWorkflowSection(props: {
                 <small>Built-in next action</small>
               </div>
             </li>
+            <li>
+              <span>4</span>
+              <div>
+                <strong>Polynet MCP</strong>
+                <small>Copy the setup handoff</small>
+              </div>
+            </li>
           </ol>
 
           <div className="community-onboarding-builder">
             <div className="community-onboarding-editor">
               <div className="community-onboarding-editor-heading">
-                <span>Step 1 of 3</span>
+                <span>Step 1 of 4</span>
                 <h2>Welcome new members</h2>
                 <p>Add an optional founder video and the welcome members see before entering.</p>
               </div>

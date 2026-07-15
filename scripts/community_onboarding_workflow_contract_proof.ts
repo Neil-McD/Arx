@@ -8,6 +8,7 @@ import {
   normalizeCommunityOnboardingVideoUrl,
   shouldPresentCommunityOnboardingAgentStep,
   shouldPresentCommunityOnboardingFirstPost,
+  shouldPresentCommunityOnboardingMcpHandoff,
   shouldPresentCommunityOnboardingOrientation,
   type CommunityOnboardingMilestone,
   type CommunityOnboardingMilestoneRow,
@@ -31,6 +32,9 @@ const orientation = read("apps/web/src/components/WebCommunityOnboardingOrientat
 const firstPost = read("apps/web/src/components/WebCommunityOnboardingFirstPostGuide.tsx");
 const chat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const dock = read("apps/web/src/components/WebMemberAgentDock.tsx");
+const mcpGuide = read("apps/web/src/components/WebCommunityOnboardingMcpGuide.tsx");
+const integrations = read("apps/web/src/components/WebIntegrationsSettingsSection.tsx");
+const mcpSetup = read("shared/polynetMcpSetup.ts");
 
 function tableSource(name: string, nextName: string): string {
   const start = schema.indexOf(`${name}: defineTable`);
@@ -65,9 +69,14 @@ assert.equal(shouldPresentCommunityOnboardingFirstPost({ status: "active", phase
 assert.equal(deriveCommunityOnboardingPhase(session), "first_agent_dock_turn");
 assert.equal(shouldPresentCommunityOnboardingAgentStep({ status: "active", phase: "first_agent_dock_turn" }), true);
 session = advance(session, "first_agent_dock_turn", 40);
+assert.equal(session.status, "active");
+assert.equal(deriveCommunityOnboardingPhase(session), "mcp_handoff");
+assert.equal(shouldPresentCommunityOnboardingMcpHandoff({ status: "active", phase: "mcp_handoff" }), true);
+session = advance(session, "mcp_handoff_completed", 50);
 assert.equal(session.status, "completed");
-assert.equal(session.completedAt, 40);
-assert.equal(buildCommunityOnboardingMilestonePatch(session, "first_community_post", 50), null);
+assert.equal(session.completedAt, 50);
+assert.equal(buildCommunityOnboardingMilestonePatch(session, "first_community_post", 60), null);
+assert.equal(deriveCommunityOnboardingPhase({ completedAt: 40 }), "complete");
 
 const configSchema = tableSource("communityOnboardingConfigs", "communityOnboardingSessions");
 const sessionSchema = tableSource("communityOnboardingSessions", "communityInteractionRoots");
@@ -78,6 +87,7 @@ assert.doesNotMatch(configSchema, /agentInstructions|version:/);
 assert.match(sessionSchema, /membershipId: v\.id\("communityMemberships"\)/);
 assert.match(sessionSchema, /activationSequence: v\.number\(\)/);
 assert.match(sessionSchema, /welcomeMessageSnapshot: v\.string\(\)/);
+assert.match(sessionSchema, /mcpHandoffCompletedAt: v\.optional\(v\.number\(\)\)/);
 assert.doesNotMatch(sessionSchema, /agentInstructions|configVersion|concierge|Seed|openedAt/);
 
 for (const file of readdirSync("convex").filter((name) => name.endsWith(".ts"))) {
@@ -90,6 +100,8 @@ assert.match(core, /status: "superseded"/);
 assert.doesNotMatch(core, /agentInstructions|readCanonicalCommunityAgentContext|concierge/);
 assert.match(onboarding, /completeMyCommunityOnboardingOrientation/);
 assert.match(onboarding, /recordPersonalAgentDockTurnInternal/);
+assert.match(onboarding, /completeMyCommunityOnboardingMcpHandoff/);
+assert.match(onboarding, /milestone: "mcp_handoff_completed"/);
 assert.doesNotMatch(onboarding, /openMyCommunityOnboardingSession|resolveActivePersonalAgentGuidance|ensureCommunityAgentDockWelcomeCore/);
 assert.match(interactions, /milestone: "first_community_post"/);
 assert.doesNotMatch(interactions, /onboardingPreview|onboardingMode|onboardingSessionId/);
@@ -111,5 +123,11 @@ assert.match(firstPost, /The composer is ready for you/);
 assert.match(chat, /buildCommunityOnboardingIntroductionDraft/);
 assert.match(dock, /shouldPresentCommunityOnboardingAgentStep/);
 assert.match(dock, /requestedFundingSource: "auto"/);
+assert.match(mcpGuide, /POLYNET_MCP_SETUP_BUNDLE/);
+assert.match(mcpGuide, /Copy setup/);
+assert.match(mcpGuide, /props\.onComplete/);
+assert.match(integrations, /POLYNET_MCP_SETUP_BUNDLE/);
+assert.match(mcpSetup, /https:\/\/www\.polynet\.ai\/runtime\/mcp/);
+assert.doesNotMatch(mcpGuide, /access token|bearer token/i);
 
-console.log("PASS: community onboarding is deterministic orchestration with no onboarding inference path.");
+console.log("PASS: community onboarding deterministically reaches one canonical MCP handoff with no onboarding inference path.");

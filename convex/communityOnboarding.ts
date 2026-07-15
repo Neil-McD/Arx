@@ -47,6 +47,9 @@ function mapSession(row: Record<string, any>) {
     first_agent_dock_turn_at: row.firstAgentDockTurnAt
       ? toIsoString(row.firstAgentDockTurnAt)
       : null,
+    mcp_handoff_completed_at: row.mcpHandoffCompletedAt
+      ? toIsoString(row.mcpHandoffCompletedAt)
+      : null,
     completed_at: row.completedAt ? toIsoString(row.completedAt) : null,
   };
 }
@@ -224,6 +227,39 @@ export const dismissMyCommunityOnboardingSession = mutation({
       updatedAt: nowMs,
     });
     return { dismissed: true };
+  },
+});
+
+export const completeMyCommunityOnboardingMcpHandoff = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    sessionId: v.id("communityOnboardingSessions"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    const ownedSession = await requireOwnedActiveSession({
+      ctx,
+      sessionId: args.sessionId,
+      communityId: args.communityId,
+      userId,
+    });
+    if (deriveCommunityOnboardingPhase(ownedSession) !== "mcp_handoff") {
+      throw new Error("community_onboarding_mcp_handoff_not_ready");
+    }
+    const session = await recordCommunityOnboardingSessionMilestone({
+      ctx,
+      session: ownedSession,
+      milestone: "mcp_handoff_completed",
+      nowMs: Date.now(),
+    });
+    return session ? mapSession(session) : null;
   },
 });
 

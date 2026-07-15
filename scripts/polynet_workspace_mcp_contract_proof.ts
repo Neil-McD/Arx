@@ -41,8 +41,16 @@ const communityReadKernel = read("convex/communityReadKernel.ts");
 const communityReadContract = read("shared/communityReadContract.ts");
 const communityCapabilityContextContract = read("shared/communityCapabilityContextContract.ts");
 const packageJson = read("package.json");
-const integrationsSettings = read(
+const integrationsSettingsUi = read(
   "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+);
+const mcpSetup = read("shared/polynetMcpSetup.ts");
+const integrationsSettings = `${integrationsSettingsUi}\n${mcpSetup}`;
+
+assertIncludes(
+  integrationsSettingsUi,
+  "../../../../shared/polynetMcpSetup",
+  "Integrations Settings canonical MCP setup import",
 );
 
 assertIncludes(

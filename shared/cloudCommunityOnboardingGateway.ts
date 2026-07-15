@@ -40,6 +40,7 @@ async function mutateCloudCommunityOnboardingSession<ResultT, SessionT>(params: 
   sessionId: string;
   mutationName:
     | "communityOnboarding:completeMyCommunityOnboardingOrientation"
+    | "communityOnboarding:completeMyCommunityOnboardingMcpHandoff"
     | "communityOnboarding:dismissMyCommunityOnboardingSession";
 }): Promise<ResultT> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -69,6 +70,17 @@ export async function dismissCloudCommunityOnboardingSession<SessionT>(params: {
   await mutateCloudCommunityOnboardingSession<{ dismissed: boolean }, SessionT>({
     ...params,
     mutationName: "communityOnboarding:dismissMyCommunityOnboardingSession",
+  });
+}
+
+export async function completeCloudCommunityOnboardingMcpHandoff<SessionT>(params: {
+  session: SessionT;
+  communityId: string;
+  sessionId: string;
+}): Promise<CommunityOnboardingSession | null> {
+  return await mutateCloudCommunityOnboardingSession<CommunityOnboardingSession | null, SessionT>({
+    ...params,
+    mutationName: "communityOnboarding:completeMyCommunityOnboardingMcpHandoff",
   });
 }
 

@@ -5,12 +5,9 @@ export function WebCommunityOnboardingPreviewBar(props: {
   configuredEnabled: boolean | null;
   isLoading: boolean;
   error: string | null;
-  onAdvance: () => void;
   onExit: () => void;
 }) {
   const phase = props.session?.phase ?? null;
-  const actionLabel =
-    phase === "first_agent_dock_turn" ? "Finish preview" : null;
 
   return (
     <div className="community-onboarding-preview-bar">
@@ -25,21 +22,14 @@ export function WebCommunityOnboardingPreviewBar(props: {
             ? props.error
             : props.isLoading
               ? "Loading the saved workflow…"
+              : phase === "complete"
+                ? "Preview complete · No community post was created"
               : props.configuredEnabled === false
                 ? "Currently off · Community posts are simulated"
                 : "Community posts are simulated · Your personal agent uses your account"}
         </span>
       </div>
       <div className="community-onboarding-preview-bar-actions">
-        {actionLabel ? (
-          <button
-            type="button"
-            onClick={props.onAdvance}
-            disabled={props.isLoading || Boolean(props.error)}
-          >
-            {actionLabel}
-          </button>
-        ) : null}
         <button type="button" className="secondary" onClick={props.onExit}>
           Exit preview
         </button>

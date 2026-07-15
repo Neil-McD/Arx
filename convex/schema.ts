@@ -1353,6 +1353,7 @@ export default defineSchema({
     orientationCompletedAt: v.optional(v.number()),
     firstCommunityPostAt: v.optional(v.number()),
     firstAgentDockTurnAt: v.optional(v.number()),
+    mcpHandoffCompletedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     dismissedAt: v.optional(v.number()),
     supersededAt: v.optional(v.number()),

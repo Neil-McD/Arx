@@ -28,7 +28,7 @@ export function WebCommunityOnboardingOrientationSurface(props: {
     <>
       <div className="community-onboarding-orientation-topbar">
         <span>Member orientation</span>
-        <span>1 of 3</span>
+        <span>1 of 4</span>
       </div>
 
       <div className="community-onboarding-orientation-scroll">

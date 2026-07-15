@@ -13,6 +13,7 @@ type CommunityOnboardingSessionRow = Record<string, any> & {
   orientationCompletedAt?: number;
   firstCommunityPostAt?: number;
   firstAgentDockTurnAt?: number;
+  mcpHandoffCompletedAt?: number;
   completedAt?: number;
   createdAt: number;
 };

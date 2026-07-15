@@ -194,6 +194,11 @@ The target Polynet MCP user experience is:
 Settings -> Integrations -> Copy setup -> paste into harness -> one OAuth login -> durable MCP access
 ```
 
+Member onboarding may present the same canonical setup packet as its final
+deterministic handoff. It must reuse the Integrations packet exactly; onboarding
+must not create a second MCP payload, token path, harness wizard, or installation
+attestation.
+
 Polynet must not ask users to paste bearer tokens. Polynet is the MCP resource server, WorkOS/AuthKit is the OAuth authorization server, and the external harness is the OAuth client that owns local credential persistence.
 
 For a single harness profile/device, one successful OAuth login should survive new chats, app restarts, and normal access-token expiry. The harness should store refresh-capable credentials and refresh access tokens silently. Re-authentication is expected only after logout, token revocation, refresh-token expiry, account switch, a new harness profile/device, or lost local credentials.

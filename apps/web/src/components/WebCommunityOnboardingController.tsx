@@ -11,10 +11,12 @@ import {
 import {
   advanceCommunityOnboardingPreviewSession,
   createCommunityOnboardingPreviewSession,
+  shouldPresentCommunityOnboardingMcpHandoff,
   shouldPresentCommunityOnboardingOrientation,
   type CommunityOnboardingSession,
 } from "../../../../shared/communityOnboarding";
 import {
+  completeCloudCommunityOnboardingMcpHandoff,
   completeCloudCommunityOnboardingOrientation,
   dismissCloudCommunityOnboardingSession,
   fetchCloudCommunityOnboardingConfig,
@@ -25,9 +27,10 @@ import {
   type CloudCommunityChatLiveClient,
 } from "../../../../shared/cloudCommunityChatGateway";
 import { WebCommunityOnboardingOrientationModal } from "./WebCommunityOnboardingOrientationModal";
+import { WebCommunityOnboardingMcpGuide } from "./WebCommunityOnboardingMcpGuide";
 import { WebCommunityOnboardingPreviewBar } from "./WebCommunityOnboardingPreviewBar";
 
-type PendingAction = "continue" | "dismiss" | null;
+type PendingAction = "continue" | "dismiss" | "mcp_handoff" | null;
 
 type WebCommunityOnboardingContextValue = {
   mode: "live" | "preview";
@@ -37,7 +40,9 @@ type WebCommunityOnboardingContextValue = {
   error: string | null;
   completeOrientation: () => void;
   completeFirstPostPreview: () => void;
+  completeAgentTurnPreview: () => void;
   continueAfterFirstPost: () => void;
+  completeMcpHandoff: () => Promise<boolean>;
   dismiss: () => void;
 };
 
@@ -192,17 +197,14 @@ export function WebCommunityOnboardingController(props: {
 
   const handlePreviewAdvance = useCallback(() => {
     if (!isPreviewMode || !previewSession) return;
-    if (previewSession.phase === "first_agent_dock_turn" || previewSession.phase === "complete") {
-      props.onExitPreview?.();
-      return;
-    }
+    if (previewSession.phase === "complete") return;
     const previousPhase = previewSession.phase;
     setPreviewSession(advanceCommunityOnboardingPreviewSession(
       previewSession,
       new Date().toISOString(),
     ));
     if (previousPhase === "orientation") props.onOrientationCompleted?.();
-  }, [isPreviewMode, previewSession, props.onExitPreview, props.onOrientationCompleted]);
+  }, [isPreviewMode, previewSession, props.onOrientationCompleted]);
 
   const handleContinue = useCallback(() => {
     if (isPreviewMode) {
@@ -308,11 +310,64 @@ export function WebCommunityOnboardingController(props: {
     setFirstPostAcknowledgementSessionId(previewSession.id);
   }, [isPreviewMode, previewSession]);
 
+  const handleCompleteAgentTurnPreview = useCallback(() => {
+    if (
+      !isPreviewMode ||
+      !previewSession ||
+      previewSession.phase !== "first_agent_dock_turn"
+    ) {
+      return;
+    }
+    handlePreviewAdvance();
+  }, [handlePreviewAdvance, isPreviewMode, previewSession]);
+
   const handleContinueAfterFirstPost = useCallback(() => {
     if (!presentedSession || !firstPostAcknowledgementPending) return;
     setFirstPostAcknowledgementSessionId(null);
     if (isPreviewMode) handlePreviewAdvance();
   }, [firstPostAcknowledgementPending, handlePreviewAdvance, isPreviewMode, presentedSession]);
+
+  const handleCompleteMcpHandoff = useCallback(async (): Promise<boolean> => {
+    if (isPreviewMode) {
+      if (!previewSession || previewSession.phase !== "mcp_handoff") return false;
+      handlePreviewAdvance();
+      return true;
+    }
+    if (
+      !activeSession ||
+      activeSession.phase !== "mcp_handoff" ||
+      !usableSession ||
+      !props.communityId ||
+      pendingAction
+    ) {
+      return false;
+    }
+    const sessionId = activeSession.id;
+    setPendingAction("mcp_handoff");
+    setError(null);
+    try {
+      const next = await completeCloudCommunityOnboardingMcpHandoff({
+        session: usableSession,
+        communityId: props.communityId,
+        sessionId,
+      });
+      setActiveSession((current) => current?.id === sessionId ? next : current);
+      return next?.status === "completed";
+    } catch {
+      setError("We couldn’t save your progress. Please try again.");
+      return false;
+    } finally {
+      setPendingAction(null);
+    }
+  }, [
+    activeSession,
+    handlePreviewAdvance,
+    isPreviewMode,
+    pendingAction,
+    previewSession,
+    props.communityId,
+    usableSession,
+  ]);
 
   const contextValue = useMemo<WebCommunityOnboardingContextValue>(() => ({
     mode: isPreviewMode ? "preview" : "live",
@@ -323,11 +378,15 @@ export function WebCommunityOnboardingController(props: {
     error: presentedError,
     completeOrientation: handleContinue,
     completeFirstPostPreview: handleCompleteFirstPostPreview,
+    completeAgentTurnPreview: handleCompleteAgentTurnPreview,
     continueAfterFirstPost: handleContinueAfterFirstPost,
+    completeMcpHandoff: handleCompleteMcpHandoff,
     dismiss: handleDismiss,
   }), [
     firstPostAcknowledgementPending,
     handleCompleteFirstPostPreview,
+    handleCompleteAgentTurnPreview,
+    handleCompleteMcpHandoff,
     handleContinue,
     handleContinueAfterFirstPost,
     handleDismiss,
@@ -355,13 +414,21 @@ export function WebCommunityOnboardingController(props: {
           onDismiss={contextValue.dismiss}
         />
       ) : null}
+      {contextValue.activeSession &&
+      shouldPresentCommunityOnboardingMcpHandoff(contextValue.activeSession) ? (
+        <WebCommunityOnboardingMcpGuide
+          isPending={contextValue.pendingAction !== null}
+          error={contextValue.error}
+          onComplete={contextValue.completeMcpHandoff}
+          onDismiss={contextValue.dismiss}
+        />
+      ) : null}
       {isPreviewMode ? (
         <WebCommunityOnboardingPreviewBar
           session={contextValue.activeSession}
           configuredEnabled={previewConfiguredEnabled}
           isLoading={isPreviewLoading}
           error={previewError}
-          onAdvance={handlePreviewAdvance}
           onExit={() => props.onExitPreview?.()}
         />
       ) : null}

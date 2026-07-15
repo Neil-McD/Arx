@@ -23,7 +23,7 @@ export function WebCommunityOnboardingFirstPostGuide(props: {
           </svg>
         </div>
         <div className="community-onboarding-first-post-copy">
-          <span>Step 2 of 3</span>
+          <span>Step 2 of 4</span>
           <strong>
             {props.isComplete
               ? props.isPreview
