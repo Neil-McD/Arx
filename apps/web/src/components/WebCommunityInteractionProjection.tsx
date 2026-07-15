@@ -47,6 +47,7 @@ export type WebCommunityInteractionProjectionProps = {
   roots: CommunityInteractionRootBundle[];
   selectedRootId: string | null;
   mobileThreadPage?: boolean;
+  floatingComposers?: boolean;
   replies: CommunityInteractionReplyBundle[];
   isLoadingRoots: boolean;
   isLoadingReplies: boolean;
@@ -291,6 +292,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const mainRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const drawerScrollRef = useRef<HTMLDivElement | null>(null);
+  const drawerComposerRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
   const isMobileReadingModeRef = useRef(false);
   const isMainComposerFocusedRef = useRef(false);
@@ -416,6 +420,12 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         "--mobile-community-composer-height",
         `${Math.ceil(composer.getBoundingClientRect().height)}px`,
       );
+      if (props.floatingComposers && isNearBottomRef.current) {
+        requestAnimationFrame(() => {
+          const scroll = scrollRef.current;
+          if (scroll) scroll.scrollTop = scroll.scrollHeight;
+        });
+      }
     };
     syncComposerHeight();
     if (typeof ResizeObserver === "undefined") return;
@@ -425,7 +435,42 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
       observer.disconnect();
       main.style.removeProperty("--mobile-community-composer-height");
     };
-  }, [props.mainComposer]);
+  }, [props.floatingComposers, props.mainComposer]);
+
+  useLayoutEffect(() => {
+    const drawer = drawerRef.current;
+    const composer = drawerComposerRef.current;
+    if (!drawer || !composer || !props.selectedRootId || !props.floatingComposers) {
+      drawer?.style.removeProperty("--community-thread-composer-height");
+      return;
+    }
+
+    const syncComposerHeight = () => {
+      const scroll = drawerScrollRef.current;
+      const shouldFollowReplies = scroll
+        ? scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 120
+        : false;
+      drawer.style.setProperty(
+        "--community-thread-composer-height",
+        `${Math.ceil(composer.getBoundingClientRect().height)}px`,
+      );
+      if (shouldFollowReplies) {
+        requestAnimationFrame(() => {
+          const nextScroll = drawerScrollRef.current;
+          if (nextScroll) nextScroll.scrollTop = nextScroll.scrollHeight;
+        });
+      }
+    };
+
+    syncComposerHeight();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(syncComposerHeight);
+    observer.observe(composer);
+    return () => {
+      observer.disconnect();
+      drawer.style.removeProperty("--community-thread-composer-height");
+    };
+  }, [props.drawerComposer, props.floatingComposers, props.selectedRootId]);
 
   const rootWindowSignature = useMemo(
     () => props.roots.map((bundle) => bundle.root.id).join("|"),
@@ -527,14 +572,16 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             <span aria-hidden="true">↓</span> New messages
           </button>
         ) : null}
-        <TypingIndicator
-          users={(props.typingPresence?.users ?? []).filter(
-            (user) => user.user_id !== props.currentUserId && !user.root_id,
-          )}
-          displayName={props.displayName}
-          getAvatarColor={props.getAvatarColor}
-          getInitials={props.getInitials}
-        />
+        {!props.floatingComposers ? (
+          <TypingIndicator
+            users={(props.typingPresence?.users ?? []).filter(
+              (user) => user.user_id !== props.currentUserId && !user.root_id,
+            )}
+            displayName={props.displayName}
+            getAvatarColor={props.getAvatarColor}
+            getInitials={props.getInitials}
+          />
+        ) : null}
         {props.mainComposer ? (
           <div
             className="community-interaction-main-composer"
@@ -550,6 +597,16 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               isMainComposerFocusedRef.current = false;
             }}
           >
+            {props.floatingComposers ? (
+              <TypingIndicator
+                users={(props.typingPresence?.users ?? []).filter(
+                  (user) => user.user_id !== props.currentUserId && !user.root_id,
+                )}
+                displayName={props.displayName}
+                getAvatarColor={props.getAvatarColor}
+                getInitials={props.getInitials}
+              />
+            ) : null}
             {props.mainComposer}
           </div>
         ) : null}
@@ -574,8 +631,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         </aside>
       ) : selectedRoot ? (
         <ThreadSurface
-          className={`community-interaction-drawer${isMobileThreadPage ? " community-interaction-thread-page" : ""}`}
+          className={`community-interaction-drawer community-interaction-thread-drawer${isMobileThreadPage ? " community-interaction-thread-page" : ""}`}
           aria-label={isMobileThreadPage ? "Thread" : "Thread replies"}
+          ref={(node) => {
+            drawerRef.current = node;
+          }}
         >
           {!isMobileThreadPage ? <div className="community-interaction-drawer-back">
             <button
@@ -590,7 +650,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               <span className="back-path">thread</span>
             </button>
           </div> : null}
-          <div className="community-interaction-drawer-scroll">
+          <div className="community-interaction-drawer-scroll" ref={drawerScrollRef}>
             <div className="community-interaction-drawer-root">
               <div className="community-interaction-thread-anchor">
                 <ProfileHoverCard
@@ -858,16 +918,30 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               </div>
             )}
           </div>
-          <TypingIndicator
-            users={(props.typingPresence?.users ?? []).filter(
-              (user) => user.user_id !== props.currentUserId && user.root_id === selectedRoot.root.id,
-            )}
-            displayName={props.displayName}
-            getAvatarColor={props.getAvatarColor}
-            getInitials={props.getInitials}
-          />
+          {!props.floatingComposers ? (
+            <TypingIndicator
+              users={(props.typingPresence?.users ?? []).filter(
+                (user) => user.user_id !== props.currentUserId && user.root_id === selectedRoot.root.id,
+              )}
+              displayName={props.displayName}
+              getAvatarColor={props.getAvatarColor}
+              getInitials={props.getInitials}
+            />
+          ) : null}
           {props.drawerComposer ? (
-            <div className="community-interaction-drawer-composer">{props.drawerComposer}</div>
+            <div className="community-interaction-drawer-composer" ref={drawerComposerRef}>
+              {props.floatingComposers ? (
+                <TypingIndicator
+                  users={(props.typingPresence?.users ?? []).filter(
+                    (user) => user.user_id !== props.currentUserId && user.root_id === selectedRoot.root.id,
+                  )}
+                  displayName={props.displayName}
+                  getAvatarColor={props.getAvatarColor}
+                  getInitials={props.getInitials}
+                />
+              ) : null}
+              {props.drawerComposer}
+            </div>
           ) : null}
         </ThreadSurface>
       ) : (

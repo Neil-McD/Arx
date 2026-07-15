@@ -1637,7 +1637,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   return (
     <>
       <div
-        className={`community-chat community-attachment-drop-surface${isCommunityAttachmentDragOver ? " drag-over" : ""}`}
+        className={`community-chat community-member-chat community-attachment-drop-surface${isCommunityAttachmentDragOver ? " drag-over" : ""}`}
         onDrop={canUseComposer ? onCommunityAttachmentDrop : undefined}
         onDragEnter={canUseComposer ? onCommunityAttachmentDragEnter : undefined}
         onDragOver={canUseComposer ? onCommunityAttachmentDragOver : undefined}
@@ -1663,6 +1663,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             >
               <WebCommunityInteractionProjection
                 {...interactionProjection}
+                floatingComposers
                 onOpenCommunityChatLightbox={onOpenCommunityChatLightbox}
                 activeCommunityName={activeCommunity?.name ?? "Community"}
                 profilesByUserId={profilesByUserId}

@@ -113,6 +113,11 @@
   --stroke-active: var(--border-active);
   --stroke-selected: color-mix(in srgb, var(--accent-gold) 46%, var(--stroke-default));
   --stroke-divider-accent: var(--divider-accent, var(--border-muted));
+  --composer-surface: var(--bg-card-solid, #17171a);
+  --composer-border: color-mix(in srgb, var(--stroke-default) 88%, transparent);
+  --composer-focus-border: color-mix(in srgb, var(--text-ink-secondary) 52%, var(--stroke-default));
+  --composer-focus-ring: color-mix(in srgb, var(--text-ink-primary) 44%, transparent);
+  --composer-radius: 24px;
   --text-ink-primary: var(--text-primary);
   --text-ink-secondary: var(--text-secondary);
   --text-ink-muted: var(--text-muted);
@@ -9654,6 +9659,62 @@ button.community-launch-knowledge-integration-chip:disabled {
   min-height: 24px;
 }
 
+/* Member communication composers share one solid floating material. The
+   visitor funnel intentionally reuses the interaction projection without the
+   member root class, so these rules cannot leak into .cvs-chat. */
+.community-member-chat .community-interaction-feed-scroll {
+  padding-bottom: calc(var(--mobile-community-composer-height, 0px) + 18px);
+}
+
+.community-member-chat .community-interaction-main-composer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 12;
+  padding-top: 0;
+  border-top: 0;
+  background: transparent;
+}
+
+.community-member-chat .community-interaction-thread-drawer .community-interaction-drawer-scroll {
+  padding-bottom: calc(var(--community-thread-composer-height, 0px) + 18px);
+}
+
+.community-member-chat .community-interaction-drawer-composer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 4;
+  padding: 0 12px 12px;
+  background: transparent;
+}
+
+.community-member-chat .community-interaction-main-composer .chat-input-bar,
+.community-member-chat .community-interaction-drawer-composer .chat-input-bar {
+  border-radius: var(--composer-radius);
+  background: var(--composer-surface);
+  border-color: var(--composer-border);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+}
+
+.community-member-chat .community-interaction-main-composer .chat-input-bar {
+  padding: 12px 14px 10px;
+}
+
+.community-member-chat .community-interaction-drawer-composer .chat-input-bar {
+  padding: 12px 14px 10px;
+}
+
+.community-member-chat .chat-input-bar:focus-within {
+  border-color: var(--composer-focus-border);
+}
+
+.community-member-chat .community-interaction-reply-input-bar {
+  border-radius: var(--composer-radius);
+}
+
 .community-interaction-feed-header {
   display: flex;
   align-items: center;
@@ -12226,12 +12287,14 @@ button.community-launch-knowledge-integration-chip:disabled {
   gap: 8px;
   min-width: 0;
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 84%, transparent);
-  border-radius: 24px;
-  background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-workspace) 12%);
+  border: 1px solid var(--composer-border);
+  border-radius: var(--composer-radius);
+  background: var(--composer-surface);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(16px) saturate(130%);
-  -webkit-backdrop-filter: blur(16px) saturate(130%);
+}
+
+.community-dm-panel-composer:focus-within {
+  border-color: var(--composer-focus-border);
 }
 
 .community-dm-panel-file-input {
@@ -30868,6 +30931,26 @@ button.message-citation-chip:hover {
 .app-root.mobile-shell .community-chat .community-interaction-reply-input-bar {
   margin: 0;
   border-radius: 18px;
+}
+
+.app-root.mobile-shell .community-member-chat .community-interaction-thread-page .community-interaction-drawer-composer {
+  padding: 8px 12px calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height) + 8px);
+  border-top: 0;
+  background: transparent;
+}
+
+.app-root.mobile-shell .community-member-chat .chat-input-bar {
+  border-radius: var(--composer-radius);
+  background: var(--composer-surface);
+  border-color: var(--composer-border);
+}
+
+.app-root.mobile-shell .community-member-chat .chat-input-bar:focus-within {
+  border-color: var(--composer-focus-border);
+}
+
+.app-root.mobile-shell .community-member-chat .community-interaction-reply-input-bar {
+  border-radius: var(--composer-radius);
 }
 
 .app-root.mobile-shell .community-chat .chat-input {

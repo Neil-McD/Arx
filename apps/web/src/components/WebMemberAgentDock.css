@@ -47,11 +47,18 @@
     inset 0 1px 0 rgba(196, 181, 253, 0.14);
 }
 
-.member-agent-dock-launcher:focus-visible,
-.member-agent-dock button:focus-visible,
-.member-agent-dock textarea:focus-visible {
+.member-agent-dock-launcher:focus-visible {
   outline: 2px solid var(--member-agent-accent);
   outline-offset: 2px;
+}
+
+.member-agent-dock button:focus-visible {
+  outline: 2px solid var(--composer-focus-ring, rgba(232, 232, 234, 0.44));
+  outline-offset: 2px;
+}
+
+.member-agent-dock textarea:focus-visible {
+  outline: none;
 }
 
 .member-agent-dock-launcher svg {
@@ -331,13 +338,13 @@
   gap: 8px;
   margin: 0 12px 12px;
   padding: 8px 8px 8px 11px;
-  background: var(--surface-input);
-  border: 1px solid var(--stroke-default);
-  border-radius: 8px;
+  background: var(--composer-surface, var(--bg-card-solid, #17171a));
+  border: 1px solid var(--composer-border, var(--stroke-default));
+  border-radius: var(--composer-radius, 24px);
 }
 
 .member-agent-dock-composer:focus-within {
-  border-color: var(--stroke-strong);
+  border-color: var(--composer-focus-border, var(--stroke-strong));
 }
 
 .member-agent-dock-composer textarea {
@@ -366,7 +373,7 @@
   color: var(--bg-button-text);
   background: var(--bg-button);
   border: 0;
-  border-radius: 7px;
+  border-radius: 999px;
   cursor: pointer;
 }
 

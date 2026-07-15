@@ -46,8 +46,16 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-dm-panel-composer \{[\s\S]*border-radius: 24px;[\s\S]*background: color-mix\(in srgb, var\(--bg-card\) 88%, var\(--bg-workspace\) 12%\);/,
-  "DM composer should use the canonical soft pill geometry",
+  /\.community-dm-panel-composer \{[\s\S]*border-radius: var\(--composer-radius\);[\s\S]*background: var\(--composer-surface\);/,
+  "DM composer should use the canonical opaque pill surface",
+);
+assert.doesNotMatch(
+  baseCss.slice(
+    baseCss.indexOf(".community-dm-panel-composer {"),
+    baseCss.indexOf(".community-dm-panel-file-input"),
+  ),
+  /backdrop-filter/,
+  "DM composer should not use translucency as its separation mechanism",
 );
 assert.match(
   baseCss,
