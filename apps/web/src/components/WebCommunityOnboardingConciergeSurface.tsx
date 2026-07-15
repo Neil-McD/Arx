@@ -90,6 +90,7 @@ export function WebCommunityOnboardingConciergeSurface(props: {
   error: string | null;
   primaryLabel: string;
   pendingPrimaryLabel?: string;
+  autoFocusPrimary?: boolean;
   showPrimary?: boolean;
   secondaryLabel?: string;
   pendingSecondaryLabel?: string;
@@ -152,7 +153,13 @@ export function WebCommunityOnboardingConciergeSurface(props: {
         </button>
         <div className="community-onboarding-concierge-primary-slot">
           {showPrimary ? (
-            <button className="primary" type="button" onClick={props.onPrimary} disabled={controlsDisabled}>
+            <button
+              autoFocus={props.autoFocusPrimary}
+              className="primary"
+              type="button"
+              onClick={props.onPrimary}
+              disabled={controlsDisabled}
+            >
               {props.isPending && props.pendingPrimaryLabel
                 ? props.pendingPrimaryLabel
                 : props.primaryLabel}

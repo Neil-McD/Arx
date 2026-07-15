@@ -1,15 +1,17 @@
-import { Copy, Link2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { tryCopyTextToClipboard } from "../../../../shared/chatUi";
-import {
-  POLYNET_MCP_ENDPOINT_URL,
-  POLYNET_MCP_SETUP_BUNDLE,
-} from "../../../../shared/polynetMcpSetup";
+import { POLYNET_MCP_SETUP_BUNDLE } from "../../../../shared/polynetMcpSetup";
+import { WebCommunityOnboardingConciergeSurface } from "./WebCommunityOnboardingConciergeSurface";
 
 type CopyState = "idle" | "copying" | "saving" | "error";
 
 export function WebCommunityOnboardingMcpGuide(props: {
+  communityName: string;
+  communityAvatarUrl?: string | null;
+  communityAvatarFocusX?: number | null;
+  communityAvatarFocusY?: number | null;
+  communityAvatarZoom?: number | null;
   isPending: boolean;
   error: string | null;
   onComplete: () => Promise<boolean>;
@@ -17,11 +19,22 @@ export function WebCommunityOnboardingMcpGuide(props: {
 }) {
   const [copyState, setCopyState] = useState<CopyState>("idle");
   const [copyError, setCopyError] = useState<string | null>(null);
-  const copyButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [hasCopied, setHasCopied] = useState(false);
+  const dialogRef = useRef<HTMLElement | null>(null);
   const isBusy = props.isPending || copyState === "copying" || copyState === "saving";
+  const transcript = hasCopied
+    ? "**Copied.**\n\nGo to your harness and paste the setup into the chat. It will add the Polynet MCP server, guide you through sign-in if needed, and verify the connection for you.\n\nOnce connected, you can work with Polynet from any harness."
+    : "**Take Polynet with you.**\n\nPolynet MCP lets you access your communities from the AI harnesses you already use. Copy the setup below to connect another harness.";
+  const primaryLabel = hasCopied
+    ? copyState === "error"
+      ? "Try finishing again"
+      : "Finish onboarding"
+    : copyState === "error"
+      ? "Try copying again"
+      : "Copy MCP setup";
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => copyButtonRef.current?.focus());
+    const frame = window.requestAnimationFrame(() => dialogRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
@@ -36,65 +49,60 @@ export function WebCommunityOnboardingMcpGuide(props: {
         setCopyError("We couldn’t copy the setup packet. Try again.");
         return;
       }
-      setCopyState("saving");
-      const completed = await props.onComplete();
-      if (!completed) {
-        setCopyState("error");
-        setCopyError("The setup packet was copied, but we couldn’t save your progress. Try again.");
-      }
+      setHasCopied(true);
+      setCopyState("idle");
     } catch {
       setCopyState("error");
       setCopyError("We couldn’t copy the setup packet. Try again.");
     }
   };
 
+  const handleFinish = async () => {
+    if (isBusy) return;
+    setCopyState("saving");
+    setCopyError(null);
+    try {
+      const completed = await props.onComplete();
+      if (!completed) {
+        setCopyState("error");
+        setCopyError("Your setup is copied, but we couldn’t finish onboarding. Try again.");
+      }
+    } catch {
+      setCopyState("error");
+      setCopyError("Your setup is copied, but we couldn’t finish onboarding. Try again.");
+    }
+  };
+
   return (
     <div className="community-onboarding-mcp-overlay">
       <section
-        className="community-onboarding-mcp-guide"
+        ref={dialogRef}
+        className="community-onboarding-concierge-guide community-onboarding-mcp-guide"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="community-onboarding-mcp-title"
+        aria-label={`${props.communityName} onboarding: Take Polynet with you`}
         aria-describedby="community-onboarding-mcp-description"
+        tabIndex={-1}
       >
-        <div className="community-onboarding-mcp-icon" aria-hidden="true">
-          <Link2 />
-        </div>
-        <div className="community-onboarding-mcp-copy">
-          <span>Step 4 of 4</span>
-          <h2 id="community-onboarding-mcp-title">Take Polynet with you</h2>
-          <p id="community-onboarding-mcp-description">
-            Copy one setup packet, paste it into Codex, Claude Code, Cursor, Hermes,
-            OpenClaw, or another MCP-compatible harness, then sign in once.
-          </p>
-          <code>{POLYNET_MCP_ENDPOINT_URL}</code>
-          {copyError || props.error ? (
-            <small role="alert">{copyError ?? props.error}</small>
-          ) : (
-            <small>Your harness will use your Polynet permissions and community access.</small>
-          )}
-        </div>
-        <div className="community-onboarding-mcp-actions">
-          <button type="button" onClick={props.onDismiss} disabled={isBusy}>
-            Skip onboarding
-          </button>
-          <button
-            ref={copyButtonRef}
-            className="primary"
-            type="button"
-            onClick={() => void handleCopy()}
-            disabled={isBusy}
-          >
-            <Copy aria-hidden="true" />
-            {copyState === "copying"
-              ? "Copying…"
-              : copyState === "saving" || props.isPending
-                ? "Finishing…"
-                : copyState === "error"
-                  ? "Try again"
-                  : "Copy setup"}
-          </button>
-        </div>
+        <WebCommunityOnboardingConciergeSurface
+          key={hasCopied ? "copied" : "ready"}
+          communityName={props.communityName}
+          communityAvatarUrl={props.communityAvatarUrl}
+          communityAvatarFocusX={props.communityAvatarFocusX}
+          communityAvatarFocusY={props.communityAvatarFocusY}
+          communityAvatarZoom={props.communityAvatarZoom}
+          stepLabel="Step 4 of 4"
+          transcript={transcript}
+          descriptionId="community-onboarding-mcp-description"
+          isPending={isBusy}
+          error={copyError ?? props.error}
+          primaryLabel={primaryLabel}
+          pendingPrimaryLabel={copyState === "saving" || props.isPending ? "Finishing…" : "Copying…"}
+          autoFocusPrimary={true}
+          secondaryLabel="Skip"
+          onPrimary={() => void (hasCopied ? handleFinish() : handleCopy())}
+          onSecondary={props.onDismiss}
+        />
       </section>
     </div>
   );

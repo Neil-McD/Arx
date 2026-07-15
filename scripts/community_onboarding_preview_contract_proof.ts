@@ -93,5 +93,8 @@ assert.match(agentGuide, /WebCommunityOnboardingConciergeSurface/);
 assert.match(agentGuide, /Step 3 of 4/);
 assert.match(mcpGuide, /POLYNET_MCP_SETUP_BUNDLE/);
 assert.match(mcpGuide, /Step 4 of 4/);
+assert.match(mcpGuide, /WebCommunityOnboardingConciergeSurface/);
+assert.match(mcpGuide, /Copy MCP setup/);
+assert.doesNotMatch(mcpGuide, /POLYNET_MCP_ENDPOINT_URL/);
 
 console.log("PASS: preview simulates public writes, uses the builder's ordinary personal agent, and ends with the canonical MCP handoff.");

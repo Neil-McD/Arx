@@ -494,8 +494,14 @@ export function WebCommunityOnboardingController(props: {
         />
       ) : null}
       {contextValue.activeSession &&
+      props.communityName &&
       shouldPresentCommunityOnboardingMcpHandoff(contextValue.activeSession) ? (
         <WebCommunityOnboardingMcpGuide
+          communityName={props.communityName}
+          communityAvatarUrl={props.communityAvatarUrl}
+          communityAvatarFocusX={props.communityAvatarFocusX}
+          communityAvatarFocusY={props.communityAvatarFocusY}
+          communityAvatarZoom={props.communityAvatarZoom}
           isPending={contextValue.pendingAction !== null}
           error={contextValue.error}
           onComplete={contextValue.completeMcpHandoff}
