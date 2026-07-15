@@ -343,10 +343,6 @@
   border-radius: var(--composer-radius, 24px);
 }
 
-.member-agent-dock-composer:focus-within {
-  border-color: var(--composer-focus-border, var(--stroke-strong));
-}
-
 .member-agent-dock-composer textarea {
   min-width: 0;
   max-height: 112px;

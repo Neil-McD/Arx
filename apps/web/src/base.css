@@ -115,7 +115,6 @@
   --stroke-divider-accent: var(--divider-accent, var(--border-muted));
   --composer-surface: var(--bg-card-solid, #17171a);
   --composer-border: color-mix(in srgb, var(--stroke-default) 88%, transparent);
-  --composer-focus-border: color-mix(in srgb, var(--text-ink-secondary) 52%, var(--stroke-default));
   --composer-focus-ring: color-mix(in srgb, var(--text-ink-primary) 44%, transparent);
   --composer-radius: 24px;
   --text-ink-primary: var(--text-primary);
@@ -9691,6 +9690,25 @@ button.community-launch-knowledge-integration-chip:disabled {
   background: transparent;
 }
 
+/* Keep the scrolling layer cheap: a static layer behind each floating pill
+   softens content at the viewport edge without masking or repainting the feed. */
+.community-member-chat .community-interaction-main-composer::before,
+.community-member-chat .community-interaction-drawer-composer::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: -1;
+  height: calc(100% + 22px);
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0,
+    color-mix(in srgb, var(--bg-workspace) 76%, transparent) 100%
+  );
+}
+
 .community-member-chat .community-interaction-main-composer .chat-input-bar,
 .community-member-chat .community-interaction-drawer-composer .chat-input-bar {
   border-radius: var(--composer-radius);
@@ -9705,10 +9723,6 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-member-chat .community-interaction-drawer-composer .chat-input-bar {
   padding: 12px 14px 10px;
-}
-
-.community-member-chat .chat-input-bar:focus-within {
-  border-color: var(--composer-focus-border);
 }
 
 .community-member-chat .community-interaction-reply-input-bar {
@@ -11692,6 +11706,22 @@ button.community-launch-knowledge-integration-chip:disabled {
   pointer-events: none;
 }
 
+.community-dm-composer-float::before {
+  content: "";
+  position: absolute;
+  right: -14px;
+  bottom: -14px;
+  left: -14px;
+  z-index: -1;
+  height: calc(100% + 32px);
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0,
+    color-mix(in srgb, var(--bg-workspace) 76%, transparent) 100%
+  );
+}
+
 .community-dm-composer-float > * {
   pointer-events: auto;
 }
@@ -12291,10 +12321,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   border-radius: var(--composer-radius);
   background: var(--composer-surface);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
-}
-
-.community-dm-panel-composer:focus-within {
-  border-color: var(--composer-focus-border);
 }
 
 .community-dm-panel-file-input {
@@ -30943,10 +30969,6 @@ button.message-citation-chip:hover {
   border-radius: var(--composer-radius);
   background: var(--composer-surface);
   border-color: var(--composer-border);
-}
-
-.app-root.mobile-shell .community-member-chat .chat-input-bar:focus-within {
-  border-color: var(--composer-focus-border);
 }
 
 .app-root.mobile-shell .community-member-chat .community-interaction-reply-input-bar {

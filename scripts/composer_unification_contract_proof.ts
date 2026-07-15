@@ -64,13 +64,23 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar,[\s\S]*background: var\(--composer-surface\);[\s\S]*border-color: var\(--composer-border\);/,
-  "community and thread composers should share the opaque material",
+  /\.community-member-chat \.community-interaction-main-composer::before,[\s\S]*\.community-member-chat \.community-interaction-drawer-composer::before \{[\s\S]*z-index: -1;[\s\S]*height: calc\(100% \+ 22px\);[\s\S]*linear-gradient\([\s\S]*var\(--bg-workspace\) 76%/,
+  "community and thread content should fade behind a static composer layer",
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.chat-input-bar:focus-within \{[\s\S]*var\(--composer-focus-border\)/,
-  "member chat focus should use a neutral shell border",
+  /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar,[\s\S]*background: var\(--composer-surface\);[\s\S]*border-color: var\(--composer-border\);/,
+  "community and thread composers should share the opaque material",
+);
+assert.doesNotMatch(
+  baseCss,
+  /(?:\.community-member-chat \.chat-input-bar|\.community-dm-panel-composer):focus-within/,
+  "member communication composer shells should not change when focused",
+);
+assert.match(
+  baseCss,
+  /\.community-dm-composer-float::before \{[\s\S]*z-index: -1;[\s\S]*height: calc\(100% \+ 32px\);[\s\S]*linear-gradient\([\s\S]*var\(--bg-workspace\) 76%/,
+  "DM content should fade behind a static composer layer",
 );
 
 assert.match(
@@ -114,10 +124,10 @@ assert.match(
   /\.member-agent-dock-composer \{[\s\S]*background: var\(--composer-surface,[\s\S]*border-radius: var\(--composer-radius/,
   "member-agent composer should share the canonical material and shape",
 );
-assert.match(
+assert.doesNotMatch(
   memberAgentCss,
-  /\.member-agent-dock-composer:focus-within \{[\s\S]*var\(--composer-focus-border/,
-  "member-agent composer should use neutral focus treatment",
+  /\.member-agent-dock-composer:focus-within/,
+  "member-agent composer shell should not change when focused",
 );
 
 console.log("composer_unification_contract_proof: ok");
