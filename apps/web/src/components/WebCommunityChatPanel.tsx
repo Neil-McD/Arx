@@ -42,7 +42,7 @@ import { useMessageAttachmentInputController } from "../../../../shared/useMessa
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import { WebCommunityChatLightboxModal } from "./WebCommunityChatLightboxModal";
-import { WebCommunityOnboardingFirstPostGuide } from "./WebCommunityOnboardingFirstPostGuide";
+import { WebCommunityOnboardingConciergeGuide } from "./WebCommunityOnboardingConciergeGuide";
 import { useWebCommunityOnboarding } from "./WebCommunityOnboardingController";
 import { WebMobileDrawer } from "./WebMobileDrawer";
 import {
@@ -269,7 +269,15 @@ function mapCloudMentionCandidate(row: CloudCommunityMentionCandidateRow): Menti
 }
 
 export type WebCommunityChatPanelProps = {
-  activeCommunity: { id: string; name: string; owner_id?: string | null } | null;
+  activeCommunity: {
+    id: string;
+    name: string;
+    owner_id?: string | null;
+    avatar_url?: string | null;
+    avatar_focus_x?: number | null;
+    avatar_focus_y?: number | null;
+    avatar_zoom?: number | null;
+  } | null;
   session: unknown | null;
   isResolvingSelectedCommunity: boolean;
   hasAuthenticatedPresentation: boolean;
@@ -1482,12 +1490,15 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       {renderCommunityAgentServeNotice()}
 
       {showOnboardingFirstPostGuide && activeCommunity && communityOnboarding ? (
-        <WebCommunityOnboardingFirstPostGuide
+        <WebCommunityOnboardingConciergeGuide
           communityName={activeCommunity.name}
+          communityAvatarUrl={activeCommunity.avatar_url}
+          communityAvatarFocusX={activeCommunity.avatar_focus_x}
+          communityAvatarFocusY={activeCommunity.avatar_focus_y}
+          communityAvatarZoom={activeCommunity.avatar_zoom}
           descriptionId={COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID}
           isComplete={isOnboardingFirstPostAcknowledgement}
           isPending={communityOnboarding.pendingAction !== null}
-          isPreview={isCommunityOnboardingPreview}
           error={communityOnboarding.error}
           onContinue={communityOnboarding.continueAfterFirstPost}
           onDismiss={communityOnboarding.dismiss}

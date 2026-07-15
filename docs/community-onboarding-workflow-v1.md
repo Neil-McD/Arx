@@ -42,8 +42,10 @@ After all five exist, the session becomes `completed` and receives
 ## Member experience
 
 Step 1 presents the saved welcome and optional founder video in a focused
-overlay. Step 2 spotlights the canonical community composer and seeds an
-editable introduction draft. Step 3 shades the page, opens the existing
+overlay. Step 2 uses a deterministic community-concierge presentation to
+spotlight the canonical community composer, reveal brief scripted guidance,
+and seed an editable introduction draft. This presentation never invokes an
+agent or consumes inference. Step 3 shades the page, opens the existing
 personal agent dock under the community lens, and keeps only its composer and a
 matching guidance card in focus. After the agent finishes, the same card asks
 the member to confirm the response makes sense. Step 4 appears only after that
@@ -87,7 +89,7 @@ special runtime prompt. It is available while onboarding is off.
 
 ## Deliberately absent
 
-No generic workflow graph, arbitrary triggers, public welcome, onboarding
-concierge, community-funded inference, admin transcript, composer inference,
+No generic workflow graph, arbitrary triggers, public welcome, inference-backed
+onboarding concierge, community-funded inference, admin transcript, composer inference,
 backfill, generated prompt suggestions, browser-supplied system prompt, external
 installation detector, or harness-specific onboarding wizard exists in this slice.

@@ -34214,6 +34214,262 @@ button.message-citation-chip:hover {
   }
 }
 
+/* Deterministic community concierge: one voice, one action, no inference. */
+.community-onboarding-concierge-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: rgba(5, 5, 8, 0.66);
+  backdrop-filter: blur(4px) saturate(92%);
+  -webkit-backdrop-filter: blur(4px) saturate(92%);
+  animation: community-onboarding-concierge-overlay-in 180ms ease-out both;
+}
+
+.community-onboarding-concierge-guide {
+  position: fixed;
+  z-index: 2;
+  left: 50%;
+  bottom: 116px;
+  width: min(640px, calc(100vw - 36px));
+  min-height: 116px;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 92px;
+  align-items: start;
+  gap: 13px;
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 38%, var(--border-default));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-modal, var(--bg-panel)) 96%, var(--accent-gold) 4%);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+  color: var(--text-primary);
+  pointer-events: auto;
+  animation: community-onboarding-concierge-in 180ms ease-out both;
+}
+
+.community-onboarding-concierge-avatar {
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 42%, var(--border-default));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-gold) 12%, var(--surface-card));
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1;
+}
+
+.community-onboarding-concierge-avatar .community-avatar-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.community-onboarding-concierge-avatar.is-speaking {
+  animation: community-onboarding-concierge-speaking 900ms ease-in-out infinite;
+}
+
+.community-onboarding-concierge-copy {
+  min-width: 0;
+}
+
+.community-onboarding-concierge-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+.community-onboarding-concierge-meta strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-onboarding-concierge-meta span {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+}
+
+.community-onboarding-concierge-meta span:last-child {
+  margin-left: auto;
+  color: var(--accent-gold);
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.community-onboarding-concierge-transcript {
+  min-height: 3em;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.community-onboarding-concierge-transcript.is-speaking > span[aria-hidden="true"]::after {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin-left: 3px;
+  background: currentColor;
+  vertical-align: -0.12em;
+  animation: community-onboarding-concierge-caret 640ms steps(1, end) infinite;
+}
+
+.community-onboarding-concierge-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.community-onboarding-concierge-copy > small {
+  display: block;
+  margin-top: 6px;
+  color: var(--danger-text, #f3a6a6);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.community-onboarding-concierge-actions {
+  display: grid;
+  justify-items: stretch;
+  gap: 5px;
+  width: 92px;
+}
+
+.community-onboarding-concierge-primary-slot {
+  min-height: 34px;
+}
+
+.community-onboarding-concierge-actions button {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.community-onboarding-concierge-actions button.primary {
+  min-height: 34px;
+  border-color: var(--border-default);
+  background: color-mix(in srgb, var(--surface-card) 90%, white 10%);
+  color: var(--text-primary);
+  font-size: 11px;
+  animation: community-onboarding-concierge-action-in 180ms ease-out both;
+}
+
+.community-onboarding-concierge-actions button:hover:not(:disabled) {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+.community-onboarding-concierge-actions button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-gold) 58%, transparent);
+  outline-offset: 2px;
+}
+
+.community-onboarding-concierge-actions button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+@keyframes community-onboarding-concierge-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@keyframes community-onboarding-concierge-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes community-onboarding-concierge-speaking {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-gold) 0%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-gold) 12%, transparent); }
+}
+
+@keyframes community-onboarding-concierge-caret {
+  0%, 48% { opacity: 0.86; }
+  49%, 100% { opacity: 0; }
+}
+
+@keyframes community-onboarding-concierge-action-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 640px) {
+  .community-onboarding-concierge-guide {
+    bottom: 106px;
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 10px;
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .community-onboarding-concierge-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  .community-onboarding-concierge-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    width: 100%;
+  }
+
+  .community-onboarding-concierge-primary-slot {
+    min-height: 32px;
+  }
+
+  .community-onboarding-concierge-actions button {
+    width: auto;
+    min-width: 72px;
+  }
+
+  .community-onboarding-concierge-actions button.primary {
+    justify-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-onboarding-concierge-overlay,
+  .community-onboarding-concierge-guide,
+  .community-onboarding-concierge-avatar.is-speaking,
+  .community-onboarding-concierge-transcript.is-speaking > span[aria-hidden="true"]::after,
+  .community-onboarding-concierge-actions button.primary {
+    animation: none;
+  }
+}
+
 /* First-post coaching keeps the community visible while isolating one action. */
 .community-onboarding-first-post-overlay {
   position: fixed;
