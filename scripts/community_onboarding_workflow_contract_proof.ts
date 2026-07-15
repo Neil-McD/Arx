@@ -6,6 +6,7 @@ import {
   deriveCommunityOnboardingPhase,
   isCommunityOnboardingIntroductionReady,
   normalizeCommunityOnboardingVideoUrl,
+  shouldPresentCommunityOnboardingAgentReview,
   shouldPresentCommunityOnboardingAgentStep,
   shouldPresentCommunityOnboardingFirstPost,
   shouldPresentCommunityOnboardingMcpHandoff,
@@ -70,12 +71,16 @@ assert.equal(deriveCommunityOnboardingPhase(session), "first_agent_dock_turn");
 assert.equal(shouldPresentCommunityOnboardingAgentStep({ status: "active", phase: "first_agent_dock_turn" }), true);
 session = advance(session, "first_agent_dock_turn", 40);
 assert.equal(session.status, "active");
+assert.equal(deriveCommunityOnboardingPhase(session), "agent_turn_review");
+assert.equal(shouldPresentCommunityOnboardingAgentReview({ status: "active", phase: "agent_turn_review" }), true);
+session = advance(session, "agent_turn_acknowledged", 50);
+assert.equal(session.status, "active");
 assert.equal(deriveCommunityOnboardingPhase(session), "mcp_handoff");
 assert.equal(shouldPresentCommunityOnboardingMcpHandoff({ status: "active", phase: "mcp_handoff" }), true);
-session = advance(session, "mcp_handoff_completed", 50);
+session = advance(session, "mcp_handoff_completed", 60);
 assert.equal(session.status, "completed");
-assert.equal(session.completedAt, 50);
-assert.equal(buildCommunityOnboardingMilestonePatch(session, "first_community_post", 60), null);
+assert.equal(session.completedAt, 60);
+assert.equal(buildCommunityOnboardingMilestonePatch(session, "first_community_post", 70), null);
 assert.equal(deriveCommunityOnboardingPhase({ completedAt: 40 }), "complete");
 
 const configSchema = tableSource("communityOnboardingConfigs", "communityOnboardingSessions");
@@ -87,6 +92,7 @@ assert.doesNotMatch(configSchema, /agentInstructions|version:/);
 assert.match(sessionSchema, /membershipId: v\.id\("communityMemberships"\)/);
 assert.match(sessionSchema, /activationSequence: v\.number\(\)/);
 assert.match(sessionSchema, /welcomeMessageSnapshot: v\.string\(\)/);
+assert.match(sessionSchema, /agentTurnAcknowledgedAt: v\.optional\(v\.number\(\)\)/);
 assert.match(sessionSchema, /mcpHandoffCompletedAt: v\.optional\(v\.number\(\)\)/);
 assert.doesNotMatch(sessionSchema, /agentInstructions|configVersion|concierge|Seed|openedAt/);
 
@@ -100,6 +106,8 @@ assert.match(core, /status: "superseded"/);
 assert.doesNotMatch(core, /agentInstructions|readCanonicalCommunityAgentContext|concierge/);
 assert.match(onboarding, /completeMyCommunityOnboardingOrientation/);
 assert.match(onboarding, /recordPersonalAgentDockTurnInternal/);
+assert.match(onboarding, /acknowledgeMyCommunityOnboardingAgentTurn/);
+assert.match(onboarding, /milestone: "agent_turn_acknowledged"/);
 assert.match(onboarding, /completeMyCommunityOnboardingMcpHandoff/);
 assert.match(onboarding, /milestone: "mcp_handoff_completed"/);
 assert.doesNotMatch(onboarding, /openMyCommunityOnboardingSession|resolveActivePersonalAgentGuidance|ensureCommunityAgentDockWelcomeCore/);
@@ -122,6 +130,7 @@ assert.doesNotMatch(orientation, /textarea|onSubmit|Concierge/);
 assert.match(firstPost, /The composer is ready for you/);
 assert.match(chat, /buildCommunityOnboardingIntroductionDraft/);
 assert.match(dock, /shouldPresentCommunityOnboardingAgentStep/);
+assert.match(dock, /shouldPresentCommunityOnboardingAgentReview/);
 assert.match(dock, /requestedFundingSource: "auto"/);
 assert.match(mcpGuide, /POLYNET_MCP_SETUP_BUNDLE/);
 assert.match(mcpGuide, /Copy setup/);

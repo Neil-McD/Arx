@@ -40,6 +40,7 @@ async function mutateCloudCommunityOnboardingSession<ResultT, SessionT>(params: 
   sessionId: string;
   mutationName:
     | "communityOnboarding:completeMyCommunityOnboardingOrientation"
+    | "communityOnboarding:acknowledgeMyCommunityOnboardingAgentTurn"
     | "communityOnboarding:completeMyCommunityOnboardingMcpHandoff"
     | "communityOnboarding:dismissMyCommunityOnboardingSession";
 }): Promise<ResultT> {
@@ -49,6 +50,17 @@ async function mutateCloudCommunityOnboardingSession<ResultT, SessionT>(params: 
     communityId: params.communityId,
     sessionId: params.sessionId,
   }) as ResultT;
+}
+
+export async function acknowledgeCloudCommunityOnboardingAgentTurn<SessionT>(params: {
+  session: SessionT;
+  communityId: string;
+  sessionId: string;
+}): Promise<CommunityOnboardingSession | null> {
+  return await mutateCloudCommunityOnboardingSession<CommunityOnboardingSession | null, SessionT>({
+    ...params,
+    mutationName: "communityOnboarding:acknowledgeMyCommunityOnboardingAgentTurn",
+  });
 }
 
 export async function completeCloudCommunityOnboardingOrientation<SessionT>(params: {

@@ -39,6 +39,7 @@ import {
   type MemberAgentSurfaceContextV1,
 } from "../../../../shared/memberAgentSurfaceContext";
 import {
+  shouldPresentCommunityOnboardingAgentReview,
   shouldPresentCommunityOnboardingAgentStep,
 } from "../../../../shared/communityOnboarding";
 import { useWebTurnRunnerController } from "../../../../shared/useWebTurnRunnerController";
@@ -48,7 +49,6 @@ import type {
   ThreadStreamingState,
 } from "../../../../shared/webTurnRunnerCore";
 import { RuntimeLiveTimeline } from "./RuntimeLiveTimeline";
-import { WebCommunityOnboardingAgentGuide } from "./WebCommunityOnboardingAgentGuide";
 import { useWebCommunityOnboarding } from "./WebCommunityOnboardingController";
 import "./WebMemberAgentDock.css";
 
@@ -331,18 +331,21 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
   const turnIsActive = isSending || Boolean(streamingState);
   const visibleMessages = messages.filter((message) => message.role !== "system");
   const dockError = localError ?? formatInferenceIssue(inferenceIssue);
-  const showOnboardingAgentGuide = Boolean(
+  const showOnboardingAgentFocus = Boolean(
     props.communityId &&
     props.communityName &&
     onboardingSession?.community_id === props.communityId &&
     !onboarding?.firstPostAcknowledgementPending &&
-    shouldPresentCommunityOnboardingAgentStep(onboardingSession),
+    (
+      shouldPresentCommunityOnboardingAgentStep(onboardingSession) ||
+      shouldPresentCommunityOnboardingAgentReview(onboardingSession)
+    ),
   );
   const onboardingDescriptionId = "community-onboarding-agent-description";
 
   useEffect(() => {
     if (
-      !showOnboardingAgentGuide ||
+      !showOnboardingAgentFocus ||
       !onboardingSession ||
       !props.isVisible ||
       onboardingOpenedSessionIdsRef.current.has(onboardingSession.id)
@@ -361,12 +364,13 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     props.isVisible,
     props.mobileShellActive,
     props.onRequestOpen,
-    showOnboardingAgentGuide,
+    showOnboardingAgentFocus,
   ]);
 
   useEffect(() => {
     if (
-      !showOnboardingAgentGuide ||
+      !showOnboardingAgentFocus ||
+      !shouldPresentCommunityOnboardingAgentStep(onboardingSession) ||
       !onboardingSession ||
       onboardingFocusSessionIdRef.current !== onboardingSession.id ||
       !isOpenSurface ||
@@ -389,7 +393,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     isPreparing,
     isStartingNewChat,
     onboardingSession,
-    showOnboardingAgentGuide,
+    showOnboardingAgentFocus,
     threadKey,
     turnIsActive,
   ]);
@@ -658,13 +662,13 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
     <>
     <aside
       id="polynet-member-agent-surface"
-      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${showOnboardingAgentGuide ? " is-onboarding" : ""}`}
+      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
       aria-live="polite"
     >
       {!props.mobileShellActive ? (
         <button
           type="button"
-          className={`member-agent-dock-launcher${turnIsActive ? " is-working" : ""}${showOnboardingAgentGuide ? " is-onboarding" : ""}`}
+          className={`member-agent-dock-launcher${turnIsActive ? " is-working" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
           onClick={() => setIsOpen((open) => !open)}
           aria-label={isOpen ? "Close your agent" : "Open your agent"}
           title={isOpen ? "Close your agent" : "Open your agent"}
@@ -783,17 +787,8 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
         </div>
 
         <div className="member-agent-dock-composer-stack">
-          {showOnboardingAgentGuide && props.communityName && onboarding ? (
-            <WebCommunityOnboardingAgentGuide
-              communityName={props.communityName}
-              descriptionId={onboardingDescriptionId}
-              isPending={onboarding.pendingAction !== null}
-              error={onboarding.error}
-              onDismiss={onboarding.dismiss}
-            />
-          ) : null}
           <form
-            className={`member-agent-dock-composer${showOnboardingAgentGuide ? " is-onboarding" : ""}`}
+            className={`member-agent-dock-composer${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
             onSubmit={submit}
           >
             <textarea
@@ -808,7 +803,7 @@ export function WebMemberAgentDock(props: WebMemberAgentDockProps) {
               }}
               placeholder={`Message your agent in ${surfaceLabel}`}
               aria-label="Message your agent"
-              aria-describedby={showOnboardingAgentGuide ? onboardingDescriptionId : undefined}
+              aria-describedby={showOnboardingAgentFocus ? onboardingDescriptionId : undefined}
               rows={1}
               maxLength={8000}
               disabled={turnIsActive || isPreparing || isStartingNewChat}

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   advanceCommunityOnboardingPreviewSession,
   createCommunityOnboardingPreviewSession,
+  shouldPresentCommunityOnboardingAgentReview,
   shouldPresentCommunityOnboardingAgentStep,
   shouldPresentCommunityOnboardingFirstPost,
   shouldPresentCommunityOnboardingMcpHandoff,
@@ -52,9 +53,12 @@ const firstPost = advanceCommunityOnboardingPreviewSession(started, "2026-07-14T
 assert.equal(shouldPresentCommunityOnboardingFirstPost(firstPost), true);
 const agent = advanceCommunityOnboardingPreviewSession(firstPost, "2026-07-14T12:02:00.000Z");
 assert.equal(shouldPresentCommunityOnboardingAgentStep(agent), true);
-const mcp = advanceCommunityOnboardingPreviewSession(agent, "2026-07-14T12:03:00.000Z");
+const agentReview = advanceCommunityOnboardingPreviewSession(agent, "2026-07-14T12:03:00.000Z");
+assert.equal(shouldPresentCommunityOnboardingAgentReview(agentReview), true);
+assert.equal(shouldPresentCommunityOnboardingMcpHandoff(agentReview), false);
+const mcp = advanceCommunityOnboardingPreviewSession(agentReview, "2026-07-14T12:04:00.000Z");
 assert.equal(shouldPresentCommunityOnboardingMcpHandoff(mcp), true);
-const complete = advanceCommunityOnboardingPreviewSession(mcp, "2026-07-14T12:04:00.000Z");
+const complete = advanceCommunityOnboardingPreviewSession(mcp, "2026-07-14T12:05:00.000Z");
 assert.equal(complete.status, "completed");
 
 assert.equal(shouldRecordCommunityOnboardingAgentTurn({ invocationSurface: "member_agent_dock", surfaceKind: "community", hasCommunityId: true }), true);
@@ -66,6 +70,7 @@ assert.match(app, /buildCommunityOnboardingPreviewPath/);
 assert.match(controller, /createCommunityOnboardingPreviewSession/);
 assert.match(controller, /mode: isPreviewMode \? "preview" : "live"/);
 assert.match(controller, /handleCompleteAgentTurnPreview/);
+assert.match(controller, /handleAcknowledgeAgentTurn/);
 assert.match(controller, /handleCompleteMcpHandoff/);
 assert.doesNotMatch(controller, /sendCloudCommunityAgentDockMessage|onboardingPreview/);
 assert.match(previewBar, /Community posts are simulated/);
@@ -77,6 +82,7 @@ assert.match(dock, /startNewCloudMemberAgentGlobalEpisode/);
 assert.match(dock, /requestedFundingSource: "auto"/);
 assert.match(dock, /suppressOnboardingProgress: onboarding\?\.mode === "preview"/);
 assert.match(dock, /onboarding\.completeAgentTurnPreview\(\)/);
+assert.match(dock, /shouldPresentCommunityOnboardingAgentReview/);
 assert.doesNotMatch(dock, /Preview only|isVisualOnboardingPreview|memberAgentMode/);
 assert.doesNotMatch(orientation, /connected provider|Concierge history|textarea/);
 assert.match(mcpGuide, /POLYNET_MCP_SETUP_BUNDLE/);

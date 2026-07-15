@@ -34225,6 +34225,10 @@ button.message-citation-chip:hover {
   animation: community-onboarding-first-post-overlay-in 180ms ease-out both;
 }
 
+.community-onboarding-agent-step-overlay {
+  z-index: 9996;
+}
+
 .community-onboarding-first-post-guide {
   position: fixed;
   z-index: 2;
@@ -34243,6 +34247,10 @@ button.message-citation-chip:hover {
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
   pointer-events: auto;
   animation: community-onboarding-first-post-in 180ms ease-out both;
+}
+
+.community-onboarding-agent-step-guide {
+  z-index: 9998;
 }
 
 .community-onboarding-first-post-icon {

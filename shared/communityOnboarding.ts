@@ -14,6 +14,7 @@ export type CommunityOnboardingPhase =
   | "orientation"
   | "first_community_post"
   | "first_agent_dock_turn"
+  | "agent_turn_review"
   | "mcp_handoff"
   | "complete";
 
@@ -35,6 +36,7 @@ export type CommunityOnboardingSession = {
   orientation_completed_at: string | null;
   first_community_post_at: string | null;
   first_agent_dock_turn_at: string | null;
+  agent_turn_acknowledged_at: string | null;
   mcp_handoff_completed_at: string | null;
   completed_at: string | null;
 };
@@ -44,6 +46,7 @@ export type CommunityOnboardingMilestoneRow = {
   orientationCompletedAt?: number;
   firstCommunityPostAt?: number;
   firstAgentDockTurnAt?: number;
+  agentTurnAcknowledgedAt?: number;
   mcpHandoffCompletedAt?: number;
   completedAt?: number;
 };
@@ -52,6 +55,7 @@ export type CommunityOnboardingMilestone =
   | "orientation_completed"
   | "first_community_post"
   | "first_agent_dock_turn"
+  | "agent_turn_acknowledged"
   | "mcp_handoff_completed";
 
 export function normalizeCommunityOnboardingText(raw: unknown, maxChars: number): string {
@@ -98,6 +102,7 @@ export function deriveCommunityOnboardingPhase(
     | "orientationCompletedAt"
     | "firstCommunityPostAt"
     | "firstAgentDockTurnAt"
+    | "agentTurnAcknowledgedAt"
     | "mcpHandoffCompletedAt"
     | "completedAt"
   >,
@@ -106,6 +111,7 @@ export function deriveCommunityOnboardingPhase(
   if (!session.orientationCompletedAt) return "orientation";
   if (!session.firstCommunityPostAt) return "first_community_post";
   if (!session.firstAgentDockTurnAt) return "first_agent_dock_turn";
+  if (!session.agentTurnAcknowledgedAt) return "agent_turn_review";
   if (!session.mcpHandoffCompletedAt) return "mcp_handoff";
   return "complete";
 }
@@ -126,6 +132,12 @@ export function shouldPresentCommunityOnboardingAgentStep(
   session: Pick<CommunityOnboardingSession, "status" | "phase"> | null | undefined,
 ): boolean {
   return session?.status === "active" && session.phase === "first_agent_dock_turn";
+}
+
+export function shouldPresentCommunityOnboardingAgentReview(
+  session: Pick<CommunityOnboardingSession, "status" | "phase"> | null | undefined,
+): boolean {
+  return session?.status === "active" && session.phase === "agent_turn_review";
 }
 
 export function shouldPresentCommunityOnboardingMcpHandoff(
@@ -151,6 +163,7 @@ export function createCommunityOnboardingPreviewSession(params: {
     orientation_completed_at: null,
     first_community_post_at: null,
     first_agent_dock_turn_at: null,
+    agent_turn_acknowledged_at: null,
     mcp_handoff_completed_at: null,
     completed_at: null,
   };
@@ -178,8 +191,15 @@ export function advanceCommunityOnboardingPreviewSession(
   if (session.phase === "first_agent_dock_turn") {
     return {
       ...session,
-      phase: "mcp_handoff",
+      phase: "agent_turn_review",
       first_agent_dock_turn_at: session.first_agent_dock_turn_at ?? nowIso,
+    };
+  }
+  if (session.phase === "agent_turn_review") {
+    return {
+      ...session,
+      phase: "mcp_handoff",
+      agent_turn_acknowledged_at: session.agent_turn_acknowledged_at ?? nowIso,
     };
   }
   if (session.phase === "mcp_handoff") {
@@ -216,6 +236,9 @@ export function buildCommunityOnboardingMilestonePatch(
   if (milestone === "first_agent_dock_turn" && !session.firstAgentDockTurnAt) {
     patch.firstAgentDockTurnAt = timestamp;
   }
+  if (milestone === "agent_turn_acknowledged" && !session.agentTurnAcknowledgedAt) {
+    patch.agentTurnAcknowledgedAt = timestamp;
+  }
   if (milestone === "mcp_handoff_completed" && !session.mcpHandoffCompletedAt) {
     patch.mcpHandoffCompletedAt = timestamp;
   }
@@ -225,6 +248,7 @@ export function buildCommunityOnboardingMilestonePatch(
     next.orientationCompletedAt &&
     next.firstCommunityPostAt &&
     next.firstAgentDockTurnAt &&
+    next.agentTurnAcknowledgedAt &&
     next.mcpHandoffCompletedAt &&
     !session.completedAt
   ) {

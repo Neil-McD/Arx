@@ -18,12 +18,12 @@ mode.
 
 ## State machine
 
-An active session advances through four observable outcomes:
+An active session advances through five observable milestones:
 
-`orientationCompletedAt -> firstCommunityPostAt -> firstAgentDockTurnAt -> mcpHandoffCompletedAt`
+`orientationCompletedAt -> firstCommunityPostAt -> firstAgentDockTurnAt -> agentTurnAcknowledgedAt -> mcpHandoffCompletedAt`
 
 The visible phase is derived from these timestamps. Each write is idempotent.
-After all three exist, the session becomes `completed` and receives
+After all five exist, the session becomes `completed` and receives
 `completedAt`.
 
 - Orientation advances only when the member chooses Continue.
@@ -31,6 +31,9 @@ After all three exist, the session becomes `completed` and receives
   composer creates the post or reply.
 - The personal-agent milestone is recorded only after a successful ordinary
   member-agent turn under the same server-validated community lens.
+- The agent-turn acknowledgement is recorded only when the member reviews the
+  completed response and chooses Next. The MCP handoff is not shown while the
+  agent turn is still running.
 - The MCP handoff milestone is recorded only after the member successfully
   copies the canonical Polynet MCP setup packet. It records the handoff, not an
   unverifiable claim that an outside harness finished installation.
@@ -40,9 +43,12 @@ After all three exist, the session becomes `completed` and receives
 
 Step 1 presents the saved welcome and optional founder video in a focused
 overlay. Step 2 spotlights the canonical community composer and seeds an
-editable introduction draft. Step 3 opens and focuses the existing personal
-agent dock under the community lens. Step 4 presents the canonical Polynet MCP
-setup packet as one deterministic copy action.
+editable introduction draft. Step 3 shades the page, opens the existing
+personal agent dock under the community lens, and keeps only its composer and a
+matching guidance card in focus. After the agent finishes, the same card asks
+the member to confirm the response makes sense. Step 4 appears only after that
+confirmation and presents the canonical Polynet MCP setup packet as one
+deterministic copy action.
 
 The community agent and personal agent keep their normal identities,
 permissions, prompts, histories, providers, and rate limits. Onboarding merely
@@ -57,9 +63,10 @@ surfaces. Preview state is local and resets on refresh. Community post sends are
 simulated, while the personal-agent step uses the builder's real personal agent,
 provider, history, and limits so the agent experience is honest.
 
-A successful preview agent turn advances locally to the same MCP handoff card.
-Copying uses the same canonical setup packet as personal Integrations settings,
-then completes only the local preview session.
+A successful preview agent turn advances locally to the same response-review
+card. Choosing Next reveals the MCP handoff. Copying uses the same canonical
+setup packet as personal Integrations settings, then completes only the local
+preview session.
 
 The preview request suppresses only the onboarding progress receipt so a
 builder's real personal-agent turn cannot advance an unrelated live onboarding
@@ -75,7 +82,8 @@ special runtime prompt. It is available while onboarding is off.
 - Active member: read, advance, or dismiss only their own session.
 - Canonical community composer: record the first-post outcome.
 - Canonical member-agent runtime: record a successful personal-agent outcome.
-- Active member: complete their own MCP handoff after a successful clipboard copy.
+- Active member: acknowledge their completed agent turn and complete their own
+  MCP handoff after a successful clipboard copy.
 
 ## Deliberately absent
 

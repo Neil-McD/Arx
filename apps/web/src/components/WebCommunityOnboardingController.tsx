@@ -11,11 +11,14 @@ import {
 import {
   advanceCommunityOnboardingPreviewSession,
   createCommunityOnboardingPreviewSession,
+  shouldPresentCommunityOnboardingAgentReview,
+  shouldPresentCommunityOnboardingAgentStep,
   shouldPresentCommunityOnboardingMcpHandoff,
   shouldPresentCommunityOnboardingOrientation,
   type CommunityOnboardingSession,
 } from "../../../../shared/communityOnboarding";
 import {
+  acknowledgeCloudCommunityOnboardingAgentTurn,
   completeCloudCommunityOnboardingMcpHandoff,
   completeCloudCommunityOnboardingOrientation,
   dismissCloudCommunityOnboardingSession,
@@ -27,10 +30,11 @@ import {
   type CloudCommunityChatLiveClient,
 } from "../../../../shared/cloudCommunityChatGateway";
 import { WebCommunityOnboardingOrientationModal } from "./WebCommunityOnboardingOrientationModal";
+import { WebCommunityOnboardingAgentGuide } from "./WebCommunityOnboardingAgentGuide";
 import { WebCommunityOnboardingMcpGuide } from "./WebCommunityOnboardingMcpGuide";
 import { WebCommunityOnboardingPreviewBar } from "./WebCommunityOnboardingPreviewBar";
 
-type PendingAction = "continue" | "dismiss" | "mcp_handoff" | null;
+type PendingAction = "continue" | "dismiss" | "agent_review" | "mcp_handoff" | null;
 
 type WebCommunityOnboardingContextValue = {
   mode: "live" | "preview";
@@ -41,6 +45,7 @@ type WebCommunityOnboardingContextValue = {
   completeOrientation: () => void;
   completeFirstPostPreview: () => void;
   completeAgentTurnPreview: () => void;
+  acknowledgeAgentTurn: () => Promise<boolean>;
   continueAfterFirstPost: () => void;
   completeMcpHandoff: () => Promise<boolean>;
   dismiss: () => void;
@@ -327,6 +332,48 @@ export function WebCommunityOnboardingController(props: {
     if (isPreviewMode) handlePreviewAdvance();
   }, [firstPostAcknowledgementPending, handlePreviewAdvance, isPreviewMode, presentedSession]);
 
+  const handleAcknowledgeAgentTurn = useCallback(async (): Promise<boolean> => {
+    if (isPreviewMode) {
+      if (!previewSession || previewSession.phase !== "agent_turn_review") return false;
+      handlePreviewAdvance();
+      return true;
+    }
+    if (
+      !activeSession ||
+      activeSession.phase !== "agent_turn_review" ||
+      !usableSession ||
+      !props.communityId ||
+      pendingAction
+    ) {
+      return false;
+    }
+    const sessionId = activeSession.id;
+    setPendingAction("agent_review");
+    setError(null);
+    try {
+      const next = await acknowledgeCloudCommunityOnboardingAgentTurn({
+        session: usableSession,
+        communityId: props.communityId,
+        sessionId,
+      });
+      setActiveSession((current) => current?.id === sessionId ? next : current);
+      return next?.phase === "mcp_handoff";
+    } catch {
+      setError("We couldn’t save your progress. Please try again.");
+      return false;
+    } finally {
+      setPendingAction(null);
+    }
+  }, [
+    activeSession,
+    handlePreviewAdvance,
+    isPreviewMode,
+    pendingAction,
+    previewSession,
+    props.communityId,
+    usableSession,
+  ]);
+
   const handleCompleteMcpHandoff = useCallback(async (): Promise<boolean> => {
     if (isPreviewMode) {
       if (!previewSession || previewSession.phase !== "mcp_handoff") return false;
@@ -379,6 +426,7 @@ export function WebCommunityOnboardingController(props: {
     completeOrientation: handleContinue,
     completeFirstPostPreview: handleCompleteFirstPostPreview,
     completeAgentTurnPreview: handleCompleteAgentTurnPreview,
+    acknowledgeAgentTurn: handleAcknowledgeAgentTurn,
     continueAfterFirstPost: handleContinueAfterFirstPost,
     completeMcpHandoff: handleCompleteMcpHandoff,
     dismiss: handleDismiss,
@@ -386,6 +434,7 @@ export function WebCommunityOnboardingController(props: {
     firstPostAcknowledgementPending,
     handleCompleteFirstPostPreview,
     handleCompleteAgentTurnPreview,
+    handleAcknowledgeAgentTurn,
     handleCompleteMcpHandoff,
     handleContinue,
     handleContinueAfterFirstPost,
@@ -411,6 +460,23 @@ export function WebCommunityOnboardingController(props: {
           isPending={contextValue.pendingAction !== null}
           error={contextValue.error}
           onContinue={contextValue.completeOrientation}
+          onDismiss={contextValue.dismiss}
+        />
+      ) : null}
+      {contextValue.activeSession &&
+      props.communityName &&
+      !contextValue.firstPostAcknowledgementPending &&
+      (
+        shouldPresentCommunityOnboardingAgentStep(contextValue.activeSession) ||
+        shouldPresentCommunityOnboardingAgentReview(contextValue.activeSession)
+      ) ? (
+        <WebCommunityOnboardingAgentGuide
+          communityName={props.communityName}
+          descriptionId="community-onboarding-agent-description"
+          isComplete={shouldPresentCommunityOnboardingAgentReview(contextValue.activeSession)}
+          isPending={contextValue.pendingAction !== null}
+          error={contextValue.error}
+          onContinue={() => void contextValue.acknowledgeAgentTurn()}
           onDismiss={contextValue.dismiss}
         />
       ) : null}
