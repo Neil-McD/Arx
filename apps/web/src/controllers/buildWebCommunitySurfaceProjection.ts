@@ -8,6 +8,9 @@ type CommunitySurfaceCommunityLike =
         name: string;
         owner_id?: string | null;
         avatar_url?: string | null;
+        avatar_focus_x?: number | null;
+        avatar_focus_y?: number | null;
+        avatar_zoom?: number | null;
         banner_url?: string | null;
         banner_focus_x?: number | null;
         banner_focus_y?: number | null;
@@ -305,6 +308,10 @@ export function buildWebCommunitySurfaceProjection(
           id: params.activeCommunity.id,
           name: params.activeCommunity.name,
           owner_id: params.activeCommunity.owner_id ?? null,
+          avatar_url: params.activeCommunity.avatar_url ?? null,
+          avatar_focus_x: params.activeCommunity.avatar_focus_x ?? null,
+          avatar_focus_y: params.activeCommunity.avatar_focus_y ?? null,
+          avatar_zoom: params.activeCommunity.avatar_zoom ?? null,
         }
       : null,
     session: params.session,

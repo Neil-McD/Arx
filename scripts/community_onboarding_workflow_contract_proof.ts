@@ -32,6 +32,7 @@ const controller = read("apps/web/src/components/WebCommunityOnboardingControlle
 const orientation = read("apps/web/src/components/WebCommunityOnboardingOrientationSurface.tsx");
 const firstPost = read("apps/web/src/components/WebCommunityOnboardingConciergeGuide.tsx");
 const chat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+const communitySurfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const dock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const mcpGuide = read("apps/web/src/components/WebCommunityOnboardingMcpGuide.tsx");
 const integrations = read("apps/web/src/components/WebIntegrationsSettingsSection.tsx");
@@ -133,6 +134,8 @@ assert.match(firstPost, /prefers-reduced-motion: reduce/);
 assert.match(firstPost, /aria-live="polite"/);
 assert.match(firstPost, /Your introduction is live/);
 assert.doesNotMatch(firstPost, /That’s a strong introduction|Preview sends are simulated/);
+assert.match(communitySurfaceProjection, /avatar_url: params\.activeCommunity\.avatar_url \?\? null/);
+assert.match(communitySurfaceProjection, /avatar_focus_x: params\.activeCommunity\.avatar_focus_x \?\? null/);
 assert.match(chat, /buildCommunityOnboardingIntroductionDraft/);
 assert.match(dock, /shouldPresentCommunityOnboardingAgentStep/);
 assert.match(dock, /shouldPresentCommunityOnboardingAgentReview/);
