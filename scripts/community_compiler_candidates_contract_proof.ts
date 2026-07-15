@@ -49,14 +49,26 @@ assert.throws(
   }),
   /community_memory_decision_existing_node_required/,
 );
-assert.throws(
-  () => normalizeCommunityMemoryDecision({
-    ...retained,
-    disposition: "dismiss_low_signal",
-    existingNodeId: null,
-  }),
-  /community_memory_decision_non_retain_payload_forbidden/,
-);
+const carried = normalizeCommunityMemoryDecision({
+  ...retained,
+  disposition: "carried_forward",
+  existingNodeId: "node_1",
+});
+assert.equal(carried.existingNodeId, "node_1");
+assert.equal(carried.nodeType, null);
+assert.equal(carried.title, null);
+assert.equal(carried.bodyMd, null);
+assert.equal(carried.confidence, null);
+const dismissed = normalizeCommunityMemoryDecision({
+  ...retained,
+  disposition: "dismiss_low_signal",
+  existingNodeId: null,
+});
+assert.equal(dismissed.existingNodeId, null);
+assert.equal(dismissed.nodeType, null);
+assert.equal(dismissed.title, null);
+assert.equal(dismissed.bodyMd, null);
+assert.equal(dismissed.confidence, null);
 
 assert.match(
   candidates,

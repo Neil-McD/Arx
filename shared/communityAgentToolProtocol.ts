@@ -24,11 +24,11 @@ type JsonSchema =
   | boolean
   | Record<string, unknown>;
 
-export type CommunityAgentToolName = "list" | "read" | "search" | "write";
+export type CommunityAgentToolName = "search" | "write";
 
 export const CANONICAL_COMMUNITY_AGENT_KEY = "community_agent" as const;
 
-export const COMMUNITY_AGENT_TOOL_NAMES = ["list", "read", "search", "write"] as const;
+export const COMMUNITY_AGENT_TOOL_NAMES = ["search", "write"] as const;
 
 export type CommunityAgentFunctionTool = {
   type: "function";
@@ -53,42 +53,6 @@ const NODE_TYPE_SCHEMA: JsonSchema = {
 };
 
 const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionTool> = {
-  list: {
-    type: "function",
-    name: "list",
-    description: "List entries in the community agent filesystem. Only /compiler and /directory paths are available.",
-    strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      required: ["path", "limit"],
-      properties: {
-        path: {
-          type: ["string", "null"],
-          maxLength: 1024,
-        },
-        limit: LIMIT_SCHEMA,
-      },
-    },
-  },
-  read: {
-    type: "function",
-    name: "read",
-    description: "Read one file from the community agent filesystem.",
-    strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      required: ["path"],
-      properties: {
-        path: {
-          type: "string",
-          minLength: 1,
-          maxLength: 1024,
-        },
-      },
-    },
-  },
   search: {
     type: "function",
     name: "search",
@@ -138,6 +102,7 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
               maxItems: 96,
               items: {
                 type: "object",
+                description: "Decision matrix: retain requires semantic fields and null existingNodeId; carried_forward requires existingNodeId and ignores semantic fields; dismiss_low_signal requires null existingNodeId and ignores semantic fields.",
                 additionalProperties: false,
                 required: [
                   "workKey",
@@ -157,13 +122,16 @@ const TOOL_DEFINITIONS: Record<CommunityAgentToolName, CommunityAgentFunctionToo
                     type: "string",
                     enum: [...COMMUNITY_MEMORY_DECISION_DISPOSITIONS],
                   },
-                  nodeType: NODE_TYPE_SCHEMA,
-                  title: { type: ["string", "null"], maxLength: 240 },
-                  bodyMd: { type: ["string", "null"], maxLength: 12_000 },
-                  appliesWhen: { type: ["string", "null"], maxLength: 4_000 },
-                  doesNotApplyWhen: { type: ["string", "null"], maxLength: 4_000 },
-                  confidence: { type: ["number", "null"], minimum: 0, maximum: 1 },
-                  existingNodeId: { type: ["string", "null"], maxLength: 128 },
+                  nodeType: {
+                    ...NODE_TYPE_SCHEMA,
+                    description: "Required for retain; null otherwise.",
+                  },
+                  title: { type: ["string", "null"], maxLength: 240, description: "Required for retain; null otherwise." },
+                  bodyMd: { type: ["string", "null"], maxLength: 12_000, description: "Required for retain; null otherwise." },
+                  appliesWhen: { type: ["string", "null"], maxLength: 4_000, description: "Optional for retain; null otherwise." },
+                  doesNotApplyWhen: { type: ["string", "null"], maxLength: 4_000, description: "Optional for retain; null otherwise." },
+                  confidence: { type: ["number", "null"], minimum: 0, maximum: 1, description: "Required for retain; null otherwise." },
+                  existingNodeId: { type: ["string", "null"], maxLength: 128, description: "Required only for carried_forward; null for retain and dismiss_low_signal." },
                   reason: { type: "string", minLength: 1, maxLength: 1_000 },
                 },
               },
@@ -211,17 +179,6 @@ export function normalizeCommunityAgentToolArguments(
   rawArgs: Record<string, unknown>,
 ): Record<string, unknown> {
   const args = payloadObject(rawArgs);
-  if (toolName === "list") {
-    return {
-      path: boundedString(args.path ?? "/", 1024) || "/",
-      limit: boundedLimit(args.limit),
-    };
-  }
-  if (toolName === "read") {
-    return {
-      path: requireNonEmptyString(args.path, "path", 1024),
-    };
-  }
   if (toolName === "search") {
     return {
       query: requireNonEmptyString(args.query, "query", 512),

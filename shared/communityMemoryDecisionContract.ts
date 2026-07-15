@@ -58,7 +58,10 @@ export function normalizeCommunityMemoryDecision(
   if (!DISPOSITION_SET.has(disposition)) {
     throw new Error("community_memory_decision_disposition_invalid");
   }
-  const nodeTypeRaw = nullableBoundedString(raw.nodeType, 80);
+  const retainsMemory = disposition === "retain";
+  // Non-retain dispositions cannot create semantic memory. Canonicalize their
+  // irrelevant model fields instead of rejecting an otherwise safe batch.
+  const nodeTypeRaw = retainsMemory ? nullableBoundedString(raw.nodeType, 80) : null;
   if (nodeTypeRaw && !NODE_TYPE_SET.has(nodeTypeRaw)) {
     throw new Error("community_memory_decision_node_type_invalid");
   }
@@ -66,11 +69,11 @@ export function normalizeCommunityMemoryDecision(
     workKey,
     disposition: disposition as CommunityMemoryDecisionDisposition,
     nodeType: nodeTypeRaw as CommunityMemoryNodeType | null,
-    title: nullableBoundedString(raw.title, 240),
-    bodyMd: nullableBoundedString(raw.bodyMd, 12_000),
-    appliesWhen: nullableBoundedString(raw.appliesWhen, 4_000),
-    doesNotApplyWhen: nullableBoundedString(raw.doesNotApplyWhen, 4_000),
-    confidence: nullableConfidence(raw.confidence),
+    title: retainsMemory ? nullableBoundedString(raw.title, 240) : null,
+    bodyMd: retainsMemory ? nullableBoundedString(raw.bodyMd, 12_000) : null,
+    appliesWhen: retainsMemory ? nullableBoundedString(raw.appliesWhen, 4_000) : null,
+    doesNotApplyWhen: retainsMemory ? nullableBoundedString(raw.doesNotApplyWhen, 4_000) : null,
+    confidence: retainsMemory ? nullableConfidence(raw.confidence) : null,
     existingNodeId: nullableBoundedString(raw.existingNodeId, 128),
     reason: boundedString(raw.reason, 1_000),
   };
@@ -82,19 +85,6 @@ export function normalizeCommunityMemoryDecision(
     if (decision.existingNodeId) {
       throw new Error("community_memory_decision_retain_existing_node_forbidden");
     }
-  }
-  if (
-    decision.disposition !== "retain" &&
-    (
-      decision.nodeType !== null ||
-      decision.title !== null ||
-      decision.bodyMd !== null ||
-      decision.appliesWhen !== null ||
-      decision.doesNotApplyWhen !== null ||
-      decision.confidence !== null
-    )
-  ) {
-    throw new Error("community_memory_decision_non_retain_payload_forbidden");
   }
   if (decision.disposition === "carried_forward" && !decision.existingNodeId) {
     throw new Error("community_memory_decision_existing_node_required");

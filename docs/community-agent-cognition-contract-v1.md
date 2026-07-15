@@ -2086,3 +2086,29 @@ observed overflow traces as continuation-ready scheduling metadata.
   first ordinary heartbeat settles 12 exact traces, its second settles the two
   continuation traces, and a direct postcondition measurement proves zero
   pending work without spending a third owner-funded cycle.
+
+## Thirtieth Implementation Slice: Acceptance-Driven Tool Diet
+
+The first live 14-message staging run claimed the correct twelve-item digest
+but failed closed before mutation because the model populated irrelevant
+semantic fields on a non-retain decision. It also spent calls listing and
+reading compiler state that the runtime had already placed in the prompt.
+
+The runtime now applies the narrower contract revealed by that evidence:
+
+- `retain` still requires a valid node type, title, body, and confidence and
+  still forbids an existing node id.
+- `carried_forward` still requires an exact existing node id, and
+  `dismiss_low_signal` still forbids one.
+- Semantic memory fields on either non-retain disposition are canonicalized to
+  `null`. They cannot affect a mutation, so requiring the model to serialize
+  explicit nulls was availability cost without a safety boundary.
+- The Steward receives only `search` and `write`. Compiler-window and directory
+  census context are preloaded; internal filesystem list/read primitives remain
+  implementation utilities, not model-facing cognition tools.
+
+The follow-up staging run `bounded-continuation-live-20260715-1902` passed. Its
+first heartbeat settled 12 items with `search`, `search`, `write`; its second
+settled the two-item continuation with one `write`. Both handoffs were handled,
+each write covered every work key, pending evidence reached zero, disposable
+fixture residue reached zero, and the sponsor connection remained intact.

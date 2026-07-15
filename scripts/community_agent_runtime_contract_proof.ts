@@ -20,8 +20,13 @@ assert.match(
 );
 assert.match(
   roles,
-  /Make one explicit decision for every exact evidence item[\s\S]*call write once with the complete decision batch[\s\S]*toolNames: \["list", "read", "search", "write"\]/,
-  "the steward must settle every work key without a lossy ledger handoff",
+  /Make one explicit decision for every exact evidence item[\s\S]*call write once with the complete decision batch[\s\S]*toolNames: \["search", "write"\]/,
+  "the steward must settle every work key with only duplicate lookup and one atomic write",
+);
+assert.doesNotMatch(
+  protocol,
+  /name: "list"|name: "read"/,
+  "the model should not rediscover compiler context already preloaded by the runtime",
 );
 assert.match(
   runtime,

@@ -36,8 +36,8 @@ assert.match(
 );
 assert.match(
   decision,
-  /normalizeCommunityMemoryDecision[\s\S]*community_memory_decision_retain_payload_required[\s\S]*community_memory_decision_existing_node_required/,
-  "shared normalization should make semantic retain and carry-forward fields mandatory",
+  /retainsMemory = disposition === "retain"[\s\S]*community_memory_decision_retain_payload_required[\s\S]*community_memory_decision_existing_node_required/,
+  "shared normalization should keep retain semantics and carry-forward targets strict while discarding irrelevant fields",
 );
 assert.match(
   filesystem,
