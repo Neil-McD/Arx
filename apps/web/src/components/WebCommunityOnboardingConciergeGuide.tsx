@@ -101,22 +101,24 @@ export function WebCommunityOnboardingConciergeGuide(props: {
         className={`community-onboarding-concierge-guide${props.isComplete ? " is-complete" : ""}`}
         aria-label={`${props.communityName} community concierge`}
       >
-        <CommunityAvatar
-          name={props.communityName}
-          imageUrl={props.communityAvatarUrl}
-          focusX={props.communityAvatarFocusX}
-          focusY={props.communityAvatarFocusY}
-          zoom={props.communityAvatarZoom}
-          className={`community-onboarding-concierge-avatar${transcriptIsComplete ? "" : " is-speaking"}`}
-          aria-hidden={true}
-        />
-
-        <div className="community-onboarding-concierge-copy">
+        <header className="community-onboarding-concierge-header">
+          <CommunityAvatar
+            name={props.communityName}
+            imageUrl={props.communityAvatarUrl}
+            focusX={props.communityAvatarFocusX}
+            focusY={props.communityAvatarFocusY}
+            zoom={props.communityAvatarZoom}
+            className={`community-onboarding-concierge-avatar${transcriptIsComplete ? "" : " is-speaking"}`}
+            aria-hidden={true}
+          />
           <div className="community-onboarding-concierge-meta">
             <strong>{props.communityName}</strong>
             <span>Community concierge</span>
             <span>Step 2 of 4</span>
           </div>
+        </header>
+
+        <div className="community-onboarding-concierge-copy">
           <p
             id={props.descriptionId}
             className={`community-onboarding-concierge-transcript${transcriptIsComplete ? "" : " is-speaking"}`}
@@ -130,6 +132,9 @@ export function WebCommunityOnboardingConciergeGuide(props: {
         </div>
 
         <div className="community-onboarding-concierge-actions">
+          <button type="button" onClick={props.onDismiss} disabled={props.isPending}>
+            {props.isPending ? "Skipping…" : "Skip"}
+          </button>
           <div className="community-onboarding-concierge-primary-slot">
             {showContinue ? (
               <button className="primary" type="button" onClick={props.onContinue} disabled={props.isPending}>
@@ -137,9 +142,6 @@ export function WebCommunityOnboardingConciergeGuide(props: {
               </button>
             ) : null}
           </div>
-          <button type="button" onClick={props.onDismiss} disabled={props.isPending}>
-            {props.isPending ? "Skipping…" : "Skip"}
-          </button>
         </div>
       </aside>
     </>
