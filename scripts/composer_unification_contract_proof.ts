@@ -22,6 +22,21 @@ assert.match(
   "DMs should use the canonical opaque surface",
 );
 assert.match(
+  baseCss,
+  /\.community-dm-panel-composer \{[^}]*align-items: flex-end;/,
+  "DM composer controls should remain bottom-aligned as the input grows",
+);
+assert.match(
+  baseCss,
+  /\.community-chat \.community-interaction-main-composer \.chat-input-bar \{[^}]*align-items: flex-end;/,
+  "community composer controls should remain bottom-aligned as the input grows",
+);
+assert.match(
+  baseCss,
+  /\.community-chat \.community-interaction-drawer-composer \.chat-input-bar \{[^}]*align-items: flex-end;/,
+  "thread composer controls should remain bottom-aligned as the input grows",
+);
+assert.match(
   chatPanel,
   /className=\{`community-chat community-member-chat community-attachment-drop-surface/,
   "member chat should expose an explicit styling boundary",
@@ -124,10 +139,15 @@ assert.match(
   /\.member-agent-dock-composer \{[\s\S]*background: var\(--composer-surface,[\s\S]*border-radius: var\(--composer-radius/,
   "member-agent composer should share the canonical material and shape",
 );
+assert.match(
+  memberAgentCss,
+  /\.member-agent-dock-composer:focus-within \{[^}]*background: color-mix\(/,
+  "member-agent composer may use a subtle surface shift to communicate focus",
+);
 assert.doesNotMatch(
   memberAgentCss,
-  /\.member-agent-dock-composer:focus-within/,
-  "member-agent composer shell should not change when focused",
+  /\.member-agent-dock-composer:focus-within \{[^}]*(?:outline|border(?:-color)?):/,
+  "member-agent composer focus must never introduce an outline or ring",
 );
 
 console.log("composer_unification_contract_proof: ok");

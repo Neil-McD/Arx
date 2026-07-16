@@ -9553,7 +9553,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   max-width: none;
   border-radius: 12px;
   box-shadow: none;
-  align-items: center;
+  align-items: flex-end;
   padding: 13px 14px;
 }
 
@@ -9561,7 +9561,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   margin: 0;
   border-radius: 12px;
   box-shadow: none;
-  align-items: center;
+  align-items: flex-end;
   padding: 11px 12px;
 }
 
@@ -12313,7 +12313,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-dm-panel-composer {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   min-width: 0;
   padding: 10px 12px;
