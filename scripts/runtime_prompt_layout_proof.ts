@@ -64,6 +64,8 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
     "community_resources_list",
     "community_resource_read",
     "community_resources_search",
+    "community_memory_search",
+    "community_memory_read",
     "community_search",
     "read",
     "write",
@@ -284,7 +286,10 @@ assert.match(prompt, /When available, use community resource tools when canonica
 assert.match(prompt, /Use community_resources_map first/);
 assert.match(prompt, /Use community_resources_read to batch-read/);
 assert.match(prompt, /Use community_resources_list to inspect/);
-assert.match(prompt, /Use community_search when active community activity, archive memory, or learned context matter beyond the resource directory/);
+assert.match(prompt, /Use community_memory_search and community_memory_read when the answer depends on what the community has learned and accepted/);
+assert.match(prompt, /cite its title and status/);
+assert.match(prompt, /Use community_search for broad raw recent or archived activity evidence beyond the resource directory/);
+assert.match(prompt, /Raw archive evidence is not community-endorsed memory/);
 assert.match(prompt, /About excerpt: Used to prove prompt layout/);
 assert.match(prompt, /The about excerpt is not a complete knowledge base/);
 assert.doesNotMatch(prompt, /About: Used to prove prompt layout/);

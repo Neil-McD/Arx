@@ -325,6 +325,8 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   if (toolName === "community_resource_builder_stage_changeset") return "Resource changeset";
   if (toolName === "community_resource_builder_apply_changeset") return "Apply resource changeset";
   if (toolName === "community_search") return `Community search${query ? `: ${query}` : ""}`;
+  if (toolName === "community_memory_search") return `Memory search${query ? `: ${query}` : ""}`;
+  if (toolName === "community_memory_read") return "Read community memory";
   if (toolName === "community_chat_search") return `Chat search${query ? `: ${query}` : ""}`;
   if (toolName === "community_chat_read") return "Read chat evidence";
   if (toolName === "community_ai_feed_search") return `AI Feed search${query ? `: ${query}` : ""}`;

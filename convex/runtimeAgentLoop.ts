@@ -189,6 +189,36 @@ function buildEffectiveAllowedToolNames(params: {
   return allowed;
 }
 
+function communityMemoryToolExecutionResult(params: {
+  payload: unknown;
+  fallbackCode: string;
+  fallbackMessage: string;
+}): NativeToolExecutionResult {
+  const payload = params.payload as {
+    ok?: boolean;
+    reason_code?: unknown;
+    message?: unknown;
+  } | null;
+  if (!payload?.ok) {
+    const reasonCode = String(payload?.reason_code ?? "").trim();
+    const message = String(payload?.message ?? "").trim();
+    return {
+      status: "error",
+      exitCode: null,
+      outputText: formatJsonToolOutput(params.payload),
+      errorCode: reasonCode || params.fallbackCode,
+      errorMessage: message || params.fallbackMessage,
+    };
+  }
+  return {
+    status: "ok",
+    exitCode: 0,
+    outputText: formatJsonToolOutput(params.payload),
+    errorCode: null,
+    errorMessage: null,
+  };
+}
+
 function newCreditKey(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
 }
@@ -629,6 +659,89 @@ export async function executeRetrievalHarnessTool(params: {
         outputText: "",
         errorCode: "community_search_failed",
         errorMessage: message || "Community search failed.",
+      };
+    }
+  }
+
+  if (params.toolName === "community_memory_search") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage: "community_memory_search requires an active community context.",
+      };
+    }
+    try {
+      const payload = await params.ctx.runMutation(
+        internal.communityIntelligenceDirectory.searchCommunityMemoryInternal as any,
+        {
+          userId: params.userId,
+          authSubject: params.authSubject ?? undefined,
+          communityId: params.communityId,
+          query: String(normalizedArgs.query ?? "").trim(),
+          types: Array.isArray(normalizedArgs.types) ? normalizedArgs.types : undefined,
+          limit:
+            typeof normalizedArgs.limit === "number"
+              ? normalizedArgs.limit
+              : undefined,
+        },
+      );
+      return communityMemoryToolExecutionResult({
+        payload,
+        fallbackCode: "community_memory_search_failed",
+        fallbackMessage: "Community memory search failed.",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_memory_search_failed",
+        errorMessage: message || "Community memory search failed.",
+      };
+    }
+  }
+
+  if (params.toolName === "community_memory_read") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage: "community_memory_read requires an active community context.",
+      };
+    }
+    try {
+      const payload = await params.ctx.runMutation(
+        internal.communityIntelligenceDirectory.readCommunityMemoryInternal as any,
+        {
+          userId: params.userId,
+          authSubject: params.authSubject ?? undefined,
+          communityId: params.communityId,
+          nodeId: String(normalizedArgs.nodeId ?? ""),
+          retrievalLogId:
+            typeof normalizedArgs.retrievalLogId === "string"
+              ? normalizedArgs.retrievalLogId
+              : undefined,
+        },
+      );
+      return communityMemoryToolExecutionResult({
+        payload,
+        fallbackCode: "community_memory_read_failed",
+        fallbackMessage: "Community memory read failed.",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_memory_read_failed",
+        errorMessage: message || "Community memory read failed.",
       };
     }
   }

@@ -282,6 +282,8 @@ export function resolveAllowedToolNames(params: {
       "community_resource_read",
       "community_resources_search",
       "community_search",
+      "community_memory_search",
+      "community_memory_read",
       "community_chat_search",
       "community_chat_read",
       "community_ai_feed_search",

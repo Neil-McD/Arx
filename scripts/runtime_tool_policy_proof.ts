@@ -47,6 +47,8 @@ const FIXED_TOOL_FAMILIES = {
     "community_resource_builder_stage_changeset",
     "community_resource_builder_apply_changeset",
     "community_search",
+    "community_memory_search",
+    "community_memory_read",
     "community_chat_search",
     "community_chat_read",
     "community_ai_feed_search",
@@ -195,6 +197,7 @@ function proveFixedPolicyBoundaries() {
     "community_resource_builder_list",
     "community_resource_builder_read",
     "community_search",
+    "community_memory_search",
     "community_chat_search",
     "community_chat_read",
     "community_ai_feed_search",
@@ -212,6 +215,10 @@ function proveFixedPolicyBoundaries() {
     assert.equal(policy.parallelSafe, true, `${toolName} should be parallel-safe`);
     assert.equal(policy.exclusive, false, `${toolName} should not be exclusive`);
   }
+  const serializedMemoryRead = getFixedRuntimeToolPolicy("community_memory_read");
+  assert.equal(serializedMemoryRead.readOnly, true);
+  assert.equal(serializedMemoryRead.parallelSafe, false);
+  assert.equal(serializedMemoryRead.exclusive, false);
 
   const exclusiveTools: RetrievalToolName[] = [
     "community_write",

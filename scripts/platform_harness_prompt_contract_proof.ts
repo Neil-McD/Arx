@@ -201,6 +201,8 @@ function provePromptEntrypoints() {
       "community_resource_read",
       "community_resources_search",
       "community_search",
+      "community_memory_search",
+      "community_memory_read",
       "community_write",
       "web_research",
       "web_crawl",
@@ -237,7 +239,7 @@ function provePromptEntrypoints() {
   assert.match(platformHarnessPrompt, /AGENT_OPERATING_POLICY/);
   assert.match(platformHarnessPrompt, /THREAD_WORKING_STATE/);
   assert.match(platformHarnessPrompt, /TEMPORAL_CONTEXT/);
-  assert.match(platformHarnessPrompt, /Allowed tools: search_product_docs,get_product_doc,get_active_community_context,community_resources_map,community_resources_read,community_resources_list,community_resource_read,community_resources_search,community_search,community_write,web_research,web_crawl,read,write,bash/);
+  assert.match(platformHarnessPrompt, /Allowed tools: search_product_docs,get_product_doc,get_active_community_context,community_resources_map,community_resources_read,community_resources_list,community_resource_read,community_resources_search,community_search,community_memory_search,community_memory_read,community_write,web_research,web_crawl,read,write,bash/);
   assert.match(platformHarnessPrompt, /Account plan: Premium/);
   assert.match(platformHarnessPrompt, /Premium tools are still limited to the listed allowed tools/);
   assert.match(platformHarnessPrompt, /Use web_research for current external facts/);
@@ -251,7 +253,8 @@ function provePromptEntrypoints() {
     /community_resource_builder_read with target_type and an exact id copied from list output/,
     "member/read prompt fixture must not include builder resource edit guidance",
   );
-  assert.match(platformHarnessPrompt, /Use community_search when active community activity/);
+  assert.match(platformHarnessPrompt, /Use community_memory_search and community_memory_read when the answer depends on what the community has learned and accepted/);
+  assert.match(platformHarnessPrompt, /Use community_search for broad raw recent or archived activity evidence/);
   assert.match(platformHarnessPrompt, /Use read to inspect specific files/);
   assert.doesNotMatch(
     platformHarnessPrompt,

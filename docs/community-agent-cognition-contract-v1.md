@@ -1418,8 +1418,10 @@ Rules:
 - Member-agent memory tools are exposed only through the existing `community_tools` capability family.
 - The tools derive community scope from the active server-validated community lens. They must not accept a loose `communityId` argument from the model.
 - `community_memory_search` searches retained community intelligence in `communityIntelligenceNodes`; it is not archive RAG and it does not use embeddings as truth.
-- `community_memory_search` defaults to `promising`, `validated`, and `canonical` statuses. Draft and candidate entries remain manager-visible forming memory.
-- `community_memory_read` reads one node and a bounded visibility-filtered subgraph bundle, then marks the node as injected in the retrieval log.
+- `community_memory_search` returns only `promising`, `validated`, and `canonical` statuses. Draft and candidate entries may remain visible to managers in directory-management surfaces, but neither members nor managers may inject them through the agent memory tools.
+- `community_memory_read` reads one accepted node and a bounded visibility-filtered subgraph bundle, then marks the node as injected in the retrieval log.
+- Compiler-derived memory must revalidate its immutable source traces and active citation lifecycle for every viewer. Manager authority may widen visibility to admin evidence, but it must never bypass redaction or citation revocation.
+- A returned subgraph edge must have an accepted, currently readable neighbor. The read tool must not leak edge metadata for a hidden, stale, draft, revoked, or otherwise unreadable neighbor.
 - `community_record_outcome` records whether retrieved community memory worked, failed, or was mixed. Non-manager member paths still require a same-user retrieval log, and node-linked outcomes require the node to have been retrieved or injected in that log.
 - These tools may write retrieval logs and outcome observations. They must not directly create or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`.
 - The active-community context tool may expose a tiny memory orientation block with counts and recent validated titles, but it must not dump directory contents into the prompt.

@@ -34,6 +34,8 @@ const envelope = buildRuntimeTurnEnvelope({
     "get_active_community_context",
     "community_resources_map",
     "community_resource_builder_stage_changeset",
+    "community_memory_search",
+    "community_memory_read",
     "community_search",
     "community_write",
     "member_profile_confirm_facts",
@@ -91,6 +93,8 @@ const fullManifest = buildRuntimeContextManifest({
     "get_active_community_context",
     "community_resources_map",
     "community_resource_builder_stage_changeset",
+    "community_memory_search",
+    "community_memory_read",
     "community_search",
     "community_write",
     "member_profile_confirm_facts",
@@ -157,6 +161,7 @@ assert.ok(ids(fullManifest.prompts).includes("community_skill:launch"));
 assert.ok(ids(fullManifest.resources).includes("product_docs"));
 assert.ok(ids(fullManifest.resources).includes("active_community_context"));
 assert.ok(ids(fullManifest.resources).includes("community_resources"));
+assert.ok(ids(fullManifest.resources).includes("community_compiled_memory"));
 assert.ok(ids(fullManifest.resources).includes("community_activity_archive"));
 assert.ok(ids(fullManifest.resources).includes("workspace_files"));
 assert.ok(ids(fullManifest.resources).includes("web_external_evidence"));
@@ -164,6 +169,8 @@ assert.ok(ids(fullManifest.resources).includes("background_terminal_output"));
 assert.ok(!ids(fullManifest.resources).includes("message_attachments"));
 
 assert.equal(toolByName(fullManifest, "community_write")?.effect, "write");
+assert.equal(toolByName(fullManifest, "community_memory_search")?.family, "community_memory");
+assert.equal(toolByName(fullManifest, "community_memory_read")?.effect, "read");
 assert.equal(toolByName(fullManifest, "member_profile_confirm_facts")?.family, "member_profile");
 assert.equal(toolByName(fullManifest, "member_profile_confirm_facts")?.effect, "write");
 assert.equal(toolByName(fullManifest, "read")?.family, "sandbox_read");

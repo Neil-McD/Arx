@@ -220,6 +220,11 @@ const COMMUNITY_ACTIVITY_TOOL_NAMES = new Set<RetrievalToolName>([
   "community_ai_feed_read",
 ]);
 
+const COMMUNITY_MEMORY_TOOL_NAMES = new Set<RetrievalToolName>([
+  "community_memory_search",
+  "community_memory_read",
+]);
+
 const COMMUNITY_WRITE_TOOL_NAMES = new Set<RetrievalToolName>([
   "community_write",
 ]);
@@ -376,6 +381,9 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
       grantedBy: "validated_community_resource_lane",
       effect: isWrite ? "write" : "read",
     };
+  }
+  if (COMMUNITY_MEMORY_TOOL_NAMES.has(toolName)) {
+    return { family: "community_memory", grantedBy: "validated_community_lens", effect: "read" };
   }
   if (COMMUNITY_ACTIVITY_TOOL_NAMES.has(toolName)) {
     return { family: "community_activity", grantedBy: "validated_community_lens", effect: "read" };
@@ -646,6 +654,16 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
       visibility: params.resourceLane.lane === "builder" ? "owner" : "member",
       source: "community_resource_tools",
       reason: "community wiki/resources/source material",
+    });
+  }
+  if (hasAnyTool(params.allowedToolNames, COMMUNITY_MEMORY_TOOL_NAMES)) {
+    resources.push({
+      id: "community_compiled_memory",
+      owner: "community",
+      retrieval: "tool_available",
+      visibility: "member",
+      source: "community_memory_search/community_memory_read",
+      reason: "accepted community intelligence learned by the compiler and steward",
     });
   }
   if (hasAnyTool(params.allowedToolNames, COMMUNITY_ACTIVITY_TOOL_NAMES)) {

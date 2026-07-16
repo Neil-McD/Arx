@@ -9,6 +9,8 @@ export const COMMUNITY_AGENT_CONCIERGE_TOOL_NAMES = [
   "get_product_doc",
   "community_resources_search",
   "community_resources_read",
+  "community_memory_search",
+  "community_memory_read",
   "community_chat_search",
   "community_chat_read",
   "community_ai_feed_search",

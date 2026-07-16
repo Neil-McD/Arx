@@ -153,6 +153,59 @@ const COMMUNITY_SEARCH_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const COMMUNITY_MEMORY_TYPE_SCHEMA: JsonSchema = {
+  type: "string",
+  enum: [
+    "playbook",
+    "insight",
+    "example",
+    "warning_failure",
+    "decision_judgment",
+    "open_question",
+  ],
+};
+
+const COMMUNITY_MEMORY_SEARCH_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["query"],
+  properties: {
+    query: {
+      type: "string",
+      minLength: 1,
+      maxLength: 512,
+    },
+    types: {
+      type: "array",
+      maxItems: 6,
+      items: COMMUNITY_MEMORY_TYPE_SCHEMA,
+    },
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 12,
+    },
+  },
+};
+
+const COMMUNITY_MEMORY_READ_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["node_id"],
+  properties: {
+    node_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+    },
+    retrieval_log_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 128,
+    },
+  },
+};
+
 const COMMUNITY_CHAT_SEARCH_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -1041,8 +1094,18 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   community_search: {
     name: "community_search",
-    description: "Search the active community's recent context and archived memory for relevant chat, AI feed, resource, and PDF-linked knowledge.",
+    description: "Search the active community's raw recent activity and archive evidence across chat, AI feed, resources, and PDF-linked knowledge.",
     inputSchema: COMMUNITY_SEARCH_TOOL_SCHEMA,
+  },
+  community_memory_search: {
+    name: "community_memory_search",
+    description: "Search accepted community intelligence learned by the active community. Returns only promising, validated, or canonical memory plus a retrieval log id; it does not search raw archive evidence.",
+    inputSchema: COMMUNITY_MEMORY_SEARCH_TOOL_SCHEMA,
+  },
+  community_memory_read: {
+    name: "community_memory_read",
+    description: "Read one accepted community memory node and a bounded visibility-filtered subgraph. Pass the retrieval log id from community_memory_search when available.",
+    inputSchema: COMMUNITY_MEMORY_READ_TOOL_SCHEMA,
   },
   community_chat_search: {
     name: "community_chat_search",
@@ -1646,6 +1709,46 @@ export function normalizeToolArguments(
     const query = normalizeString(args.query);
     if (!query) throw new Error("community_search requires query.");
     return { query: query.slice(0, 240) };
+  }
+  if (toolName === "community_memory_search") {
+    const query = normalizeString(args.query);
+    if (!query) throw new Error("community_memory_search requires query.");
+    if (args.types !== undefined && !Array.isArray(args.types)) {
+      throw new Error("community_memory_search types must be an array.");
+    }
+    const allowedTypes = new Set([
+      "playbook",
+      "insight",
+      "example",
+      "warning_failure",
+      "decision_judgment",
+      "open_question",
+    ]);
+    const requestedTypes = Array.isArray(args.types)
+      ? args.types
+          .map((value) => normalizeString(value))
+          .filter((value): value is string => Boolean(value))
+      : [];
+    const unsupportedType = requestedTypes.find((value) => !allowedTypes.has(value));
+    if (unsupportedType) {
+      throw new Error(`community_memory_search received unsupported memory type: ${unsupportedType}.`);
+    }
+    const types = [...new Set(requestedTypes)].slice(0, 6);
+    const limit = normalizeBoundedInteger(args.limit, "community_memory_search limit", 1, 12);
+    return {
+      query: query.slice(0, 512),
+      ...(types.length ? { types } : null),
+      ...(limit ? { limit } : null),
+    };
+  }
+  if (toolName === "community_memory_read") {
+    const nodeId = normalizeString(args.node_id ?? args.nodeId);
+    if (!nodeId) throw new Error("community_memory_read requires node_id.");
+    const retrievalLogId = normalizeString(args.retrieval_log_id ?? args.retrievalLogId);
+    return {
+      nodeId: nodeId.slice(0, 128),
+      ...(retrievalLogId ? { retrievalLogId: retrievalLogId.slice(0, 128) } : null),
+    };
   }
   if (toolName === "community_chat_search") {
     const query = normalizeString(args.query);

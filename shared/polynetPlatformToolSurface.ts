@@ -55,6 +55,22 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiredCommunityAuthority: "member",
   },
   {
+    toolName: "community_memory_search",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "member",
+    requiredCommunityAuthority: "member",
+  },
+  {
+    toolName: "community_memory_read",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "member",
+    requiredCommunityAuthority: "member",
+  },
+  {
     toolName: "community_chat_search",
     billingPolicy: "free",
     requiresCommunity: true,

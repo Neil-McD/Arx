@@ -187,6 +187,8 @@ assert.deepEqual(
       "polynet_get_community",
       "community_resources_map",
       "community_search",
+      "community_memory_search",
+      "community_memory_read",
       "community_write",
       "web_research",
       "read",
@@ -202,6 +204,8 @@ assert.deepEqual(
     "polynet_get_community",
     "community_resources_map",
     "community_search",
+    "community_memory_search",
+    "community_memory_read",
   ],
 );
 assert.match(

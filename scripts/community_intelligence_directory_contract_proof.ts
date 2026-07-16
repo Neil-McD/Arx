@@ -213,8 +213,8 @@ assert.match(
 }
 assert.match(
   directory,
-  /function canViewerReadTrace[\s\S]*actorUserId[\s\S]*row\.visibilityScope === "private"[\s\S]*sourceVisibility !== "redacted"[\s\S]*community_source_trace_not_readable/,
-  "trace readability should only allow owned private non-redacted traces and reject unreadable/redacted traces",
+  /function canViewerReadTrace[\s\S]*row\.sourceVisibility === "redacted"[\s\S]*if \(isManager\) return true;[\s\S]*actorUserId[\s\S]*row\.visibilityScope === "private"[\s\S]*community_source_trace_not_readable/,
+  "trace readability should reject redaction before manager expansion while still allowing owned private traces",
 );
 assert.match(
   directory,

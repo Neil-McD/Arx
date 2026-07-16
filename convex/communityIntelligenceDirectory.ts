@@ -556,18 +556,17 @@ function canViewerReadNode(row: IntelligenceNodeRow, isManager: boolean): boolea
 }
 
 function canViewerReadTrace(row: SourceTraceRow, isManager: boolean, userId?: any): boolean {
+  if (row.sourceVisibility === "redacted") return false;
   if (isManager) return true;
   if (
     userId &&
     row.actorUserId &&
     normalizeIdValue(row.actorUserId) === normalizeIdValue(userId) &&
-    row.visibilityScope === "private" &&
-    row.sourceVisibility !== "redacted"
+    row.visibilityScope === "private"
   ) {
     return true;
   }
   if (!canViewerReadVisibility(row.visibilityScope, false)) return false;
-  if (row.sourceVisibility === "redacted") return false;
   return canViewerReadVisibility(row.sourceVisibility, false);
 }
 
@@ -576,14 +575,14 @@ async function compilerMemoryEvidenceIsCurrentlyReadable(args: {
   node: IntelligenceNodeRow;
   isManager: boolean;
 }): Promise<boolean> {
-  if (args.isManager || !(args.node.tags ?? []).includes("compiler_memory")) return true;
+  if (!(args.node.tags ?? []).includes("compiler_memory")) return true;
   if ((args.node.sourceTraceIds ?? []).length === 0) return false;
   for (const traceId of args.node.sourceTraceIds ?? []) {
     const trace = (await args.ctx.db.get(traceId as any)) as SourceTraceRow | null;
     if (
       !trace ||
       normalizeIdValue(trace.communityId) !== normalizeIdValue(args.node.communityId) ||
-      !canViewerReadTrace(trace, false)
+      !canViewerReadTrace(trace, args.isManager)
     ) {
       return false;
     }
@@ -3705,7 +3704,10 @@ export const readCommunityMemoryInternal = internalMutation({
       if (normalizeIdValue(node.communityId) !== normalizeIdValue(args.communityId)) {
         throw new Error("community_intelligence_node_not_found");
       }
-      if (!canViewerReadNode(node, isManager)) {
+      if (
+        !ACCEPTED_MEMBER_MEMORY_STATUSES.includes(node.status) ||
+        !canViewerReadNode(node, isManager)
+      ) {
         throw new Error("community_intelligence_node_not_readable");
       }
       if (!(await compilerMemoryEvidenceIsCurrentlyReadable({ ctx, node, isManager }))) {
@@ -3762,6 +3764,7 @@ export const readCommunityMemoryInternal = internalMutation({
             const neighborNode = await getIntelligenceNodeOrThrow(ctx, neighborNodeId);
             if (
               normalizeIdValue(neighborNode.communityId) === normalizeIdValue(args.communityId) &&
+              ACCEPTED_MEMBER_MEMORY_STATUSES.includes(neighborNode.status) &&
               canViewerReadNode(neighborNode, isManager) &&
               await compilerMemoryEvidenceIsCurrentlyReadable({ ctx, node: neighborNode, isManager })
             ) {
@@ -3771,6 +3774,7 @@ export const readCommunityMemoryInternal = internalMutation({
             neighbor = null;
           }
         }
+        if (!neighbor) continue;
         edges.push({
           direction: candidate.direction,
           edge: mapEdgeRow(candidate.edge),

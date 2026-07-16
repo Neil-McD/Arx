@@ -1,0 +1,66 @@
+{
+  "schema_version": "community_memory_consumption_staging_acceptance:v1",
+  "recorded_at": "2026-07-16",
+  "deployment": "basic-robin-885",
+  "deployment_kind": "staging",
+  "member": {
+    "code": "community_memory_consumption_acceptance_passed",
+    "failures": [],
+    "surface_names": [
+      "member_agent_dock",
+      "community_concierge",
+      "external_mcp"
+    ],
+    "same_memory_identity_across_surfaces": true,
+    "memory_title": "Quartz lantern protocol",
+    "memory_status": "promising",
+    "retrieval_logs_bound_to_viewer": 3,
+    "accepted_neighbor_visible": true,
+    "draft_neighbor_hidden": true,
+    "admin_neighbor_hidden": true,
+    "revoked_search_hidden": true,
+    "revoked_read_denied": true
+  },
+  "manager": {
+    "code": "community_memory_consumption_acceptance_passed",
+    "failures": [],
+    "surface_names": [
+      "member_agent_dock",
+      "community_concierge",
+      "external_mcp"
+    ],
+    "same_memory_identity_across_surfaces": true,
+    "memory_title": "Quartz lantern protocol",
+    "memory_status": "promising",
+    "retrieval_logs_bound_to_viewer": 3,
+    "accepted_community_neighbor_visible": true,
+    "accepted_admin_neighbor_visible": true,
+    "draft_neighbor_hidden": true,
+    "revoked_search_hidden": true,
+    "revoked_read_denied": true
+  },
+  "outsider": {
+    "code": "community_memory_consumption_outsider_acceptance_passed",
+    "failures": [],
+    "search_denied": true
+  },
+  "lineage": {
+    "canonical_work_key_present": true,
+    "source_kind": "ai_feed",
+    "source_trace_count": 1,
+    "citation_count": 1,
+    "evidence_policy_version": "citation_v1",
+    "node_preserved_after_revocation": true,
+    "trace_visibility_after_revocation": "admin",
+    "trace_source_visibility_after_revocation": "redacted"
+  },
+  "cleanup": {
+    "probe_ok": true,
+    "fixture_communities_checked": 2,
+    "community_rows_remaining": 0,
+    "citation_rows_remaining": 0,
+    "scoped_table_rows_remaining": 0,
+    "acceptance_function_removed": true,
+    "acceptance_flag_removed": true
+  }
+}
