@@ -44,6 +44,11 @@ assert.doesNotMatch(
   /cycleLedger|CycleLedger|toolName === "note"|name: "note"/,
   "the deleted multi-role ledger must not remain in the active runtime or model tool surface",
 );
+assert.doesNotMatch(
+  schema,
+  /communityAgentCycleLedgers/,
+  "the retired multi-role cycle ledger table must not remain in canonical schema",
+);
 assert.doesNotMatch(roles, /observer:\s*\{|questioner:\s*\{/);
 assert.match(
   runtime,

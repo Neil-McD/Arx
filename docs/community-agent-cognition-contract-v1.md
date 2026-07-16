@@ -1853,7 +1853,9 @@ chat can at worst produce a bad chat reply; it can never reach the directory
 except the long way — traces through the compiler and its validation gates.
 The former multi-role cycle ledger is not part of the runtime or model tool
 surface. `communityAgentRuns` plus ordered `communityAgentRunEvents` are the
-canonical reconstructable execution record.
+canonical reconstructable execution record. The redundant legacy cycle-ledger
+rows were verified against their exact canonical `note` events, purged, and the
+table was removed.
 
 ### Promotion Policy (autonomous retention, evidence-gated status)
 

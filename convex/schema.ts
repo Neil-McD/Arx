@@ -2142,21 +2142,6 @@ export default defineSchema({
     ])
     .index("by_sponsor_createdAt", ["sponsorUserId", "createdAt"]),
 
-  // Historical compatibility only. The straight-through compiler no longer
-  // reads or writes the former multi-role handoff ledger. Remove this table
-  // only after its existing deployment rows have been explicitly exported or
-  // purged through a bounded data migration.
-  communityAgentCycleLedgers: defineTable({
-    communityId: v.id("communities"),
-    cycleId: v.string(),
-    seq: v.number(),
-    role: v.string(),
-    content: v.string(),
-    createdAt: v.number(),
-  })
-    .index("by_cycle_seq", ["cycleId", "seq"])
-    .index("by_community_createdAt", ["communityId", "createdAt"]),
-
   // Per-run event log for community agent runs: prompts, reasoning summaries,
   // tool calls/results, and the final outcome, in sequence. This is the audit
   // trail that makes a headless steward run reconstructable after the fact.
