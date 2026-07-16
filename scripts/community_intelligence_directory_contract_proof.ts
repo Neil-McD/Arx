@@ -301,8 +301,8 @@ assert.match(
 );
 assert.match(
   directory,
-  /recordCommunityOutcomeObservationCore[\s\S]*requiredNodeState: "injected"[\s\S]*evidenceStrength: "observed"[\s\S]*insertChangeRequest\([\s\S]*operation: "attach_outcome"/,
-  "the internal outcome path should require an injected canonical receipt node, fix evidence strength, and create a change request",
+  /recordCommunityOutcomeObservationCore[\s\S]*requiredNodeState: "injected"[\s\S]*resolveExistingReceiptOutcomeForNode[\s\S]*deduplicated: true[\s\S]*evidenceStrength: "observed"[\s\S]*insertChangeRequest\([\s\S]*operation: "attach_outcome"/,
+  "the internal outcome path should require an injected canonical receipt node, deduplicate before writing, fix evidence strength, and create one change request",
 );
 assert.match(
   directory,

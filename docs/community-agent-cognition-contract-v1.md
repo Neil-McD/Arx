@@ -2168,6 +2168,21 @@ Rules:
 - An outcome must name exactly one node that the same receipt marked injected.
   The active path uses fixed `observed` evidence strength; callers cannot
   inflate it.
+- One receipt plus one injected node is the natural identity of one consumption
+  episode. The first outcome write creates one immutable observation, one
+  `attach_outcome` change request, and one receipt linkage.
+- Exact retries return the original observation with `deduplicated: true` and
+  perform no write. Concurrent identical mutations converge through the same
+  receipt read/write transaction.
+- Reusing the same receipt and node with a different status or materially
+  different normalized note fails with `community_memory_outcome_conflict`.
+  A genuinely new assessment requires a new receipt.
+- Outcome idempotency reuses the receipt's bounded outcome-reference ledger.
+  It does not add a caller idempotency key, another table, or compiler
+  `workKey` semantics.
+- Missing, cross-receipt, cross-community, uninjected-node, or duplicate
+  outcome references on a V1 receipt fail closed as receipt corruption rather
+  than silently selecting one.
 - Receipt validation never replaces current node, evidence, membership, or
   redaction checks. All of those still fail closed independently.
 - The generic workflow retrieval API, receipt-wide feedback API, and general
@@ -2182,3 +2197,6 @@ Rules:
 
 The staging acceptance certificate for these rules is recorded in
 `docs/community-memory-retrieval-receipt-staging-acceptance-20260716.md`.
+Transactional outcome replay and concurrency acceptance is recorded separately
+in
+`docs/community-memory-outcome-idempotency-staging-acceptance-20260716.md`.

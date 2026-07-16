@@ -329,6 +329,15 @@ It must use the same accepted-memory backend path as the internal member-agent `
 
 `polynet_workspace_record_outcome` records whether one injected memory entry worked, failed, or was mixed. It must require `node_id` plus the same-user, same-community, `external_mcp`, `community_memory_retrieval_receipt:v1` receipt that injected that node. It uses fixed `observed` evidence strength and must not directly mutate community intelligence nodes or edges.
 
+Outcome writes use the natural operation identity `(retrieval_log_id, node_id)`.
+The first write creates one immutable outcome, one `attach_outcome` change
+request, and one receipt linkage. An exact retry returns the original
+`outcome_observation_id` with `deduplicated: true` and performs no write. A
+retry with a different status or materially different normalized note fails
+with `community_memory_outcome_conflict`. A new assessment of the same node
+must use a new retrieval receipt. Callers do not provide a separate idempotency
+key, and the server does not maintain a second replay ledger.
+
 Raw/recent/archive evidence remains separate from accepted memory. External agents should not treat archive search as community-endorsed intelligence.
 
 ## AI Feed Evidence Boundary

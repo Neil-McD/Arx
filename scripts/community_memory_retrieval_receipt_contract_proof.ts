@@ -41,6 +41,9 @@ const mcpContract = read("docs/polynet-workspace-mcp-contract-v0.md");
 const stagingAcceptance = JSON.parse(
   read("scripts/fixtures/community_memory_retrieval_receipt_staging_acceptance_20260716.json"),
 );
+const outcomeIdempotencyAcceptance = JSON.parse(
+  read("scripts/fixtures/community_memory_outcome_idempotency_staging_acceptance_20260716.json"),
+);
 
 assert.match(
   contract,
@@ -236,6 +239,26 @@ const outcomeCore = directory.slice(
   directory.indexOf("async function recordCommunityOutcomeObservationCore"),
   directory.indexOf("\nexport const recordCommunityOutcomeObservationInternal"),
 );
+const outcomeLedgerResolver = functionBlock(
+  directory,
+  "resolveExistingReceiptOutcomeForNode",
+  "\nfunction retrievalLogBelongsToUser",
+);
+assert.match(
+  outcomeLedgerResolver,
+  /receipt\.outcomeObservationIds[\s\S]*ctx\.db\.get\(outcomeId[\s\S]*outcome\.communityId[\s\S]*outcome\.retrievalLogId[\s\S]*injectedNodeIds/,
+  "outcome replay should resolve and integrity-check the receipt's bounded outcome ledger",
+);
+assert.match(
+  outcomeLedgerResolver,
+  /matchingOutcomes\.length > 1[\s\S]*community_memory_outcome_duplicate/,
+  "multiple outcomes for one receipt and node should fail closed",
+);
+assert.match(
+  outcomeLedgerResolver,
+  /existingOutcome\.resultStatus !== args\.resultStatus[\s\S]*existingOutcome\.evidenceStrength !== "observed"[\s\S]*existingOutcome\.notes[\s\S]*community_memory_outcome_conflict/,
+  "materially different replays should conflict instead of mutating an observation",
+);
 assert.match(
   outcomeCore,
   /requireCanonicalCommunityMemoryReceipt\([\s\S]*receiptSurface[\s\S]*nodeId: node\._id[\s\S]*requiredNodeState: "injected"/,
@@ -245,6 +268,30 @@ assert.match(
   outcomeCore,
   /evidenceStrength: "observed"/,
   "the active outcome path should use fixed observed evidence strength",
+);
+assert.match(
+  outcomeCore,
+  /normalizedNotes = normalizeCommunityOutcomeNotes\(args\.notes\)[\s\S]*resolveExistingReceiptOutcomeForNode\([\s\S]*if \(existingOutcome\)[\s\S]*deduplicated: true[\s\S]*db\.insert\("communityOutcomeObservations"/,
+  "exact retries should return before either outcome or change-request insertion",
+);
+assert.match(
+  directory,
+  /function normalizeCommunityOutcomeNotes[\s\S]*trim\(\)\.replace\(\/\\s\+\/g, " "\)[\s\S]*slice\(0, 1000\)/,
+  "outcome notes should have one whitespace-stable bounded representation",
+);
+assert.match(
+  outcomeCore,
+  /outcomeObservationIds: Array\.from\([\s\S]*new Map\([\s\S]*normalizeIdValue\(id\)/,
+  "receipt outcome linkage should remain set-like",
+);
+const outcomeMutation = exportedFunctionBlock(
+  directory,
+  "recordCommunityOutcomeObservationInternal",
+);
+assert.match(
+  outcomeMutation,
+  /outcome_observation_id: result\.outcome\.id[\s\S]*deduplicated: result\.deduplicated/,
+  "the outcome response should expose stable identity and replay status",
 );
 assert.match(
   directory,
@@ -257,6 +304,11 @@ const outcomeDispatch = httpMcp.slice(
   httpMcp.indexOf("\n  if (toolName === ", outcomeDispatchStart + 1),
 );
 assert.match(outcomeDispatch, /node_id is required/);
+assert.doesNotMatch(
+  outcomeDispatch,
+  /idempotency_key|idempotencyKey/,
+  "the MCP adapter should not require a redundant caller idempotency key",
+);
 
 assert.match(
   cognitionContract,
@@ -282,6 +334,10 @@ assert.match(
 assert.match(
   mcpContract,
   /same-user, same-community, `external_mcp`, `community_memory_retrieval_receipt:v1` receipt/,
+);
+assert.match(
+  mcpContract,
+  /natural operation identity `\(retrieval_log_id, node_id\)`[\s\S]*`deduplicated: true`[\s\S]*community_memory_outcome_conflict/,
 );
 
 assert.equal(
@@ -350,5 +406,55 @@ assert.equal(stagingAcceptance.cleanup?.fixture_communities_remaining, 0);
 assert.equal(stagingAcceptance.cleanup?.fixture_users_remaining, 0);
 assert.equal(stagingAcceptance.deployed_surface?.acceptance_function_removed, true);
 assert.equal(stagingAcceptance.cleanup?.acceptance_flag_removed, true);
+
+assert.equal(
+  outcomeIdempotencyAcceptance.schema_version,
+  "community_memory_outcome_idempotency_staging_acceptance:v1",
+);
+assert.equal(outcomeIdempotencyAcceptance.deployment_kind, "staging");
+assert.equal(outcomeIdempotencyAcceptance.self_expiring_deployment, true);
+assert.equal(outcomeIdempotencyAcceptance.production_touched, false);
+assert.equal(
+  outcomeIdempotencyAcceptance.result?.code,
+  "community_memory_outcome_idempotency_acceptance_passed",
+);
+assert.deepEqual(outcomeIdempotencyAcceptance.result?.failures, []);
+assert.equal(outcomeIdempotencyAcceptance.sequential_replay?.first_deduplicated, false);
+assert.equal(outcomeIdempotencyAcceptance.sequential_replay?.replay_deduplicated, true);
+assert.equal(outcomeIdempotencyAcceptance.sequential_replay?.same_outcome_id, true);
+assert.equal(
+  outcomeIdempotencyAcceptance.sequential_replay?.changed_status_error,
+  "community_memory_outcome_conflict",
+);
+assert.deepEqual(
+  outcomeIdempotencyAcceptance.concurrent_replay?.deduplicated_states,
+  [false, true],
+);
+assert.equal(outcomeIdempotencyAcceptance.concurrent_replay?.same_outcome_id, true);
+assert.equal(outcomeIdempotencyAcceptance.concurrent_replay?.outcome_count, 1);
+assert.equal(outcomeIdempotencyAcceptance.concurrent_replay?.change_request_count, 1);
+assert.equal(outcomeIdempotencyAcceptance.concurrent_replay?.receipt_link_count, 1);
+assert.equal(outcomeIdempotencyAcceptance.database_counts?.outcome_count, 4);
+assert.equal(outcomeIdempotencyAcceptance.database_counts?.change_request_count, 4);
+assert.deepEqual(
+  outcomeIdempotencyAcceptance.database_counts?.receipt_outcome_link_counts,
+  [2, 1, 1],
+);
+assert.equal(outcomeIdempotencyAcceptance.architecture?.schema_changed, false);
+assert.equal(outcomeIdempotencyAcceptance.architecture?.caller_idempotency_key_added, false);
+assert.equal(outcomeIdempotencyAcceptance.architecture?.replay_table_added, false);
+assert.equal(outcomeIdempotencyAcceptance.architecture?.compiler_work_key_reused, false);
+assert.equal(outcomeIdempotencyAcceptance.cleanup?.fixture_communities_remaining, 0);
+assert.equal(outcomeIdempotencyAcceptance.cleanup?.fixture_users_remaining, 0);
+assert.equal(outcomeIdempotencyAcceptance.cleanup?.acceptance_flag_removed, true);
+assert.equal(outcomeIdempotencyAcceptance.cleanup?.local_dev_auth_fallback_removed, true);
+assert.equal(
+  outcomeIdempotencyAcceptance.deployed_surface?.canonical_internal_outcome_present,
+  true,
+);
+assert.equal(
+  outcomeIdempotencyAcceptance.deployed_surface?.acceptance_function_removed,
+  true,
+);
 
 console.log("community_memory_retrieval_receipt_contract_proof: ok");

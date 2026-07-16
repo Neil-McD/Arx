@@ -1,0 +1,65 @@
+{
+  "schema_version": "community_memory_outcome_idempotency_staging_acceptance:v1",
+  "date": "2026-07-16",
+  "deployment": "effervescent-impala-326",
+  "deployment_reference": "neil-mcdevitt:polynet:dev/memory-receipt-v1-20260716",
+  "deployment_kind": "staging",
+  "self_expiring_deployment": true,
+  "production_touched": false,
+  "result": {
+    "code": "community_memory_outcome_idempotency_acceptance_passed",
+    "failures": []
+  },
+  "sequential_replay": {
+    "first_deduplicated": false,
+    "replay_deduplicated": true,
+    "same_outcome_id": true,
+    "formatting_only_whitespace_normalized": true,
+    "changed_status_error": "community_memory_outcome_conflict"
+  },
+  "concurrent_replay": {
+    "call_count": 2,
+    "all_succeeded": true,
+    "same_outcome_id": true,
+    "deduplicated_states": [
+      false,
+      true
+    ],
+    "outcome_count": 1,
+    "change_request_count": 1,
+    "receipt_link_count": 1
+  },
+  "distinct_episode_boundaries": {
+    "second_injected_node_created_distinct_outcome": true,
+    "same_node_new_receipt_created_distinct_outcome": true
+  },
+  "database_counts": {
+    "outcome_count": 4,
+    "change_request_count": 4,
+    "receipt_outcome_link_counts": [
+      2,
+      1,
+      1
+    ]
+  },
+  "architecture": {
+    "schema_changed": false,
+    "caller_idempotency_key_added": false,
+    "replay_table_added": false,
+    "compiler_work_key_reused": false
+  },
+  "cleanup": {
+    "deleted_change_request_count": 4,
+    "deleted_outcome_count": 4,
+    "deleted_receipt_count": 3,
+    "deleted_node_count": 3,
+    "fixture_communities_remaining": 0,
+    "fixture_users_remaining": 0,
+    "acceptance_flag_removed": true,
+    "local_dev_auth_fallback_removed": true
+  },
+  "deployed_surface": {
+    "canonical_internal_outcome_present": true,
+    "acceptance_function_removed": true
+  }
+}

@@ -337,6 +337,12 @@ function normalizeOptionalLongText(raw: unknown, maxLen: number): string | undef
   return text.slice(0, maxLen);
 }
 
+function normalizeCommunityOutcomeNotes(raw: unknown): string | undefined {
+  const text = String(raw ?? "").trim().replace(/\s+/g, " ");
+  if (!text) return undefined;
+  return text.slice(0, 1000);
+}
+
 function normalizeStringList(raw: unknown, maxItems: number, maxLen: number): string[] {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
@@ -682,6 +688,60 @@ async function requireCanonicalCommunityMemoryReceipt(args: {
     );
   }
   return receipt;
+}
+
+async function resolveExistingReceiptOutcomeForNode(args: {
+  ctx: any;
+  receipt: RetrievalLogRow;
+  communityId: any;
+  nodeId: any;
+  resultStatus: Exclude<OutcomeResultStatus, "unknown">;
+  notes?: string;
+}): Promise<OutcomeObservationRow | null> {
+  const receiptId = normalizeIdValue(args.receipt._id);
+  const communityId = normalizeIdValue(args.communityId);
+  const nodeId = normalizeIdValue(args.nodeId);
+  const injectedNodeIds = new Set(
+    (args.receipt.injectedNodeIds ?? []).map(normalizeIdValue),
+  );
+  const seenOutcomeIds = new Set<string>();
+  const matchingOutcomes: OutcomeObservationRow[] = [];
+
+  for (const outcomeId of args.receipt.outcomeObservationIds ?? []) {
+    const normalizedOutcomeId = normalizeIdValue(outcomeId);
+    if (!normalizedOutcomeId || seenOutcomeIds.has(normalizedOutcomeId)) {
+      throw new Error("community_memory_outcome_receipt_corrupt");
+    }
+    seenOutcomeIds.add(normalizedOutcomeId);
+
+    const outcome = (await args.ctx.db.get(outcomeId as any)) as OutcomeObservationRow | null;
+    if (
+      !outcome ||
+      normalizeIdValue(outcome.communityId) !== communityId ||
+      normalizeIdValue(outcome.retrievalLogId) !== receiptId ||
+      !outcome.nodeId ||
+      !injectedNodeIds.has(normalizeIdValue(outcome.nodeId))
+    ) {
+      throw new Error("community_memory_outcome_receipt_corrupt");
+    }
+    if (normalizeIdValue(outcome.nodeId) === nodeId) {
+      matchingOutcomes.push(outcome);
+    }
+  }
+
+  if (matchingOutcomes.length > 1) {
+    throw new Error("community_memory_outcome_duplicate");
+  }
+  const existingOutcome = matchingOutcomes[0] ?? null;
+  if (!existingOutcome) return null;
+  if (
+    existingOutcome.resultStatus !== args.resultStatus ||
+    existingOutcome.evidenceStrength !== "observed" ||
+    (existingOutcome.notes ?? undefined) !== args.notes
+  ) {
+    throw new Error("community_memory_outcome_conflict");
+  }
+  return existingOutcome;
 }
 
 function retrievalLogBelongsToUser(log: RetrievalLogRow, userId: any): boolean {
@@ -3805,6 +3865,21 @@ async function recordCommunityOutcomeObservationCore(args: {
     nodeId: node._id,
     requiredNodeState: "injected",
   });
+  const normalizedNotes = normalizeCommunityOutcomeNotes(args.notes);
+  const existingOutcome = await resolveExistingReceiptOutcomeForNode({
+    ctx: args.ctx,
+    receipt: retrievalLog,
+    communityId: args.communityId,
+    nodeId: node._id,
+    resultStatus: args.resultStatus,
+    notes: normalizedNotes,
+  });
+  if (existingOutcome) {
+    return {
+      outcome: mapOutcomeObservationRow(existingOutcome),
+      deduplicated: true,
+    };
+  }
   const nowMs = Date.now();
   const observedAt = nowMs;
   const outcomeId = await args.ctx.db.insert("communityOutcomeObservations" as any, {
@@ -3813,7 +3888,7 @@ async function recordCommunityOutcomeObservationCore(args: {
     retrievalLogId: args.retrievalLogId,
     resultStatus: args.resultStatus,
     evidenceStrength: "observed",
-    notes: normalizeOptionalLongText(args.notes, 4000),
+    notes: normalizedNotes,
     observedByActorType: actor.actorType,
     ...(actor.actorUserId ? { observedByUserId: actor.actorUserId } : {}),
     observedAt,
@@ -3832,7 +3907,7 @@ async function recordCommunityOutcomeObservationCore(args: {
       resultStatus: args.resultStatus,
       evidenceStrength: "observed",
       workflowId: null,
-      notes: normalizeOptionalLongText(args.notes, 1000) ?? null,
+      notes: normalizedNotes ?? null,
     },
     confidence: args.resultStatus === "worked" ? 0.55 : args.resultStatus === "failed" ? 0.45 : 0.35,
     privacyRisk: 0.2,
@@ -3841,12 +3916,22 @@ async function recordCommunityOutcomeObservationCore(args: {
     nowMs,
   });
   await args.ctx.db.patch(retrievalLog._id as any, {
-    outcomeObservationIds: [...(retrievalLog.outcomeObservationIds ?? []), outcomeId],
+    outcomeObservationIds: Array.from(
+      new Map(
+        [...(retrievalLog.outcomeObservationIds ?? []), outcomeId].map((id) => [
+          normalizeIdValue(id),
+          id,
+        ]),
+      ).values(),
+    ),
     updatedAt: nowMs,
   });
   const outcome = (await args.ctx.db.get(outcomeId as any)) as OutcomeObservationRow | null;
   if (!outcome) throw new Error("community_outcome_observation_not_found");
-  return mapOutcomeObservationRow(outcome);
+  return {
+    outcome: mapOutcomeObservationRow(outcome),
+    deduplicated: false,
+  };
 }
 
 export const recordCommunityOutcomeObservationInternal = internalMutation({
@@ -3871,7 +3956,7 @@ export const recordCommunityOutcomeObservationInternal = internalMutation({
         userId: args.userId,
         authSubject: args.authSubject ?? null,
       });
-      const outcome = await recordCommunityOutcomeObservationCore({
+      const result = await recordCommunityOutcomeObservationCore({
         ctx,
         userId,
         communityId: args.communityId,
@@ -3883,8 +3968,9 @@ export const recordCommunityOutcomeObservationInternal = internalMutation({
       });
       return {
         ok: true,
-        outcome_observation_id: outcome.id,
-        outcome,
+        outcome_observation_id: result.outcome.id,
+        outcome: result.outcome,
+        deduplicated: result.deduplicated,
       };
     } catch (error) {
       return memoryToolError(error, "community_memory_outcome_failed");

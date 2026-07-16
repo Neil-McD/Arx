@@ -808,6 +808,20 @@ assertIncludes(outcomeDispatch, "node_id is required", "outcome injected node pr
 assertIncludes(outcomeDispatch, "result_status must be worked, failed, or mixed", "outcome status validation");
 assertNotIncludes(outcomeDispatch, "communityIntelligenceNodes", "outcome direct node mutation");
 assertNotIncludes(outcomeDispatch, "communityIntelligenceEdges", "outcome direct edge mutation");
+assertNotIncludes(outcomeDispatch, "idempotency_key", "outcome natural idempotency identity");
+
+const outcomeDefinition = toolDefinitionBlock(polynetMcp, "polynet_workspace_record_outcome");
+assertIncludes(
+  outcomeDefinition,
+  "Exact retries for the same retrieval receipt and node return the original immutable outcome.",
+  "outcome replay contract",
+);
+assertIncludes(
+  outcomeDefinition,
+  'required: ["ok", "outcome_observation_id", "outcome", "deduplicated"]',
+  "outcome replay response fields",
+);
+assertNotIncludes(outcomeDefinition, "idempotency_key", "outcome caller idempotency key");
 
 for (const toolName of [
   "polynet_workspace_resources_list",

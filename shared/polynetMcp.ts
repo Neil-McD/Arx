@@ -706,7 +706,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
     name: "polynet_workspace_record_outcome",
     title: "Record Polynet Community Memory Outcome",
     description:
-      "Record whether one injected accepted-memory node worked, failed, or was mixed in a selected Polynet community context.",
+      "Record whether one injected accepted-memory node worked, failed, or was mixed in a selected Polynet community context. Exact retries for the same retrieval receipt and node return the original immutable outcome.",
     annotations: {
       title: "Record Polynet Community Memory Outcome",
       destructiveHint: false,
@@ -749,6 +749,24 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
         outcome: {
           type: "object",
           additionalProperties: true,
+          required: ["ok", "outcome_observation_id", "outcome", "deduplicated"],
+          description:
+            "Receipt-bound outcome result, including outcome_observation_id and whether an exact retry was deduplicated.",
+          properties: {
+            ok: {
+              type: "boolean",
+            },
+            outcome_observation_id: {
+              type: "string",
+            },
+            outcome: {
+              type: "object",
+              additionalProperties: true,
+            },
+            deduplicated: {
+              type: "boolean",
+            },
+          },
         },
       },
     },
