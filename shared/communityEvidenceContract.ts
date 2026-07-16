@@ -16,8 +16,13 @@ export const COMMUNITY_EVIDENCE_SURFACES = [
   "community_concierge",
 ] as const;
 
+export const COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION =
+  "community_memory_retrieval_receipt:v1" as const;
+
 export type CommunityEvidenceSurface =
   (typeof COMMUNITY_EVIDENCE_SURFACES)[number];
+export type CommunityMemoryRetrievalReceiptVersion =
+  typeof COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION;
 export type CommunityInteractionEvidenceObjectType = "root" | "reply";
 
 export type CommunityResourceEvidenceRef = `resource:${string}`;

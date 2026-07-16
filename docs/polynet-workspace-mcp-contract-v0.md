@@ -325,9 +325,9 @@ Metadata smoke proves discovery and OAuth challenge behavior without credentials
 
 It must use the same accepted-memory backend path as the internal member-agent `community_memory_search` tool. It must not use archive RAG, raw community search, draft intelligence, candidate intelligence, or broad directory collection.
 
-`polynet_workspace_memory_read` reads one accepted, readable memory node plus a bounded, visibility-filtered subgraph bundle. It may create or update retrieval logs.
+`polynet_workspace_memory_read` reads one accepted, readable memory node plus a bounded, visibility-filtered subgraph bundle. Search and read share one `community_memory_retrieval_receipt:v1` receipt attributed to `external_mcp`. The receipt stores returned and injected node ids but never the raw search query.
 
-`polynet_workspace_record_outcome` records whether a retrieved memory entry worked, failed, or was mixed. It must require retrieval provenance and must not directly mutate community intelligence nodes or edges.
+`polynet_workspace_record_outcome` records whether a retrieved memory entry worked, failed, or was mixed. It must require a same-user, same-community, `external_mcp` retrieval receipt and must not directly mutate community intelligence nodes or edges.
 
 Raw/recent/archive evidence remains separate from accepted memory. External agents should not treat archive search as community-endorsed intelligence.
 
@@ -450,6 +450,10 @@ Focused proofs must show:
 - accepted memory search uses `searchCommunityMemoryInternal`,
 - accepted memory read uses `readCommunityMemoryInternal`,
 - outcome feedback uses `recordCommunityOutcomeObservationInternal`,
+- accepted memory search/read pass the explicit `external_mcp` receipt surface,
+- new accepted-memory receipts do not persist raw query text,
+- memory read rejects a receipt that did not return the requested node,
+- outcome feedback rejects another viewer's receipt even when the caller manages the community,
 - product docs tools use the canonical product docs index helpers,
 - resource tools require `member_resources`,
 - resource tools use only bounded read/map/list/search internals,

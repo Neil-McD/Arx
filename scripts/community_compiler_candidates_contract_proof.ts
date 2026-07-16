@@ -155,7 +155,7 @@ assert.doesNotMatch(
 );
 assert.match(
   directory,
-  /export async function searchCommunityMemoryCore[\s\S]*requireCommunityChatAccess[\s\S]*retrieveAcceptedCommunityMemoryNodes[\s\S]*communityIntelligenceRetrievalLogs[\s\S]*export const searchCommunityMemoryInternal/,
+  /export async function searchCommunityMemoryCore[\s\S]*requireCommunityChatAccess[\s\S]*retrieveAcceptedCommunityMemoryNodes[\s\S]*createCommunityMemoryRetrievalReceipt[\s\S]*export const searchCommunityMemoryInternal/,
   "accepted-memory search should have one authorization, evidence-filtering, and audit core",
 );
 assert.equal(

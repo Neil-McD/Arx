@@ -1,0 +1,45 @@
+{
+  "schema_version": "community_memory_retrieval_receipt_staging_acceptance:v1",
+  "recorded_at": "2026-07-16",
+  "deployment": "basic-robin-885",
+  "deployment_kind": "staging",
+  "happy_path": {
+    "surfaces": [
+      "member_agent_dock",
+      "community_concierge",
+      "external_mcp"
+    ],
+    "same_memory_identity_across_surfaces": true,
+    "receipt_version": "community_memory_retrieval_receipt:v1",
+    "search_read_same_receipt": true,
+    "receipt_bound_to_viewer_and_community": true,
+    "raw_query_persisted": false,
+    "feedback_states_recorded": [
+      "useful",
+      "wrong",
+      "stale"
+    ],
+    "external_mcp_outcome_bound_to_receipt": true
+  },
+  "adversarial": {
+    "unreturned_node_read": "community_intelligence_retrieval_node_not_returned",
+    "cross_surface_read": "community_intelligence_retrieval_receipt_surface_mismatch",
+    "manager_foreign_receipt_read": "community_intelligence_retrieval_log_forbidden",
+    "manager_foreign_receipt_feedback": "community_intelligence_retrieval_feedback_forbidden",
+    "manager_foreign_receipt_outcome": "community_intelligence_outcome_retrieval_forbidden",
+    "cross_community_read": "community_intelligence_retrieval_log_not_found",
+    "outsider_search": "community_entitlement_required",
+    "revoked_node_read": "community_intelligence_node_not_readable",
+    "revoked_node_absent_from_search": true
+  },
+  "cleanup": {
+    "fixture_communities_remaining": 0,
+    "retrieval_logs_remaining": 0,
+    "outcome_observations_remaining": 0,
+    "change_requests_remaining": 0,
+    "intelligence_nodes_remaining": 0,
+    "memberships_remaining": 0,
+    "acceptance_function_removed": true,
+    "acceptance_flag_removed": true
+  }
+}

@@ -680,6 +680,7 @@ export async function executeRetrievalHarnessTool(params: {
           userId: params.userId,
           authSubject: params.authSubject ?? undefined,
           communityId: params.communityId,
+          surface: params.evidenceSurface ?? "member_agent_dock",
           query: String(normalizedArgs.query ?? "").trim(),
           types: Array.isArray(normalizedArgs.types) ? normalizedArgs.types : undefined,
           limit:
@@ -722,6 +723,7 @@ export async function executeRetrievalHarnessTool(params: {
           userId: params.userId,
           authSubject: params.authSubject ?? undefined,
           communityId: params.communityId,
+          surface: params.evidenceSurface ?? "member_agent_dock",
           nodeId: String(normalizedArgs.nodeId ?? ""),
           retrievalLogId:
             typeof normalizedArgs.retrievalLogId === "string"

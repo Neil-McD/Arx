@@ -1419,10 +1419,10 @@ Rules:
 - The tools derive community scope from the active server-validated community lens. They must not accept a loose `communityId` argument from the model.
 - `community_memory_search` searches retained community intelligence in `communityIntelligenceNodes`; it is not archive RAG and it does not use embeddings as truth.
 - `community_memory_search` returns only `promising`, `validated`, and `canonical` statuses. Draft and candidate entries may remain visible to managers in directory-management surfaces, but neither members nor managers may inject them through the agent memory tools.
-- `community_memory_read` reads one accepted node and a bounded visibility-filtered subgraph bundle, then marks the node as injected in the retrieval log.
+- `community_memory_read` reads one accepted node and a bounded visibility-filtered subgraph bundle, then marks the node as injected in the same retrieval receipt created by search.
 - Compiler-derived memory must revalidate its immutable source traces and active citation lifecycle for every viewer. Manager authority may widen visibility to admin evidence, but it must never bypass redaction or citation revocation.
 - A returned subgraph edge must have an accepted, currently readable neighbor. The read tool must not leak edge metadata for a hidden, stale, draft, revoked, or otherwise unreadable neighbor.
-- `community_record_outcome` records whether retrieved community memory worked, failed, or was mixed. Non-manager member paths still require a same-user retrieval log, and node-linked outcomes require the node to have been retrieved or injected in that log.
+- `community_record_outcome` records whether retrieved community memory worked, failed, or was mixed. Receipt-bound outcomes always require a same-user receipt, including for managers, and node-linked outcomes require the node to have been retrieved or injected in that receipt.
 - These tools may write retrieval logs and outcome observations. They must not directly create or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`.
 - The active-community context tool may expose a tiny memory orientation block with counts and recent validated titles, but it must not dump directory contents into the prompt.
 - Runtime prompt policy must distinguish retained community memory from raw archive evidence: use `community_memory_search` for what the community has learned, use `community_search` for unvalidated recent/archive evidence.
@@ -2128,3 +2128,45 @@ The durable certificate is
 machine-checked result fixture under `scripts/fixtures`. Requalification may
 temporarily restore an isolated acceptance action on a non-production branch,
 but the canonical deployed surface contains only the memory runtime itself.
+
+## Thirty-Second Implementation Slice: Canonical Retrieval Receipts
+
+Accepted-memory consumption now uses one privacy-safe receipt contract across
+the member agent, community Concierge, and external MCP:
+
+```txt
+search under one authenticated community lens
+  -> one versioned, surface-attributed receipt
+  -> bounded returned node ids
+  -> read one node that the receipt actually returned
+  -> mark that same node injected on the same receipt
+  -> attach same-viewer feedback and outcomes
+```
+
+Rules:
+
+- New accepted-memory receipts use
+  `community_memory_retrieval_receipt:v1`.
+- Each receipt records community, viewer, surface, returned node ids, injected
+  node ids, timestamps, optional workflow id, feedback, and outcome references.
+- The three canonical surfaces are `member_agent_dock`,
+  `community_concierge`, and `external_mcp`.
+- Search text remains transient input to deterministic reranking. New receipts
+  never persist it.
+- Historical rows may retain the optional legacy `query` field and may lack a
+  receipt version or surface. That compatibility does not permit new writers to
+  populate raw query text.
+- A provided receipt must belong to the authenticated viewer and the explicit
+  community. Manager authority does not bypass receipt ownership.
+- Versioned receipts must be read and used for MCP outcomes through the same
+  surface that created them.
+- A read may inject only a node present in the receipt's returned-node set.
+  Direct read without a prior receipt creates one receipt containing that node
+  as both returned and injected.
+- Receipt validation never replaces current node, evidence, membership, or
+  redaction checks. All of those still fail closed independently.
+- The older generic workflow retrieval API remains compatibility-only and does
+  not persist raw search text. It is not a fourth agent consumption surface.
+
+The staging acceptance certificate for these rules is recorded in
+`docs/community-memory-retrieval-receipt-staging-acceptance-20260716.md`.

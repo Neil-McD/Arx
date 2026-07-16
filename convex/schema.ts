@@ -3206,7 +3206,19 @@ export default defineSchema({
   communityIntelligenceRetrievalLogs: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
+    // Optional only for rows created before the canonical privacy-safe receipt
+    // contract. Every new accepted-memory tool receipt writes both fields.
+    receiptVersion: v.optional(v.literal("community_memory_retrieval_receipt:v1")),
+    surface: v.optional(
+      v.union(
+        v.literal("member_agent_dock"),
+        v.literal("external_mcp"),
+        v.literal("community_concierge"),
+      ),
+    ),
     workflowId: v.optional(v.string()),
+    // Historical compatibility only. New receipts never persist raw search
+    // text; the query is used transiently for deterministic retrieval.
     query: v.optional(v.string()),
     retrievedNodeIds: v.array(v.id("communityIntelligenceNodes")),
     injectedNodeIds: v.array(v.id("communityIntelligenceNodes")),
