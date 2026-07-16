@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { truncateText } from "./communityArchiveDocuments";
+import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
 
 export const communityEvidenceSurfaceValidator = v.union(
   v.literal("member_agent_dock"),
@@ -49,6 +50,7 @@ export const recordCommunityEvidenceRetrievalInternal = internalMutation({
     resultRefs: v.array(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireLiveCommunityForCognitionWrite(ctx, args.communityId);
     return await ctx.db.insert("communityEvidenceRetrievalLogs" as any, {
       communityId: args.communityId,
       userId: args.userId,

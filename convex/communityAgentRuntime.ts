@@ -31,6 +31,7 @@ import { renderCommunityAgentSkills } from "../shared/communityAgentSkills";
 import { buildCommunityAgentIdentityPrompt } from "../shared/communityAgentRuntimeBoundary";
 import { normalizeIdValue, toIsoString } from "./communityCore";
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
+import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
 
 const COMMUNITY_AGENT_RUNTIME_MAX_TOOL_STEPS = 12;
 const COMMUNITY_AGENT_RUNTIME_MAX_OUTPUT_CHARS = 12_000;
@@ -686,6 +687,7 @@ export const recordCommunityAgentRunEventsInternal = internalMutation({
     ),
   },
   handler: async (ctx, args) => {
+    await requireLiveCommunityForCognitionWrite(ctx, args.communityId);
     const nowMs = Date.now();
     for (const event of args.events) {
       const seq = Math.max(0, Math.floor(event.seq));

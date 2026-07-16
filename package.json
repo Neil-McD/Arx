@@ -228,6 +228,7 @@
     "check:community-memory-health-probe-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_memory_health_probe_contract_proof.ts",
     "check:community-memory-consumption-parity-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_memory_consumption_parity_contract_proof.ts",
     "check:community-memory-retrieval-receipt-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_memory_retrieval_receipt_contract_proof.ts",
+    "check:community-cognition-cleanup-behavior": "tsx scripts/community_cognition_cleanup_behavior_proof.ts",
     "check:community-agent-filesystem-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_filesystem_contract_proof.ts",
     "check:community-agent-concierge-intake-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_concierge_intake_contract_proof.ts",
     "check:community-agent-serve-issue-notice-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_serve_issue_notice_contract_proof.ts",

@@ -21,6 +21,7 @@ import {
   requireCommunityEvidenceCitationsActiveCore,
 } from "./communityEvidenceCitations";
 import { communityEvidenceSurfaceValidator } from "./communityEvidenceAudit";
+import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
 import { isCommunityMemoryWorkKey } from "./communityMemoryWorkKey";
 import {
   COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION,
@@ -1717,6 +1718,7 @@ export async function upsertCommunitySourceTrace(args: {
   allowExistingUpdate?: boolean;
   nowMs: number;
 }): Promise<ReturnType<typeof mapTraceRow>> {
+  await requireLiveCommunityForCognitionWrite(args.ctx, args.communityId);
   const sourceId = normalizeOptionalLongText(args.sourceId, 512);
   const title = normalizeOptionalLongText(args.title, 240);
   const summary = normalizeBoundedText(
@@ -1958,6 +1960,7 @@ export async function createOrReuseTrustedCommunityIntelligenceChangeRequest(arg
   changeRequest: ReturnType<typeof mapChangeRequestRow>;
   reusedExisting: boolean;
 }> {
+  await requireLiveCommunityForCognitionWrite(args.ctx, args.communityId);
   const workKey = String(args.workKey ?? "").trim() || undefined;
   if (workKey && !isCommunityMemoryWorkKey(workKey)) {
     throw new Error("community_intelligence_work_key_invalid");
@@ -2864,6 +2867,7 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
   nowMs?: number;
 }): Promise<ReturnType<typeof mapChangeRequestRow>> {
   const changeRequest = await getChangeRequestOrThrow(args.ctx, args.changeRequestId);
+  await requireLiveCommunityForCognitionWrite(args.ctx, changeRequest.communityId);
   const payload = payloadObject(changeRequest.requestedPayload);
   const autonomousCompilerMemory = args.applicationMode === "autonomous_compiler_memory";
   if (autonomousCompilerMemory) {

@@ -2,7 +2,7 @@
 
 Status: active architecture; core runtime boundary implemented on Work 3 staging
 Scope: product architecture, memory system, community agent loop
-Last updated: 2026-07-15
+Last updated: 2026-07-16
 
 ## Purpose
 
@@ -2189,3 +2189,31 @@ The staging acceptance certificate for these rules is recorded in
 Transactional outcome replay and concurrency acceptance is recorded separately
 in
 `docs/community-memory-outcome-idempotency-staging-acceptance-20260716.md`.
+
+## Thirty-Third Implementation Slice: Guarded Cognition-Orphan Cleanup
+
+Community deletion can leave inaccessible derived cognition behind after the
+canonical community row is removed. The first cleanup slice is intentionally
+manual and memory-scoped:
+
+- One fixed internal allowlist contains only community-owned archive, evidence,
+  compiler, directory, retrieval, outcome, metabolizer, and community-agent run
+  records.
+- Product-source tables such as interactions, resources, AI-feed posts, events,
+  memberships, billing records, personal-agent history, and Concierge serve
+  requests are outside the cleanup contract.
+- Inspection and deletion both refuse a community whose canonical row still
+  exists.
+- Inspection returns bounded metadata counts only. It never returns stored
+  evidence, memory bodies, prompts, or retrieval text.
+- Deletion accepts a validator-backed phase rather than an arbitrary table
+  name, uses a community-prefixed index, deletes at most one hundred rows, and
+  verifies every selected row still belongs to the explicit community.
+- Repeating a completed phase is a no-op.
+- Source-trace, compiler-digest, autonomous change-request, apply, agent
+  run-event, archive-projection, and evidence-retrieval audit write seams
+  require the canonical community to remain live.
+- This slice does not add a cron, scheduler, public API, schema table, or
+  automatic hook from `deleteCommunity`. Automation is deferred until the
+  primitive passes isolated staging acceptance against a disposable community
+  and an untouched control community.
