@@ -150,8 +150,13 @@ assert.match(
 );
 assert.match(
   block,
-  /if \(outcome\.nodeId\)[\s\S]*else if \(outcome\.retrievalLogId\)[\s\S]*retrievalLogNodeIds\(retrievalLog\)/,
-  "outcomes should apply directly to nodeId when present and otherwise fall back to retrieved nodes from retrieval provenance",
+  /if \(outcome\.retrievalLogId\)[\s\S]*if \(!isCanonicalMemoryReceipt\(retrievalLog\)\) continue[\s\S]*if \(outcome\.nodeId\)[\s\S]*canonicalReceiptInjectedNode\(retrievalLog, outcome\.nodeId\)/,
+  "receipt-bound outcomes should apply only to one injected node on a canonical V1 receipt",
+);
+assert.match(
+  block,
+  /if \(!isCanonicalMemoryReceipt\(log\) \|\| !log\.feedback\) continue/,
+  "legacy retrieval logs should remain audit-only and must not feed metabolizer feedback",
 );
 assert.match(
   block,

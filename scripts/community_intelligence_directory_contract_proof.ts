@@ -269,19 +269,11 @@ assert.match(
     "public change request decisions should not impersonate autonomous actors",
   );
 }
-{
-  const block = exportedFunctionBlock(directory, "recordCommunityOutcomeObservation");
-  assert.match(
-    block,
-    /actorType: v\.optional\(\s*v\.union\(\s*v\.literal\("member"\),\s*v\.literal\("admin"\),?\s*\)/,
-    "public outcome observations should only allow member/admin actor identity",
-  );
-  assert.doesNotMatch(
-    block,
-    /v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)|actorAgentKey/,
-    "public outcome observations should not impersonate community-agent or compiler actors",
-  );
-}
+assert.doesNotMatch(
+  directory,
+  /export const (retrieveCommunityIntelligenceForWorkflow|recordCommunityIntelligenceRetrievalFeedback|recordCommunityOutcomeObservation) =/,
+  "legacy workflow retrieval, receipt-wide feedback, and general public outcomes should be deleted",
+);
 assert.match(
   directory,
   /createCommunityIntelligenceNode[\s\S]*insertMutationLog\([\s\S]*operation: "create_node"/,
@@ -297,10 +289,10 @@ assert.match(
   /createCommunityIntelligenceEdge[\s\S]*insertMutationLog\([\s\S]*operation: "create_edge"/,
   "edge creation should write an audit mutation",
 );
-assert.match(
-  directory,
-  /retrieveCommunityIntelligenceForWorkflow[\s\S]*communityIntelligenceRetrievalLogs/,
-  "workflow retrieval should log retrieved and injected nodes",
+assert.equal(
+  (directory.match(/insert\("communityIntelligenceRetrievalLogs"/g) ?? []).length,
+  1,
+  "the directory should have exactly one retrieval receipt writer",
 );
 assert.match(
   directory,
@@ -309,18 +301,13 @@ assert.match(
 );
 assert.match(
   directory,
-  /recordCommunityIntelligenceRetrievalFeedback[\s\S]*community_intelligence_retrieval_log_not_found[\s\S]*requireCommunityChatAccess\(\{ ctx, communityId: log\.communityId, userId \}\)/,
-  "retrieval feedback should re-check current community access before writing",
+  /recordCommunityOutcomeObservationCore[\s\S]*requiredNodeState: "injected"[\s\S]*evidenceStrength: "observed"[\s\S]*insertChangeRequest\([\s\S]*operation: "attach_outcome"/,
+  "the internal outcome path should require an injected canonical receipt node, fix evidence strength, and create a change request",
 );
 assert.match(
   directory,
-  /recordCommunityOutcomeObservation[\s\S]*community_intelligence_outcome_retrieval_required[\s\S]*insertChangeRequest\([\s\S]*operation: "attach_outcome"/,
-  "member outcome observations should require retrieval context and create change requests instead of direct truth writes",
-);
-assert.match(
-  directory,
-  /recordCommunityOutcomeObservation[\s\S]*if \(node\) \{[\s\S]*insertChangeRequest\([\s\S]*operation: "attach_outcome"/,
-  "outcome observations should become change requests before they can alter directory truth",
+  /export const recordCommunityOutcomeObservationInternal = internalMutation[\s\S]*nodeId: v\.id\("communityIntelligenceNodes"\)[\s\S]*retrievalLogId: v\.id\("communityIntelligenceRetrievalLogs"\)/,
+  "the only outcome API should be internal and require one node plus one receipt",
 );
 assert.match(
   directory,
@@ -332,15 +319,10 @@ assert.match(
   /export const createCommunityIntelligenceNode = internalMutation[\s\S]*resolveAdminTruthActor/,
   "canonical node creation should be internal repair infrastructure with admin truth resolution",
 );
-assert.match(
-  directory,
-  /export const retrieveCommunityIntelligenceForWorkflow[\s\S]*requireCommunityChatAccess\(\{ ctx, communityId: args\.communityId, userId \}\);/,
-  "retrieval should require community access",
-);
-assert.match(
+assert.doesNotMatch(
   communityExports,
-  /retrieveCommunityIntelligenceForWorkflowImpl/,
-  "community module should re-export workflow retrieval",
+  /retrieveCommunityIntelligenceForWorkflow|recordCommunityIntelligenceRetrievalFeedback|recordCommunityOutcomeObservation/,
+  "community module should not re-export deleted receipt or outcome APIs",
 );
 assert.match(
   communityExports,

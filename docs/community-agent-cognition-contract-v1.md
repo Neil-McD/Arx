@@ -1408,9 +1408,6 @@ The fourteenth backend slice closes the first member-agent consumption loop:
 Retained directory intelligence
   -> member-agent community memory tools
   -> cited guidance inside a community-lensed turn
-  -> outcome feedback from the member
-  -> communityOutcomeObservations
-  -> future compiler/directory updates
 ```
 
 Rules:
@@ -1422,8 +1419,9 @@ Rules:
 - `community_memory_read` reads one accepted node and a bounded visibility-filtered subgraph bundle, then marks the node as injected in the same retrieval receipt created by search.
 - Compiler-derived memory must revalidate its immutable source traces and active citation lifecycle for every viewer. Manager authority may widen visibility to admin evidence, but it must never bypass redaction or citation revocation.
 - A returned subgraph edge must have an accepted, currently readable neighbor. The read tool must not leak edge metadata for a hidden, stale, draft, revoked, or otherwise unreadable neighbor.
-- `community_record_outcome` records whether retrieved community memory worked, failed, or was mixed. Receipt-bound outcomes always require a same-user receipt, including for managers, and node-linked outcomes require the node to have been retrieved or injected in that receipt.
-- These tools may write retrieval logs and outcome observations. They must not directly create or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`.
+- Native member-agent and Concierge tools currently expose accepted-memory search and read only. They write retrieval receipts but do not expose a separate outcome tool.
+- The external MCP may record whether one injected community-memory node worked, failed, or was mixed. It requires the same viewer, community, `external_mcp` surface, and `community_memory_retrieval_receipt:v1` receipt that injected that explicit node. Manager authority never bypasses receipt ownership.
+- Consumption tools may write retrieval receipts, and the external MCP outcome tool may write outcome observations. They must not directly create or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`.
 - The active-community context tool may expose a tiny memory orientation block with counts and recent validated titles, but it must not dump directory contents into the prompt.
 - Runtime prompt policy must distinguish retained community memory from raw archive evidence: use `community_memory_search` for what the community has learned, use `community_search` for unvalidated recent/archive evidence.
 - Raw evidence may support a new memory change only through the immutable citation and apply-time revalidation rules in `docs/community-evidence-integrity-contract-v1.md`; archive rows are candidates, never authority.
@@ -2140,7 +2138,7 @@ search under one authenticated community lens
   -> bounded returned node ids
   -> read one node that the receipt actually returned
   -> mark that same node injected on the same receipt
-  -> attach same-viewer feedback and outcomes
+  -> attach one same-viewer outcome to that injected node
 ```
 
 Rules:
@@ -2148,7 +2146,7 @@ Rules:
 - New accepted-memory receipts use
   `community_memory_retrieval_receipt:v1`.
 - Each receipt records community, viewer, surface, returned node ids, injected
-  node ids, timestamps, optional workflow id, feedback, and outcome references.
+  node ids, timestamps, optional workflow id, and outcome references.
 - The three canonical surfaces are `member_agent_dock`,
   `community_concierge`, and `external_mcp`.
 - Search text remains transient input to deterministic reranking. New receipts
@@ -2158,15 +2156,29 @@ Rules:
   populate raw query text.
 - A provided receipt must belong to the authenticated viewer and the explicit
   community. Manager authority does not bypass receipt ownership.
-- Versioned receipts must be read and used for MCP outcomes through the same
+- Active reads and outcomes accept only
+  `community_memory_retrieval_receipt:v1`. Historical unversioned receipt rows
+  remain stored for audit, but are not active authorization or metabolizer
+  inputs.
+- Versioned receipts must be read and used for outcomes through the same
   surface that created them.
 - A read may inject only a node present in the receipt's returned-node set.
   Direct read without a prior receipt creates one receipt containing that node
   as both returned and injected.
+- An outcome must name exactly one node that the same receipt marked injected.
+  The active path uses fixed `observed` evidence strength; callers cannot
+  inflate it.
 - Receipt validation never replaces current node, evidence, membership, or
   redaction checks. All of those still fail closed independently.
-- The older generic workflow retrieval API remains compatibility-only and does
-  not persist raw search text. It is not a fourth agent consumption surface.
+- The generic workflow retrieval API, receipt-wide feedback API, and general
+  public outcome API are deleted. The canonical accepted-memory search helper
+  is the only receipt writer, and the node-specific internal outcome mutation
+  is the only active outcome writer. Its current first-party caller is the
+  external MCP adapter; native member-agent and Concierge tools remain
+  search/read-only.
+- Historical `query`, `feedback`, and `feedbackNote` columns remain nullable
+  storage compatibility only. They are not returned by the active V1 receipt
+  response and have no first-party writer.
 
 The staging acceptance certificate for these rules is recorded in
 `docs/community-memory-retrieval-receipt-staging-acceptance-20260716.md`.

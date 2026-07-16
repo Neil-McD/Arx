@@ -6,6 +6,7 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import { COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION } from "../shared/communityEvidenceContract";
 
 type ActorType = "member" | "admin" | "agent" | "compiler" | "system";
 type EvidenceStrength = "none" | "anecdotal" | "observed" | "measured" | "validated";
@@ -51,6 +52,7 @@ type IntelligenceNodeRow = {
 type RetrievalLogRow = {
   _id: any;
   communityId: any;
+  receiptVersion?: "community_memory_retrieval_receipt:v1";
   retrievedNodeIds: any[];
   injectedNodeIds: any[];
   feedback?: "useful" | "not_useful" | "wrong" | "stale";
@@ -123,6 +125,17 @@ function retrievalLogNodeIds(log: RetrievalLogRow): any[] {
     result.push(id);
   }
   return result;
+}
+
+function isCanonicalMemoryReceipt(log: RetrievalLogRow | null): log is RetrievalLogRow {
+  return log?.receiptVersion === COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION;
+}
+
+function canonicalReceiptInjectedNode(log: RetrievalLogRow, nodeId: any): boolean {
+  const normalizedNodeId = normalizeIdValue(nodeId);
+  return (log.injectedNodeIds ?? []).some(
+    (injectedNodeId) => normalizeIdValue(injectedNodeId) === normalizedNodeId,
+  );
 }
 
 function ensureMetabolizerSignal(map: Map<string, MetabolizerNodeSignal>, nodeId: any): MetabolizerNodeSignal | null {
@@ -423,7 +436,7 @@ export const settleCommunityMemorySignalsInternal = internalMutation({
 
     const signals = new Map<string, MetabolizerNodeSignal>();
     for (const log of retrievalLogs) {
-      if (!log.feedback) continue;
+      if (!isCanonicalMemoryReceipt(log) || !log.feedback) continue;
       for (const nodeId of retrievalLogNodeIds(log)) {
         const signal = ensureMetabolizerSignal(signals, nodeId);
         if (signal) applyRetrievalFeedbackSignal(signal, log.feedback);
@@ -433,11 +446,10 @@ export const settleCommunityMemorySignalsInternal = internalMutation({
     for (const outcome of outcomes) {
       if (METABOLIZER_EXCLUDED_AGENT_KEYS.has(String(outcome.observedByAgentKey ?? ""))) continue;
       const targetNodeIds: any[] = [];
-      if (outcome.nodeId) {
-        targetNodeIds.push(outcome.nodeId);
-      } else if (outcome.retrievalLogId) {
+      let retrievalLog: RetrievalLogRow | null = null;
+      if (outcome.retrievalLogId) {
         const logId = normalizeIdValue(outcome.retrievalLogId);
-        let retrievalLog = retrievalLogById.get(logId) ?? null;
+        retrievalLog = retrievalLogById.get(logId) ?? null;
         if (!retrievalLog) {
           const fetched = (await ctx.db.get(outcome.retrievalLogId as any)) as RetrievalLogRow | null;
           retrievalLog =
@@ -446,7 +458,11 @@ export const settleCommunityMemorySignalsInternal = internalMutation({
               : null;
           if (retrievalLog) retrievalLogById.set(logId, retrievalLog);
         }
-        if (retrievalLog) targetNodeIds.push(...retrievalLogNodeIds(retrievalLog));
+        if (!isCanonicalMemoryReceipt(retrievalLog)) continue;
+      }
+      if (outcome.nodeId) {
+        if (retrievalLog && !canonicalReceiptInjectedNode(retrievalLog, outcome.nodeId)) continue;
+        targetNodeIds.push(outcome.nodeId);
       }
       for (const nodeId of targetNodeIds) {
         const signal = ensureMetabolizerSignal(signals, nodeId);

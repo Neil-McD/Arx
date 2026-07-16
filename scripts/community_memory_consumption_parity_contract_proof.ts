@@ -165,7 +165,7 @@ assert.match(
 );
 assert.match(
   directory,
-  /export async function searchCommunityMemoryCore[\s\S]*requireCommunityChatAccess[\s\S]*retrieveAcceptedCommunityMemoryNodes[\s\S]*communityIntelligenceRetrievalLogs/,
+  /export async function searchCommunityMemoryCore[\s\S]*requireCommunityChatAccess[\s\S]*retrieveAcceptedCommunityMemoryNodes[\s\S]*createCommunityMemoryRetrievalReceipt/,
 );
 assert.match(
   readBlock,
@@ -177,7 +177,8 @@ assert.match(
 );
 assert.match(
   readBlock,
-  /retrievalLog\.communityId[\s\S]*retrievalLog\.userId[\s\S]*community_intelligence_retrieval_log_forbidden/,
+  /requireCanonicalCommunityMemoryReceipt\([\s\S]*communityId: args\.communityId[\s\S]*userId[\s\S]*surface: args\.surface[\s\S]*requiredNodeState: "returned"/,
+  "native memory read should delegate receipt ownership and surface validation to the canonical validator",
 );
 assert.match(
   readBlock,

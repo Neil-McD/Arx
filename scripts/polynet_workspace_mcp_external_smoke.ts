@@ -973,13 +973,17 @@ async function runAuthenticatedSmoke(args: {
       retrievalLogId,
       "POLYNET_MCP_RECORD_OUTCOME requires a retrieval log id from search/read or POLYNET_MCP_RETRIEVAL_LOG_ID.",
     );
+    assert.ok(
+      nodeId,
+      "POLYNET_MCP_RECORD_OUTCOME requires a memory node id from search/read or POLYNET_MCP_MEMORY_NODE_ID.",
+    );
     const outcomeArgs: Record<string, unknown> = {
       workspace_context_id: workspaceContextId,
       retrieval_log_id: retrievalLogId,
+      node_id: nodeId,
       result_status: "mixed",
       notes: "external MCP smoke observed authenticated workspace memory retrieval path",
     };
-    if (nodeId) outcomeArgs.node_id = nodeId;
     await callTool({
       mcpUrl: args.mcpUrl,
       token,

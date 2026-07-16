@@ -193,7 +193,7 @@ assert.match(
 const intelligenceDirectory = read("convex/communityIntelligenceDirectory.ts");
 const publicMemoryOverview = intelligenceDirectory.slice(
   intelligenceDirectory.indexOf("export const resolvePublicCommunityMemoryOverviewBySlug"),
-  intelligenceDirectory.indexOf("export const retrieveCommunityIntelligenceForWorkflow"),
+  intelligenceDirectory.indexOf("export async function searchCommunityMemoryCore"),
 );
 assert.notEqual(publicMemoryOverview.length, 0, "public memory overview query must exist");
 assert.doesNotMatch(

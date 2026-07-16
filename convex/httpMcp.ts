@@ -1619,6 +1619,9 @@ async function handleToolCall(args: {
       return { ok: false, type: "tool", message: "result_status must be worked, failed, or mixed." };
     }
     const nodeId = normalizeString(toolArgs.node_id, 128);
+    if (!nodeId) {
+      return { ok: false, type: "tool", message: "node_id is required." };
+    }
     const notes = normalizeString(toolArgs.notes, 1000);
     try {
       const outcome = (await ctx.runMutation(
@@ -1629,7 +1632,7 @@ async function handleToolCall(args: {
           communityId: resolved.context.communityId,
           surface: "external_mcp",
           retrievalLogId,
-          ...(nodeId ? { nodeId } : null),
+          nodeId,
           resultStatus,
           ...(notes ? { notes } : null),
         },

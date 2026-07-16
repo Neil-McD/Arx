@@ -1,9 +1,14 @@
 {
-  "schema_version": "community_memory_retrieval_receipt_staging_acceptance:v1",
+  "schema_version": "community_memory_retrieval_receipt_canonicalization_staging_acceptance:v1",
   "recorded_at": "2026-07-16",
-  "deployment": "basic-robin-885",
+  "deployment": "effervescent-impala-326",
+  "deployment_reference": "neil-mcdevitt:polynet:dev/memory-receipt-v1-20260716",
   "deployment_kind": "staging",
-  "happy_path": {
+  "self_expiring_deployment": true,
+  "production_touched": false,
+  "member_path": {
+    "code": "community_memory_receipt_member_acceptance_passed",
+    "failures": [],
     "surfaces": [
       "member_agent_dock",
       "community_concierge",
@@ -12,34 +17,45 @@
     "same_memory_identity_across_surfaces": true,
     "receipt_version": "community_memory_retrieval_receipt:v1",
     "search_read_same_receipt": true,
-    "receipt_bound_to_viewer_and_community": true,
+    "receipt_bound_to_viewer_community_and_surface": true,
     "raw_query_persisted": false,
-    "feedback_states_recorded": [
-      "useful",
-      "wrong",
-      "stale"
-    ],
-    "external_mcp_outcome_bound_to_receipt": true
+    "receipt_wide_feedback_exposed": false,
+    "legacy_receipt_metabolizer_audit_only": true,
+    "external_mcp_outcome_before_read": "community_intelligence_retrieval_node_not_injected",
+    "external_mcp_outcome_after_read": true
+  },
+  "owner_path": {
+    "code": "community_memory_receipt_owner_acceptance_passed",
+    "failures": [],
+    "manager_foreign_receipt_read": "community_intelligence_retrieval_log_forbidden",
+    "manager_foreign_receipt_outcome": "community_intelligence_retrieval_log_forbidden"
   },
   "adversarial": {
     "unreturned_node_read": "community_intelligence_retrieval_node_not_returned",
     "cross_surface_read": "community_intelligence_retrieval_receipt_surface_mismatch",
-    "manager_foreign_receipt_read": "community_intelligence_retrieval_log_forbidden",
-    "manager_foreign_receipt_feedback": "community_intelligence_retrieval_feedback_forbidden",
-    "manager_foreign_receipt_outcome": "community_intelligence_outcome_retrieval_forbidden",
     "cross_community_read": "community_intelligence_retrieval_log_not_found",
-    "outsider_search": "community_entitlement_required",
-    "revoked_node_read": "community_intelligence_node_not_readable",
-    "revoked_node_absent_from_search": true
+    "legacy_receipt_read": "community_intelligence_retrieval_receipt_version_required",
+    "legacy_receipt_outcome": "community_intelligence_retrieval_receipt_version_required",
+    "missing_outcome_node_id": "node_id is required",
+    "outcome_for_returned_but_uninjected_node": "community_intelligence_retrieval_node_not_injected"
+  },
+  "deployed_surface": {
+    "canonical_receipt_writer_count": 1,
+    "canonical_internal_outcome_present": true,
+    "public_workflow_retrieval_absent": true,
+    "public_receipt_feedback_absent": true,
+    "public_general_outcome_absent": true,
+    "acceptance_function_removed": true
   },
   "cleanup": {
     "fixture_communities_remaining": 0,
-    "retrieval_logs_remaining": 0,
-    "outcome_observations_remaining": 0,
-    "change_requests_remaining": 0,
-    "intelligence_nodes_remaining": 0,
-    "memberships_remaining": 0,
-    "acceptance_function_removed": true,
+    "fixture_users_remaining": 0,
+    "retrieval_logs_deleted": 5,
+    "outcome_observations_deleted": 1,
+    "change_requests_deleted": 1,
+    "intelligence_nodes_deleted": 3,
+    "memberships_deleted": 2,
+    "metabolizer_runs_deleted": 1,
     "acceptance_flag_removed": true
   }
 }

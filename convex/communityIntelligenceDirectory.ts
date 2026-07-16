@@ -173,11 +173,8 @@ type RetrievalLogRow = {
   receiptVersion?: CommunityMemoryRetrievalReceiptVersion;
   surface?: CommunityEvidenceSurface;
   workflowId?: string;
-  query?: string;
   retrievedNodeIds: any[];
   injectedNodeIds: any[];
-  feedback?: "useful" | "not_useful" | "wrong" | "stale";
-  feedbackNote?: string;
   outcomeObservationIds: any[];
   createdAt: number;
   updatedAt: number;
@@ -624,13 +621,6 @@ async function canViewerReadNodeWithCurrentEvidence(args: {
   );
 }
 
-function normalizeRequestedStatuses(statuses: NodeStatus[] | undefined, isManager: boolean): Set<NodeStatus> {
-  const requested = statuses?.length ? statuses : ACTIVE_RETRIEVAL_STATUSES;
-  if (isManager) return new Set(requested);
-  const readable = requested.filter((status) => MEMBER_READABLE_STATUSES.has(status));
-  return new Set(readable.length ? readable : ACTIVE_RETRIEVAL_STATUSES);
-}
-
 function resolveNodeVisibility(args: {
   status: NodeStatus;
   requestedVisibility?: VisibilityScope;
@@ -654,25 +644,48 @@ function resolveNodeVisibility(args: {
   return { visibilityScope, sourceVisibility };
 }
 
+async function requireCanonicalCommunityMemoryReceipt(args: {
+  ctx: any;
+  retrievalLogId: any;
+  communityId: any;
+  userId: any;
+  surface: CommunityEvidenceSurface;
+  nodeId: any;
+  requiredNodeState: "returned" | "injected";
+}): Promise<RetrievalLogRow> {
+  const receipt = (await args.ctx.db.get(args.retrievalLogId as any)) as RetrievalLogRow | null;
+  if (
+    !receipt ||
+    normalizeIdValue(receipt.communityId) !== normalizeIdValue(args.communityId)
+  ) {
+    throw new Error("community_intelligence_retrieval_log_not_found");
+  }
+  if (normalizeIdValue(receipt.userId) !== normalizeIdValue(args.userId)) {
+    throw new Error("community_intelligence_retrieval_log_forbidden");
+  }
+  if (receipt.receiptVersion !== COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION) {
+    throw new Error("community_intelligence_retrieval_receipt_version_required");
+  }
+  if (receipt.surface !== args.surface) {
+    throw new Error("community_intelligence_retrieval_receipt_surface_mismatch");
+  }
+  const nodeIds =
+    args.requiredNodeState === "injected"
+      ? receipt.injectedNodeIds ?? []
+      : receipt.retrievedNodeIds ?? [];
+  const normalizedNodeId = normalizeIdValue(args.nodeId);
+  if (!nodeIds.some((nodeId) => normalizeIdValue(nodeId) === normalizedNodeId)) {
+    throw new Error(
+      args.requiredNodeState === "injected"
+        ? "community_intelligence_retrieval_node_not_injected"
+        : "community_intelligence_retrieval_node_not_returned",
+    );
+  }
+  return receipt;
+}
+
 function retrievalLogBelongsToUser(log: RetrievalLogRow, userId: any): boolean {
   return normalizeIdValue(log.userId) === normalizeIdValue(userId);
-}
-
-function retrievalReceiptMatchesSurface(
-  log: RetrievalLogRow,
-  surface: CommunityEvidenceSurface,
-): boolean {
-  if (log.receiptVersion === COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION) {
-    return log.surface === surface;
-  }
-  return !log.surface || log.surface === surface;
-}
-
-function retrievalReceiptContainsNode(log: RetrievalLogRow, nodeId: any): boolean {
-  const normalizedNodeId = normalizeIdValue(nodeId);
-  return (log.retrievedNodeIds ?? []).some(
-    (retrievedNodeId) => normalizeIdValue(retrievedNodeId) === normalizedNodeId,
-  );
 }
 
 async function createCommunityMemoryRetrievalReceipt(args: {
@@ -808,28 +821,6 @@ function mapEdgeRow(row: IntelligenceEdgeRow) {
   };
 }
 
-function mapRetrievalLogRow(row: RetrievalLogRow) {
-  return {
-    id: normalizeIdValue(row._id),
-    community_id: normalizeIdValue(row.communityId),
-    user_id: normalizeIdValue(row.userId),
-    receipt_version: row.receiptVersion ?? null,
-    surface: row.surface ?? null,
-    workflow_id: row.workflowId ?? null,
-    query:
-      row.receiptVersion === COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION
-        ? null
-        : row.query ?? null,
-    retrieved_node_ids: (row.retrievedNodeIds ?? []).map(normalizeIdValue),
-    injected_node_ids: (row.injectedNodeIds ?? []).map(normalizeIdValue),
-    feedback: row.feedback ?? null,
-    feedback_note: row.feedbackNote ?? null,
-    outcome_observation_ids: (row.outcomeObservationIds ?? []).map(normalizeIdValue),
-    created_at: toIsoString(row.createdAt),
-    updated_at: toIsoString(row.updatedAt),
-  };
-}
-
 function mapCommunityMemoryRetrievalReceipt(row: RetrievalLogRow) {
   return {
     id: normalizeIdValue(row._id),
@@ -838,7 +829,6 @@ function mapCommunityMemoryRetrievalReceipt(row: RetrievalLogRow) {
     workflow_id: row.workflowId ?? null,
     retrieved_node_ids: (row.retrievedNodeIds ?? []).map(normalizeIdValue),
     injected_node_ids: (row.injectedNodeIds ?? []).map(normalizeIdValue),
-    feedback: row.feedback ?? null,
     outcome_observation_ids: (row.outcomeObservationIds ?? []).map(normalizeIdValue),
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
@@ -2117,49 +2107,6 @@ function retrievalScore(args: {
     textScore(args.node, args.query ?? "") * 0.8 -
     clampScore(args.node.stalenessScore) * 0.5
   );
-}
-
-async function retrieveNodesForWorkflow(args: {
-  ctx: any;
-  communityId: any;
-  userId: any;
-  isManager: boolean;
-  workflowId?: string;
-  query?: string;
-  types?: NodeType[];
-  statuses?: NodeStatus[];
-  limit: number;
-}): Promise<IntelligenceNodeRow[]> {
-  const statusSet = normalizeRequestedStatuses(args.statuses, args.isManager);
-  const typeSet = new Set(args.types ?? []);
-  const rows = (await args.ctx.db
-    .query("communityIntelligenceNodes" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-    .collect()) as IntelligenceNodeRow[];
-  const eligibleRows = rows
-    .filter((row) => statusSet.has(row.status))
-    .filter((row) => typeSet.size === 0 || typeSet.has(row.type))
-    .filter((row) => {
-      if (!args.workflowId) return true;
-      if ((row.workflowIds ?? []).length === 0) return true;
-      return (row.workflowIds ?? []).includes(args.workflowId);
-    });
-  const evidenceReadableRows: IntelligenceNodeRow[] = [];
-  for (const row of eligibleRows) {
-    if (await canViewerReadNodeWithCurrentEvidence({
-      ctx: args.ctx,
-      node: row,
-      isManager: args.isManager,
-    })) {
-      evidenceReadableRows.push(row);
-    }
-  }
-  return evidenceReadableRows
-    .map((node) => ({ node, score: retrievalScore({ node, workflowId: args.workflowId, query: args.query }) }))
-    .filter((entry) => entry.score > -0.5)
-    .sort((a, b) => b.score - a.score || b.node.updatedAt - a.node.updatedAt)
-    .slice(0, args.limit)
-    .map((entry) => entry.node);
 }
 
 async function retrieveAcceptedCommunityMemoryNodes(args: {
@@ -3592,87 +3539,6 @@ export const resolvePublicCommunityMemoryOverviewBySlug = query({
   },
 });
 
-export const retrieveCommunityIntelligenceForWorkflow = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    workflowId: v.optional(v.string()),
-    query: v.optional(v.string()),
-    types: v.optional(
-      v.array(
-        v.union(
-          v.literal("playbook"),
-          v.literal("insight"),
-          v.literal("example"),
-          v.literal("warning_failure"),
-          v.literal("decision_judgment"),
-          v.literal("open_question"),
-        ),
-      ),
-    ),
-    statuses: v.optional(
-      v.array(
-        v.union(
-          v.literal("draft"),
-          v.literal("candidate"),
-          v.literal("promising"),
-          v.literal("validated"),
-          v.literal("canonical"),
-          v.literal("contested"),
-          v.literal("stale"),
-          v.literal("deprecated"),
-          v.literal("archived"),
-        ),
-      ),
-    ),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const isManager = await viewerCanManageCommunity(ctx, args.communityId, userId);
-    const limit = Math.max(1, Math.min(12, Math.floor(args.limit ?? 5)));
-    const workflowId = normalizeWorkflowId(args.workflowId);
-    const queryText = normalizeOptionalLongText(args.query, 1000);
-    const nodes = await retrieveNodesForWorkflow({
-      ctx,
-      communityId: args.communityId,
-      userId,
-      isManager,
-      workflowId,
-      query: queryText,
-      types: args.types,
-      statuses: args.statuses,
-      limit,
-    });
-    const nowMs = Date.now();
-    const logId = await ctx.db.insert("communityIntelligenceRetrievalLogs" as any, {
-      communityId: args.communityId,
-      userId,
-      workflowId,
-      // Compatibility path for the older generic workflow API. The canonical
-      // personal-agent, Concierge, and MCP paths use versioned receipts below.
-      // Raw search text is not persisted on either path.
-      retrievedNodeIds: nodes.map((node) => node._id),
-      injectedNodeIds: nodes.map((node) => node._id),
-      outcomeObservationIds: [],
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    const log = (await ctx.db.get(logId as any)) as RetrievalLogRow | null;
-    if (!log) throw new Error("community_intelligence_retrieval_log_create_failed");
-    return {
-      retrieval_log: mapRetrievalLogRow(log),
-      nodes: nodes.map(mapNodeRow),
-    };
-  },
-});
-
 export async function searchCommunityMemoryCore(args: {
   ctx: any;
   userId: any;
@@ -3863,19 +3729,15 @@ export const readCommunityMemoryInternal = internalMutation({
       const nowMs = Date.now();
       let retrievalLog: RetrievalLogRow | null = null;
       if (args.retrievalLogId) {
-        retrievalLog = (await ctx.db.get(args.retrievalLogId as any)) as RetrievalLogRow | null;
-        if (!retrievalLog || normalizeIdValue(retrievalLog.communityId) !== normalizeIdValue(args.communityId)) {
-          throw new Error("community_intelligence_retrieval_log_not_found");
-        }
-        if (normalizeIdValue(retrievalLog.userId) !== normalizeIdValue(userId)) {
-          throw new Error("community_intelligence_retrieval_log_forbidden");
-        }
-        if (!retrievalReceiptMatchesSurface(retrievalLog, args.surface)) {
-          throw new Error("community_intelligence_retrieval_receipt_surface_mismatch");
-        }
-        if (!retrievalReceiptContainsNode(retrievalLog, node._id)) {
-          throw new Error("community_intelligence_retrieval_node_not_returned");
-        }
+        retrievalLog = await requireCanonicalCommunityMemoryReceipt({
+          ctx,
+          retrievalLogId: args.retrievalLogId,
+          communityId: args.communityId,
+          userId,
+          surface: args.surface,
+          nodeId: node._id,
+          requiredNodeState: "returned",
+        });
         const injectedNodeIds = Array.from(
           new Map(
             [...(retrievalLog.injectedNodeIds ?? []), node._id].map((id) => [normalizeIdValue(id), id]),
@@ -3918,73 +3780,39 @@ async function recordCommunityOutcomeObservationCore(args: {
   ctx: any;
   userId: any;
   communityId: any;
-  nodeId?: any;
-  retrievalLogId?: any;
-  workflowId?: string;
-  metricName?: string;
-  metricValue?: number;
-  baselineValue?: number;
-  resultStatus: OutcomeResultStatus;
-  evidenceStrength: EvidenceStrength;
+  nodeId: any;
+  retrievalLogId: any;
+  resultStatus: Exclude<OutcomeResultStatus, "unknown">;
   notes?: string;
-  actorType?: "member" | "admin";
-  receiptSurface?: CommunityEvidenceSurface;
+  receiptSurface: CommunityEvidenceSurface;
 }) {
   await requireCommunityChatAccess({ ctx: args.ctx, communityId: args.communityId, userId: args.userId });
   const actor = await resolveWriteActor({
     ctx: args.ctx,
     communityId: args.communityId,
     userId: args.userId,
-    requestedActorType: args.actorType,
   });
-  let node: IntelligenceNodeRow | null = null;
-  if (args.nodeId) {
-    node = await getIntelligenceNodeOrThrow(args.ctx, args.nodeId);
-    if (normalizeIdValue(node.communityId) !== normalizeIdValue(args.communityId)) {
-      throw new Error("community_intelligence_node_not_found");
-    }
+  const node = await getIntelligenceNodeOrThrow(args.ctx, args.nodeId);
+  if (normalizeIdValue(node.communityId) !== normalizeIdValue(args.communityId)) {
+    throw new Error("community_intelligence_node_not_found");
   }
-  let retrievalLog: RetrievalLogRow | null = null;
-  if (args.retrievalLogId) {
-    retrievalLog = (await args.ctx.db.get(args.retrievalLogId as any)) as RetrievalLogRow | null;
-    if (!retrievalLog || normalizeIdValue(retrievalLog.communityId) !== normalizeIdValue(args.communityId)) {
-      throw new Error("community_intelligence_retrieval_log_not_found");
-    }
-    if (!retrievalLogBelongsToUser(retrievalLog, args.userId)) {
-      throw new Error("community_intelligence_outcome_retrieval_forbidden");
-    }
-    if (
-      args.receiptSurface &&
-      !retrievalReceiptMatchesSurface(retrievalLog, args.receiptSurface)
-    ) {
-      throw new Error("community_intelligence_retrieval_receipt_surface_mismatch");
-    }
-  }
-  if (!actor.isManager) {
-    if (!retrievalLog) {
-      throw new Error("community_intelligence_outcome_retrieval_required");
-    }
-  }
-  if (node && retrievalLog) {
-    const retrievalNodeIds = new Set(
-      [...(retrievalLog.retrievedNodeIds ?? []), ...(retrievalLog.injectedNodeIds ?? [])].map(normalizeIdValue),
-    );
-    if (!retrievalNodeIds.has(normalizeIdValue(node._id))) {
-      throw new Error("community_intelligence_outcome_node_not_retrieved");
-    }
-  }
+  const retrievalLog = await requireCanonicalCommunityMemoryReceipt({
+    ctx: args.ctx,
+    retrievalLogId: args.retrievalLogId,
+    communityId: args.communityId,
+    userId: args.userId,
+    surface: args.receiptSurface,
+    nodeId: node._id,
+    requiredNodeState: "injected",
+  });
   const nowMs = Date.now();
   const observedAt = nowMs;
   const outcomeId = await args.ctx.db.insert("communityOutcomeObservations" as any, {
     communityId: args.communityId,
-    ...(args.nodeId ? { nodeId: args.nodeId } : {}),
-    ...(args.retrievalLogId ? { retrievalLogId: args.retrievalLogId } : {}),
-    workflowId: normalizeWorkflowId(args.workflowId),
-    metricName: normalizeOptionalText(args.metricName, 120),
-    ...(typeof args.metricValue === "number" ? { metricValue: args.metricValue } : {}),
-    ...(typeof args.baselineValue === "number" ? { baselineValue: args.baselineValue } : {}),
+    nodeId: args.nodeId,
+    retrievalLogId: args.retrievalLogId,
     resultStatus: args.resultStatus,
-    evidenceStrength: args.evidenceStrength,
+    evidenceStrength: "observed",
     notes: normalizeOptionalLongText(args.notes, 4000),
     observedByActorType: actor.actorType,
     ...(actor.actorUserId ? { observedByUserId: actor.actorUserId } : {}),
@@ -3992,34 +3820,30 @@ async function recordCommunityOutcomeObservationCore(args: {
     createdAt: nowMs,
     updatedAt: nowMs,
   });
-  if (node) {
-    await insertChangeRequest({
-      ctx: args.ctx,
-      communityId: args.communityId,
-      operation: "attach_outcome",
-      outcomeObservationIds: [outcomeId],
-      targetNodeIds: [node._id],
-      requestedPayload: {
-        outcomeObservationId: normalizeIdValue(outcomeId),
-        retrievalLogId: args.retrievalLogId ? normalizeIdValue(args.retrievalLogId) : null,
-        resultStatus: args.resultStatus,
-        evidenceStrength: args.evidenceStrength,
-        workflowId: normalizeWorkflowId(args.workflowId) ?? null,
-        notes: normalizeOptionalLongText(args.notes, 1000) ?? null,
-      },
-      confidence: args.resultStatus === "worked" ? 0.55 : args.resultStatus === "failed" ? 0.45 : 0.35,
-      privacyRisk: 0.2,
-      actorType: actor.actorType,
-      actorUserId: actor.actorUserId,
-      nowMs,
-    });
-  }
-  if (retrievalLog) {
-    await args.ctx.db.patch(retrievalLog._id as any, {
-      outcomeObservationIds: [...(retrievalLog.outcomeObservationIds ?? []), outcomeId],
-      updatedAt: nowMs,
-    });
-  }
+  await insertChangeRequest({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    operation: "attach_outcome",
+    outcomeObservationIds: [outcomeId],
+    targetNodeIds: [node._id],
+    requestedPayload: {
+      outcomeObservationId: normalizeIdValue(outcomeId),
+      retrievalLogId: normalizeIdValue(args.retrievalLogId),
+      resultStatus: args.resultStatus,
+      evidenceStrength: "observed",
+      workflowId: null,
+      notes: normalizeOptionalLongText(args.notes, 1000) ?? null,
+    },
+    confidence: args.resultStatus === "worked" ? 0.55 : args.resultStatus === "failed" ? 0.45 : 0.35,
+    privacyRisk: 0.2,
+    actorType: actor.actorType,
+    actorUserId: actor.actorUserId,
+    nowMs,
+  });
+  await args.ctx.db.patch(retrievalLog._id as any, {
+    outcomeObservationIds: [...(retrievalLog.outcomeObservationIds ?? []), outcomeId],
+    updatedAt: nowMs,
+  });
   const outcome = (await args.ctx.db.get(outcomeId as any)) as OutcomeObservationRow | null;
   if (!outcome) throw new Error("community_outcome_observation_not_found");
   return mapOutcomeObservationRow(outcome);
@@ -4031,7 +3855,7 @@ export const recordCommunityOutcomeObservationInternal = internalMutation({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     surface: communityEvidenceSurfaceValidator,
-    nodeId: v.optional(v.id("communityIntelligenceNodes")),
+    nodeId: v.id("communityIntelligenceNodes"),
     retrievalLogId: v.id("communityIntelligenceRetrievalLogs"),
     resultStatus: v.union(
       v.literal("worked"),
@@ -4055,7 +3879,6 @@ export const recordCommunityOutcomeObservationInternal = internalMutation({
         retrievalLogId: args.retrievalLogId,
         receiptSurface: args.surface,
         resultStatus: args.resultStatus,
-        evidenceStrength: "observed",
         notes: args.notes,
       });
       return {
@@ -4064,101 +3887,8 @@ export const recordCommunityOutcomeObservationInternal = internalMutation({
         outcome,
       };
     } catch (error) {
-      return memoryToolError(error, "community_record_outcome_failed");
+      return memoryToolError(error, "community_memory_outcome_failed");
     }
-  },
-});
-
-export const recordCommunityIntelligenceRetrievalFeedback = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    retrievalLogId: v.id("communityIntelligenceRetrievalLogs"),
-    feedback: v.union(
-      v.literal("useful"),
-      v.literal("not_useful"),
-      v.literal("wrong"),
-      v.literal("stale"),
-    ),
-    feedbackNote: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    const log = (await ctx.db.get(args.retrievalLogId as any)) as RetrievalLogRow | null;
-    if (!log) throw new Error("community_intelligence_retrieval_log_not_found");
-    await requireCommunityChatAccess({ ctx, communityId: log.communityId, userId });
-    if (!retrievalLogBelongsToUser(log, userId)) {
-      throw new Error("community_intelligence_retrieval_feedback_forbidden");
-    }
-    const nowMs = Date.now();
-    await ctx.db.patch(log._id as any, {
-      feedback: args.feedback,
-      feedbackNote: normalizeOptionalLongText(args.feedbackNote, 2000),
-      updatedAt: nowMs,
-    });
-    const updated = (await ctx.db.get(log._id as any)) as RetrievalLogRow | null;
-    if (!updated) throw new Error("community_intelligence_retrieval_log_not_found");
-    return mapRetrievalLogRow(updated);
-  },
-});
-
-export const recordCommunityOutcomeObservation = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    nodeId: v.optional(v.id("communityIntelligenceNodes")),
-    retrievalLogId: v.optional(v.id("communityIntelligenceRetrievalLogs")),
-    workflowId: v.optional(v.string()),
-    metricName: v.optional(v.string()),
-    metricValue: v.optional(v.number()),
-    baselineValue: v.optional(v.number()),
-    resultStatus: v.union(
-      v.literal("worked"),
-      v.literal("failed"),
-      v.literal("mixed"),
-      v.literal("unknown"),
-    ),
-    evidenceStrength: v.union(
-      v.literal("none"),
-      v.literal("anecdotal"),
-      v.literal("observed"),
-      v.literal("measured"),
-      v.literal("validated"),
-    ),
-    notes: v.optional(v.string()),
-    actorType: v.optional(
-      v.union(
-        v.literal("member"),
-        v.literal("admin"),
-      ),
-    ),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    return await recordCommunityOutcomeObservationCore({
-      ctx,
-      userId,
-      communityId: args.communityId,
-      nodeId: args.nodeId,
-      retrievalLogId: args.retrievalLogId,
-      workflowId: args.workflowId,
-      metricName: args.metricName,
-      metricValue: args.metricValue,
-      baselineValue: args.baselineValue,
-      resultStatus: args.resultStatus,
-      evidenceStrength: args.evidenceStrength,
-      notes: args.notes,
-      actorType: args.actorType,
-    });
   },
 });
 

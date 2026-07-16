@@ -706,7 +706,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
     name: "polynet_workspace_record_outcome",
     title: "Record Polynet Community Memory Outcome",
     description:
-      "Record whether accepted memory retrieved through a selected Polynet community context worked, failed, or was mixed.",
+      "Record whether one injected accepted-memory node worked, failed, or was mixed in a selected Polynet community context.",
     annotations: {
       title: "Record Polynet Community Memory Outcome",
       destructiveHint: false,
@@ -714,7 +714,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
     inputSchema: {
       type: "object",
       additionalProperties: false,
-      required: ["workspace_context_id", "retrieval_log_id", "result_status"],
+      required: ["workspace_context_id", "retrieval_log_id", "node_id", "result_status"],
       properties: {
         workspace_context_id: WORKSPACE_CONTEXT_ID_SCHEMA,
         retrieval_log_id: {
@@ -727,7 +727,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
           type: "string",
           minLength: 1,
           maxLength: 128,
-          description: "Optional memory node id the outcome applies to.",
+          description: "Injected memory node id the outcome applies to.",
         },
         result_status: {
           type: "string",

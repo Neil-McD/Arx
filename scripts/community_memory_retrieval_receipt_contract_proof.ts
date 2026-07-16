@@ -72,6 +72,11 @@ assert.match(
   /Historical compatibility only[\s\S]*query: v\.optional\(v\.string\(\)\)/,
   "the raw query field should be documented as historical compatibility only",
 );
+assert.match(
+  receiptSchema,
+  /Historical compatibility only[\s\S]*node-specific outcomes[\s\S]*feedback: v\.optional/,
+  "receipt-wide feedback columns should be historical storage only",
+);
 
 const createReceiptBlock = functionBlock(
   directory,
@@ -94,34 +99,36 @@ assert.doesNotMatch(
   /insert\("communityIntelligenceRetrievalLogs"[\s\S]{0,900}\bquery\s*:/,
   "no accepted-memory retrieval-log insert should persist raw query text",
 );
-
-const workflowStart = directory.indexOf(
-  "export const retrieveCommunityIntelligenceForWorkflow =",
-);
-const workflowEnd = directory.indexOf(
-  "\nexport async function searchCommunityMemoryCore",
-  workflowStart,
-);
-assert.notEqual(workflowStart, -1);
-assert.notEqual(workflowEnd, -1);
-const workflowBlock = directory.slice(workflowStart, workflowEnd);
-const workflowInsertStart = workflowBlock.indexOf(
-  'ctx.db.insert("communityIntelligenceRetrievalLogs"',
-);
-const workflowInsertEnd = workflowBlock.indexOf(
-  "\n    const log =",
-  workflowInsertStart,
-);
-assert.notEqual(workflowInsertStart, -1);
-assert.notEqual(workflowInsertEnd, -1);
-const workflowInsertBlock = workflowBlock.slice(
-  workflowInsertStart,
-  workflowInsertEnd,
+assert.equal(
+  (directory.match(/insert\("communityIntelligenceRetrievalLogs"/g) ?? []).length,
+  1,
+  "the canonical receipt helper should be the only retrieval-log writer",
 );
 assert.doesNotMatch(
-  workflowInsertBlock,
-  /\bquery:\s*queryText/,
-  "the compatibility workflow retrieval path must also stop persisting raw query text",
+  directory,
+  /export const (retrieveCommunityIntelligenceForWorkflow|recordCommunityIntelligenceRetrievalFeedback|recordCommunityOutcomeObservation) =/,
+  "legacy workflow retrieval, receipt-wide feedback, and the general public outcome API should be deleted",
+);
+
+const validatorBlock = functionBlock(
+  directory,
+  "requireCanonicalCommunityMemoryReceipt",
+  "\nfunction retrievalLogBelongsToUser",
+);
+assert.match(
+  validatorBlock,
+  /receipt\.receiptVersion !== COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION[\s\S]*community_intelligence_retrieval_receipt_version_required/,
+  "active receipt use should reject historical unversioned rows",
+);
+assert.match(
+  validatorBlock,
+  /receipt\.communityId[\s\S]*receipt\.userId[\s\S]*receipt\.surface !== args\.surface/,
+  "one validator should bind community, viewer, and surface",
+);
+assert.match(
+  validatorBlock,
+  /requiredNodeState === "injected"[\s\S]*receipt\.injectedNodeIds[\s\S]*receipt\.retrievedNodeIds/,
+  "one validator should support returned-node reads and injected-node outcomes",
 );
 
 const searchBlock = exportedFunctionBlock(directory, "searchCommunityMemoryInternal");
@@ -149,13 +156,8 @@ assert.match(
 );
 assert.match(
   readBlock,
-  /retrievalLog\.communityId[\s\S]*retrievalLog\.userId[\s\S]*retrievalReceiptMatchesSurface/,
-  "memory read should bind a provided receipt to community, viewer, and surface",
-);
-assert.match(
-  readBlock,
-  /retrievalReceiptContainsNode\(retrievalLog, node\._id\)[\s\S]*community_intelligence_retrieval_node_not_returned/,
-  "memory read should reject an accepted but unreturned node",
+  /requireCanonicalCommunityMemoryReceipt\([\s\S]*nodeId: node\._id[\s\S]*requiredNodeState: "returned"/,
+  "memory read should require one canonical receipt that returned the requested node",
 );
 assert.match(
   readBlock,
@@ -166,6 +168,16 @@ assert.match(
   readBlock,
   /retrieval_receipt: mapCommunityMemoryRetrievalReceipt/,
   "memory read should return the updated canonical receipt",
+);
+const receiptMapper = functionBlock(
+  directory,
+  "mapCommunityMemoryRetrievalReceipt",
+  "\nfunction mapOutcomeObservationRow",
+);
+assert.doesNotMatch(
+  receiptMapper,
+  /feedback/,
+  "the active V1 receipt response should not expose deleted receipt-wide feedback",
 );
 
 const archiveSearchToolBlock = conditionalBlock(
@@ -220,40 +232,31 @@ for (const toolName of [
   );
 }
 
-const feedbackBlock = exportedFunctionBlock(
-  directory,
-  "recordCommunityIntelligenceRetrievalFeedback",
-);
-assert.match(
-  feedbackBlock,
-  /retrievalLogBelongsToUser\(log, userId\)[\s\S]*community_intelligence_retrieval_feedback_forbidden/,
-  "feedback should require same-viewer receipt ownership",
-);
-assert.doesNotMatch(
-  feedbackBlock,
-  /viewerCanManageCommunity|isManager/,
-  "manager authority must not bypass feedback receipt ownership",
-);
-
 const outcomeCore = directory.slice(
   directory.indexOf("async function recordCommunityOutcomeObservationCore"),
   directory.indexOf("\nexport const recordCommunityOutcomeObservationInternal"),
 );
 assert.match(
   outcomeCore,
-  /retrievalLogBelongsToUser\(retrievalLog, args\.userId\)[\s\S]*community_intelligence_outcome_retrieval_forbidden/,
-  "receipt-bound outcomes should require same-viewer ownership for every role",
+  /requireCanonicalCommunityMemoryReceipt\([\s\S]*receiptSurface[\s\S]*nodeId: node\._id[\s\S]*requiredNodeState: "injected"/,
+  "receipt-bound outcomes should require the same-viewer, same-surface V1 receipt to have injected one explicit node",
 );
 assert.match(
   outcomeCore,
-  /receiptSurface[\s\S]*retrievalReceiptMatchesSurface/,
-  "surface-bound outcome tools should preserve receipt continuity",
+  /evidenceStrength: "observed"/,
+  "the active outcome path should use fixed observed evidence strength",
 );
 assert.match(
-  outcomeCore,
-  /retrievalNodeIds[\s\S]*community_intelligence_outcome_node_not_retrieved/,
-  "node outcomes should remain bound to returned or injected nodes",
+  directory,
+  /export const recordCommunityOutcomeObservationInternal = internalMutation[\s\S]*nodeId: v\.id\("communityIntelligenceNodes"\)/,
+  "the only outcome function should be internal and node-specific",
 );
+const outcomeDispatchStart = httpMcp.indexOf('if (toolName === "polynet_workspace_record_outcome")');
+const outcomeDispatch = httpMcp.slice(
+  outcomeDispatchStart,
+  httpMcp.indexOf("\n  if (toolName === ", outcomeDispatchStart + 1),
+);
+assert.match(outcomeDispatch, /node_id is required/);
 
 assert.match(
   cognitionContract,
@@ -264,28 +267,51 @@ assert.match(
   /New receipts[\s\S]*never persist it|New accepted-memory receipts[\s\S]*never persist/,
 );
 assert.match(
+  cognitionContract,
+  /generic workflow retrieval API, receipt-wide feedback API, and general[\s\S]*public outcome API are deleted/,
+);
+assert.doesNotMatch(
+  cognitionContract,
+  /`community_record_outcome`/,
+  "the architecture contract should not claim a nonexistent native outcome tool",
+);
+assert.match(
+  cognitionContract,
+  /current first-party caller is the[\s\S]*external MCP adapter[\s\S]*native member-agent and Concierge tools remain[\s\S]*search\/read-only/,
+);
+assert.match(
   mcpContract,
-  /same-user, same-community, `external_mcp` retrieval receipt/,
+  /same-user, same-community, `external_mcp`, `community_memory_retrieval_receipt:v1` receipt/,
 );
 
 assert.equal(
   stagingAcceptance.schema_version,
-  "community_memory_retrieval_receipt_staging_acceptance:v1",
+  "community_memory_retrieval_receipt_canonicalization_staging_acceptance:v1",
 );
 assert.equal(stagingAcceptance.deployment_kind, "staging");
-assert.deepEqual(stagingAcceptance.happy_path?.surfaces, [
+assert.equal(stagingAcceptance.self_expiring_deployment, true);
+assert.equal(stagingAcceptance.production_touched, false);
+assert.equal(
+  stagingAcceptance.member_path?.code,
+  "community_memory_receipt_member_acceptance_passed",
+);
+assert.deepEqual(stagingAcceptance.member_path?.failures, []);
+assert.deepEqual(stagingAcceptance.member_path?.surfaces, [
   "member_agent_dock",
   "community_concierge",
   "external_mcp",
 ]);
-assert.equal(stagingAcceptance.happy_path?.same_memory_identity_across_surfaces, true);
-assert.equal(stagingAcceptance.happy_path?.search_read_same_receipt, true);
-assert.equal(stagingAcceptance.happy_path?.raw_query_persisted, false);
-assert.deepEqual(stagingAcceptance.happy_path?.feedback_states_recorded, [
-  "useful",
-  "wrong",
-  "stale",
-]);
+assert.equal(stagingAcceptance.member_path?.same_memory_identity_across_surfaces, true);
+assert.equal(stagingAcceptance.member_path?.search_read_same_receipt, true);
+assert.equal(stagingAcceptance.member_path?.raw_query_persisted, false);
+assert.equal(stagingAcceptance.member_path?.receipt_wide_feedback_exposed, false);
+assert.equal(stagingAcceptance.member_path?.legacy_receipt_metabolizer_audit_only, true);
+assert.equal(stagingAcceptance.member_path?.external_mcp_outcome_after_read, true);
+assert.equal(
+  stagingAcceptance.owner_path?.code,
+  "community_memory_receipt_owner_acceptance_passed",
+);
+assert.deepEqual(stagingAcceptance.owner_path?.failures, []);
 assert.equal(
   stagingAcceptance.adversarial?.unreturned_node_read,
   "community_intelligence_retrieval_node_not_returned",
@@ -295,21 +321,34 @@ assert.equal(
   "community_intelligence_retrieval_receipt_surface_mismatch",
 );
 assert.equal(
-  stagingAcceptance.adversarial?.manager_foreign_receipt_read,
+  stagingAcceptance.owner_path?.manager_foreign_receipt_read,
   "community_intelligence_retrieval_log_forbidden",
 );
 assert.equal(
-  stagingAcceptance.adversarial?.manager_foreign_receipt_feedback,
-  "community_intelligence_retrieval_feedback_forbidden",
+  stagingAcceptance.owner_path?.manager_foreign_receipt_outcome,
+  "community_intelligence_retrieval_log_forbidden",
 );
 assert.equal(
-  stagingAcceptance.adversarial?.manager_foreign_receipt_outcome,
-  "community_intelligence_outcome_retrieval_forbidden",
+  stagingAcceptance.adversarial?.legacy_receipt_read,
+  "community_intelligence_retrieval_receipt_version_required",
 );
-assert.equal(stagingAcceptance.adversarial?.revoked_node_absent_from_search, true);
+assert.equal(
+  stagingAcceptance.adversarial?.legacy_receipt_outcome,
+  "community_intelligence_retrieval_receipt_version_required",
+);
+assert.equal(stagingAcceptance.adversarial?.missing_outcome_node_id, "node_id is required");
+assert.equal(
+  stagingAcceptance.adversarial?.outcome_for_returned_but_uninjected_node,
+  "community_intelligence_retrieval_node_not_injected",
+);
+assert.equal(stagingAcceptance.deployed_surface?.canonical_receipt_writer_count, 1);
+assert.equal(stagingAcceptance.deployed_surface?.canonical_internal_outcome_present, true);
+assert.equal(stagingAcceptance.deployed_surface?.public_workflow_retrieval_absent, true);
+assert.equal(stagingAcceptance.deployed_surface?.public_receipt_feedback_absent, true);
+assert.equal(stagingAcceptance.deployed_surface?.public_general_outcome_absent, true);
 assert.equal(stagingAcceptance.cleanup?.fixture_communities_remaining, 0);
-assert.equal(stagingAcceptance.cleanup?.retrieval_logs_remaining, 0);
-assert.equal(stagingAcceptance.cleanup?.acceptance_function_removed, true);
+assert.equal(stagingAcceptance.cleanup?.fixture_users_remaining, 0);
+assert.equal(stagingAcceptance.deployed_surface?.acceptance_function_removed, true);
 assert.equal(stagingAcceptance.cleanup?.acceptance_flag_removed, true);
 
 console.log("community_memory_retrieval_receipt_contract_proof: ok");

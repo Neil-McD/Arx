@@ -3222,6 +3222,8 @@ export default defineSchema({
     query: v.optional(v.string()),
     retrievedNodeIds: v.array(v.id("communityIntelligenceNodes")),
     injectedNodeIds: v.array(v.id("communityIntelligenceNodes")),
+    // Historical compatibility only. The active V1 contract records
+    // node-specific outcomes instead of receipt-wide feedback.
     feedback: v.optional(
       v.union(
         v.literal("useful"),

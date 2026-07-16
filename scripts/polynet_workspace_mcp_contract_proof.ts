@@ -804,6 +804,7 @@ const outcomeDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_record_out
 assertIncludes(outcomeDispatch, "resolveWorkspaceContext", "outcome workspace revalidation");
 assertIncludes(outcomeDispatch, "recordCommunityOutcomeObservationInternal", "outcome accepted memory feedback path");
 assertIncludes(outcomeDispatch, "retrieval_log_id is required", "outcome retrieval provenance");
+assertIncludes(outcomeDispatch, "node_id is required", "outcome injected node provenance");
 assertIncludes(outcomeDispatch, "result_status must be worked, failed, or mixed", "outcome status validation");
 assertNotIncludes(outcomeDispatch, "communityIntelligenceNodes", "outcome direct node mutation");
 assertNotIncludes(outcomeDispatch, "communityIntelligenceEdges", "outcome direct edge mutation");

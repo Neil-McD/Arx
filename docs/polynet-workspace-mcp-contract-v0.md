@@ -317,7 +317,7 @@ POLYNET_MCP_RECORD_OUTCOME=1
 POLYNET_MCP_TIMEOUT_MS=15000
 ```
 
-Metadata smoke proves discovery and OAuth challenge behavior without credentials. Authenticated smoke proves token -> tools/list -> list/open/context/authority/product docs/search and, when `member_resources` is available, resource map/list/search/read. When `builder_resources` is available, authenticated smoke also calls the read-only builder resource map/list/read path and verifies that map returns builder scope. It does not read memory unless `POLYNET_MCP_REQUIRE_MEMORY=1` is set. It must validate the `authority` projection on both `polynet_open_workspace` and `polynet_get_workspace_context`; optional expectation env vars can pin the relation, authority lens, required toolsets, and a resource search query for a known test account/workspace. `POLYNET_MCP_REQUIRE_RESOURCES=1` makes authenticated smoke fail if `member_resources` is missing or no readable member-visible resource can be found. `POLYNET_MCP_REQUIRE_BUILDER_RESOURCES=1` makes authenticated smoke fail if `builder_resources` is missing, if the builder resource map does not return builder scope, or if no readable builder resource can be found. Acceptance smoke requires a readable accepted-memory node and fails if no node can be read. `POLYNET_MCP_RECORD_OUTCOME=1` is required before any smoke records outcome feedback.
+Metadata smoke proves discovery and OAuth challenge behavior without credentials. Authenticated smoke proves token -> tools/list -> list/open/context/authority/product docs/search and, when `member_resources` is available, resource map/list/search/read. When `builder_resources` is available, authenticated smoke also calls the read-only builder resource map/list/read path and verifies that map returns builder scope. It does not read memory unless `POLYNET_MCP_REQUIRE_MEMORY=1` is set. It must validate the `authority` projection on both `polynet_open_workspace` and `polynet_get_workspace_context`; optional expectation env vars can pin the relation, authority lens, required toolsets, and a resource search query for a known test account/workspace. `POLYNET_MCP_REQUIRE_RESOURCES=1` makes authenticated smoke fail if `member_resources` is missing or no readable member-visible resource can be found. `POLYNET_MCP_REQUIRE_BUILDER_RESOURCES=1` makes authenticated smoke fail if `builder_resources` is missing, if the builder resource map does not return builder scope, or if no readable builder resource can be found. Acceptance smoke requires a readable accepted-memory node and fails if no node can be read. `POLYNET_MCP_RECORD_OUTCOME=1` is required before any smoke records a node-specific outcome observation.
 
 ## Memory Boundary
 
@@ -327,7 +327,7 @@ It must use the same accepted-memory backend path as the internal member-agent `
 
 `polynet_workspace_memory_read` reads one accepted, readable memory node plus a bounded, visibility-filtered subgraph bundle. Search and read share one `community_memory_retrieval_receipt:v1` receipt attributed to `external_mcp`. The receipt stores returned and injected node ids but never the raw search query.
 
-`polynet_workspace_record_outcome` records whether a retrieved memory entry worked, failed, or was mixed. It must require a same-user, same-community, `external_mcp` retrieval receipt and must not directly mutate community intelligence nodes or edges.
+`polynet_workspace_record_outcome` records whether one injected memory entry worked, failed, or was mixed. It must require `node_id` plus the same-user, same-community, `external_mcp`, `community_memory_retrieval_receipt:v1` receipt that injected that node. It uses fixed `observed` evidence strength and must not directly mutate community intelligence nodes or edges.
 
 Raw/recent/archive evidence remains separate from accepted memory. External agents should not treat archive search as community-endorsed intelligence.
 
@@ -449,11 +449,14 @@ Focused proofs must show:
 - internal visitor/no-membership state is normalized to `no_access` in MCP output,
 - accepted memory search uses `searchCommunityMemoryInternal`,
 - accepted memory read uses `readCommunityMemoryInternal`,
-- outcome feedback uses `recordCommunityOutcomeObservationInternal`,
+- node-specific outcome observation uses `recordCommunityOutcomeObservationInternal`,
 - accepted memory search/read pass the explicit `external_mcp` receipt surface,
 - new accepted-memory receipts do not persist raw query text,
 - memory read rejects a receipt that did not return the requested node,
-- outcome feedback rejects another viewer's receipt even when the caller manages the community,
+- memory read and outcome observation reject historical unversioned receipts,
+- outcome observation requires `node_id` and rejects a node the receipt did not inject,
+- outcome observation rejects another viewer's receipt even when the caller manages the community,
+- the public workflow retrieval, receipt-wide feedback, and general outcome functions are absent,
 - product docs tools use the canonical product docs index helpers,
 - resource tools require `member_resources`,
 - resource tools use only bounded read/map/list/search internals,

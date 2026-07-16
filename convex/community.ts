@@ -201,10 +201,7 @@ import {
   listCommunityIntelligenceEdges as listCommunityIntelligenceEdgesImpl,
   listCommunityIntelligenceMutations as listCommunityIntelligenceMutationsImpl,
   listCommunityIntelligenceChangeRequests as listCommunityIntelligenceChangeRequestsImpl,
-  recordCommunityIntelligenceRetrievalFeedback as recordCommunityIntelligenceRetrievalFeedbackImpl,
-  recordCommunityOutcomeObservation as recordCommunityOutcomeObservationImpl,
   decideCommunityIntelligenceChangeRequest as decideCommunityIntelligenceChangeRequestImpl,
-  retrieveCommunityIntelligenceForWorkflow as retrieveCommunityIntelligenceForWorkflowImpl,
 } from "./communityIntelligenceDirectory";
 
 export const createCommunity = createCommunityImpl;
@@ -369,9 +366,6 @@ export const decideCommunityIntelligenceChangeRequest = decideCommunityIntellige
 export const applyCommunityIntelligenceChangeRequest = applyCommunityIntelligenceChangeRequestImpl;
 export const listCommunityIntelligenceDirectoryView = listCommunityIntelligenceDirectoryViewImpl;
 export const listCommunityIntelligenceEdges = listCommunityIntelligenceEdgesImpl;
-export const retrieveCommunityIntelligenceForWorkflow = retrieveCommunityIntelligenceForWorkflowImpl;
-export const recordCommunityIntelligenceRetrievalFeedback = recordCommunityIntelligenceRetrievalFeedbackImpl;
-export const recordCommunityOutcomeObservation = recordCommunityOutcomeObservationImpl;
 export const listCommunityIntelligenceMutations = listCommunityIntelligenceMutationsImpl;
 export const runCommunityCompilerDigestPass = runCommunityCompilerDigestPassImpl;
 export const listCommunityCompilerDigests = listCommunityCompilerDigestsImpl;
