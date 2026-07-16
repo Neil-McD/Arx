@@ -38,17 +38,17 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar,[\s\S]*--community-composer-control-size: 36px;/,
-  "desktop member composers should expose the canonical control height",
+  /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar,[\s\S]*--community-composer-control-size: 36px;[\s\S]*--community-composer-input-size: 24px;/,
+  "desktop member composers should expose their control and one-line input heights",
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.chat-input,[\s\S]*\.community-member-chat \.mention-composer-highlight \{[^}]*min-height: var\(--community-composer-control-size\);[^}]*padding-block: calc\(\(var\(--community-composer-control-size\) - 1\.45em\) \/ 2\);/,
-  "member composer text and mention highlighting should center within the control row and expand upward together",
+  /\.community-member-chat \.mention-composer-field \{[^}]*padding-bottom: calc\([\s\S]*var\(--community-composer-control-size\) - var\(--community-composer-input-size\)[\s\S]*\/ 2[\s\S]*\);/,
+  "member composer text should be optically centered while retaining its natural one-line height",
 );
 assert.match(
   baseCss,
-  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;/,
+  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;[^}]*--community-composer-input-size: 28px;/,
   "mobile member composers should center text against their larger controls",
 );
 assert.match(
