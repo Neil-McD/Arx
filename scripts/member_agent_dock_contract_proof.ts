@@ -767,8 +767,8 @@ assert.match(
 assert.match(component, /<strong>Your agent<\/strong>/);
 assert.match(
   styles,
-  /--member-agent-accent: #a78bfa;[\s\S]*--member-agent-accent-soft: rgba\(167, 139, 250, 0\.16\);/,
-  "the dock must reuse the platform's established purple agent identity",
+  /--member-agent-accent: var\(--accent-selection\);[\s\S]*--member-agent-accent-strong: color-mix\([\s\S]*var\(--member-agent-accent\) 82%,[\s\S]*var\(--text-primary\) 18%[\s\S]*--member-agent-accent-soft: color-mix\([\s\S]*var\(--member-agent-accent\) 16%,[\s\S]*transparent[\s\S]*--member-agent-accent-border: color-mix\([\s\S]*var\(--member-agent-accent\) 32%,[\s\S]*transparent/,
+  "the dock must derive its identity palette from the active theme accent",
 );
 assert.match(
   styles,
@@ -783,11 +783,11 @@ assert.match(
 assert.match(
   styles,
   /\.member-agent-dock-launcher \{[\s\S]*?width: 60px;[\s\S]*?height: 60px;[\s\S]*?color: var\(--member-agent-accent\);[\s\S]*?background: color-mix\(in srgb, var\(--member-agent-accent\) 18%, #111115\);[\s\S]*?border: 1px solid var\(--member-agent-accent-border\);[\s\S]*?border-radius: 16px;/,
-  "the agent launcher must keep its purple identity inside a compact, high-contrast control",
+  "the agent launcher must keep its theme-derived identity inside a compact, high-contrast control",
 );
 assert.match(
   styles,
-  /box-shadow:\s*0 8px 24px rgba\(0, 0, 0, 0\.46\),\s*0 2px 8px rgba\(0, 0, 0, 0\.34\),\s*inset 0 1px 0 rgba\(196, 181, 253, 0\.1\);/,
+  /box-shadow:\s*0 8px 24px rgba\(0, 0, 0, 0\.46\),\s*0 2px 8px rgba\(0, 0, 0, 0\.34\),\s*inset 0 1px 0 color-mix\(in srgb, var\(--member-agent-accent-strong\) 10%, transparent\);/,
   "the launcher must remain visually separated from busy community content",
 );
 assert.match(
@@ -802,13 +802,18 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher\.is-working \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*border-color: rgba\(167, 139, 250, 0\.58\);[\s\S]*animation: member-agent-dock-working-pulse 1\.6s ease-in-out infinite;/,
-  "an active agent turn must reserve purple motion for the working state",
+  /\.member-agent-dock-launcher\.is-working \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*border-color: color-mix\(in srgb, var\(--member-agent-accent\) 58%, transparent\);[\s\S]*animation: member-agent-dock-working-pulse 1\.6s ease-in-out infinite;/,
+  "an active agent turn must derive its working treatment from the active theme accent",
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher:hover \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*background: color-mix\(in srgb, var\(--member-agent-accent\) 24%, #111115\);[\s\S]*border-color: rgba\(167, 139, 250, 0\.48\);/,
+  /\.member-agent-dock-launcher:hover \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*background: color-mix\(in srgb, var\(--member-agent-accent\) 24%, #111115\);[\s\S]*border-color: color-mix\(in srgb, var\(--member-agent-accent\) 48%, transparent\);/,
   "hover must clarify the floating control without moving it",
+);
+assert.doesNotMatch(
+  styles,
+  /#a78bfa|#c4b5fd|rgba\(167, 139, 250|rgba\(196, 181, 253/,
+  "the personal-agent dock must not restore a fixed purple palette",
 );
 assert.match(
   styles,

@@ -2928,11 +2928,11 @@
 }
 
 .mobile-bottom-rail-ai {
-  color: var(--accent-agent);
+  color: var(--accent-selection);
 }
 
 .mobile-bottom-rail-ai.active {
-  color: var(--accent-agent);
+  color: var(--accent-selection);
 }
 
 .mobile-bottom-rail-ai-icon {

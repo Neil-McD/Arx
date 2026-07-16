@@ -1,8 +1,20 @@
 .member-agent-dock {
-  --member-agent-accent: #a78bfa;
-  --member-agent-accent-strong: #c4b5fd;
-  --member-agent-accent-soft: rgba(167, 139, 250, 0.16);
-  --member-agent-accent-border: rgba(167, 139, 250, 0.32);
+  --member-agent-accent: var(--accent-selection);
+  --member-agent-accent-strong: color-mix(
+    in srgb,
+    var(--member-agent-accent) 82%,
+    var(--text-primary) 18%
+  );
+  --member-agent-accent-soft: color-mix(
+    in srgb,
+    var(--member-agent-accent) 16%,
+    transparent
+  );
+  --member-agent-accent-border: color-mix(
+    in srgb,
+    var(--member-agent-accent) 32%,
+    transparent
+  );
   position: fixed;
   right: 20px;
   bottom: 20px;
@@ -26,7 +38,7 @@
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.46),
     0 2px 8px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(196, 181, 253, 0.1);
+    inset 0 1px 0 color-mix(in srgb, var(--member-agent-accent-strong) 10%, transparent);
   backdrop-filter: blur(14px);
   pointer-events: auto;
   cursor: pointer;
@@ -40,11 +52,11 @@
 .member-agent-dock-launcher:hover {
   color: var(--member-agent-accent-strong);
   background: color-mix(in srgb, var(--member-agent-accent) 24%, #111115);
-  border-color: rgba(167, 139, 250, 0.48);
+  border-color: color-mix(in srgb, var(--member-agent-accent) 48%, transparent);
   box-shadow:
     0 10px 28px rgba(0, 0, 0, 0.52),
     0 2px 8px rgba(0, 0, 0, 0.38),
-    inset 0 1px 0 rgba(196, 181, 253, 0.14);
+    inset 0 1px 0 color-mix(in srgb, var(--member-agent-accent-strong) 14%, transparent);
 }
 
 .member-agent-dock-launcher:focus-visible {
@@ -71,7 +83,7 @@
 
 .member-agent-dock-launcher.is-working {
   color: var(--member-agent-accent-strong);
-  border-color: rgba(167, 139, 250, 0.58);
+  border-color: color-mix(in srgb, var(--member-agent-accent) 58%, transparent);
   animation: member-agent-dock-working-pulse 1.6s ease-in-out infinite;
 }
 
@@ -532,16 +544,16 @@
   0%, 100% {
     box-shadow:
       0 8px 24px rgba(0, 0, 0, 0.46),
-      0 0 0 1px rgba(167, 139, 250, 0.08),
-      0 0 12px rgba(167, 139, 250, 0.16),
-      inset 0 1px 0 rgba(196, 181, 253, 0.1);
+      0 0 0 1px color-mix(in srgb, var(--member-agent-accent) 8%, transparent),
+      0 0 12px color-mix(in srgb, var(--member-agent-accent) 16%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--member-agent-accent-strong) 10%, transparent);
   }
   50% {
     box-shadow:
       0 8px 24px rgba(0, 0, 0, 0.46),
-      0 0 0 1px rgba(167, 139, 250, 0.22),
-      0 0 20px rgba(167, 139, 250, 0.34),
-      inset 0 1px 0 rgba(196, 181, 253, 0.1);
+      0 0 0 1px color-mix(in srgb, var(--member-agent-accent) 22%, transparent),
+      0 0 20px color-mix(in srgb, var(--member-agent-accent) 34%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--member-agent-accent-strong) 10%, transparent);
   }
 }
 

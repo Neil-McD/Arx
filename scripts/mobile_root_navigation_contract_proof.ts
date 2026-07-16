@@ -333,8 +333,8 @@ assert.match(
 );
 assert.match(
   indexCss,
-  /\.mobile-bottom-rail-ai \{[\s\S]*color: var\(--accent-agent\);[\s\S]*\.mobile-bottom-rail-ai\.active \{[\s\S]*color: var\(--accent-agent\);[\s\S]*\.mobile-bottom-rail-ai-icon \{[\s\S]*width: 28px;[\s\S]*height: 28px;[\s\S]*display: inline-flex;[\s\S]*\.mobile-bottom-rail-ai-icon svg \{[\s\S]*fill: none;[\s\S]*stroke: currentColor;[\s\S]*\.mobile-bottom-rail-ai\.active \.mobile-bottom-rail-ai-icon svg \{[\s\S]*fill: currentColor;/,
-  "AI should remain violet while switching from an outline to a selected fill",
+  /\.mobile-bottom-rail-ai \{[\s\S]*color: var\(--accent-selection\);[\s\S]*\.mobile-bottom-rail-ai\.active \{[\s\S]*color: var\(--accent-selection\);[\s\S]*\.mobile-bottom-rail-ai-icon \{[\s\S]*width: 28px;[\s\S]*height: 28px;[\s\S]*display: inline-flex;[\s\S]*\.mobile-bottom-rail-ai-icon svg \{[\s\S]*fill: none;[\s\S]*stroke: currentColor;[\s\S]*\.mobile-bottom-rail-ai\.active \.mobile-bottom-rail-ai-icon svg \{[\s\S]*fill: currentColor;/,
+  "AI should inherit the active theme accent while switching from an outline to a selected fill",
 );
 assert.doesNotMatch(
   indexCss,
