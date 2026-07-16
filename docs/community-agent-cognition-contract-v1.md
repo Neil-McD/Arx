@@ -2217,3 +2217,11 @@ manual and memory-scoped:
   automatic hook from `deleteCommunity`. Automation is deferred until the
   primitive passes isolated staging acceptance against a disposable community
   and an untouched control community.
+
+The primitive passed that isolated staging acceptance on 2026-07-16. The proof
+used the canonical `deleteCommunity` mutation, 218 target cognition rows across
+all fourteen phases, an untouched control, bounded multi-batch deletion,
+idempotent replay, guarded late-write attempts, and product-source
+non-interference. The temporary acceptance function and flag were removed
+afterward. The durable certificate is
+`docs/community-cognition-cleanup-staging-acceptance-20260716.md`.

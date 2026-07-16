@@ -320,4 +320,78 @@ assert.equal(
   "cleanup must validate the entire selected batch before deleting any row",
 );
 
+const stagingAcceptance = JSON.parse(
+  readFileSync(
+    new URL(
+      "./fixtures/community_cognition_cleanup_staging_acceptance_20260716.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+);
+assert.equal(
+  stagingAcceptance.schema_version,
+  "community_cognition_cleanup_staging_acceptance:v1",
+);
+assert.equal(stagingAcceptance.deployment_kind, "staging");
+assert.equal(stagingAcceptance.self_expiring_deployment, true);
+assert.equal(stagingAcceptance.production_touched, false);
+assert.equal(stagingAcceptance.fixture?.cleanup_phase_count, 14);
+assert.equal(stagingAcceptance.fixture?.target_total_cognition_rows, 218);
+assert.equal(stagingAcceptance.fixture?.target_source_trace_rows, 205);
+assert.equal(stagingAcceptance.fixture?.control_total_cognition_rows, 14);
+assert.equal(
+  stagingAcceptance.live_community_guard?.inspection_error,
+  "community_cognition_cleanup_live_community_forbidden",
+);
+assert.equal(
+  stagingAcceptance.live_community_guard?.deletion_error,
+  "community_cognition_cleanup_live_community_forbidden",
+);
+assert.equal(
+  stagingAcceptance.canonical_deletion?.function,
+  "community:deleteCommunity",
+);
+assert.equal(
+  stagingAcceptance.late_write_guard?.error,
+  "community_cognition_write_community_not_found",
+);
+assert.deepEqual(stagingAcceptance.late_write_guard?.failures, []);
+assert.equal(
+  stagingAcceptance.late_write_guard?.guarded_writers?.length,
+  7,
+);
+assert.equal(
+  stagingAcceptance.cleanup?.policy_version,
+  "community_cognition_cleanup:v1",
+);
+assert.equal(stagingAcceptance.cleanup?.deleted_total, 218);
+assert.equal(stagingAcceptance.cleanup?.source_trace_batch_count, 3);
+assert.equal(stagingAcceptance.cleanup?.final_total, 0);
+assert.equal(stagingAcceptance.cleanup?.replay_deleted_total, 0);
+assert.equal(
+  stagingAcceptance.non_interference?.control_cognition_unchanged,
+  true,
+);
+assert.equal(
+  stagingAcceptance.non_interference?.target_product_sources_unchanged,
+  true,
+);
+assert.equal(
+  stagingAcceptance.non_interference?.control_product_sources_unchanged,
+  true,
+);
+assert.equal(stagingAcceptance.teardown?.fixture_communities_remaining, 0);
+assert.equal(stagingAcceptance.teardown?.fixture_users_remaining, 0);
+assert.equal(stagingAcceptance.teardown?.fixture_cognition_rows_remaining, 0);
+assert.equal(
+  stagingAcceptance.teardown?.fixture_product_source_rows_remaining,
+  0,
+);
+assert.equal(stagingAcceptance.teardown?.acceptance_flag_removed, true);
+assert.equal(
+  stagingAcceptance.deployed_surface?.acceptance_function_removed,
+  true,
+);
+
 console.log("community_cognition_cleanup_behavior_proof: ok");

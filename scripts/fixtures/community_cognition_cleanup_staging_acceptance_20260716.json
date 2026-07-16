@@ -1,0 +1,83 @@
+{
+  "schema_version": "community_cognition_cleanup_staging_acceptance:v1",
+  "date": "2026-07-16",
+  "deployment": "coordinated-otter-526",
+  "deployment_reference": "neil-mcdevitt:polynet:dev/cognition-cleanup-v1-20260716",
+  "deployment_kind": "staging",
+  "self_expiring_deployment": true,
+  "production_touched": false,
+  "fixture": {
+    "cleanup_phase_count": 14,
+    "target_total_cognition_rows": 218,
+    "target_source_trace_rows": 205,
+    "control_total_cognition_rows": 14,
+    "control_rows_per_phase": 1,
+    "target_product_source_counts": {
+      "interactions": 1,
+      "ai_feed": 1,
+      "events": 1,
+      "concierge_requests": 1
+    },
+    "control_product_source_counts": {
+      "interactions": 1,
+      "ai_feed": 1,
+      "events": 1,
+      "concierge_requests": 1
+    }
+  },
+  "live_community_guard": {
+    "inspection_error": "community_cognition_cleanup_live_community_forbidden",
+    "deletion_error": "community_cognition_cleanup_live_community_forbidden"
+  },
+  "canonical_deletion": {
+    "function": "community:deleteCommunity",
+    "ok": true,
+    "target_community_exists_after": false,
+    "target_cognition_rows_after": 218,
+    "target_product_sources_unchanged": true
+  },
+  "late_write_guard": {
+    "error": "community_cognition_write_community_not_found",
+    "guarded_writers": [
+      "source_trace",
+      "compiler_digest",
+      "change_request",
+      "apply",
+      "agent_run_event",
+      "archive_projection",
+      "evidence_retrieval_audit"
+    ],
+    "failures": []
+  },
+  "cleanup": {
+    "policy_version": "community_cognition_cleanup:v1",
+    "inspection_count_lower_bound": 113,
+    "inspection_count_is_lower_bound": true,
+    "batch_limit": 100,
+    "deleted_total": 218,
+    "source_trace_batch_count": 3,
+    "final_total": 0,
+    "all_phases_empty": true,
+    "replay_deleted_total": 0
+  },
+  "non_interference": {
+    "control_cognition_rows_after": 14,
+    "control_cognition_unchanged": true,
+    "target_product_sources_unchanged": true,
+    "control_product_sources_unchanged": true
+  },
+  "teardown": {
+    "deleted_control_cognition_rows": 14,
+    "deleted_product_source_rows": 10,
+    "fixture_communities_remaining": 0,
+    "fixture_users_remaining": 0,
+    "fixture_cognition_rows_remaining": 0,
+    "fixture_product_source_rows_remaining": 0,
+    "acceptance_flag_removed": true
+  },
+  "deployed_surface": {
+    "inspect_internal_present": true,
+    "delete_batch_internal_present": true,
+    "acceptance_function_removed": true
+  }
+}
