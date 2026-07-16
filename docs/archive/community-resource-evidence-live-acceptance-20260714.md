@@ -1,5 +1,8 @@
 # Community Resource Evidence Live Acceptance — 2026-07-14
 
+> Historical certificate. The temporary deployed acceptance action used by
+> this run has been removed; active proofs now target canonical runtime paths.
+
 Status: passed
 
 ## Isolated deployment

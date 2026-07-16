@@ -53,7 +53,6 @@ import type * as communityAgentRuntime from "../communityAgentRuntime.js";
 import type * as communityAgentServeWorker from "../communityAgentServeWorker.js";
 import type * as communityAiFeed from "../communityAiFeed.js";
 import type * as communityAiFeedEvidence from "../communityAiFeedEvidence.js";
-import type * as communityAiFeedEvidenceAcceptance from "../communityAiFeedEvidenceAcceptance.js";
 import type * as communityAiFeedEvidenceCore from "../communityAiFeedEvidenceCore.js";
 import type * as communityAppMounts from "../communityAppMounts.js";
 import type * as communityArchive from "../communityArchive.js";
@@ -88,7 +87,6 @@ import type * as communityInteractionLegacyBridge from "../communityInteractionL
 import type * as communityInteractions from "../communityInteractions.js";
 import type * as communityLaunchSetup from "../communityLaunchSetup.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
-import type * as communityLineageAcceptance from "../communityLineageAcceptance.js";
 import type * as communityMemoryHealth from "../communityMemoryHealth.js";
 import type * as communityMemoryMetabolizer from "../communityMemoryMetabolizer.js";
 import type * as communityMemoryWorkKey from "../communityMemoryWorkKey.js";
@@ -101,7 +99,6 @@ import type * as communityRecentContext from "../communityRecentContext.js";
 import type * as communityRecipientCore from "../communityRecipientCore.js";
 import type * as communityResourceContent from "../communityResourceContent.js";
 import type * as communityResourceEvidence from "../communityResourceEvidence.js";
-import type * as communityResourceEvidenceAcceptance from "../communityResourceEvidenceAcceptance.js";
 import type * as communityResourceEvidenceCore from "../communityResourceEvidenceCore.js";
 import type * as communityResources from "../communityResources.js";
 import type * as communitySkillAttachments from "../communitySkillAttachments.js";
@@ -279,7 +276,6 @@ declare const fullApi: ApiFromModules<{
   communityAgentServeWorker: typeof communityAgentServeWorker;
   communityAiFeed: typeof communityAiFeed;
   communityAiFeedEvidence: typeof communityAiFeedEvidence;
-  communityAiFeedEvidenceAcceptance: typeof communityAiFeedEvidenceAcceptance;
   communityAiFeedEvidenceCore: typeof communityAiFeedEvidenceCore;
   communityAppMounts: typeof communityAppMounts;
   communityArchive: typeof communityArchive;
@@ -314,7 +310,6 @@ declare const fullApi: ApiFromModules<{
   communityInteractions: typeof communityInteractions;
   communityLaunchSetup: typeof communityLaunchSetup;
   communityLifecycle: typeof communityLifecycle;
-  communityLineageAcceptance: typeof communityLineageAcceptance;
   communityMemoryHealth: typeof communityMemoryHealth;
   communityMemoryMetabolizer: typeof communityMemoryMetabolizer;
   communityMemoryWorkKey: typeof communityMemoryWorkKey;
@@ -327,7 +322,6 @@ declare const fullApi: ApiFromModules<{
   communityRecipientCore: typeof communityRecipientCore;
   communityResourceContent: typeof communityResourceContent;
   communityResourceEvidence: typeof communityResourceEvidence;
-  communityResourceEvidenceAcceptance: typeof communityResourceEvidenceAcceptance;
   communityResourceEvidenceCore: typeof communityResourceEvidenceCore;
   communityResources: typeof communityResources;
   communitySkillAttachments: typeof communitySkillAttachments;

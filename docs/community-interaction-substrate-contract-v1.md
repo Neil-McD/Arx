@@ -56,7 +56,10 @@ The future write contract uses typed content blocks. Renderers may turn those bl
 
 Raw chat is not community intelligence.
 
-Most activity should remain ephemeral or archival. Only selected, high-signal, permissioned, or promoted interactions become source traces for the compiler. The community cognition loop learns from evidence, outcomes, and validated operational patterns, not from dumping every message into memory.
+Every readable interaction may become a governed source trace, but a source
+trace is evidence rather than retained community intelligence. The compiler
+must explicitly retain, carry forward, or dismiss that evidence; most activity
+should never become memory.
 
 ### Delete Hard Delete As Normal Moderation
 
@@ -165,7 +168,10 @@ Reaction summaries may be denormalized onto roots/replies for feed speed, but th
 
 ### `interactionReadState`
 
-Per-user state for unread roots, unread drawer replies, followed interactions, muted interactions, and last-read positions.
+Unread projection is currently derived from the community-level
+`communityMemberSettings.chatLastSeenAt` boundary. There is no separate
+interaction read-state table until the product requires independently persisted
+per-root follow, mute, or drawer-read state.
 
 ### `interactionModerationEvents`
 
@@ -173,17 +179,19 @@ Append-only events for edit, hide, unhide, tombstone, lock, pin, unpin, and priv
 
 ### `interactionSourceTraceBridge`
 
-Optional bridge from interaction to community cognition.
+Derived projection from canonical interaction evidence into community
+cognition. Interaction source traces are keyed directly by their canonical
+evidence reference; there is no intermediate source-trace link table.
 
 Rules:
 
 - Creating an interaction does not automatically create community truth.
 - Community/public interactions may enter a permissioned retrieval archive without
   becoming compiler input.
-- Only explicitly promoted or deterministically high-signal interactions create
-  permissioned `communitySourceTraces`.
-- Archive synchronization and source-trace promotion are separate idempotent
-  operations. Backfill synchronizes the archive but never promotes evidence.
+- Every readable interaction sync creates or updates one permissioned
+  `communitySourceTraces` row keyed by its canonical evidence reference.
+- Archive synchronization and source-trace projection are separate idempotent
+  derived records. Neither one directly creates retained memory.
 - Source traces must preserve actor, visibility, evidence, and provenance.
 - Directory truth is still created only through compiler and policy gates.
 
@@ -197,7 +205,8 @@ Migration order:
 2. Project existing chat messages into interaction roots/replies for compatibility.
 3. Route web UI reads and writes through the canonical projection/composer.
 4. Keep the legacy chat writer only for compatibility consumers and migration/backfill.
-5. Move reactions, embeds, mentions, unread, and moderation onto canonical tables.
+5. Move reactions, embeds, mentions, and moderation onto canonical tables; keep
+   the community unread boundary in `communityMemberSettings`.
 6. Delete legacy chat writes after parity.
 7. Delete legacy chat reads after backfill and UI projection are stable.
 
@@ -218,12 +227,18 @@ The first backend slice adds canonical tables beside legacy chat:
 - `communityInteractionEmbeds`
 - `communityInteractionMentions`
 - `communityInteractionReactions`
-- `communityInteractionReadStates`
 - `communityInteractionModerationEvents`
-- `communityInteractionSourceTraceLinks` (historical compatibility only; no current writer or reader)
 - `communityInteractionLegacyChatLinks`
 
-It also adds `interaction` as a product-owned `communitySourceTraces.sourceType`. Public source-trace writes must still be limited to `manual` and `external`; interaction traces are created only through trusted product bridges.
+Unread state remains on the existing `communityMemberSettings.chatLastSeenAt`
+boundary rather than a duplicate interaction read-state table. Interaction
+source traces use canonical evidence references directly rather than a
+duplicate link ledger.
+
+The slice also adds `interaction` as a product-owned
+`communitySourceTraces.sourceType`. Public source-trace writes must still be
+limited to `manual` and `external`; interaction traces are created only through
+trusted product bridges.
 
 ## Current Write-Core Slice
 
@@ -323,7 +338,7 @@ Rules:
 - idempotency keys use a composer namespace, not `legacy_chat_message:*`
 - the bridge does not call public root/reply mutations
 - the bridge may schedule async link-embed enrichment after creating pending embed records
-- the bridge does not generate upload URLs, fetch URLs, scrape pages, process media, promote source traces, or call the compiler synchronously
+- the bridge does not generate upload URLs, fetch URLs, scrape pages, process media, write source traces, or call the compiler synchronously; it schedules the idempotent derived-evidence sync
 
 ## Current Async Link Embed Enrichment Slice
 
@@ -376,7 +391,7 @@ The compatibility adapter keeps the legacy chat mutation alive while dual-writin
 - adapter write/materialization failures are not swallowed after writes begin; Convex must abort the transaction instead of committing partial canonical rows
 - adapter writes do not call the public interaction mutations
 - adapter writes do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously
-- adapter writes do not promote source traces, write archive truth, or call the compiler synchronously; they schedule the same idempotent derived-evidence sync as canonical writes
+- adapter writes do not write source traces, archive truth, or compiler state synchronously; they schedule the same idempotent derived-evidence sync as canonical writes
 - the legacy adapter shadow-writes bounded canonical `communityInteractionAttachments` rows from legacy message payloads
 - attachment-only legacy messages become bounded markdown summaries so projection does not silently drop them
 - legacy chat response shape is unchanged
@@ -401,7 +416,7 @@ Rules:
 - running the batch repeatedly must not duplicate roots or replies
 - backfill write/materialization failures are not caught after writes begin
 - backfill does not migrate reactions, edits, deletes, or moderation state
-- backfill does not promote source traces, write archive truth, or call the compiler synchronously; materialized interactions schedule idempotent derived-evidence sync and do not change UI behavior
+- backfill does not write source traces, archive truth, or compiler state synchronously; materialized interactions schedule idempotent derived-evidence sync and do not change UI behavior
 
 ## Canonical Interaction Evidence Spine
 
@@ -415,7 +430,7 @@ Published Resources use a parallel evidence boundary:
 - resource search combines a bounded recent-source scan with the permissioned resource archive, then revalidates canonical visibility before returning every result
 - retrieval logs record actor, surface, capability, and returned refs, but never copy the raw query
 - published resources are community-authoritative and may name an accountable recorder, but do not infer human contribution credit
-- archive synchronization does not create compiler source traces; searchability is not promotion
+- archive synchronization does not create compiler source traces; searchability is not compiler eligibility
 Attribution, episode, and profile-discoverability semantics are defined by
 `docs/community-lineage-ontology-contract-v0.md`.
 

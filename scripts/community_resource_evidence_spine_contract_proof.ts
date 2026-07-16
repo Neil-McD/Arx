@@ -26,7 +26,6 @@ const [
   httpMcp,
   lineageContract,
   interactionContract,
-  acceptance,
 ] = await Promise.all([
   read("convex/schema.ts"),
   read("convex/communityResources.ts"),
@@ -39,7 +38,6 @@ const [
   read("convex/httpMcp.ts"),
   read("docs/community-lineage-ontology-contract-v0.md"),
   read("docs/community-interaction-substrate-contract-v1.md"),
-  read("convex/communityResourceEvidenceAcceptance.ts"),
 ]);
 
 assert.match(schema, /communityEvidenceRetrievalLogs: defineTable/);
@@ -89,16 +87,6 @@ assert.match(lineageContract, /createdByUserId[\s\S]*accountable recorder/);
 assert.match(lineageContract, /credit = null/);
 assert.match(lineageContract, /Searchability is not compiler eligibility/);
 assert.match(interactionContract, /Published Resources use a parallel evidence boundary/);
-
-assert.match(acceptance, /executeRetrievalHarnessTool/);
-assert.match(acceptance, /executeConciergeTool/);
-assert.match(acceptance, /handleMcpPost/);
-assert.match(acceptance, /resource_archive_only_retrieval_not_proven/);
-assert.match(acceptance, /resource_identity_not_move_stable/);
-assert.match(acceptance, /resource_automatically_promoted_to_compiler/);
-assert.match(acceptance, /resource_retrieval_audit_copied_raw_query/);
-assert.match(acceptance, /hidden_resource_archive_not_deleted/);
-assert.match(acceptance, /wrongType/);
 
 const resourceId = "resource_1";
 const sourceId = "resource_source_1";

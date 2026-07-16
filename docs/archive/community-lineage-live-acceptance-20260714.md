@@ -1,5 +1,8 @@
 # Community Lineage Live Acceptance — 2026-07-14
 
+> Historical certificate. The temporary deployed acceptance action used by
+> this run has been removed; active proofs now target canonical runtime paths.
+
 Status: passed
 Deployment: `neil-mcdevitt:polynet:dev/lineage-evidence-20260714`
 Deployment name: `basic-robin-885`

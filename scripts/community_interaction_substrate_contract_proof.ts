@@ -62,11 +62,12 @@ const directory = read(directoryPath);
   "`communityInteractionEmbeds`",
   "`communityInteractionMentions`",
   "`communityInteractionReactions`",
-  "`communityInteractionReadStates`",
   "`communityInteractionModerationEvents`",
-  "`communityInteractionSourceTraceLinks`",
   "`communityInteractionLegacyChatLinks`",
-  "It also adds `interaction` as a product-owned `communitySourceTraces.sourceType`.",
+  "`communityMemberSettings.chatLastSeenAt` boundary",
+  "there is no intermediate source-trace link table",
+  "`interaction` as a product-owned",
+  "`communitySourceTraces.sourceType`",
   "## Current Async Link Embed Enrichment Slice",
   "Convex never fetches the user-provided source URL directly",
   "the source URL fetcher remains authoritative for DNS resolution checks, public-address pinning, and redirect target revalidation",
@@ -199,7 +200,7 @@ const mentionsTable = schemaTable("communityInteractionMentions", "communityInte
   '.index("by_mentionedRole_createdAt", ["mentionedRoleKey", "createdAt"])',
 ].forEach((needle) => assertIncludes(schemaPath, mentionsTable, needle));
 
-const reactionsTable = schemaTable("communityInteractionReactions", "communityInteractionReadStates");
+const reactionsTable = schemaTable("communityInteractionReactions", "communityInteractionModerationEvents");
 [
   'targetType: v.union(v.literal("root"), v.literal("reply"))',
   "actorKey: v.string()",
@@ -208,17 +209,7 @@ const reactionsTable = schemaTable("communityInteractionReactions", "communityIn
   '.index("by_reply_actor_emoji", ["replyId", "actorKey", "emoji"])',
 ].forEach((needle) => assertIncludes(schemaPath, reactionsTable, needle));
 
-const readStateTable = schemaTable("communityInteractionReadStates", "communityInteractionModerationEvents");
-[
-  'rootId: v.id("communityInteractionRoots")',
-  'userId: v.id("users")',
-  "hasUnread: v.boolean()",
-  "notificationState: v.union(",
-  '.index("by_root_user", ["rootId", "userId"])',
-  '.index("by_user_community_unread_updatedAt", ["userId", "communityId", "hasUnread", "updatedAt"])',
-].forEach((needle) => assertIncludes(schemaPath, readStateTable, needle));
-
-const moderationTable = schemaTable("communityInteractionModerationEvents", "communityInteractionSourceTraceLinks");
+const moderationTable = schemaTable("communityInteractionModerationEvents", "communityInteractionLegacyChatLinks");
 [
   'v.literal("tombstone")',
   'v.literal("privacy_purge_requested")',
@@ -229,19 +220,8 @@ const moderationTable = schemaTable("communityInteractionModerationEvents", "com
 ].forEach((needle) => assertIncludes(schemaPath, moderationTable, needle));
 assertExcludes(schemaPath, moderationTable, "delete: v.literal");
 
-const traceLinkTable = schemaTable("communityInteractionSourceTraceLinks", "communityInteractionLegacyChatLinks");
-[
-  'sourceTraceId: v.optional(v.id("communitySourceTraces"))',
-  "sourceTraceSourceId: v.optional(v.string())",
-  'linkState: v.union(v.literal("pending"), v.literal("active"), v.literal("removed"))',
-  'v.literal("manual")',
-  'v.literal("moderator")',
-  'v.literal("high_signal")',
-  'v.literal("compiler_candidate")',
-  'v.literal("agent_signal")',
-  '.index("by_sourceTrace", ["sourceTraceId"])',
-  '.index("by_community_state_createdAt", ["communityId", "linkState", "createdAt"])',
-].forEach((needle) => assertIncludes(schemaPath, traceLinkTable, needle));
+assertExcludes(schemaPath, schema, "communityInteractionReadStates: defineTable");
+assertExcludes(schemaPath, schema, "communityInteractionSourceTraceLinks: defineTable");
 
 const legacyChatLinkTable = schemaTable("communityInteractionLegacyChatLinks", "dmConversations");
 [

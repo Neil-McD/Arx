@@ -11,12 +11,10 @@ async function read(relativePath: string): Promise<string> {
   return await readFile(path.join(root, relativePath), "utf8");
 }
 
-const [contract, liveCertificate, schema, evidence, acceptance, mcp] = await Promise.all([
+const [contract, schema, evidence, mcp] = await Promise.all([
   read("docs/community-lineage-ontology-contract-v0.md"),
-  read("docs/community-lineage-live-acceptance-20260714.md"),
   read("convex/schema.ts"),
   read("convex/communityInteractionEvidence.ts"),
-  read("convex/communityLineageAcceptance.ts"),
   read("shared/polynetMcp.ts"),
 ]);
 
@@ -110,28 +108,6 @@ assert.match(evidence, /deriveCommunityInteractionLineageEnvelope/);
 assert.match(evidence, /lineage,/);
 assert.match(mcp, /polynet_community_chat_search:[\s\S]*?readOnlyHint: true/);
 assert.match(mcp, /polynet_community_chat_read:[\s\S]*?readOnlyHint: true/);
-assert.match(acceptance, /POLYNET_DEPLOYMENT_KIND/);
-assert.match(acceptance, /POLYNET_LINEAGE_ACCEPTANCE_ENABLED/);
-assert.match(acceptance, /v\.literal\(ACCEPTANCE_CONFIRMATION\)/);
-assert.match(acceptance, /"member_agent_dock"[\s\S]*"community_concierge"[\s\S]*"external_mcp"/);
-assert.match(acceptance, /executeRetrievalHarnessTool/);
-assert.match(acceptance, /executeConciergeTool/);
-assert.match(acceptance, /handleMcpPost/);
-assert.doesNotMatch(acceptance, /promoteCommunityInteractionEvidenceInternal/);
-assert.match(acceptance, /compilerGroupKey/);
-assert.match(acceptance, /wrongTypeDenied/);
-assert.match(acceptance, /crossCommunityParentDenied/);
-assert.match(acceptance, /recentContextForeignParentDenied/);
-assert.match(acceptance, /archiveOnlyResult/);
-assert.match(acceptance, /outsiderDenied/);
-assert.match(acceptance, /redactedReadDenied/);
-assert.match(acceptance, /retrieval_audit_copied_raw_query/);
-assert.match(liveCertificate, /Run: `integration-20260714-b`/);
-assert.match(liveCertificate, /recentContextForeignParentDenied=true/);
-assert.match(liveCertificate, /code=community_lineage_acceptance_passed/);
-assert.match(liveCertificate, /archive\/searchability is automatic/);
-assert.match(liveCertificate, /none copied the[\s\S]*raw query text/);
-assert.match(liveCertificate, /at least five existing[\s\S]*sourceType=chat/);
 
 for (const forbidden of [
   "communityLineageEdges: defineTable",

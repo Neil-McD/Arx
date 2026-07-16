@@ -1513,7 +1513,7 @@ Compiler work and agent work are different durable facts:
 pending source evidence
   -> immutable digest content keyed by its sorted work keys
   -> pending/running/handled agent handoff
-  -> exact digest-version cycle
+  -> exact digest-version Steward pass
   -> autonomous retention or deliberate no-op
 ```
 
@@ -1534,17 +1534,17 @@ Rules:
 - A heartbeat rechecks the owner off-switch, daily cycle cap, and founder
   connection before inference. It then compiles eligible evidence if needed,
   claims one exact digest version, and passes `digestId + versionKey + workKey`
-  coordinates into the role cycle.
-- A claimed role-cycle filesystem context is bound to that digest id and
+  coordinates into the Steward pass.
+- A claimed Steward filesystem context is bound to that digest id and
   version. Compiler window/list/read/search and retention writes must not cross
   into a different digest, and every tool call must still match the running
   heartbeat claim.
 - The heartbeat's compiler mutation rechecks the evidence trigger in its own
   transaction. If a concurrent compiler already consumed the evidence, the
   losing mutation creates no second digest handoff.
-- A completed cycle, including a deliberate Observer no-signal result, marks
-  the exact handoff handled. Known failures return it to pending; abandoned
-  running claims become retryable after the lease.
+- A completed Steward pass with durable decisions for every item marks the
+  exact handoff handled. Known failures return it to pending; abandoned running
+  claims become retryable after the lease.
 - The sweep never compiles evidence itself and never uses an arbitrary delay.
   It settles deterministic metabolizer state independently, then immediately
   schedules only planner-approved agent work.
@@ -1825,56 +1825,43 @@ This amendment refines the agent operating model after the memory-surface work
 (rail preview + full graph) shipped and the activation gap was measured. It
 supersedes earlier language where noted. Everything else in v1 stands.
 
-### One Agent, Four Roles
+### One Agent, Two Runtime Roles
 
 There is one community agent entity per community: one runtime, one filesystem,
-one audit trail. Roles are system prompts and skill sets on that entity, not
-separate services. This makes concrete the v1 rule "separate prompts or agent
-personas for each pass."
+and one audit trail. Its two runtime roles have separate authority envelopes:
 
 ```txt
-Sleep roles (heartbeat/event-woken, owner-sponsored):
-1. Observer   - triages the compiler window: meaningful, novel, repeated,
-                sensitive, private? (the ingress/compiler filter questions)
-2. Questioner - the reflection pass: what could the community learn, what is
-                the rejected alternative, what would falsify this? Produces
-                learning envelopes; surfaces contradictions and open questions.
-3. Steward    - judges and writes through the typed memory boundary; nurtures the directory:
-                merge near-duplicates, mark stale, flag contested, lint,
-                regenerate overviews. Posts one-way announcements.
+Autonomous role (heartbeat/event-woken, owner-sponsored):
+1. Steward   - receives one exact bounded compiler digest, searches for
+               duplicates when necessary, and settles every work item through
+               one typed atomic memory write. It cannot be prompted by members.
 
-Serve role (member-triggered, realtime):
-4. Concierge  - answers member questions in community chat from the directory
-                and resources, with citations. Read-only.
+Serve role (member-triggered, requester-sponsored):
+2. Concierge - answers member questions from authorized community evidence and
+               retained memory. It is read-only.
 ```
 
 ### The Two-Authorities Invariant
 
-> The roles that can write memory cannot be spoken to.
+> The role that can write memory cannot be spoken to.
 > The role that can be spoken to cannot write memory.
 
-Sleep roles hold atomic compiler-memory authority and wake only from heartbeats
-and events; no member or admin prompt can steer them. The Concierge holds chat
-voice and zero write authority. A prompt injection in chat can at worst produce
-a bad chat reply; it can never reach the directory except the long way — traces
-through the compiler and its validation gates. This refines the v1 rule
-that no human prompts the community agent: the rule always protected the write
-path, and it still does.
-
-### The Cycle Ledger
-
-Sleep roles run as chained passes sharing one per-cycle working document in the
-agent filesystem (alongside /compiler and /directory). Observer writes triage
-notes; Questioner reads them and appends reflections; Steward reads both and
-acts. Every role can see the compiler window, the directory, and each other's
-notes. Nothing is hidden between roles; the ledger persists with the run record.
+The autonomous Steward holds atomic compiler-memory authority and wakes only
+from heartbeats and governed events; no member or admin prompt can steer it.
+The Concierge holds chat voice and zero write authority. A prompt injection in
+chat can at worst produce a bad chat reply; it can never reach the directory
+except the long way — traces through the compiler and its validation gates.
+The former multi-role cycle ledger is not part of the runtime or model tool
+surface. `communityAgentRuns` plus ordered `communityAgentRunEvents` are the
+canonical reconstructable execution record.
 
 ### Promotion Policy (autonomous retention, evidence-gated status)
 
-The Steward selects a digest item once. In that same database transaction, the
-system captures immutable citations, revalidates canonical evidence, records an
-audit row, and applies the memory. There is no acceptance state between proposal
-and application.
+The Steward settles one exact bounded digest with one structured decision
+batch. The database transaction captures immutable citations, revalidates
+canonical evidence, records the audit rows, applies retained memory, and
+terminally records every work-item disposition. There is no acceptance state
+between proposal and application.
 
 Guardrails:
 
@@ -1941,8 +1928,8 @@ A memory sweep runs every six hours. It settles metabolizer scores from
 retrieval/outcome signals independently, measures canonical compiler and
 handoff work, and immediately schedules eligible communities. The heartbeat
 rechecks the owner off-switch, daily cycle cap, and founder connection before
-tokens can be spent, then owns the compile -> claim -> cycle -> settlement
-transition. Unchanged handled digest versions never re-wake the roles.
+tokens can be spent, then owns the compile -> claim -> Steward pass -> settlement
+transition. Unchanged handled digest versions never re-wake the Steward.
 Frequency controls worst-case latency only; durable work state and cost gates
 own execution.
 
@@ -1960,9 +1947,9 @@ cycle and the rule that digest inclusion means compilation.
 ### Canonical path
 
 1. Every live, evidence-readable community interaction is normalized into a
-   `communitySourceTraces` row during ordinary evidence sync. Historical
-   promotion-link rows remain readable database history only; no current
-   promotion action or runtime link read/write exists.
+   `communitySourceTraces` row during ordinary evidence sync. The obsolete
+   promotion-link table has been removed; no promotion action or runtime
+   link-ledger read/write exists.
 2. Pending source traces are the only compiler queue truth. Parallel archive,
    feed, resource, event, and member-activity aggregate inputs are not compiler
    work unless they first become governed source traces.

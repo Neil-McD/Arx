@@ -30,11 +30,11 @@ const [
   retrievalTools,
   invocationSurface,
   conciergeTools,
+  conciergeWorker,
   mcp,
   httpMcp,
   lineageContract,
   evidenceCore,
-  acceptance,
 ] = await Promise.all([
   read("convex/schema.ts"),
   read("convex/communityInteractionEvidence.ts"),
@@ -47,11 +47,11 @@ const [
   read("shared/retrievalTools.ts"),
   read("shared/runtimeInvocationSurface.ts"),
   read("shared/communityAgentConciergeTools.ts"),
+  read("convex/communityAgentServeWorker.ts"),
   read("shared/polynetMcp.ts"),
   read("convex/httpMcp.ts"),
   read("docs/community-lineage-ontology-contract-v0.md"),
   read("convex/communityInteractionEvidenceCore.ts"),
-  read("convex/communityLineageAcceptance.ts"),
 ]);
 
 assert.match(schema, /communityEvidenceRetrievalLogs: defineTable/);
@@ -134,19 +134,30 @@ for (const source of [retrievalTools, invocationSurface, conciergeTools, runtime
   assert.match(source, /community_chat_search/);
   assert.match(source, /community_chat_read/);
 }
+assert.match(
+  runtimeLoop,
+  /communityInteractionEvidence\.searchCommunityInteractionEvidenceInternal/,
+);
+assert.match(
+  runtimeLoop,
+  /communityInteractionEvidence\.readCommunityInteractionEvidenceForToolInternal/,
+);
+assert.match(conciergeWorker, /executeConciergeTool/);
+assert.match(conciergeWorker, /executeRetrievalHarnessTool/);
+assert.match(conciergeWorker, /evidenceSurface: "community_concierge"/);
 assert.match(mcp, /polynet_community_chat_search/);
 assert.match(mcp, /polynet_community_chat_read/);
+assert.match(
+  httpMcp,
+  /communityInteractionEvidence\.searchCommunityInteractionEvidenceInternal/,
+);
+assert.match(
+  httpMcp,
+  /communityInteractionEvidence\.readCommunityInteractionEvidenceForToolInternal/,
+);
 assert.match(httpMcp, /surface: "external_mcp"/);
 assert.match(lineageContract, /profile projection: `source_only`/);
 assert.match(lineageContract, /Searchability is not acceptance/);
-assert.match(acceptance, /executeRetrievalHarnessTool/);
-assert.match(acceptance, /executeConciergeTool/);
-assert.match(acceptance, /handleMcpPost/);
-assert.match(acceptance, /wrong_table_reference_not_denied/);
-assert.match(acceptance, /cross_community_parent_not_denied/);
-assert.match(acceptance, /recent_context_cross_community_parent_not_denied/);
-assert.match(acceptance, /archive_only_retrieval_not_proven/);
-assert.match(acceptance, /ordinary_evidence_not_automatically_traced/);
 
 const rootRef = buildCommunityInteractionEvidenceRef({ objectType: "root", objectId: "root_123" });
 assert.equal(rootRef, "interaction:root:root_123");

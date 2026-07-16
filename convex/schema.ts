@@ -1930,25 +1930,6 @@ export default defineSchema({
     .index("by_actor", ["actorKey"])
     .index("by_community_createdAt", ["communityId", "createdAt"]),
 
-  communityInteractionReadStates: defineTable({
-    communityId: v.id("communities"),
-    rootId: v.id("communityInteractionRoots"),
-    userId: v.id("users"),
-    lastReadAt: v.optional(v.number()),
-    lastReadReplySeq: v.optional(v.number()),
-    hasUnread: v.boolean(),
-    notificationState: v.union(
-      v.literal("default"),
-      v.literal("following"),
-      v.literal("muted"),
-    ),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_root_user", ["rootId", "userId"])
-    .index("by_user_community", ["userId", "communityId"])
-    .index("by_user_community_unread_updatedAt", ["userId", "communityId", "hasUnread", "updatedAt"]),
-
   communityInteractionModerationEvents: defineTable({
     communityId: v.id("communities"),
     targetType: v.union(v.literal("root"), v.literal("reply")),
@@ -1986,37 +1967,6 @@ export default defineSchema({
     .index("by_actorUser_createdAt", ["actorUserId", "createdAt"])
     .index("by_actorAgent_createdAt", ["actorAgentKey", "createdAt"])
     .index("by_community_idempotencyKey", ["communityId", "idempotencyKey"]),
-
-  communityInteractionSourceTraceLinks: defineTable({
-    communityId: v.id("communities"),
-    rootId: v.optional(v.id("communityInteractionRoots")),
-    replyId: v.optional(v.id("communityInteractionReplies")),
-    sourceTraceId: v.optional(v.id("communitySourceTraces")),
-    sourceTraceSourceId: v.optional(v.string()),
-    linkState: v.union(v.literal("pending"), v.literal("active"), v.literal("removed")),
-    promotionReason: v.union(
-      v.literal("manual"),
-      v.literal("moderator"),
-      v.literal("high_signal"),
-      v.literal("compiler_candidate"),
-      v.literal("agent_signal"),
-    ),
-    actorType: v.union(
-      v.literal("human"),
-      v.literal("personal_agent"),
-      v.literal("community_agent"),
-      v.literal("system"),
-    ),
-    actorUserId: v.optional(v.id("users")),
-    actorAgentKey: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_root", ["rootId"])
-    .index("by_reply", ["replyId"])
-    .index("by_sourceTrace", ["sourceTraceId"])
-    .index("by_community_state_createdAt", ["communityId", "linkState", "createdAt"])
-    .index("by_community_sourceId", ["communityId", "sourceTraceSourceId"]),
 
   communityInteractionLegacyChatLinks: defineTable({
     communityId: v.id("communities"),
@@ -2193,7 +2143,9 @@ export default defineSchema({
     .index("by_sponsor_createdAt", ["sponsorUserId", "createdAt"]),
 
   // Historical compatibility only. The straight-through compiler no longer
-  // reads or writes the former multi-role handoff ledger.
+  // reads or writes the former multi-role handoff ledger. Remove this table
+  // only after its existing deployment rows have been explicitly exported or
+  // purged through a bounded data migration.
   communityAgentCycleLedgers: defineTable({
     communityId: v.id("communities"),
     cycleId: v.string(),
