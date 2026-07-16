@@ -1347,8 +1347,6 @@ export default defineSchema({
       orientation: v.optional(v.object({
         status: v.union(
           v.literal("idle"),
-          // Read compatibility for sessions created before first-view generation.
-          v.literal("queued"),
           v.literal("running"),
           v.literal("ready"),
           v.literal("fallback"),
@@ -1356,8 +1354,6 @@ export default defineSchema({
         text: v.optional(v.string()),
         promptVersion: v.string(),
         requestedAt: v.optional(v.number()),
-        // Legacy scheduler metadata. New sessions never write this field.
-        fallbackDeadlineAt: v.optional(v.number()),
         startedAt: v.optional(v.number()),
         completedAt: v.optional(v.number()),
         resolvedModelId: v.optional(v.string()),

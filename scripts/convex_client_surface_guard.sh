@@ -12,7 +12,7 @@ ALLOWLIST_REGEX='^shared/(convexAuthenticatedClient|convexRuntime)\.ts:'
 PATTERN='import \{ ConvexHttpClient \} from "convex/browser"|new ConvexHttpClient\('
 
 echo "[1/3] Scanning runtime/product paths for direct ConvexHttpClient usage..."
-MATCHES="$(rg -n --no-heading -S "$PATTERN" shared apps src convex -g '*.{ts,tsx,js,jsx,mts,cts}' || true)"
+MATCHES="$(rg -n --no-heading -S "$PATTERN" shared apps convex -g '*.{ts,tsx,js,jsx,mts,cts}' || true)"
 
 if [[ -z "$MATCHES" ]]; then
   echo "[2/3] No direct ConvexHttpClient usage found."

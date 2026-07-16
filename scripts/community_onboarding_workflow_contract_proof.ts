@@ -126,7 +126,10 @@ assert.match(sessionSchema, /v\.literal\("fallback"\)/);
 assert.match(sessionSchema, /v\.literal\("idle"\)/);
 assert.match(sessionSchema, /agentTurnAcknowledgedAt: v\.optional\(v\.number\(\)\)/);
 assert.match(sessionSchema, /mcpHandoffCompletedAt: v\.optional\(v\.number\(\)\)/);
-assert.doesNotMatch(sessionSchema, /agentInstructions|configVersion|Seed|openedAt/);
+assert.doesNotMatch(
+  sessionSchema,
+  /agentInstructions|configVersion|Seed|openedAt|v\.literal\("queued"\)|fallbackDeadlineAt/,
+);
 assert.doesNotMatch(schema, /communityOnboardingConciergeNotes: defineTable/);
 
 for (const file of readdirSync("convex").filter((name) => name.endsWith(".ts"))) {
@@ -167,6 +170,7 @@ assert.match(onboardingConcierge, /session\.status !== "active"/);
 assert.match(onboardingConcierge, /session\.orientationCompletedAt/);
 assert.match(onboardingConcierge, /stale_generation/);
 assert.match(onboardingConcierge, /status: "fallback"/);
+assert.doesNotMatch(onboardingConcierge, /"queued"|fallbackDeadlineAt/);
 assert.match(onboardingConcierge, /COMMUNITY_ONBOARDING_ORIENTATION_PROVIDER_TIMEOUT_MS/);
 assert.match(onboardingConciergeShared, /The application owns every action, button, permission, route, and state transition/);
 assert.doesNotMatch(onboardingConcierge, /executeRetrievalHarnessTool|communityAgentServeRequests/);

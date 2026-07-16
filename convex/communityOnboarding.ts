@@ -33,7 +33,7 @@ function mapOrientationNarration(row: Record<string, any>) {
   const narration = row.conciergeNarration?.orientation as Record<string, any> | undefined;
   if (!narration) return null;
   return {
-    status: narration.status === "queued" ? "idle" : narration.status,
+    status: narration.status,
     text: String(narration.text ?? "").trim() || null,
   };
 }

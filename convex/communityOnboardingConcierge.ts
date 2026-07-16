@@ -38,11 +38,10 @@ const RUNNING_CLAIM_STALE_AFTER_MS =
   COMMUNITY_ONBOARDING_ORIENTATION_PROVIDER_TIMEOUT_MS + 4_000;
 
 type OrientationNarrationRow = {
-  status: "idle" | "queued" | "running" | "ready" | "fallback";
+  status: "idle" | "running" | "ready" | "fallback";
   text?: string;
   promptVersion: string;
   requestedAt?: number;
-  fallbackDeadlineAt?: number;
   startedAt?: number;
   completedAt?: number;
   resolvedModelId?: string;

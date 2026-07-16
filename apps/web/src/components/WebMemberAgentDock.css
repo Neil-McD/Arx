@@ -628,11 +628,6 @@
     padding-top: calc(10px + env(safe-area-inset-top, 0px));
   }
 
-  .community-onboarding-agent-guide {
-    gap: 10px;
-    margin-inline: 14px;
-  }
-
   .member-agent-dock.mobile-root .member-agent-dock-header-actions > button {
     width: 44px;
     height: 44px;
@@ -648,7 +643,6 @@
   .member-agent-dock-reasoning svg,
   .member-agent-dock-launcher,
   .member-agent-dock-caret,
-  .community-onboarding-agent-guide,
   .member-agent-dock-composer.is-onboarding,
   .is-spinning {
     animation: none;

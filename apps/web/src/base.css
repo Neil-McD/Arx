@@ -33540,10 +33540,6 @@ button.message-citation-chip:hover {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-rose) 13%, transparent);
 }
 
-.community-onboarding-field-instructions textarea {
-  min-height: 168px;
-}
-
 .community-onboarding-journey {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
