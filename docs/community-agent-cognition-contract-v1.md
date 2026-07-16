@@ -2112,3 +2112,17 @@ first heartbeat settled 12 items with `search`, `search`, `write`; its second
 settled the two-item continuation with one `write`. Both handoffs were handled,
 each write covered every work key, pending evidence reached zero, disposable
 fixture residue reached zero, and the sponsor connection remained intact.
+
+## Thirty-First Implementation Slice: Delete the Acceptance Surface
+
+The canonical kernel passed deterministic and real-model staging acceptance on
+2026-07-16. The deployed fixture action and its environment flag are not runtime
+requirements, so they are deleted after closure. Keeping a state-mutating test
+API in the application would expand the security and maintenance surface after
+its evidence had already served its purpose.
+
+The durable certificate is
+`docs/community-memory-kernel-staging-acceptance-20260716.md`, with a small
+machine-checked result fixture under `scripts/fixtures`. Requalification may
+temporarily restore an isolated acceptance action on a non-production branch,
+but the canonical deployed surface contains only the memory runtime itself.

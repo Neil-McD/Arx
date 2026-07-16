@@ -7,12 +7,11 @@ const root = process.cwd();
 const candidates = readFileSync(join(root, "convex/communityCompilerCandidates.ts"), "utf8");
 const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
-const acceptance = readFileSync(
-  join(root, "convex/communityChatMemoryCompilerAcceptance.ts"),
-  "utf8",
-);
-const modelAcceptance = acceptance.slice(
-  acceptance.indexOf("export const runCommunityChatMemoryCompilerModelAcceptance"),
+const acceptanceCertificate = JSON.parse(
+  readFileSync(
+    join(root, "scripts/fixtures/community_memory_staging_acceptance_20260716.json"),
+    "utf8",
+  ),
 );
 
 const retained = normalizeCommunityMemoryDecision({
@@ -154,60 +153,51 @@ assert.doesNotMatch(
   /buildLearningEnvelope|retainCommunityIntelligenceFromDigestItemCore/,
   "the generic backend-authored candidate path should be deleted",
 );
-assert.match(acceptance, /chat_evidence_not_automatically_traced/);
-assert.match(acceptance, /digest_is_not_exact_versioned_work/);
-assert.match(acceptance, /idempotent_replay_created_duplicate_state/);
-assert.match(acceptance, /revoked_evidence_memory_remained_member_readable/);
-assert.match(acceptance, /stale_revision_batch_did_not_roll_back_atomically/);
-assert.doesNotMatch(
-  acceptance,
-  /claimCommunityChatMemoryCompilerDigestInternal/,
-  "acceptance must not bypass the production handoff lease with a private claim mutation",
-);
-assert.match(
-  acceptance,
-  /communityAgentHeartbeat\.claimCommunityCompilerDigestHandoffInternal[\s\S]*communityAgentHeartbeat\.settleCommunityCompilerDigestHandoffInternal/,
-  "acceptance should exercise the canonical claim and terminal settlement boundaries",
-);
-assert.match(
-  acceptance,
-  /prematureHandledError[\s\S]*community_compiler_handoff_unsettled[\s\S]*canonicalHandoffSettled/,
-  "acceptance should prove incomplete work cannot become handled and complete work becomes settled",
-);
 assert.match(
   directory,
   /export async function searchCommunityMemoryCore[\s\S]*requireCommunityChatAccess[\s\S]*retrieveAcceptedCommunityMemoryNodes[\s\S]*communityIntelligenceRetrievalLogs[\s\S]*export const searchCommunityMemoryInternal/,
   "accepted-memory search should have one authorization, evidence-filtering, and audit core",
 );
-assert.match(
-  acceptance,
-  /searchCommunityChatMemoryCompilerMemberMemoryInternal[\s\S]*searchCommunityMemoryCore/,
-  "acceptance should exercise the production accepted-memory search core without bypassing access checks",
+assert.equal(
+  acceptanceCertificate.schema_version,
+  "community_memory_staging_acceptance:v1",
 );
-assert.match(
-  modelAcceptance,
-  /MODEL_ACCEPTANCE_CONFIRMATION[\s\S]*readCommunityChatMemoryCompilerSponsorReadinessInternal[\s\S]*sponsor_connection_missing/,
-  "the real-model fixture must require explicit staging confirmation and a connected sponsor",
+assert.equal(acceptanceCertificate.deployment_kind, "staging");
+assert.equal(
+  acceptanceCertificate.deterministic.code,
+  "community_chat_memory_compiler_acceptance_passed",
 );
-assert.match(
-  modelAcceptance,
-  /modelEpisodeRows[\s\S]*length !== 14[\s\S]*runCommunityAgentHeartbeatInternal[\s\S]*itemCount !== 12[\s\S]*model_tool_trace_not_one_complete_write[\s\S]*model_prompt_injection_was_not_safely_dismissed[\s\S]*itemCount !== 2[\s\S]*second_heartbeat_did_not_settle_bounded_continuation/,
-  "the model fixture must prove the real heartbeat, one complete write per digest, injection resistance, and 12 then 2 bounded continuation",
+assert.deepEqual(acceptanceCertificate.deterministic.failures, []);
+assert.equal(acceptanceCertificate.deterministic.exact_digest_item_count, 3);
+assert.deepEqual(
+  acceptanceCertificate.deterministic.terminal_states,
+  ["carried_forward", "dismissed_low_signal", "compiled"],
 );
-assert.doesNotMatch(
-  modelAcceptance,
-  /writeCommunityAgentFilesystemInternal|claimCommunityCompilerDigestHandoffInternal|settleCommunityCompilerDigestHandoffInternal|runCommunityCompilerDigestPassInternal/,
-  "the model fixture must not bypass the production heartbeat with direct compiler or settlement calls",
+assert.equal(acceptanceCertificate.deterministic.canonical_handoff_settled, true);
+assert.equal(acceptanceCertificate.deterministic.revoked_from_member_directory, true);
+assert.equal(acceptanceCertificate.deterministic.revoked_from_member_search, true);
+assert.equal(acceptanceCertificate.deterministic.revoked_from_public_overview, true);
+assert.equal(acceptanceCertificate.deterministic.stale_batch_rolled_back, true);
+assert.equal(
+  acceptanceCertificate.model.code,
+  "community_chat_memory_model_acceptance_passed",
 );
-assert.match(
-  modelAcceptance,
-  /preserveOwner: true[\s\S]*sponsorStatePreserved/,
-  "fixture cleanup must preserve the connected sponsor and provider state",
+assert.deepEqual(acceptanceCertificate.model.failures, []);
+assert.deepEqual(acceptanceCertificate.model.digest_item_counts, [12, 2]);
+assert.deepEqual(
+  acceptanceCertificate.model.tool_call_names,
+  [["search", "search", "write"], ["write"]],
 );
-assert.match(
-  acceptance,
-  /communityAgentRunEvents[\s\S]*communityAgentRuns[\s\S]*communityInteractionContentBlocks[\s\S]*communityInteractionReplies[\s\S]*communityInteractionRoots[\s\S]*if \(args\.preserveOwner !== true\)/,
-  "fixture cleanup must remove model-run and interaction-link residue without deleting a preserved sponsor",
-);
+assert.equal(acceptanceCertificate.model.exactly_one_write_per_digest, true);
+assert.equal(acceptanceCertificate.model.each_write_covered_every_work_key, true);
+assert.equal(acceptanceCertificate.model.both_handoffs_settled, true);
+assert.equal(acceptanceCertificate.model.pending_after_second, 0);
+assert.equal(acceptanceCertificate.model.second_heartbeat_settled_continuation, true);
+assert.equal(acceptanceCertificate.model.sponsor_state_preserved, true);
+assert.deepEqual(acceptanceCertificate.cleanup, {
+  acceptance_flag_removed: true,
+  fixture_community_rows: 0,
+  fixture_agent_run_rows: 0,
+});
 
 console.log("community_compiler_candidates_contract_proof: ok");

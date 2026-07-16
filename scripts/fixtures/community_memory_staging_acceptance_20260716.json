@@ -1,0 +1,50 @@
+{
+  "schema_version": "community_memory_staging_acceptance:v1",
+  "recorded_at": "2026-07-16",
+  "deployment_kind": "staging",
+  "deterministic": {
+    "code": "community_chat_memory_compiler_acceptance_passed",
+    "failures": [],
+    "automatic_trace_count": 3,
+    "exact_digest_item_count": 3,
+    "terminal_states": [
+      "carried_forward",
+      "dismissed_low_signal",
+      "compiled"
+    ],
+    "canonical_handoff_settled": true,
+    "revoked_from_member_directory": true,
+    "revoked_from_member_search": true,
+    "revoked_from_public_overview": true,
+    "stale_batch_rolled_back": true
+  },
+  "model": {
+    "code": "community_chat_memory_model_acceptance_passed",
+    "failures": [],
+    "digest_item_counts": [
+      12,
+      2
+    ],
+    "tool_call_names": [
+      [
+        "search",
+        "search",
+        "write"
+      ],
+      [
+        "write"
+      ]
+    ],
+    "exactly_one_write_per_digest": true,
+    "each_write_covered_every_work_key": true,
+    "both_handoffs_settled": true,
+    "pending_after_second": 0,
+    "second_heartbeat_settled_continuation": true,
+    "sponsor_state_preserved": true
+  },
+  "cleanup": {
+    "acceptance_flag_removed": true,
+    "fixture_community_rows": 0,
+    "fixture_agent_run_rows": 0
+  }
+}

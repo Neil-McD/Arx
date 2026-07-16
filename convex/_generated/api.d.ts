@@ -64,7 +64,6 @@ import type * as communityArchiveShared from "../communityArchiveShared.js";
 import type * as communityAttention from "../communityAttention.js";
 import type * as communityCapabilityContext from "../communityCapabilityContext.js";
 import type * as communityChat from "../communityChat.js";
-import type * as communityChatMemoryCompilerAcceptance from "../communityChatMemoryCompilerAcceptance.js";
 import type * as communityCommerce from "../communityCommerce.js";
 import type * as communityCompilerCandidates from "../communityCompilerCandidates.js";
 import type * as communityCompilerDigest from "../communityCompilerDigest.js";
@@ -291,7 +290,6 @@ declare const fullApi: ApiFromModules<{
   communityAttention: typeof communityAttention;
   communityCapabilityContext: typeof communityCapabilityContext;
   communityChat: typeof communityChat;
-  communityChatMemoryCompilerAcceptance: typeof communityChatMemoryCompilerAcceptance;
   communityCommerce: typeof communityCommerce;
   communityCompilerCandidates: typeof communityCompilerCandidates;
   communityCompilerDigest: typeof communityCompilerDigest;
