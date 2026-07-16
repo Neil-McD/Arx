@@ -1,8 +1,8 @@
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  deleteDeletedCommunityCognitionBatchCore,
-  inspectDeletedCommunityCognitionCore,
+  drainDeletedCommunityCognitionStepCore,
 } from "./communityCognitionCleanupCore";
 
 const communityCognitionCleanupPhaseValidator = v.union(
@@ -22,30 +22,28 @@ const communityCognitionCleanupPhaseValidator = v.union(
   v.literal("archive_documents"),
 );
 
-export const inspectDeletedCommunityCognitionInternal = internalQuery({
-  args: {
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    return await inspectDeletedCommunityCognitionCore({
-      db: ctx.db as any,
-      communityId: args.communityId,
-    });
-  },
-});
-
-export const deleteDeletedCommunityCognitionBatchInternal = internalMutation({
+export const drainDeletedCommunityCognitionInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
     phase: communityCognitionCleanupPhaseValidator,
-    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    return await deleteDeletedCommunityCognitionBatchCore({
+    const result = await drainDeletedCommunityCognitionStepCore({
       db: ctx.db as any,
       communityId: args.communityId,
       phase: args.phase,
-      limit: args.limit,
     });
+    if (result.next_phase) {
+      await ctx.scheduler.runAfter(
+        0,
+        (internal as any).communityCognitionCleanup
+          .drainDeletedCommunityCognitionInternal,
+        {
+          communityId: args.communityId,
+          phase: result.next_phase,
+        },
+      );
+    }
+    return result;
   },
 });

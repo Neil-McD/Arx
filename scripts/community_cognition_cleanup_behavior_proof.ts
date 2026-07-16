@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  COMMUNITY_COGNITION_CLEANUP_FIRST_PHASE,
   COMMUNITY_COGNITION_CLEANUP_MAX_BATCH_LIMIT,
   COMMUNITY_COGNITION_CLEANUP_PHASES,
   boundCommunityCognitionCleanupLimit,
   deleteDeletedCommunityCognitionBatchCore,
+  drainDeletedCommunityCognitionStepCore,
   inspectDeletedCommunityCognitionCore,
+  type CommunityCognitionCleanupPhase,
 } from "../convex/communityCognitionCleanupCore.ts";
 import { requireLiveCommunityForCognitionWrite } from "../convex/communityCognitionLifecycle.ts";
 
@@ -208,6 +211,85 @@ for (const table of excludedProductTables) {
   );
 }
 
+const scheduledDb = new FakeDb();
+scheduledDb.addCommunity(controlCommunityId);
+for (const definition of COMMUNITY_COGNITION_CLEANUP_PHASES) {
+  const rowCount = definition.phase === "source_traces" ? 205 : 1;
+  for (let index = 0; index < rowCount; index += 1) {
+    scheduledDb.addRow(definition.table, {
+      _id: `scheduled:${definition.phase}:target:${index}`,
+      communityId: targetCommunityId,
+    });
+  }
+  scheduledDb.addRow(definition.table, {
+    _id: `scheduled:${definition.phase}:control`,
+    communityId: controlCommunityId,
+  });
+}
+for (const table of excludedProductTables) {
+  scheduledDb.addRow(table, {
+    _id: `scheduled:${table}:target`,
+    communityId: targetCommunityId,
+  });
+}
+
+async function runScheduledDrain(fakeDb: FakeDb) {
+  let phase: CommunityCognitionCleanupPhase | null =
+    COMMUNITY_COGNITION_CLEANUP_FIRST_PHASE;
+  let executionCount = 0;
+  let deletedTotal = 0;
+  const phaseExecutionCounts = new Map<CommunityCognitionCleanupPhase, number>();
+  let finalInspection: Record<string, any> | null = null;
+  while (phase) {
+    const currentPhase = phase;
+    const result = await drainDeletedCommunityCognitionStepCore({
+      db: fakeDb as any,
+      communityId: targetCommunityId,
+      phase: currentPhase,
+    });
+    executionCount += 1;
+    deletedTotal += result.deleted_count;
+    phaseExecutionCounts.set(
+      currentPhase,
+      (phaseExecutionCounts.get(currentPhase) ?? 0) + 1,
+    );
+    assert.ok(
+      result.deleted_count <= COMMUNITY_COGNITION_CLEANUP_MAX_BATCH_LIMIT,
+      "every scheduled drain step must remain bounded",
+    );
+    finalInspection = result.final_inspection;
+    phase = result.next_phase;
+    assert.ok(executionCount <= 32, "scheduled cleanup must converge");
+  }
+  return { executionCount, deletedTotal, phaseExecutionCounts, finalInspection };
+}
+
+const scheduledDrain = await runScheduledDrain(scheduledDb);
+assert.equal(scheduledDrain.executionCount, 16);
+assert.equal(scheduledDrain.deletedTotal, 218);
+assert.equal(scheduledDrain.phaseExecutionCounts.get("source_traces"), 3);
+assert.equal(scheduledDrain.finalInspection?.empty, true);
+for (const definition of COMMUNITY_COGNITION_CLEANUP_PHASES) {
+  assert.equal(
+    scheduledDb
+      .rows(definition.table)
+      .filter((row) => row.communityId === controlCommunityId).length,
+    1,
+    `${definition.table} scheduled control row must remain`,
+  );
+}
+for (const table of excludedProductTables) {
+  assert.equal(
+    scheduledDb.rows(table).filter((row) => row.communityId === targetCommunityId).length,
+    1,
+    `${table} must remain untouched by the scheduled drain`,
+  );
+}
+const scheduledReplay = await runScheduledDrain(scheduledDb);
+assert.equal(scheduledReplay.executionCount, COMMUNITY_COGNITION_CLEANUP_PHASES.length);
+assert.equal(scheduledReplay.deletedTotal, 0);
+assert.equal(scheduledReplay.finalInspection?.empty, true);
+
 const cleanupModule = readFileSync(
   new URL("../convex/communityCognitionCleanup.ts", import.meta.url),
   "utf8",
@@ -237,8 +319,8 @@ for (const definition of COMMUNITY_COGNITION_CLEANUP_PHASES) {
     `${definition.table} must expose the declared community-prefixed index`,
   );
 }
-assert.match(cleanupModule, /internalQuery/);
 assert.match(cleanupModule, /internalMutation/);
+assert.doesNotMatch(cleanupModule, /internalQuery/);
 assert.doesNotMatch(
   cleanupModule,
   /\bexport const \w+ = (?:query|mutation)\(/,
@@ -246,8 +328,23 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   cleanupModule,
-  /scheduler|cronJobs/,
-  "the first cleanup slice must remain manual",
+  /cronJobs/,
+  "cleanup must not add a recurring cron",
+);
+assert.equal(
+  cleanupModule.match(/ctx\.scheduler\.runAfter\(/g)?.length,
+  1,
+  "the cleanup driver must expose one canonical continuation schedule",
+);
+assert.match(
+  cleanupModule,
+  /export const drainDeletedCommunityCognitionInternal = internalMutation/,
+  "cleanup must expose one canonical internal drain",
+);
+assert.doesNotMatch(
+  cleanupModule,
+  /inspectDeletedCommunityCognitionInternal|deleteDeletedCommunityCognitionBatchInternal/,
+  "manual internal cleanup wrappers must be deleted after automatic closure",
 );
 assert.doesNotMatch(
   cleanupModule,
@@ -259,10 +356,22 @@ assert.deepEqual(
   COMMUNITY_COGNITION_CLEANUP_PHASES.map((definition) => definition.phase),
   "the Convex validator and fixed cleanup allowlist must stay in lockstep",
 );
-assert.doesNotMatch(
-  lifecycle,
-  /communityCognitionCleanup|deleteDeletedCommunityCognition/,
-  "the first cleanup slice must not hook community deletion",
+const canonicalCommunityDeleteIndex = lifecycle.indexOf(
+  "await ctx.db.delete(community._id as any);",
+);
+const cleanupScheduleIndex = lifecycle.indexOf(
+  "drainDeletedCommunityCognitionInternal",
+  canonicalCommunityDeleteIndex,
+);
+assert.ok(canonicalCommunityDeleteIndex >= 0, "canonical community deletion must remain present");
+assert.ok(
+  cleanupScheduleIndex > canonicalCommunityDeleteIndex,
+  "canonical deletion must atomically schedule cleanup after deleting the community row",
+);
+assert.equal(
+  lifecycle.match(/drainDeletedCommunityCognitionInternal/g)?.length,
+  1,
+  "canonical deletion must have exactly one cleanup entry point",
 );
 
 for (const [file, expectedCount] of [
@@ -331,7 +440,7 @@ const stagingAcceptance = JSON.parse(
 );
 assert.equal(
   stagingAcceptance.schema_version,
-  "community_cognition_cleanup_staging_acceptance:v1",
+  "community_cognition_cleanup_staging_acceptance:v2",
 );
 assert.equal(stagingAcceptance.deployment_kind, "staging");
 assert.equal(stagingAcceptance.self_expiring_deployment, true);
@@ -341,25 +450,19 @@ assert.equal(stagingAcceptance.fixture?.target_total_cognition_rows, 218);
 assert.equal(stagingAcceptance.fixture?.target_source_trace_rows, 205);
 assert.equal(stagingAcceptance.fixture?.control_total_cognition_rows, 14);
 assert.equal(
-  stagingAcceptance.live_community_guard?.inspection_error,
-  "community_cognition_cleanup_live_community_forbidden",
-);
-assert.equal(
-  stagingAcceptance.live_community_guard?.deletion_error,
-  "community_cognition_cleanup_live_community_forbidden",
-);
-assert.equal(
-  stagingAcceptance.canonical_deletion?.function,
+  stagingAcceptance.automatic_lifecycle?.canonical_delete_function,
   "community:deleteCommunity",
 );
+assert.equal(stagingAcceptance.automatic_lifecycle?.direct_cleanup_call_count, 0);
+assert.equal(stagingAcceptance.automatic_lifecycle?.scheduled_mutation_count, 16);
 assert.equal(
-  stagingAcceptance.late_write_guard?.error,
-  "community_cognition_write_community_not_found",
+  stagingAcceptance.automatic_lifecycle?.successful_scheduled_mutation_count,
+  16,
 );
-assert.deepEqual(stagingAcceptance.late_write_guard?.failures, []);
+assert.equal(stagingAcceptance.automatic_lifecycle?.failed_scheduled_mutation_count, 0);
 assert.equal(
-  stagingAcceptance.late_write_guard?.guarded_writers?.length,
-  7,
+  stagingAcceptance.automatic_lifecycle?.source_trace_scheduled_mutation_count,
+  3,
 );
 assert.equal(
   stagingAcceptance.cleanup?.policy_version,
@@ -381,6 +484,17 @@ assert.equal(
   stagingAcceptance.non_interference?.control_product_sources_unchanged,
   true,
 );
+assert.equal(stagingAcceptance.runtime_surface?.schema_changed, false);
+assert.equal(stagingAcceptance.runtime_surface?.cron_added, false);
+assert.equal(stagingAcceptance.runtime_surface?.cleanup_job_table_added, false);
+assert.equal(stagingAcceptance.runtime_surface?.public_cleanup_function_added, false);
+assert.equal(stagingAcceptance.runtime_surface?.operator_driver_added, false);
+assert.equal(stagingAcceptance.runtime_surface?.canonical_internal_drain_count, 1);
+assert.equal(
+  stagingAcceptance.runtime_surface?.manual_inspection_wrapper_present,
+  false,
+);
+assert.equal(stagingAcceptance.runtime_surface?.manual_batch_wrapper_present, false);
 assert.equal(stagingAcceptance.teardown?.fixture_communities_remaining, 0);
 assert.equal(stagingAcceptance.teardown?.fixture_users_remaining, 0);
 assert.equal(stagingAcceptance.teardown?.fixture_cognition_rows_remaining, 0);
@@ -389,6 +503,18 @@ assert.equal(
   0,
 );
 assert.equal(stagingAcceptance.teardown?.acceptance_flag_removed, true);
+assert.equal(
+  stagingAcceptance.deployed_surface?.canonical_drain_internal_present,
+  true,
+);
+assert.equal(
+  stagingAcceptance.deployed_surface?.manual_inspection_internal_present,
+  false,
+);
+assert.equal(
+  stagingAcceptance.deployed_surface?.manual_batch_internal_present,
+  false,
+);
 assert.equal(
   stagingAcceptance.deployed_surface?.acceptance_function_removed,
   true,

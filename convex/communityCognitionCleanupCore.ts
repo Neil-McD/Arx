@@ -78,6 +78,9 @@ export const COMMUNITY_COGNITION_CLEANUP_PHASES = [
 export type CommunityCognitionCleanupPhase =
   (typeof COMMUNITY_COGNITION_CLEANUP_PHASES)[number]["phase"];
 
+export const COMMUNITY_COGNITION_CLEANUP_FIRST_PHASE =
+  COMMUNITY_COGNITION_CLEANUP_PHASES[0].phase;
+
 type CleanupDb = {
   get: (id: any) => Promise<unknown>;
   query: (table: string) => {
@@ -221,5 +224,51 @@ export async function deleteDeletedCommunityCognitionBatchCore(args: {
     batch_limit: limit,
     deleted_count: rowsToDelete.length,
     has_more: rows.length > limit,
+  };
+}
+
+export function nextCommunityCognitionCleanupPhase(args: {
+  phase: CommunityCognitionCleanupPhase;
+  hasMore: boolean;
+}): CommunityCognitionCleanupPhase | null {
+  if (args.hasMore) return args.phase;
+  const currentIndex = COMMUNITY_COGNITION_CLEANUP_PHASES.findIndex(
+    (definition) => definition.phase === args.phase,
+  );
+  if (currentIndex < 0) {
+    throw new Error("community_cognition_cleanup_phase_invalid");
+  }
+  return COMMUNITY_COGNITION_CLEANUP_PHASES[currentIndex + 1]?.phase ?? null;
+}
+
+export async function drainDeletedCommunityCognitionStepCore(args: {
+  db: CleanupDb;
+  communityId: any;
+  phase: CommunityCognitionCleanupPhase;
+}) {
+  const batch = await deleteDeletedCommunityCognitionBatchCore({
+    db: args.db,
+    communityId: args.communityId,
+    phase: args.phase,
+    limit: COMMUNITY_COGNITION_CLEANUP_MAX_BATCH_LIMIT,
+  });
+  const nextPhase = nextCommunityCognitionCleanupPhase({
+    phase: args.phase,
+    hasMore: batch.has_more,
+  });
+  const finalInspection = nextPhase
+    ? null
+    : await inspectDeletedCommunityCognitionCore({
+        db: args.db,
+        communityId: args.communityId,
+      });
+  if (finalInspection && !finalInspection.empty) {
+    throw new Error("community_cognition_cleanup_terminal_not_empty");
+  }
+  return {
+    ...batch,
+    next_phase: nextPhase,
+    complete: nextPhase === null,
+    final_inspection: finalInspection,
   };
 }

@@ -1,4 +1,4 @@
-# Community Cognition Cleanup — Staging Acceptance
+# Automatic Community Cognition Cleanup — Staging Acceptance
 
 Status: passed
 Date: 2026-07-16
@@ -12,81 +12,84 @@ Date: 2026-07-16
 - Expiration: one day
 - Production touched: no
 
-The proof used a fresh empty deployment and temporarily installed one
-environment-gated acceptance module. It did not change production, the shared
-staging deployment, community deletion, cron configuration, or schema.
+The proof reused the empty self-expiring deployment from the guarded cleanup
+acceptance. It temporarily restored one environment-gated fixture module and
+did not change production, shared staging, schema, cron configuration, public
+APIs, or frontend behavior.
 
-## Fixture and live-community denial
+## Irreducible runtime
+
+The final runtime has one cognition-cleanup function:
+
+- `drainDeletedCommunityCognitionInternal`
+
+The prior manual inspection and per-phase deletion wrappers were removed.
+Canonical `deleteCommunity` now deletes the community row and schedules the
+first drain mutation in the same transaction. Every drain mutation deletes at
+most one hundred rows and atomically schedules either the same phase or the
+next fixed phase. The final phase runs the bounded inspection core and fails if
+any allowlisted cognition remains.
+
+There is no cleanup table, job ledger, cron, action, public endpoint, operator
+driver, or UI. Convex's built-in scheduled-function record is the execution
+ledger.
+
+## Canonical automatic proof
 
 The disposable target contained:
 
 - one record in thirteen cleanup phases
-- 205 source traces, forcing three bounded deletion batches
-- 218 derived cognition records in total
-- one chat/interaction, AI Feed post, event, and Concierge serve request as
+- 205 source traces
+- 218 cognition records in total
+- one interaction, AI Feed post, event, and Concierge serve request as
   product-source non-interference sentinels
 
 The untouched control contained one row in each of the fourteen cognition
 phases and the same four product-source sentinels.
 
-Before community deletion, both inspection and deletion failed closed with
-`community_cognition_cleanup_live_community_forbidden`.
-
-## Canonical lifecycle and late-write denial
-
-The proof deleted the target through the real public
+The acceptance flow invoked only the real public
 `community:deleteCommunity` mutation under the seeded owner's verified CLI
-identity. The community row disappeared while all 218 cognition rows and all
-four product-source sentinels remained available for the cleanup proof.
+identity. It never called a cleanup function directly.
 
-After deletion, every guarded cognition seam rejected a late write with
-`community_cognition_write_community_not_found`:
+Canonical deletion produced exactly sixteen successful scheduled drain
+mutations:
 
-- source trace
-- compiler digest
-- trusted change request
-- accepted change-request apply
-- community-agent run event
-- archive projection
-- evidence-retrieval audit
+- one mutation for each of thirteen ordinary phases
+- three mutations for the 205-row source-trace phase
 
-## Bounded cleanup and non-interference
+The target reached zero rows in all fourteen cognition phases. The control
+retained all fourteen cognition rows. Target and control interactions, AI Feed
+posts, events, and Concierge requests remained unchanged.
 
-The canonical internal cleanup primitives deleted all 218 target cognition
-rows. Every phase used a batch limit of 100. The 205 source traces required
-three batches; every other phase required one. Final inspection reported all
-fourteen phases empty.
+## Determinism and failure boundaries
 
-An immediate replay across every phase deleted zero records. Throughout the
-cleanup:
+The machine proof independently walks the same phase transition core and
+proves:
 
-- the control retained all fourteen cognition records
-- target and control interactions remained unchanged
-- target and control AI Feed posts remained unchanged
-- target and control events remained unchanged
-- target and control Concierge serve requests remained unchanged
+- exactly sixteen executions delete the 218-row fixture
+- every execution deletes at most one hundred rows
+- source traces require exactly three executions
+- final inspection is empty
+- replay traverses the fixed phases but deletes zero rows
+- live-community cleanup remains forbidden
+- a poisoned cross-community index result deletes nothing
+- product-source tables stay outside the allowlist
+- the control stays untouched
 
-This proves the cleanup allowlist is derived-cognition-only and idempotent.
+Late cognition writes remain guarded by the prior live acceptance and the
+same deterministic contract proof.
 
-## Teardown and deployed surface
+## Teardown and final deployed surface
 
-Fixture teardown removed:
+Fixture teardown removed the control's fourteen cognition rows, ten supporting
+product-source fixture rows, the remaining control membership and community,
+and both fixture users. Final reads found zero fixture communities, users,
+cognition rows, or product-source rows.
 
-- the control's fourteen cognition records
-- ten target/control product-source sentinel rows
-- the remaining control membership and community
-- both fixture users
-
-A final state read found zero target or control cognition, product sources,
-communities, or users. The temporary acceptance flag was unset, the temporary
-module was deleted, and the deployment was pushed again.
-
-The final function specification contains:
-
-- `inspectDeletedCommunityCognitionInternal`
-- `deleteDeletedCommunityCognitionBatchInternal`
-
-It does not contain the acceptance module or any acceptance function.
+The temporary flag and fixture module were removed and the deployment was
+pushed again. The final function specification contains exactly one cognition
+cleanup function, `drainDeletedCommunityCognitionInternal`, and contains
+neither manual wrapper nor any acceptance function.
 
 The machine-readable certificate is
 `scripts/fixtures/community_cognition_cleanup_staging_acceptance_20260716.json`.

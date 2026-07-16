@@ -1,5 +1,5 @@
 {
-  "schema_version": "community_cognition_cleanup_staging_acceptance:v1",
+  "schema_version": "community_cognition_cleanup_staging_acceptance:v2",
   "date": "2026-07-16",
   "deployment": "coordinated-otter-526",
   "deployment_reference": "neil-mcdevitt:polynet:dev/cognition-cleanup-v1-20260716",
@@ -25,34 +25,19 @@
       "concierge_requests": 1
     }
   },
-  "live_community_guard": {
-    "inspection_error": "community_cognition_cleanup_live_community_forbidden",
-    "deletion_error": "community_cognition_cleanup_live_community_forbidden"
-  },
-  "canonical_deletion": {
-    "function": "community:deleteCommunity",
-    "ok": true,
+  "automatic_lifecycle": {
+    "canonical_delete_function": "community:deleteCommunity",
+    "canonical_delete_ok": true,
+    "direct_cleanup_call_count": 0,
+    "scheduled_mutation_count": 16,
+    "successful_scheduled_mutation_count": 16,
+    "failed_scheduled_mutation_count": 0,
+    "source_trace_scheduled_mutation_count": 3,
     "target_community_exists_after": false,
-    "target_cognition_rows_after": 218,
-    "target_product_sources_unchanged": true
-  },
-  "late_write_guard": {
-    "error": "community_cognition_write_community_not_found",
-    "guarded_writers": [
-      "source_trace",
-      "compiler_digest",
-      "change_request",
-      "apply",
-      "agent_run_event",
-      "archive_projection",
-      "evidence_retrieval_audit"
-    ],
-    "failures": []
+    "target_cognition_rows_after": 0
   },
   "cleanup": {
     "policy_version": "community_cognition_cleanup:v1",
-    "inspection_count_lower_bound": 113,
-    "inspection_count_is_lower_bound": true,
     "batch_limit": 100,
     "deleted_total": 218,
     "source_trace_batch_count": 3,
@@ -66,6 +51,16 @@
     "target_product_sources_unchanged": true,
     "control_product_sources_unchanged": true
   },
+  "runtime_surface": {
+    "schema_changed": false,
+    "cron_added": false,
+    "cleanup_job_table_added": false,
+    "public_cleanup_function_added": false,
+    "operator_driver_added": false,
+    "canonical_internal_drain_count": 1,
+    "manual_inspection_wrapper_present": false,
+    "manual_batch_wrapper_present": false
+  },
   "teardown": {
     "deleted_control_cognition_rows": 14,
     "deleted_product_source_rows": 10,
@@ -76,8 +71,9 @@
     "acceptance_flag_removed": true
   },
   "deployed_surface": {
-    "inspect_internal_present": true,
-    "delete_batch_internal_present": true,
+    "canonical_drain_internal_present": true,
+    "manual_inspection_internal_present": false,
+    "manual_batch_internal_present": false,
     "acceptance_function_removed": true
   }
 }

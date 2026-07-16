@@ -47,6 +47,7 @@ import {
   canReceiveCommunityRevenue,
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
+import { COMMUNITY_COGNITION_CLEANUP_FIRST_PHASE } from "./communityCognitionCleanupCore";
 
 type MemberAgentChannelLifecycleLike = {
   _id: any;
@@ -1085,6 +1086,15 @@ export const deleteCommunity = mutation({
     });
 
     await ctx.db.delete(community._id as any);
+    await ctx.scheduler.runAfter(
+      0,
+      (internal as any).communityCognitionCleanup
+        .drainDeletedCommunityCognitionInternal,
+      {
+        communityId: community._id,
+        phase: COMMUNITY_COGNITION_CLEANUP_FIRST_PHASE,
+      },
+    );
     return { ok: true };
   },
 });

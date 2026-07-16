@@ -2213,15 +2213,21 @@ manual and memory-scoped:
 - Source-trace, compiler-digest, autonomous change-request, apply, agent
   run-event, archive-projection, and evidence-retrieval audit write seams
   require the canonical community to remain live.
-- This slice does not add a cron, scheduler, public API, schema table, or
-  automatic hook from `deleteCommunity`. Automation is deferred until the
-  primitive passes isolated staging acceptance against a disposable community
-  and an untouched control community.
+- Canonical `deleteCommunity` atomically schedules one internal drain after
+  removing the community row. Each scheduled mutation deletes one bounded
+  batch, then schedules the same fixed phase or the next one.
+- The final phase runs the bounded inspection core and fails if any allowlisted
+  cognition remains. Convex's scheduled-function record is the execution
+  ledger; no cleanup table, cron, public API, action, operator driver, or UI is
+  added.
+- The manual inspection and per-phase deletion wrappers are deleted. The
+  scheduled drain is the only runtime cleanup function and canonical community
+  deletion is its only production entry point.
 
-The primitive passed that isolated staging acceptance on 2026-07-16. The proof
-used the canonical `deleteCommunity` mutation, 218 target cognition rows across
-all fourteen phases, an untouched control, bounded multi-batch deletion,
-idempotent replay, guarded late-write attempts, and product-source
-non-interference. The temporary acceptance function and flag were removed
-afterward. The durable certificate is
+The automatic lifecycle passed isolated staging acceptance on 2026-07-16. The
+proof invoked only canonical `deleteCommunity`; sixteen successful scheduled
+mutations removed 218 target cognition rows across all fourteen phases while
+an untouched control and all product-source sentinels remained unchanged. The
+temporary acceptance function and flag were removed afterward. The durable
+certificate is
 `docs/community-cognition-cleanup-staging-acceptance-20260716.md`.
