@@ -9711,10 +9711,22 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-member-chat .community-interaction-main-composer .chat-input-bar,
 .community-member-chat .community-interaction-drawer-composer .chat-input-bar {
+  --community-composer-control-size: 36px;
   border-radius: var(--composer-radius);
   background: var(--composer-surface);
   border-color: var(--composer-border);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+}
+
+.community-member-chat .mention-composer-field {
+  min-height: var(--community-composer-control-size);
+}
+
+.community-member-chat .chat-input,
+.community-member-chat .mention-composer-highlight {
+  box-sizing: border-box;
+  min-height: var(--community-composer-control-size);
+  padding-block: calc((var(--community-composer-control-size) - 1.45em) / 2);
 }
 
 .community-member-chat .community-interaction-main-composer .chat-input-bar {
@@ -30966,9 +30978,15 @@ button.message-citation-chip:hover {
 }
 
 .app-root.mobile-shell .community-member-chat .chat-input-bar {
+  --community-composer-control-size: 42px;
   border-radius: var(--composer-radius);
   background: var(--composer-surface);
   border-color: var(--composer-border);
+}
+
+.app-root.mobile-shell .community-member-chat .chat-input,
+.app-root.mobile-shell .community-member-chat .mention-composer-highlight {
+  min-height: var(--community-composer-control-size);
 }
 
 .app-root.mobile-shell .community-member-chat .community-interaction-reply-input-bar {

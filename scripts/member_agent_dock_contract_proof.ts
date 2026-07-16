@@ -767,8 +767,8 @@ assert.match(
 assert.match(component, /<strong>Your agent<\/strong>/);
 assert.match(
   styles,
-  /--member-agent-accent: var\(--accent-selection\);[\s\S]*--member-agent-accent-strong: color-mix\([\s\S]*var\(--member-agent-accent\) 82%,[\s\S]*var\(--text-primary\) 18%[\s\S]*--member-agent-accent-soft: color-mix\([\s\S]*var\(--member-agent-accent\) 16%,[\s\S]*transparent[\s\S]*--member-agent-accent-border: color-mix\([\s\S]*var\(--member-agent-accent\) 32%,[\s\S]*transparent[\s\S]*--member-agent-launcher-foreground: var\(--text-primary\);/,
-  "the dock must derive its surface palette from the active theme accent while preserving a high-contrast launcher glyph",
+  /--member-agent-accent: var\(--accent-selection\);[\s\S]*--member-agent-accent-strong: color-mix\([\s\S]*var\(--member-agent-accent\) 82%,[\s\S]*var\(--text-primary\) 18%[\s\S]*--member-agent-accent-soft: color-mix\([\s\S]*var\(--member-agent-accent\) 16%,[\s\S]*transparent[\s\S]*--member-agent-accent-border: color-mix\([\s\S]*var\(--member-agent-accent\) 32%,[\s\S]*transparent/,
+  "the dock must derive its identity palette from the active theme accent",
 );
 assert.match(
   styles,
@@ -782,7 +782,7 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher \{[\s\S]*?width: 60px;[\s\S]*?height: 60px;[\s\S]*?color: var\(--member-agent-launcher-foreground\);[\s\S]*?background: color-mix\(in srgb, var\(--member-agent-accent\) 18%, #111115\);[\s\S]*?border: 1px solid var\(--member-agent-accent-border\);[\s\S]*?border-radius: 16px;/,
+  /\.member-agent-dock-launcher \{[\s\S]*?width: 60px;[\s\S]*?height: 60px;[\s\S]*?color: var\(--member-agent-accent\);[\s\S]*?background: color-mix\(in srgb, var\(--member-agent-accent\) 18%, #111115\);[\s\S]*?border: 1px solid var\(--member-agent-accent-border\);[\s\S]*?border-radius: 16px;/,
   "the agent launcher must keep its theme-derived identity inside a compact, high-contrast control",
 );
 assert.match(
@@ -802,12 +802,12 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher\.is-working \{[\s\S]*color: var\(--member-agent-launcher-foreground\);[\s\S]*border-color: color-mix\(in srgb, var\(--member-agent-accent\) 58%, transparent\);[\s\S]*animation: member-agent-dock-working-pulse 1\.6s ease-in-out infinite;/,
+  /\.member-agent-dock-launcher\.is-working \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*border-color: color-mix\(in srgb, var\(--member-agent-accent\) 58%, transparent\);[\s\S]*animation: member-agent-dock-working-pulse 1\.6s ease-in-out infinite;/,
   "an active agent turn must derive its working treatment from the active theme accent",
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher:hover \{[\s\S]*color: var\(--member-agent-launcher-foreground\);[\s\S]*background: color-mix\(in srgb, var\(--member-agent-accent\) 24%, #111115\);[\s\S]*border-color: color-mix\(in srgb, var\(--member-agent-accent\) 48%, transparent\);/,
+  /\.member-agent-dock-launcher:hover \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*background: color-mix\(in srgb, var\(--member-agent-accent\) 24%, #111115\);[\s\S]*border-color: color-mix\(in srgb, var\(--member-agent-accent\) 48%, transparent\);/,
   "hover must clarify the floating control without moving it",
 );
 assert.doesNotMatch(

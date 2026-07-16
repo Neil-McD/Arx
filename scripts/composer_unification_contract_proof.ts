@@ -37,6 +37,21 @@ assert.match(
   "thread composer controls should remain bottom-aligned as the input grows",
 );
 assert.match(
+  baseCss,
+  /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar,[\s\S]*--community-composer-control-size: 36px;/,
+  "desktop member composers should expose the canonical control height",
+);
+assert.match(
+  baseCss,
+  /\.community-member-chat \.chat-input,[\s\S]*\.community-member-chat \.mention-composer-highlight \{[^}]*min-height: var\(--community-composer-control-size\);[^}]*padding-block: calc\(\(var\(--community-composer-control-size\) - 1\.45em\) \/ 2\);/,
+  "member composer text and mention highlighting should center within the control row and expand upward together",
+);
+assert.match(
+  baseCss,
+  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;/,
+  "mobile member composers should center text against their larger controls",
+);
+assert.match(
   chatPanel,
   /className=\{`community-chat community-member-chat community-attachment-drop-surface/,
   "member chat should expose an explicit styling boundary",

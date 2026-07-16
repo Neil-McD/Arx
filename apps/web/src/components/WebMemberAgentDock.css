@@ -15,7 +15,6 @@
     var(--member-agent-accent) 32%,
     transparent
   );
-  --member-agent-launcher-foreground: var(--text-primary);
   position: fixed;
   right: 20px;
   bottom: 20px;
@@ -32,7 +31,7 @@
   height: 60px;
   place-items: center;
   overflow: visible;
-  color: var(--member-agent-launcher-foreground);
+  color: var(--member-agent-accent);
   background: color-mix(in srgb, var(--member-agent-accent) 18%, #111115);
   border: 1px solid var(--member-agent-accent-border);
   border-radius: 16px;
@@ -51,7 +50,7 @@
 }
 
 .member-agent-dock-launcher:hover {
-  color: var(--member-agent-launcher-foreground);
+  color: var(--member-agent-accent-strong);
   background: color-mix(in srgb, var(--member-agent-accent) 24%, #111115);
   border-color: color-mix(in srgb, var(--member-agent-accent) 48%, transparent);
   box-shadow:
@@ -83,7 +82,7 @@
 }
 
 .member-agent-dock-launcher.is-working {
-  color: var(--member-agent-launcher-foreground);
+  color: var(--member-agent-accent-strong);
   border-color: color-mix(in srgb, var(--member-agent-accent) 58%, transparent);
   animation: member-agent-dock-working-pulse 1.6s ease-in-out infinite;
 }
