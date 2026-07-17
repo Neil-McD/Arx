@@ -43,13 +43,16 @@ function asyncFunctionBlock(source: string, functionName: string): string {
 }
 
 const overview = exportedFunctionBlock(directory, "getCommunityPolynetOverview");
+const publicOverview = exportedFunctionBlock(directory, "resolvePublicCommunityMemoryOverviewBySlug");
 const readNodes = asyncFunctionBlock(directory, "readPolynetOverviewNodes");
 const readResources = asyncFunctionBlock(directory, "readPolynetOverviewResources");
 const readEdges = asyncFunctionBlock(directory, "readPolynetOverviewEdges");
+const readResourceDerivationEdges = asyncFunctionBlock(directory, "readPolynetOverviewResourceDerivationEdges");
 const mapNode = functionBlock(directory, "mapPolynetOverviewNode");
 const mapResourceNode = functionBlock(directory, "mapPolynetOverviewResourceNode");
 const mapEdge = functionBlock(directory, "mapPolynetOverviewEdge");
 const mapResourceEdge = functionBlock(directory, "mapPolynetOverviewResourceEdge");
+const mapResourceDerivationEdge = functionBlock(directory, "mapPolynetOverviewResourceDerivationEdge");
 const overviewStatusesStart = directory.indexOf("const POLYNET_OVERVIEW_STATUSES");
 const overviewStatusesEnd = directory.indexOf("];", overviewStatusesStart);
 const overviewStatuses = directory.slice(overviewStatusesStart, overviewStatusesEnd);
@@ -90,6 +93,17 @@ assert.match(readEdges, /if \(!edge\.toNodeId\) continue/, "overview graph shoul
 assert.match(readEdges, /nodeIds\.has\(normalizeIdValue\(edge\.fromNodeId\)\)[\s\S]*nodeIds\.has\(normalizeIdValue\(edge\.toNodeId\)\)/, "overview edges should stay inside the selected visible node set");
 assert.match(readEdges, /canViewerReadVisibility\(edge\.visibilityScope, args\.isManager\)/, "overview edges should keep visibility filtering");
 
+assert.match(directory, /parseCommunityResourceEvidenceRef/, "resource derivation should reuse the canonical typed resource reference parser");
+assert.match(readResourceDerivationEdges, /POLYNET_OVERVIEW_EDGES_PER_NODE_LIMIT/, "resource derivation should inspect only a bounded source prefix per memory");
+assert.match(readResourceDerivationEdges, /\.slice\(0, POLYNET_OVERVIEW_EDGE_LIMIT\)/, "resource derivation should reuse the overview's explicit total edge budget");
+assert.match(readResourceDerivationEdges, /await args\.ctx\.db\.get\(rawTraceId as any\)/, "resource derivation should read only source traces already cited by selected memories");
+assert.doesNotMatch(readResourceDerivationEdges, /\.collect\(\)|communitySourceTraces[\s\S]*\.query\(/, "resource derivation should not scan the source-trace corpus");
+assert.match(readResourceDerivationEdges, /normalizeIdValue\(trace\.communityId\)[\s\S]*normalizeIdValue\(args\.communityId\)/, "resource derivation should fail closed across communities");
+assert.match(readResourceDerivationEdges, /trace\.sourceType !== "resource"/, "resource derivation should accept resource traces only");
+assert.match(readResourceDerivationEdges, /canViewerReadTrace\(trace, args\.isManager\)/, "resource derivation should reuse trace visibility policy");
+assert.match(readResourceDerivationEdges, /parseCommunityResourceEvidenceRef\(trace\.sourceId\)/, "resource derivation should reject malformed resource evidence references");
+assert.match(readResourceDerivationEdges, /resourcesById\.get/, "resource derivation should end only at a selected member-visible resource");
+
 assert.match(mapNode, /kind: "directory_node"/, "overview graph should expose real directory nodes as directory_node graph nodes");
 assert.match(mapNode, /row\.originChangeRequestId[\s\S]*communityMemoryLineageId\(row\.originChangeRequestId\)/, "retained memory should preserve its forming-node lineage");
 assert.doesNotMatch(mapNode, /body_md|source_trace_ids|outcome_observation_ids/, "overview graph nodes should not expose source bodies or evidence ids");
@@ -103,12 +117,23 @@ assert.match(mapEdge, /to: directoryGraphNodeId\(row\.toNodeId\)/, "overview edg
 assert.match(mapResourceEdge, /kind: "resource_edge"/, "resource containment should be a typed read-model edge");
 assert.match(mapResourceEdge, /from: communityGraphRootId\(communityId\)/, "resource containment should start at the community root");
 assert.match(mapResourceEdge, /to: resourceGraphNodeId\(row\._id\)/, "resource containment should end at the resource node");
+assert.match(mapResourceDerivationEdge, /kind: "resource_edge"/, "resource derivation should reuse the resource read-model edge kind");
+assert.match(mapResourceDerivationEdge, /from: directoryGraphNodeId\(node\._id\)/, "resource derivation should start at the retained memory");
+assert.match(mapResourceDerivationEdge, /to: resourceGraphNodeId\(resource\._id\)/, "resource derivation should end at the canonical resource");
+assert.match(mapResourceDerivationEdge, /type: "derived_from"/, "resource provenance should be explicitly typed");
+assert.doesNotMatch(mapResourceDerivationEdge, /trace\._id|sourceTrace|source_trace/, "resource derivation payloads should not expose source-trace identity");
 
 assert.match(overview, /communityGraphRootId\(args\.communityId\)/, "overview should include one synthetic community root node for UI layout");
 assert.match(overview, /readPolynetOverviewResources/, "overview should project canonical resources without waiting for compiler promotion");
 assert.match(overview, /selectPolynetOverviewItems/, "learned and source nodes should share one bounded graph budget");
 assert.match(overview, /nodes: \[[\s\S]*kind: "community"[\s\S]*\.\.\.selectedItems\.map\(mapPolynetOverviewSelectionNode\)/, "overview graph should contain the community root plus learned and source nodes");
 assert.match(overview, /resources\.map\(\(row\) => mapPolynetOverviewResourceEdge/, "overview should connect every selected resource to the community root");
+assert.match(overview, /readPolynetOverviewResourceDerivationEdges/, "member overview should project existing resource lineage");
+assert.match(overview, /\.\.\.resourceDerivationEdgeResult\.edges/, "member overview should render bounded resource derivation edges");
+assert.match(publicOverview, /readPolynetOverviewResourceDerivationEdges/, "public anonymous topology should use the same visibility-filtered resource lineage projection");
+assert.match(publicOverview, /isManager: false/, "public resource lineage should never gain manager trace visibility");
+assert.match(publicOverview, /label: null,[\s\S]*title: null/, "public resource lineage should keep node content anonymous");
+assert.match(overview, /directoryEdgeResult\.hasMoreEdges \|\| resourceDerivationEdgeResult\.hasMoreEdges/, "overview truncation should include derived provenance edges");
 assert.doesNotMatch(overview, /communityCompilerDigests|communitySourceTraces|readCommunityCompilerWindow/, "overview should not expose compiler or raw-trace internals");
 assert.doesNotMatch(overview, /wakeEvidence|errorMessage|body_md|source_trace_ids/, "overview should stay compact and member-safe");
 assert.match(overview, /summarizePolynetOverviewMemory\(selectedItems, hasMoreNodes, hasMoreEdges\)/, "memory counts should include learned and resource source nodes");

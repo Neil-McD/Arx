@@ -219,6 +219,13 @@ learnings use that directory table. Public visitors may see the anonymous graph
 shape, while titles, URLs, bodies, and recorder identity remain inside the
 authorized community lens.
 
+If a selected retained memory cites the readable canonical resource trace, the
+overview projects one deterministic `derived_from` edge from that learned node
+to the resource node. The relation is derived at read time from existing
+`sourceTraceIds`, bounded per node and in total, and filtered through the same
+community and trace-visibility rules. It stores no parallel graph record and
+exposes neither the trace id nor resource content.
+
 Events should not become memory by existing. They are coordination state. Only event-derived decisions, recaps, outcomes, repeated questions, or coordination patterns should become source traces or directory proposals.
 
 Members require the strictest boundary. Member tooling should return roles, join dates, public profile fields, aggregate activity, and explicit contribution signals. It should not create hidden trust scores, private behavioral judgments, or surveillance-style summaries.
@@ -1604,6 +1611,7 @@ Rules:
 - The query is scoped to exactly one explicit `communityId` and requires community access.
 - The graph contains one synthetic community root node plus real visible directory nodes.
 - Directory graph edges are real node-to-node `communityIntelligenceEdges`; the projection does not invent memory edges.
+- Memory-to-resource `derived_from` edges are bounded read projections of existing readable source-trace lineage; they are not stored as parallel graph truth.
 - The projection does not expose raw activity, source traces, compiler digests, compiler windows, or pending change requests.
 - The projection exposes accepted-memory statuses only: `promising`, `validated`, `canonical`, `contested`, and `stale`.
 - Draft, candidate, archived, and deprecated nodes stay out of the Polynet overview.

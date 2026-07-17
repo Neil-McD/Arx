@@ -83,6 +83,7 @@ assert.equal(typeCountTotal, memoryNodes.length, "type counts should match visib
 assert.equal(statusCountTotal, memoryNodes.length, "status counts should match visible memory node count");
 assert.equal(fixture.graph.forming_node_limit, undefined, "fixture should not expose a forming approval-plane limit");
 assert.equal(fixture.graph.has_more_forming_nodes, undefined, "fixture should not expose forming approval-plane truncation");
+assert.equal(fixture.graph.edge_limit, 400, "fixture should expose the combined directory, derivation, and containment edge budget");
 assert.deepEqual(
   Object.keys(fixture.agent.recent_actions_summary),
   ["applied"],
@@ -91,6 +92,8 @@ assert.deepEqual(
 
 const directoryEdges = fixture.graph.edges.filter((edge: any) => edge.kind === "directory_edge");
 const resourceEdges = fixture.graph.edges.filter((edge: any) => edge.kind === "resource_edge");
+const resourceContainmentEdges = resourceEdges.filter((edge: any) => edge.type === "contains_resource");
+const resourceDerivationEdges = resourceEdges.filter((edge: any) => edge.type === "derived_from");
 assert.ok(directoryEdges.length >= 3, "fixture should have enough real directory edges to exercise the graph");
 for (const edge of directoryEdges) {
   assert.equal(edge.kind, "directory_edge", "overview should expose only real directory edges");
@@ -100,10 +103,15 @@ for (const edge of directoryEdges) {
   assert.notEqual(edge.from, rootNodeId, "directory edge should not be invented from the synthetic root");
   assert.notEqual(edge.to, rootNodeId, "directory edge should not be invented to the synthetic root");
 }
-assert.equal(resourceEdges.length, 1, "fixture should connect its canonical resource to the community root once");
-assert.equal(resourceEdges[0].from, rootNodeId, "resource projection edge should start at the community root");
-assert.ok(nodeIds.has(resourceEdges[0].to), "resource projection edge should end at a visible resource node");
-assert.equal(resourceEdges[0].type, "contains_resource", "resource projection edge should be explicitly typed");
+assert.equal(resourceContainmentEdges.length, 1, "fixture should connect its canonical resource to the community root once");
+assert.equal(resourceContainmentEdges[0].from, rootNodeId, "resource projection edge should start at the community root");
+assert.ok(nodeIds.has(resourceContainmentEdges[0].to), "resource projection edge should end at a visible resource node");
+assert.equal(resourceDerivationEdges.length, 1, "fixture should project one truthful memory-to-resource provenance edge");
+assert.match(resourceDerivationEdges[0].from, /^directory_node:/, "resource derivation should start at retained memory");
+assert.match(resourceDerivationEdges[0].to, /^resource_node:/, "resource derivation should end at the canonical resource");
+assert.ok(nodeIds.has(resourceDerivationEdges[0].from), "resource derivation should start at a visible node");
+assert.ok(nodeIds.has(resourceDerivationEdges[0].to), "resource derivation should end at a visible node");
+assert.doesNotMatch(JSON.stringify(resourceDerivationEdges[0]), /trace|source_trace/i, "resource derivation should not expose trace identity");
 
 assert.doesNotMatch(
   JSON.stringify(fixture),
@@ -115,6 +123,7 @@ assert.match(section, /function edgeClass/, "tab should classify edges by edge t
 assert.doesNotMatch(section, /statusClass\(edge\.type\)/, "tab should not classify typed edges as node statuses");
 assert.match(css, /\.cp-edge\.supports/, "CSS should style support edges directly");
 assert.match(css, /\.cp-edge\.contradicts/, "CSS should style contradiction edges directly");
+assert.match(css, /\.cp-edge\.derived-from/, "CSS should distinguish resource provenance edges");
 assert.doesNotMatch(css, /\.cp-forming-circle/, "CSS should not retain deleted forming-memory treatment");
 assert.doesNotMatch(css, /\.community-polynet-meta\b|\.community-polynet-meta-error\b/, "old archive-panel CSS leftovers should be removed");
 

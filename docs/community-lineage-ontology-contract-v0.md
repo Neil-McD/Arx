@@ -160,6 +160,12 @@ canonical resource is projected directly as a source node, while the resource
 row remains content truth. No duplicate `communityIntelligenceNodes` row is
 created merely because the resource was published.
 
+When a selected retained memory cites that readable resource trace, the product
+graph projects one deterministic `derived_from` edge from the memory node to
+the canonical resource node. This is a bounded, permission-filtered read model
+of existing provenance. It does not store a second edge, expose the trace id,
+or imply that every resource has already produced a learned conclusion.
+
 When a resource becomes unavailable, its archive projection is removed and its
 existing trace becomes admin/redacted and compiler-ineligible. Republishing
 reopens that exact stable trace. Title, body, and URL are material revisions;

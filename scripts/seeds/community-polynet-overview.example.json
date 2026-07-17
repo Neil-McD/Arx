@@ -49,7 +49,7 @@
   "graph": {
     "root_node_id": "community:community_distribution_engine_fixture",
     "node_limit": 80,
-    "edge_limit": 240,
+    "edge_limit": 400,
     "has_more_nodes": false,
     "has_more_edges": false,
     "nodes": [
@@ -162,6 +162,16 @@
         "type": "contains_resource",
         "confidence": 1,
         "updated_at": "2026-06-16T08:59:00.000Z"
+      },
+      {
+        "id": "resource_derivation_edge:node_creator_outreach_playbook:resource_creator_outreach_guide",
+        "kind": "resource_edge",
+        "edge_id": "derived_from:node_creator_outreach_playbook:resource_creator_outreach_guide",
+        "from": "directory_node:node_creator_outreach_playbook",
+        "to": "resource_node:resource_creator_outreach_guide",
+        "type": "derived_from",
+        "confidence": 1,
+        "updated_at": "2026-06-16T09:05:00.000Z"
       },
       {
         "id": "directory_edge:edge_playbook_supported_by_hooks",

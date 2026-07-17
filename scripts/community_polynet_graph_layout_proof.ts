@@ -72,6 +72,30 @@ assert.ok(withNoise.has("resource_node:1"), "resource source node should be plac
 assert.ok(!withNoise.has("chat:1"), "non-directory activity should not be placed");
 assert.ok(!withNoise.has("approval:1"), "approval-plane projections should not be placed");
 
+// A projected provenance edge must materially pull a retained memory toward its
+// canonical resource source; otherwise the new topology would be decorative only.
+const provenanceNodes: PolynetLayoutNodeInput[] = [
+  { id: ROOT_ID, kind: "community" },
+  { id: "directory_node:claim", kind: "directory_node" },
+  { id: "resource_node:source", kind: "resource_node" },
+  { id: "directory_node:other", kind: "directory_node" },
+];
+const containmentEdges = [{ from: ROOT_ID, to: "resource_node:source" }];
+const withoutDerivation = computePolynetLayout(provenanceNodes, ROOT_ID, containmentEdges);
+const withDerivation = computePolynetLayout(provenanceNodes, ROOT_ID, [
+  ...containmentEdges,
+  { from: "directory_node:claim", to: "resource_node:source" },
+]);
+const provenanceDistance = (layout: Map<string, { x: number; y: number }>) => {
+  const memory = layout.get("directory_node:claim")!;
+  const resource = layout.get("resource_node:source")!;
+  return Math.hypot(memory.x - resource.x, memory.y - resource.y);
+};
+assert.ok(
+  provenanceDistance(withDerivation) < provenanceDistance(withoutDerivation),
+  "derived resource lineage should form a visible memory-source cluster",
+);
+
 // --- bounds ---
 const seedBounds = computePolynetBounds(computePolynetLayout(makeNodes(0), ROOT_ID));
 assert.deepEqual(

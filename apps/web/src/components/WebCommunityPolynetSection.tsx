@@ -66,6 +66,7 @@ function edgeClass(raw: string | null | undefined): string {
   if (edgeType === "has_example") return "has-example";
   if (edgeType === "applies_to_workflow") return "applies-to-workflow";
   if (edgeType === "contains_resource") return "contains-resource";
+  if (edgeType === "derived_from") return "derived-from";
   return "default";
 }
 

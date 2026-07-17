@@ -123,6 +123,8 @@ assert.match(section, /style=\{\{ transform: `translate\(\$\{pos\.x\}px, \$\{pos
 assert.match(preview, /key=\{lineageId\}/, "The compact memory graph should preserve retained-memory node identity");
 assert.match(preview, /data-lineage-id=\{lineageId\}/, "The compact memory graph should expose lifecycle lineage for acceptance tests");
 assert.match(section, /overview\.graph\.edges\.map/, "Polynet graph should render backend-projected edges");
+assert.match(section, /edgeType === "derived_from"\) return "derived-from"/, "full graph should visibly classify resource provenance edges");
+assert.match(preview, /edgeType === "derived_from"\) return "derived-from"/, "rail graph should preserve resource provenance edges");
 assert.match(
   section,
   /className=\{`cp-node-label/,
@@ -209,6 +211,7 @@ assert.match(
 );
 assert.match(css, /\.cp-node-circle\.type-resource/, "Polynet CSS should visibly distinguish canonical resource nodes");
 assert.match(css, /\.cp-edge\.contains-resource/, "Polynet CSS should distinguish resource containment edges");
+assert.match(css, /\.cp-edge\.derived-from/, "Polynet CSS should distinguish resource provenance edges");
 assert.doesNotMatch(css, /\.cp-forming-circle/, "deleted forming-memory treatment should not remain in CSS");
 assert.match(css, /\.cp-node \{[\s\S]*transition:[^;]*transform 380ms/, "retained-memory layout changes should animate smoothly");
 assert.match(css, /\.cp-root-circle\.activity-running/, "community root should pulse only for active agent states");

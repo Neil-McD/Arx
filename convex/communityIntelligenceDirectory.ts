@@ -29,6 +29,7 @@ import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifec
 import { isCommunityMemoryWorkKey } from "./communityMemoryWorkKey";
 import {
   COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION,
+  parseCommunityResourceEvidenceRef,
   type CommunityEvidenceSurface,
   type CommunityMemoryRetrievalReceiptVersion,
 } from "../shared/communityEvidenceContract";
@@ -1045,6 +1046,25 @@ function mapPolynetOverviewResourceEdge(communityId: any, row: CommunityResource
   };
 }
 
+function mapPolynetOverviewResourceDerivationEdge(
+  node: IntelligenceNodeRow,
+  resource: CommunityResourceLike,
+  trace: SourceTraceRow,
+) {
+  const nodeId = normalizeIdValue(node._id);
+  const resourceId = normalizeIdValue(resource._id);
+  return {
+    id: `resource_derivation_edge:${nodeId}:${resourceId}`,
+    kind: "resource_edge",
+    edge_id: `derived_from:${nodeId}:${resourceId}`,
+    from: directoryGraphNodeId(node._id),
+    to: resourceGraphNodeId(resource._id),
+    type: "derived_from",
+    confidence: 1,
+    updated_at: toIsoString(Math.max(node.updatedAt, resource.updatedAt, trace.updatedAt)),
+  };
+}
+
 function communityAgentActivityState(row: Record<string, any> | null): string {
   if (!row) return "not_started";
   if (row.status === "running") return "running";
@@ -1239,6 +1259,64 @@ async function readPolynetOverviewEdges(args: {
       .slice(0, POLYNET_OVERVIEW_EDGE_LIMIT),
     hasMoreEdges,
   };
+}
+
+async function readPolynetOverviewResourceDerivationEdges(args: {
+  ctx: any;
+  communityId: any;
+  nodes: IntelligenceNodeRow[];
+  resources: CommunityResourceLike[];
+  isManager: boolean;
+}): Promise<{
+  edges: ReturnType<typeof mapPolynetOverviewResourceDerivationEdge>[];
+  hasMoreEdges: boolean;
+}> {
+  const resourcesById = new Map(
+    args.resources.map((resource) => [normalizeIdValue(resource._id), resource]),
+  );
+  if (resourcesById.size === 0 || args.nodes.length === 0) {
+    return { edges: [], hasMoreEdges: false };
+  }
+
+  const allCandidateRefs = args.nodes.flatMap((node) =>
+    (node.sourceTraceIds ?? [])
+      .slice(0, POLYNET_OVERVIEW_EDGES_PER_NODE_LIMIT)
+      .map((rawTraceId) => ({ node, rawTraceId, traceId: normalizeIdValue(rawTraceId) }))
+      .filter((candidate) => Boolean(candidate.traceId)),
+  );
+  const hasMoreEdges =
+    args.nodes.some(
+      (node) => (node.sourceTraceIds ?? []).length > POLYNET_OVERVIEW_EDGES_PER_NODE_LIMIT,
+    ) || allCandidateRefs.length > POLYNET_OVERVIEW_EDGE_LIMIT;
+  const candidateRefs = allCandidateRefs.slice(0, POLYNET_OVERVIEW_EDGE_LIMIT);
+  const traceIds = new Map(
+    candidateRefs.map((candidate) => [candidate.traceId, candidate.rawTraceId]),
+  );
+
+  const tracesById = new Map<string, SourceTraceRow>();
+  await Promise.all(
+    Array.from(traceIds.entries()).map(async ([traceId, rawTraceId]) => {
+      const trace = await args.ctx.db.get(rawTraceId as any);
+      if (isSourceTraceRow(trace)) tracesById.set(traceId, trace);
+    }),
+  );
+
+  const edges = new Map<string, ReturnType<typeof mapPolynetOverviewResourceDerivationEdge>>();
+  for (const candidate of candidateRefs) {
+    const trace = tracesById.get(candidate.traceId);
+    if (!trace) continue;
+    if (normalizeIdValue(trace.communityId) !== normalizeIdValue(args.communityId)) continue;
+    if (trace.sourceType !== "resource" || !canViewerReadTrace(trace, args.isManager)) continue;
+    const resourceId = parseCommunityResourceEvidenceRef(trace.sourceId);
+    if (!resourceId) continue;
+    const resource = resourcesById.get(normalizeIdValue(resourceId));
+    if (!resource) continue;
+    const edgeKey = `${normalizeIdValue(candidate.node._id)}:${normalizeIdValue(resource._id)}`;
+    if (edges.has(edgeKey)) continue;
+    edges.set(edgeKey, mapPolynetOverviewResourceDerivationEdge(candidate.node, resource, trace));
+  }
+
+  return { edges: Array.from(edges.values()), hasMoreEdges };
 }
 
 function summarizePolynetOverviewMemory(
@@ -3658,12 +3736,23 @@ export const getCommunityPolynetOverview = query({
       resourceResult.hasMoreResources ||
       nodes.length < nodeResult.nodes.length ||
       resources.length < resourceResult.resources.length;
-    const { edges, hasMoreEdges } = await readPolynetOverviewEdges({
-      ctx,
-      communityId: args.communityId,
-      nodes,
-      isManager,
-    });
+    const [directoryEdgeResult, resourceDerivationEdgeResult] = await Promise.all([
+      readPolynetOverviewEdges({
+        ctx,
+        communityId: args.communityId,
+        nodes,
+        isManager,
+      }),
+      readPolynetOverviewResourceDerivationEdges({
+        ctx,
+        communityId: args.communityId,
+        nodes,
+        resources,
+        isManager,
+      }),
+    ]);
+    const hasMoreEdges =
+      directoryEdgeResult.hasMoreEdges || resourceDerivationEdgeResult.hasMoreEdges;
     const recentRunRows = ((await ctx.db
       .query("communityAgentRuns" as any)
       .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
@@ -3714,11 +3803,12 @@ export const getCommunityPolynetOverview = query({
           ...selectedItems.map(mapPolynetOverviewSelectionNode),
         ],
         edges: [
-          ...edges.map(mapPolynetOverviewEdge),
+          ...directoryEdgeResult.edges.map(mapPolynetOverviewEdge),
           ...resources.map((row) => mapPolynetOverviewResourceEdge(args.communityId, row)),
+          ...resourceDerivationEdgeResult.edges,
         ],
         node_limit: nodeLimit,
-        edge_limit: POLYNET_OVERVIEW_EDGE_LIMIT + nodeLimit,
+        edge_limit: POLYNET_OVERVIEW_EDGE_LIMIT * 2 + nodeLimit,
         has_more_nodes: hasMoreNodes,
         has_more_edges: hasMoreEdges,
       },
@@ -3772,12 +3862,23 @@ export const resolvePublicCommunityMemoryOverviewBySlug = query({
       resourceResult.hasMoreResources ||
       nodes.length < nodeResult.nodes.length ||
       resources.length < resourceResult.resources.length;
-    const { edges, hasMoreEdges } = await readPolynetOverviewEdges({
-      ctx,
-      communityId: community._id,
-      nodes,
-      isManager: false,
-    });
+    const [directoryEdgeResult, resourceDerivationEdgeResult] = await Promise.all([
+      readPolynetOverviewEdges({
+        ctx,
+        communityId: community._id,
+        nodes,
+        isManager: false,
+      }),
+      readPolynetOverviewResourceDerivationEdges({
+        ctx,
+        communityId: community._id,
+        nodes,
+        resources,
+        isManager: false,
+      }),
+    ]);
+    const hasMoreEdges =
+      directoryEdgeResult.hasMoreEdges || resourceDerivationEdgeResult.hasMoreEdges;
     const latestRun = ((await ctx.db
       .query("communityAgentRuns" as any)
       .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", community._id))
@@ -3824,11 +3925,13 @@ export const resolvePublicCommunityMemoryOverviewBySlug = query({
             })),
           ],
           edges: [
-            ...edges.map(mapPolynetOverviewEdge),
+            ...directoryEdgeResult.edges.map(mapPolynetOverviewEdge),
             ...resources.map((row) => mapPolynetOverviewResourceEdge(community._id, row)),
+            ...resourceDerivationEdgeResult.edges,
           ],
           node_limit: POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT,
-          edge_limit: POLYNET_OVERVIEW_EDGE_LIMIT + POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT,
+          edge_limit:
+            POLYNET_OVERVIEW_EDGE_LIMIT * 2 + POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT,
           has_more_nodes: hasMoreNodes,
           has_more_edges: hasMoreEdges,
         },

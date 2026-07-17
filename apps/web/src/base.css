@@ -17800,6 +17800,11 @@ button.chat-reply-quote:hover {
   stroke-dasharray: 2 4;
 }
 
+.cp-edge.derived-from {
+  stroke: color-mix(in srgb, #f472b6 44%, transparent);
+  stroke-dasharray: 4 3;
+}
+
 /* Contradiction is the one relationship worth shouting: red + dashed, the visual
    opposite of a calm "supports" link. */
 .cp-edge.contradicts {
