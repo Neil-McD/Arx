@@ -47,11 +47,15 @@ export type CommunityInteractionEmbed = {
   normalized_source_url: string | null;
   workspace_ref_kind: string | null;
   workspace_ref_id: string | null;
+  preview_kind: "video" | "social_post" | "link" | string | null;
+  author_name: string | null;
   provider: string | null;
   title: string | null;
   description: string | null;
   image_url: string | null;
+  image_alt: string | null;
   video_url: string | null;
+  resolver_version: number | null;
   fetched_at: string | null;
   error: string | null;
 };

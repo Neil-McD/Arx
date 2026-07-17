@@ -34,6 +34,7 @@ const chromeHost = read("apps/web/src/components/WebShellChromeHost.tsx");
 const mobileCommunityShell = read("apps/web/src/components/WebMobileCommunityShell.tsx");
 const chromeHostPropsBuilder = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
+const linkPreview = read("apps/web/src/components/CommunityInteractionLinkPreview.tsx");
 const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
@@ -214,13 +215,28 @@ assert.match(
 );
 assert.match(
   feed,
-  /selectRichInteractionEmbeds[\s\S]*export function EmbedCards[\s\S]*const visible = selectRichInteractionEmbeds\(props\.embeds\)[\s\S]*embed\.status === "pending"[\s\S]*embed\.status !== "ready"\) return null;[\s\S]*className="community-interaction-embed"/,
+  /selectRichInteractionEmbeds[\s\S]*export function EmbedCards[\s\S]*const visible = selectRichInteractionEmbeds\(props\.embeds\)[\s\S]*embed\.status === "pending"[\s\S]*embed\.status !== "ready"\) return null;[\s\S]*<CommunityInteractionLinkPreview[^>]*embed=\{embed\}/,
   "interaction embeds should use the shared single-preview policy before rendering pending skeletons or ready cards",
 );
 assert.doesNotMatch(
   feed,
   /community-interaction-embed is-bare/,
   "interaction embeds should not render failed previews as duplicate bare URL cards",
+);
+assert.match(
+  linkPreview,
+  /function approvedVideoUrl[\s\S]*const isLoom[\s\S]*const isYouTube[\s\S]*function VideoLinkPreview[\s\S]*const \[active, setActive\] = useState\(false\)[\s\S]*data-preview-kind="video"[\s\S]*<iframe[\s\S]*sandbox="allow-forms allow-popups allow-presentation allow-same-origin allow-scripts"[\s\S]*Open on \{provider\}/,
+  "video previews should revalidate the player host, defer it until an explicit click, and retain an external fallback",
+);
+assert.match(
+  linkPreview,
+  /function SocialPostLinkPreview[\s\S]*author_name[\s\S]*data-preview-kind="social_post"[\s\S]*community-interaction-embed-social-body[\s\S]*Show more[\s\S]*View on X/,
+  "social previews should render the shared post author and body instead of platform marketing metadata",
+);
+assert.match(
+  linkPreview,
+  /function GenericLinkPreview[\s\S]*data-preview-kind="link"[\s\S]*target="_blank"[\s\S]*rel="noreferrer noopener"/,
+  "unknown providers should retain one safe generic metadata card",
 );
 assert.match(
   feed,
@@ -937,6 +953,11 @@ assert.match(
   baseCss,
   /\.community-interaction-embed\s*\{[\s\S]*max-width:\s*460px;[\s\S]*background:\s*var\(--surface-card\);[\s\S]*\.community-interaction-embed:focus-visible[\s\S]*\.community-interaction-embed-provider\s*\{[\s\S]*color:\s*var\(--text-ink-secondary\);[\s\S]*\.community-interaction-embed-desc\s*\{[\s\S]*-webkit-line-clamp:\s*3;/,
   "embed cards should inherit theme surfaces while keeping provider and description text readable",
+);
+assert.match(
+  baseCss,
+  /\.community-interaction-embed-play:focus-visible[\s\S]*\.community-interaction-embed-player[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*6;[\s\S]*\.community-interaction-embed-social-more/,
+  "typed video and social previews should have bounded, keyboard-visible presentation states",
 );
 assert.match(
   read("shared/linkEmbedUi.tsx"),

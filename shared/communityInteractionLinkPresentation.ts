@@ -18,6 +18,31 @@ const MAX_RICH_INTERACTION_EMBEDS = 1;
 const STANDALONE_HTTP_URL_RE = /^https?:\/\/\S+$/i;
 const TRAILING_URL_PUNCTUATION_RE = /[.,;:!?)\]}'"]+$/;
 
+function stripPresentationTrackingParams(parsed: URL): void {
+  for (const key of Array.from(parsed.searchParams.keys())) {
+    const lower = key.toLowerCase();
+    if (
+      lower.startsWith("utm_") ||
+      lower === "fbclid" ||
+      lower === "gclid" ||
+      lower === "mc_cid" ||
+      lower === "mc_eid"
+    ) {
+      parsed.searchParams.delete(key);
+    }
+  }
+  const hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
+  if (hostname === "x.com" || hostname === "twitter.com") {
+    parsed.hostname = "x.com";
+    for (const key of ["s", "t", "ref_src"]) parsed.searchParams.delete(key);
+  }
+  if (hostname === "loom.com") parsed.searchParams.delete("sid");
+  if (hostname === "youtube.com" || hostname === "youtu.be") {
+    parsed.searchParams.delete("si");
+    parsed.searchParams.delete("feature");
+  }
+}
+
 function canonicalHttpUrl(raw: unknown): string | null {
   const trimmed = String(raw ?? "").trim().replace(TRAILING_URL_PUNCTUATION_RE, "");
   if (!trimmed || !STANDALONE_HTTP_URL_RE.test(trimmed)) return null;
@@ -25,6 +50,7 @@ function canonicalHttpUrl(raw: unknown): string | null {
     const parsed = new URL(trimmed);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
     parsed.hash = "";
+    stripPresentationTrackingParams(parsed);
     return parsed.toString();
   } catch {
     return null;

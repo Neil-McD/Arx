@@ -356,14 +356,21 @@ Rules:
 - the source URL fetcher remains authoritative for DNS resolution checks, public-address pinning, and redirect target revalidation
 - enrichment requests must include byte, character, timeout, redirect, and accept-header bounds
 - fetcher responses must be read with a bounded response cap before JSON parsing
+- interaction embed requests may opt into one additional bounded oEmbed fetch only when the source provider, discovered endpoint, and returned player host are all on the explicit Loom, YouTube, or X allowlist
+- ordinary resource/source ingestion does not opt into interaction oEmbed resolution and keeps its existing single-fetch behavior
+- oEmbed contributes normalized fields only (`video`, `social_post`, or `link` plus bounded author, title, body, media, and approved player URL); raw provider HTML and scripts are never persisted or rendered
+- content-specific oEmbed fields win over platform-level Open Graph marketing fields; unsupported providers and failed or malformed oEmbed responses fall back to the existing Open Graph link card
 - returned preview image URLs must pass the same shared community source URL policy or be omitted
-- enrichment failures patch the embed to `failed`; they do not fail or mutate the canonical root/reply text
+- fresh enrichment failures patch the embed to `failed`; they do not fail or mutate the canonical root/reply text
+- versioned stale-preview refreshes are idempotent, skip redacted rows, and preserve an existing usable ready card plus its retry eligibility if refreshed resolution fails
 - renderers treat link blocks as derived preview metadata when canonical `markdown_text` already contains the URL; they must not append the URL a second time
 - failed preview embeds render no fallback card when the canonical message text already preserves the clickable URL
 - renderers show at most one rich preview per message; additional links remain visible in canonical message text
 - a ready rich preview replaces its matching exact standalone URL line at that authored position; it must not move surrounding copy or remove the same URL when it appears inside prose
 - previews without an exact ready standalone URL match retain the trailing position after canonical attachments, preserving pending, inline-link, workspace-reference, and attachment ordering
 - exact consecutive standalone duplicates collapse at presentation time without mutating stored message text
+- tracking-only URL differences are ignored for exact standalone replacement, while content-bearing parameters such as video start time remain significant
+- approved video players are click-to-activate, sandboxed, and retain a direct provider link; social previews render normalized author/body/media without loading third-party widget JavaScript
 - default dark and Polynet dark share one semantic chat-link treatment while their surface tokens continue to theme embed cards
 
 Bounded chat formatting rules:

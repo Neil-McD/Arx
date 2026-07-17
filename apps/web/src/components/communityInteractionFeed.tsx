@@ -8,6 +8,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { EmojiPickerButton, QUICK_REACTIONS, ReactionSummary } from "./communityInteractionRowParts";
+import { CommunityInteractionLinkPreview } from "./CommunityInteractionLinkPreview";
 import { groupInteractionFeed } from "./groupInteractionFeed";
 import type { WebCommunityInteractionProjectionProps } from "./WebCommunityInteractionProjection";
 import type {
@@ -275,27 +276,7 @@ export function EmbedCards(props: { embeds: CommunityInteractionEmbed[] }) {
           );
         }
         if (embed.status !== "ready") return null;
-        const href = embed.source_url ?? undefined;
-        const provider = embed.provider || hostnameOf(embed.source_url);
-        return (
-          <a
-            key={embed.id}
-            className="community-interaction-embed"
-            href={href}
-            target="_blank"
-            rel="noreferrer noopener"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {embed.image_url ? (
-              <img className="community-interaction-embed-media" src={embed.image_url} alt="" loading="lazy" />
-            ) : null}
-            <div className="community-interaction-embed-text">
-              {provider ? <span className="community-interaction-embed-provider">{provider}</span> : null}
-              {embed.title ? <span className="community-interaction-embed-title">{embed.title}</span> : null}
-              {embed.description ? <span className="community-interaction-embed-desc">{embed.description}</span> : null}
-            </div>
-          </a>
-        );
+        return <CommunityInteractionLinkPreview key={embed.id} embed={embed} />;
       })}
     </div>
   );

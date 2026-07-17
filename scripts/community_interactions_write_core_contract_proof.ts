@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
+const interactionEmbedRefresh = readFileSync(join(root, "convex/communityInteractionEmbedRefresh.ts"), "utf8");
 const sourceUrlPolicy = readFileSync(join(root, "convex/communitySourceUrlPolicy.ts"), "utf8");
 const communityFacade = readFileSync(join(root, "convex/community.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
@@ -340,28 +341,28 @@ assert.match(
   "link block normalization should require shared safe source URL policy",
 );
 
-const fetchEmbedOpenGraph = interactions.slice(
-  interactions.indexOf("async function fetchEmbedOpenGraph"),
+const fetchEmbedPreview = interactions.slice(
+  interactions.indexOf("async function fetchEmbedPreview"),
   interactions.indexOf("export const enrichInteractionEmbed"),
 );
 assert.match(
-  fetchEmbedOpenGraph,
+  fetchEmbedPreview,
   /const requestedUrl = requireSafeCommunitySourceUrl\(sourceUrl, MAX_INTERACTION_URL_CHARS\)/,
   "embed enrichment should revalidate the source URL before broker handoff",
 );
 assert.match(
-  fetchEmbedOpenGraph,
+  fetchEmbedPreview,
   /fetchInteractionEmbedWithTimeout\(resolveInteractionEmbedSourceFetcherEndpoint\(\),[\s\S]*headers: interactionEmbedSourceFetcherHeaders\(\)/,
   "embed enrichment should only call the configured first-party fetcher endpoint",
 );
 assert.doesNotMatch(
-  fetchEmbedOpenGraph,
+  fetchEmbedPreview,
   /\bfetch\s*\(\s*(sourceUrl|requestedUrl)|process\.env/,
   "embed enrichment must not directly fetch user URLs or read raw process env",
 );
 assert.match(
-  fetchEmbedOpenGraph,
-  /max_bytes: INTERACTION_EMBED_SOURCE_FETCHER_MAX_BYTES[\s\S]*max_chars: INTERACTION_EMBED_SOURCE_FETCHER_MAX_CHARS[\s\S]*timeout_ms: INTERACTION_EMBED_SOURCE_FETCHER_TIMEOUT_MS[\s\S]*max_redirects: INTERACTION_EMBED_SOURCE_FETCHER_MAX_REDIRECTS/,
+  fetchEmbedPreview,
+  /max_bytes: INTERACTION_EMBED_SOURCE_FETCHER_MAX_BYTES[\s\S]*max_chars: INTERACTION_EMBED_SOURCE_FETCHER_MAX_CHARS[\s\S]*timeout_ms: INTERACTION_EMBED_SOURCE_FETCHER_TIMEOUT_MS[\s\S]*max_redirects: INTERACTION_EMBED_SOURCE_FETCHER_MAX_REDIRECTS[\s\S]*preview_mode: "interaction_embed_v2"/,
   "embed enrichment should send bounded fetcher limits",
 );
 assert.match(
@@ -370,21 +371,36 @@ assert.match(
   "embed enrichment redirect cap should not exceed the first-party broker hard cap",
 );
 assert.match(
-  fetchEmbedOpenGraph,
-  /readEmbedFetcherJsonBounded\(response\)[\s\S]*sanitizeEmbedImageUrl\(payload\.og_image\)/,
-  "embed enrichment should bound fetcher JSON and sanitize returned image URLs",
+  fetchEmbedPreview,
+  /readEmbedFetcherJsonBounded\(response\)[\s\S]*sanitizeEmbedVideoUrl\(payload\.preview_video_url, requestedUrl\)[\s\S]*sanitizeEmbedImageUrl\(payload\.preview_image \?\? payload\.og_image\)/,
+  "embed enrichment should bound fetcher JSON and sanitize returned image and player URLs",
 );
 
 const enrichInteractionEmbed = exportedConstBlock(interactions, "enrichInteractionEmbed");
 assert.match(
   enrichInteractionEmbed,
-  /internalAction\(\{[\s\S]*fetchEmbedOpenGraph/,
+  /internalAction\(\{[\s\S]*fetchEmbedPreview/,
   "external URL fetching should be isolated to the internal embed enrichment action",
 );
 assert.match(
   enrichInteractionEmbed,
-  /const sourceUrl = requireSafeCommunitySourceUrl\(embed\.sourceUrl, MAX_INTERACTION_URL_CHARS\)[\s\S]*fetchEmbedOpenGraph\(sourceUrl\)[\s\S]*error: boundedEmbedError/,
+  /const sourceUrl = requireSafeCommunitySourceUrl\(embed\.sourceUrl, MAX_INTERACTION_URL_CHARS\)[\s\S]*fetchEmbedPreview\(sourceUrl\)[\s\S]*previewKind: preview\.previewKind[\s\S]*error: boundedEmbedError/,
   "internal embed enrichment action should fail closed on unsafe URLs and bounded errors",
+);
+assert.match(
+  interactions,
+  /export const applyInteractionEmbedEnrichment = internalMutation\(\{[\s\S]*embed\.status === "redacted"[\s\S]*isStaleRefresh[\s\S]*isPending \? \{ status: "failed" as const \} : \{\}[\s\S]*isPending && args\.resolverVersion[\s\S]*previewKind: args\.previewKind \?\? "link"/,
+  "typed preview refreshes should never revive redacted rows, replace a usable stale card with a failed state, or mark a failed stale refresh complete",
+);
+assert.match(
+  interactionEmbedRefresh,
+  /scheduleStaleInteractionEmbedPreviewRefresh = internalMutation\(\{[\s\S]*paginationOptsValidator[\s\S]*query\("communityInteractionEmbeds"\)[\s\S]*embed\.status !== "ready" && embed\.status !== "failed"[\s\S]*embed\.resolverVersion === INTERACTION_EMBED_RESOLVER_VERSION[\s\S]*refresh: true[\s\S]*continueCursor/,
+  "legacy preview refresh should be internal, paginated, version-gated, and retry only eligible ready or failed link rows",
+);
+assert.match(
+  interactionEmbedRefresh,
+  /SUPPORTED_SOURCE_HOSTS = new Set\(\[[\s\S]*"loom\.com"[\s\S]*"youtube\.com"[\s\S]*"x\.com"[\s\S]*"twitter\.com"[\s\S]*isSupportedSourceUrl/,
+  "legacy preview refresh should only schedule providers supported by the typed resolver",
 );
 
 assert.match(

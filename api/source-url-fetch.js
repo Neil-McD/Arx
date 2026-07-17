@@ -2,6 +2,11 @@ import dns from "node:dns";
 import https from "node:https";
 import net from "node:net";
 import { timingSafeEqual } from "node:crypto";
+import {
+  extractInteractionOEmbedDiscoveryUrl,
+  interactionPreviewOpenGraphFallback,
+  normalizeInteractionOEmbedPreview,
+} from "./source-url-preview.mjs";
 
 const BROKER_SECRET_ENV = "ARX_SOURCE_URL_FETCHER_SECRET";
 const USER_AGENT = "Polynet Community Source Ingestion/1.0";
@@ -470,6 +475,7 @@ function extractOpenGraph(html, finalUrl) {
   const ogTitle = extractMetaContent(html, ["og:title", "twitter:title"]) || extractTitleFromHtml(html);
   const ogDescription = extractMetaContent(html, ["og:description", "twitter:description", "description"]);
   let ogImage = extractMetaContent(html, ["og:image", "og:image:url", "og:image:secure_url", "twitter:image", "twitter:image:src"]);
+  const ogImageAlt = extractMetaContent(html, ["og:image:alt", "twitter:image:alt"]);
   if (ogImage) {
     try {
       ogImage = new URL(ogImage, finalUrl).toString();
@@ -477,7 +483,36 @@ function extractOpenGraph(html, finalUrl) {
       ogImage = null;
     }
   }
-  return { og_title: ogTitle, og_description: ogDescription, og_image: ogImage };
+  return {
+    og_title: ogTitle,
+    og_description: ogDescription,
+    og_image: ogImage,
+    og_image_alt: ogImageAlt,
+  };
+}
+
+async function resolveInteractionEmbedPreview(fetched, openGraph, options) {
+  const fallback = interactionPreviewOpenGraphFallback(openGraph);
+  const oEmbedUrl = extractInteractionOEmbedDiscoveryUrl(fetched.rawText, fetched.finalUrl);
+  if (!oEmbedUrl) return fallback;
+  try {
+    const oEmbedResponse = await fetchSourceUrl(oEmbedUrl, {
+      maxBytes: 64_000,
+      maxChars: 8_000,
+      timeoutMs: Math.min(options.timeoutMs, 6_000),
+      maxRedirects: Math.min(options.maxRedirects, 1),
+      accept: "application/json",
+    });
+    if (!normalizeContentType(oEmbedResponse.contentType).includes("application/json")) return fallback;
+    const oEmbed = JSON.parse(oEmbedResponse.rawText || "{}");
+    return normalizeInteractionOEmbedPreview({
+      sourceUrl: fetched.finalUrl,
+      openGraph,
+      oEmbed,
+    });
+  } catch {
+    return fallback;
+  }
 }
 
 function extractReadableTextFromHtml(html, maxChars) {
@@ -558,7 +593,10 @@ export default async function handler(req, res) {
       /<head[\s>]/i.test(fetched.rawText);
     const openGraph = isHtml
       ? extractOpenGraph(fetched.rawText, fetched.finalUrl)
-      : { og_title: null, og_description: null, og_image: null };
+      : { og_title: null, og_description: null, og_image: null, og_image_alt: null };
+    const interactionPreview = payload.preview_mode === "interaction_embed_v2"
+      ? await resolveInteractionEmbedPreview(fetched, openGraph, options)
+      : null;
     sendJson(res, 200, {
       ok: true,
       final_url: fetched.finalUrl,
@@ -566,6 +604,7 @@ export default async function handler(req, res) {
       title: extracted.title,
       text: extracted.text,
       ...openGraph,
+      ...(interactionPreview ?? {}),
     });
   } catch (error) {
     const isKnown = error instanceof SourceFetchError;

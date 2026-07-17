@@ -11009,6 +11009,159 @@ button.community-launch-knowledge-integration-chip:disabled {
   max-width: 460px;
 }
 
+.community-interaction-embed.is-video,
+.community-interaction-embed.is-social-post {
+  width: min(100%, 460px);
+}
+
+.community-interaction-embed-play {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: var(--bg-card);
+  color: var(--text-ink-primary);
+  cursor: pointer;
+}
+
+.community-interaction-embed-play:focus-visible,
+.community-interaction-embed-external:focus-visible,
+.community-interaction-embed-social-more:focus-visible,
+.community-interaction-embed-social-media-link:focus-visible,
+.community-interaction-embed-social-footer:focus-visible {
+  outline: 2px solid var(--chat-link);
+  outline-offset: 2px;
+}
+
+.community-interaction-embed.is-video .community-interaction-embed-media,
+.community-interaction-embed-player,
+.community-interaction-embed-player iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.community-interaction-embed.is-video .community-interaction-embed-media {
+  max-height: none;
+  object-fit: cover;
+}
+
+.community-interaction-embed.is-video .community-interaction-embed-media.is-empty {
+  background: color-mix(in srgb, var(--surface-card) 78%, var(--stroke-default) 22%);
+}
+
+.community-interaction-embed-player iframe {
+  height: 100%;
+  border: 0;
+  background: #000;
+}
+
+.community-interaction-embed-play-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, #fff 72%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, #050505 78%, transparent);
+  color: #fff;
+  transform: translate(-50%, -50%);
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.community-interaction-embed-play:hover .community-interaction-embed-play-icon {
+  background: color-mix(in srgb, #050505 90%, transparent);
+  transform: translate(-50%, -50%) scale(1.05);
+}
+
+.community-interaction-embed-external,
+.community-interaction-embed-social-footer {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 5px;
+  color: var(--chat-link);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.community-interaction-embed-external:hover,
+.community-interaction-embed-social-footer:hover {
+  color: var(--chat-link-hover);
+}
+
+.community-interaction-embed.is-social-post {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.community-interaction-embed-social-header {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.community-interaction-embed-social-author {
+  overflow: hidden;
+  color: var(--text-ink-primary);
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-interaction-embed-social-body {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-ink-primary);
+  font-size: 14px;
+  line-height: 1.48;
+  white-space: pre-line;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+}
+
+.community-interaction-embed-social-body.is-expanded {
+  display: block;
+  overflow: visible;
+}
+
+.community-interaction-embed-social-more {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--chat-link);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.community-interaction-embed-social-media-link {
+  display: block;
+  margin: 0 -12px;
+  border-block: 1px solid var(--stroke-default);
+}
+
+.community-interaction-embed.is-social-post .community-interaction-embed-media {
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+}
+
+.community-interaction-embed-social-footer {
+  justify-self: start;
+}
+
 /* Layered collapse: when the chat area itself is too narrow for feed + drawer
    side-by-side, the drawer takes over the area (back arrow returns to chat).
    Keyed to the projection's own width (container query) so it triggers based on
