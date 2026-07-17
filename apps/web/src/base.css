@@ -10937,7 +10937,9 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-embeds {
-  --community-interaction-embed-max-width: 380px;
+  --community-interaction-embed-max-width: 340px;
+  --community-interaction-embed-row-height: 88px;
+  --community-interaction-embed-media-width: 118px;
   margin-top: 8px;
   display: grid;
   gap: 6px;
@@ -10979,6 +10981,8 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-interaction-embed-text {
   display: grid;
+  min-width: 0;
+  align-content: center;
   gap: 3px;
   padding: 8px 10px;
 }
@@ -10990,10 +10994,14 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-embed-title {
+  display: -webkit-box;
+  overflow: hidden;
   color: var(--text-ink-primary);
   font-size: 13px;
   font-weight: 650;
   line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .community-interaction-embed-desc {
@@ -11003,17 +11011,31 @@ button.community-launch-knowledge-integration-chip:disabled {
   font-size: 13px;
   line-height: 1.42;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 1;
 }
 
 .community-interaction-embed.is-pending {
-  height: 52px;
+  height: var(--community-interaction-embed-row-height);
   max-width: var(--community-interaction-embed-max-width);
 }
 
 .community-interaction-embed.is-video,
-.community-interaction-embed.is-social-post {
+.community-interaction-embed.is-social-post,
+.community-interaction-embed.is-link {
   width: min(100%, var(--community-interaction-embed-max-width));
+}
+
+.community-interaction-embed-summary,
+.community-interaction-embed.is-link,
+.community-interaction-embed.is-social-post {
+  min-height: var(--community-interaction-embed-row-height);
+}
+
+.community-interaction-embed-summary,
+.community-interaction-embed.is-link.has-media,
+.community-interaction-embed.is-social-post.has-media {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--community-interaction-embed-media-width);
 }
 
 .community-interaction-embed-play {
@@ -11027,6 +11049,25 @@ button.community-launch-knowledge-integration-chip:disabled {
   cursor: pointer;
 }
 
+.community-interaction-embed-summary .community-interaction-embed-play {
+  min-height: var(--community-interaction-embed-row-height);
+  border-left: 1px solid var(--stroke-default);
+}
+
+.community-interaction-embed-summary .community-interaction-embed-media,
+.community-interaction-embed.is-link.has-media > .community-interaction-embed-media {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: var(--community-interaction-embed-row-height);
+  max-height: none;
+  object-fit: cover;
+}
+
+.community-interaction-embed.is-link.has-media > .community-interaction-embed-media {
+  border-left: 1px solid var(--stroke-default);
+}
+
 .community-interaction-embed-play:focus-visible,
 .community-interaction-embed-external:focus-visible,
 .community-interaction-embed-social-more:focus-visible,
@@ -11036,7 +11077,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   outline-offset: 2px;
 }
 
-.community-interaction-embed.is-video .community-interaction-embed-media,
 .community-interaction-embed-player,
 .community-interaction-embed-player iframe {
   display: block;
@@ -11044,12 +11084,8 @@ button.community-launch-knowledge-integration-chip:disabled {
   aspect-ratio: 16 / 9;
 }
 
-.community-interaction-embed.is-video .community-interaction-embed-media {
-  max-height: none;
-  object-fit: cover;
-}
-
 .community-interaction-embed.is-video .community-interaction-embed-media.is-empty {
+  display: block;
   background: color-mix(in srgb, var(--surface-card) 78%, var(--stroke-default) 22%);
 }
 
@@ -11064,8 +11100,8 @@ button.community-launch-knowledge-integration-chip:disabled {
   top: 50%;
   left: 50%;
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   border: 1px solid color-mix(in srgb, #fff 72%, transparent);
   border-radius: 999px;
@@ -11098,9 +11134,15 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-embed.is-social-post {
+  padding: 0;
+}
+
+.community-interaction-embed-social-content {
   display: grid;
-  gap: 8px;
-  padding: 10px;
+  min-width: 0;
+  align-content: center;
+  gap: 3px;
+  padding: 7px 10px;
 }
 
 .community-interaction-embed-social-header {
@@ -11124,11 +11166,11 @@ button.community-launch-knowledge-integration-chip:disabled {
   display: -webkit-box;
   overflow: hidden;
   color: var(--text-ink-primary);
-  font-size: 13px;
-  line-height: 1.42;
+  font-size: 12px;
+  line-height: 1.35;
   white-space: pre-line;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 2;
 }
 
 .community-interaction-embed-social-body.is-expanded {
@@ -11143,25 +11185,64 @@ button.community-launch-knowledge-integration-chip:disabled {
   background: transparent;
   color: var(--chat-link);
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
 }
 
+.community-interaction-embed-social-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
 .community-interaction-embed-social-media-link {
   display: block;
-  margin: 0 -10px;
-  border-block: 1px solid var(--stroke-default);
+  height: var(--community-interaction-embed-row-height);
+  min-height: var(--community-interaction-embed-row-height);
+  overflow: hidden;
+  border-left: 1px solid var(--stroke-default);
 }
 
 .community-interaction-embed.is-social-post .community-interaction-embed-media {
   width: 100%;
-  max-height: 190px;
+  height: 100%;
+  min-height: var(--community-interaction-embed-row-height);
+  max-height: none;
   object-fit: cover;
 }
 
+.community-interaction-embed.is-social-post.is-expanded .community-interaction-embed-social-media-link {
+  height: var(--community-interaction-embed-row-height);
+  min-height: 0;
+  align-self: start;
+}
+
+.community-interaction-embed.is-social-post.is-expanded .community-interaction-embed-media {
+  min-height: 0;
+}
+
 .community-interaction-embed-social-footer {
-  justify-self: start;
+  flex: 0 0 auto;
+  font-size: 11px;
+}
+
+@container community-chat-area (max-width: 420px) {
+  .community-interaction-embeds {
+    --community-interaction-embed-max-width: 100%;
+    --community-interaction-embed-media-width: 96px;
+  }
+}
+
+@container community-chat-area (max-width: 320px) {
+  .community-interaction-embeds {
+    --community-interaction-embed-media-width: 84px;
+  }
+
+  .community-interaction-embed-social-actions {
+    gap: 5px;
+  }
 }
 
 /* Layered collapse: when the chat area itself is too narrow for feed + drawer
