@@ -57,6 +57,17 @@ const dmAttachmentUploadMutation = directMessages.slice(
   directMessages.indexOf("export const generateDirectMessageAttachmentUploadUrl"),
   directMessages.indexOf("export const sendDirectMessage"),
 );
+const dmExistingConversationSendMutation = directMessages.slice(
+  directMessages.indexOf("export const sendDirectMessage = mutation"),
+  directMessages.indexOf("export const sendDirectMessageToUser = mutation"),
+);
+const dmFirstSendMutation = directMessages.slice(
+  directMessages.indexOf("export const sendDirectMessageToUser = mutation"),
+  directMessages.indexOf("export const blockDirectMessageUser = mutation"),
+);
+const dmFirstAttachmentUploadMutation = directMessages.slice(
+  directMessages.indexOf("export const generateDirectMessageAttachmentUploadUrlForUser = mutation"),
+);
 const dmSetTypingMutation = directMessages.slice(
   directMessages.indexOf("export const setDirectTyping"),
   directMessages.indexOf("export const clearDirectTyping"),
@@ -126,7 +137,8 @@ assert.match(directMessages, /async function requireDirectMessageRelationshipAcc
 assert.match(directMessages, /requiredCommunityId\?: any \| null/, "DM creation must be able to require a specific source community for new rooms");
 assert.match(directMessages, /requiredCommunityId: isNewConversation \? args\.communityId : null/, "new DM rooms must require the requested community while existing rooms can reopen through any current mutual community");
 assert.match(directMessages, /throw new Error\("dm_target_self"\)/, "users must not open self-DMs");
-assert.match(directMessages, /requireProfileSetupCompleteForUser\(ctx, viewerUserId\)/, "DM writes must require profile setup");
+assert.doesNotMatch(directMessages, /requireProfileSetupCompleteForUser|accountSetupCore/, "DM authorization must stay independent of public-profile completion");
+assert.match(dmEnsureConversationMutation, /requireDirectMessageRelationshipAccess/, "DM opens must retain current shared-community relationship access");
 assert.match(directMessages, /listMyDirectConversations = query/, "backend must expose current-user DM inbox query even if UI inbox is deferred");
 assert.doesNotMatch(directMessages, /listEligibleDirectMessageRecipients = query/, "backend must not keep the deleted community-scoped recipient lookup");
 assert.doesNotMatch(directMessages, /listEligibleDirectMessageRecipientsForViewer = query/, "backend must not keep the deleted eager global recipient lookup");
@@ -191,7 +203,7 @@ assert.match(directMessages, /setDirectTyping = mutation/, "backend must expose 
 assert.match(directMessages, /clearDirectTyping = mutation/, "backend must expose a DM typing clear mutation");
 assert.match(directMessages, /listDirectTyping = query/, "backend must expose a live DM typing query");
 assert.match(dmSetTypingMutation, /requireActiveUserParticipant/, "typing writes must require active conversation participation");
-assert.match(dmSetTypingMutation, /requireProfileSetupCompleteForUser\(ctx, viewerUserId\)/, "typing writes must require profile setup like message sends");
+assert.doesNotMatch(dmSetTypingMutation, /requireProfileSetupCompleteForUser|profile_setup_required/, "typing writes must not depend on public-profile completion");
 assert.match(dmSetTypingMutation, /requireDirectConversationSendAccess/, "typing writes must require current DM send access");
 assert.match(dmSetTypingMutation, /DM_TYPING_DISPLAY_WINDOW_MS/, "typing writes must set a bounded display TTL");
 assert.match(dmSetTypingMutation, /query\("dmTypingPresence" as any\)[\s\S]*withIndex\("by_conversation_user"/, "typing writes must upsert by conversation and user");
@@ -208,11 +220,17 @@ assert.match(account, /dmTypingPresence/, "account deletion must clean DM typing
 assert.match(anonymousCleanup, /dmTypingPresence/, "anonymous cleanup must include DM typing presence rows");
 assert.match(directMessages, /sendDirectMessage = mutation/, "backend must expose direct message sending");
 assert.match(directMessages, /sendDirectMessageToUser = mutation/, "backend must support a first send without eagerly creating an empty conversation");
+assert.match(dmExistingConversationSendMutation, /requireActiveUserParticipant[\s\S]*requireDirectConversationSendAccess/, "existing-conversation sends must require active participation and current relationship access");
+assert.doesNotMatch(dmExistingConversationSendMutation, /requireProfileSetupCompleteForUser|profile_setup_required/, "existing-conversation sends must not depend on public-profile completion");
+assert.match(dmFirstSendMutation, /requireDirectMessageRelationshipAccess/, "first sends must require current shared-community relationship access");
+assert.doesNotMatch(dmFirstSendMutation, /requireProfileSetupCompleteForUser|profile_setup_required/, "first sends must not depend on public-profile completion");
 assert.match(directMessages, /generateDirectMessageAttachmentUploadUrl = mutation/, "backend must expose a DM attachment upload URL mutation");
 assert.match(dmAttachmentUploadMutation, /requireActiveUserParticipant/, "DM attachment upload must require active conversation participation");
-assert.match(dmAttachmentUploadMutation, /requireProfileSetupCompleteForUser\(ctx, viewerUserId\)/, "DM attachment upload must require profile setup");
+assert.doesNotMatch(dmAttachmentUploadMutation, /requireProfileSetupCompleteForUser|profile_setup_required/, "DM attachment upload must not depend on public-profile completion");
 assert.match(dmAttachmentUploadMutation, /requireDirectConversationSendAccess/, "DM attachment upload must require current send access");
 assert.match(dmAttachmentUploadMutation, /ctx\.storage\.generateUploadUrl/, "DM attachment upload must use Convex storage upload URLs");
+assert.match(dmFirstAttachmentUploadMutation, /requireDirectMessageRelationshipAccess/, "first-message attachment uploads must require current shared-community relationship access");
+assert.doesNotMatch(dmFirstAttachmentUploadMutation, /requireProfileSetupCompleteForUser|profile_setup_required/, "first-message attachment uploads must not depend on public-profile completion");
 assert.match(directMessages, /async function requireDirectConversationSendAccess/, "DM sends must have a continuous access guard");
 assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*throw new Error\("dm_conversation_access_required"\)/, "DM send access guard must fail closed with a named policy error");
 assert.match(directMessages, /requireDirectConversationSendAccess[\s\S]*listConversationParticipants[\s\S]*participantType === "user"[\s\S]*peerParticipants\.length !== 1/, "DM send access guard must require exactly one active human peer");

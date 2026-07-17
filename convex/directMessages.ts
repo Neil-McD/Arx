@@ -11,7 +11,6 @@ import {
   type CommunityMembershipLike,
 } from "./communityCore";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
-import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
 import { resolveViewerDirectMessageRelationship } from "./profileRelationshipCore";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import { stripChatInlineMarkdown } from "../shared/chatInlineMarkdown";
@@ -434,6 +433,9 @@ async function requireDirectMessageRelationshipAccess(args: {
   preferredCommunityId?: any | null;
   requiredCommunityId?: any | null;
 }): Promise<string> {
+  // DM write access is defined by authenticated relationship, entitlement,
+  // block, participant, and rate/payload checks. Public-profile completeness
+  // is presentation state and must not become an authorization boundary.
   // Blocks fail with the same error as a missing mutual community so a block
   // is never revealed to the blocked side.
   if (await directMessageBlockExistsBetween(args.ctx, args.viewerUserId, args.targetUserId)) {
@@ -1059,8 +1061,6 @@ export const ensureDirectConversationFromCommunity = mutation({
       throw new Error("dm_target_self");
     }
 
-    await requireProfileSetupCompleteForUser(ctx, viewerUserId);
-
     const nowMs = Date.now();
     const canonicalKey = buildDirectConversationCanonicalKey(viewerUserId, targetUser._id);
     let conversation = await findDirectConversationByUsers(ctx, viewerUserId, targetUser._id);
@@ -1405,7 +1405,6 @@ export const setDirectTyping = mutation({
       conversationId: args.conversationId,
       userId: viewerUserId,
     });
-    await requireProfileSetupCompleteForUser(ctx, viewerUserId);
     await requireDirectConversationSendAccess({
       ctx,
       conversation,
@@ -1560,7 +1559,6 @@ export const generateDirectMessageAttachmentUploadUrl = mutation({
       conversationId: args.conversationId,
       userId: viewerUserId,
     });
-    await requireProfileSetupCompleteForUser(ctx, viewerUserId);
     await requireDirectConversationSendAccess({
       ctx,
       conversation,
@@ -1590,7 +1588,6 @@ export const sendDirectMessage = mutation({
       conversationId: args.conversationId,
       userId: viewerUserId,
     });
-    await requireProfileSetupCompleteForUser(ctx, viewerUserId);
     await requireDirectConversationSendAccess({
       ctx,
       conversation,
@@ -1647,8 +1644,6 @@ export const sendDirectMessageToUser = mutation({
     if (normalizeIdValue(targetUser._id) === normalizeIdValue(viewerUserId)) {
       throw new Error("dm_target_self");
     }
-    await requireProfileSetupCompleteForUser(ctx, viewerUserId);
-
     const contextCommunityId = await requireDirectMessageRelationshipAccess({
       ctx,
       viewerUserId,
@@ -1788,7 +1783,6 @@ export const generateDirectMessageAttachmentUploadUrlForUser = mutation({
     if (normalizeIdValue(targetUser._id) === normalizeIdValue(viewerUserId)) {
       throw new Error("dm_target_self");
     }
-    await requireProfileSetupCompleteForUser(ctx, viewerUserId);
     await requireDirectMessageRelationshipAccess({
       ctx,
       viewerUserId,
