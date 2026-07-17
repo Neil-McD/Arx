@@ -174,32 +174,6 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
     syncBodyTextareaHeight();
   }, [bodyText, isBodyEditing]);
 
-  useEffect(() => {
-    if (!isEditing || !editor) return;
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (
-        target.closest(
-          [
-            ".resource-viewer-title-input",
-            ".resource-viewer-title-edit-trigger",
-            ".resource-viewer-prose-input",
-            ".resource-viewer-prose-edit-trigger",
-            ".resource-viewer-empty-edit-trigger",
-            ".resource-viewer-edit-actions",
-            ".resource-viewer-pin-toggle",
-          ].join(", "),
-        )
-      ) {
-        return;
-      }
-      editor.onCancel();
-    };
-    document.addEventListener("pointerdown", handlePointerDown, true);
-    return () => document.removeEventListener("pointerdown", handlePointerDown, true);
-  }, [editor, isEditing]);
-
   const beginEdit = (field: WebCommunityResourceInlineEditorField) => {
     if (!editor?.canEdit || editor.isSaving) return;
     if (editor.isEditing) {
@@ -389,16 +363,26 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
             {renderPinControl()}
           </h1>
           <div className="resource-viewer-header-aside">
-            {isEditing && editor?.isDirty ? (
+            {isEditing && editor ? (
               <div className="resource-viewer-edit-actions">
                 <button
-                  className="platform-save-button resource-viewer-edit-save"
+                  className="resource-viewer-edit-cancel"
                   type="button"
-                  onClick={() => void editor.onSave()}
-                  disabled={!editor.canSave}
+                  onClick={() => editor.onCancel()}
+                  disabled={editor.isSaving}
                 >
-                  {editor.isSaving ? "Saving..." : editor.isDirty ? "Save changes" : "Saved"}
+                  Cancel
                 </button>
+                {editor.isDirty ? (
+                  <button
+                    className="platform-save-button resource-viewer-edit-save"
+                    type="button"
+                    onClick={() => void editor.onSave()}
+                    disabled={!editor.canSave}
+                  >
+                    {editor.isSaving ? "Saving..." : "Save changes"}
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>

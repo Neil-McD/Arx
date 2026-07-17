@@ -231,6 +231,16 @@ assert.match(
   /const nextRole = normalizeResourceRole\(nextRoleRaw\)[\s\S]*role: nextRole/,
   "resource updates must persist normalized role",
 );
+assert.doesNotMatch(
+  resourceViewer,
+  /document\.addEventListener\("pointerdown"/,
+  "resource editing must not use a document-wide pointer handler that can discard dirty input before Save runs",
+);
+assert.match(
+  resourceViewer,
+  /resource-viewer-edit-actions[\s\S]*onClick=\{\(\) => editor\.onCancel\(\)\}[\s\S]*Cancel[\s\S]*onClick=\{\(\) => void editor\.onSave\(\)\}[\s\S]*Save changes/,
+  "resource editing must expose explicit Cancel and Save actions that invoke the canonical editor callbacks",
+);
 assert.match(
   resources,
   /status: nextStatus/,
