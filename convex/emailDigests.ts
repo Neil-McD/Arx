@@ -72,15 +72,6 @@ type CommunityResourceRow = {
   createdAt: number;
 };
 
-type CommunityArchiveDocumentRow = {
-  _id: any;
-  sourceType: "chat" | "interaction" | "ai_feed" | "resource";
-  title?: string;
-  snippet: string;
-  url?: string;
-  createdAt: number;
-};
-
 type DigestItemCandidate = {
   priority: number;
   createdAt: number;
@@ -178,13 +169,6 @@ function formatDigestDateLabel(periodStartDay: string, periodEndDay: string): st
     timeZone: "UTC",
   });
   return `${formatter.format(start)} - ${formatter.format(end)}`;
-}
-
-function sourceTypeLabel(sourceType: CommunityArchiveDocumentRow["sourceType"]): string {
-  if (sourceType === "ai_feed") return "AI signal";
-  if (sourceType === "resource") return "Resource";
-  if (sourceType === "interaction") return "Community chat";
-  return "Discussion";
 }
 
 function itemUrlPath(communitySlug: string, tab: "chat" | "ai_feed" | "resources" | "polynet"): string {
@@ -293,22 +277,6 @@ async function listRecentResources(ctx: any, params: {
     });
 }
 
-async function listRecentArchiveDocuments(ctx: any, params: {
-  communityId: any;
-  periodStartMs: number;
-  periodEndMs: number;
-}): Promise<CommunityArchiveDocumentRow[]> {
-  const rows = (await ctx.db
-    .query("communityArchiveDocuments" as any)
-    .withIndex("by_community_createdAt", (q: any) =>
-      q.eq("communityId", params.communityId).gte("createdAt", params.periodStartMs),
-    )
-    .collect()) as CommunityArchiveDocumentRow[];
-  return rows
-    .filter((row) => row.createdAt <= params.periodEndMs)
-    .sort((a, b) => b.createdAt - a.createdAt);
-}
-
 async function countNewActiveMembers(ctx: any, params: {
   communityId: any;
   periodStartMs: number;
@@ -330,7 +298,6 @@ async function countNewActiveMembers(ctx: any, params: {
 function buildDigestItems(args: {
   communitySlug: string;
   aiFeedPosts: CommunityAiFeedPostRow[];
-  archiveDocuments: CommunityArchiveDocumentRow[];
   resources: CommunityResourceRow[];
   chatMessages: CommunityChatMessageRow[];
 }): DigestItemCandidate[] {
@@ -345,16 +312,6 @@ function buildDigestItems(args: {
       summary,
       meta: `AI ${post.type}`,
       urlPath: itemUrlPath(args.communitySlug, "polynet"),
-    });
-  }
-  for (const doc of args.archiveDocuments.slice(0, 4)) {
-    items.push({
-      priority: 300,
-      createdAt: doc.createdAt,
-      title: truncateText(doc.title || "New knowledge added to collective intelligence", 96),
-      summary: truncateText(doc.snippet, 220),
-      meta: `Collective intelligence • ${sourceTypeLabel(doc.sourceType)}`,
-      urlPath: itemUrlPath(args.communitySlug, doc.sourceType === "resource" ? "resources" : "polynet"),
     });
   }
   for (const resource of args.resources.slice(0, 3)) {
@@ -412,7 +369,7 @@ export const buildWeeklyCommunityDigestBatchesInternal = internalQuery({
       const communitySlug = String(community.slug ?? "").trim();
       if (!communitySlug) continue;
 
-      const [chatMessages, aiFeedPosts, resources, archiveDocuments, newMemberCount] = await Promise.all([
+      const [chatMessages, aiFeedPosts, resources, newMemberCount] = await Promise.all([
         listRecentCommunityChatMessages(ctx, {
           communityId: community._id,
           periodStartMs: period.periodStartMs,
@@ -428,11 +385,6 @@ export const buildWeeklyCommunityDigestBatchesInternal = internalQuery({
           periodStartMs: period.periodStartMs,
           periodEndMs: period.periodEndMs,
         }),
-        listRecentArchiveDocuments(ctx, {
-          communityId: community._id,
-          periodStartMs: period.periodStartMs,
-          periodEndMs: period.periodEndMs,
-        }),
         countNewActiveMembers(ctx, {
           communityId: community._id,
           periodStartMs: period.periodStartMs,
@@ -444,7 +396,6 @@ export const buildWeeklyCommunityDigestBatchesInternal = internalQuery({
         chatMessageCount: chatMessages.length,
         aiFeedPostCount: aiFeedPosts.length,
         resourceCount: resources.length,
-        archiveDocumentCount: archiveDocuments.length,
         newMemberCount,
       };
       if (!shouldSendWeeklyDigest(activity)) continue;
@@ -460,7 +411,6 @@ export const buildWeeklyCommunityDigestBatchesInternal = internalQuery({
       const items = buildDigestItems({
         communitySlug,
         aiFeedPosts,
-        archiveDocuments,
         resources,
         chatMessages,
       }).map(({ title, summary, meta, urlPath }) => ({

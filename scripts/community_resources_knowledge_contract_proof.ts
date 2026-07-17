@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   buildCommunityResourceDirectoryFields,
   buildCommunityResourceModuleDirectoryFields,
@@ -12,8 +12,8 @@ function read(path: string): string {
 const schema = read("convex/schema.ts");
 const communityCore = read("convex/communityCore.ts");
 const resources = read("convex/communityResources.ts");
-const archiveDocuments = read("convex/communityArchiveDocuments.ts");
 const archiveRetrieval = read("convex/communityArchiveRetrieval.ts");
+const communityArchive = read("convex/communityArchive.ts");
 const recentContext = read("convex/communityRecentContext.ts");
 const attention = read("convex/communityAttention.ts");
 const emailDigests = read("convex/emailDigests.ts");
@@ -428,25 +428,37 @@ assert.match(
 );
 
 assert.match(
-  archiveDocuments,
-  /communityResourceIsLiveModulePage\(hydratedResource, liveModuleIds\)/,
-  "only pages inside live modules must be archived for community search",
-);
-assert.match(
-  archiveDocuments,
-  /deleteArchiveDocumentBySource\([\s\S]*sourceType: "resource"/,
-  "moving a page out of live module visibility must remove stale archive documents",
+  archiveRetrieval,
+  /archive_context: \[\]/,
+  "broad community search must keep an empty archive field during wire-compatible retirement",
 );
 assert.match(
   archiveRetrieval,
-  /resource_role: doc\.resourceRole/,
-  "archive retrieval must expose resource role to agents",
+  /retrieval_version: "canonical_recent_v1"/,
+  "broad community search must identify canonical recent-table retrieval",
 );
-assert.match(
+assert.doesNotMatch(
   archiveRetrieval,
-  /resource_status: doc\.resourceStatus/,
-  "archive retrieval must expose resource status to agents",
+  /vectorSearch|embedGemini|communityArchiveDocuments/,
+  "broad community search must not execute the legacy embedding archive",
 );
+assert.equal(
+  existsSync("convex/communityArchiveEmbeddingPipeline.ts"),
+  false,
+  "the embedding worker module must remain deleted",
+);
+assert.equal(
+  existsSync("convex/communityArchiveShared.ts"),
+  false,
+  "embedding-only shared constants must remain deleted",
+);
+for (const surface of [communityArchive, communityBarrel, resourceGateway]) {
+  assert.doesNotMatch(
+    surface,
+    /getCommunityArchiveHealth|processCommunityArchivePending|retryCommunityArchiveFailures/,
+    "embedding worker administration must not remain callable",
+  );
+}
 assert.match(
   recentContext,
   /query\("communityResourceModules"[\s\S]*communityResourceIsLiveModulePage/,

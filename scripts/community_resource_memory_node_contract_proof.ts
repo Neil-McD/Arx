@@ -6,7 +6,6 @@ const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const projection = read("convex/communityResourceMemoryProjection.ts");
-const archive = read("convex/communityArchiveDocuments.ts");
 const resources = read("convex/communityResources.ts");
 const wikiArchitect = read("convex/communityWikiArchitect.ts");
 const directory = read("convex/communityIntelligenceDirectory.ts");
@@ -20,8 +19,8 @@ assert.match(packageJson, /"check:community-resource-memory-node-proof"/);
 
 assert.match(projection, /export async function syncCommunityResourceMemoryProjection/);
 assert.match(projection, /export async function revokeCommunityResourceMemoryProjection/);
-assert.match(projection, /const archive = await upsertArchiveDocumentForResource/);
-assert.match(projection, /if \(!archive\.indexed\)[\s\S]*redactCommunityResourceSourceTrace/);
+assert.match(projection, /resolveCommunityResourceEvidenceSource/);
+assert.match(projection, /if \(!resolved\)[\s\S]*redactCommunityResourceSourceTrace/);
 assert.match(projection, /recordTrustedCommunitySourceTraceCore/);
 assert.match(projection, /resolveCommunityEvidenceRefCore/);
 assert.match(projection, /contentHash: evidence\.contentHash/);
@@ -30,7 +29,7 @@ assert.match(projection, /sourceType: "resource"/);
 assert.match(projection, /buildCommunityResourceEvidenceRef/);
 assert.match(projection, /visibilityScope: "community"[\s\S]*sourceVisibility: "community"/);
 assert.match(projection, /actorType: "system"/);
-assert.match(projection, /actorUserId: archive\.resource\.createdByUserId/);
+assert.match(projection, /actorUserId: canonicalResource\.createdByUserId/);
 assert.match(projection, /community_resource_memory_projection/);
 assert.doesNotMatch(projection, /actorAgentKey: "community_agent"/);
 assert.doesNotMatch(projection, /credit|confidence|accept|approve|inference|generateText|embedGemini/);
@@ -54,13 +53,9 @@ assert.match(projection, /COMMUNITY_RESOURCE_TRACE_SUMMARY_MAX_CHARS = 4_000/);
 assert.match(projection, /const existing = await readCommunityResourceSourceTrace/);
 assert.match(projection, /if \(!existing\) return false/);
 assert.match(projection, /visibilityScope: "admin"[\s\S]*sourceVisibility: "redacted"/);
-assert.match(projection, /deleteArchiveDocumentBySource[\s\S]*redactCommunityResourceSourceTrace/);
-
-assert.match(archive, /Promise<\{ indexed: boolean; resource: CommunityResourceLike \}>/);
-assert.match(archive, /communityResourceIsLiveModulePage/);
-assert.match(archive, /return \{ indexed: false, resource: hydratedResource \}/);
-assert.match(archive, /return \{ indexed: true, resource: hydratedResource \}/);
-assert.match(archive, /embeddingStatus: "pending"/);
+assert.doesNotMatch(projection, /communityArchiveDocuments|upsertArchive|deleteArchive/);
+assert.match(projection, /return \{ visible: false, traced, sourceRef \}/);
+assert.match(projection, /return \{ visible: true, traced: true, sourceRef \}/);
 
 assert.match(resources, /from "\.\/communityResourceMemoryProjection"/);
 assert.doesNotMatch(resources, /from "\.\/communityArchiveDocuments"/);

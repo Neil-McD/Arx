@@ -1,14 +1,4 @@
 import { internal } from "./_generated/api";
-import { normalizeIdValue, toIsoString } from "./communityCore";
-import type { ArchiveDocLike } from "./communityArchiveDocuments";
-import { normalizeOptionalText, truncateText } from "./communityArchiveDocuments";
-import { embedGeminiQuery, resolveGeminiEmbeddingConfig } from "./communityArchiveEmbeddingPipeline";
-import { ARCHIVE_VECTOR_LIMIT } from "./communityArchiveShared";
-import {
-  buildCommunityAiFeedEvidenceRef,
-  buildCommunityInteractionEvidenceRef,
-  buildCommunityResourceEvidenceRef,
-} from "../shared/communityEvidenceContract";
 
 async function resolveTrustedSearchUserId(args: {
   ctx: any;
@@ -32,44 +22,11 @@ async function resolveTrustedSearchUserId(args: {
   return resolvedUserId;
 }
 
-function mapArchiveDocToItem(doc: ArchiveDocLike, score: number | null) {
-  const interactionMatch = doc.sourceType === "interaction"
-    ? /^(root|reply):([^\s:]+)$/.exec(doc.sourceId)
-    : null;
-  const sourceId = interactionMatch
-    ? buildCommunityInteractionEvidenceRef({
-        objectType: interactionMatch[1] as "root" | "reply",
-        objectId: interactionMatch[2],
-      })
-    : doc.sourceType === "resource"
-      ? buildCommunityResourceEvidenceRef(doc.sourceId)
-      : doc.sourceType === "ai_feed"
-        ? buildCommunityAiFeedEvidenceRef(doc.sourceId)
-        : doc.sourceId;
-  return {
-    source_type: doc.sourceType,
-    source_id: sourceId,
-    ...(doc.sourceType === "interaction" || doc.sourceType === "resource" || doc.sourceType === "ai_feed"
-      ? { ref: sourceId }
-      : null),
-    title: normalizeOptionalText(doc.title, 180),
-    snippet: doc.snippet,
-    created_at: toIsoString(doc.createdAt),
-    score,
-    ...(doc.authorLabel ? { author_label: doc.authorLabel } : null),
-    ...(doc.url ? { url: doc.url } : null),
-    ...(doc.postType ? { post_type: doc.postType } : null),
-    ...(doc.resourceType ? { resource_type: doc.resourceType } : null),
-    ...(doc.resourceRole ? { resource_role: doc.resourceRole } : null),
-    ...(doc.resourceStatus ? { resource_status: doc.resourceStatus } : null),
-  };
-}
-
-function canonicalEvidenceItemKey(item: Record<string, any>): string {
-  const ref = String(item.ref ?? "").trim();
-  return ref || `${String(item.source_type ?? "")}:${String(item.source_id ?? "")}`;
-}
-
+/**
+ * Compatibility wrapper for the broad community_search tool. Canonical source
+ * tables now own retrieval; archive fields remain empty until the MCP wire
+ * contract is simplified in the archive-deletion slice.
+ */
 export async function searchCommunityKnowledge(args: {
   ctx: any;
   userId?: any;
@@ -90,165 +47,13 @@ export async function searchCommunityKnowledge(args: {
       query: args.query,
     },
   );
-  const queryText = truncateText(args.query, 240);
-  const config = resolveGeminiEmbeddingConfig();
-  const diagnostics = {
-    ...(recent as any).diagnostics,
-    retrieval_version: "recent_context_plus_archive_v2",
-    archive_fetch_ok: false,
-    archive_items_used: 0,
-    archive_documents_available: 0,
-    archive_pending_documents: 0,
-    archive_embedded_documents: 0,
-    archive_failed_documents: 0,
-    archive_ready: false,
-    archive_embedding_model: config.ok ? config.model : null,
-    archive_error: config.ok ? null : config.reason,
-  };
-  if (!queryText || !config.ok) {
-    return {
-      ...(recent as any),
-      archive_context: [],
-      archive_source_counts: { interaction: 0, ai_feed: 0, resource: 0 },
-      diagnostics,
-    };
-  }
-
-  try {
-    const archiveStatusCounts = (await args.ctx.runQuery(
-      internal.communityArchive.getCommunityArchiveStatusCountsInternal as any,
-      { communityId: args.communityId },
-    )) as {
-      total: number;
-      pending: number;
-      embedded: number;
-      failed: number;
-    };
-    diagnostics.archive_documents_available = archiveStatusCounts.total;
-    diagnostics.archive_pending_documents = archiveStatusCounts.pending;
-    diagnostics.archive_embedded_documents = archiveStatusCounts.embedded;
-    diagnostics.archive_failed_documents = archiveStatusCounts.failed;
-    diagnostics.archive_ready = archiveStatusCounts.embedded > 0;
-
-    const queryEmbedding = await embedGeminiQuery({
-      apiKey: config.apiKey,
-      model: config.model,
-      text: queryText,
-    });
-    const vectorHits = await args.ctx.vectorSearch("communityArchiveDocuments" as any, "by_embedding" as any, {
-      vector: queryEmbedding,
-      limit: ARCHIVE_VECTOR_LIMIT,
-      filter: (q: any) => q.eq("communityId", args.communityId),
-    });
-    diagnostics.archive_fetch_ok = true;
-    if (vectorHits.length === 0) {
-      return {
-        ...(recent as any),
-        archive_context: [],
-        archive_source_counts: { interaction: 0, ai_feed: 0, resource: 0 },
-        diagnostics,
-      };
-    }
-
-    const scoreById = new Map<string, number>();
-    for (const hit of vectorHits) {
-      scoreById.set(normalizeIdValue(hit._id), Number(hit._score ?? 0));
-    }
-    const docs = (await args.ctx.runQuery(internal.communityArchive.getCommunityArchiveDocumentsByIdsInternal as any, {
-      ids: vectorHits.map((hit: any) => hit._id),
-    })) as ArchiveDocLike[];
-
-    const seenRecent = new Set<string>(
-      Array.isArray((recent as any).recent_context)
-        ? (recent as any).recent_context.map((item: any) => canonicalEvidenceItemKey(item))
-        : [],
-    );
-    const orderedDocs = docs
-      .filter((doc) => doc.sourceType !== "chat")
-      .slice()
-      .sort(
-        (a, b) =>
-          Number(scoreById.get(normalizeIdValue(b._id)) ?? 0) -
-            Number(scoreById.get(normalizeIdValue(a._id)) ?? 0) ||
-          b.createdAt - a.createdAt,
-      );
-    const refsBySourceType = {
-      interaction: orderedDocs
-        .filter((doc) => doc.sourceType === "interaction")
-        .map((doc) => String(mapArchiveDocToItem(doc, null).ref ?? "")),
-      resource: orderedDocs
-        .filter((doc) => doc.sourceType === "resource")
-        .map((doc) => String(mapArchiveDocToItem(doc, null).ref ?? "")),
-      ai_feed: orderedDocs
-        .filter((doc) => doc.sourceType === "ai_feed")
-        .map((doc) => String(mapArchiveDocToItem(doc, null).ref ?? "")),
-    };
-    const [readableInteractionItems, readableResourceItems, readableAiFeedItems] = await Promise.all([
-      refsBySourceType.interaction.length > 0
-        ? args.ctx.runQuery(
-            (internal as any).communityInteractionEvidence.readCommunityInteractionEvidenceItemsInternal,
-            { userId, communityId: args.communityId, refs: refsBySourceType.interaction },
-          )
-        : [],
-      refsBySourceType.resource.length > 0
-        ? args.ctx.runQuery(
-            (internal as any).communityResourceEvidence.readCommunityResourceEvidenceItemsInternal,
-            { userId, communityId: args.communityId, refs: refsBySourceType.resource },
-          )
-        : [],
-      refsBySourceType.ai_feed.length > 0
-        ? args.ctx.runQuery(
-            (internal as any).communityAiFeedEvidence.readCommunityAiFeedEvidenceItemsInternal,
-            { userId, communityId: args.communityId, refs: refsBySourceType.ai_feed },
-          )
-        : [],
-    ]) as [Array<Record<string, any>>, Array<Record<string, any>>, Array<Record<string, any>>];
-    const readableByRef = new Map(
-      [...readableInteractionItems, ...readableResourceItems, ...readableAiFeedItems].map((item) => [
-        String(item.ref ?? ""),
-        item,
-      ]),
-    );
-    const archiveItems = orderedDocs
-      .map((doc) => {
-        const score = Number(scoreById.get(normalizeIdValue(doc._id)) ?? 0);
-        const basicItem = mapArchiveDocToItem(doc, score);
-        const item = readableByRef.get(String(basicItem.ref ?? ""));
-        if (!item) return null;
-        const itemWithScore: Record<string, any> = { ...item, score };
-        return {
-          key: canonicalEvidenceItemKey(item),
-          item: itemWithScore,
-        };
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
-      .filter(({ key }) => !seenRecent.has(key));
-
-    const archive_context = archiveItems.map((entry) => entry.item);
-    diagnostics.archive_items_used = archive_context.length;
-    return {
-      ...(recent as any),
-      archive_context,
-      archive_source_counts: {
-        interaction: archive_context.filter((item) => item.source_type === "interaction").length,
-        ai_feed: archive_context.filter((item) => item.source_type === "ai_feed").length,
-        resource: archive_context.filter((item) => item.source_type === "resource").length,
-      },
-      diagnostics,
-    };
-  } catch (error) {
-    diagnostics.archive_fetch_ok = false;
-    diagnostics.archive_error = truncateText(
-      error instanceof Error ? error.message : "archive_retrieval_failed",
-      500,
-    );
-    diagnostics.archive_items_used = 0;
-  }
-
   return {
-    ...(recent as any),
+    ...recent,
     archive_context: [],
     archive_source_counts: { interaction: 0, ai_feed: 0, resource: 0 },
-    diagnostics,
+    diagnostics: {
+      ...(recent?.diagnostics ?? {}),
+      retrieval_version: "canonical_recent_v1",
+    },
   };
 }

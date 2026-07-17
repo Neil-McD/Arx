@@ -11,15 +11,7 @@ import {
   type CommunityResourceModuleLike,
 } from "./communityCore";
 import { hydrateCommunityResourceBody } from "./communityResourceContent";
-import {
-  type ArchiveDocLike,
-  truncateText,
-} from "./communityArchiveDocuments";
-import {
-  embedGeminiQuery,
-  resolveGeminiEmbeddingConfig,
-} from "./communityArchiveEmbeddingPipeline";
-import { ARCHIVE_VECTOR_LIMIT } from "./communityArchiveShared";
+import { truncateText } from "./communityText";
 import {
   communityEvidenceSurfaceValidator,
   resolveTrustedCommunityEvidenceUserId,
@@ -42,7 +34,6 @@ type CommunityRow = {
 
 const RECENT_RESOURCE_SCAN_LIMIT = 80;
 const RESOURCE_MODULE_SCAN_LIMIT = 500;
-const RESOURCE_ARCHIVE_VECTOR_LIMIT = Math.max(ARCHIVE_VECTOR_LIMIT, 64);
 
 function normalizeResourceSearchLimit(raw: unknown): number {
   const parsed = Math.floor(Number(raw ?? 10));
@@ -264,70 +255,7 @@ export const searchCommunityResourceEvidenceInternal = internalAction({
       (internal as any).communityResourceEvidence.searchRecentCommunityResourceEvidenceInternal,
       { userId, communityId: args.communityId, query, limit },
     )) as { community: Record<string, unknown>; matches: Array<Record<string, unknown>> };
-    const matches = [...recent.matches];
-    const seen = new Set(matches.map((match) => String(match.ref ?? "")));
-    let archiveAvailable = false;
-    let archiveError: string | null = null;
-    const config = resolveGeminiEmbeddingConfig();
-    if (config.ok && matches.length < limit) {
-      try {
-        const embedding = await embedGeminiQuery({
-          apiKey: config.apiKey,
-          model: config.model,
-          text: query,
-        });
-        const hits = await ctx.vectorSearch(
-          "communityArchiveDocuments" as any,
-          "by_embedding" as any,
-          {
-            vector: embedding,
-            limit: RESOURCE_ARCHIVE_VECTOR_LIMIT,
-            filter: (q: any) => q.eq("communityId", args.communityId),
-          },
-        );
-        archiveAvailable = true;
-        const scoreById = new Map<string, number>();
-        for (const hit of hits) {
-          scoreById.set(normalizeIdValue(hit._id), Number(hit._score ?? 0));
-        }
-        const docs = (await ctx.runQuery(
-          (internal as any).communityArchive.getCommunityArchiveDocumentsByIdsInternal,
-          { ids: hits.map((hit: any) => hit._id) },
-        )) as ArchiveDocLike[];
-        const refs = docs
-          .filter((doc) => doc.sourceType === "resource")
-          .sort(
-            (a, b) =>
-              Number(scoreById.get(normalizeIdValue(b._id)) ?? 0) -
-              Number(scoreById.get(normalizeIdValue(a._id)) ?? 0),
-          )
-          .map((doc) => buildCommunityResourceEvidenceRef(doc.sourceId))
-          .filter((ref) => !seen.has(ref))
-          .slice(0, limit - matches.length);
-        const archiveItems = (await ctx.runQuery(
-          (internal as any).communityResourceEvidence.readCommunityResourceEvidenceItemsInternal,
-          { userId, communityId: args.communityId, refs },
-        )) as Array<Record<string, unknown>>;
-        for (const item of archiveItems) {
-          const ref = String(item.ref ?? "");
-          if (!ref || seen.has(ref)) continue;
-          const doc = docs.find(
-            (candidate) => buildCommunityResourceEvidenceRef(candidate.sourceId) === ref,
-          );
-          seen.add(ref);
-          matches.push({
-            ...item,
-            score: doc ? Number(scoreById.get(normalizeIdValue(doc._id)) ?? 0) : null,
-          });
-          if (matches.length >= limit) break;
-        }
-      } catch (error) {
-        archiveAvailable = false;
-        archiveError =
-          truncateText(error instanceof Error ? error.message : String(error), 240) ||
-          "community_resource_archive_search_failed";
-      }
-    }
+    const matches = recent.matches;
     const resultRefs = matches.map((match) => String(match.ref ?? "")).filter(Boolean);
     const retrievalId: any = await ctx.runMutation(
       (internal as any).communityEvidenceAudit.recordCommunityEvidenceRetrievalInternal,
@@ -347,11 +275,9 @@ export const searchCommunityResourceEvidenceInternal = internalAction({
       matches,
       retrieval_id: normalizeIdValue(retrievalId),
       diagnostics: {
-        version: 1,
-        recent_source: "community_resources",
-        archive_source: "community_resource_archive",
-        archive_available: archiveAvailable,
-        archive_error: archiveError,
+        version: 2,
+        source: "community_resources",
+        strategy: "bounded_lexical",
       },
     };
   },

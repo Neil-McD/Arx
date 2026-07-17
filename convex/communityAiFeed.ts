@@ -14,10 +14,6 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
-import {
-  deleteArchiveDocumentBySource,
-  upsertArchiveDocumentForAiFeedPost,
-} from "./communityArchiveDocuments";
 import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import { upsertCommunitySourceTrace } from "./communityIntelligenceDirectory";
 
@@ -226,7 +222,6 @@ async function hideFeedPost(args: {
     post: nextPost,
     nowMs: args.nowMs,
   });
-  await upsertArchiveDocumentForAiFeedPost(args.ctx, nextPost);
 }
 
 async function mapFeedPostRow(args: {
@@ -343,7 +338,6 @@ async function insertFeedPost(args: {
     updatedAt: args.nowMs,
   });
   const created = await getFeedPostOrThrow(args.ctx, normalizeIdValue(id));
-  await upsertArchiveDocumentForAiFeedPost(args.ctx, created);
   await upsertSourceTraceForAiFeedPost(args.ctx, created, args.nowMs);
   await recordCommunityActivityEventBestEffort({
     ctx: args.ctx,
@@ -653,11 +647,6 @@ export const deleteExpiredHiddenCommunityAiFeedPostsInternal = internalMutation(
         deletedReactions += 1;
       }
       if (reactions.length >= MAX_EXPIRED_POST_REACTION_DELETE_BATCH) continue;
-      await deleteArchiveDocumentBySource(ctx, {
-        communityId: post.communityId,
-        sourceType: "ai_feed",
-        sourceId: normalizeIdValue(post._id),
-      });
       await ctx.db.delete(post._id as any);
       deletedPosts += 1;
     }
@@ -731,7 +720,6 @@ export const reactToCommunityAiFeedPost = mutation({
       nowMs,
     });
     const updated = await getFeedPostOrThrow(ctx, normalizeIdValue(post._id));
-    await upsertArchiveDocumentForAiFeedPost(ctx, updated);
     const viewerReaction = (await ctx.db
       .query("communityAiFeedReactions" as any)
       .withIndex("by_post_actorKey", (q: any) =>
@@ -767,11 +755,6 @@ export const hideCommunityAiFeedPost = mutation({
         post,
         nowMs,
       });
-      await deleteArchiveDocumentBySource(ctx, {
-        communityId: post.communityId,
-        sourceType: "ai_feed",
-        sourceId: normalizeIdValue(post._id),
-      });
       return { ok: true };
     }
     await ctx.db.patch(post._id as any, {
@@ -784,11 +767,6 @@ export const hideCommunityAiFeedPost = mutation({
       ctx,
       post: hiddenPost,
       nowMs,
-    });
-    await deleteArchiveDocumentBySource(ctx, {
-      communityId: post.communityId,
-      sourceType: "ai_feed",
-      sourceId: normalizeIdValue(post._id),
     });
     return { ok: true };
   },

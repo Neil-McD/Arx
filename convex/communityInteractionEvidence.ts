@@ -8,18 +8,7 @@ import {
   resolvePublicUserId,
   toIsoString,
 } from "./communityCore";
-import {
-  deleteArchiveDocumentBySource,
-  normalizeOptionalText,
-  syncArchiveDocumentForInteraction,
-  truncateText,
-  type ArchiveDocLike,
-} from "./communityArchiveDocuments";
-import {
-  embedGeminiQuery,
-  resolveGeminiEmbeddingConfig,
-} from "./communityArchiveEmbeddingPipeline";
-import { ARCHIVE_VECTOR_LIMIT } from "./communityArchiveShared";
+import { normalizeOptionalText, truncateText } from "./communityText";
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
 import {
   communityInteractionEvidenceSourceIsReadable,
@@ -93,7 +82,6 @@ type EmbedRow = {
 const evidenceObjectTypeValidator = v.union(v.literal("root"), v.literal("reply"));
 const RECENT_ROOT_SCAN_LIMIT = 80;
 const RECENT_REPLY_SCAN_LIMIT = 160;
-const INTERACTION_ARCHIVE_VECTOR_LIMIT = Math.max(ARCHIVE_VECTOR_LIMIT, 32);
 
 function interactionChildBelongsToEvidence(args: {
   child: { communityId: any; rootId?: any; replyId?: any };
@@ -136,15 +124,6 @@ function scoreEvidenceText(raw: unknown, tokens: string[]): number {
     if (text.includes(token)) matches += 1;
   }
   return matches === 0 ? 0 : Number((matches / tokens.length).toFixed(4));
-}
-
-function archiveSourceIdToRef(sourceId: string): string | null {
-  const match = /^(root|reply):([^\s:]+)$/.exec(String(sourceId ?? "").trim());
-  if (!match) return null;
-  return buildCommunityInteractionEvidenceRef({
-    objectType: match[1] as CommunityInteractionEvidenceObjectType,
-    objectId: match[2],
-  });
 }
 
 async function loadReadableInteraction(args: {
@@ -517,72 +496,7 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
       (internal as any).communityInteractionEvidence.searchRecentCommunityInteractionEvidenceInternal,
       { userId, communityId: args.communityId, query, limit },
     )) as { community: Record<string, unknown>; results: Array<Record<string, unknown>> };
-    const results = [...recent.results];
-    const seen = new Set(results.map((result) => String(result.ref ?? "")));
-    let archiveAvailable = false;
-    let archiveError: string | null = null;
-    const config = resolveGeminiEmbeddingConfig();
-    if (config.ok && results.length < limit) {
-      try {
-        const queryEmbedding = await embedGeminiQuery({
-          apiKey: config.apiKey,
-          model: config.model,
-          text: query,
-        });
-        const hits = await ctx.vectorSearch(
-          "communityArchiveDocuments" as any,
-          "by_embedding" as any,
-          {
-            vector: queryEmbedding,
-            limit: INTERACTION_ARCHIVE_VECTOR_LIMIT,
-            // Convex vector filters support equality and OR, not AND. Keep the
-            // authorization boundary in-index and narrow to interaction docs
-            // after fetching canonical rows.
-            filter: (q: any) => q.eq("communityId", args.communityId),
-          },
-        );
-        archiveAvailable = true;
-        const scoreById = new Map<string, number>();
-        for (const hit of hits) {
-          scoreById.set(normalizeIdValue(hit._id), Number(hit._score ?? 0));
-        }
-        const docs = (await ctx.runQuery(
-          (internal as any).communityArchive.getCommunityArchiveDocumentsByIdsInternal,
-          { ids: hits.map((hit: any) => hit._id) },
-        )) as ArchiveDocLike[];
-        const refs = docs
-          .filter((doc) => doc.sourceType === "interaction")
-          .sort(
-            (a, b) =>
-              Number(scoreById.get(normalizeIdValue(b._id)) ?? 0) -
-              Number(scoreById.get(normalizeIdValue(a._id)) ?? 0),
-          )
-          .map((doc) => archiveSourceIdToRef(doc.sourceId))
-          .filter((ref): ref is string => Boolean(ref && !seen.has(ref)))
-          .slice(0, limit - results.length);
-        const archiveItems = (await ctx.runQuery(
-          (internal as any).communityInteractionEvidence.readCommunityInteractionEvidenceItemsInternal,
-          { userId, communityId: args.communityId, refs },
-        )) as Array<Record<string, unknown>>;
-        for (const item of archiveItems) {
-          const ref = String(item.ref ?? "");
-          if (!ref || seen.has(ref)) continue;
-          seen.add(ref);
-          const doc = docs.find((candidate) => archiveSourceIdToRef(candidate.sourceId) === ref);
-          results.push({
-            ...item,
-            score: doc ? Number(scoreById.get(normalizeIdValue(doc._id)) ?? 0) : null,
-          });
-          if (results.length >= limit) break;
-        }
-      } catch (error) {
-        archiveAvailable = false;
-        archiveError = truncateText(
-          error instanceof Error ? error.message : String(error),
-          240,
-        ) || "community_interaction_archive_search_failed";
-      }
-    }
+    const results = recent.results;
     const resultRefs = results.map((result) => String(result.ref ?? "")).filter(Boolean);
     const retrievalId: any = await ctx.runMutation(
       (internal as any).communityEvidenceAudit.recordCommunityEvidenceRetrievalInternal,
@@ -601,11 +515,9 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
       results,
       retrieval_id: normalizeIdValue(retrievalId),
       diagnostics: {
-        version: 1,
-        recent_source: "community_interactions",
-        archive_source: "community_interaction_archive",
-        archive_available: archiveAvailable,
-        archive_error: archiveError,
+        version: 2,
+        source: "community_interactions",
+        strategy: "bounded_lexical",
       },
     };
   },
@@ -678,14 +590,6 @@ async function removeInteractionSourceTrace(args: {
   ref: string;
   nowMs: number;
 }) {
-  const parsed = parseCommunityInteractionEvidenceRef(args.ref);
-  if (parsed) {
-    await deleteArchiveDocumentBySource(args.ctx, {
-      communityId: args.communityId,
-      sourceType: "interaction",
-      sourceId: `${parsed.objectType}:${parsed.objectId}`,
-    });
-  }
   const directTrace = await args.ctx.db
     .query("communitySourceTraces" as any)
     .withIndex("by_community_source", (q: any) =>
@@ -756,12 +660,6 @@ export const syncCommunityInteractionEvidenceInternal = internalMutation({
       objectType: args.objectType,
       objectId: args.objectId,
     });
-    const archive = await syncArchiveDocumentForInteraction({
-      ctx,
-      communityId: args.communityId,
-      objectType: args.objectType,
-      objectId: args.objectId,
-    });
     if (!source || !communityInteractionEvidenceSourceIsReadable(source)) {
       await removeInteractionSourceTrace({
         ctx,
@@ -779,7 +677,7 @@ export const syncCommunityInteractionEvidenceInternal = internalMutation({
           },
         );
       }
-      return { ok: true, indexed: false, traced: false, ref };
+      return { ok: true, traced: false, ref };
     }
     const traced = await upsertInteractionSourceTrace({
       ctx,
@@ -789,7 +687,6 @@ export const syncCommunityInteractionEvidenceInternal = internalMutation({
     });
     return {
       ok: true,
-      indexed: archive.indexed,
       traced: true,
       ref,
       source_trace_id: traced.sourceTraceId,

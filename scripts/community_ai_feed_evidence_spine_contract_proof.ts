@@ -165,7 +165,9 @@ function proveImplementationBoundaries() {
   const contract = read("docs/community-lineage-ontology-contract-v0.md");
 
   assertIncludes(evidence, 'query("communityAiFeedPosts" as any)', "recent canonical scan");
-  assertIncludes(evidence, 'doc.sourceType === "ai_feed"', "archive post-filter");
+  assertIncludes(evidence, "const matches = recent.matches", "canonical lexical result set");
+  assertIncludes(evidence, 'strategy: "bounded_lexical"', "canonical lexical diagnostics");
+  assert.ok(!/vectorSearch|embedGemini|archiveAvailable|archiveError/.test(evidence), "AI Feed retrieval must not execute an embedding archive fallback");
   assertIncludes(evidence, "readCommunityAiFeedEvidenceItemsInternal", "archive canonical revalidation");
   assertIncludes(evidence, "retrieval_score", "retrieval relevance field");
   assertIncludes(evidence, "signal_score", "reaction signal field");

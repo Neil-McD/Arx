@@ -57,12 +57,13 @@ assert.doesNotMatch(resources, /export const searchCommunityResourceDirectoryInt
 assert.match(evidence, /const RECENT_RESOURCE_SCAN_LIMIT = 80/);
 assert.match(evidence, /\.take\(RECENT_RESOURCE_SCAN_LIMIT\)/);
 assert.doesNotMatch(evidence, /\.take\(5000\)/);
-assert.match(evidence, /doc\.sourceType === "resource"/);
 assert.match(evidence, /q\.eq\("communityId", args\.communityId\)/);
 assert.match(evidence, /readCommunityResourceEvidenceItemsInternal/);
 assert.match(evidence, /resolveCommunityResourceEvidenceSource/);
 assert.match(evidence, /recordCommunityEvidenceRetrievalInternal/);
-assert.match(evidence, /archiveAvailable = false;[\s\S]*archiveError/);
+assert.match(evidence, /const matches = recent\.matches/);
+assert.match(evidence, /strategy: "bounded_lexical"/);
+assert.doesNotMatch(evidence, /vectorSearch|embedGemini|archiveAvailable|archiveError/);
 assert.match(evidence, /recordedByUserId: args\.resource\.createdByUserId/);
 assert.doesNotMatch(evidence, /recordTrustedCommunitySourceTraceCore/);
 assert.doesNotMatch(evidence, /communitySourceTraces/);

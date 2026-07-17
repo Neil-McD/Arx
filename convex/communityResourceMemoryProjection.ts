@@ -1,10 +1,8 @@
 import type { CommunityResourceLike } from "./communityCore";
 import { normalizeIdValue } from "./communityCore";
-import {
-  deleteArchiveDocumentBySource,
-  truncateText,
-  upsertArchiveDocumentForResource,
-} from "./communityArchiveDocuments";
+import { hydrateCommunityResourceBody } from "./communityResourceContent";
+import { resolveCommunityResourceEvidenceSource } from "./communityResourceEvidenceCore";
+import { truncateText } from "./communityText";
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
 import { resolveCommunityEvidenceRefCore } from "./communityEvidenceCore";
 import { buildCommunityResourceEvidenceRef } from "../shared/communityEvidenceContract";
@@ -71,24 +69,30 @@ async function redactCommunityResourceSourceTrace(
 
 /**
  * Canonical resource -> memory lifecycle. The resource row remains product
- * truth; archive and source-trace rows are deterministic retrieval/compiler
- * projections. No model call or approval gate occurs on this write path.
+ * truth; its source trace is the deterministic compiler projection. No model
+ * call, duplicate content row, or approval gate occurs on this write path.
  */
 export async function syncCommunityResourceMemoryProjection(
   ctx: ResourceMemoryProjectionContext,
   resource: CommunityResourceLike,
   nowMs = Date.now(),
-): Promise<{ indexed: boolean; traced: boolean; sourceRef: string }> {
-  const archive = await upsertArchiveDocumentForResource(ctx, resource);
-  const sourceRef = resourceEvidenceRef(archive.resource);
-  if (!archive.indexed) {
-    const traced = await redactCommunityResourceSourceTrace(ctx, archive.resource, nowMs);
-    return { indexed: false, traced, sourceRef };
+): Promise<{ visible: boolean; traced: boolean; sourceRef: string }> {
+  const sourceRef = resourceEvidenceRef(resource);
+  const resolved = await resolveCommunityResourceEvidenceSource({
+    ctx,
+    communityId: resource.communityId,
+    resourceId: resource._id,
+  });
+  if (!resolved) {
+    const traced = await redactCommunityResourceSourceTrace(ctx, resource, nowMs);
+    return { visible: false, traced, sourceRef };
   }
+  const canonicalResource =
+    (await hydrateCommunityResourceBody(ctx, resolved.resource)) ?? resolved.resource;
 
   const evidence = await resolveCommunityEvidenceRefCore({
     ctx,
-    communityId: archive.resource.communityId,
+    communityId: canonicalResource.communityId,
     ref: sourceRef,
   });
   if (evidence.status !== "active" || evidence.sourceKind !== "resource") {
@@ -97,21 +101,21 @@ export async function syncCommunityResourceMemoryProjection(
 
   await recordTrustedCommunitySourceTraceCore({
     ctx,
-    communityId: archive.resource.communityId,
+    communityId: canonicalResource.communityId,
     sourceType: "resource",
     sourceId: sourceRef,
-    title: archive.resource.title,
-    summary: buildCommunityResourceTraceSummary(archive.resource),
+    title: canonicalResource.title,
+    summary: buildCommunityResourceTraceSummary(canonicalResource),
     contentHash: evidence.contentHash,
     provenanceHash: evidence.provenanceHash,
     visibilityScope: "community",
     sourceVisibility: "community",
     actorType: "system",
-    actorUserId: archive.resource.createdByUserId,
+    actorUserId: canonicalResource.createdByUserId,
     actorAgentKey: COMMUNITY_RESOURCE_MEMORY_AGENT_KEY,
     nowMs,
   });
-  return { indexed: true, traced: true, sourceRef };
+  return { visible: true, traced: true, sourceRef };
 }
 
 /** Revoke derived retrieval/compiler projections before deleting source truth. */
@@ -120,10 +124,5 @@ export async function revokeCommunityResourceMemoryProjection(
   resource: CommunityResourceLike,
   nowMs = Date.now(),
 ): Promise<void> {
-  await deleteArchiveDocumentBySource(ctx, {
-    communityId: resource.communityId,
-    sourceType: "resource",
-    sourceId: normalizeIdValue(resource._id),
-  });
   await redactCommunityResourceSourceTrace(ctx, resource, nowMs);
 }

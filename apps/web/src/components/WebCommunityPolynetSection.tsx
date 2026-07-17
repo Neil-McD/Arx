@@ -297,7 +297,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                         style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
                         role="button"
                         tabIndex={0}
-                        aria-label={node.label}
+                        aria-label={node.label ?? undefined}
                         onPointerDown={handlers.makeNodePointerDownHandler(node.id, layoutPos)}
                         onMouseEnter={() => setHoveredNodeId(node.id)}
                         onMouseLeave={() => setHoveredNodeId((current) => (current === node.id ? null : current))}

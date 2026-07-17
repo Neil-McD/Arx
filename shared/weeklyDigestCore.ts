@@ -2,7 +2,6 @@ export type WeeklyDigestActivityCounts = {
   chatMessageCount: number;
   aiFeedPostCount: number;
   resourceCount: number;
-  archiveDocumentCount: number;
   newMemberCount: number;
 };
 
@@ -58,7 +57,6 @@ export function shouldSendWeeklyDigest(activity: WeeklyDigestActivityCounts): bo
   return (
     activity.aiFeedPostCount >= 1 ||
     activity.resourceCount >= 1 ||
-    activity.archiveDocumentCount >= 1 ||
     activity.newMemberCount >= 2 ||
     activity.chatMessageCount >= 3
   );
@@ -89,11 +87,6 @@ export function formatWeeklyDigestStats(activity: WeeklyDigestActivityCounts): s
   }
   if (activity.resourceCount > 0) {
     parts.push(`${activity.resourceCount} resource${activity.resourceCount === 1 ? "" : "s"}`);
-  }
-  if (activity.archiveDocumentCount > 0) {
-    parts.push(
-      `${activity.archiveDocumentCount} knowledge artifact${activity.archiveDocumentCount === 1 ? "" : "s"}`,
-    );
   }
   if (activity.newMemberCount > 0) {
     parts.push(`${activity.newMemberCount} new member${activity.newMemberCount === 1 ? "" : "s"}`);

@@ -178,12 +178,6 @@ import {
   runCommunityWikiArchitectProposal as runCommunityWikiArchitectProposalImpl,
 } from "./communityWikiArchitect";
 import {
-  getCommunityArchiveHealth as getCommunityArchiveHealthImpl,
-  processCommunityArchivePending as processCommunityArchivePendingImpl,
-  requestCommunityArchiveBackfill as requestCommunityArchiveBackfillImpl,
-  retryCommunityArchiveFailures as retryCommunityArchiveFailuresImpl,
-} from "./communityArchive";
-import {
   listMyCommunityAttention as listMyCommunityAttentionImpl,
   markCommunitySurfaceSeen as markCommunitySurfaceSeenImpl,
   markCommunityChatReadAt as markCommunityChatReadAtImpl,
@@ -329,12 +323,6 @@ export const listGoogleDriveSourceFiles: any = listGoogleDriveSourceFilesImpl;
 export const runCommunityWikiArchitectProposal: any = runCommunityWikiArchitectProposalImpl;
 export const draftCommunityResourceContentFromSources: any = draftCommunityResourceContentFromSourcesImpl;
 export const deleteCommunity = deleteCommunityImpl;
-export const getCommunityArchiveHealth = getCommunityArchiveHealthImpl;
-export const requestCommunityArchiveBackfill = requestCommunityArchiveBackfillImpl;
-export {
-  processCommunityArchivePendingImpl as processCommunityArchivePending,
-  retryCommunityArchiveFailuresImpl as retryCommunityArchiveFailures,
-};
 export const getCommunityAgentConfig = getCommunityAgentConfigImpl;
 export const saveCommunityAgentConfig = saveCommunityAgentConfigImpl;
 export const getActiveCommunityAgentSystemPrompt = getActiveCommunityAgentSystemPromptImpl;

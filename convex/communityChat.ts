@@ -13,9 +13,6 @@ import {
   toIsoString,
 } from "./communityCore";
 import {
-  deleteArchiveDocumentBySource,
-} from "./communityArchiveDocuments";
-import {
   recordLegacyChatMessageInteractionBestEffort,
   syncLegacyChatMessageDeleteToInteractionCore,
   syncLegacyChatMessageEditToInteractionCore,
@@ -628,11 +625,6 @@ export const deleteOwnMessage = mutation({
       nowMs,
     });
     await ctx.db.delete(message._id as any);
-    await deleteArchiveDocumentBySource(ctx, {
-      communityId: thread.communityId,
-      sourceType: "chat",
-      sourceId: normalizeIdValue(message._id),
-    });
     await ctx.db.patch(thread._id as any, {
       updatedAt: nowMs,
     });

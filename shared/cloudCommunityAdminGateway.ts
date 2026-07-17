@@ -91,46 +91,6 @@ export type CloudCommunityOneLinerSaveResult = {
   updated_at: string;
 };
 
-export type CloudCommunityArchiveHealthRow = {
-  community_id: string;
-  total_documents: number;
-  status_counts: {
-    pending: number;
-    embedded: number;
-    failed: number;
-  };
-  source_counts: {
-    chat: number;
-    ai_feed: number;
-    resource: number;
-  };
-  pdf_counts: {
-    pdf_documents: number;
-  };
-  last_embedding_updated_at: string | null;
-  latest_failure_message: string | null;
-};
-
-export type CloudCommunityArchiveBackfillResult = {
-  chat: number;
-  ai_feed: number;
-  resource: number;
-};
-
-export type CloudCommunityArchiveProcessResult = {
-  processed: number;
-  succeeded: number;
-  failed: number;
-  pdf_extraction_attempted: number;
-  pdf_extraction_succeeded: number;
-  embedding_model: string | null;
-  error: string | null;
-};
-
-export type CloudCommunityArchiveRetryResult = CloudCommunityArchiveProcessResult & {
-  retried: number;
-};
-
 export type CloudCommunitySourceLinkIngestionResult = {
   ok: boolean;
   kind:
@@ -1957,68 +1917,4 @@ export async function deleteCloudCommunity<SessionT>(
     authSubject,
     communityId: params.communityId,
   });
-}
-
-export async function fetchCloudCommunityArchiveHealth<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<CloudCommunityArchiveHealthRow | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunityArchiveHealth" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  return firstGatewayRow<CloudCommunityArchiveHealthRow>(payload)
-    ?? ((payload && typeof payload === "object" && !Array.isArray(payload))
-      ? (payload as CloudCommunityArchiveHealthRow)
-      : null);
-}
-
-export async function requestCloudCommunityArchiveBackfill<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<CloudCommunityArchiveBackfillResult | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:requestCommunityArchiveBackfill" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  return firstGatewayRow<CloudCommunityArchiveBackfillResult>(payload)
-    ?? ((payload && typeof payload === "object" && !Array.isArray(payload))
-      ? (payload as CloudCommunityArchiveBackfillResult)
-      : null);
-}
-
-export async function processCloudCommunityArchivePending<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<CloudCommunityArchiveProcessResult | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.action("community:processCommunityArchivePending" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  return firstGatewayRow<CloudCommunityArchiveProcessResult>(payload)
-    ?? ((payload && typeof payload === "object" && !Array.isArray(payload))
-      ? (payload as CloudCommunityArchiveProcessResult)
-      : null);
-}
-
-export async function retryCloudCommunityArchiveFailures<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<CloudCommunityArchiveRetryResult | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.action("community:retryCommunityArchiveFailures" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  return firstGatewayRow<CloudCommunityArchiveRetryResult>(payload)
-    ?? ((payload && typeof payload === "object" && !Array.isArray(payload))
-      ? (payload as CloudCommunityArchiveRetryResult)
-      : null);
 }

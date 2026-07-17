@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
-import { truncateText } from "./communityArchiveDocuments";
+import { truncateText } from "./communityText";
 import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
 
 export const communityEvidenceSurfaceValidator = v.union(

@@ -23,7 +23,6 @@ const [
   evidence,
   audit,
   recent,
-  archiveDocuments,
   communityChat,
   interactions,
   runtimeLoop,
@@ -40,7 +39,6 @@ const [
   read("convex/communityInteractionEvidence.ts"),
   read("convex/communityEvidenceAudit.ts"),
   read("convex/communityRecentContext.ts"),
-  read("convex/communityArchiveDocuments.ts"),
   read("convex/communityChat.ts"),
   read("convex/communityInteractions.ts"),
   read("convex/runtimeAgentLoop.ts"),
@@ -65,7 +63,7 @@ assert.match(evidence, /actorUserId: actor\.actorUserId/);
 assert.match(evidence, /actorAgentKey: actor\.actorAgentKey/);
 assert.match(evidence, /deriveCommunityInteractionLineageEnvelope/);
 assert.match(evidence, /lineage,/);
-assert.match(evidence, /syncArchiveDocumentForInteraction/);
+assert.doesNotMatch(evidence, /syncArchiveDocumentForInteraction|deleteArchiveDocumentBySource/);
 assert.match(evidence, /backfillCommunityInteractionEvidenceInternal/);
 assert.match(evidence, /sourceVisibility: "redacted"/);
 assert.match(evidence, /compilerState: "excluded_by_visibility"/);
@@ -99,18 +97,11 @@ const redactionBlock = evidence.slice(redactionStart, backfillStart);
 assert.match(redactionBlock, /query\("communityInteractionReplies" as any\)/);
 assert.doesNotMatch(redactionBlock, /query\("communityInteractionSourceTraceLinks" as any\)/);
 
-const vectorSearchStart = evidence.indexOf("const hits = await ctx.vectorSearch");
 const retrievalAuditStart = evidence.indexOf("const retrievalId: any = await ctx.runMutation");
-assert.ok(
-  vectorSearchStart >= 0 && retrievalAuditStart > vectorSearchStart,
-  "archive vector search block must exist",
-);
-const vectorSearchBlock = evidence.slice(vectorSearchStart, retrievalAuditStart);
-assert.match(vectorSearchBlock, /q\.eq\("communityId", args\.communityId\)/);
-assert.doesNotMatch(vectorSearchBlock, /q\.and\(/);
-assert.match(vectorSearchBlock, /doc\.sourceType === "interaction"/);
-assert.match(vectorSearchBlock, /archiveError = truncateText/);
-assert.match(evidence, /archive_error: archiveError/);
+assert.ok(retrievalAuditStart >= 0, "retrieval audit block must exist");
+assert.match(evidence, /const results = recent\.results/);
+assert.match(evidence, /strategy: "bounded_lexical"/);
+assert.doesNotMatch(evidence, /vectorSearch|embedGemini|archiveAvailable|archiveError|archive_error/);
 
 assert.match(recent, /query\("communityInteractionRoots"/);
 assert.match(recent, /query\("communityInteractionReplies"/);
@@ -122,12 +113,9 @@ assert.match(
 assert.doesNotMatch(recent, /query\("communityChatMessages"/);
 assert.match(recent, /recent_context_v2/);
 
-assert.match(archiveDocuments, /sourceType: "interaction"/);
 assert.match(evidence, /"communityInteractionRoots" as any/);
 assert.match(evidence, /"communityInteractionReplies" as any/);
-assert.match(archiveDocuments, /interaction: "paginated_async"/);
-assert.doesNotMatch(archiveDocuments, /upsertArchiveDocumentForChatMessage/);
-assert.doesNotMatch(communityChat, /upsertArchiveDocumentForChatMessage/);
+assert.doesNotMatch(communityChat, /communityArchiveDocuments|deleteArchiveDocumentBySource/);
 assert.match(interactions, /scheduleCommunityInteractionEvidenceSync/);
 
 for (const source of [retrievalTools, invocationSurface, conciergeTools, runtimeLoop]) {

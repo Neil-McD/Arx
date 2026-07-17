@@ -16,6 +16,7 @@ import {
   type CommunityInteractionEvidenceRow,
 } from "./communityInteractionEvidenceCore";
 import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
+import { normalizeOptionalText, truncateText } from "./communityText";
 
 export type ArchiveSourceType = "chat" | "interaction" | "ai_feed" | "resource";
 export type ArchiveEmbeddingStatus = "pending" | "embedded" | "failed";
@@ -107,17 +108,6 @@ function stripMarkdown(value: string): string {
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 $2")
       .replace(/[#>*_~-]+/g, " "),
   );
-}
-
-export function truncateText(raw: unknown, maxLen: number): string {
-  const value = collapseWhitespace(String(raw ?? ""));
-  if (!value) return "";
-  return value.length <= maxLen ? value : `${value.slice(0, Math.max(0, maxLen - 1)).trimEnd()}…`;
-}
-
-export function normalizeOptionalText(raw: unknown, maxLen: number): string | null {
-  const value = truncateText(raw, maxLen);
-  return value || null;
 }
 
 export function normalizeUrl(raw: unknown): string | null {

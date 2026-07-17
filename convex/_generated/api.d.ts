@@ -57,9 +57,7 @@ import type * as communityAiFeedEvidenceCore from "../communityAiFeedEvidenceCor
 import type * as communityAppMounts from "../communityAppMounts.js";
 import type * as communityArchive from "../communityArchive.js";
 import type * as communityArchiveDocuments from "../communityArchiveDocuments.js";
-import type * as communityArchiveEmbeddingPipeline from "../communityArchiveEmbeddingPipeline.js";
 import type * as communityArchiveRetrieval from "../communityArchiveRetrieval.js";
-import type * as communityArchiveShared from "../communityArchiveShared.js";
 import type * as communityAttention from "../communityAttention.js";
 import type * as communityCapabilityContext from "../communityCapabilityContext.js";
 import type * as communityChat from "../communityChat.js";
@@ -110,6 +108,7 @@ import type * as communityResourceMemoryProjection from "../communityResourceMem
 import type * as communityResources from "../communityResources.js";
 import type * as communitySkillAttachments from "../communitySkillAttachments.js";
 import type * as communitySourceUrlPolicy from "../communitySourceUrlPolicy.js";
+import type * as communityText from "../communityText.js";
 import type * as communityWikiArchitect from "../communityWikiArchitect.js";
 import type * as creatorCommerce from "../creatorCommerce.js";
 import type * as criticalAudit from "../criticalAudit.js";
@@ -287,9 +286,7 @@ declare const fullApi: ApiFromModules<{
   communityAppMounts: typeof communityAppMounts;
   communityArchive: typeof communityArchive;
   communityArchiveDocuments: typeof communityArchiveDocuments;
-  communityArchiveEmbeddingPipeline: typeof communityArchiveEmbeddingPipeline;
   communityArchiveRetrieval: typeof communityArchiveRetrieval;
-  communityArchiveShared: typeof communityArchiveShared;
   communityAttention: typeof communityAttention;
   communityCapabilityContext: typeof communityCapabilityContext;
   communityChat: typeof communityChat;
@@ -340,6 +337,7 @@ declare const fullApi: ApiFromModules<{
   communityResources: typeof communityResources;
   communitySkillAttachments: typeof communitySkillAttachments;
   communitySourceUrlPolicy: typeof communitySourceUrlPolicy;
+  communityText: typeof communityText;
   communityWikiArchitect: typeof communityWikiArchitect;
   creatorCommerce: typeof creatorCommerce;
   criticalAudit: typeof criticalAudit;
