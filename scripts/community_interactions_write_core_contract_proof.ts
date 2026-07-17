@@ -394,8 +394,8 @@ assert.match(
 );
 assert.match(
   interactionEmbedRefresh,
-  /scheduleStaleInteractionEmbedPreviewRefresh = internalMutation\(\{[\s\S]*paginationOptsValidator[\s\S]*query\("communityInteractionEmbeds"\)[\s\S]*embed\.status !== "ready" && embed\.status !== "failed"[\s\S]*embed\.resolverVersion === INTERACTION_EMBED_RESOLVER_VERSION[\s\S]*refresh: true[\s\S]*continueCursor/,
-  "legacy preview refresh should be internal, paginated, version-gated, and retry only eligible ready or failed link rows",
+  /const MAX_REFRESH_BATCH_SIZE = 100[\s\S]*scheduleStaleInteractionEmbedPreviewRefresh = internalMutation\(\{[\s\S]*paginationOptsValidator[\s\S]*Math\.max\(1, Math\.min\(requestedBatchSize, MAX_REFRESH_BATCH_SIZE\)\)[\s\S]*paginate\(\{ cursor: args\.paginationOpts\.cursor, numItems: batchSize \}\)[\s\S]*embed\.status !== "ready" && embed\.status !== "failed"[\s\S]*embed\.resolverVersion === INTERACTION_EMBED_RESOLVER_VERSION[\s\S]*refresh: true[\s\S]*continueCursor/,
+  "legacy preview refresh should be internal, batch-capped, paginated, version-gated, and retry only eligible ready or failed link rows",
 );
 assert.match(
   interactionEmbedRefresh,

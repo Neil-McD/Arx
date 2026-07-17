@@ -4,6 +4,8 @@ import { internal } from "./_generated/api";
 
 const INTERACTION_EMBED_RESOLVER_VERSION = 2;
 const REFRESH_BATCH_DELAY_MS = 100;
+const DEFAULT_REFRESH_BATCH_SIZE = 50;
+const MAX_REFRESH_BATCH_SIZE = 100;
 const SUPPORTED_SOURCE_HOSTS = new Set([
   "loom.com",
   "youtube.com",
@@ -26,10 +28,14 @@ function isSupportedSourceUrl(raw: unknown): boolean {
 export const scheduleStaleInteractionEmbedPreviewRefresh = internalMutation({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, args) => {
+    const requestedBatchSize = Math.floor(Number(args.paginationOpts.numItems));
+    const batchSize = Number.isFinite(requestedBatchSize)
+      ? Math.max(1, Math.min(requestedBatchSize, MAX_REFRESH_BATCH_SIZE))
+      : DEFAULT_REFRESH_BATCH_SIZE;
     const page = await ctx.db
       .query("communityInteractionEmbeds")
       .order("asc")
-      .paginate(args.paginationOpts);
+      .paginate({ cursor: args.paginationOpts.cursor, numItems: batchSize });
     let scheduled = 0;
     for (const embed of page.page) {
       if (
@@ -53,7 +59,7 @@ export const scheduleStaleInteractionEmbedPreviewRefresh = internalMutation({
         {
           paginationOpts: {
             cursor: page.continueCursor,
-            numItems: args.paginationOpts.numItems,
+            numItems: batchSize,
           },
         },
       );

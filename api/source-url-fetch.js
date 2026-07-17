@@ -4,6 +4,7 @@ import net from "node:net";
 import { timingSafeEqual } from "node:crypto";
 import {
   extractInteractionOEmbedDiscoveryUrl,
+  interactionOEmbedResponseUrlIsAllowed,
   interactionPreviewOpenGraphFallback,
   normalizeInteractionOEmbedPreview,
 } from "./source-url-preview.mjs";
@@ -429,11 +430,15 @@ function decodeBasicHtmlEntities(raw) {
     const lower = String(entity).toLowerCase();
     if (lower.startsWith("#x")) {
       const value = Number.parseInt(lower.slice(2), 16);
-      return Number.isFinite(value) ? String.fromCodePoint(value) : " ";
+      return Number.isFinite(value) && value >= 0 && value <= 0x10ffff && !(value >= 0xd800 && value <= 0xdfff)
+        ? String.fromCodePoint(value)
+        : " ";
     }
     if (lower.startsWith("#")) {
       const value = Number.parseInt(lower.slice(1), 10);
-      return Number.isFinite(value) ? String.fromCodePoint(value) : " ";
+      return Number.isFinite(value) && value >= 0 && value <= 0x10ffff && !(value >= 0xd800 && value <= 0xdfff)
+        ? String.fromCodePoint(value)
+        : " ";
     }
     return named[lower] ?? " ";
   });
@@ -492,7 +497,7 @@ function extractOpenGraph(html, finalUrl) {
 }
 
 async function resolveInteractionEmbedPreview(fetched, openGraph, options) {
-  const fallback = interactionPreviewOpenGraphFallback(openGraph);
+  const fallback = interactionPreviewOpenGraphFallback(openGraph, fetched.finalUrl);
   const oEmbedUrl = extractInteractionOEmbedDiscoveryUrl(fetched.rawText, fetched.finalUrl);
   if (!oEmbedUrl) return fallback;
   try {
@@ -503,6 +508,7 @@ async function resolveInteractionEmbedPreview(fetched, openGraph, options) {
       maxRedirects: Math.min(options.maxRedirects, 1),
       accept: "application/json",
     });
+    if (!interactionOEmbedResponseUrlIsAllowed(fetched.finalUrl, oEmbedResponse.finalUrl)) return fallback;
     if (!normalizeContentType(oEmbedResponse.contentType).includes("application/json")) return fallback;
     const oEmbed = JSON.parse(oEmbedResponse.rawText || "{}");
     return normalizeInteractionOEmbedPreview({

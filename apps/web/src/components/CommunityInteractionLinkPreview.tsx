@@ -20,26 +20,43 @@ function providerLabel(embed: CommunityInteractionEmbed): string {
   return provider;
 }
 
-function approvedVideoUrl(raw: string, sourceRaw: string): string | null {
+function approvedHttpsUrl(raw: string | null): string | null {
   try {
-    const videoUrl = new URL(raw);
-    const sourceUrl = new URL(sourceRaw);
+    const url = new URL(String(raw ?? ""));
     if (
-      videoUrl.protocol !== "https:" ||
-      sourceUrl.protocol !== "https:" ||
-      videoUrl.username ||
-      videoUrl.password ||
-      sourceUrl.username ||
-      sourceUrl.password
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      (url.port && url.port !== "443")
     ) {
       return null;
     }
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function approvedVideoUrl(raw: string, sourceRaw: string): string | null {
+  try {
+    const approvedVideo = approvedHttpsUrl(raw);
+    const approvedSource = approvedHttpsUrl(sourceRaw);
+    if (!approvedVideo || !approvedSource) return null;
+    const videoUrl = new URL(approvedVideo);
+    const sourceUrl = new URL(approvedSource);
     const videoHost = videoUrl.hostname.toLowerCase().replace(/^www\./, "");
     const sourceHost = sourceUrl.hostname.toLowerCase().replace(/^www\./, "");
-    const isLoom = sourceHost === "loom.com" && videoHost === "loom.com";
+    const isLoom =
+      sourceHost === "loom.com" &&
+      videoHost === "loom.com" &&
+      /^\/embed\/[A-Za-z0-9_-]{8,160}\/?$/.test(videoUrl.pathname);
     const isYouTube =
       (sourceHost === "youtube.com" || sourceHost === "youtube-nocookie.com" || sourceHost === "youtu.be") &&
-      (videoHost === "youtube.com" || videoHost === "youtube-nocookie.com");
+      (videoHost === "youtube.com" || videoHost === "youtube-nocookie.com") &&
+      (
+        /^\/embed\/[A-Za-z0-9_-]{6,80}\/?$/.test(videoUrl.pathname) ||
+        (videoUrl.pathname === "/embed" && Boolean(videoUrl.searchParams.get("list")))
+      );
     return isLoom || isYouTube ? videoUrl.toString() : null;
   } catch {
     return null;
@@ -62,7 +79,12 @@ function activatedVideoUrl(raw: string): string {
   }
 }
 
-function VideoLinkPreview(props: { embed: CommunityInteractionEmbed; href: string; videoUrl: string }) {
+function VideoLinkPreview(props: {
+  embed: CommunityInteractionEmbed;
+  href: string;
+  mediaUrl: string | null;
+  videoUrl: string;
+}) {
   const [active, setActive] = useState(false);
   const title = props.embed.title || "Shared video";
   const provider = providerLabel(props.embed);
@@ -81,7 +103,7 @@ function VideoLinkPreview(props: { embed: CommunityInteractionEmbed; href: strin
             allowFullScreen
             loading="lazy"
             referrerPolicy="strict-origin-when-cross-origin"
-            sandbox="allow-forms allow-popups allow-presentation allow-same-origin allow-scripts"
+            sandbox="allow-popups allow-presentation allow-same-origin allow-scripts"
           />
         </div>
       ) : (
@@ -91,12 +113,13 @@ function VideoLinkPreview(props: { embed: CommunityInteractionEmbed; href: strin
           aria-label={`Play ${title}`}
           onClick={() => setActive(true)}
         >
-          {props.embed.image_url ? (
+          {props.mediaUrl ? (
             <img
               className="community-interaction-embed-media"
-              src={props.embed.image_url}
+              src={props.mediaUrl}
               alt=""
               loading="lazy"
+              referrerPolicy="no-referrer"
             />
           ) : (
             <span className="community-interaction-embed-media is-empty" aria-hidden="true" />
@@ -124,11 +147,15 @@ function VideoLinkPreview(props: { embed: CommunityInteractionEmbed; href: strin
   );
 }
 
-function SocialPostLinkPreview(props: { embed: CommunityInteractionEmbed; href: string }) {
+function SocialPostLinkPreview(props: {
+  embed: CommunityInteractionEmbed;
+  href: string;
+  mediaUrl: string | null;
+}) {
   const [expanded, setExpanded] = useState(false);
   const author = props.embed.author_name || props.embed.title || "X post";
   const body = props.embed.description || "View this post on X";
-  const canExpand = body.length > 320;
+  const canExpand = body.length > 320 || body.split("\n").length > 6;
   return (
     <div
       className="community-interaction-embed is-social-post"
@@ -150,7 +177,7 @@ function SocialPostLinkPreview(props: { embed: CommunityInteractionEmbed; href: 
           {expanded ? "Show less" : "Show more"}
         </button>
       ) : null}
-      {props.embed.image_url ? (
+      {props.mediaUrl ? (
         <a
           className="community-interaction-embed-social-media-link"
           href={props.href}
@@ -160,9 +187,10 @@ function SocialPostLinkPreview(props: { embed: CommunityInteractionEmbed; href: 
         >
           <img
             className="community-interaction-embed-media"
-            src={props.embed.image_url}
+            src={props.mediaUrl}
             alt={props.embed.image_alt || ""}
             loading="lazy"
+            referrerPolicy="no-referrer"
           />
         </a>
       ) : null}
@@ -180,7 +208,11 @@ function SocialPostLinkPreview(props: { embed: CommunityInteractionEmbed; href: 
   );
 }
 
-function GenericLinkPreview(props: { embed: CommunityInteractionEmbed; href: string }) {
+function GenericLinkPreview(props: {
+  embed: CommunityInteractionEmbed;
+  href: string;
+  mediaUrl: string | null;
+}) {
   const provider = providerLabel(props.embed);
   return (
     <a
@@ -192,12 +224,13 @@ function GenericLinkPreview(props: { embed: CommunityInteractionEmbed; href: str
       aria-label={`${props.embed.title || provider || "Open link"} (opens in a new tab)`}
       onClick={(event) => event.stopPropagation()}
     >
-      {props.embed.image_url ? (
+      {props.mediaUrl ? (
         <img
           className="community-interaction-embed-media"
-          src={props.embed.image_url}
+          src={props.mediaUrl}
           alt={props.embed.image_alt || ""}
           loading="lazy"
+          referrerPolicy="no-referrer"
         />
       ) : null}
       <div className="community-interaction-embed-text">
@@ -212,14 +245,15 @@ function GenericLinkPreview(props: { embed: CommunityInteractionEmbed; href: str
 }
 
 export function CommunityInteractionLinkPreview(props: { embed: CommunityInteractionEmbed }) {
-  const href = props.embed.source_url || props.embed.normalized_source_url;
+  const href = approvedHttpsUrl(props.embed.source_url || props.embed.normalized_source_url);
   if (!href) return null;
+  const mediaUrl = approvedHttpsUrl(props.embed.image_url);
   const videoUrl = props.embed.video_url ? approvedVideoUrl(props.embed.video_url, href) : null;
   if (props.embed.preview_kind === "video" && videoUrl) {
-    return <VideoLinkPreview embed={props.embed} href={href} videoUrl={videoUrl} />;
+    return <VideoLinkPreview embed={props.embed} href={href} mediaUrl={mediaUrl} videoUrl={videoUrl} />;
   }
   if (props.embed.preview_kind === "social_post" && props.embed.author_name && props.embed.description) {
-    return <SocialPostLinkPreview embed={props.embed} href={href} />;
+    return <SocialPostLinkPreview embed={props.embed} href={href} mediaUrl={mediaUrl} />;
   }
-  return <GenericLinkPreview embed={props.embed} href={href} />;
+  return <GenericLinkPreview embed={props.embed} href={href} mediaUrl={mediaUrl} />;
 }

@@ -10944,6 +10944,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .community-interaction-embed {
   display: block;
+  height: max-content;
   max-width: 460px;
   border: 1px solid var(--stroke-default);
   border-radius: 12px;

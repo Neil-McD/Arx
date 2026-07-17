@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   extractInteractionOEmbedDiscoveryUrl,
+  interactionOEmbedResponseUrlIsAllowed,
   interactionPreviewOpenGraphFallback,
   normalizeInteractionOEmbedPreview,
 } from "../api/source-url-preview.mjs";
@@ -22,6 +23,15 @@ assert.ok(loomDiscovery, "Loom oEmbed discovery should resolve");
 assert.equal(new URL(loomDiscovery).hostname, "www.loom.com");
 assert.equal(new URL(loomDiscovery).searchParams.get("format"), "json");
 assert.equal(new URL(loomDiscovery).searchParams.get("maxwidth"), "550");
+assert.equal(
+  interactionOEmbedResponseUrlIsAllowed(loomSourceUrl, "https://www.loom.com/v1/oembed?url=proof"),
+  true,
+);
+assert.equal(
+  interactionOEmbedResponseUrlIsAllowed(loomSourceUrl, "https://attacker.example/oembed?url=proof"),
+  false,
+  "oEmbed redirects must remain on an endpoint host approved for the source provider",
+);
 
 const loomPreview = normalizeInteractionOEmbedPreview({
   sourceUrl: loomSourceUrl,
@@ -69,6 +79,7 @@ const xPreview = normalizeInteractionOEmbedPreview({
   },
   oEmbed: {
     type: "rich",
+    url: "https://x.com/mathelirium/status/2075857952792047708",
     author_name: "Mathelirium",
     html: '<blockquote class="twitter-tweet"><p lang="en">A Neural Sheet Learns the Shape of a Brain<br><br>This time, the self-organizing map learns the geometry of a brain. <a href="https://t.co/media">pic.x.com/media</a></p><script src="https://platform.x.com/widgets.js"></script></blockquote>',
   },
@@ -113,6 +124,56 @@ assert.equal(
   }).preview_kind,
   "link",
   "unapproved player origins must degrade to link previews",
+);
+const loomCompactFallback = normalizeInteractionOEmbedPreview({
+  sourceUrl: loomSourceUrl,
+  openGraph: {
+    og_title: "Polynet - 17 July 2026",
+    og_description: "Use Loom to record quick videos of your screen and cam.",
+    og_image: "https://cdn.loom.com/assets/img/og/loom-banner.png",
+    og_image_alt: "Loom marketing banner",
+  },
+  oEmbed: {
+    type: "video",
+    title: "Unsafe path",
+    html: '<iframe src="https://www.loom.com/account/settings"></iframe>',
+  },
+});
+assert.equal(loomCompactFallback.preview_kind, "link");
+assert.equal(loomCompactFallback.preview_title, "Polynet - 17 July 2026");
+assert.equal(loomCompactFallback.preview_description, null);
+assert.equal(loomCompactFallback.preview_image, null);
+
+const mismatchedXPreview = normalizeInteractionOEmbedPreview({
+  sourceUrl: xSourceUrl,
+  openGraph: {
+    og_title: "Mathelirium on X",
+    og_description: "Actual post copy",
+    og_image: "https://abs.twimg.com/marketing.png",
+    og_image_alt: "X marketing image",
+  },
+  oEmbed: {
+    type: "rich",
+    url: "https://x.com/attacker/status/9999999999999999999",
+    author_name: "Attacker",
+    html: "<p>Spoofed post</p>",
+  },
+});
+assert.equal(mismatchedXPreview.preview_kind, "link");
+assert.equal(mismatchedXPreview.preview_description, "Actual post copy");
+assert.equal(mismatchedXPreview.preview_image, null);
+assert.doesNotThrow(() =>
+  normalizeInteractionOEmbedPreview({
+    sourceUrl: xSourceUrl,
+    openGraph: { og_title: null, og_description: null, og_image: null, og_image_alt: null },
+    oEmbed: {
+      type: "rich",
+      url: "https://x.com/mathelirium/status/2075857952792047708",
+      author_name: "Mathelirium",
+      html: "<p>Malformed numeric entity: &#999999999;</p>",
+    },
+  }),
+  "malformed provider entities should degrade to bounded text instead of throwing",
 );
 
 assert.deepEqual(

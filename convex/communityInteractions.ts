@@ -2823,11 +2823,19 @@ function sanitizeEmbedVideoUrl(raw: unknown, sourceUrl: string): string | null {
   try {
     const safeUrl = requireSafeCommunitySourceUrl(value, MAX_EMBED_IMAGE_URL_CHARS);
     const sourceHost = new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./, "");
-    const videoHost = new URL(safeUrl).hostname.toLowerCase().replace(/^www\./, "");
-    const isLoom = sourceHost === "loom.com" && videoHost === "loom.com";
+    const video = new URL(safeUrl);
+    const videoHost = video.hostname.toLowerCase().replace(/^www\./, "");
+    const isLoom =
+      sourceHost === "loom.com" &&
+      videoHost === "loom.com" &&
+      /^\/embed\/[A-Za-z0-9_-]{8,160}\/?$/.test(video.pathname);
     const isYouTube =
       (sourceHost === "youtube.com" || sourceHost === "youtube-nocookie.com" || sourceHost === "youtu.be") &&
-      (videoHost === "youtube.com" || videoHost === "youtube-nocookie.com");
+      (videoHost === "youtube.com" || videoHost === "youtube-nocookie.com") &&
+      (
+        /^\/embed\/[A-Za-z0-9_-]{6,80}\/?$/.test(video.pathname) ||
+        (video.pathname === "/embed" && Boolean(video.searchParams.get("list")))
+      );
     return isLoom || isYouTube ? safeUrl : null;
   } catch {
     return null;

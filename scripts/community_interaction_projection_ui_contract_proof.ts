@@ -225,8 +225,18 @@ assert.doesNotMatch(
 );
 assert.match(
   linkPreview,
-  /function approvedVideoUrl[\s\S]*const isLoom[\s\S]*const isYouTube[\s\S]*function VideoLinkPreview[\s\S]*const \[active, setActive\] = useState\(false\)[\s\S]*data-preview-kind="video"[\s\S]*<iframe[\s\S]*sandbox="allow-forms allow-popups allow-presentation allow-same-origin allow-scripts"[\s\S]*Open on \{provider\}/,
-  "video previews should revalidate the player host, defer it until an explicit click, and retain an external fallback",
+  /function approvedHttpsUrl[\s\S]*function approvedVideoUrl[\s\S]*const isLoom[\s\S]*const isYouTube[\s\S]*function VideoLinkPreview[\s\S]*const \[active, setActive\] = useState\(false\)[\s\S]*data-preview-kind="video"[\s\S]*<iframe[\s\S]*sandbox="allow-popups allow-presentation allow-same-origin allow-scripts"[\s\S]*Open on \{provider\}/,
+  "video previews should revalidate source and player hosts and paths, defer the player until an explicit click, and retain an external fallback",
+);
+assert.match(
+  linkPreview,
+  /const href = approvedHttpsUrl[\s\S]*const mediaUrl = approvedHttpsUrl/,
+  "the browser should fail closed on corrupted legacy source or media URLs",
+);
+assert.match(
+  linkPreview,
+  /referrerPolicy="no-referrer"/,
+  "preview images should avoid leaking chat referrers to third-party media hosts",
 );
 assert.match(
   linkPreview,
@@ -951,8 +961,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-interaction-embed\s*\{[\s\S]*max-width:\s*460px;[\s\S]*background:\s*var\(--surface-card\);[\s\S]*\.community-interaction-embed:focus-visible[\s\S]*\.community-interaction-embed-provider\s*\{[\s\S]*color:\s*var\(--text-ink-secondary\);[\s\S]*\.community-interaction-embed-desc\s*\{[\s\S]*-webkit-line-clamp:\s*3;/,
-  "embed cards should inherit theme surfaces while keeping provider and description text readable",
+  /\.community-interaction-embed\s*\{[\s\S]*height:\s*max-content;[\s\S]*max-width:\s*460px;[\s\S]*background:\s*var\(--surface-card\);[\s\S]*\.community-interaction-embed:focus-visible[\s\S]*\.community-interaction-embed-provider\s*\{[\s\S]*color:\s*var\(--text-ink-secondary\);[\s\S]*\.community-interaction-embed-desc\s*\{[\s\S]*-webkit-line-clamp:\s*3;/,
+  "embed cards should own their intrinsic grid height, inherit theme surfaces, and keep provider and description text readable",
 );
 assert.match(
   baseCss,

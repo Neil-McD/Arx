@@ -25,6 +25,14 @@ function normalizeHost(raw) {
   return String(raw ?? "").trim().toLowerCase().replace(/^www\./, "").replace(/\.+$/, "");
 }
 
+function decodedCodePoint(raw, radix) {
+  const value = Number.parseInt(raw, radix);
+  if (!Number.isFinite(value) || value < 0 || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) {
+    return " ";
+  }
+  return String.fromCodePoint(value);
+}
+
 function decodeHtmlEntities(raw) {
   const named = {
     amp: "&",
@@ -37,12 +45,10 @@ function decodeHtmlEntities(raw) {
   return String(raw ?? "").replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (_match, entity) => {
     const lower = String(entity).toLowerCase();
     if (lower.startsWith("#x")) {
-      const value = Number.parseInt(lower.slice(2), 16);
-      return Number.isFinite(value) ? String.fromCodePoint(value) : " ";
+      return decodedCodePoint(lower.slice(2), 16);
     }
     if (lower.startsWith("#")) {
-      const value = Number.parseInt(lower.slice(1), 10);
-      return Number.isFinite(value) ? String.fromCodePoint(value) : " ";
+      return decodedCodePoint(lower.slice(1), 10);
     }
     return named[lower] ?? " ";
   });
@@ -50,6 +56,7 @@ function decodeHtmlEntities(raw) {
 
 function normalizedText(raw, maxChars) {
   const value = decodeHtmlEntities(raw)
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/[ \t]+/g, " ")
@@ -59,6 +66,25 @@ function normalizedText(raw, maxChars) {
   if (!value) return null;
   if (value.length <= maxChars) return value;
   return `${value.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
+}
+
+export function interactionOEmbedResponseUrlIsAllowed(sourceUrl, responseUrl) {
+  const rule = providerRuleForSourceUrl(sourceUrl);
+  if (!rule) return false;
+  try {
+    const parsed = new URL(responseUrl);
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      (parsed.port && parsed.port !== "443")
+    ) {
+      return false;
+    }
+    return rule.endpointHosts.has(normalizeHost(parsed.hostname));
+  } catch {
+    return false;
+  }
 }
 
 function attributeValue(tag, name) {
@@ -112,7 +138,12 @@ export function extractInteractionOEmbedDiscoveryUrl(html, sourceUrl) {
 function safeHttpUrl(raw) {
   try {
     const parsed = new URL(String(raw ?? ""));
-    if (parsed.protocol !== "https:" || parsed.username || parsed.password) return null;
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      (parsed.port && parsed.port !== "443")
+    ) return null;
     parsed.hash = "";
     return parsed.toString();
   } catch {
@@ -120,13 +151,27 @@ function safeHttpUrl(raw) {
   }
 }
 
+function embedPathIsAllowed(rule, parsed) {
+  if (rule.provider === "loom") {
+    return /^\/embed\/[A-Za-z0-9_-]{8,160}\/?$/.test(parsed.pathname);
+  }
+  if (rule.provider === "youtube") {
+    return (
+      /^\/embed\/[A-Za-z0-9_-]{6,80}\/?$/.test(parsed.pathname) ||
+      (parsed.pathname === "/embed" && Boolean(parsed.searchParams.get("list")))
+    );
+  }
+  return false;
+}
+
 function extractIframeSrc(html, rule) {
   const iframe = String(html ?? "").match(/<iframe\b[^>]*>/i)?.[0] ?? "";
   const rawSrc = decodeHtmlEntities(attributeValue(iframe, "src"));
   const src = safeHttpUrl(rawSrc);
   if (!src) return null;
-  const host = normalizeHost(new URL(src).hostname);
-  return rule.embedHosts.has(host) ? src : null;
+  const parsed = new URL(src);
+  const host = normalizeHost(parsed.hostname);
+  return rule.embedHosts.has(host) && embedPathIsAllowed(rule, parsed) ? src : null;
 }
 
 function extractFirstParagraphText(html) {
@@ -134,25 +179,37 @@ function extractFirstParagraphText(html) {
   return normalizedText(body, 600);
 }
 
-function openGraphFallback(openGraph) {
+function xPostMediaUrl(raw) {
+  const url = safeHttpUrl(raw);
+  if (!url) return null;
+  return normalizeHost(new URL(url).hostname) === "pbs.twimg.com" ? url : null;
+}
+
+function openGraphFallback(openGraph, sourceUrl) {
+  const provider = providerRuleForSourceUrl(sourceUrl)?.provider ?? null;
+  const suppressDescription = provider === "loom";
+  const suppressImage = provider === "loom" || provider === "x";
   return {
     preview_kind: "link",
     preview_author_name: null,
     preview_title: normalizedText(openGraph?.og_title, 300),
-    preview_description: normalizedText(openGraph?.og_description, 600),
-    preview_image: safeHttpUrl(openGraph?.og_image),
-    preview_image_alt: normalizedText(openGraph?.og_image_alt, 300),
+    preview_description: suppressDescription ? null : normalizedText(openGraph?.og_description, 600),
+    preview_image: suppressImage ? null : safeHttpUrl(openGraph?.og_image),
+    preview_image_alt: suppressImage ? null : normalizedText(openGraph?.og_image_alt, 300),
     preview_video_url: null,
     preview_resolver_version: INTERACTION_PREVIEW_RESOLVER_VERSION,
   };
 }
 
 export function normalizeInteractionOEmbedPreview({ sourceUrl, openGraph, oEmbed }) {
-  const fallback = openGraphFallback(openGraph);
+  const fallback = openGraphFallback(openGraph, sourceUrl);
   const rule = providerRuleForSourceUrl(sourceUrl);
   if (!rule || !oEmbed || typeof oEmbed !== "object" || Array.isArray(oEmbed)) return fallback;
 
   if (rule.provider === "x" && String(oEmbed.type ?? "").toLowerCase() === "rich") {
+    const sourceStatusId = /\/status\/(\d+)/i.exec(new URL(sourceUrl).pathname)?.[1] ?? null;
+    const responseStatusId = /\/status\/(\d+)/i.exec(String(oEmbed.url ?? ""))?.[1] ?? null;
+    if (!sourceStatusId || sourceStatusId !== responseStatusId) return fallback;
     const authorName = normalizedText(oEmbed.author_name, 160);
     const postBody = extractFirstParagraphText(oEmbed.html);
     if (!authorName || !postBody) return fallback;
@@ -162,6 +219,8 @@ export function normalizeInteractionOEmbedPreview({ sourceUrl, openGraph, oEmbed
       preview_author_name: authorName,
       preview_title: authorName,
       preview_description: postBody,
+      preview_image: xPostMediaUrl(openGraph?.og_image),
+      preview_image_alt: normalizedText(openGraph?.og_image_alt, 300),
     };
   }
 
@@ -183,6 +242,6 @@ export function normalizeInteractionOEmbedPreview({ sourceUrl, openGraph, oEmbed
   return fallback;
 }
 
-export function interactionPreviewOpenGraphFallback(openGraph) {
-  return openGraphFallback(openGraph);
+export function interactionPreviewOpenGraphFallback(openGraph, sourceUrl = null) {
+  return openGraphFallback(openGraph, sourceUrl);
 }
