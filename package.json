@@ -73,6 +73,8 @@
     "smoke:builder-partner-runtime": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/builder_partner_program_runtime_smoke.ts",
     "check:community-launch-setup-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_launch_setup_contract_proof.ts",
     "check:community-settings-panes-route-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_settings_panes_route_contract_proof.ts",
+    "check:community-onboarding-workflow-contract": "tsx scripts/community_onboarding_workflow_contract_proof.ts",
+    "check:community-onboarding-preview-contract": "tsx scripts/community_onboarding_preview_contract_proof.ts",
     "check:community-funnel-editor-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_funnel_editor_contract_proof.ts",
     "check:community-tab-hydration-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_tab_hydration_contract_proof.ts",
     "check:purchase-token-hygiene-proof": "tsx scripts/purchase_token_hygiene_proof.ts",

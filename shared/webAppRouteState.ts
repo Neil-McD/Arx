@@ -20,12 +20,15 @@ export type PublicRoute =
 
 export type AppShellVariant = "standard" | "mobile";
 
+export type CommunityExperienceMode = "standard" | "onboarding_preview";
+
 export type AppRouteState = {
   page: AppPage;
   view: AppView;
   settingsPage: SettingsPage;
   communitySlug: string | null;
   communityTab: CommunityTab;
+  communityExperienceMode?: CommunityExperienceMode;
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
   docsSlug?: string | null;
@@ -40,6 +43,7 @@ export type AppRoutePathState = {
   settingsPage: SettingsPage;
   communitySlug: string | null;
   communityTab: CommunityTab;
+  communityExperienceMode?: CommunityExperienceMode;
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
   docsSlug?: string | null;
@@ -227,6 +231,14 @@ export function buildCommunityFunnelPreviewPath(communitySlug: string | null | u
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
   return `/c/${encodeURIComponent(slug)}/preview`;
+}
+
+export function buildCommunityOnboardingPreviewPath(
+  communitySlug: string | null | undefined,
+): string | null {
+  const slug = String(communitySlug ?? "").trim();
+  if (!slug) return null;
+  return `/c/${encodeURIComponent(slug)}/onboarding/preview`;
 }
 
 export function buildCommunityFunnelPath(communitySlug: string | null | undefined): string | null {
@@ -433,6 +445,25 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     };
   }
 
+  if (
+    segments[0] === "c" &&
+    segments.length === 4 &&
+    segments[2] === "onboarding" &&
+    segments[3] === "preview"
+  ) {
+    const slug = String(segments[1] ?? "").trim() || null;
+    if (!slug) return null;
+    return {
+      page: "community",
+      view: "home",
+      settingsPage: "agent",
+      communitySlug: slug,
+      communityTab: "chat",
+      communityExperienceMode: "onboarding_preview",
+      threadId: null,
+    };
+  }
+
   if (segments[0] === "c" && segments.length >= 3) {
     const slug = String(segments[1] ?? "").trim() || null;
     if (!slug) return null;
@@ -447,6 +478,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       settingsPage: "agent",
       communitySlug: slug,
       communityTab,
+      communityExperienceMode: "standard",
       communityResourceModuleId,
       communitySettingsPane,
       threadId: null,
@@ -497,6 +529,9 @@ export function readAppRouteFromLocation(): AppRouteState {
       settingsPage: fromPath.settingsPage,
       communitySlug: fromPath.communitySlug,
       communityTab: fromPath.communityTab,
+      ...(fromPath.communityExperienceMode === "onboarding_preview"
+        ? { communityExperienceMode: "onboarding_preview" as const }
+        : {}),
       communityResourceModuleId: fromPath.communityResourceModuleId ?? null,
       communitySettingsPane: fromPath.communitySettingsPane ?? null,
       docsSlug: fromPath.docsSlug ?? null,
@@ -528,6 +563,9 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
   }
 
   if (state.page === "community") {
+    if (state.communityExperienceMode === "onboarding_preview") {
+      return buildCommunityOnboardingPreviewPath(state.communitySlug);
+    }
     return buildCommunityTabPath(
       state.communitySlug,
       state.communityTab,

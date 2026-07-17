@@ -8,6 +8,9 @@ type CommunitySurfaceCommunityLike =
         name: string;
         owner_id?: string | null;
         avatar_url?: string | null;
+        avatar_focus_x?: number | null;
+        avatar_focus_y?: number | null;
+        avatar_zoom?: number | null;
         banner_url?: string | null;
         banner_focus_x?: number | null;
         banner_focus_y?: number | null;
@@ -20,6 +23,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communityTab: CommunityTab;
   activeCommunity: CommunitySurfaceCommunityLike | null;
   session: WebCommunityChatPanelProps["session"];
+  ensureSession: WebCommunitySecondaryPanelsProps["settings"]["ensureSession"];
   selectedActiveCommunitySlug: string | null;
   hasAuthenticatedPresentation: boolean;
   isAuthRecoveringSignedIn: boolean;
@@ -32,6 +36,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communitySettingsLayer: WebCommunitySecondaryPanelsProps["settings"]["communitySettingsLayer"];
   communitySettingsPane: CommunitySettingsPane;
   onSelectCommunitySettingsPane: (pane: CommunitySettingsPane, opts?: { replace?: boolean }) => void;
+  onPreviewCommunityOnboarding: WebCommunitySecondaryPanelsProps["settings"]["onPreviewCommunityOnboarding"];
   canManageCommunitySettings: WebCommunitySecondaryPanelsProps["settings"]["canManageCommunitySettings"];
   canDeleteActiveCommunity: WebCommunitySecondaryPanelsProps["settings"]["canDeleteCommunity"];
   requireSignIn: WebCommunitySecondaryPanelsProps["settings"]["requireSignIn"];
@@ -176,11 +181,14 @@ export function buildWebCommunitySurfaceProjection(
     communityTab: params.communityTab,
     settings: {
       activeCommunity: params.activeCommunity,
+      session: params.session,
+      ensureSession: params.ensureSession,
       hasSession: params.hasAuthenticatedPresentation,
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       communitySettingsLayer: params.communitySettingsLayer,
       activePane: params.communitySettingsPane,
       onSelectPane: params.onSelectCommunitySettingsPane,
+      onPreviewCommunityOnboarding: params.onPreviewCommunityOnboarding,
       canManageCommunitySettings: params.canManageCommunitySettings,
       canDeleteCommunity: params.canDeleteActiveCommunity,
       requireSignIn: params.requireSignIn,
@@ -302,6 +310,10 @@ export function buildWebCommunitySurfaceProjection(
           id: params.activeCommunity.id,
           name: params.activeCommunity.name,
           owner_id: params.activeCommunity.owner_id ?? null,
+          avatar_url: params.activeCommunity.avatar_url ?? null,
+          avatar_focus_x: params.activeCommunity.avatar_focus_x ?? null,
+          avatar_focus_y: params.activeCommunity.avatar_focus_y ?? null,
+          avatar_zoom: params.activeCommunity.avatar_zoom ?? null,
         }
       : null,
     session: params.session,

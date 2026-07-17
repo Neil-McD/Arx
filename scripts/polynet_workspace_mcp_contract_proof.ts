@@ -41,8 +41,16 @@ const communityReadKernel = read("convex/communityReadKernel.ts");
 const communityReadContract = read("shared/communityReadContract.ts");
 const communityCapabilityContextContract = read("shared/communityCapabilityContextContract.ts");
 const packageJson = read("package.json");
-const integrationsSettings = read(
+const integrationsSettingsUi = read(
   "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+);
+const mcpSetup = read("shared/polynetMcpSetup.ts");
+const integrationsSettings = `${integrationsSettingsUi}\n${mcpSetup}`;
+
+assertIncludes(
+  integrationsSettingsUi,
+  "../../../../shared/polynetMcpSetup",
+  "Integrations Settings canonical MCP setup import",
 );
 
 assertIncludes(
@@ -210,6 +218,26 @@ assertIncludes(
   "codex mcp login polynet --scopes openid,profile,email,offline_access",
   "workspace MCP contract should include the canonical Codex login fallback",
 );
+assertIncludes(
+  contract,
+  "openclaw mcp add polynet --url https://www.polynet.ai/runtime/mcp --transport streamable-http --auth oauth",
+  "workspace MCP contract should include the native OpenClaw add command",
+);
+assertIncludes(
+  contract,
+  "openclaw mcp doctor polynet --probe",
+  "workspace MCP contract should include OpenClaw verification",
+);
+assertIncludes(
+  contract,
+  "hermes mcp login polynet",
+  "workspace MCP contract should include native Hermes authentication",
+);
+assertIncludes(
+  contract,
+  "`/reload-mcp`",
+  "workspace MCP contract should include Hermes session refresh guidance",
+);
 
 assertIncludes(
   packageJson,
@@ -231,6 +259,26 @@ assertIncludes(
   integrationsSettings,
   "POLYNET_MCP_CODEX_LOGIN_FALLBACK_COMMAND",
   "Polynet Codex login fallback command",
+);
+assertIncludes(
+  integrationsSettings,
+  "POLYNET_MCP_OPENCLAW_ADD_COMMAND",
+  "Polynet OpenClaw add command constant",
+);
+assertIncludes(
+  integrationsSettings,
+  "POLYNET_MCP_OPENCLAW_LOGIN_COMMAND",
+  "Polynet OpenClaw login command constant",
+);
+assertIncludes(
+  integrationsSettings,
+  "POLYNET_MCP_HERMES_CONFIG",
+  "Polynet Hermes config constant",
+);
+assertIncludes(
+  integrationsSettings,
+  "POLYNET_MCP_HERMES_LOGIN_COMMAND",
+  "Polynet Hermes login command constant",
 );
 assertIncludes(
   integrationsSettings,
@@ -465,6 +513,56 @@ assertIncludes(
   integrationsSettings,
   "If Polynet is already configured, do not add it again.",
   "Polynet setup packet should avoid duplicate Codex registration",
+);
+assertIncludes(
+  integrationsSettings,
+  "## OpenClaw",
+  "PolyMCP setup packet should include OpenClaw instructions",
+);
+assertIncludes(
+  integrationsSettings,
+  "openclaw mcp add polynet --url",
+  "PolyMCP setup packet should include native OpenClaw setup",
+);
+assertIncludes(
+  integrationsSettings,
+  "--transport streamable-http --auth oauth",
+  "PolyMCP setup packet should configure OpenClaw OAuth transport",
+);
+assertIncludes(
+  integrationsSettings,
+  "openclaw mcp login polynet",
+  "PolyMCP setup packet should include OpenClaw login",
+);
+assertIncludes(
+  integrationsSettings,
+  "openclaw mcp doctor polynet --probe",
+  "PolyMCP setup packet should include OpenClaw verification",
+);
+assertIncludes(
+  integrationsSettings,
+  "## Hermes",
+  "PolyMCP setup packet should include Hermes instructions",
+);
+assertIncludes(
+  integrationsSettings,
+  '`    url: "${POLYNET_MCP_ENDPOINT_URL}"`',
+  "PolyMCP setup packet should include the Hermes remote endpoint",
+);
+assertIncludes(
+  integrationsSettings,
+  "auth: oauth",
+  "PolyMCP setup packet should configure Hermes OAuth",
+);
+assertIncludes(
+  integrationsSettings,
+  "hermes mcp login polynet",
+  "PolyMCP setup packet should include Hermes login",
+);
+assertIncludes(
+  integrationsSettings,
+  "/reload-mcp",
+  "PolyMCP setup packet should include Hermes reload guidance",
 );
 assertIncludes(
   integrationsSettings,

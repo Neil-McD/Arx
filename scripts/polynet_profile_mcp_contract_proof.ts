@@ -160,9 +160,7 @@ const mcp = read("shared/polynetMcp.ts");
 const http = read("convex/httpMcp.ts");
 const ontology = read("convex/memberOntology.ts");
 const ontologyCore = read("convex/memberOntologyCore.ts");
-const setup = read(
-  "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
-);
+const setup = read("shared/polynetMcpSetup.ts");
 const contract = read("docs/polynet-workspace-mcp-contract-v0.md");
 const smoke = read("scripts/polynet_workspace_mcp_external_smoke.ts");
 

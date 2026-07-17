@@ -213,6 +213,11 @@ The target Polynet MCP user experience is:
 Settings -> Integrations -> Copy setup -> paste into harness -> one OAuth login -> durable MCP access
 ```
 
+Member onboarding may present the same canonical setup packet as its final
+deterministic handoff. It must reuse the Integrations packet exactly; onboarding
+must not create a second MCP payload, token path, harness wizard, or installation
+attestation.
+
 Polynet must not ask users to paste bearer tokens. Polynet is the MCP resource server, WorkOS/AuthKit is the OAuth authorization server, and the external harness is the OAuth client that owns local credential persistence.
 
 For a single harness profile/device, one successful OAuth login should survive new chats, app restarts, and normal access-token expiry. The harness should store refresh-capable credentials and refresh access tokens silently. Re-authentication is expected only after logout, token revocation, refresh-token expiry, account switch, a new harness profile/device, or lost local credentials.
@@ -254,6 +259,28 @@ codex mcp login polynet --scopes openid,profile,email,offline_access
 ```
 
 `mcp-remote` is a compatibility fallback only. It is not the canonical Codex setup path and its stored OAuth credentials should not be treated as proof that native Codex MCP OAuth is authenticated.
+
+OpenClaw setup should use its native remote MCP registry:
+
+```bash
+openclaw mcp add polynet --url https://www.polynet.ai/runtime/mcp --transport streamable-http --auth oauth
+openclaw mcp login polynet
+```
+
+After browser sign-in, `openclaw mcp doctor polynet --probe` should verify that
+the Polynet tools are available.
+
+Hermes setup should use its native remote MCP configuration:
+
+```yaml
+mcp_servers:
+  polynet:
+    url: "https://www.polynet.ai/runtime/mcp"
+    auth: oauth
+```
+
+Then run `hermes mcp login polynet`. An already-open Hermes session should run
+`/reload-mcp` or start a fresh session before verification.
 
 Continuity acceptance requires a clean native Codex profile to:
 
@@ -490,6 +517,8 @@ Focused proofs must show:
 - setup copy is a self-contained setup packet for the receiving agent,
 - setup copy includes a Claude Code remote HTTP setup path,
 - setup copy uses native Codex OAuth with `offline_access`,
+- setup copy includes an OpenClaw Streamable HTTP + OAuth setup path,
+- setup copy includes a Hermes remote HTTP + OAuth setup path,
 - setup copy recommends durable MCP credential storage,
 - setup copy puts durable credential storage before OAuth,
 - setup copy presents `codex mcp login` as fallback only,

@@ -56,6 +56,10 @@ import {
   describeMemberAgentSurface,
   type MemberAgentSurfaceContextV1,
 } from "../../../../shared/memberAgentSurfaceContext";
+import {
+  shouldPresentCommunityOnboardingAgentReview,
+  shouldPresentCommunityOnboardingAgentStep,
+} from "../../../../shared/communityOnboarding";
 import { useWebTurnRunnerController } from "../../../../shared/useWebTurnRunnerController";
 import type {
   InferenceIssueModalState,
@@ -63,6 +67,7 @@ import type {
   ThreadStreamingState,
 } from "../../../../shared/webTurnRunnerCore";
 import { RuntimeLiveTimeline } from "./RuntimeLiveTimeline";
+import { useWebCommunityOnboarding } from "./WebCommunityOnboardingController";
 import "./WebMemberAgentDock.css";
 
 type MemberAgentMessage = Omit<CloudMessageTransportRow, "role"> & {
@@ -101,6 +106,7 @@ type MemberAgentRetryState = {
 type WebMemberAgentDockProps = {
   isVisible: boolean;
   mobileShellActive?: boolean;
+  onRequestOpen?: () => void;
   mobileRoot?: boolean;
   communityId: string | null;
   communityName: string | null;
@@ -172,6 +178,7 @@ function formatInferenceIssue(issue: InferenceIssueModalState | null): string | 
 
 export const WebMemberAgentDock = forwardRef<WebMemberAgentDockHandle, WebMemberAgentDockProps>(
 function WebMemberAgentDock(props, ref) {
+  const onboarding = useWebCommunityOnboarding();
   const [isOpen, setIsOpen] = useState(false);
   const isOpenSurface = props.mobileShellActive
     ? Boolean(props.mobileRoot)
@@ -196,6 +203,9 @@ function WebMemberAgentDock(props, ref) {
   const [, setRuntimeEventsByRunId] = useState<Record<string, ThreadStreamingRuntimeEvent[]>>({});
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const onboardingOpenedSessionIdsRef = useRef(new Set<string>());
+  const onboardingSeededSessionIdsRef = useRef(new Set<string>());
+  const onboardingFocusSessionIdRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentsRef = useRef<MemberAgentImageDraft[]>([]);
   const draftTextRef = useRef("");
@@ -215,6 +225,8 @@ function WebMemberAgentDock(props, ref) {
   });
   const scopeUserId = props.session?.user.id ?? null;
   const surfaceKind = props.surfaceContext?.kind ?? null;
+  const onboardingSession = onboarding?.activeSession ?? null;
+  const isConversationSurfaceActive = isOpenSurface;
   if (
     agentScopeRef.current.userId !== scopeUserId ||
     agentScopeRef.current.surfaceKey !== surfaceKey
@@ -432,7 +444,12 @@ function WebMemberAgentDock(props, ref) {
   }, [props.isVisible]);
 
   useEffect(() => {
-    if (!isOpenSurface || !props.isVisible || !surfaceKind || !props.session) return;
+    if (
+      !isConversationSurfaceActive ||
+      !props.isVisible ||
+      !surfaceKind ||
+      !props.session
+    ) return;
     let cancelled = false;
     if (activeThreadKeyRef.current) return;
     const scope = agentScopeRef.current;
@@ -471,7 +488,7 @@ function WebMemberAgentDock(props, ref) {
       cancelled = true;
     };
   }, [
-    isOpenSurface,
+    isConversationSurfaceActive,
     loadMessages,
     props.communityId,
     props.ensureSession,
@@ -489,6 +506,95 @@ function WebMemberAgentDock(props, ref) {
   const composerIsBusy = turnIsActive || isUploadingAttachments || isSubmitting;
   const visibleMessages = messages.filter((message) => message.role !== "system");
   const dockError = localError ?? formatInferenceIssue(inferenceIssue);
+  const showOnboardingAgentFocus = Boolean(
+    props.communityId &&
+    props.communityName &&
+    onboardingSession?.community_id === props.communityId &&
+    !onboarding?.firstPostAcknowledgementPending &&
+    (
+      shouldPresentCommunityOnboardingAgentStep(onboardingSession) ||
+      shouldPresentCommunityOnboardingAgentReview(onboardingSession)
+    ),
+  );
+  const onboardingDescriptionId = "community-onboarding-agent-description";
+
+  useEffect(() => {
+    if (
+      !showOnboardingAgentFocus ||
+      !onboardingSession ||
+      !props.isVisible ||
+      onboardingOpenedSessionIdsRef.current.has(onboardingSession.id)
+    ) {
+      return;
+    }
+    onboardingOpenedSessionIdsRef.current.add(onboardingSession.id);
+    onboardingFocusSessionIdRef.current = onboardingSession.id;
+    if (props.mobileShellActive) {
+      props.onRequestOpen?.();
+      return;
+    }
+    setIsOpen(true);
+  }, [
+    onboardingSession,
+    props.isVisible,
+    props.mobileShellActive,
+    props.onRequestOpen,
+    showOnboardingAgentFocus,
+  ]);
+
+  useEffect(() => {
+    if (
+      !showOnboardingAgentFocus ||
+      !shouldPresentCommunityOnboardingAgentStep(onboardingSession) ||
+      !onboardingSession ||
+      !props.communityName ||
+      onboardingSeededSessionIdsRef.current.has(onboardingSession.id)
+    ) {
+      return;
+    }
+    onboardingSeededSessionIdsRef.current.add(onboardingSession.id);
+    setInput((current) => {
+      if (current.trim()) {
+        draftTextRef.current = current;
+        return current;
+      }
+      const seededPrompt =
+        `What is one useful first action I should take in ${props.communityName}?`;
+      draftTextRef.current = seededPrompt;
+      return seededPrompt;
+    });
+  }, [onboardingSession, props.communityName, showOnboardingAgentFocus]);
+
+  useEffect(() => {
+    if (
+      !showOnboardingAgentFocus ||
+      !shouldPresentCommunityOnboardingAgentStep(onboardingSession) ||
+      !onboardingSession ||
+      onboardingFocusSessionIdRef.current !== onboardingSession.id ||
+      !isOpenSurface ||
+      !threadKey ||
+      turnIsActive ||
+      isPreparing ||
+      isStartingNewChat
+    ) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea || textarea.disabled || !document.contains(textarea)) return;
+      textarea.focus({ preventScroll: true });
+      onboardingFocusSessionIdRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    isOpenSurface,
+    isPreparing,
+    isStartingNewChat,
+    onboardingSession,
+    showOnboardingAgentFocus,
+    threadKey,
+    turnIsActive,
+  ]);
 
   const observeThreadContext = useCallback((communityId: string | null, contextVersion: number) => {
     const next = {
@@ -839,6 +945,7 @@ function WebMemberAgentDock(props, ref) {
         runtimeEngine: "polynet",
         invocationSurface: "member_agent_dock",
         surfaceContext,
+        suppressOnboardingProgress: onboarding?.mode === "preview",
         requestedFundingSource: "auto",
         requestedAgenticTools: true,
         replyToId: messageId,
@@ -848,6 +955,7 @@ function WebMemberAgentDock(props, ref) {
       if (result.error) throw new Error(result.error);
       if (isCurrentScope(scope)) {
         await loadMessages(thread.thread_key, usableSession);
+        if (onboarding?.mode === "preview") onboarding.completeAgentTurnPreview();
       }
       revokeDraftPreviews(workingDrafts);
     } catch (error) {
@@ -902,15 +1010,16 @@ function WebMemberAgentDock(props, ref) {
     Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
 
   return (
+    <>
     <aside
       id="polynet-member-agent-surface"
-      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}`}
+      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
       aria-live="polite"
     >
       {!props.mobileShellActive ? (
         <button
           type="button"
-          className={`member-agent-dock-launcher${composerIsBusy ? " is-working" : ""}`}
+          className={`member-agent-dock-launcher${composerIsBusy ? " is-working" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
           onClick={() => setIsOpen((open) => !open)}
           aria-label={isOpen ? "Close your agent" : "Open your agent"}
           title={isOpen ? "Close your agent" : "Open your agent"}
@@ -941,7 +1050,13 @@ function WebMemberAgentDock(props, ref) {
             <button
               type="button"
               onClick={() => void startNewChat()}
-              disabled={composerIsBusy || isPreparing || isStartingNewChat || !episodeId}
+              disabled={
+                showOnboardingAgentFocus ||
+                composerIsBusy ||
+                isPreparing ||
+                isStartingNewChat ||
+                !episodeId
+              }
               aria-label="Start fresh conversation"
               title="Start fresh conversation"
             >
@@ -951,6 +1066,7 @@ function WebMemberAgentDock(props, ref) {
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
+                disabled={showOnboardingAgentFocus}
                 aria-label="Close"
                 title="Close"
               >
@@ -1060,7 +1176,7 @@ function WebMemberAgentDock(props, ref) {
             </div>
           ) : null}
           <form
-            className={`member-agent-dock-composer${isAttachmentDragOver ? " is-dragging" : ""}`}
+            className={`member-agent-dock-composer${isAttachmentDragOver ? " is-dragging" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
             onSubmit={submit}
             onDragEnter={(event) => {
               if (!Array.from(event.dataTransfer.types ?? []).includes("Files")) return;
@@ -1119,6 +1235,7 @@ function WebMemberAgentDock(props, ref) {
               }}
               placeholder={`Message your agent in ${surfaceLabel}`}
               aria-label="Message your agent"
+              aria-describedby={showOnboardingAgentFocus ? onboardingDescriptionId : undefined}
               rows={1}
               maxLength={8000}
               disabled={composerIsBusy || isPreparing || isStartingNewChat}
@@ -1164,5 +1281,6 @@ function WebMemberAgentDock(props, ref) {
         </div>
       </section>
     </aside>
+    </>
   );
 });

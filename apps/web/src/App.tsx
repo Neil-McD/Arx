@@ -267,6 +267,7 @@ import { deriveOpenDiscoverTransition } from "../../../shared/appNavTransitions"
 import {
   type AppShellVariant,
   type AppRouteState,
+  type CommunityExperienceMode,
   type PublicRoute,
   STANDALONE_APP_LAUNCH_SEARCH_PARAM,
   STANDALONE_APP_LAUNCH_SEARCH_VALUE,
@@ -275,6 +276,7 @@ import {
   applyShellVariantToKnownPath,
   buildAppRoutePath,
   buildCommunityFunnelPath,
+  buildCommunityOnboardingPreviewPath,
   buildCommunityTabPath,
   buildSettingsPath,
   buildCommunityFunnelPreviewPath,
@@ -531,6 +533,7 @@ import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOver
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
 import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeHostProps";
 import type { MemberAgentSurfaceContextV1 } from "../../../shared/memberAgentSurfaceContext";
+import { WebCommunityOnboardingController } from "./components/WebCommunityOnboardingController";
 import type { WebMemberAgentDockHandle } from "./components/WebMemberAgentDock";
 
 const WebAppMainSurfaceHost = lazy(() =>
@@ -1944,6 +1947,8 @@ export default function App() {
   const [shellVariant, setShellVariant] = useState<AppShellVariant>(() => initialShellVariant);
   const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay>(null);
   const [mobileRootPage, setMobileRootPage] = useState<MobileRootPage>("community");
+  const [communityOnboardingFirstPostFocusRequest, setCommunityOnboardingFirstPostFocusRequest] =
+    useState(0);
   const [mobileSettingsView, setMobileSettingsView] = useState<"index" | "detail">("detail");
   const [mobileChromeReadingMode, setMobileChromeReadingMode] = useState(false);
 
@@ -2281,6 +2286,11 @@ export default function App() {
     });
   const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
   const [communityTab, setCommunityTab] = useState<CommunityTab>(() => initialAppRoute?.communityTab ?? "chat");
+  const [communityExperienceMode, setCommunityExperienceMode] = useState<CommunityExperienceMode>(() =>
+    initialAppRoute?.page === "community"
+      ? initialAppRoute.communityExperienceMode ?? "standard"
+      : "standard",
+  );
   const [communityResourceModuleId, setCommunityResourceModuleId] = useState<string | null>(() =>
     initialAppRoute?.page === "community" && initialAppRoute.communityTab === "resources"
       ? initialAppRoute.communityResourceModuleId ?? null
@@ -4311,6 +4321,7 @@ export default function App() {
       setActiveOperatorTab(nextAppRoute.operatorTab ?? "platform");
     }
     if (nextAppRoute.page === "community") {
+      setCommunityExperienceMode(nextAppRoute.communityExperienceMode ?? "standard");
       applyCommunityShellState({
         communitySlug: normalizedCommunitySlug,
         communityTab: nextAppRoute.communityTab,
@@ -4322,12 +4333,14 @@ export default function App() {
         nextAppRoute.communityTab === "settings" ? nextAppRoute.communitySettingsPane ?? "community" : "community",
       );
     } else if (nextAppRoute.page === "workspace" && nextAppRoute.view === "home") {
+      setCommunityExperienceMode("standard");
       applyCommunityShellState({
         communitySlug: nextThreadId ? undefined : normalizedCommunitySlug,
       });
       setCommunityResourceModuleId(null);
       setCommunitySettingsPane("community");
     } else {
+      setCommunityExperienceMode("standard");
       setCommunityResourceModuleId(null);
       setCommunitySettingsPane("community");
     }
@@ -6247,6 +6260,7 @@ export default function App() {
     settingsPage,
     activeCommunitySlug: selectedActiveCommunitySlug,
     communityTab,
+    communityExperienceMode,
     communityResourceModuleId,
     communitySettingsPane,
     docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
@@ -10323,6 +10337,21 @@ export default function App() {
     navigateTo(settingsPath, opts?.replace ? { replace: true } : {});
   }, [activeCommunity?.slug, navigateTo, selectedActiveCommunitySlug]);
 
+  const isCommunityOnboardingPreviewMode =
+    publicRoute.kind === "app" &&
+    activePage === "community" &&
+    communityExperienceMode === "onboarding_preview";
+  const handlePreviewCommunityOnboarding = useCallback(() => {
+    const slug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
+    const path = buildCommunityOnboardingPreviewPath(slug);
+    if (path) navigateTo(path);
+  }, [activeCommunity?.slug, navigateTo, selectedActiveCommunitySlug]);
+  const handleExitCommunityOnboardingPreview = useCallback(() => {
+    const slug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
+    const path = buildCommunityTabPath(slug, "settings", null, "workflows");
+    if (path) navigateTo(path, { replace: true });
+  }, [activeCommunity?.slug, navigateTo, selectedActiveCommunitySlug]);
+
   const isCommunityFunnelAboutDirty =
     Boolean(activeCommunity) && communitySettingsAbout !== (activeCommunity?.about ?? "");
 
@@ -10441,6 +10470,7 @@ export default function App() {
       communityTab,
       activeCommunity,
       session: session,
+      ensureSession: ensureUsableAuthSession,
       selectedActiveCommunitySlug,
       hasAuthenticatedPresentation: hasAuthenticatedAppShellPresentation,
       isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
@@ -10454,6 +10484,7 @@ export default function App() {
       communitySettingsLayer,
       communitySettingsPane,
       onSelectCommunitySettingsPane: handleSelectCommunitySettingsPane,
+      onPreviewCommunityOnboarding: handlePreviewCommunityOnboarding,
       canManageCommunitySettings,
       canDeleteActiveCommunity,
       requireSignIn,
@@ -10796,8 +10827,9 @@ export default function App() {
       onCommunityAttachmentDragLeave: handleCommunityAttachmentDragLeave,
       onCommunityAttachmentPaste: handleCommunityAttachmentPaste,
       isCommunityAttachmentDragOver,
-      onCommunityMessageInputChange: (value: string, textarea: HTMLTextAreaElement) => {
+      onCommunityMessageInputChange: (value: string, textarea?: HTMLTextAreaElement) => {
         setCommunityMessageInput(value);
+        if (!textarea) return;
         textarea.style.height = "auto";
         textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
       },
@@ -11261,6 +11293,10 @@ export default function App() {
     setMobileOverlay(null);
     handleSelectCommunityTab(tab);
   }, [handleSelectCommunityTab]);
+  const handleCommunityOnboardingOrientationCompleted = useCallback(() => {
+    setCommunityOnboardingFirstPostFocusRequest((current) => current + 1);
+    if (!isCommunityOnboardingPreviewMode) handleSelectCommunityTab("chat");
+  }, [handleSelectCommunityTab, isCommunityOnboardingPreviewMode]);
 
   const standalonePublicRouteViewProps = buildWebStandalonePublicRouteViewProps({
     publicRouteKind: publicRoute.kind,
@@ -11575,6 +11611,8 @@ export default function App() {
     },
     communityHostProps: {
       communityTab,
+      onSelectCommunityTab: handleSelectCommunityTab,
+      firstPostFocusRequest: communityOnboardingFirstPostFocusRequest,
       chatPanelProps: {
         ...communityChatPanelProps,
         mobileMembersOverlayOpen: showMobileShell && mobileOverlay === "members",
@@ -11688,6 +11726,7 @@ export default function App() {
           isVisible={isMemberAgentDockVisible}
           mobileShellActive={showMobileShell}
           mobileRoot={showMobileShell && mobileRootPage === "agent"}
+          onRequestOpen={() => setMobileRootPage("agent")}
           communityId={memberAgentDockCommunity?.id ?? null}
           communityName={memberAgentDockCommunity?.name ?? null}
           surfaceContext={memberAgentSurfaceContext}
@@ -12004,8 +12043,26 @@ export default function App() {
   });
 
   return (
-    <>
+    <WebCommunityOnboardingController
+      session={communityChatPanelProps.session}
+      ensureSession={ensureUsableAuthSession}
+      communityId={memberAgentDockCommunity?.id ?? null}
+      communityName={memberAgentDockCommunity?.name ?? null}
+      communityAvatarUrl={memberAgentDockCommunity?.avatar_url ?? null}
+      communityAvatarFocusX={memberAgentDockCommunity?.avatar_focus_x ?? null}
+      communityAvatarFocusY={memberAgentDockCommunity?.avatar_focus_y ?? null}
+      communityAvatarZoom={memberAgentDockCommunity?.avatar_zoom ?? null}
+      isEnabled={Boolean(
+        memberAgentDockCommunity &&
+        communityChatPanelProps.hasAuthenticatedPresentation &&
+        communityChatPanelProps.hasSession
+      )}
+      previewMode={isCommunityOnboardingPreviewMode}
+      canPreview={canManageCommunitySettings}
+      onExitPreview={handleExitCommunityOnboardingPreview}
+      onOrientationCompleted={handleCommunityOnboardingOrientationCompleted}
+    >
       <WebShellChromeHost {...shellChromeHostProps} />
-    </>
+    </WebCommunityOnboardingController>
   );
 }

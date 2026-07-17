@@ -116,6 +116,7 @@ export type RunAgentTurnParams = {
   runtimeEngine?: RuntimeEngine;
   invocationSurface?: RuntimeInvocationSurface;
   surfaceContext?: MemberAgentSurfaceContextV1 | null;
+  suppressOnboardingProgress?: boolean;
   requestedFundingSource:
     | "demo_public"
     | "user_key"

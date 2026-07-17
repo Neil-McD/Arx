@@ -48,6 +48,7 @@ import {
 } from "./platformHomeCommunity";
 import { getStripeClient } from "./stripeCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
+import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
 type AnalyticsBucketValue = "day" | "week" | "month";
@@ -743,61 +744,25 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
     existingMembershipRows,
   );
   let grantedMembershipMarker: string | null = null;
-  if (!existingMembership) {
-    const membershipId = await args.ctx.db.insert("communityMemberships", {
-      communityId: args.request.communityId,
-      userId: args.request.userId,
-      role: "member",
-      accessSource: "free_grant",
-      active: true,
-      createdAt: args.nowMs,
-      updatedAt: args.nowMs,
-    });
-    await adjustCommunityActiveMemberCountForMembershipTransition({
-      ctx: args.ctx,
-      communityId: args.request.communityId,
-      before: null,
-      after: {
-        _id: membershipId,
-        communityId: args.request.communityId,
-        userId: args.request.userId,
-        role: "member",
-        accessSource: "free_grant",
-        active: true,
-        createdAt: args.nowMs,
-        updatedAt: args.nowMs,
-      },
-    });
-    grantedMembershipMarker = `${String(membershipId)}:${args.nowMs}`;
-  } else if (!communityMembershipRowIsActive(existingMembership)) {
+  if (!existingMembership || !communityMembershipRowIsActive(existingMembership)) {
     const restoredAccessSource =
-      existingMembership.accessSource === "paid_subscription" ||
-      existingMembership.accessSource === "free_grant" ||
-      existingMembership.accessSource === "manual_grant"
+      existingMembership?.accessSource === "paid_subscription" ||
+      existingMembership?.accessSource === "free_grant" ||
+      existingMembership?.accessSource === "manual_grant"
         ? existingMembership.accessSource
         : "free_grant";
-    const restoredMembership = {
-      ...existingMembership,
-      accessSource: restoredAccessSource,
-      active: true,
-      revokedAt: undefined,
-      revokedReason: undefined,
-      updatedAt: args.nowMs,
-    } as CommunityMembershipLike;
-    await args.ctx.db.patch(existingMembership._id as any, {
-      accessSource: restoredAccessSource,
-      active: true,
-      revokedAt: undefined,
-      revokedReason: undefined,
-      updatedAt: args.nowMs,
-    });
-    await adjustCommunityActiveMemberCountForMembershipTransition({
+    const activation = await activateCommunityMembershipCore({
       ctx: args.ctx,
       communityId: args.request.communityId,
-      before: existingMembership,
-      after: restoredMembership,
+      userId: args.request.userId,
+      role: existingMembership
+        ? normalizeCommunityRoleForOutput(existingMembership.role) || "member"
+        : "member",
+      accessSource: restoredAccessSource,
+      activationReason: args.grantReason,
+      nowMs: args.nowMs,
     });
-    grantedMembershipMarker = `${String(existingMembership._id)}:${args.nowMs}`;
+    grantedMembershipMarker = activation.activationMarker;
   }
   await args.ctx.db.patch(args.request._id as any, {
     status: "approved",

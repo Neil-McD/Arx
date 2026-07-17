@@ -45,6 +45,8 @@ export type CommunityMembershipLike = {
   accessSource?: string;
   pricePointId?: any;
   active?: boolean;
+  activationSequence?: number;
+  activatedAt?: number;
   revokedAt?: number;
   revokedReason?: string;
   createdAt: number;

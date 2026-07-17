@@ -22,6 +22,17 @@
   pointer-events: none;
 }
 
+.member-agent-dock.is-onboarding {
+  z-index: 9997;
+}
+
+.member-agent-dock.is-onboarding .member-agent-dock-panel {
+  border-color: color-mix(in srgb, var(--member-agent-accent) 42%, var(--stroke-strong));
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.5),
+    0 0 0 1px color-mix(in srgb, var(--member-agent-accent) 12%, transparent);
+}
+
 .member-agent-dock-launcher {
   position: absolute;
   right: 0;
@@ -90,6 +101,12 @@
 .member-agent-dock-launcher.is-working:hover,
 .member-agent-dock-launcher.is-working:focus-visible {
   animation: none;
+}
+
+.member-agent-dock-launcher.is-onboarding:not(.is-working) {
+  color: var(--member-agent-accent-strong);
+  border-color: color-mix(in srgb, var(--member-agent-accent) 58%, transparent);
+  animation: member-agent-dock-onboarding-pulse 1.8s ease-in-out infinite;
 }
 
 .member-agent-dock-launcher:hover svg,
@@ -433,15 +450,6 @@
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 
-.member-agent-dock-composer:focus-within {
-  /* Focus is communicated by a subtle surface shift, never an outline/ring. */
-  background: color-mix(
-    in srgb,
-    var(--composer-surface, var(--bg-card-solid, #17171a)) 94%,
-    var(--text-ink-primary) 6%
-  );
-}
-
 .member-agent-dock-composer.is-dragging {
   border-color: var(--stroke-strong);
   background: var(--surface-card-alt);
@@ -449,6 +457,12 @@
 
 .member-agent-dock-file-input {
   display: none;
+}
+
+.member-agent-dock-composer.is-onboarding {
+  border-color: color-mix(in srgb, var(--member-agent-accent) 58%, var(--stroke-default));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--member-agent-accent) 10%, transparent);
+  animation: member-agent-dock-composer-focus 420ms ease-out both;
 }
 
 .member-agent-dock-composer textarea {
@@ -557,6 +571,34 @@
   }
 }
 
+@keyframes member-agent-dock-onboarding-pulse {
+  0%, 100% {
+    box-shadow:
+      0 8px 24px rgba(0, 0, 0, 0.46),
+      0 0 0 1px color-mix(in srgb, var(--member-agent-accent) 12%, transparent),
+      0 0 12px color-mix(in srgb, var(--member-agent-accent) 20%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--member-agent-accent-strong) 10%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 8px 24px rgba(0, 0, 0, 0.46),
+      0 0 0 1px color-mix(in srgb, var(--member-agent-accent) 30%, transparent),
+      0 0 22px color-mix(in srgb, var(--member-agent-accent) 38%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--member-agent-accent-strong) 10%, transparent);
+  }
+}
+
+@keyframes member-agent-dock-composer-focus {
+  from { box-shadow: 0 0 0 7px color-mix(in srgb, var(--member-agent-accent) 18%, transparent); }
+  to { box-shadow: 0 0 0 3px color-mix(in srgb, var(--member-agent-accent) 10%, transparent); }
+}
+
+@media (max-width: 920px) and (min-width: 701px) {
+  .member-agent-dock.is-onboarding .member-agent-dock-panel {
+    width: min(420px, calc(100vw - 32px));
+  }
+}
+
 @media (max-width: 700px) {
   .member-agent-dock {
     right: 12px;
@@ -572,6 +614,15 @@
     inset: 0 0 calc(var(--mobile-bottom-rail-height) + env(safe-area-inset-bottom, 0px));
     z-index: 30;
     pointer-events: auto;
+  }
+
+  .member-agent-dock.mobile-root.is-onboarding {
+    top: calc(298px + env(safe-area-inset-top, 0px));
+    z-index: 9997;
+  }
+
+  .member-agent-dock.is-onboarding:not(.mobile-root) .member-agent-dock-panel {
+    height: max(260px, calc(100svh - 310px - env(safe-area-inset-top, 0px)));
   }
 
   .member-agent-dock.mobile-root .member-agent-dock-panel {
@@ -604,6 +655,7 @@
   .member-agent-dock-reasoning svg,
   .member-agent-dock-launcher,
   .member-agent-dock-caret,
+  .member-agent-dock-composer.is-onboarding,
   .is-spinning {
     animation: none;
   }

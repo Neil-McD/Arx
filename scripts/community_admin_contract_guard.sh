@@ -12,6 +12,7 @@ COMMUNITY_FILE="convex/community.ts"
 COMMUNITY_ADMIN_FILE="convex/communityAdmin.ts"
 COMMUNITY_CORE_FILE="convex/communityCore.ts"
 COMMUNITY_LIFECYCLE_FILE="convex/communityLifecycle.ts"
+COMMUNITY_MEMBERSHIP_LIFECYCLE_FILE="convex/communityMembershipLifecycle.ts"
 COMMUNITY_PUBLIC_FILE="convex/communityPublic.ts"
 COMMUNITY_COMMERCE_FILE="convex/communityCommerce.ts"
 BILLING_CORE_FILE="convex/billingCore.ts"
@@ -40,6 +41,10 @@ if [[ ! -f "$COMMUNITY_CORE_FILE" ]]; then
 fi
 if [[ ! -f "$COMMUNITY_LIFECYCLE_FILE" ]]; then
   echo "FAIL: missing $COMMUNITY_LIFECYCLE_FILE"
+  exit 1
+fi
+if [[ ! -f "$COMMUNITY_MEMBERSHIP_LIFECYCLE_FILE" ]]; then
+  echo "FAIL: missing $COMMUNITY_MEMBERSHIP_LIFECYCLE_FILE"
   exit 1
 fi
 if [[ ! -f "$COMMUNITY_PUBLIC_FILE" ]]; then
@@ -199,6 +204,9 @@ require_multiline_match "$COMMUNITY_LIFECYCLE_FILE" \
 require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function adjustCommunityActiveMemberCountForMembershipTransition\([\s\S]*?syncCommunityActiveMemberCount' \
   "membership transitions go through the durable member-count helper"
+require_multiline_match "$COMMUNITY_MEMBERSHIP_LIFECYCLE_FILE" \
+  'export async function activateCommunityMembershipCore[\s\S]*?syncCommunityActiveMemberCount' \
+  "membership activations reconcile member counts through one canonical helper"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const countCommunityMemberships = query\([\s\S]*?if \(sinceMs === null\) \{[\s\S]*?return await countCanonicalCommunityMembers\(\{' \
   "countCommunityMemberships computes current count from canonical rows"
@@ -321,19 +329,19 @@ require_no_match "$ADMIN_CONTROLLER_FILE" \
   'Promise\.all\([\s\S]*?(listCloudCommunityMembershipAdminPage[\s\S]*?countCloudCommunityMembershipRows|countCloudCommunityMembershipRows[\s\S]*?listCloudCommunityMembershipAdminPage)' \
   "frontend no longer joins admin roster and count promises"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'approveCommunityJoinRequest[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
+  'approveCommunityJoinRequest[\s\S]*activateCommunityMembershipCore' \
   "join approvals maintain active member count"
 require_multiline_match "$COMMUNITY_PUBLIC_FILE" \
-  'grantFreeMembership[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
+  'grantFreeMembership[\s\S]*activateCommunityMembershipCore' \
   "public joins maintain active member count"
 require_multiline_match "$BILLING_CORE_FILE" \
-  'ensureCommunityMembership[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
+  'ensureCommunityMembership[\s\S]*activateCommunityMembershipCore' \
   "paid membership creation maintains active member count"
 require_multiline_match "$COMMUNITY_COMMERCE_FILE" \
   'syncCommunitySubscriptionLifecycleInternal[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
   "subscription status changes maintain active member count"
 require_multiline_match "$PLATFORM_HOME_COMMUNITY_FILE" \
-  'ensurePlatformHomeCommunityMembership[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
+  'ensurePlatformHomeCommunityMembership[\s\S]*activateCommunityMembershipCore' \
   "platform autojoin maintains active member count"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'revokeCommunityMemberInternal[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \

@@ -30,24 +30,33 @@ import type {
   ConnectUserPlatformAppInput,
   ConnectUserPlatformAppResult,
 } from "../../../../shared/userPlatformAppMountTypes";
+import { WebCommunityOnboardingWorkflowSection } from "./WebCommunityOnboardingWorkflowSection";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
 type ActiveCommunity = {
+  id: string;
   name: string;
   slug: string;
   visibility: string;
   one_liner: string | null;
   about: string | null;
+  avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
 };
 
 type WebCommunitySettingsSectionProps = {
   activeCommunity: ActiveCommunity | null;
+  session: unknown;
+  ensureSession: (session: any) => Promise<any | null>;
   hasSession: boolean;
   canViewActiveCommunitySettings: boolean;
   communitySettingsLayer: CommunitySettingsLayer;
   activePane: CommunitySettingsPane;
   onSelectPane: (pane: CommunitySettingsPane, opts?: { replace?: boolean }) => void;
+  onPreviewCommunityOnboarding: () => void;
   canManageCommunitySettings: boolean;
   canDeleteCommunity: boolean;
   requireSignIn: () => void;
@@ -199,6 +208,7 @@ function buildPersonalOptInInput(args: {
 
 const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
   community: "Community",
+  workflows: "Workflows",
   integrations: "Integrations",
   danger: "Danger",
 };
@@ -984,8 +994,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
   } = props;
   const isOwnerSettingsLayer = communitySettingsLayer === "owner";
   const ownerSettingsPanes: CommunitySettingsPane[] = canDeleteCommunity
-    ? ["community", "integrations", "danger"]
-    : ["community", "integrations"];
+    ? ["community", "workflows", "integrations", "danger"]
+    : ["community", "workflows", "integrations"];
   const availableSettingsPanes = canManageCommunitySettings ? ownerSettingsPanes : [];
   const selectedSettingsPane = availableSettingsPanes.includes(activePane)
     ? activePane
@@ -1093,6 +1103,19 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 hasSession={hasSession}
                 requireSignIn={requireSignIn}
                 integrations={communityIntegrations}
+              />
+            ) : null}
+            {selectedSettingsPane === "workflows" ? (
+              <WebCommunityOnboardingWorkflowSection
+                session={props.session}
+                ensureSession={props.ensureSession}
+                communityId={activeCommunity.id}
+                communityName={activeCommunity.name}
+                communityAvatarUrl={activeCommunity.avatar_url}
+                communityAvatarFocusX={activeCommunity.avatar_focus_x}
+                communityAvatarFocusY={activeCommunity.avatar_focus_y}
+                communityAvatarZoom={activeCommunity.avatar_zoom}
+                onPreview={props.onPreviewCommunityOnboarding}
               />
             ) : null}
             {selectedSettingsPane === "danger" && canDeleteCommunity ? (
