@@ -57,6 +57,20 @@ function canonicalHttpUrl(raw: unknown): string | null {
   }
 }
 
+function trailingBareHttpUrl(line: string): { prefix: string; url: string } | null {
+  const trimmedEnd = line.trimEnd();
+  const match = /https?:\/\/\S+$/i.exec(trimmedEnd);
+  if (!match) return null;
+  const start = match.index;
+  if (start > 0 && !/\s/.test(trimmedEnd[start - 1] ?? "")) return null;
+  const url = canonicalHttpUrl(match[0]);
+  if (!url) return null;
+  return {
+    prefix: trimmedEnd.slice(0, start).trimEnd(),
+    url,
+  };
+}
+
 function embedUrlKey(embed: CommunityInteractionLinkEmbedLike): string | null {
   return canonicalHttpUrl(embed.normalized_source_url ?? embed.source_url);
 }
@@ -119,18 +133,21 @@ export function interactionPresentationForEmbeds<T extends CommunityInteractionL
       continue;
     }
 
-    const standaloneUrl = canonicalHttpUrl(trimmed);
-    if (!standaloneUrl) {
+    const trailingBareUrl = trailingBareHttpUrl(line);
+    if (!trailingBareUrl) {
       previousStandaloneUrl = null;
       textLines.push(line);
       continue;
     }
 
-    const isConsecutiveDuplicate = standaloneUrl === previousStandaloneUrl;
-    previousStandaloneUrl = standaloneUrl;
+    const isStandaloneUrl = !trailingBareUrl.prefix;
+    const isConsecutiveDuplicate =
+      isStandaloneUrl && trailingBareUrl.url === previousStandaloneUrl;
+    previousStandaloneUrl = isStandaloneUrl ? trailingBareUrl.url : null;
     if (isConsecutiveDuplicate) continue;
 
-    if (!visibleEmbedPlaced && readyVisibleLinkUrl === standaloneUrl && visibleEmbed) {
+    if (!visibleEmbedPlaced && readyVisibleLinkUrl === trailingBareUrl.url && visibleEmbed) {
+      if (trailingBareUrl.prefix) textLines.push(trailingBareUrl.prefix);
       flushText();
       bodySegments.push({ type: "embed", embed: visibleEmbed });
       visibleEmbedPlaced = true;

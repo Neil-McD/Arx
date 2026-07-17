@@ -223,6 +223,20 @@ assert.deepEqual(
   },
   "X host aliases and share-tracking parameters should not leave a duplicate standalone URL",
 );
+assert.deepEqual(
+  interactionPresentationForEmbeds(
+    "Wild: https://twitter.com/mathelirium/status/2075857952792047708?s=46",
+    [readyXEmbed],
+  ),
+  {
+    bodySegments: [
+      { type: "text", text: "Wild:" },
+      { type: "embed", embed: readyXEmbed },
+    ],
+    trailingEmbeds: [],
+  },
+  "a ready card should replace its matching bare URL at the end of a caption line",
+);
 
 const timedVideoEmbed = {
   embed_kind: "link",
@@ -241,23 +255,23 @@ assert.deepEqual(
 
 assert.match(
   previewCss,
-  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*340px;[\s\S]*--community-interaction-embed-row-height:\s*88px;[\s\S]*--community-interaction-embed-media-width:\s*118px;[\s\S]*\.community-interaction-embed-summary,[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) var\(--community-interaction-embed-media-width\);/,
-  "collapsed link previews should use one compact metadata-left and media-right row",
+  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*420px;[\s\S]*--community-interaction-embed-row-height:\s*104px;[\s\S]*--community-interaction-embed-media-width:\s*140px;[\s\S]*\.community-interaction-embed-summary,[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) var\(--community-interaction-embed-media-width\);/,
+  "collapsed link previews should use one readable metadata-left and media-right row",
 );
 assert.match(
   previewCss,
-  /\.community-interaction-embed-social-body\s*\{[\s\S]*-webkit-line-clamp:\s*2;[\s\S]*\.community-interaction-embed\.is-social-post \.community-interaction-embed-media\s*\{[\s\S]*min-height:\s*var\(--community-interaction-embed-row-height\);/,
-  "social previews should keep their excerpt and right-side media inside the compact row",
+  /\.community-interaction-embed\.is-social-post\.has-media\s*\{[\s\S]*height:\s*var\(--community-interaction-embed-row-height\);[\s\S]*\.community-interaction-embed-social-body\s*\{[\s\S]*-webkit-line-clamp:\s*3;[\s\S]*\.community-interaction-embed\.is-social-post \.community-interaction-embed-media\s*\{[\s\S]*height:\s*var\(--community-interaction-embed-row-height\);/,
+  "social previews should keep a readable excerpt and right-side media inside the row",
 );
 assert.match(
   previewComponent,
-  /body\.length > 120 \|\| body\.split\("\\n"\)\.length > 2/,
-  "social text hidden by compact clamping should remain expandable",
+  /function SocialPostLinkPreview[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-body[\s\S]*<img/,
+  "the social preview card should be the single primary link without duplicate text actions",
 );
 assert.match(
   previewComponent,
-  /function VideoPreviewMetadata[\s\S]*className="community-interaction-embed-text"[\s\S]*className="community-interaction-embed-summary"[\s\S]*<VideoPreviewMetadata[\s\S]*className="community-interaction-embed-play"/,
-  "collapsed video previews should put metadata before the right-side play target while preserving activation",
+  /function VideoPreviewMetadata[\s\S]*community-interaction-embed-video-link[\s\S]*community-interaction-embed-provider-row[\s\S]*className="community-interaction-embed-summary"[\s\S]*<VideoPreviewMetadata[\s\S]*className="community-interaction-embed-play"/,
+  "video previews should keep one muted source link beside the right-side play target",
 );
 
 console.log("PASS: interaction link previews prefer safe content-specific objects over platform marketing cards");

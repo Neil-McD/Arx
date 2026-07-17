@@ -81,20 +81,20 @@ function activatedVideoUrl(raw: string): string {
 
 function VideoPreviewMetadata(props: { href: string; provider: string; title: string }) {
   return (
-    <div className="community-interaction-embed-text">
-      <span className="community-interaction-embed-provider">{props.provider}</span>
-      <span className="community-interaction-embed-title">{props.title}</span>
-      <a
-        className="community-interaction-embed-external"
-        href={props.href}
-        target="_blank"
-        rel="noreferrer noopener"
-        aria-label={`Open ${props.title} on ${props.provider} in a new tab`}
-      >
-        <span>Open on {props.provider}</span>
+    <a
+      className="community-interaction-embed-text community-interaction-embed-video-link"
+      href={props.href}
+      target="_blank"
+      rel="noreferrer noopener"
+      aria-label={`Open ${props.title} on ${props.provider} in a new tab`}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <span className="community-interaction-embed-provider-row">
+        <span className="community-interaction-embed-provider">{props.provider}</span>
         <ExternalLink size={12} aria-hidden="true" />
-      </a>
-    </div>
+      </span>
+      <span className="community-interaction-embed-title">{props.title}</span>
+    </a>
   );
 }
 
@@ -163,65 +163,35 @@ function SocialPostLinkPreview(props: {
   href: string;
   mediaUrl: string | null;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const author = props.embed.author_name || props.embed.title || "X post";
   const body = props.embed.description || "View this post on X";
-  const canExpand = body.length > 120 || body.split("\n").length > 2;
   return (
-    <div
-      className={`community-interaction-embed is-social-post${props.mediaUrl ? " has-media" : ""}${
-        expanded ? " is-expanded" : ""
-      }`}
+    <a
+      className={`community-interaction-embed is-social-post${props.mediaUrl ? " has-media" : ""}`}
       data-preview-kind="social_post"
+      href={props.href}
+      target="_blank"
+      rel="noreferrer noopener"
+      aria-label={`View ${author}'s post on X in a new tab`}
       onClick={(event) => event.stopPropagation()}
     >
       <div className="community-interaction-embed-social-content">
         <div className="community-interaction-embed-social-header">
           <span className="community-interaction-embed-social-author">{author}</span>
-          <span className="community-interaction-embed-provider">X</span>
+          <span className="community-interaction-embed-provider">· X</span>
         </div>
-        <span className={`community-interaction-embed-social-body${expanded ? " is-expanded" : ""}`}>{body}</span>
-        <div className="community-interaction-embed-social-actions">
-          {canExpand ? (
-            <button
-              type="button"
-              className="community-interaction-embed-social-more"
-              aria-expanded={expanded}
-              onClick={() => setExpanded((current) => !current)}
-            >
-              {expanded ? "Show less" : "Show more"}
-            </button>
-          ) : null}
-          <a
-            className="community-interaction-embed-social-footer"
-            href={props.href}
-            target="_blank"
-            rel="noreferrer noopener"
-            aria-label={`View ${author}'s post on X in a new tab`}
-          >
-            <span>View on X</span>
-            <ExternalLink size={12} aria-hidden="true" />
-          </a>
-        </div>
+        <span className="community-interaction-embed-social-body">{body}</span>
       </div>
       {props.mediaUrl ? (
-        <a
-          className="community-interaction-embed-social-media-link"
-          href={props.href}
-          target="_blank"
-          rel="noreferrer noopener"
-          aria-label={`View ${author}'s post media on X in a new tab`}
-        >
-          <img
-            className="community-interaction-embed-media"
-            src={props.mediaUrl}
-            alt={props.embed.image_alt || ""}
-            loading="lazy"
-            referrerPolicy="no-referrer"
-          />
-        </a>
+        <img
+          className="community-interaction-embed-media"
+          src={props.mediaUrl}
+          alt={props.embed.image_alt || ""}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
       ) : null}
-    </div>
+    </a>
   );
 }
 
