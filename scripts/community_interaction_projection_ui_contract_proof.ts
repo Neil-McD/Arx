@@ -240,7 +240,7 @@ assert.match(
 );
 assert.match(
   linkPreview,
-  /function SocialPostLinkPreview[\s\S]*author_name[\s\S]*body\.length > 220[\s\S]*body\.split\("\\n"\)\.length > 4[\s\S]*data-preview-kind="social_post"[\s\S]*community-interaction-embed-social-body[\s\S]*Show more[\s\S]*View on X/,
+  /function SocialPostLinkPreview[\s\S]*author_name[\s\S]*body\.length > 120[\s\S]*body\.split\("\\n"\)\.length > 2[\s\S]*data-preview-kind="social_post"[\s\S]*community-interaction-embed-social-content[\s\S]*community-interaction-embed-social-body[\s\S]*Show more[\s\S]*View on X/,
   "compact social previews should render the shared post author and body while preserving expansion for longer content",
 );
 assert.match(
@@ -961,13 +961,13 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*380px;[\s\S]*\.community-interaction-embed\s*\{[\s\S]*height:\s*max-content;[\s\S]*max-width:\s*var\(--community-interaction-embed-max-width\);[\s\S]*background:\s*var\(--surface-card\);[\s\S]*\.community-interaction-embed:focus-visible[\s\S]*\.community-interaction-embed-provider\s*\{[\s\S]*color:\s*var\(--text-ink-secondary\);[\s\S]*\.community-interaction-embed-desc\s*\{[\s\S]*-webkit-line-clamp:\s*3;/,
-  "embed cards should own their intrinsic grid height, inherit theme surfaces, and keep provider and description text readable",
+  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*340px;[\s\S]*--community-interaction-embed-row-height:\s*88px;[\s\S]*\.community-interaction-embed\s*\{[\s\S]*height:\s*max-content;[\s\S]*max-width:\s*var\(--community-interaction-embed-max-width\);[\s\S]*background:\s*var\(--surface-card\);[\s\S]*\.community-interaction-embed:focus-visible[\s\S]*\.community-interaction-embed-provider\s*\{[\s\S]*color:\s*var\(--text-ink-secondary\);[\s\S]*\.community-interaction-embed-desc\s*\{[\s\S]*-webkit-line-clamp:\s*1;/,
+  "embed rows should own their compact intrinsic height, inherit theme surfaces, and keep metadata readable",
 );
 assert.match(
   baseCss,
-  /\.community-interaction-embed-play:focus-visible[\s\S]*\.community-interaction-embed-player[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*4;[\s\S]*\.community-interaction-embed-social-more[\s\S]*\.community-interaction-embed\.is-social-post \.community-interaction-embed-media[\s\S]*max-height:\s*190px;/,
-  "typed video and social previews should have bounded, keyboard-visible presentation states",
+  /\.community-interaction-embed-play:focus-visible[\s\S]*\.community-interaction-embed-summary[\s\S]*grid-template-columns:[\s\S]*\.community-interaction-embed-player[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*2;[\s\S]*\.community-interaction-embed-social-more[\s\S]*\.community-interaction-embed-social-media-link[\s\S]*border-left:\s*1px solid var\(--stroke-default\);/,
+  "typed video and social previews should have horizontal collapsed rows and keyboard-visible expanded states",
 );
 assert.match(
   read("shared/linkEmbedUi.tsx"),

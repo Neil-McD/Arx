@@ -241,18 +241,23 @@ assert.deepEqual(
 
 assert.match(
   previewCss,
-  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*380px;[\s\S]*\.community-interaction-embed\.is-video,[\s\S]*width:\s*min\(100%,\s*var\(--community-interaction-embed-max-width\)\);/,
-  "link preview cards should stay compact within the conversation column",
+  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*340px;[\s\S]*--community-interaction-embed-row-height:\s*88px;[\s\S]*--community-interaction-embed-media-width:\s*118px;[\s\S]*\.community-interaction-embed-summary,[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) var\(--community-interaction-embed-media-width\);/,
+  "collapsed link previews should use one compact metadata-left and media-right row",
 );
 assert.match(
   previewCss,
-  /\.community-interaction-embed-social-body\s*\{[\s\S]*-webkit-line-clamp:\s*4;[\s\S]*\.community-interaction-embed\.is-social-post \.community-interaction-embed-media\s*\{[\s\S]*max-height:\s*190px;/,
-  "social previews should bound both excerpt and media height",
+  /\.community-interaction-embed-social-body\s*\{[\s\S]*-webkit-line-clamp:\s*2;[\s\S]*\.community-interaction-embed\.is-social-post \.community-interaction-embed-media\s*\{[\s\S]*min-height:\s*var\(--community-interaction-embed-row-height\);/,
+  "social previews should keep their excerpt and right-side media inside the compact row",
 );
 assert.match(
   previewComponent,
-  /body\.length > 220 \|\| body\.split\("\\n"\)\.length > 4/,
+  /body\.length > 120 \|\| body\.split\("\\n"\)\.length > 2/,
   "social text hidden by compact clamping should remain expandable",
+);
+assert.match(
+  previewComponent,
+  /function VideoPreviewMetadata[\s\S]*className="community-interaction-embed-text"[\s\S]*className="community-interaction-embed-summary"[\s\S]*<VideoPreviewMetadata[\s\S]*className="community-interaction-embed-play"/,
+  "collapsed video previews should put metadata before the right-side play target while preserving activation",
 );
 
 console.log("PASS: interaction link previews prefer safe content-specific objects over platform marketing cards");
