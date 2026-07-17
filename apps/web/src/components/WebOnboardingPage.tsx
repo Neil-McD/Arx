@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { useEffect, useState, type DragEvent } from "react";
 import { Check, CircleUserRound, PlugZap, X } from "lucide-react";
 import {
   formatAccountSetupMissingGuidance,
@@ -74,7 +74,6 @@ type WebOnboardingPageProps = {
   openAiConnectionSuccess: string | null;
   onConnectOpenAi: () => Promise<void> | void;
   onFinishOnboarding: () => Promise<boolean | void> | boolean | void;
-  identityOnly?: boolean;
   onClose?: () => void;
 };
 
@@ -146,7 +145,7 @@ function formatProviderStatus(
 
 export function WebOnboardingPage(props: WebOnboardingPageProps) {
   const [step, setStep] = useState<OnboardingStep>(() =>
-    props.identityOnly ? "identity" : normalizeStep(props.accountSetupStatus?.current_step),
+    normalizeStep(props.accountSetupStatus?.current_step),
   );
   const [hasConfirmedPlatformLegal, setHasConfirmedPlatformLegal] = useState(false);
   const [activeLegalDocument, setActiveLegalDocument] = useState<LegalDocumentEntry | null>(null);
@@ -160,14 +159,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     else if (props.chatgptConnected) setProviderChoice("chatgpt");
   }, [props.chatgptConnected, props.openAiConnected]);
 
-  useEffect(() => {
-    if (props.identityOnly && step !== "identity") setStep("identity");
-  }, [props.identityOnly, step]);
-
-  const identityStepStatus = props.accountSetupStatus?.steps.find((item) => item.step === "identity");
-  const progress = props.identityOnly && identityStepStatus
-    ? Math.round((identityStepStatus.completed_items / identityStepStatus.total_items) * 100)
-    : props.accountSetupStatus?.percent ?? 0;
+  const progress = props.accountSetupStatus?.percent ?? 0;
   const progressCircumference = 2 * Math.PI * 17;
   const progressDashOffset = progressCircumference - (progress / 100) * progressCircumference;
   const hasInferenceProvider = props.chatgptConnected || props.openAiConnected;
@@ -208,10 +200,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     openAiSelected,
     props.isSavingOpenAiConnection,
   );
-  const stepOrder = useMemo<OnboardingStep[]>(
-    () => props.identityOnly ? ["identity"] : ["identity", "inference"],
-    [props.identityOnly],
-  );
+  const stepOrder: OnboardingStep[] = ["identity", "inference"];
   const setupRequirementMessage =
     props.error && props.accountSetupStatus && !props.accountSetupStatus.completed
       ? formatAccountSetupMissingGuidance(props.accountSetupStatus)
@@ -232,8 +221,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
           : null,
       );
       if (ok) {
-        if (props.identityOnly) props.onClose?.();
-        else setStep("inference");
+        setStep("inference");
       }
       return;
     }
@@ -288,9 +276,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
         </div>
         <div>
           <p className="polynet-landing-kicker">Account setup</p>
-          <h1 id="polynet-onboarding-title">
-            {props.identityOnly ? "Finish your profile" : "Finish account setup"}
-          </h1>
+          <h1 id="polynet-onboarding-title">Finish account setup</h1>
           <p>{progress}% complete</p>
         </div>
       </div>
@@ -560,11 +546,9 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
               >
                 {props.isSaving
                   ? "Saving..."
-                  : props.identityOnly
-                    ? "Save profile"
-                    : step === "inference"
-                      ? "Finish"
-                      : "Next"}
+                  : step === "inference"
+                    ? "Finish"
+                    : "Next"}
               </button>
             </div>
           </div>

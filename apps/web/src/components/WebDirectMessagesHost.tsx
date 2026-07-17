@@ -107,8 +107,6 @@ type WebDirectMessagesHostProps<SessionT> = {
   getAvatarColor: (seed: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
   requireSignIn?: () => void;
-  isProfileSetupComplete?: boolean;
-  onProfileSetupRequired?: () => void;
   showAppToastMessage?: (message: string) => void;
   onUnreadCountChange?: (count: number) => void;
   onIncomingDirectMessage?: (event: IncomingDirectMessageEvent) => void;
@@ -124,14 +122,9 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-const DIRECT_MESSAGE_PROFILE_SETUP_REQUIRED = "Finish account setup to send direct messages.";
-
 function friendlyDirectMessageSendError(error: unknown, fallback: string): string {
   const raw = toErrorMessage(error, fallback);
   const normalized = raw.toLowerCase();
-  if (normalized.includes("profile_setup_required")) {
-    return DIRECT_MESSAGE_PROFILE_SETUP_REQUIRED;
-  }
   if (normalized.includes("dm_rate_limited")) {
     return "You're sending messages too quickly. Give it a minute and try again.";
   }
@@ -153,10 +146,6 @@ function friendlyDirectMessageSendError(error: unknown, fallback: string): strin
     normalized.startsWith("dm_") ||
     normalized.startsWith("convex_");
   return looksLikeRawServerError ? fallback : raw;
-}
-
-function directMessageSendRequiresProfileSetup(error: unknown): boolean {
-  return toErrorMessage(error, "").toLowerCase().includes("profile_setup_required");
 }
 
 function friendlyDirectMessageReadError(error: unknown, fallback: string): string {
@@ -503,8 +492,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     getAvatarColor,
     renderTextWithLinks,
     requireSignIn,
-    isProfileSetupComplete,
-    onProfileSetupRequired,
     showAppToastMessage,
     onUnreadCountChange,
     onIncomingDirectMessage,
@@ -530,14 +517,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const peopleLoadRequestRef = useRef(0);
   const hasInboxLiveSubscriptionRef = useRef(false);
 
-  useEffect(() => {
-    if (isProfileSetupComplete !== true) return;
-    setDirectMessagePanel((previous) =>
-      previous?.error === DIRECT_MESSAGE_PROFILE_SETUP_REQUIRED
-        ? { ...previous, error: null }
-        : previous,
-    );
-  }, [isProfileSetupComplete]);
   const directMessageOpenRequestRef = useRef(0);
   const readMarkSeqByConversationRef = useRef<Record<string, number>>({});
   const draftsByConversationRef = useRef<Record<string, DirectMessageDraft>>({});
@@ -1593,9 +1572,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           };
         });
       } catch (error) {
-        if (directMessageSendRequiresProfileSetup(error)) {
-          onProfileSetupRequired?.();
-        }
         const message = friendlyDirectMessageSendError(error, "Failed to upload attachment.");
         setDirectMessagePanel((previous) =>
           previous?.conversation.id === conversationId
@@ -1616,7 +1592,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         );
       }
     },
-    [ensureSession, onProfileSetupRequired, session],
+    [ensureSession, session],
   );
 
   const lastUploadKickConversationRef = useRef<string | null>(null);
@@ -1661,9 +1637,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           ),
         );
       } catch (error) {
-        if (directMessageSendRequiresProfileSetup(error)) {
-          onProfileSetupRequired?.();
-        }
         updateConversationEchoes(conversationId, (echoes) =>
           echoes.map((item) =>
             item.local_id === echo.local_id
@@ -1677,7 +1650,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         );
       }
     },
-    [ensureSession, onProfileSetupRequired, session, updateConversationEchoes],
+    [ensureSession, session, updateConversationEchoes],
   );
 
   const deliverVirtualDirectMessageEcho = useCallback(
@@ -1748,9 +1721,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             : previous,
         );
       } catch (error) {
-        if (directMessageSendRequiresProfileSetup(error)) {
-          onProfileSetupRequired?.();
-        }
         const failConversationId =
           virtualToRealConversationIdRef.current[virtualConversationId] ?? virtualConversationId;
         updateConversationEchoes(failConversationId, (echoes) =>
@@ -1766,7 +1736,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         );
       }
     },
-    [ensureSession, onProfileSetupRequired, session, updateConversationEchoes],
+    [ensureSession, session, updateConversationEchoes],
   );
 
   const sendDirectMessage = useCallback(async () => {
@@ -1774,15 +1744,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     const text = String(current?.input ?? "").trim();
     const attachmentsToSend = [...(current?.attachments ?? [])];
     if (!current || (!text && attachmentsToSend.length === 0) || !session) return;
-    if (isProfileSetupComplete === false) {
-      setDirectMessagePanel((previous) =>
-        previous?.conversation.id === current.conversation.id
-          ? { ...previous, error: DIRECT_MESSAGE_PROFILE_SETUP_REQUIRED }
-          : previous,
-      );
-      onProfileSetupRequired?.();
-      return;
-    }
     if (hasUnreadyDirectAttachments(attachmentsToSend)) {
       setDirectMessagePanel((previous) =>
         previous?.conversation.id === current.conversation.id
@@ -1847,9 +1808,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     deliverVirtualDirectMessageEcho,
     directMessagePanel,
     focusDirectMessageInput,
-    isProfileSetupComplete,
     onDirectMessageSent,
-    onProfileSetupRequired,
     session,
     sessionUserId,
     updateConversationEchoes,

@@ -2037,7 +2037,6 @@ export default function App() {
   });
   const [hasLoadedOnboardingProfile, setHasLoadedOnboardingProfile] = useState(false);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
-  const [isIdentityOnlyOnboarding, setIsIdentityOnlyOnboarding] = useState(false);
   const profileUi = useWebProfileSettingsUiController({
     profileStorageUserId,
     initialProfileDraft,
@@ -2051,17 +2050,10 @@ export default function App() {
   const [isCheckingOnboardingHandle, setIsCheckingOnboardingHandle] = useState(false);
   const openProfileSetup = useCallback(() => {
     setOnboardingError(null);
-    setIsIdentityOnlyOnboarding(false);
-    setIsOnboardingModalOpen(true);
-  }, []);
-  const openDirectMessageProfileSetup = useCallback(() => {
-    setOnboardingError(null);
-    setIsIdentityOnlyOnboarding(true);
     setIsOnboardingModalOpen(true);
   }, []);
   const closeProfileSetup = useCallback(() => {
     setIsOnboardingModalOpen(false);
-    setIsIdentityOnlyOnboarding(false);
   }, []);
   /* The bridge (gate card's second state) opens on an entry ATTEMPT — the
      pitch always converts first. Platform-generic joiners never come here:
@@ -7611,11 +7603,6 @@ export default function App() {
   const effectiveAccountSetupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
   const isProfileSetupCompleteForPublicActions =
     !session || Boolean(effectiveAccountSetupStatus && isAccountSetupStatusIdentityComplete(effectiveAccountSetupStatus));
-  const directMessageProfileSetupComplete = !session
-    ? true
-    : effectiveAccountSetupStatus
-      ? isProfileSetupCompleteForPublicActions
-      : undefined;
   const isAccountSetupCompleteForBuilderActions =
     !session || Boolean(effectiveAccountSetupStatus?.completed);
 
@@ -11423,7 +11410,6 @@ export default function App() {
       openAiConnectionSuccess: providerConnectionUi.openAiConnectionSuccess,
       onConnectOpenAi: providerConnectionUi.handleConnectOpenAi,
       onFinishOnboarding: finishOnboarding,
-      identityOnly: isIdentityOnlyOnboarding,
       onClose: closeProfileSetup,
     },
     platformBridgePageProps: {
@@ -11733,8 +11719,6 @@ export default function App() {
         getAvatarColor={getAvatarColor}
         renderTextWithLinks={renderTextWithLinks}
         requireSignIn={() => requireSignIn()}
-        isProfileSetupComplete={directMessageProfileSetupComplete}
-        onProfileSetupRequired={openDirectMessageProfileSetup}
         showAppToastMessage={showAppToastMessage}
         onUnreadCountChange={setDirectMessagesUnreadCount}
         onIncomingDirectMessage={directMessageWebNotifications.notifyIncoming}
