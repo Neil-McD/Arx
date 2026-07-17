@@ -107,6 +107,7 @@ type WebDirectMessagesHostProps<SessionT> = {
   getAvatarColor: (seed: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
   requireSignIn?: () => void;
+  isProfileSetupComplete?: boolean;
   onProfileSetupRequired?: () => void;
   showAppToastMessage?: (message: string) => void;
   onUnreadCountChange?: (count: number) => void;
@@ -123,11 +124,13 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+const DIRECT_MESSAGE_PROFILE_SETUP_REQUIRED = "Finish account setup to send direct messages.";
+
 function friendlyDirectMessageSendError(error: unknown, fallback: string): string {
   const raw = toErrorMessage(error, fallback);
   const normalized = raw.toLowerCase();
   if (normalized.includes("profile_setup_required")) {
-    return "Finish account setup to send direct messages.";
+    return DIRECT_MESSAGE_PROFILE_SETUP_REQUIRED;
   }
   if (normalized.includes("dm_rate_limited")) {
     return "You're sending messages too quickly. Give it a minute and try again.";
@@ -500,6 +503,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     getAvatarColor,
     renderTextWithLinks,
     requireSignIn,
+    isProfileSetupComplete,
     onProfileSetupRequired,
     showAppToastMessage,
     onUnreadCountChange,
@@ -525,6 +529,15 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const inboxLoadRequestRef = useRef(0);
   const peopleLoadRequestRef = useRef(0);
   const hasInboxLiveSubscriptionRef = useRef(false);
+
+  useEffect(() => {
+    if (isProfileSetupComplete !== true) return;
+    setDirectMessagePanel((previous) =>
+      previous?.error === DIRECT_MESSAGE_PROFILE_SETUP_REQUIRED
+        ? { ...previous, error: null }
+        : previous,
+    );
+  }, [isProfileSetupComplete]);
   const directMessageOpenRequestRef = useRef(0);
   const readMarkSeqByConversationRef = useRef<Record<string, number>>({});
   const draftsByConversationRef = useRef<Record<string, DirectMessageDraft>>({});
@@ -1761,6 +1774,15 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     const text = String(current?.input ?? "").trim();
     const attachmentsToSend = [...(current?.attachments ?? [])];
     if (!current || (!text && attachmentsToSend.length === 0) || !session) return;
+    if (isProfileSetupComplete === false) {
+      setDirectMessagePanel((previous) =>
+        previous?.conversation.id === current.conversation.id
+          ? { ...previous, error: DIRECT_MESSAGE_PROFILE_SETUP_REQUIRED }
+          : previous,
+      );
+      onProfileSetupRequired?.();
+      return;
+    }
     if (hasUnreadyDirectAttachments(attachmentsToSend)) {
       setDirectMessagePanel((previous) =>
         previous?.conversation.id === current.conversation.id
@@ -1825,7 +1847,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     deliverVirtualDirectMessageEcho,
     directMessagePanel,
     focusDirectMessageInput,
+    isProfileSetupComplete,
     onDirectMessageSent,
+    onProfileSetupRequired,
     session,
     sessionUserId,
     updateConversationEchoes,
