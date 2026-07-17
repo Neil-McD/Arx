@@ -18,7 +18,7 @@ import {
 //
 // A node at world (wx, wy) renders at user-space (tx + wx*scale, ty + wy*scale).
 
-const MIN_SCALE = 0.4;
+const MIN_SCALE = 0.08;
 const MAX_SCALE = 3;
 const ZOOM_STEP = 1.2;
 const FIT_PADDING = 72;

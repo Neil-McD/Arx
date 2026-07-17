@@ -96,6 +96,55 @@ assert.ok(
   "derived resource lineage should form a visible memory-source cluster",
 );
 
+// Sparse live graphs still contain disconnected learned memories. A few root-to-
+// resource springs must not repel those memories beyond a readable initial frame.
+const sparseResourceNodes: PolynetLayoutNodeInput[] = Array.from({ length: 3 }, (_, index) => ({
+  id: `resource_node:sparse-${index}`,
+  kind: "resource_node",
+}));
+const sparseDirectoryNodes: PolynetLayoutNodeInput[] = Array.from({ length: 4 }, (_, index) => ({
+  id: `directory_node:sparse-${index}`,
+  kind: "directory_node",
+}));
+const sparseNodes: PolynetLayoutNodeInput[] = [
+  { id: ROOT_ID, kind: "community" },
+  ...sparseResourceNodes,
+  ...sparseDirectoryNodes,
+];
+const sparseEdges = sparseResourceNodes.map((node) => ({ from: ROOT_ID, to: node.id }));
+const sparseLayout = computePolynetLayout(sparseNodes, ROOT_ID, sparseEdges);
+const sparseFit = computeFitTransform(
+  computePolynetBounds(sparseLayout),
+  { width: 972, height: 546 },
+  { padding: 72, minScale: 0.08, maxScale: 3 },
+);
+assert.ok(sparseFit.scale >= 0.4, "a sparse eight-node graph should remain readable when fitted");
+
+// At the 120-memory API ceiling plus its community root, reset/initial fit must
+// still contain every node.
+const maxNodes: PolynetLayoutNodeInput[] = [
+  { id: ROOT_ID, kind: "community" },
+  ...sparseResourceNodes,
+  ...Array.from({ length: 117 }, (_, index) => ({
+    id: `directory_node:max-${index}`,
+    kind: "directory_node",
+  })),
+];
+const maxLayout = computePolynetLayout(maxNodes, ROOT_ID, sparseEdges);
+const maxViewport = { width: 972, height: 546 };
+const maxPadding = 72;
+const maxFit = computeFitTransform(computePolynetBounds(maxLayout), maxViewport, {
+  padding: maxPadding,
+  minScale: 0.08,
+  maxScale: 3,
+});
+for (const [, position] of maxLayout) {
+  const x = maxFit.tx + position.x * maxFit.scale;
+  const y = maxFit.ty + position.y * maxFit.scale;
+  assert.ok(x >= maxPadding - 1 && x <= maxViewport.width - maxPadding + 1, "max graph x should fit");
+  assert.ok(y >= maxPadding - 1 && y <= maxViewport.height - maxPadding + 1, "max graph y should fit");
+}
+
 // --- bounds ---
 const seedBounds = computePolynetBounds(computePolynetLayout(makeNodes(0), ROOT_ID));
 assert.deepEqual(

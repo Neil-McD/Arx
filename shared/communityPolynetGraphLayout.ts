@@ -36,7 +36,7 @@ const RADIUS_JITTER = 0.3; // fraction of RING_GAP
 // iterates fixed math, no Math.random / Date — so the graph never jitters.
 const IDEAL_EDGE_LENGTH = 165; // k — the natural spring rest length
 const RELAX_ITERATIONS = 160;
-const RELAX_GRAVITY = 0.025; // mild pull to origin so disconnected clusters don't drift off
+const RELAX_GRAVITY = 0.9; // center disconnected nodes so sparse graphs remain frameable
 const RELAX_INITIAL_TEMP = IDEAL_EDGE_LENGTH * 1.1;
 const RELAX_COOLING = 0.955;
 const RELAX_MIN_TEMP = 2;

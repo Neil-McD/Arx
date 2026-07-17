@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const controller = readFileSync(join(root, "apps/web/src/controllers/useWebCommunityPolynetController.ts"), "utf8");
+const viewportController = readFileSync(join(root, "apps/web/src/controllers/useWebPolynetGraphViewport.ts"), "utf8");
 const section = readFileSync(join(root, "apps/web/src/components/WebCommunityPolynetSection.tsx"), "utf8");
 const preview = readFileSync(join(root, "apps/web/src/components/CommunityMemoryGraphPreview.tsx"), "utf8");
 const gateway = readFileSync(join(root, "shared/cloudCommunityPolynetGateway.ts"), "utf8");
@@ -123,6 +124,7 @@ assert.match(section, /style=\{\{ transform: `translate\(\$\{pos\.x\}px, \$\{pos
 assert.match(preview, /key=\{lineageId\}/, "The compact memory graph should preserve retained-memory node identity");
 assert.match(preview, /data-lineage-id=\{lineageId\}/, "The compact memory graph should expose lifecycle lineage for acceptance tests");
 assert.match(section, /overview\.graph\.edges\.map/, "Polynet graph should render backend-projected edges");
+assert.match(viewportController, /const MIN_SCALE = 0\.08/, "full graph should zoom out far enough to fit the bounded 120-node projection");
 assert.match(section, /edgeType === "derived_from"\) return "derived-from"/, "full graph should visibly classify resource provenance edges");
 assert.match(preview, /edgeType === "derived_from"\) return "derived-from"/, "rail graph should preserve resource provenance edges");
 assert.match(
