@@ -125,7 +125,7 @@ function VideoLinkPreview(props: {
             <span className="community-interaction-embed-media is-empty" aria-hidden="true" />
           )}
           <span className="community-interaction-embed-play-icon" aria-hidden="true">
-            <Play size={22} fill="currentColor" />
+            <Play size={18} fill="currentColor" />
           </span>
         </button>
       )}
@@ -155,7 +155,7 @@ function SocialPostLinkPreview(props: {
   const [expanded, setExpanded] = useState(false);
   const author = props.embed.author_name || props.embed.title || "X post";
   const body = props.embed.description || "View this post on X";
-  const canExpand = body.length > 320 || body.split("\n").length > 6;
+  const canExpand = body.length > 220 || body.split("\n").length > 4;
   return (
     <div
       className="community-interaction-embed is-social-post"

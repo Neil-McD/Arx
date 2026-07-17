@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   extractInteractionOEmbedDiscoveryUrl,
@@ -7,6 +8,12 @@ import {
   normalizeInteractionOEmbedPreview,
 } from "../api/source-url-preview.mjs";
 import { interactionPresentationForEmbeds } from "../shared/communityInteractionLinkPresentation.ts";
+
+const previewCss = readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8");
+const previewComponent = readFileSync(
+  new URL("../apps/web/src/components/CommunityInteractionLinkPreview.tsx", import.meta.url),
+  "utf8",
+);
 
 const loomSourceUrl = "https://www.loom.com/share/29f6556e6f6849609b0225fbbc6224ff";
 const loomDiscovery = extractInteractionOEmbedDiscoveryUrl(
@@ -230,6 +237,22 @@ assert.deepEqual(
     trailingEmbeds: [timedVideoEmbed],
   },
   "content-bearing video start parameters must remain significant",
+);
+
+assert.match(
+  previewCss,
+  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*380px;[\s\S]*\.community-interaction-embed\.is-video,[\s\S]*width:\s*min\(100%,\s*var\(--community-interaction-embed-max-width\)\);/,
+  "link preview cards should stay compact within the conversation column",
+);
+assert.match(
+  previewCss,
+  /\.community-interaction-embed-social-body\s*\{[\s\S]*-webkit-line-clamp:\s*4;[\s\S]*\.community-interaction-embed\.is-social-post \.community-interaction-embed-media\s*\{[\s\S]*max-height:\s*190px;/,
+  "social previews should bound both excerpt and media height",
+);
+assert.match(
+  previewComponent,
+  /body\.length > 220 \|\| body\.split\("\\n"\)\.length > 4/,
+  "social text hidden by compact clamping should remain expandable",
 );
 
 console.log("PASS: interaction link previews prefer safe content-specific objects over platform marketing cards");
