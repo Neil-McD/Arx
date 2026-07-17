@@ -11716,6 +11716,7 @@ export default function App() {
         getAvatarColor={getAvatarColor}
         renderTextWithLinks={renderTextWithLinks}
         requireSignIn={() => requireSignIn()}
+        onProfileSetupRequired={openProfileSetup}
         showAppToastMessage={showAppToastMessage}
         onUnreadCountChange={setDirectMessagesUnreadCount}
         onIncomingDirectMessage={directMessageWebNotifications.notifyIncoming}

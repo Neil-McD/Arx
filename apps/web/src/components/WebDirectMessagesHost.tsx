@@ -107,6 +107,7 @@ type WebDirectMessagesHostProps<SessionT> = {
   getAvatarColor: (seed: string) => string;
   renderTextWithLinks: (text: string) => ReactNode;
   requireSignIn?: () => void;
+  onProfileSetupRequired?: () => void;
   showAppToastMessage?: (message: string) => void;
   onUnreadCountChange?: (count: number) => void;
   onIncomingDirectMessage?: (event: IncomingDirectMessageEvent) => void;
@@ -125,6 +126,9 @@ function toErrorMessage(error: unknown, fallback: string): string {
 function friendlyDirectMessageSendError(error: unknown, fallback: string): string {
   const raw = toErrorMessage(error, fallback);
   const normalized = raw.toLowerCase();
+  if (normalized.includes("profile_setup_required")) {
+    return "Finish account setup to send direct messages.";
+  }
   if (normalized.includes("dm_rate_limited")) {
     return "You're sending messages too quickly. Give it a minute and try again.";
   }
@@ -146,6 +150,10 @@ function friendlyDirectMessageSendError(error: unknown, fallback: string): strin
     normalized.startsWith("dm_") ||
     normalized.startsWith("convex_");
   return looksLikeRawServerError ? fallback : raw;
+}
+
+function directMessageSendRequiresProfileSetup(error: unknown): boolean {
+  return toErrorMessage(error, "").toLowerCase().includes("profile_setup_required");
 }
 
 function friendlyDirectMessageReadError(error: unknown, fallback: string): string {
@@ -492,6 +500,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     getAvatarColor,
     renderTextWithLinks,
     requireSignIn,
+    onProfileSetupRequired,
     showAppToastMessage,
     onUnreadCountChange,
     onIncomingDirectMessage,
@@ -1571,7 +1580,10 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           };
         });
       } catch (error) {
-        const message = toErrorMessage(error, "Failed to upload attachment.");
+        if (directMessageSendRequiresProfileSetup(error)) {
+          onProfileSetupRequired?.();
+        }
+        const message = friendlyDirectMessageSendError(error, "Failed to upload attachment.");
         setDirectMessagePanel((previous) =>
           previous?.conversation.id === conversationId
             ? {
@@ -1591,7 +1603,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         );
       }
     },
-    [ensureSession, session],
+    [ensureSession, onProfileSetupRequired, session],
   );
 
   const lastUploadKickConversationRef = useRef<string | null>(null);
@@ -1636,6 +1648,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           ),
         );
       } catch (error) {
+        if (directMessageSendRequiresProfileSetup(error)) {
+          onProfileSetupRequired?.();
+        }
         updateConversationEchoes(conversationId, (echoes) =>
           echoes.map((item) =>
             item.local_id === echo.local_id
@@ -1649,7 +1664,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         );
       }
     },
-    [ensureSession, session, updateConversationEchoes],
+    [ensureSession, onProfileSetupRequired, session, updateConversationEchoes],
   );
 
   const deliverVirtualDirectMessageEcho = useCallback(
@@ -1720,6 +1735,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             : previous,
         );
       } catch (error) {
+        if (directMessageSendRequiresProfileSetup(error)) {
+          onProfileSetupRequired?.();
+        }
         const failConversationId =
           virtualToRealConversationIdRef.current[virtualConversationId] ?? virtualConversationId;
         updateConversationEchoes(failConversationId, (echoes) =>
@@ -1735,7 +1753,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         );
       }
     },
-    [ensureSession, session, updateConversationEchoes],
+    [ensureSession, onProfileSetupRequired, session, updateConversationEchoes],
   );
 
   const sendDirectMessage = useCallback(async () => {

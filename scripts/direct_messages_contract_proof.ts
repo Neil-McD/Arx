@@ -401,6 +401,11 @@ assert.doesNotMatch(app, /activeCommunityName=\{activeCommunity\?\.name \?\? nul
 assert.match(app, /directMessagesUnreadCount/, "app shell must own top-bar DM unread count");
 assert.match(app, /onUnreadCountChange=\{setDirectMessagesUnreadCount\}/, "global DM host must feed top-bar unread state");
 assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");
+assert.match(dmHost, /onProfileSetupRequired\?: \(\) => void/, "DM host must expose an actionable profile-setup gate");
+assert.match(dmHost, /profile_setup_required[\s\S]*Finish account setup to send direct messages\./, "DM profile gate must explain the required action instead of surfacing a raw server error");
+assert.match(dmHostUploadAttachmentDraft, /directMessageSendRequiresProfileSetup\(error\)[\s\S]*onProfileSetupRequired\?\.\(\)/, "DM attachment writes must open profile setup when the backend gate rejects the write");
+assert.match(dmHost, /deliverDirectMessageEcho[\s\S]*directMessageSendRequiresProfileSetup\(error\)[\s\S]*onProfileSetupRequired\?\.\(\)[\s\S]*deliverVirtualDirectMessageEcho[\s\S]*directMessageSendRequiresProfileSetup\(error\)[\s\S]*onProfileSetupRequired\?\.\(\)/, "existing and first-send DM failures must both open profile setup");
+assert.match(app, /onProfileSetupRequired=\{openProfileSetup\}/, "app shell must route DM setup failures into the canonical setup modal");
 assert.match(css, /\.community-dm-panel/, "DM panel must have glass side-panel styling");
 assert.doesNotMatch(css, /\.community-dm-panel::before|\.community-dm-panel::after/, "DM panel must not cover readable inbox or chat content with global pseudo-element scrims");
 assert.match(css, /\.community-dm-panel \{[\s\S]*background: var\(--web-floating-chrome-bg,[\s\S]*backdrop-filter: blur\(16px\) saturate\(130%\)/, "DM panel root must keep the profile-style glass material");
