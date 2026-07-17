@@ -43,9 +43,9 @@ import {
   toIsoString,
 } from "./communityCore";
 import {
-  deleteArchiveDocumentBySource,
-  upsertArchiveDocumentForResource,
-} from "./communityArchiveDocuments";
+  revokeCommunityResourceMemoryProjection,
+  syncCommunityResourceMemoryProjection,
+} from "./communityResourceMemoryProjection";
 import {
   deleteCommunityResourceBodyContent,
   hydrateCommunityResourceBody,
@@ -1956,7 +1956,7 @@ async function getNextResourceSortOrder(args: {
   );
 }
 
-async function syncArchiveDocumentsForModule(args: {
+async function syncResourceMemoryProjectionsForModule(args: {
   ctx: any;
   communityId: any;
   moduleId: any;
@@ -1968,7 +1968,7 @@ async function syncArchiveDocumentsForModule(args: {
     )
     .collect()) as CommunityResourceLike[];
   for (const row of rows) {
-    await upsertArchiveDocumentForResource(args.ctx, row);
+    await syncCommunityResourceMemoryProjection(args.ctx, row);
   }
 }
 
@@ -2055,7 +2055,7 @@ export const backfillCommunityResourceModuleStatusesInternal = internalMutation(
           status: nextStatus,
           updatedAt: nowMs,
         });
-        await syncArchiveDocumentsForModule({
+        await syncResourceMemoryProjectionsForModule({
           ctx,
           communityId: module.communityId,
           moduleId: module._id,
@@ -2970,7 +2970,7 @@ async function createPageFromChangesetOperation(args: {
     });
   }
   const hydrated = await hydrateCommunityResourceBody(args.ctx, created) ?? created;
-  await upsertArchiveDocumentForResource(args.ctx, hydrated);
+  await syncCommunityResourceMemoryProjection(args.ctx, hydrated, args.nowMs);
   return hydrated;
 }
 
@@ -3046,7 +3046,7 @@ async function editPageFromChangesetOperation(args: {
     });
   }
   const hydrated = await hydrateCommunityResourceBody(args.ctx, updated) ?? updated;
-  await upsertArchiveDocumentForResource(args.ctx, hydrated);
+  await syncCommunityResourceMemoryProjection(args.ctx, hydrated, args.nowMs);
   return hydrated;
 }
 
@@ -3062,13 +3062,9 @@ async function deletePageFromChangesetOperation(args: {
     role: "page",
     expectedUpdatedAt: args.operation.expected_updated_at,
   });
+  await revokeCommunityResourceMemoryProjection(args.ctx, existing);
   await deleteCommunityResourceBodyContent(args.ctx, existing._id);
   await args.ctx.db.delete(existing._id as any);
-  await deleteArchiveDocumentBySource(args.ctx, {
-    communityId: existing.communityId,
-    sourceType: "resource",
-    sourceId: normalizeIdValue(existing._id),
-  });
   return existing;
 }
 
@@ -3137,7 +3133,7 @@ async function applyCommunityResourceBuilderChangesetOperations(args: {
         updatedAt: args.nowMs,
       });
       if (moduleStatusChanged) {
-        await syncArchiveDocumentsForModule({
+        await syncResourceMemoryProjectionsForModule({
           ctx: args.ctx,
           communityId: args.communityId,
           moduleId: module._id,
@@ -3210,7 +3206,7 @@ async function applyCommunityResourceBuilderChangesetOperations(args: {
         updatedAt: args.nowMs,
       });
       const updated = (await args.ctx.db.get(resource._id as any)) as CommunityResourceLike | null;
-      if (updated) await upsertArchiveDocumentForResource(args.ctx, updated);
+      if (updated) await syncCommunityResourceMemoryProjection(args.ctx, updated, args.nowMs);
       applied.push({
         index,
         op: operation.op,
@@ -3270,7 +3266,7 @@ async function applyCommunityResourceBuilderChangesetOperations(args: {
       updatedAt: args.nowMs,
     });
     const updated = (await args.ctx.db.get(page._id as any)) as CommunityResourceLike | null;
-    if (updated) await upsertArchiveDocumentForResource(args.ctx, updated);
+    if (updated) await syncCommunityResourceMemoryProjection(args.ctx, updated, args.nowMs);
     applied.push({
       index,
       op: operation.op,
@@ -5504,7 +5500,7 @@ export const writeCommunityResourceBuilderResource = mutation({
       });
     }
     const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
-    await upsertArchiveDocumentForResource(ctx, hydrated);
+    await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
     return {
       ok: true,
       kind: "community_resource_builder_write",
@@ -5565,7 +5561,7 @@ export const editCommunityResourceBuilderResource = mutation({
         updatedAt: nowMs,
       });
       if (moduleStatusChanged) {
-        await syncArchiveDocumentsForModule({
+        await syncResourceMemoryProjectionsForModule({
           ctx,
           communityId: args.communityId,
           moduleId: existing._id,
@@ -5682,7 +5678,7 @@ export const editCommunityResourceBuilderResource = mutation({
       });
     }
     const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
-    await upsertArchiveDocumentForResource(ctx, hydrated);
+    await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
     return {
       ok: true,
       kind: "community_resource_builder_edit",
@@ -5974,7 +5970,7 @@ export const saveCommunityResourceModule = mutation({
         await maybeDeleteStorageAsset(ctx, previousBannerStorageId);
       }
       if (moduleStatusChanged) {
-        await syncArchiveDocumentsForModule({
+        await syncResourceMemoryProjectionsForModule({
           ctx,
           communityId: existing.communityId,
           moduleId: existing._id,
@@ -6125,7 +6121,7 @@ export const deleteCommunityResourceModule = mutation({
           updatedAt: nowMs,
         });
         const updated = (await ctx.db.get(resource._id as any)) as CommunityResourceLike | null;
-        if (updated) await upsertArchiveDocumentForResource(ctx, updated);
+        if (updated) await syncCommunityResourceMemoryProjection(ctx, updated, nowMs);
       }),
     );
 
@@ -8306,7 +8302,7 @@ export const patchCommunitySourceIngestionInternal = internalMutation({
       });
     }
     const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
-    await upsertArchiveDocumentForResource(ctx, hydrated);
+    await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
     return await mapCommunityResourceRow(ctx, hydrated);
   },
 });
@@ -9236,7 +9232,7 @@ export const saveCommunitySourceCrawlPagesInternal = internalMutation({
         const updated = (await ctx.db.get(decision.source_id as any)) as CommunityResourceLike | null;
         if (updated) {
           const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
-          await upsertArchiveDocumentForResource(ctx, hydrated);
+          await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
         }
         sourceResourceIds.push(decision.source_id);
         const unitResult = await saveCommunitySourceUnitsForPage(ctx, {
@@ -9282,7 +9278,7 @@ export const saveCommunitySourceCrawlPagesInternal = internalMutation({
       const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
       if (created) {
         const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
-        await upsertArchiveDocumentForResource(ctx, hydrated);
+        await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
       }
       const sourceResourceId = normalizeIdValue(id);
       sourceResourceIds.push(sourceResourceId);
@@ -9759,7 +9755,7 @@ export const saveCommunityResource = mutation({
         });
       }
       const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
-      await upsertArchiveDocumentForResource(ctx, hydrated);
+      await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
       return await mapCommunityResourceRow(ctx, hydrated);
     }
 
@@ -9859,7 +9855,7 @@ export const saveCommunityResource = mutation({
       });
     }
     const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
-    await upsertArchiveDocumentForResource(ctx, hydrated);
+    await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
     const createdModule = moduleId
       ? ((await ctx.db.get(moduleId as any)) as CommunityResourceModuleLike | null)
       : null;
@@ -9945,7 +9941,7 @@ export const createCommunityResourcePageDraftFromSource = mutation({
       maxChars: 20_000,
     });
     const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
-    await upsertArchiveDocumentForResource(ctx, hydrated);
+    await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
     return await mapCommunityResourceRow(ctx, hydrated);
   },
 });
@@ -10122,14 +10118,10 @@ export const deleteCommunityResource = mutation({
       communityId: resource.communityId,
       userId: args.userId,
     });
+    await revokeCommunityResourceMemoryProjection(ctx, resource);
     await deleteCommunitySourceUnitsForSourceResource(ctx, resource._id);
     await deleteCommunityResourceBodyContent(ctx, resource._id);
     await ctx.db.delete(resource._id as any);
-    await deleteArchiveDocumentBySource(ctx, {
-      communityId: resource.communityId,
-      sourceType: "resource",
-      sourceId: normalizeIdValue(resource._id),
-    });
     return { ok: true };
   },
 });

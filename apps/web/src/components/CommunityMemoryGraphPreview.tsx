@@ -22,6 +22,7 @@ function typeClass(raw: string | null | undefined): string {
     case "warning_failure": return "warning";
     case "decision_judgment": return "decision";
     case "open_question": return "question";
+    case "resource": return "resource";
     default: return "default";
   }
 }
@@ -49,6 +50,7 @@ function edgeClass(raw: string | null | undefined): string {
   if (edgeType === "contradicts") return "contradicts";
   if (edgeType === "has_example") return "has-example";
   if (edgeType === "applies_to_workflow") return "applies-to-workflow";
+  if (edgeType === "contains_resource") return "contains-resource";
   return "default";
 }
 

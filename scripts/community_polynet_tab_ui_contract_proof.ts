@@ -114,6 +114,9 @@ assert.match(
   "Polynet back action should route to the same community chat without relying on browser history",
 );
 assert.match(section, /overview\.graph\.nodes\.map/, "Polynet graph should render backend-projected nodes");
+assert.match(section, /case "resource": return "resource"/, "Polynet graph should give resource source nodes a distinct visual type");
+assert.match(preview, /case "resource": return "resource"/, "The compact graph should preserve the resource source-node type");
+assert.match(section, /selectedNode\.kind === "directory_node"[\s\S]*confidence/, "resource details should not fabricate learned-memory confidence");
 assert.match(section, /key=\{lineageId\}/, "Polynet nodes should preserve React identity across retained-memory updates");
 assert.match(section, /data-lineage-id=\{lineageId\}/, "Polynet nodes should expose lifecycle lineage for visual acceptance tests");
 assert.match(section, /style=\{\{ transform: `translate\(\$\{pos\.x\}px, \$\{pos\.y\}px\)` \}\}/, "Polynet node movement should be CSS-transitionable");
@@ -137,7 +140,7 @@ assert.doesNotMatch(
 );
 assert.match(section, /agentActivityClass\(overview\?\.agent\.activity_state\)/, "Polynet root should reflect the projected community-agent state");
 assert.match(section, /The community agent is examining recent activity\./, "empty graph should expose active inspection without claiming memory");
-assert.match(section, /No retained memories yet\./, "resting empty graph should state retained-memory truth plainly");
+assert.match(section, /No community intelligence yet\./, "resting empty graph should account for both learned and source intelligence");
 assert.doesNotMatch(
   section,
   /Backfill archive|Process pending|Retry failed|Total docs|Embedded|PDF docs|archive health|archive memory/i,
@@ -153,6 +156,11 @@ assert.match(
   contextPanel,
   /memoryOverview\?: CloudCommunityPolynetOverview \| null/,
   "Community context rail should accept the Polynet overview projection",
+);
+assert.match(
+  contextPanel,
+  /node\.kind === "directory_node" \|\| node\.kind === "resource_node"/,
+  "Community context memory should treat canonical resource nodes as real memory",
 );
 assert.match(
   contextPanel,
@@ -199,6 +207,8 @@ assert.match(
   /\.cp-root-circle \{[\s\S]*fill: var\(--accent-gold\)/,
   "Polynet root node should be a compact dot in the theme accent",
 );
+assert.match(css, /\.cp-node-circle\.type-resource/, "Polynet CSS should visibly distinguish canonical resource nodes");
+assert.match(css, /\.cp-edge\.contains-resource/, "Polynet CSS should distinguish resource containment edges");
 assert.doesNotMatch(css, /\.cp-forming-circle/, "deleted forming-memory treatment should not remain in CSS");
 assert.match(css, /\.cp-node \{[\s\S]*transition:[^;]*transform 380ms/, "retained-memory layout changes should animate smoothly");
 assert.match(css, /\.cp-root-circle\.activity-running/, "community root should pulse only for active agent states");

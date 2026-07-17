@@ -315,8 +315,8 @@ assert.match(
 );
 assert.match(
   resources,
-  /saveCommunitySourceCrawlPagesInternal = internalMutation\(\{[\s\S]*communitySourceCrawlerPageArg[\s\S]*requireCommunityManager[\s\S]*by_community_role_status[\s\S]*communitySourceCrawlerUrlAliases\(maybeSafeSourceCrawlerUrl, source\.url\)[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias: existingByUrl[\s\S]*seenAliases: seenUrls[\s\S]*decision\.action === "skip"[\s\S]*decision\.action === "update_existing"[\s\S]*role: "source"[\s\S]*status: "review"[\s\S]*sourceIngestionStatus: "ready"[\s\S]*sourceIngestionKind: "url"[\s\S]*writeCommunityResourceBodyContent[\s\S]*upsertArchiveDocumentForResource/,
-  "source crawl pages should dedupe root/redirect URL aliases and persist canonical ready URL source rows with large body content and archive sync",
+  /saveCommunitySourceCrawlPagesInternal = internalMutation\(\{[\s\S]*communitySourceCrawlerPageArg[\s\S]*requireCommunityManager[\s\S]*by_community_role_status[\s\S]*communitySourceCrawlerUrlAliases\(maybeSafeSourceCrawlerUrl, source\.url\)[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias: existingByUrl[\s\S]*seenAliases: seenUrls[\s\S]*decision\.action === "skip"[\s\S]*decision\.action === "update_existing"[\s\S]*role: "source"[\s\S]*status: "review"[\s\S]*sourceIngestionStatus: "ready"[\s\S]*sourceIngestionKind: "url"[\s\S]*writeCommunityResourceBodyContent[\s\S]*syncCommunityResourceMemoryProjection/,
+  "source crawl pages should dedupe root/redirect URL aliases and persist canonical ready URL source rows through the memory lifecycle",
 );
 assert.match(
   resources,
@@ -405,8 +405,8 @@ assert.match(
 );
 assert.match(
   resources,
-  /sourceIngestionStatus: args\.status[\s\S]*sourceOriginalFilename[\s\S]*writeCommunityResourceBodyContent[\s\S]*upsertArchiveDocumentForResource/,
-  "source ingestion should persist extracted text into content storage and keep archive projection in sync",
+  /sourceIngestionStatus: args\.status[\s\S]*sourceOriginalFilename[\s\S]*writeCommunityResourceBodyContent[\s\S]*syncCommunityResourceMemoryProjection/,
+  "source ingestion should persist extracted text and keep canonical memory projections in sync",
 );
 assert.match(
   resources,

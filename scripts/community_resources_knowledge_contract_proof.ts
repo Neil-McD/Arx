@@ -258,8 +258,8 @@ assert.match(
 );
 assert.match(
   resources,
-  /backfillCommunityResourceModuleStatusesInternal[\s\S]*syncArchiveDocumentsForModule/,
-  "module status backfill must resync archive documents after canonicalizing visibility",
+  /backfillCommunityResourceModuleStatusesInternal[\s\S]*syncResourceMemoryProjectionsForModule/,
+  "module status backfill must resync resource memory projections after canonicalizing visibility",
 );
 assert.match(
   resources,

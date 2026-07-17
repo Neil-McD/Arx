@@ -1,6 +1,8 @@
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  communityResourceIsLiveModulePage,
+  communityResourceModuleIsLive,
   normalizeIdValue,
   normalizeOptionalText,
   normalizeSlug,
@@ -8,6 +10,8 @@ import {
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
+  type CommunityResourceLike,
+  type CommunityResourceModuleLike,
 } from "./communityCore";
 import {
   compilerStateForSourceTraceLifecycle,
@@ -265,6 +269,8 @@ const POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT = 80;
 const POLYNET_OVERVIEW_MAX_NODE_LIMIT = 120;
 const POLYNET_OVERVIEW_EDGE_LIMIT = 160;
 const POLYNET_OVERVIEW_EDGES_PER_NODE_LIMIT = 8;
+const POLYNET_OVERVIEW_RESOURCE_MODULE_SCAN_LIMIT = 500;
+const POLYNET_OVERVIEW_RESOURCE_ROW_SCAN_MULTIPLIER = 4;
 const POLYNET_OVERVIEW_RUN_LIMIT = 6;
 const NODE_TYPES = new Set<NodeType>([
   "playbook",
@@ -930,6 +936,14 @@ function communityMemoryLineageId(changeRequestId: any): string {
   return `change_request:${normalizeIdValue(changeRequestId)}`;
 }
 
+function resourceGraphNodeId(resourceId: any): string {
+  return `resource_node:${normalizeIdValue(resourceId)}`;
+}
+
+function resourceMemoryLineageId(resourceId: any): string {
+  return `resource:${normalizeIdValue(resourceId)}`;
+}
+
 function nodeStatusRank(status: NodeStatus): number {
   if (status === "canonical") return 5;
   if (status === "validated") return 4;
@@ -976,6 +990,19 @@ function mapPolynetOverviewNode(row: IntelligenceNodeRow) {
   };
 }
 
+function mapPolynetOverviewResourceNode(row: CommunityResourceLike) {
+  return {
+    id: resourceGraphNodeId(row._id),
+    lineage_id: resourceMemoryLineageId(row._id),
+    kind: "resource_node",
+    type: "resource",
+    label: row.title,
+    title: row.title,
+    status: "source",
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
 function mapPolynetOverviewEdge(row: IntelligenceEdgeRow) {
   return {
     id: `directory_edge:${normalizeIdValue(row._id)}`,
@@ -985,6 +1012,20 @@ function mapPolynetOverviewEdge(row: IntelligenceEdgeRow) {
     to: directoryGraphNodeId(row.toNodeId),
     type: row.type,
     confidence: row.confidence,
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+function mapPolynetOverviewResourceEdge(communityId: any, row: CommunityResourceLike) {
+  const resourceId = normalizeIdValue(row._id);
+  return {
+    id: `resource_edge:${resourceId}`,
+    kind: "resource_edge",
+    edge_id: `resource:${resourceId}`,
+    from: communityGraphRootId(communityId),
+    to: resourceGraphNodeId(row._id),
+    type: "contains_resource",
+    confidence: 1,
     updated_at: toIsoString(row.updatedAt),
   };
 }
@@ -1054,6 +1095,97 @@ async function readPolynetOverviewNodes(args: {
   };
 }
 
+async function readPolynetOverviewResources(args: {
+  ctx: any;
+  communityId: any;
+  limit: number;
+}): Promise<{ resources: CommunityResourceLike[]; hasMoreResources: boolean }> {
+  const moduleRows = (await args.ctx.db
+    .query("communityResourceModules" as any)
+    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+    .take(POLYNET_OVERVIEW_RESOURCE_MODULE_SCAN_LIMIT)) as CommunityResourceModuleLike[];
+  const liveModules = moduleRows
+    .filter(communityResourceModuleIsLive)
+    .sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
+  const liveModuleIds = new Set(liveModules.map((module) => normalizeIdValue(module._id)));
+  const scanLimit = Math.max(args.limit + 1, args.limit * POLYNET_OVERVIEW_RESOURCE_ROW_SCAN_MULTIPLIER);
+  const deduped = new Map<string, CommunityResourceLike>();
+  let scannedRows = 0;
+  let scannedModules = 0;
+  let hasMoreResources = moduleRows.length >= POLYNET_OVERVIEW_RESOURCE_MODULE_SCAN_LIMIT;
+
+  for (const module of liveModules) {
+    if (deduped.size > args.limit || scannedRows >= scanLimit) {
+      hasMoreResources = true;
+      break;
+    }
+    const remainingScan = scanLimit - scannedRows;
+    const remainingCandidates = args.limit + 1 - deduped.size;
+    const takeLimit = Math.max(1, Math.min(remainingScan, remainingCandidates));
+    const rows = (await args.ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community_module", (q: any) =>
+        q.eq("communityId", args.communityId).eq("moduleId", module._id),
+      )
+      .take(takeLimit)) as CommunityResourceLike[];
+    scannedRows += rows.length;
+    scannedModules += 1;
+    if (rows.length >= takeLimit) hasMoreResources = true;
+    for (const row of rows) {
+      if (!communityResourceIsLiveModulePage(row, liveModuleIds)) continue;
+      const rowId = normalizeIdValue(row._id);
+      if (!rowId || deduped.has(rowId)) continue;
+      deduped.set(rowId, row);
+    }
+  }
+  if (scannedModules < liveModules.length) hasMoreResources = true;
+
+  const resources = Array.from(deduped.values())
+    .sort((a, b) =>
+      Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
+      b.updatedAt - a.updatedAt ||
+      String(a.title ?? "").localeCompare(String(b.title ?? "")),
+    )
+    .slice(0, args.limit);
+  if (deduped.size > resources.length) hasMoreResources = true;
+  return { resources, hasMoreResources };
+}
+
+type PolynetOverviewSelectionItem =
+  | { kind: "directory"; row: IntelligenceNodeRow }
+  | { kind: "resource"; row: CommunityResourceLike };
+
+function selectPolynetOverviewItems(args: {
+  nodes: IntelligenceNodeRow[];
+  resources: CommunityResourceLike[];
+  limit: number;
+}): PolynetOverviewSelectionItem[] {
+  const selected: PolynetOverviewSelectionItem[] = [];
+  let nodeIndex = 0;
+  let resourceIndex = 0;
+  while (selected.length < args.limit) {
+    const node = args.nodes[nodeIndex];
+    const resource = args.resources[resourceIndex];
+    if (!node && !resource) break;
+    if (node) {
+      selected.push({ kind: "directory", row: node });
+      nodeIndex += 1;
+    }
+    if (selected.length >= args.limit) break;
+    if (resource) {
+      selected.push({ kind: "resource", row: resource });
+      resourceIndex += 1;
+    }
+  }
+  return selected;
+}
+
+function mapPolynetOverviewSelectionNode(item: PolynetOverviewSelectionItem) {
+  return item.kind === "directory"
+    ? mapPolynetOverviewNode(item.row)
+    : mapPolynetOverviewResourceNode(item.row);
+}
+
 async function readPolynetOverviewEdges(args: {
   ctx: any;
   communityId: any;
@@ -1094,19 +1226,41 @@ async function readPolynetOverviewEdges(args: {
   };
 }
 
-function summarizePolynetOverviewMemory(nodes: IntelligenceNodeRow[], hasMoreNodes: boolean, hasMoreEdges: boolean) {
-  const countsByType = emptyCountMap(Array.from(NODE_TYPES).sort() as NodeType[]);
-  const countsByStatus = emptyCountMap(POLYNET_OVERVIEW_STATUSES);
+function summarizePolynetOverviewMemory(
+  items: PolynetOverviewSelectionItem[],
+  hasMoreNodes: boolean,
+  hasMoreEdges: boolean,
+) {
+  const countsByType: Record<string, number> = {
+    ...emptyCountMap(Array.from(NODE_TYPES).sort() as NodeType[]),
+    resource: 0,
+  };
+  const countsByStatus: Record<string, number> = {
+    ...emptyCountMap(POLYNET_OVERVIEW_STATUSES),
+    source: 0,
+  };
   let staleCount = 0;
   let contestedCount = 0;
-  for (const node of nodes) {
+  let learnedNodeCount = 0;
+  let sourceNodeCount = 0;
+  for (const item of items) {
+    if (item.kind === "resource") {
+      countsByType.resource += 1;
+      countsByStatus.source += 1;
+      sourceNodeCount += 1;
+      continue;
+    }
+    const node = item.row;
     countsByType[node.type] += 1;
     countsByStatus[node.status] += 1;
+    learnedNodeCount += 1;
     if (node.status === "stale") staleCount += 1;
     if (node.status === "contested") contestedCount += 1;
   }
   return {
-    total_visible_nodes: nodes.length,
+    total_visible_nodes: items.length,
+    learned_node_count: learnedNodeCount,
+    source_node_count: sourceNodeCount,
     counts_by_type: countsByType,
     counts_by_status: countsByStatus,
     stale_count: staleCount,
@@ -3446,12 +3600,35 @@ export const getCommunityPolynetOverview = query({
       Math.min(POLYNET_OVERVIEW_MAX_NODE_LIMIT, Math.floor(args.nodeLimit ?? POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT)),
     );
 
-    const { nodes, hasMoreNodes } = await readPolynetOverviewNodes({
-      ctx,
-      communityId: args.communityId,
-      isManager,
+    const [nodeResult, resourceResult] = await Promise.all([
+      readPolynetOverviewNodes({
+        ctx,
+        communityId: args.communityId,
+        isManager,
+        limit: nodeLimit,
+      }),
+      readPolynetOverviewResources({
+        ctx,
+        communityId: args.communityId,
+        limit: nodeLimit,
+      }),
+    ]);
+    const selectedItems = selectPolynetOverviewItems({
+      nodes: nodeResult.nodes,
+      resources: resourceResult.resources,
       limit: nodeLimit,
     });
+    const nodes = selectedItems
+      .filter((item): item is Extract<PolynetOverviewSelectionItem, { kind: "directory" }> => item.kind === "directory")
+      .map((item) => item.row);
+    const resources = selectedItems
+      .filter((item): item is Extract<PolynetOverviewSelectionItem, { kind: "resource" }> => item.kind === "resource")
+      .map((item) => item.row);
+    const hasMoreNodes =
+      nodeResult.hasMoreNodes ||
+      resourceResult.hasMoreResources ||
+      nodes.length < nodeResult.nodes.length ||
+      resources.length < resourceResult.resources.length;
     const { edges, hasMoreEdges } = await readPolynetOverviewEdges({
       ctx,
       communityId: args.communityId,
@@ -3505,15 +3682,18 @@ export const getCommunityPolynetOverview = query({
             label: community.name,
             type: "community",
           },
-          ...nodes.map(mapPolynetOverviewNode),
+          ...selectedItems.map(mapPolynetOverviewSelectionNode),
         ],
-        edges: edges.map(mapPolynetOverviewEdge),
+        edges: [
+          ...edges.map(mapPolynetOverviewEdge),
+          ...resources.map((row) => mapPolynetOverviewResourceEdge(args.communityId, row)),
+        ],
         node_limit: nodeLimit,
-        edge_limit: POLYNET_OVERVIEW_EDGE_LIMIT,
+        edge_limit: POLYNET_OVERVIEW_EDGE_LIMIT + nodeLimit,
         has_more_nodes: hasMoreNodes,
         has_more_edges: hasMoreEdges,
       },
-      memory: summarizePolynetOverviewMemory(nodes, hasMoreNodes, hasMoreEdges),
+      memory: summarizePolynetOverviewMemory(selectedItems, hasMoreNodes, hasMoreEdges),
     };
   },
 });
@@ -3521,7 +3701,7 @@ export const getCommunityPolynetOverview = query({
 /* Visitor lens: the memory graph's SHAPE for the public community page —
    member-readable nodes and edges as anonymous dots. Titles and labels are
    stripped, no run history, published communities only. Viewable, never
-   selectable; note content never leaves the community. */
+   selectable; resource and learned-memory content never leave the community. */
 export const resolvePublicCommunityMemoryOverviewBySlug = query({
   args: {
     communitySlug: v.string(),
@@ -3534,12 +3714,35 @@ export const resolvePublicCommunityMemoryOverviewBySlug = query({
       .first();
     if (!community) return { ok: false as const };
 
-    const { nodes, hasMoreNodes } = await readPolynetOverviewNodes({
-      ctx,
-      communityId: community._id,
-      isManager: false,
+    const [nodeResult, resourceResult] = await Promise.all([
+      readPolynetOverviewNodes({
+        ctx,
+        communityId: community._id,
+        isManager: false,
+        limit: POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT,
+      }),
+      readPolynetOverviewResources({
+        ctx,
+        communityId: community._id,
+        limit: POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT,
+      }),
+    ]);
+    const selectedItems = selectPolynetOverviewItems({
+      nodes: nodeResult.nodes,
+      resources: resourceResult.resources,
       limit: POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT,
     });
+    const nodes = selectedItems
+      .filter((item): item is Extract<PolynetOverviewSelectionItem, { kind: "directory" }> => item.kind === "directory")
+      .map((item) => item.row);
+    const resources = selectedItems
+      .filter((item): item is Extract<PolynetOverviewSelectionItem, { kind: "resource" }> => item.kind === "resource")
+      .map((item) => item.row);
+    const hasMoreNodes =
+      nodeResult.hasMoreNodes ||
+      resourceResult.hasMoreResources ||
+      nodes.length < nodeResult.nodes.length ||
+      resources.length < resourceResult.resources.length;
     const { edges, hasMoreEdges } = await readPolynetOverviewEdges({
       ctx,
       communityId: community._id,
@@ -3585,19 +3788,22 @@ export const resolvePublicCommunityMemoryOverviewBySlug = query({
               label: community.name,
               type: "community",
             },
-            ...nodes.map((row) => ({
-              ...mapPolynetOverviewNode(row),
+            ...selectedItems.map((item) => ({
+              ...mapPolynetOverviewSelectionNode(item),
               label: null,
               title: null,
             })),
           ],
-          edges: edges.map(mapPolynetOverviewEdge),
+          edges: [
+            ...edges.map(mapPolynetOverviewEdge),
+            ...resources.map((row) => mapPolynetOverviewResourceEdge(community._id, row)),
+          ],
           node_limit: POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT,
-          edge_limit: POLYNET_OVERVIEW_EDGE_LIMIT,
+          edge_limit: POLYNET_OVERVIEW_EDGE_LIMIT + POLYNET_OVERVIEW_DEFAULT_NODE_LIMIT,
           has_more_nodes: hasMoreNodes,
           has_more_edges: hasMoreEdges,
         },
-        memory: summarizePolynetOverviewMemory(nodes, hasMoreNodes, hasMoreEdges),
+        memory: summarizePolynetOverviewMemory(selectedItems, hasMoreNodes, hasMoreEdges),
       },
     };
   },

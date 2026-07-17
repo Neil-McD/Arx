@@ -151,9 +151,20 @@ optional `recorded_by = user`, `credit = null`, and
 `profile_projection = none`. Human or agent credit requires a later explicit
 publication/attribution contract; it is never inferred from the recorder.
 
-Resource archival is a permissioned retrieval projection. It does not create a
-compiler source trace or otherwise promote the resource into accepted community
-memory. Searchability is not compiler eligibility.
+Resource archival is a permissioned retrieval projection. When a page becomes
+member-visible through a live module, the same canonical lifecycle also creates
+or updates one `resource:<communityResourceId>` source trace. That trace makes
+the published resource eligible for bounded compiler interpretation; it does
+not promote the resource into accepted learned memory. In the product graph the
+canonical resource is projected directly as a source node, while the resource
+row remains content truth. No duplicate `communityIntelligenceNodes` row is
+created merely because the resource was published.
+
+When a resource becomes unavailable, its archive projection is removed and its
+existing trace becomes admin/redacted and compiler-ineligible. Republishing
+reopens that exact stable trace. Title, body, and URL are material revisions;
+pinning, ordering, and movement between live modules are location/UI changes and
+must not create a new semantic evidence revision.
 
 `updatedAt` and `editedAt` identify the current revision. v0 does not preserve a
 full historical content snapshot for every edit. A future revision ledger must

@@ -55,18 +55,20 @@ for (const [id, pos] of populated) {
   assert.ok(distance > 50, `directory node ${id} should orbit the root, got ${distance}`);
 }
 
-// Non-directory projections remain ignored.
+// Canonical resource source nodes participate; transient activity/approval projections remain ignored.
 const withNoise = computePolynetLayout(
   [
     { id: ROOT_ID, kind: "community" },
     { id: "chat:1", kind: "chat_activity" },
     { id: "approval:1", kind: "forming_memory" },
     { id: "node:a", kind: "directory_node" },
+    { id: "resource_node:1", kind: "resource_node" },
   ],
   ROOT_ID,
 );
-assert.equal(withNoise.size, 2, "only root and retained directory memory should be placed");
+assert.equal(withNoise.size, 3, "root, learned memory, and canonical resource memory should be placed");
 assert.ok(withNoise.has("node:a"), "directory node should be placed");
+assert.ok(withNoise.has("resource_node:1"), "resource source node should be placed");
 assert.ok(!withNoise.has("chat:1"), "non-directory activity should not be placed");
 assert.ok(!withNoise.has("approval:1"), "approval-plane projections should not be placed");
 

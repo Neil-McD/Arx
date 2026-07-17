@@ -31,9 +31,7 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
-import {
-  upsertArchiveDocumentForResource,
-} from "./communityArchiveDocuments";
+import { syncCommunityResourceMemoryProjection } from "./communityResourceMemoryProjection";
 import {
   buildCommunityResourceBuilderHealthReport,
 } from "./communityResources";
@@ -1541,7 +1539,7 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
       const updatedSource = (await ctx.db.get(source._id as any)) as CommunityResourceLike | null;
       if (!updatedSource) throw new Error("community_wiki_architect_source_not_found");
       sourceById.set(normalizeIdValue(updatedSource._id), updatedSource);
-      await upsertArchiveDocumentForResource(ctx, updatedSource);
+      await syncCommunityResourceMemoryProjection(ctx, updatedSource, nowMs);
       sourceModulesUpdated.push(updatedSource.title);
     };
 
@@ -1611,7 +1609,7 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
         maxChars: 20_000,
       });
       const hydratedCreatedPage = await hydrateCommunityResourceBody(ctx, createdPage) ?? createdPage;
-      await upsertArchiveDocumentForResource(ctx, hydratedCreatedPage);
+      await syncCommunityResourceMemoryProjection(ctx, hydratedCreatedPage, nowMs);
       await patchSourceModuleIfNeeded(source, module._id);
       if (source && draft.source_resource_id) {
         sourceBackedPages.push({
@@ -1642,7 +1640,7 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
       });
       const updatedPage = (await ctx.db.get(page._id as any)) as CommunityResourceLike | null;
       if (!updatedPage) throw new Error("community_wiki_architect_page_not_found");
-      await upsertArchiveDocumentForResource(ctx, updatedPage);
+      await syncCommunityResourceMemoryProjection(ctx, updatedPage, nowMs);
       await patchSourceModuleIfNeeded(source, updatedPage.moduleId ?? null);
       sourceBackedPages.push({
         page: updatedPage,
@@ -1860,7 +1858,7 @@ export const patchCommunityResourceContentDraftInternal = internalMutation({
       maxChars: COMMUNITY_RESOURCE_CONTENT_WRITER_BODY_CHARS,
     });
     const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
-    await upsertArchiveDocumentForResource(ctx, hydrated);
+    await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
     return {
       id: normalizeIdValue(hydrated._id),
       title: String(hydrated.title ?? ""),

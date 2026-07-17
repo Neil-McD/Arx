@@ -44,9 +44,12 @@ function asyncFunctionBlock(source: string, functionName: string): string {
 
 const overview = exportedFunctionBlock(directory, "getCommunityPolynetOverview");
 const readNodes = asyncFunctionBlock(directory, "readPolynetOverviewNodes");
+const readResources = asyncFunctionBlock(directory, "readPolynetOverviewResources");
 const readEdges = asyncFunctionBlock(directory, "readPolynetOverviewEdges");
 const mapNode = functionBlock(directory, "mapPolynetOverviewNode");
+const mapResourceNode = functionBlock(directory, "mapPolynetOverviewResourceNode");
 const mapEdge = functionBlock(directory, "mapPolynetOverviewEdge");
+const mapResourceEdge = functionBlock(directory, "mapPolynetOverviewResourceEdge");
 const overviewStatusesStart = directory.indexOf("const POLYNET_OVERVIEW_STATUSES");
 const overviewStatusesEnd = directory.indexOf("];", overviewStatusesStart);
 const overviewStatuses = directory.slice(overviewStatusesStart, overviewStatusesEnd);
@@ -67,6 +70,13 @@ assert.match(readNodes, /canViewerReadNode/, "overview nodes should reuse direct
 assert.match(readNodes, /POLYNET_OVERVIEW_STATUSES/, "overview should use a deliberately narrow accepted-memory status set");
 assert.doesNotMatch(overviewStatuses, /"draft"|"candidate"|"archived"|"deprecated"/, "overview should not expose draft, candidate, archived, or deprecated nodes");
 
+assert.match(readResources, /communityResourceModules/, "resource nodes should be discovered through canonical resource modules");
+assert.match(readResources, /communityResourceModuleIsLive/, "resource node discovery should require live modules");
+assert.match(readResources, /by_community_module/, "resource node discovery should use the canonical module index");
+assert.match(readResources, /communityResourceIsLiveModulePage/, "resource node discovery should reuse canonical member visibility");
+assert.match(readResources, /scanLimit/, "resource node discovery should keep one explicit bounded row budget");
+assert.doesNotMatch(readResources, /\.collect\(\)/, "resource node reads should never collect an unbounded community corpus");
+
 assert.doesNotMatch(
   overview,
   /formingNodes|forming_node|forming_memory|communityIntelligenceChangeRequests/,
@@ -83,16 +93,25 @@ assert.match(readEdges, /canViewerReadVisibility\(edge\.visibilityScope, args\.i
 assert.match(mapNode, /kind: "directory_node"/, "overview graph should expose real directory nodes as directory_node graph nodes");
 assert.match(mapNode, /row\.originChangeRequestId[\s\S]*communityMemoryLineageId\(row\.originChangeRequestId\)/, "retained memory should preserve its forming-node lineage");
 assert.doesNotMatch(mapNode, /body_md|source_trace_ids|outcome_observation_ids/, "overview graph nodes should not expose source bodies or evidence ids");
+assert.match(mapResourceNode, /kind: "resource_node"/, "overview should expose canonical resources as first-class graph nodes");
+assert.match(mapResourceNode, /lineage_id: resourceMemoryLineageId\(row\._id\)/, "resource nodes should use stable resource lineage");
+assert.match(mapResourceNode, /type: "resource"[\s\S]*status: "source"/, "resource nodes should retain source ontology without claiming learned validation");
+assert.doesNotMatch(mapResourceNode, /bodyMd|url|createdByUserId|confidence|evidence_strength/, "resource graph nodes should stay metadata-minimal");
 assert.match(mapEdge, /kind: "directory_edge"/, "overview graph edges should expose real directory node-to-node edges");
 assert.match(mapEdge, /from: directoryGraphNodeId\(row\.fromNodeId\)/, "overview edges should map from directory nodes");
 assert.match(mapEdge, /to: directoryGraphNodeId\(row\.toNodeId\)/, "overview edges should map to directory nodes");
+assert.match(mapResourceEdge, /kind: "resource_edge"/, "resource containment should be a typed read-model edge");
+assert.match(mapResourceEdge, /from: communityGraphRootId\(communityId\)/, "resource containment should start at the community root");
+assert.match(mapResourceEdge, /to: resourceGraphNodeId\(row\._id\)/, "resource containment should end at the resource node");
 
 assert.match(overview, /communityGraphRootId\(args\.communityId\)/, "overview should include one synthetic community root node for UI layout");
-assert.match(overview, /nodes: \[[\s\S]*kind: "community"[\s\S]*\.\.\.nodes\.map\(mapPolynetOverviewNode\)/, "overview graph should contain the community root and retained directory nodes");
-assert.match(overview, /edges: edges\.map\(mapPolynetOverviewEdge\)/, "overview graph should expose mapped directory edges only");
+assert.match(overview, /readPolynetOverviewResources/, "overview should project canonical resources without waiting for compiler promotion");
+assert.match(overview, /selectPolynetOverviewItems/, "learned and source nodes should share one bounded graph budget");
+assert.match(overview, /nodes: \[[\s\S]*kind: "community"[\s\S]*\.\.\.selectedItems\.map\(mapPolynetOverviewSelectionNode\)/, "overview graph should contain the community root plus learned and source nodes");
+assert.match(overview, /resources\.map\(\(row\) => mapPolynetOverviewResourceEdge/, "overview should connect every selected resource to the community root");
 assert.doesNotMatch(overview, /communityCompilerDigests|communitySourceTraces|readCommunityCompilerWindow/, "overview should not expose compiler or raw-trace internals");
 assert.doesNotMatch(overview, /wakeEvidence|errorMessage|body_md|source_trace_ids/, "overview should stay compact and member-safe");
-assert.match(overview, /summarizePolynetOverviewMemory\(nodes, hasMoreNodes, hasMoreEdges\)/, "memory counts should continue to summarize retained directory nodes only");
+assert.match(overview, /summarizePolynetOverviewMemory\(selectedItems, hasMoreNodes, hasMoreEdges\)/, "memory counts should include learned and resource source nodes");
 
 assert.match(overview, /communityAgentRuns/, "overview should include community-agent run status");
 assert.match(overview, /by_community_createdAt/, "overview should read recent agent runs through the community time index");

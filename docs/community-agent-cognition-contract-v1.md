@@ -202,6 +202,23 @@ This layer should arrive surface by surface as each boundary becomes stable. The
 
 Resources should not be treated as normal activity blobs. They are durable reference evidence. The compiler window should know that a resource was added, updated, reused, stale, or contradictory; the agent should use a dedicated resource read/search path when it needs the actual resource content.
 
+### Canonical resource source nodes
+
+A member-visible page in a live resource module enters community memory without
+an approval gate. One write lifecycle maintains two derived records: an archive
+document for exact/semantic retrieval and one versioned `resource` source trace
+for compiler admission and lineage. Embedding remains asynchronous and never
+blocks publication or graph visibility.
+
+The Polynet overview projects the canonical resource row as a first-class
+`resource_node` immediately. This is a source node, not a learned claim: it has
+stable `resource:<communityResourceId>` lineage and `source` status, but no
+fabricated confidence, evidence grade, or authorship credit. The projection does
+not create or update `communityIntelligenceNodes`; only compiler-retained
+learnings use that directory table. Public visitors may see the anonymous graph
+shape, while titles, URLs, bodies, and recorder identity remain inside the
+authorized community lens.
+
 Events should not become memory by existing. They are coordination state. Only event-derived decisions, recaps, outcomes, repeated questions, or coordination patterns should become source traces or directory proposals.
 
 Members require the strictest boundary. Member tooling should return roles, join dates, public profile fields, aggregate activity, and explicit contribution signals. It should not create hidden trust scores, private behavioral judgments, or surveillance-style summaries.
@@ -1361,7 +1378,7 @@ Pending source traces
 Rules:
 
 - The digest pass must use the same pending-evidence selector exposed by `measureCommunityCompilerEvidenceInternal`.
-- The digest pass may still read the 30-day activity window for chat, AI feed, resources, and outcomes, but source-trace consumption comes only from selected pending source traces.
+- The digest pass consumes selected pending source traces only. Surface archives remain retrieval indexes and must not become a second compiler signal for the same interaction, AI Feed post, resource, or outcome.
 - A `source_trace_signal` digest item represents distinct selected pending
   traces that the pass handled. An AI Feed promotion trace is consumed with its
   canonical AI Feed signal and must not create a second digest signal.

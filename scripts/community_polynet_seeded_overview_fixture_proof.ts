@@ -41,9 +41,11 @@ assert.equal(rootNodes[0].id, rootNodeId, "synthetic root node should match root
 assert.equal(rootNodes[0].community_id, fixture.community.id, "synthetic root should stay inside the fixture community");
 
 const directoryNodes = fixture.graph.nodes.filter((node: any) => node.kind === "directory_node");
+const resourceNodes = fixture.graph.nodes.filter((node: any) => node.kind === "resource_node");
 const formingNodes = fixture.graph.nodes.filter((node: any) => node.kind === "forming_memory");
 assert.equal(formingNodes.length, 0, "fixture should not project approval state as forming memory");
 assert.ok(directoryNodes.length >= 5, "fixture should have enough real directory nodes to exercise the graph");
+assert.equal(resourceNodes.length, 1, "fixture should include one canonical resource source node");
 assert.deepEqual(
   new Set(directoryNodes.map((node: any) => node.type)),
   new Set(["playbook", "insight", "example", "warning_failure", "open_question"]),
@@ -62,11 +64,23 @@ for (const node of directoryNodes) {
   assert.doesNotMatch(JSON.stringify(node), /body_md|source_trace_ids|outcome_observation_ids|raw_trace/i, "overview nodes should stay compact");
 }
 
-assert.equal(fixture.memory.total_visible_nodes, directoryNodes.length, "visible memory count should match directory nodes");
+for (const node of resourceNodes) {
+  assert.match(node.id, /^resource_node:/, "resource graph node ids should be stable projections");
+  assert.match(node.lineage_id, /^resource:/, "resource nodes should expose canonical resource lineage");
+  assert.equal(node.type, "resource", "resource nodes should retain their source ontology");
+  assert.equal(node.status, "source", "resource nodes should not claim learned validation status");
+  assert.equal(node.confidence, undefined, "resource nodes should not fabricate confidence");
+  assert.equal(node.evidence_strength, undefined, "resource nodes should not fabricate evidence strength");
+}
+
+const memoryNodes = [...directoryNodes, ...resourceNodes];
+assert.equal(fixture.memory.total_visible_nodes, memoryNodes.length, "visible memory count should include learned and source nodes");
+assert.equal(fixture.memory.learned_node_count, directoryNodes.length, "learned count should match directory nodes");
+assert.equal(fixture.memory.source_node_count, resourceNodes.length, "source count should match resource nodes");
 const typeCountTotal = Object.values(fixture.memory.counts_by_type).reduce((sum: number, count: any) => sum + Number(count), 0);
 const statusCountTotal = Object.values(fixture.memory.counts_by_status).reduce((sum: number, count: any) => sum + Number(count), 0);
-assert.equal(typeCountTotal, directoryNodes.length, "type counts should match directory node count");
-assert.equal(statusCountTotal, directoryNodes.length, "status counts should match directory node count");
+assert.equal(typeCountTotal, memoryNodes.length, "type counts should match visible memory node count");
+assert.equal(statusCountTotal, memoryNodes.length, "status counts should match visible memory node count");
 assert.equal(fixture.graph.forming_node_limit, undefined, "fixture should not expose a forming approval-plane limit");
 assert.equal(fixture.graph.has_more_forming_nodes, undefined, "fixture should not expose forming approval-plane truncation");
 assert.deepEqual(
@@ -75,8 +89,10 @@ assert.deepEqual(
   "fixture should summarize only applied memory writes",
 );
 
-assert.ok(fixture.graph.edges.length >= 3, "fixture should have enough real edges to exercise the graph");
-for (const edge of fixture.graph.edges) {
+const directoryEdges = fixture.graph.edges.filter((edge: any) => edge.kind === "directory_edge");
+const resourceEdges = fixture.graph.edges.filter((edge: any) => edge.kind === "resource_edge");
+assert.ok(directoryEdges.length >= 3, "fixture should have enough real directory edges to exercise the graph");
+for (const edge of directoryEdges) {
   assert.equal(edge.kind, "directory_edge", "overview should expose only real directory edges");
   assert.ok(EDGE_TYPES.has(edge.type), `unexpected edge type: ${edge.type}`);
   assert.ok(nodeIds.has(edge.from), `edge.from should point to a projected graph node: ${edge.from}`);
@@ -84,6 +100,10 @@ for (const edge of fixture.graph.edges) {
   assert.notEqual(edge.from, rootNodeId, "directory edge should not be invented from the synthetic root");
   assert.notEqual(edge.to, rootNodeId, "directory edge should not be invented to the synthetic root");
 }
+assert.equal(resourceEdges.length, 1, "fixture should connect its canonical resource to the community root once");
+assert.equal(resourceEdges[0].from, rootNodeId, "resource projection edge should start at the community root");
+assert.ok(nodeIds.has(resourceEdges[0].to), "resource projection edge should end at a visible resource node");
+assert.equal(resourceEdges[0].type, "contains_resource", "resource projection edge should be explicitly typed");
 
 assert.doesNotMatch(
   JSON.stringify(fixture),

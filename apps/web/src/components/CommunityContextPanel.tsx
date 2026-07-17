@@ -129,8 +129,8 @@ function formatMemberActivityLabel(lastActiveAt: string | null | undefined, isOn
   return relative ? `Active ${relative}` : null;
 }
 
-function isDirectoryMemoryNode(node: CloudCommunityPolynetOverviewNode): boolean {
-  return node.kind === "directory_node";
+function isCommunityMemoryNode(node: CloudCommunityPolynetOverviewNode): boolean {
+  return node.kind === "directory_node" || node.kind === "resource_node";
 }
 
 // The community context rail (chat right column, resting state): community name,
@@ -162,7 +162,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     ? String(knownMemberCount)
     : `${loadedMemberCount}${props.membersHasMore ? "+" : ""}`;
   const memoryOverview = props.memoryOverview ?? null;
-  const hasRetainedMemory = (memoryOverview?.graph.nodes ?? []).some(isDirectoryMemoryNode);
+  const hasRetainedMemory = (memoryOverview?.graph.nodes ?? []).some(isCommunityMemoryNode);
   const lockedMembers = Boolean(props.lockedSections?.members);
   const lockedMemory = Boolean(props.lockedSections?.memory);
   /* Visitor lens: an empty memory is young, not locked — plain header, the

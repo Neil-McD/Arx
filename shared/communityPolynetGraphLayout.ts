@@ -1,7 +1,8 @@
 // Deterministic organic layout for the Polynet community memory graph.
 //
-// The community root is a seed neuron at the world origin {0,0}. Directory
-// memory nodes spread outward on growth rings, but each node's angle and radius
+// The community root is a seed neuron at the world origin {0,0}. Learned
+// directory nodes and canonical resource nodes spread outward on growth rings,
+// but each node's angle and radius
 // are perturbed by a stable hash of its id so the field looks grown rather than
 // mechanically even. The function is pure and synchronous: the same input always
 // produces the same positions (no Math.random / Date), so the graph never jitters
@@ -64,14 +65,16 @@ export function computePolynetLayout(
   const positions = new Map<string, PolynetLayoutPosition>();
   positions.set(rootNodeId, { x: 0, y: 0 });
 
-  const directoryNodes = nodes.filter(
-    (node) => node.kind === "directory_node" && node.id !== rootNodeId,
+  const memoryNodes = nodes.filter(
+    (node) =>
+      (node.kind === "directory_node" || node.kind === "resource_node") &&
+      node.id !== rootNodeId,
   );
   let ringIndex = 1;
   let positionInRing = 0;
   let capacity = ringCapacity(ringIndex);
 
-  directoryNodes.forEach((node) => {
+  memoryNodes.forEach((node) => {
     if (positionInRing >= capacity) {
       ringIndex += 1;
       positionInRing = 0;

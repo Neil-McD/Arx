@@ -376,8 +376,8 @@ assert.match(
 );
 assert.match(
   resources,
-  /operation\.op === "delete_page"[\s\S]*role: "page"[\s\S]*deletePageFromChangesetOperation[\s\S]*deleteCommunityResourceBodyContent[\s\S]*ctx\.db\.delete[\s\S]*deleteArchiveDocumentBySource/,
-  "delete_page should only delete page resources and should remove body plus archive/search exposure",
+  /operation\.op === "delete_page"[\s\S]*role: "page"[\s\S]*deletePageFromChangesetOperation[\s\S]*revokeCommunityResourceMemoryProjection[\s\S]*deleteCommunityResourceBodyContent[\s\S]*ctx\.db\.delete/,
+  "delete_page should only delete page resources and should revoke memory before source truth",
 );
 assert.match(
   resources,

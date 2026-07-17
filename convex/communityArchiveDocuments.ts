@@ -453,7 +453,10 @@ export async function upsertArchiveDocumentForAiFeedPost(ctx: { db: any }, post:
   await upsertArchiveDoc(ctx, nextDoc);
 }
 
-export async function upsertArchiveDocumentForResource(ctx: { db: any }, resource: CommunityResourceLike): Promise<void> {
+export async function upsertArchiveDocumentForResource(
+  ctx: { db: any },
+  resource: CommunityResourceLike,
+): Promise<{ indexed: boolean; resource: CommunityResourceLike }> {
   const hydratedResource = await hydrateCommunityResourceBody(ctx, resource) ?? resource;
   const module = hydratedResource.moduleId
     ? ((await ctx.db.get(hydratedResource.moduleId as any)) as CommunityResourceModuleLike | null)
@@ -476,7 +479,7 @@ export async function upsertArchiveDocumentForResource(ctx: { db: any }, resourc
       sourceType: "resource",
       sourceId: normalizeIdValue(hydratedResource._id),
     });
-    return;
+    return { indexed: false, resource: hydratedResource };
   }
   const nextDoc = buildResourceArchiveDoc({
     resource: hydratedResource,
@@ -488,9 +491,10 @@ export async function upsertArchiveDocumentForResource(ctx: { db: any }, resourc
       sourceType: "resource",
       sourceId: normalizeIdValue(hydratedResource._id),
     });
-    return;
+    return { indexed: false, resource: hydratedResource };
   }
   await upsertArchiveDoc(ctx, nextDoc);
+  return { indexed: true, resource: hydratedResource };
 }
 
 export async function backfillCommunityArchive(ctx: { db: any }, communityId: any): Promise<{

@@ -65,6 +65,7 @@ function edgeClass(raw: string | null | undefined): string {
   if (edgeType === "contradicts") return "contradicts";
   if (edgeType === "has_example") return "has-example";
   if (edgeType === "applies_to_workflow") return "applies-to-workflow";
+  if (edgeType === "contains_resource") return "contains-resource";
   return "default";
 }
 
@@ -77,6 +78,7 @@ function typeClass(raw: string | null | undefined): string {
     case "warning_failure": return "warning";
     case "decision_judgment": return "decision";
     case "open_question": return "question";
+    case "resource": return "resource";
     default: return "default";
   }
 }
@@ -90,9 +92,10 @@ function nodeRadius(confidence: unknown): number {
 
 function selectInitialNode(overview: CloudCommunityPolynetOverview | null): string | null {
   if (!overview) return null;
-  // Prefer a real memory node; never auto-select the seed, so it stays a bare dot.
-  const firstDirectoryNode = overview.graph.nodes.find((node) => node.kind === "directory_node");
-  return firstDirectoryNode?.id ?? null;
+  // Prefer learned memory, then a canonical source resource. Never select the seed.
+  const firstMemoryNode = overview.graph.nodes.find((node) => node.kind === "directory_node")
+    ?? overview.graph.nodes.find((node) => node.kind === "resource_node");
+  return firstMemoryNode?.id ?? null;
 }
 
 export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProps) {
@@ -148,7 +151,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
     useWebPolynetGraphViewport({ layout, onSelectNode: setSelectedNodeId });
   const showAllLabels = transform.scale > SHOW_ALL_LABELS_SCALE;
   const selectedNode = overview?.graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
-  const directoryNodeCount = overview?.graph.nodes.filter((node) => node.kind === "directory_node").length ?? 0;
+  const memoryNodeCount = overview?.graph.nodes.filter((node) => node.kind !== "community").length ?? 0;
   const agentActivity = agentActivityClass(overview?.agent.activity_state);
   const focusNeighbors = hoveredNodeId ? adjacency.get(hoveredNodeId) ?? null : null;
   // Only dim when the hovered node actually has neighbors to focus. Hovering the
@@ -330,11 +333,11 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                   })}
                 </g>
               </svg>
-              {directoryNodeCount === 0 ? (
+              {memoryNodeCount === 0 ? (
                 <div className="community-polynet-empty-graph">
                   {agentActivity === "running"
                     ? "The community agent is examining recent activity."
-                    : "No retained memories yet."}
+                    : "No community intelligence yet."}
                 </div>
               ) : null}
               <div className="community-polynet-graph-controls">
@@ -348,7 +351,9 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
                   <div className="community-polynet-detail-meta">
                     <span>{formatLabel(selectedNode.type)}</span>
                     <span>{formatLabel(selectedNode.status)}</span>
-                    <span>{formatPercent(selectedNode.confidence)} confidence</span>
+                    {selectedNode.kind === "directory_node"
+                      ? <span>{formatPercent(selectedNode.confidence)} confidence</span>
+                      : null}
                   </div>
                 </div>
               ) : null}

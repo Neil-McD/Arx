@@ -85,7 +85,8 @@ assert.match(httpMcp, /surface: "external_mcp"/);
 assert.match(lineageContract, /resource:<communityResourceId>/);
 assert.match(lineageContract, /createdByUserId[\s\S]*accountable recorder/);
 assert.match(lineageContract, /credit = null/);
-assert.match(lineageContract, /Searchability is not compiler eligibility/);
+assert.match(lineageContract, /eligible for bounded compiler interpretation/);
+assert.match(lineageContract, /No duplicate `communityIntelligenceNodes` row/);
 assert.match(interactionContract, /Published Resources use a parallel evidence boundary/);
 
 const resourceId = "resource_1";

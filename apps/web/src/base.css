@@ -17621,6 +17621,11 @@ button.chat-reply-quote:hover {
   stroke: rgba(52, 211, 153, 0.3);
 }
 
+.cp-edge.contains-resource {
+  stroke: color-mix(in srgb, #38bdf8 36%, transparent);
+  stroke-dasharray: 2 4;
+}
+
 /* Contradiction is the one relationship worth shouting: red + dashed, the visual
    opposite of a calm "supports" link. */
 .cp-edge.contradicts {
@@ -17679,6 +17684,7 @@ button.chat-reply-quote:hover {
 .cp-node-circle.type-warning { fill: #ef6a5e; }
 .cp-node-circle.type-decision { fill: var(--accent-gold); }
 .cp-node-circle.type-question { fill: #8b93a7; }
+.cp-node-circle.type-resource { fill: #38bdf8; }
 
 /* Status treatment, independent of the type color. */
 .cp-node-circle.status-promising { opacity: 0.8; }

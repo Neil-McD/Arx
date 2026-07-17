@@ -430,7 +430,7 @@ Published Resources use a parallel evidence boundary:
 - resource search combines a bounded recent-source scan with the permissioned resource archive, then revalidates canonical visibility before returning every result
 - retrieval logs record actor, surface, capability, and returned refs, but never copy the raw query
 - published resources are community-authoritative and may name an accountable recorder, but do not infer human contribution credit
-- archive synchronization does not create compiler source traces; searchability is not compiler eligibility
+- the canonical live-resource memory lifecycle maintains both the archive projection and one versioned resource source trace; the retrieval-only evidence search module never creates a second trace
 Attribution, episode, and profile-discoverability semantics are defined by
 `docs/community-lineage-ontology-contract-v0.md`.
 
