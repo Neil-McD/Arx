@@ -103,7 +103,6 @@ import type * as communityRecipientCore from "../communityRecipientCore.js";
 import type * as communityResourceContent from "../communityResourceContent.js";
 import type * as communityResourceEvidence from "../communityResourceEvidence.js";
 import type * as communityResourceEvidenceCore from "../communityResourceEvidenceCore.js";
-import type * as communityResourceMemoryBackfill from "../communityResourceMemoryBackfill.js";
 import type * as communityResourceMemoryProjection from "../communityResourceMemoryProjection.js";
 import type * as communityResources from "../communityResources.js";
 import type * as communitySkillAttachments from "../communitySkillAttachments.js";
@@ -331,7 +330,6 @@ declare const fullApi: ApiFromModules<{
   communityResourceContent: typeof communityResourceContent;
   communityResourceEvidence: typeof communityResourceEvidence;
   communityResourceEvidenceCore: typeof communityResourceEvidenceCore;
-  communityResourceMemoryBackfill: typeof communityResourceMemoryBackfill;
   communityResourceMemoryProjection: typeof communityResourceMemoryProjection;
   communityResources: typeof communityResources;
   communitySkillAttachments: typeof communitySkillAttachments;
