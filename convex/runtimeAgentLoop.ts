@@ -619,11 +619,10 @@ export async function executeRetrievalHarnessTool(params: {
       };
     }
     try {
-      const payload = await params.ctx.runAction(
-        internal.communityArchive.searchCommunityKnowledgeInternal as any,
+      const payload = await params.ctx.runQuery(
+        internal.communityRecentContext.readCommunityRecentContextInternal as any,
         {
           userId: params.userId,
-          authSubject: params.authSubject ?? undefined,
           communityId: params.communityId,
           query: String(normalizedArgs.query ?? "").trim(),
         },

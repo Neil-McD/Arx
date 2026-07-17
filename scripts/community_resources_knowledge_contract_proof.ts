@@ -12,9 +12,10 @@ function read(path: string): string {
 const schema = read("convex/schema.ts");
 const communityCore = read("convex/communityCore.ts");
 const resources = read("convex/communityResources.ts");
-const archiveRetrieval = read("convex/communityArchiveRetrieval.ts");
-const communityArchive = read("convex/communityArchive.ts");
+const communityMaintenance = read("convex/communityMaintenance.ts");
 const recentContext = read("convex/communityRecentContext.ts");
+const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
+const httpMcp = read("convex/httpMcp.ts");
 const attention = read("convex/communityAttention.ts");
 const emailDigests = read("convex/emailDigests.ts");
 const resourceDirectory = read("shared/communityResourceDirectory.ts");
@@ -437,21 +438,12 @@ assert.match(
   "web resource contracts must carry uploaded source references",
 );
 
-assert.match(
-  archiveRetrieval,
-  /archive_context: \[\]/,
-  "broad community search must keep an empty archive field during wire-compatible retirement",
-);
-assert.match(
-  archiveRetrieval,
-  /retrieval_version: "canonical_recent_v1"/,
-  "broad community search must identify canonical recent-table retrieval",
-);
-assert.doesNotMatch(
-  archiveRetrieval,
-  /vectorSearch|embedGemini|communityArchiveDocuments/,
-  "broad community search must not execute the legacy embedding archive",
-);
+assert.equal(existsSync("convex/communityArchive.ts"), false, "archive-named runtime wrapper must stay deleted");
+assert.equal(existsSync("convex/communityArchiveRetrieval.ts"), false, "archive retrieval wrapper must stay deleted");
+assert.match(recentContext, /retrieval_version: "recent_context_v2"/);
+assert.match(runtimeAgentLoop, /communityRecentContext\.readCommunityRecentContextInternal/);
+assert.match(httpMcp, /communityRecentContext\.readCommunityRecentContextInternal/);
+assert.match(httpMcp, /archive_context: \[\]/, "MCP v0 must keep its empty compatibility field");
 assert.equal(
   existsSync("convex/communityArchiveEmbeddingPipeline.ts"),
   false,
@@ -462,7 +454,7 @@ assert.equal(
   false,
   "embedding-only shared constants must remain deleted",
 );
-for (const surface of [communityArchive, communityBarrel, resourceGateway]) {
+for (const surface of [communityMaintenance, communityBarrel, resourceGateway]) {
   assert.doesNotMatch(
     surface,
     /getCommunityArchiveHealth|processCommunityArchivePending|retryCommunityArchiveFailures/,

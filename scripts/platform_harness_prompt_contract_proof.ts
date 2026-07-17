@@ -254,7 +254,7 @@ function provePromptEntrypoints() {
     "member/read prompt fixture must not include builder resource edit guidance",
   );
   assert.match(platformHarnessPrompt, /Use community_memory_search and community_memory_read when the answer depends on what the community has learned and accepted/);
-  assert.match(platformHarnessPrompt, /Use community_search for broad raw recent or archived activity evidence/);
+  assert.match(platformHarnessPrompt, /Use community_search for broad raw recent community activity evidence/);
   assert.match(platformHarnessPrompt, /Use read to inspect specific files/);
   assert.doesNotMatch(
     platformHarnessPrompt,

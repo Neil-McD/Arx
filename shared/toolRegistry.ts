@@ -1094,12 +1094,12 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   community_search: {
     name: "community_search",
-    description: "Search the active community's raw recent activity and archive evidence across chat, AI feed, resources, and PDF-linked knowledge.",
+    description: "Search the active community's raw recent activity evidence across chat, AI Feed, and resources.",
     inputSchema: COMMUNITY_SEARCH_TOOL_SCHEMA,
   },
   community_memory_search: {
     name: "community_memory_search",
-    description: "Search accepted community intelligence learned by the active community. Returns only promising, validated, or canonical memory plus a retrieval log id; it does not search raw archive evidence.",
+    description: "Search accepted community intelligence learned by the active community. Returns only promising, validated, or canonical memory plus a retrieval log id; it does not search raw activity evidence.",
     inputSchema: COMMUNITY_MEMORY_SEARCH_TOOL_SCHEMA,
   },
   community_memory_read: {

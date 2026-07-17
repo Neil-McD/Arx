@@ -393,7 +393,7 @@ Metadata smoke proves discovery and OAuth challenge behavior without credentials
 
 `polynet_workspace_memory_search` searches accepted community intelligence only.
 
-It must use the same accepted-memory backend path as the internal member-agent `community_memory_search` tool. It must not use archive RAG, raw community search, draft intelligence, candidate intelligence, or broad directory collection.
+It must use the same accepted-memory backend path as the internal member-agent `community_memory_search` tool. It must not use raw community search, draft intelligence, candidate intelligence, or broad directory collection.
 
 `polynet_workspace_memory_read` reads one accepted, readable memory node plus a bounded, visibility-filtered subgraph bundle. Search and read share one `community_memory_retrieval_receipt:v1` receipt attributed to `external_mcp`. The receipt stores returned and injected node ids but never the raw search query.
 
@@ -408,7 +408,7 @@ with `community_memory_outcome_conflict`. A new assessment of the same node
 must use a new retrieval receipt. Callers do not provide a separate idempotency
 key, and the server does not maintain a second replay ledger.
 
-Raw/recent/archive evidence remains separate from accepted memory. External agents should not treat archive search as community-endorsed intelligence.
+Raw recent activity evidence remains separate from accepted memory. External agents should not treat evidence search as community-endorsed intelligence.
 
 ## AI Feed Evidence Boundary
 

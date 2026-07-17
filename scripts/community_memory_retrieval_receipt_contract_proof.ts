@@ -191,7 +191,7 @@ const archiveSearchToolBlock = conditionalBlock(
 assert.doesNotMatch(
   archiveSearchToolBlock,
   /surface:/,
-  "raw archive search should not receive an accepted-memory receipt surface",
+  "raw evidence search should not receive an accepted-memory receipt surface",
 );
 const memorySearchToolBlock = conditionalBlock(
   runtimeLoop,

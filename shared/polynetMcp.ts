@@ -676,7 +676,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
     name: "polynet_workspace_memory_search",
     title: "Search Polynet Community Memory",
     description:
-      "Search accepted community intelligence in a selected community context. This returns learned memory, not raw archive evidence.",
+      "Search accepted community intelligence in a selected community context. This returns learned memory, not raw activity evidence.",
     annotations: {
       title: "Search Polynet Community Memory",
       readOnlyHint: false,

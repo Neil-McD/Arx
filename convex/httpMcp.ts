@@ -575,7 +575,7 @@ function buildWorkspaceContext(
       accepted_memory:
         "Use polynet_workspace_memory_search for accepted community intelligence.",
       raw_evidence:
-        "Use polynet_community_search for raw recent/archive evidence; do not treat raw evidence as community-endorsed memory.",
+        "Use polynet_community_search for raw recent community evidence; do not treat raw evidence as community-endorsed memory.",
     },
   };
 }
@@ -1510,11 +1510,10 @@ async function handleToolCall(args: {
     if (!row) {
       return { ok: false, type: "tool", message: "Community not found or not accessible." };
     }
-    const raw = (await ctx.runAction(
-      internal.communityArchive.searchCommunityKnowledgeInternal as any,
+    const raw = (await ctx.runQuery(
+      internal.communityRecentContext.readCommunityRecentContextInternal as any,
       {
         userId: actor.dbUserId,
-        authSubject,
         communityId: row.community_id,
         query,
       },
@@ -1524,9 +1523,6 @@ async function handleToolCall(args: {
     }
     const recentContext = Array.isArray(raw.recent_context)
       ? raw.recent_context.map(sanitizeCommunitySearchItem).filter(Boolean)
-      : [];
-    const archiveContext = Array.isArray(raw.archive_context)
-      ? raw.archive_context.map(sanitizeCommunitySearchItem).filter(Boolean)
       : [];
     const structuredContent = {
       community: {
@@ -1544,15 +1540,13 @@ async function handleToolCall(args: {
             }
           : null,
       recent_context: recentContext,
-      archive_context: archiveContext,
+      // Retained only at the external MCP boundary for v0 wire compatibility.
+      archive_context: [],
       source_counts:
         raw.source_counts && typeof raw.source_counts === "object"
           ? raw.source_counts
           : null,
-      archive_source_counts:
-        raw.archive_source_counts && typeof raw.archive_source_counts === "object"
-          ? raw.archive_source_counts
-          : null,
+      archive_source_counts: { interaction: 0, ai_feed: 0, resource: 0 },
     };
     return {
       ok: true,

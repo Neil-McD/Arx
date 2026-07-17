@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalAction, internalMutation } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
 import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
@@ -12,7 +12,6 @@ import {
   type CommunitySubscriptionLike,
   normalizeIdValue,
 } from "./communityCore";
-import { searchCommunityKnowledge } from "./communityArchiveRetrieval";
 
 function normalizeMaintenanceSlug(raw: unknown): string {
   return String(raw ?? "")
@@ -212,23 +211,5 @@ export const purgeOrphanedCommunityUserArtifactsInternal = internalMutation({
     for (const row of orphanMemberships) await ctx.db.delete(row._id as any);
 
     return { ok: true, ...summary };
-  },
-});
-
-export const searchCommunityKnowledgeInternal = internalAction({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    query: v.string(),
-  },
-  handler: async (ctx, args): Promise<unknown> => {
-    return await searchCommunityKnowledge({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-      communityId: args.communityId,
-      query: args.query,
-    });
   },
 });

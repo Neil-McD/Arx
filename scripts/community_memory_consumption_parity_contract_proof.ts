@@ -222,7 +222,7 @@ assert.match(
   /community_memory_search for what the active community has learned and accepted/,
 );
 assert.match(runtimePrompt, /cite the memory title and status/);
-assert.match(runtimePrompt, /community_search for broad raw recent or archived/);
+assert.match(runtimePrompt, /community_search for broad raw recent community activity/);
 assert.doesNotMatch(
   runtimePrompt,
   /community_search when active community activity, archive memory, or learned/,

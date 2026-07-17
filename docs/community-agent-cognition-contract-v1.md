@@ -136,7 +136,6 @@ Organize community surfaces by memory role, not by UI tab.
 ```txt
 Product tables = source of truth
 Source traces = normalized evidence
-Embeddings = disposable search index
 Compiler = time-windowed interpretation
 Directory = retained compiled intelligence
 Retrieval = action-time memory routing
@@ -149,29 +148,29 @@ Temporal handling:
 30+ days = long-term memory retrieval only
 ```
 
-The compiler window is not a context dump. It is the bounded working set the community agent can inspect, filter, rank, summarize, and compile from. Activity older than the compiler window should only matter through retained directory intelligence, source traces, archive/search, resources, outcome-linked memory, or other long-term retrieval systems.
+The compiler window is not a context dump. It is the bounded working set the community agent can inspect, filter, rank, summarize, and compile from. Activity older than the compiler window should only matter through retained directory intelligence, source traces, canonical source search, resources, outcome-linked memory, or other long-term retrieval systems.
 
 Surface handling:
 
-| Surface | Raw canonical record | Source trace | Embedded | Compiler input | Directory role |
-| --- | --- | --- | --- | --- | --- |
-| Chat | yes | selected or high-signal messages | yes, mostly | yes | only extracted decisions, insights, questions, warnings, examples |
-| AI Feed | yes | yes | yes | yes, weighted by signal ranking | only promoted posts or patterns |
-| Resources | yes | yes | yes, strongly | yes, especially for stale or contradiction checks | usually reference material; sometimes source-backed playbook or resource node |
-| Workflow runs / artifacts | yes | yes | yes, where text-bearing | yes | successful examples, failures, workflow improvements, validated patterns |
-| Outcomes / feedback | yes | yes | yes, when textual | yes, high priority | support, contest, validate, or falsify patterns |
-| Calls / transcripts | yes | yes | yes | yes | decisions, insights, repeated questions, warnings, examples |
-| Events | yes | only when there is recap/transcript/decision/outcome evidence | only descriptions, summaries, recaps, or transcripts | context-only unless evidence-bearing | only learnings, decisions, repeated coordination patterns, or event-derived outcomes |
-| Members | yes | only explicit contribution or aggregate state signals | mostly no | context-only and aggregate-first | expertise nodes later, opt-in and evidence-based |
+| Surface | Raw canonical record | Source trace | Compiler input | Directory role |
+| --- | --- | --- | --- | --- |
+| Chat | yes | selected or high-signal messages | yes | only extracted decisions, insights, questions, warnings, examples |
+| AI Feed | yes | yes | yes, weighted by signal ranking | only promoted posts or patterns |
+| Resources | yes | yes | yes, especially for stale or contradiction checks | usually reference material; sometimes source-backed playbook or resource node |
+| Workflow runs / artifacts | yes | yes | yes | successful examples, failures, workflow improvements, validated patterns |
+| Outcomes / feedback | yes | yes | yes, high priority | support, contest, validate, or falsify patterns |
+| Calls / transcripts | yes | yes | yes | decisions, insights, repeated questions, warnings, examples |
+| Events | yes | only when there is recap/transcript/decision/outcome evidence | context-only unless evidence-bearing | only learnings, decisions, repeated coordination patterns, or event-derived outcomes |
+| Members | yes | only explicit contribution or aggregate state signals | context-only and aggregate-first | expertise nodes later, opt-in and evidence-based |
 
 Rules:
 
 - Everything can become a permissioned source trace.
-- Some text-heavy sources can be embedded for recall.
+- Text-heavy sources remain readable through their canonical source tools.
 - Most activity should never become directory truth.
 - Directory entries are narrow, retained community intelligence.
-- Raw archive and embeddings can support evidence search, but they are not validated community intelligence.
-- Workflow retrieval should prefer retained directory intelligence, then fall back to archive evidence when needed.
+- Raw activity can support evidence search, but it is not validated community intelligence.
+- Workflow retrieval should prefer retained directory intelligence, then fall back to raw activity evidence when needed.
 - Events and members are mostly structural context and graph references, not blob-search content.
 - Event scheduling, member joins, presence, reactions, and generic activity are not learning signals by themselves.
 - Events and members enter the learning compiler only through evidence-bearing artifacts such as transcripts, recaps, feedback, outcomes, decisions, workflow runs, artifacts, or explicit contribution records.
@@ -205,10 +204,10 @@ Resources should not be treated as normal activity blobs. They are durable refer
 ### Canonical resource source nodes
 
 A member-visible page in a live resource module enters community memory without
-an approval gate. One write lifecycle maintains two derived records: an archive
-document for exact/semantic retrieval and one versioned `resource` source trace
-for compiler admission and lineage. Embedding remains asynchronous and never
-blocks publication or graph visibility.
+an approval gate. Its canonical Markdown remains directly readable through the
+resource tools, while one versioned `resource` source trace supports compiler
+admission and lineage. Derived synchronization never blocks publication or
+graph visibility.
 
 The Polynet overview projects the canonical resource row as a first-class
 `resource_node` immediately. This is a source node, not a learned claim: it has
@@ -558,10 +557,10 @@ Community context:
 - accepted community intelligence
 - relevant playbooks
 - examples and warnings
-- raw archive evidence when needed
+- raw activity evidence when needed
 ```
 
-The source of each context item should remain distinguishable. The system should know whether context came from personal memory, accepted community intelligence, raw archive evidence, or the current workflow.
+The source of each context item should remain distinguishable. The system should know whether context came from personal memory, accepted community intelligence, raw activity evidence, or the current workflow.
 
 ### Internal Layers
 
@@ -892,9 +891,9 @@ Shows:
 - Resources
 - People and Expertise, later and carefully
 
-The directory should be the accepted community memory surface. It should not be a raw archive browser.
+The directory should be the accepted community memory surface. It should not be a raw activity browser.
 
-Archive search may still support the directory by providing source evidence and fallback retrieval.
+Canonical source search may support the directory by providing evidence and fallback retrieval.
 
 ### Community Cognition Decision Log
 
@@ -982,7 +981,7 @@ Rules:
 9. Do not expose raw private traces as community evidence.
 10. Do not let the community agent become a centralized epistemic authority.
 11. Do not let personal memory leak into community memory without explicit policy and promotion.
-12. Do not treat vector search over raw archive documents as validated community intelligence.
+12. Do not treat raw evidence search as validated community intelligence.
 
 The community agent should interpret, suggest, rank, organize, and retrieve. It should not dictate truth.
 
@@ -1073,7 +1072,7 @@ or outcomes justify promotion.
 Change request application rejects stale targets when the target node or edge changed after change request creation.
 ```
 
-The first retrieval path is deterministic metadata retrieval. Embeddings can be added later as a derived index, not as truth.
+The retrieval path is deterministic metadata and lexical retrieval over canonical records.
 
 ## Second Implementation Slice
 
@@ -1438,7 +1437,7 @@ Rules:
 
 - Member-agent memory tools are exposed only through the existing `community_tools` capability family.
 - The tools derive community scope from the active server-validated community lens. They must not accept a loose `communityId` argument from the model.
-- `community_memory_search` searches retained community intelligence in `communityIntelligenceNodes`; it is not archive RAG and it does not use embeddings as truth.
+- `community_memory_search` searches retained community intelligence in `communityIntelligenceNodes`; it is not raw evidence search.
 - `community_memory_search` returns only `promising`, `validated`, and `canonical` statuses. Draft and candidate entries may remain visible to managers in directory-management surfaces, but neither members nor managers may inject them through the agent memory tools.
 - `community_memory_read` reads one accepted node and a bounded visibility-filtered subgraph bundle, then marks the node as injected in the same retrieval receipt created by search.
 - Compiler-derived memory must revalidate its immutable source traces and active citation lifecycle for every viewer. Manager authority may widen visibility to admin evidence, but it must never bypass redaction or citation revocation.
@@ -1447,8 +1446,8 @@ Rules:
 - The external MCP may record whether one injected community-memory node worked, failed, or was mixed. It requires the same viewer, community, `external_mcp` surface, and `community_memory_retrieval_receipt:v1` receipt that injected that explicit node. Manager authority never bypasses receipt ownership.
 - Consumption tools may write retrieval receipts, and the external MCP outcome tool may write outcome observations. They must not directly create or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`.
 - The active-community context tool may expose a tiny memory orientation block with counts and recent validated titles, but it must not dump directory contents into the prompt.
-- Runtime prompt policy must distinguish retained community memory from raw archive evidence: use `community_memory_search` for what the community has learned, use `community_search` for unvalidated recent/archive evidence.
-- Raw evidence may support a new memory change only through the immutable citation and apply-time revalidation rules in `docs/community-evidence-integrity-contract-v1.md`; archive rows are candidates, never authority.
+- Runtime prompt policy must distinguish retained community memory from raw activity evidence: use `community_memory_search` for what the community has learned, use `community_search` for unvalidated recent activity evidence.
+- Raw evidence may support a new memory change only through the immutable citation and apply-time revalidation rules in `docs/community-evidence-integrity-contract-v1.md`; source traces are candidates, never authority.
 - If community memory is used in prose, the agent should cite the entry title and status.
 
 ## Fifteenth Implementation Slice
@@ -1467,7 +1466,7 @@ Rules:
 - `community_memory_search` must use `retrieveAcceptedCommunityMemoryNodes`, not the broader workflow helper that can collect all nodes for a community.
 - Accepted member memory search is limited to `promising`, `validated`, and `canonical`.
 - Retrieval should use freshness-aware directory indexes: `by_community_status_updatedAt` for normal search and `by_community_type_status_updatedAt` when the model supplies type filters.
-- Runtime memory lookup remains deterministic and non-LLM. Embeddings and archive search may assist other flows later, but they are not canonical directory truth.
+- Runtime memory lookup remains deterministic and non-LLM. Broader evidence search may assist other flows, but it is not canonical directory truth.
 
 ## Deleted Approval Plane
 
@@ -1633,13 +1632,13 @@ getCommunityPolynetOverview
 
 Rules:
 
-- The tab consumes `community:getCommunityPolynetOverview`; it does not call archive health APIs.
+- The tab consumes `community:getCommunityPolynetOverview`; it does not call retired archive APIs.
 - The tab is read-only in this slice. It must not expose write buttons, prompt boxes, review queues, candidate decisions, or directory mutation controls.
 - The graph renders backend-projected nodes and edges only. It may include the synthetic community root node returned by the overview, but it must not create fake memory nodes.
 - The tab shows the community agent as status/activity derived from the `communityAgentRuns` ledger.
 - The tab shows selected-node metadata from the overview projection, not raw traces or compiler internals.
 - Polynet tab visibility follows community view access because this is now a member-safe memory surface, not a manager-only archive operations panel.
-- Archive backfill, processing, retry, and embedding-health controls are not part of the Polynet memory tab.
+- Retired archive maintenance controls are not part of the Polynet memory tab.
 
 ## Twentieth Implementation Slice
 
@@ -1962,9 +1961,8 @@ own execution.
 
 ### Decisions Pending
 
-- Concierge evidence reach: directory + resources first; raw archive search
-  later, behind guardrails (the archive RAG lane is the recorded attack
-  surface).
+- Concierge evidence reach: directory + resources first; raw activity search
+  later, behind guardrails because broad raw evidence is an attack surface.
 
 ## Twenty-Sixth Implementation Slice: Straight-Through Evidence Compiler
 

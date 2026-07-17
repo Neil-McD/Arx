@@ -149,7 +149,7 @@ assert.doesNotMatch(
 assert.doesNotMatch(
   worker,
   /buildCommunityAgentFunctionTools|communityAgentFilesystem|createCommunityAgentRunInternal|runCommunityAgentCycleInternal|community_write|web_research|web_crawl|community_search/,
-  "serve worker must not use memory-cycle tools, community write, web research, or broad community archive search",
+  "serve worker must not use memory-cycle tools, community write, web research, or broad community evidence search",
 );
 
 assert.match(

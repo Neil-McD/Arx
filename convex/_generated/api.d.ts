@@ -55,9 +55,7 @@ import type * as communityAiFeed from "../communityAiFeed.js";
 import type * as communityAiFeedEvidence from "../communityAiFeedEvidence.js";
 import type * as communityAiFeedEvidenceCore from "../communityAiFeedEvidenceCore.js";
 import type * as communityAppMounts from "../communityAppMounts.js";
-import type * as communityArchive from "../communityArchive.js";
 import type * as communityArchiveDocuments from "../communityArchiveDocuments.js";
-import type * as communityArchiveRetrieval from "../communityArchiveRetrieval.js";
 import type * as communityAttention from "../communityAttention.js";
 import type * as communityCapabilityContext from "../communityCapabilityContext.js";
 import type * as communityChat from "../communityChat.js";
@@ -89,6 +87,7 @@ import type * as communityInteractionLegacyBridge from "../communityInteractionL
 import type * as communityInteractions from "../communityInteractions.js";
 import type * as communityLaunchSetup from "../communityLaunchSetup.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
+import type * as communityMaintenance from "../communityMaintenance.js";
 import type * as communityMembershipLifecycle from "../communityMembershipLifecycle.js";
 import type * as communityMemoryHealth from "../communityMemoryHealth.js";
 import type * as communityMemoryMetabolizer from "../communityMemoryMetabolizer.js";
@@ -285,9 +284,7 @@ declare const fullApi: ApiFromModules<{
   communityAiFeedEvidence: typeof communityAiFeedEvidence;
   communityAiFeedEvidenceCore: typeof communityAiFeedEvidenceCore;
   communityAppMounts: typeof communityAppMounts;
-  communityArchive: typeof communityArchive;
   communityArchiveDocuments: typeof communityArchiveDocuments;
-  communityArchiveRetrieval: typeof communityArchiveRetrieval;
   communityAttention: typeof communityAttention;
   communityCapabilityContext: typeof communityCapabilityContext;
   communityChat: typeof communityChat;
@@ -319,6 +316,7 @@ declare const fullApi: ApiFromModules<{
   communityInteractions: typeof communityInteractions;
   communityLaunchSetup: typeof communityLaunchSetup;
   communityLifecycle: typeof communityLifecycle;
+  communityMaintenance: typeof communityMaintenance;
   communityMembershipLifecycle: typeof communityMembershipLifecycle;
   communityMemoryHealth: typeof communityMemoryHealth;
   communityMemoryMetabolizer: typeof communityMemoryMetabolizer;

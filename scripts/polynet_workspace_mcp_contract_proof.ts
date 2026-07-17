@@ -890,15 +890,15 @@ assertIncludes(
 const memorySearchDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_memory_search");
 assertIncludes(memorySearchDispatch, "resolveWorkspaceContext", "memory search workspace revalidation");
 assertIncludes(memorySearchDispatch, "searchCommunityMemoryInternal", "memory search accepted directory path");
-assertNotIncludes(memorySearchDispatch, "searchCommunityKnowledgeInternal", "memory search raw archive path");
-assertNotIncludes(memorySearchDispatch, "communityArchive", "memory search raw archive path");
+assertNotIncludes(memorySearchDispatch, "readCommunityRecentContextInternal", "memory search raw evidence path");
+assertNotIncludes(memorySearchDispatch, "communityArchive", "memory search retired archive path");
 assertNotIncludes(memorySearchDispatch, "runtimeMcpManager", "memory search internal MCP consumer boundary");
 
 const memoryReadDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_memory_read");
 assertIncludes(memoryReadDispatch, "resolveWorkspaceContext", "memory read workspace revalidation");
 assertIncludes(memoryReadDispatch, "readCommunityMemoryInternal", "memory read accepted directory path");
 assertIncludes(memoryReadDispatch, "node_id is required", "memory read node id validation");
-assertNotIncludes(memoryReadDispatch, "communityArchive", "memory read raw archive path");
+assertNotIncludes(memoryReadDispatch, "communityArchive", "memory read retired archive path");
 
 const outcomeDispatch = toolDispatchBlock(httpMcp, "polynet_workspace_record_outcome");
 assertIncludes(outcomeDispatch, "resolveWorkspaceContext", "outcome workspace revalidation");
@@ -1018,7 +1018,8 @@ assertNotIncludes(builderResourceReadDispatch, "stageCommunityResourceBuilderCha
 assertNotIncludes(builderResourceReadDispatch, "applyCommunityResourceBuilderChangeset", "builder resource read no apply mutation path");
 
 const rawSearchDispatch = toolDispatchBlock(httpMcp, "polynet_community_search");
-assertIncludes(rawSearchDispatch, "searchCommunityKnowledgeInternal", "raw community search remains separate");
+assertIncludes(rawSearchDispatch, "readCommunityRecentContextInternal", "raw community search uses canonical recent context");
+assertIncludes(rawSearchDispatch, "archive_context: []", "MCP v0 raw search keeps its empty compatibility field");
 assertNotIncludes(rawSearchDispatch, "searchCommunityMemoryInternal", "raw community search should not masquerade as accepted memory");
 
 assertNotIncludes(httpMcp, "runtimeMcpManager", "provider MCP HTTP adapter");
