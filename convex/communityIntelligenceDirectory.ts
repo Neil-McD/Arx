@@ -95,6 +95,8 @@ type SourceTraceRow = {
   sourceId?: string;
   title?: string;
   summary: string;
+  contentHash?: string;
+  provenanceHash?: string;
   visibilityScope: VisibilityScope;
   sourceVisibility: SourceVisibility;
   workflowId?: string;
@@ -388,6 +390,15 @@ function normalizeActorKey(raw: unknown): string | undefined {
   return value || undefined;
 }
 
+function normalizeOptionalEvidenceFingerprint(raw: unknown): string | undefined {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (!value) return undefined;
+  if (!/^[a-f0-9]{64}$/.test(value)) {
+    throw new Error("community_source_trace_evidence_fingerprint_invalid");
+  }
+  return value;
+}
+
 function stringArraysEqual(left: readonly string[] = [], right: readonly string[] = []): boolean {
   const normalizedLeft = Array.from(new Set(left.map(String))).sort();
   const normalizedRight = Array.from(new Set(right.map(String))).sort();
@@ -404,6 +415,8 @@ function idArraysEqual(left: readonly any[] = [], right: readonly any[] = []): b
 function sourceTraceMaterialChanged(existing: SourceTraceRow, next: {
   title?: string;
   summary: string;
+  contentHash?: string;
+  provenanceHash?: string;
   visibilityScope: VisibilityScope;
   sourceVisibility: SourceVisibility;
   workflowId?: string;
@@ -417,6 +430,8 @@ function sourceTraceMaterialChanged(existing: SourceTraceRow, next: {
   return (
     (existing.title ?? undefined) !== (next.title ?? undefined) ||
     existing.summary !== next.summary ||
+    (next.contentHash !== undefined && existing.contentHash !== next.contentHash) ||
+    (next.provenanceHash !== undefined && existing.provenanceHash !== next.provenanceHash) ||
     existing.visibilityScope !== next.visibilityScope ||
     existing.sourceVisibility !== next.sourceVisibility ||
     (existing.workflowId ?? undefined) !== (next.workflowId ?? undefined) ||
@@ -1860,6 +1875,8 @@ export async function upsertCommunitySourceTrace(args: {
   sourceId?: string;
   title?: string | null;
   summary: string;
+  contentHash?: string;
+  provenanceHash?: string;
   visibilityScope?: VisibilityScope;
   sourceVisibility?: SourceVisibility;
   workflowId?: string | null;
@@ -1880,6 +1897,8 @@ export async function upsertCommunitySourceTrace(args: {
     4000,
     "community_source_trace_summary_required",
   );
+  const contentHash = normalizeOptionalEvidenceFingerprint(args.contentHash);
+  const provenanceHash = normalizeOptionalEvidenceFingerprint(args.provenanceHash);
   const visibilityScope = args.visibilityScope ?? "community";
   const sourceVisibility = args.sourceVisibility ?? visibilityScope;
   const workflowId = normalizeWorkflowId(args.workflowId);
@@ -1906,6 +1925,8 @@ export async function upsertCommunitySourceTrace(args: {
     const materialChanged = sourceTraceMaterialChanged(existing, {
       title,
       summary,
+      contentHash,
+      provenanceHash,
       visibilityScope,
       sourceVisibility,
       workflowId,
@@ -1927,6 +1948,8 @@ export async function upsertCommunitySourceTrace(args: {
     await args.ctx.db.patch(existing._id as any, {
       title,
       summary,
+      ...(contentHash !== undefined ? { contentHash } : {}),
+      ...(provenanceHash !== undefined ? { provenanceHash } : {}),
       visibilityScope,
       sourceVisibility,
       workflowId,
@@ -1959,6 +1982,8 @@ export async function upsertCommunitySourceTrace(args: {
     ...(sourceId ? { sourceId } : {}),
     title,
     summary,
+    ...(contentHash !== undefined ? { contentHash } : {}),
+    ...(provenanceHash !== undefined ? { provenanceHash } : {}),
     visibilityScope,
     sourceVisibility,
     workflowId,
@@ -1984,6 +2009,8 @@ export async function recordTrustedCommunitySourceTraceCore(args: {
   sourceId: string;
   title?: string | null;
   summary: string;
+  contentHash?: string;
+  provenanceHash?: string;
   visibilityScope?: VisibilityScope;
   sourceVisibility?: SourceVisibility;
   workflowId?: string | null;
@@ -2022,6 +2049,8 @@ export async function recordTrustedCommunitySourceTraceCore(args: {
     sourceId,
     title: args.title,
     summary: args.summary,
+    contentHash: args.contentHash,
+    provenanceHash: args.provenanceHash,
     visibilityScope,
     sourceVisibility,
     workflowId: args.workflowId,

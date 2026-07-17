@@ -23,6 +23,9 @@ assert.match(projection, /export async function revokeCommunityResourceMemoryPro
 assert.match(projection, /const archive = await upsertArchiveDocumentForResource/);
 assert.match(projection, /if \(!archive\.indexed\)[\s\S]*redactCommunityResourceSourceTrace/);
 assert.match(projection, /recordTrustedCommunitySourceTraceCore/);
+assert.match(projection, /resolveCommunityEvidenceRefCore/);
+assert.match(projection, /contentHash: evidence\.contentHash/);
+assert.match(projection, /provenanceHash: evidence\.provenanceHash/);
 assert.match(projection, /sourceType: "resource"/);
 assert.match(projection, /buildCommunityResourceEvidenceRef/);
 assert.match(projection, /visibilityScope: "community"[\s\S]*sourceVisibility: "community"/);
@@ -39,7 +42,12 @@ assert.match(
 assert.doesNotMatch(
   projection.match(/export function buildCommunityResourceTraceSummary[\s\S]*?\n\}/)?.[0] ?? "",
   /pinned|sortOrder|moduleId|updatedAt/,
-  "pinning, ordering, moving, and transport clocks must not create semantic revisions",
+  "pinning, ordering, and transport clocks must not create summary-only revisions",
+);
+assert.match(
+  projection,
+  /resolveCommunityEvidenceRefCore[\s\S]*community_resource_memory_evidence_resolution_failed/,
+  "module context and full content must come from the canonical evidence resolver",
 );
 assert.match(projection, /COMMUNITY_RESOURCE_TRACE_SUMMARY_MAX_CHARS = 4_000/);
 

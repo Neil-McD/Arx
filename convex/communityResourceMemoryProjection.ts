@@ -6,6 +6,7 @@ import {
   upsertArchiveDocumentForResource,
 } from "./communityArchiveDocuments";
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
+import { resolveCommunityEvidenceRefCore } from "./communityEvidenceCore";
 import { buildCommunityResourceEvidenceRef } from "../shared/communityEvidenceContract";
 
 const COMMUNITY_RESOURCE_MEMORY_AGENT_KEY = "community_resource_memory_projection";
@@ -85,6 +86,15 @@ export async function syncCommunityResourceMemoryProjection(
     return { indexed: false, traced, sourceRef };
   }
 
+  const evidence = await resolveCommunityEvidenceRefCore({
+    ctx,
+    communityId: archive.resource.communityId,
+    ref: sourceRef,
+  });
+  if (evidence.status !== "active" || evidence.sourceKind !== "resource") {
+    throw new Error("community_resource_memory_evidence_resolution_failed");
+  }
+
   await recordTrustedCommunitySourceTraceCore({
     ctx,
     communityId: archive.resource.communityId,
@@ -92,6 +102,8 @@ export async function syncCommunityResourceMemoryProjection(
     sourceId: sourceRef,
     title: archive.resource.title,
     summary: buildCommunityResourceTraceSummary(archive.resource),
+    contentHash: evidence.contentHash,
+    provenanceHash: evidence.provenanceHash,
     visibilityScope: "community",
     sourceVisibility: "community",
     actorType: "system",

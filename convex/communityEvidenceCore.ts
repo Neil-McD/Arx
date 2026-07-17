@@ -99,6 +99,13 @@ function sourceVersion(args: {
   return `u:${Math.max(1, maxUpdatedAt)}:c:${args.contentHash.slice(0, 16)}:p:${args.provenanceHash.slice(0, 16)}`;
 }
 
+function contentAddressedSourceVersion(args: {
+  contentHash: string;
+  provenanceHash: string;
+}): string {
+  return `c:${args.contentHash}:p:${args.provenanceHash}`;
+}
+
 async function sha256HexText(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -307,8 +314,7 @@ async function resolveResourceEvidence(args: {
     communityId: args.communityId,
     sourceKind: "resource",
     sourceRef: args.sourceRef,
-    sourceVersion: sourceVersion({
-      updatedAtValues: [hydrated.updatedAt, source.module.updatedAt],
+    sourceVersion: contentAddressedSourceVersion({
       contentHash,
       provenanceHash,
     }),

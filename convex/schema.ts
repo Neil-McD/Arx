@@ -2742,6 +2742,10 @@ export default defineSchema({
     sourceId: v.optional(v.string()),
     title: v.optional(v.string()),
     summary: v.string(),
+    // Canonical evidence fingerprints. Optional for legacy/non-canonical
+    // traces; resource projections populate both from the shared resolver.
+    contentHash: v.optional(v.string()),
+    provenanceHash: v.optional(v.string()),
     visibilityScope: v.union(
       v.literal("private"),
       v.literal("admin"),
@@ -2839,6 +2843,12 @@ export default defineSchema({
     capturedAt: v.number(),
   })
     .index("by_community_ref_version", ["communityId", "sourceRef", "sourceVersion"])
+    .index("by_community_ref_fingerprints", [
+      "communityId",
+      "sourceRef",
+      "contentHash",
+      "provenanceHash",
+    ])
     .index("by_community_ref_capturedAt", ["communityId", "sourceRef", "capturedAt"])
     .index("by_sourceTrace", ["sourceTraceId"]),
 

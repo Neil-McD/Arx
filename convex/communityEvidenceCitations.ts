@@ -57,12 +57,45 @@ function traceIsAdmissibleForActor(
   return true;
 }
 
+function citationMatchesResolution(
+  citation: CommunityEvidenceCitationRow,
+  resolution: ActiveCommunityEvidenceResolution,
+): boolean {
+  return (
+    citation.sourceKind === resolution.sourceKind &&
+    (
+      citation.sourceVersion === resolution.sourceVersion ||
+      resolution.sourceKind === "resource"
+    ) &&
+    citation.contentHash === resolution.contentHash &&
+    citation.provenanceHash === resolution.provenanceHash &&
+    citation.capturedVisibility === resolution.visibilityScope
+  );
+}
+
 async function insertOrReuseCitation(args: {
   ctx: { db: any };
   resolution: ActiveCommunityEvidenceResolution;
   sourceTraceId?: any;
   capturedAt: number;
 }): Promise<any> {
+  if (args.resolution.sourceKind === "resource") {
+    const equivalentCandidates = (await args.ctx.db
+      .query("communityEvidenceCitations" as any)
+      .withIndex("by_community_ref_fingerprints", (q: any) =>
+        q
+          .eq("communityId", args.resolution.communityId)
+          .eq("sourceRef", args.resolution.sourceRef)
+          .eq("contentHash", args.resolution.contentHash)
+          .eq("provenanceHash", args.resolution.provenanceHash),
+      )
+      .take(8)) as CommunityEvidenceCitationRow[];
+    const equivalent = equivalentCandidates.find((row) =>
+      citationMatchesResolution(row, args.resolution)
+    );
+    if (equivalent) return equivalent._id;
+  }
+
   const candidates = (await args.ctx.db
     .query("communityEvidenceCitations" as any)
     .withIndex("by_community_ref_version", (q: any) =>
@@ -73,10 +106,7 @@ async function insertOrReuseCitation(args: {
     )
     .take(8)) as CommunityEvidenceCitationRow[];
   const matching = candidates.find(
-    (row) =>
-      row.sourceKind === args.resolution.sourceKind &&
-      row.contentHash === args.resolution.contentHash &&
-      row.provenanceHash === args.resolution.provenanceHash,
+    (row) => citationMatchesResolution(row, args.resolution),
   );
   if (matching) return matching._id;
   if (candidates.length > 0) {
@@ -176,11 +206,7 @@ export async function checkCommunityEvidenceCitationCore(args: {
   }
   if (resolution.status !== "active") return "invalid";
   if (
-    resolution.sourceKind !== citation.sourceKind ||
-    resolution.sourceVersion !== citation.sourceVersion ||
-    resolution.contentHash !== citation.contentHash ||
-    resolution.provenanceHash !== citation.provenanceHash ||
-    resolution.visibilityScope !== citation.capturedVisibility
+    !citationMatchesResolution(citation, resolution)
   ) {
     return "superseded";
   }
