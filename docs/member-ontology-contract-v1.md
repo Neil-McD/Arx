@@ -145,13 +145,14 @@ write the spine directly.
 
 ## Read Models
 
-Each consumer is a lens with an exact visibility predicate. All three MUST go
+Each consumer is a lens with an exact visibility predicate. All four MUST go
 through one shared predicate function; no reader hand-rolls visibility.
 
 | Lens | Scope | May see |
 | --- | --- | --- |
 | Founder/admin | one community | spine + `approved` facts scoped to that community; nothing pending, rejected, retracted, superseded, or observed; retains approved facts after member leaves (invariant 4) |
 | Member-help (self lens) | the member's own agent | everything of their own — the richest view; consent trivially satisfied |
+| External profile | authenticated member through Polynet MCP | current `approved` platform facts only; no community facts or audit-history states |
 | Member-to-member (orientation card) | shared community | spine + `approved` facts scoped to the community both share; nothing pending, nothing observed, nothing from other communities |
 
 There is no community-agent-internal member lens in v1. If one is introduced,
@@ -173,6 +174,14 @@ must never become actionable context merely because an agent is reading.
    `member_profile_confirm_facts` runtime primitive delegates to the same
    confirmation mutation; one mutation, one approval marker. No current global
    skill exposes it. A future profile-building flow must activate it explicitly.
+   The external Polynet MCP exposes a separate authenticated-self confirmation
+   boundary for the member's platform profile. It accepts only an approval
+   marker plus bounded `kind`/`body` pairs; the server fixes the verified user,
+   platform scope, `stated_interview` provenance, confidence, evidence
+   namespace, consent derivation, and member authorship. Exact marker retries
+   are idempotent; a different batch under the same marker conflicts.
+   Its read uses the narrow `external_profile` lens: current approved
+   platform-scoped facts only, with audit history and community facts excluded.
 3. **Enrichment** → the member's own agent drafts `social_enrichment` facts,
    born pending; the member's review approves/rejects each.
 4. **Ongoing observation** → agents/compiler write `inferred_agent` (pending)

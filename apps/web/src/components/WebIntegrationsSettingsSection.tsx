@@ -21,7 +21,7 @@ import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
 
 const POLYNET_MCP_ENDPOINT_URL = "https://www.polynet.ai/runtime/mcp";
-const POLYNET_MCP_TOOL_COUNT_LABEL = "17 workspace tools";
+const POLYNET_MCP_TOOL_COUNT_LABEL = "17 workspace + 2 profile tools";
 const POLYNET_MCP_CLAUDE_CODE_ADD_COMMAND = `claude mcp add --transport http polynet ${POLYNET_MCP_ENDPOINT_URL}`;
 const POLYNET_MCP_CODEX_ADD_COMMAND = `codex mcp add polynet --url ${POLYNET_MCP_ENDPOINT_URL}`;
 const POLYNET_MCP_CODEX_LOGIN_FALLBACK_COMMAND =
@@ -83,6 +83,7 @@ const POLYNET_MCP_SETUP_BUNDLE = [
   "4. After sign-in, verify the connection by listing the user's Polynet community contexts.",
   "5. If this already-open chat cannot see the tools after sign-in, tell the user to start a fresh chat or reconnect tools.",
   "6. Tell the user when Polynet is connected.",
+  "7. After verification, read the user's current Polynet profile and offer the optional profile setup described below.",
   "",
   "## Claude Code",
   "",
@@ -159,8 +160,27 @@ const POLYNET_MCP_SETUP_BUNDLE = [
   "If successful, tell the user:",
   "",
   "```text",
-  "Polynet is connected. I can now use your Polynet communities, resources, and workspace memory.",
+  "Polynet is connected. I can now use your Polynet communities, resources, and workspace memory. Would you like me to build or improve your Polynet profile now? I'll show you exactly what will be saved before writing anything.",
   "```",
+  "",
+  "## Optional Profile Setup",
+  "",
+  "After connection verification, call `polynet_get_my_profile` before asking profile questions.",
+  "",
+  "If the user declines the profile offer, stop. Do not ask again in this setup flow.",
+  "",
+  "If the user accepts:",
+  "",
+  "1. Use the returned account context and platform profile facts to identify only meaningful gaps.",
+  "2. Ask concise questions only for meaningful gaps in situation, goals, skills, interests, availability, preferences, or links.",
+  "3. Prepare at most 12 short factual statements using only the supported fact kinds.",
+  "4. Show the complete proposed batch and ask: `Save these facts to your Polynet profile?`",
+  "5. Only after an explicit yes, call `polynet_confirm_my_profile_facts` with a stable unique `confirm_marker` and the exact approved `kind` and `body` pairs.",
+  "6. Tell the user whether the profile was saved or the same approved batch was already recorded.",
+  "",
+  "Never supply or invent a user id, community id, provenance, confidence, consent state, or evidence owner. Polynet derives those server-side.",
+  "",
+  "Never write profile facts merely because they appeared elsewhere in the harness. The member must see and explicitly approve the complete batch first.",
   "",
   "## Usage Guidance",
   "",

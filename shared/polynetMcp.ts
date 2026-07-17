@@ -1,3 +1,5 @@
+import { POLYNET_PROFILE_CONFIRM_INPUT_SCHEMA } from "./polynetProfileMcpContract.ts";
+
 type JsonSchema =
   | {
       type?: string | string[];
@@ -18,6 +20,8 @@ type JsonSchema =
 export type PolynetMcpToolName =
   | "polynet_list_communities"
   | "polynet_get_community"
+  | "polynet_get_my_profile"
+  | "polynet_confirm_my_profile_facts"
   | "polynet_community_search"
   | "polynet_community_chat_search"
   | "polynet_community_chat_read"
@@ -301,6 +305,59 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
               },
             },
           },
+        },
+      },
+    },
+  },
+  polynet_get_my_profile: {
+    name: "polynet_get_my_profile",
+    title: "Get My Polynet Profile",
+    description:
+      "Read the authenticated member's Polynet account context and platform-scoped semantic profile. This never reads another member or community-scoped profile facts.",
+    annotations: {
+      title: "Get My Polynet Profile",
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    inputSchema: EMPTY_OBJECT_SCHEMA,
+    outputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["profile"],
+      properties: {
+        profile: {
+          type: "object",
+          additionalProperties: true,
+          description:
+            "The authenticated member's account context, derived spine, and bounded platform-scoped fact ledger.",
+        },
+      },
+    },
+  },
+  polynet_confirm_my_profile_facts: {
+    name: "polynet_confirm_my_profile_facts",
+    title: "Confirm My Polynet Profile Facts",
+    description:
+      "Save one exact batch of profile facts only after the authenticated member explicitly approves the complete draft. Identity, platform scope, provenance, confidence, and evidence ownership are enforced by Polynet.",
+    annotations: {
+      title: "Confirm My Polynet Profile Facts",
+      readOnlyHint: false,
+      idempotentHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
+    inputSchema: POLYNET_PROFILE_CONFIRM_INPUT_SCHEMA,
+    outputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["confirmation"],
+      properties: {
+        confirmation: {
+          type: "object",
+          additionalProperties: true,
+          description:
+            "Receipt for the member-approved platform profile batch, including retry deduplication state.",
         },
       },
     },

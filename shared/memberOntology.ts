@@ -97,6 +97,7 @@ export type MemberFactLike = {
 
 export type MemberOntologyLens =
   | { kind: "self" }
+  | { kind: "external_profile" }
   | { kind: "founder_admin"; communityId: string }
   | { kind: "member_orientation"; communityId: string };
 
@@ -104,6 +105,13 @@ export type MemberOntologyLens =
    no hand-rolled consent checks at query sites. */
 export function memberFactVisibleToLens(fact: MemberFactLike, lens: MemberOntologyLens): boolean {
   if (lens.kind === "self") return true;
+  if (lens.kind === "external_profile") {
+    return (
+      fact.communityId === null &&
+      fact.consentState === "approved" &&
+      fact.provenance !== "observed_behavior"
+    );
+  }
   if (lens.kind === "founder_admin") {
     /* Human founder/admin reads fail closed: only member-approved facts from
        this exact community. Any future community-agent internal context needs

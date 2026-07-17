@@ -24,7 +24,9 @@ Polynet exposes MCP:
 
 ## Scope
 
-This v0 slice exposes one authenticated user's accessible community workspaces to outside agent harnesses such as Codex, Claude Code, OpenCLAW, or any other MCP-capable client.
+This v0 slice exposes one authenticated user's accessible community workspaces
+and their own platform-scoped member profile to outside agent harnesses such as
+Codex, Claude Code, OpenCLAW, or any other MCP-capable client.
 
 `polynet_list_communities` defaults to `scope: joined` for compatibility. Its
 optional `scope: discover` projection lists only public `Published`
@@ -42,6 +44,16 @@ list workspaces
   -> search accepted community memory
   -> read one memory entry
   -> record whether it worked
+```
+
+The authenticated profile loop is separate from community selection:
+
+```text
+read my platform profile
+  -> offer to fill meaningful gaps
+  -> show the complete proposed fact batch
+  -> receive explicit member approval
+  -> confirm that exact platform-scoped batch
 ```
 
 ## Authority Model
@@ -72,6 +84,13 @@ internal `community_context` capability; this vocabulary mapping must not
 create a second authorization implementation.
 
 The MCP client must never provide a trusted `communityId`, user id, entitlement, or permission decision.
+
+Self-profile tools never accept a user or community selector. The provider
+derives the subject from the verified OAuth actor. Confirmed external profile
+facts are always platform scoped, use server-fixed `stated_interview`
+provenance and member authorship, and enter the existing `memberFacts` ledger.
+The external harness may propose facts but may not choose provenance,
+confidence, consent state, evidence ownership, or scope.
 
 `polynet_open_workspace` and `polynet_get_workspace_context` must include an MCP-facing `authority` projection derived from the existing community access bundle:
 
@@ -255,6 +274,8 @@ Provider v0 adds:
 polynet_list_workspaces
 polynet_open_workspace
 polynet_get_workspace_context
+polynet_get_my_profile
+polynet_confirm_my_profile_facts
 polynet_product_docs_search
 polynet_product_doc_read
 polynet_workspace_memory_search
@@ -270,6 +291,28 @@ polynet_workspace_builder_resource_read
 ```
 
 Existing community-named tools may remain for compatibility, but v0 product semantics should prefer the workspace-named provider tools.
+
+## Member Profile Boundary
+
+`polynet_get_my_profile` returns only the verified actor's account context,
+derived platform spine, and a bounded ledger of current approved platform
+facts. It does not return another member's facts, community-scoped facts, or
+pending/retracted/superseded profile history.
+
+`polynet_confirm_my_profile_facts` accepts only a stable confirmation marker
+and at most 12 member-approved `kind`/`body` pairs. The member must see and
+explicitly approve the complete batch before the tool is called. The server
+fixes the subject, platform scope, `stated_interview` provenance, confidence,
+evidence namespace, consent derivation, and member authorship.
+
+The confirmation marker is the operation identity. An exact retry returns the
+original fact ids with `deduplicated: true` and performs no write. Reusing the
+same marker for a different normalized fact batch fails with
+`member_profile_confirm_marker_conflict`.
+
+The provider reuses the canonical member ontology ledger and spine
+recomputation. It must not create a second external profile store, write the
+display profile, or copy facts into community memory.
 
 ## External Smoke Harness
 

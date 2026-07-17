@@ -389,6 +389,8 @@ for (const toolName of [
   "polynet_list_workspaces",
   "polynet_open_workspace",
   "polynet_get_workspace_context",
+  "polynet_get_my_profile",
+  "polynet_confirm_my_profile_facts",
   "polynet_product_docs_search",
   "polynet_product_doc_read",
   "polynet_workspace_memory_search",

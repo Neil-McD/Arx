@@ -30,6 +30,7 @@ import {
   resolveAccessibleCommunityReadDetail,
 } from "./communityReadKernel";
 import type { CommunityReadSummary } from "../shared/communityReadContract.ts";
+import { normalizePolynetProfileConfirmInput } from "../shared/polynetProfileMcpContract.ts";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -814,6 +815,60 @@ async function handleToolCall(args: {
         isError: false,
       },
     };
+  }
+
+  if (toolName === "polynet_get_my_profile") {
+    try {
+      const profile = (await ctx.runQuery(
+        internal.memberOntology.getMemberProfileForMcpInternal as any,
+        { userId: actor.dbUserId },
+      )) as Record<string, unknown>;
+      const structuredContent = { profile };
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(structuredContent),
+          structuredContent,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, type: "tool", message: message || "Profile read failed." };
+    }
+  }
+
+  if (toolName === "polynet_confirm_my_profile_facts") {
+    const normalized = normalizePolynetProfileConfirmInput(toolArgs);
+    if (!normalized.ok) {
+      return { ok: false, type: "tool", message: normalized.message };
+    }
+    try {
+      const confirmation = (await ctx.runMutation(
+        internal.memberOntology.confirmMemberProfileFactsForMcpInternal as any,
+        {
+          userId: actor.dbUserId,
+          confirmMarker: normalized.input.confirmMarker,
+          facts: normalized.input.facts,
+        },
+      )) as Record<string, unknown>;
+      const structuredContent = { confirmation };
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(structuredContent),
+          structuredContent,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        ok: false,
+        type: "tool",
+        message: message || "Profile confirmation failed.",
+      };
+    }
   }
 
   if (toolName === "polynet_product_docs_search") {
@@ -1777,7 +1832,7 @@ export async function handleMcpPost(args: {
           version: "0.1.0-alpha",
         },
         instructions:
-          "Polynet MCP alpha exposes provider-side workspace tools over remote HTTP. MCP connection and tool calls require Polynet authentication. Workspace context ids are selectors and are revalidated server-side on every call.",
+          "Polynet MCP alpha exposes provider-side community and authenticated self-profile tools over remote HTTP. MCP connection and tool calls require Polynet authentication. Workspace context ids are selectors and are revalidated server-side on every call. After connection, offer profile setup once; read the current profile first and never confirm profile facts until the member has seen and explicitly approved the complete batch.",
       },
       {
         "MCP-Protocol-Version": negotiatedVersion,

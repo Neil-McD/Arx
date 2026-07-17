@@ -208,6 +208,7 @@
     "check:personal-memory-access-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/personal_memory_access_policy_proof.ts",
     "check:polynet-workspace-mcp-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_workspace_mcp_contract_proof.ts",
     "check:polynet-workspace-mcp-auth-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_workspace_mcp_auth_contract_proof.ts",
+    "check:polynet-profile-mcp-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_profile_mcp_contract_proof.ts",
     "check:community-capability-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_capability_contract_proof.ts",
     "preflight:polynet-workspace-mcp-release": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_workspace_mcp_release_preflight.ts --prod",
     "smoke:polynet-workspace-mcp-metadata": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_workspace_mcp_external_smoke.ts --mode=metadata",

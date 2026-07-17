@@ -264,11 +264,21 @@ export async function recomputeMemberSpine(ctx: any, userId: any, nowMs: number)
 export async function readMemberFactsForLens(ctx: any, args: {
   subjectUserId: any;
   lens: MemberOntologyLens;
+  scope?: { communityId: any | null };
 }): Promise<MemberFactRow[]> {
-  const rows = (await ctx.db
-    .query("memberFacts")
-    .withIndex("by_user", (q: any) => q.eq("userId", args.subjectUserId))
-    .collect()) as any[];
+  const rows = args.scope
+    ? ((await ctx.db
+        .query("memberFacts")
+        .withIndex("by_user_community", (q: any) =>
+          q
+            .eq("userId", args.subjectUserId)
+            .eq("communityId", args.scope?.communityId ?? undefined),
+        )
+        .collect()) as any[])
+    : ((await ctx.db
+        .query("memberFacts")
+        .withIndex("by_user", (q: any) => q.eq("userId", args.subjectUserId))
+        .collect()) as any[]);
   return rows.filter((row) => memberFactVisibleToLens(toFactLike(row), args.lens)) as MemberFactRow[];
 }
 

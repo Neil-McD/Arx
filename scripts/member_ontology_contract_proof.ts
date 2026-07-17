@@ -98,6 +98,29 @@ assert.ok(
   memberFactVisibleToLens(factInA, { kind: "founder_admin", communityId: "community_a" }),
   "approved community facts are visible through that community's founder/admin lens",
 );
+assert.ok(
+  !memberFactVisibleToLens(factInA, { kind: "external_profile" }),
+  "external profile must never expose community-scoped facts",
+);
+
+const approvedPlatformFact: MemberFactLike = {
+  communityId: null,
+  kind: "goal",
+  body: "Ship the Polynet profile bridge",
+  provenance: "stated_interview",
+  consentState: "approved",
+};
+assert.ok(
+  memberFactVisibleToLens(approvedPlatformFact, { kind: "external_profile" }),
+  "external profile exposes approved platform-scoped facts",
+);
+assert.ok(
+  !memberFactVisibleToLens(
+    { ...approvedPlatformFact, consentState: "retracted" },
+    { kind: "external_profile" },
+  ),
+  "external profile excludes audit-history states",
+);
 
 /* 4. Unapproved and internal facts never reach founder/admin or orientation. */
 const founderHiddenFacts: MemberFactLike[] = [

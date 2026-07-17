@@ -15,6 +15,8 @@ const PROVIDER_TOOLS = [
   "polynet_list_workspaces",
   "polynet_open_workspace",
   "polynet_get_workspace_context",
+  "polynet_get_my_profile",
+  "polynet_confirm_my_profile_facts",
   "polynet_product_docs_search",
   "polynet_product_doc_read",
   "polynet_workspace_memory_search",
@@ -860,6 +862,14 @@ async function runAuthenticatedSmoke(args: {
     assert.ok(toolNames.includes(providerTool), `tools/list should advertise ${providerTool}.`);
   }
 
+  const profileResult = await callTool({
+    mcpUrl: args.mcpUrl,
+    token,
+    name: "polynet_get_my_profile",
+  });
+  const profile = asRecord(profileResult.profile);
+  assert.equal(asString(profile.scope), "platform", "self-profile read should be platform scoped.");
+
   const list = await callTool({
     mcpUrl: args.mcpUrl,
     token,
@@ -996,6 +1006,7 @@ async function runAuthenticatedSmoke(args: {
   return {
     tools_list: "ok",
     advertised_tool_count: toolNames.length,
+    get_my_profile: "ok",
     list_workspaces: "ok",
     open_workspace: "ok",
     get_workspace_context: "ok",
