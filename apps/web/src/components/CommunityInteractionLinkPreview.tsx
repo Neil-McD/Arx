@@ -161,13 +161,12 @@ function VideoLinkPreview(props: {
 function SocialPostLinkPreview(props: {
   embed: CommunityInteractionEmbed;
   href: string;
-  mediaUrl: string | null;
 }) {
   const author = props.embed.author_name || props.embed.title || "X post";
   const body = props.embed.description || "View this post on X";
   return (
     <a
-      className={`community-interaction-embed is-social-post${props.mediaUrl ? " has-media" : ""}`}
+      className="community-interaction-embed is-social-post"
       data-preview-kind="social_post"
       href={props.href}
       target="_blank"
@@ -175,22 +174,11 @@ function SocialPostLinkPreview(props: {
       aria-label={`View ${author}'s post on X in a new tab`}
       onClick={(event) => event.stopPropagation()}
     >
-      <div className="community-interaction-embed-social-content">
-        <div className="community-interaction-embed-social-header">
-          <span className="community-interaction-embed-social-author">{author}</span>
-          <span className="community-interaction-embed-provider">· X</span>
-        </div>
-        <span className="community-interaction-embed-social-body">{body}</span>
+      <div className="community-interaction-embed-social-header">
+        <span className="community-interaction-embed-social-author">{author}</span>
+        <span className="community-interaction-embed-provider">X</span>
       </div>
-      {props.mediaUrl ? (
-        <img
-          className="community-interaction-embed-media"
-          src={props.mediaUrl}
-          alt={props.embed.image_alt || ""}
-          loading="lazy"
-          referrerPolicy="no-referrer"
-        />
-      ) : null}
+      <span className="community-interaction-embed-social-body">{body}</span>
     </a>
   );
 }
@@ -240,7 +228,7 @@ export function CommunityInteractionLinkPreview(props: { embed: CommunityInterac
     return <VideoLinkPreview embed={props.embed} href={href} mediaUrl={mediaUrl} videoUrl={videoUrl} />;
   }
   if (props.embed.preview_kind === "social_post" && props.embed.author_name && props.embed.description) {
-    return <SocialPostLinkPreview embed={props.embed} href={href} mediaUrl={mediaUrl} />;
+    return <SocialPostLinkPreview embed={props.embed} href={href} />;
   }
   return <GenericLinkPreview embed={props.embed} href={href} mediaUrl={mediaUrl} />;
 }

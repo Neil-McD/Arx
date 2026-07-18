@@ -14,6 +14,10 @@ const previewComponent = readFileSync(
   new URL("../apps/web/src/components/CommunityInteractionLinkPreview.tsx", import.meta.url),
   "utf8",
 );
+const socialPreviewComponent = previewComponent.slice(
+  previewComponent.indexOf("function SocialPostLinkPreview"),
+  previewComponent.indexOf("function GenericLinkPreview"),
+);
 
 const loomSourceUrl = "https://www.loom.com/share/29f6556e6f6849609b0225fbbc6224ff";
 const loomDiscovery = extractInteractionOEmbedDiscoveryUrl(
@@ -255,18 +259,23 @@ assert.deepEqual(
 
 assert.match(
   previewCss,
-  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*420px;[\s\S]*--community-interaction-embed-row-height:\s*104px;[\s\S]*--community-interaction-embed-media-width:\s*140px;[\s\S]*\.community-interaction-embed-summary,[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) var\(--community-interaction-embed-media-width\);/,
-  "collapsed link previews should use one readable metadata-left and media-right row",
+  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*420px;[\s\S]*--community-interaction-embed-row-height:\s*104px;[\s\S]*--community-interaction-embed-media-width:\s*140px;[\s\S]*--community-interaction-social-max-width:\s*500px;[\s\S]*--community-interaction-social-min-height:\s*112px;[\s\S]*\.community-interaction-embed-summary,[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) var\(--community-interaction-embed-media-width\);/,
+  "video and generic link previews should retain their compact metadata-left and media-right row",
 );
 assert.match(
   previewCss,
-  /\.community-interaction-embed\.is-social-post\.has-media\s*\{[\s\S]*height:\s*var\(--community-interaction-embed-row-height\);[\s\S]*\.community-interaction-embed-social-body\s*\{[\s\S]*-webkit-line-clamp:\s*3;[\s\S]*\.community-interaction-embed\.is-social-post \.community-interaction-embed-media\s*\{[\s\S]*height:\s*var\(--community-interaction-embed-row-height\);/,
-  "social previews should keep a readable excerpt and right-side media inside the row",
+  /\.community-interaction-embed\.is-social-post\s*\{[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*grid-template-rows:\s*auto 1fr;[\s\S]*\.community-interaction-embed-social-header\s*\{[\s\S]*border-bottom:\s*1px solid var\(--stroke-default\);[\s\S]*\.community-interaction-embed-social-body\s*\{[\s\S]*font-size:\s*14px;[\s\S]*-webkit-line-clamp:\s*5;/,
+  "social previews should use one larger stacked identity-header and text-body card",
 );
 assert.match(
-  previewComponent,
-  /function SocialPostLinkPreview[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-body[\s\S]*<img/,
-  "the social preview card should be the single primary link without duplicate text actions",
+  socialPreviewComponent,
+  /function SocialPostLinkPreview[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-header[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>/,
+  "the text-first social preview card should remain the single primary link",
+);
+assert.doesNotMatch(
+  socialPreviewComponent,
+  /<img|mediaUrl|community-interaction-embed-media/,
+  "meaningful-text social previews should not render attached provider media",
 );
 assert.match(
   previewComponent,
