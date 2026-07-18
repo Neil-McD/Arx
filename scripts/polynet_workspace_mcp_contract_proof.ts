@@ -41,6 +41,7 @@ const communityReadKernel = read("convex/communityReadKernel.ts");
 const communityReadContract = read("shared/communityReadContract.ts");
 const communityCapabilityContextContract = read("shared/communityCapabilityContextContract.ts");
 const packageJson = read("package.json");
+const externalSmoke = read("scripts/polynet_workspace_mcp_external_smoke.ts");
 const integrationsSettingsUi = read(
   "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
 );
@@ -1021,6 +1022,13 @@ const rawSearchDispatch = toolDispatchBlock(httpMcp, "polynet_community_search")
 assertIncludes(rawSearchDispatch, "readCommunityRecentContextInternal", "raw community search uses canonical recent context");
 assertIncludes(rawSearchDispatch, "archive_context: []", "MCP v0 raw search keeps its empty compatibility field");
 assertNotIncludes(rawSearchDispatch, "searchCommunityMemoryInternal", "raw community search should not masquerade as accepted memory");
+assertIncludes(externalSmoke, '"polynet_community_search"', "external smoke raw community search coverage");
+assertIncludes(externalSmoke, "recentSearch.archive_context", "external smoke empty archive compatibility assertion");
+assertIncludes(externalSmoke, "recentSearch.archive_source_counts", "external smoke zero archive source count assertion");
+assertIncludes(externalSmoke, "deniedSearch.isError", "external smoke inaccessible community denial assertion");
+assertIncludes(externalSmoke, 'sourceType === "interaction" || sourceType === "ai_feed"', "external smoke communication activity acceptance gate");
+assertIncludes(externalSmoke, "POLYNET_MCP_REQUIRE_RECENT_ACTIVITY", "external smoke recent activity opt-in gate");
+assertIncludes(externalSmoke, "Acceptance smoke requires POLYNET_MCP_DENIED_COMMUNITY_SLUG", "external smoke known inaccessible community acceptance gate");
 
 assertNotIncludes(httpMcp, "runtimeMcpManager", "provider MCP HTTP adapter");
 assertNotIncludes(httpMcp, "userPlatformAppMounts", "provider MCP HTTP adapter");

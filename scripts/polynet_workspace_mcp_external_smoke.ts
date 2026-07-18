@@ -17,6 +17,7 @@ const PROVIDER_TOOLS = [
   "polynet_get_workspace_context",
   "polynet_get_my_profile",
   "polynet_confirm_my_profile_facts",
+  "polynet_community_search",
   "polynet_product_docs_search",
   "polynet_product_doc_read",
   "polynet_workspace_memory_search",
@@ -81,6 +82,8 @@ Environment:
   POLYNET_MCP_URL                  Remote MCP endpoint. If only an origin is supplied, /runtime/mcp is appended.
   POLYNET_MCP_BEARER_TOKEN         Required for authenticated and acceptance modes.
   POLYNET_MCP_COMMUNITY_SLUG       Optional workspace slug to open. Defaults to the first listed workspace.
+  POLYNET_MCP_RECENT_QUERY         Optional recent community evidence query. Defaults to "community".
+  POLYNET_MCP_DENIED_COMMUNITY_SLUG Known-existing inaccessible slug. Required in acceptance mode; otherwise defaults to a generated nonexistent slug.
   POLYNET_MCP_MEMORY_QUERY         Optional memory query. Defaults to "strategy".
   POLYNET_MCP_MEMORY_NODE_ID       Optional memory node id override for read.
   POLYNET_MCP_RETRIEVAL_LOG_ID     Optional retrieval log id override for read/outcome.
@@ -88,6 +91,7 @@ Environment:
   POLYNET_MCP_EXPECT_RELATION      Optional exact expected workspace authority relation.
   POLYNET_MCP_EXPECT_AUTHORITY_LENS Optional exact expected workspace authority lens.
   POLYNET_MCP_EXPECT_TOOLSETS      Optional comma-separated toolsets that must be available.
+  POLYNET_MCP_REQUIRE_RECENT_ACTIVITY Set to 1 to require interaction or AI-feed activity from community search.
   POLYNET_MCP_REQUIRE_MEMORY       Set to 1 to make authenticated mode fail if no memory node is readable.
   POLYNET_MCP_REQUIRE_RESOURCES    Set to 1 to make authenticated mode fail if resources are unavailable or unreadable.
   POLYNET_MCP_REQUIRE_BUILDER_RESOURCES Set to 1 to make authenticated mode fail if builder resources are unavailable or not builder-scoped.
@@ -371,6 +375,17 @@ async function callTool(args: {
   name: string;
   toolArgs?: Record<string, unknown>;
 }): Promise<Record<string, unknown>> {
+  const result = await callToolResult(args);
+  assert.notEqual(result.isError, true, `${args.name} returned tool error: ${JSON.stringify(result)}`);
+  return asRecord(result.structuredContent);
+}
+
+async function callToolResult(args: {
+  mcpUrl: string;
+  token: string;
+  name: string;
+  toolArgs?: Record<string, unknown>;
+}): Promise<Record<string, unknown>> {
   const response = await postJsonRpc({
     mcpUrl: args.mcpUrl,
     token: args.token,
@@ -380,9 +395,7 @@ async function callTool(args: {
       arguments: args.toolArgs ?? {},
     },
   });
-  const result = assertJsonRpcResult(response, args.name);
-  assert.notEqual(result.isError, true, `${args.name} returned tool error: ${JSON.stringify(result)}`);
-  return asRecord(result.structuredContent);
+  return assertJsonRpcResult(response, args.name);
 }
 
 function readAuthenticateParam(header: string, paramName: string): string | null {
@@ -845,6 +858,8 @@ async function runAuthenticatedSmoke(args: {
   requireMemoryRead: boolean;
   requireResources: boolean;
   requireBuilderResources: boolean;
+  requireRecentActivity: boolean;
+  requireKnownDeniedCommunity: boolean;
 }): Promise<Record<string, unknown>> {
   const token = readEnv("POLYNET_MCP_BEARER_TOKEN");
   if (!token) {
@@ -916,6 +931,90 @@ async function runAuthenticatedSmoke(args: {
   const contextWorkspace = asRecord(context.workspace);
   const contextAuthority = assertWorkspaceAuthority(contextWorkspace, "polynet_get_workspace_context");
   assertMatchingAuthority(openedAuthority, contextAuthority);
+
+  const recentQuery = readEnv("POLYNET_MCP_RECENT_QUERY") ?? "community";
+  const recentSearch = await callTool({
+    mcpUrl: args.mcpUrl,
+    token,
+    name: "polynet_community_search",
+    toolArgs: {
+      community_slug: slug,
+      query: recentQuery,
+    },
+  });
+  const recentCommunity = asRecord(recentSearch.community);
+  assert.equal(
+    asString(recentCommunity.slug),
+    slug,
+    "polynet_community_search should return the selected authorized community.",
+  );
+  assert.ok(
+    Array.isArray(recentSearch.recent_context),
+    "polynet_community_search should return recent_context as an array.",
+  );
+  const recentContext = asArray(recentSearch.recent_context);
+  const recentActivity = recentContext.filter((item) => {
+    const sourceType = asString(optionalRecord(item)?.source_type);
+    return sourceType === "interaction" || sourceType === "ai_feed";
+  });
+  if (args.requireRecentActivity) {
+    assert.ok(
+      recentActivity.length > 0,
+      "Acceptance smoke requires at least one interaction or AI-feed activity item; resources alone are not communication-memory acceptance.",
+    );
+  }
+  assert.deepEqual(
+    asArray(recentSearch.archive_context),
+    [],
+    "polynet_community_search archive_context must remain empty during v0 compatibility.",
+  );
+  const archiveSourceCounts = asRecord(recentSearch.archive_source_counts);
+  assert.deepEqual(
+    archiveSourceCounts,
+    { interaction: 0, ai_feed: 0, resource: 0 },
+    "polynet_community_search archive_source_counts must remain zeroed during v0 compatibility.",
+  );
+
+  const configuredDeniedSlug = readEnv("POLYNET_MCP_DENIED_COMMUNITY_SLUG");
+  if (args.requireKnownDeniedCommunity) {
+    assert.ok(
+      configuredDeniedSlug,
+      "Acceptance smoke requires POLYNET_MCP_DENIED_COMMUNITY_SLUG to name a known-existing community this token cannot access.",
+    );
+  }
+  const deniedSlug = configuredDeniedSlug ?? `polynet-mcp-inaccessible-${Date.now().toString(36)}`;
+  assert.notEqual(
+    deniedSlug,
+    slug,
+    "POLYNET_MCP_DENIED_COMMUNITY_SLUG must differ from the selected authorized community.",
+  );
+  const deniedSearch = await callToolResult({
+    mcpUrl: args.mcpUrl,
+    token,
+    name: "polynet_community_search",
+    toolArgs: {
+      community_slug: deniedSlug,
+      query: recentQuery,
+    },
+  });
+  assert.equal(
+    deniedSearch.isError,
+    true,
+    "polynet_community_search must fail closed for an inaccessible community slug.",
+  );
+  const deniedStructuredContent = optionalRecord(deniedSearch.structuredContent);
+  if (deniedStructuredContent) {
+    assert.equal(
+      asArray(deniedStructuredContent.recent_context).length,
+      0,
+      "inaccessible community search must not return recent context.",
+    );
+    assert.equal(
+      asArray(deniedStructuredContent.archive_context).length,
+      0,
+      "inaccessible community search must not return archive compatibility context.",
+    );
+  }
 
   const productDocsSmoke = await runProductDocsSmoke({
     mcpUrl: args.mcpUrl,
@@ -1010,6 +1109,12 @@ async function runAuthenticatedSmoke(args: {
     list_workspaces: "ok",
     open_workspace: "ok",
     get_workspace_context: "ok",
+    community_search: "ok",
+    community_search_fail_closed: "ok",
+    community_search_denial_kind: configuredDeniedSlug ? "known_inaccessible" : "generated_nonexistent",
+    recent_context_items: recentContext.length,
+    recent_activity_items: recentActivity.length,
+    archive_context_items: 0,
     ...productDocsSmoke,
     memory_search: "ok",
     memory_read: readStatus,
@@ -1040,6 +1145,9 @@ async function main() {
           requireMemoryRead: mode === "acceptance" || readBoolEnv("POLYNET_MCP_REQUIRE_MEMORY"),
           requireResources: readBoolEnv("POLYNET_MCP_REQUIRE_RESOURCES"),
           requireBuilderResources: readBoolEnv("POLYNET_MCP_REQUIRE_BUILDER_RESOURCES"),
+          requireRecentActivity:
+            mode === "acceptance" || readBoolEnv("POLYNET_MCP_REQUIRE_RECENT_ACTIVITY"),
+          requireKnownDeniedCommunity: mode === "acceptance",
         })
       : null;
   console.log(
