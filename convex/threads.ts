@@ -3411,6 +3411,7 @@ export const appendCloudRuntimeRunEvent = mutation({
     const persistedPayload = projectRuntimeCommunityContextEventPayload({
       eventType,
       payload: args.payload,
+      communityScopeId: run.communityId,
     });
     const runtimeHarnessTelemetrySummary = applyRuntimeHarnessTelemetryEvent({
       summary: run.runtimeHarnessTelemetrySummary,
@@ -3486,6 +3487,7 @@ export const appendCloudRuntimeRunEventInternal = internalMutation({
     const persistedPayload = projectRuntimeCommunityContextEventPayload({
       eventType,
       payload: args.payload,
+      communityScopeId: run.communityId,
     });
     const runtimeHarnessTelemetrySummary = applyRuntimeHarnessTelemetryEvent({
       summary: run.runtimeHarnessTelemetrySummary,

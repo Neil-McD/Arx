@@ -193,6 +193,19 @@ const ambiguousFinished = project("tool_call_finished", {
 assert.equal(ambiguousFinished.status, "unknown");
 assert.equal(ambiguousFinished.success, null);
 
+const finishedWithRunScope = record(
+  projectRuntimeCommunityContextEventPayload({
+    eventType: "tool_call_finished",
+    communityScopeId: "community_from_run",
+    payload: {
+      tool_name: "community_chat_search",
+      status: "ok",
+      success: true,
+    },
+  }),
+);
+assert.equal(finishedWithRunScope.community_scope_id, "community_from_run");
+
 const builderPayload = {
   tool_name: "community_resource_builder_stage_changeset",
   args: { summary: "must remain for approval UI" },
@@ -268,7 +281,7 @@ assert.equal(
 );
 assert.match(
   threads,
-  /const persistedPayload = projectRuntimeCommunityContextEventPayload\([\s\S]*?applyRuntimeHarnessTelemetryEvent\([\s\S]*?payload: persistedPayload[\s\S]*?runtimeRunEvents[\s\S]*?payload: persistedPayload/,
+  /const persistedPayload = projectRuntimeCommunityContextEventPayload\([\s\S]*?communityScopeId: run\.communityId[\s\S]*?applyRuntimeHarnessTelemetryEvent\([\s\S]*?payload: persistedPayload[\s\S]*?runtimeRunEvents[\s\S]*?payload: persistedPayload/,
 );
 
 console.log("runtime_community_context_receipt_proof: ok");

@@ -315,6 +315,7 @@ export function isRuntimeCommunityContextReceiptToolName(
 export function projectRuntimeCommunityContextEventPayload(args: {
   eventType: string;
   payload: unknown;
+  communityScopeId?: unknown;
 }): unknown {
   const payload = asRecord(args.payload);
   if (!payload || !TOOL_EVENT_TYPES.has(String(args.eventType ?? "").trim())) {
@@ -326,7 +327,10 @@ export function projectRuntimeCommunityContextEventPayload(args: {
   }
   const phase = args.eventType === "tool_call_started" ? "started" : "finished";
   const harnessKind = boundedIdentifier(asRecord(payload.harness)?.kind, 80);
-  const communityScopeId = boundedIdentifier(payload.community_scope_id, 160);
+  const communityScopeId = boundedIdentifier(
+    payload.community_scope_id ?? args.communityScopeId,
+    160,
+  );
   const errorCode = boundedIdentifier(payload.error_code ?? payload.errorCode, 160);
   const errorMessage = redactReceiptText(payload.error_message ?? payload.errorMessage);
   const status = boundedIdentifier(payload.status, 40);
