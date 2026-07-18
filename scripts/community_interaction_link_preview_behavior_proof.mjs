@@ -15,7 +15,7 @@ const previewComponent = readFileSync(
   "utf8",
 );
 const socialPreviewComponent = previewComponent.slice(
-  previewComponent.indexOf("function SocialPostLinkPreview"),
+  previewComponent.indexOf("function SocialPostFallback"),
   previewComponent.indexOf("function GenericLinkPreview"),
 );
 
@@ -79,6 +79,7 @@ assert.ok(xDiscovery, "X oEmbed discovery should resolve");
 assert.equal(new URL(xDiscovery).searchParams.get("omit_script"), "true");
 assert.equal(new URL(xDiscovery).searchParams.get("dnt"), "true");
 assert.equal(new URL(xDiscovery).searchParams.get("hide_thread"), "true");
+assert.equal(new URL(xDiscovery).searchParams.get("hide_media"), "true");
 
 const xPreview = normalizeInteractionOEmbedPreview({
   sourceUrl: xSourceUrl,
@@ -265,17 +266,42 @@ assert.match(
 assert.match(
   previewCss,
   /\.community-interaction-embed\.is-social-post\s*\{[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*grid-template-rows:\s*auto 1fr;[\s\S]*\.community-interaction-embed-social-header\s*\{[\s\S]*border-bottom:\s*1px solid var\(--stroke-default\);[\s\S]*\.community-interaction-embed-social-body\s*\{[\s\S]*font-size:\s*14px;[\s\S]*-webkit-line-clamp:\s*5;/,
-  "social previews should use one larger stacked identity-header and text-body card",
+  "social fallback previews should retain the readable stacked identity-header and text-body card",
 );
 assert.match(
   socialPreviewComponent,
-  /function SocialPostLinkPreview[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-header[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>/,
-  "the text-first social preview card should remain the single primary link",
+  /function SocialPostFallback[\s\S]*<a[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-header[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>[\s\S]*function SocialPostLinkPreview[\s\S]*data-preview-kind="social_post"[\s\S]*data-native-state=[\s\S]*community-interaction-embed-social-native[\s\S]*<SocialPostFallback/,
+  "X previews should retain one immediate readable fallback while the official post renderer loads",
 );
 assert.doesNotMatch(
   socialPreviewComponent,
   /<img|mediaUrl|community-interaction-embed-media/,
-  "meaningful-text social previews should not render attached provider media",
+  "the Polynet fallback should not render attached provider media",
+);
+assert.match(
+  previewComponent,
+  /const X_WIDGETS_SCRIPT_URL = "https:\/\/platform\.x\.com\/widgets\.js";[\s\S]*function xPostIdFromUrl[\s\S]*host !== "x\.com" && host !== "twitter\.com"[\s\S]*\[0-9\]\{1,24\}[\s\S]*function loadXWidgets[\s\S]*X_WIDGETS_LOAD_TIMEOUT_MS[\s\S]*existing instanceof HTMLScriptElement/,
+  "official X posts should load lazily from a fixed provider script with a validated numeric post ID and compact privacy-aware options",
+);
+assert.match(
+  socialPreviewComponent,
+  /IntersectionObserver[\s\S]*createTweet\?\.\(postId, target, \{[\s\S]*cards: "hidden"[\s\S]*conversation: "none"[\s\S]*dnt: true[\s\S]*theme: "dark"/,
+  "native X rendering should defer until near the viewport and use compact privacy-aware options",
+);
+assert.match(
+  socialPreviewComponent,
+  /const failNative = \(\) => \{[\s\S]*target\.replaceChildren\(\);[\s\S]*setNativeFailed\(true\);[\s\S]*window\.setTimeout\(failNative, X_WIDGETS_RENDER_TIMEOUT_MS\)[\s\S]*nativeFailed \? "failed"/,
+  "deleted or provider-blocked X posts should resolve to the readable fallback instead of loading forever",
+);
+assert.doesNotMatch(
+  previewComponent,
+  /dangerouslySetInnerHTML/,
+  "provider oEmbed HTML must never be injected into the Polynet document",
+);
+assert.match(
+  previewCss,
+  /\.community-interaction-embed-social-shell\s*\{[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*\.community-interaction-embed-social-native\s*\{[\s\S]*visibility:\s*hidden;[\s\S]*\.community-interaction-embed-social-native\.is-ready\s*\{[\s\S]*visibility:\s*visible;[\s\S]*\.community-interaction-embed-social-native iframe\s*\{[\s\S]*max-width:\s*100% !important;/,
+  "the native X renderer should stay bounded and hidden until the provider confirms a rendered post",
 );
 assert.match(
   previewComponent,

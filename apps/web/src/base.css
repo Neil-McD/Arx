@@ -11143,6 +11143,42 @@ button.community-launch-knowledge-integration-chip:disabled {
   padding: 0;
 }
 
+.community-interaction-embed-social-shell {
+  width: min(100%, var(--community-interaction-social-max-width));
+  max-width: var(--community-interaction-social-max-width);
+  min-width: 0;
+}
+
+.community-interaction-embed-social-native {
+  width: 100%;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.community-interaction-embed-social-native.is-ready {
+  height: auto;
+  min-height: var(--community-interaction-social-min-height);
+  overflow: visible;
+  border-radius: 12px;
+  background: #15202b;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.community-interaction-embed-social-native iframe {
+  display: block !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 12px;
+  background: #15202b;
+  color-scheme: dark;
+}
+
 .community-interaction-embed-social-header {
   display: flex;
   min-width: 0;
