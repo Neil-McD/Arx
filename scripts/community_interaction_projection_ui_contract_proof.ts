@@ -36,7 +36,7 @@ const chromeHostPropsBuilder = read("apps/web/src/controllers/buildWebShellChrom
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const linkPreview = read("apps/web/src/components/CommunityInteractionLinkPreview.tsx");
 const socialLinkPreview = linkPreview.slice(
-  linkPreview.indexOf("function SocialPostLinkPreview"),
+  linkPreview.indexOf("function SocialPostFallback"),
   linkPreview.indexOf("function GenericLinkPreview"),
 );
 const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
@@ -244,13 +244,28 @@ assert.match(
 );
 assert.match(
   socialLinkPreview,
-  /function SocialPostLinkPreview[\s\S]*author_name[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*href=\{props\.href\}[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-header[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>/,
-  "social previews should make the stacked text card one safe primary link without duplicate blue actions",
+  /function SocialPostFallback[\s\S]*author_name[\s\S]*<a[\s\S]*href=\{props\.href\}[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-header[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>[\s\S]*function SocialPostLinkPreview[\s\S]*data-preview-kind="social_post"[\s\S]*community-interaction-embed-social-native[\s\S]*<SocialPostFallback/,
+  "social previews should expose a safe readable fallback until the native X post is ready",
 );
 assert.doesNotMatch(
   socialLinkPreview,
   /<img|mediaUrl|community-interaction-embed-media/,
-  "meaningful-text social previews should omit attached media while media-led fallbacks remain generic cards",
+  "meaningful-text social fallbacks should omit attached media while media-led generic fallbacks remain available",
+);
+assert.match(
+  linkPreview,
+  /const X_WIDGETS_SCRIPT_URL = "https:\/\/platform\.x\.com\/widgets\.js";[\s\S]*function xPostIdFromUrl[\s\S]*\[0-9\]\{1,24\}[\s\S]*function loadXWidgets[\s\S]*existing instanceof HTMLScriptElement/,
+  "native X rendering should be lazy, source-bounded, compact, privacy-aware, and fail back to readable content",
+);
+assert.match(
+  socialLinkPreview,
+  /IntersectionObserver[\s\S]*const failNative = \(\) => \{[\s\S]*target\.replaceChildren\(\);[\s\S]*setNativeFailed\(true\);[\s\S]*window\.setTimeout\(failNative, X_WIDGETS_RENDER_TIMEOUT_MS\)[\s\S]*createTweet\?\.\(postId, target, \{[\s\S]*cards: "hidden"[\s\S]*conversation: "none"[\s\S]*dnt: true[\s\S]*theme: "dark"[\s\S]*nativeFailed \? "failed"/,
+  "X posts should load near the viewport and retain the fallback when the provider fails",
+);
+assert.doesNotMatch(
+  linkPreview,
+  /dangerouslySetInnerHTML/,
+  "community link previews must not inject raw provider markup",
 );
 assert.match(
   linkPreview,

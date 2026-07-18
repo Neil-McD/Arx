@@ -124,6 +124,7 @@ export function extractInteractionOEmbedDiscoveryUrl(html, sourceUrl) {
         endpointUrl.searchParams.set("dnt", "true");
         endpointUrl.searchParams.set("theme", "dark");
         endpointUrl.searchParams.set("hide_thread", "true");
+        endpointUrl.searchParams.set("hide_media", "true");
       } else {
         endpointUrl.searchParams.set("maxheight", "360");
       }
