@@ -1,4 +1,4 @@
-const INTERACTION_PREVIEW_RESOLVER_VERSION = 3;
+const INTERACTION_PREVIEW_RESOLVER_VERSION = 4;
 
 const OEMBED_PROVIDER_RULES = [
   {
@@ -57,6 +57,7 @@ function decodeHtmlEntities(raw) {
 function normalizedText(raw, maxChars) {
   const value = decodeHtmlEntities(raw)
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ")
+    .replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/gi, "")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/[ \t]+/g, " ")
@@ -152,12 +153,23 @@ function safeHttpUrl(raw) {
   }
 }
 
-function xStatusIdFromSourceUrl(sourceUrl) {
+export function interactionXStatusIdentity(sourceUrl) {
   try {
     const parsed = new URL(sourceUrl);
     const host = normalizeHost(parsed.hostname);
-    if (parsed.protocol !== "https:" || (host !== "x.com" && host !== "twitter.com")) return null;
-    return /\/status\/(\d{1,24})(?:\/|$)/i.exec(parsed.pathname)?.[1] ?? null;
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      (parsed.port && parsed.port !== "443") ||
+      (host !== "x.com" && host !== "twitter.com")
+    ) return null;
+    const match = /^\/([A-Za-z0-9_]{1,15})\/status\/(\d{1,24})\/?$/i.exec(parsed.pathname);
+    if (!match) return null;
+    return {
+      statusId: match[2],
+      handle: match[1].toLowerCase() === "i" ? null : match[1],
+    };
   } catch {
     return null;
   }
@@ -170,7 +182,7 @@ function xSyndicationToken(statusId) {
 }
 
 export function interactionXSyndicationUrl(sourceUrl) {
-  const statusId = xStatusIdFromSourceUrl(sourceUrl);
+  const statusId = interactionXStatusIdentity(sourceUrl)?.statusId ?? null;
   const token = statusId ? xSyndicationToken(statusId) : null;
   if (!statusId || !token) return null;
   const endpoint = new URL("https://cdn.syndication.twimg.com/tweet-result");
@@ -232,6 +244,22 @@ function xSyndicationPostBody(syndication) {
   return normalizedText(visibleText, 600);
 }
 
+function xPublishedAt(raw) {
+  const timestamp = Date.parse(String(raw ?? ""));
+  const earliestTweetMs = Date.UTC(2006, 2, 21);
+  const latestReasonableMs = Date.now() + 24 * 60 * 60 * 1000;
+  return Number.isFinite(timestamp) && timestamp >= earliestTweetMs && timestamp <= latestReasonableMs
+    ? timestamp
+    : null;
+}
+
+function xPostContext(syndication) {
+  if (syndication?.quoted_tweet && typeof syndication.quoted_tweet === "object") return "quote";
+  if (String(syndication?.quoted_status_id_str ?? "").trim()) return "quote";
+  if (String(syndication?.in_reply_to_status_id_str ?? "").trim()) return "reply";
+  return "post";
+}
+
 function embedPathIsAllowed(rule, parsed) {
   if (rule.provider === "loom") {
     return /^\/embed\/[A-Za-z0-9_-]{8,160}\/?$/.test(parsed.pathname);
@@ -266,10 +294,13 @@ function openGraphFallback(openGraph, sourceUrl) {
   const suppressImage = provider === "loom" || provider === "x";
   return {
     preview_kind: "link",
+    preview_provider: null,
+    preview_provider_post_id: null,
+    preview_published_at: null,
+    preview_post_context: null,
     preview_author_name: null,
     preview_author_handle: null,
     preview_author_avatar: null,
-    preview_author_verified: null,
     preview_title: normalizedText(openGraph?.og_title, 300),
     preview_description: suppressDescription ? null : normalizedText(openGraph?.og_description, 600),
     preview_image: suppressImage ? null : safeHttpUrl(openGraph?.og_image),
@@ -285,13 +316,15 @@ export function normalizeInteractionOEmbedPreview({ sourceUrl, openGraph, oEmbed
   if (!rule) return fallback;
 
   if (rule.provider === "x") {
-    const sourceStatusId = xStatusIdFromSourceUrl(sourceUrl);
+    const sourceIdentity = interactionXStatusIdentity(sourceUrl);
+    const sourceStatusId = sourceIdentity?.statusId ?? null;
+    const oEmbedIdentity = interactionXStatusIdentity(String(oEmbed?.url ?? ""));
     const validOEmbed =
       oEmbed &&
       typeof oEmbed === "object" &&
       !Array.isArray(oEmbed) &&
       String(oEmbed.type ?? "").toLowerCase() === "rich" &&
-      sourceStatusId === (/\/status\/(\d+)/i.exec(String(oEmbed.url ?? ""))?.[1] ?? null);
+      sourceStatusId === oEmbedIdentity?.statusId;
     const validSyndication =
       syndication &&
       typeof syndication === "object" &&
@@ -310,13 +343,13 @@ export function normalizeInteractionOEmbedPreview({ sourceUrl, openGraph, oEmbed
     return {
       ...fallback,
       preview_kind: "social_post",
+      preview_provider: "x",
+      preview_provider_post_id: sourceStatusId,
+      preview_published_at: validSyndication ? xPublishedAt(syndication.created_at) : null,
+      preview_post_context: validSyndication ? xPostContext(syndication) : null,
       preview_author_name: authorName,
-      preview_author_handle: xAuthorHandle(syndicationUser?.screen_name),
+      preview_author_handle: xAuthorHandle(syndicationUser?.screen_name) ?? sourceIdentity?.handle ?? null,
       preview_author_avatar: xProfileAvatarUrl(syndicationUser?.profile_image_url_https),
-      preview_author_verified:
-        syndicationUser == null
-          ? null
-          : syndicationUser.is_blue_verified === true || syndicationUser.verified === true,
       preview_title: authorName,
       preview_description: postBody,
       preview_image: null,

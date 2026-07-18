@@ -5,6 +5,8 @@ import { join } from "node:path";
 const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
 const interactionEmbedRefresh = readFileSync(join(root, "convex/communityInteractionEmbedRefresh.ts"), "utf8");
+const interactionPreviewContract = readFileSync(join(root, "shared/interactionEmbedPreviewContract.ts"), "utf8");
+const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const sourceUrlPolicy = readFileSync(join(root, "convex/communitySourceUrlPolicy.ts"), "utf8");
 const communityFacade = readFileSync(join(root, "convex/community.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
@@ -125,6 +127,11 @@ assert.match(
   interactions,
   /MAX_INTERACTION_BLOCKS_PER_WRITE/,
   "write core should bound canonical content block hydration",
+);
+assert.match(
+  interactions,
+  /nextRefreshAt: embed\.nextRefreshAt \?\? null[\s\S]*leaseUntil: v\.optional\(v\.union\(v\.number\(\), v\.null\(\)\)\)[\s\S]*args\.leaseUntil \?\? null[\s\S]*embed\.nextRefreshAt \?\? null[\s\S]*leaseUntil: embed\.nextRefreshAt/,
+  "enrichment writes should use the leased next-refresh value as a generation token so delayed workers cannot overwrite newer results",
 );
 assert.match(
   interactions,
@@ -384,23 +391,33 @@ assert.match(
 );
 assert.match(
   enrichInteractionEmbed,
-  /const sourceUrl = requireSafeCommunitySourceUrl\(embed\.sourceUrl, MAX_INTERACTION_URL_CHARS\)[\s\S]*fetchEmbedPreview\(sourceUrl\)[\s\S]*previewKind: preview\.previewKind[\s\S]*error: boundedEmbedError/,
+  /const sourceUrl = requireSafeCommunitySourceUrl\(embed\.sourceUrl, MAX_INTERACTION_URL_CHARS\)[\s\S]*fetchEmbedPreview\(sourceUrl\)[\s\S]*previewKind: preview\.previewKind[\s\S]*const errorCode = boundedEmbedError[\s\S]*error: errorCode/,
   "internal embed enrichment action should fail closed on unsafe URLs and bounded errors",
 );
 assert.match(
   interactions,
-  /export const applyInteractionEmbedEnrichment = internalMutation\(\{[\s\S]*embed\.status === "redacted"[\s\S]*isStaleRefresh[\s\S]*isPending \? \{ status: "failed" as const \} : \{\}[\s\S]*isPending && args\.resolverVersion[\s\S]*previewKind: args\.previewKind \?\? "link"/,
-  "typed preview refreshes should never revive redacted rows, replace a usable stale card with a failed state, or mark a failed stale refresh complete",
+  /export const applyInteractionEmbedEnrichment = internalMutation\(\{[\s\S]*embed\.status === "redacted"[\s\S]*isRefresh[\s\S]*status: "unavailable" as const[\s\S]*isPending \? \{ status: "failed" as const \} : \{\}[\s\S]*interactionEmbedRefreshRetryMs\(failureCount\)[\s\S]*nextRefreshAt: nowMs \+ INTERACTION_EMBED_REFRESH_SUCCESS_MS/,
+  "typed preview refreshes should preserve ready snapshots on transient failure, retire authoritative unavailable posts, and schedule deterministic retry or success refreshes",
 );
 assert.match(
   interactionEmbedRefresh,
-  /const MAX_REFRESH_BATCH_SIZE = 100[\s\S]*scheduleStaleInteractionEmbedPreviewRefresh = internalMutation\(\{[\s\S]*paginationOptsValidator[\s\S]*Math\.max\(1, Math\.min\(requestedBatchSize, MAX_REFRESH_BATCH_SIZE\)\)[\s\S]*paginate\(\{ cursor: args\.paginationOpts\.cursor, numItems: batchSize \}\)[\s\S]*embed\.status !== "ready" && embed\.status !== "failed"[\s\S]*embed\.resolverVersion === INTERACTION_EMBED_RESOLVER_VERSION[\s\S]*refresh: true[\s\S]*continueCursor/,
-  "legacy preview refresh should be internal, batch-capped, paginated, version-gated, and retry only eligible ready or failed link rows",
+  /const MAX_REFRESH_BATCH_SIZE = 100[\s\S]*scheduleDueInteractionEmbedPreviewRefresh = internalMutation\(\{[\s\S]*Math\.max\(1, Math\.min\(requestedLimit, MAX_REFRESH_BATCH_SIZE\)\)[\s\S]*withIndex\("by_provider_status_nextRefreshAt"[\s\S]*dueByVersion[\s\S]*dueByTime[\s\S]*INTERACTION_EMBED_REFRESH_LEASE_MS[\s\S]*refresh: status !== "pending"/,
+  "the canonical preview refresh queue should be internal, indexed, batch-capped, leased, version-aware, and able to repair missed pending work",
 );
 assert.match(
   interactionEmbedRefresh,
-  /SUPPORTED_SOURCE_HOSTS = new Set\(\[[\s\S]*"loom\.com"[\s\S]*"youtube\.com"[\s\S]*"x\.com"[\s\S]*"twitter\.com"[\s\S]*isSupportedSourceUrl/,
-  "legacy preview refresh should only schedule providers supported by the typed resolver",
+  /REFRESHABLE_PROVIDERS = \[[\s\S]*"x"[\s\S]*"loom\.com"[\s\S]*"youtube\.com"[\s\S]*interactionXStatusIdentity[\s\S]*refreshableSourceMatchesProvider/,
+  "the canonical preview refresh queue should only schedule exact sources for supported providers",
+);
+assert.match(
+  interactionPreviewContract,
+  /INTERACTION_EMBED_RESOLVER_VERSION = 4[\s\S]*INTERACTION_EMBED_REFRESH_SUCCESS_MS[\s\S]*interactionXStatusIdentity[\s\S]*interactionEmbedRefreshRetryMs/,
+  "browser and cloud preview timing plus exact X URL identity should share one typed contract",
+);
+assert.match(
+  crons,
+  /refresh due community interaction previews[\s\S]*\{ hours: 1 \}[\s\S]*scheduleDueInteractionEmbedPreviewRefresh[\s\S]*\{ limit: 50 \}/,
+  "the canonical bounded refresh queue should have one production repair cron",
 );
 
 assert.match(

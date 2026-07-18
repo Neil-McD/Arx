@@ -1,6 +1,10 @@
 import { useState } from "react";
-import { BadgeCheck, ExternalLink, Play } from "lucide-react";
+import { ExternalLink, Play } from "lucide-react";
 import type { CommunityInteractionEmbed } from "../../../../shared/cloudCommunityInteractionsGateway";
+import {
+  interactionEmbedPreviewIsStale,
+  interactionXStatusIdentity,
+} from "../../../../shared/interactionEmbedPreviewContract";
 
 function hostnameOf(raw: string | null): string {
   try {
@@ -16,7 +20,7 @@ function providerLabel(embed: CommunityInteractionEmbed): string {
   if (provider === "youtube.com" || provider === "youtu.be" || provider === "youtube-nocookie.com") {
     return "YouTube";
   }
-  if (provider === "x.com" || provider === "twitter.com") return "X";
+  if (provider === "x" || provider === "x.com" || provider === "twitter.com") return "X";
   return provider;
 }
 
@@ -79,25 +83,24 @@ function activatedVideoUrl(raw: string): string {
   }
 }
 
-function xAuthorHandleFromUrl(raw: string): string | null {
-  try {
-    const url = new URL(raw);
-    const host = url.hostname.toLowerCase().replace(/^www\./, "");
-    if (host !== "x.com" && host !== "twitter.com") return null;
-    const handle = /^\/([A-Za-z0-9_]{1,15})\/status\/[0-9]{1,24}(?:\/|$)/i.exec(url.pathname)?.[1] ?? null;
-    return handle && handle.toLowerCase() !== "i" ? handle : null;
-  } catch {
-    return null;
-  }
-}
-
 function approvedXAvatarUrl(raw: string | null): string | null {
   const approved = approvedHttpsUrl(raw);
   if (!approved) return null;
   const url = new URL(approved);
-  return url.hostname.toLowerCase() === "pbs.twimg.com" && /^\/profile_images\//.test(url.pathname)
-    ? approved
-    : null;
+  const allowedFormats = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+  const allowedSizes = new Set(["mini", "normal", "bigger", "200x200", "400x400"]);
+  const format = url.searchParams.get("format")?.toLowerCase() ?? null;
+  const size = url.searchParams.get("name")?.toLowerCase() ?? null;
+  const extension = /\.([A-Za-z0-9]+)$/.exec(url.pathname)?.[1]?.toLowerCase() ?? null;
+  if (
+    url.hostname.toLowerCase() !== "pbs.twimg.com" ||
+    !/^\/profile_images\/[0-9]{1,24}\/[A-Za-z0-9._~-]{1,200}$/.test(url.pathname) ||
+    [...url.searchParams.keys()].some((key) => key !== "format" && key !== "name") ||
+    (format !== null && !allowedFormats.has(format)) ||
+    (size !== null && !allowedSizes.has(size)) ||
+    (extension !== null ? !allowedFormats.has(extension) : format === null)
+  ) return null;
+  return `/api/x-avatar?url=${encodeURIComponent(approved)}`;
 }
 
 function socialPostBody(raw: string | null): string {
@@ -109,6 +112,29 @@ function socialPostBody(raw: string | null): string {
 
 function authorInitial(raw: string): string {
   return Array.from(raw.trim())[0]?.toUpperCase() || "X";
+}
+
+function timestampMs(raw: string | null): number | null {
+  const value = Date.parse(String(raw ?? ""));
+  return Number.isFinite(value) ? value : null;
+}
+
+function compactPostDate(raw: string | null): string | null {
+  const value = timestampMs(raw);
+  if (value === null) return null;
+  const date = new Date(value);
+  const includeYear = date.getFullYear() !== new Date().getFullYear();
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(includeYear ? { year: "numeric" } : {}),
+  }).format(date);
+}
+
+function postContextLabel(raw: CommunityInteractionEmbed["post_context"]): string | null {
+  if (raw === "reply") return "Reply";
+  if (raw === "quote") return "Quote";
+  return null;
 }
 
 function VideoPreviewMetadata(props: { href: string; provider: string; title: string }) {
@@ -195,9 +221,14 @@ function SocialPostLinkPreview(props: {
   href: string;
 }) {
   const author = props.embed.author_name || props.embed.title || "X post";
-  const handle = props.embed.author_handle || xAuthorHandleFromUrl(props.href);
+  const identity = interactionXStatusIdentity(props.href);
+  const handle = props.embed.author_handle || identity?.handle || null;
   const avatarUrl = approvedXAvatarUrl(props.embed.author_avatar_url);
   const body = socialPostBody(props.embed.description);
+  const publishedDate = compactPostDate(props.embed.published_at);
+  const fetchedAt = timestampMs(props.embed.fetched_at);
+  const isSnapshot = interactionEmbedPreviewIsStale(fetchedAt);
+  const contextLabel = postContextLabel(props.embed.post_context);
   return (
     <a
       className="community-interaction-embed is-social-post"
@@ -205,28 +236,33 @@ function SocialPostLinkPreview(props: {
       href={props.href}
       target="_blank"
       rel="noreferrer noopener"
-      aria-label={`View ${author}'s post on X in a new tab`}
+      aria-label={`View ${author}'s${isSnapshot ? " saved" : ""} post on X in a new tab`}
       onClick={(event) => event.stopPropagation()}
     >
       <div className="community-interaction-embed-social-header">
         <span className="community-interaction-embed-social-avatar" aria-hidden="true">
           {avatarUrl ? (
-            <img src={avatarUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />
+            <img src={avatarUrl} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
           ) : (
             <span>{authorInitial(author)}</span>
           )}
         </span>
-        <span className="community-interaction-embed-social-identity">
+        <span className="community-interaction-embed-social-identity" dir="auto">
           <span className="community-interaction-embed-social-author">{author}</span>
-          {props.embed.author_verified ? (
-            <BadgeCheck className="community-interaction-embed-social-verified" size={15} aria-label="Verified" />
-          ) : null}
-          {handle ? (
-            <span className="community-interaction-embed-social-handle">@{handle}</span>
-          ) : null}
+          <span className="community-interaction-embed-social-meta">
+            {contextLabel ? <span>{contextLabel}</span> : null}
+            {contextLabel ? <span aria-hidden="true">·</span> : null}
+            {handle ? <span>@{handle}</span> : null}
+            {handle && publishedDate ? <span aria-hidden="true">·</span> : null}
+            {publishedDate ? (
+              <time dateTime={props.embed.published_at ?? undefined}>{publishedDate}</time>
+            ) : null}
+            {(handle || publishedDate) ? <span aria-hidden="true">·</span> : null}
+            <span>{isSnapshot ? "X snapshot" : "X"}</span>
+          </span>
         </span>
       </div>
-      <span className="community-interaction-embed-social-body">{body}</span>
+      <span className="community-interaction-embed-social-body" dir="auto">{body}</span>
     </a>
   );
 }
@@ -275,7 +311,15 @@ export function CommunityInteractionLinkPreview(props: { embed: CommunityInterac
   if (props.embed.preview_kind === "video" && videoUrl) {
     return <VideoLinkPreview embed={props.embed} href={href} mediaUrl={mediaUrl} videoUrl={videoUrl} />;
   }
-  if (props.embed.preview_kind === "social_post" && props.embed.author_name && props.embed.description) {
+  const xIdentity = interactionXStatusIdentity(href);
+  if (
+    props.embed.preview_kind === "social_post" &&
+    props.embed.provider === "x" &&
+    xIdentity &&
+    props.embed.provider_post_id === xIdentity.statusId &&
+    props.embed.author_name &&
+    props.embed.description
+  ) {
     return <SocialPostLinkPreview embed={props.embed} href={href} />;
   }
   return <GenericLinkPreview embed={props.embed} href={href} mediaUrl={mediaUrl} />;

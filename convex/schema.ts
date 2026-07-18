@@ -1712,6 +1712,7 @@ export default defineSchema({
       v.literal("pending"),
       v.literal("ready"),
       v.literal("failed"),
+      v.literal("unavailable"),
       v.literal("redacted"),
     ),
     visibilityScope: v.union(
@@ -1741,6 +1742,11 @@ export default defineSchema({
     authorAvatarUrl: v.optional(v.string()),
     authorVerified: v.optional(v.boolean()),
     provider: v.optional(v.string()),
+    providerPostId: v.optional(v.string()),
+    publishedAt: v.optional(v.number()),
+    postContext: v.optional(
+      v.union(v.literal("post"), v.literal("reply"), v.literal("quote")),
+    ),
     title: v.optional(v.string()),
     description: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
@@ -1748,6 +1754,8 @@ export default defineSchema({
     videoUrl: v.optional(v.string()),
     resolverVersion: v.optional(v.number()),
     fetchedAt: v.optional(v.number()),
+    nextRefreshAt: v.optional(v.number()),
+    refreshFailureCount: v.optional(v.number()),
     error: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1755,6 +1763,7 @@ export default defineSchema({
     .index("by_root", ["rootId"])
     .index("by_reply", ["replyId"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_provider_status_nextRefreshAt", ["provider", "status", "nextRefreshAt"])
     .index("by_community_normalizedSourceUrl", ["communityId", "normalizedSourceUrl"])
     .index("by_community_workspaceRef", ["communityId", "workspaceRefKind", "workspaceRefId"]),
 

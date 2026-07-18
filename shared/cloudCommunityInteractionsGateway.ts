@@ -41,7 +41,7 @@ export type CommunityInteractionContentBlock = {
 export type CommunityInteractionEmbed = {
   id: string;
   embed_kind: "link" | "workspace_ref" | string;
-  status: "pending" | "ready" | "failed" | "redacted" | string;
+  status: "pending" | "ready" | "failed" | "unavailable" | "redacted" | string;
   visibility_scope: string;
   source_url: string | null;
   normalized_source_url: string | null;
@@ -51,8 +51,10 @@ export type CommunityInteractionEmbed = {
   author_name: string | null;
   author_handle: string | null;
   author_avatar_url: string | null;
-  author_verified: boolean | null;
   provider: string | null;
+  provider_post_id: string | null;
+  published_at: string | null;
+  post_context: "post" | "reply" | "quote" | string | null;
   title: string | null;
   description: string | null;
   image_url: string | null;

@@ -244,12 +244,17 @@ assert.match(
 );
 assert.match(
   socialLinkPreview,
-  /function SocialPostLinkPreview[\s\S]*author_name[\s\S]*author_handle[\s\S]*author_avatar_url[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*href=\{props\.href\}[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-avatar[\s\S]*community-interaction-embed-social-identity[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>/,
-  "social previews should render one compact black X-style identity-and-text link",
+  /function SocialPostLinkPreview[\s\S]*author_name[\s\S]*author_handle[\s\S]*author_avatar_url[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*href=\{props\.href\}[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-avatar[\s\S]*community-interaction-embed-social-identity[\s\S]*published_at[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>/,
+  "social previews should render one compact black X-style provenance-and-text link with a same-origin avatar",
+);
+assert.match(
+  linkPreview,
+  /function approvedXAvatarUrl[\s\S]*pbs\.twimg\.com[\s\S]*\/api\/x-avatar\?url=/,
+  "X avatars should reach the browser only through the bounded same-origin proxy",
 );
 assert.doesNotMatch(
   socialLinkPreview,
-  /community-interaction-embed-media|community-interaction-embed-social-mark|iframe|Reply|replies|Copy link|favorite_count|conversation_count/,
+  /community-interaction-embed-media|community-interaction-embed-social-mark|iframe|replies|Copy link|favorite_count|conversation_count|BadgeCheck/,
   "meaningful-text social previews should omit attached media, provider marks, and action chrome",
 );
 assert.doesNotMatch(
@@ -991,8 +996,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-interaction-embed-play:focus-visible[\s\S]*\.community-interaction-embed-video-link:focus-visible[\s\S]*\.community-interaction-embed-summary[\s\S]*grid-template-columns:[\s\S]*\.community-interaction-embed-player[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-embed\.is-social-post[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*grid-template-rows:\s*auto 1fr;[\s\S]*\.community-interaction-embed-social-header[\s\S]*border-bottom:\s*1px solid var\(--stroke-default\);[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*5;/,
-  "video previews should retain horizontal play rows while social previews use stacked text cards with primary navigation",
+  /\.community-interaction-embed-play:focus-visible[\s\S]*\.community-interaction-embed-video-link:focus-visible[\s\S]*\.community-interaction-embed-summary[\s\S]*grid-template-columns:[\s\S]*\.community-interaction-embed-player[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-embed\.is-social-post[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*background:\s*#000;[\s\S]*\.community-interaction-embed-social-identity[\s\S]*unicode-bidi:\s*plaintext;[\s\S]*\.community-interaction-embed-social-meta[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*5;/,
+  "video previews should retain horizontal play rows while social previews use compact isolated provenance-and-text cards",
 );
 assert.match(
   read("shared/linkEmbedUi.tsx"),

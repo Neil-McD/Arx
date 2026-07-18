@@ -225,4 +225,13 @@ crons.interval(
   {},
 );
 
+// Link previews are derived snapshots. One indexed, leased queue repairs missed
+// initial work, upgrades old resolver versions, and revalidates due provider cards.
+crons.interval(
+  "refresh due community interaction previews",
+  { hours: 1 },
+  (internal as any).communityInteractionEmbedRefresh.scheduleDueInteractionEmbedPreviewRefresh,
+  { limit: 50 },
+);
+
 export default crons;

@@ -5,11 +5,18 @@ import {
   extractInteractionOEmbedDiscoveryUrl,
   interactionOEmbedResponseUrlIsAllowed,
   interactionPreviewOpenGraphFallback,
+  interactionXStatusIdentity,
   interactionXSyndicationResponseUrlIsAllowed,
   interactionXSyndicationUrl,
   normalizeInteractionOEmbedPreview,
 } from "../api/source-url-preview.mjs";
+import { approvedXAvatarSourceUrl } from "../api/x-avatar.js";
 import { interactionPresentationForEmbeds } from "../shared/communityInteractionLinkPresentation.ts";
+import {
+  INTERACTION_EMBED_REFRESH_SUCCESS_MS,
+  interactionEmbedPreviewIsStale,
+  interactionXStatusIdentity as sharedInteractionXStatusIdentity,
+} from "../shared/interactionEmbedPreviewContract.ts";
 
 const previewCss = readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8");
 const previewComponent = readFileSync(
@@ -20,6 +27,7 @@ const interactionFunctions = readFileSync(
   new URL("../convex/communityInteractions.ts", import.meta.url),
   "utf8",
 );
+const avatarProxy = readFileSync(new URL("../api/x-avatar.js", import.meta.url), "utf8");
 const socialPreviewComponent = previewComponent.slice(
   previewComponent.indexOf("function SocialPostLinkPreview"),
   previewComponent.indexOf("function GenericLinkPreview"),
@@ -44,6 +52,9 @@ assert.equal(
   interactionOEmbedResponseUrlIsAllowed(loomSourceUrl, "https://www.loom.com/v1/oembed?url=proof"),
   true,
 );
+const freshnessNow = Date.UTC(2026, 6, 18, 12);
+assert.equal(interactionEmbedPreviewIsStale(freshnessNow - INTERACTION_EMBED_REFRESH_SUCCESS_MS + 1, freshnessNow), false);
+assert.equal(interactionEmbedPreviewIsStale(freshnessNow - INTERACTION_EMBED_REFRESH_SUCCESS_MS, freshnessNow), true);
 assert.equal(
   interactionOEmbedResponseUrlIsAllowed(loomSourceUrl, "https://attacker.example/oembed?url=proof"),
   false,
@@ -76,6 +87,18 @@ assert.equal(
 );
 
 const xSourceUrl = "https://x.com/mathelirium/status/2075857952792047708?s=46&t=tracking";
+assert.deepEqual(interactionXStatusIdentity(xSourceUrl), {
+  statusId: "2075857952792047708",
+  handle: "mathelirium",
+});
+assert.equal(interactionXStatusIdentity("https://x.com.evil.example/mathelirium/status/2075857952792047708"), null);
+assert.equal(interactionXStatusIdentity("https://x.com/mathelirium/status/2075857952792047708/photo/1"), null);
+assert.deepEqual(sharedInteractionXStatusIdentity(xSourceUrl), interactionXStatusIdentity(xSourceUrl));
+assert.equal(
+  sharedInteractionXStatusIdentity("https://x.com/mathelirium/status/2075857952792047708/photo/1"),
+  null,
+  "broker and browser/cloud exact X URL validators should stay behaviorally aligned",
+);
 const xDiscovery = extractInteractionOEmbedDiscoveryUrl(
   `<link rel="alternate" type="application/json+oembed"
     href="https://publish.x.com/oembed?url=https%3A%2F%2Fx.com%2Fmathelirium%2Fstatus%2F2075857952792047708">`,
@@ -119,6 +142,7 @@ const xPreview = normalizeInteractionOEmbedPreview({
   },
   syndication: {
     id_str: "2075857952792047708",
+    created_at: "Thu Jul 16 15:00:00 +0000 2026",
     text: "A Neural Sheet Learns the Shape of a Brain\n\nThis time, the self-organizing map learns the geometry of a brain. https://t.co/media",
     display_text_range: [0, 111],
     user: {
@@ -130,14 +154,32 @@ const xPreview = normalizeInteractionOEmbedPreview({
   },
 });
 assert.equal(xPreview.preview_kind, "social_post");
+assert.equal(xPreview.preview_provider, "x");
+assert.equal(xPreview.preview_provider_post_id, "2075857952792047708");
+assert.equal(xPreview.preview_published_at, Date.parse("Thu Jul 16 15:00:00 +0000 2026"));
+assert.equal(xPreview.preview_post_context, "post");
 assert.equal(xPreview.preview_author_name, "Mathelirium");
 assert.equal(xPreview.preview_author_handle, "mathelirium");
 assert.equal(xPreview.preview_author_avatar, "https://pbs.twimg.com/profile_images/1234/avatar_normal.jpg");
-assert.equal(xPreview.preview_author_verified, true);
 assert.match(xPreview.preview_description, /^A Neural Sheet Learns the Shape of a Brain/);
 assert.doesNotMatch(xPreview.preview_description, /t\.co|pic\.x\.com/);
 assert.equal(xPreview.preview_image, null, "attached X media should not enter the compact post card");
 assert.doesNotMatch(JSON.stringify(xPreview), /blockquote|iframe|widgets\.js/);
+
+const replyPreview = normalizeInteractionOEmbedPreview({
+  sourceUrl: xSourceUrl,
+  openGraph: { og_title: null, og_description: null, og_image: null, og_image_alt: null },
+  oEmbed: null,
+  syndication: {
+    id_str: "2075857952792047708",
+    text: "safe\u202espoof\u2066 text",
+    in_reply_to_status_id_str: "2070000000000000000",
+    user: { name: "Safe\u202e Name", screen_name: "mathelirium" },
+  },
+});
+assert.equal(replyPreview.preview_post_context, "reply");
+assert.equal(replyPreview.preview_description, "safespoof text");
+assert.equal(replyPreview.preview_author_name, "Safe Name");
 
 const invalidAvatarPreview = normalizeInteractionOEmbedPreview({
   sourceUrl: xSourceUrl,
@@ -159,6 +201,19 @@ assert.equal(
   null,
   "X author avatars must stay on the provider profile-image path",
 );
+assert.ok(
+  approvedXAvatarSourceUrl("https://pbs.twimg.com/profile_images/1234/avatar_normal.jpg"),
+  "the same-origin avatar proxy should accept only the exact X profile-image shape",
+);
+assert.equal(approvedXAvatarSourceUrl("https://pbs.twimg.com/media/tracking.jpg"), null);
+assert.equal(approvedXAvatarSourceUrl("https://attacker.example/profile_images/1234/avatar.jpg"), null);
+assert.equal(approvedXAvatarSourceUrl("https://pbs.twimg.com/profile_images/1234/avatar.svg"), null);
+assert.match(
+  avatarProxy,
+  /MAX_AVATAR_BYTES = 1_000_000[\s\S]*dns\.promises\.lookup[\s\S]*hostname: pinnedAddress[\s\S]*servername: X_AVATAR_HOST[\s\S]*response\.headers\.location[\s\S]*ALLOWED_CONTENT_TYPES\.has\(contentType\)[\s\S]*X-Content-Type-Options[\s\S]*nosniff/,
+  "the avatar proxy should pin public DNS, reject redirects and unexpected MIME types, bound bytes, and disable sniffing",
+);
+assert.doesNotMatch(avatarProxy, /\bfetch\s*\(/, "the avatar proxy must not re-resolve provider DNS through fetch");
 
 const youtubePreview = normalizeInteractionOEmbedPreview({
   sourceUrl: "https://www.youtube.com/watch?v=M7lc1UVf-VE",
@@ -255,16 +310,19 @@ assert.deepEqual(
   }),
   {
     preview_kind: "link",
+    preview_provider: null,
+    preview_provider_post_id: null,
+    preview_published_at: null,
+    preview_post_context: null,
     preview_author_name: null,
     preview_author_handle: null,
     preview_author_avatar: null,
-    preview_author_verified: null,
     preview_title: "Article title",
     preview_description: "Article description",
     preview_image: "https://news.example.com/hero.jpg",
     preview_image_alt: "Article hero",
     preview_video_url: null,
-    preview_resolver_version: 3,
+    preview_resolver_version: 4,
   },
   "ordinary pages should retain a stable Open Graph fallback",
 );
@@ -331,13 +389,23 @@ assert.match(
 );
 assert.match(
   socialPreviewComponent,
-  /function SocialPostLinkPreview[\s\S]*author_avatar_url[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-avatar[\s\S]*community-interaction-embed-social-identity[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>/,
-  "X previews should be one safe primary link containing only identity and post text",
+  /function SocialPostLinkPreview[\s\S]*author_avatar_url[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-avatar[\s\S]*community-interaction-embed-social-identity[\s\S]*published_at[\s\S]*X snapshot[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>/,
+  "X previews should be one safe primary link containing proxied identity, provenance, and post text",
+);
+assert.match(
+  previewComponent,
+  /function approvedXAvatarUrl[\s\S]*pbs\.twimg\.com[\s\S]*\/api\/x-avatar\?url=/,
+  "X avatars should reach the browser only through the bounded same-origin proxy",
 );
 assert.doesNotMatch(
   socialPreviewComponent,
-  /community-interaction-embed-media|community-interaction-embed-social-mark|iframe|Reply|replies|Copy link|favorite_count|conversation_count/,
+  /community-interaction-embed-media|community-interaction-embed-social-mark|iframe|replies|Copy link|favorite_count|conversation_count|BadgeCheck/,
   "compact X cards should omit attached media, provider marks, and action chrome",
+);
+assert.match(
+  previewComponent,
+  /interactionXStatusIdentity\(href\)[\s\S]*provider === "x"[\s\S]*provider_post_id === xIdentity\.statusId/,
+  "the browser should independently require matching exact X post provenance before using X styling",
 );
 assert.doesNotMatch(
   previewComponent,

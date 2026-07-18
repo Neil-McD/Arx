@@ -5,6 +5,9 @@
   "functions": {
     "api/source-url-fetch.js": {
       "maxDuration": 10
+    },
+    "api/x-avatar.js": {
+      "maxDuration": 5
     }
   },
   "routes": [

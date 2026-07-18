@@ -52,6 +52,14 @@ import {
   textContainsEverybodyMentionToken,
 } from "./communityMentionBroadcasts";
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
+import {
+  INTERACTION_EMBED_REFRESH_LEASE_MS,
+  INTERACTION_EMBED_REFRESH_SUCCESS_MS,
+  INTERACTION_EMBED_RESOLVER_VERSION,
+  interactionEmbedRefreshRetryMs,
+  interactionXStatusIdentity,
+  type XPostContext,
+} from "../shared/interactionEmbedPreviewContract";
 
 type InteractionActorType = "human" | "personal_agent" | "community_agent" | "system";
 type InteractionRootKind = "discussion" | "announcement" | "question" | "resource_share" | "agent_signal";
@@ -132,7 +140,7 @@ type EmbedRow = {
   rootId?: any;
   replyId?: any;
   embedKind: "link" | "workspace_ref";
-  status: "pending" | "ready" | "failed" | "redacted";
+  status: "pending" | "ready" | "failed" | "unavailable" | "redacted";
   visibilityScope: InteractionVisibilityScope;
   sourceUrl?: string;
   normalizedSourceUrl?: string;
@@ -144,6 +152,9 @@ type EmbedRow = {
   authorAvatarUrl?: string;
   authorVerified?: boolean;
   provider?: string;
+  providerPostId?: string;
+  publishedAt?: number;
+  postContext?: XPostContext;
   title?: string;
   description?: string;
   imageUrl?: string;
@@ -151,6 +162,8 @@ type EmbedRow = {
   videoUrl?: string;
   resolverVersion?: number;
   fetchedAt?: number;
+  nextRefreshAt?: number;
+  refreshFailureCount?: number;
   error?: string;
   createdAt: number;
   updatedAt: number;
@@ -745,8 +758,10 @@ function mapEmbed(row: EmbedRow) {
     author_name: row.authorName ?? null,
     author_handle: row.authorHandle ?? null,
     author_avatar_url: row.authorAvatarUrl ?? null,
-    author_verified: typeof row.authorVerified === "boolean" ? row.authorVerified : null,
     provider: row.provider ?? null,
+    provider_post_id: row.providerPostId ?? null,
+    published_at: typeof row.publishedAt === "number" ? toIsoString(row.publishedAt) : null,
+    post_context: row.postContext ?? null,
     title: row.title ?? null,
     description: row.description ?? null,
     image_url: row.imageUrl ?? null,
@@ -920,6 +935,9 @@ async function insertContentBlocksForTarget(args: {
         visibilityScope: args.visibilityScope,
         sourceUrl: block.url,
         normalizedSourceUrl: block.normalizedSourceUrl,
+        provider: interactionXStatusIdentity(block.url) ? "x" : hostnameOfUrl(block.url) ?? undefined,
+        nextRefreshAt: args.nowMs + INTERACTION_EMBED_REFRESH_LEASE_MS,
+        refreshFailureCount: 0,
         createdAt: args.nowMs,
         updatedAt: args.nowMs,
       });
@@ -2718,7 +2736,6 @@ const MAX_EMBED_DESCRIPTION_CHARS = 600;
 const MAX_EMBED_AUTHOR_CHARS = 160;
 const MAX_EMBED_IMAGE_ALT_CHARS = 300;
 const MAX_EMBED_IMAGE_URL_CHARS = 2048;
-const INTERACTION_EMBED_RESOLVER_VERSION = 3;
 const MAX_EMBED_FETCHER_RESPONSE_BYTES = 64_000;
 const INTERACTION_EMBED_SOURCE_FETCHER_ENDPOINT_ENV = "ARX_SOURCE_URL_FETCHER_ENDPOINT";
 const INTERACTION_EMBED_SOURCE_FETCHER_SECRET_ENV = "ARX_SOURCE_URL_FETCHER_SECRET";
@@ -2729,9 +2746,25 @@ const INTERACTION_EMBED_SOURCE_FETCHER_TIMEOUT_MS = 8000;
 const INTERACTION_EMBED_SOURCE_FETCHER_MAX_REDIRECTS = 3;
 
 function boundedEmbedString(raw: unknown, maxChars: number): string | null {
-  const value = String(raw ?? "").replace(/\s+/g, " ").trim();
+  const value = String(raw ?? "")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ")
+    .replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!value) return null;
   return value.slice(0, maxChars);
+}
+
+function boundedEmbedPostBody(raw: unknown): string | null {
+  const value = String(raw ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ")
+    .replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/gi, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return value ? value.slice(0, MAX_EMBED_DESCRIPTION_CHARS) : null;
 }
 
 function hostnameOfUrl(raw: string): string | null {
@@ -2824,7 +2857,17 @@ function sanitizeXAuthorAvatarUrl(raw: unknown): string | null {
   if (!safeUrl) return null;
   try {
     const url = new URL(safeUrl);
-    return url.hostname.toLowerCase() === "pbs.twimg.com" && /^\/profile_images\//.test(url.pathname)
+    const allowedFormats = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+    const allowedSizes = new Set(["mini", "normal", "bigger", "200x200", "400x400"]);
+    const format = url.searchParams.get("format")?.toLowerCase() ?? null;
+    const size = url.searchParams.get("name")?.toLowerCase() ?? null;
+    const extension = /\.([A-Za-z0-9]+)$/.exec(url.pathname)?.[1]?.toLowerCase() ?? null;
+    return url.hostname.toLowerCase() === "pbs.twimg.com" &&
+      /^\/profile_images\/[0-9]{1,24}\/[A-Za-z0-9._~-]{1,200}$/.test(url.pathname) &&
+      [...url.searchParams.keys()].every((key) => key === "format" || key === "name") &&
+      (!format || allowedFormats.has(format)) &&
+      (!size || allowedSizes.has(size)) &&
+      ((extension && allowedFormats.has(extension)) || (!extension && Boolean(format)))
       ? safeUrl
       : null;
   } catch {
@@ -2882,6 +2925,7 @@ export const getInteractionEmbedForEnrichment = internalQuery({
       status: embed.status,
       sourceUrl: embed.sourceUrl ?? embed.normalizedSourceUrl ?? null,
       resolverVersion: embed.resolverVersion ?? null,
+      nextRefreshAt: embed.nextRefreshAt ?? null,
     };
   },
 });
@@ -2889,13 +2933,18 @@ export const getInteractionEmbedForEnrichment = internalQuery({
 export const applyInteractionEmbedEnrichment = internalMutation({
   args: {
     embedId: v.string(),
-    status: v.union(v.literal("ready"), v.literal("failed")),
+    status: v.union(v.literal("ready"), v.literal("failed"), v.literal("unavailable")),
     refresh: v.optional(v.boolean()),
+    leaseUntil: v.optional(v.union(v.number(), v.null())),
     previewKind: v.optional(v.union(v.literal("video"), v.literal("social_post"), v.literal("link"))),
     authorName: v.optional(v.union(v.string(), v.null())),
     authorHandle: v.optional(v.union(v.string(), v.null())),
     authorAvatarUrl: v.optional(v.union(v.string(), v.null())),
-    authorVerified: v.optional(v.union(v.boolean(), v.null())),
+    providerPostId: v.optional(v.union(v.string(), v.null())),
+    publishedAt: v.optional(v.union(v.number(), v.null())),
+    postContext: v.optional(
+      v.union(v.literal("post"), v.literal("reply"), v.literal("quote"), v.null()),
+    ),
     title: v.optional(v.union(v.string(), v.null())),
     description: v.optional(v.union(v.string(), v.null())),
     imageUrl: v.optional(v.union(v.string(), v.null())),
@@ -2908,20 +2957,48 @@ export const applyInteractionEmbedEnrichment = internalMutation({
   handler: async (ctx, args) => {
     const embed = (await ctx.db.get(args.embedId as any)) as EmbedRow | null;
     if (!embed || embed.embedKind !== "link" || embed.status === "redacted") return;
+    if ((args.leaseUntil ?? null) !== (embed.nextRefreshAt ?? null)) return;
     const isPending = embed.status === "pending";
-    const isStaleRefresh =
+    const isRefresh =
       Boolean(args.refresh) &&
-      (embed.status === "ready" || embed.status === "failed") &&
-      embed.resolverVersion !== INTERACTION_EMBED_RESOLVER_VERSION;
-    if (!isPending && !isStaleRefresh) return;
+      (embed.status === "ready" || embed.status === "failed");
+    if (!isPending && !isRefresh) return;
     const nowMs = Date.now();
+    if (args.status === "unavailable") {
+      await ctx.db.patch(args.embedId as any, {
+        status: "unavailable" as const,
+        previewKind: undefined,
+        authorName: undefined,
+        authorHandle: undefined,
+        authorAvatarUrl: undefined,
+        authorVerified: undefined,
+        providerPostId: undefined,
+        publishedAt: undefined,
+        postContext: undefined,
+        title: undefined,
+        description: undefined,
+        imageUrl: undefined,
+        imageAlt: undefined,
+        videoUrl: undefined,
+        provider: args.provider ?? embed.provider,
+        resolverVersion: args.resolverVersion ?? INTERACTION_EMBED_RESOLVER_VERSION,
+        fetchedAt: undefined,
+        nextRefreshAt: undefined,
+        refreshFailureCount: 0,
+        error: args.error ?? "source_post_unavailable",
+        updatedAt: nowMs,
+      });
+      return;
+    }
     if (args.status === "failed") {
+      const failureCount = Math.min(16, Math.max(0, embed.refreshFailureCount ?? 0) + 1);
       await ctx.db.patch(args.embedId as any, {
         ...(isPending ? { status: "failed" as const } : {}),
         ...(args.provider ? { provider: args.provider } : {}),
-        ...(isPending && args.resolverVersion ? { resolverVersion: args.resolverVersion } : {}),
+        resolverVersion: args.resolverVersion ?? INTERACTION_EMBED_RESOLVER_VERSION,
         ...(args.error ? { error: args.error } : {}),
-        fetchedAt: nowMs,
+        nextRefreshAt: nowMs + interactionEmbedRefreshRetryMs(failureCount),
+        refreshFailureCount: failureCount,
         updatedAt: nowMs,
       });
       return;
@@ -2932,7 +3009,10 @@ export const applyInteractionEmbedEnrichment = internalMutation({
       authorName: args.authorName ?? undefined,
       authorHandle: args.authorHandle ?? undefined,
       authorAvatarUrl: args.authorAvatarUrl ?? undefined,
-      authorVerified: args.authorVerified ?? undefined,
+      authorVerified: undefined,
+      providerPostId: args.providerPostId ?? undefined,
+      publishedAt: args.publishedAt ?? undefined,
+      postContext: args.postContext ?? undefined,
       title: args.title ?? undefined,
       description: args.description ?? undefined,
       imageUrl: args.imageUrl ?? undefined,
@@ -2942,6 +3022,8 @@ export const applyInteractionEmbedEnrichment = internalMutation({
       resolverVersion: args.resolverVersion ?? undefined,
       error: undefined,
       fetchedAt: nowMs,
+      nextRefreshAt: nowMs + INTERACTION_EMBED_REFRESH_SUCCESS_MS,
+      refreshFailureCount: 0,
       updatedAt: nowMs,
     });
   },
@@ -2954,7 +3036,10 @@ async function fetchEmbedPreview(
   authorName: string | null;
   authorHandle: string | null;
   authorAvatarUrl: string | null;
-  authorVerified: boolean | null;
+  provider: string | null;
+  providerPostId: string | null;
+  publishedAt: number | null;
+  postContext: XPostContext | null;
   title: string | null;
   description: string | null;
   imageUrl: string | null;
@@ -2976,42 +3061,67 @@ async function fetchEmbedPreview(
       accept: "text/html,text/plain,text/markdown,application/json,application/xml,text/xml,*/*;q=0.5",
     }),
   });
-  if (!response.ok) throw new Error(`source_url_fetcher_failed_${response.status}`);
   const payload = await readEmbedFetcherJsonBounded(response);
-  if (payload.ok === false) throw new Error(String(payload.error_code ?? "source_url_fetch_failed"));
+  if (!response.ok || payload.ok === false) {
+    throw new Error(boundedEmbedError(payload.error_code ?? `source_url_fetcher_failed_${response.status}`));
+  }
   const requestedPreviewKind = normalizeEmbedPreviewKind(payload.preview_kind);
   const videoUrl = sanitizeEmbedVideoUrl(payload.preview_video_url, requestedUrl);
+  const requestedXIdentity = interactionXStatusIdentity(requestedUrl);
+  const finalXIdentity = interactionXStatusIdentity(payload.final_url);
+  const provider = payload.preview_provider === "x" ? "x" : null;
+  const providerPostId = boundedEmbedString(payload.preview_provider_post_id, 24);
+  const xPostIdentityIsValid =
+    requestedXIdentity !== null &&
+    finalXIdentity !== null &&
+    requestedXIdentity.statusId === finalXIdentity.statusId &&
+    requestedXIdentity.statusId === providerPostId &&
+    provider === "x" &&
+    Number(payload.preview_resolver_version) === INTERACTION_EMBED_RESOLVER_VERSION;
   const authorName = boundedEmbedString(payload.preview_author_name, MAX_EMBED_AUTHOR_CHARS);
   const authorHandleRaw = boundedEmbedString(payload.preview_author_handle, 15);
   const authorHandle = authorHandleRaw && /^[A-Za-z0-9_]{1,15}$/.test(authorHandleRaw)
     ? authorHandleRaw
     : null;
   const authorAvatarUrl = sanitizeXAuthorAvatarUrl(payload.preview_author_avatar);
-  const authorVerified =
-    payload.preview_author_verified === true
-      ? true
-      : payload.preview_author_verified === false
-        ? false
-        : null;
-  const description = boundedEmbedString(
+  const socialDescription = boundedEmbedPostBody(payload.preview_description);
+  const genericDescription = boundedEmbedString(
     payload.preview_description ?? payload.og_description,
     MAX_EMBED_DESCRIPTION_CHARS,
   );
   const previewKind =
     requestedPreviewKind === "video" && videoUrl
       ? "video"
-      : requestedPreviewKind === "social_post" && authorName && description
+      : requestedPreviewKind === "social_post" && xPostIdentityIsValid && authorName && socialDescription
         ? "social_post"
         : "link";
+  const publishedAtRaw = Number(payload.preview_published_at);
+  const publishedAt =
+    previewKind === "social_post" &&
+    Number.isFinite(publishedAtRaw) &&
+    publishedAtRaw >= Date.UTC(2006, 2, 21) &&
+    publishedAtRaw <= Date.now() + 24 * 60 * 60 * 1000
+      ? publishedAtRaw
+      : null;
+  const postContext =
+    previewKind === "social_post" &&
+    (payload.preview_post_context === "post" ||
+      payload.preview_post_context === "reply" ||
+      payload.preview_post_context === "quote")
+      ? payload.preview_post_context
+      : null;
   return {
     previewKind,
     authorName: previewKind === "social_post" ? authorName : null,
     authorHandle: previewKind === "social_post" ? authorHandle : null,
     authorAvatarUrl: previewKind === "social_post" ? authorAvatarUrl : null,
-    authorVerified: previewKind === "social_post" ? authorVerified : null,
+    provider: previewKind === "social_post" ? provider : null,
+    providerPostId: previewKind === "social_post" ? providerPostId : null,
+    publishedAt,
+    postContext,
     title: boundedEmbedString(payload.preview_title ?? payload.og_title ?? payload.title, MAX_EMBED_TITLE_CHARS),
-    description,
-    imageUrl: sanitizeEmbedImageUrl(payload.preview_image ?? payload.og_image),
+    description: previewKind === "social_post" ? socialDescription : genericDescription,
+    imageUrl: previewKind === "social_post" ? null : sanitizeEmbedImageUrl(payload.preview_image ?? payload.og_image),
     imageAlt: boundedEmbedString(payload.preview_image_alt ?? payload.og_image_alt, MAX_EMBED_IMAGE_ALT_CHARS),
     videoUrl: previewKind === "video" ? videoUrl : null,
     resolverVersion:
@@ -3028,11 +3138,10 @@ export const enrichInteractionEmbed = internalAction({
       embedId: args.embedId,
     });
     const isPending = embed?.status === "pending";
-    const isStaleRefresh =
+    const isRefresh =
       Boolean(args.refresh) &&
-      (embed?.status === "ready" || embed?.status === "failed") &&
-      embed?.resolverVersion !== INTERACTION_EMBED_RESOLVER_VERSION;
-    if (!embed || embed.embedKind !== "link" || (!isPending && !isStaleRefresh) || !embed.sourceUrl) return;
+      (embed?.status === "ready" || embed?.status === "failed");
+    if (!embed || embed.embedKind !== "link" || (!isPending && !isRefresh) || !embed.sourceUrl) return;
     try {
       const sourceUrl = requireSafeCommunitySourceUrl(embed.sourceUrl, MAX_INTERACTION_URL_CHARS);
       const preview = await fetchEmbedPreview(sourceUrl);
@@ -3040,27 +3149,43 @@ export const enrichInteractionEmbed = internalAction({
         embedId: args.embedId,
         status: "ready",
         refresh: Boolean(args.refresh),
+        leaseUntil: embed.nextRefreshAt,
         previewKind: preview.previewKind,
         authorName: preview.authorName,
         authorHandle: preview.authorHandle,
         authorAvatarUrl: preview.authorAvatarUrl,
-        authorVerified: preview.authorVerified,
+        providerPostId: preview.providerPostId,
+        publishedAt: preview.publishedAt,
+        postContext: preview.postContext,
         title: preview.title,
         description: preview.description,
         imageUrl: preview.imageUrl,
         imageAlt: preview.imageAlt,
         videoUrl: preview.videoUrl,
-        provider: hostnameOfUrl(sourceUrl),
+        provider: preview.provider ?? hostnameOfUrl(sourceUrl),
         ...(preview.resolverVersion ? { resolverVersion: preview.resolverVersion } : {}),
       });
     } catch (error) {
+      const errorCode = boundedEmbedError(error instanceof Error ? error.message : error);
+      const sourceIsXPost = interactionXStatusIdentity(embed.sourceUrl) !== null;
+      const sourceProvider = sourceIsXPost ? "x" : hostnameOfUrl(embed.sourceUrl);
+      const xPostIsAuthoritativelyUnavailable =
+        sourceIsXPost &&
+        (
+          errorCode === "community_source_url_fetch_failed_401" ||
+          errorCode === "community_source_url_fetch_failed_403" ||
+          errorCode === "community_source_url_fetch_failed_404" ||
+          errorCode === "community_source_url_fetch_failed_410"
+        );
       await ctx.runMutation(internal.communityInteractions.applyInteractionEmbedEnrichment, {
         embedId: args.embedId,
-        status: "failed",
+        status:
+          xPostIsAuthoritativelyUnavailable ? "unavailable" : "failed",
         refresh: Boolean(args.refresh),
-        provider: hostnameOfUrl(embed.sourceUrl),
+        leaseUntil: embed.nextRefreshAt,
+        provider: sourceProvider,
         resolverVersion: INTERACTION_EMBED_RESOLVER_VERSION,
-        error: boundedEmbedError(error instanceof Error ? error.message : error),
+        error: errorCode,
       });
     }
   },
