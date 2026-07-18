@@ -9,6 +9,7 @@ import {
 } from "../shared/runtimeCommunityContextReceipt.ts";
 import { buildRuntimeContextFragmentsFromParts } from "../shared/runtimeContextFragments.ts";
 import { buildRuntimeLiveTimeline } from "../shared/runtimeTimelineUi.ts";
+import { buildRuntimeRecentToolAttemptsFromEvents } from "../shared/runtimeTurnContextPacket.ts";
 
 function record(value: unknown): Record<string, unknown> {
   assert.ok(value && typeof value === "object" && !Array.isArray(value));
@@ -20,8 +21,14 @@ function array(value: unknown): unknown[] {
   return value;
 }
 
-function project(eventType: string, payload: Record<string, unknown>): Record<string, unknown> {
-  return record(projectRuntimeCommunityContextEventPayload({ eventType, payload }));
+function project(
+  eventType: string,
+  payload: Record<string, unknown>,
+  communityScopeId: unknown = null,
+): Record<string, unknown> {
+  return record(
+    projectRuntimeCommunityContextEventPayload({ eventType, payload, communityScopeId }),
+  );
 }
 
 const expectedTools = [
@@ -54,9 +61,11 @@ const started = project("tool_call_started", {
   },
   attempt: 1,
   harness: { kind: "chat_tools", secret: "do-not-store" },
-});
+}, "community_1");
 assert.equal(started.tool_name, "community_chat_search");
 assert.equal(started.community_scope_id, "community_1");
+assert.equal(started.status, "running");
+assert.equal(started.error_code, null);
 assert.equal("args" in started, false);
 assert.equal("arguments" in started, false);
 const startedReceipt = record(started.community_context_receipt);
@@ -100,7 +109,7 @@ const finished = project("tool_call_finished", {
   output_preview: "private conversation text",
   details: { transcript: "private transcript" },
   harness: { kind: "chat_tools" },
-});
+}, "community_1");
 for (const forbiddenKey of ["args", "arguments", "output", "output_preview", "details"]) {
   assert.equal(forbiddenKey in finished, false, `finished receipt retained ${forbiddenKey}`);
 }
@@ -176,16 +185,84 @@ assert.equal(malformedResult.parse_status, "unparseable");
 assert.equal(malformedResult.raw_output_char_count, "not-json private resource contents".length);
 assert.equal(JSON.stringify(malformed).includes("private resource contents"), false);
 
-const redactedError = project("tool_call_finished", {
+const boundedError = project("tool_call_finished", {
   tool_name: "community_memory_read",
   status: "error",
   success: false,
   error_code: "provider_failed",
   error_message: "Authorization:Bearer abc.def.ghi access_token=super-secret-value",
   args: { node_id: "node_2" },
+}, "community_1");
+assert.equal("error_message" in boundedError, false);
+assert.equal("errorMessage" in boundedError, false);
+assert.equal(boundedError.error_code, "provider_failed");
+assert.equal(boundedError.status, "error");
+assert.equal(boundedError.success, false);
+const boundedErrorSerialized = JSON.stringify(boundedError);
+assert.equal(boundedErrorSerialized.includes("super-secret-value"), false);
+assert.equal(boundedErrorSerialized.includes("abc.def.ghi"), false);
+
+const malformedError = project("tool_call_finished", {
+  tool_name: "community_memory_read",
+  community_scope_id: "forged_payload_scope",
+  status: "error Bearer secret-status-token",
+  success: false,
+  error_code: "Authorization: Bearer secret-error-code",
+  error_message: "access_token=secret-error-message",
+}, "community_from_run");
+assert.equal(malformedError.community_scope_id, "community_from_run");
+assert.equal(malformedError.status, "error");
+assert.equal(malformedError.error_code, "community_context_tool_failed");
+const malformedErrorSerialized = JSON.stringify(malformedError);
+for (const forbidden of [
+  "forged_payload_scope",
+  "secret-status-token",
+  "secret-error-code",
+  "secret-error-message",
+]) {
+  assert.equal(malformedErrorSerialized.includes(forbidden), false);
+}
+
+const successfulWithInjectedFailure = project("tool_call_finished", {
+  tool_name: "community_chat_search",
+  status: "ok",
+  success: true,
+  error_code: "provider_failed",
 });
-assert.equal(String(redactedError.error_message).includes("super-secret-value"), false);
-assert.equal(String(redactedError.error_message).includes("abc.def.ghi"), false);
+assert.equal(successfulWithInjectedFailure.status, "ok");
+assert.equal(successfulWithInjectedFailure.success, true);
+assert.equal(successfulWithInjectedFailure.error_code, null);
+
+const failedAttempts = buildRuntimeRecentToolAttemptsFromEvents({
+  events: [
+    {
+      eventType: "tool_call_finished",
+      payload: boundedError,
+      createdAt: Date.now(),
+    },
+  ],
+});
+assert.equal(failedAttempts.length, 1);
+assert.equal(failedAttempts[0]?.toolName, "community_memory_read");
+assert.equal(failedAttempts[0]?.status, "error");
+assert.equal(failedAttempts[0]?.errorCode, "provider_failed");
+assert.equal(failedAttempts[0]?.errorMessage, null);
+
+const failedFragments = buildRuntimeContextFragmentsFromParts({
+  runtimeRunEvents: [
+    {
+      seq: 3,
+      eventType: "tool_call_finished",
+      payload: boundedError,
+      createdAt: Date.now(),
+    },
+  ],
+});
+const failedActionLedger = failedFragments.find((fragment) => fragment.kind === "action_ledger");
+assert.ok(failedActionLedger);
+assert.match(failedActionLedger.body, /status=error/);
+assert.match(failedActionLedger.body, /error_code=provider_failed/);
+assert.equal(failedActionLedger.body.includes("super-secret-value"), false);
 
 const ambiguousFinished = project("tool_call_finished", {
   tool_name: "community_resources_map",
@@ -199,12 +276,27 @@ const finishedWithRunScope = record(
     communityScopeId: "community_from_run",
     payload: {
       tool_name: "community_chat_search",
+      community_scope_id: "forged_payload_scope",
       status: "ok",
       success: true,
     },
   }),
 );
 assert.equal(finishedWithRunScope.community_scope_id, "community_from_run");
+
+const finishedWithoutRunScope = record(
+  projectRuntimeCommunityContextEventPayload({
+    eventType: "tool_call_finished",
+    communityScopeId: null,
+    payload: {
+      tool_name: "community_chat_search",
+      community_scope_id: "forged_payload_scope",
+      status: "ok",
+      success: true,
+    },
+  }),
+);
+assert.equal(finishedWithoutRunScope.community_scope_id, null);
 
 const builderPayload = {
   tool_name: "community_resource_builder_stage_changeset",
@@ -215,6 +307,7 @@ assert.strictEqual(
   projectRuntimeCommunityContextEventPayload({
     eventType: "tool_call_finished",
     payload: builderPayload,
+    communityScopeId: null,
   }),
   builderPayload,
 );
@@ -223,11 +316,16 @@ assert.strictEqual(
   projectRuntimeCommunityContextEventPayload({
     eventType: "tool_call_finished",
     payload: unrelatedPayload,
+    communityScopeId: null,
   }),
   unrelatedPayload,
 );
 assert.strictEqual(
-  projectRuntimeCommunityContextEventPayload({ eventType: "run_started", payload: unrelatedPayload }),
+  projectRuntimeCommunityContextEventPayload({
+    eventType: "run_started",
+    payload: unrelatedPayload,
+    communityScopeId: null,
+  }),
   unrelatedPayload,
 );
 

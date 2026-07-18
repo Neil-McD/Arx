@@ -27,6 +27,8 @@ const RECEIPT_TOOL_NAME_SET = new Set<string>(
 const TOOL_EVENT_TYPES = new Set(["tool_call_started", "tool_call_finished"]);
 const MAX_IDENTIFIER_CHARS = 512;
 const MAX_RECEIPT_REFERENCES = 12;
+const MACHINE_ERROR_CODE_PATTERN = /^[a-z][a-z0-9_]{0,119}$/;
+const FALLBACK_ERROR_CODE = "community_context_tool_failed";
 
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -45,20 +47,6 @@ function boundedIdentifier(value: unknown, maxChars = MAX_IDENTIFIER_CHARS): str
   const normalized = String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim();
   if (!normalized) return null;
   return normalized.slice(0, maxChars);
-}
-
-function redactReceiptText(value: unknown, maxChars = 300): string | null {
-  let text = String(value ?? "").replace(/\s+/g, " ").trim();
-  if (!text) return null;
-  text = text
-    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[redacted_jwt]")
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "[redacted_api_key]")
-    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [redacted]")
-    .replace(
-      /(authorization|access[_-]?token|refresh[_-]?token|api[_-]?key|x-api-key|secret)["']?\s*[:=]\s*["']?[^"',}\s]+/gi,
-      "$1:[redacted]",
-    );
-  return text.slice(0, Math.max(1, Math.floor(maxChars)));
 }
 
 function readToolName(payload: JsonRecord): string | null {
@@ -306,6 +294,11 @@ function readFinishedSuccess(payload: JsonRecord, status: string | null): boolea
   return null;
 }
 
+function canonicalErrorCode(value: unknown): string | null {
+  const normalized = String(value ?? "").trim();
+  return MACHINE_ERROR_CODE_PATTERN.test(normalized) ? normalized : null;
+}
+
 export function isRuntimeCommunityContextReceiptToolName(
   value: unknown,
 ): value is RuntimeCommunityContextReceiptToolName {
@@ -315,7 +308,7 @@ export function isRuntimeCommunityContextReceiptToolName(
 export function projectRuntimeCommunityContextEventPayload(args: {
   eventType: string;
   payload: unknown;
-  communityScopeId?: unknown;
+  communityScopeId: unknown;
 }): unknown {
   const payload = asRecord(args.payload);
   if (!payload || !TOOL_EVENT_TYPES.has(String(args.eventType ?? "").trim())) {
@@ -327,23 +320,29 @@ export function projectRuntimeCommunityContextEventPayload(args: {
   }
   const phase = args.eventType === "tool_call_started" ? "started" : "finished";
   const harnessKind = boundedIdentifier(asRecord(payload.harness)?.kind, 80);
-  const communityScopeId = boundedIdentifier(
-    payload.community_scope_id ?? args.communityScopeId,
-    160,
-  );
-  const errorCode = boundedIdentifier(payload.error_code ?? payload.errorCode, 160);
-  const errorMessage = redactReceiptText(payload.error_message ?? payload.errorMessage);
-  const status = boundedIdentifier(payload.status, 40);
+  const communityScopeId = boundedIdentifier(args.communityScopeId, 160);
+  const rawStatus = boundedIdentifier(payload.status, 40);
   const exitCode = asFiniteInteger(payload.exit_code ?? payload.exitCode);
-  const success = phase === "finished" ? readFinishedSuccess(payload, status) : null;
+  const success = phase === "finished" ? readFinishedSuccess(payload, rawStatus) : null;
+  const status =
+    phase === "started"
+      ? "running"
+      : success === true
+        ? "ok"
+        : success === false
+          ? "error"
+          : "unknown";
+  const errorCode =
+    phase === "finished" && success === false
+      ? canonicalErrorCode(payload.error_code ?? payload.errorCode) ?? FALLBACK_ERROR_CODE
+      : null;
   return {
     ...pickIdentifierFields(payload),
     tool_name: toolName,
-    status: status ?? (phase === "started" ? "running" : success === false ? "error" : "unknown"),
+    status,
     success,
     exit_code: exitCode,
     error_code: errorCode,
-    error_message: errorMessage,
     community_scope_id: communityScopeId,
     harness: harnessKind ? { kind: harnessKind } : null,
     community_context_receipt: {
