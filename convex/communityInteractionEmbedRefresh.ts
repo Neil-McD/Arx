@@ -2,7 +2,7 @@ import { paginationOptsValidator } from "convex/server";
 import { internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 
-const INTERACTION_EMBED_RESOLVER_VERSION = 2;
+const INTERACTION_EMBED_RESOLVER_VERSION = 3;
 const REFRESH_BATCH_DELAY_MS = 100;
 const DEFAULT_REFRESH_BATCH_SIZE = 50;
 const MAX_REFRESH_BATCH_SIZE = 100;

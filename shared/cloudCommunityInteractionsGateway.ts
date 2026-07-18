@@ -49,6 +49,9 @@ export type CommunityInteractionEmbed = {
   workspace_ref_id: string | null;
   preview_kind: "video" | "social_post" | "link" | string | null;
   author_name: string | null;
+  author_handle: string | null;
+  author_avatar_url: string | null;
+  author_verified: boolean | null;
   provider: string | null;
   title: string | null;
   description: string | null;
