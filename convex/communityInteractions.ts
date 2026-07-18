@@ -140,6 +140,9 @@ type EmbedRow = {
   workspaceRefId?: string;
   previewKind?: "video" | "social_post" | "link";
   authorName?: string;
+  authorHandle?: string;
+  authorAvatarUrl?: string;
+  authorVerified?: boolean;
   provider?: string;
   title?: string;
   description?: string;
@@ -740,6 +743,9 @@ function mapEmbed(row: EmbedRow) {
     workspace_ref_id: row.workspaceRefId ?? null,
     preview_kind: row.previewKind ?? null,
     author_name: row.authorName ?? null,
+    author_handle: row.authorHandle ?? null,
+    author_avatar_url: row.authorAvatarUrl ?? null,
+    author_verified: typeof row.authorVerified === "boolean" ? row.authorVerified : null,
     provider: row.provider ?? null,
     title: row.title ?? null,
     description: row.description ?? null,
@@ -2712,7 +2718,7 @@ const MAX_EMBED_DESCRIPTION_CHARS = 600;
 const MAX_EMBED_AUTHOR_CHARS = 160;
 const MAX_EMBED_IMAGE_ALT_CHARS = 300;
 const MAX_EMBED_IMAGE_URL_CHARS = 2048;
-const INTERACTION_EMBED_RESOLVER_VERSION = 2;
+const INTERACTION_EMBED_RESOLVER_VERSION = 3;
 const MAX_EMBED_FETCHER_RESPONSE_BYTES = 64_000;
 const INTERACTION_EMBED_SOURCE_FETCHER_ENDPOINT_ENV = "ARX_SOURCE_URL_FETCHER_ENDPOINT";
 const INTERACTION_EMBED_SOURCE_FETCHER_SECRET_ENV = "ARX_SOURCE_URL_FETCHER_SECRET";
@@ -2813,6 +2819,19 @@ function sanitizeEmbedImageUrl(raw: unknown): string | null {
   }
 }
 
+function sanitizeXAuthorAvatarUrl(raw: unknown): string | null {
+  const safeUrl = sanitizeEmbedImageUrl(raw);
+  if (!safeUrl) return null;
+  try {
+    const url = new URL(safeUrl);
+    return url.hostname.toLowerCase() === "pbs.twimg.com" && /^\/profile_images\//.test(url.pathname)
+      ? safeUrl
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeEmbedPreviewKind(raw: unknown): "video" | "social_post" | "link" {
   return raw === "video" || raw === "social_post" ? raw : "link";
 }
@@ -2874,6 +2893,9 @@ export const applyInteractionEmbedEnrichment = internalMutation({
     refresh: v.optional(v.boolean()),
     previewKind: v.optional(v.union(v.literal("video"), v.literal("social_post"), v.literal("link"))),
     authorName: v.optional(v.union(v.string(), v.null())),
+    authorHandle: v.optional(v.union(v.string(), v.null())),
+    authorAvatarUrl: v.optional(v.union(v.string(), v.null())),
+    authorVerified: v.optional(v.union(v.boolean(), v.null())),
     title: v.optional(v.union(v.string(), v.null())),
     description: v.optional(v.union(v.string(), v.null())),
     imageUrl: v.optional(v.union(v.string(), v.null())),
@@ -2908,6 +2930,9 @@ export const applyInteractionEmbedEnrichment = internalMutation({
       status: "ready",
       previewKind: args.previewKind ?? "link",
       authorName: args.authorName ?? undefined,
+      authorHandle: args.authorHandle ?? undefined,
+      authorAvatarUrl: args.authorAvatarUrl ?? undefined,
+      authorVerified: args.authorVerified ?? undefined,
       title: args.title ?? undefined,
       description: args.description ?? undefined,
       imageUrl: args.imageUrl ?? undefined,
@@ -2927,6 +2952,9 @@ async function fetchEmbedPreview(
 ): Promise<{
   previewKind: "video" | "social_post" | "link";
   authorName: string | null;
+  authorHandle: string | null;
+  authorAvatarUrl: string | null;
+  authorVerified: boolean | null;
   title: string | null;
   description: string | null;
   imageUrl: string | null;
@@ -2954,6 +2982,17 @@ async function fetchEmbedPreview(
   const requestedPreviewKind = normalizeEmbedPreviewKind(payload.preview_kind);
   const videoUrl = sanitizeEmbedVideoUrl(payload.preview_video_url, requestedUrl);
   const authorName = boundedEmbedString(payload.preview_author_name, MAX_EMBED_AUTHOR_CHARS);
+  const authorHandleRaw = boundedEmbedString(payload.preview_author_handle, 15);
+  const authorHandle = authorHandleRaw && /^[A-Za-z0-9_]{1,15}$/.test(authorHandleRaw)
+    ? authorHandleRaw
+    : null;
+  const authorAvatarUrl = sanitizeXAuthorAvatarUrl(payload.preview_author_avatar);
+  const authorVerified =
+    payload.preview_author_verified === true
+      ? true
+      : payload.preview_author_verified === false
+        ? false
+        : null;
   const description = boundedEmbedString(
     payload.preview_description ?? payload.og_description,
     MAX_EMBED_DESCRIPTION_CHARS,
@@ -2967,6 +3006,9 @@ async function fetchEmbedPreview(
   return {
     previewKind,
     authorName: previewKind === "social_post" ? authorName : null,
+    authorHandle: previewKind === "social_post" ? authorHandle : null,
+    authorAvatarUrl: previewKind === "social_post" ? authorAvatarUrl : null,
+    authorVerified: previewKind === "social_post" ? authorVerified : null,
     title: boundedEmbedString(payload.preview_title ?? payload.og_title ?? payload.title, MAX_EMBED_TITLE_CHARS),
     description,
     imageUrl: sanitizeEmbedImageUrl(payload.preview_image ?? payload.og_image),
@@ -3000,6 +3042,9 @@ export const enrichInteractionEmbed = internalAction({
         refresh: Boolean(args.refresh),
         previewKind: preview.previewKind,
         authorName: preview.authorName,
+        authorHandle: preview.authorHandle,
+        authorAvatarUrl: preview.authorAvatarUrl,
+        authorVerified: preview.authorVerified,
         title: preview.title,
         description: preview.description,
         imageUrl: preview.imageUrl,

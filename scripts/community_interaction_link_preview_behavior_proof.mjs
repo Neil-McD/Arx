@@ -5,6 +5,8 @@ import {
   extractInteractionOEmbedDiscoveryUrl,
   interactionOEmbedResponseUrlIsAllowed,
   interactionPreviewOpenGraphFallback,
+  interactionXSyndicationResponseUrlIsAllowed,
+  interactionXSyndicationUrl,
   normalizeInteractionOEmbedPreview,
 } from "../api/source-url-preview.mjs";
 import { interactionPresentationForEmbeds } from "../shared/communityInteractionLinkPresentation.ts";
@@ -14,8 +16,12 @@ const previewComponent = readFileSync(
   new URL("../apps/web/src/components/CommunityInteractionLinkPreview.tsx", import.meta.url),
   "utf8",
 );
+const interactionFunctions = readFileSync(
+  new URL("../convex/communityInteractions.ts", import.meta.url),
+  "utf8",
+);
 const socialPreviewComponent = previewComponent.slice(
-  previewComponent.indexOf("function SocialPostFallback"),
+  previewComponent.indexOf("function SocialPostLinkPreview"),
   previewComponent.indexOf("function GenericLinkPreview"),
 );
 
@@ -80,6 +86,22 @@ assert.equal(new URL(xDiscovery).searchParams.get("omit_script"), "true");
 assert.equal(new URL(xDiscovery).searchParams.get("dnt"), "true");
 assert.equal(new URL(xDiscovery).searchParams.get("hide_thread"), "true");
 assert.equal(new URL(xDiscovery).searchParams.get("hide_media"), "true");
+const xSyndicationUrl = interactionXSyndicationUrl(xSourceUrl);
+assert.ok(xSyndicationUrl, "X syndication metadata should resolve from a validated status URL");
+assert.equal(new URL(xSyndicationUrl).hostname, "cdn.syndication.twimg.com");
+assert.equal(new URL(xSyndicationUrl).searchParams.get("id"), "2075857952792047708");
+assert.equal(
+  interactionXSyndicationResponseUrlIsAllowed(xSourceUrl, xSyndicationUrl),
+  true,
+  "X syndication responses should stay on the fixed provider endpoint and status ID",
+);
+assert.equal(
+  interactionXSyndicationResponseUrlIsAllowed(
+    xSourceUrl,
+    "https://attacker.example/tweet-result?id=2075857952792047708",
+  ),
+  false,
+);
 
 const xPreview = normalizeInteractionOEmbedPreview({
   sourceUrl: xSourceUrl,
@@ -95,12 +117,48 @@ const xPreview = normalizeInteractionOEmbedPreview({
     author_name: "Mathelirium",
     html: '<blockquote class="twitter-tweet"><p lang="en">A Neural Sheet Learns the Shape of a Brain<br><br>This time, the self-organizing map learns the geometry of a brain. <a href="https://t.co/media">pic.x.com/media</a></p><script src="https://platform.x.com/widgets.js"></script></blockquote>',
   },
+  syndication: {
+    id_str: "2075857952792047708",
+    text: "A Neural Sheet Learns the Shape of a Brain\n\nThis time, the self-organizing map learns the geometry of a brain. https://t.co/media",
+    display_text_range: [0, 111],
+    user: {
+      name: "Mathelirium",
+      screen_name: "mathelirium",
+      is_blue_verified: true,
+      profile_image_url_https: "https://pbs.twimg.com/profile_images/1234/avatar_normal.jpg",
+    },
+  },
 });
 assert.equal(xPreview.preview_kind, "social_post");
 assert.equal(xPreview.preview_author_name, "Mathelirium");
+assert.equal(xPreview.preview_author_handle, "mathelirium");
+assert.equal(xPreview.preview_author_avatar, "https://pbs.twimg.com/profile_images/1234/avatar_normal.jpg");
+assert.equal(xPreview.preview_author_verified, true);
 assert.match(xPreview.preview_description, /^A Neural Sheet Learns the Shape of a Brain/);
-assert.equal(xPreview.preview_image, "https://pbs.twimg.com/media/brain.jpg");
+assert.doesNotMatch(xPreview.preview_description, /t\.co|pic\.x\.com/);
+assert.equal(xPreview.preview_image, null, "attached X media should not enter the compact post card");
 assert.doesNotMatch(JSON.stringify(xPreview), /blockquote|iframe|widgets\.js/);
+
+const invalidAvatarPreview = normalizeInteractionOEmbedPreview({
+  sourceUrl: xSourceUrl,
+  openGraph: { og_title: null, og_description: null, og_image: null, og_image_alt: null },
+  oEmbed: null,
+  syndication: {
+    id_str: "2075857952792047708",
+    text: "Safe post text",
+    user: {
+      name: "Mathelirium",
+      screen_name: "mathelirium",
+      profile_image_url_https: "https://attacker.example/tracking-pixel.png",
+    },
+  },
+});
+assert.equal(invalidAvatarPreview.preview_kind, "social_post");
+assert.equal(
+  invalidAvatarPreview.preview_author_avatar,
+  null,
+  "X author avatars must stay on the provider profile-image path",
+);
 
 const youtubePreview = normalizeInteractionOEmbedPreview({
   sourceUrl: "https://www.youtube.com/watch?v=M7lc1UVf-VE",
@@ -198,12 +256,15 @@ assert.deepEqual(
   {
     preview_kind: "link",
     preview_author_name: null,
+    preview_author_handle: null,
+    preview_author_avatar: null,
+    preview_author_verified: null,
     preview_title: "Article title",
     preview_description: "Article description",
     preview_image: "https://news.example.com/hero.jpg",
     preview_image_alt: "Article hero",
     preview_video_url: null,
-    preview_resolver_version: 2,
+    preview_resolver_version: 3,
   },
   "ordinary pages should retain a stable Open Graph fallback",
 );
@@ -260,48 +321,33 @@ assert.deepEqual(
 
 assert.match(
   previewCss,
-  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*420px;[\s\S]*--community-interaction-embed-row-height:\s*104px;[\s\S]*--community-interaction-embed-media-width:\s*140px;[\s\S]*--community-interaction-social-max-width:\s*500px;[\s\S]*--community-interaction-social-min-height:\s*112px;[\s\S]*\.community-interaction-embed-summary,[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) var\(--community-interaction-embed-media-width\);/,
+  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*420px;[\s\S]*--community-interaction-embed-row-height:\s*104px;[\s\S]*--community-interaction-embed-media-width:\s*140px;[\s\S]*--community-interaction-social-max-width:\s*460px;[\s\S]*\.community-interaction-embed-summary,[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) var\(--community-interaction-embed-media-width\);/,
   "video and generic link previews should retain their compact metadata-left and media-right row",
 );
 assert.match(
   previewCss,
-  /\.community-interaction-embed\.is-social-post\s*\{[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*grid-template-rows:\s*auto 1fr;[\s\S]*\.community-interaction-embed-social-header\s*\{[\s\S]*border-bottom:\s*1px solid var\(--stroke-default\);[\s\S]*\.community-interaction-embed-social-body\s*\{[\s\S]*font-size:\s*14px;[\s\S]*-webkit-line-clamp:\s*5;/,
-  "social fallback previews should retain the readable stacked identity-header and text-body card",
+  /\.community-interaction-embed\.is-social-post\s*\{[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*padding:\s*12px 14px 14px;[\s\S]*background:\s*#000;[\s\S]*\.community-interaction-embed-social-avatar\s*\{[\s\S]*width:\s*32px;[\s\S]*\.community-interaction-embed-social-body\s*\{[\s\S]*font-size:\s*14px;[\s\S]*-webkit-line-clamp:\s*5;/,
+  "X previews should use a compact black identity-and-text card",
 );
 assert.match(
   socialPreviewComponent,
-  /function SocialPostFallback[\s\S]*<a[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-header[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>[\s\S]*function SocialPostLinkPreview[\s\S]*data-preview-kind="social_post"[\s\S]*data-native-state=[\s\S]*community-interaction-embed-social-native[\s\S]*<SocialPostFallback/,
-  "X previews should retain one immediate readable fallback while the official post renderer loads",
+  /function SocialPostLinkPreview[\s\S]*author_avatar_url[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-avatar[\s\S]*community-interaction-embed-social-identity[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>/,
+  "X previews should be one safe primary link containing only identity and post text",
 );
 assert.doesNotMatch(
   socialPreviewComponent,
-  /<img|mediaUrl|community-interaction-embed-media/,
-  "the Polynet fallback should not render attached provider media",
-);
-assert.match(
-  previewComponent,
-  /const X_WIDGETS_SCRIPT_URL = "https:\/\/platform\.x\.com\/widgets\.js";[\s\S]*function xPostIdFromUrl[\s\S]*host !== "x\.com" && host !== "twitter\.com"[\s\S]*\[0-9\]\{1,24\}[\s\S]*function loadXWidgets[\s\S]*X_WIDGETS_LOAD_TIMEOUT_MS[\s\S]*existing instanceof HTMLScriptElement/,
-  "official X posts should load lazily from a fixed provider script with a validated numeric post ID and compact privacy-aware options",
-);
-assert.match(
-  socialPreviewComponent,
-  /IntersectionObserver[\s\S]*createTweet\?\.\(postId, target, \{[\s\S]*cards: "hidden"[\s\S]*conversation: "none"[\s\S]*dnt: true[\s\S]*theme: "dark"/,
-  "native X rendering should defer until near the viewport and use compact privacy-aware options",
-);
-assert.match(
-  socialPreviewComponent,
-  /const failNative = \(\) => \{[\s\S]*target\.replaceChildren\(\);[\s\S]*setNativeFailed\(true\);[\s\S]*window\.setTimeout\(failNative, X_WIDGETS_RENDER_TIMEOUT_MS\)[\s\S]*nativeFailed \? "failed"/,
-  "deleted or provider-blocked X posts should resolve to the readable fallback instead of loading forever",
+  /community-interaction-embed-media|community-interaction-embed-social-mark|iframe|Reply|replies|Copy link|favorite_count|conversation_count/,
+  "compact X cards should omit attached media, provider marks, and action chrome",
 );
 assert.doesNotMatch(
   previewComponent,
-  /dangerouslySetInnerHTML/,
-  "provider oEmbed HTML must never be injected into the Polynet document",
+  /dangerouslySetInnerHTML|platform\.x\.com\/widgets\.js|createTweet/,
+  "X cards must not inject provider markup or load the oversized third-party widget",
 );
 assert.match(
-  previewCss,
-  /\.community-interaction-embed-social-shell\s*\{[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*\.community-interaction-embed-social-native\s*\{[\s\S]*visibility:\s*hidden;[\s\S]*\.community-interaction-embed-social-native\.is-ready\s*\{[\s\S]*visibility:\s*visible;[\s\S]*\.community-interaction-embed-social-native iframe\s*\{[\s\S]*max-width:\s*100% !important;/,
-  "the native X renderer should stay bounded and hidden until the provider confirms a rendered post",
+  interactionFunctions,
+  /function sanitizeXAuthorAvatarUrl[\s\S]*hostname\.toLowerCase\(\) === "pbs\.twimg\.com"[\s\S]*\^\\\/profile_images\\\/[\s\S]*const authorAvatarUrl = sanitizeXAuthorAvatarUrl/,
+  "the cloud boundary should independently constrain X avatars to provider profile images",
 );
 assert.match(
   previewComponent,

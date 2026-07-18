@@ -1,36 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { ExternalLink, Play } from "lucide-react";
+import { useState } from "react";
+import { BadgeCheck, ExternalLink, Play } from "lucide-react";
 import type { CommunityInteractionEmbed } from "../../../../shared/cloudCommunityInteractionsGateway";
-
-const X_WIDGETS_SCRIPT_ID = "polynet-x-widgets";
-const X_WIDGETS_SCRIPT_URL = "https://platform.x.com/widgets.js";
-const X_WIDGETS_LOAD_TIMEOUT_MS = 8_000;
-const X_WIDGETS_RENDER_TIMEOUT_MS = 8_000;
-
-type XWidgetsApi = {
-  _e?: Array<() => void>;
-  ready?: (callback: () => void) => void;
-  widgets?: {
-    createTweet?: (
-      postId: string,
-      target: HTMLElement,
-      options: {
-        cards: "hidden";
-        conversation: "none";
-        dnt: true;
-        theme: "dark";
-      },
-    ) => Promise<HTMLElement | undefined>;
-  };
-};
-
-declare global {
-  interface Window {
-    twttr?: XWidgetsApi;
-  }
-}
-
-let xWidgetsPromise: Promise<XWidgetsApi> | null = null;
 
 function hostnameOf(raw: string | null): string {
   try {
@@ -109,85 +79,36 @@ function activatedVideoUrl(raw: string): string {
   }
 }
 
-function xPostIdFromUrl(raw: string): string | null {
+function xAuthorHandleFromUrl(raw: string): string | null {
   try {
     const url = new URL(raw);
     const host = url.hostname.toLowerCase().replace(/^www\./, "");
     if (host !== "x.com" && host !== "twitter.com") return null;
-    return /\/status\/([0-9]{1,24})(?:\/|$)/i.exec(url.pathname)?.[1] ?? null;
+    const handle = /^\/([A-Za-z0-9_]{1,15})\/status\/[0-9]{1,24}(?:\/|$)/i.exec(url.pathname)?.[1] ?? null;
+    return handle && handle.toLowerCase() !== "i" ? handle : null;
   } catch {
     return null;
   }
 }
 
-function availableXWidgetsApi(): XWidgetsApi | null {
-  const api = window.twttr;
-  return typeof api?.widgets?.createTweet === "function" ? api : null;
+function approvedXAvatarUrl(raw: string | null): string | null {
+  const approved = approvedHttpsUrl(raw);
+  if (!approved) return null;
+  const url = new URL(approved);
+  return url.hostname.toLowerCase() === "pbs.twimg.com" && /^\/profile_images\//.test(url.pathname)
+    ? approved
+    : null;
 }
 
-function loadXWidgets(): Promise<XWidgetsApi> {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return Promise.reject(new Error("X widgets require a browser"));
-  }
-  const available = availableXWidgetsApi();
-  if (available) return Promise.resolve(available);
-  if (xWidgetsPromise) return xWidgetsPromise;
+function socialPostBody(raw: string | null): string {
+  return String(raw || "View this post on X")
+    .replace(/\s*(?:https?:\/\/)?pic\.(?:x|twitter)\.com\/\S+\s*$/i, "")
+    .replace(/\s+https:\/\/t\.co\/[A-Za-z0-9]+\s*$/i, "")
+    .trim();
+}
 
-  xWidgetsPromise = new Promise<XWidgetsApi>((resolve, reject) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      const api = availableXWidgetsApi();
-      if (!api) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      resolve(api);
-    };
-    const fail = () => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      const failedScript = document.getElementById(X_WIDGETS_SCRIPT_ID);
-      if (failedScript instanceof HTMLScriptElement && failedScript.src === X_WIDGETS_SCRIPT_URL) {
-        failedScript.remove();
-      }
-      reject(new Error("X widgets failed to load"));
-    };
-    const timeout = window.setTimeout(fail, X_WIDGETS_LOAD_TIMEOUT_MS);
-
-    if (!window.twttr) {
-      const queuedApi: XWidgetsApi = { _e: [] };
-      queuedApi.ready = (callback) => queuedApi._e?.push(callback);
-      window.twttr = queuedApi;
-    }
-    window.twttr.ready?.(finish);
-
-    const existing = document.getElementById(X_WIDGETS_SCRIPT_ID);
-    if (existing) {
-      if (!(existing instanceof HTMLScriptElement) || existing.src !== X_WIDGETS_SCRIPT_URL) {
-        fail();
-        return;
-      }
-      existing.addEventListener("load", finish, { once: true });
-      existing.addEventListener("error", fail, { once: true });
-      finish();
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.id = X_WIDGETS_SCRIPT_ID;
-    script.src = X_WIDGETS_SCRIPT_URL;
-    script.async = true;
-    script.referrerPolicy = "no-referrer";
-    script.addEventListener("load", finish, { once: true });
-    script.addEventListener("error", fail, { once: true });
-    document.head.appendChild(script);
-  }).catch((error) => {
-    xWidgetsPromise = null;
-    throw error;
-  });
-
-  return xWidgetsPromise;
+function authorInitial(raw: string): string {
+  return Array.from(raw.trim())[0]?.toUpperCase() || "X";
 }
 
 function VideoPreviewMetadata(props: { href: string; provider: string; title: string }) {
@@ -269,15 +190,18 @@ function VideoLinkPreview(props: {
   );
 }
 
-function SocialPostFallback(props: {
+function SocialPostLinkPreview(props: {
   embed: CommunityInteractionEmbed;
   href: string;
 }) {
   const author = props.embed.author_name || props.embed.title || "X post";
-  const body = props.embed.description || "View this post on X";
+  const handle = props.embed.author_handle || xAuthorHandleFromUrl(props.href);
+  const avatarUrl = approvedXAvatarUrl(props.embed.author_avatar_url);
+  const body = socialPostBody(props.embed.description);
   return (
     <a
       className="community-interaction-embed is-social-post"
+      data-preview-kind="social_post"
       href={props.href}
       target="_blank"
       rel="noreferrer noopener"
@@ -285,110 +209,25 @@ function SocialPostFallback(props: {
       onClick={(event) => event.stopPropagation()}
     >
       <div className="community-interaction-embed-social-header">
-        <span className="community-interaction-embed-social-author">{author}</span>
-        <span className="community-interaction-embed-provider">X</span>
+        <span className="community-interaction-embed-social-avatar" aria-hidden="true">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />
+          ) : (
+            <span>{authorInitial(author)}</span>
+          )}
+        </span>
+        <span className="community-interaction-embed-social-identity">
+          <span className="community-interaction-embed-social-author">{author}</span>
+          {props.embed.author_verified ? (
+            <BadgeCheck className="community-interaction-embed-social-verified" size={15} aria-label="Verified" />
+          ) : null}
+          {handle ? (
+            <span className="community-interaction-embed-social-handle">@{handle}</span>
+          ) : null}
+        </span>
       </div>
       <span className="community-interaction-embed-social-body">{body}</span>
     </a>
-  );
-}
-
-function SocialPostLinkPreview(props: {
-  embed: CommunityInteractionEmbed;
-  href: string;
-}) {
-  const postId = xPostIdFromUrl(props.href);
-  const shellRef = useRef<HTMLDivElement>(null);
-  const nativeHostRef = useRef<HTMLDivElement>(null);
-  const [shouldLoadNative, setShouldLoadNative] = useState(false);
-  const [nativeReady, setNativeReady] = useState(false);
-  const [nativeFailed, setNativeFailed] = useState(false);
-
-  useEffect(() => {
-    const shell = shellRef.current;
-    if (!postId || !shell) return;
-    if (typeof IntersectionObserver === "undefined") {
-      setShouldLoadNative(true);
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
-        setShouldLoadNative(true);
-        observer.disconnect();
-      },
-      { rootMargin: "240px 0px" },
-    );
-    observer.observe(shell);
-    return () => observer.disconnect();
-  }, [postId]);
-
-  useEffect(() => {
-    const target = nativeHostRef.current;
-    if (!postId || !shouldLoadNative || !target) return;
-    let cancelled = false;
-    target.replaceChildren();
-    setNativeReady(false);
-    setNativeFailed(false);
-    const failNative = () => {
-      if (cancelled) return;
-      cancelled = true;
-      target.replaceChildren();
-      setNativeReady(false);
-      setNativeFailed(true);
-    };
-    const renderTimeout = window.setTimeout(failNative, X_WIDGETS_RENDER_TIMEOUT_MS);
-
-    void loadXWidgets()
-      .then((api) =>
-        api.widgets?.createTweet?.(postId, target, {
-          cards: "hidden",
-          conversation: "none",
-          dnt: true,
-          theme: "dark",
-        }),
-      )
-      .then((rendered) => {
-        if (cancelled) {
-          target.replaceChildren();
-          return;
-        }
-        window.clearTimeout(renderTimeout);
-        if (!rendered) {
-          failNative();
-          return;
-        }
-        setNativeReady(true);
-      })
-      .catch(() => {
-        window.clearTimeout(renderTimeout);
-        failNative();
-      });
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(renderTimeout);
-      target.replaceChildren();
-    };
-  }, [postId, shouldLoadNative]);
-
-  return (
-    <div
-      ref={shellRef}
-      className="community-interaction-embed-social-shell"
-      data-preview-kind="social_post"
-      data-native-state={
-        nativeReady ? "ready" : nativeFailed ? "failed" : shouldLoadNative ? "loading" : "deferred"
-      }
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div
-        ref={nativeHostRef}
-        className={`community-interaction-embed-social-native${nativeReady ? " is-ready" : ""}`}
-        aria-hidden={!nativeReady}
-      />
-      {nativeReady ? null : <SocialPostFallback embed={props.embed} href={props.href} />}
-    </div>
   );
 }
 

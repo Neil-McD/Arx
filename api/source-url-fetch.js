@@ -6,6 +6,8 @@ import {
   extractInteractionOEmbedDiscoveryUrl,
   interactionOEmbedResponseUrlIsAllowed,
   interactionPreviewOpenGraphFallback,
+  interactionXSyndicationResponseUrlIsAllowed,
+  interactionXSyndicationUrl,
   normalizeInteractionOEmbedPreview,
 } from "./source-url-preview.mjs";
 
@@ -499,26 +501,48 @@ function extractOpenGraph(html, finalUrl) {
 async function resolveInteractionEmbedPreview(fetched, openGraph, options) {
   const fallback = interactionPreviewOpenGraphFallback(openGraph, fetched.finalUrl);
   const oEmbedUrl = extractInteractionOEmbedDiscoveryUrl(fetched.rawText, fetched.finalUrl);
-  if (!oEmbedUrl) return fallback;
-  try {
-    const oEmbedResponse = await fetchSourceUrl(oEmbedUrl, {
-      maxBytes: 64_000,
-      maxChars: 8_000,
-      timeoutMs: Math.min(options.timeoutMs, 6_000),
-      maxRedirects: Math.min(options.maxRedirects, 1),
-      accept: "application/json",
-    });
-    if (!interactionOEmbedResponseUrlIsAllowed(fetched.finalUrl, oEmbedResponse.finalUrl)) return fallback;
-    if (!normalizeContentType(oEmbedResponse.contentType).includes("application/json")) return fallback;
-    const oEmbed = JSON.parse(oEmbedResponse.rawText || "{}");
-    return normalizeInteractionOEmbedPreview({
-      sourceUrl: fetched.finalUrl,
-      openGraph,
-      oEmbed,
-    });
-  } catch {
-    return fallback;
-  }
+  const syndicationUrl = interactionXSyndicationUrl(fetched.finalUrl);
+  if (!oEmbedUrl && !syndicationUrl) return fallback;
+
+  const [oEmbed, syndication] = await Promise.all([
+    oEmbedUrl
+      ? fetchSourceUrl(oEmbedUrl, {
+          maxBytes: 64_000,
+          maxChars: 8_000,
+          timeoutMs: Math.min(options.timeoutMs, 6_000),
+          maxRedirects: Math.min(options.maxRedirects, 1),
+          accept: "application/json",
+        })
+          .then((response) => {
+            if (!interactionOEmbedResponseUrlIsAllowed(fetched.finalUrl, response.finalUrl)) return null;
+            if (!normalizeContentType(response.contentType).includes("application/json")) return null;
+            return JSON.parse(response.rawText || "{}");
+          })
+          .catch(() => null)
+      : Promise.resolve(null),
+    syndicationUrl
+      ? fetchSourceUrl(syndicationUrl, {
+          maxBytes: 128_000,
+          maxChars: 50_000,
+          timeoutMs: Math.min(options.timeoutMs, 6_000),
+          maxRedirects: Math.min(options.maxRedirects, 1),
+          accept: "application/json",
+        })
+          .then((response) => {
+            if (!interactionXSyndicationResponseUrlIsAllowed(fetched.finalUrl, response.finalUrl)) return null;
+            if (!normalizeContentType(response.contentType).includes("application/json")) return null;
+            return JSON.parse(response.rawText || "{}");
+          })
+          .catch(() => null)
+      : Promise.resolve(null),
+  ]);
+
+  return normalizeInteractionOEmbedPreview({
+    sourceUrl: fetched.finalUrl,
+    openGraph,
+    oEmbed,
+    syndication,
+  });
 }
 
 function extractReadableTextFromHtml(html, maxChars) {
