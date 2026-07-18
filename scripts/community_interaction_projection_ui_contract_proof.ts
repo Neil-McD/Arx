@@ -35,6 +35,10 @@ const mobileCommunityShell = read("apps/web/src/components/WebMobileCommunityShe
 const chromeHostPropsBuilder = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const linkPreview = read("apps/web/src/components/CommunityInteractionLinkPreview.tsx");
+const socialLinkPreview = linkPreview.slice(
+  linkPreview.indexOf("function SocialPostLinkPreview"),
+  linkPreview.indexOf("function GenericLinkPreview"),
+);
 const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
@@ -239,9 +243,14 @@ assert.match(
   "preview images should avoid leaking chat referrers to third-party media hosts",
 );
 assert.match(
-  linkPreview,
-  /function SocialPostLinkPreview[\s\S]*author_name[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*href=\{props\.href\}[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-content[\s\S]*community-interaction-embed-social-body[\s\S]*<img/,
-  "social previews should make the content card one safe primary link without duplicate blue actions",
+  socialLinkPreview,
+  /function SocialPostLinkPreview[\s\S]*author_name[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*href=\{props\.href\}[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-header[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>/,
+  "social previews should make the stacked text card one safe primary link without duplicate blue actions",
+);
+assert.doesNotMatch(
+  socialLinkPreview,
+  /<img|mediaUrl|community-interaction-embed-media/,
+  "meaningful-text social previews should omit attached media while media-led fallbacks remain generic cards",
 );
 assert.match(
   linkPreview,
@@ -977,8 +986,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-interaction-embed-play:focus-visible[\s\S]*\.community-interaction-embed-video-link:focus-visible[\s\S]*\.community-interaction-embed-summary[\s\S]*grid-template-columns:[\s\S]*\.community-interaction-embed-player[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-embed\.is-social-post\.has-media[\s\S]*height:\s*var\(--community-interaction-embed-row-height\);[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*3;[\s\S]*\.community-interaction-embed\.is-social-post \.community-interaction-embed-media[\s\S]*border-left:\s*1px solid var\(--stroke-default\);/,
-  "typed video and social previews should have horizontal rows, primary card navigation, and keyboard-visible controls",
+  /\.community-interaction-embed-play:focus-visible[\s\S]*\.community-interaction-embed-video-link:focus-visible[\s\S]*\.community-interaction-embed-summary[\s\S]*grid-template-columns:[\s\S]*\.community-interaction-embed-player[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-embed\.is-social-post[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*grid-template-rows:\s*auto 1fr;[\s\S]*\.community-interaction-embed-social-header[\s\S]*border-bottom:\s*1px solid var\(--stroke-default\);[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*5;/,
+  "video previews should retain horizontal play rows while social previews use stacked text cards with primary navigation",
 );
 assert.match(
   read("shared/linkEmbedUi.tsx"),
