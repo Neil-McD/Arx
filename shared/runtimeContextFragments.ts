@@ -10,6 +10,7 @@ import {
   renderRuntimeTurnEnvelopeForPrompt,
   type RuntimeTurnEnvelopeV1,
 } from "./runtimeTurnEnvelope.ts";
+import { runtimeCommunityContextReceiptTarget } from "./runtimeCommunityContextReceipt.ts";
 
 export const RUNTIME_CONTEXT_FRAGMENT_RENDER_BUDGET_CHARS = 12_000;
 
@@ -456,6 +457,8 @@ export function sortRuntimeContextRunEvents(
 }
 
 function readToolTarget(payload: Record<string, unknown>, toolName: string): string | null {
+  const receiptTarget = runtimeCommunityContextReceiptTarget(payload);
+  if (receiptTarget) return receiptTarget;
   const args = asRecord(payload.args);
   const details = asRecord(payload.details);
   const failureSemantics = asRecord(payload.failure_semantics);

@@ -44,6 +44,7 @@ import {
   normalizeMemberAgentImageMime,
   normalizeMemberAgentImageName,
 } from "../shared/memberAgentAttachments";
+import { projectRuntimeCommunityContextEventPayload } from "../shared/runtimeCommunityContextReceipt";
 
 type ThreadLike = {
   _id: any;
@@ -3407,10 +3408,14 @@ export const appendCloudRuntimeRunEvent = mutation({
     const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
     const createdAt =
       typeof args.createdAt === "number" && Number.isFinite(args.createdAt) ? Math.floor(args.createdAt) : nowMs;
+    const persistedPayload = projectRuntimeCommunityContextEventPayload({
+      eventType,
+      payload: args.payload,
+    });
     const runtimeHarnessTelemetrySummary = applyRuntimeHarnessTelemetryEvent({
       summary: run.runtimeHarnessTelemetrySummary,
       eventType,
-      payload: args.payload,
+      payload: persistedPayload,
     });
     const id = await ctx.db.insert("runtimeRunEvents", {
       ownerId,
@@ -3419,7 +3424,7 @@ export const appendCloudRuntimeRunEvent = mutation({
       seq,
       eventType,
       eventKey,
-      payload: args.payload,
+      payload: persistedPayload,
       createdAt,
     });
     await ctx.db.patch(run._id, {
@@ -3478,10 +3483,14 @@ export const appendCloudRuntimeRunEventInternal = internalMutation({
       typeof args.createdAt === "number" && Number.isFinite(args.createdAt)
         ? Math.floor(args.createdAt)
         : nowMs;
+    const persistedPayload = projectRuntimeCommunityContextEventPayload({
+      eventType,
+      payload: args.payload,
+    });
     const runtimeHarnessTelemetrySummary = applyRuntimeHarnessTelemetryEvent({
       summary: run.runtimeHarnessTelemetrySummary,
       eventType,
-      payload: args.payload,
+      payload: persistedPayload,
     });
     const id = await ctx.db.insert("runtimeRunEvents", {
       ownerId: args.ownerId,
@@ -3490,7 +3499,7 @@ export const appendCloudRuntimeRunEventInternal = internalMutation({
       seq,
       eventType,
       eventKey,
-      payload: args.payload,
+      payload: persistedPayload,
       createdAt,
     });
     await ctx.db.patch(run._id, {

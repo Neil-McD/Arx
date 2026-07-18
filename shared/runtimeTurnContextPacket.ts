@@ -15,6 +15,10 @@ import {
   type RuntimeContextRunEvent,
 } from "./runtimeContextFragments.ts";
 import type { RuntimeTurnEnvelopeV1 } from "./runtimeTurnEnvelope.ts";
+import {
+  runtimeCommunityContextReceiptResultSummary,
+  runtimeCommunityContextReceiptTarget,
+} from "./runtimeCommunityContextReceipt.ts";
 
 export type RuntimeTurnContextPacket = {
   latestUserText?: string | null;
@@ -183,6 +187,8 @@ function readToolAttemptCommandOrTarget(params: {
   failureSemantics: Record<string, unknown> | null;
 }): string | null {
   const toolName = params.toolName;
+  const receiptTarget = runtimeCommunityContextReceiptTarget(params.payload);
+  if (receiptTarget) return receiptTarget;
   if (toolName === "bash") {
     return (
       readAttemptString(params.failureSemantics, "command") ??
@@ -237,7 +243,8 @@ function normalizeRuntimeRecentToolAttempt(
   const failureSemantics = readNestedRecord(payload, "failure_semantics");
   const outputPreview =
     readAttemptString(payload, "output_preview", "output") ??
-    readAttemptString(details, "output_preview", "stdout_preview", "stderr_preview");
+    readAttemptString(details, "output_preview", "stdout_preview", "stderr_preview") ??
+    runtimeCommunityContextReceiptResultSummary(payload);
   const attempt: RuntimeRecentToolAttemptPrompt = {
     toolCallId: readAttemptString(payload, "tool_call_id", "toolCallId"),
     providerCallId: readAttemptString(payload, "provider_call_id", "providerCallId"),

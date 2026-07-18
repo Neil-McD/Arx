@@ -1,5 +1,9 @@
 import { isComputerUseToolName } from "./retrievalTools.ts";
 import type { CloudRuntimeRunEventTransportRow } from "./cloudThreadsRead";
+import {
+  readRuntimeCommunityContextReceipt,
+  runtimeCommunityContextReceiptTarget,
+} from "./runtimeCommunityContextReceipt.ts";
 
 export type RuntimeToolCategory =
   | "exploration"
@@ -101,7 +105,11 @@ function readRuntimeToolName(payload: Record<string, unknown> | null): string | 
 }
 
 function readRuntimeToolArgs(payload: Record<string, unknown> | null): Record<string, unknown> | null {
-  return asRecord(payload?.args) ?? asRecord(payload?.arguments) ?? parseJsonRecord(payload?.arguments);
+  const raw = asRecord(payload?.args) ?? asRecord(payload?.arguments) ?? parseJsonRecord(payload?.arguments);
+  if (raw) return raw;
+  if (!readRuntimeCommunityContextReceipt(payload)) return null;
+  const target = runtimeCommunityContextReceiptTarget(payload);
+  return target ? { ref: target, node_id: target } : {};
 }
 
 function normalizeInlineWhitespace(value: string): string {
