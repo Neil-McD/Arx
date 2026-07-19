@@ -5,6 +5,8 @@ EXPECTED_ROOT="/Users/neilmcdevitt/code/arx/.worktrees/semantic-platform-staging
 EXPECTED_BRANCH="codex/semantic-platform-staging-20260719"
 EXPECTED_UPSTREAM="origin/codex/semantic-platform-staging-20260719"
 EXPECTED_CONVEX_DEPLOYMENT="dev:quick-porcupine-949"
+EXPECTED_CONVEX_URL="https://quick-porcupine-949.convex.cloud"
+EXPECTED_CONVEX_SITE_URL="https://quick-porcupine-949.convex.site"
 EXPECTED_VERCEL_PROJECT_NAME="polynet-staging"
 EXPECTED_VERCEL_PROJECT_ID="prj_plXUH12pm9nZ5lWS5wJOt163maFL"
 EXPECTED_VERCEL_ORG_ID="team_TJvbi4UGtg62xteusiC1Cvxy"
@@ -29,17 +31,23 @@ ok() {
   echo "OK: $*"
 }
 
-read_local_selector() {
-  local key="$1"
-  local file="$ROOT_DIR/.env.staging.local"
+read_env_value() {
+  local file="$1"
+  local key="$2"
   local value=""
 
   if [[ -f "$file" ]]; then
-    value="$(awk -F= -v key="$key" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$file")"
+    value="$(awk -F= -v key="$key" '$1 == key { sub(/^[^=]*=/, ""); sub(/[[:space:]]+#.*/, ""); gsub(/^[[:space:]]+|[[:space:]]+$/, ""); print; exit }' "$file")"
     value="${value#\"}"
     value="${value%\"}"
   fi
   printf '%s' "$value"
+}
+
+read_local_selector() {
+  local key="$1"
+  local file="$ROOT_DIR/.env.staging.local"
+  read_env_value "$file" "$key"
 }
 
 require_local_selector() {
@@ -87,6 +95,17 @@ require_local_selector "POLYNET_DEPLOYMENT_KIND" "staging"
 require_local_selector "VERCEL_PROJECT_NAME" "$EXPECTED_VERCEL_PROJECT_NAME"
 require_local_selector "VERCEL_PROJECT_ID" "$EXPECTED_VERCEL_PROJECT_ID"
 require_local_selector "VERCEL_ORG_ID" "$EXPECTED_VERCEL_ORG_ID"
+
+if [[ -f "$ROOT_DIR/.env.local" ]]; then
+  git -C "$ROOT_DIR" check-ignore -q .env.local || fail ".env.local must remain ignored"
+  local_convex_deployment="$(read_env_value "$ROOT_DIR/.env.local" "CONVEX_DEPLOYMENT")"
+  local_convex_url="$(read_env_value "$ROOT_DIR/.env.local" "VITE_CONVEX_URL")"
+  local_convex_site_url="$(read_env_value "$ROOT_DIR/.env.local" "VITE_CONVEX_SITE_URL")"
+  [[ "$local_convex_deployment" == "$EXPECTED_CONVEX_DEPLOYMENT" ]] || fail ".env.local CONVEX_DEPLOYMENT must be staging, got ${local_convex_deployment:-missing}"
+  [[ "$local_convex_url" == "$EXPECTED_CONVEX_URL" ]] || fail ".env.local VITE_CONVEX_URL must be the staging client URL"
+  [[ "$local_convex_site_url" == "$EXPECTED_CONVEX_SITE_URL" ]] || fail ".env.local VITE_CONVEX_SITE_URL must be the staging HTTP actions URL"
+  ok ".env.local is bound to Convex staging"
+fi
 
 PROJECT_JSON="$ROOT_DIR/.vercel/project.json"
 [[ -f "$PROJECT_JSON" ]] || fail ".vercel/project.json is required"
