@@ -42,6 +42,50 @@ This is the canonical path. Do not rely on branch names, preview URLs, or old Ve
 - Do not run direct local Vercel production deploys from a worktree snapshot.
 - If the Git-based release path is blocked, fix the Git path instead of bypassing it.
 
+## Semantic Platform Staging Lane
+
+The semantic-platform program uses one isolated non-production integration lane:
+
+- worktree: `/Users/neilmcdevitt/code/arx/.worktrees/semantic-platform-staging-20260719`
+- branch: `codex/semantic-platform-staging-20260719`
+- Vercel project: `polynet-staging`
+- Convex deployment: `dev:quick-porcupine-949`
+- deployment kind: `staging`
+
+This lane begins at the exact production web commit but never deploys from `main`.
+The existing semantic feature worktree is source material only; transfer one clean,
+reviewable changeset at a time into the staging lane.
+
+Before any staging operation, run:
+
+```bash
+npm run check:semantic-platform-staging
+npm run check:semantic-platform-staging-proof
+```
+
+The guard fails closed unless the worktree, branch, upstream, Vercel project, and
+Convex selector are the exact non-production identities above. It also rejects
+deploy-key authority and production-shaped selectors. The ignored
+`.env.staging.local` and `.vercel/project.json` files must remain local.
+
+Web staging releases are Git-based. Do not run direct local Vercel deploy,
+promote, alias, or rollback commands. Use the stable production domain owned by
+the `polynet-staging` project after its Git production branch is set to the
+semantic staging branch. The short `polynet-staging.vercel.app` alias currently
+points at a historical preview and is not staging truth.
+
+When a slice changes Convex code or schema, deploy staging Convex first from the
+exact clean commit:
+
+```bash
+npm run deploy:semantic-platform-staging-convex
+```
+
+Then allow the staging Vercel project to deploy the same Git commit. Verify the
+staging build marker and signed-in behavior before considering any separate
+production release. Recheck the production build marker afterward; staging work
+never grants permission to change production.
+
 ## Release Types
 
 ### Community-first transition release
