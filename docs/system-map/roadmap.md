@@ -6,6 +6,10 @@ This is a plan, not authorization. Every implementation slice gets its own clean
 
 The aggregate staging shape work in Step 0 is complete for identity/membership compatibility, legacy interactions/resources/retrieval, Builder Partner state, anonymous users, scheduler thresholds, and selected retention tables. The two blocking product decisions are also recorded: Builder Partner is retained as a secondary capability under a prospective community-only 4% model, and account deletion must preserve/anonymize shared state while deleting private state. Exact retention periods and several unrelated architecture decisions remain open, but they do not block the first isolated safety fixture.
 
+## Current implementation checkpoint
+
+The account-deletion safety fixture, declarative lifecycle ownership policy, Builder Partner v3 economics, and removal of the unreachable legacy deletion executor are complete on the isolated staging lane. The insecure session-ID fallback identified by F-003 is also removed: session creation and rotation now require secure UUID generation and fail retryably before credential effects. The next candidate to evaluate is F-004, honest and recoverable logout revocation; the quarantined deletion lifecycle remains downstream of live auth-boundary hardening.
+
 ## Step 0 — Freeze decisions and gather minimum live shape
 
 No product write.
@@ -117,6 +121,6 @@ Exit proof: smaller retained surface, lower change fan-out, bounded costs, and n
 2. Automate release evidence, migration zero-observation, fairness SLOs, orphan audits, dependency policy, and privacy lifecycle receipts.
 3. Accelerate only after deletion and invariant closure; automation must not perpetuate compatibility or deferred obligations.
 
-## Recommended immediate next slice
+## Historical first implementation recommendation
 
 The first implementation slice should be the smallest isolated account-deletion safety proof: create two synthetic users with a shared DM and community-owned contribution, characterize the current mutation, and add a fail-closed guard only if the destructive behavior is reproduced. Do not invoke deletion against staging data. This comes before Builder Partner v3 because it contains an irreversible cross-user data-loss path; monetization drift is financially important but can be migrated prospectively without destroying existing obligations. The second slice is the Builder Partner v3 policy/terms/ledger migration in Step 2; the complete deletion lifecycle follows in Step 3.

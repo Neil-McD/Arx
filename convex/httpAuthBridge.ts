@@ -1,6 +1,10 @@
 import { internal } from "./_generated/api";
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
-import { normalizeStoredState } from "./authSessions";
+import {
+  AUTH_SECURE_RANDOM_UNAVAILABLE,
+  createSecureAuthSessionId,
+  normalizeStoredState,
+} from "./authSessions";
 import { normalizeEmailForVerification, resolveTrustedEmailVerification } from "./workosEmailVerification";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
@@ -21,6 +25,7 @@ type RegisterRuntimeAuthBridgeRoutesArgs = {
   jsonResponse: (req: Request, status: number, payload: unknown) => Response;
   optionsResponse: (req: Request) => Response;
   parseOptionalString: (raw: unknown, maxLen: number) => string | null;
+  createSessionId?: () => string;
 };
 
 function readEnv(name: string): string {
@@ -42,14 +47,6 @@ function hasValidBridgeSecret(req: Request): boolean {
   if (!expected) return false;
   const provided = String(req.headers.get("x-arx-auth-bridge-secret") ?? "").trim();
   return Boolean(provided) && provided === expected;
-}
-
-function buildSessionId(): string {
-  try {
-    return crypto.randomUUID();
-  } catch {
-    return `sess_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
-  }
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -212,6 +209,7 @@ function mapBridgeSessionActionResult(
 
 export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeRoutesArgs): void {
   const { http, httpAction, jsonResponse, optionsResponse, parseOptionalString } = args;
+  const createSessionId = args.createSessionId ?? createSecureAuthSessionId;
 
   const registerOptions = (path: string) => {
     http.route({
@@ -271,6 +269,17 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
           avatarUrl: verified.identity.avatarUrl ?? stored.user.avatarUrl ?? null,
         },
       };
+      let sessionId: string;
+      try {
+        sessionId = createSessionId();
+      } catch {
+        return jsonResponse(req, 503, {
+          ok: false,
+          code: AUTH_SECURE_RANDOM_UNAVAILABLE,
+          error: AUTH_SECURE_RANDOM_UNAVAILABLE,
+          message: "Secure session creation is temporarily unavailable.",
+        });
+      }
       const normalizedStoredEmail = normalizeEmailForVerification(normalizedStored.user.email);
       const identityEmailMatchesStored =
         Boolean(verified.identity.email) &&
@@ -297,7 +306,6 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
         nowMs: Date.now(),
       });
 
-      const sessionId = buildSessionId();
       await ctx.runMutation(internal.authSessions.createAuthSessionInternal as any, {
         sessionId,
         authSubject,

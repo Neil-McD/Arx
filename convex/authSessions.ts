@@ -38,6 +38,10 @@ type AuthSessionRow = {
 const DEFAULT_OAUTH_SCOPE = "openid profile email offline_access";
 const WORKOS_AUTHENTICATE_UPSTREAM_URL = "https://api.workos.com/user_management/authenticate";
 const MAX_SESSION_CHAIN_DEPTH = 8;
+export const AUTH_SECURE_RANDOM_UNAVAILABLE = "auth_secure_random_unavailable" as const;
+
+const SECURE_AUTH_SESSION_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function normalizeString(value: unknown): string {
   return String(value ?? "").trim();
@@ -336,12 +340,27 @@ function readEnv(name: string): string {
   return "";
 }
 
-function buildSessionId(): string {
+export function createSecureAuthSessionId(
+  randomUuid: () => string = () => crypto.randomUUID(),
+): string {
   try {
-    return crypto.randomUUID();
+    const sessionId = randomUuid();
+    if (typeof sessionId !== "string" || !SECURE_AUTH_SESSION_ID_PATTERN.test(sessionId)) {
+      throw new Error(AUTH_SECURE_RANDOM_UNAVAILABLE);
+    }
+    return sessionId;
   } catch {
-    return `sess_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    throw new Error(AUTH_SECURE_RANDOM_UNAVAILABLE);
   }
+}
+
+export async function prepareSecureAuthSessionRotation<T>(args: {
+  refreshUpstream: () => Promise<T>;
+  createSessionId?: () => string;
+}): Promise<{ newSessionId: string; refreshed: T }> {
+  const newSessionId = (args.createSessionId ?? createSecureAuthSessionId)();
+  const refreshed = await args.refreshUpstream();
+  return { newSessionId, refreshed };
 }
 
 function resolveOAuthAuthorizeUrl(): string {
@@ -964,9 +983,10 @@ export const refreshAuthSessionInternal = internalAction({
     const nowSec = Math.floor(Date.now() / 1000);
     try {
       const upstreamRefreshStartedAt = Date.now();
-      const refreshed = await refreshUpstreamSession(stored);
+      const { newSessionId, refreshed } = await prepareSecureAuthSessionRotation({
+        refreshUpstream: async () => await refreshUpstreamSession(stored),
+      });
       const upstreamRefreshMs = Date.now() - upstreamRefreshStartedAt;
-      const newSessionId = buildSessionId();
       await ctx.runMutation(internal.authSessions.rotateAuthSessionInternal as any, {
         currentSessionId: resolved.resolvedSessionId,
         newSessionId,

@@ -42,6 +42,11 @@ Desktop auth is now:
 
 This removes browser-owned refresh-token continuity from the desktop path.
 
+Opaque session identifiers are generated only with `crypto.randomUUID()`. If
+secure randomness is unavailable, session creation and rotation fail retryably;
+the runtime must not issue a weaker identifier, mutate session authority, or
+clear a still-valid browser session merely to preserve availability.
+
 ## 3) WorkOS AuthKit Mapping
 
 Given `AUTHKIT_DOMAIN`:
