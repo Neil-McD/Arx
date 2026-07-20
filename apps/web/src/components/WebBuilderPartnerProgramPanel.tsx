@@ -220,7 +220,7 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
               <span className="builder-partner-kicker">Platform partner program</span>
               <h2>{isActive ? "Your Builder Partner account is active." : "Bring builders to Polynet and share in the value they create."}</h2>
               <p>
-                Builder Partners can earn up to {formatBps(BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS)}
+                Builder Partners can earn up to {formatBps(BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS)}{" "}
                 of eligible settled community revenue. Partner links are generated automatically when
                 the requirements are met.
               </p>
