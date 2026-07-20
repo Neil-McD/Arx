@@ -61,12 +61,17 @@ Before any staging operation, run:
 ```bash
 npm run check:semantic-platform-staging
 npm run check:semantic-platform-staging-proof
+npm run check:semantic-platform-staging-remote
 ```
 
 The guard fails closed unless the worktree, branch, upstream, Vercel project, and
 Convex selector are the exact non-production identities above. It also rejects
 deploy-key authority and production-shaped selectors. The ignored
 `.env.staging.local` and `.vercel/project.json` files must remain local.
+The read-only remote guard requires an authenticated Vercel CLI. It verifies that
+the `polynet-staging` project tracks the canonical staging branch, automatically
+assigns production domains, and owns `polynet-staging.vercel.app` without a stale
+branch, redirect, or custom-environment override.
 
 Web staging releases are Git-based. Do not run direct local Vercel deploy,
 promote, alias, or rollback commands. Use the stable production domain owned by

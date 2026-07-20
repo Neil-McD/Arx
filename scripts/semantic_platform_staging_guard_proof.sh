@@ -6,7 +6,9 @@ VERCEL_DIR="$ROOT_DIR/.vercel"
 PROJECT_JSON="$VERCEL_DIR/project.json"
 LOCAL_ENV="$ROOT_DIR/.env.local"
 GUARD="$ROOT_DIR/scripts/semantic_platform_staging_guard.sh"
+REMOTE_GUARD="$ROOT_DIR/scripts/semantic_platform_staging_remote_guard.sh"
 DEPLOY_SCRIPT="$ROOT_DIR/scripts/deploy_semantic_platform_staging_convex.sh"
+PACKAGE_JSON="$ROOT_DIR/package.json"
 BACKUP_DIR="$(mktemp -d)"
 OUTPUT_FILE="$BACKUP_DIR/guard.out"
 
@@ -35,6 +37,28 @@ if grep -q 'requires HEAD to match' "$GUARD"; then
   exit 1
 fi
 echo "OK: staging Convex deploy is bound to the clean dev-deployment path"
+
+grep -q 'check:semantic-platform-staging-remote' "$PACKAGE_JSON" || {
+  echo "FAIL: package scripts must expose the remote staging authority guard" >&2
+  exit 1
+}
+grep -q 'autoAssignCustomDomains' "$REMOTE_GUARD" || {
+  echo "FAIL: remote staging guard must verify automatic domain assignment" >&2
+  exit 1
+}
+grep -q 'EXPECTED_PRODUCTION_BRANCH="codex/semantic-platform-staging-20260719"' "$REMOTE_GUARD" || {
+  echo "FAIL: remote staging guard must verify the canonical staging production branch" >&2
+  exit 1
+}
+grep -q 'EXPECTED_DOMAIN="polynet-staging.vercel.app"' "$REMOTE_GUARD" || {
+  echo "FAIL: remote staging guard must verify the canonical short staging domain" >&2
+  exit 1
+}
+grep -q 'domain_git_branch.*== "null"' "$REMOTE_GUARD" || {
+  echo "FAIL: remote staging guard must reject branch overrides on the production domain" >&2
+  exit 1
+}
+echo "OK: remote staging authority guard protects automatic canonical-domain promotion"
 
 cleanup() {
   rm -rf "$VERCEL_DIR"
