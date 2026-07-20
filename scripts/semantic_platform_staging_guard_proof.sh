@@ -26,6 +26,14 @@ if grep -q 'convex deploy' "$DEPLOY_SCRIPT"; then
   echo "FAIL: staging Convex deploy must not use convex deploy" >&2
   exit 1
 fi
+grep -q 'remote_ahead.*== "0"' "$GUARD" || {
+  echo "FAIL: release guard must reject a remote branch that is ahead or divergent" >&2
+  exit 1
+}
+if grep -q 'requires HEAD to match' "$GUARD"; then
+  echo "FAIL: release guard must allow a clean local-ahead commit for Convex-first staging" >&2
+  exit 1
+fi
 echo "OK: staging Convex deploy is bound to the clean dev-deployment path"
 
 cleanup() {

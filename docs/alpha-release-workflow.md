@@ -81,6 +81,11 @@ exact clean commit:
 npm run deploy:semantic-platform-staging-convex
 ```
 
+The release guard permits that clean commit to be ahead of the staging upstream
+only when the upstream is an ancestor of `HEAD`; it rejects behind or divergent
+history. This preserves Convex-first ordering before the exact same commit is
+pushed for the Git-based web deployment.
+
 Then allow the staging Vercel project to deploy the same Git commit. Verify the
 staging build marker and signed-in behavior before considering any separate
 production release. Recheck the production build marker afterward; staging work

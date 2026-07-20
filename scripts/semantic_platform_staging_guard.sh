@@ -130,9 +130,9 @@ ok "no forbidden generated or environment files are staged"
 
 if [[ "$RELEASE_MODE" == "true" ]]; then
   [[ -z "$(git -C "$ROOT_DIR" status --porcelain=v1)" ]] || fail "release mode requires a clean worktree"
-  divergence="$(git -C "$ROOT_DIR" rev-list --left-right --count 'HEAD...@{upstream}')"
-  [[ "$divergence" == $'0\t0' || "$divergence" == "0 0" ]] || fail "release mode requires HEAD to match $EXPECTED_UPSTREAM, got $divergence"
-  ok "release commit is clean and matches its remote staging branch"
+  read -r local_ahead remote_ahead <<<"$(git -C "$ROOT_DIR" rev-list --left-right --count 'HEAD...@{upstream}')"
+  [[ "$remote_ahead" == "0" ]] || fail "release mode requires $EXPECTED_UPSTREAM to be an ancestor of HEAD, got ${local_ahead:-?} ahead and ${remote_ahead:-?} behind"
+  ok "release commit is clean and descends from its remote staging branch (${local_ahead:-0} local commit(s) ahead)"
 fi
 
 echo "PASS: semantic platform staging identity is isolated from production."
