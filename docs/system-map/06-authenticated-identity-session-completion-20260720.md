@@ -92,6 +92,6 @@ Accepted on the staging code commit `b03b7eac16c6dc99e4436e96d66e465eb086969c`:
 - the already-signed-in pre-cutover browser session survived migration and final schema deletion;
 - a reload on the deployed build remained at `/c/polynet/chat`, rendered the authenticated profile and `Active now`, showed no sign-in control, and emitted zero browser warnings/errors;
 - the post-reload full scan remained exactly 1,069 rows with zero malformed hashes, invalid revisions, expired/missing lifetimes, legacy fields, or scan overflow;
-- production was not pushed, deployed, queried, or mutated.
+- production was not pushed, deployed, data-queried, or mutated; its public version marker remained `a936dee72a65f91723f332779390210e4cf783f0`.
 
 This completes the slice at 8/10 across all five dimensions within the declared boundary.
