@@ -8,7 +8,7 @@ The aggregate staging shape work in Step 0 is complete for identity/membership c
 
 ## Current implementation checkpoint
 
-The account-deletion safety fixture, declarative lifecycle ownership policy, Builder Partner v3 economics, and removal of the unreachable legacy deletion executor are complete on the isolated staging lane. The insecure session-ID fallback identified by F-003 is removed: session creation and rotation require secure UUID generation and fail retryably before credential effects. F-004 is also closed at the code-contract level: browser state and cookies clear only after canonical Polynet session revocation is confirmed, local revocation precedes bounded best-effort provider logout, and ambiguous failures remain retryable. After staging release proof, the next identity candidate is F-001, removing the full-user auth scan through a measured normalized-identity migration; the quarantined deletion lifecycle remains downstream of live auth-boundary hardening.
+The account-deletion safety fixture, declarative lifecycle ownership policy, Builder Partner v3 economics, and removal of the unreachable legacy deletion executor are complete on the isolated staging lane. The insecure session-ID fallback identified by F-003 is removed: session creation and rotation require secure UUID generation and fail retryably before credential effects. F-004 is also closed at the code-contract level: browser state and cookies clear only after canonical Polynet session revocation is confirmed, local revocation precedes bounded best-effort provider logout, and ambiguous failures remain retryable. F-001 is now closed at the code-contract level: verified `authSubject` is the sole actor-binding authority, and the full-user email scan, implicit relink residue, duplicate preview, dead continuity payload, and unused users-email indexes are removed without live data migration. The quarantined deletion lifecycle remains downstream of live auth-boundary hardening.
 
 ## Step 0 — Freeze decisions and gather minimum live shape
 
@@ -57,7 +57,7 @@ Exit proof: interruption at every phase resumes safely; other-party/community st
 
 1. Remove insecure session-ID fallback and prove fail-closed behavior.
 2. Make logout revocation/recovery honest and recoverable.
-3. Measure/migrate normalized identity data; remove full-user auth scan.
+3. **Complete on staging:** make verified `authSubject` the sole account-binding authority; remove the full-user email scan and inactive relink/continuity compatibility without migrating profile data.
 4. Deduplicate memberships, require explicit active state, repair cached counts, and prove concurrency behavior.
 5. Tighten join-request state vocabulary.
 6. Consolidate entitlement resolution into one bounded deterministic owner.

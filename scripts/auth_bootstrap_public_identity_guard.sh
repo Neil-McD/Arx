@@ -43,7 +43,7 @@ reject_multiline_match() {
 
 echo "[1/4] Ensuring bootstrapActor returns authSubject for authenticated sessions..."
 require_multiline_match "$AUTH_FILE" \
-  'export const bootstrapActor = mutation\([\s\S]*?ensureAuthenticatedActorDetailed\([\s\S]*?return \{[\s\S]*?authSubject: actor\.authSubject,' \
+  'export const bootstrapActor = mutation\([\s\S]*?ensureAuthenticatedActor\([\s\S]*?return \{[\s\S]*?authSubject: actor\.authSubject,' \
   "bootstrapActor returns authSubject"
 
 echo "[2/4] Ensuring getActor returns authSubject for authenticated sessions..."

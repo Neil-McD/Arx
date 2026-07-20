@@ -9,7 +9,7 @@ The bounded aggregate audit resolved or narrowed these questions for the isolate
 | IDs | Resolution |
 | --- | --- |
 | U-001 | no duplicate auth subjects, normalized emails, or community slugs in complete scans |
-| U-002 | only one email-bearing user lacks normalized email; runtime index-miss frequency remains unknown |
+| U-002 | resolved by deletion: only one email-bearing user lacked normalized email, but email lookup/relink and its fallback scan were removed; index-miss frequency is no longer a runtime concern |
 | U-003 | no ambiguous latest entitlement timestamp; two users have multiple rows and one has 13 |
 | U-004 | no duplicate membership pairs; 35 communities lack cached active-member count and two owner-membership residues exist |
 | U-005 | zero memberships omit `active` |
@@ -35,7 +35,7 @@ Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-stagin
 | ID | Unknown | Why it matters | Smallest safe evidence |
 | --- | --- | --- | --- |
 | U-001 | Are auth subjects, normalized emails, and community slugs unique in staging? | application-level uniqueness can drift | duplicate counts only |
-| U-002 | How many users lack normalized email and how often does auth scan? | decides whether compatibility can be deleted | counts plus index-miss counter |
+| U-002 | **Resolved:** the actor path no longer queries by email or scans users; the one missing derived profile value does not affect account authority. | removes an unbounded auth cost and alternate binding authority | behavior fixture plus structural no-scan guard |
 | U-003 | Can equal/latest entitlement rows disagree? | deterministic tier resolution | histogram and ambiguous-timestamp count |
 | U-004 | Are membership pairs duplicated or cached counts divergent? | access and visible member totals | aggregate duplicate/state/count deltas |
 | U-005 | How many memberships omit `active`, and which writer created them? | fail-open compatibility removal | state by creation epoch/writer lineage |

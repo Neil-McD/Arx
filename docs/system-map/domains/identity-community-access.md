@@ -34,7 +34,7 @@ All five are MVP core. UI, prompts, manifests, and agent-selected arguments are 
 
 ### Authentication and actor resolution
 
-`authIdentity` asks Convex for a verified identity. If an explicit subject disagrees, it fails with `auth_subject_mismatch`; absent verified identity fails closed unless an explicitly configured fallback is allowed. The fallback itself is limited by environment logic to development/test. `authActor` then maps the subject to the canonical `users` row and rejects supplied-user mismatches.
+`authIdentity` asks Convex for a verified identity. If an explicit subject disagrees, it fails with `auth_subject_mismatch`; absent verified identity fails closed unless an explicitly configured fallback is allowed. The fallback itself is limited by environment logic to development/test. `authActor` then maps the subject to the canonical `users` row through `by_authSubject` and rejects supplied-user mismatches. Email and its verification metadata may update the already-selected profile, but they cannot select or rebind an account.
 
 The good invariant is clear: caller-supplied identity is an assertion, never authority. The focused verified-identity and public-identity guards pass.
 
@@ -86,7 +86,7 @@ Let `U` be users, `E` entitlement rows for one user, `M` membership rows for a c
 
 | Path | Current order | Why it matters |
 | --- | --- | --- |
-| Email compatibility lookup during actor continuity | indexed query, then worst-case `O(U)` full scan on miss | It is invoked before checking whether production email relink is enabled; auth cost grows with the entire user base. |
+| Actor provisioning | one indexed `by_authSubject` lookup plus one indexed entitlement lookup | Cost is independent of unrelated users; email never selects the actor. |
 | Platform tier resolution | `O(E log E)` per resolver call | Three implementations repeat the collect/filter/sort rule; history grows with grants and billing syncs. |
 | Membership selection for one pair | `O(D log D)` | Schema does not enforce uniqueness; multiple current rows are resolved in application code. |
 | Active member count synchronization | `O(M)` per transition | It scans all community membership rows and counts rows, not distinct users; duplicate active rows can overcount. |
@@ -109,7 +109,7 @@ Let `U` be users, `E` entitlement rows for one user, `M` membership rows for a c
 | --- | --- | --- | ---: | --- |
 | Verified actor, community owner, membership, block, and entitlement authority | `KEEP (MVP core)` | `HARDEN` | 0 | Physically required to make gated communities secure. Owner: identity/access. |
 | Three platform-tier resolution implementations | `KEEP (MVP core)` | `CONSOLIDATE`, `BOUND` | 7 | The job is required; three copies of the same append-history rule are not. Owner: platform entitlement. |
-| Full-user email compatibility scan on the auth path | `KEEP (MVP core)` | `MIGRATE_THEN_DELETE`, `BOUND` | 8 | Legacy email normalization is useful only until indexed data is complete; global scanning is not an acceptable steady-state requirement. Owner: auth continuity. |
+| Full-user email compatibility scan and implicit relink | `DELETE (deferred/dead)` | `DELETE` complete | 10 | Verified subject is the account authority; mutable email must not scan for or silently seize another account. Owner: auth identity. |
 | Insecure session-ID randomness fallback | `KEEP (MVP core)` | `HARDEN` | 10 | Availability fallback cannot justify weakening a credential identifier; secure generation should fail closed. Owner: auth session. |
 | Duplicate membership-row compatibility and absent-`active` fallback | `DECISION REQUIRED (user confirmation)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 7 | Removal is desirable but unsafe without bounded staging distributions and a uniqueness migration plan. Owner: community access. |
 | Deprecated `communities.memberOnboarding` field | `DELETE (deferred/dead)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 9 | Schema says current product code never reads/writes it; stored-value and migration completion must be verified first. Owner: schema lifecycle. |
@@ -118,4 +118,4 @@ Let `U` be users, `E` entitlement rows for one user, `M` membership rows for a c
 
 ## Proof posture
 
-The current proof suite gives strong structural and deterministic policy evidence. It does not yet prove live provider revocation, concurrent uniqueness, high-cardinality performance, deletion recovery, or signed-in staging behavior. Those remain explicit unknowns rather than hidden assumptions.
+The current proof suite gives strong structural and deterministic policy evidence. The focused actor fixture proves same-subject idempotency, distinct accounts for equal verified emails, fail-closed supplied-ID mismatch, one default entitlement, and absence of the relink/full-scan surface. It does not yet prove live provider revocation, concurrent uniqueness, deletion recovery, or signed-in staging behavior. Those remain explicit unknowns rather than hidden assumptions.

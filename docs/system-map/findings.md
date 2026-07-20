@@ -8,7 +8,7 @@ For table compactness, `KEEP`, `DELETE`, and `DECISION REQUIRED` are exact short
 
 | ID | Pri | Finding | Classification / action | Confidence | Cheapest falsifier |
 | --- | --- | --- | --- | --- | --- |
-| F-001 | P0 | Auth continuity uses indexed normalized email then scans every user on an index miss before checking whether production relink is enabled; worst case `O(U)` (`authActor.ts:185-198,294-304`). | `KEEP`; `BOUND`, `MIGRATE_THEN_DELETE` | confirmed source | redacted count/instrumentation of index misses and legacy rows |
+| F-001 | P0 | **Resolved on staging:** actor provisioning now selects accounts only by indexed `authSubject`. The `O(U)` email fallback, local-only relink path, duplicate resolution preview, dead continuity payload, and unused users-email indexes were deleted without migrating user data. | `KEEP`; compatibility `DELETE` complete | behavioral and structural proof | `authActorSubjectAuthority.test.ts` |
 | F-002 | P1 | Account-tier selection is separately implemented in `auth.ts`, `entitlements.ts`, and `gates.ts`; each collects/sorts history, `O(E log E)`. | `KEEP`; `CONSOLIDATE`, `BOUND` | confirmed source | one shared-resolver parity proof |
 | F-003 | P0 | Two session-ID generators fall back to predictable `Math.random()` plus time if secure UUID generation throws. | `KEEP`; `HARDEN` | confirmed source | forced RNG-failure test requiring fail-closed behavior |
 | F-004 | P0 | Browser logout clears the cookie and returns success after bridge revocation failure, potentially stranding a live server/provider session. | `KEEP`; `HARDEN`, `OBSERVE_FIRST` | source confirmed; consequence inferred | fake bridge failure and server-session assertion |
@@ -95,5 +95,7 @@ The bounded 2026-07-20 audit materially changes confidence and sequencing:
 - 67 legacy chat messages/links, two inline resource bodies, five raw-query retrieval receipts, and one legacy-unversioned intelligence node remain;
 - Builder Partner contains active/payable/pending financial state described by F-022, F-023, and F-050; the capability is retained, so that state now requires versioned migration rather than wind-down;
 - current staging is below the no-cursor cron thresholds, so F-031 through F-034 are latent scale defects rather than present starvation.
+
+The post-audit F-001 slice rejected the initial migrate-first assumption. Email remains mutable profile data, while verified `authSubject` is the sole account-binding authority; the one observed missing derived `normalizedEmail` value therefore did not justify preserving or migrating an inactive relink mechanism.
 
 Exact bounds and caveats: [`04-staging-shape-audit-20260720.md`](04-staging-shape-audit-20260720.md).

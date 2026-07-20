@@ -2,7 +2,7 @@ import { internal } from "./_generated/api";
 import { action, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  ensureAuthenticatedActorDetailed,
+  ensureAuthenticatedActor,
   findAuthenticatedActorState,
   resolveAuthenticatedActor,
 } from "./authActor";
@@ -147,7 +147,7 @@ export const bootstrapActor = mutation({
         identity,
         email: args.email,
       });
-      const { actor, continuity } = await ensureAuthenticatedActorDetailed({
+      const actor = await ensureAuthenticatedActor({
         ctx,
         authSubject: identity.authSubject,
         email: seededProfile.email,
@@ -187,7 +187,6 @@ export const bootstrapActor = mutation({
         avatarUrl: actor.avatarUrl,
         createdAt: actor.createdAt,
         updatedAt: actor.updatedAt,
-        continuity,
       };
     }
 

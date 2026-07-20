@@ -119,7 +119,7 @@ Operational tables already show retention pressure: 257 critical audit events, 7
 | missing membership `active` compatibility | prevalence unknown | zero rows in complete staging scan; eligible for a guarded removal slice |
 | duplicate memberships | prevalence unknown | zero pairs in complete staging scan; retain concurrency proof before uniqueness redesign |
 | deprecated `memberOnboarding` | prevalence unknown | zero rows; strongest schema deletion candidate |
-| auth email full-scan compatibility | unknown backlog | one email-bearing row lacks normalization; migrate that shape before removal |
+| auth email full-scan compatibility | unknown backlog | one email-bearing row lacks normalization; the later subject-authority slice deleted relink compatibility without requiring a data migration |
 | revoked-session prune | theoretical scale concern | table exceeds 5,000 and bounded prefix is 94% revoked; operationally material |
 | anonymous cleanup | possibly dead | 56 anonymous accounts; do not delete cleanup until creation/reference lifecycle is understood |
 | account deletion shared-data risk | source-only | all four DMs are shared; real staging blast radius confirmed |

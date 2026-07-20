@@ -1,7 +1,6 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
-import { isAnonymousAuthSubject, normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
 
 type UserRow = {
   _id: any;
@@ -28,54 +27,6 @@ export type AuthenticatedActor = {
   updatedAt: number;
 };
 
-export type AuthContinuityResolutionPath =
-  | "subject_match"
-  | "email_relink"
-  | "ambiguous_email"
-  | "missing_verified_email"
-  | "new_user";
-
-export type AuthContinuityResolutionBlocker =
-  | "missing_email"
-  | "email_not_verified"
-  | "ambiguous_email_candidates"
-  | "no_matching_email_candidate"
-  | "email_relink_disabled"
-  | "requested_user_id_mismatch";
-
-export type AuthContinuityUserSummary = {
-  userId: string;
-  authSubject: string | null;
-  email: string | null;
-  normalizedEmail: string | null;
-  emailVerifiedAt: number | null;
-  emailVerificationSource: "oauth_provider" | "magic_link" | "manual_change_code" | null;
-  displayName: string | null;
-  avatarUrl: string | null;
-  createdAt: number;
-  updatedAt: number;
-  isAnonymousAuthSubject: boolean;
-};
-
-export type AuthContinuityResolutionPreview = {
-  authSubject: string;
-  requestedUserId: string | null;
-  email: string | null;
-  normalizedEmail: string | null;
-  emailVerified: boolean;
-  emailVerificationSource: "oauth_provider" | "magic_link" | "manual_change_code" | null;
-  displayName: string | null;
-  avatarUrl: string | null;
-  subjectMatchUser: AuthContinuityUserSummary | null;
-  emailUsers: AuthContinuityUserSummary[];
-  eligibleRelinkCandidates: AuthContinuityUserSummary[];
-  relinkCandidateUser: AuthContinuityUserSummary | null;
-  resolutionPath: AuthContinuityResolutionPath;
-  blockers: AuthContinuityResolutionBlocker[];
-  resolvedUserId: string | null;
-  wouldCreateNewUser: boolean;
-};
-
 function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
 }
@@ -90,7 +41,8 @@ function normalizeEmailValue(raw: unknown): string | undefined {
 }
 
 function normalizeStoredEmail(raw: unknown): string | null {
-  return normalizeAuthRelinkEmail(raw);
+  const normalized = String(raw ?? "").trim().toLowerCase();
+  return normalized || null;
 }
 
 function normalizeEmailVerificationSource(
@@ -103,185 +55,6 @@ function normalizeEmailVerificationSource(
   return undefined;
 }
 
-function readEnv(name: string): string {
-  try {
-    const value = (globalThis as any)?.process?.env?.[name];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  } catch {
-    // ignore
-  }
-  return "";
-}
-
-function readBoolEnv(name: string): boolean {
-  const normalized = readEnv(name).toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
-}
-
-function isExplicitLocalDevEnvironment(): boolean {
-  const nodeEnv = readEnv("NODE_ENV").toLowerCase();
-  return nodeEnv === "development" || nodeEnv === "test";
-}
-
-function allowAutomaticEmailRelink(): boolean {
-  return readBoolEnv("ARX_AUTH_ENABLE_EMAIL_RELINK") && isExplicitLocalDevEnvironment();
-}
-
-function toAuthContinuityUserSummary(user: UserRow): AuthContinuityUserSummary {
-  const authSubject = normalizeIdValue(user.authSubject) || null;
-  return {
-    userId: normalizeIdValue(user._id),
-    authSubject,
-    email: user.email ?? null,
-    normalizedEmail: normalizeStoredEmail(user.normalizedEmail ?? user.email),
-    emailVerifiedAt: typeof user.emailVerifiedAt === "number" ? user.emailVerifiedAt : null,
-    emailVerificationSource: user.emailVerificationSource ?? null,
-    displayName: user.displayName ?? null,
-    avatarUrl: user.avatarUrl ?? null,
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt,
-    isAnonymousAuthSubject: authSubject ? isAnonymousAuthSubject(authSubject) : false,
-  };
-}
-
-type ActorResolutionState = {
-  requestedUserId: string | null;
-  email: string | null;
-  normalizedEmail: string | null;
-  emailVerified: boolean;
-  emailVerificationSource: "oauth_provider" | "magic_link" | "manual_change_code" | null;
-  displayName: string | null;
-  avatarUrl: string | null;
-  subjectMatchUser: UserRow | null;
-  emailUsers: UserRow[];
-  eligibleRelinkCandidates: UserRow[];
-  relinkCandidateUser: UserRow | null;
-  resolutionPath: AuthContinuityResolutionPath;
-  blockers: AuthContinuityResolutionBlocker[];
-  resolvedUserId: string | null;
-  wouldCreateNewUser: boolean;
-};
-
-async function readActorResolutionState(args: {
-  ctx: any;
-  authSubject: string;
-  userId?: any;
-  email?: string | null;
-  emailVerified?: boolean | null;
-  emailVerificationSource?: "oauth_provider" | "magic_link" | "manual_change_code" | null;
-  displayName?: string | null;
-  avatarUrl?: string | null;
-}): Promise<ActorResolutionState> {
-  const requestedUserId = normalizeIdValue(args.userId) || null;
-  const email = normalizeEmailValue(args.email) ?? null;
-  const normalizedEmail = normalizeStoredEmail(email);
-  const emailVerified = Boolean(args.emailVerified && normalizedEmail);
-  const emailVerificationSource =
-    normalizeEmailVerificationSource(args.emailVerificationSource) ??
-    (emailVerified ? "oauth_provider" : undefined);
-  const displayName = normalizeOptionalString(args.displayName) ?? null;
-  const avatarUrl = normalizeOptionalString(args.avatarUrl) ?? null;
-
-  const subjectMatchUser = await getUserByResolvedSubject(args.ctx, args.authSubject);
-  const emailUsers = normalizedEmail ? await listUsersByNormalizedEmail(args.ctx, normalizedEmail) : [];
-  const automaticEmailRelinkEnabled = allowAutomaticEmailRelink();
-  const eligibleRelinkCandidates = normalizedEmail
-    ? emailUsers.filter((user) => {
-        const userAuthSubject = normalizeIdValue(user.authSubject);
-        if (!userAuthSubject || isAnonymousAuthSubject(userAuthSubject)) return false;
-        return normalizeStoredEmail(user.normalizedEmail ?? user.email) === normalizedEmail;
-      })
-    : [];
-  const relinkCandidateUser =
-    !subjectMatchUser && automaticEmailRelinkEnabled && emailVerified && eligibleRelinkCandidates.length === 1
-      ? (eligibleRelinkCandidates[0] ?? null)
-      : null;
-
-  const blockers: AuthContinuityResolutionBlocker[] = [];
-  if (requestedUserId) {
-    const resolvedUserId = normalizeIdValue(subjectMatchUser?._id ?? relinkCandidateUser?._id);
-    if (resolvedUserId && resolvedUserId !== requestedUserId) {
-      blockers.push("requested_user_id_mismatch");
-    }
-  }
-  if (!email || !normalizedEmail) {
-    blockers.push("missing_email");
-  }
-  if (!emailVerified) {
-    blockers.push("email_not_verified");
-  }
-  if (!subjectMatchUser && eligibleRelinkCandidates.length > 1) {
-    blockers.push("ambiguous_email_candidates");
-  }
-  if (
-    !subjectMatchUser &&
-    !automaticEmailRelinkEnabled &&
-    emailVerified &&
-    normalizedEmail &&
-    eligibleRelinkCandidates.length === 1
-  ) {
-    blockers.push("email_relink_disabled");
-  }
-  if (!subjectMatchUser && emailVerified && normalizedEmail && eligibleRelinkCandidates.length === 0) {
-    blockers.push("no_matching_email_candidate");
-  }
-
-  let resolutionPath: AuthContinuityResolutionPath = "new_user";
-  if (subjectMatchUser) {
-    resolutionPath = "subject_match";
-  } else if (relinkCandidateUser) {
-    resolutionPath = "email_relink";
-  } else if (!emailVerified || !normalizedEmail) {
-    resolutionPath = "missing_verified_email";
-  } else if (eligibleRelinkCandidates.length > 1) {
-    resolutionPath = "ambiguous_email";
-  }
-
-  const resolvedUserId = normalizeIdValue(subjectMatchUser?._id ?? relinkCandidateUser?._id) || null;
-
-  return {
-    requestedUserId,
-    email,
-    normalizedEmail,
-    emailVerified,
-    emailVerificationSource: emailVerificationSource ?? null,
-    displayName,
-    avatarUrl,
-    subjectMatchUser,
-    emailUsers,
-    eligibleRelinkCandidates,
-    relinkCandidateUser,
-    resolutionPath,
-    blockers,
-    resolvedUserId,
-    wouldCreateNewUser: !subjectMatchUser && !relinkCandidateUser,
-  };
-}
-
-function toAuthContinuityResolutionPreview(
-  authSubject: string,
-  state: ActorResolutionState,
-): AuthContinuityResolutionPreview {
-  return {
-    authSubject,
-    requestedUserId: state.requestedUserId,
-    email: state.email,
-    normalizedEmail: state.normalizedEmail,
-    emailVerified: state.emailVerified,
-    emailVerificationSource: state.emailVerificationSource,
-    displayName: state.displayName,
-    avatarUrl: state.avatarUrl,
-    subjectMatchUser: state.subjectMatchUser ? toAuthContinuityUserSummary(state.subjectMatchUser) : null,
-    emailUsers: state.emailUsers.map(toAuthContinuityUserSummary),
-    eligibleRelinkCandidates: state.eligibleRelinkCandidates.map(toAuthContinuityUserSummary),
-    relinkCandidateUser: state.relinkCandidateUser ? toAuthContinuityUserSummary(state.relinkCandidateUser) : null,
-    resolutionPath: state.resolutionPath,
-    blockers: state.blockers,
-    resolvedUserId: state.resolvedUserId,
-    wouldCreateNewUser: state.wouldCreateNewUser,
-  };
-}
-
 async function getUserByResolvedSubject(ctx: any, authSubject: string): Promise<UserRow | null> {
   const normalizedSubject = normalizeIdValue(authSubject);
   if (!normalizedSubject) return null;
@@ -291,21 +64,8 @@ async function getUserByResolvedSubject(ctx: any, authSubject: string): Promise<
     .first()) as UserRow | null) ?? null;
 }
 
-async function listUsersByNormalizedEmail(ctx: any, normalizedEmail: string): Promise<UserRow[]> {
-  const normalized = normalizeStoredEmail(normalizedEmail);
-  if (!normalized) return [];
-  const indexed = (await ctx.db
-    .query("users")
-    .withIndex("by_normalizedEmail", (q: any) => q.eq("normalizedEmail", normalized))
-    .collect()) as UserRow[];
-  if (indexed.length > 0) return indexed;
-  const scanned = (await ctx.db.query("users").collect()) as UserRow[];
-  return scanned.filter((user) => normalizeStoredEmail(user.email) === normalized);
-}
-
 function buildUserPatch(args: {
   existing: UserRow;
-  authSubject?: string;
   email?: string;
   normalizedEmail?: string;
   emailVerified: boolean;
@@ -315,14 +75,11 @@ function buildUserPatch(args: {
   nowMs: number;
 }): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
-  const nextAuthSubject = normalizeIdValue(args.authSubject);
-  if (nextAuthSubject && nextAuthSubject !== normalizeIdValue(args.existing.authSubject)) {
-    patch.authSubject = nextAuthSubject;
-  }
-
-  const emailChanged = args.email !== args.existing.email;
+  const emailProvided = args.email !== undefined;
+  const emailChanged = emailProvided && args.email !== args.existing.email;
   const normalizedEmailChanged =
-    normalizeStoredEmail(args.normalizedEmail) !== normalizeStoredEmail(args.existing.normalizedEmail ?? args.existing.email);
+    emailProvided &&
+    normalizeStoredEmail(args.normalizedEmail) !== normalizeStoredEmail(args.existing.normalizedEmail);
 
   if (emailChanged) patch.email = args.email;
   if (normalizedEmailChanged) patch.normalizedEmail = args.normalizedEmail;
@@ -431,54 +188,24 @@ async function ensureActorByResolvedSubject(args: {
   nowMs?: number;
 }): Promise<AuthenticatedActor> {
   const nowMs = args.nowMs ?? Date.now();
-  const state = await readActorResolutionState({
-    ctx: args.ctx,
-    authSubject: args.authSubject,
-    userId: args.userId,
-    email: args.email ?? null,
-    emailVerified: args.emailVerified ?? false,
-    emailVerificationSource: args.emailVerificationSource ?? null,
-    displayName: args.displayName ?? null,
-    avatarUrl: args.avatarUrl ?? null,
-  });
-  const requestedUserId = state.requestedUserId;
-  const email = state.email ?? undefined;
-  const normalizedEmail = state.normalizedEmail ?? undefined;
-  const emailVerified = state.emailVerified;
-  const emailVerificationSource = state.emailVerificationSource ?? undefined;
-  const displayName = state.displayName ?? undefined;
-  const avatarUrl = state.avatarUrl ?? undefined;
-
-  let existing = state.subjectMatchUser;
-  if (!existing && state.relinkCandidateUser) {
-    const relinkCandidate = state.relinkCandidateUser;
-    const resolvedUserId = normalizeIdValue(relinkCandidate._id);
-    if (requestedUserId && requestedUserId !== resolvedUserId) {
-      throw new Error("user_id_mismatch");
-    }
-    const authSubjectChanged =
-      normalizeIdValue(relinkCandidate.authSubject) !== normalizeIdValue(args.authSubject);
-    const patch = buildUserPatch({
-      existing: relinkCandidate,
-      authSubject: args.authSubject,
-      email,
-      normalizedEmail,
-      emailVerified,
-      emailVerificationSource,
-      displayName,
-      avatarUrl,
-      nowMs,
-    });
-    if (Object.keys(patch).length > 0) {
-      await args.ctx.db.patch(relinkCandidate._id, patch);
-    }
-    existing = ((await args.ctx.db.get(relinkCandidate._id)) as UserRow | null) ?? relinkCandidate;
-  }
+  const authSubject = normalizeIdValue(args.authSubject);
+  if (!authSubject) throw new Error("auth_subject_required");
+  const requestedUserId = normalizeIdValue(args.userId);
+  const email = normalizeEmailValue(args.email);
+  const normalizedEmail = normalizeStoredEmail(email) ?? undefined;
+  const emailVerified = Boolean(args.emailVerified && normalizedEmail);
+  const emailVerificationSource =
+    normalizeEmailVerificationSource(args.emailVerificationSource) ??
+    (emailVerified ? "oauth_provider" : undefined);
+  const displayName = normalizeOptionalString(args.displayName);
+  const avatarUrl = normalizeOptionalString(args.avatarUrl);
+  const existing = await getUserByResolvedSubject(args.ctx, authSubject);
 
   let dbUserId = existing?._id ?? null;
   if (!existing) {
+    if (requestedUserId) throw new Error("user_id_mismatch");
     dbUserId = await args.ctx.db.insert("users", {
-      authSubject: args.authSubject,
+      authSubject,
       email,
       normalizedEmail,
       ...(emailVerified ? { emailVerifiedAt: nowMs, emailVerificationSource } : null),
@@ -512,100 +239,7 @@ async function ensureActorByResolvedSubject(args: {
   await ensureDefaultFreeEntitlement(args.ctx, dbUserId, nowMs);
   const user = (await args.ctx.db.get(dbUserId)) as UserRow | null;
   if (!user) throw new Error("user_not_found");
-  return toActor(args.authSubject, user);
-}
-
-export async function previewAuthenticatedActorResolutionBySubject(args: {
-  ctx: any;
-  authSubject: string;
-  userId?: any;
-  email?: string | null;
-  emailVerified?: boolean | null;
-  emailVerificationSource?: "oauth_provider" | "magic_link" | "manual_change_code" | null;
-  displayName?: string | null;
-  avatarUrl?: string | null;
-}): Promise<AuthContinuityResolutionPreview> {
-  const authSubject = normalizeIdValue(args.authSubject);
-  if (!authSubject) throw new Error("auth_subject_required");
-  const state = await readActorResolutionState({
-    ctx: args.ctx,
-    authSubject,
-    userId: args.userId,
-    email: args.email ?? null,
-    emailVerified: args.emailVerified ?? false,
-    emailVerificationSource: args.emailVerificationSource ?? null,
-    displayName: args.displayName ?? null,
-    avatarUrl: args.avatarUrl ?? null,
-  });
-  return toAuthContinuityResolutionPreview(authSubject, state);
-}
-
-export async function previewAuthenticatedActorResolution(args: {
-  ctx: any;
-  authSubject?: string | null;
-  userId?: any;
-  email?: string | null;
-  emailVerified?: boolean | null;
-  emailVerificationSource?: "oauth_provider" | "magic_link" | "manual_change_code" | null;
-  displayName?: string | null;
-  avatarUrl?: string | null;
-}): Promise<AuthContinuityResolutionPreview> {
-  const authSubject = await resolveAuthenticatedSubject({
-    ctx: args.ctx,
-    authSubject: args.authSubject ?? null,
-  });
-  return await previewAuthenticatedActorResolutionBySubject({
-    ctx: args.ctx,
-    authSubject,
-    userId: args.userId,
-    email: args.email ?? null,
-    emailVerified: args.emailVerified ?? false,
-    emailVerificationSource: args.emailVerificationSource ?? null,
-    displayName: args.displayName ?? null,
-    avatarUrl: args.avatarUrl ?? null,
-  });
-}
-
-export async function ensureAuthenticatedActorDetailed(args: {
-  ctx: any;
-  authSubject?: string | null;
-  userId?: any;
-  email?: string | null;
-  emailVerified?: boolean | null;
-  emailVerificationSource?: "oauth_provider" | "magic_link" | "manual_change_code" | null;
-  displayName?: string | null;
-  avatarUrl?: string | null;
-  nowMs?: number;
-}): Promise<{
-  actor: AuthenticatedActor;
-  continuity: AuthContinuityResolutionPreview;
-}> {
-  const authSubject = await resolveAuthenticatedSubject({
-    ctx: args.ctx,
-    authSubject: args.authSubject ?? null,
-  });
-  const continuity = await previewAuthenticatedActorResolutionBySubject({
-    ctx: args.ctx,
-    authSubject,
-    userId: args.userId,
-    email: args.email ?? null,
-    emailVerified: args.emailVerified ?? false,
-    emailVerificationSource: args.emailVerificationSource ?? null,
-    displayName: args.displayName ?? null,
-    avatarUrl: args.avatarUrl ?? null,
-  });
-  const actor = await ensureActorByResolvedSubject({
-    ctx: args.ctx,
-    authSubject,
-    userId: args.userId,
-    email: args.email ?? null,
-    emailVerified: args.emailVerified ?? false,
-    emailVerificationSource: args.emailVerificationSource ?? null,
-    displayName: args.displayName ?? null,
-    avatarUrl: args.avatarUrl ?? null,
-    nowMs: args.nowMs,
-  });
-  return { actor, continuity };
+  return toActor(authSubject, user);
 }
 
 export async function findAuthenticatedActorState(args: {
@@ -646,19 +280,21 @@ export async function ensureAuthenticatedActor(args: {
   avatarUrl?: string | null;
   nowMs?: number;
 }): Promise<AuthenticatedActor> {
-  return (
-    await ensureAuthenticatedActorDetailed({
-      ctx: args.ctx,
-      authSubject: args.authSubject ?? null,
-      userId: args.userId,
-      email: args.email ?? null,
-      emailVerified: args.emailVerified ?? false,
-      emailVerificationSource: args.emailVerificationSource ?? null,
-      displayName: args.displayName ?? null,
-      avatarUrl: args.avatarUrl ?? null,
-      nowMs: args.nowMs,
-    })
-  ).actor;
+  const authSubject = await resolveAuthenticatedSubject({
+    ctx: args.ctx,
+    authSubject: args.authSubject ?? null,
+  });
+  return await ensureActorByResolvedSubject({
+    ctx: args.ctx,
+    authSubject,
+    userId: args.userId,
+    email: args.email ?? null,
+    emailVerified: args.emailVerified ?? false,
+    emailVerificationSource: args.emailVerificationSource ?? null,
+    displayName: args.displayName ?? null,
+    avatarUrl: args.avatarUrl ?? null,
+    nowMs: args.nowMs,
+  });
 }
 
 export async function resolveUserIdForAuthenticatedRequest(args: {

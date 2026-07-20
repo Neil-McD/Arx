@@ -15,15 +15,6 @@ export type ConvexAuthenticatedClientContext = {
   bootstrap: ConvexAuthenticatedBootstrapResult | null;
 };
 
-export type ConvexAuthenticatedBootstrapContinuity = {
-  resolutionPath: string | null;
-  blockers: string[];
-  resolvedUserId: string | null;
-  wouldCreateNewUser: boolean;
-  subjectMatchUserId: string | null;
-  relinkCandidateUserId: string | null;
-};
-
 export type ConvexAuthenticatedBootstrapResult = {
   authSubject: string | null;
   dbUserId: string | null;
@@ -32,7 +23,6 @@ export type ConvexAuthenticatedBootstrapResult = {
   email: string | null;
   displayName: string | null;
   avatarUrl: string | null;
-  continuity: ConvexAuthenticatedBootstrapContinuity | null;
 };
 
 export type ConvexClient = ConvexHttpClient;
@@ -149,30 +139,6 @@ export async function bootstrapConvexAuthenticatedClient(
         email: normalizeGatewayNullableString(actor?.email),
         displayName: normalizeGatewayNullableString(actor?.displayName),
         avatarUrl: normalizeGatewayNullableString(actor?.avatarUrl),
-        continuity: actor?.continuity && typeof actor.continuity === "object"
-          ? {
-              resolutionPath: normalizeGatewayNullableString((actor.continuity as Record<string, unknown>).resolutionPath),
-              blockers: Array.isArray((actor.continuity as Record<string, unknown>).blockers)
-                ? ((actor.continuity as Record<string, unknown>).blockers as unknown[])
-                    .map((value) => normalizeGatewayNullableString(value))
-                    .filter((value): value is string => Boolean(value))
-                : [],
-              resolvedUserId: normalizeGatewayNullableString((actor.continuity as Record<string, unknown>).resolvedUserId),
-              wouldCreateNewUser: Boolean((actor.continuity as Record<string, unknown>).wouldCreateNewUser),
-              subjectMatchUserId: normalizeGatewayNullableString(
-                (actor.continuity as Record<string, unknown>).subjectMatchUser &&
-                  typeof (actor.continuity as Record<string, unknown>).subjectMatchUser === "object"
-                  ? ((actor.continuity as Record<string, unknown>).subjectMatchUser as Record<string, unknown>).userId
-                  : null,
-              ),
-              relinkCandidateUserId: normalizeGatewayNullableString(
-                (actor.continuity as Record<string, unknown>).relinkCandidateUser &&
-                  typeof (actor.continuity as Record<string, unknown>).relinkCandidateUser === "object"
-                  ? ((actor.continuity as Record<string, unknown>).relinkCandidateUser as Record<string, unknown>).userId
-                  : null,
-              ),
-            }
-          : null,
       },
     };
   })();

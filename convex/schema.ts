@@ -22,8 +22,6 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_authSubject", ["authSubject"])
-    .index("by_email", ["email"])
-    .index("by_normalizedEmail", ["normalizedEmail"])
     .index("by_normalizedHandle", ["normalizedHandle"]),
 
   authSessions: defineTable({

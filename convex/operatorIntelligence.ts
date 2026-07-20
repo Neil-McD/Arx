@@ -19,7 +19,7 @@ import {
   type AccountSetupStep,
 } from "../shared/accountSetup";
 import type { DeveloperAppAuthType } from "../shared/communityAppMountTypes";
-import { isAnonymousAuthSubject } from "../shared/authRelinkPolicy";
+import { isAnonymousAuthSubject } from "../shared/authSubject";
 import { buildAccountSetupStatusForRows } from "./accountSetupCore";
 
 type MoneyMetric = {
