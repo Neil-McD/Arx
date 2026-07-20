@@ -7,9 +7,11 @@ import {
   classifyAuthSessionLogoutResolutionFailure,
   completeConfirmedAuthSessionLogout,
   createSecureAuthSessionId,
-  prepareSecureAuthSessionRotation,
+  hashAuthSessionCredential,
+  resolveAuthSessionLifecycle,
 } from "./authSessions";
 import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
+import { setAuthSessionCookie } from "../api/auth/_cookies.js";
 import logoutWebSession from "../api/auth/logout.js";
 import refreshWebSession from "../api/auth/refresh.js";
 import { completeConfirmedSignOut } from "../apps/web/src/controllers/confirmedSignOut";
@@ -69,43 +71,26 @@ describe("secure auth session identifiers", () => {
     ).toThrow(AUTH_SECURE_RANDOM_UNAVAILABLE);
   });
 
-  test("reserves the replacement identifier before calling the upstream refresh provider", async () => {
-    const effects: string[] = [];
-    const result = await prepareSecureAuthSessionRotation({
-      createSessionId: () => {
-        effects.push("session-id");
-        return VALID_UUID;
-      },
-      refreshUpstream: async () => {
-        effects.push("upstream-refresh");
-        return { accessToken: "refreshed" };
-      },
-    });
-
-    expect(effects).toEqual(["session-id", "upstream-refresh"]);
-    expect(result).toEqual({
-      newSessionId: VALID_UUID,
-      refreshed: { accessToken: "refreshed" },
-    });
+  test("stores a deterministic one-way credential hash rather than the raw session identifier", async () => {
+    const hash = await hashAuthSessionCredential(VALID_UUID);
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(hash).not.toContain(VALID_UUID);
+    expect(await hashAuthSessionCredential(VALID_UUID)).toBe(hash);
   });
 
-  test("does not call the upstream refresh provider when identifier generation fails", async () => {
-    let upstreamRefreshCalls = 0;
-
-    await expect(
-      prepareSecureAuthSessionRotation({
-        createSessionId: () =>
-          createSecureAuthSessionId(() => {
-            throw new Error("rng unavailable");
-          }),
-        refreshUpstream: async () => {
-          upstreamRefreshCalls += 1;
-          return { accessToken: "must-not-exist" };
-        },
-      }),
-    ).rejects.toThrow(AUTH_SECURE_RANDOM_UNAVAILABLE);
-
-    expect(upstreamRefreshCalls).toBe(0);
+  test("server lifecycle fails closed at absolute expiry and after revocation", () => {
+    expect(resolveAuthSessionLifecycle({ expiresAt: 2_000 }, 1_999)).toEqual({
+      status: "active",
+      expiresAt: 2_000,
+    });
+    expect(resolveAuthSessionLifecycle({ expiresAt: 2_000 }, 2_000)).toEqual({
+      status: "terminal",
+      reason: "auth_session_expired",
+    });
+    expect(resolveAuthSessionLifecycle({ expiresAt: 4_000, revokedAt: 1_000 }, 2_000)).toEqual({
+      status: "terminal",
+      reason: "auth_session_revoked",
+    });
   });
 
   test("session creation returns a retryable failure before provisioning an actor or session", async () => {
@@ -222,6 +207,65 @@ describe("secure auth session identifiers", () => {
     expect(responseHeaders.has("Set-Cookie")).toBe(false);
   });
 
+  test("a successful refresh preserves the same browser credential", async () => {
+    vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
+    vi.stubEnv("VITE_CONVEX_SITE_URL", "https://staging-convex.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            ok: true,
+            session: {
+              access_token: "refreshed-access-token",
+              expires_at: Math.floor(Date.now() / 1_000) + 3_600,
+              user: { id: "workos:refresh-fixture" },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    const harness = createNodeResponseHarness();
+
+    await refreshWebSession(
+      {
+        method: "POST",
+        headers: {
+          host: "localhost:5174",
+          origin: "http://localhost:5174",
+          "x-forwarded-proto": "http",
+          cookie: "arx-auth-session=existing-secure-session-id",
+        },
+      },
+      harness.response,
+    );
+
+    expect(harness.response.statusCode).toBe(200);
+    expect(harness.readJson()).toMatchObject({
+      ok: true,
+      session: { access_token: "refreshed-access-token" },
+    });
+    expect(harness.headers.has("Set-Cookie")).toBe(false);
+  });
+
+  test("the browser credential lifetime cannot exceed server absolute expiry", () => {
+    vi.stubEnv("ARX_AUTH_SESSION_COOKIE_MAX_AGE_SECONDS", String(365 * 24 * 60 * 60));
+    const harness = createNodeResponseHarness();
+    setAuthSessionCookie(
+      harness.response,
+      {
+        headers: {
+          host: "localhost:5174",
+          "x-forwarded-proto": "http",
+        },
+      },
+      VALID_UUID,
+    );
+
+    expect(String(harness.headers.get("Set-Cookie"))).toContain("Max-Age=2592000");
+  });
+
   test("a logout bridge transport failure is retryable and preserves the browser session cookie", async () => {
     vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
     vi.stubEnv("VITE_CONVEX_SITE_URL", "https://staging-convex.test");
@@ -280,13 +324,13 @@ describe("secure auth session identifiers", () => {
 });
 
 describe("confirmed auth logout", () => {
-  test("only a missing session is idempotent success; an invalid replacement chain fails closed", () => {
+  test("only a missing session is idempotent success; an invalid session fails closed", () => {
     expect(classifyAuthSessionLogoutResolutionFailure("auth_session_missing")).toEqual({
       status: "ok",
     });
-    expect(classifyAuthSessionLogoutResolutionFailure("auth_session_chain_invalid")).toEqual({
+    expect(classifyAuthSessionLogoutResolutionFailure("auth_session_invalid")).toEqual({
       status: "transient_failure",
-      reason: "auth_session_chain_invalid",
+      reason: "auth_session_invalid",
     });
   });
 

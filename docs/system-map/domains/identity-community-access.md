@@ -19,7 +19,7 @@ All five are MVP core. UI, prompts, manifests, and agent-selected arguments are 
 | State | Role | Key implementation evidence |
 | --- | --- | --- |
 | `users` | canonical Polynet account keyed by verified `authSubject` | `convex/schema.ts:5-27`; `convex/authActor.ts` |
-| `authSessions` | canonical opaque continuity/session ledger and encrypted upstream token state | `convex/schema.ts:29-48`; `convex/authSessions.ts` |
+| `authSessions` | canonical bounded continuity state: hashed browser credential, absolute expiry, refresh lease/revision, revocation/retention timestamps, and encrypted upstream token state | `convex/schema.ts`; `convex/authSessions.ts`; `convex/authSessionCore.ts` |
 | `userEntitlements` | append-history platform tier grants | `convex/schema.ts:50-65` |
 | `communities` | canonical community identity, owner, visibility, entry policy | `convex/schema.ts:1253-1301` |
 | `communityMemberships` | canonical non-owner membership/access-source relationship | `convex/schema.ts:1303-1327` |
@@ -40,9 +40,11 @@ The good invariant is clear: caller-supplied identity is an assertion, never aut
 
 ### Session lifecycle
 
-The Vercel routes start/callback/bootstrap/refresh/logout through a same-origin bridge protected by a server-held bridge secret. The browser cookie is `HttpOnly`, `Secure` off localhost, and `SameSite=Lax` (`api/auth/_cookies.js:150-178`). Provider token state is encrypted in `authSessions`. Refresh rotates the opaque session and revokes/replaces the predecessor. Bootstrap follows at most eight replacement links and rejects loops or overlong chains (`convex/authSessions.ts:500-540`).
+The Vercel routes start/callback/bootstrap/refresh/logout through a same-origin bridge protected by a server-held bridge secret. The browser cookie is `HttpOnly`, `Secure` off localhost, `SameSite=Lax`, and cannot outlive the 30-day server absolute lifetime. The raw UUID credential exists only in that cookie; Convex stores its SHA-256 hash. Provider token state is encrypted in one `authSessions` row.
 
-Logout now treats the canonical Polynet session as the authority. The server revokes that session before attempting bounded best-effort provider logout; only a confirmed local outcome permits the Vercel route to clear the cookie and the web controller to clear caches, broadcast signed-out state, and navigate. Bridge, network, or local-revocation failures return a retryable result while preserving the cookie and browser session. A lost response after committed revocation converges on retry because missing and already-revoked sessions are idempotent success. Provider failure is diagnostic evidence, not permission to resurrect or block the locally revoked session (`convex/authSessions.ts`, `api/auth/logout.js`, `shared/authCore.ts`, `apps/web/src/controllers/confirmedSignOut.ts`).
+Refresh never rotates the browser credential or creates a replacement row. Bootstrap and explicit refresh use the same state machine: absolute expiry/revocation is checked first; a 30-second compare-and-set lease admits one provider-refresh owner for the current `secretRevision`; the winner encrypts the new provider state and increments the revision in place. A concurrent request either uses a still-valid stored access token or receives an explicit retryable result. Provider refresh and logout calls have deterministic timeouts. Unsupported encrypted-secret versions fail closed and make the row terminally purgeable.
+
+Logout treats the canonical Polynet session as the authority. The server revokes that session and assigns its indexed seven-day purge timestamp before attempting bounded best-effort provider logout; only a confirmed local outcome permits the Vercel route to clear the cookie and the web controller to clear caches, broadcast signed-out state, and navigate. Bridge, network, or local-revocation failures return a retryable result while preserving the cookie. A lost response after committed revocation converges on retry because missing and already-revoked sessions are idempotent success. Provider failure is evidence, not permission to resurrect the locally revoked session. One internal hourly cron owns retention and deletes at most 500 due terminal rows per transaction. There is no public maintenance endpoint or manual production prune command.
 
 ### Community creation and ownership
 
@@ -77,7 +79,9 @@ Platform tier is the latest active row in `userEntitlements`, defaulting to free
 - Community access is reevaluated from current block, membership, access source, and subscription state.
 - Membership activation is idempotent for an already-active row.
 - Onboarding state is downstream from access and cannot create access.
-- Session replacement traversal is bounded to eight links.
+- Each sign-in has one hashed credential row with a 30-day absolute lifetime; refresh changes only encrypted provider state and the monotonic revision.
+- Exactly one non-expired lease owner may refresh a revision; stale and concurrent owners cannot commit it.
+- Raw credentials, replacement pointers, and public session-maintenance authority are absent from the canonical schema.
 - Client/public user IDs are projections; database IDs and supplied IDs do not grant authority.
 
 ## Complexity and growth risks
@@ -90,18 +94,15 @@ Let `U` be users, `E` entitlement rows for one user, `M` membership rows for a c
 | Platform tier resolution | `O(E log E)` per resolver call | Three implementations repeat the collect/filter/sort rule; history grows with grants and billing syncs. |
 | Membership selection for one pair | `O(D log D)` | Schema does not enforce uniqueness; multiple current rows are resolved in application code. |
 | Active member count synchronization | `O(M)` per transition | It scans all community membership rows and counts rows, not distinct users; duplicate active rows can overcount. |
-| Revoked session pruning | `O(S)` scan per maintenance call | The deletion limit caps writes, not scan cost; no `revokedAt` index or scheduled owner is present. |
+| Terminal session retention | `O(B log S)` indexed selection plus `O(B)` deletion, `B <= 500` | Cost is bounded per hourly internal run and independent of unrelated non-due rows. |
 | Community deletion | `O(all checkout sessions + domain rows + T×Q×R traversal)` in one mutation | A large community or global checkout history can exceed transaction/time limits and leave deletion behavior unavailable. |
 | Discover list | bounded to at most 200 communities plus per-community plan/branding reads | Request count is bounded, but still an N+1/fan-out candidate for the later public-boundary pass. |
 
 ## Security and robustness risks
 
-1. Both session-ID generators fall back from `crypto.randomUUID()` to `Math.random()` plus time (`convex/authSessions.ts:339-344`, `convex/httpAuthBridge.ts:47-52`). A security credential identifier should fail closed if secure randomness is unavailable.
-2. Logout's best-effort bridge call can report success after failing to revoke server/provider state.
-3. Revoked-session maintenance is a secret-gated public mutation that scans the full table. It is operationally fragile and broadens a sensitive maintenance surface.
-4. Missing `communityMemberships.active` is treated as active for legacy compatibility (`convex/communityCore.ts:683-687`). That preserves old rows but is access-critical fail-open compatibility until legacy prevalence is proven zero and the invariant is tightened.
-5. `communityJoinRequests.status` is an unconstrained string even though downstream logic assumes a small state machine.
-6. Community deletion is an unbounded destructive transaction with a global checkout-session scan and nested interaction deletion. Completeness across all 125 tables is not yet proven.
+1. Missing `communityMemberships.active` is treated as active for legacy compatibility (`convex/communityCore.ts:683-687`). Staging prevalence is zero, but the fail-open rule remains until its own guarded removal slice.
+2. `communityJoinRequests.status` is an unconstrained string even though downstream logic assumes a small state machine.
+3. Community deletion is an unbounded destructive transaction with a global checkout-session scan and nested interaction deletion. Completeness across all 125 tables is not yet proven.
 
 ## Reduction candidates
 
@@ -110,7 +111,7 @@ Let `U` be users, `E` entitlement rows for one user, `M` membership rows for a c
 | Verified actor, community owner, membership, block, and entitlement authority | `KEEP (MVP core)` | `HARDEN` | 0 | Physically required to make gated communities secure. Owner: identity/access. |
 | Three platform-tier resolution implementations | `KEEP (MVP core)` | `CONSOLIDATE`, `BOUND` | 7 | The job is required; three copies of the same append-history rule are not. Owner: platform entitlement. |
 | Full-user email compatibility scan and implicit relink | `DELETE (deferred/dead)` | `DELETE` complete | 10 | Verified subject is the account authority; mutable email must not scan for or silently seize another account. Owner: auth identity. |
-| Insecure session-ID randomness fallback | `KEEP (MVP core)` | `HARDEN` | 10 | Availability fallback cannot justify weakening a credential identifier; secure generation should fail closed. Owner: auth session. |
+| Raw session IDs, refresh-created replacement rows, traversal, and public/manual pruning | `DELETE (deferred/dead)` | `DELETE` complete | 10 | One hashed bounded credential and one internal retention owner perform the entire required job. Owner: auth session. |
 | Duplicate membership-row compatibility and absent-`active` fallback | `DECISION REQUIRED (user confirmation)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 7 | Removal is desirable but unsafe without bounded staging distributions and a uniqueness migration plan. Owner: community access. |
 | Deprecated `communities.memberOnboarding` field | `DELETE (deferred/dead)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 9 | Schema says current product code never reads/writes it; stored-value and migration completion must be verified first. Owner: schema lifecycle. |
 | Join-request free-form status | `KEEP (MVP core)` | `HARDEN` | 6 | Approval flow is required; arbitrary states are not. Owner: community access. |
@@ -118,4 +119,4 @@ Let `U` be users, `E` entitlement rows for one user, `M` membership rows for a c
 
 ## Proof posture
 
-The current proof suite gives strong structural and deterministic policy evidence. The focused actor fixture proves same-subject idempotency, distinct accounts for equal verified emails, fail-closed supplied-ID mismatch, one default entitlement, and absence of the relink/full-scan surface. It does not yet prove live provider revocation, concurrent uniqueness, deletion recovery, or signed-in staging behavior. Those remain explicit unknowns rather than hidden assumptions.
+The focused actor fixture proves same-subject idempotency, distinct accounts for equal verified emails, fail-closed supplied-ID mismatch, one default entitlement, and absence of relink/full-scan authority. Persisted Convex fixtures prove one-row creation, raw-credential absence, collision failure, real concurrent refresh ownership, one provider effect, monotonic in-place commit, absolute expiry, unsupported-secret failure, revocation, and multi-batch indexed retention. Vercel-route fixtures prove retryable refresh/logout cookie preservation, stable-cookie success, 30-day browser/server lifetime alignment, and local-before-provider logout ordering. The live staging cutover independently proved the legacy index empty before schema deletion. Provider outage behavior is deterministic in tests; a live external-provider outage drill remains broader operational work, not a blocker for this slice.

@@ -133,3 +133,15 @@ Operational tables already show retention pressure: 257 critical audit events, 7
 ## Read-only gate result
 
 Pass. The audit resolved data-shape uncertainty without exposing private content or changing state. It does **not** authorize migration, deletion, payout handling, cron changes, account deletion, or production inference. The later decision record resolves Builder Partner direction and shared-data ownership for planning. The next safe step is an isolated two-user account-deletion behavioral proof and fail-closed boundary—not a live mutation.
+
+## Auth-session cutover receipt — later authorized slice
+
+This section records a later implementation slice and does not retroactively change the read-only boundary above.
+
+- The exact staging guard passed before every deployment and migration invocation; production was never selected or queried.
+- The replacement ledger was drained through capped 500-row reads and isolated one-row writes. Controlled output in the final drain alone processed more than 60,000 rows, with active credentials preserved as hashes and terminal/replacement residue deleted.
+- The final migration batch processed 331 rows and returned `done=true`, with no skipped or retryable rows.
+- A separate indexed query then returned `legacy_rows_exist: false`; the bounded first 500 hashed rows had zero replacement pointers and zero missing/expired absolute lifetimes.
+- Only after that zero-state receipt were the legacy raw-credential fields/indexes and the temporary migration/public-maintenance surfaces removed from source.
+
+The original “more than 5,000” result was therefore a lower bound on severe replacement amplification, not a near-total. The canonical design now prevents that growth by holding one bounded row per sign-in and refreshing encrypted provider state in place.

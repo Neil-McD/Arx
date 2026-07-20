@@ -83,6 +83,13 @@ export async function readResponseError(response) {
   return `Request failed (${response.status})`;
 }
 
+export function sendJson(res, status, payload) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(JSON.stringify(payload));
+}
+
 export async function callRuntimeAuthJson(routePath, payload) {
   const url = buildRuntimeUrl(routePath);
   if (!url) throw new Error("Missing Convex runtime URL.");

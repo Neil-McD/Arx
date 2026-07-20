@@ -11,7 +11,7 @@ browser -> same-origin auth bridge -> OAuth provider -> verified Convex identity
 ```
 
 - Authority: verified provider identity and actor resolver; cookie is only an opaque pointer.
-- Good: identity mismatch fails closed; session replacement traversal is bounded.
+- Good: identity mismatch fails closed; one hashed, absolutely expiring session row refreshes in place under a single-owner lease.
 - Gaps: insecure random fallback; logout can clear the handle after revocation failure; account deletion is unbounded, incomplete, and destroys shared DM/community data.
 - Recovery receipt: session/audit events exist; deletion lacks resumable phase receipts.
 

@@ -10,9 +10,9 @@ For table compactness, `KEEP`, `DELETE`, and `DECISION REQUIRED` are exact short
 | --- | --- | --- | --- | --- | --- |
 | F-001 | P0 | **Resolved on staging:** actor provisioning now selects accounts only by indexed `authSubject`. The `O(U)` email fallback, local-only relink path, duplicate resolution preview, dead continuity payload, and unused users-email indexes were deleted without migrating user data. | `KEEP`; compatibility `DELETE` complete | behavioral and structural proof | `authActorSubjectAuthority.test.ts` |
 | F-002 | P1 | Account-tier selection is separately implemented in `auth.ts`, `entitlements.ts`, and `gates.ts`; each collects/sorts history, `O(E log E)`. | `KEEP`; `CONSOLIDATE`, `BOUND` | confirmed source | one shared-resolver parity proof |
-| F-003 | P0 | Two session-ID generators fall back to predictable `Math.random()` plus time if secure UUID generation throws. | `KEEP`; `HARDEN` | confirmed source | forced RNG-failure test requiring fail-closed behavior |
-| F-004 | P0 | Browser logout clears the cookie and returns success after bridge revocation failure, potentially stranding a live server/provider session. | `KEEP`; `HARDEN`, `OBSERVE_FIRST` | source confirmed; consequence inferred | fake bridge failure and server-session assertion |
-| F-005 | P1 | Revoked-session pruning is a secret-gated public mutation that scans all sessions; delete limit does not bound reads and no scheduled owner was found. | `KEEP`; `BOUND`, `HARDEN` | confirmed source | large fixture read-count proof |
+| F-003 | P0 | **Resolved on staging:** session creation requires a secure UUID and stores only its SHA-256 hash; randomness failure and hash collision fail closed before persistence. | `KEEP`; `HARDEN` complete | persisted and forced-failure proof | `authSessionSecurity.test.ts`; `authSessionStateMachine.test.ts` |
+| F-004 | P0 | **Resolved on staging:** one bounded hashed credential remains stable for the 30-day server lifetime; refresh updates one row under a single-owner lease, and logout revokes locally before bounded provider logout or browser clearing. | `KEEP`; `HARDEN` complete | persisted concurrency and failure proof | concurrent refresh plus logout-order fixtures |
+| F-005 | P1 | **Resolved on staging:** the replacement chain and public maintenance mutation are deleted. Terminal rows carry indexed `purgeAfterAt`; one internal hourly cron owns 500-row retention batches. The staging legacy index was drained to zero before schema removal. | `KEEP`; `BOUND`, `HARDEN` complete | live zero-state plus bounded fixture | indexed zero query and multi-batch retention proof |
 | F-006 | P0 | Membership uniqueness is not schema-enforced; duplicate selection is `O(D log D)` and active-member cache counts rows, not distinct users. | `DECISION REQUIRED`; `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | confirmed design; prevalence unknown | aggregate duplicate/count-delta audit |
 | F-007 | P1 | Missing `communityMemberships.active` is interpreted as active, an access-critical legacy fail-open compatibility rule. | `DECISION REQUIRED`; `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | confirmed source | redacted state/epoch distribution |
 | F-008 | P1 | Join-request status is `v.string()` while code assumes a bounded state machine. | `KEEP`; `HARDEN` | confirmed source | grouped live status counts and writer literals |
@@ -90,12 +90,14 @@ The bounded 2026-07-20 audit materially changes confidence and sequencing:
 
 - zero duplicate memberships, zero missing `active`, zero deprecated `memberOnboarding`, and zero duplicate slugs were found in complete staging scans;
 - 35 of 44 communities lack the active-member-count cache and two contain owner membership residue;
-- auth sessions exceed 5,000; 4,718 of the bounded prefix are revoked;
+- the original auth-session audit exceeded its 5,000-row cap; the completed session slice subsequently drained the entire legacy index to zero while preserving active credentials as hashed rows;
 - all four DMs are shared, confirming real blast radius for F-016;
 - 67 legacy chat messages/links, two inline resource bodies, five raw-query retrieval receipts, and one legacy-unversioned intelligence node remain;
 - Builder Partner contains active/payable/pending financial state described by F-022, F-023, and F-050; the capability is retained, so that state now requires versioned migration rather than wind-down;
 - current staging is below the no-cursor cron thresholds, so F-031 through F-034 are latent scale defects rather than present starvation.
 
 The post-audit F-001 slice rejected the initial migrate-first assumption. Email remains mutable profile data, while verified `authSubject` is the sole account-binding authority; the one observed missing derived `normalizedEmail` value therefore did not justify preserving or migrating an inactive relink mechanism.
+
+The post-audit F-003/F-004/F-005 slice also falsified the idea that replacement chains were harmless bounded compatibility. Controlled staging batches processed well over 60,000 additional legacy rows after the audit's 5,000-row lower bound. The independent indexed cutover query then reported `legacy_rows_exist: false`, zero replacement fields in the bounded hashed prefix, and zero expired rows in that prefix. Only after that receipt were the raw-ID fields/indexes and temporary migration surface removed.
 
 Exact bounds and caveats: [`04-staging-shape-audit-20260720.md`](04-staging-shape-audit-20260720.md).

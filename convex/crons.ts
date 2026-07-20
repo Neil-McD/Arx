@@ -4,6 +4,15 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 crons.interval(
+  "prune terminal auth sessions",
+  { hours: 1 },
+  (internal as any).authSessions.pruneTerminalAuthSessionsInternal,
+  {
+    limit: 500,
+  },
+);
+
+crons.interval(
   "process pending email outbox",
   { minutes: 5 },
   (internal as any).email.processPendingEmailOutboxInternal,

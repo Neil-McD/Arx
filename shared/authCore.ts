@@ -2,14 +2,7 @@ import {
   probeConvexAuthenticatedActorSessionDetailed,
   type ConvexAuthenticatedSessionProbeResult,
 } from "./convexAuthSessionProbe";
-import { readConvexRuntimeUrl } from "./convexRuntime";
 import { isStandaloneWebApp } from "./browserRuntimeMode";
-import {
-  normalizePaidUsageBillingMode,
-  type PaidUsageBillingMode,
-} from "./paidUsageBilling";
-import { VOICE_TRANSCRIPTION_UPLOAD_TIMEOUT_MS } from "./voiceCapture";
-import { normalizePaidToolKind, type PaidToolKind } from "./workspaceCredits";
 
 export type AuthUser = {
   id: string;
@@ -31,7 +24,8 @@ export type AuthSessionRef = {
 
 export type AuthBridgeBootstrapTrace = {
   bootstrapPath: string | null;
-  rotatedSessionFollowed: boolean;
+  refreshLeaseContended: boolean;
+  recoveredAfterRefreshFailure: boolean;
   upstreamRefreshMs: number | null;
 };
 
@@ -57,31 +51,6 @@ export type AuthSessionEnsureResult =
   | { status: "ready"; session: AuthSession; runtimeAcceptance?: ConvexAuthenticatedSessionProbeResult }
   | { status: "transient_failure"; reason: string }
   | { status: "terminal_failure"; reason: string };
-
-export class VoiceTranscriptionRequestError extends Error {
-  readonly status: number;
-  readonly code: string | null;
-  readonly toolKind: PaidToolKind | null;
-  readonly requiredCredits: number | null;
-  readonly paidUsageBillingMode: PaidUsageBillingMode | null;
-
-  constructor(args: {
-    message: string;
-    status: number;
-    code?: string | null;
-    toolKind?: PaidToolKind | null;
-    requiredCredits?: number | null;
-    paidUsageBillingMode?: PaidUsageBillingMode | null;
-  }) {
-    super(args.message);
-    this.name = "VoiceTranscriptionRequestError";
-    this.status = args.status;
-    this.code = args.code ?? null;
-    this.toolKind = args.toolKind ?? null;
-    this.requiredCredits = args.requiredCredits ?? null;
-    this.paidUsageBillingMode = args.paidUsageBillingMode ?? null;
-  }
-}
 
 function readFirstNonEmptyEnv(keys: readonly string[]): string | null {
   for (const key of keys) {
@@ -117,95 +86,6 @@ export async function readAuthError(response: Response): Promise<string> {
   return `Cloud error (${response.status})`;
 }
 
-function normalizePositiveCredits(value: unknown): number | null {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-async function readVoiceTranscriptionRequestError(
-  response: Response,
-): Promise<VoiceTranscriptionRequestError> {
-  try {
-    const json = (await response.clone().json()) as {
-      code?: unknown;
-      error?: unknown;
-      message?: unknown;
-      tool_kind?: unknown;
-      toolKind?: unknown;
-      paid_tool_kind?: unknown;
-      required_credits?: unknown;
-      requiredCredits?: unknown;
-      paid_usage_billing_mode?: unknown;
-      paidUsageBillingMode?: unknown;
-      billing_mode?: unknown;
-    };
-    const message =
-      readString(json.message) ??
-      readString(json.error) ??
-      `Cloud error (${response.status})`;
-    return new VoiceTranscriptionRequestError({
-      message,
-      status: response.status,
-      code: readString(json.code) ?? readString(json.error),
-      toolKind: normalizePaidToolKind(
-        json.tool_kind ?? json.toolKind ?? json.paid_tool_kind,
-      ),
-      requiredCredits: normalizePositiveCredits(
-        json.required_credits ?? json.requiredCredits,
-      ),
-      paidUsageBillingMode: normalizePaidUsageBillingMode(
-        json.paid_usage_billing_mode ??
-          json.paidUsageBillingMode ??
-          json.billing_mode,
-      ),
-    });
-  } catch {
-    return new VoiceTranscriptionRequestError({
-      message: await readAuthError(response),
-      status: response.status,
-    });
-  }
-}
-
-function isAbortLikeError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const record = error as { name?: unknown; message?: unknown };
-  const name = typeof record.name === "string" ? record.name.toLowerCase() : "";
-  const message = typeof record.message === "string" ? record.message.toLowerCase() : "";
-  return name === "aborterror" || message.includes("aborted");
-}
-
-async function fetchVoiceTranscription(
-  url: string,
-  init: RequestInit,
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => {
-    controller.abort();
-  }, VOICE_TRANSCRIPTION_UPLOAD_TIMEOUT_MS);
-  try {
-    return await fetch(url, {
-      ...init,
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (isAbortLikeError(error)) {
-      throw new VoiceTranscriptionRequestError({
-        message: "Voice upload timed out. Try a shorter clip.",
-        status: 0,
-        code: "voice_upload_timeout",
-      });
-    }
-    throw new VoiceTranscriptionRequestError({
-      message: "Voice upload failed. Check your connection and try again.",
-      status: 0,
-      code: "voice_upload_failed",
-    });
-  } finally {
-    window.clearTimeout(timeout);
-  }
-}
-
 export function decodeAuthJwtPayload(token: string): unknown | null {
   try {
     const parts = token.split(".");
@@ -232,15 +112,6 @@ const AUTH_GATEWAY_BEGIN_PATH = "/api/auth/google/start";
 const AUTH_GATEWAY_SESSION_PATH = "/api/auth/session";
 const AUTH_GATEWAY_REFRESH_PATH = "/api/auth/refresh";
 const AUTH_GATEWAY_LOGOUT_PATH = "/api/auth/logout";
-
-function trimTrailingSlashes(value: string): string {
-  return value.replace(/\/+$/, "");
-}
-
-function buildConvexRuntimeUrl(baseUrl: string, routePath: string): string {
-  const route = routePath.startsWith("/") ? routePath : `/${routePath}`;
-  return `${trimTrailingSlashes(baseUrl)}${route}`;
-}
 
 function buildSameOriginAuthUrl(routePath: string): string {
   const route = routePath.startsWith("/") ? routePath : `/${routePath}`;
@@ -351,59 +222,6 @@ function readOptionalNumber(value: unknown): number | null {
   return null;
 }
 
-function findNestedObjectCandidate(
-  payload: Record<string, unknown>,
-  keys: readonly string[],
-): Record<string, unknown> | null {
-  for (const key of keys) {
-    const nested = asObject(payload[key]);
-    if (nested) return nested;
-  }
-  return null;
-}
-
-function findSessionPayload(payload: unknown, requireRefreshToken = true): Record<string, unknown> | null {
-  const initial = asObject(payload);
-  if (!initial) return null;
-  const queue: Record<string, unknown>[] = [initial];
-  const visited = new Set<Record<string, unknown>>();
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (visited.has(current)) continue;
-    visited.add(current);
-
-    const accessToken = readObjectString(current, ["access_token", "accessToken"]);
-    const refreshToken = readObjectString(current, ["refresh_token", "refreshToken"]);
-    if (accessToken && (!requireRefreshToken || refreshToken)) return current;
-
-    const nested = findNestedObjectCandidate(current, ["session", "data", "result", "payload"]);
-    if (nested) queue.push(nested);
-  }
-  return null;
-}
-
-function readJwtExp(accessToken: string): number | null {
-  const payload = decodeAuthJwtPayload(accessToken);
-  if (!payload || typeof payload !== "object") return null;
-  const exp = readEpochSeconds((payload as Record<string, unknown>).exp);
-  return exp;
-}
-
-function coerceSessionExpiresAt(
-  sessionPayload: Record<string, unknown>,
-  accessToken: string,
-): number | null {
-  const nowSec = Math.floor(Date.now() / 1000);
-  const direct = readEpochSeconds(sessionPayload.expires_at ?? sessionPayload.expiresAt);
-  if (direct) return direct;
-  const expiresIn = readEpochSeconds(sessionPayload.expires_in ?? sessionPayload.expiresIn);
-  if (expiresIn) return nowSec + Math.max(1, expiresIn);
-  const jwtExp = readJwtExp(accessToken);
-  if (jwtExp) return jwtExp;
-  return null;
-}
-
 function decodeAuthUserFromIdentityToken(token: string): AuthUser | null {
   const payload = decodeAuthJwtPayload(token);
   if (!payload || typeof payload !== "object") return null;
@@ -435,51 +253,19 @@ function coerceAuthUser(value: unknown): AuthUser | null {
   return user;
 }
 
-type PersistedAuthSessionRecord = AuthSession & {
-  refresh_token: string;
-};
-
-function toPersistedAuthSessionRecord(
-  payload: unknown,
-  options: {
-    requireRefreshToken?: boolean;
-  } = {},
-): PersistedAuthSessionRecord | null {
-  const requireRefreshToken = options.requireRefreshToken !== false;
-  const sessionPayload = findSessionPayload(payload, requireRefreshToken);
-  if (!sessionPayload) return null;
-  const accessToken = readObjectString(sessionPayload, ["access_token", "accessToken"]);
-  const idToken = readObjectString(sessionPayload, ["id_token", "idToken"]);
-  const refreshToken = readObjectString(sessionPayload, ["refresh_token", "refreshToken"]);
-  if (!accessToken) return null;
-  if (requireRefreshToken && !refreshToken) return null;
-  const expiresAt = coerceSessionExpiresAt(sessionPayload, accessToken);
-  if (!expiresAt) return null;
-  const user =
-    coerceAuthUser(sessionPayload.user) ??
-    decodeAuthUserFromIdentityToken(idToken ?? accessToken) ?? { id: "" };
+function coerceAuthSession(payload: unknown): AuthSession | null {
+  const record = asObject(payload);
+  if (!record) return null;
+  const accessToken = readString(record.access_token);
+  const idToken = readString(record.id_token);
+  const expiresAt = readEpochSeconds(record.expires_at);
+  const user = coerceAuthUser(record.user);
+  if (!accessToken || !expiresAt || !user) return null;
   return {
     access_token: accessToken,
     ...(idToken ? { id_token: idToken } : null),
-    refresh_token: refreshToken ?? "",
     expires_at: expiresAt,
     user,
-  };
-}
-
-function coerceAuthSession(
-  payload: unknown,
-  options: {
-    requireRefreshToken?: boolean;
-  } = {},
-): AuthSession | null {
-  const record = toPersistedAuthSessionRecord(payload, options);
-  if (!record) return null;
-  return {
-    access_token: record.access_token,
-    ...(record.id_token ? { id_token: record.id_token } : null),
-    expires_at: record.expires_at,
-    user: record.user,
   };
 }
 
@@ -488,15 +274,21 @@ function coerceAuthBridgeBootstrapTrace(payload: unknown): AuthBridgeBootstrapTr
   if (!record) return null;
   const bootstrapPath =
     readObjectString(record, ["bootstrap_path", "bootstrapPath", "path"]) ?? null;
-  const rotatedSessionFollowed =
-    record.rotated_session_followed === true || record.rotatedSessionFollowed === true;
+  const refreshLeaseContended =
+    record.refresh_lease_contended === true || record.refreshLeaseContended === true;
+  const recoveredAfterRefreshFailure =
+    record.recovered_after_refresh_failure === true ||
+    record.recoveredAfterRefreshFailure === true;
   const upstreamRefreshMs = readOptionalNumber(
     record.upstream_refresh_ms ?? record.upstreamRefreshMs,
   );
-  if (!bootstrapPath && !rotatedSessionFollowed && upstreamRefreshMs === null) return null;
+  if (!bootstrapPath && !refreshLeaseContended && !recoveredAfterRefreshFailure && upstreamRefreshMs === null) {
+    return null;
+  }
   return {
     bootstrapPath,
-    rotatedSessionFollowed,
+    refreshLeaseContended,
+    recoveredAfterRefreshFailure,
     upstreamRefreshMs,
   };
 }
@@ -539,7 +331,7 @@ export async function bootstrapSessionDetailed(): Promise<AuthSessionBootstrapRe
   if (!response.ok) throw new Error(await readAuthError(response));
   const payload = (await response.json()) as Record<string, unknown>;
   return {
-    session: coerceAuthSession(payload?.session ?? null, { requireRefreshToken: false }),
+    session: coerceAuthSession(payload?.session ?? null),
     trace: coerceAuthBridgeBootstrapTrace(payload?.trace ?? null),
   };
 }
@@ -575,56 +367,6 @@ function ensureResultFromRefreshFailure(
     return { status: "terminal_failure", reason: refresh.reason };
   }
   return { status: "transient_failure", reason: refresh.reason };
-}
-
-export async function transcribeVoice(params: {
-  session: { access_token: string };
-  audioBase64: string;
-  mimeType: string;
-  language?: string | null;
-  surface: string;
-  preferPrimary?: boolean;
-  durationMs?: number | null;
-}): Promise<string> {
-  const accessToken = readString(params.session?.access_token);
-  if (!accessToken) throw new Error("Sign in to use voice input.");
-  const convexUrl = readConvexRuntimeUrl();
-  if (!convexUrl) throw new Error("Voice transcription is unavailable: missing Convex URL.");
-
-  const response = await fetchVoiceTranscription(
-    buildConvexRuntimeUrl(convexUrl, "/runtime/voice_transcribe"),
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        audio_base64: params.audioBase64,
-        mime_type: params.mimeType,
-        language: params.language ?? undefined,
-        surface: params.surface,
-        prefer_primary: params.preferPrimary ?? false,
-        duration_ms:
-          typeof params.durationMs === "number" && Number.isFinite(params.durationMs)
-            ? Math.max(0, Math.round(params.durationMs))
-            : undefined,
-      }),
-    },
-  );
-  if (!response.ok) {
-    throw await readVoiceTranscriptionRequestError(response);
-  }
-  let payload: unknown = null;
-  try {
-    payload = (await response.json()) as unknown;
-  } catch {
-    payload = null;
-  }
-  if (!payload) throw new Error("Transcription failed.");
-  const payloadRecord = asObject(payload);
-  const text = readString(payloadRecord?.text);
-  return text ?? "";
 }
 
 function includesJwtFailureText(value: string): boolean {
@@ -791,9 +533,7 @@ export async function refreshAuthSessionResult(): Promise<AuthSessionRefreshResu
   }
   try {
     const payload = (await response.json()) as Record<string, unknown>;
-    const refreshed = coerceAuthSession(payload?.session ?? null, {
-      requireRefreshToken: false,
-    });
+    const refreshed = coerceAuthSession(payload?.session ?? null);
     if (!refreshed) {
       return { status: "transient_failure", reason: "invalid_refresh_response" };
     }

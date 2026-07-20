@@ -563,7 +563,9 @@ export function useWebAppAuthController(
             hasSession: Boolean(currentSession),
             bootstrapPath: bootstrapResult.trace?.bootstrapPath ?? null,
             upstreamRefreshMs: bootstrapResult.trace?.upstreamRefreshMs ?? null,
-            rotatedSessionFollowed: bootstrapResult.trace?.rotatedSessionFollowed ?? false,
+            refreshLeaseContended: bootstrapResult.trace?.refreshLeaseContended ?? false,
+            recoveredAfterRefreshFailure:
+              bootstrapResult.trace?.recoveredAfterRefreshFailure ?? false,
           },
         });
         if (cancelled) return;

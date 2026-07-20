@@ -1,12 +1,5 @@
-import { callAuthBridgeJson, isSameOriginPost, readResponseError } from "./_bridge.js";
-import { clearAuthSessionCookie, readAuthSessionId, setAuthSessionCookie } from "./_cookies.js";
-
-function sendJson(res, status, payload) {
-  res.statusCode = status;
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.setHeader("Cache-Control", "no-store");
-  res.end(JSON.stringify(payload));
-}
+import { callAuthBridgeJson, isSameOriginPost, readResponseError, sendJson } from "./_bridge.js";
+import { clearAuthSessionCookie, readAuthSessionId } from "./_cookies.js";
 
 export default async function handler(req, res) {
   if (req.method === "OPTIONS") {
@@ -47,10 +40,6 @@ export default async function handler(req, res) {
 
   if (response.ok) {
     const payload = await response.json();
-    const nextSessionId = typeof payload?.session_id === "string" ? payload.session_id.trim() : "";
-    if (nextSessionId) {
-      setAuthSessionCookie(res, req, nextSessionId);
-    }
     sendJson(res, 200, {
       ok: true,
       session: payload?.session ?? null,

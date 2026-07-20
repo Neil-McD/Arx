@@ -9,6 +9,7 @@
  */
 
 import type * as account from "../account.js";
+import type * as accountLifecyclePolicy from "../accountLifecyclePolicy.js";
 import type * as accountSetupCore from "../accountSetupCore.js";
 import type * as anonymousUserCleanup from "../anonymousUserCleanup.js";
 import type * as appConnections from "../appConnections.js";
@@ -19,6 +20,7 @@ import type * as appValidation from "../appValidation.js";
 import type * as auth from "../auth.js";
 import type * as authActor from "../authActor.js";
 import type * as authIdentity from "../authIdentity.js";
+import type * as authSessionCore from "../authSessionCore.js";
 import type * as authSessions from "../authSessions.js";
 import type * as billing from "../billing.js";
 import type * as billingCore from "../billingCore.js";
@@ -238,6 +240,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   account: typeof account;
+  accountLifecyclePolicy: typeof accountLifecyclePolicy;
   accountSetupCore: typeof accountSetupCore;
   anonymousUserCleanup: typeof anonymousUserCleanup;
   appConnections: typeof appConnections;
@@ -248,6 +251,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   authActor: typeof authActor;
   authIdentity: typeof authIdentity;
+  authSessionCore: typeof authSessionCore;
   authSessions: typeof authSessions;
   billing: typeof billing;
   billingCore: typeof billingCore;

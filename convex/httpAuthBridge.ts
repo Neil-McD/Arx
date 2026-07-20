@@ -3,6 +3,7 @@ import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import {
   AUTH_SECURE_RANDOM_UNAVAILABLE,
   createSecureAuthSessionId,
+  hashAuthSessionCredential,
   normalizeStoredState,
 } from "./authSessions";
 import { normalizeEmailForVerification, resolveTrustedEmailVerification } from "./workosEmailVerification";
@@ -58,6 +59,12 @@ function readString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+async function buildSessionLookup(sessionCredential: string) {
+  return {
+    sessionTokenHash: await hashAuthSessionCredential(sessionCredential),
+  };
 }
 
 function toPublicSession(stored: {
@@ -183,7 +190,6 @@ function mapBridgeSessionActionResult(
   if (result?.status === "ready" || result?.status === "refreshed") {
     return jsonResponse(req, 200, {
       ok: true,
-      ...(readString(result?.sessionId) ? { session_id: readString(result?.sessionId) } : null),
       session: result.session,
       ...(asObject(result?.trace) ? { trace: result.trace } : null),
     });
@@ -270,8 +276,10 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
         },
       };
       let sessionId: string;
+      let sessionTokenHash: string;
       try {
         sessionId = createSessionId();
+        sessionTokenHash = await hashAuthSessionCredential(sessionId);
       } catch {
         return jsonResponse(req, 503, {
           ok: false,
@@ -307,8 +315,7 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
       });
 
       await ctx.runMutation(internal.authSessions.createAuthSessionInternal as any, {
-        sessionId,
-        authSubject,
+        sessionTokenHash,
         userId: actor.dbUserId,
         accessToken: normalizedStored.accessToken,
         ...(normalizedStored.idToken ? { idToken: normalizedStored.idToken } : null),
@@ -355,7 +362,7 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
         });
       }
       const result = await ctx.runAction(internal.authSessions.bootstrapAuthSessionInternal as any, {
-        sessionId,
+        ...(await buildSessionLookup(sessionId)),
       });
       return mapBridgeSessionActionResult(req, jsonResponse, result);
     }),
@@ -385,7 +392,7 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
         });
       }
       const result = await ctx.runAction(internal.authSessions.refreshAuthSessionInternal as any, {
-        sessionId,
+        ...(await buildSessionLookup(sessionId)),
       });
       return mapBridgeSessionActionResult(req, jsonResponse, result);
     }),
@@ -410,7 +417,7 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
         return jsonResponse(req, 200, { ok: true });
       }
       const result = await ctx.runAction(internal.authSessions.logoutAuthSessionInternal as any, {
-        sessionId,
+        ...(await buildSessionLookup(sessionId)),
       });
       return mapBridgeSessionActionResult(req, jsonResponse, result);
     }),

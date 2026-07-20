@@ -6,6 +6,7 @@ const AUTH_FLOW_COOKIE_NAME_SECURE = "__Secure-arx-auth-flow";
 const AUTH_FLOW_COOKIE_NAME_LOCAL = "arx-auth-flow";
 const AUTH_FLOW_TTL_MS = 20 * 60 * 1000;
 const DEFAULT_SESSION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+const MAX_SESSION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 const DEFAULT_POST_SIGN_IN_PATH = "/";
 
 function readEnv(name) {
@@ -150,7 +151,15 @@ export function buildRedirectUrl(req, returnTo, params = {}) {
 export function setAuthSessionCookie(res, req, sessionId) {
   const name = resolveCookieName(req, "session");
   const domain = resolveCookieDomain(req);
-  const maxAge = Number(readEnv("ARX_AUTH_SESSION_COOKIE_MAX_AGE_SECONDS") || DEFAULT_SESSION_COOKIE_MAX_AGE_SECONDS);
+  const configuredMaxAge = Number(
+    readEnv("ARX_AUTH_SESSION_COOKIE_MAX_AGE_SECONDS") || DEFAULT_SESSION_COOKIE_MAX_AGE_SECONDS,
+  );
+  const maxAge = Math.min(
+    MAX_SESSION_COOKIE_MAX_AGE_SECONDS,
+    Number.isFinite(configuredMaxAge) && configuredMaxAge > 0
+      ? Math.floor(configuredMaxAge)
+      : DEFAULT_SESSION_COOKIE_MAX_AGE_SECONDS,
+  );
   appendSetCookie(
     res,
     serializeCookie(name, encodeURIComponent(String(sessionId ?? "")), {

@@ -66,7 +66,7 @@ assert.match(
 );
 assert.match(
   platformDiagnostics,
-  /DIAGNOSTIC_METADATA_ALLOWLIST[\s\S]*"auth\.session_established": \["bootstrapPath", "rotatedSessionFollowed"\][\s\S]*"auth\.session_refreshed": \[\][\s\S]*"access\.operator_access_granted": \["role", "source"\]/,
+  /DIAGNOSTIC_METADATA_ALLOWLIST[\s\S]*"auth\.session_established": \["bootstrapPath", "refreshLeaseContended"\][\s\S]*"auth\.session_refreshed": \[\][\s\S]*"access\.operator_access_granted": \["role", "source"\]/,
   "platform diagnostics metadata must be event-type allowlisted",
 );
 assert.match(
@@ -81,7 +81,7 @@ assert.match(
 );
 assert.match(
   platformDiagnostics,
-  /DIAGNOSTIC_METADATA_SAFE_KEY_EXCEPTIONS[\s\S]*"recoveredWithStoredToken"[\s\S]*"rotatedSessionFollowed"/,
+  /DIAGNOSTIC_METADATA_SAFE_KEY_EXCEPTIONS[\s\S]*"refreshLeaseContended"/,
   "platform diagnostics sanitizer must preserve explicit safe auth status labels",
 );
 assert.match(

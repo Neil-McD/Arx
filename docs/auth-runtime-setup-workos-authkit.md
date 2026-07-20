@@ -165,13 +165,9 @@ After the env posture is aligned, verify the actual failure seam:
 
 ## 8) Session Maintenance
 
-Revoked rotated session rows are safe to prune after a retention window.
-
-Run:
-
-```bash
-npm run auth:prune-sessions -- --older-than-days 14 --limit 500
-```
-
-This deletes only revoked auth session rows older than the chosen cutoff from
-the production Convex deployment.
+Each sign-in creates one server-held session with a 30-day absolute lifetime.
+Refresh updates that row in place under a single-owner lease; it never rotates
+the browser credential or creates a replacement chain. Logout and terminal
+provider failures revoke locally first. An internal hourly Convex cron deletes
+terminal rows after the seven-day evidence window in indexed batches capped at
+500. There is no public maintenance endpoint or operator-run prune command.

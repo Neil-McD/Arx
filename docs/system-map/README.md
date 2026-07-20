@@ -22,6 +22,7 @@ The map is source-comprehensive, not runtime-complete. A later bounded staging a
 - [`03-coverage-and-topology.md`](03-coverage-and-topology.md): all 16 coverage domains, repository topology, and concentration.
 - [`04-staging-shape-audit-20260720.md`](04-staging-shape-audit-20260720.md): bounded redacted staging distributions and candidate-status changes.
 - [`05-decisions-builder-partner-and-data-ownership.md`](05-decisions-builder-partner-and-data-ownership.md): accepted product direction, remaining financial inputs, and revised causal order.
+- [`06-authenticated-identity-session-completion-20260720.md`](06-authenticated-identity-session-completion-20260720.md): F-001/F-003–F-005 end state, migration receipt, executable proof, and 8/10 score contract.
 - [`domains/identity-community-access.md`](domains/identity-community-access.md): identity, sessions, communities, membership, and access.
 - [`domains/privacy-account-lifecycle.md`](domains/privacy-account-lifecycle.md): profiles, consent, shared ownership, account and community deletion.
 - [`domains/billing-money.md`](domains/billing-money.md): payment authority, community revenue, entitlements, credits, Builder Partner commissions, and payouts.

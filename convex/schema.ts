@@ -25,25 +25,23 @@ export default defineSchema({
     .index("by_normalizedHandle", ["normalizedHandle"]),
 
   authSessions: defineTable({
-    sessionId: v.string(),
-    authSubject: v.string(),
+    sessionTokenHash: v.string(),
     userId: v.id("users"),
-    replacedBySessionId: v.optional(v.string()),
     encryptedSecretHex: v.string(),
     secretIvHex: v.string(),
     secretVersion: v.number(),
-    accessTokenExpiresAt: v.optional(v.number()),
-    email: v.optional(v.string()),
-    displayName: v.optional(v.string()),
-    avatarUrl: v.optional(v.string()),
-    lastRefreshAt: v.optional(v.number()),
+    expiresAt: v.number(),
+    refreshLeaseId: v.optional(v.string()),
+    refreshLeaseExpiresAt: v.optional(v.number()),
+    secretRevision: v.number(),
     revokedAt: v.optional(v.number()),
+    purgeAfterAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_sessionId", ["sessionId"])
-    .index("by_authSubject", ["authSubject"])
-    .index("by_user", ["userId"]),
+    .index("by_sessionTokenHash", ["sessionTokenHash"])
+    .index("by_user", ["userId"])
+    .index("by_purgeAfterAt", ["purgeAfterAt"]),
 
   userEntitlements: defineTable({
     userId: v.id("users"),

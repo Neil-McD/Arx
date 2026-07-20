@@ -78,3 +78,15 @@ On 2026-07-20 UTC, five bounded Convex inline queries read redacted aggregate st
 ## Coverage gate
 
 The generated domain assignment has no fallback schema tables. All tables, registered functions, alias candidates, HTTP routes, API routes, scheduled jobs, docs, and tracked files have an assigned domain. Assignment proves coverage, not necessity or correct ownership. Semantic conclusions live in the dossiers and findings register.
+
+## Later authenticated identity/session checkpoint
+
+The frozen inventory remains historical truth for the mapping snapshot. A later authorized staging-only implementation slice closed F-001 and F-003 through F-005 without selecting production:
+
+- verified provider subject is the sole account-binding authority;
+- one raw browser credential maps to one stored SHA-256 hash and one absolutely expiring server row;
+- provider refresh is an in-place, single-owner, revision-checked transition;
+- local revocation is authoritative and terminal retention is internal, indexed, scheduled, and capped at 500 rows;
+- the staging legacy session index was drained to a separately verified zero state before its schema and compatibility code were deleted.
+
+Current implementation and live acceptance evidence belongs in the later completion receipt, not in the original inventory hashes above.

@@ -80,16 +80,13 @@ const DIAGNOSTIC_METADATA_BLOCKED_KEY_PARTS = [
   "encrypted",
 ];
 
-const DIAGNOSTIC_METADATA_SAFE_KEY_EXCEPTIONS = [
-  "recoveredWithStoredToken",
-  "rotatedSessionFollowed",
-];
+const DIAGNOSTIC_METADATA_SAFE_KEY_EXCEPTIONS = ["refreshLeaseContended"];
 
 const DIAGNOSTIC_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
-  "auth.session_established": ["bootstrapPath", "rotatedSessionFollowed"],
-  "auth.bootstrap_failed": ["recoveredWithStoredToken"],
+  "auth.session_established": ["bootstrapPath", "refreshLeaseContended"],
+  "auth.bootstrap_failed": [],
   "auth.session_refreshed": [],
-  "auth.session_refresh_failed": ["recoveredWithStoredToken"],
+  "auth.session_refresh_failed": [],
   "auth.session_logged_out": ["providerLogoutOutcome"],
   "auth.session_logout_failed": [],
   "access.operator_access_granted": ["role", "source"],
