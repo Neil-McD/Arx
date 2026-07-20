@@ -1,5 +1,6 @@
 export const BUILDER_PARTNER_PROGRAM_VERSION = "builder_partner_v1";
 export const BUILDER_PARTNER_TERMS_VERSION = "builder_partner_terms_v2";
+export const BUILDER_PARTNER_ACCRUAL_MODE: "frozen" | "community_v3" = "frozen";
 export const BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS = 1000;
 export const BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS = 500;
 export const BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS = 2000;

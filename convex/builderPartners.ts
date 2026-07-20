@@ -8,6 +8,7 @@ import { requireOperatorRole } from "./operatorAccess";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { getStripeClient } from "./stripeCore";
 import {
+  BUILDER_PARTNER_ACCRUAL_MODE,
   BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS,
   BUILDER_PARTNER_COMMISSION_HOLD_MS,
   BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
@@ -1049,6 +1050,7 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
   currencyDecimals?: number | null;
   nowMs?: number;
 }) {
+  if (BUILDER_PARTNER_ACCRUAL_MODE === "frozen") return null;
   const nowMs = args.nowMs ?? Date.now();
   const sourceCheckoutSessionId = String(args.sourceCheckoutSessionId ?? "").trim();
   const sourceProviderInvoiceId = String(args.sourceProviderInvoiceId ?? "").trim();
@@ -1135,6 +1137,7 @@ export async function recordPaidToolUsagePartnerCommission(ctx: any, args: {
   rawVendorCostUsd?: number | null;
   nowMs?: number;
 }) {
+  if (BUILDER_PARTNER_ACCRUAL_MODE === "frozen") return null;
   const nowMs = args.nowMs ?? Date.now();
   const creditKey = String(args.creditKey ?? "").trim();
   if (!creditKey) return null;
