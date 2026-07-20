@@ -85,4 +85,13 @@ An 8 means the slice is complete and launch-worthy within its boundary, not that
 
 ## Final acceptance
 
-To close this receipt, the tested commit must be deployed through the staging branch, the public staging build marker must match it, a signed-in reload/bootstrap must remain authenticated without cookie replacement, and the post-deploy 1,069-row invariants must remain green. Production must remain unchanged.
+Accepted on the staging code commit `b03b7eac16c6dc99e4436e96d66e465eb086969c`:
+
+- the commit was pushed only to `codex/semantic-platform-staging-20260719` and deployed by the `polynet-staging` Git path;
+- `https://polynet-staging.vercel.app/version.json` reported that exact build and Sentry release;
+- the already-signed-in pre-cutover browser session survived migration and final schema deletion;
+- a reload on the deployed build remained at `/c/polynet/chat`, rendered the authenticated profile and `Active now`, showed no sign-in control, and emitted zero browser warnings/errors;
+- the post-reload full scan remained exactly 1,069 rows with zero malformed hashes, invalid revisions, expired/missing lifetimes, legacy fields, or scan overflow;
+- production was not pushed, deployed, queried, or mutated.
+
+This completes the slice at 8/10 across all five dimensions within the declared boundary.

@@ -1,6 +1,6 @@
 # Polynet System Map
 
-Status: comprehensive static map and bounded redacted staging-shape audit complete at commit `67c89903add41ff9b8de20929e07429a8d98f3bc`; signed-in behavior, provider convergence, external consumers, and production remain unqueried.
+Status: comprehensive static map and bounded redacted staging-shape audit complete at commit `67c89903add41ff9b8de20929e07429a8d98f3bc`; the later authenticated identity/session slice is complete and signed-in verified on staging. Live provider-outage convergence, external consumers, unrelated domains, and production remain outside that proof.
 
 This directory is evidence and analysis, not product authority. Schema, executable authorization boundaries, runtime behavior, and the current MVP contract remain authoritative for their respective truth classes. Nothing in this map authorizes a code, schema, data, configuration, deployment, migration, or deletion change.
 
@@ -12,7 +12,7 @@ This directory is evidence and analysis, not product authority. Schema, executab
 4. Competing truths, duplication, scale risks, destructive lifecycle defects, deferred surfaces, stale configuration, proof gaps, and deletion candidates are recorded in one findings register.
 5. The idiot index challenges exact requirements and compatibility burdens; it never grants deletion authority.
 
-The map is source-comprehensive, not runtime-complete. A later bounded staging audit inspected aggregate state distributions only; it returned no private content or identifiers. It did not execute authenticated journeys, invoke external providers, or mutate anything. Remaining runtime uncertainty stays explicit.
+The original map is source-comprehensive, not globally runtime-complete. Its bounded staging audit returned no private content or identifiers. A later authorized F-001/F-003–F-005 slice migrated staging session state, deployed the simplified contract, and completed a signed-in reload acceptance; its separate receipt keeps that evidence distinct from the frozen read-only audit. Remaining runtime uncertainty stays explicit.
 
 ## Navigation
 
