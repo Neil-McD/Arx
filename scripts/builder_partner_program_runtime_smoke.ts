@@ -371,6 +371,7 @@ runConvex("communityCommerce:createPendingPublicCommunityCheckoutSessionInternal
   amountBaseUnits: checkoutConfig.amountBaseUnits,
   currency: checkoutConfig.currency,
   currencyDecimals: checkoutConfig.currencyDecimals,
+  platformFeeBps: checkoutConfig.platformFeeBps,
   providerPriceId: checkoutConfig.providerPriceId,
   ownerUserId: referred.userId,
   claimToken: `claim_${runId}`,
@@ -385,6 +386,8 @@ runConvex("communityCommerce:syncPendingCommunityCheckoutSubscriptionInternal", 
   sourceProviderInvoiceId: `in_${runId}`,
   sourceProviderPaymentIntentId: `pi_${runId}`,
   sourceProviderChargeId: `ch_${runId}`,
+  settledRevenueBaseUnits: checkoutConfig.amountBaseUnits,
+  platformFeeBps: checkoutConfig.platformFeeBps,
   providerPriceId: checkoutConfig.providerPriceId,
   subscriptionStatus: "active",
   currentPeriodStartAt: purchaseNowMs,
@@ -401,6 +404,8 @@ runConvex("communityCommerce:syncPendingCommunityCheckoutSubscriptionInternal", 
   sourceProviderInvoiceId: `in_${runId}`,
   sourceProviderPaymentIntentId: `pi_${runId}`,
   sourceProviderChargeId: `ch_${runId}`,
+  settledRevenueBaseUnits: checkoutConfig.amountBaseUnits,
+  platformFeeBps: checkoutConfig.platformFeeBps,
   providerPriceId: checkoutConfig.providerPriceId,
   subscriptionStatus: "active",
   currentPeriodStartAt: purchaseNowMs,
@@ -415,8 +420,8 @@ const afterCheckout = runConvex(
   { authSubject: partnerSubject },
   { identity: partner.identity },
 );
-assert.equal(Number(afterCheckout.commissionSummary.pendingUsd), 6);
-assert.equal(Number(afterCheckout.commissionSummary.totalUsd), 6);
+assert.equal(Number(afterCheckout.commissionSummary.pendingUsd), 4);
+assert.equal(Number(afterCheckout.commissionSummary.totalUsd), 4);
 assert.equal(Number(afterCheckout.attributionSummary.boundCount), 1);
 
 const holdClearedAt = purchaseNowMs + 30 * DAY_MS + 1;
@@ -431,7 +436,7 @@ const beforePayoutReservation = runConvex(
   { authSubject: partnerSubject },
   { identity: partner.identity },
 );
-assert.equal(Number(beforePayoutReservation.commissionSummary.readyUsd), 6);
+assert.equal(Number(beforePayoutReservation.commissionSummary.readyUsd), 4);
 assert.equal(Number(beforePayoutReservation.commissionSummary.readyCount), 1);
 
 const payoutNowMs = nowMs;
@@ -445,7 +450,7 @@ const payoutCycle = smokePayoutCycle.payoutCycle;
 assert.equal(payoutCycle.ok, true);
 assert.equal(payoutCycle.created, true, JSON.stringify(payoutCycle));
 assert.equal(payoutCycle.cycle?.cycleKey, `partner_payout_smoke:${runId}:${smokePayoutCycle.cyclePeriod}`);
-assert.ok(Number(payoutCycle.cycle?.totalAmountUsd) >= 6, JSON.stringify(payoutCycle));
+assert.ok(Number(payoutCycle.cycle?.totalAmountUsd) >= 4, JSON.stringify(payoutCycle));
 assert.ok(Number(payoutCycle.cycle?.partnerCount) >= 1, JSON.stringify(payoutCycle));
 assert.ok(Number(payoutCycle.cycle?.itemCount) >= 1, JSON.stringify(payoutCycle));
 const afterPayoutReservation = runConvex(

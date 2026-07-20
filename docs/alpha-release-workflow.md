@@ -71,8 +71,11 @@ deploy-key authority and production-shaped selectors. The ignored
 Web staging releases are Git-based. Do not run direct local Vercel deploy,
 promote, alias, or rollback commands. Use the stable production domain owned by
 the `polynet-staging` project after its Git production branch is set to the
-semantic staging branch. The short `polynet-staging.vercel.app` alias currently
-points at a historical preview and is not staging truth.
+semantic staging branch. The canonical staging web origin is
+`https://polynet-staging.vercel.app`; project- and deployment-specific Vercel
+domains are implementation details and are not acceptance targets. Verify that
+the canonical origin's `version.json` matches the exact staged commit before any
+signed-in smoke.
 
 When a slice changes Convex code or schema, deploy staging Convex first from the
 exact clean commit:

@@ -12,10 +12,9 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import {
-  BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
+  BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS,
   BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
-  BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS,
-  calculateBuilderPartnerCommunityRevenueCommission,
+  BUILDER_PARTNER_EARNING_WINDOW_MS,
 } from "../../../../shared/builderPartnerProgram";
 import type {
   BuilderPartnerProgramRequirement,
@@ -112,13 +111,8 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
   const [hasConfirmedTermsAcceptance, setHasConfirmedTermsAcceptance] = useState(false);
   const activeTermsDocument = BUILDER_PARTNER_TERMS_ENTRY;
   const showProgramOverview = props.showProgramOverview ?? true;
-  const toolUsageRevenueShareBps = BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS;
-  const communityCommission = calculateBuilderPartnerCommunityRevenueCommission({
-    communityRevenueUsd: 100,
-    platformFeeBps: BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
-    partnerCommunityRevenueShareBps: BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
-  });
-  const effectiveCommunityRevenueShareBps = communityCommission.effectiveCommunityRevenueShareBps;
+  const attributionWindowDays = Math.round(BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS / (24 * 60 * 60 * 1000));
+  const earningWindowMonths = Math.round(BUILDER_PARTNER_EARNING_WINDOW_MS / (365 * 24 * 60 * 60 * 1000) * 12);
   const isSignedIn = Boolean(props.session);
   const snapshot = props.builderPartnerProgram;
   const partner = snapshot?.partner ?? null;
@@ -218,7 +212,7 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
             Builder Partner Program
           </div>
           <div className="settings-section-desc">
-            Platform-level partner program for builders bringing new communities and paid tool usage to Polynet.
+            An optional partner program for builders who refer new community creators to Polynet.
           </div>
 
           <div className="builder-partner-hero">
@@ -226,8 +220,9 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
               <span className="builder-partner-kicker">Platform partner program</span>
               <h2>{isActive ? "Your Builder Partner account is active." : "Bring builders to Polynet and share in the value they create."}</h2>
               <p>
-                Builder Partners earn from referred creators' community revenue and settled paid tool usage.
-                Partner links are generated automatically when the requirements are met.
+                Builder Partners can earn up to {formatBps(BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS)}
+                of eligible settled community revenue. Partner links are generated automatically when
+                the requirements are met.
               </p>
             </div>
             <div className="builder-partner-status-stack" aria-label="Builder Partner status">
@@ -253,18 +248,15 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
               <BadgeDollarSign />
               <span>Community revenue</span>
               <strong>
-                Earn {formatBps(effectiveCommunityRevenueShareBps)} of referred creators'
-                community revenue.
+                Earn up to {formatBps(BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS)} of eligible revenue.
               </strong>
-              <small>Calculated from eligible referred creator community revenue.</small>
+              <small>Paid from Polynet's platform fee, never from the community builder's payout.</small>
             </div>
             <div className="builder-partner-metric" role="listitem">
-              <BadgeDollarSign />
-              <span>Paid tool usage</span>
-              <strong>
-                Earn up to {formatBps(toolUsageRevenueShareBps)} of referred creators' settled tool usage.
-              </strong>
-              <small>Tool commissions preserve Polynet's retained margin target before payout.</small>
+              <Clock3 />
+              <span>Attribution</span>
+              <strong>{attributionWindowDays}-day bind window, {earningWindowMonths}-month earning window</strong>
+              <small>The earning window starts at the referral's first authenticated bind.</small>
             </div>
             <div className="builder-partner-metric" role="listitem">
               <ShieldCheck />

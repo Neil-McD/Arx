@@ -69,7 +69,6 @@ import {
   WORKSPACE_RIGHT_PANEL_KEYBOARD_STEP,
   WebWorkspaceRightPanel,
 } from "./WebWorkspaceRightPanel";
-import type { WebBuilderPartnerProgramPanelProps } from "./WebBuilderPartnerProgramPanel";
 import { useOperatorDashboardData } from "./useOperatorDashboardData";
 import {
   buildWorkspaceRightPanelTabs,
@@ -387,7 +386,6 @@ export type WebWorkspaceHostProps = {
   onOpenPremiumBilling: () => void;
   showWorkspaceRightPanel?: boolean;
   operatorRightPanelSession?: AuthSessionLike | null;
-  builderPartnerProgramPanel?: WebBuilderPartnerProgramPanelProps | null;
   workspaceRightPanelOpen?: boolean;
   workspaceCommunityPreviewPanel?: WorkspaceCommunityPreviewPanelDataProps | null;
   workspaceUserDataPanel?: WorkspaceUserDataPanelDataProps | null;
@@ -1527,7 +1525,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const showWorkspaceRightPanel = Boolean(props.showWorkspaceRightPanel && props.workspaceUserDataPanel);
   const isWorkspaceRightPanelVisible = Boolean(showWorkspaceRightPanel && props.workspaceRightPanelOpen);
   const showCommunityTab = Boolean(props.workspaceCommunityPreviewPanel?.activeCommunity);
-  const showPartnerTab = Boolean(props.builderPartnerProgramPanel?.builderPartnerProgram?.partner);
   const showOperatorTabs = Boolean(props.operatorRightPanelSession);
   const rightPanelStorageUserId = useMemo(() => resolveAuthSubject(props.session), [props.session]);
   const activeRightPanelMode = resolveWorkspaceRightPanelMode(requestedRightPanelMode, showOperatorTabs);
@@ -1540,7 +1537,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       buildWorkspaceRightPanelTabs({
         communityLabel: props.workspaceCommunityPreviewPanel?.activeCommunity.name ?? null,
         showCommunityTab,
-        showPartnerTab,
         showOperatorTabs,
         mode: activeRightPanelMode,
       }),
@@ -1549,7 +1545,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       props.workspaceCommunityPreviewPanel?.activeCommunity.name,
       showCommunityTab,
       showOperatorTabs,
-      showPartnerTab,
     ],
   );
   const activeRightPanelTab = resolveWorkspaceRightPanelTab(requestedRightPanelTab, workspaceRightPanelTabs);
@@ -2608,7 +2603,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             state={operatorData.state}
             topCommunities={operatorData.topCommunities}
             partnerPayoutCycleActions={operatorData.partnerPayoutCycleActions}
-            builderPartnerProgramPanel={props.builderPartnerProgramPanel ?? null}
             isLoading={operatorData.isLoading}
             error={operatorData.error}
             insightTabs={workspaceRightPanelTabs}

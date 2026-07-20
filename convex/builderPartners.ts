@@ -11,15 +11,14 @@ import {
   BUILDER_PARTNER_ACCRUAL_MODE,
   BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS,
   BUILDER_PARTNER_COMMISSION_HOLD_MS,
-  BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
+  BUILDER_PARTNER_COMMUNITY_REVENUE_BASIS,
   BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
+  BUILDER_PARTNER_EARNING_WINDOW_MS,
+  BUILDER_PARTNER_ECONOMIC_POLICY_VERSION,
   BUILDER_PARTNER_PAYOUT_BUFFER_MS,
   BUILDER_PARTNER_PROGRAM_VERSION,
   BUILDER_PARTNER_TERMS_VERSION,
-  BUILDER_PARTNER_TOOL_USAGE_POLYNET_RETAINED_REVENUE_BPS,
-  BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS,
   calculateBuilderPartnerCommunityRevenueCommission,
-  calculateBuilderPartnerToolUsageCommission,
   roundBuilderPartnerMoney,
 } from "../shared/builderPartnerProgram";
 import { BUILDER_PARTNER_TERMS_DOCUMENT } from "../shared/legalDocuments";
@@ -883,10 +882,11 @@ async function recordBuilderPartnerTermsAcceptance(ctx: any, args: {
 
 function isOpenAttribution(row: any, nowMs: number): boolean {
   const status = String(row?.status ?? "");
-  return (
-    (status === "active" || status === "bound") &&
-    Number(row?.expiresAt ?? 0) > nowMs
-  );
+  if (status === "active") return Number(row?.expiresAt ?? 0) > nowMs;
+  if (status === "bound") {
+    return Number(row?.commissionEligibleUntil ?? row?.expiresAt ?? 0) > nowMs;
+  }
+  return false;
 }
 
 async function expireClosedAttributions(ctx: any, rows: any[], nowMs: number) {
@@ -894,10 +894,11 @@ async function expireClosedAttributions(ctx: any, rows: any[], nowMs: number) {
     rows
       .filter((row) => {
         const status = String(row?.status ?? "");
-        return (
-          (status === "active" || status === "bound") &&
-          Number(row?.expiresAt ?? 0) <= nowMs
-        );
+        if (status === "active") return Number(row?.expiresAt ?? 0) <= nowMs;
+        if (status === "bound") {
+          return Number(row?.commissionEligibleUntil ?? row?.expiresAt ?? 0) <= nowMs;
+        }
+        return false;
       })
       .map((row) =>
         ctx.db.patch(row._id, {
@@ -967,6 +968,9 @@ async function findBoundPartnerAttributionForCommission(ctx: any, args: {
     .filter((row: any) => row.status === "bound")
     .filter((row: any) => isOpenAttribution(row, args.nowMs))
     .filter((row: any) =>
+      String(row.economicPolicyVersion ?? "") === BUILDER_PARTNER_ECONOMIC_POLICY_VERSION,
+    )
+    .filter((row: any) =>
       args.requireCommunityRevenueEligibility
         ? row.eligibleForCommunityRevenue === true
         : true,
@@ -988,6 +992,10 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
   referredCommunityId?: any;
   basisType: "community_platform_fee" | "community_revenue" | "paid_tool_usage";
   basisAmountUsd: number;
+  economicPolicyVersion: string;
+  basisDefinition: string;
+  policyRateBps: number;
+  platformFeeBps: number;
   commissionRateBps: number;
   commissionAmountUsd: number;
   sourceCheckoutSessionId?: string;
@@ -1013,6 +1021,10 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
     referredCommunityId: args.referredCommunityId,
     basisType: args.basisType,
     basisAmountUsd,
+    economicPolicyVersion: args.economicPolicyVersion,
+    basisDefinition: args.basisDefinition,
+    policyRateBps: args.policyRateBps,
+    platformFeeBps: args.platformFeeBps,
     commissionRateBps: args.commissionRateBps,
     commissionAmountUsd,
     currency: "usd",
@@ -1048,9 +1060,10 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
   amountBaseUnits?: number | null;
   currency?: string | null;
   currencyDecimals?: number | null;
+  platformFeeBps?: number | null;
   nowMs?: number;
 }) {
-  if (BUILDER_PARTNER_ACCRUAL_MODE === "frozen") return null;
+  if (BUILDER_PARTNER_ACCRUAL_MODE !== "community_v3") return null;
   const nowMs = args.nowMs ?? Date.now();
   const sourceCheckoutSessionId = String(args.sourceCheckoutSessionId ?? "").trim();
   const sourceProviderInvoiceId = String(args.sourceProviderInvoiceId ?? "").trim();
@@ -1105,9 +1118,14 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
     currencyDecimals: args.currencyDecimals,
   });
   if (!(communityRevenueUsd && communityRevenueUsd > 0)) return null;
+  const rawPlatformFeeBps = Number(args.platformFeeBps);
+  if (!Number.isFinite(rawPlatformFeeBps) || rawPlatformFeeBps <= 0 || rawPlatformFeeBps > 10000) {
+    return null;
+  }
+  const platformFeeBps = Math.round(rawPlatformFeeBps);
   const commission = calculateBuilderPartnerCommunityRevenueCommission({
     communityRevenueUsd,
-    platformFeeBps: BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
+    platformFeeBps,
     partnerCommunityRevenueShareBps: BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
   });
   return await insertPartnerCommissionIfEligible(ctx, {
@@ -1118,7 +1136,11 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
     referredCommunityId: args.communityId,
     basisType: "community_revenue",
     basisAmountUsd: communityRevenueUsd,
-    commissionRateBps: BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
+    economicPolicyVersion: BUILDER_PARTNER_ECONOMIC_POLICY_VERSION,
+    basisDefinition: BUILDER_PARTNER_COMMUNITY_REVENUE_BASIS,
+    policyRateBps: BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
+    platformFeeBps,
+    commissionRateBps: commission.effectiveCommunityRevenueShareBps,
     commissionAmountUsd: commission.commissionAmountUsd,
     sourceCheckoutSessionId: sourceCheckoutSessionId || undefined,
     sourceProviderSubscriptionId: String(args.sourceProviderSubscriptionId ?? "").trim() || undefined,
@@ -1126,59 +1148,6 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
     sourceProviderPaymentIntentId:
       String(args.sourceProviderPaymentIntentId ?? "").trim() || undefined,
     sourceProviderChargeId: String(args.sourceProviderChargeId ?? "").trim() || undefined,
-    nowMs,
-  });
-}
-
-export async function recordPaidToolUsagePartnerCommission(ctx: any, args: {
-  referredUserId: any;
-  creditKey: string;
-  polynetPriceUsd?: number | null;
-  rawVendorCostUsd?: number | null;
-  nowMs?: number;
-}) {
-  if (BUILDER_PARTNER_ACCRUAL_MODE === "frozen") return null;
-  const nowMs = args.nowMs ?? Date.now();
-  const creditKey = String(args.creditKey ?? "").trim();
-  if (!creditKey) return null;
-  const commissionKey = `paid_tool_usage:${creditKey}`;
-  const existing = await getCommissionByKey(ctx, commissionKey);
-  if (existing) return existing;
-
-  const match = await findBoundPartnerAttributionForCommission(ctx, {
-    referredUserId: args.referredUserId,
-    nowMs,
-    requireCommunityRevenueEligibility: true,
-  });
-  if (!match) return null;
-
-  if (
-    typeof args.polynetPriceUsd !== "number" ||
-    !Number.isFinite(args.polynetPriceUsd) ||
-    typeof args.rawVendorCostUsd !== "number" ||
-    !Number.isFinite(args.rawVendorCostUsd)
-  ) {
-    return null;
-  }
-  const commission = calculateBuilderPartnerToolUsageCommission({
-    polynetPriceUsd: args.polynetPriceUsd,
-    rawVendorCostUsd: args.rawVendorCostUsd,
-    partnerToolUsageRevenueShareBps: BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS,
-    polynetRetainedRevenueBps: BUILDER_PARTNER_TOOL_USAGE_POLYNET_RETAINED_REVENUE_BPS,
-  });
-  if (!(commission.toolRevenueUsd > 0) || !(commission.commissionAmountUsd > 0)) {
-    return null;
-  }
-
-  return await insertPartnerCommissionIfEligible(ctx, {
-    commissionKey,
-    partner: match.partner,
-    attribution: match.attribution,
-    referredUserId: args.referredUserId,
-    basisType: "paid_tool_usage",
-    basisAmountUsd: commission.toolRevenueUsd,
-    commissionRateBps: commission.effectiveToolUsageRevenueShareBps,
-    commissionAmountUsd: commission.commissionAmountUsd,
     nowMs,
   });
 }
@@ -1227,6 +1196,7 @@ export const recordCommunitySubscriptionInvoicePartnerCommissionInternal = inter
       amountBaseUnits: args.amountBaseUnits,
       currency: args.currency,
       currencyDecimals,
+      platformFeeBps: subscription.platformFeeBps,
       nowMs: args.nowMs,
     });
     return {
@@ -2595,13 +2565,25 @@ export const recordBuilderPartnerAttribution = mutation({
 
     const existingForPartner = relevantRows.find(
       (row: any) => String(row.partnerId) === String(partner._id),
-    ) ?? candidateRows.find(
-      (row: any) =>
-        String(row.partnerId) === String(partner._id) &&
-        String(row.status ?? "") !== "voided",
     );
     if (existingForPartner) {
       const nextReferredUserId = referredUserId ?? existingForPartner.referredUserId;
+      const existingPolicyIsCurrent =
+        String(existingForPartner.economicPolicyVersion ?? "") ===
+        BUILDER_PARTNER_ECONOMIC_POLICY_VERSION;
+      if (existingForPartner.referredUserId && !existingPolicyIsCurrent) {
+        return { ok: false, reason: "attribution_policy_stale" };
+      }
+      const nextBoundAt = nextReferredUserId
+        ? existingPolicyIsCurrent && typeof existingForPartner.boundAt === "number"
+          ? existingForPartner.boundAt
+          : nowMs
+        : undefined;
+      const nextCommissionEligibleUntil = nextBoundAt
+        ? existingPolicyIsCurrent && typeof existingForPartner.commissionEligibleUntil === "number"
+          ? existingForPartner.commissionEligibleUntil
+          : nextBoundAt + BUILDER_PARTNER_EARNING_WINDOW_MS
+        : undefined;
       const nextReferredUserHadOwnedCommunityAtBind =
         nextReferredUserId
           ? existingForPartner.referredUserHadOwnedCommunityAtBind ?? referredUserHadOwnedCommunityAtBind
@@ -2618,6 +2600,9 @@ export const recordBuilderPartnerAttribution = mutation({
         status: nextReferredUserId ? "bound" : "active",
         referredUserHadOwnedCommunityAtBind: nextReferredUserHadOwnedCommunityAtBind,
         eligibleForCommunityRevenue: nextEligibleForCommunityRevenue,
+        economicPolicyVersion: BUILDER_PARTNER_ECONOMIC_POLICY_VERSION,
+        boundAt: nextBoundAt,
+        commissionEligibleUntil: nextCommissionEligibleUntil,
         lastTouchAt: nowMs,
         expiresAt,
         updatedAt: nowMs,
@@ -2640,6 +2625,10 @@ export const recordBuilderPartnerAttribution = mutation({
       status: referredUserId ? "bound" : "active",
       referredUserHadOwnedCommunityAtBind,
       eligibleForCommunityRevenue,
+      economicPolicyVersion: BUILDER_PARTNER_ECONOMIC_POLICY_VERSION,
+      boundAt: referredUserId ? nowMs : undefined,
+      commissionEligibleUntil:
+        referredUserId ? nowMs + BUILDER_PARTNER_EARNING_WINDOW_MS : undefined,
       firstTouchAt: nowMs,
       lastTouchAt: nowMs,
       expiresAt,

@@ -36,6 +36,7 @@ This file is the execution contract for agents working in this repository.
 - Core member UX: join, navigate, post/chat, and voice.
 - Billing and provider/account connections.
 - Automated payouts for community builders (existing community payout flow).
+- Builder Partner retained as a secondary Settings/operator capability under prospective v3 community-only economics; it is not a primary MVP journey or launch gate, and historical obligations remain immutable.
 - Community-scoped AI agent interactions embedded in community surfaces.
 - Official Polynet MCP access for external agent harnesses.
 - Tiered access and quota enforcement for AI usage.
@@ -46,8 +47,8 @@ This file is the execution contract for agents working in this repository.
 
 ## 2) Deferred (Must Not Expand During MVP)
 
-- Affiliate system as a launch requirement.
-- Automated affiliate payouts.
+- Any broader affiliate system as a launch requirement.
+- Automated affiliate payouts beyond the retained Builder Partner settlement flow.
 - Advanced automations/workflow depth beyond minimal alpha.
 - Funnel builder.
 - Standalone general-purpose personal-agent Workspace or multi-agent canvas.

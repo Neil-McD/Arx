@@ -1,4 +1,4 @@
-import builderPartnerTermsV2 from "../../../../docs/legal/builder-partner-terms-v2.md?raw";
+import builderPartnerTermsV3 from "../../../../docs/legal/builder-partner-terms-v3.md?raw";
 import privacyAiDataPolicyV1 from "../../../../docs/legal/privacy-ai-data-policy-v1.md?raw";
 import termsOfServiceV1 from "../../../../docs/legal/terms-of-service-v1.md?raw";
 import {
@@ -33,7 +33,7 @@ function stripMarkdownFrontmatter(source: string): string {
 
 export const BUILDER_PARTNER_TERMS_ENTRY: LegalDocumentEntry = {
   ...BUILDER_PARTNER_TERMS_DOCUMENT,
-  content: stripMarkdownFrontmatter(builderPartnerTermsV2),
+  content: stripMarkdownFrontmatter(builderPartnerTermsV3),
 };
 
 export const TERMS_OF_SERVICE_ENTRY: LegalDocumentEntry = {

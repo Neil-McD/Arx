@@ -8,6 +8,7 @@ import type { PublicHttpAction } from "convex/server";
 import { logStructuredError } from "./errorLogging";
 import { buildStripeConnectAccountSnapshot } from "./stripeConnectAccountCore";
 import { normalizeStripeCommunitySubscriptionStatus } from "./billingCore";
+import { calculateBuilderPartnerEligibleSettledRevenueBaseUnits } from "../shared/builderPartnerProgram";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -443,6 +444,34 @@ function toIsoStringOrUndefined(ms: number | null): string | undefined {
     : undefined;
 }
 
+function readStripeSubscriptionApplicationFeeBps(
+  subscription: Stripe.Subscription,
+): number | null {
+  const applicationFeePercent = Number((subscription as any)?.application_fee_percent);
+  if (
+    !Number.isFinite(applicationFeePercent) ||
+    applicationFeePercent < 0 ||
+    applicationFeePercent > 100
+  ) {
+    return null;
+  }
+  return Math.round(applicationFeePercent * 100);
+}
+
+function readSettledInvoiceRevenueExcludingTax(invoice: Stripe.Invoice): number {
+  const totalTax = Array.isArray((invoice as any)?.total_taxes)
+    ? (invoice as any).total_taxes.reduce(
+        (sum: number, tax: any) => sum + Math.max(0, Number(tax?.amount ?? 0)),
+        0,
+      )
+    : 0;
+  return calculateBuilderPartnerEligibleSettledRevenueBaseUnits({
+    amountPaidBaseUnits: Number(invoice.amount_paid ?? 0),
+    totalExcludingTaxBaseUnits: (invoice as any)?.total_excluding_tax,
+    totalTaxBaseUnits: totalTax,
+  });
+}
+
 function stripeRefundFullyRefundsCharge(refund: Stripe.Refund, charge: Stripe.Charge | null): boolean {
   const chargeAmount = Number(charge?.amount ?? 0);
   if (!Number.isFinite(chargeAmount) || chargeAmount <= 0) return false;
@@ -513,6 +542,7 @@ async function syncCommunitySubscriptionFromStripeSubscription(
       providerSubscriptionId,
       providerCustomerId:
         typeof subscription.customer === "string" ? subscription.customer : null,
+      platformFeeBps: readStripeSubscriptionApplicationFeeBps(subscription),
       status: normalizedCommunityStatus,
       currentPeriodStartIso: toIsoStringOrUndefined(cycleStartedAt),
       currentPeriodEndIso: toIsoStringOrUndefined(cycleEndsAt),
@@ -1020,6 +1050,9 @@ export function registerRuntimeBillingRoutes(
               await retrieveStripeInvoiceForEvidence(
                 readStripeObjectId((subscription as any)?.latest_invoice),
               );
+            if (!latestInvoice) {
+              throw new Error("community_checkout_invoice_evidence_missing");
+            }
             const initialInvoiceEvidence = readStripeInvoiceEvidence(
               latestInvoice,
             );
@@ -1042,6 +1075,8 @@ export function registerRuntimeBillingRoutes(
                   initialInvoiceEvidence.sourceProviderPaymentIntentId ?? undefined,
                 sourceProviderChargeId:
                   initialInvoiceEvidence.sourceProviderChargeId ?? undefined,
+                settledRevenueBaseUnits: readSettledInvoiceRevenueExcludingTax(latestInvoice),
+                platformFeeBps: readStripeSubscriptionApplicationFeeBps(subscription),
                 providerPriceId,
                 subscriptionStatus: normalizeStripeCommunitySubscriptionStatus({
                   subscriptionStatus: subscription.status,
@@ -1095,7 +1130,7 @@ export function registerRuntimeBillingRoutes(
               reason: "invoice_subscription_missing",
             }, "ignored");
           }
-          const amountBaseUnits = Number(invoice.amount_paid ?? 0);
+          const amountBaseUnits = readSettledInvoiceRevenueExcludingTax(invoice);
           const currency = String(invoice.currency ?? "").trim().toLowerCase();
           if (!Number.isFinite(amountBaseUnits) || amountBaseUnits <= 0 || !currency) {
             return processedResponse({

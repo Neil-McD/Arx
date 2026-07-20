@@ -1,11 +1,12 @@
-export const BUILDER_PARTNER_PROGRAM_VERSION = "builder_partner_v1";
-export const BUILDER_PARTNER_TERMS_VERSION = "builder_partner_terms_v2";
-export const BUILDER_PARTNER_ACCRUAL_MODE: "frozen" | "community_v3" = "frozen";
-export const BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS = 1000;
-export const BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS = 500;
-export const BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS = 2000;
-export const BUILDER_PARTNER_TOOL_USAGE_POLYNET_RETAINED_REVENUE_BPS = 4000;
+export const BUILDER_PARTNER_PROGRAM_VERSION = "builder_partner_v3";
+export const BUILDER_PARTNER_TERMS_VERSION = "builder_partner_terms_v3";
+export const BUILDER_PARTNER_ECONOMIC_POLICY_VERSION = "builder_partner_economics_v3";
+export const BUILDER_PARTNER_ACCRUAL_MODE: "frozen" | "community_v3" = "community_v3";
+export const BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS = 400;
+export const BUILDER_PARTNER_COMMUNITY_REVENUE_BASIS =
+  "settled_community_revenue_after_discounts_excluding_tax";
 export const BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+export const BUILDER_PARTNER_EARNING_WINDOW_MS = 365 * 24 * 60 * 60 * 1000;
 export const BUILDER_PARTNER_COMMISSION_HOLD_MS = 30 * 24 * 60 * 60 * 1000;
 export const BUILDER_PARTNER_PAYOUT_BUFFER_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -30,6 +31,23 @@ export function roundBuilderPartnerMoney(value: number): number {
   return Math.round(Math.max(0, normalized) * 10000) / 10000;
 }
 
+export function calculateBuilderPartnerEligibleSettledRevenueBaseUnits(params: {
+  amountPaidBaseUnits: number;
+  totalExcludingTaxBaseUnits?: number | null;
+  totalTaxBaseUnits?: number | null;
+}): number {
+  const amountPaidBaseUnits = Math.max(0, Math.floor(Number(params.amountPaidBaseUnits) || 0));
+  if (
+    typeof params.totalExcludingTaxBaseUnits === "number" &&
+    Number.isFinite(params.totalExcludingTaxBaseUnits) &&
+    params.totalExcludingTaxBaseUnits >= 0
+  ) {
+    return Math.min(amountPaidBaseUnits, Math.floor(params.totalExcludingTaxBaseUnits));
+  }
+  const totalTaxBaseUnits = Math.max(0, Math.floor(Number(params.totalTaxBaseUnits) || 0));
+  return Math.max(0, amountPaidBaseUnits - totalTaxBaseUnits);
+}
+
 export function calculateBuilderPartnerCommunityRevenueCommission(params: {
   communityRevenueUsd: number;
   platformFeeBps: number;
@@ -43,60 +61,20 @@ export function calculateBuilderPartnerCommunityRevenueCommission(params: {
   const partnerCommunityRevenueShareBps = normalizeBps(
     params.partnerCommunityRevenueShareBps ?? BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
   );
+  const effectiveCommunityRevenueShareBps = Math.min(
+    platformFeeBps,
+    partnerCommunityRevenueShareBps,
+  );
   const communityRevenueUsd = roundBuilderPartnerMoney(params.communityRevenueUsd);
   const platformFeeUsd = roundBuilderPartnerMoney(
     communityRevenueUsd * (platformFeeBps / 10000),
   );
   const commissionAmountUsd = roundBuilderPartnerMoney(
-    communityRevenueUsd * (partnerCommunityRevenueShareBps / 10000),
+    communityRevenueUsd * (effectiveCommunityRevenueShareBps / 10000),
   );
   return {
     platformFeeUsd,
     commissionAmountUsd,
-    effectiveCommunityRevenueShareBps: partnerCommunityRevenueShareBps,
-  };
-}
-
-export function calculateBuilderPartnerToolUsageCommission(params: {
-  polynetPriceUsd: number;
-  rawVendorCostUsd: number;
-  partnerToolUsageRevenueShareBps?: number;
-  polynetRetainedRevenueBps?: number;
-}): {
-  toolRevenueUsd: number;
-  rawVendorCostUsd: number;
-  grossMarginUsd: number;
-  commissionAmountUsd: number;
-  retainedPolynetRevenueUsd: number;
-  effectiveToolUsageRevenueShareBps: number;
-} {
-  const toolRevenueUsd = roundBuilderPartnerMoney(params.polynetPriceUsd);
-  const rawVendorCostUsd = roundBuilderPartnerMoney(params.rawVendorCostUsd);
-  const partnerShareBps = normalizeBps(
-    params.partnerToolUsageRevenueShareBps ?? BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS,
-  );
-  const retainedRevenueBps = normalizeBps(
-    params.polynetRetainedRevenueBps ?? BUILDER_PARTNER_TOOL_USAGE_POLYNET_RETAINED_REVENUE_BPS,
-  );
-  const targetCommissionUsd = roundBuilderPartnerMoney(toolRevenueUsd * (partnerShareBps / 10000));
-  const minimumPolynetRetainedUsd = roundBuilderPartnerMoney(toolRevenueUsd * (retainedRevenueBps / 10000));
-  const availableForPartnerUsd = roundBuilderPartnerMoney(
-    toolRevenueUsd - rawVendorCostUsd - minimumPolynetRetainedUsd,
-  );
-  const commissionAmountUsd = roundBuilderPartnerMoney(
-    Math.min(targetCommissionUsd, availableForPartnerUsd),
-  );
-  const grossMarginUsd = Math.round((toolRevenueUsd - rawVendorCostUsd) * 10000) / 10000;
-  const retainedPolynetRevenueUsd = Math.round(
-    (toolRevenueUsd - rawVendorCostUsd - commissionAmountUsd) * 10000,
-  ) / 10000;
-  return {
-    toolRevenueUsd,
-    rawVendorCostUsd,
-    grossMarginUsd,
-    commissionAmountUsd,
-    retainedPolynetRevenueUsd,
-    effectiveToolUsageRevenueShareBps:
-      toolRevenueUsd > 0 ? Math.round((commissionAmountUsd / toolRevenueUsd) * 10000) : 0,
+    effectiveCommunityRevenueShareBps,
   };
 }

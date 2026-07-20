@@ -18,10 +18,6 @@ import { OperatorBusinessPanelView } from "./OperatorBusinessPanelView";
 import { OperatorCommunitiesPanelView } from "./OperatorCommunitiesPanelView";
 import { OperatorEmailPanelView } from "./OperatorEmailPanelView";
 import { OperatorPlatformPanelView } from "./OperatorPlatformPanelView";
-import {
-  WebBuilderPartnerProgramPanel,
-  type WebBuilderPartnerProgramPanelProps,
-} from "./WebBuilderPartnerProgramPanel";
 import type { OperatorDashboardState } from "./useOperatorDashboardData";
 import type { PartnerPayoutCycleActions } from "./workspaceRightPanelOperatorShared";
 
@@ -44,7 +40,6 @@ export function WebWorkspaceRightPanel(props: {
   state: OperatorDashboardState;
   topCommunities: OperatorCommunityRecord[];
   partnerPayoutCycleActions: PartnerPayoutCycleActions;
-  builderPartnerProgramPanel: WebBuilderPartnerProgramPanelProps | null;
   isLoading: boolean;
   error: string | null;
   showModeSwitch: boolean;
@@ -134,11 +129,6 @@ export function WebWorkspaceRightPanel(props: {
           />
         ) : activeInsightTab === "community" && props.workspaceCommunityPreviewPanel ? (
           <WorkspaceCommunityPreviewPanelContent {...props.workspaceCommunityPreviewPanel} />
-        ) : activeInsightTab === "partner" && props.builderPartnerProgramPanel ? (
-          <WebBuilderPartnerProgramPanel
-            {...props.builderPartnerProgramPanel}
-            showProgramOverview={false}
-          />
         ) : activeInsightTab === "platform" ? (
           <OperatorPlatformPanelView
             webDeploy={props.state.webDeploy}

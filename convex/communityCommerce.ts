@@ -52,8 +52,10 @@ type CommunityCheckoutSessionRow = {
   billingPeriod?: string;
   pricePointId?: any;
   amountBaseUnits?: number;
+  settledRevenueBaseUnits?: number;
   currency?: string;
   currencyDecimals?: number;
+  platformFeeBps?: number;
   ownerUserId?: any;
   claimToken?: string;
   status: "pending" | "complete" | "expired";
@@ -83,6 +85,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     providerPriceId: v.optional(v.union(v.string(), v.null())),
     providerSubscriptionId: v.optional(v.union(v.string(), v.null())),
     providerCustomerId: v.optional(v.union(v.string(), v.null())),
+    platformFeeBps: v.optional(v.union(v.number(), v.null())),
     currentPeriodStartIso: v.optional(v.union(v.string(), v.null())),
     currentPeriodEndIso: v.optional(v.union(v.string(), v.null())),
     cancelAtPeriodEnd: v.optional(v.union(v.boolean(), v.null())),
@@ -186,6 +189,14 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       String(args.providerCustomerId ?? "").trim() ||
       String(current?.providerCustomerId ?? "").trim() ||
       undefined;
+    const requestedPlatformFeeBps =
+      typeof args.platformFeeBps === "number" ? args.platformFeeBps : Number.NaN;
+    const nextPlatformFeeBps =
+      Number.isFinite(requestedPlatformFeeBps) &&
+      requestedPlatformFeeBps >= 0 &&
+      requestedPlatformFeeBps <= 10000
+        ? Math.round(requestedPlatformFeeBps)
+        : current?.platformFeeBps;
 
     const patch = {
       source: currentSource === "stripe" || currentSource === "external_sync" ? current?.source : source,
@@ -193,6 +204,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       status,
       providerSubscriptionId: nextProviderSubscriptionId,
       providerCustomerId: nextProviderCustomerId,
+      platformFeeBps: nextPlatformFeeBps,
       currentPeriodStartAt:
         typeof currentPeriodStartAt === "number"
           ? currentPeriodStartAt
@@ -398,6 +410,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     amountBaseUnits: v.number(),
     currency: v.string(),
     currencyDecimals: v.number(),
+    platformFeeBps: v.number(),
     providerPriceId: v.string(),
     ownerUserId: v.optional(v.id("users")),
     claimToken: v.string(),
@@ -415,6 +428,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
       amountBaseUnits: args.amountBaseUnits,
       currency: args.currency,
       currencyDecimals: args.currencyDecimals,
+      platformFeeBps: args.platformFeeBps,
       providerPriceId: args.providerPriceId,
       ownerUserId: args.ownerUserId ?? undefined,
       claimToken: args.claimToken,
@@ -439,6 +453,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
         amountBaseUnits: args.amountBaseUnits,
         currency: args.currency,
         currencyDecimals: args.currencyDecimals,
+        platformFeeBps: args.platformFeeBps,
         expiresAt: args.expiresAt,
       },
       createdAt: nowMs,
@@ -540,6 +555,8 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
     sourceProviderInvoiceId: v.optional(v.union(v.string(), v.null())),
     sourceProviderPaymentIntentId: v.optional(v.union(v.string(), v.null())),
     sourceProviderChargeId: v.optional(v.union(v.string(), v.null())),
+    settledRevenueBaseUnits: v.optional(v.union(v.number(), v.null())),
+    platformFeeBps: v.optional(v.union(v.number(), v.null())),
     providerPriceId: v.optional(v.union(v.string(), v.null())),
     subscriptionStatus: v.string(),
     currentPeriodStartAt: v.optional(v.union(v.number(), v.null())),
@@ -574,6 +591,14 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
       providerSubscriptionId:
         String(args.providerSubscriptionId ?? "").trim() || row.providerSubscriptionId,
       providerPriceId: String(args.providerPriceId ?? "").trim() || row.providerPriceId,
+      settledRevenueBaseUnits:
+        typeof args.settledRevenueBaseUnits === "number"
+          ? Math.max(0, args.settledRevenueBaseUnits)
+          : row.settledRevenueBaseUnits,
+      platformFeeBps:
+        typeof args.platformFeeBps === "number"
+          ? Math.max(0, Math.min(10000, Math.round(args.platformFeeBps)))
+          : row.platformFeeBps,
       currentPeriodStartAt:
         typeof args.currentPeriodStartAt === "number"
           ? args.currentPeriodStartAt
@@ -623,9 +648,16 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
           String(args.sourceProviderPaymentIntentId ?? row.sourceProviderPaymentIntentId ?? "").trim() || undefined,
         sourceProviderChargeId:
           String(args.sourceProviderChargeId ?? row.sourceProviderChargeId ?? "").trim() || undefined,
-        amountBaseUnits: row.amountBaseUnits,
+        amountBaseUnits:
+          typeof args.settledRevenueBaseUnits === "number"
+            ? Math.max(0, args.settledRevenueBaseUnits)
+            : row.settledRevenueBaseUnits,
         currency: row.currency,
         currencyDecimals: row.currencyDecimals,
+        platformFeeBps:
+          typeof args.platformFeeBps === "number"
+            ? Math.max(0, Math.min(10000, Math.round(args.platformFeeBps)))
+            : undefined,
         nowMs,
       });
     }
@@ -829,6 +861,7 @@ export const startPublicCommunityCheckout = action({
         amountBaseUnits: checkoutConfig.amountBaseUnits,
         currency: checkoutConfig.currency,
         currencyDecimals: checkoutConfig.currencyDecimals,
+        platformFeeBps: checkoutConfig.platformFeeBps,
         providerPriceId,
         ownerUserId: ownerUserId ?? undefined,
         claimToken,

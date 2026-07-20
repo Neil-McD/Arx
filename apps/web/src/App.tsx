@@ -426,7 +426,6 @@ import {
   loadBuilderPartnerProgramCanonical,
   type BuilderPartnerProgramSnapshot,
 } from "../../../shared/builderPartnerProgramGateway";
-import type { WebBuilderPartnerProgramPanelProps } from "./components/WebBuilderPartnerProgramPanel";
 import {
   loadCloudWorkspaceCardOnFileStatus,
   refreshCloudWorkspaceCardOnFileStatus,
@@ -11057,34 +11056,6 @@ export default function App() {
     resolveKnownCommunitySlugById,
     selectedActiveCommunityId,
   ]);
-  const builderPartnerProgramPanelProps: WebBuilderPartnerProgramPanelProps = {
-    session: session,
-    requireSignIn,
-    accountCommerceStatus,
-    accountCommerceError,
-    builderPartnerProgram,
-    isLoadingBuilderPartnerProgram,
-    builderPartnerProgramError,
-    isAcceptingBuilderPartnerTerms,
-    renderMarkdown,
-    loadBuilderPartnerProgram: async (nextSession) => {
-      await loadBuilderPartnerProgram(nextSession as AuthSession);
-    },
-    acceptBuilderPartnerTerms,
-    openAccountSetup: openProfileSetup,
-    openCreateCommunityModal: () => openCreateCommunityModal(),
-    communities,
-    communityRoleById,
-    openOwnedCommunitySettings: openOwnedPartnerCommunitySettings,
-    startStripeConnectOnboarding: (opts) => {
-      void startStripeConnectOnboarding({
-        context: opts?.context ?? "account",
-        communitySlug: opts?.communitySlug ?? null,
-        country: opts?.country ?? null,
-      });
-    },
-    isStartingStripeConnectOnboarding,
-  };
   const settingsPanelsProps: WebSettingsPanelsProps = {
     settingsGroup: settingsGroup as SettingsGroup,
     profile: {
