@@ -35,6 +35,7 @@ import {
   formatWorkspaceInstrumentationError,
 } from "../lib/workspaceInstrumentation";
 import { useWebAuthSessionLifecycle } from "./useWebAuthSessionLifecycle";
+import { completeConfirmedSignOut } from "./confirmedSignOut";
 
 type AsyncVoid = void | Promise<void>;
 
@@ -121,6 +122,8 @@ function readAuthCallbackErrorFromLocation(): string | null {
 }
 
 const AUTH_SESSION_EXPIRED_MESSAGE = "Session expired. Please sign in again.";
+const AUTH_LOGOUT_CONFIRMATION_FAILED_MESSAGE =
+  "Sign out could not be confirmed. Check your connection and try again.";
 const ENSURED_SESSION_CACHE_TTL_MS = 15_000;
 
 export function useWebAppAuthController(
@@ -432,15 +435,24 @@ export function useWebAppAuthController(
   }, [beginSignInFlow, session]);
 
   const handleSignOut = useCallback(async (): Promise<void> => {
-    clearAuthFlowPending();
-    authSessionEpochRef.current += 1;
     setAuthError(null);
     setIsAuthSigningOut(true);
     try {
-      await onBeforeSignOutRef.current?.();
-      await clearSessionLocally();
-      await logoutAuthSessionRemote({ scope: "local" });
-      await onAfterSignOutRef.current?.();
+      const result = await completeConfirmedSignOut({
+        confirmRemoteLogout: () => logoutAuthSessionRemote({ scope: "local" }),
+        beforeLocalClear: async () => {
+          clearAuthFlowPending();
+          authSessionEpochRef.current += 1;
+          await onBeforeSignOutRef.current?.();
+        },
+        clearLocalSession: clearSessionLocally,
+        afterLocalClear: async () => {
+          await onAfterSignOutRef.current?.();
+        },
+      });
+      if (result.status === "transient_failure") {
+        setAuthError(AUTH_LOGOUT_CONFIRMATION_FAILED_MESSAGE);
+      }
     } finally {
       setIsAuthSigningOut(false);
     }

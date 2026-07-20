@@ -71,6 +71,11 @@ assert.match(
 );
 assert.match(
   platformDiagnostics,
+  /"auth\.session_logged_out": \["providerLogoutOutcome"\]/,
+  "auth logout diagnostics may retain only the bounded provider outcome",
+);
+assert.match(
+  platformDiagnostics,
   /DIAGNOSTIC_METADATA_BLOCKED_KEY_PARTS[\s\S]*"token"[\s\S]*"secret"[\s\S]*"authorization"[\s\S]*"session"[\s\S]*"encrypted"/,
   "platform diagnostics metadata sanitizer must keep a defensive sensitive-key denylist",
 );
@@ -110,6 +115,8 @@ for (const eventType of [
   "auth.bootstrap_failed",
   "auth.session_refreshed",
   "auth.session_refresh_failed",
+  "auth.session_logged_out",
+  "auth.session_logout_failed",
 ]) {
   assert.match(authSessions, new RegExp(eventType.replaceAll(".", "\\.")), `auth sessions must record ${eventType}`);
 }

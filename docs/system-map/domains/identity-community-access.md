@@ -42,7 +42,7 @@ The good invariant is clear: caller-supplied identity is an assertion, never aut
 
 The Vercel routes start/callback/bootstrap/refresh/logout through a same-origin bridge protected by a server-held bridge secret. The browser cookie is `HttpOnly`, `Secure` off localhost, and `SameSite=Lax` (`api/auth/_cookies.js:150-178`). Provider token state is encrypted in `authSessions`. Refresh rotates the opaque session and revokes/replaces the predecessor. Bootstrap follows at most eight replacement links and rejects loops or overlong chains (`convex/authSessions.ts:500-540`).
 
-Logout attempts upstream logout and server revocation, but the browser adapter swallows bridge failure, clears the cookie, and returns success (`api/auth/logout.js:36-48`). This creates a recoverability gap: the user loses the session handle while the server/provider state may remain live until expiry or maintenance.
+Logout now treats the canonical Polynet session as the authority. The server revokes that session before attempting bounded best-effort provider logout; only a confirmed local outcome permits the Vercel route to clear the cookie and the web controller to clear caches, broadcast signed-out state, and navigate. Bridge, network, or local-revocation failures return a retryable result while preserving the cookie and browser session. A lost response after committed revocation converges on retry because missing and already-revoked sessions are idempotent success. Provider failure is diagnostic evidence, not permission to resurrect or block the locally revoked session (`convex/authSessions.ts`, `api/auth/logout.js`, `shared/authCore.ts`, `apps/web/src/controllers/confirmedSignOut.ts`).
 
 ### Community creation and ownership
 

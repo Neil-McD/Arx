@@ -8,7 +8,7 @@ The aggregate staging shape work in Step 0 is complete for identity/membership c
 
 ## Current implementation checkpoint
 
-The account-deletion safety fixture, declarative lifecycle ownership policy, Builder Partner v3 economics, and removal of the unreachable legacy deletion executor are complete on the isolated staging lane. The insecure session-ID fallback identified by F-003 is also removed: session creation and rotation now require secure UUID generation and fail retryably before credential effects. The next candidate to evaluate is F-004, honest and recoverable logout revocation; the quarantined deletion lifecycle remains downstream of live auth-boundary hardening.
+The account-deletion safety fixture, declarative lifecycle ownership policy, Builder Partner v3 economics, and removal of the unreachable legacy deletion executor are complete on the isolated staging lane. The insecure session-ID fallback identified by F-003 is removed: session creation and rotation require secure UUID generation and fail retryably before credential effects. F-004 is also closed at the code-contract level: browser state and cookies clear only after canonical Polynet session revocation is confirmed, local revocation precedes bounded best-effort provider logout, and ambiguous failures remain retryable. After staging release proof, the next identity candidate is F-001, removing the full-user auth scan through a measured normalized-identity migration; the quarantined deletion lifecycle remains downstream of live auth-boundary hardening.
 
 ## Step 0 — Freeze decisions and gather minimum live shape
 

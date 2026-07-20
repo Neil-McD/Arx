@@ -1,6 +1,8 @@
 import { callAuthBridgeJson } from "./_bridge.js";
 import { clearAuthSessionCookie, readAuthSessionId } from "./_cookies.js";
 
+const AUTH_LOGOUT_UNAVAILABLE_MESSAGE = "Sign out could not be confirmed. Please try again.";
+
 function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -35,12 +37,26 @@ export default async function handler(req, res) {
 
   const sessionId = readAuthSessionId(req);
   if (sessionId) {
+    let response;
     try {
-      await callAuthBridgeJson("/runtime/auth_bridge_session_logout", {
+      response = await callAuthBridgeJson("/runtime/auth_bridge_session_logout", {
         payload: { session_id: sessionId },
       });
     } catch {
-      // best effort only
+      sendJson(res, 503, {
+        ok: false,
+        code: "auth_logout_unavailable",
+        error: AUTH_LOGOUT_UNAVAILABLE_MESSAGE,
+      });
+      return;
+    }
+    if (!response.ok) {
+      sendJson(res, 503, {
+        ok: false,
+        code: "auth_logout_unavailable",
+        error: AUTH_LOGOUT_UNAVAILABLE_MESSAGE,
+      });
+      return;
     }
   }
 

@@ -548,10 +548,14 @@ export async function bootstrapSession(): Promise<AuthSession | null> {
   return (await bootstrapSessionDetailed()).session;
 }
 
+export type AuthSessionLogoutResult =
+  | { status: "signed_out" }
+  | { status: "transient_failure"; reason: string };
+
 export async function logoutAuthSessionRemote(params: {
   accessToken?: string | null;
   scope?: string;
-}): Promise<void> {
+}): Promise<AuthSessionLogoutResult> {
   void params.accessToken;
   void params.scope;
   const response = await callSameOriginAuthEndpoint({
@@ -559,7 +563,9 @@ export async function logoutAuthSessionRemote(params: {
     method: "POST",
     payload: {},
   });
-  if (!response || response.ok) return;
+  if (!response) return { status: "transient_failure", reason: "auth_gateway_unavailable" };
+  if (response.ok) return { status: "signed_out" };
+  return { status: "transient_failure", reason: await readAuthError(response) };
 }
 
 function ensureResultFromRefreshFailure(

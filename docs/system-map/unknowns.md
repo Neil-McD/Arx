@@ -16,6 +16,7 @@ The bounded aggregate audit resolved or narrowed these questions for the isolate
 | U-006 | one join request, status `approved` |
 | U-007 | zero stored deprecated `memberOnboarding` fields |
 | U-008 | sessions exceed 5,000; bounded prefix is dominated by revoked/replacement rows, but total and chain validity remain unknown |
+| U-009 | resolved at the code-contract level: unconfirmed bridge/local-revocation failures preserve the browser session and cookie; confirmed local revocation precedes bounded best-effort provider logout; live provider behavior remains configuration-specific |
 | U-011 | resolved at ownership level: delete private state, anonymize shared state, preserve minimum finance/legal evidence, and propagate explicit privacy purges; exact TTLs remain open |
 | U-013 | 56 anonymous subjects exist; creator/reference lifecycle remains unknown |
 | U-015 | resolved: retain Builder Partner as a secondary capability; prospective 4% community-only economics; no paid-tool commissions |
@@ -41,7 +42,7 @@ Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-stagin
 | U-006 | Which join-request statuses exist? | validator migration | grouped counts only |
 | U-007 | Does deprecated `memberOnboarding` exist on live rows? | schema deletion readiness | count and migration receipt |
 | U-008 | What are session counts/ages/replacement-chain anomalies? | pruning and revocation design | redacted histograms/invalid-chain count |
-| U-009 | What happens to provider/server sessions when logout bridge fails? | stranded session risk | isolated fake-provider fixture |
+| U-009 | What happens to provider/server sessions when logout bridge fails? **Resolved at the code-contract level; live provider behavior remains configuration-specific.** | unconfirmed logout preserves the retry handle; confirmed local revocation remains authoritative | behavioral gateway, browser-ordering, and fake-provider fixtures |
 | U-010 | Which table fields reference users, communities, DMs, storage, or external objects but lack lifecycle policy? | deletion completeness | generated schema/source ownership matrix |
 | U-011 | What should survive account deletion for DMs, community contributions, evidence, finance, legal, and audit? **Resolved at the ownership level; exact finance/legal/security TTLs remain open.** | current algorithm can now be judged against a stable ownership policy | decision record plus field-level lifecycle matrix |
 | U-012 | Do DM messages embed storage references and are any orphaned? | storage privacy/cost | encoding inventory and orphan counts, no content |

@@ -24,6 +24,7 @@ export type {
   AuthSession,
   AuthSessionBootstrapResult,
   AuthSessionEnsureResult,
+  AuthSessionLogoutResult,
   AuthSessionRefreshResult,
   AuthSessionRefreshResultInFlightRef,
   AuthUser,

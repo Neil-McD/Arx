@@ -38,6 +38,7 @@ type AuthSessionRow = {
 const DEFAULT_OAUTH_SCOPE = "openid profile email offline_access";
 const WORKOS_AUTHENTICATE_UPSTREAM_URL = "https://api.workos.com/user_management/authenticate";
 const MAX_SESSION_CHAIN_DEPTH = 8;
+const AUTH_PROVIDER_LOGOUT_TIMEOUT_MS = 5_000;
 export const AUTH_SECURE_RANDOM_UNAVAILABLE = "auth_secure_random_unavailable" as const;
 
 const SECURE_AUTH_SESSION_ID_PATTERN =
@@ -470,11 +471,53 @@ async function refreshUpstreamSession(existing: StoredAuthSessionV1): Promise<St
   return refreshed;
 }
 
-async function logoutUpstream(accessToken: string): Promise<void> {
-  const logoutUrl = resolveOAuthLogoutUrl();
-  if (!logoutUrl || !normalizeString(accessToken)) return;
+export type AuthProviderLogoutOutcome = "succeeded" | "failed" | "skipped";
+
+export type ConfirmedAuthSessionLogoutResult =
+  | { status: "ok"; providerLogoutOutcome: AuthProviderLogoutOutcome }
+  | { status: "transient_failure"; reason: string };
+
+export function classifyAuthSessionLogoutResolutionFailure(
+  reason: "auth_session_missing" | "auth_session_chain_invalid",
+): { status: "ok" } | { status: "transient_failure"; reason: "auth_session_chain_invalid" } {
+  return reason === "auth_session_missing"
+    ? { status: "ok" }
+    : { status: "transient_failure", reason: "auth_session_chain_invalid" };
+}
+
+export async function completeConfirmedAuthSessionLogout(params: {
+  revokeLocalSession: () => Promise<void>;
+  logoutProvider?: () => Promise<AuthProviderLogoutOutcome>;
+}): Promise<ConfirmedAuthSessionLogoutResult> {
   try {
-    await fetch(logoutUrl, {
+    await params.revokeLocalSession();
+  } catch (error) {
+    return {
+      status: "transient_failure",
+      reason: error instanceof Error ? error.message : String(error ?? "auth_session_logout_unavailable"),
+    };
+  }
+
+  if (!params.logoutProvider) {
+    return { status: "ok", providerLogoutOutcome: "skipped" };
+  }
+  try {
+    return {
+      status: "ok",
+      providerLogoutOutcome: await params.logoutProvider(),
+    };
+  } catch {
+    return { status: "ok", providerLogoutOutcome: "failed" };
+  }
+}
+
+async function logoutUpstream(accessToken: string): Promise<AuthProviderLogoutOutcome> {
+  const logoutUrl = resolveOAuthLogoutUrl();
+  if (!logoutUrl || !normalizeString(accessToken)) return "skipped";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AUTH_PROVIDER_LOGOUT_TIMEOUT_MS);
+  try {
+    const response = await fetch(logoutUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -484,9 +527,13 @@ async function logoutUpstream(accessToken: string): Promise<void> {
         scope: "local",
         access_token: accessToken,
       }),
+      signal: controller.signal,
     });
+    return response.ok ? "succeeded" : "failed";
   } catch {
-    // best effort only
+    return "failed";
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -1069,19 +1116,56 @@ export const logoutAuthSessionInternal = internalAction({
   handler: async (ctx, args) => {
     const resolved = await resolveAuthSessionRowForAction(ctx, args.sessionId);
     if (!resolved.ok) {
-      return { status: "ok" as const };
+      const resolutionResult = classifyAuthSessionLogoutResolutionFailure(resolved.reason);
+      if (resolutionResult.status === "ok") return resolutionResult;
+      await recordAuthSessionDiagnostic(ctx, {
+        eventType: "auth.session_logout_failed",
+        status: "failed",
+        severity: "error",
+        surface: "auth_bridge_logout",
+        errorCode: resolutionResult.reason,
+      });
+      return resolutionResult;
     }
     const row = resolved.row;
     if (typeof row.revokedAt === "number") {
       return { status: "ok" as const };
     }
     const stored = await decodeStoredState(row);
-    if (stored?.accessToken) {
-      await logoutUpstream(stored.accessToken);
+    const logoutStartedAt = Date.now();
+    const result = await completeConfirmedAuthSessionLogout({
+      revokeLocalSession: async () => {
+        await ctx.runMutation(internal.authSessions.revokeAuthSessionInternal as any, {
+          sessionId: resolved.resolvedSessionId,
+          nowMs: Date.now(),
+        });
+      },
+      ...(stored?.accessToken
+        ? { logoutProvider: () => logoutUpstream(stored.accessToken) }
+        : null),
+    });
+    if (result.status === "transient_failure") {
+      await recordAuthSessionDiagnostic(ctx, {
+        eventType: "auth.session_logout_failed",
+        status: "failed",
+        severity: "error",
+        userId: row.userId,
+        surface: "auth_bridge_logout",
+        latencyMs: Date.now() - logoutStartedAt,
+        errorCode: normalizeDiagnosticErrorCode(result.reason, "auth_session_logout_unavailable"),
+      });
+      return { status: "transient_failure" as const, reason: "auth_session_logout_unavailable" };
     }
-    await ctx.runMutation(internal.authSessions.revokeAuthSessionInternal as any, {
-      sessionId: resolved.resolvedSessionId,
-      nowMs: Date.now(),
+    await recordAuthSessionDiagnostic(ctx, {
+      eventType: "auth.session_logged_out",
+      status: "succeeded",
+      severity: result.providerLogoutOutcome === "failed" ? "warning" : "info",
+      userId: row.userId,
+      surface: "auth_bridge_logout",
+      latencyMs: Date.now() - logoutStartedAt,
+      metadata: {
+        providerLogoutOutcome: result.providerLogoutOutcome,
+      },
     });
     return { status: "ok" as const };
   },
