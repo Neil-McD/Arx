@@ -19,6 +19,7 @@ EXCLUDES=(
   --glob '!**/.turbo/**'
   --glob '!**/coverage/**'
   --glob '!references/**'
+  --glob '!docs/system-map/snapshots/**'
   --glob '!apps/web/src/lib/discoverCatalog.ts'
   --glob '!shared/discoverCatalog.ts'
   --glob '!shared/communityWorkflowImportMcpRegistry.ts'
