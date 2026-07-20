@@ -64,7 +64,6 @@ const nativeToolProtocol = read("shared/nativeToolProtocol.ts");
 const openRouterTransport = read("convex/openRouterNativeTransport.ts");
 const runtimeTurnResolution = read("convex/runtimeTurnResolution.ts");
 const cognitionContract = read("docs/community-agent-cognition-contract-v1.md");
-const account = read("convex/account.ts");
 const anonymousUserCleanup = read("convex/anonymousUserCleanup.ts");
 const communityLifecycle = read("convex/communityLifecycle.ts");
 const profiles = read("convex/profiles.ts");
@@ -516,11 +515,6 @@ assert.equal(
   "both message creation paths plus upload-ticket issuance and claims must reject retained legacy episodes",
 );
 assert.match(
-  account,
-  /memberAgentChannels[\s\S]*memberAgentEpisodes[\s\S]*ctx\.db\.delete\(channel\._id\)[\s\S]*const threads/,
-  "account deletion must remove episodes before channels and canonical threads",
-);
-assert.match(
   anonymousUserCleanup,
   /memberAgentChannels[\s\S]*by_owner[\s\S]*ownerId/,
   "anonymous-user cleanup must treat a member-agent channel as a live user reference",
@@ -959,11 +953,6 @@ assert.match(
   threads,
   /generateCloudThreadAttachmentUploadUrl = mutation[\s\S]*member_agent_attachment_upload_ticket_required[\s\S]*prepareCloudMemberAgentAttachmentUploadInternal = internalMutation/,
   "the generic thread uploader must not bypass server-owned upload preparation on member-agent threads",
-);
-assert.match(
-  account,
-  /cloudThreadAttachments[\s\S]*deleteStorageObjectIfPresent\(ctx, row\.storageId\)[\s\S]*cloudThreadAttachmentUploadTickets[\s\S]*const cloudMessages/,
-  "account deletion must remove attachment blobs and tickets before messages and threads",
 );
 assert.match(
   nativeToolProtocol,

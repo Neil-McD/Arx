@@ -857,67 +857,7 @@ function proveEligibilityGateContract(
   );
 }
 
-function proveReductionAndCleanupContract(accountSource: string, docsSource: string) {
-  assertIncludes(
-    accountSource,
-    "withIndex(\"by_referredUser\", (q: any) => q.eq(\"referredUserId\", userId))",
-    "account deletion cleanup",
-  );
-  assertIncludes(
-    accountSource,
-    "readBuilderPartnerFinanceDeletionState",
-    "account deletion must classify partner finance state before deleting",
-  );
-  assertIncludes(
-    accountSource,
-    "account_delete_partner_finance_pending_blocked",
-    "account deletion must block unresolved partner finance",
-  );
-  assertIncludes(
-    accountSource,
-    "hasUnresolvedFinance",
-    "account deletion must block unresolved partner finance",
-  );
-  assertIncludes(
-    accountSource,
-    "preserve(\"partnerCommissionLedger\", referredPartnerCommissions.length)",
-    "account deletion must preserve referred-user partner commission history",
-  );
-  assert.doesNotMatch(
-    accountSource,
-    /financeLinkedCreditLedgerEntryIds|sourceCreditLedgerEntryId/,
-    "account deletion should not preserve deleted paid-tool partner commission evidence",
-  );
-  assertIncludes(
-    accountSource,
-    "scrubFinanceLinkedPartnerAttribution",
-    "account deletion must scrub attribution privacy fields while preserving finance evidence",
-  );
-  assertIncludes(
-    accountSource,
-    "tombstoneBuilderPartnerCode",
-    "account deletion must disable settled partner links instead of deleting audit history",
-  );
-  assertIncludes(
-    accountSource,
-    "listPartnerAttributions",
-    "account deletion cleanup",
-  );
-  assertIncludes(
-    accountSource,
-    "\"partnerCommissionLedger\", partner._id",
-    "account deletion must inspect partner ledger rows by status",
-  );
-  assert.doesNotMatch(
-    accountSource,
-    /deleteRowsByIndex\(ctx, "partnerCommissionLedger", "by_referredUser"/,
-    "account deletion must not erase referred-user partner commission ledger history",
-  );
-  assert.doesNotMatch(
-    accountSource,
-    /deleteRowsByIndex\(ctx, "partnerCommissionAdjustments", "by_partner_createdAt"/,
-    "account deletion must not erase partner adjustment history",
-  );
+function proveReductionDoctrine(docsSource: string) {
   assertIncludes(
     docsSource,
     "A narrow platform-level Builder Partner Program can exist only when it directly helps builders bring new communities to Polynet",
@@ -2536,7 +2476,6 @@ function main() {
     readText(new URL("../apps/web/src/components/workspaceRightPanelOperatorShared.ts", import.meta.url)),
   ].join("\n");
   const appSource = readText(new URL("../apps/web/src/App.tsx", import.meta.url));
-  const accountSource = readText(new URL("../convex/account.ts", import.meta.url));
   const docsSource = readText(new URL("../docs/product/primitives/polynet.md", import.meta.url));
   const billingDocsSource = readText(new URL("../docs/product/reference/billing-entitlements.md", import.meta.url));
   const authSource = readText(new URL("../convex/auth.ts", import.meta.url));
@@ -2597,7 +2536,7 @@ function main() {
     createControllerSource,
     settingsGovernanceSource,
   );
-  proveReductionAndCleanupContract(accountSource, docsSource);
+  proveReductionDoctrine(docsSource);
   provePricingFoundation(authSource);
   proveCommissionProducerContract(builderPartnersSource, communityCommerceSource);
   proveRecurringInvoiceContract(httpBillingSource);

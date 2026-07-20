@@ -11,6 +11,31 @@ const DELETING_SUBJECT = "account-deletion-safety-user";
 const SURVIVING_SUBJECT = "account-deletion-safety-survivor";
 const LIFECYCLE_BLOCKER = "account_delete_lifecycle_migration_blocked";
 
+test("account deletion quarantine never provisions a missing account", async () => {
+  const t = convexTest(schema, modules);
+  const unprovisionedSubject = "account-deletion-unprovisioned-user";
+  const asUnprovisionedIdentity = t.withIdentity({ subject: unprovisionedSubject });
+
+  await expect(
+    asUnprovisionedIdentity.mutation(api.account.deleteOwnAccount, {
+      authSubject: unprovisionedSubject,
+    }),
+  ).rejects.toThrow("user_not_found");
+
+  expect(await t.run(async (ctx) => await ctx.db.query("users").collect())).toEqual([]);
+  expect(await t.run(async (ctx) => await ctx.db.query("criticalAuditEvents").collect())).toEqual([]);
+});
+
+test("account deletion quarantine requires verified identity", async () => {
+  const t = convexTest(schema, modules);
+
+  await expect(
+    t.mutation(api.account.deleteOwnAccount, {}),
+  ).rejects.toThrow("verified_identity_required");
+
+  expect(await t.run(async (ctx) => await ctx.db.query("users").collect())).toEqual([]);
+});
+
 test("account deletion is quarantined before shared state can be destroyed", async () => {
   const t = convexTest(schema, modules);
   const now = 1_750_000_000_000;

@@ -18,7 +18,6 @@ const creatorCommerce = await readRepoFile("convex/creatorCommerce.ts");
 const communityCommerce = await readRepoFile("convex/communityCommerce.ts");
 const billingCore = await readRepoFile("convex/billingCore.ts");
 const httpBilling = await readRepoFile("convex/httpBilling.ts");
-const account = await readRepoFile("convex/account.ts");
 const stripeWebhookHandler = httpBilling.split('path: "/billing/stripe_webhook"')[1] ?? "";
 
 assertContains(schema, /criticalAuditEvents: defineTable/, "critical audit table must exist");
@@ -101,7 +100,6 @@ for (const [fileName, source, eventTypes] of [
     httpBilling,
     ["stripe_webhook_received", "stripe_webhook_processed", "stripe_webhook_failed"],
   ],
-  ["convex/account.ts", account, ["account_delete_blocked", "account_delete_completed"]],
 ] as const) {
   assertContains(source, /recordCriticalAudit/, `${fileName} must use critical audit recording`);
   for (const eventType of eventTypes) {

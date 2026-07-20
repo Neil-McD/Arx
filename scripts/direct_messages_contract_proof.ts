@@ -17,7 +17,6 @@ const authSessions = read("convex/authSessions.ts");
 const webAuthController = read("apps/web/src/controllers/useWebAppAuthController.ts");
 const communityTypes = read("shared/communityTypes.ts");
 const directTypingHook = read("shared/useDirectMessageTypingPresence.ts");
-const account = read("convex/account.ts");
 const anonymousCleanup = read("convex/anonymousUserCleanup.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const profilePanel = read("apps/web/src/components/WebCommunityProfilePanel.tsx");
@@ -215,7 +214,6 @@ assert.doesNotMatch(dmListTypingQuery, /requireDirectConversationSendAccess|requ
 assert.match(dmListTypingQuery, /withIndex\("by_conversation_displayUntil"[\s\S]*gt\("displayUntil", nowMs\)/, "typing reads must query only non-expired rows through the displayUntil index");
 assert.match(dmListTypingQuery, /normalizeIdValue\(row\.userId\) !== normalizeIdValue\(viewerUserId\)/, "typing reads must exclude the viewer");
 assert.match(dmListTypingQuery, /MAX_DM_TYPING_PRESENCE_SCAN_ROWS/, "typing reads must stay bounded");
-assert.match(account, /dmTypingPresence/, "account deletion must clean DM typing presence rows");
 assert.match(anonymousCleanup, /dmTypingPresence/, "anonymous cleanup must include DM typing presence rows");
 assert.match(directMessages, /sendDirectMessage = mutation/, "backend must expose direct message sending");
 assert.match(directMessages, /sendDirectMessageToUser = mutation/, "backend must support a first send without eagerly creating an empty conversation");
