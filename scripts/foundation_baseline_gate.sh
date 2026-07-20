@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=23
+TOTAL_STEPS=24
 CURRENT_STEP=1
 
 run_step() {
@@ -36,6 +36,7 @@ run_step "No legacy Builder plan infra guard" npm run check:no-builder-plan-infr
 run_step "Purchase token hygiene proof" npm run check:purchase-token-hygiene-proof
 run_step "Frontend privacy hygiene proof" npm run check:frontend-privacy-hygiene-proof
 run_step "Account deletion safety behavior" npm run test:account-deletion-safety
+run_step "Account lifecycle policy contract" npm run check:account-lifecycle-policy-contract
 run_step "Community admin contract guard" bash scripts/community_admin_contract_guard.sh
 run_step "Community public identity guard" bash scripts/community_public_identity_guard.sh
 run_step "Community access role policy proof" npm run check:community-access-role-policy-proof

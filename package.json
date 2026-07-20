@@ -33,6 +33,7 @@
     "check:auth-billing-public-identity-guard": "bash scripts/auth_billing_public_identity_guard.sh",
     "check:account-setup-completion-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_setup_completion_contract_proof.ts",
     "check:account-delete-error-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_delete_error_contract_proof.ts",
+    "check:account-lifecycle-policy-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_lifecycle_policy_contract_proof.ts",
     "test:account-deletion-safety": "vitest run convex/accountDeletionSafety.test.ts",
     "check:avatar-framing-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/avatar_framing_contract_proof.ts",
     "check:profile-display-fallback-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_display_fallback_contract_proof.ts",
