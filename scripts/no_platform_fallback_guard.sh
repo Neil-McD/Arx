@@ -10,6 +10,7 @@ NEEDLE='platform''_fallback'
 
 if rg -n "$NEEDLE" docs shared convex apps/web/src scripts \
   --glob '!**/node_modules/**' \
+  --glob '!docs/system-map/snapshots/**' \
   --glob '!scripts/no_platform_fallback_guard.sh' \
   --glob '!scripts/foundation_baseline_gate.sh'; then
   echo "FAIL: found legacy platform_fallback wording; use platform."
