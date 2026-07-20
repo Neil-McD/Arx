@@ -9,6 +9,7 @@ const account = read("convex/account.ts");
 const accountSettings = read("apps/web/src/components/WebAccountSettingsSection.tsx");
 
 const blockerCodes = [
+  "account_delete_lifecycle_migration_blocked",
   "account_delete_owned_communities_blocked",
   "account_delete_active_community_subscription_blocked",
   "account_delete_active_payout_account_blocked",
@@ -21,9 +22,8 @@ assert.match(account, /import \{ ConvexError, v \} from "convex\/values"/, "acco
 assert.match(account, /function throwAccountDeleteBlocker/, "account delete blockers must go through one stable helper");
 assert.match(account, /throw new ConvexError\(\{ code, reason: code \}\)/, "blocker helper must expose structured client-visible code data");
 assert.doesNotMatch(account, /throw new Error\("account_delete_/, "expected delete blockers must not be plain Error strings");
-assert.match(account, /readAccountDeleteBlockerReason/, "blocked audit events must preserve structured blocker reason");
-assert.match(account, /eventKey: `account_delete_blocked:\$\{userId\}:\$\{blockerReason\}:\$\{nowMs\}`/, "blocked audit event key must include stable blocker code");
-assert.match(account, /reason: blockerReason/, "blocked audit metadata must include stable blocker code");
+assert.match(account, /quarantineAccountDeletionUntilLifecycleMigration\(\)/, "account deletion must fail closed before the legacy deletion body");
+assert.doesNotMatch(account, /eventType: "account_delete_blocked"/, "a mutation that rethrows must not claim its rolled-back audit write is durable");
 assert.match(account, /function hasBlockingPayoutAccountState/, "payout setup blocker must distinguish active setup from abandoned onboarding rows");
 assert.doesNotMatch(account, /function hasPayoutAccountState[\s\S]*return Boolean\(row\)/, "payout setup blocker must not reject every Stripe Connect row");
 assert.match(account, /row\.status === "ready"/, "ready Stripe Connect accounts must still block deletion");

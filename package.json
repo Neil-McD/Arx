@@ -33,6 +33,7 @@
     "check:auth-billing-public-identity-guard": "bash scripts/auth_billing_public_identity_guard.sh",
     "check:account-setup-completion-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_setup_completion_contract_proof.ts",
     "check:account-delete-error-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_delete_error_contract_proof.ts",
+    "test:account-deletion-safety": "vitest run convex/accountDeletionSafety.test.ts",
     "check:avatar-framing-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/avatar_framing_contract_proof.ts",
     "check:profile-display-fallback-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_display_fallback_contract_proof.ts",
     "check:profile-text-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_text_contract_proof.ts",
@@ -303,13 +304,16 @@
     "stripe": "^20.4.1"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^6.0.3",
+    "convex-test": "^0.0.54",
     "playwright": "^1.58.2",
     "tsx": "^4.22.4",
     "typescript": "^5.5.4",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vitest": "^4.1.10"
   },
   "overrides": {
     "@hey-api/openapi-ts": "0.97.3",

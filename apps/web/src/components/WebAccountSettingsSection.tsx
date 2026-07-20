@@ -96,6 +96,7 @@ type WebAccountSettingsSectionProps = {
 };
 
 const deleteAccountErrorMessages: Record<string, string> = {
+  account_delete_lifecycle_migration_blocked: "Account deletion is temporarily paused while shared conversations and community records are made safely separable. No account data was changed.",
   account_delete_owned_communities_blocked: "Delete or transfer owned communities before deleting your account.",
   account_delete_active_community_subscription_blocked: "Cancel active community memberships before deleting your account.",
   account_delete_active_payout_account_blocked: "Resolve active payout setup before deleting your account.",
@@ -657,7 +658,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
             Delete account
           </div>
           <div className="settings-section-desc">
-            Delete your Polynet account data, including your profile, sessions, provider connections, personal memory, workspace threads, and personal workspace data. Active subscriptions, payout setup, owned communities, and community app grants or skills must be resolved first.
+            Account deletion is temporarily paused while shared conversations and community records are made safely separable. No account data will be changed from this screen.
           </div>
           <div className="provider-connection-stack">
             <input
@@ -667,16 +668,16 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
               placeholder="Type DELETE to confirm"
               autoComplete="off"
               spellCheck={false}
-              disabled={isDeletingAccount}
+              disabled
             />
             <div className="auth-actions">
               <button
                 className="danger"
                 type="button"
                 onClick={() => void handleDeleteAccount()}
-                disabled={isDeletingAccount || deleteConfirmation !== "DELETE"}
+                disabled
               >
-                {isDeletingAccount ? "Deleting…" : "Delete account"}
+                Temporarily unavailable
               </button>
             </div>
           </div>

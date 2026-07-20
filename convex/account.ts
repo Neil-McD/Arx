@@ -4,6 +4,7 @@ import { ensureAuthenticatedActor } from "./authActor";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 
 type AccountDeleteBlockerCode =
+  | "account_delete_lifecycle_migration_blocked"
   | "account_delete_owned_communities_blocked"
   | "account_delete_active_community_subscription_blocked"
   | "account_delete_active_payout_account_blocked"
@@ -11,38 +12,12 @@ type AccountDeleteBlockerCode =
   | "account_delete_mounted_apps_blocked"
   | "account_delete_attached_skills_blocked";
 
-const accountDeleteBlockerCodes = new Set<string>([
-  "account_delete_owned_communities_blocked",
-  "account_delete_active_community_subscription_blocked",
-  "account_delete_active_payout_account_blocked",
-  "account_delete_partner_finance_pending_blocked",
-  "account_delete_mounted_apps_blocked",
-  "account_delete_attached_skills_blocked",
-]);
-
 function throwAccountDeleteBlocker(code: AccountDeleteBlockerCode): never {
   throw new ConvexError({ code, reason: code });
 }
 
-function readAccountDeleteBlockerReason(error: unknown): string {
-  const data =
-    error instanceof ConvexError
-      ? error.data
-      : typeof error === "object" && error !== null && "data" in error
-        ? (error as { data?: unknown }).data
-        : null;
-  if (typeof data === "object" && data !== null) {
-    const code = (data as { code?: unknown }).code;
-    if (typeof code === "string" && accountDeleteBlockerCodes.has(code)) return code;
-    const reason = (data as { reason?: unknown }).reason;
-    if (typeof reason === "string" && accountDeleteBlockerCodes.has(reason)) return reason;
-  }
-
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  for (const code of accountDeleteBlockerCodes) {
-    if (message.includes(code)) return code;
-  }
-  return message || "unknown";
+function quarantineAccountDeletionUntilLifecycleMigration(): void {
+  throwAccountDeleteBlocker("account_delete_lifecycle_migration_blocked");
 }
 
 async function deleteRowsByIndex(ctx: any, tableName: string, indexName: string, fieldName: string, value: any) {
@@ -359,25 +334,12 @@ export const deleteOwnAccount = mutation({
     });
     const userId = actor.dbUserId;
 
-    try {
-      await assertAccountDeletionAllowed(ctx, userId);
-    } catch (error) {
-      const blockerReason = readAccountDeleteBlockerReason(error);
-      await recordCriticalAuditEventBestEffort(ctx, {
-        eventKey: `account_delete_blocked:${userId}:${blockerReason}:${nowMs}`,
-        eventType: "account_delete_blocked",
-        severity: "warning",
-        status: "blocked",
-        actorUserId: userId,
-        subjectUserId: userId,
-        provider: "polynet",
-        metadata: {
-          reason: blockerReason,
-        },
-        createdAt: nowMs,
-      });
-      throw error;
-    }
+    // The legacy one-transaction deletion path is intentionally unreachable
+    // until shared-state ownership, privacy propagation, and resumable phase
+    // receipts are implemented. Throwing here preserves every database row.
+    quarantineAccountDeletionUntilLifecycleMigration();
+
+    await assertAccountDeletionAllowed(ctx, userId);
 
     const deleted: Record<string, number> = {};
     const record = async (tableName: string, count: number) => {
