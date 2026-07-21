@@ -32,7 +32,10 @@ Deleted residue: the `platform_home_autojoin_opt_out` magic message, its join-re
 
 ## Staging deployment receipt
 
-Pending final Dev Convex deployment and post-deploy redacted aggregate.
+- Exact source commit `dc7e47ab` deployed successfully through the guarded staging script to `dev:quick-porcupine-949`; production was not selected or queried.
+- The versioned read-only `join_admission_authority:v2` aggregate then scanned all 67 membership rows and the one join-request row with no truncation and no identifiers/content in its output.
+- The result contained zero platform-home sentinel rows, zero duplicate request pairs, zero denial-field violations, and zero approved requests without active membership. The sole request remained `approved`, the maximum rows per pair remained one, and all 67 memberships remained active.
+- No data migration or product mutation was required for this separation.
 
 ## Score for this slice
 

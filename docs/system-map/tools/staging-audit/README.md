@@ -18,4 +18,6 @@ npx convex run \
   --codegen disable
 ```
 
+Use `join-admission.mjs` for the narrower post-cutover membership/join-request integrity receipt; it reports only aggregate state and exact sentinel prevalence.
+
 Do not add `--push`, `--prod`, an action/mutation name, or a production selector. Results belong in a commit/deployment-addressed evidence document, never in generated source or product state.
