@@ -827,47 +827,6 @@ export const pruneTerminalAuthSessionsInternal = internalMutation({
   },
 });
 
-export const backfillAuthSessionPurgeDeadlinesInternal = internalMutation({
-  args: {
-    cursor: v.optional(v.string()),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const limit = normalizeAuthSessionBatchLimit(args.limit, 200);
-    const page = await ctx.db
-      .query("authSessions")
-      .order("asc")
-      .paginate({ cursor: args.cursor ?? null, numItems: limit });
-    let repaired = 0;
-    const nowMs = Date.now();
-    for (const row of page.page) {
-      const revokedAt =
-        typeof row.revokedAt === "number" && Number.isFinite(row.revokedAt)
-          ? Math.floor(row.revokedAt)
-          : undefined;
-      const purgeAfterAt = computeAuthSessionPurgeAfter(
-        revokedAt === undefined ? row.expiresAt : Math.min(row.expiresAt, revokedAt),
-      );
-      if (row.purgeAfterAt === purgeAfterAt) continue;
-      await ctx.db.patch(row._id, { purgeAfterAt, updatedAt: nowMs });
-      repaired += 1;
-    }
-    if (!page.isDone) {
-      await ctx.scheduler.runAfter(
-        0,
-        (internal as any).authSessions.backfillAuthSessionPurgeDeadlinesInternal,
-        { cursor: page.continueCursor, limit },
-      );
-    }
-    return {
-      scanned: page.page.length,
-      repaired,
-      complete: page.isDone,
-      continuationScheduled: !page.isDone,
-    };
-  },
-});
-
 async function readAuthSessionForAction(ctx: any, lookup: AuthSessionLookup) {
   return (await ctx.runQuery(
     (internal as any).authSessions.getAuthSessionByCredentialInternal,
