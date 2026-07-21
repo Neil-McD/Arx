@@ -634,6 +634,7 @@ export const createAuthSessionInternal = internalMutation({
     if (existing) throw new Error("auth_session_credential_collision");
     const encrypted = await encryptSecret(encodeStoredState(buildStoredStateArgs(args)));
     const expiresAt = args.nowMs + AUTH_SESSION_ABSOLUTE_TTL_MS;
+    const purgeAfterAt = computeAuthSessionPurgeAfter(expiresAt);
     const id = await ctx.db.insert("authSessions", {
       sessionTokenHash: args.sessionTokenHash,
       userId: args.userId,
@@ -641,6 +642,7 @@ export const createAuthSessionInternal = internalMutation({
       secretIvHex: encrypted.secretIvHex,
       secretVersion: encrypted.secretVersion,
       expiresAt,
+      purgeAfterAt,
       secretRevision: 0,
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
@@ -748,10 +750,22 @@ export const revokeAuthSessionInternal = internalMutation({
   handler: async (ctx, args) => {
     const row = await getAuthSessionRowByLookup(ctx, args);
     if (!row) return { revoked: false, missing: true };
-    if (typeof row.revokedAt === "number") return { revoked: true, missing: false };
+    const revokedAt =
+      typeof row.revokedAt === "number" && Number.isFinite(row.revokedAt)
+        ? Math.floor(row.revokedAt)
+        : Math.floor(args.nowMs);
+    const purgeAfterAt = computeAuthSessionPurgeAfter(
+      Math.min(row.expiresAt, revokedAt),
+    );
+    const alreadyCanonical =
+      row.revokedAt === revokedAt &&
+      row.purgeAfterAt === purgeAfterAt &&
+      !normalizeString(row.refreshLeaseId) &&
+      typeof row.refreshLeaseExpiresAt !== "number";
+    if (alreadyCanonical) return { revoked: true, missing: false };
     await ctx.db.patch(row._id as any, {
-      revokedAt: args.nowMs,
-      purgeAfterAt: computeAuthSessionPurgeAfter(args.nowMs),
+      revokedAt,
+      purgeAfterAt,
       refreshLeaseId: undefined,
       refreshLeaseExpiresAt: undefined,
       updatedAt: args.nowMs,
@@ -775,8 +789,41 @@ export const pruneTerminalAuthSessionsInternal = internalMutation({
         q.gt("purgeAfterAt", 0).lte("purgeAfterAt", nowMs),
       )
       .take(limit);
-    for (const row of rows) await ctx.db.delete(row._id);
-    return { deleted: rows.length, limit, doneForNow: rows.length < limit };
+    let deleted = 0;
+    let repaired = 0;
+    for (const row of rows) {
+      const revokedAt =
+        typeof row.revokedAt === "number" && Number.isFinite(row.revokedAt)
+          ? Math.floor(row.revokedAt)
+          : undefined;
+      const purgeAfterAt = computeAuthSessionPurgeAfter(
+        revokedAt === undefined ? row.expiresAt : Math.min(row.expiresAt, revokedAt),
+      );
+      if (purgeAfterAt > nowMs) {
+        if (row.purgeAfterAt !== purgeAfterAt) {
+          await ctx.db.patch(row._id, { purgeAfterAt, updatedAt: nowMs });
+          repaired += 1;
+        }
+        continue;
+      }
+      await ctx.db.delete(row._id);
+      deleted += 1;
+    }
+    const doneForNow = rows.length < limit;
+    if (!doneForNow) {
+      await ctx.scheduler.runAfter(
+        0,
+        (internal as any).authSessions.pruneTerminalAuthSessionsInternal,
+        { nowMs, limit },
+      );
+    }
+    return {
+      deleted,
+      repaired,
+      limit,
+      doneForNow,
+      continuationScheduled: !doneForNow,
+    };
   },
 });
 

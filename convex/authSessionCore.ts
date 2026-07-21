@@ -63,8 +63,8 @@ export function resolveAuthSessionLifecycle(
   return { status: "active", expiresAt };
 }
 
-export function computeAuthSessionPurgeAfter(nowMs: number): number {
-  return Math.floor(nowMs) + AUTH_SESSION_TERMINAL_RETENTION_MS;
+export function computeAuthSessionPurgeAfter(terminalAt: number): number {
+  return Math.floor(terminalAt) + AUTH_SESSION_TERMINAL_RETENTION_MS;
 }
 
 export function classifyAuthSessionLogoutResolutionFailure(

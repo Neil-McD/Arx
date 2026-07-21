@@ -24,6 +24,7 @@ const NOW_MS = 1_750_000_000_000;
 const CREDENTIAL = "123e4567-e89b-42d3-a456-426614174000";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -108,12 +109,16 @@ test("one sign-in creates one hashed bounded session and collisions fail closed"
     sessionTokenHash: fixture.sessionTokenHash,
     userId: fixture.userId,
     expiresAt: NOW_MS + AUTH_SESSION_ABSOLUTE_TTL_MS,
+    purgeAfterAt:
+      NOW_MS + AUTH_SESSION_ABSOLUTE_TTL_MS + AUTH_SESSION_TERMINAL_RETENTION_MS,
     secretRevision: 0,
   });
   expect(JSON.stringify(rows[0])).not.toContain(CREDENTIAL);
 
   await expect(createSession(fixture)).rejects.toThrow("auth_session_credential_collision");
-  expect(await fixture.t.run(async (ctx) => await ctx.db.query("authSessions").collect())).toHaveLength(1);
+  expect(
+    await fixture.t.run(async (ctx) => await ctx.db.query("authSessions").collect()),
+  ).toHaveLength(1);
 });
 
 test("refresh lease admits one owner, rejects a concurrent owner, and commits in place", async () => {
@@ -399,7 +404,101 @@ test("absolute expiry and revocation fail closed before refresh ownership", asyn
   expect(revoked).toEqual({ status: "terminal", reason: "auth_session_revoked" });
 });
 
-test("terminal retention reads and deletes only the configured indexed batch", async () => {
+test("an untouched session survives until its expiry retention deadline and is then deleted", async () => {
+  const fixture = await createFixture();
+  await createSession(fixture);
+  const purgeAfterAt =
+    NOW_MS + AUTH_SESSION_ABSOLUTE_TTL_MS + AUTH_SESSION_TERMINAL_RETENTION_MS;
+
+  const early = await fixture.t.mutation(
+    (internal as any).authSessions.pruneTerminalAuthSessionsInternal,
+    { nowMs: purgeAfterAt - 1, limit: 3 },
+  );
+  expect(early).toEqual({
+    deleted: 0,
+    repaired: 0,
+    limit: 3,
+    doneForNow: true,
+    continuationScheduled: false,
+  });
+  expect(
+    await fixture.t.run(async (ctx) => await ctx.db.query("authSessions").collect()),
+  ).toHaveLength(1);
+
+  const due = await fixture.t.mutation(
+    (internal as any).authSessions.pruneTerminalAuthSessionsInternal,
+    { nowMs: purgeAfterAt, limit: 3 },
+  );
+  expect(due).toEqual({
+    deleted: 1,
+    repaired: 0,
+    limit: 3,
+    doneForNow: true,
+    continuationScheduled: false,
+  });
+  expect(
+    await fixture.t.run(async (ctx) => await ctx.db.query("authSessions").collect()),
+  ).toEqual([]);
+});
+
+test("revocation advances the deadline and idempotently repairs legacy revoked rows", async () => {
+  const fixture = await createFixture();
+  const created = await createSession(fixture);
+  const revokedAt = NOW_MS + 5_000;
+  await fixture.t.mutation((internal as any).authSessions.revokeAuthSessionInternal, {
+    sessionTokenHash: fixture.sessionTokenHash,
+    nowMs: revokedAt,
+  });
+  const revoked = await fixture.t.run(async (ctx) => await ctx.db.get(created.id)) as any;
+  expect(revoked).toMatchObject({
+    revokedAt,
+    purgeAfterAt: revokedAt + AUTH_SESSION_TERMINAL_RETENTION_MS,
+  });
+
+  await fixture.t.run(async (ctx) =>
+    await ctx.db.patch(created.id, {
+      purgeAfterAt: undefined,
+      refreshLeaseId: "legacy-refresh-lease",
+      refreshLeaseExpiresAt: NOW_MS + 60_000,
+    }),
+  );
+  await fixture.t.mutation((internal as any).authSessions.revokeAuthSessionInternal, {
+    sessionTokenHash: fixture.sessionTokenHash,
+    nowMs: revokedAt + 30_000,
+  });
+  const repaired = await fixture.t.run(async (ctx) => await ctx.db.get(created.id)) as any;
+  expect(repaired).toMatchObject({
+    revokedAt,
+    purgeAfterAt: revokedAt + AUTH_SESSION_TERMINAL_RETENTION_MS,
+  });
+  expect(repaired.refreshLeaseId).toBeUndefined();
+  expect(repaired.refreshLeaseExpiresAt).toBeUndefined();
+});
+
+test("the pruner repairs an early active deadline instead of deleting the session", async () => {
+  const fixture = await createFixture();
+  const created = await createSession(fixture);
+  await fixture.t.run(async (ctx) => await ctx.db.patch(created.id, { purgeAfterAt: NOW_MS }));
+
+  const result = await fixture.t.mutation(
+    (internal as any).authSessions.pruneTerminalAuthSessionsInternal,
+    { nowMs: NOW_MS + 1_000, limit: 3 },
+  );
+  expect(result).toEqual({
+    deleted: 0,
+    repaired: 1,
+    limit: 3,
+    doneForNow: true,
+    continuationScheduled: false,
+  });
+  const row = await fixture.t.run(async (ctx) => await ctx.db.get(created.id)) as any;
+  expect(row?.purgeAfterAt).toBe(
+    NOW_MS + AUTH_SESSION_ABSOLUTE_TTL_MS + AUTH_SESSION_TERMINAL_RETENTION_MS,
+  );
+});
+
+test("a full terminal-retention batch schedules and drains its own bounded continuation", async () => {
+  vi.useFakeTimers();
   const fixture = await createFixture();
   for (let index = 0; index < 7; index += 1) {
     const credential = `123e4567-e89b-42d3-a456-4266141740${String(index + 10).padStart(2, "0")}`;
@@ -418,26 +517,21 @@ test("terminal retention reads and deletes only the configured indexed batch", a
       limit: 3,
     },
   );
-  expect(first).toEqual({ deleted: 3, limit: 3, doneForNow: false });
-  expect(await fixture.t.run(async (ctx) => await ctx.db.query("authSessions").collect())).toHaveLength(4);
+  expect(first).toEqual({
+    deleted: 3,
+    repaired: 0,
+    limit: 3,
+    doneForNow: false,
+    continuationScheduled: true,
+  });
+  expect(
+    await fixture.t.run(async (ctx) => await ctx.db.query("authSessions").collect()),
+  ).toHaveLength(4);
 
-  const second = await fixture.t.mutation(
-    (internal as any).authSessions.pruneTerminalAuthSessionsInternal,
-    {
-      nowMs: NOW_MS + AUTH_SESSION_TERMINAL_RETENTION_MS,
-      limit: 3,
-    },
-  );
-  const third = await fixture.t.mutation(
-    (internal as any).authSessions.pruneTerminalAuthSessionsInternal,
-    {
-      nowMs: NOW_MS + AUTH_SESSION_TERMINAL_RETENTION_MS,
-      limit: 3,
-    },
-  );
-  expect(second.deleted).toBe(3);
-  expect(third).toEqual({ deleted: 1, limit: 3, doneForNow: true });
-  expect(await fixture.t.run(async (ctx) => await ctx.db.query("authSessions").collect())).toEqual([]);
+  await fixture.t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(
+    await fixture.t.run(async (ctx) => await ctx.db.query("authSessions").collect()),
+  ).toEqual([]);
 });
 
 test("source contract has one hashed credential path and internal indexed retention", () => {
