@@ -1,6 +1,6 @@
-import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import {
-  classifyPublicCommunityJoinError, clearPendingPublicJoin, getErrorMessage, joinPublicCommunityRpc, storePendingPublicJoin, } from "../../../../shared/pay_first";
+  classifyPublicCommunityJoinError, getErrorMessage, joinPublicCommunityRpc, } from "../../../../shared/pay_first";
 import type { PendingAuthIntentInput } from "../../../../shared/authResumeState";
 import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisibility";
 
@@ -19,7 +19,12 @@ import { resolveAuthSubject } from "../../../../shared/authSession";
 import type { AuthSession } from "../auth";
 import type { CommunityBillingPeriod } from "../../../../shared/communityTypes";
 import {
+  isPublicCommunityAdmissionActionOwner,
+  isPublicCommunityAdmissionActionSnapshotCurrent,
   isPublicCommunityLoadSnapshotCurrent,
+  type PublicCommunityAdmissionActionKind,
+  type PublicCommunityAdmissionActionOrigin,
+  type PublicCommunityAdmissionActionSnapshot,
   type PublicCommunityAccessResolution,
   type PublicCommunityLoadSnapshot,
 } from "../communityJoinPolicy";
@@ -82,6 +87,20 @@ type CommunityAccessRow = {
   join_request_reapply_at?: string | null;
 };
 
+type ReconciledAdmissionStatus =
+  | "entered"
+  | "pending"
+  | "denied"
+  | "blocked"
+  | "none"
+  | "unavailable"
+  | "stale";
+
+type ReconciledAdmission<CommunityAccessT> = {
+  status: ReconciledAdmissionStatus;
+  access: CommunityAccessT | null;
+};
+
 export function useWebPublicFunnelActions<
   PublicCommunityT extends {
     slug: string;
@@ -112,226 +131,302 @@ export function useWebPublicFunnelActions<
   const argsRef = useRef(args);
   argsRef.current = args;
   const publicCommunityLoadGenerationRef = useRef(0);
+  const publicCommunityActionGenerationRef = useRef(0);
+  const activePublicCommunityActionRef = useRef<PublicCommunityAdmissionActionSnapshot | null>(null);
+  const renderActionAuthorityKey = `${String(args.getCurrentPublicFunnelSlug() ?? "").trim()}\u0000${String(
+    args.getCurrentAuthSubject() ?? "",
+  ).trim()}`;
+  const renderActionAuthorityKeyRef = useRef(renderActionAuthorityKey);
+  if (renderActionAuthorityKeyRef.current !== renderActionAuthorityKey) {
+    renderActionAuthorityKeyRef.current = renderActionAuthorityKey;
+    publicCommunityActionGenerationRef.current += 1;
+    activePublicCommunityActionRef.current = null;
+  }
 
-  const applyApprovalJoinState = useCallback(
-    (opts: {
-      status: "pending" | "denied";
-      communityId?: string | null;
-      communitySlug?: string | null;
-      reapplyAt?: string | null;
-    }) => {
+  useEffect(() => {
+    if (activePublicCommunityActionRef.current) return;
+    argsRef.current.setIsJoiningPublicCommunity(false);
+    argsRef.current.setIsCancellingPublicCommunityJoinRequest(false);
+  }, [renderActionAuthorityKey]);
+
+  const actionSnapshotIsCurrent = useCallback(
+    (snapshot: PublicCommunityAdmissionActionSnapshot): boolean =>
+      isPublicCommunityAdmissionActionSnapshotCurrent({
+        snapshot,
+        current: {
+          generation: publicCommunityActionGenerationRef.current,
+          publicFunnelSlug: argsRef.current.getCurrentPublicFunnelSlug(),
+          authSubject: argsRef.current.getCurrentAuthSubject(),
+        },
+      }),
+    [],
+  );
+
+  const beginAdmissionAction = useCallback(
+    (args: {
+      kind: PublicCommunityAdmissionActionKind;
+      origin: PublicCommunityAdmissionActionOrigin;
+      communitySlug: string;
+      authSubject: string;
+    }): PublicCommunityAdmissionActionSnapshot | null => {
+      const snapshot: PublicCommunityAdmissionActionSnapshot = {
+        generation: ++publicCommunityActionGenerationRef.current,
+        kind: args.kind,
+        origin: args.origin,
+        communitySlug: args.communitySlug,
+        authSubject: args.authSubject,
+      };
+      if (!actionSnapshotIsCurrent(snapshot)) return null;
+      activePublicCommunityActionRef.current = snapshot;
       const current = argsRef.current;
-      if (
-        opts.communitySlug &&
-        current.getCurrentPublicCommunitySlug() !== opts.communitySlug
-      ) {
-        return;
-      }
+      current.setIsJoiningPublicCommunity(args.kind === "join");
+      current.setIsCancellingPublicCommunityJoinRequest(args.kind === "cancel");
       current.setPublicJoinError(null);
-      current.setPublicCommunityAccess((previous) => {
-        if (!previous) return previous;
-        if (
-          opts.communityId &&
-          previous.community_id !== opts.communityId
-        ) {
-          return previous;
-        }
-        return {
-          ...previous,
-          relation: opts.status === "pending" ? "pending" : "visitor",
-          join_request_status: opts.status,
-          join_request_reapply_at: opts.reapplyAt ?? null,
-        } as CommunityAccessT;
-      });
-      current.setPublicCommunity((prev) =>
-        prev
-          ? ({
-              ...prev,
-              entry_policy: "approval",
-            } as PublicCommunityT)
-          : prev,
-      );
+      return snapshot;
+    },
+    [actionSnapshotIsCurrent],
+  );
+
+  const finishAdmissionAction = useCallback(
+    (snapshot: PublicCommunityAdmissionActionSnapshot): void => {
+      if (
+        !isPublicCommunityAdmissionActionOwner({
+          active: activePublicCommunityActionRef.current,
+          snapshot,
+        })
+      ) return;
+      activePublicCommunityActionRef.current = null;
+      argsRef.current.setIsJoiningPublicCommunity(false);
+      argsRef.current.setIsCancellingPublicCommunityJoinRequest(false);
     },
     [],
   );
 
-  const reconcileJoinOutcomeBySlug = useCallback(
-    async (communitySlug: string, session: AuthSession): Promise<"entered" | "pending" | "denied" | "none"> => {
-      const trimmedSlug = communitySlug.trim();
-      if (!trimmedSlug) return "none";
+  const setCurrentFunnelEntryPolicy = useCallback(
+    (
+      snapshot: PublicCommunityAdmissionActionSnapshot,
+      entryPolicy: "approval" | "paid_subscription",
+    ): void => {
+      if (!actionSnapshotIsCurrent(snapshot)) return;
+      const current = argsRef.current;
+      if (current.getCurrentPublicFunnelSlug() !== snapshot.communitySlug) return;
+      current.setPublicCommunity((previous) =>
+        previous?.slug === snapshot.communitySlug
+          ? ({ ...previous, entry_policy: entryPolicy } as PublicCommunityT)
+          : previous,
+      );
+    },
+    [actionSnapshotIsCurrent],
+  );
 
+  const navigateAuthResumeToFunnel = useCallback(
+    (snapshot: PublicCommunityAdmissionActionSnapshot): void => {
+      if (snapshot.origin !== "auth_resume" || !actionSnapshotIsCurrent(snapshot)) return;
+      if (argsRef.current.getCurrentPublicFunnelSlug() === snapshot.communitySlug) return;
+      const shellVariant = readShellVariantFromPathname(window.location.pathname || "/");
+      const path = applyShellVariantToPublicPath(
+        `/c/${encodeURIComponent(snapshot.communitySlug)}`,
+        shellVariant,
+      );
+      argsRef.current.navigateToUrl(path);
+    },
+    [actionSnapshotIsCurrent],
+  );
+
+  const reconcileAdmissionBySlug = useCallback(
+    async (
+      snapshot: PublicCommunityAdmissionActionSnapshot,
+      session: AuthSession,
+    ): Promise<ReconciledAdmission<CommunityAccessT>> => {
       let access: CommunityAccessT | null;
       try {
         access = await fetchCloudMyCommunityAccessBySlug<AuthSession, CommunityAccessT>({
           session,
-          communitySlug: trimmedSlug,
+          communitySlug: snapshot.communitySlug,
         });
       } catch {
-        return "none";
+        if (!actionSnapshotIsCurrent(snapshot)) return { status: "stale", access: null };
+        const current = argsRef.current;
+        if (current.getCurrentPublicFunnelSlug() === snapshot.communitySlug) {
+          current.setPublicCommunityAccess(null);
+          current.setPublicCommunityAccessResolution({
+            status: "unavailable",
+            communitySlug: snapshot.communitySlug,
+            authSubject: snapshot.authSubject,
+          });
+        }
+        return { status: "unavailable", access: null };
       }
+      if (!actionSnapshotIsCurrent(snapshot)) return { status: "stale", access: null };
+      if (!access || typeof access.is_blocked !== "boolean") {
+        const current = argsRef.current;
+        if (current.getCurrentPublicFunnelSlug() === snapshot.communitySlug) {
+          current.setPublicCommunityAccess(null);
+          current.setPublicCommunityAccessResolution({
+            status: "unavailable",
+            communitySlug: snapshot.communitySlug,
+            authSubject: snapshot.authSubject,
+          });
+        }
+        return { status: "unavailable", access: null };
+      }
+
       const current = argsRef.current;
-      if (current.getCurrentPublicCommunitySlug() !== trimmedSlug || !access) {
-        return "none";
-      }
-      current.setPublicCommunityAccess(access);
-      if ((access.can_enter_community || access.is_owner) && access.community_id) {
-        clearPendingPublicJoin();
-        current.setPublicJoinError(null);
-        current.openCommunityWorkspace({
-          communityId: access.community_id,
-          communitySlug: trimmedSlug,
+      if (
+        current.getCurrentPublicFunnelSlug() === snapshot.communitySlug &&
+        current.getCurrentPublicCommunitySlug() === snapshot.communitySlug
+      ) {
+        current.setPublicCommunityAccess(access);
+        current.setPublicCommunityAccessResolution({
+          status: "ready",
+          communitySlug: snapshot.communitySlug,
+          authSubject: snapshot.authSubject,
         });
-        await current.loadCommunities(session);
-        return "entered";
       }
-      const status = access.join_request_status;
-      if (status !== "pending" && status !== "denied") return "none";
-      clearPendingPublicJoin();
-      current.setPublicJoinError(null);
-      current.setPublicCommunity((previous) =>
-        previous
-          ? ({
-              ...previous,
-              entry_policy: "approval",
-            } as PublicCommunityT)
-          : previous,
-      );
-      return status;
+      if (access.is_blocked) return { status: "blocked", access };
+      if ((access.can_enter_community || access.is_owner) && access.community_id) {
+        return { status: "entered", access };
+      }
+      if (access.join_request_status === "pending") return { status: "pending", access };
+      if (access.join_request_status === "denied") return { status: "denied", access };
+      return { status: "none", access };
     },
-    [],
+    [actionSnapshotIsCurrent],
+  );
+
+  const enterReconciledCommunity = useCallback(
+    async (
+      snapshot: PublicCommunityAdmissionActionSnapshot,
+      session: AuthSession,
+      communityId: string,
+    ): Promise<void> => {
+      if (!actionSnapshotIsCurrent(snapshot)) return;
+      const current = argsRef.current;
+      current.setPublicJoinError(null);
+      current.openCommunityWorkspace({
+        communityId,
+        communitySlug: snapshot.communitySlug,
+      });
+      await current.loadCommunities(session);
+    },
+    [actionSnapshotIsCurrent],
   );
 
   const joinPublicCommunity = useCallback(
-    async (opts: { communityId?: string; communitySlug?: string | null }): Promise<void> => {
-      const trimmedId = (opts.communityId ?? "").trim();
-      const trimmedSlug = (opts.communitySlug ?? "").trim();
-      if (!trimmedId && !trimmedSlug) return;
+    async (opts: {
+      communitySlug: string;
+      origin: PublicCommunityAdmissionActionOrigin;
+    }): Promise<void> => {
+      const trimmedSlug = opts.communitySlug.trim();
+      if (!trimmedSlug) return;
 
       const current = argsRef.current;
       const rawSession = current.getSession();
       const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
       if (!session) {
-        storePendingPublicJoin(trimmedSlug || trimmedId);
         current.requireSignIn({
           reason: "join_public_community",
           payload: {
-            community_id: trimmedId || null,
-            community_slug: trimmedSlug || null,
+            community_slug: trimmedSlug,
           },
         });
         return;
       }
-
-      current.setIsJoiningPublicCommunity(true);
-      current.setPublicJoinError(null);
+      const authSubject = String(resolveAuthSubject(session) ?? "").trim();
+      if (!authSubject || authSubject !== String(current.getCurrentAuthSubject() ?? "").trim()) return;
+      const snapshot = beginAdmissionAction({
+        kind: "join",
+        origin: opts.origin,
+        communitySlug: trimmedSlug,
+        authSubject,
+      });
+      if (!snapshot) return;
       try {
         const joinResult = await joinPublicCommunityRpc({
           session,
-          communityId: trimmedId || undefined,
-          communitySlug: trimmedSlug || undefined,
+          communitySlug: trimmedSlug,
         });
-        clearPendingPublicJoin();
-        if (
-          trimmedSlug &&
-          current.getCurrentPublicCommunitySlug() !== trimmedSlug
-        ) {
+        if (!actionSnapshotIsCurrent(snapshot)) return;
+
+        if (joinResult.outcome === "joined") {
+          await enterReconciledCommunity(snapshot, session, joinResult.community_id);
           return;
         }
 
-        if (joinResult.outcome === "joined") {
-          current.openCommunityWorkspace({
-            communityId: joinResult.community_id,
-            communitySlug: trimmedSlug || null,
-          });
-          await current.loadCommunities(session);
+        const reconciled = await reconcileAdmissionBySlug(snapshot, session);
+        if (reconciled.status === "stale") return;
+        if (reconciled.status === "entered" && reconciled.access?.community_id) {
+          await enterReconciledCommunity(snapshot, session, reconciled.access.community_id);
           return;
         }
-        if (joinResult.outcome === "approval_pending") {
-          applyApprovalJoinState({
-            status: "pending",
-            communityId: joinResult.community_id,
-            communitySlug: trimmedSlug || null,
-          });
-          current.onJoinRequestSent?.({
-            communityId: joinResult.community_id ?? null,
-            communitySlug: trimmedSlug || null,
-          });
-          if (trimmedSlug) {
-            await reconcileJoinOutcomeBySlug(trimmedSlug, session);
-          }
-          return;
-        }
-        if (joinResult.outcome === "approval_denied") {
-          applyApprovalJoinState({
-            status: "denied",
-            communityId: joinResult.community_id,
-            communitySlug: trimmedSlug || null,
-            reapplyAt: joinResult.reapply_at ?? null,
-          });
-          if (trimmedSlug) {
-            await reconcileJoinOutcomeBySlug(trimmedSlug, session);
-          }
+        if (reconciled.status === "blocked") {
+          current.setPublicJoinError(null);
           return;
         }
         if (joinResult.outcome === "paid_plan_required") {
+          setCurrentFunnelEntryPolicy(snapshot, "paid_subscription");
+          navigateAuthResumeToFunnel(snapshot);
+          if (!actionSnapshotIsCurrent(snapshot)) return;
           current.setPublicJoinError("This community now requires a paid plan. Select a plan to continue.");
-          current.setPublicCommunity((prev) =>
-            prev
-              ? ({
-                  ...prev,
-                  entry_policy: "paid_subscription",
-                } as PublicCommunityT)
-              : prev,
-          );
           return;
         }
+        setCurrentFunnelEntryPolicy(snapshot, "approval");
+        navigateAuthResumeToFunnel(snapshot);
+        if (!actionSnapshotIsCurrent(snapshot)) return;
+        if (joinResult.outcome === "approval_pending" && reconciled.status === "pending") {
+          current.onJoinRequestSent?.({
+            communityId: joinResult.community_id ?? null,
+            communitySlug: trimmedSlug,
+          });
+        }
+        current.setPublicJoinError(
+          reconciled.status === "unavailable"
+            ? "Your request was received, but its current status could not be verified. Reload to try again."
+            : null,
+        );
       } catch (error) {
-        if (
-          trimmedSlug &&
-          current.getCurrentPublicCommunitySlug() !== trimmedSlug
-        ) {
-          return;
-        }
+        if (!actionSnapshotIsCurrent(snapshot)) return;
         const message = getErrorMessage(error, "Failed to join community.");
         const kind = classifyPublicCommunityJoinError(error);
-        if (kind === "approval_pending" || kind === "approval_denied") {
-          clearPendingPublicJoin();
-          applyApprovalJoinState({
-            status: kind === "approval_denied" ? "denied" : "pending",
-            communityId: trimmedId || null,
-            communitySlug: trimmedSlug || null,
-          });
-          if (trimmedSlug) {
-            await reconcileJoinOutcomeBySlug(trimmedSlug, session);
-          }
+        const reconciled = await reconcileAdmissionBySlug(snapshot, session);
+        if (reconciled.status === "stale") return;
+        if (reconciled.status === "entered" && reconciled.access?.community_id) {
+          await enterReconciledCommunity(snapshot, session, reconciled.access.community_id);
+          return;
+        }
+        if (reconciled.status === "blocked") {
+          current.setPublicJoinError(null);
+          return;
+        }
+        if (reconciled.status === "pending" || reconciled.status === "denied") {
+          setCurrentFunnelEntryPolicy(snapshot, "approval");
+          navigateAuthResumeToFunnel(snapshot);
+          if (actionSnapshotIsCurrent(snapshot)) current.setPublicJoinError(null);
           return;
         }
         if (kind === "paid_plan_required") {
-          clearPendingPublicJoin();
+          setCurrentFunnelEntryPolicy(snapshot, "paid_subscription");
+          navigateAuthResumeToFunnel(snapshot);
+          if (!actionSnapshotIsCurrent(snapshot)) return;
           current.setPublicJoinError("This community now requires a paid plan. Select a plan to continue.");
-          current.setPublicCommunity((prev) =>
-            prev
-              ? ({
-                  ...prev,
-                  entry_policy: "paid_subscription",
-                } as PublicCommunityT)
-              : prev,
-          );
           return;
         }
-        if (trimmedSlug) {
-          const reconciled = await reconcileJoinOutcomeBySlug(trimmedSlug, session);
-          if (reconciled !== "none") {
-            return;
-          }
-        }
-        clearPendingPublicJoin();
+        navigateAuthResumeToFunnel(snapshot);
+        if (!actionSnapshotIsCurrent(snapshot)) return;
         current.setPublicJoinError(message);
       } finally {
-        current.setIsJoiningPublicCommunity(false);
+        finishAdmissionAction(snapshot);
       }
     },
-    [applyApprovalJoinState, reconcileJoinOutcomeBySlug],
+    [
+      actionSnapshotIsCurrent,
+      beginAdmissionAction,
+      enterReconciledCommunity,
+      finishAdmissionAction,
+      navigateAuthResumeToFunnel,
+      reconcileAdmissionBySlug,
+      setCurrentFunnelEntryPolicy,
+    ],
   );
 
   const cancelMyPendingJoinRequest = useCallback(
@@ -342,36 +437,51 @@ export function useWebPublicFunnelActions<
       const rawSession = current.getSession();
       const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
       if (!session) return;
-
-      current.setIsCancellingPublicCommunityJoinRequest(true);
-      current.setPublicJoinError(null);
+      const authSubject = String(resolveAuthSubject(session) ?? "").trim();
+      if (!authSubject || authSubject !== String(current.getCurrentAuthSubject() ?? "").trim()) return;
+      const snapshot = beginAdmissionAction({
+        kind: "cancel",
+        origin: "funnel",
+        communitySlug: trimmedSlug,
+        authSubject,
+      });
+      if (!snapshot) return;
       try {
-        const result = await cancelCloudMyJoinRequestBySlug({
+        await cancelCloudMyJoinRequestBySlug({
           session,
           communitySlug: trimmedSlug,
         });
-        if (result?.outcome === "canceled" || result?.outcome === "none") {
-          if (current.getCurrentPublicCommunitySlug() !== trimmedSlug) return;
-          current.setPublicCommunityAccess((previous) =>
-            previous
-              ? ({
-                  ...previous,
-                  relation: previous.can_enter_community ? previous.relation : "visitor",
-                  join_request_status: null,
-                  join_request_reapply_at: null,
-                } as CommunityAccessT)
-              : previous,
-          );
-          await reconcileJoinOutcomeBySlug(trimmedSlug, session);
+        if (!actionSnapshotIsCurrent(snapshot)) return;
+        const reconciled = await reconcileAdmissionBySlug(snapshot, session);
+        if (reconciled.status !== "stale" && reconciled.status !== "unavailable") {
+          current.setPublicJoinError(null);
+        } else if (reconciled.status === "unavailable") {
+          current.setPublicJoinError("The cancellation completed, but its current status could not be verified. Reload to try again.");
         }
       } catch (error) {
+        if (!actionSnapshotIsCurrent(snapshot)) return;
         const message = getErrorMessage(error, "Failed to cancel join request.");
-        current.setPublicJoinError(message);
+        const reconciled = await reconcileAdmissionBySlug(snapshot, session);
+        if (!actionSnapshotIsCurrent(snapshot)) return;
+        if (
+          reconciled.status === "none" ||
+          reconciled.status === "denied" ||
+          reconciled.status === "entered"
+        ) {
+          current.setPublicJoinError(null);
+        } else {
+          current.setPublicJoinError(message);
+        }
       } finally {
-        current.setIsCancellingPublicCommunityJoinRequest(false);
+        finishAdmissionAction(snapshot);
       }
     },
-    [reconcileJoinOutcomeBySlug],
+    [
+      actionSnapshotIsCurrent,
+      beginAdmissionAction,
+      finishAdmissionAction,
+      reconcileAdmissionBySlug,
+    ],
   );
 
   const loadPublicCommunity = useCallback(
@@ -603,7 +713,6 @@ export function useWebPublicFunnelActions<
           current.requireSignIn({
             reason: "join_public_community",
             payload: {
-              community_id: null,
               community_slug: communitySlug,
             },
           });

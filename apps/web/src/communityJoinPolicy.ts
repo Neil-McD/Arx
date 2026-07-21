@@ -26,6 +26,23 @@ export type PublicCommunityLoadSnapshot = {
   authSubject: string | null;
 };
 
+export type PublicCommunityAdmissionActionKind = "join" | "cancel";
+export type PublicCommunityAdmissionActionOrigin = "funnel" | "auth_resume";
+
+export type PublicCommunityAdmissionActionSnapshot = {
+  generation: number;
+  kind: PublicCommunityAdmissionActionKind;
+  origin: PublicCommunityAdmissionActionOrigin;
+  communitySlug: string;
+  authSubject: string;
+};
+
+export type PublicCommunityAdmissionActionAuthority = {
+  generation: number;
+  publicFunnelSlug: string | null;
+  authSubject: string | null;
+};
+
 export type PublicCommunityAdmissionProjection = {
   status: PublicCommunityAdmissionStatus;
   canEnterCommunity: boolean;
@@ -52,6 +69,36 @@ export function isPublicCommunityLoadSnapshotCurrent(args: {
       normalizeAuthorityValue(args.current.communitySlug) &&
     normalizeAuthorityValue(args.snapshot.authSubject) ===
       normalizeAuthorityValue(args.current.authSubject)
+  );
+}
+
+export function isPublicCommunityAdmissionActionSnapshotCurrent(args: {
+  snapshot: PublicCommunityAdmissionActionSnapshot;
+  current: PublicCommunityAdmissionActionAuthority;
+}): boolean {
+  const snapshotSlug = normalizeAuthorityValue(args.snapshot.communitySlug);
+  const snapshotSubject = normalizeAuthorityValue(args.snapshot.authSubject);
+  const currentSubject = normalizeAuthorityValue(args.current.authSubject);
+  if (!snapshotSlug || !snapshotSubject || !currentSubject) return false;
+  if (args.snapshot.generation !== args.current.generation) return false;
+  if (snapshotSubject !== currentSubject) return false;
+  if (args.snapshot.origin === "auth_resume") return true;
+  return snapshotSlug === normalizeAuthorityValue(args.current.publicFunnelSlug);
+}
+
+export function isPublicCommunityAdmissionActionOwner(args: {
+  active: PublicCommunityAdmissionActionSnapshot | null;
+  snapshot: PublicCommunityAdmissionActionSnapshot;
+}): boolean {
+  if (!args.active) return false;
+  return (
+    args.active.generation === args.snapshot.generation &&
+    args.active.kind === args.snapshot.kind &&
+    args.active.origin === args.snapshot.origin &&
+    normalizeAuthorityValue(args.active.communitySlug) ===
+      normalizeAuthorityValue(args.snapshot.communitySlug) &&
+    normalizeAuthorityValue(args.active.authSubject) ===
+      normalizeAuthorityValue(args.snapshot.authSubject)
   );
 }
 

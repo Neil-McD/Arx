@@ -1,7 +1,5 @@
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import {
-  readPendingPublicJoinCommunityId,
-  readPendingPublicJoinCommunitySlug,
   readPendingPurchaseClaimToken,
   storePendingPurchaseClaimToken,
 } from "../../../../shared/pay_first";
@@ -20,7 +18,6 @@ export function useWebPostAuthBillingLifecycle<
   sessionRef: MutableRefObject<TSession | null>;
   claimTokenParam: string | null;
   isRedeemingClaim: boolean;
-  isJoiningPublicCommunity: boolean;
   lastAutoRedeemPendingPurchasesUserIdRef: MutableRefObject<string | null>;
   autoRedeemPendingPurchasesAttemptRef: MutableRefObject<number>;
   autoRedeemPendingPurchasesTimeoutRef: MutableRefObject<number | null>;
@@ -32,7 +29,6 @@ export function useWebPostAuthBillingLifecycle<
   redeemPendingPurchases: (args: { navigate: boolean; silentNoop: boolean }) => Promise<number>;
   loadPendingPurchaseClaims: (session: TSession) => Promise<void>;
   loadAccountCommerceStatus: (session: TSession) => Promise<TBillingStatus | null>;
-  joinPublicCommunity: (args: { communitySlug: string | null; communityId?: string }) => Promise<void>;
 }) {
   useEffect(() => {
     const token = (params.claimTokenParam ?? "").trim();
@@ -111,19 +107,4 @@ export function useWebPostAuthBillingLifecycle<
     void params.loadAccountCommerceStatus(session);
   }, [params.session]);
 
-  useEffect(() => {
-    const session = params.session;
-    if (!session) return;
-    if (params.isRedeemingClaim || params.isJoiningPublicCommunity) return;
-    if (typeof window !== "undefined") {
-      const pathname = String(window.location.pathname ?? "").trim();
-      if (pathname.startsWith("/c/")) return;
-    }
-    const claimToken = readPendingPurchaseClaimToken();
-    if (claimToken) return;
-    const communitySlug = readPendingPublicJoinCommunitySlug();
-    const communityId = readPendingPublicJoinCommunityId();
-    if (!communitySlug && !communityId) return;
-    void params.joinPublicCommunity({ communitySlug: communitySlug || null, communityId: communityId || undefined });
-  }, [params.session, params.isRedeemingClaim, params.isJoiningPublicCommunity]);
 }

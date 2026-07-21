@@ -22,7 +22,7 @@ import {
   type AuthSession,
 } from "./auth";
 import {
-  clearPendingPurchaseClaimToken, readPendingPurchaseClaimToken, storePendingPublicJoin, storePendingPurchaseClaimToken, type PendingPurchaseClaim
+  clearPendingPurchaseClaimToken, readPendingPurchaseClaimToken, storePendingPurchaseClaimToken, type PendingPurchaseClaim
 } from "../../../shared/pay_first";
 import {
   buildPathWithSearchParamsRemoved,
@@ -7180,8 +7180,8 @@ export default function App() {
       },
       join_public_community: (payload) => {
         void joinPublicCommunity({
-          communityId: payload.community_id ?? undefined,
-          communitySlug: payload.community_slug ?? undefined,
+          communitySlug: payload.community_slug,
+          origin: "auth_resume",
         });
       },
       redeem_pending_purchases: (payload) => {
@@ -7919,7 +7919,6 @@ export default function App() {
     sessionRef,
     claimTokenParam,
     isRedeemingClaim,
-    isJoiningPublicCommunity: publicCommunityUi.isJoiningPublicCommunity,
     lastAutoRedeemPendingPurchasesUserIdRef,
     autoRedeemPendingPurchasesAttemptRef,
     autoRedeemPendingPurchasesTimeoutRef,
@@ -7931,7 +7930,6 @@ export default function App() {
     redeemPendingPurchases,
     loadPendingPurchaseClaims,
     loadAccountCommerceStatus,
-    joinPublicCommunity,
   });
 
   useWebPostAuthStripeConnectLifecycle({
@@ -9433,7 +9431,10 @@ export default function App() {
       return;
     }
     if (!canJoinForFree && !canJoinWithApproval) return;
-    void joinPublicCommunity({ communitySlug: publicCommunityUi.publicCommunity.slug });
+    void joinPublicCommunity({
+      communitySlug: publicCommunityUi.publicCommunity.slug,
+      origin: "funnel",
+    });
   };
 
   const handlePublicCheckoutContinue = () => {

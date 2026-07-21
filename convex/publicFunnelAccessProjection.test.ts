@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 
 import {
   derivePublicCommunityAdmissionProjection,
+  isPublicCommunityAdmissionActionOwner,
+  isPublicCommunityAdmissionActionSnapshotCurrent,
   isPublicCommunityLoadSnapshotCurrent,
   type PublicCommunityAccessResolution,
 } from "../apps/web/src/communityJoinPolicy";
@@ -234,5 +236,150 @@ describe("public community load snapshot", () => {
         current: { ...snapshot },
       }),
     ).toBe(true);
+  });
+});
+
+describe("public community admission action snapshot", () => {
+  const funnelSnapshot = {
+    generation: 11,
+    kind: "join" as const,
+    origin: "funnel" as const,
+    communitySlug: "polynet",
+    authSubject: "user_a",
+  };
+
+  test("accepts only the latest funnel action for the same route and subject", () => {
+    expect(
+      isPublicCommunityAdmissionActionSnapshotCurrent({
+        snapshot: funnelSnapshot,
+        current: {
+          generation: 11,
+          publicFunnelSlug: "polynet",
+          authSubject: "user_a",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPublicCommunityAdmissionActionSnapshotCurrent({
+        snapshot: funnelSnapshot,
+        current: {
+          generation: 12,
+          publicFunnelSlug: "polynet",
+          authSubject: "user_a",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPublicCommunityAdmissionActionSnapshotCurrent({
+        snapshot: funnelSnapshot,
+        current: {
+          generation: 11,
+          publicFunnelSlug: "other",
+          authSubject: "user_a",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPublicCommunityAdmissionActionSnapshotCurrent({
+        snapshot: funnelSnapshot,
+        current: {
+          generation: 11,
+          publicFunnelSlug: "polynet",
+          authSubject: "user_b",
+        },
+      }),
+    ).toBe(false);
+  });
+
+  test("auth resume is intent-bound rather than funnel-route-bound", () => {
+    expect(
+      isPublicCommunityAdmissionActionSnapshotCurrent({
+        snapshot: {
+          ...funnelSnapshot,
+          origin: "auth_resume",
+        },
+        current: {
+          generation: 11,
+          publicFunnelSlug: null,
+          authSubject: "user_a",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isPublicCommunityAdmissionActionSnapshotCurrent({
+        snapshot: {
+          ...funnelSnapshot,
+          origin: "auth_resume",
+        },
+        current: {
+          generation: 11,
+          publicFunnelSlug: null,
+          authSubject: "user_b",
+        },
+      }),
+    ).toBe(false);
+  });
+
+  test("same-subject token refresh does not invalidate an action", () => {
+    expect(
+      isPublicCommunityAdmissionActionSnapshotCurrent({
+        snapshot: funnelSnapshot,
+        current: {
+          generation: 11,
+          publicFunnelSlug: "polynet",
+          authSubject: "user_a",
+        },
+      }),
+    ).toBe(true);
+  });
+
+  test("malformed action authority fails closed", () => {
+    expect(
+      isPublicCommunityAdmissionActionSnapshotCurrent({
+        snapshot: { ...funnelSnapshot, communitySlug: "" },
+        current: {
+          generation: 11,
+          publicFunnelSlug: "polynet",
+          authSubject: "user_a",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isPublicCommunityAdmissionActionSnapshotCurrent({
+        snapshot: funnelSnapshot,
+        current: {
+          generation: 11,
+          publicFunnelSlug: "polynet",
+          authSubject: null,
+        },
+      }),
+    ).toBe(false);
+  });
+
+  test("only the exact active operation owns shared loading completion", () => {
+    expect(
+      isPublicCommunityAdmissionActionOwner({
+        active: funnelSnapshot,
+        snapshot: { ...funnelSnapshot },
+      }),
+    ).toBe(true);
+    expect(
+      isPublicCommunityAdmissionActionOwner({
+        active: { ...funnelSnapshot, generation: 12 },
+        snapshot: funnelSnapshot,
+      }),
+    ).toBe(false);
+    expect(
+      isPublicCommunityAdmissionActionOwner({
+        active: { ...funnelSnapshot, kind: "cancel" },
+        snapshot: funnelSnapshot,
+      }),
+    ).toBe(false);
+    expect(
+      isPublicCommunityAdmissionActionOwner({
+        active: null,
+        snapshot: funnelSnapshot,
+      }),
+    ).toBe(false);
   });
 });

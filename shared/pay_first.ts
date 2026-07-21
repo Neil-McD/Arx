@@ -1,8 +1,6 @@
 import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexAuthenticatedClient";
 
 const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
-const PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY = "arx_pending_public_join_community_id";
-const PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY = "arx_pending_public_join_community_slug";
 const PENDING_PURCHASE_CLAIM_TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 type PendingPurchaseClaimTokenStorageV1 = {
@@ -11,10 +9,6 @@ type PendingPurchaseClaimTokenStorageV1 = {
   stored_at: number;
   expires_at: number;
 };
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-fA-F-]{36}$/.test(value);
-}
 
 function safeLocalStorageGet(key: string): string {
   try {
@@ -77,32 +71,6 @@ export function readPendingPurchaseClaimToken(): string {
 
 export function clearPendingPurchaseClaimToken(): void {
   safeLocalStorageRemove(PENDING_PURCHASE_CLAIM_TOKEN_KEY);
-}
-
-export function storePendingPublicJoin(communityId: string): void {
-  const trimmed = communityId.trim();
-  if (trimmed) {
-    if (isUuid(trimmed)) {
-      safeLocalStorageSet(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY, trimmed);
-      safeLocalStorageRemove(PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY);
-    } else {
-      safeLocalStorageSet(PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY, trimmed.toLowerCase());
-      safeLocalStorageRemove(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
-    }
-  }
-}
-
-export function readPendingPublicJoinCommunityId(): string {
-  return safeLocalStorageGet(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
-}
-
-export function readPendingPublicJoinCommunitySlug(): string {
-  return safeLocalStorageGet(PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY);
-}
-
-export function clearPendingPublicJoin(): void {
-  safeLocalStorageRemove(PENDING_PUBLIC_JOIN_COMMUNITY_ID_KEY);
-  safeLocalStorageRemove(PENDING_PUBLIC_JOIN_COMMUNITY_SLUG_KEY);
 }
 
 export type PendingPurchaseClaim = {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -11,6 +11,9 @@ const funnelComponent = read("apps/web/src/components/WebPublicCommunityFunnel.t
 const accessTypes = read("shared/communityTypes.ts");
 const communityCore = read("convex/communityCore.ts");
 const app = read("apps/web/src/App.tsx");
+const authResumeState = read("shared/authResumeState.ts");
+const payFirst = read("shared/pay_first.ts");
+const postAuthBilling = read("apps/web/src/controllers/useWebPostAuthBillingLifecycle.ts");
 
 // --- The base load must MERGE into the same community, never replace it ---
 // The memory graph + stats are folded in by async fetches; a bare replace on a
@@ -65,6 +68,67 @@ assert.match(
   "the credential used for access lookup must belong to the snapshotted principal",
 );
 
+// --- Join/cancel responses have the same route, principal, and generation owner ---
+assert.match(
+  funnelActions,
+  /publicCommunityActionGenerationRef/,
+  "public admission mutations must own an explicit action generation",
+);
+assert.match(
+  funnelActions,
+  /isPublicCommunityAdmissionActionSnapshotCurrent/,
+  "join and cancel responses must validate their action authority snapshot",
+);
+assert.match(
+  funnelActions,
+  /isPublicCommunityAdmissionActionOwner/,
+  "only the active operation may clear shared admission loading state",
+);
+assert.match(
+  funnelActions,
+  /reconcileAdmissionBySlug[\s\S]{0,1000}fetchCloudMyCommunityAccessBySlug/,
+  "join and cancel must reconcile through the canonical community-access bundle",
+);
+assert.doesNotMatch(
+  funnelActions,
+  /applyApprovalJoinState|join_request_status:\s*(?:opts\.status|null)/,
+  "the browser must not retain an optimistic join-request state owner",
+);
+
+// --- One bounded typed auth-resume record replaces indefinite duplicate join keys ---
+assert.match(
+  authResumeState,
+  /AUTH_RESUME_STATE_TTL_MS/,
+  "public join resume must use the bounded typed auth-resume record",
+);
+assert.match(
+  authResumeState,
+  /reason:\s*"join_public_community";[\s\S]{0,100}community_slug:\s*string/,
+  "public join resume must be owned by the canonical funnel slug",
+);
+for (const source of [payFirst, postAuthBilling, app]) {
+  assert.doesNotMatch(
+    source,
+    /PENDING_PUBLIC_JOIN|storePendingPublicJoin|readPendingPublicJoin|clearPendingPublicJoin/,
+    "legacy pending-public-join storage and replay must remain deleted",
+  );
+}
+assert.equal(
+  existsSync("shared/usePendingPublicCommunityJoinController.ts"),
+  false,
+  "the unreferenced alternate public-join controller must remain deleted",
+);
+assert.match(
+  app,
+  /communitySlug:\s*payload\.community_slug,[\s\S]{0,80}origin:\s*"auth_resume"/,
+  "post-auth join continuation must declare auth-resume authority explicitly",
+);
+assert.match(
+  app,
+  /communitySlug:\s*publicCommunityUi\.publicCommunity\.slug,[\s\S]{0,80}origin:\s*"funnel"/,
+  "the live funnel join action must declare funnel authority explicitly",
+);
+
 // --- Preview has no access lookup; signed-in access fails closed until ready ---
 assert.match(
   funnelRoute,
@@ -103,5 +167,5 @@ assert.doesNotMatch(accessTypes, /primary_cta/, "the shared access contract must
 assert.doesNotMatch(communityCore, /primary_cta|primaryCta|CommunityPrimaryCta/, "the backend access bundle must not compute unused CTA policy");
 
 console.log(
-  "community funnel load contract proof passed: one principal-bound generation, fail-closed admission, preview bypass, and no duplicate CTA policy.",
+  "community funnel contract proof passed: principal-bound load/action generations, canonical admission reconciliation, one bounded resume owner, preview bypass, and no duplicate CTA policy.",
 );
