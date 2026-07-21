@@ -63,26 +63,21 @@ assert.match(
   "The ensure flow must be able to replace stale or deleted Stripe customer ids deliberately.",
 );
 
-for (const [label, source] of [
-  ["workspace credit top-up", workspaceCredits],
-  ["community checkout", communityCommerce],
-] as const) {
-  assert.match(
-    source,
-    /ensureStripeCustomerForUser\(/,
-    `${label} must ensure a reusable Stripe customer before Checkout.`,
-  );
-  assert.match(
-    source,
-    /checkout\.sessions\.create\(\{[\s\S]*customer: stripeCustomerId/,
-    `${label} Checkout must pass the Stripe customer id.`,
-  );
-  assert.doesNotMatch(
-    source,
-    /customer_email:/,
-    `${label} must not rely on customer_email as identity.`,
-  );
-}
+assert.match(
+  communityCommerce,
+  /ensureStripeCustomerForUser\(/,
+  "Community checkout must ensure a reusable Stripe customer before Checkout.",
+);
+assert.doesNotMatch(
+  communityCommerce,
+  /customer_email:/,
+  "Community checkout must not rely on customer_email as identity.",
+);
+assert.match(
+  communityCommerce,
+  /providerCustomerId:\s*stripeCustomerId[\s\S]*customer:\s*attempt\.providerCustomerId/,
+  "Community Checkout must freeze and reuse the ensured Stripe customer id.",
+);
 
 assert.match(
   workspaceCredits,

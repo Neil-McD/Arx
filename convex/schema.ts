@@ -718,6 +718,14 @@ export default defineSchema({
     workspaceCreditsUncollectedPaid: v.optional(v.number()),
     ownerUserId: v.optional(v.id("users")),
     claimToken: v.optional(v.string()),
+    // Public community checkout-start identity. Optional only for rows created
+    // before the idempotent attempt boundary was introduced.
+    checkoutAttemptId: v.optional(v.string()),
+    checkoutAttemptExpiresAt: v.optional(v.number()),
+    checkoutCommunitySlug: v.optional(v.string()),
+    checkoutSuccessUrl: v.optional(v.string()),
+    checkoutCancelUrl: v.optional(v.string()),
+    providerDestinationAccountId: v.optional(v.string()),
     status: v.union(v.literal("pending"), v.literal("complete"), v.literal("expired")),
     expiresAt: v.number(),
     createdAt: v.number(),
@@ -728,6 +736,7 @@ export default defineSchema({
     .index("by_providerSubscriptionId", ["providerSubscriptionId"])
     .index("by_owner", ["ownerUserId"])
     .index("by_owner_status", ["ownerUserId", "status"])
+    .index("by_owner_mode_checkoutAttemptId", ["ownerUserId", "mode", "checkoutAttemptId"])
     .index("by_mode_status", ["mode", "status"])
     .index("by_community_status", ["communityId", "status"]),
 

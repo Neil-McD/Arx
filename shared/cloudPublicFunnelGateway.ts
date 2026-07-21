@@ -129,27 +129,63 @@ export async function fetchCloudCommunityPresenceSummary<SessionT, TSummary = un
 
 export async function startCloudPublicFunnelCheckout<SessionT>(
   params: CloudPublicFunnelParams<SessionT> & {
-    session: SessionT | null;
+    session: SessionT;
     communitySlug: string;
     billingPeriod: CommunityBillingPeriod;
     successUrl: string;
     cancelUrl: string;
+    checkoutAttemptId: string;
   },
-): Promise<{ checkout_url?: unknown }> {
-  let client = createConvexClient();
-  let authSubject: string | null = null;
-  if (params.session) {
-    const bootstrapped = await bootstrapConvexAuthenticatedClient(params.session);
-    client = bootstrapped.client;
-    authSubject = bootstrapped.authSubject;
-  }
-  return (await client.action("billing:startPublicCommunityCheckout" as any, {
+): Promise<PublicCommunityCheckoutStartResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const result = await client.action("billing:startPublicCommunityCheckout" as any, {
     communitySlug: params.communitySlug,
     billingPeriod: params.billingPeriod,
     successUrl: params.successUrl,
     cancelUrl: params.cancelUrl,
-    ...(authSubject ? { authSubject } : null),
-  })) as {
-    checkout_url?: unknown;
+    checkoutAttemptId: params.checkoutAttemptId,
+    authSubject,
+  });
+  return requirePublicCommunityCheckoutStartResult(
+    result,
+    params.checkoutAttemptId,
+  );
+}
+
+export type PublicCommunityCheckoutStartResult = {
+  checkout_attempt_id: string;
+  session_id: string;
+  checkout_url: string;
+};
+
+export function requirePublicCommunityCheckoutStartResult(
+  value: unknown,
+  expectedAttemptId: string,
+): PublicCommunityCheckoutStartResult {
+  if (!value || typeof value !== "object") {
+    throw new Error("community_checkout_start_contract_invalid");
+  }
+  const row = value as Record<string, unknown>;
+  const checkoutAttemptId = String(row.checkout_attempt_id ?? "").trim();
+  const sessionId = String(row.session_id ?? "").trim();
+  const checkoutUrl = String(row.checkout_url ?? "").trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(checkoutUrl);
+  } catch {
+    throw new Error("community_checkout_start_contract_invalid");
+  }
+  if (
+    checkoutAttemptId !== String(expectedAttemptId ?? "").trim() ||
+    !sessionId ||
+    parsed.protocol !== "https:" ||
+    parsed.hostname !== "checkout.stripe.com"
+  ) {
+    throw new Error("community_checkout_start_contract_invalid");
+  }
+  return {
+    checkout_attempt_id: checkoutAttemptId,
+    session_id: sessionId,
+    checkout_url: parsed.toString(),
   };
 }

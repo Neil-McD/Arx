@@ -11,7 +11,6 @@ import {
   fetchCloudPublicFunnelStats,
   recordCloudPublicFunnelVisit,
   resolveCloudPublicFunnel,
-  startCloudPublicFunnelCheckout,
 } from "../../../../shared/cloudPublicFunnelGateway";
 import { preloadImageUrls } from "../../../../shared/preloadImageUrls";
 import { applyShellVariantToPublicPath, readShellVariantFromPathname } from "../../../../shared/webAppRouteState";
@@ -78,8 +77,6 @@ type UseWebPublicFunnelActionsArgs<
   setPublicCommunityError: Dispatch<SetStateAction<string | null>>;
   setPublicCommunityPlans: Dispatch<SetStateAction<PublicPlanT[]>>;
 
-  setCheckoutError: Dispatch<SetStateAction<string | null>>;
-  setCheckoutStatus: Dispatch<SetStateAction<"idle" | "loading" | "pending" | "succeeded" | "error">>;
   navigateToUrl: (url: string) => void;
 };
 
@@ -610,64 +607,9 @@ export function useWebPublicFunnelActions<
     [],
   );
 
-  const startCheckoutForPlan = useCallback(
-    async (communitySlug: string, billingPeriod: CommunityBillingPeriod, cancelPath: string): Promise<void> => {
-      const current = argsRef.current;
-      current.setCheckoutStatus("loading");
-      current.setCheckoutError(null);
-      try {
-        const origin = window.location.origin.replace(/\/+$/, "");
-        const shellVariant = readShellVariantFromPathname(window.location.pathname || "/");
-        const successPath = applyShellVariantToPublicPath(
-          "/checkout/success?session_id={CHECKOUT_SESSION_ID}",
-          shellVariant,
-        );
-        const successUrl = `${origin}${successPath}`;
-        const cancelUrl = `${origin}${cancelPath}`;
-        const rawSession = current.getSession();
-        const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
-        if (!session) {
-          current.requireSignIn({
-            reason: "join_public_community",
-            payload: {
-              community_slug: communitySlug,
-            },
-          });
-          current.setCheckoutStatus("idle");
-          return;
-        }
-        const data = await startCloudPublicFunnelCheckout<AuthSession>({
-          session,
-          communitySlug,
-          billingPeriod,
-          successUrl,
-          cancelUrl,
-        });
-        const checkoutUrl = typeof data?.checkout_url === "string" ? data.checkout_url : "";
-        if (!checkoutUrl) throw new Error("Missing checkout_url.");
-        current.navigateToUrl(checkoutUrl);
-      } catch (error) {
-        const rawMessage =
-          typeof error === "string"
-            ? error
-            : error instanceof Error
-              ? error.message
-              : "Failed to start checkout.";
-        const message =
-          rawMessage === "community_checkout_unavailable"
-            ? "Checkout is temporarily unavailable for this community."
-            : rawMessage;
-        current.setCheckoutError(message);
-        current.setCheckoutStatus("error");
-      }
-    },
-    [],
-  );
-
   return {
     cancelMyPendingJoinRequest,
     joinPublicCommunity,
     loadPublicCommunity,
-    startCheckoutForPlan,
   };
 }

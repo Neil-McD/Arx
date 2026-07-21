@@ -363,9 +363,14 @@ assert.equal(Number(checkoutConfig.amountBaseUnits), 10000);
 assert.equal(String(checkoutConfig.currency).toLowerCase(), "usd");
 
 const sessionId = `partner_smoke_${runId}`;
-runConvex("communityCommerce:createPendingPublicCommunityCheckoutSessionInternal", {
+const checkoutAppOrigin =
+  process.env.POLYNET_PARTNER_RUNTIME_SMOKE_PROD === "1"
+    ? "https://polynet.ai"
+    : "https://polynet-staging.vercel.app";
+runConvex("communityCommerce:reservePublicCommunityCheckoutAttemptInternal", {
   sessionId,
   communityId: checkoutConfig.communityId,
+  communitySlug: referredCommunitySlug,
   billingPeriod: "monthly",
   pricePointId: checkoutConfig.pricePointId,
   amountBaseUnits: checkoutConfig.amountBaseUnits,
@@ -373,8 +378,14 @@ runConvex("communityCommerce:createPendingPublicCommunityCheckoutSessionInternal
   currencyDecimals: checkoutConfig.currencyDecimals,
   platformFeeBps: checkoutConfig.platformFeeBps,
   providerPriceId: checkoutConfig.providerPriceId,
+  providerCustomerId: `cus_${runId.replace(/[^a-zA-Z0-9]/g, "_")}`,
+  providerDestinationAccountId: checkoutConfig.destinationAccountId,
   ownerUserId: referred.userId,
   claimToken: `claim_${runId}`,
+  checkoutAttemptId: `checkout_${runId.replace(/[^a-zA-Z0-9]/g, "_")}`,
+  checkoutAttemptExpiresAt: purchaseNowMs + 23 * 60 * 60 * 1000,
+  successUrl: `${checkoutAppOrigin}/checkout/success?session_id=${sessionId}`,
+  cancelUrl: `${checkoutAppOrigin}/c/${referredCommunitySlug}`,
   expiresAt: nowMs + 60 * 60 * 1000,
   nowMs: purchaseNowMs,
 });

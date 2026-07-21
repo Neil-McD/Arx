@@ -460,6 +460,7 @@ import {
 import { useWebAccountCommerceActions } from "./controllers/useWebAccountCommerceActions";
 import { useWebCommerceClaimActions } from "./controllers/useWebCommerceClaimActions";
 import { useWebPublicFunnelActions } from "./controllers/useWebPublicFunnelActions";
+import { useWebPublicCheckoutStart } from "./controllers/useWebPublicCheckoutStart";
 import { useWebCommunityChatPreloadLifecycle } from "./controllers/useWebCommunityChatPreloadLifecycle";
 import { useWebDiscoverPreloadLifecycle } from "./controllers/useWebDiscoverPreloadLifecycle";
 import { useWebBillingUiController } from "./controllers/useWebBillingUiController";
@@ -7284,7 +7285,6 @@ export default function App() {
     cancelMyPendingJoinRequest,
     joinPublicCommunity,
     loadPublicCommunity,
-    startCheckoutForPlan,
   } = useWebPublicFunnelActions<
     PublicCommunityRecord,
     PublicPlanSummary,
@@ -7321,8 +7321,6 @@ export default function App() {
     setIsLoadingPublicCommunity: publicCommunityUi.setIsLoadingPublicCommunity,
     setPublicCommunityError: publicCommunityUi.setPublicCommunityError,
     setPublicCommunityPlans: publicCommunityUi.setPublicCommunityPlans,
-    setCheckoutError,
-    setCheckoutStatus,
     navigateToUrl: (url) => window.location.assign(url),
   });
 
@@ -7883,6 +7881,20 @@ export default function App() {
        preserve the subject and must not re-hammer the public funnel queries. */
     sessionDependency: canonicalSessionUserId,
     loadPublicCommunity,
+  });
+  const { startCheckoutForPlan } = useWebPublicCheckoutStart({
+    getSession: () => sessionRef.current,
+    ensureSession: ensureUsableAuthSession,
+    getCurrentPublicFunnelSlug: () => publicFunnelSlug,
+    getCurrentBillingPeriod: () =>
+      selectedPublicCommunityPlan?.billing_period ?? null,
+    getCurrentAuthSubject: () => canonicalSessionUserId,
+    getCurrentRouteAuthority: () =>
+      `${shellVariant}:${shellPublicRoute.kind}:${publicFunnelSlug ?? ""}`,
+    requireSignIn,
+    setCheckoutError,
+    setCheckoutStatus,
+    navigateToUrl: (url) => window.location.assign(url),
   });
   useEffect(() => {
     if (publicCommunityAdmissionStatus === "ready") return;
