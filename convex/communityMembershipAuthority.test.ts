@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api } from "./_generated/api";
@@ -123,6 +123,9 @@ describe("community membership authority", () => {
     expect(operatorDashboard).not.toContain("community_membership_active_flags_backfill");
     expect(operatorDashboard).not.toContain("backfillCommunityActiveMemberCounts");
     expect(operatorDashboard).not.toContain("community_active_member_count_backfill");
+    expect(
+      existsSync(new URL("./communityOwnerMembershipMigration.ts", import.meta.url)),
+    ).toBe(false);
 
     for (const relativePath of projectionFiles) {
       const source = read(relativePath);

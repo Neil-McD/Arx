@@ -11,7 +11,7 @@ The bounded aggregate audit resolved or narrowed these questions for the isolate
 | U-001 | no duplicate auth subjects, normalized emails, or community slugs in complete scans |
 | U-002 | resolved by deletion: only one email-bearing user lacked normalized email, but email lookup/relink and its fallback scan were removed; index-miss frequency is no longer a runtime concern |
 | U-003 | no ambiguous latest entitlement timestamp; two users have multiple rows and one has 13 |
-| U-004 | resolved on staging: duplicate pairs are absent and fail closed; all 44 cached counts equal owner plus active non-owner rows; two owner-membership residues remain a separate referenced-data migration |
+| U-004 | resolved on staging: duplicate pairs are absent and fail closed; all 44 cached counts equal owner plus active non-owner rows; owner membership creation fails closed and the two unreferenced residues were deleted with a zero-work rerun |
 | U-005 | zero memberships omit `active` |
 | U-006 | one join request, status `approved` |
 | U-007 | zero stored deprecated `memberOnboarding` fields |
