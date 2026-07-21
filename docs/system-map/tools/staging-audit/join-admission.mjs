@@ -16,11 +16,33 @@ export default query({
       const key = `${String(row.communityId)}:${String(row.userId)}`;
       requestPairCounts.set(key, (requestPairCounts.get(key) ?? 0) + 1);
     }
-    const activeMembershipPairs = new Set(
-      memberships
-        .filter((row) => row.active === true && typeof row.revokedAt !== "number")
-        .map((row) => `${String(row.communityId)}:${String(row.userId)}`),
-    );
+    let ownerRequestRows = 0;
+    let missingReferenceRequestRows = 0;
+    let membershipPairNotUniqueRequestRows = 0;
+    let activeMembershipWithRequestRows = 0;
+    for (const row of requests) {
+      const community = await ctx.db.get(row.communityId);
+      const user = await ctx.db.get(row.userId);
+      if (!community || !user) missingReferenceRequestRows += 1;
+      if (community && String(community.ownerId) === String(row.userId)) {
+        ownerRequestRows += 1;
+      }
+      const pairMemberships = await ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community_user", (q) =>
+          q.eq("communityId", row.communityId).eq("userId", row.userId),
+        )
+        .take(2);
+      if (pairMemberships.length > 1) membershipPairNotUniqueRequestRows += 1;
+      if (
+        pairMemberships.some(
+          (membership) =>
+            membership.active === true && typeof membership.revokedAt !== "number",
+        )
+      ) {
+        activeMembershipWithRequestRows += 1;
+      }
+    }
     const knownRevokedReasons = new Set([
       "left_by_member",
       "removed_by_manager",
@@ -30,7 +52,7 @@ export default query({
     ]);
 
     return {
-      audit_version: "join_admission_authority:v2",
+      audit_version: "join_admission_authority:v3",
       output_contains_identifiers: false,
       scans: {
         requests: { scanned: requests.length, truncated: requestRows.length > LIMIT },
@@ -43,25 +65,27 @@ export default query({
       max_request_rows_per_pair: requestPairCounts.size
         ? Math.max(...requestPairCounts.values())
         : 0,
-      platform_home_opt_out_rows: requests.filter(
-        (row) => String(row.message ?? "").trim() === "platform_home_autojoin_opt_out",
+      invalid_request_status_rows: requests.filter(
+        (row) => row.status !== "pending" && row.status !== "denied",
       ).length,
-      denied_missing_denied_at: requests.filter(
-        (row) => row.status === "denied" && typeof row.deniedAt !== "number",
-      ).length,
-      denied_missing_reapply_at: requests.filter(
-        (row) => row.status === "denied" && typeof row.reapplyAt !== "number",
-      ).length,
-      non_denied_with_denial_fields: requests.filter(
+      pending_with_denial_fields: requests.filter(
         (row) =>
-          row.status !== "denied" &&
-          (typeof row.deniedAt === "number" || typeof row.reapplyAt === "number"),
+          row.status === "pending" &&
+          (row.deniedAt !== undefined || row.reapplyAt !== undefined),
       ).length,
-      approved_without_active_membership: requests.filter(
+      malformed_denied_rows: requests.filter(
         (row) =>
-          row.status === "approved" &&
-          !activeMembershipPairs.has(`${String(row.communityId)}:${String(row.userId)}`),
+          row.status === "denied" &&
+          (typeof row.deniedAt !== "number" ||
+            !Number.isFinite(row.deniedAt) ||
+            typeof row.reapplyAt !== "number" ||
+            !Number.isFinite(row.reapplyAt) ||
+            row.reapplyAt <= row.deniedAt),
       ).length,
+      owner_request_rows: ownerRequestRows,
+      missing_reference_request_rows: missingReferenceRequestRows,
+      membership_pair_not_unique_request_rows: membershipPairNotUniqueRequestRows,
+      active_membership_with_request_rows: activeMembershipWithRequestRows,
       membership_state_counts: counts(
         memberships.map((row) =>
           row.active === true && typeof row.revokedAt !== "number" ? "active" : "inactive",
