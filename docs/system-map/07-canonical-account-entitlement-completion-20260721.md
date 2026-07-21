@@ -29,9 +29,10 @@ For a source write: an older revision is ignored as stale, an identical replay i
 - The complete preflight covered all 91 entitlement rows for 78 users: 79 `default`, 12 `admin_override`, zero Premium, manual, or unsupported rows.
 - Two `(user,source)` pairs had duplicate history; one pair contained 11 rows. No current or future-boundary decision conflicts existed.
 - The target retained the newest admin row for each of two users and deleted 89 rows: 79 defaults plus ten stale admin revisions.
-- The expectation-locked dry run and mutation both preserved the full-user current result: 77 Free and one Architect. Every relevant future boundary also had exact parity.
+- The expectation-locked dry run and mutation preserved the current result for all 78 users represented in the old entitlement table: 77 Free and one Architect. Every relevant future boundary also had exact parity.
 - The post-migration audit contained exactly two rows, no duplicate source pair, no unsupported source, and at most one row per source/user.
 - The idempotency rerun proposed and deleted zero rows. The temporary migration module was then removed.
+- After the final schema deployment, an independent aggregate covered all 120 staging account rows: exactly two admin-source entitlement rows, zero duplicate/unsupported/invalid rows, and an effective result of 119 Free and one Architect.
 
 ## Executable proof
 
