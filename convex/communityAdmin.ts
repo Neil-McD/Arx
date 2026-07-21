@@ -1289,7 +1289,6 @@ export const listCommunityJoinRequests = query({
         user_id:
           (await resolvePublicUserId(ctx, row.userId, userIdCache)) ??
           String(row.userId),
-        message: row.message ?? null,
         status: "pending",
         created_at: toIsoString(row.createdAt),
         updated_at: toIsoString(row.updatedAt),

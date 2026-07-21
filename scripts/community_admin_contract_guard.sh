@@ -21,6 +21,7 @@ SCHEMA_FILE="convex/schema.ts"
 ADMIN_GATEWAY_FILE="shared/cloudCommunityAdminGateway.ts"
 MEMBERSHIP_GATEWAY_FILE="shared/cloudCommunityMembershipGateway.ts"
 WEB_APP_FILE="apps/web/src/App.tsx"
+WEB_BASE_CSS_FILE="apps/web/src/base.css"
 WEB_CONTEXT_PANEL_FILE="apps/web/src/components/CommunityContextPanel.tsx"
 WEB_MEMBER_DIALOG_FILE="apps/web/src/components/CommunityMemberSettingsDialog.tsx"
 WEB_INTERACTION_PROJECTION_FILE="apps/web/src/components/WebCommunityInteractionProjection.tsx"
@@ -195,6 +196,11 @@ require_multiline_match "$SCHEMA_FILE" \
 require_multiline_match "$SCHEMA_FILE" \
   'communityJoinRequests: defineTable\([\s\S]*?\.index\("by_community_status_createdAt", \["communityId", "status", "createdAt"\]\)' \
   "communityJoinRequests has community status creation-order index"
+require_block_no_match "$SCHEMA_FILE" \
+  'communityJoinRequests: defineTable' \
+  '^\s*communityBlocks: defineTable' \
+  'message:' \
+  "communityJoinRequests schema does not retain the unwritten applicant message field"
 require_multiline_match "$SCHEMA_FILE" \
   'communities: defineTable\([\s\S]*?activeMemberCount: v\.number\(\)' \
   "communities require a durable active member count"
@@ -247,6 +253,37 @@ require_block_no_match "$COMMUNITY_ADMIN_FILE" \
   '^\}\);' \
   'withIndex\("by_community",[\s\S]*?\.collect\(\)' \
   "listCommunityJoinRequests does not collect every community join request"
+require_block_no_match "$COMMUNITY_ADMIN_FILE" \
+  'export const listCommunityJoinRequests = query' \
+  '^\}\);' \
+  'message:' \
+  "join-request review payload does not project the deleted applicant message field"
+require_block_no_match "$COMMUNITY_CORE_FILE" \
+  'export type CommunityJoinRequestLike = \{' \
+  '^\};' \
+  'message' \
+  "join-request persistence type does not retain the deleted applicant message field"
+require_block_no_match "$COMMUNITY_CORE_FILE" \
+  'export function mapJoinRequestRow' \
+  '^\}' \
+  'message' \
+  "public join-request payload does not project the deleted applicant message field"
+require_block_no_match "$WEB_APP_FILE" \
+  'type CommunityJoinRequest = \{' \
+  '^\};' \
+  'message' \
+  "web join-request type does not retain the deleted applicant message field"
+require_block_no_match "$WEB_CONTEXT_PANEL_FILE" \
+  'export type CommunityAdmissionJoinRequest = \{' \
+  '^\};' \
+  'message' \
+  "context-panel join-request type does not retain the deleted applicant message field"
+require_no_match "$WEB_CONTEXT_PANEL_FILE" \
+  'request\.message' \
+  "context-panel join requests do not render a nonexistent applicant message"
+require_no_match "$WEB_BASE_CSS_FILE" \
+  'community-context-request-message' \
+  "join-request applicant message CSS is deleted with its UI"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'function requireOwnerForAdminAuthorityChange\([\s\S]*?currentRole === "admin" \|\| nextRole === "admin"[\s\S]*?community_owner_required_for_admin_role' \
   "admin authority changes require an explicit owner-only helper"

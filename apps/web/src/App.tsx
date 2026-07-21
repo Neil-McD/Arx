@@ -1221,7 +1221,6 @@ type CommunityJoinRequest = {
   community_id: string;
   user_id: string;
   status: string;
-  message: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -10440,7 +10439,6 @@ export default function App() {
             avatarFocusX: profile?.avatar_focus_x ?? null,
             avatarFocusY: profile?.avatar_focus_y ?? null,
             avatarZoom: profile?.avatar_zoom ?? null,
-            message: (request.message ?? "").trim() || null,
             createdAtLabel: formatRelativeTime(request.created_at),
           };
         }),

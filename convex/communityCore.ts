@@ -105,7 +105,6 @@ export type CommunityJoinRequestLike = {
   communityId: any;
   userId: any;
   status: string;
-  message?: string;
   deniedAt?: number;
   reapplyAt?: number;
   createdAt: number;
@@ -1153,7 +1152,6 @@ export function mapJoinRequestRow(args: {
   return {
     community_id: args.communityId,
     status: String(args.row.status ?? "").trim().toLowerCase() || "pending",
-    message: args.row.message ?? null,
     created_at: toIsoString(args.row.createdAt),
     updated_at: toIsoString(args.row.updatedAt),
     denied_at: deniedAt !== null ? toIsoString(deniedAt) : null,

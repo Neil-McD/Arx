@@ -39,7 +39,6 @@ export type CommunityAdmissionJoinRequest = {
   avatarFocusX?: number | null;
   avatarFocusY?: number | null;
   avatarZoom?: number | null;
-  message: string | null;
   createdAtLabel: string;
 };
 
@@ -453,9 +452,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             <strong>{name}</strong>
             <span>{request.createdAtLabel}</span>
           </div>
-          {request.message ? (
-            <div className="community-context-request-message">{request.message}</div>
-          ) : null}
         </div>
         <div className="community-context-request-actions">
           <button
