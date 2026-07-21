@@ -207,6 +207,46 @@ describe("secure auth session identifiers", () => {
     expect(responseHeaders.has("Set-Cookie")).toBe(false);
   });
 
+  test("a terminal subject mismatch clears the existing browser session cookie", async () => {
+    vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
+    vi.stubEnv("VITE_CONVEX_SITE_URL", "https://staging-convex.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            ok: false,
+            code: "auth_session_invalid",
+            error: "auth_session_invalid",
+            message: "auth_session_subject_mismatch",
+          }),
+          { status: 401, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    const harness = createNodeResponseHarness();
+
+    await refreshWebSession(
+      {
+        method: "POST",
+        headers: {
+          host: "localhost:5174",
+          origin: "http://localhost:5174",
+          "x-forwarded-proto": "http",
+          cookie: "arx-auth-session=existing-secure-session-id",
+        },
+      },
+      harness.response,
+    );
+
+    expect(harness.response.statusCode).toBe(401);
+    expect(harness.readJson()).toMatchObject({
+      ok: false,
+      error: "auth_session_subject_mismatch",
+    });
+    expect(String(harness.headers.get("Set-Cookie"))).toContain("Max-Age=0");
+  });
+
   test("a successful refresh preserves the same browser credential", async () => {
     vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
     vi.stubEnv("VITE_CONVEX_SITE_URL", "https://staging-convex.test");

@@ -317,6 +317,21 @@ function normalizeStoredState(
   };
 }
 
+function readObservedRefreshSubjects(payload: unknown): string[] {
+  const sessionPayload = findSessionPayload(payload, false);
+  if (!sessionPayload) return [];
+  const accessToken = readObjectString(sessionPayload, ["access_token", "accessToken"]);
+  const idToken = readObjectString(sessionPayload, ["id_token", "idToken"]);
+  const subjects = [
+    coerceUser(sessionPayload.user)?.id ?? null,
+    idToken ? decodeUserFromIdentityToken(idToken)?.id ?? null : null,
+    accessToken ? decodeUserFromIdentityToken(accessToken)?.id ?? null : null,
+  ]
+    .map((value) => normalizeString(value))
+    .filter((value): value is string => Boolean(value));
+  return Array.from(new Set(subjects));
+}
+
 function encodeStoredState(value: StoredAuthSessionV1): string {
   return JSON.stringify(value);
 }
@@ -464,6 +479,14 @@ async function refreshUpstreamSession(existing: StoredAuthSessionV1): Promise<St
     throw new Error(text || `auth_refresh_failed_${response.status}`);
   }
   const payload = (await response.json()) as unknown;
+  const expectedSubject = normalizeString(existing.user.id);
+  const observedSubjects = readObservedRefreshSubjects(payload);
+  if (observedSubjects.length === 0) {
+    throw new Error("auth_session_subject_unverifiable");
+  }
+  if (!expectedSubject || observedSubjects.some((subject) => subject !== expectedSubject)) {
+    throw new Error("auth_session_subject_mismatch");
+  }
   const refreshed = normalizeStoredState(payload, {
     requireRefreshToken: false,
     fallback: existing,
@@ -574,6 +597,7 @@ function isTerminalRefreshFailure(reason: string): boolean {
     normalized.includes("invalid_grant") ||
     normalized.includes("invalid refresh token") ||
     normalized.includes("missing refresh token") ||
+    normalized.includes("auth_session_subject_mismatch") ||
     normalized.includes("auth_refresh_failed_400") ||
     normalized.includes("auth_refresh_failed_401") ||
     normalized.includes("auth_refresh_failed_403")

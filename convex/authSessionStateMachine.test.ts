@@ -66,6 +66,38 @@ async function createSession(
   );
 }
 
+async function createRefreshActionFixture(subject: string) {
+  vi.stubEnv("ARX_DB_KEY", "auth-session-state-machine-test-key");
+  vi.stubEnv("ARX_AUTH_TOKEN_URL", "https://auth.example.test/token");
+  vi.stubEnv("ARX_AUTH_CLIENT_ID", "test-client-id");
+  const t = convexTest(schema, modules);
+  const nowMs = Date.now();
+  const userId = await t.run(async (ctx) =>
+    await ctx.db.insert("users", {
+      authSubject: subject,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    }),
+  );
+  const sessionTokenHash = await hashAuthSessionCredential(CREDENTIAL);
+  const created = await t.mutation((internal as any).authSessions.createAuthSessionInternal, {
+    sessionTokenHash,
+    userId,
+    accessToken: "expired-access-token",
+    refreshToken: "refresh-token-v1",
+    accessTokenExpiresAt: Math.floor(nowMs / 1_000) - 1,
+    externalUserId: subject,
+    nowMs,
+  });
+  return { t, created, sessionTokenHash };
+}
+
+function jwtWithSubject(subject: string): string {
+  const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ sub: subject })).toString("base64url");
+  return `${header}.${payload}.unsigned`;
+}
+
 test("one sign-in creates one hashed bounded session and collisions fail closed", async () => {
   const fixture = await createFixture();
   await createSession(fixture);
@@ -180,6 +212,7 @@ test("two concurrent refresh actions produce one provider effect and one committ
           access_token: "access-token-v2",
           refresh_token: "refresh-token-v2",
           expires_in: 3_600,
+          user: { id: "workos:concurrent_refresh" },
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
@@ -197,7 +230,10 @@ test("two concurrent refresh actions produce one provider effect and one committ
   const first = await firstPromise;
 
   expect(providerCalls).toBe(1);
-  expect(first.status).toBe("refreshed");
+  expect(first).toMatchObject({
+    status: "refreshed",
+    session: { user: { id: "workos:concurrent_refresh" } },
+  });
   expect(second).toEqual({
     status: "transient_failure",
     reason: "auth_session_refresh_in_progress",
@@ -205,6 +241,100 @@ test("two concurrent refresh actions produce one provider effect and one committ
   const rows = await t.run(async (ctx) => await ctx.db.query("authSessions").collect());
   expect(rows).toHaveLength(1);
   expect(rows[0].secretRevision).toBe(1);
+});
+
+test("a provider subject mismatch revokes the session without committing refreshed credentials", async () => {
+  const fixture = await createRefreshActionFixture("workos:subject_owner");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          access_token: "different-subject-access-token",
+          refresh_token: "different-subject-refresh-token",
+          expires_in: 3_600,
+          user: { id: "workos:different_subject" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    ),
+  );
+
+  const result = await fixture.t.action((internal as any).authSessions.refreshAuthSessionInternal, {
+    sessionTokenHash: fixture.sessionTokenHash,
+  });
+
+  expect(result).toEqual({
+    status: "terminal_failure",
+    reason: "auth_session_subject_mismatch",
+  });
+  expect(JSON.stringify(result)).not.toContain("different-subject-access-token");
+  const row = await fixture.t.run(async (ctx) => await ctx.db.get(fixture.created.id)) as any;
+  expect(row).toMatchObject({ secretRevision: 0 });
+  expect(row?.revokedAt).toBeTypeOf("number");
+  expect(row?.purgeAfterAt).toBeTypeOf("number");
+  expect(row?.refreshLeaseId).toBeUndefined();
+});
+
+test("conflicting fresh token subjects fail closed even when the provider user matches", async () => {
+  const fixture = await createRefreshActionFixture("workos:subject_owner");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          access_token: jwtWithSubject("workos:different_subject"),
+          refresh_token: "refresh-token-v2",
+          expires_in: 3_600,
+          user: { id: "workos:subject_owner" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    ),
+  );
+
+  const result = await fixture.t.action((internal as any).authSessions.refreshAuthSessionInternal, {
+    sessionTokenHash: fixture.sessionTokenHash,
+  });
+
+  expect(result).toEqual({
+    status: "terminal_failure",
+    reason: "auth_session_subject_mismatch",
+  });
+  const row = await fixture.t.run(async (ctx) => await ctx.db.get(fixture.created.id)) as any;
+  expect(row).toMatchObject({ secretRevision: 0 });
+  expect(row?.revokedAt).toBeTypeOf("number");
+  expect(row?.refreshLeaseId).toBeUndefined();
+});
+
+test("an unverifiable successful refresh response never commits and releases its lease", async () => {
+  const fixture = await createRefreshActionFixture("workos:subject_owner");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          access_token: "opaque-access-token-without-subject",
+          refresh_token: "refresh-token-v2",
+          expires_in: 3_600,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    ),
+  );
+
+  const result = await fixture.t.action((internal as any).authSessions.refreshAuthSessionInternal, {
+    sessionTokenHash: fixture.sessionTokenHash,
+  });
+
+  expect(result).toEqual({
+    status: "transient_failure",
+    reason: "auth_session_subject_unverifiable",
+  });
+  const row = await fixture.t.run(async (ctx) => await ctx.db.get(fixture.created.id)) as any;
+  expect(row).toMatchObject({ secretRevision: 0 });
+  expect(row?.revokedAt).toBeUndefined();
+  expect(row?.refreshLeaseId).toBeUndefined();
 });
 
 test("unsupported encrypted-secret versions fail closed and become terminally purgeable", async () => {
