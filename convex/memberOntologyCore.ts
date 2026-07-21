@@ -18,7 +18,7 @@ import {
   type MemberOntologyLens,
 } from "../shared/memberOntology";
 import type { MemberAccountContextLike } from "../shared/memberContextMarkdown";
-import { getCanonicalTierByUserIdInternal } from "./auth";
+import { readCanonicalAccountTier } from "./accountEntitlementCore";
 import { communityMembershipRowIsActive } from "./communityCore";
 
 export type MemberFactRow = MemberFactLike & {
@@ -308,7 +308,7 @@ export async function loadMemberAccountContext(
         .query("communities")
         .withIndex("by_owner", (q: any) => q.eq("ownerId", userId))
         .collect(),
-      getCanonicalTierByUserIdInternal(ctx, userId, nowMs),
+      readCanonicalAccountTier(ctx, userId, nowMs),
     ]);
 
   const hasChatgpt = providerConnections.some((row: any) => row?.provider === "chatgpt");

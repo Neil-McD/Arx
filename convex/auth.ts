@@ -19,11 +19,14 @@ import {
 } from "../shared/accountCommerce";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 import { canReceiveCommunityRevenue } from "./stripeConnectAccountCore";
-import { upsertCurrentAccountEntitlementSource } from "./accountEntitlementCore";
+import {
+  readCanonicalAccountTier,
+  upsertCurrentAccountEntitlementSource,
+  type CanonicalAccountTier,
+} from "./accountEntitlementCore";
+import { resolveEffectiveTierForGate } from "../shared/canonicalGateEngine";
 
-type CanonicalTier = "free" | "architect";
-type EffectiveTier = "anon_free" | "auth_free" | "architect";
-type AuthState = "anonymous" | "authenticated";
+type CanonicalTier = CanonicalAccountTier;
 
 type AccountTierMeta = {
   maxCommunities: number;
@@ -46,20 +49,6 @@ function accountTierMeta(tier: CanonicalTier): AccountTierMeta {
   };
 }
 
-function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
-  const normalized = String(rawTier ?? "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "architect") return "architect";
-  return "free";
-}
-
-function resolveEffectiveTier(input: { authState: AuthState; canonicalTier: CanonicalTier }): EffectiveTier {
-  if (input.authState === "anonymous") return "anon_free";
-  if (input.canonicalTier === "free") return "auth_free";
-  return input.canonicalTier;
-}
-
 function readEnv(name: string): string {
   try {
     const value = (globalThis as any)?.process?.env?.[name];
@@ -73,27 +62,6 @@ function readEnv(name: string): string {
 function isExplicitLocalDevEnvironment(): boolean {
   const nodeEnv = readEnv("NODE_ENV").toLowerCase();
   return nodeEnv === "development" || nodeEnv === "test";
-}
-
-function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
-  if (startsAt > nowMs) return false;
-  if (typeof endsAt === "number" && nowMs > endsAt) return false;
-  return true;
-}
-
-export async function getCanonicalTierByUserIdInternal(ctx: any, userId: any, nowMs: number): Promise<CanonicalTier> {
-  const rows = (await ctx.db
-    .query("userEntitlements")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .collect()) as Array<{
-    tier: unknown;
-    startsAt: number;
-    endsAt?: number;
-  }>;
-  const activeRows = rows
-    .filter((row) => isActiveWindow(nowMs, row.startsAt, row.endsAt))
-    .sort((a, b) => b.startsAt - a.startsAt);
-  return normalizeCanonicalTier(activeRows[0]?.tier ?? "free");
 }
 
 function normalizeOptionalString(raw: unknown): string | null {
@@ -174,8 +142,8 @@ export const bootstrapActor = mutation({
       } catch (error) {
         console.error("platform_home_community_membership_ensure_failed", error);
       }
-      const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
-      const effectiveTier = resolveEffectiveTier({ authState: args.authState, canonicalTier });
+      const canonicalTier = await readCanonicalAccountTier(ctx, actor.dbUserId, nowMs);
+      const effectiveTier = resolveEffectiveTierForGate({ authState: args.authState, tier: canonicalTier });
 
       return {
         authState: args.authState,
@@ -196,7 +164,7 @@ export const bootstrapActor = mutation({
     return {
       authState: args.authState,
       canonicalTier,
-      effectiveTier: resolveEffectiveTier({ authState: args.authState, canonicalTier }),
+      effectiveTier: resolveEffectiveTierForGate({ authState: args.authState, tier: canonicalTier }),
       authSubject: null,
       dbUserId: null,
       email: null,
@@ -313,16 +281,16 @@ export const getActor = query({
           authState: args.authState,
           authSubject,
           canonicalTier,
-          effectiveTier: resolveEffectiveTier({ authState: args.authState, canonicalTier }),
+          effectiveTier: resolveEffectiveTierForGate({ authState: args.authState, tier: canonicalTier }),
         };
       }
-      const canonicalTier = await getCanonicalTierByUserIdInternal(ctx, actor.dbUserId, nowMs);
+      const canonicalTier = await readCanonicalAccountTier(ctx, actor.dbUserId, nowMs);
       return {
         authState: args.authState,
         authSubject,
         dbUserId: String(actor.dbUserId),
         canonicalTier,
-        effectiveTier: resolveEffectiveTier({ authState: args.authState, canonicalTier }),
+        effectiveTier: resolveEffectiveTierForGate({ authState: args.authState, tier: canonicalTier }),
         email: actor.email,
         displayName: actor.displayName,
         avatarUrl: actor.avatarUrl,
@@ -335,7 +303,7 @@ export const getActor = query({
       authSubject: null,
       dbUserId: null,
       canonicalTier,
-      effectiveTier: resolveEffectiveTier({ authState: args.authState, canonicalTier }),
+      effectiveTier: resolveEffectiveTierForGate({ authState: args.authState, tier: canonicalTier }),
       email: null,
       displayName: null,
       avatarUrl: null,
@@ -365,7 +333,7 @@ export const setDevTierOverride = mutation({
       throw new Error("dev_tier_override_forbidden");
     }
 
-    const tier = normalizeCanonicalTier(args.tier);
+    const tier = args.tier;
     await upsertCurrentAccountEntitlementSource({
       ctx,
       userId: actor.dbUserId,
@@ -374,11 +342,11 @@ export const setDevTierOverride = mutation({
       startsAt: nowMs,
       nowMs,
     });
-    const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
+    const canonicalTier = await readCanonicalAccountTier(ctx, actor.dbUserId, nowMs);
     return {
       ok: true,
       canonicalTier,
-      effectiveTier: resolveEffectiveTier({ authState: "authenticated", canonicalTier }),
+      effectiveTier: resolveEffectiveTierForGate({ authState: "authenticated", tier: canonicalTier }),
     };
   },
 });
@@ -419,7 +387,7 @@ export const getAccountCommerceStatus = query({
       authSubject: args.authSubject ?? null,
     });
     if (!actor) return null;
-    const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
+    const canonicalTier = await readCanonicalAccountTier(ctx, actor.dbUserId, nowMs);
     const meta = accountTierMeta(canonicalTier);
     const hasPayoutAccess = meta.hasPayouts;
     const stripeConnect = hasPayoutAccess
@@ -508,7 +476,7 @@ export const getAccountCommerceAccessForUserInternal = internalQuery({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const accountTier = await getCanonicalTierByUserIdInternal(ctx as never, args.userId, nowMs);
+    const accountTier = await readCanonicalAccountTier(ctx, args.userId, nowMs);
     const meta = accountTierMeta(accountTier);
     return {
       user_id: String(args.userId),

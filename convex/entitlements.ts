@@ -1,30 +1,8 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
-
-type CanonicalTier = "free" | "architect";
-type EffectiveTier = "anon_free" | "auth_free" | "architect";
-type AuthState = "anonymous" | "authenticated";
-
-function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
-  const normalized = String(rawTier ?? "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "architect") return "architect";
-  return "free";
-}
-
-function resolveEffectiveTier(input: { authState: AuthState; tier: CanonicalTier }): EffectiveTier {
-  if (input.authState === "anonymous") return "anon_free";
-  if (input.tier === "free") return "auth_free";
-  return input.tier;
-}
-
-function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
-  if (startsAt > nowMs) return false;
-  if (typeof endsAt === "number" && nowMs > endsAt) return false;
-  return true;
-}
+import { readCanonicalAccountTier } from "./accountEntitlementCore";
+import { resolveEffectiveTierForGate } from "../shared/canonicalGateEngine";
 
 export const getCanonicalTierByUserId = query({
   args: {
@@ -39,15 +17,7 @@ export const getCanonicalTierByUserId = query({
       authSubject: args.authSubject ?? null,
     });
     const nowMs = args.nowMs ?? Date.now();
-    const rows = await ctx.db
-      .query("userEntitlements")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-    const activeRows = rows
-      .filter((row) => isActiveWindow(nowMs, row.startsAt, row.endsAt))
-      .sort((a, b) => b.startsAt - a.startsAt);
-    const canonicalTier = normalizeCanonicalTier(activeRows[0]?.tier ?? "free");
-    return canonicalTier;
+    return await readCanonicalAccountTier(ctx, userId, nowMs);
   },
 });
 
@@ -83,15 +53,8 @@ export const getEffectiveTierByAuthSubject = query({
     }
 
     const nowMs = args.nowMs ?? Date.now();
-    const rows = await ctx.db
-      .query("userEntitlements")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
-    const activeRows = rows
-      .filter((row) => isActiveWindow(nowMs, row.startsAt, row.endsAt))
-      .sort((a, b) => b.startsAt - a.startsAt);
-    const canonicalTier = normalizeCanonicalTier(activeRows[0]?.tier ?? "free");
-    const effectiveTier = resolveEffectiveTier({ authState, tier: canonicalTier });
+    const canonicalTier = await readCanonicalAccountTier(ctx, user._id, nowMs);
+    const effectiveTier = resolveEffectiveTierForGate({ authState, tier: canonicalTier });
     return {
       authState,
       canonicalTier,

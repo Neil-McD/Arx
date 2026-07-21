@@ -30,6 +30,7 @@
     "check:convex-verified-identity-guard": "bash scripts/convex_verified_identity_guard.sh",
     "check:auth-bootstrap-public-identity-guard": "bash scripts/auth_bootstrap_public_identity_guard.sh",
     "check:auth-billing-public-identity-guard": "bash scripts/auth_billing_public_identity_guard.sh",
+    "check:account-entitlement-authority-guard": "bash scripts/account_entitlement_authority_guard.sh",
     "check:account-setup-completion-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_setup_completion_contract_proof.ts",
     "check:account-delete-error-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_delete_error_contract_proof.ts",
     "check:account-lifecycle-policy-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_lifecycle_policy_contract_proof.ts",

@@ -16,7 +16,7 @@ Builder Partner is a retained fourth, secondary growth economy—not a launch ga
 | --- | --- | --- |
 | checkout/payment/subscription settlement | Stripe | idempotent checkout/session/subscription projections and webhook receipts |
 | community access | current membership plus provider-derived `communitySubscriptions` | per-request access decision |
-| platform tier | `userEntitlements` history | effective tier/gate projection |
+| platform tier | sparse `userEntitlements` current-source rows; absence is Free | bounded effective tier/gate projection |
 | workspace/tool usage | credit balance, reservation, usage charge/collection ledgers | reserve, settle, retry, reconcile |
 | creator payout readiness | Stripe Connect account plus community commerce state | destination transfer configuration and operator visibility |
 | partner obligation | Builder Partner attribution, versioned commission, adjustment, payout batch/transfer/item ledgers | secondary growth policy plus financially retained liability/history |
@@ -40,7 +40,7 @@ The bounded staging audit found active partners and pending financial state, so 
 
 ## Duplication and scale
 
-- Platform tier resolution is independently implemented in `auth.ts`, `entitlements.ts`, and `gates.ts`, each collecting and sorting entitlement history.
+- Platform tier resolution is consolidated in `accountEntitlementCore.ts`; every product reader uses the same bounded, fail-closed decision and both current writers use one idempotent monotonic source upsert.
 - `convex/billing.ts` re-exports ten registered functions that also remain available from their source modules.
 - Account deletion must understand community commerce, credits, Connect, and Builder Partner history, amplifying destructive-lifecycle risk.
 - Operator money aggregation performs broad table reads and per-community lookups rather than a bounded materialized read model.
@@ -55,7 +55,7 @@ Static code clearly separates provider verification from redirects, but runtime 
 | Candidate | Classification | Action | Idiot index | Rationale |
 | --- | --- | --- | ---: | --- |
 | provider-verified community access and ordinary creator payout | `KEEP (MVP core)` | `HARDEN` | 0 | required for gated paid communities and builder economics |
-| one shared entitlement resolver | `KEEP (MVP core)` | `CONSOLIDATE`, `BOUND` | 1 | one job is required; three algorithms are not |
+| one shared entitlement resolver | `KEEP (MVP core)` | `CONSOLIDATE`, `BOUND` complete | 1 | one bounded job remains; independent interpretations and append-only default/history rows are deleted |
 | Builder Partner as a secondary growth capability | `KEEP (MVP core)` | `DOCUMENT`, `HARDEN`, `CONSOLIDATE` | 2 | explicitly retained; not a launch gate or primary product journey |
 | paid-tool Builder Partner commission | `DELETE (deferred/dead)` | `MIGRATE_THEN_DELETE`, `VERSION` | 10 | explicitly removed from the target economics; preserve historical rows |
 | 5% prospective community-revenue formula | `DELETE (deferred/dead)` | `MIGRATE_THEN_DELETE`, `VERSION` | 8 | replace with 4% only for new eligible commissions |

@@ -47,9 +47,7 @@ export default defineSchema({
     userId: v.id("users"),
     tier: v.union(v.literal("free"), v.literal("architect")),
     source: v.union(
-      v.literal("default"),
       v.literal("admin_override"),
-      v.literal("manual_grant"),
       v.literal("premium_subscription"),
     ),
     startsAt: v.number(),
@@ -58,8 +56,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_source", ["userId", "source"])
-    .index("by_user_startsAt", ["userId", "startsAt"]),
+    .index("by_user_source", ["userId", "source"]),
 
   operatorRoles: defineTable({
     userId: v.id("users"),

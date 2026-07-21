@@ -36,7 +36,7 @@ flowchart TD
 | Request identity | Convex-verified provider identity (`authSubject`) | explicit subject argument | `resolveAuthenticatedSubject` / actor resolver | confirmed |
 | Browser continuity | opaque cookie points to `authSessions`; provider owns upstream validity | replacement chain, cookie, diagnostics | same-origin bridge plus session actions | confirmed statically |
 | Polynet account/profile | `users`, profile detail and consent records by bounded concern | public user projection | authenticated actor resolver | confirmed; lifecycle incomplete |
-| Platform tier | append-history `userEntitlements` | effective tier/gate decision | latest active entitlement resolver and shared gate policy | confirmed, triplicated resolver |
+| Platform tier | absence means Free; at most one current row for each of `admin_override` and `premium_subscription` | effective tier/gate decision | bounded fail-closed account-entitlement resolver plus shared gate policy | confirmed; staging normalized and guarded |
 | Community identity/ownership | `communities`; owner is `ownerId` | public/funnel projection | authenticated actor plus owner resolver | confirmed |
 | Non-owner access | unique community/user membership pair, block, access source, join request, and provider-derived subscription | capability bundle and required cached member count | indexed unique-pair resolver plus community access resolver | pair reads fail closed on duplicates; cache is staging-reconciled and schema-required |
 | Payment | Stripe for settlement/subscription/payment state; Convex for verified product projections and ledgers | redirect and UI status | webhook/provider verification and idempotent lifecycle functions | confirmed static separation; outage convergence untested |

@@ -12,14 +12,12 @@ import {
   type CommunityMembershipLike,
   type CommunityPricePointLike,
   type CommunitySubscriptionLike,
-  type UserEntitlementLike,
   adjustCommunityActiveMemberCountForMembershipTransition,
   communityMembershipRowIsActive,
   countCanonicalCommunityMembers,
   getCommunityAndMembership,
   getActiveCommunityBlock,
   getUniqueCommunityMembershipByPair,
-  isActiveEntitlementWindow,
   listCommunityMembershipRowsForManager,
   mapCommunityMemberSettingsRow,
   mapCommunityPricingRow,
@@ -35,9 +33,9 @@ import {
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   syncCommunityActiveMemberCount,
-  tierHasArchitectAccess,
   toIsoString,
 } from "./communityCore";
+import { readCanonicalAccountTier } from "./accountEntitlementCore";
 import { logStructuredError } from "./errorLogging";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
@@ -1262,16 +1260,7 @@ export const communityOwnerHasArchitectAccess = query({
       communityId: args.communityId,
       userId: args.userId,
     });
-    const entitlements = (await ctx.db
-      .query("userEntitlements")
-      .withIndex("by_user", (q: any) => q.eq("userId", community.ownerId))
-      .collect()) as UserEntitlementLike[];
-    const active = entitlements
-      .filter((row) =>
-        isActiveEntitlementWindow(nowMs, row.startsAt, row.endsAt),
-      )
-      .sort((a, b) => b.startsAt - a.startsAt);
-    return tierHasArchitectAccess(active[0]?.tier);
+    return (await readCanonicalAccountTier(ctx, community.ownerId, nowMs)) === "architect";
   },
 });
 

@@ -1,7 +1,7 @@
 # Auth + Money + Access Matrix (Canonical Contract)
 
 Status: active
-Last verified: 2026-05-07
+Last verified: 2026-07-21
 Scope: canonical web runtime, community monetization, provider-funded inference, and premium-tool accounting
 
 ## 0) Current Account Ladder
@@ -23,6 +23,8 @@ Scope: canonical web runtime, community monetization, provider-funded inference,
    - unlocks Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage
 
 The product-facing model is Free plus Polynet Premium. The internal account-tier enum remains `free | architect`; `architect` is the Premium entitlement label.
+
+Canonical persistence is sparse: no row means Free. `userEntitlements` may hold at most one current `admin_override` row and one current `premium_subscription` row. One bounded fail-closed resolver owns tier selection; callers must not read or interpret this table directly.
 
 ## 1) Irreducible Contract
 
@@ -130,6 +132,8 @@ Polynet Premium entitlement is the product-facing access rule for premium tools.
 ## 7) Canonical Files
 
 - Gate engine: `/Users/neilmcdevitt/code/arx/shared/canonicalGateEngine.ts`
+- Account entitlement authority: `/Users/neilmcdevitt/code/arx/convex/accountEntitlementCore.ts`
+- Account entitlement behavioral proof: `/Users/neilmcdevitt/code/arx/convex/accountEntitlementAuthority.test.ts`
 - Gate parity matrix: `/Users/neilmcdevitt/code/arx/shared/contracts/gate_parity_matrix_v1.json`
 - Prompt/context projection: `/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts`
 - Billing/product truth: `/Users/neilmcdevitt/code/arx/docs/product/reference/billing-entitlements.md`

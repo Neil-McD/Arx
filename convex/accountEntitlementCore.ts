@@ -24,6 +24,7 @@ export type AccountEntitlementResolution = {
     | "unsupported_source"
     | "duplicate_source"
     | "invalid_row"
+    | "invalid_evaluation_time"
     | "conflicting_revision";
   corrupt: boolean;
 };
@@ -35,8 +36,9 @@ const CURRENT_SOURCE_SET = new Set<CurrentAccountEntitlementSource>([
 const MAX_CURRENT_SOURCE_ROWS = CURRENT_SOURCE_SET.size;
 const MAX_COMPATIBILITY_SOURCE_ROWS = 32;
 
-function normalizeTier(value: unknown): CanonicalAccountTier {
-  return String(value ?? "").trim().toLowerCase() === "architect" ? "architect" : "free";
+function normalizeTier(value: unknown): CanonicalAccountTier | null {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "free" || normalized === "architect" ? normalized : null;
 }
 
 function normalizeCurrentSource(value: unknown): CurrentAccountEntitlementSource | null {
@@ -84,6 +86,9 @@ export function resolveCanonicalAccountEntitlementFromRows(
   rows: readonly AccountEntitlementRowLike[],
   nowMs: number,
 ): AccountEntitlementResolution {
+  if (!Number.isFinite(nowMs)) {
+    return corruptResolution("invalid_evaluation_time");
+  }
   if (rows.length > MAX_CURRENT_SOURCE_ROWS) {
     return corruptResolution("too_many_rows");
   }
@@ -94,6 +99,7 @@ export function resolveCanonicalAccountEntitlementFromRows(
     if (!source) return corruptResolution("unsupported_source");
     if (sources.has(source)) return corruptResolution("duplicate_source");
     sources.add(source);
+    if (!normalizeTier(row.tier)) return corruptResolution("invalid_row");
     const startsAt = finiteTimestamp(row.startsAt);
     const endsAt = normalizedEndsAt(row.endsAt);
     if (
@@ -110,7 +116,7 @@ export function resolveCanonicalAccountEntitlementFromRows(
     .map((row) => ({
       row,
       source: normalizeCurrentSource(row.source)!,
-      tier: normalizeTier(row.tier),
+      tier: normalizeTier(row.tier)!,
       startsAt: finiteTimestamp(row.startsAt)!,
       endsAt: normalizedEndsAt(row.endsAt),
     }))
@@ -155,6 +161,14 @@ export async function readCanonicalAccountEntitlement(
   return resolveCanonicalAccountEntitlementFromRows(rows, nowMs);
 }
 
+export async function readCanonicalAccountTier(
+  ctx: any,
+  userId: any,
+  nowMs: number,
+): Promise<CanonicalAccountTier> {
+  return (await readCanonicalAccountEntitlement(ctx, userId, nowMs)).canonicalTier;
+}
+
 function compareRowsNewestFirst(a: AccountEntitlementRowLike, b: AccountEntitlementRowLike): number {
   return (
     Number(b.startsAt ?? 0) - Number(a.startsAt ?? 0) ||
@@ -171,8 +185,18 @@ export async function upsertCurrentAccountEntitlementSource(args: {
   startsAt: number;
   endsAt?: number;
   nowMs: number;
-}): Promise<{ outcome: "inserted" | "updated" | "retry" | "stale"; rowId: unknown }> {
+}): Promise<{
+  outcome: "inserted" | "updated" | "retry" | "stale" | "conflict_closed";
+  rowId: unknown;
+}> {
+  if (normalizeCurrentSource(args.source) !== args.source) {
+    throw new Error("account_entitlement_source_invalid");
+  }
+  if (normalizeTier(args.tier) !== args.tier) {
+    throw new Error("account_entitlement_tier_invalid");
+  }
   if (!Number.isFinite(args.startsAt)) throw new Error("account_entitlement_starts_at_invalid");
+  if (!Number.isFinite(args.nowMs)) throw new Error("account_entitlement_updated_at_invalid");
   if (
     args.endsAt !== undefined &&
     (!Number.isFinite(args.endsAt) || args.endsAt < args.startsAt)
@@ -214,7 +238,13 @@ export async function upsertCurrentAccountEntitlementSource(args: {
     if (normalizeTier(current.tier) === args.tier && currentEndsAt === incomingEndsAt) {
       return { outcome: "retry", rowId: current._id };
     }
-    throw new Error("account_entitlement_source_revision_conflict");
+    await args.ctx.db.patch(current._id, {
+      tier: "free",
+      startsAt: args.startsAt,
+      endsAt: args.startsAt,
+      updatedAt: args.nowMs,
+    });
+    return { outcome: "conflict_closed", rowId: current._id };
   }
 
   await args.ctx.db.patch(current._id, {

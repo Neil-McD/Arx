@@ -20,7 +20,7 @@ All five are MVP core. UI, prompts, manifests, and agent-selected arguments are 
 | --- | --- | --- |
 | `users` | canonical Polynet account keyed by verified `authSubject` | `convex/schema.ts:5-27`; `convex/authActor.ts` |
 | `authSessions` | canonical bounded continuity state: hashed browser credential, absolute expiry, refresh lease/revision, revocation/retention timestamps, and encrypted upstream token state | `convex/schema.ts`; `convex/authSessions.ts`; `convex/authSessionCore.ts`; `convex/authProviderRequest.ts` |
-| `userEntitlements` | append-history platform tier grants | `convex/schema.ts:50-65` |
+| `userEntitlements` | sparse current-source platform-tier overrides; absence is Free | `convex/schema.ts`; `convex/accountEntitlementCore.ts` |
 | `communities` | canonical community identity, owner, visibility, entry policy | `convex/schema.ts:1253-1301` |
 | `communityMemberships` | canonical non-owner membership/access-source relationship | `convex/schema.ts:1303-1327` |
 | `communitySubscriptions` | provider-derived paid community-access state | `convex/schema.ts:1466-1494` |
@@ -71,7 +71,9 @@ Published visibility never bypasses this path. Focused lifecycle, role-policy, s
 
 ### Platform entitlement
 
-Platform tier is the latest active row in `userEntitlements`, defaulting to free. This resolution is separately implemented in `convex/auth.ts`, `convex/entitlements.ts`, and `convex/gates.ts`. Each implementation collects the user's history, filters active windows, and sorts by `startsAt`. The shared gate policy reduces policy drift after that point, but the canonical data-resolution step is still triplicated.
+Platform tier has one owner: `accountEntitlementCore`. Absence means Free. The table can contain at most one current row from each physically required source, `admin_override` and `premium_subscription`; all readers take at most three indexed rows and fail closed to Free on extra rows, duplicate sources, unsupported sources, invalid windows, or a conflicting same-time revision. The latest active `startsAt` wins; the active window is half-open. Auth, gates, commerce, public Premium badges, community administration, member context, and operator reporting call this owner rather than interpreting storage themselves.
+
+Writers update one row per source monotonically. An older event is stale, an exact same-revision replay is idempotent, and a same-revision payload conflict writes an inactive Free tombstone so ambiguity cannot preserve paid access. A strictly newer event restores normal state. Premium cancellation uses the same zero-length tombstone shape, so it cannot erase an independent older admin grant. Actor provisioning writes no default row.
 
 ## Confirmed invariants
 
@@ -86,6 +88,8 @@ Platform tier is the latest active row in `userEntitlements`, defaulting to free
 - Raw credentials, replacement pointers, and public session-maintenance authority are absent from the canonical schema.
 - Client/public user IDs are projections; database IDs and supplied IDs do not grant authority.
 - Malformed session and OAuth-flow cookies cannot throw or reach an authenticated bridge effect.
+- Absence of a platform entitlement row means Free; only current admin and Premium subscription sources can persist rows.
+- Corrupt or ambiguous entitlement state fails closed to Free through one bounded reader.
 
 ## Complexity and growth risks
 
@@ -94,7 +98,7 @@ Let `U` be users, `E` entitlement rows for one user, `M` membership rows for a c
 | Path | Current order | Why it matters |
 | --- | --- | --- |
 | Actor provisioning | one indexed `by_authSubject` lookup plus one indexed entitlement lookup | Cost is independent of unrelated users; email never selects the actor. |
-| Platform tier resolution | `O(E log E)` per resolver call | Three implementations repeat the collect/filter/sort rule; history grows with grants and billing syncs. |
+| Platform tier resolution | `O(1)` time and space, at most three indexed rows read | Two allowed source rows are the complete valid state; a third row proves corruption and fails closed. |
 | Membership selection for one pair | indexed lookup | One `.unique()` read returns zero/one row and fails closed on corruption instead of sorting duplicates. |
 | Active member count synchronization | `O(M)` per transition | It deterministically recomputes owner plus active non-owner rows; reliable at current scale, but the full scan is the later optimization target. |
 | Terminal session retention | `O(B log S)` indexed selection plus `O(B)` deletion, `B <= 500` | Cost is bounded per hourly internal run and independent of unrelated non-due rows. |
@@ -108,13 +112,14 @@ Explicit membership state is now fail-closed on staging: only `active === true` 
 1. Membership pair uniqueness is application-enforced because the schema cannot declare a compound uniqueness constraint; all known reads fail closed if that invariant is externally corrupted.
 2. `communityJoinRequests.status` is an unconstrained string even though downstream logic assumes a small state machine.
 3. Community deletion is an unbounded destructive transaction with a global checkout-session scan and nested interaction deletion. Completeness across all 125 tables is not yet proven.
+4. Entitlement uniqueness is application-enforced because Convex indexes are not unique; every reader fails closed and every writer uses the single monotonic source upsert, but out-of-band writes must remain forbidden.
 
 ## Reduction candidates
 
 | Exact candidate | Classification | Action | Idiot index | Reason/owner |
 | --- | --- | --- | ---: | --- |
 | Verified actor, community owner, membership, block, and entitlement authority | `KEEP (MVP core)` | `HARDEN` | 0 | Physically required to make gated communities secure. Owner: identity/access. |
-| Three platform-tier resolution implementations | `KEEP (MVP core)` | `CONSOLIDATE`, `BOUND` | 7 | The job is required; three copies of the same append-history rule are not. Owner: platform entitlement. |
+| Three platform-tier resolution implementations and append-only default/history rows | `DELETE (deferred/dead)` | `DELETE` complete | 9 | One bounded owner, absence-as-Free, and two current source rows perform the complete job. Owner: platform entitlement. |
 | Full-user email compatibility scan and implicit relink | `DELETE (deferred/dead)` | `DELETE` complete | 10 | Verified subject is the account authority; mutable email must not scan for or silently seize another account. Owner: auth identity. |
 | Raw session IDs, refresh-created replacement rows, traversal, and public/manual pruning | `DELETE (deferred/dead)` | `DELETE` complete | 10 | One hashed bounded credential and one internal retention owner perform the entire required job. Owner: auth session. |
 | Duplicate membership-row compatibility | `DELETE (deferred/dead)` | `DELETE` complete | 7 | Staging contains zero duplicate pairs; one indexed resolver now fails closed and concurrent activation stays inside one transaction. Owner: community access. |
@@ -125,4 +130,4 @@ Explicit membership state is now fail-closed on staging: only `active === true` 
 
 ## Proof posture
 
-The focused actor fixture proves same-subject idempotency, distinct accounts for equal verified emails, fail-closed supplied-ID mismatch, one default entitlement, and absence of relink/full-scan authority. Persisted Convex fixtures prove one-row creation, raw-credential absence, collision failure, real concurrent refresh ownership, one provider effect, monotonic in-place commit, absolute expiry, unsupported-secret failure, revocation, multi-batch indexed retention, and timeout lease release with no state commit. Route/provider fixtures prove pre-header and body-stall deadlines, single body consumption, timer cleanup, canonical PKCE timeout, malformed-cookie recovery with zero bridge effects, valid signed-flow round-trip, missing-cookie continuity, retryable refresh/logout cookie preservation, stable-cookie success, 30-day browser/server lifetime alignment, and local-before-provider logout ordering. The live staging cutovers independently proved the legacy session index empty, every membership row explicit, zero duplicate pairs, 44/44 exact member-count caches, and zero owner-membership residues before temporary migration deletion; the membership authority fixture proves missing state cannot regain access, duplicate pairs fail closed, concurrent activation converges, owner activation fails without side effects, owner public/admin/paid paths create no membership state, and count sync repairs drift. Provider outage behavior is deterministic in tests; a live external-provider outage drill remains broader operational work, not a blocker for these slices.
+The focused actor fixture proves same-subject idempotency, distinct accounts for equal verified emails, fail-closed supplied-ID mismatch, zero default-entitlement writes, and absence of relink/full-scan authority. The account-entitlement fixture proves absence-as-Free, half-open windows, bounded corruption failure, latest-revision selection, independent-source cancellation, stale-event rejection, exact replay idempotency, and same-time conflict abort. Persisted session fixtures prove one-row creation, raw-credential absence, collision failure, real concurrent refresh ownership, one provider effect, monotonic in-place commit, absolute expiry, unsupported-secret failure, revocation, multi-batch indexed retention, and timeout lease release with no state commit. Route/provider fixtures prove pre-header and body-stall deadlines, single body consumption, timer cleanup, canonical PKCE timeout, malformed-cookie recovery with zero bridge effects, valid signed-flow round-trip, missing-cookie continuity, retryable refresh/logout cookie preservation, stable-cookie success, 30-day browser/server lifetime alignment, and local-before-provider logout ordering. The live staging cutovers independently proved the legacy session index empty, every membership row explicit, zero duplicate pairs, 44/44 exact member-count caches, zero owner-membership residues, and entitlement normalization from 91 historical rows to two current-source rows with exact current/future parity before temporary migration deletion. Provider outage behavior is deterministic in tests; a live external-provider outage drill remains broader operational work, not a blocker for these slices.

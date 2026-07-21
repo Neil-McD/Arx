@@ -2,9 +2,9 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 import {
-  normalizeTierForGate,
   resolveCanonicalGatePolicy,
 } from "../shared/canonicalGateEngine";
+import { readCanonicalAccountTier } from "./accountEntitlementCore";
 
 type CanonicalTier = "free" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "architect";
@@ -36,12 +36,6 @@ type GateDecision = {
   fundingSource: RequestedFundingSource | null;
 };
 
-function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
-  if (startsAt > nowMs) return false;
-  if (typeof endsAt === "number" && nowMs > endsAt) return false;
-  return true;
-}
-
 async function getCanonicalTierBySubject(params: {
   ctx: any;
   authSubject: string;
@@ -52,16 +46,9 @@ async function getCanonicalTierBySubject(params: {
     .withIndex("by_authSubject", (q: any) => q.eq("authSubject", params.authSubject))
     .first();
   if (!user) return { userId: null, canonicalTier: "free", email: null };
-  const rows = await params.ctx.db
-    .query("userEntitlements")
-    .withIndex("by_user", (q: any) => q.eq("userId", user._id))
-    .collect();
-  const activeRows = rows
-    .filter((row: any) => isActiveWindow(params.nowMs, row.startsAt, row.endsAt))
-    .sort((a: any, b: any) => b.startsAt - a.startsAt);
   return {
     userId: user._id,
-    canonicalTier: normalizeTierForGate(activeRows[0]?.tier ?? "free"),
+    canonicalTier: await readCanonicalAccountTier(params.ctx, user._id, params.nowMs),
     email: user.email ?? null,
   };
 }

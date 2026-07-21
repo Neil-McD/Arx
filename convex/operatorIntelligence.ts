@@ -22,6 +22,7 @@ import type { DeveloperAppAuthType } from "../shared/communityAppMountTypes";
 import { isAnonymousAuthSubject } from "../shared/authSubject";
 import { buildAccountSetupStatusForRows } from "./accountSetupCore";
 import { communityMembershipRowIsActive } from "./communityCore";
+import { readCanonicalAccountTier } from "./accountEntitlementCore";
 
 type MoneyMetric = {
   currency: string;
@@ -394,7 +395,7 @@ function moneyFromUsd(value: number): MoneyMetric | null {
   };
 }
 
-function platformFeeBpsForTier(tier: "free" | "architect" | "unknown"): number {
+function platformFeeBpsForTier(tier: "free" | "architect"): number {
   return tier === "architect"
     ? ARCHITECT_ACCOUNT_COMMUNITY_PLATFORM_FEE_BPS
     : FREE_ACCOUNT_COMMUNITY_PLATFORM_FEE_BPS;
@@ -1480,19 +1481,8 @@ function mapSecurityAuditAttentionItem(row: any) {
   };
 }
 
-async function readActiveTier(ctx: any, userId: any, nowMs: number): Promise<"free" | "architect" | "unknown"> {
-  const rows = await ctx.db
-    .query("userEntitlements")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .collect();
-  let tier: "free" | "architect" | "unknown" = "unknown";
-  for (const row of rows) {
-    if (row.startsAt > nowMs) continue;
-    if (typeof row.endsAt === "number" && row.endsAt <= nowMs) continue;
-    if (row.tier === "architect") return "architect";
-    if (row.tier === "free" && tier === "unknown") tier = "free";
-  }
-  return tier;
+async function readActiveTier(ctx: any, userId: any, nowMs: number): Promise<"free" | "architect"> {
+  return await readCanonicalAccountTier(ctx, userId, nowMs);
 }
 
 async function readPayoutStatus(ctx: any, userId: any) {

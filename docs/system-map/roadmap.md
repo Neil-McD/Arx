@@ -60,7 +60,7 @@ Exit proof: interruption at every phase resumes safely; other-party/community st
 3. **Complete on staging:** make verified `authSubject` the sole account-binding authority; remove the full-user email scan and inactive relink/continuity compatibility without migrating profile data.
 4. **Membership authority complete on staging:** missing active state denies access; pair reads fail closed on duplicates; activation/reactivation preserves one row under Convex transaction retries; owner access comes only from `communities.ownerId`; every membership writer rejects owner rows; the two unreferenced owner residues are deleted; the member-count cache is reconciled for all 44 communities and schema-required; all temporary migration surfaces are deleted.
 5. Tighten join-request state vocabulary.
-6. Consolidate entitlement resolution into one bounded deterministic owner.
+6. **Complete on staging:** consolidate entitlement resolution into one bounded fail-closed owner; make absence Free; constrain storage to one row for each of two current sources; make writers monotonic and idempotent; delete defaults, history, legacy sources/index, and the temporary migration.
 
 Exit proof: verified actor, membership, block, subscription, and tier invariants hold under duplicates, stale clients, concurrency, and provider delay.
 

@@ -54,7 +54,7 @@ require_multiline_match "$AUTH_FILE" \
 
 echo "[3/5] Ensuring dev-tier override response stays minimal and avoids public userId residue..."
 require_multiline_match "$AUTH_FILE" \
-  'export const setDevTierOverride = mutation\([\s\S]*?return \{\s*ok: true,\s*canonicalTier,\s*effectiveTier: resolveEffectiveTier[\s\S]*?\n\}\);\n\nexport const getAccountCommerceStatus = query\(' \
+  'export const setDevTierOverride = mutation\([\s\S]*?return \{\s*ok: true,\s*canonicalTier,\s*effectiveTier: resolveEffectiveTierForGate[\s\S]*?\n\}\);\n\nexport const getAccountCommerceStatus = query\(' \
   "setDevTierOverride returns tier-only payload"
 reject_multiline_match "$AUTH_FILE" \
   'export const setDevTierOverride = mutation\([\s\S]*?return \{[\s\S]*?userId:[\s\S]*?\n\}\);\n\nexport const getAccountCommerceStatus = query\(' \

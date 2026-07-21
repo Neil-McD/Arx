@@ -34,8 +34,13 @@ const baseCss = read("apps/web/src/base.css");
 
 assert.match(
   badgeProjection,
-  /query\("userEntitlements"\)[\s\S]*withIndex\("by_user"[\s\S]*tier[\s\S]*"architect"[\s\S]*kind:\s*"polynet_premium"[\s\S]*label:\s*"Premium"/,
-  "premium member badge must be derived from active userEntitlements and projected as a public badge",
+  /readCanonicalAccountTier\(ctx,\s*userId,\s*nowMs\)[\s\S]*===\s*"architect"[\s\S]*kind:\s*"polynet_premium"[\s\S]*label:\s*"Premium"/,
+  "premium member badge must be derived through the canonical account-tier authority",
+);
+assert.doesNotMatch(
+  badgeProjection,
+  /query\("userEntitlements"\)/,
+  "premium member badge must not independently resolve entitlement rows",
 );
 
 assert.doesNotMatch(

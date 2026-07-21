@@ -86,6 +86,16 @@ describe("canonical account entitlement authority", () => {
       reason: "invalid_row",
       corrupt: true,
     });
+    expect(resolveCanonicalAccountEntitlementFromRows([row({ tier: "operator" })], 100)).toMatchObject({
+      canonicalTier: "free",
+      reason: "invalid_row",
+      corrupt: true,
+    });
+    expect(resolveCanonicalAccountEntitlementFromRows([row()], Number.NaN)).toMatchObject({
+      canonicalTier: "free",
+      reason: "invalid_evaluation_time",
+      corrupt: true,
+    });
     expect(
       resolveCanonicalAccountEntitlementFromRows(
         [row(), row({ _id: "admin", source: "admin_override", tier: "free" })],
@@ -170,7 +180,7 @@ describe("canonical account entitlement authority", () => {
     });
   });
 
-  test("same-time conflicting source writes make no change", async () => {
+  test("same-time conflicting source writes close access until a newer revision", async () => {
     const t = convexTest(schema, modules);
     const userId = await t.run(async (ctx) =>
       await ctx.db.insert("users", {
@@ -189,8 +199,9 @@ describe("canonical account entitlement authority", () => {
         nowMs: 100,
       }),
     );
-    await expect(
-      t.run(async (ctx) =>
+    expect(
+      (
+        await t.run(async (ctx) =>
         upsertCurrentAccountEntitlementSource({
           ctx,
           userId,
@@ -199,10 +210,28 @@ describe("canonical account entitlement authority", () => {
           startsAt: 100,
           nowMs: 101,
         }),
-      ),
-    ).rejects.toThrow("account_entitlement_source_revision_conflict");
+        )
+      ).outcome,
+    ).toBe("conflict_closed");
     expect(
       await t.run(async (ctx) => readCanonicalAccountEntitlement(ctx, userId, 101)),
+    ).toMatchObject({ canonicalTier: "free", corrupt: false });
+    expect(
+      (
+        await t.run(async (ctx) =>
+          upsertCurrentAccountEntitlementSource({
+            ctx,
+            userId,
+            source: "premium_subscription",
+            tier: "architect",
+            startsAt: 102,
+            nowMs: 102,
+          }),
+        )
+      ).outcome,
+    ).toBe("updated");
+    expect(
+      await t.run(async (ctx) => readCanonicalAccountEntitlement(ctx, userId, 102)),
     ).toMatchObject({ canonicalTier: "architect", corrupt: false });
   });
 });
