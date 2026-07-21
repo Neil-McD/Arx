@@ -25,6 +25,7 @@ The original map is source-comprehensive, not globally runtime-complete. Its bou
 - [`06-authenticated-identity-session-completion-20260720.md`](06-authenticated-identity-session-completion-20260720.md): F-001/F-003–F-005 end state, migration receipt, executable proof, and 8/10 score contract.
 - [`07-canonical-account-entitlement-completion-20260721.md`](07-canonical-account-entitlement-completion-20260721.md): F-002 end state, staging normalization receipt, executable authority proof, and score contract.
 - [`08-platform-home-admission-separation-20260721.md`](08-platform-home-admission-separation-20260721.md): membership-owned platform-home autojoin intent, re-entry policy, executable proof, and score contract.
+- [`10-community-subscription-event-convergence-20260721.md`](10-community-subscription-event-convergence-20260721.md): first U-017 slice; current-provider reconciliation for paid-community subscription update/delete events.
 - [`domains/identity-community-access.md`](domains/identity-community-access.md): identity, sessions, communities, membership, and access.
 - [`domains/privacy-account-lifecycle.md`](domains/privacy-account-lifecycle.md): profiles, consent, shared ownership, account and community deletion.
 - [`domains/billing-money.md`](domains/billing-money.md): payment authority, community revenue, entitlements, credits, Builder Partner commissions, and payouts.

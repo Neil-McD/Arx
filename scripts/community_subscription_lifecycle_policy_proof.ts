@@ -438,6 +438,21 @@ function assertSourceAnchors() {
   );
   assertIncludes(
     httpBilling,
+    "resolveCurrentCommunitySubscriptionEvent",
+    "community subscription update/delete events reconcile through current provider truth",
+  );
+  assertIncludes(
+    httpBilling,
+    "retrieveCurrent: retrieveStripeSubscriptionForEvidence",
+    "community subscription event reconciliation re-reads Stripe",
+  );
+  assertIncludes(
+    httpBilling,
+    'revokedReason: "subscription_provider_missing"',
+    "provider-confirmed missing subscriptions fail closed",
+  );
+  assertIncludes(
+    httpBilling,
     "function stripeResourceMissing",
     "Stripe evidence retrieval distinguishes missing resources from transient failures",
   );

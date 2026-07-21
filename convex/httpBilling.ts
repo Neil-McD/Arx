@@ -8,6 +8,7 @@ import type { PublicHttpAction } from "convex/server";
 import { logStructuredError } from "./errorLogging";
 import { buildStripeConnectAccountSnapshot } from "./stripeConnectAccountCore";
 import { normalizeStripeCommunitySubscriptionStatus } from "./billingCore";
+import { resolveCurrentCommunitySubscriptionEvent } from "./communitySubscriptionEventConvergenceCore";
 import { calculateBuilderPartnerEligibleSettledRevenueBaseUnits } from "../shared/builderPartnerProgram";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
@@ -662,6 +663,141 @@ async function syncCommunityAccessForDispute(
     ignored: true,
     reason: "dispute_outcome_unknown",
     provider_subscription_id: providerSubscriptionId,
+  };
+}
+
+async function syncCommunitySubscriptionEventFromCurrentProvider(
+  ctx: any,
+  event: Stripe.Event,
+  deliveredSubscription: Stripe.Subscription,
+): Promise<{
+  status: "succeeded" | "ignored";
+  payload: Record<string, unknown>;
+}> {
+  if (
+    event.type !== "customer.subscription.updated" &&
+    event.type !== "customer.subscription.deleted"
+  ) {
+    throw new Error("community_subscription_event_type_invalid");
+  }
+
+  const resolution = await resolveCurrentCommunitySubscriptionEvent({
+    eventType: event.type,
+    eventSubscription: deliveredSubscription,
+    retrieveCurrent: retrieveStripeSubscriptionForEvidence,
+  });
+  const eventCreatedAt = readStripeEventCreatedAtMs(event);
+  const providerSubscriptionId = resolution.providerSubscriptionId;
+  const resolvedSubscription =
+    resolution.kind === "current" ? resolution.subscription : null;
+  const localSessionId =
+    readStripeMetadataString(
+      resolvedSubscription?.metadata,
+      "local_session_id",
+    ) ??
+    readStripeMetadataString(
+      deliveredSubscription.metadata,
+      "local_session_id",
+    );
+  const communityCheckoutSession = localSessionId
+    ? await ctx.runQuery(
+        internal.communityCommerce
+          .getCommunityJoinCheckoutSessionInternal as any,
+        { sessionId: localSessionId },
+      )
+    : null;
+
+  if (resolution.kind === "missing") {
+    if (communityCheckoutSession && localSessionId) {
+      await ctx.runMutation(
+        internal.communityCommerce
+          .syncPendingCommunityCheckoutSubscriptionInternal as any,
+        {
+          sessionId: localSessionId,
+          providerSubscriptionId,
+          subscriptionStatus: "ended",
+          cancelAtPeriodEnd: false,
+          markComplete: false,
+          nowMs: eventCreatedAt,
+        },
+      );
+    }
+    const communityLifecycleResult =
+      await syncCommunitySubscriptionRiskStatus(ctx, event, {
+        providerSubscriptionId,
+        status: "ended",
+        revokedReason: "subscription_provider_missing",
+      });
+    if (communityCheckoutSession || !communityLifecycleResult.ignored) {
+      return {
+        status: "succeeded",
+        payload: {
+          received: true,
+          reason: "community_subscription_provider_missing",
+          communityLifecycleResult,
+        },
+      };
+    }
+    return {
+      status: "ignored",
+      payload: {
+        ignored: true,
+        reason: "community_subscription_not_found",
+      },
+    };
+  }
+
+  const subscription = resolution.subscription;
+  const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
+  const cycle = readStripeSubscriptionCycle(subscription);
+  const subscriptionStatus = normalizeStripeCommunitySubscriptionStatus({
+    subscriptionStatus: subscription.status,
+    cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
+  });
+  if (communityCheckoutSession && localSessionId) {
+    await ctx.runMutation(
+      internal.communityCommerce
+        .syncPendingCommunityCheckoutSubscriptionInternal as any,
+      {
+        sessionId: localSessionId,
+        providerCustomerId:
+          typeof subscription.customer === "string"
+            ? subscription.customer
+            : null,
+        providerSubscriptionId: subscription.id,
+        providerPriceId,
+        subscriptionStatus,
+        currentPeriodStartAt: cycle.cycleStartedAt,
+        currentPeriodEndAt: cycle.cycleEndsAt,
+        cancelAtPeriodEnd: Boolean(
+          (subscription as any)?.cancel_at_period_end,
+        ),
+        markComplete: false,
+        nowMs: eventCreatedAt,
+      },
+    );
+  }
+  const communityLifecycleResult =
+    await syncCommunitySubscriptionFromStripeSubscription(
+      ctx,
+      event,
+      subscription,
+      { preserveRiskRevocation: true },
+    );
+  if (!communityLifecycleResult.ignored) {
+    return {
+      status: "succeeded",
+      payload: { received: true, communityLifecycleResult },
+    };
+  }
+  return {
+    status: "ignored",
+    payload: {
+      ignored: true,
+      reason:
+        communityLifecycleResult.reason ??
+        "community_subscription_not_found",
+    },
   };
 }
 
@@ -1470,34 +1606,38 @@ export function registerRuntimeBillingRoutes(
           event.type === "customer.subscription.updated" ||
           event.type === "customer.subscription.deleted"
         ) {
-          const subscription = event.data.object as Stripe.Subscription;
-          const localSessionId = readStripeMetadataString(
-            subscription.metadata,
+          const deliveredSubscription = event.data.object as Stripe.Subscription;
+          const deliveredLocalSessionId = readStripeMetadataString(
+            deliveredSubscription.metadata,
             "local_session_id",
           );
-          const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
+          const deliveredProviderPriceId =
+            deliveredSubscription.items.data[0]?.price?.id ?? null;
           const { cycleStartedAt, cycleEndsAt } =
-            readStripeSubscriptionCycle(subscription);
+            readStripeSubscriptionCycle(deliveredSubscription);
           const normalizedCommunityStatus =
             normalizeStripeCommunitySubscriptionStatus({
-              subscriptionStatus: subscription.status,
-              cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
+              subscriptionStatus: deliveredSubscription.status,
+              cancelAtPeriodEnd:
+                (deliveredSubscription as any)?.cancel_at_period_end,
             });
           const premiumSubscriptionResult = await (ctx as any).runMutation(
             (internal as any).premiumBilling
               .syncPremiumSubscriptionFromStripeInternal,
             {
-              localSessionId,
+              localSessionId: deliveredLocalSessionId,
               providerCustomerId:
-                typeof subscription.customer === "string"
-                  ? subscription.customer
+                typeof deliveredSubscription.customer === "string"
+                  ? deliveredSubscription.customer
                   : null,
-              providerSubscriptionId: subscription.id,
-              providerPriceId,
+              providerSubscriptionId: deliveredSubscription.id,
+              providerPriceId: deliveredProviderPriceId,
               subscriptionStatus: normalizedCommunityStatus,
               currentPeriodStartAt: cycleStartedAt,
               currentPeriodEndAt: cycleEndsAt,
-              cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+              cancelAtPeriodEnd: Boolean(
+                (deliveredSubscription as any)?.cancel_at_period_end,
+              ),
               nowMs:
                 Number(event.created ?? 0) > 0
                   ? Number(event.created) * 1000
@@ -1512,58 +1652,18 @@ export function registerRuntimeBillingRoutes(
               premiumSubscriptionResult,
             });
           }
-          if (localSessionId) {
-            const communityCheckoutSession = await (ctx as any).runQuery(
-              internal.communityCommerce.getCommunityJoinCheckoutSessionInternal as any,
-              {
-                sessionId: localSessionId,
-              },
+
+          const communityResult =
+            await syncCommunitySubscriptionEventFromCurrentProvider(
+              ctx,
+              event,
+              deliveredSubscription,
             );
-            if (communityCheckoutSession) {
-              await (ctx as any).runMutation(
-                internal.communityCommerce
-                  .syncPendingCommunityCheckoutSubscriptionInternal as any,
-                {
-                  sessionId: localSessionId,
-                  providerCustomerId:
-                    typeof subscription.customer === "string"
-                      ? subscription.customer
-                      : null,
-                  providerSubscriptionId: subscription.id,
-                  providerPriceId,
-                  subscriptionStatus: normalizedCommunityStatus,
-                  currentPeriodStartAt: cycleStartedAt,
-                  currentPeriodEndAt: cycleEndsAt,
-                  cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
-                  markComplete: false,
-                  nowMs:
-                    Number(event.created ?? 0) > 0
-                      ? Number(event.created) * 1000
-                      : Date.now(),
-                },
-              );
-            }
-          }
-          const communityLifecycleResult = await syncCommunitySubscriptionFromStripeSubscription(
-            ctx,
-            event,
-            subscription,
-            { preserveRiskRevocation: true },
-          );
-          if (!communityLifecycleResult.ignored) {
-            return processedResponse({
-              ok: true,
-              received: true,
-              event: event.type,
-              communityLifecycleResult,
-            });
-          }
           return processedResponse({
             ok: true,
-            ignored: true,
             event: event.type,
-            reason: communityLifecycleResult.reason ?? "community_subscription_not_found",
-          }, "ignored");
+            ...communityResult.payload,
+          }, communityResult.status);
         }
 
         if (event.type === "account.updated") {
