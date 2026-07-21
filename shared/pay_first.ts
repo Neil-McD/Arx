@@ -1,4 +1,5 @@
 import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexAuthenticatedClient";
+import { normalizeCommunitySlugIdentity } from "./communitySlug";
 
 const PENDING_PURCHASE_CLAIM_TOKEN_KEY = "arx_pending_purchase_claim_token";
 const PENDING_PURCHASE_CLAIM_TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -122,6 +123,43 @@ export type PublicCommunityJoinErrorKind =
   | "forbidden"
   | null;
 
+export type PublicCommunityJoinResult = {
+  outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
+  community_id: string;
+  reapply_at?: string | null;
+};
+
+export function requirePublicCommunityJoinResult(value: unknown): PublicCommunityJoinResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("community_join_contract_invalid");
+  }
+  const record = value as Record<string, unknown>;
+  const outcome = record.outcome;
+  if (
+    outcome !== "joined" &&
+    outcome !== "approval_pending" &&
+    outcome !== "approval_denied" &&
+    outcome !== "paid_plan_required"
+  ) {
+    throw new Error("community_join_contract_invalid");
+  }
+  const communityId = typeof record.community_id === "string" ? record.community_id.trim() : "";
+  if (!communityId) throw new Error("community_join_contract_invalid");
+  const rawReapplyAt = record.reapply_at;
+  if (rawReapplyAt !== undefined && rawReapplyAt !== null && typeof rawReapplyAt !== "string") {
+    throw new Error("community_join_contract_invalid");
+  }
+  const reapplyAt = typeof rawReapplyAt === "string" ? rawReapplyAt.trim() || null : null;
+  if (outcome === "approval_denied" && !reapplyAt) {
+    throw new Error("community_join_contract_invalid");
+  }
+  return {
+    outcome,
+    community_id: communityId,
+    ...(rawReapplyAt !== undefined ? { reapply_at: reapplyAt } : null),
+  };
+}
+
 export function classifyPublicCommunityJoinError(error: unknown): PublicCommunityJoinErrorKind {
   const values: string[] = [];
   const collect = (value: unknown) => {
@@ -196,44 +234,13 @@ export async function redeemPendingPurchaseClaimsRpc<S extends SessionLike>(opts
 
 export async function joinPublicCommunityRpc<S extends SessionLike>(opts: {
   session: S;
-  communityId?: string;
-  communitySlug?: string;
-}): Promise<{
-  outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
-  community_id: string;
-  reapply_at?: string | null;
-}> {
+  communitySlug: string;
+}): Promise<PublicCommunityJoinResult> {
   const { client } = await bootstrapConvexUserForPayFirst(opts.session);
-  const slug = (opts.communitySlug ?? "").trim();
-  const id = (opts.communityId ?? "").trim();
-  let result:
-    | {
-        outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
-        community_id: string;
-        reapply_at?: string | null;
-      }
-    | null = null;
-  if (slug) {
-    result = ((await client.mutation("community:joinPublicCommunityBySlug" as any, {
-      communitySlug: slug,
-    })) as {
-      outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
-      community_id: string;
-      reapply_at?: string | null;
-    } | null) ?? null;
-  } else if (id) {
-    result = ((await client.mutation("community:joinPublicCommunity" as any, {
-      communityId: id,
-    })) as {
-      outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
-      community_id: string;
-      reapply_at?: string | null;
-    } | null) ?? null;
-  } else {
-    throw new Error("Missing community");
-  }
-  return result ?? {
-    outcome: "joined",
-    community_id: id,
-  };
+  const slug = normalizeCommunitySlugIdentity(opts.communitySlug);
+  if (!slug) throw new Error("community_slug_required");
+  const result = await client.mutation("community:joinPublicCommunityBySlug" as any, {
+    communitySlug: slug,
+  });
+  return requirePublicCommunityJoinResult(result);
 }

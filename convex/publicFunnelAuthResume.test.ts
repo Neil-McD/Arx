@@ -8,7 +8,7 @@ describe("public funnel auth resume intent", () => {
       parsePendingAuthIntentInput({
         reason: "join_public_community",
         payload: {
-          community_slug: "  polynet  ",
+          community_slug: "  PolyNet  ",
           community_id: "legacy-id-must-not-survive",
         },
       }),
@@ -38,6 +38,12 @@ describe("public funnel auth resume intent", () => {
       parsePendingAuthIntentInput({
         reason: "join_public_community",
         payload: null,
+      }),
+    ).toBeNull();
+    expect(
+      parsePendingAuthIntentInput({
+        reason: "join_public_community",
+        payload: { community_slug: 123 },
       }),
     ).toBeNull();
   });

@@ -14,6 +14,8 @@ const app = read("apps/web/src/App.tsx");
 const authResumeState = read("shared/authResumeState.ts");
 const payFirst = read("shared/pay_first.ts");
 const postAuthBilling = read("apps/web/src/controllers/useWebPostAuthBillingLifecycle.ts");
+const admissionAction = read("apps/web/src/publicCommunityAdmissionAction.ts");
+const routeState = read("shared/webAppRouteState.ts");
 
 // --- The base load must MERGE into the same community, never replace it ---
 // The memory graph + stats are folded in by async fetches; a bare replace on a
@@ -84,6 +86,26 @@ assert.match(
   /isPublicCommunityAdmissionActionOwner/,
   "only the active operation may clear shared admission loading state",
 );
+assert.doesNotMatch(
+  funnelActions,
+  /renderActionAuthorityKeyRef/,
+  "route and subject changes must not mutate action authority during render",
+);
+assert.match(
+  funnelActions,
+  /useEffect\(\(\) => \{[\s\S]{0,300}active && actionSnapshotIsCurrent\(active\)[\s\S]{0,180}publicCommunityActionGenerationRef\.current \+= 1/,
+  "committed route and subject changes must retain only a still-current action",
+);
+assert.match(
+  funnelActions,
+  /executePublicCommunityJoinAction/,
+  "the React controller must execute the single testable join decision path",
+);
+assert.match(
+  admissionAction,
+  /export async function executePublicCommunityJoinAction[\s\S]{0,800}await args\.runJoin\(\)/,
+  "the admission executor must own the asynchronous join outcome path",
+);
 assert.match(
   funnelActions,
   /reconcileAdmissionBySlug[\s\S]{0,1000}fetchCloudMyCommunityAccessBySlug/,
@@ -106,6 +128,16 @@ assert.match(
   /reason:\s*"join_public_community";[\s\S]{0,100}community_slug:\s*string/,
   "public join resume must be owned by the canonical funnel slug",
 );
+assert.match(
+  authResumeState,
+  /community_slug =[\s\S]{0,120}normalizeCommunitySlugIdentity\(payload\.community_slug\)/,
+  "auth-resume community identity must be canonicalized once at ingress",
+);
+assert.match(
+  routeState,
+  /parsePublicCommunityFunnelRoutePath[\s\S]{0,500}normalizeCommunitySlugIdentity/,
+  "public funnel routes must canonicalize slug identity before projection",
+);
 for (const source of [payFirst, postAuthBilling, app]) {
   assert.doesNotMatch(
     source,
@@ -127,6 +159,33 @@ assert.match(
   app,
   /communitySlug:\s*publicCommunityUi\.publicCommunity\.slug,[\s\S]{0,80}origin:\s*"funnel"/,
   "the live funnel join action must declare funnel authority explicitly",
+);
+
+// --- The browser has one strict slug-owned join RPC and never fabricates success ---
+assert.match(
+  payFirst,
+  /joinPublicCommunityRpc[\s\S]{0,160}communitySlug:\s*string/,
+  "the public join gateway must require the canonical community slug",
+);
+assert.doesNotMatch(
+  payFirst,
+  /joinPublicCommunityRpc[\s\S]{0,220}communityId\??:/,
+  "the unused client ID join representation must remain deleted",
+);
+assert.doesNotMatch(
+  payFirst,
+  /client\.mutation\("community:joinPublicCommunity"\s+as any/,
+  "the client gateway must not retain the unreferenced ID mutation path",
+);
+assert.match(
+  payFirst,
+  /return requirePublicCommunityJoinResult\(result\)/,
+  "null and malformed join responses must fail closed through the strict result contract",
+);
+assert.doesNotMatch(
+  payFirst,
+  /result\s*\?\?\s*\{[\s\S]{0,100}outcome:\s*"joined"/,
+  "the client gateway must never synthesize a joined result",
 );
 
 // --- Preview has no access lookup; signed-in access fails closed until ready ---
@@ -167,5 +226,5 @@ assert.doesNotMatch(accessTypes, /primary_cta/, "the shared access contract must
 assert.doesNotMatch(communityCore, /primary_cta|primaryCta|CommunityPrimaryCta/, "the backend access bundle must not compute unused CTA policy");
 
 console.log(
-  "community funnel contract proof passed: principal-bound load/action generations, canonical admission reconciliation, one bounded resume owner, preview bypass, and no duplicate CTA policy.",
+  "community funnel contract proof passed: canonical slug identity, strict join results, commit-safe action authority, executable admission decisions, bounded resume ownership, preview bypass, and no duplicate CTA policy.",
 );

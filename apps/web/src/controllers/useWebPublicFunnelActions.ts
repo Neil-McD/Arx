@@ -16,6 +16,7 @@ import {
 import { preloadImageUrls } from "../../../../shared/preloadImageUrls";
 import { applyShellVariantToPublicPath, readShellVariantFromPathname } from "../../../../shared/webAppRouteState";
 import { resolveAuthSubject } from "../../../../shared/authSession";
+import { normalizeCommunitySlugIdentity } from "../../../../shared/communitySlug";
 import type { AuthSession } from "../auth";
 import type { CommunityBillingPeriod } from "../../../../shared/communityTypes";
 import {
@@ -28,6 +29,11 @@ import {
   type PublicCommunityAccessResolution,
   type PublicCommunityLoadSnapshot,
 } from "../communityJoinPolicy";
+import {
+  executePublicCommunityCancelAction,
+  executePublicCommunityJoinAction,
+  type ReconciledAdmission,
+} from "../publicCommunityAdmissionAction";
 
 type UseWebPublicFunnelActionsArgs<
   PublicCommunityT extends {
@@ -87,20 +93,6 @@ type CommunityAccessRow = {
   join_request_reapply_at?: string | null;
 };
 
-type ReconciledAdmissionStatus =
-  | "entered"
-  | "pending"
-  | "denied"
-  | "blocked"
-  | "none"
-  | "unavailable"
-  | "stale";
-
-type ReconciledAdmission<CommunityAccessT> = {
-  status: ReconciledAdmissionStatus;
-  access: CommunityAccessT | null;
-};
-
 export function useWebPublicFunnelActions<
   PublicCommunityT extends {
     slug: string;
@@ -136,18 +128,6 @@ export function useWebPublicFunnelActions<
   const renderActionAuthorityKey = `${String(args.getCurrentPublicFunnelSlug() ?? "").trim()}\u0000${String(
     args.getCurrentAuthSubject() ?? "",
   ).trim()}`;
-  const renderActionAuthorityKeyRef = useRef(renderActionAuthorityKey);
-  if (renderActionAuthorityKeyRef.current !== renderActionAuthorityKey) {
-    renderActionAuthorityKeyRef.current = renderActionAuthorityKey;
-    publicCommunityActionGenerationRef.current += 1;
-    activePublicCommunityActionRef.current = null;
-  }
-
-  useEffect(() => {
-    if (activePublicCommunityActionRef.current) return;
-    argsRef.current.setIsJoiningPublicCommunity(false);
-    argsRef.current.setIsCancellingPublicCommunityJoinRequest(false);
-  }, [renderActionAuthorityKey]);
 
   const actionSnapshotIsCurrent = useCallback(
     (snapshot: PublicCommunityAdmissionActionSnapshot): boolean =>
@@ -161,6 +141,15 @@ export function useWebPublicFunnelActions<
       }),
     [],
   );
+
+  useEffect(() => {
+    const active = activePublicCommunityActionRef.current;
+    if (active && actionSnapshotIsCurrent(active)) return;
+    if (active) publicCommunityActionGenerationRef.current += 1;
+    activePublicCommunityActionRef.current = null;
+    argsRef.current.setIsJoiningPublicCommunity(false);
+    argsRef.current.setIsCancellingPublicCommunityJoinRequest(false);
+  }, [actionSnapshotIsCurrent, renderActionAuthorityKey]);
 
   const beginAdmissionAction = useCallback(
     (args: {
@@ -317,7 +306,7 @@ export function useWebPublicFunnelActions<
       communitySlug: string;
       origin: PublicCommunityAdmissionActionOrigin;
     }): Promise<void> => {
-      const trimmedSlug = opts.communitySlug.trim();
+      const trimmedSlug = normalizeCommunitySlugIdentity(opts.communitySlug);
       if (!trimmedSlug) return;
 
       const current = argsRef.current;
@@ -342,78 +331,20 @@ export function useWebPublicFunnelActions<
       });
       if (!snapshot) return;
       try {
-        const joinResult = await joinPublicCommunityRpc({
-          session,
+        await executePublicCommunityJoinAction<CommunityAccessT>({
           communitySlug: trimmedSlug,
+          runJoin: () => joinPublicCommunityRpc({ session, communitySlug: trimmedSlug }),
+          isCurrent: () => actionSnapshotIsCurrent(snapshot),
+          reconcile: () => reconcileAdmissionBySlug(snapshot, session),
+          enterCommunity: (communityId) =>
+            enterReconciledCommunity(snapshot, session, communityId),
+          setEntryPolicy: (entryPolicy) => setCurrentFunnelEntryPolicy(snapshot, entryPolicy),
+          navigateAuthResumeToFunnel: () => navigateAuthResumeToFunnel(snapshot),
+          setError: (message) => argsRef.current.setPublicJoinError(message),
+          onJoinRequestSent: (params) => argsRef.current.onJoinRequestSent?.(params),
+          getErrorMessage,
+          classifyError: classifyPublicCommunityJoinError,
         });
-        if (!actionSnapshotIsCurrent(snapshot)) return;
-
-        if (joinResult.outcome === "joined") {
-          await enterReconciledCommunity(snapshot, session, joinResult.community_id);
-          return;
-        }
-
-        const reconciled = await reconcileAdmissionBySlug(snapshot, session);
-        if (reconciled.status === "stale") return;
-        if (reconciled.status === "entered" && reconciled.access?.community_id) {
-          await enterReconciledCommunity(snapshot, session, reconciled.access.community_id);
-          return;
-        }
-        if (reconciled.status === "blocked") {
-          current.setPublicJoinError(null);
-          return;
-        }
-        if (joinResult.outcome === "paid_plan_required") {
-          setCurrentFunnelEntryPolicy(snapshot, "paid_subscription");
-          navigateAuthResumeToFunnel(snapshot);
-          if (!actionSnapshotIsCurrent(snapshot)) return;
-          current.setPublicJoinError("This community now requires a paid plan. Select a plan to continue.");
-          return;
-        }
-        setCurrentFunnelEntryPolicy(snapshot, "approval");
-        navigateAuthResumeToFunnel(snapshot);
-        if (!actionSnapshotIsCurrent(snapshot)) return;
-        if (joinResult.outcome === "approval_pending" && reconciled.status === "pending") {
-          current.onJoinRequestSent?.({
-            communityId: joinResult.community_id ?? null,
-            communitySlug: trimmedSlug,
-          });
-        }
-        current.setPublicJoinError(
-          reconciled.status === "unavailable"
-            ? "Your request was received, but its current status could not be verified. Reload to try again."
-            : null,
-        );
-      } catch (error) {
-        if (!actionSnapshotIsCurrent(snapshot)) return;
-        const message = getErrorMessage(error, "Failed to join community.");
-        const kind = classifyPublicCommunityJoinError(error);
-        const reconciled = await reconcileAdmissionBySlug(snapshot, session);
-        if (reconciled.status === "stale") return;
-        if (reconciled.status === "entered" && reconciled.access?.community_id) {
-          await enterReconciledCommunity(snapshot, session, reconciled.access.community_id);
-          return;
-        }
-        if (reconciled.status === "blocked") {
-          current.setPublicJoinError(null);
-          return;
-        }
-        if (reconciled.status === "pending" || reconciled.status === "denied") {
-          setCurrentFunnelEntryPolicy(snapshot, "approval");
-          navigateAuthResumeToFunnel(snapshot);
-          if (actionSnapshotIsCurrent(snapshot)) current.setPublicJoinError(null);
-          return;
-        }
-        if (kind === "paid_plan_required") {
-          setCurrentFunnelEntryPolicy(snapshot, "paid_subscription");
-          navigateAuthResumeToFunnel(snapshot);
-          if (!actionSnapshotIsCurrent(snapshot)) return;
-          current.setPublicJoinError("This community now requires a paid plan. Select a plan to continue.");
-          return;
-        }
-        navigateAuthResumeToFunnel(snapshot);
-        if (!actionSnapshotIsCurrent(snapshot)) return;
-        current.setPublicJoinError(message);
       } finally {
         finishAdmissionAction(snapshot);
       }
@@ -431,7 +362,7 @@ export function useWebPublicFunnelActions<
 
   const cancelMyPendingJoinRequest = useCallback(
     async (communitySlug: string): Promise<void> => {
-      const trimmedSlug = communitySlug.trim();
+      const trimmedSlug = normalizeCommunitySlugIdentity(communitySlug);
       if (!trimmedSlug) return;
       const current = argsRef.current;
       const rawSession = current.getSession();
@@ -447,31 +378,17 @@ export function useWebPublicFunnelActions<
       });
       if (!snapshot) return;
       try {
-        await cancelCloudMyJoinRequestBySlug({
-          session,
-          communitySlug: trimmedSlug,
+        await executePublicCommunityCancelAction<CommunityAccessT>({
+          runCancel: () =>
+            cancelCloudMyJoinRequestBySlug({
+              session,
+              communitySlug: trimmedSlug,
+            }),
+          isCurrent: () => actionSnapshotIsCurrent(snapshot),
+          reconcile: () => reconcileAdmissionBySlug(snapshot, session),
+          setError: (message) => argsRef.current.setPublicJoinError(message),
+          getErrorMessage,
         });
-        if (!actionSnapshotIsCurrent(snapshot)) return;
-        const reconciled = await reconcileAdmissionBySlug(snapshot, session);
-        if (reconciled.status !== "stale" && reconciled.status !== "unavailable") {
-          current.setPublicJoinError(null);
-        } else if (reconciled.status === "unavailable") {
-          current.setPublicJoinError("The cancellation completed, but its current status could not be verified. Reload to try again.");
-        }
-      } catch (error) {
-        if (!actionSnapshotIsCurrent(snapshot)) return;
-        const message = getErrorMessage(error, "Failed to cancel join request.");
-        const reconciled = await reconcileAdmissionBySlug(snapshot, session);
-        if (!actionSnapshotIsCurrent(snapshot)) return;
-        if (
-          reconciled.status === "none" ||
-          reconciled.status === "denied" ||
-          reconciled.status === "entered"
-        ) {
-          current.setPublicJoinError(null);
-        } else {
-          current.setPublicJoinError(message);
-        }
       } finally {
         finishAdmissionAction(snapshot);
       }
@@ -489,7 +406,7 @@ export function useWebPublicFunnelActions<
       slug: string,
       opts?: { recordVisit?: boolean; isPreviewMode?: boolean },
     ): Promise<void> => {
-      const requestedSlug = slug.trim();
+      const requestedSlug = normalizeCommunitySlugIdentity(slug);
       if (!requestedSlug) return;
       const routeSlug = String(argsRef.current.getCurrentPublicFunnelSlug() ?? "").trim();
       if (routeSlug !== requestedSlug) return;

@@ -35,7 +35,7 @@
     "check:account-delete-error-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_delete_error_contract_proof.ts",
     "check:account-lifecycle-policy-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_lifecycle_policy_contract_proof.ts",
     "test:account-deletion-safety": "vitest run convex/accountDeletionSafety.test.ts",
-    "test:community-membership-authority": "vitest run convex/communityMembershipAuthority.test.ts convex/platformHomeAdmission.test.ts convex/communityJoinRequestCore.test.ts convex/publicFunnelAccessProjection.test.ts convex/publicFunnelAuthResume.test.ts",
+    "test:community-membership-authority": "vitest run convex/communityMembershipAuthority.test.ts convex/platformHomeAdmission.test.ts convex/communityJoinRequestCore.test.ts convex/publicFunnelAccessProjection.test.ts convex/publicFunnelAuthResume.test.ts convex/publicFunnelAdmissionAction.test.ts",
     "check:community-funnel-load-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_funnel_load_contract_proof.ts",
     "test:account-entitlement-authority": "vitest run convex/accountEntitlementAuthority.test.ts",
     "test:auth-actor-subject-authority": "vitest run convex/authActorSubjectAuthority.test.ts",

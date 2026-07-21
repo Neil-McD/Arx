@@ -1,4 +1,5 @@
 import { isUuid } from "./appIdentity";
+import { normalizeCommunitySlugIdentity } from "./communitySlug";
 import {
   parseCommunitySettingsPane,
   parseCommunityTab,
@@ -488,6 +489,23 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
   return null;
 }
 
+export function parsePublicCommunityFunnelRoutePath(pathname: string): Extract<
+  PublicRoute,
+  { kind: "community_funnel" | "community_funnel_preview" }
+> | null {
+  const path = stripShellVariantFromPathname(pathname || "/");
+  const segments = splitPathSegments(path);
+  if (segments[0] === "c" && segments.length === 3 && segments[2] === "preview") {
+    const slug = normalizeCommunitySlugIdentity(segments[1]);
+    if (slug) return { kind: "community_funnel_preview", slug };
+  }
+  if (segments[0] === "c" && segments.length === 2) {
+    const slug = normalizeCommunitySlugIdentity(segments[1]);
+    if (slug) return { kind: "community_funnel", slug };
+  }
+  return null;
+}
+
 export function readPublicRouteFromLocation(): PublicRoute {
   const path = stripShellVariantFromPathname(window.location.pathname || "/");
   if (path === "/checkout/success") {
@@ -501,15 +519,8 @@ export function readPublicRouteFromLocation(): PublicRoute {
     return { kind: "claim", token };
   }
 
-  const segments = splitPathSegments(path);
-  if (segments[0] === "c" && segments.length === 3 && segments[2] === "preview") {
-    const slug = String(segments[1] ?? "").trim();
-    if (slug) return { kind: "community_funnel_preview", slug };
-  }
-  if (segments[0] === "c" && segments.length === 2) {
-    const slug = String(segments[1] ?? "").trim();
-    if (slug) return { kind: "community_funnel", slug };
-  }
+  const communityFunnelRoute = parsePublicCommunityFunnelRoutePath(path);
+  if (communityFunnelRoute) return communityFunnelRoute;
 
   return { kind: "app" };
 }

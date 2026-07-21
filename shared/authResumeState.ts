@@ -2,6 +2,7 @@ import {
   normalizeCreateCommunityIntentDraft,
   type CreateCommunityIntentDraft,
 } from "./createCommunityIntent";
+import { normalizeCommunitySlugIdentity } from "./communitySlug";
 
 const AUTH_RESUME_STATE_STORAGE_KEY = "arx_auth_resume_state_v1";
 const AUTH_RESUME_STATE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -96,7 +97,10 @@ function normalizePendingAuthIntent(
   }
 
   if (reason === "join_public_community") {
-    const community_slug = typeof payload.community_slug === "string" ? payload.community_slug.trim() : "";
+    const community_slug =
+      typeof payload.community_slug === "string"
+        ? normalizeCommunitySlugIdentity(payload.community_slug)
+        : "";
     if (!community_slug) return null;
     return { reason, payload: { community_slug } };
   }
