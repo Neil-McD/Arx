@@ -789,19 +789,29 @@ export async function adjustCommunityActiveMemberCountForMembershipTransition(ar
   });
 }
 
-export function pickMostRelevantCommunityMembership(
-  rows: CommunityMembershipLike[] | null | undefined,
-): CommunityMembershipLike | null {
-  const list = Array.isArray(rows) ? rows.slice() : [];
-  if (list.length === 0) return null;
-  list.sort((a, b) => {
-    const aActive = communityMembershipRowIsActive(a);
-    const bActive = communityMembershipRowIsActive(b);
-    if (aActive !== bActive) return aActive ? -1 : 1;
-    if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
-    return b.createdAt - a.createdAt;
-  });
-  return list[0] ?? null;
+export async function getUniqueCommunityMembershipByPair(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+}): Promise<CommunityMembershipLike | null> {
+  try {
+    return (await args.ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_user", (q: any) =>
+        q.eq("communityId", args.communityId).eq("userId", args.userId),
+      )
+      .unique()) as CommunityMembershipLike | null;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.startsWith(
+        "unique() query returned more than one result from table communityMemberships",
+      )
+    ) {
+      throw new Error("community_membership_pair_not_unique");
+    }
+    throw error;
+  }
 }
 
 export const COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
@@ -1083,11 +1093,11 @@ export async function getCommunityAndMembership(args: {
 }> {
   const community = (await args.ctx.db.get(args.communityId)) as CommunityLike | null;
   if (!community) throw new Error("community_not_found");
-  const membershipRows = (await args.ctx.db
-    .query("communityMemberships")
-    .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
-    .collect()) as CommunityMembershipLike[];
-  const membership = pickMostRelevantCommunityMembership(membershipRows);
+  const membership = await getUniqueCommunityMembershipByPair({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
   return { community, membership };
 }
 

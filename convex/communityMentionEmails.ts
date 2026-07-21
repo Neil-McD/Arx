@@ -1,7 +1,11 @@
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import { communityMembershipRowIsActive, normalizeIdValue } from "./communityCore";
+import {
+  communityMembershipRowIsActive,
+  getUniqueCommunityMembershipByPair,
+  normalizeIdValue,
+} from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import {
   EVERYBODY_MENTION_ROLE_KEY,
@@ -177,11 +181,23 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
       // Membership re-check at email time: the recipient may have left (or
       // been removed) since the mention was written; no content leaves the
       // community for ex-members.
-      const membership = (await ctx.db
-        .query("communityMemberships" as any)
-        .withIndex("by_community_user", (q: any) =>
-          q.eq("communityId", mention.communityId).eq("userId", mention.mentionedUserId))
-        .first()) as Record<string, any> | null;
+      let membership;
+      try {
+        membership = await getUniqueCommunityMembershipByPair({
+          ctx,
+          communityId: mention.communityId,
+          userId: mention.mentionedUserId,
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "community_membership_pair_not_unique"
+        ) {
+          suppressOnlyJob(mention);
+          continue;
+        }
+        throw error;
+      }
       const preferences = (await ctx.db
         .query("emailPreferences" as any)
         .withIndex("by_user", (q: any) => q.eq("userId", mention.mentionedUserId))

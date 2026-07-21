@@ -31,6 +31,7 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 | 8 | `App.tsx` should be decomposed before obsolete surfaces are removed | `DECISION REQUIRED (user confirmation)` | frontend | spreads dead complexity into more files | delete surfaces and consolidate state first |
 | 8 | anonymous-user deletion can rely on a hand-maintained reference list | `DECISION REQUIRED (user confirmation)` | identity/privacy | table growth silently invalidates safety | inventory live state and replace/delete cleanup |
 | 8 | recurring bounded prefix scans are “done” without continuation | `KEEP (MVP core)` | async operations | later eligible work can starve permanently | cursor/partition/service-level proof |
+| 8 | duplicate membership rows should be silently ranked and tolerated | `DELETE (deferred/dead)` | access | choosing a winner hides authority corruption and makes access order-dependent | one indexed pair resolver; fail closed and keep creation in one transaction |
 | 7 | three entitlement-history algorithms are safer than one | `KEEP (MVP core)` | access/billing | repeated policy data resolution invites drift and repeated sorting | one bounded resolver with parity proof |
 | 7 | missing membership `active` should mean active forever | `DELETE (deferred/dead)` | access | legacy compatibility was fail-open on an authorization row with zero staging dependents | deleted on staging; explicit true is schema-required and behaviorally enforced |
 | 7 | native and official MCP transports each need independent semantic truth | `KEEP (MVP core)` | capabilities | wire contracts differ; capability meaning/authority should not | shared semantic kernel, versioned adapters |
@@ -66,7 +67,6 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 
 - legacy interaction writer/link/attachment/backfill/read stack;
 - inline resource body fields and compactor;
-- duplicate membership compatibility;
 - raw retrieval query fields and legacy evidence states;
 - duplicate public Convex aliases and legacy MCP wire names;
 - standalone Workspace route/controller/UI state.

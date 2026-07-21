@@ -26,6 +26,7 @@ import {
   adjustCommunityActiveMemberCountForMembershipTransition,
   communitySubscriptionStatusGrantsAccess,
   communityUserIsBlocked,
+  getUniqueCommunityMembershipByPair,
   normalizeCommunitySubscriptionStatus,
   parseIsoMs,
   requireCommunityUserNotBlocked,
@@ -100,10 +101,11 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     if (!status) throw new Error("community_subscription_status_invalid");
     const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
-    const membership = (await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
-      .first()) as CommunityMembershipLike | null;
+    const membership = await getUniqueCommunityMembershipByPair({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
     if (!membership) throw new Error("community_membership_not_found");
     if (String(membership.accessSource ?? "").trim().toLowerCase() !== "paid_subscription") {
       throw new Error("community_membership_not_subscription");

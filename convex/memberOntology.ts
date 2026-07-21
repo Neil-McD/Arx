@@ -4,7 +4,10 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
-import { communityMembershipRowIsActive } from "./communityCore";
+import {
+  communityMembershipRowIsActive,
+  getUniqueCommunityMembershipByPair,
+} from "./communityCore";
 import {
   insertMemberFacts,
   loadMemberAccountContext,
@@ -158,10 +161,11 @@ export const confirmMemberProfileFactsForMcpInternal = internalMutation({
 });
 
 async function loadActiveMembership(ctx: any, communityId: any, userId: any) {
-  const membership = await ctx.db
-    .query("communityMemberships")
-    .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId))
-    .first();
+  const membership = await getUniqueCommunityMembershipByPair({
+    ctx,
+    communityId,
+    userId,
+  });
   return membership && communityMembershipRowIsActive(membership) ? membership : null;
 }
 

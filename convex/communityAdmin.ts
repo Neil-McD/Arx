@@ -18,6 +18,7 @@ import {
   countCanonicalCommunityMembers,
   getCommunityAndMembership,
   getActiveCommunityBlock,
+  getUniqueCommunityMembershipByPair,
   isActiveEntitlementWindow,
   listCommunityMembershipRowsForManager,
   mapCommunityMemberSettingsRow,
@@ -25,7 +26,6 @@ import {
   normalizeCommunityRoleForOutput,
   normalizeRoleAssignment,
   parseIsoMs,
-  pickMostRelevantCommunityMembership,
   requireCommunityChatAccess,
   requireCommunityModerator,
   requireCommunityManager,
@@ -732,17 +732,11 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
   nowMs: number;
   grantReason: string;
 }): Promise<{ grantedMembership: boolean }> {
-  const existingMembershipRows = (await args.ctx.db
-    .query("communityMemberships")
-    .withIndex("by_community_user", (q: any) =>
-      q
-        .eq("communityId", args.request.communityId)
-        .eq("userId", args.request.userId),
-    )
-    .collect()) as CommunityMembershipLike[];
-  const existingMembership = pickMostRelevantCommunityMembership(
-    existingMembershipRows,
-  );
+  const existingMembership = await getUniqueCommunityMembershipByPair({
+    ctx: args.ctx,
+    communityId: args.request.communityId,
+    userId: args.request.userId,
+  });
   let grantedMembershipMarker: string | null = null;
   if (!existingMembership || !communityMembershipRowIsActive(existingMembership)) {
     const restoredAccessSource =
@@ -860,22 +854,15 @@ export const listCommunityMemberships = query({
       .query("communityMemberships")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect()) as CommunityMembershipLike[];
-    const membershipRowsByCommunityId = new Map<
-      string,
-      CommunityMembershipLike[]
-    >();
+    const membershipRowsByCommunityId = new Map<string, CommunityMembershipLike>();
     for (const row of membershipRows) {
       const key = String(row.communityId);
-      const existing = membershipRowsByCommunityId.get(key);
-      if (existing) {
-        existing.push(row);
-      } else {
-        membershipRowsByCommunityId.set(key, [row]);
+      if (membershipRowsByCommunityId.has(key)) {
+        throw new Error("community_membership_pair_not_unique");
       }
+      membershipRowsByCommunityId.set(key, row);
     }
     const effectiveRows = Array.from(membershipRowsByCommunityId.values())
-      .map((rows) => pickMostRelevantCommunityMembership(rows))
-      .filter((row): row is CommunityMembershipLike => Boolean(row))
       .sort((a, b) => a.createdAt - b.createdAt);
     const ownedCommunities = (await ctx.db
       .query("communities")
@@ -1837,13 +1824,11 @@ export const blockCommunityUserInternal = internalMutation({
     if (String(community.ownerId) === String(args.targetUserId)) {
       throw new Error("community_owner_ban_forbidden");
     }
-    const targetMembershipRows = (await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_user", (q: any) =>
-        q.eq("communityId", args.communityId).eq("userId", args.targetUserId),
-      )
-      .collect()) as CommunityMembershipLike[];
-    const targetMembership = pickMostRelevantCommunityMembership(targetMembershipRows);
+    const targetMembership = await getUniqueCommunityMembershipByPair({
+      ctx,
+      communityId: args.communityId,
+      userId: args.targetUserId,
+    });
     if (targetMembership) {
       requireOwnerForAdminAuthorityChange({
         community,
@@ -2196,12 +2181,11 @@ export const leaveCommunity = mutation({
         if (String(community.ownerId) === String(args.userId)) {
           throw new Error("community_owner_cannot_leave");
         }
-        const membership = (await ctx.db
-          .query("communityMemberships")
-          .withIndex("by_community_user", (q: any) =>
-            q.eq("communityId", args.communityId).eq("userId", args.userId),
-          )
-          .first()) as CommunityMembershipLike | null;
+        const membership = await getUniqueCommunityMembershipByPair({
+          ctx,
+          communityId: args.communityId,
+          userId: args.userId,
+        });
         if (membership) {
           await endCommunitySubscriptionsForMembership({
             ctx,

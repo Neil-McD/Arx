@@ -38,7 +38,7 @@ flowchart TD
 | Polynet account/profile | `users`, profile detail and consent records by bounded concern | public user projection | authenticated actor resolver | confirmed; lifecycle incomplete |
 | Platform tier | append-history `userEntitlements` | effective tier/gate decision | latest active entitlement resolver and shared gate policy | confirmed, triplicated resolver |
 | Community identity/ownership | `communities`; owner is `ownerId` | public/funnel projection | authenticated actor plus owner resolver | confirmed |
-| Non-owner access | membership, block, access source, join request, and provider-derived subscription | capability bundle and cached member count | community access resolver | confirmed statically; duplicate-row risk |
+| Non-owner access | unique community/user membership pair, block, access source, join request, and provider-derived subscription | capability bundle and cached member count | indexed unique-pair resolver plus community access resolver | pair reads fail closed on duplicates; cached count migration remains open |
 | Payment | Stripe for settlement/subscription/payment state; Convex for verified product projections and ledgers | redirect and UI status | webhook/provider verification and idempotent lifecycle functions | confirmed static separation; outage convergence untested |
 | Community interaction | `communityInteractionRoots`, replies, blocks, attachments, embeds, moderation events | legacy chat rows/link tables are migration compatibility | interaction access/write cores | confirmed; privacy purge incomplete |
 | Direct message | conversation, participants, ordered messages | typing and read/activity projections | participant/block/rate checks | confirmed; shared account-deletion ownership defective |

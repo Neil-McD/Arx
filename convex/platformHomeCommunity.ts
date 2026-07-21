@@ -2,12 +2,11 @@ import { internal } from "./_generated/api";
 import {
   type CommunityLike,
   type CommunityJoinRequestLike,
-  type CommunityMembershipLike,
   COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
   communityMembershipRowIsActive,
+  getUniqueCommunityMembershipByPair,
   normalizeCommunityRoleForOutput,
   pickMostRelevantCommunityJoinRequest,
-  pickMostRelevantCommunityMembership,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
@@ -208,11 +207,11 @@ export async function ensurePlatformHomeCommunityMembership(args: {
     return { status: "disabled", communityId };
   }
 
-  const membershipRows = (await args.ctx.db
-    .query("communityMemberships")
-    .withIndex("by_community_user", (q: any) => q.eq("communityId", community._id).eq("userId", args.userId))
-    .collect()) as CommunityMembershipLike[];
-  const existingMembership = pickMostRelevantCommunityMembership(membershipRows);
+  const existingMembership = await getUniqueCommunityMembershipByPair({
+    ctx: args.ctx,
+    communityId: community._id,
+    userId: args.userId,
+  });
   if (existingMembership && communityMembershipRowIsActive(existingMembership)) {
     await scheduleCommunityAppGrantSeedingBestEffort({
       ctx: args.ctx,

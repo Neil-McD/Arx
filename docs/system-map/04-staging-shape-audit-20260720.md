@@ -117,7 +117,7 @@ Operational tables already show retention pressure: 257 critical audit events, 7
 | Candidate | Before | After this audit |
 | --- | --- | --- |
 | missing membership `active` compatibility | prevalence unknown | zero rows in complete staging scan; eligible for a guarded removal slice |
-| duplicate memberships | prevalence unknown | zero pairs in complete staging scan; retain concurrency proof before uniqueness redesign |
+| duplicate memberships | prevalence unknown | zero pairs before and after the staging-verified fail-closed pair-authority cutover |
 | deprecated `memberOnboarding` | prevalence unknown | zero rows; strongest schema deletion candidate |
 | auth email full-scan compatibility | unknown backlog | one email-bearing row lacks normalization; the later subject-authority slice deleted relink compatibility without requiring a data migration |
 | revoked-session prune | theoretical scale concern | table exceeds 5,000 and bounded prefix is 94% revoked; operationally material |
@@ -137,6 +137,10 @@ Pass. The audit resolved data-shape uncertainty without exposing private content
 ## Membership cutover revalidation — 2026-07-21 UTC
 
 Immediately before the explicit-active schema cutover, the same versioned read-only query was rerun against `quick-porcupine-949`. The complete result remained 69 membership rows, zero missing `active` values, zero duplicate pairs, zero multiple-active pairs, and zero inactive/revoked rows. The identical aggregate was returned after the required schema and fail-closed projections deployed successfully. No identifiers or content were returned and neither audit changed product state. This receipt authorized removal of the missing-active compatibility rule and its temporary repair mutation; it did not authorize the separate membership-uniqueness or active-member-count migrations.
+
+## Membership-pair authority cutover — 2026-07-21 UTC
+
+Before the pair-authority cutover, the versioned read-only identity/access query again scanned the complete staging membership table at `quick-porcupine-949`: 69 rows, zero duplicate pairs, zero multiple-active pairs, zero missing `active`, and zero inactive/revoked rows. The cutover replaces order-dependent duplicate selection with one indexed unique-pair resolver, preserves one activation/reactivation row, and makes duplicate input fail closed. Convex serializable mutation retries provide the concurrency boundary because the indexed pair read and possible insert remain in one mutation transaction. The identical complete aggregate was returned immediately after the exact clean changeset deployed to Dev Convex; neither query changed data or exposed identifiers/content. This closes duplicate-selection compatibility on staging. Active-member-count repair and owner-membership residue remain separate work.
 
 ## Auth-session cutover receipt — later authorized slice
 

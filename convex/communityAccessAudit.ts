@@ -11,7 +11,6 @@ import {
   communitySubscriptionStatusGrantsAccess,
   normalizeCommunitySubscriptionStatus,
   normalizeMembershipAccessSource,
-  pickMostRelevantCommunityMembership,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
 
@@ -129,9 +128,24 @@ export const listCommunityAccessStateAuditFindingsInternal = internalQuery({
         membershipsByUser.set(userId, [...(membershipsByUser.get(userId) ?? []), membership]);
       }
 
+      const uniqueMembershipByUser = new Map<string, CommunityMembershipLike | null>();
       for (const [userId, userMemberships] of membershipsByUser) {
-        const membership = pickMostRelevantCommunityMembership(userMemberships);
-        if (!membership || !communityMembershipRowIsActive(membership)) continue;
+        if (userMemberships.length !== 1) {
+          uniqueMembershipByUser.set(userId, null);
+          pushFinding(findings, community, {
+            code: "duplicate_community_membership_pair",
+            severity: "error",
+            user_id: userId,
+            details: {
+              membership_count: userMemberships.length,
+              membership_ids: userMemberships.map((row) => String(row._id)),
+            },
+          });
+          continue;
+        }
+        const membership = userMemberships[0] ?? null;
+        uniqueMembershipByUser.set(userId, membership);
+        if (!communityMembershipRowIsActive(membership)) continue;
 
         const block = activeBlockByUser.get(userId) ?? null;
         if (block && String(community.ownerId) !== userId) {
@@ -198,7 +212,7 @@ export const listCommunityAccessStateAuditFindingsInternal = internalQuery({
       for (const request of joinRequests) {
         const status = String(request.status ?? "").trim().toLowerCase();
         if (status !== "approved") continue;
-        const membership = pickMostRelevantCommunityMembership(membershipsByUser.get(String(request.userId)));
+        const membership = uniqueMembershipByUser.get(String(request.userId)) ?? null;
         if (!communityMembershipRowIsActive(membership)) {
           pushFinding(findings, community, {
             code: "approved_join_request_without_active_membership",

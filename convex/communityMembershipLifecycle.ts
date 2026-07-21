@@ -1,8 +1,8 @@
 import {
   type CommunityMembershipLike,
   communityMembershipRowIsActive,
+  getUniqueCommunityMembershipByPair,
   normalizeCommunityRoleForOutput,
-  pickMostRelevantCommunityMembership,
   syncCommunityActiveMemberCount,
 } from "./communityCore";
 import { createCommunityOnboardingSessionForActivation } from "./communityOnboardingCore";
@@ -26,13 +26,14 @@ export async function activateCommunityMembershipCore(args: {
   accessGranted: boolean;
   activationMarker: string | null;
 }> {
-  const rows = (await args.ctx.db
-    .query("communityMemberships" as any)
-    .withIndex("by_community_user", (q: any) =>
-      q.eq("communityId", args.communityId).eq("userId", args.userId),
-    )
-    .collect()) as CommunityMembershipLike[];
-  const existing = pickMostRelevantCommunityMembership(rows);
+  // Keep this indexed read in the same mutation transaction as the insert.
+  // Convex serializable retries then make concurrent activation attempts
+  // converge on the row committed by the winning transaction.
+  const existing = await getUniqueCommunityMembershipByPair({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
   if (existing && communityMembershipRowIsActive(existing)) {
     const role = args.role ?? (normalizeCommunityRoleForOutput(existing.role) || "member");
     await args.ctx.db.patch(existing._id, {

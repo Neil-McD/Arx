@@ -11,7 +11,7 @@ The bounded aggregate audit resolved or narrowed these questions for the isolate
 | U-001 | no duplicate auth subjects, normalized emails, or community slugs in complete scans |
 | U-002 | resolved by deletion: only one email-bearing user lacked normalized email, but email lookup/relink and its fallback scan were removed; index-miss frequency is no longer a runtime concern |
 | U-003 | no ambiguous latest entitlement timestamp; two users have multiple rows and one has 13 |
-| U-004 | no duplicate membership pairs; 35 communities lack cached active-member count and two owner-membership residues exist |
+| U-004 | duplicate pair authority is resolved in staging code and zero duplicate pairs remain; 35 communities still lack cached active-member count and two owner-membership residues exist |
 | U-005 | zero memberships omit `active` |
 | U-006 | one join request, status `approved` |
 | U-007 | zero stored deprecated `memberOnboarding` fields |
@@ -28,7 +28,7 @@ The bounded aggregate audit resolved or narrowed these questions for the isolate
 | U-024 | current staging is below scheduler caps; the no-cursor defect is latent |
 | U-033 | diagnostics and runtime events each exceed the 2,000-row cap; retention policy remains unknown |
 
-Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-staging-shape-audit-20260720.md). “Resolved” here means data shape observed in this staging snapshot, not a permanent invariant or production claim.
+Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-staging-shape-audit-20260720.md). “Resolved” here normally means data shape observed in this staging snapshot, not a production claim. U-004 additionally has a staging-deployed runtime invariant: pair reads fail closed and activation keeps the indexed read plus insert in one transaction.
 
 ## Identity, access, privacy, and lifecycle
 

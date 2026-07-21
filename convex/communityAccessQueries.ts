@@ -2,11 +2,10 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   type CommunityLike,
-  type CommunityMembershipLike,
   getCommunityAndMembership,
+  getUniqueCommunityMembershipByPair,
   mapCommunityAccessRow,
   normalizeSlug,
-  pickMostRelevantCommunityMembership,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 
@@ -56,11 +55,11 @@ export const getMyCommunityAccessBySlug = query({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) return null;
-    const membershipRows = (await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", userId))
-      .collect()) as CommunityMembershipLike[];
-    const membership = pickMostRelevantCommunityMembership(membershipRows);
+    const membership = await getUniqueCommunityMembershipByPair({
+      ctx,
+      communityId: community._id,
+      userId,
+    });
     return await mapCommunityAccessRow({
       ctx,
       community,

@@ -260,7 +260,7 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'revokeCommunityMemberInternal[\s\S]*?requireOwnerForAdminAuthorityChange\(\{\s*community,\s*actorUserId: userId,\s*targetMembership: membership,' \
   "member revocation requires owner for admin targets"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'blockCommunityUserInternal[\s\S]*?targetMembershipRows[\s\S]*?pickMostRelevantCommunityMembership\(targetMembershipRows\)[\s\S]*?requireOwnerForAdminAuthorityChange\(\{\s*community,\s*actorUserId: userId,\s*targetMembership,' \
+  'blockCommunityUserInternal[\s\S]*?getUniqueCommunityMembershipByPair\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.targetUserId,[\s\S]*?requireOwnerForAdminAuthorityChange\(\{\s*community,\s*actorUserId: userId,\s*targetMembership,' \
   "member ban requires owner for admin targets"
 require_no_match "$WEB_APP_FILE" \
   'filteredCommunityMembers|communityMembersRoleFilter|communityMembersPlanFilter|useCommunityMemberRosterLifecycle|loadCommunityMembers|handleShowMoreCommunityMembers' \

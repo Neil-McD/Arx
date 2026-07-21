@@ -11,9 +11,8 @@ import {
 import type { CommunityAccess } from "../shared/communityTypes";
 import {
   type CommunityLike,
-  type CommunityMembershipLike,
+  getUniqueCommunityMembershipByPair,
   mapCommunityAccessRow,
-  pickMostRelevantCommunityMembership,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 
@@ -73,13 +72,11 @@ export const resolveCommunityCapabilityContextInternal = internalQuery({
       .first()) as CommunityLike | null;
     if (!community) return { ok: false as const, code: "community_not_accessible" as const };
 
-    const membershipRows = (await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_user", (q) =>
-        q.eq("communityId", community._id).eq("userId", userId),
-      )
-      .collect()) as CommunityMembershipLike[];
-    const membership = pickMostRelevantCommunityMembership(membershipRows);
+    const membership = await getUniqueCommunityMembershipByPair({
+      ctx,
+      communityId: community._id,
+      userId,
+    });
     const access = (await mapCommunityAccessRow({
       ctx,
       community,

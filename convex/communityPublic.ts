@@ -17,10 +17,10 @@ import {
   listCanonicalCommunityMemberMembershipRows,
   mapActivePlanSummaries,
   mapJoinRequestRow,
+  getUniqueCommunityMembershipByPair,
   normalizeCommunityRoleForOutput,
   normalizeSlug,
   pickMostRelevantCommunityJoinRequest,
-  pickMostRelevantCommunityMembership,
   pickPreferredActivePlan,
   requireCommunityChatAccess,
   requireCommunityUserNotBlocked,
@@ -452,11 +452,11 @@ export const resolvePublicCommunityAccessBySlug = query({
 
     let membership: CommunityMembershipLike | null = null;
     if (userId) {
-      const membershipRows = (await ctx.db
-        .query("communityMemberships")
-        .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", userId))
-        .collect()) as CommunityMembershipLike[];
-      membership = pickMostRelevantCommunityMembership(membershipRows);
+      membership = await getUniqueCommunityMembershipByPair({
+        ctx,
+        communityId: community._id,
+        userId,
+      });
     }
 
     const access = await resolveCommunityAccessBundle({
@@ -728,11 +728,11 @@ async function joinPublicCommunityInternal(args: {
     communityId: args.community._id,
     userId: args.userId,
   });
-  const existingMembershipRows = (await args.ctx.db
-    .query("communityMemberships")
-    .withIndex("by_community_user", (q: any) => q.eq("communityId", args.community._id).eq("userId", args.userId))
-    .collect()) as CommunityMembershipLike[];
-  const existingMembership = pickMostRelevantCommunityMembership(existingMembershipRows);
+  const existingMembership = await getUniqueCommunityMembershipByPair({
+    ctx: args.ctx,
+    communityId: args.community._id,
+    userId: args.userId,
+  });
   let grantedMembershipMarker: string | null = null;
 
   const grantFreeMembership = async () => {
