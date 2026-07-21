@@ -1,4 +1,4 @@
-import { callAuthBridgeJson, isSameOriginPost, sendJson } from "./_bridge.js";
+import { callAuthBridgeJson, createAuthConvexDeadline, isSameOriginPost, sendJson } from "./_bridge.js";
 import { clearAuthSessionCookie, readAuthSessionCookie } from "./_cookies.js";
 
 const AUTH_LOGOUT_UNAVAILABLE_MESSAGE = "Sign out could not be confirmed. Please try again.";
@@ -23,10 +23,11 @@ export default async function handler(req, res) {
   const sessionCookie = readAuthSessionCookie(req);
   if (sessionCookie.status === "valid") {
     let response;
+    const deadlineAt = createAuthConvexDeadline();
     try {
       response = await callAuthBridgeJson("/runtime/auth_bridge_session_logout", {
         payload: { session_id: sessionCookie.value },
-      });
+      }, deadlineAt);
     } catch {
       sendJson(res, 503, {
         ok: false,

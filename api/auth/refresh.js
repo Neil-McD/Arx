@@ -1,4 +1,10 @@
-import { callAuthBridgeJson, isSameOriginPost, readResponseError, sendJson } from "./_bridge.js";
+import {
+  callAuthBridgeJson,
+  createAuthConvexDeadline,
+  isSameOriginPost,
+  readResponseError,
+  sendJson,
+} from "./_bridge.js";
 import { clearAuthSessionCookie, readAuthSessionCookie } from "./_cookies.js";
 
 export default async function handler(req, res) {
@@ -27,10 +33,11 @@ export default async function handler(req, res) {
   const sessionId = sessionCookie.value;
 
   let response;
+  const deadlineAt = createAuthConvexDeadline();
   try {
     response = await callAuthBridgeJson("/runtime/auth_bridge_session_refresh", {
       payload: { session_id: sessionId },
-    });
+    }, deadlineAt);
   } catch (error) {
     sendJson(res, 503, {
       ok: false,

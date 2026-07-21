@@ -1,4 +1,4 @@
-import { callRuntimeAuthJson, readResponseError } from "../_bridge.js";
+import { callRuntimeAuthJson, createAuthConvexDeadline, readResponseError } from "../_bridge.js";
 import { buildRedirectUrl, normalizeReturnToPath, setAuthFlowCookie } from "../_cookies.js";
 
 function randomBase64Url(bytes) {
@@ -47,13 +47,14 @@ export default async function handler(req, res) {
   const state = randomBase64Url(24);
 
   let response;
+  const deadlineAt = createAuthConvexDeadline();
   try {
     response = await callRuntimeAuthJson("/runtime/auth_begin_google_sign_in", {
       redirect_to: redirectTo,
       code_challenge: codeChallenge,
       code_challenge_method: "S256",
       state,
-    });
+    }, deadlineAt);
   } catch (error) {
     redirect(
       res,

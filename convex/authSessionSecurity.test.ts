@@ -23,7 +23,14 @@ import {
   setAuthFlowCookie,
   setAuthSessionCookie,
 } from "../api/auth/_cookies.js";
+import {
+  AUTH_CONVEX_RESPONSE_TIMEOUT_MS,
+  AUTH_REQUEST_TIMEOUT as AUTH_BRIDGE_REQUEST_TIMEOUT,
+  callRuntimeAuthJson,
+  createAuthConvexDeadline,
+} from "../api/auth/_bridge.js";
 import googleAuthCallback from "../api/auth/google/callback.js";
+import googleAuthStart from "../api/auth/google/start.js";
 import logoutWebSession from "../api/auth/logout.js";
 import refreshWebSession from "../api/auth/refresh.js";
 import bootstrapWebSession from "../api/auth/session.js";
@@ -219,6 +226,273 @@ describe("auth provider whole-response deadline", () => {
     });
     expect(readBody).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("Vercel auth bridge whole-response deadline", () => {
+  test("buffers one response snapshot and clears the route deadline on success", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
+    vi.stubEnv("VITE_CONVEX_SITE_URL", "https://staging-convex.test");
+    const convexResponse = new Response('{"ok":true}', {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+    const readBody = vi.spyOn(convexResponse, "text");
+    vi.stubGlobal("fetch", vi.fn(async () => convexResponse));
+
+    const response = await callRuntimeAuthJson(
+      "/runtime/auth-test",
+      {},
+      createAuthConvexDeadline(),
+    );
+
+    expect(await response.json()).toEqual({ ok: true });
+    expect(readBody).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("times out a Convex stall before headers and clears the route deadline", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
+    vi.stubEnv("VITE_CONVEX_SITE_URL", "https://staging-convex.test");
+    let convexSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        convexSignal = init?.signal ?? undefined;
+        return await new Promise<Response>(() => undefined);
+      }),
+    );
+
+    const resultPromise = callRuntimeAuthJson(
+      "/runtime/auth-test",
+      {},
+      createAuthConvexDeadline(),
+    );
+    const rejection = expect(resultPromise).rejects.toThrow(AUTH_BRIDGE_REQUEST_TIMEOUT);
+    await vi.advanceTimersByTimeAsync(AUTH_CONVEX_RESPONSE_TIMEOUT_MS);
+
+    await rejection;
+    expect(convexSignal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("times out a stalled Convex body after headers and reads it only once", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
+    vi.stubEnv("VITE_CONVEX_SITE_URL", "https://staging-convex.test");
+    let convexSignal: AbortSignal | undefined;
+    const convexResponse = new Response(null, {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+    const readBody = vi
+      .spyOn(convexResponse, "text")
+      .mockImplementation(async () => await new Promise<string>(() => undefined));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        convexSignal = init?.signal ?? undefined;
+        return convexResponse;
+      }),
+    );
+
+    const resultPromise = callRuntimeAuthJson(
+      "/runtime/auth-test",
+      {},
+      createAuthConvexDeadline(),
+    );
+    const rejection = expect(resultPromise).rejects.toThrow(AUTH_BRIDGE_REQUEST_TIMEOUT);
+    await vi.advanceTimersByTimeAsync(AUTH_CONVEX_RESPONSE_TIMEOUT_MS);
+
+    await rejection;
+    expect(convexSignal?.aborted).toBe(true);
+    expect(readBody).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("clears the route deadline after a non-timeout Convex failure", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
+    vi.stubEnv("VITE_CONVEX_SITE_URL", "https://staging-convex.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("convex unavailable");
+      }),
+    );
+
+    await expect(
+      callRuntimeAuthJson("/runtime/auth-test", {}, createAuthConvexDeadline()),
+    ).rejects.toThrow("convex unavailable");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("the OAuth callback shares one route deadline across exchange and session creation", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
+    vi.stubEnv("VITE_CONVEX_SITE_URL", "https://staging-convex.test");
+    const requestHeaders = {
+      host: "localhost:5174",
+      "x-forwarded-proto": "http",
+    };
+    const flowHarness = createNodeResponseHarness();
+    setAuthFlowCookie(flowHarness.response, { headers: requestHeaders }, {
+      state: "callback-state",
+      codeVerifier: "callback-code-verifier",
+      redirectTo: "http://localhost:5174/api/auth/google/callback",
+      returnTo: "/c/polynet/chat",
+      createdAtMs: Date.now(),
+    });
+    const flowCookie = String(flowHarness.headers.get("Set-Cookie")).split(";", 1)[0];
+    let createSignal: AbortSignal | undefined;
+    const bridgeFetch = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        if (bridgeFetch.mock.calls.length === 1) {
+          return await new Promise<Response>((resolve) => {
+            setTimeout(
+              () =>
+                resolve(
+                  new Response(
+                    JSON.stringify({
+                      access_token: "verified-access-token",
+                      refresh_token: "refresh-token",
+                      user: { id: "workos:callback-fixture" },
+                    }),
+                    { status: 200, headers: { "Content-Type": "application/json" } },
+                  ),
+                ),
+              10_000,
+            );
+          });
+        }
+        createSignal = init?.signal ?? undefined;
+        return await new Promise<Response>(() => undefined);
+      },
+    );
+    vi.stubGlobal("fetch", bridgeFetch);
+    const responseHarness = createNodeResponseHarness();
+
+    const callbackPromise = googleAuthCallback(
+      {
+        method: "GET",
+        headers: {
+          ...requestHeaders,
+          cookie: `${flowCookie}; arx-auth-session=existing-secure-session-id`,
+        },
+        query: { code: "provider-code", state: "callback-state" },
+      },
+      responseHarness.response,
+    );
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(bridgeFetch).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(createSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await callbackPromise;
+
+    expect(createSignal?.aborted).toBe(true);
+    expect(responseHarness.response.statusCode).toBe(302);
+    expect(String(responseHarness.headers.get("Location"))).toContain(
+      `error_description=${AUTH_BRIDGE_REQUEST_TIMEOUT}`,
+    );
+    const setCookie = String(responseHarness.headers.get("Set-Cookie"));
+    expect(setCookie).toContain("arx-auth-flow=");
+    expect(setCookie).toContain("Max-Age=0");
+    expect(setCookie).not.toContain("arx-auth-session=");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("OAuth start timeout does not create flow or session credentials", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
+    vi.stubEnv("VITE_CONVEX_SITE_URL", "https://staging-convex.test");
+    vi.stubGlobal("fetch", vi.fn(async () => await new Promise<Response>(() => undefined)));
+    const harness = createNodeResponseHarness();
+
+    const startPromise = googleAuthStart(
+      {
+        method: "GET",
+        headers: { host: "localhost:5174", "x-forwarded-proto": "http" },
+        query: { return_to: "/c/polynet/chat" },
+      },
+      harness.response,
+    );
+    await vi.advanceTimersByTimeAsync(AUTH_CONVEX_RESPONSE_TIMEOUT_MS);
+    await startPromise;
+
+    expect(harness.response.statusCode).toBe(302);
+    expect(String(harness.headers.get("Location"))).toContain("error=auth_start_failed");
+    expect(String(harness.headers.get("Location"))).toContain(
+      `error_description=${AUTH_BRIDGE_REQUEST_TIMEOUT}`,
+    );
+    expect(harness.headers.has("Set-Cookie")).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("bootstrap and refresh timeouts preserve an existing browser credential", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
+    vi.stubEnv("VITE_CONVEX_SITE_URL", "https://staging-convex.test");
+
+    for (const route of [
+      { handler: bootstrapWebSession, method: "GET" },
+      { handler: refreshWebSession, method: "POST" },
+    ]) {
+      vi.stubGlobal("fetch", vi.fn(async () => await new Promise<Response>(() => undefined)));
+      const harness = createNodeResponseHarness();
+      const routePromise = route.handler(
+        {
+          method: route.method,
+          headers: {
+            host: "localhost:5174",
+            origin: "http://localhost:5174",
+            "x-forwarded-proto": "http",
+            cookie: "arx-auth-session=existing-secure-session-id",
+          },
+        },
+        harness.response,
+      );
+      await vi.advanceTimersByTimeAsync(AUTH_CONVEX_RESPONSE_TIMEOUT_MS);
+      await routePromise;
+
+      expect(harness.response.statusCode).toBe(503);
+      expect(harness.readJson()).toMatchObject({
+        ok: false,
+        error: AUTH_BRIDGE_REQUEST_TIMEOUT,
+      });
+      expect(harness.headers.has("Set-Cookie")).toBe(false);
+      expect(vi.getTimerCount()).toBe(0);
+    }
+  });
+
+  test("logout timeout remains retryable and preserves the browser credential", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
+    vi.stubEnv("VITE_CONVEX_SITE_URL", "https://staging-convex.test");
+    vi.stubGlobal("fetch", vi.fn(async () => await new Promise<Response>(() => undefined)));
+
+    const logoutPromise = invokeWebLogoutWithCookie();
+    await vi.advanceTimersByTimeAsync(AUTH_CONVEX_RESPONSE_TIMEOUT_MS);
+    const harness = await logoutPromise;
+
+    expect(harness.response.statusCode).toBe(503);
+    expect(harness.readJson()).toMatchObject({
+      ok: false,
+      code: "auth_logout_unavailable",
+    });
+    expect(harness.headers.has("Set-Cookie")).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("auth functions retain a platform ceiling above the application deadline", async () => {
+    const config = await import("../vercel.json");
+    expect(AUTH_BRIDGE_REQUEST_TIMEOUT).toBe(AUTH_REQUEST_TIMEOUT);
+    expect(config.default.functions["api/auth/**/*.js"].maxDuration).toBe(25);
+    expect(config.default.functions["api/auth/**/*.js"].maxDuration * 1_000).toBeGreaterThan(
+      AUTH_CONVEX_RESPONSE_TIMEOUT_MS,
+    );
   });
 });
 

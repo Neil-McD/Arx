@@ -12,7 +12,7 @@ browser -> same-origin auth bridge -> OAuth provider -> verified Convex identity
 
 - Authority: verified provider identity and actor resolver; cookie is only an opaque pointer.
 - Good: verified subject is the sole account-binding authority; secure random credentials are stored only as hashes; one absolutely expiring row refreshes in place under a single-owner lease; logout revokes locally before provider cleanup.
-- Gaps: outer browser-to-Vercel and Vercel-to-Convex deadlines plus bounded routine-success diagnostics remain; account deletion is safely unavailable until its resumable lifecycle exists. Convex-to-provider PKCE/refresh headers and bodies are now bounded by one deadline, and malformed session/flow cookies clear before any bridge effect.
+- Gaps: the outer browser-to-Vercel deadline plus bounded routine-success diagnostics remain; account deletion is safely unavailable until its resumable lifecycle exists. Convex-to-provider PKCE/refresh and Vercel-to-Convex auth headers and bodies are bounded by whole-response deadlines, the two-call callback shares one route budget, and malformed session/flow cookies clear before any bridge effect.
 - Recovery receipt: auth/session retention is indexed, bounded, and self-continuing; account deletion still lacks resumable phase receipts.
 
 ## 2. Founder creates and manages a community

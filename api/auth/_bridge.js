@@ -2,6 +2,13 @@ function readEnv(name) {
   return String(process.env?.[name] ?? "").trim();
 }
 
+export const AUTH_CONVEX_RESPONSE_TIMEOUT_MS = 15_000;
+export const AUTH_REQUEST_TIMEOUT = "auth_request_timeout";
+
+export function createAuthConvexDeadline(nowMs = Date.now()) {
+  return nowMs + AUTH_CONVEX_RESPONSE_TIMEOUT_MS;
+}
+
 function trimTrailingSlashes(value) {
   return String(value ?? "").replace(/\/+$/, "");
 }
@@ -90,27 +97,75 @@ export function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
-export async function callRuntimeAuthJson(routePath, payload) {
-  const url = buildRuntimeUrl(routePath);
-  if (!url) throw new Error("Missing Convex runtime URL.");
-  return await fetch(url, {
-    method: "POST",
-    headers: buildBridgeHeaders(),
-    body: JSON.stringify(payload ?? {}),
+async function fetchAuthConvexResponse(url, init, deadlineAt) {
+  const remainingMs = deadlineAt - Date.now();
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
+    throw new Error(AUTH_REQUEST_TIMEOUT);
+  }
+
+  const controller = new AbortController();
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error(AUTH_REQUEST_TIMEOUT));
+    }, remainingMs);
   });
+
+  try {
+    const response = await Promise.race([
+      fetch(url, { ...init, signal: controller.signal }),
+      timeout,
+    ]);
+    const bodyText = await Promise.race([response.text(), timeout]);
+    const body = [204, 205, 304].includes(response.status) ? null : bodyText;
+    return new Response(body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-export async function callAuthBridgeJson(routePath, params = {}) {
+export async function callRuntimeAuthJson(
+  routePath,
+  payload,
+  deadlineAt = createAuthConvexDeadline(),
+) {
+  const url = buildRuntimeUrl(routePath);
+  if (!url) throw new Error("Missing Convex runtime URL.");
+  return await fetchAuthConvexResponse(
+    url,
+    {
+      method: "POST",
+      headers: buildBridgeHeaders(),
+      body: JSON.stringify(payload ?? {}),
+    },
+    deadlineAt,
+  );
+}
+
+export async function callAuthBridgeJson(
+  routePath,
+  params = {},
+  deadlineAt = createAuthConvexDeadline(),
+) {
   const url = buildRuntimeUrl(routePath);
   if (!url) throw new Error("Missing Convex runtime URL.");
   const headers = buildBridgeHeaders({
     accessToken: params.accessToken ?? "",
   });
-  return await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(params.payload ?? {}),
-  });
+  return await fetchAuthConvexResponse(
+    url,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify(params.payload ?? {}),
+    },
+    deadlineAt,
+  );
 }
 
 function asObject(value) {

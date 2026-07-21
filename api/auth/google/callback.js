@@ -1,6 +1,7 @@
 import {
   callAuthBridgeJson,
   callRuntimeAuthJson,
+  createAuthConvexDeadline,
   extractAccessTokenFromAuthPayload,
   readResponseError,
 } from "../_bridge.js";
@@ -61,13 +62,14 @@ export default async function handler(req, res) {
     return;
   }
 
+  const deadlineAt = createAuthConvexDeadline();
   let exchangeResponse;
   try {
     exchangeResponse = await callRuntimeAuthJson("/runtime/auth_exchange_pkce_code", {
       auth_code: authCode,
       code_verifier: pending.codeVerifier,
       redirect_to: pending.redirectTo,
-    });
+    }, deadlineAt);
   } catch (error) {
     await redirectWithError(error instanceof Error ? error.message : "Auth exchange failed.");
     return;
@@ -98,7 +100,7 @@ export default async function handler(req, res) {
       payload: {
         payload,
       },
-    });
+    }, deadlineAt);
   } catch (error) {
     await redirectWithError(error instanceof Error ? error.message : "Auth session creation failed.");
     return;
