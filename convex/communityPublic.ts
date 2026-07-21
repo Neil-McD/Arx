@@ -35,10 +35,8 @@ import { findAuthenticatedActorState } from "./authActor";
 import { resolveCommunityFunnelConfigByCommunityId } from "./communityFunnel";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
-  clearPlatformHomeCommunityAutojoinOptOut,
-  isPlatformHomeAutojoinOptOutRequest,
   isPlatformHomeCommunity,
-  readPlatformHomeAutojoinOptOut,
+  platformHomeMembershipRequiresReapproval,
 } from "./platformHomeCommunity";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { hashBusinessVisitorKey } from "./businessAnalyticsCore";
@@ -773,13 +771,6 @@ async function joinPublicCommunityInternal(args: {
       nowMs: args.nowMs,
       reason: "already_active_public_join",
     });
-    if (isPlatformHomeCommunity({ communitySlug: args.community.slug })) {
-      await clearPlatformHomeCommunityAutojoinOptOut({
-        ctx: args.ctx,
-        communityId: args.community._id,
-        userId: args.userId,
-      });
-    }
     return {
       outcome: "joined",
       community_id: String(args.community._id),
@@ -795,62 +786,39 @@ async function joinPublicCommunityInternal(args: {
     .trim()
     .toLowerCase();
 
-  const platformHomeAutojoinOptOut = isPlatformHomeCommunity({
-    communitySlug: args.community.slug,
-  })
-    ? await readPlatformHomeAutojoinOptOut({
-        ctx: args.ctx,
-        communityId: args.community._id,
-        userId: args.userId,
-      })
-    : null;
-  if (platformHomeAutojoinOptOut?.kind === "removed") {
-    const explicitJoinRequest = pickMostRelevantCommunityJoinRequest(
-      joinRequestRows.filter(
-        (row) => !isPlatformHomeAutojoinOptOutRequest(row),
-      ),
-    );
-    const explicitStatus = String(explicitJoinRequest?.status ?? "")
-      .trim()
-      .toLowerCase();
-    if (explicitStatus === "pending") {
+  const platformHomeRequiresReapproval =
+    isPlatformHomeCommunity({ communitySlug: args.community.slug }) &&
+    platformHomeMembershipRequiresReapproval(existingMembership);
+  if (platformHomeRequiresReapproval && joinRequestStatus !== "approved") {
+    if (joinRequestStatus === "pending") {
       return {
         outcome: "approval_pending",
         community_id: String(args.community._id),
       };
     }
-    if (explicitStatus === "approved") {
-      await clearPlatformHomeCommunityAutojoinOptOut({
-        ctx: args.ctx,
-        communityId: args.community._id,
-        userId: args.userId,
-      });
-    } else if (
-      !communityJoinRequestCanReapply(
-        platformHomeAutojoinOptOut.request,
-        args.nowMs,
-      )
+    if (
+      joinRequestStatus === "denied" &&
+      !communityJoinRequestCanReapply(joinRequest, args.nowMs)
     ) {
       return {
         outcome: "approval_denied",
         community_id: String(args.community._id),
         reapply_at:
-          typeof platformHomeAutojoinOptOut.request.reapplyAt === "number"
-            ? toIsoString(platformHomeAutojoinOptOut.request.reapplyAt)
+          typeof joinRequest?.reapplyAt === "number"
+            ? toIsoString(joinRequest.reapplyAt)
             : null,
       };
-    } else {
-      await ensurePendingCommunityJoinRequest({
-        ctx: args.ctx,
-        communityId: args.community._id,
-        userId: args.userId,
-        nowMs: args.nowMs,
-      });
-      return {
-        outcome: "approval_pending",
-        community_id: String(args.community._id),
-      };
     }
+    await ensurePendingCommunityJoinRequest({
+      ctx: args.ctx,
+      communityId: args.community._id,
+      userId: args.userId,
+      nowMs: args.nowMs,
+    });
+    return {
+      outcome: "approval_pending",
+      community_id: String(args.community._id),
+    };
   }
 
   const entryPolicy = resolveCommunityEntryPolicy(args.community);
@@ -921,13 +889,6 @@ async function joinPublicCommunityInternal(args: {
       userId: args.userId,
       nowMs: args.nowMs,
       reason: "public_join_granted",
-    });
-  }
-  if (isPlatformHomeCommunity({ communitySlug: args.community.slug })) {
-    await clearPlatformHomeCommunityAutojoinOptOut({
-      ctx: args.ctx,
-      communityId: args.community._id,
-      userId: args.userId,
     });
   }
   return {

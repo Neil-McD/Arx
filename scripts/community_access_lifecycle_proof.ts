@@ -28,6 +28,10 @@ function assertIncludes(haystack: string, needle: string, label: string) {
   assert.ok(haystack.includes(needle), `expected ${label} to include ${needle}`);
 }
 
+function assertExcludes(haystack: string, needle: string, label: string) {
+  assert.ok(!haystack.includes(needle), `expected ${label} to exclude ${needle}`);
+}
+
 function subscriptionGrantsAccess(status: SubscriptionStatus | null): boolean {
   return status === "active" || status === "past_due" || status === "cancel_at_period_end";
 }
@@ -105,6 +109,7 @@ function assertSourceAnchors() {
   const communityCore = readText(new URL("../convex/communityCore.ts", import.meta.url));
   const billingCore = readText(new URL("../convex/billingCore.ts", import.meta.url));
   const audit = readText(new URL("../convex/communityAccessAudit.ts", import.meta.url));
+  const platformHome = readText(new URL("../convex/platformHomeCommunity.ts", import.meta.url));
 
   assertIncludes(communityPublic, "outcome: \"paid_plan_required\"", "paid public join must route to checkout");
   assertIncludes(communityAdmin, "community_paid_checkout_required", "paid approval must be rejected");
@@ -112,7 +117,9 @@ function assertSourceAnchors() {
   assertIncludes(billingCore, "String(checkoutSession.status ?? \"\").trim().toLowerCase() !== \"complete\"", "claim redemption requires complete checkout");
   assertIncludes(billingCore, "await requireCommunityUserNotBlocked({", "claim redemption rejects blocked users");
   assertIncludes(communityAdmin, "revokedReason:", "manager removal keeps revoked membership evidence");
-  assertIncludes(communityAdmin, "await ctx.db.delete(membership._id as any);", "member leave deletes own membership row intentionally");
+  assertIncludes(communityAdmin, "PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON", "platform-home leave keeps inactive membership intent");
+  assertIncludes(platformHome, "platformHomeMembershipDisablesAutojoin", "platform-home bootstrap respects inactive membership intent");
+  assertExcludes(platformHome, "platform_home_autojoin_opt_out", "platform-home preference no longer overloads join requests");
   assertIncludes(audit, "active_membership_with_active_block", "state audit checks active block drift");
   assertIncludes(audit, "active_paid_membership_without_granting_subscription", "state audit checks paid subscription drift");
   assertIncludes(audit, "approved_join_request_without_active_membership", "state audit checks approved request drift");

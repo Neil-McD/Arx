@@ -39,10 +39,8 @@ import { readCanonicalAccountTier } from "./accountEntitlementCore";
 import { logStructuredError } from "./errorLogging";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
-  clearPlatformHomeCommunityAutojoinOptOut,
-  isPlatformHomeAutojoinOptOutRequest,
   isPlatformHomeCommunity,
-  upsertPlatformHomeCommunityAutojoinOptOut,
+  PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
 } from "./platformHomeCommunity";
 import { getStripeClient } from "./stripeCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
@@ -766,13 +764,6 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
     reapplyAt: undefined,
     updatedAt: args.nowMs,
   });
-  if (isPlatformHomeCommunity({ communitySlug: args.community?.slug })) {
-    await clearPlatformHomeCommunityAutojoinOptOut({
-      ctx: args.ctx,
-      communityId: args.request.communityId,
-      userId: args.request.userId,
-    });
-  }
   if (grantedMembershipMarker) {
     await scheduleCommunityAppGrantSeedingBestEffort({
       ctx: args.ctx,
@@ -1308,7 +1299,6 @@ export const listCommunityJoinRequests = query({
     const userIdCache = new Map<string, string | null>();
     return await Promise.all(
       rows
-        .filter((row) => !isPlatformHomeAutojoinOptOutRequest(row))
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, limit)
         .map(async (row) => ({
@@ -1644,15 +1634,6 @@ export const revokeCommunityMemberInternal = internalMutation({
             reapplyAt: nowMs + COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
             createdAt: nowMs,
             updatedAt: nowMs,
-          });
-        }
-        if (isPlatformHomeCommunity({ communitySlug: community.slug })) {
-          await upsertPlatformHomeCommunityAutojoinOptOut({
-            ctx,
-            communityId: args.communityId,
-            userId: membership.userId,
-            nowMs,
-            kind: "removed",
           });
         }
         return { ok: true };
@@ -2179,19 +2160,55 @@ export const leaveCommunity = mutation({
           communityId: args.communityId,
           userId: args.userId,
         });
+        const platformHome = isPlatformHomeCommunity({ communitySlug: community.slug });
+        if (!membership && platformHome) {
+          throw new Error("community_membership_not_found");
+        }
+        if (membership && !communityMembershipRowIsActive(membership)) {
+          if (
+            platformHome &&
+            String(membership.revokedReason ?? "").trim() ===
+              PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON
+          ) {
+            return { ok: true };
+          }
+          throw new Error("community_membership_inactive");
+        }
         if (membership) {
           await endCommunitySubscriptionsForMembership({
             ctx,
             membershipId: membership._id,
             nowMs,
           });
-          await ctx.db.delete(membership._id as any);
-          await adjustCommunityActiveMemberCountForMembershipTransition({
-            ctx,
-            communityId: args.communityId,
-            before: membership,
-            after: null,
-          });
+          if (platformHome) {
+            const inactiveMembership = {
+              ...membership,
+              active: false,
+              revokedAt: nowMs,
+              revokedReason: PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
+              updatedAt: nowMs,
+            } as CommunityMembershipLike;
+            await ctx.db.patch(membership._id as any, {
+              active: false,
+              revokedAt: nowMs,
+              revokedReason: PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
+              updatedAt: nowMs,
+            });
+            await adjustCommunityActiveMemberCountForMembershipTransition({
+              ctx,
+              communityId: args.communityId,
+              before: membership,
+              after: inactiveMembership,
+            });
+          } else {
+            await ctx.db.delete(membership._id as any);
+            await adjustCommunityActiveMemberCountForMembershipTransition({
+              ctx,
+              communityId: args.communityId,
+              before: membership,
+              after: null,
+            });
+          }
         }
         const memberSettings = (await ctx.db
           .query("communityMemberSettings" as any)
@@ -2210,15 +2227,6 @@ export const leaveCommunity = mutation({
           .first()) as CommunityJoinRequestLike | null;
         if (joinRequest) {
           await ctx.db.delete(joinRequest._id as any);
-        }
-        if (isPlatformHomeCommunity({ communitySlug: community.slug })) {
-          await upsertPlatformHomeCommunityAutojoinOptOut({
-            ctx,
-            communityId: args.communityId,
-            userId: args.userId,
-            nowMs,
-            kind: "left",
-          });
         }
         return { ok: true };
       },

@@ -35,8 +35,13 @@ assert.match(
 );
 assert.match(
   homeCommunity,
-  /PLATFORM_HOME_AUTOJOIN_OPT_OUT_MESSAGE[\s\S]*readPlatformHomeAutojoinOptOut/,
-  "canonical Polynet auto-membership must preserve explicit member opt-out",
+  /getUniqueCommunityMembershipByPair[\s\S]*platformHomeMembershipDisablesAutojoin[\s\S]*status: "disabled"/,
+  "canonical Polynet auto-membership must preserve inactive relationship intent",
+);
+assert.doesNotMatch(
+  homeCommunity,
+  /platform_home_autojoin_opt_out|communityJoinRequests/,
+  "platform-home autojoin must not overload join requests with preference state",
 );
 assert.match(
   backend,
