@@ -7292,6 +7292,12 @@ export default function App() {
   >({
     getSession: () => sessionRef.current,
     getCurrentPublicCommunitySlug: () => publicCommunityUi.publicCommunity?.slug ?? null,
+    getCurrentPublicFunnelSlug: () =>
+      shellPublicRoute.kind === "community_funnel" ||
+      shellPublicRoute.kind === "community_funnel_preview"
+        ? shellPublicRoute.slug
+        : null,
+    getCurrentAuthSubject: () => canonicalSessionUserId,
     ensureSession: ensureUsableAuthSession,
     ...sessionArg,
     requireSignIn,
@@ -7311,6 +7317,7 @@ export default function App() {
     setPublicJoinError: publicCommunityUi.setPublicJoinError,
     setPublicCommunity: publicCommunityUi.setPublicCommunity,
     setPublicCommunityAccess: publicCommunityUi.setPublicCommunityAccess,
+    setPublicCommunityAccessResolution: publicCommunityUi.setPublicCommunityAccessResolution,
     setIsLoadingPublicCommunity: publicCommunityUi.setIsLoadingPublicCommunity,
     setPublicCommunityError: publicCommunityUi.setPublicCommunityError,
     setPublicCommunityPlans: publicCommunityUi.setPublicCommunityPlans,
@@ -7855,6 +7862,7 @@ export default function App() {
     selectedPublicCommunityPlan,
     publicVisibilityLabel,
     resolvedPublicCommunity,
+    publicCommunityAdmissionStatus,
     canEnterPublicCommunity,
     canJoinForFree,
     canJoinWithApproval,
@@ -7868,13 +7876,19 @@ export default function App() {
     publicCommunity: publicCommunityUi.publicCommunity,
     publicCommunityPlans: publicCommunityUi.publicCommunityPlans,
     publicCommunityAccess: publicCommunityUi.publicCommunityAccess,
+    publicCommunityAccessResolution: publicCommunityUi.publicCommunityAccessResolution,
+    authSubject: canonicalSessionUserId,
     isSignedIn: Boolean(session),
-    /* Re-fire the funnel load only when signed-in status flips — not on every
-       session object identity change, which re-hammered the load (and the
-       expensive stats query) and blinked the right panel. */
-    sessionDependency: Boolean(session),
+    /* Re-fire only when the authenticated principal changes. Token refreshes
+       preserve the subject and must not re-hammer the public funnel queries. */
+    sessionDependency: canonicalSessionUserId,
     loadPublicCommunity,
   });
+  useEffect(() => {
+    if (publicCommunityAdmissionStatus === "ready") return;
+    setIsBridgeGateOpen(false);
+    setBridgePendingEntry(null);
+  }, [publicCommunityAdmissionStatus]);
   /* Visitor lens: locked shell-nav tabs reopen the join gate on the funnel
      surface (nonce bump crosses the shell/surface boundary). */
   const [visitorGateNonce, setVisitorGateNonce] = useState(0);
@@ -9390,6 +9404,7 @@ export default function App() {
     readPendingPurchaseClaimToken();
   const handlePublicLandingPrimaryAction = () => {
     if (isPublicFunnelPreviewRoute) return;
+    if (publicCommunityAdmissionStatus !== "ready") return;
     if (!publicCommunityUi.publicCommunity) return;
     if (canEnterPublicCommunity && publicCommunityUi.publicCommunityAccess?.community_id) {
       enterCommunityThroughBridge({
@@ -9436,6 +9451,7 @@ export default function App() {
     void redeemPurchaseClaim(token);
   };
   const handleCancelPendingPublicJoinRequest = () => {
+    if (publicCommunityAdmissionStatus !== "ready") return;
     const slug = publicCommunityUi.publicCommunity?.slug ?? publicFunnelSlug ?? "";
     if (!slug || !approvalPending) return;
     void cancelMyPendingJoinRequest(slug);
@@ -10984,6 +11000,11 @@ export default function App() {
     });
     publicCommunityUi.setPublicCommunityPlans(opts.community.active_plan ? [opts.community.active_plan] : []);
     publicCommunityUi.setPublicCommunityAccess(null);
+    publicCommunityUi.setPublicCommunityAccessResolution({
+      status: "not_required",
+      communitySlug: null,
+      authSubject: null,
+    });
     publicCommunityUi.setPublicCommunityError(null);
     publicCommunityUi.setPublicJoinError(null);
     publicCommunityUi.setIsLoadingPublicCommunity(true);
@@ -11471,6 +11492,7 @@ export default function App() {
         : null,
       hasSelectedPublicCommunityPlan: Boolean(selectedPublicCommunityPlan),
       isLoadingPublicCommunity: publicCommunityUi.isLoadingPublicCommunity,
+      admissionStatus: publicCommunityAdmissionStatus,
       canEnterCommunity: canEnterPublicCommunity,
       canJoinForFree,
       canJoinWithApproval,
@@ -11494,6 +11516,7 @@ export default function App() {
            (join/enter/claim), never on arrival. */
         !isPublicFunnelPreviewRoute &&
         session &&
+        publicCommunityAdmissionStatus === "ready" &&
         resolvedPublicCommunity &&
         effectiveAccountSetupStatus &&
         !effectiveAccountSetupStatus.completed &&

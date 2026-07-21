@@ -40,7 +40,6 @@ export type CommunityLike = {
 
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityAccessRelation = "visitor" | "pending" | "member" | "moderator" | "admin" | "owner";
-export type CommunityPrimaryCta = "open_community" | "join" | "checkout";
 
 export type CommunityMembershipLike = {
   _id: any;
@@ -1187,12 +1186,6 @@ export async function resolveCommunityAccessBundle(args: {
   const canManagePublishing = isOwner;
   const canManagePayouts = isOwner;
   const canPostMessage = isEntitled;
-  const primaryCta: CommunityPrimaryCta = isEntitled
-    ? "open_community"
-    : entryPolicy === "paid_subscription"
-      ? "checkout"
-      : "join";
-
   return {
     community_id: String(args.community._id),
     user_id: (await resolvePublicUserId(args.ctx, args.userId)) ?? String(args.userId),
@@ -1201,7 +1194,6 @@ export async function resolveCommunityAccessBundle(args: {
     visibility: args.community.visibility,
     join_request_status: joinRequestStatus,
     join_request_reapply_at: joinRequestReapplyAt !== null ? toIsoString(joinRequestReapplyAt) : null,
-    primary_cta: primaryCta,
     is_owner: isOwner,
     is_entitled: isEntitled,
     is_blocked: isBlocked,

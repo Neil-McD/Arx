@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { PublicCommunityAccessResolution } from "../communityJoinPolicy";
 
 export function useWebPublicCommunityUiController<
   PublicCommunityT,
@@ -8,6 +9,12 @@ export function useWebPublicCommunityUiController<
   const [publicCommunity, setPublicCommunity] = useState<PublicCommunityT | null>(null);
   const [publicCommunityPlans, setPublicCommunityPlans] = useState<PublicPlanT[]>([]);
   const [publicCommunityAccess, setPublicCommunityAccess] = useState<PublicCommunityAccessT | null>(null);
+  const [publicCommunityAccessResolution, setPublicCommunityAccessResolution] =
+    useState<PublicCommunityAccessResolution>({
+      status: "not_required",
+      communitySlug: null,
+      authSubject: null,
+    });
   const [publicCommunityError, setPublicCommunityError] = useState<string | null>(null);
   const [isLoadingPublicCommunity, setIsLoadingPublicCommunity] = useState(false);
   const [isJoiningPublicCommunity, setIsJoiningPublicCommunity] = useState(false);
@@ -21,6 +28,8 @@ export function useWebPublicCommunityUiController<
     setPublicCommunityPlans,
     publicCommunityAccess,
     setPublicCommunityAccess,
+    publicCommunityAccessResolution,
+    setPublicCommunityAccessResolution,
     publicCommunityError,
     setPublicCommunityError,
     isLoadingPublicCommunity,

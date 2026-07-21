@@ -89,6 +89,7 @@ function access(overrides: Partial<CommunityAccess> = {}): CommunityAccess {
     visibility: "published",
     is_owner: false,
     is_entitled: true,
+    is_blocked: false,
     entitlement_role: "member",
     entitlement_ends_at: null,
     effective_role: "member",

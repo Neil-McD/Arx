@@ -235,9 +235,9 @@ export type CommunityAccess = {
   visibility?: "published" | "unlisted";
   join_request_status?: "pending" | "denied" | null;
   join_request_reapply_at?: string | null;
-  primary_cta?: "open_community" | "join" | "checkout";
   is_owner: boolean;
   is_entitled: boolean;
+  is_blocked: boolean;
   access_source?: "free_grant" | "manual_grant" | "paid_subscription" | null;
   subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
   entitlement_role: string | null;

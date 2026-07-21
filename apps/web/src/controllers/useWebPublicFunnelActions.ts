@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import {
   classifyPublicCommunityJoinError, clearPendingPublicJoin, getErrorMessage, joinPublicCommunityRpc, storePendingPublicJoin, } from "../../../../shared/pay_first";
 import type { PendingAuthIntentInput } from "../../../../shared/authResumeState";
@@ -15,8 +15,14 @@ import {
 } from "../../../../shared/cloudPublicFunnelGateway";
 import { preloadImageUrls } from "../../../../shared/preloadImageUrls";
 import { applyShellVariantToPublicPath, readShellVariantFromPathname } from "../../../../shared/webAppRouteState";
+import { resolveAuthSubject } from "../../../../shared/authSession";
 import type { AuthSession } from "../auth";
 import type { CommunityBillingPeriod } from "../../../../shared/communityTypes";
+import {
+  isPublicCommunityLoadSnapshotCurrent,
+  type PublicCommunityAccessResolution,
+  type PublicCommunityLoadSnapshot,
+} from "../communityJoinPolicy";
 
 type UseWebPublicFunnelActionsArgs<
   PublicCommunityT extends {
@@ -41,6 +47,8 @@ type UseWebPublicFunnelActionsArgs<
 > = {
   getSession: () => AuthSession | null;
   getCurrentPublicCommunitySlug: () => string | null;
+  getCurrentPublicFunnelSlug: () => string | null;
+  getCurrentAuthSubject: () => string | null;
   session: AuthSession | null;
   ensureSession?: (session: AuthSession | null) => Promise<AuthSession | null>;
   requireSignIn: (intentInput: PendingAuthIntentInput) => void;
@@ -53,6 +61,7 @@ type UseWebPublicFunnelActionsArgs<
   setPublicJoinError: Dispatch<SetStateAction<string | null>>;
   setPublicCommunity: Dispatch<SetStateAction<PublicCommunityT | null>>;
   setPublicCommunityAccess: Dispatch<SetStateAction<CommunityAccessT | null>>;
+  setPublicCommunityAccessResolution: Dispatch<SetStateAction<PublicCommunityAccessResolution>>;
 
   setIsLoadingPublicCommunity: Dispatch<SetStateAction<boolean>>;
   setPublicCommunityError: Dispatch<SetStateAction<string | null>>;
@@ -68,6 +77,7 @@ type CommunityAccessRow = {
   relation?: "visitor" | "pending" | "member" | "moderator" | "admin" | "owner" | null;
   can_enter_community?: boolean;
   is_owner: boolean;
+  is_blocked: boolean;
   join_request_status?: "pending" | "denied" | null;
   join_request_reapply_at?: string | null;
 };
@@ -100,10 +110,8 @@ export function useWebPublicFunnelActions<
   >,
 ) {
   const argsRef = useRef(args);
-
-  useEffect(() => {
-    argsRef.current = args;
-  }, [args]);
+  argsRef.current = args;
+  const publicCommunityLoadGenerationRef = useRef(0);
 
   const applyApprovalJoinState = useCallback(
     (opts: {
@@ -367,9 +375,34 @@ export function useWebPublicFunnelActions<
   );
 
   const loadPublicCommunity = useCallback(
-    async (slug: string, opts?: { recordVisit?: boolean }): Promise<void> => {
+    async (
+      slug: string,
+      opts?: { recordVisit?: boolean; isPreviewMode?: boolean },
+    ): Promise<void> => {
       const requestedSlug = slug.trim();
       if (!requestedSlug) return;
+      const routeSlug = String(argsRef.current.getCurrentPublicFunnelSlug() ?? "").trim();
+      if (routeSlug !== requestedSlug) return;
+
+      const generation = ++publicCommunityLoadGenerationRef.current;
+      const authSubject = String(argsRef.current.getCurrentAuthSubject() ?? "").trim() || null;
+      const hadSession = Boolean(argsRef.current.getSession());
+      const isPreviewMode = opts?.isPreviewMode === true;
+      const snapshot: PublicCommunityLoadSnapshot = {
+        generation,
+        communitySlug: requestedSlug,
+        authSubject,
+      };
+      const snapshotIsCurrent = (): boolean =>
+        isPublicCommunityLoadSnapshotCurrent({
+          snapshot,
+          current: {
+            generation: publicCommunityLoadGenerationRef.current,
+            communitySlug: String(argsRef.current.getCurrentPublicFunnelSlug() ?? "").trim(),
+            authSubject: String(argsRef.current.getCurrentAuthSubject() ?? "").trim() || null,
+          },
+        });
+
       const current = argsRef.current;
       const currentSlug = current.getCurrentPublicCommunitySlug();
       const isSameSlugRefresh = currentSlug === requestedSlug;
@@ -377,8 +410,27 @@ export function useWebPublicFunnelActions<
       current.setIsLoadingPublicCommunity(true);
       current.setPublicCommunityError(null);
       current.setPublicJoinError(null);
+      current.setPublicCommunityAccess(null);
+      if (isPreviewMode || !hadSession) {
+        current.setPublicCommunityAccessResolution({
+          status: "not_required",
+          communitySlug: null,
+          authSubject: null,
+        });
+      } else if (!authSubject) {
+        current.setPublicCommunityAccessResolution({
+          status: "unavailable",
+          communitySlug: requestedSlug,
+          authSubject: null,
+        });
+      } else {
+        current.setPublicCommunityAccessResolution({
+          status: "verifying",
+          communitySlug: requestedSlug,
+          authSubject,
+        });
+      }
       if (!isSameSlugRefresh) {
-        current.setPublicCommunityAccess(null);
         current.setPublicCommunity(null);
         current.setPublicCommunityPlans([]);
       }
@@ -387,6 +439,7 @@ export function useWebPublicFunnelActions<
           communitySlug: requestedSlug,
         });
         if (!payload?.community?.slug) throw new Error("Community not found.");
+        if (!snapshotIsCurrent()) return;
 
         const revealImageUrls = [
           payload.community.avatar_url ?? null,
@@ -397,6 +450,7 @@ export function useWebPublicFunnelActions<
             : null,
         ];
         await preloadImageUrls(revealImageUrls, { maxUrls: 8, timeoutMs: 1500 });
+        if (!snapshotIsCurrent()) return;
 
         const loadedCommunity = payload.community;
         const resolvedSlug = loadedCommunity.slug;
@@ -404,7 +458,7 @@ export function useWebPublicFunnelActions<
            stats are folded in by the async fetches below, and a bare replace on
            any re-fire would drop them for a beat — that is the panel flicker.
            (Same additive pattern the stats/memory merges use.) */
-        current.setPublicCommunity((prev) =>
+        argsRef.current.setPublicCommunity((prev) =>
           prev && prev.slug === resolvedSlug
             ? ({
                 ...prev,
@@ -416,12 +470,12 @@ export function useWebPublicFunnelActions<
                 visibility: toCanonicalCommunityVisibility(loadedCommunity.visibility, "unlisted"),
               } as PublicCommunityT),
         );
-        current.setPublicCommunityPlans(payload.active_plan ? [payload.active_plan] : []);
-        current.setIsLoadingPublicCommunity(false);
+        argsRef.current.setPublicCommunityPlans(payload.active_plan ? [payload.active_plan] : []);
+        argsRef.current.setIsLoadingPublicCommunity(false);
 
         if (opts?.recordVisit !== false) {
           void recordCloudPublicFunnelVisit<AuthSession>({
-            session: current.getSession(),
+            session: argsRef.current.getSession(),
             communitySlug: resolvedSlug,
           }).catch((error) => {
             console.warn("Failed to record public funnel visit:", error);
@@ -432,9 +486,10 @@ export function useWebPublicFunnelActions<
           communitySlug: resolvedSlug,
         })
           .then((statsPayload) => {
+            if (!snapshotIsCurrent()) return;
             const stats = statsPayload?.community as Partial<PublicCommunityT> | undefined;
             if (!stats) return;
-            current.setPublicCommunity((prev) =>
+            argsRef.current.setPublicCommunity((prev) =>
               prev && prev.slug === resolvedSlug
                 ? ({ ...prev, ...stats } as PublicCommunityT)
                 : prev,
@@ -448,8 +503,9 @@ export function useWebPublicFunnelActions<
           communitySlug: resolvedSlug,
         })
           .then((overviewPayload) => {
+            if (!snapshotIsCurrent()) return;
             if (!overviewPayload?.ok || !overviewPayload.overview) return;
-            current.setPublicCommunity((prev) =>
+            argsRef.current.setPublicCommunity((prev) =>
               prev && prev.slug === resolvedSlug
                 ? ({ ...prev, memory_overview: overviewPayload.overview } as PublicCommunityT)
                 : prev,
@@ -459,38 +515,69 @@ export function useWebPublicFunnelActions<
             console.warn("Failed to resolve public community memory overview:", error);
           });
 
+        if (isPreviewMode || !hadSession) return;
+        if (!authSubject) {
+          if (!snapshotIsCurrent()) return;
+          argsRef.current.setPublicCommunityError(
+            "You are signed in, but Polynet could not verify your identity. Sign in again and retry.",
+          );
+          return;
+        }
+
         void (async () => {
-          const rawSession = current.getSession();
-          const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
-          if (session) {
-            try {
-              const access = await fetchCloudMyCommunityAccessBySlug<AuthSession, CommunityAccessT>({
-                session,
-                communitySlug: resolvedSlug,
-              });
-              if (current.getCurrentPublicCommunitySlug() !== resolvedSlug) return;
-              current.setPublicCommunityAccess(access);
-            } catch (error) {
-              if (current.getCurrentPublicCommunitySlug() !== resolvedSlug) return;
-              current.setPublicCommunityAccess(null);
-              current.setPublicCommunityError(
-                "You are signed in, but Polynet could not verify your community access. Refresh and try again.",
-              );
-              console.warn("Failed to verify signed-in community access:", error);
+          try {
+            const latest = argsRef.current;
+            const rawSession = latest.getSession();
+            const session = latest.ensureSession ? await latest.ensureSession(rawSession) : rawSession;
+            if (!snapshotIsCurrent()) return;
+            if (!session) throw new Error("auth_session_unavailable");
+            if (resolveAuthSubject(session) !== authSubject) return;
+
+            const access = await fetchCloudMyCommunityAccessBySlug<AuthSession, CommunityAccessT>({
+              session,
+              communitySlug: resolvedSlug,
+            });
+            if (!snapshotIsCurrent()) return;
+            if (!access || typeof access.is_blocked !== "boolean") {
+              throw new Error("community_access_contract_invalid");
             }
-          } else if (current.getCurrentPublicCommunitySlug() === resolvedSlug) {
-            current.setPublicCommunityAccess(null);
+            argsRef.current.setPublicCommunityAccess(access);
+            argsRef.current.setPublicCommunityAccessResolution({
+              status: "ready",
+              communitySlug: requestedSlug,
+              authSubject,
+            });
+          } catch (error) {
+            if (!snapshotIsCurrent()) return;
+            argsRef.current.setPublicCommunityAccess(null);
+            argsRef.current.setPublicCommunityAccessResolution({
+              status: "unavailable",
+              communitySlug: requestedSlug,
+              authSubject,
+            });
+            argsRef.current.setPublicCommunityError(
+              "You are signed in, but Polynet could not verify your community access. Refresh and try again.",
+            );
+            console.warn("Failed to verify signed-in community access:", error);
           }
         })();
       } catch (error) {
+        if (!snapshotIsCurrent()) return;
         const message =
           typeof error === "string"
             ? error
             : error instanceof Error
               ? error.message
               : "Failed to load community.";
-        current.setPublicCommunityError(message);
-        current.setIsLoadingPublicCommunity(false);
+        argsRef.current.setPublicCommunityError(message);
+        argsRef.current.setIsLoadingPublicCommunity(false);
+        if (!isPreviewMode && hadSession && authSubject) {
+          argsRef.current.setPublicCommunityAccessResolution({
+            status: "unavailable",
+            communitySlug: requestedSlug,
+            authSubject,
+          });
+        }
       }
     },
     [],

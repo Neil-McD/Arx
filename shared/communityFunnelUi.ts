@@ -21,7 +21,15 @@ export type CommunityFunnelUiFaceLike = {
   avatar_zoom?: number | null;
 };
 
-export type CommunityFunnelUiMode = "enter" | "join" | "request_access" | "checkout" | "private";
+export type CommunityFunnelUiMode =
+  | "enter"
+  | "join"
+  | "request_access"
+  | "checkout"
+  | "private"
+  | "verifying"
+  | "blocked"
+  | "unavailable";
 
 export function getCommunityInitials(name: string): string {
   return (
@@ -89,6 +97,15 @@ export function buildCommunityFunnelCopy(mode: CommunityFunnelUiMode): {
   }
   if (mode === "join") {
     return { eyebrow: "Open access", body: "Enter immediately and start participating." };
+  }
+  if (mode === "verifying") {
+    return { eyebrow: "Checking access", body: "Confirming your community access." };
+  }
+  if (mode === "blocked") {
+    return { eyebrow: "Access unavailable", body: "This account cannot access this community." };
+  }
+  if (mode === "unavailable") {
+    return { eyebrow: "Access unavailable", body: "Polynet could not verify your access. Refresh and try again." };
   }
   return { eyebrow: "Private community", body: "Reach out to the owner for access." };
 }

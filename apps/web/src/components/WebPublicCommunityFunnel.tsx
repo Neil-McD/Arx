@@ -5,12 +5,14 @@ import {
   buildCommunityFunnelActionCardArt,
   buildCommunityFunnelCopy,
   filterOnlineAvatarFaces,
+  type CommunityFunnelUiMode,
 } from "../../../../shared/communityFunnelUi";
+import type { PublicCommunityAdmissionStatus } from "../communityJoinPolicy";
 import type { ComponentProps } from "react";
 import type { WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
 import { WebCommunityVisitorSurface } from "./WebCommunityVisitorSurface";
 
-type FunnelMode = "enter" | "join" | "request_access" | "checkout" | "private";
+type FunnelMode = CommunityFunnelUiMode;
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 type MagicLinkStatus = "idle" | "sending" | "sent";
 
@@ -84,6 +86,7 @@ type WebPublicCommunityFunnelProps = {
   selectedPublicCommunityPlanLabel: string | null;
   hasSelectedPublicCommunityPlan: boolean;
   isLoadingPublicCommunity: boolean;
+  admissionStatus: PublicCommunityAdmissionStatus;
   canEnterCommunity: boolean;
   canJoinForFree: boolean;
   canJoinWithApproval: boolean;
@@ -111,11 +114,13 @@ type WebPublicCommunityFunnelProps = {
 };
 
 function deriveFunnelMode(args: {
+  admissionStatus: PublicCommunityAdmissionStatus;
   canEnterCommunity: boolean;
   canJoinWithCheckout: boolean;
   canJoinWithApproval: boolean;
   canJoinForFree: boolean;
 }): FunnelMode {
+  if (args.admissionStatus !== "ready") return args.admissionStatus;
   if (args.canEnterCommunity) return "enter";
   if (args.canJoinWithCheckout) return "checkout";
   if (args.canJoinWithApproval) return "request_access";
@@ -140,6 +145,8 @@ function buildPrimaryActionLabel(args: {
     return "Join now";
   }
   if (args.mode === "join") return args.isJoiningPublicCommunity ? "Joining…" : "Join now";
+  if (args.mode === "verifying") return "Verifying access…";
+  if (args.mode === "blocked" || args.mode === "unavailable") return "Access unavailable";
   return "Private community";
 }
 
@@ -163,6 +170,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     selectedPublicCommunityPlanLabel,
     hasSelectedPublicCommunityPlan,
     isLoadingPublicCommunity,
+    admissionStatus,
     canEnterCommunity,
     canJoinForFree,
     canJoinWithApproval,
@@ -198,13 +206,17 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   const pricingLabel = isFreePricing ? "FREE" : selectedPublicCommunityPlanLabel;
 
   const funnelMode = deriveFunnelMode({
+    admissionStatus,
     canEnterCommunity,
     canJoinWithCheckout,
     canJoinWithApproval,
     canJoinForFree,
   });
   const funnelCopy = buildCommunityFunnelCopy(funnelMode);
-  const cardBlurb = publicCommunity?.one_liner ?? funnelCopy.body;
+  const cardBlurb =
+    admissionStatus === "ready"
+      ? publicCommunity?.one_liner ?? funnelCopy.body
+      : funnelCopy.body;
   const primaryActionLabel = buildPrimaryActionLabel({
     mode: funnelMode,
     isJoiningPublicCommunity,
@@ -215,6 +227,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   });
   const isPrimaryActionDisabled =
     isPreviewMode ||
+    admissionStatus !== "ready" ||
     !publicCommunity ||
     checkoutStatus === "loading" ||
     isJoiningPublicCommunity ||
