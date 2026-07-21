@@ -240,8 +240,8 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMembershipCreatedAtRows = query\([\s\S]*?listCommunityMembershipRowsForManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
   "listCommunityMembershipCreatedAtRows delegates through manager helper"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityJoinRequests = query\([\s\S]*?withIndex\("by_community_status_createdAt", \(q: any\) =>[\s\S]*?q\.eq\("communityId", args\.communityId\)\.eq\("status", status\)[\s\S]*?\.order\("desc"\)[\s\S]*?\.take\(limit\)' \
-  "listCommunityJoinRequests reads join requests by community status creation order"
+  'export const listCommunityJoinRequests = query\([\s\S]*?withIndex\("by_community_status_createdAt", \(q: any\) =>[\s\S]*?q\.eq\("communityId", args\.communityId\)\.eq\("status", "pending"\)[\s\S]*?\.order\("desc"\)[\s\S]*?\.take\(limit\)' \
+  "listCommunityJoinRequests reads only pending requests by community status creation order"
 require_block_no_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityJoinRequests = query' \
   '^\}\);' \

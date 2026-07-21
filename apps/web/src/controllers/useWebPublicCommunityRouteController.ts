@@ -19,7 +19,6 @@ type PublicCommunityLike = {
 type PublicJoinRequestLike = {
   status: string;
   reapply_at?: string | null;
-  denied_until?: string | null;
 };
 
 type PublicCommunityAccessLike = {
@@ -90,11 +89,7 @@ export function useWebPublicCommunityRouteController<
   const approvalDenied = !canEnterPublicCommunity && myJoinRequestStatus === "denied";
   const approvalReapplyAtIso = !approvalDenied
     ? null
-    : String(
-        params.myPublicCommunityJoinRequest?.reapply_at ??
-          params.myPublicCommunityJoinRequest?.denied_until ??
-          "",
-      ).trim() || null;
+    : String(params.myPublicCommunityJoinRequest?.reapply_at ?? "").trim() || null;
   const approvalReapplyAtMs =
     approvalReapplyAtIso && Number.isFinite(Date.parse(approvalReapplyAtIso))
       ? Date.parse(approvalReapplyAtIso)

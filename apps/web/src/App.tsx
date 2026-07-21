@@ -1224,9 +1224,6 @@ type CommunityJoinRequest = {
   message: string | null;
   created_at: string;
   updated_at: string;
-  decided_at: string | null;
-  decided_by: string | null;
-  denied_until: string | null;
 };
 
 type MyCommunityJoinRequest = {
@@ -1235,7 +1232,6 @@ type MyCommunityJoinRequest = {
   updated_at: string;
   denied_at?: string | null;
   reapply_at?: string | null;
-  denied_until?: string | null;
 };
 
 function normalizeCommunityEventsMonthIso(raw: string | null | undefined): string {

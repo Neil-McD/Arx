@@ -1261,7 +1261,6 @@ export const listCommunityJoinRequests = query({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     limit: v.optional(v.number()),
-    includeStatuses: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -1275,45 +1274,26 @@ export const listCommunityJoinRequests = query({
       communityId: args.communityId,
       userId: args.userId,
     });
-    const statuses = Array.from(new Set(
-      (args.includeStatuses ?? ["pending"]).map((status) =>
-        String(status ?? "")
-          .trim()
-          .toLowerCase(),
-      ),
-    ));
     const limit = Math.max(1, Math.min(5000, Math.floor(args.limit ?? 200)));
-    const rows = (
-      await Promise.all(
-        statuses.map(async (status) =>
-          (await ctx.db
-            .query("communityJoinRequests")
-            .withIndex("by_community_status_createdAt", (q: any) =>
-              q.eq("communityId", args.communityId).eq("status", status),
-            )
-            .order("desc")
-            .take(limit)) as CommunityJoinRequestLike[],
-        ),
+    const rows = (await ctx.db
+      .query("communityJoinRequests")
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("status", "pending"),
       )
-    ).flat();
+      .order("desc")
+      .take(limit)) as CommunityJoinRequestLike[];
     const userIdCache = new Map<string, string | null>();
     return await Promise.all(
-      rows
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, limit)
-        .map(async (row) => ({
-          id: String(row._id),
-          user_id:
-            (await resolvePublicUserId(ctx, row.userId, userIdCache)) ??
-            String(row.userId),
-          message: row.message ?? null,
-          status:
-            String(row.status ?? "")
-              .trim()
-              .toLowerCase() || "pending",
-          created_at: toIsoString(row.createdAt),
-          updated_at: toIsoString(row.updatedAt),
-        })),
+      rows.map(async (row) => ({
+        id: String(row._id),
+        user_id:
+          (await resolvePublicUserId(ctx, row.userId, userIdCache)) ??
+          String(row.userId),
+        message: row.message ?? null,
+        status: "pending",
+        created_at: toIsoString(row.createdAt),
+        updated_at: toIsoString(row.updatedAt),
+      })),
     );
   },
 });

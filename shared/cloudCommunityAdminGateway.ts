@@ -1394,7 +1394,6 @@ export async function listCloudCommunityJoinRequestRows<SessionT, TJoinRequest =
     authSubject,
     communityId: params.communityId,
     limit: 201,
-    includeStatuses: ["pending"],
   });
   return coerceGatewayRows<TJoinRequest>(payload);
 }

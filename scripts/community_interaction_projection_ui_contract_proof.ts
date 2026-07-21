@@ -611,8 +611,28 @@ assert.match(
 );
 assert.match(
   adminGateway,
-  /approved_pending_request_count\?: number;[\s\S]*pending_request_overflow\?: boolean;[\s\S]*listCommunityJoinRequests[\s\S]*limit: 201,[\s\S]*includeStatuses: \["pending"\]/,
+  /approved_pending_request_count\?: number;[\s\S]*pending_request_overflow\?: boolean;[\s\S]*listCommunityJoinRequests[\s\S]*limit: 201,/,
   "admin gateway should fetch one extra pending request so the context rail can honestly show 200+ without an exact count query",
+);
+assert.doesNotMatch(
+  adminGateway,
+  /includeStatuses/,
+  "admin gateway should not select join-request states; the backend owns the pending-only queue",
+);
+assert.match(
+  communityAdmin,
+  /listCommunityJoinRequests = query\(\{[\s\S]*\.eq\("communityId", args\.communityId\)\.eq\("status", "pending"\)[\s\S]*\.order\("desc"\)[\s\S]*\.take\(limit\)/,
+  "join-request review should be one bounded pending-only indexed query",
+);
+assert.doesNotMatch(
+  sectionBetween(
+    communityAdmin,
+    "export const listCommunityJoinRequests = query({",
+    "export const approveCommunityJoinRequest = mutation({",
+    "pending join-request review query",
+  ),
+  /includeStatuses|Promise\.all\(\s*statuses\.map|\.sort\(/,
+  "join-request review should not retain caller-selected status fan-out or redundant sorting",
 );
 assert.match(
   contextPanel,
@@ -669,10 +689,21 @@ assert.match(
   /approveCommunityJoinRequest = mutation\(\{[\s\S]*requestId: v\.id\("communityJoinRequests"\)[\s\S]*ctx\.db\.get\(args\.requestId\)/,
   "approve join request should validate request ids as communityJoinRequests ids",
 );
+const freeAccessApprovalHelper = sectionBetween(
+  communityAdmin,
+  "async function approveCommunityJoinRequestForFreeAccess(args: {",
+  "async function approvePendingJoinRequestsForOpenAccessBatch(args: {",
+  "free-access join-request approval helper",
+);
+assert.match(
+  freeAccessApprovalHelper,
+  /activateCommunityMembershipCore\(\{[\s\S]*scheduleCommunityAppGrantSeedingBestEffort\(\{[\s\S]*enqueueCommunityAccessGrantedEmailInternal\(\{/,
+  "free-access approval should activate canonical membership, seed app grants, and enqueue access email",
+);
 assert.match(
   communityAdmin,
-  /approveCommunityJoinRequestForFreeAccess[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition[\s\S]*enqueueCommunityAccessGrantedEmailInternal[\s\S]*approveCommunityJoinRequest = mutation\(\{[\s\S]*approveCommunityJoinRequestForFreeAccess\(\{[\s\S]*grantReason: "join_request_approved"/,
-  "manual join-request approval should use the shared free-access approval helper so membership, counts, app grants, and emails stay canonical",
+  /approveCommunityJoinRequest = mutation\(\{[\s\S]*approveCommunityJoinRequestForFreeAccess\(\{[\s\S]*grantReason: "join_request_approved"/,
+  "manual join-request approval should delegate to the shared free-access approval helper",
 );
 assert.match(
   communityAdmin,

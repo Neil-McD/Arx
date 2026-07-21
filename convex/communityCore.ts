@@ -1158,7 +1158,6 @@ export function mapJoinRequestRow(args: {
     updated_at: toIsoString(args.row.updatedAt),
     denied_at: deniedAt !== null ? toIsoString(deniedAt) : null,
     reapply_at: reapplyAt !== null ? toIsoString(reapplyAt) : null,
-    denied_until: reapplyAt !== null ? toIsoString(reapplyAt) : null,
   };
 }
 

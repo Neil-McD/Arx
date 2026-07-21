@@ -112,7 +112,6 @@ export function useWebPublicFunnelActions<
       communityId?: string | null;
       communitySlug?: string | null;
       reapplyAt?: string | null;
-      deniedUntil?: string | null;
     }) => {
       const current = argsRef.current;
       current.setPublicJoinError(null);
@@ -121,7 +120,6 @@ export function useWebPublicFunnelActions<
         status: opts.status,
         updated_at: new Date().toISOString(),
         reapply_at: opts.reapplyAt ?? null,
-        denied_until: opts.deniedUntil ?? opts.reapplyAt ?? null,
       } as unknown as MyCommunityJoinRequestT);
       current.setPublicCommunity((prev) =>
         prev
