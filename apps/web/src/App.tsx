@@ -1225,14 +1225,6 @@ type CommunityJoinRequest = {
   updated_at: string;
 };
 
-type MyCommunityJoinRequest = {
-  community_id: string;
-  status: string;
-  updated_at: string;
-  denied_at?: string | null;
-  reapply_at?: string | null;
-};
-
 function normalizeCommunityEventsMonthIso(raw: string | null | undefined): string {
   const date = raw ? new Date(raw) : new Date();
   const normalized = Number.isFinite(date.getTime()) ? date : new Date();
@@ -2116,8 +2108,7 @@ export default function App() {
   const publicCommunityUi = useWebPublicCommunityUiController<
     PublicCommunityRecord,
     PublicPlanSummary,
-    CommunityAccess,
-    MyCommunityJoinRequest
+    CommunityAccess
   >();
   const billingUi = useWebBillingUiController<
     AccountCommerceStatus,
@@ -7297,8 +7288,7 @@ export default function App() {
   } = useWebPublicFunnelActions<
     PublicCommunityRecord,
     PublicPlanSummary,
-    CommunityAccess,
-    MyCommunityJoinRequest
+    CommunityAccess
   >({
     getSession: () => sessionRef.current,
     getCurrentPublicCommunitySlug: () => publicCommunityUi.publicCommunity?.slug ?? null,
@@ -7321,8 +7311,6 @@ export default function App() {
     setPublicJoinError: publicCommunityUi.setPublicJoinError,
     setPublicCommunity: publicCommunityUi.setPublicCommunity,
     setPublicCommunityAccess: publicCommunityUi.setPublicCommunityAccess,
-    setIsLoadingMyPublicCommunityJoinRequest: publicCommunityUi.setIsLoadingMyPublicCommunityJoinRequest,
-    setMyPublicCommunityJoinRequest: publicCommunityUi.setMyPublicCommunityJoinRequest,
     setIsLoadingPublicCommunity: publicCommunityUi.setIsLoadingPublicCommunity,
     setPublicCommunityError: publicCommunityUi.setPublicCommunityError,
     setPublicCommunityPlans: publicCommunityUi.setPublicCommunityPlans,
@@ -7875,12 +7863,11 @@ export default function App() {
     approvalDenied,
     canRequestAgain,
     approvalReapplyLabel,
-  } = useWebPublicCommunityRouteController<PublicCommunityRecord, MyCommunityJoinRequest>({
+  } = useWebPublicCommunityRouteController<PublicCommunityRecord>({
     publicRoute: shellPublicRoute,
     publicCommunity: publicCommunityUi.publicCommunity,
     publicCommunityPlans: publicCommunityUi.publicCommunityPlans,
     publicCommunityAccess: publicCommunityUi.publicCommunityAccess,
-    myPublicCommunityJoinRequest: publicCommunityUi.myPublicCommunityJoinRequest,
     isSignedIn: Boolean(session),
     /* Re-fire the funnel load only when signed-in status flips — not on every
        session object identity change, which re-hammered the load (and the
@@ -10999,8 +10986,6 @@ export default function App() {
     publicCommunityUi.setPublicCommunityAccess(null);
     publicCommunityUi.setPublicCommunityError(null);
     publicCommunityUi.setPublicJoinError(null);
-    publicCommunityUi.setMyPublicCommunityJoinRequest(null);
-    publicCommunityUi.setIsLoadingMyPublicCommunityJoinRequest(false);
     publicCommunityUi.setIsLoadingPublicCommunity(true);
     setCheckoutError(null);
     setCheckoutStatus("idle");
@@ -11494,8 +11479,6 @@ export default function App() {
       isJoiningPublicCommunity: publicCommunityUi.isJoiningPublicCommunity,
       isCancellingPublicCommunityJoinRequest:
         publicCommunityUi.isCancellingPublicCommunityJoinRequest,
-      isLoadingMyPublicCommunityJoinRequest:
-        publicCommunityUi.isLoadingMyPublicCommunityJoinRequest,
       approvalPending,
       approvalDenied,
       canRequestAgain,

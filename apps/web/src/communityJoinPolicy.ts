@@ -1,6 +1,17 @@
 export type CommunityFunnelAction = "join" | "request_access" | "checkout";
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityMembersJoinReviewMode = "paid" | "free_auto" | "free_approval";
+export type CommunityJoinRequestStatus = "pending" | "denied";
+
+export type PublicCommunityAdmissionProjection = {
+  canEnterCommunity: boolean;
+  joinRequestStatus: CommunityJoinRequestStatus | null;
+  approvalPending: boolean;
+  approvalDenied: boolean;
+  approvalReapplyAtIso: string | null;
+  approvalReapplyAtMs: number | null;
+  canRequestAgain: boolean;
+};
 
 export function isCommunityEntryPolicy(value: unknown): value is CommunityEntryPolicy {
   return value === "open" || value === "approval" || value === "paid_subscription";
@@ -26,4 +37,52 @@ export function deriveCommunityMembersJoinReviewMode(args: {
     return "free_auto";
   }
   return "free_approval";
+}
+
+export function derivePublicCommunityAdmissionProjection(args: {
+  access?: {
+    can_enter_community?: boolean;
+    is_owner?: boolean;
+    join_request_status?: unknown;
+    join_request_reapply_at?: unknown;
+  } | null;
+  isPreviewMode?: boolean;
+  nowMs?: number;
+}): PublicCommunityAdmissionProjection {
+  const isPreviewMode = args.isPreviewMode === true;
+  const canEnterCommunity = !isPreviewMode && Boolean(
+    args.access && (args.access.can_enter_community || args.access.is_owner),
+  );
+  const rawStatus = !isPreviewMode && !canEnterCommunity
+    ? args.access?.join_request_status
+    : null;
+  const joinRequestStatus: CommunityJoinRequestStatus | null =
+    rawStatus === "pending" || rawStatus === "denied" ? rawStatus : null;
+  const approvalPending = joinRequestStatus === "pending";
+  const approvalDenied = joinRequestStatus === "denied";
+  const rawReapplyAt = approvalDenied ? args.access?.join_request_reapply_at : null;
+  const approvalReapplyAtIso =
+    typeof rawReapplyAt === "string" && rawReapplyAt.trim()
+      ? rawReapplyAt.trim()
+      : null;
+  const parsedReapplyAtMs = approvalReapplyAtIso
+    ? Date.parse(approvalReapplyAtIso)
+    : Number.NaN;
+  const approvalReapplyAtMs = Number.isFinite(parsedReapplyAtMs)
+    ? parsedReapplyAtMs
+    : null;
+  const nowMs = Number.isFinite(args.nowMs) ? Number(args.nowMs) : Date.now();
+  return {
+    canEnterCommunity,
+    joinRequestStatus,
+    approvalPending,
+    approvalDenied,
+    approvalReapplyAtIso,
+    approvalReapplyAtMs,
+    canRequestAgain: Boolean(
+      approvalDenied &&
+        approvalReapplyAtMs !== null &&
+        approvalReapplyAtMs <= nowMs,
+    ),
+  };
 }

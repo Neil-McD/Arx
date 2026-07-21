@@ -68,3 +68,15 @@ The expectation-locked mutation deleted exactly that one `approved` row. The sec
 | Robustness | 9 | malformed state is rejected; activation always cleans residual admission state |
 
 The next dependency-ordered cleanup target is no longer join admission. Resume Step 4 only for separately bounded identity/access risks, or move to the next highest causal item in the roadmap after a fresh ground-truth review.
+
+## Public funnel projection closure
+
+The final duplicate projection is deleted in the subsequent staging source slice:
+
+- `getMyCommunityAccessBySlug` is the only authenticated public-funnel read for access and admission state;
+- `join_request_status` and `join_request_reapply_at` are part of that access bundle;
+- the separate `getMyJoinRequestBySlug` query, mapper, `communityExperience.ts` and `community.ts` aliases, cloud gateway, React state, loading state, type, and unused component prop are deleted;
+- initial load, post-mutation confirmation, cancellation confirmation, and lost-response reconciliation all converge through the same access bundle;
+- route changes reject stale join/cancel results, preview mode ignores both owner access and request state, and unknown request state fails closed in the frontend projection.
+
+The focused admission suite now contains 42 passing tests: the 37 persisted membership/platform-home/join-request tests plus five access-projection tests for pending, denied cooldown, elapsed reapplication, entry precedence, preview isolation, and malformed state. The community-admin guard makes the deleted public query and duplicate frontend state forbidden source shapes.

@@ -9,6 +9,7 @@ cd "$ROOT_DIR"
 echo "== Community admin contract guard =="
 
 COMMUNITY_FILE="convex/community.ts"
+COMMUNITY_EXPERIENCE_FILE="convex/communityExperience.ts"
 COMMUNITY_ADMIN_FILE="convex/communityAdmin.ts"
 COMMUNITY_CORE_FILE="convex/communityCore.ts"
 COMMUNITY_JOIN_REQUEST_CORE_FILE="convex/communityJoinRequestCore.ts"
@@ -21,12 +22,17 @@ PLATFORM_HOME_COMMUNITY_FILE="convex/platformHomeCommunity.ts"
 SCHEMA_FILE="convex/schema.ts"
 ADMIN_GATEWAY_FILE="shared/cloudCommunityAdminGateway.ts"
 MEMBERSHIP_GATEWAY_FILE="shared/cloudCommunityMembershipGateway.ts"
+PUBLIC_FUNNEL_GATEWAY_FILE="shared/cloudPublicFunnelGateway.ts"
 WEB_APP_FILE="apps/web/src/App.tsx"
 WEB_BASE_CSS_FILE="apps/web/src/base.css"
+WEB_PUBLIC_FUNNEL_FILE="apps/web/src/components/WebPublicCommunityFunnel.tsx"
 WEB_CONTEXT_PANEL_FILE="apps/web/src/components/CommunityContextPanel.tsx"
 WEB_MEMBER_DIALOG_FILE="apps/web/src/components/CommunityMemberSettingsDialog.tsx"
 WEB_INTERACTION_PROJECTION_FILE="apps/web/src/components/WebCommunityInteractionProjection.tsx"
 WEB_JOIN_REQUESTS_CONTROLLER_FILE="apps/web/src/controllers/useWebCommunityJoinRequestsController.ts"
+WEB_PUBLIC_FUNNEL_ACTIONS_FILE="apps/web/src/controllers/useWebPublicFunnelActions.ts"
+WEB_PUBLIC_ROUTE_CONTROLLER_FILE="apps/web/src/controllers/useWebPublicCommunityRouteController.ts"
+WEB_PUBLIC_UI_CONTROLLER_FILE="apps/web/src/controllers/useWebPublicCommunityUiController.ts"
 ADMIN_CONTROLLER_FILE="shared/useCommunityAdminController.ts"
 
 if [[ ! -f "$COMMUNITY_FILE" ]]; then
@@ -268,11 +274,30 @@ require_block_no_match "$COMMUNITY_CORE_FILE" \
   '^\};' \
   'message' \
   "join-request persistence type does not retain the deleted applicant message field"
-require_block_no_match "$COMMUNITY_CORE_FILE" \
-  'export function mapJoinRequestRow' \
-  '^\}' \
-  'message' \
-  "public join-request payload does not project the deleted applicant message field"
+for file in \
+  "$COMMUNITY_FILE" \
+  "$COMMUNITY_EXPERIENCE_FILE" \
+  "$COMMUNITY_PUBLIC_FILE" \
+  "$PUBLIC_FUNNEL_GATEWAY_FILE" \
+  "$WEB_APP_FILE" \
+  "$WEB_PUBLIC_FUNNEL_ACTIONS_FILE"; do
+  require_no_match "$file" \
+    'getMyJoinRequestBySlug|fetchCloudMyJoinRequestBySlug' \
+    "duplicate public join-request projection is absent from $file"
+done
+require_no_match "$COMMUNITY_CORE_FILE" \
+  'mapJoinRequestRow' \
+  "duplicate public join-request mapper is deleted"
+for file in \
+  "$WEB_APP_FILE" \
+  "$WEB_PUBLIC_FUNNEL_FILE" \
+  "$WEB_PUBLIC_FUNNEL_ACTIONS_FILE" \
+  "$WEB_PUBLIC_ROUTE_CONTROLLER_FILE" \
+  "$WEB_PUBLIC_UI_CONTROLLER_FILE"; do
+  require_no_match "$file" \
+    'MyCommunityJoinRequest|myPublicCommunityJoinRequest|isLoadingMyPublicCommunityJoinRequest' \
+    "duplicate frontend join-request state is absent from $file"
+done
 require_block_no_match "$WEB_APP_FILE" \
   'type CommunityJoinRequest = \{' \
   '^\};' \

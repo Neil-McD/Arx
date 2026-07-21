@@ -91,7 +91,6 @@ type WebPublicCommunityFunnelProps = {
   checkoutStatus: CheckoutStatus;
   isJoiningPublicCommunity: boolean;
   isCancellingPublicCommunityJoinRequest: boolean;
-  isLoadingMyPublicCommunityJoinRequest: boolean;
   approvalPending: boolean;
   approvalDenied: boolean;
   canRequestAgain: boolean;
@@ -171,7 +170,6 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     checkoutStatus,
     isJoiningPublicCommunity,
     isCancellingPublicCommunityJoinRequest,
-    isLoadingMyPublicCommunityJoinRequest,
     approvalPending,
     approvalDenied,
     canRequestAgain,

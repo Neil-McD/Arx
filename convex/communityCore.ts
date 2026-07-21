@@ -1096,23 +1096,6 @@ export async function resolveCommunityMembershipEntitlementState(args: {
   };
 }
 
-export function mapJoinRequestRow(args: {
-  communityId: string;
-  row: CommunityJoinRequestLike;
-}) {
-  const status = assertCanonicalCommunityJoinRequest(args.row);
-  const deniedAt = typeof args.row.deniedAt === "number" ? args.row.deniedAt : null;
-  const reapplyAt = status === "denied" ? args.row.reapplyAt! : null;
-  return {
-    community_id: args.communityId,
-    status,
-    created_at: toIsoString(args.row.createdAt),
-    updated_at: toIsoString(args.row.updatedAt),
-    denied_at: deniedAt !== null ? toIsoString(deniedAt) : null,
-    reapply_at: reapplyAt !== null ? toIsoString(reapplyAt) : null,
-  };
-}
-
 export async function requireCommunityChatAccess(args: {
   ctx: any;
   communityId: any;

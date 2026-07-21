@@ -132,7 +132,6 @@ import {
   deleteCommunityResourceModule as deleteCommunityResourceModuleImpl,
   getMyCommunityAccess as getMyCommunityAccessImpl,
   getMyCommunityAccessBySlug as getMyCommunityAccessBySlugImpl,
-  getMyJoinRequestBySlug as getMyJoinRequestBySlugImpl,
   joinPublicCommunity as joinPublicCommunityImpl,
   joinPublicCommunityBySlug as joinPublicCommunityBySlugImpl,
   listCommunityResourceBuilderDirectory as listCommunityResourceBuilderDirectoryImpl,
@@ -261,7 +260,6 @@ export const resolvePublicFunnelBySlug = resolvePublicFunnelBySlugImpl;
 export const resolvePublicFunnelStatsBySlug = resolvePublicFunnelStatsBySlugImpl;
 export const listPublicDiscoverCommunities = listPublicDiscoverCommunitiesImpl;
 export const heartbeatCommunityPresence = heartbeatCommunityPresenceImpl;
-export const getMyJoinRequestBySlug = getMyJoinRequestBySlugImpl;
 export const joinPublicCommunityBySlug = joinPublicCommunityBySlugImpl;
 export const joinPublicCommunity = joinPublicCommunityImpl;
 export const cancelMyJoinRequestBySlug = cancelMyJoinRequestBySlugImpl;

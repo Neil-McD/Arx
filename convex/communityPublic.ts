@@ -14,7 +14,6 @@ import {
   countCanonicalCommunityMembersFromRows,
   listCanonicalCommunityMemberMembershipRows,
   mapActivePlanSummaries,
-  mapJoinRequestRow,
   getUniqueCommunityMembershipByPair,
   normalizeCommunityRoleForOutput,
   normalizeSlug,
@@ -640,38 +639,6 @@ export const listPublicDiscoverCommunities = query({
       ok: true,
       communities,
     };
-  },
-});
-
-export const getMyJoinRequestBySlug = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communitySlug: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    const slug = normalizeSlug(args.communitySlug);
-    const community = (await ctx.db
-      .query("communities")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .first()) as CommunityLike | null;
-    if (!community) return null;
-    const row = await getUniqueCommunityJoinRequestByPair({
-      ctx,
-      communityId: community._id,
-      userId,
-    });
-    if (!row) return null;
-    return mapJoinRequestRow({
-      communityId: String(community._id),
-      row,
-    });
   },
 });
 

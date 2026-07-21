@@ -5,7 +5,11 @@ import {
   formatCommunityVisibilityLabel,
   toCanonicalCommunityVisibility,
 } from "../../../../shared/communityVisibility";
-import { deriveCommunityFunnelAction, type CommunityFunnelAction } from "../communityJoinPolicy";
+import {
+  deriveCommunityFunnelAction,
+  derivePublicCommunityAdmissionProjection,
+  type CommunityFunnelAction,
+} from "../communityJoinPolicy";
 
 type PublicCommunityLike = {
   slug: string;
@@ -16,25 +20,20 @@ type PublicCommunityLike = {
   funnel?: unknown | null;
 };
 
-type PublicJoinRequestLike = {
-  status: string;
-  reapply_at?: string | null;
-};
-
 type PublicCommunityAccessLike = {
   can_enter_community?: boolean;
   is_owner: boolean;
+  join_request_status?: "pending" | "denied" | null;
+  join_request_reapply_at?: string | null;
 };
 
 export function useWebPublicCommunityRouteController<
   TPublicCommunity extends PublicCommunityLike,
-  TJoinRequest extends PublicJoinRequestLike,
 >(params: {
   publicRoute: PublicRoute;
   publicCommunity: TPublicCommunity | null;
   publicCommunityPlans: PublicPlanSummary[];
   publicCommunityAccess: PublicCommunityAccessLike | null;
-  myPublicCommunityJoinRequest: TJoinRequest | null;
   isSignedIn: boolean;
   sessionDependency: unknown;
   loadPublicCommunity: (slug: string, opts?: { recordVisit?: boolean }) => Promise<void> | void;
@@ -76,31 +75,20 @@ export function useWebPublicCommunityRouteController<
   /* Preview forces the visitor lens even for the owner: ignore their own
      entitlement so the CTA reads as a visitor's (Join/Request/Checkout),
      never "Enter community". */
-  const canEnterPublicCommunity = isPublicFunnelPreviewRoute
-    ? false
-    : Boolean(
-        params.publicCommunityAccess &&
-          (params.publicCommunityAccess.can_enter_community || params.publicCommunityAccess.is_owner),
-      );
-  const myJoinRequestStatus = isPublicFunnelPreviewRoute
-    ? ""
-    : String(params.myPublicCommunityJoinRequest?.status ?? "").trim().toLowerCase();
-  const approvalPending = !canEnterPublicCommunity && myJoinRequestStatus === "pending";
-  const approvalDenied = !canEnterPublicCommunity && myJoinRequestStatus === "denied";
-  const approvalReapplyAtIso = !approvalDenied
-    ? null
-    : String(params.myPublicCommunityJoinRequest?.reapply_at ?? "").trim() || null;
-  const approvalReapplyAtMs =
-    approvalReapplyAtIso && Number.isFinite(Date.parse(approvalReapplyAtIso))
-      ? Date.parse(approvalReapplyAtIso)
-      : null;
-  const canRequestAgain = Boolean(approvalDenied && approvalReapplyAtMs !== null && approvalReapplyAtMs <= Date.now());
+  const admission = derivePublicCommunityAdmissionProjection({
+    access: params.publicCommunityAccess,
+    isPreviewMode: isPublicFunnelPreviewRoute,
+  });
+  const canEnterPublicCommunity = admission.canEnterCommunity;
+  const approvalPending = admission.approvalPending;
+  const approvalDenied = admission.approvalDenied;
+  const canRequestAgain = admission.canRequestAgain;
   const approvalReapplyLabel =
-    approvalDenied && approvalReapplyAtMs !== null
+    approvalDenied && admission.approvalReapplyAtMs !== null
       ? new Intl.DateTimeFormat(undefined, {
           month: "short",
           day: "numeric",
-        }).format(new Date(approvalReapplyAtMs))
+        }).format(new Date(admission.approvalReapplyAtMs))
       : null;
   return {
     publicFunnelSlug,

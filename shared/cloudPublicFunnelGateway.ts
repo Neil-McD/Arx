@@ -17,19 +17,6 @@ type CloudPublicFunnelAuthParams<SessionT> = {
 type CloudPublicFunnelParams<SessionT> = {
 };
 
-export async function fetchCloudMyJoinRequestBySlug<SessionT, TRow = unknown>(
-  params: CloudPublicFunnelAuthParams<SessionT> & {
-    communitySlug: string;
-  },
-): Promise<TRow | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getMyJoinRequestBySlug" as any, {
-    authSubject,
-    communitySlug: params.communitySlug,
-  });
-  return firstGatewayRow<TRow>(payload);
-}
-
 export async function cancelCloudMyJoinRequestBySlug<SessionT>(
   params: CloudPublicFunnelAuthParams<SessionT> & {
     communitySlug: string;
