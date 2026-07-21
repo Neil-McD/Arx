@@ -1379,7 +1379,7 @@ export default defineSchema({
   communityJoinRequests: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
-    status: v.string(),
+    status: v.union(v.literal("pending"), v.literal("denied")),
     deniedAt: v.optional(v.number()),
     reapplyAt: v.optional(v.number()),
     createdAt: v.number(),

@@ -483,7 +483,7 @@ describe("canonical community join-request kernel", () => {
         status: "approved",
         createdAt: 1,
         updatedAt: 1,
-      }),
+      } as any),
     ).toThrow("community_join_request_status_invalid");
     expect(() =>
       assertCanonicalCommunityJoinRequest({

@@ -7,7 +7,7 @@ export type CommunityJoinRequestLike = {
   _id: any;
   communityId: any;
   userId: any;
-  status: string;
+  status: CommunityJoinRequestStatus;
   deniedAt?: number;
   reapplyAt?: number;
   createdAt: number;

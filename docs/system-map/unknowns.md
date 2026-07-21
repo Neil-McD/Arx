@@ -13,7 +13,7 @@ The bounded aggregate audit resolved or narrowed these questions for the isolate
 | U-003 | no ambiguous latest entitlement timestamp; two users have multiple rows and one has 13 |
 | U-004 | resolved on staging: duplicate pairs are absent and fail closed; all 44 cached counts equal owner plus active non-owner rows; owner membership creation fails closed and the two unreferenced residues were deleted with a zero-work rerun |
 | U-005 | zero memberships omit `active` |
-| U-006 | one join request, status `approved` |
+| U-006 | resolved: the one `approved` row had an active membership; it was safely deleted, the migration rerun had zero work, and the final schema permits only `pending \| denied` |
 | U-007 | zero stored deprecated `memberOnboarding` fields |
 | U-008 | sessions exceed 5,000; bounded prefix is dominated by revoked/replacement rows, but total and chain validity remain unknown |
 | U-009 | resolved at the code-contract level: unconfirmed bridge/local-revocation failures preserve the browser session and cookie; confirmed local revocation precedes bounded best-effort provider logout; live provider behavior remains configuration-specific |
@@ -39,7 +39,7 @@ Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-stagin
 | U-003 | Can equal/latest entitlement rows disagree? | deterministic tier resolution | histogram and ambiguous-timestamp count |
 | U-004 | **Resolved on staging:** membership pairs are unique/fail-closed and cached counts are complete and exact. | access and visible member totals | aggregate duplicate/state/count deltas plus behavioral authority fixture |
 | U-005 | How many memberships omit `active`, and which writer created them? | fail-open compatibility removal | state by creation epoch/writer lineage |
-| U-006 | Which join-request statuses exist? | validator migration | grouped counts only |
+| U-006 | **Resolved on staging:** no legacy rows remain; runtime storage is constrained to `pending \| denied`. | closes arbitrary workflow state and alternate access authority | locked preflight/migration receipt plus post-deploy grouped counts |
 | U-007 | Does deprecated `memberOnboarding` exist on live rows? | schema deletion readiness | count and migration receipt |
 | U-008 | What are session counts/ages/replacement-chain anomalies? | pruning and revocation design | redacted histograms/invalid-chain count |
 | U-009 | What happens to provider/server sessions when logout bridge fails? **Resolved at the code-contract level; live provider behavior remains configuration-specific.** | unconfirmed logout preserves the retry handle; confirmed local revocation remains authoritative | behavioral gateway, browser-ordering, and fake-provider fixtures |

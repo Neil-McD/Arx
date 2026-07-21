@@ -25,7 +25,7 @@ All five are MVP core. UI, prompts, manifests, and agent-selected arguments are 
 | `communityMemberships` | canonical non-owner membership/access-source relationship | `convex/schema.ts:1303-1327` |
 | `communitySubscriptions` | provider-derived paid community-access state | `convex/schema.ts:1466-1494` |
 | `communityBlocks` | negative community access override | `convex/schema.ts:1391-1402` |
-| `communityJoinRequests` | approval workflow history/current projection | `convex/schema.ts:1376-1389` |
+| `communityJoinRequests` | one current `pending` or cooldown-bearing `denied` admission state; never access authority | `convex/schema.ts`; `convex/communityJoinRequestCore.ts` |
 | onboarding config/sessions | activation workflow and progress, not access authority | `convex/schema.ts:1329-1363` |
 | `communities.activeMemberCount` | derived cache; owner plus active non-owner membership rows | `convex/communityCore.ts:690-776` |
 | `communities.memberOnboarding` | deprecated compatibility field | explicit schema comment at `convex/schema.ts:1269-1287` |
@@ -110,7 +110,7 @@ Let `U` be users, `E` entitlement rows for one user, `M` membership rows for a c
 Explicit membership state is now fail-closed on staging: only `active === true` without a revocation timestamp grants membership, the schema requires the field, and the temporary repair surface is deleted after a complete zero-missing-row preflight.
 
 1. Membership pair uniqueness is application-enforced because the schema cannot declare a compound uniqueness constraint; all known reads fail closed if that invariant is externally corrupted.
-2. `communityJoinRequests.status` is an unconstrained string even though downstream logic assumes a small state machine.
+2. Join-request uniqueness is application-enforced because Convex indexes are not unique; all pair reads and transitions now fail closed on duplicate rows, while the schema restricts status to `pending | denied`.
 3. Community deletion is an unbounded destructive transaction with a global checkout-session scan and nested interaction deletion. Completeness across all 125 tables is not yet proven.
 4. Entitlement uniqueness is application-enforced because Convex indexes are not unique; every reader fails closed and every writer uses the single monotonic source upsert, but out-of-band writes must remain forbidden.
 
