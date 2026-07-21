@@ -26,6 +26,12 @@ export async function activateCommunityMembershipCore(args: {
   accessGranted: boolean;
   activationMarker: string | null;
 }> {
+  const community = await args.ctx.db.get(args.communityId);
+  if (!community) throw new Error("community_not_found");
+  if (String(community.ownerId) === String(args.userId)) {
+    throw new Error("community_owner_membership_forbidden");
+  }
+
   // Keep this indexed read in the same mutation transaction as the insert.
   // Convex serializable retries then make concurrent activation attempts
   // converge on the row committed by the winning transaction.

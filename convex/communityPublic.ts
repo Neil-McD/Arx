@@ -723,6 +723,12 @@ async function joinPublicCommunityInternal(args: {
   community_id: string;
   reapply_at?: string | null;
 }> {
+  if (String(args.community.ownerId) === String(args.userId)) {
+    return {
+      outcome: "joined",
+      community_id: String(args.community._id),
+    };
+  }
   await requireCommunityUserNotBlocked({
     ctx: args.ctx,
     communityId: args.community._id,

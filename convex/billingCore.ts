@@ -467,6 +467,19 @@ export async function redeemClaimRow(args: {
       grantMarker: null,
     };
   }
+  if (String(community.ownerId) === String(args.userId)) {
+    await args.ctx.db.patch(args.claim._id, {
+      status: "redeemed",
+      redeemedByUserId: args.userId,
+      redeemedAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+    return {
+      communityId: String(args.claim.communityId),
+      accessGranted: false,
+      grantMarker: null,
+    };
+  }
   await requireCommunityUserNotBlocked({
     ctx: args.ctx,
     communityId: args.claim.communityId,

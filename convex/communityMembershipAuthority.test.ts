@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
+import { api } from "./_generated/api";
+import { redeemClaimRow } from "./billingCore";
 import {
   type CommunityMembershipLike,
   communityMembershipRowIsActive,
@@ -11,7 +13,11 @@ import {
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import schema from "./schema";
 
-const modules = import.meta.glob(["./_generated/**/*.*s"]);
+const modules = import.meta.glob([
+  "./communityAdmin.ts",
+  "./communityPublic.ts",
+  "./_generated/**/*.*s",
+]);
 
 function membership(
   overrides: Partial<CommunityMembershipLike> = {},
@@ -38,9 +44,10 @@ async function createAuthorityFixture(
   onboardingEnabled = false,
 ) {
   const nowMs = 1_750_000_000_000;
+  const ownerSubject = `membership-authority-owner-${suffix}`;
   return await t.run(async (ctx) => {
     const ownerId = await ctx.db.insert("users", {
-      authSubject: `membership-authority-owner-${suffix}`,
+      authSubject: ownerSubject,
       displayName: "Membership authority owner",
       createdAt: nowMs,
       updatedAt: nowMs,
@@ -70,7 +77,7 @@ async function createAuthorityFixture(
         updatedAt: nowMs,
       });
     }
-    return { communityId, ownerId, userId, nowMs };
+    return { communityId, ownerId, ownerSubject, userId, nowMs };
   });
 }
 
@@ -256,6 +263,143 @@ describe("community membership authority", () => {
         }),
       ),
     ).rejects.toThrow("community_membership_pair_not_unique");
+  });
+
+  test("canonical activation rejects the community owner without side effects", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createAuthorityFixture(t, "owner-activation", true);
+
+    await expect(
+      t.run(async (ctx) =>
+        await activateCommunityMembershipCore({
+          ctx,
+          communityId: fixture.communityId,
+          userId: fixture.ownerId,
+          accessSource: "free_grant",
+          activationReason: "owner_membership_authority_test",
+          nowMs: fixture.nowMs + 1,
+        }),
+      ),
+    ).rejects.toThrow("community_owner_membership_forbidden");
+
+    const state = await t.run(async (ctx) => ({
+      community: await ctx.db.get(fixture.communityId),
+      memberships: await ctx.db.query("communityMemberships").collect(),
+      onboardingSessions: await ctx.db.query("communityOnboardingSessions").collect(),
+    }));
+    expect(state.community?.activeMemberCount).toBe(1);
+    expect(state.memberships).toHaveLength(0);
+    expect(state.onboardingSessions).toHaveLength(0);
+  });
+
+  test("public join treats the owner as already entitled without membership side effects", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createAuthorityFixture(t, "owner-public-join", true);
+    const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
+
+    await expect(
+      asOwner.mutation(api.communityPublic.joinPublicCommunity, {
+        communityId: fixture.communityId,
+      }),
+    ).resolves.toEqual({
+      outcome: "joined",
+      community_id: String(fixture.communityId),
+    });
+
+    const state = await t.run(async (ctx) => ({
+      memberships: await ctx.db.query("communityMemberships").collect(),
+      joinRequests: await ctx.db.query("communityJoinRequests").collect(),
+      onboardingSessions: await ctx.db.query("communityOnboardingSessions").collect(),
+    }));
+    expect(state.memberships).toHaveLength(0);
+    expect(state.joinRequests).toHaveLength(0);
+    expect(state.onboardingSessions).toHaveLength(0);
+  });
+
+  test("approving an owner join request records the decision without creating membership", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createAuthorityFixture(t, "owner-approval", true);
+    const requestId = await t.run(async (ctx) =>
+      await ctx.db.insert("communityJoinRequests", {
+        communityId: fixture.communityId,
+        userId: fixture.ownerId,
+        status: "pending",
+        createdAt: fixture.nowMs,
+        updatedAt: fixture.nowMs,
+      }),
+    );
+    const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
+
+    await expect(
+      asOwner.mutation(api.communityAdmin.approveCommunityJoinRequest, { requestId }),
+    ).resolves.toEqual({ ok: true });
+
+    const state = await t.run(async (ctx) => ({
+      request: await ctx.db.get(requestId),
+      memberships: await ctx.db.query("communityMemberships").collect(),
+      onboardingSessions: await ctx.db.query("communityOnboardingSessions").collect(),
+    }));
+    expect(state.request?.status).toBe("approved");
+    expect(state.memberships).toHaveLength(0);
+    expect(state.onboardingSessions).toHaveLength(0);
+  });
+
+  test("redeeming an owner paid claim preserves the claim without membership or subscription", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createAuthorityFixture(t, "owner-paid-claim", true);
+    const seeded = await t.run(async (ctx) => {
+      await ctx.db.patch(fixture.communityId, { entryPolicy: "paid_subscription" });
+      const pricePointId = await ctx.db.insert("communityPricePoints", {
+        communityId: fixture.communityId,
+        billingPeriod: "monthly",
+        name: "Owner authority test",
+        amountBaseUnits: 1_000,
+        currency: "usd",
+        currencyDecimals: 2,
+        isCurrent: true,
+        createdAt: fixture.nowMs,
+        updatedAt: fixture.nowMs,
+      });
+      const claimId = await ctx.db.insert("purchaseClaims", {
+        claimToken: "owner-authority-paid-claim",
+        communityId: fixture.communityId,
+        pricePointId,
+        ownerUserId: fixture.ownerId,
+        status: "pending",
+        expiresAt: fixture.nowMs + 60_000,
+        createdAt: fixture.nowMs,
+        updatedAt: fixture.nowMs,
+      });
+      return { claimId };
+    });
+
+    const redemption = await t.run(async (ctx) => {
+      const claim = await ctx.db.get(seeded.claimId);
+      if (!claim) throw new Error("test_claim_missing");
+      return await redeemClaimRow({
+        ctx,
+        claim: claim as any,
+        userId: fixture.ownerId,
+        nowMs: fixture.nowMs + 1,
+      });
+    });
+    expect(redemption).toEqual({
+      communityId: String(fixture.communityId),
+      accessGranted: false,
+      grantMarker: null,
+    });
+
+    const state = await t.run(async (ctx) => ({
+      claim: await ctx.db.get(seeded.claimId),
+      memberships: await ctx.db.query("communityMemberships").collect(),
+      subscriptions: await ctx.db.query("communitySubscriptions").collect(),
+      onboardingSessions: await ctx.db.query("communityOnboardingSessions").collect(),
+    }));
+    expect(state.claim?.status).toBe("redeemed");
+    expect(state.claim?.redeemedByUserId).toEqual(fixture.ownerId);
+    expect(state.memberships).toHaveLength(0);
+    expect(state.subscriptions).toHaveLength(0);
+    expect(state.onboardingSessions).toHaveLength(0);
   });
 
   test("activation is idempotent and reactivation preserves row identity", async () => {

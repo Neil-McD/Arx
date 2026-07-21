@@ -738,7 +738,11 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
     userId: args.request.userId,
   });
   let grantedMembershipMarker: string | null = null;
-  if (!existingMembership || !communityMembershipRowIsActive(existingMembership)) {
+  const targetIsOwner = String(args.community.ownerId) === String(args.request.userId);
+  if (
+    !targetIsOwner &&
+    (!existingMembership || !communityMembershipRowIsActive(existingMembership))
+  ) {
     const restoredAccessSource =
       existingMembership?.accessSource === "paid_subscription" ||
       existingMembership?.accessSource === "free_grant" ||
