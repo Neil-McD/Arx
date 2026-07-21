@@ -9,8 +9,8 @@
 export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v1" as const;
 
 export const ACCOUNT_LIFECYCLE_SCHEMA_BASELINE = Object.freeze({
-  tableCount: 125,
-  directUserEdgeCount: 124,
+  tableCount: 124,
+  directUserEdgeCount: 122,
   opaqueFieldCount: 26,
   storageFieldCount: 7,
 });
@@ -182,7 +182,6 @@ const policyGroups: readonly PolicyGroup[] = [
       "userMemorySettings",
       "userProviderAuthStates",
       "userProviderDeviceAuthStates",
-      "agentLifecycleActivations",
       "emailPreferences",
       "emailOutbox",
       "personalMemoryItems",
@@ -598,12 +597,6 @@ export const ACCOUNT_LIFECYCLE_FIELD_OVERRIDES: Readonly<
     retentionAuthority: "security_operations",
     executorOwner: "security_operations",
   },
-  "communities.memberOnboarding.updatedByUserId": {
-    disposition: "detach_identity",
-    phase: "shared_anonymize",
-    retentionAuthority: "community",
-    executorOwner: "community_access",
-  },
 });
 
 export type AccountLifecycleUnindexedLookup = "index_required" | "parent_cascade";
@@ -635,7 +628,6 @@ export const ACCOUNT_LIFECYCLE_UNINDEXED_EDGE_POLICIES: Readonly<
   "criticalAuditEvents.subjectUserId": { lookup: "index_required", reason: "subject identity minimization cannot scan audit history" },
   "purchaseClaims.redeemedByUserId": { lookup: "index_required", reason: "redeemer identity minimization requires bounded finance lookup" },
   "memberFacts.createdByUserId": { lookup: "index_required", reason: "creator attribution may reference the account outside owned facts" },
-  "communities.memberOnboarding.updatedByUserId": { lookup: "index_required", reason: "the canonical field-removal migration must prove this deprecated nested edge is absent before lifecycle execution" },
   "communityOnboardingConfigs.updatedByUserId": { lookup: "index_required", reason: "onboarding attribution must be detached without community-wide scans" },
   "communityBlocks.createdByUserId": { lookup: "index_required", reason: "moderation authorship requires a bounded lookup" },
   "communityAnalyticsEvents.userId": { lookup: "index_required", reason: "analytics pseudonymization requires a retention-bounded index" },

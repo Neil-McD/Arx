@@ -9,6 +9,7 @@
  */
 
 import type * as account from "../account.js";
+import type * as accountEntitlementCore from "../accountEntitlementCore.js";
 import type * as accountLifecyclePolicy from "../accountLifecyclePolicy.js";
 import type * as accountSetupCore from "../accountSetupCore.js";
 import type * as anonymousUserCleanup from "../anonymousUserCleanup.js";
@@ -20,6 +21,7 @@ import type * as appValidation from "../appValidation.js";
 import type * as auth from "../auth.js";
 import type * as authActor from "../authActor.js";
 import type * as authIdentity from "../authIdentity.js";
+import type * as authProviderRequest from "../authProviderRequest.js";
 import type * as authSessionCore from "../authSessionCore.js";
 import type * as authSessions from "../authSessions.js";
 import type * as billing from "../billing.js";
@@ -87,6 +89,7 @@ import type * as communityInteractionEvidenceCore from "../communityInteractionE
 import type * as communityInteractionLegacyAttachments from "../communityInteractionLegacyAttachments.js";
 import type * as communityInteractionLegacyBridge from "../communityInteractionLegacyBridge.js";
 import type * as communityInteractions from "../communityInteractions.js";
+import type * as communityJoinRequestCore from "../communityJoinRequestCore.js";
 import type * as communityLaunchSetup from "../communityLaunchSetup.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
 import type * as communityMaintenance from "../communityMaintenance.js";
@@ -151,7 +154,6 @@ import type * as httpRuntimeRoutes from "../httpRuntimeRoutes.js";
 import type * as httpRuntimeSupport from "../httpRuntimeSupport.js";
 import type * as httpRuntimeTurnState from "../httpRuntimeTurnState.js";
 import type * as httpVoice from "../httpVoice.js";
-import type * as legacyOnboardingMigration from "../legacyOnboardingMigration.js";
 import type * as legalAcceptances from "../legalAcceptances.js";
 import type * as mcpHttpClient from "../mcpHttpClient.js";
 import type * as mcpSnapshotCodec from "../mcpSnapshotCodec.js";
@@ -240,6 +242,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   account: typeof account;
+  accountEntitlementCore: typeof accountEntitlementCore;
   accountLifecyclePolicy: typeof accountLifecyclePolicy;
   accountSetupCore: typeof accountSetupCore;
   anonymousUserCleanup: typeof anonymousUserCleanup;
@@ -251,6 +254,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   authActor: typeof authActor;
   authIdentity: typeof authIdentity;
+  authProviderRequest: typeof authProviderRequest;
   authSessionCore: typeof authSessionCore;
   authSessions: typeof authSessions;
   billing: typeof billing;
@@ -318,6 +322,7 @@ declare const fullApi: ApiFromModules<{
   communityInteractionLegacyAttachments: typeof communityInteractionLegacyAttachments;
   communityInteractionLegacyBridge: typeof communityInteractionLegacyBridge;
   communityInteractions: typeof communityInteractions;
+  communityJoinRequestCore: typeof communityJoinRequestCore;
   communityLaunchSetup: typeof communityLaunchSetup;
   communityLifecycle: typeof communityLifecycle;
   communityMaintenance: typeof communityMaintenance;
@@ -382,7 +387,6 @@ declare const fullApi: ApiFromModules<{
   httpRuntimeSupport: typeof httpRuntimeSupport;
   httpRuntimeTurnState: typeof httpRuntimeTurnState;
   httpVoice: typeof httpVoice;
-  legacyOnboardingMigration: typeof legacyOnboardingMigration;
   legalAcceptances: typeof legalAcceptances;
   mcpHttpClient: typeof mcpHttpClient;
   mcpSnapshotCodec: typeof mcpSnapshotCodec;

@@ -103,9 +103,10 @@ never grants permission to change production.
 
 ### Community-first transition release
 
-Use this sequence while retiring the old onboarding agent and moving members to the
-global member-agent channel. This is a two-phase compatibility release, not an atomic
-web/backend cutover.
+Use this sequence while retiring the old onboarding storage and moving members to the
+global member-agent channel. The cached-client RPC is a separate compatibility boundary;
+the deleted storage validators must never be promoted while production still stores
+legacy values.
 
 1. From the exact validated release commit, run the read-only production preflight:
 
@@ -113,21 +114,13 @@ web/backend cutover.
 npm run preflight:community-first-release:prod
 ```
 
-2. Stop if any production scan is truncated, any source-compatibility check fails,
-   or a dedicated `community-onboarding:` thread exists. Historical thread/message
-   deletion requires a separate data review and is never automatic.
-3. Deploy Convex production first. The temporary `requestOnboardingGuideKickoff`
-   shim routes cached old clients into the global member-agent channel; it does not
-   restore the old onboarding activation, skill, runtime, or dedicated thread.
-4. Confirm both the temporary kickoff RPC and the new member-agent/global-entry
-   functions are present before changing the web release.
-5. Land and push the same validated commit on `main`, then let Vercel project
-   `polynet` deploy it through GitHub.
-6. Smoke a cached old browser session and a fresh browser session. Both must enter
-   the normal community surface and open the same user-owned global agent channel.
-7. After the cached-client window, run the bounded functions in
-   `legacyOnboardingMigration.ts` until each returns `isDone: true`, then rerun the
-   production preflight and verify all legacy counts are zero.
+2. Stop if any production scan is truncated, a source-boundary check fails, a
+   dedicated `community-onboarding:` thread exists, or either legacy storage count
+   is nonzero. Historical thread/message deletion requires a separate data review
+   and is never automatic.
+3. If legacy storage is nonzero, run the bounded cleanup functions that are still
+   deployed on the current production backend. This must happen before deploying
+   the schema-removal commit:
 
 ```bash
 npx convex run legacyOnboardingMigration:clearCommunityMemberOnboardingPageInternal \
@@ -139,13 +132,24 @@ npm run preflight:community-first-release:prod
 
 If a cleanup response returns `isDone: false`, pass its `continueCursor` as the
 next call's `paginationOpts.cursor`. Do not use `--push` during production cleanup.
+The staging source intentionally no longer contains the migration module; these calls
+target the still-deployed production functions and disappear when the cleanup commit
+is promoted.
 
-8. In a later cleanup release, remove the temporary RPC, migration module,
-   `agentLifecycleActivations` validator, and `communities.memberOnboarding` validator.
+4. Rerun the preflight and require zero legacy field rows, zero activation rows, and
+   zero dedicated onboarding threads.
+5. Deploy Convex production first from the exact validated cleanup commit.
+6. Confirm the temporary `requestOnboardingGuideKickoff` shim and the current
+   member-agent/global-entry functions remain present.
+7. Land and push the same validated commit on `main`, then let Vercel project
+   `polynet` deploy it through GitHub.
+8. Smoke a cached old browser session and a fresh browser session. Both must enter
+   the normal community surface and open the same user-owned global agent channel.
+9. Remove the cached-client RPC only in a separately reviewed release after its
+   compatibility window or observed usage is explicitly closed.
 
-Never deploy the web first during this transition: the new web requires backend
-functions that production does not currently expose. Never remove the legacy schema
-validators before the stored legacy values have been cleared.
+Never deploy the web first during this transition. Never deploy the schema-removal
+commit before the production preflight proves the stored legacy values are zero.
 
 ### Normal release
 

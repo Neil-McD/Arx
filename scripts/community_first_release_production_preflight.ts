@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const DEFAULT_LIMIT = 1_000;
@@ -41,25 +41,17 @@ function loadProductionTable(table: string, limit: number): ConvexRow[] {
   return parsed as ConvexRow[];
 }
 
-function sourceCompatibility() {
+function sourceBoundary() {
   const schema = read("convex/schema.ts");
   const shim = read("convex/onboardingLifecycle.ts");
-  const migration = read("convex/legacyOnboardingMigration.ts");
   return {
     cachedClientKickoffShim:
       shim.includes("requestOnboardingGuideKickoff") &&
       shim.includes("ensureMemberAgentGlobalChannel") &&
       shim.includes('compatibility_route: "member_agent_global_channel"'),
-    legacyCommunityFieldValidator:
-      schema.includes("Deprecated release-compatibility field") &&
-      schema.includes("memberOnboarding: v.optional"),
-    legacyActivationTableValidator:
-      schema.includes("Deprecated release-compatibility table") &&
-      schema.includes("agentLifecycleActivations: defineTable"),
-    boundedCleanup:
-      migration.includes("MAX_BATCH_SIZE = 100") &&
-      migration.includes("clearCommunityMemberOnboardingPageInternal") &&
-      migration.includes("deleteAgentLifecycleActivationsPageInternal"),
+    legacyCommunityFieldRemoved: !schema.includes("memberOnboarding: v.optional"),
+    legacyActivationTableRemoved: !schema.includes("agentLifecycleActivations: defineTable"),
+    legacyMigrationSourceRemoved: !existsSync("convex/legacyOnboardingMigration.ts"),
   };
 }
 
@@ -76,7 +68,7 @@ function main(): void {
     ["agentLifecycleActivations", activations.length],
     ["threads", threads.length],
   ].filter(([, count]) => count >= limit).map(([name]) => name);
-  const compatibility = sourceCompatibility();
+  const boundary = sourceBoundary();
   const legacy = {
     communityMemberOnboardingRows: communities.filter(
       (row) => row.memberOnboarding !== undefined,
@@ -86,18 +78,22 @@ function main(): void {
       String(row.threadKey ?? "").startsWith("community-onboarding:"),
     ).length,
   };
-  const compatibilityReady = Object.values(compatibility).every(Boolean);
+  const sourceBoundaryReady = Object.values(boundary).every(Boolean);
+  const legacyStorageReady =
+    legacy.communityMemberOnboardingRows === 0 && legacy.activationRows === 0;
   const historicalThreadReviewRequired = legacy.dedicatedOnboardingThreads > 0;
   const ok =
     truncatedTables.length === 0 &&
-    compatibilityReady &&
+    sourceBoundaryReady &&
+    legacyStorageReady &&
     !historicalThreadReviewRequired;
   console.log(JSON.stringify({
     ok,
     readOnly: true,
     target: "production",
-    sourceCompatibility: compatibility,
+    sourceBoundary: boundary,
     legacyData: legacy,
+    legacyStorageReady,
     historicalThreadReviewRequired,
     scan: {
       limit,
@@ -109,10 +105,12 @@ function main(): void {
       },
     },
     nextAction: ok
-      ? "deploy_compatibility_backend_before_web_then_run_bounded_cleanup_after_cached_client_window"
+      ? "production_legacy_onboarding_storage_is_zero_and_schema_removal_release_is_unblocked"
       : historicalThreadReviewRequired
         ? "stop_release_and_review_dedicated_onboarding_thread_history_before_cleanup"
-        : "stop_release_and_restore_complete_compatibility_or_increase_scan_limit",
+        : truncatedTables.length > 0
+          ? "stop_release_and_increase_scan_limit"
+          : "run_currently_deployed_bounded_legacy_onboarding_cleanup_then_rerun_preflight",
   }, null, 2));
   if (!ok) process.exitCode = 1;
 }

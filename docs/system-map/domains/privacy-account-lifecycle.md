@@ -19,7 +19,7 @@ The ownership matrix is now accepted as product direction. The current implement
 
 ## Account deletion path
 
-`convex/account.ts:349-673` implements `deleteOwnAccount` as one large mutation. It checks finance and mounted-object blockers, then collects and deletes rows across many domains. The broad intent is good, but the operation is transaction-sized, non-resumable, and incomplete relative to 125 tables.
+`convex/account.ts:349-673` implements `deleteOwnAccount` as one large mutation. It checks finance and mounted-object blockers, then collects and deletes rows across many domains. The broad intent is good, but the operation is transaction-sized, non-resumable, and incomplete relative to 124 current tables.
 
 Two source-level defects are upstream of all cleanup aesthetics:
 

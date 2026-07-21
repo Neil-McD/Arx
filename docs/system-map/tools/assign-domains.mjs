@@ -34,7 +34,7 @@ const domains = {
 const tableGroups = {
   "identity-access": ["users", "authSessions", "userEntitlements", "operatorRoles"],
   "profiles-privacy": [
-    "legalAcceptances", "userMemorySettings", "userProfileDetails", "agentLifecycleActivations",
+    "legalAcceptances", "userMemorySettings", "userProfileDetails",
     "personalMemoryItems", "memberFacts", "memberProfileSpines",
   ],
   "community-core": [

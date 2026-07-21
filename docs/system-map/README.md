@@ -1,6 +1,6 @@
 # Polynet System Map
 
-Status: comprehensive static map and bounded redacted staging-shape audit complete at commit `67c89903add41ff9b8de20929e07429a8d98f3bc`; the later authenticated identity/session, first static deletion, explicit-active membership, unique membership-pair authority, required active-member-count, canonical account-entitlement, platform-home admission-separation, canonical join-request, and single public-funnel access-projection slices are complete on the staging lane. Live provider-outage convergence, external consumers, unrelated domains, and production remain outside that proof.
+Status: comprehensive static map and bounded redacted staging-shape audit complete at commit `67c89903add41ff9b8de20929e07429a8d98f3bc`; the later authenticated identity/session, first static deletion, explicit-active membership, unique membership-pair authority, required active-member-count, canonical account-entitlement, platform-home admission-separation, canonical join-request, single public-funnel access-projection, and legacy onboarding storage-closure slices are complete on the staging lane. Live provider-outage convergence, external consumers, unrelated domains, and production remain outside that proof.
 
 This directory is evidence and analysis, not product authority. Schema, executable authorization boundaries, runtime behavior, and the current MVP contract remain authoritative for their respective truth classes. Nothing in this map authorizes a code, schema, data, configuration, deployment, migration, or deletion change.
 

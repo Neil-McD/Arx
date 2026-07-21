@@ -2,6 +2,10 @@
 
 Snapshot: `67c89903add41ff9b8de20929e07429a8d98f3bc` on isolated staging.
 
+Current staging delta: the deprecated `communities.memberOnboarding` field and empty
+`agentLifecycleActivations` table were deleted after complete zero-row scans and
+zero-work cleanup receipts. The frozen snapshot still records their former shape.
+
 ## Irreducible job
 
 This domain answers five questions and should do no more:
@@ -28,7 +32,6 @@ All five are MVP core. UI, prompts, manifests, and agent-selected arguments are 
 | `communityJoinRequests` | one current `pending` or cooldown-bearing `denied` admission state; never access authority | `convex/schema.ts`; `convex/communityJoinRequestCore.ts` |
 | onboarding config/sessions | activation workflow and progress, not access authority | `convex/schema.ts:1329-1363` |
 | `communities.activeMemberCount` | derived cache; owner plus active non-owner membership rows | `convex/communityCore.ts:690-776` |
-| `communities.memberOnboarding` | deprecated compatibility field | explicit schema comment at `convex/schema.ts:1269-1287` |
 
 ## Authority path
 
@@ -111,7 +114,7 @@ Explicit membership state is now fail-closed on staging: only `active === true` 
 
 1. Membership pair uniqueness is application-enforced because the schema cannot declare a compound uniqueness constraint; all known reads fail closed if that invariant is externally corrupted.
 2. Join-request uniqueness is application-enforced because Convex indexes are not unique; all pair reads and transitions now fail closed on duplicate rows, while the schema restricts status to `pending | denied`.
-3. Community deletion is an unbounded destructive transaction with a global checkout-session scan and nested interaction deletion. Completeness across all 125 tables is not yet proven.
+3. Community deletion is an unbounded destructive transaction with a global checkout-session scan and nested interaction deletion. Completeness across all 124 current tables is not yet proven.
 4. Entitlement uniqueness is application-enforced because Convex indexes are not unique; every reader fails closed and every writer uses the single monotonic source upsert, but out-of-band writes must remain forbidden.
 
 ## Reduction candidates
@@ -124,7 +127,7 @@ Explicit membership state is now fail-closed on staging: only `active === true` 
 | Raw session IDs, refresh-created replacement rows, traversal, and public/manual pruning | `DELETE (deferred/dead)` | `DELETE` complete | 10 | One hashed bounded credential and one internal retention owner perform the entire required job. Owner: auth session. |
 | Duplicate membership-row compatibility | `DELETE (deferred/dead)` | `DELETE` complete | 7 | Staging contains zero duplicate pairs; one indexed resolver now fails closed and concurrent activation stays inside one transaction. Owner: community access. |
 | Missing-`active` membership compatibility | `DELETE (deferred/dead)` | `DELETE` complete | 7 | Complete staging scans found zero dependent rows; missing state now denies access and the schema requires an explicit value. Owner: community access. |
-| Deprecated `communities.memberOnboarding` field | `DELETE (deferred/dead)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 9 | Schema says current product code never reads/writes it; stored-value and migration completion must be verified first. Owner: schema lifecycle. |
+| Deprecated onboarding field/table storage | `DELETE (deferred/dead)` | `DELETE` complete on staging | 9 | Complete staging scans and zero-work receipts preceded deletion; production remains promotion-blocked until its legacy rows are cleared. Owner: schema lifecycle. |
 | Join-request free-form status | `KEEP (MVP core)` | `HARDEN` | 6 | Approval flow is required; arbitrary states are not. Owner: community access. |
 | One-transaction community cascade deletion | `KEEP (MVP core)` | `HARDEN`, `BOUND` | 8 | Deletion is required; unbounded all-domain work in one transaction is not. Owner: account/community lifecycle. |
 

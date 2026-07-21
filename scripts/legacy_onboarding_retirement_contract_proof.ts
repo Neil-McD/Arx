@@ -12,6 +12,7 @@ function read(path: string): string {
 
 for (const path of [
   "convex/agentLifecycleActivations.ts",
+  "convex/legacyOnboardingMigration.ts",
   "shared/cloudOnboardingGuideGateway.ts",
   "shared/runtimeSkillLifecycle.ts",
   "shared/communityMemberOnboarding.ts",
@@ -65,10 +66,14 @@ const toolRegistry = read("shared/toolRegistry.ts");
 assert.match(toolRegistry, /member_profile_confirm_facts/);
 
 const schema = read("convex/schema.ts");
-assert.match(schema, /Deprecated release-compatibility table/);
-assert.match(schema, /agentLifecycleActivations:\s*defineTable/);
-assert.match(schema, /Deprecated release-compatibility field/);
-assert.match(schema, /memberOnboarding:\s*v\.optional/);
+assert.doesNotMatch(schema, /agentLifecycleActivations:\s*defineTable/);
+assert.doesNotMatch(schema, /memberOnboarding:\s*v\.optional/);
+assert.match(schema, /communityOnboardingConfigs:\s*defineTable/);
+assert.match(schema, /communityOnboardingSessions:\s*defineTable/);
+
+const accountLifecyclePolicy = read("convex/accountLifecyclePolicy.ts");
+assert.doesNotMatch(accountLifecyclePolicy, /agentLifecycleActivations/);
+assert.doesNotMatch(accountLifecyclePolicy, /communities\.memberOnboarding/);
 
 const retiredCommunityConfigSurface = [
   read("apps/web/src/App.tsx"),
@@ -84,9 +89,10 @@ assert.doesNotMatch(
 );
 
 const generatedApi = read("convex/_generated/api.d.ts");
+assert.match(generatedApi, /onboardingLifecycle/);
 assert.doesNotMatch(
   generatedApi,
-  /agentLifecycleActivations|saveCommunityMemberOnboardingConfig/,
+  /legacyOnboardingMigration|agentLifecycleActivations|saveCommunityMemberOnboardingConfig/,
 );
 
 console.log("legacy_onboarding_retirement_contract_proof: ok");

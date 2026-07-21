@@ -22,7 +22,7 @@ run_step() {
 
 run_step "Gate parity contract" bash scripts/gate_parity_contract_check.sh
 run_step "Legacy onboarding retirement contract" npm run check:legacy-onboarding-retirement-contract
-run_step "Community-first release compatibility contract" npm run check:community-first-release-compatibility-contract
+run_step "Cached-client member-entry compatibility contract" npm run check:cached-client-member-entry-compatibility-contract
 run_step "Legacy route surface guard" bash scripts/legacy_route_surface_guard.sh
 run_step "No compat RPC primitive guard" bash scripts/no_compat_rpc_primitive_guard.sh
 run_step "Auth env contract guard" bash scripts/auth_env_contract_guard.sh

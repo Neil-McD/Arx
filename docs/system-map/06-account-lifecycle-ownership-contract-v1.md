@@ -37,10 +37,10 @@ The v1 proof mechanically extracts the current Convex schema and compares it wit
 
 | Surface | Count | Required treatment |
 | --- | ---: | --- |
-| schema tables | 125 | every table has exactly one policy |
-| direct user-ID fields | 124 | every edge inherits or overrides a field disposition |
-| tables with direct user-ID fields | 107 | no table is inferred safe from its name |
-| direct edges without a user-first index | 42 | each declares `index_required` or a bounded `parent_cascade` |
+| schema tables | 124 | every table has exactly one policy |
+| direct user-ID fields | 122 | every edge inherits or overrides a field disposition |
+| tables with direct user-ID fields | 106 | no table is inferred safe from its name |
+| direct edges without a user-first index | 41 | each declares `index_required` or a bounded `parent_cascade` |
 | opaque JSON/`v.any()` fields | 26 | each table declares opaque-data handling |
 | storage-ID fields | 7 | each declares private deletion or shared preservation |
 
@@ -61,7 +61,7 @@ Adding a schema table, direct user edge, opaque field, or storage field must fai
 | external provider | revoke/release, then delete local private state | provider contract and effect receipt |
 | derived intelligence | `privacy_propagate` | community intelligence policy |
 
-The executable detail is field-aware. For example, `communities.ownerId` blocks finalization until transfer, while the deprecated nested `communities.memberOnboarding.updatedByUserId` does not create ownership and follows its canonical field-removal migration.
+The executable detail is field-aware. For example, `communities.ownerId` blocks finalization until transfer. The deprecated nested `communities.memberOnboarding.updatedByUserId` never created ownership and its zero-row staging field-removal migration is complete.
 
 ## Disposition semantics
 
@@ -160,7 +160,7 @@ A direct user reference is executable only when one of these is true:
 1. a schema index begins with that exact user field; or
 2. the policy names a bounded parent cascade whose parent is itself indexed by the user.
 
-The current contract identifies 42 edges that do not have a user-first index. Most require new indexes. A small number are intentionally reached through a bounded parent, such as partner children through `builderPartners` and private workspace snapshots through their owned project.
+The current contract identifies 41 edges that do not have a user-first index. Most require new indexes. A small number are intentionally reached through a bounded parent, such as partner children through `builderPartners` and private workspace snapshots through their owned project.
 
 No executor may replace a missing index with `.collect()`, a global scan, or a hard-coded list of “known” referencing tables.
 
