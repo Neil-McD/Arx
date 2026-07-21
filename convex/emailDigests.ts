@@ -5,6 +5,7 @@ import { buildCommunityTabPath } from "../shared/webAppRouteState";
 import { listActiveCommunityRecipientUserIds } from "./communityRecipientCore";
 import {
   type CommunityResourceModuleLike,
+  communityMembershipRowIsActive,
   communityResourceIsLiveModulePage,
   communityResourceModuleIsLive,
 } from "./communityCore";
@@ -288,8 +289,7 @@ async function countNewActiveMembers(ctx: any, params: {
     .collect()) as CommunityMembershipRow[];
   return memberships.filter(
     (row) =>
-      row.active !== false &&
-      typeof row.revokedAt !== "number" &&
+      communityMembershipRowIsActive(row) &&
       row.createdAt >= params.periodStartMs &&
       row.createdAt <= params.periodEndMs,
   ).length;

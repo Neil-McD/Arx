@@ -23,6 +23,7 @@ import {
   normalizeStoredSnapshotTools,
 } from "./mcpSnapshotCodec";
 import {
+  communityMembershipRowIsActive,
   requireCommunityChatAccess,
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
@@ -766,8 +767,7 @@ export const listCommunityAppGrantRecipientUserIdsInternal = internalQuery({
       .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
       .collect()) as CommunityAppGrantRecipientRow[];
     for (const membership of memberships) {
-      if (membership.active === false) continue;
-      if (typeof membership.revokedAt === "number") continue;
+      if (!communityMembershipRowIsActive(membership)) continue;
       addRecipient(membership.userId);
     }
     return recipientUserIds;

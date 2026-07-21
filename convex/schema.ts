@@ -1317,7 +1317,7 @@ export default defineSchema({
       ),
     ),
     pricePointId: v.optional(v.id("communityPricePoints")),
-    active: v.optional(v.boolean()),
+    active: v.boolean(),
     activationSequence: v.optional(v.number()),
     activatedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),

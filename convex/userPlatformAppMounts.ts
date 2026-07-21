@@ -119,6 +119,7 @@ function withMountedStage(
 }
 import { encryptSecret } from "./providerConnections";
 import {
+  communityMembershipRowIsActive,
   requireCommunityChatAccess,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
@@ -328,8 +329,7 @@ async function listCommunityAppSourceProvenanceRecipientUserIds(
     truncated = true;
   }
   for (const membership of membershipRows.slice(0, maxRecipients)) {
-    if (membership.active === false) continue;
-    if (typeof membership.revokedAt === "number") continue;
+    if (!communityMembershipRowIsActive(membership)) continue;
     addRecipient(membership.userId);
   }
   return { userIds: recipients, truncated };

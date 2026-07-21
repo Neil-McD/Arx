@@ -32,7 +32,7 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 | 8 | anonymous-user deletion can rely on a hand-maintained reference list | `DECISION REQUIRED (user confirmation)` | identity/privacy | table growth silently invalidates safety | inventory live state and replace/delete cleanup |
 | 8 | recurring bounded prefix scans are “done” without continuation | `KEEP (MVP core)` | async operations | later eligible work can starve permanently | cursor/partition/service-level proof |
 | 7 | three entitlement-history algorithms are safer than one | `KEEP (MVP core)` | access/billing | repeated policy data resolution invites drift and repeated sorting | one bounded resolver with parity proof |
-| 7 | missing membership `active` should mean active forever | `DECISION REQUIRED (user confirmation)` | access | legacy compatibility is fail-open on an authorization row | observe, migrate, require explicit active state |
+| 7 | missing membership `active` should mean active forever | `DELETE (deferred/dead)` | access | legacy compatibility was fail-open on an authorization row with zero staging dependents | deleted on staging; explicit true is schema-required and behaviorally enforced |
 | 7 | native and official MCP transports each need independent semantic truth | `KEEP (MVP core)` | capabilities | wire contracts differ; capability meaning/authority should not | shared semantic kernel, versioned adapters |
 | 7 | raw retrieval query legacy fields belong indefinitely | `DECISION REQUIRED (user confirmation)` | intelligence/privacy | current writers omit them and privacy benefit is low | count/scrub/remove after retention decision |
 | 6 | `billing.ts` and source modules both need public registered names forever | `KEEP (MVP core)` | billing API | compatibility may exist but permanent duplication is unowned | inventory external callers and consolidate |
@@ -66,7 +66,7 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 
 - legacy interaction writer/link/attachment/backfill/read stack;
 - inline resource body fields and compactor;
-- duplicate/implicit-active membership compatibility;
+- duplicate membership compatibility;
 - raw retrieval query fields and legacy evidence states;
 - duplicate public Convex aliases and legacy MCP wire names;
 - standalone Workspace route/controller/UI state.

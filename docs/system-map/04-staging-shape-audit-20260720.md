@@ -134,6 +134,10 @@ Operational tables already show retention pressure: 257 critical audit events, 7
 
 Pass. The audit resolved data-shape uncertainty without exposing private content or changing state. It does **not** authorize migration, deletion, payout handling, cron changes, account deletion, or production inference. The later decision record resolves Builder Partner direction and shared-data ownership for planning. The next safe step is an isolated two-user account-deletion behavioral proof and fail-closed boundary—not a live mutation.
 
+## Membership cutover revalidation — 2026-07-21 UTC
+
+Immediately before the explicit-active schema cutover, the same versioned read-only query was rerun against `quick-porcupine-949`. The complete result remained 69 membership rows, zero missing `active` values, zero duplicate pairs, zero multiple-active pairs, and zero inactive/revoked rows. The identical aggregate was returned after the required schema and fail-closed projections deployed successfully. No identifiers or content were returned and neither audit changed product state. This receipt authorized removal of the missing-active compatibility rule and its temporary repair mutation; it did not authorize the separate membership-uniqueness or active-member-count migrations.
+
 ## Auth-session cutover receipt — later authorized slice
 
 This section records a later implementation slice and does not retroactively change the read-only boundary above.

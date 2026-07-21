@@ -63,7 +63,7 @@ assert.match(
 
 assert.match(
   recipients,
-  /settings\?\.muted === true[\s\S]*settings\.mutedUntil > params\.nowMs[\s\S]*membership\.active === false \|\| typeof membership\.revokedAt === "number"/,
+  /settings\?\.muted === true[\s\S]*settings\.mutedUntil > params\.nowMs[\s\S]*communityMembershipRowIsActive\(membership/,
   "active community recipient policy must suppress muted and revoked users",
 );
 

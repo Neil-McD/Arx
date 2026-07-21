@@ -8,7 +8,7 @@ The aggregate staging shape work in Step 0 is complete for identity/membership c
 
 ## Current implementation checkpoint
 
-The account-deletion safety fixture, declarative lifecycle ownership policy, Builder Partner v3 economics, and removal of the unreachable legacy deletion executor are complete on the isolated staging lane. F-001 and the complete authenticated session-continuity slice are now closed: verified `authSubject` is the sole actor-binding authority; each sign-in creates one hashed, absolutely expiring server credential; refresh is an in-place single-owner state transition; logout is local-authoritative; terminal retention is indexed, bounded, internal, and scheduled. The staging replacement ledger was drained to a proven zero state before its fields, indexes, public migration/prune surfaces, and duplicate bridge-cookie rotation logic were deleted. The quarantined deletion lifecycle remains downstream of these now-closed auth boundaries.
+The account-deletion safety fixture, declarative lifecycle ownership policy, Builder Partner v3 economics, removal of the unreachable legacy deletion executor, first static deletion slice, and explicit-active membership cutover are complete on the isolated staging lane. F-001 and the complete authenticated session-continuity slice are also closed: verified `authSubject` is the sole actor-binding authority; each sign-in creates one hashed, absolutely expiring server credential; refresh is an in-place single-owner state transition; logout is local-authoritative; terminal retention is indexed, bounded, internal, and scheduled. The staging replacement ledger and missing-active membership backlog were each proven empty before the session compatibility fields and membership repair surface were deleted. The quarantined deletion lifecycle remains downstream of membership uniqueness/count and entitlement-authority closure.
 
 ## Step 0 — Freeze decisions and gather minimum live shape
 
@@ -58,7 +58,7 @@ Exit proof: interruption at every phase resumes safely; other-party/community st
 1. **Complete on staging:** remove insecure credential fallback; store only the hash; prove generation and collision failure close before persistence.
 2. **Complete on staging:** make refresh a stable one-row leased transition, make logout local-authoritative and recoverable, impose absolute expiry, and internalize indexed bounded retention.
 3. **Complete on staging:** make verified `authSubject` the sole account-binding authority; remove the full-user email scan and inactive relink/continuity compatibility without migrating profile data.
-4. Deduplicate memberships, require explicit active state, repair cached counts, and prove concurrency behavior.
+4. **Explicit active state complete on staging:** missing state denies access, the field is schema-required, and the temporary repair surface is deleted. Remaining: enforce one row per membership pair, repair cached counts, and prove concurrent activation.
 5. Tighten join-request state vocabulary.
 6. Consolidate entitlement resolution into one bounded deterministic owner.
 

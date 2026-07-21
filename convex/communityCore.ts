@@ -680,11 +680,10 @@ export function normalizeRoleAssignment(raw: unknown): "admin" | "moderator" | "
   throw new Error("member_role_invalid");
 }
 
-export function communityMembershipRowIsActive(membership: CommunityMembershipLike | null | undefined): boolean {
-  if (!membership) return false;
-  if (membership.active === false) return false;
-  if (typeof membership.revokedAt === "number" && membership.revokedAt > 0) return false;
-  return true;
+export function communityMembershipRowIsActive(
+  membership: Pick<CommunityMembershipLike, "active" | "revokedAt"> | null | undefined,
+): boolean {
+  return membership?.active === true && typeof membership.revokedAt !== "number";
 }
 
 export function normalizeCommunityActiveMemberCount(rawCount: unknown): number | null {
