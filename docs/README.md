@@ -16,9 +16,7 @@
 5. `url-routing-contract-v1.md`
 6. `platform-diagnostics-contract-v1.md`
 7. `workspace-context-contract-v1.md`
-
-## Planned product architecture
-1. `community-agent-cognition-contract-v1.md`
+8. `community-agent-cognition-contract-v1.md`
 
 ## Active operational guides
 1. `auth-runtime-setup-workos-authkit.md`

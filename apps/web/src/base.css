@@ -6201,13 +6201,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   margin: 0 auto;
 }
 
-.discover-hero-with-app-detail {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 14px;
-  padding-bottom: 14px;
-}
-
 .discover-hero-copy {
   display: flex;
   flex-direction: column;
@@ -6258,61 +6251,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   grid-column: 1 / -1;
 }
 
-.discover-app-list {
-  grid-column: 1 / -1;
-  width: min(100%, 1120px);
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  justify-content: center;
-  column-gap: 48px;
-  row-gap: 8px;
-  align-content: start;
-  padding-bottom: 30px;
-}
-
-.discover-app-list>.discover-empty {
-  grid-column: 1 / -1;
-}
-
-.discover-app-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-  padding: 18px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 82%, transparent);
-}
-
-.discover-app-row-button {
-  appearance: none;
-  border: 0;
-  width: 100%;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-  padding: 18px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 82%, transparent);
-  cursor: pointer;
-}
-
-.discover-app-row-button:hover .discover-app-action,
-.discover-app-row-button:focus-visible .discover-app-action {
-  border-color: var(--border-strong);
-  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
-  color: var(--text-primary);
-}
-
-.discover-app-row-button:focus-visible {
-  outline: 2px solid var(--border-active);
-  outline-offset: 4px;
-  border-radius: 14px;
-}
-
 .discover-catalog-logo {
   width: 50px;
   height: 50px;
@@ -6353,194 +6291,6 @@ button.community-launch-knowledge-integration-chip:disabled {
 
 .discover-catalog-logo-detail .discover-catalog-logo-fallback {
   font-size: 14px;
-}
-
-.discover-app-row-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.discover-app-row-name {
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.2;
-  color: var(--text-primary);
-}
-
-.discover-app-row-tagline {
-  min-width: 0;
-  font-size: 14px;
-  line-height: 1.4;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.discover-app-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 56px;
-  height: 34px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border-muted);
-  background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
-}
-
-.discover-app-action:hover,
-.discover-app-action:focus-visible {
-  border-color: var(--border-strong);
-  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
-  color: var(--text-primary);
-}
-
-.discover-skill-list {
-  row-gap: 0;
-}
-
-.discover-skill-row-button {
-  align-items: flex-start;
-}
-
-.discover-skill-row-icon {
-  margin-top: 2px;
-  transition:
-    transform 140ms ease,
-    border-color 140ms ease,
-    background 140ms ease;
-}
-
-.discover-skill-row-button:hover .discover-skill-row-icon,
-.discover-skill-row-button:focus-visible .discover-skill-row-icon {
-  transform: translateY(-1px);
-  border-color: var(--border-strong);
-  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
-}
-
-.discover-skill-row-copy {
-  gap: 6px;
-}
-
-.discover-skill-row-heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.discover-skill-row-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 9px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border-muted) 90%, transparent);
-  background: color-mix(in srgb, var(--bg-card-alt) 80%, transparent);
-  color: var(--text-faint);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  flex-shrink: 0;
-}
-
-.discover-skill-row-desc {
-  max-width: 62ch;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.discover-skill-row-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
-.discover-skill-row-token {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border-muted) 82%, transparent);
-  background: color-mix(in srgb, var(--bg-card-alt) 74%, transparent);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.discover-app-action.is-installed {
-  color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--border-active) 42%, var(--border-muted));
-}
-
-.discover-app-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  border: 1px solid var(--border-muted);
-  background: color-mix(in srgb, var(--bg-card-alt) 88%, transparent);
-  color: var(--text-primary);
-}
-
-.discover-app-icon-detail {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-}
-
-.discover-app-icon svg {
-  width: 20px;
-  height: 20px;
-}
-
-.discover-app-icon-custom {
-  background: linear-gradient(135deg, rgba(201, 169, 98, 0.22), rgba(110, 212, 216, 0.08));
-}
-
-.discover-app-icon-research {
-  background: linear-gradient(135deg, rgba(110, 212, 216, 0.2), rgba(110, 212, 216, 0.06));
-}
-
-.discover-app-icon-summary {
-  background: linear-gradient(135deg, rgba(201, 169, 98, 0.2), rgba(201, 169, 98, 0.06));
-}
-
-.discover-app-icon-workflow {
-  background: linear-gradient(135deg, rgba(244, 106, 147, 0.16), rgba(244, 106, 147, 0.06));
-}
-
-.discover-app-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.discover-app-tagline {
-  font-size: 12px;
-  color: var(--text-muted);
 }
 
 .discover-empty {
@@ -6626,139 +6376,6 @@ button.community-launch-knowledge-integration-chip:disabled {
 .discover-card-button:focus-visible {
   outline: 2px solid var(--border-active);
   outline-offset: 2px;
-}
-
-.discover-app-detail-page {
-  width: min(100%, 1080px);
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding-bottom: 24px;
-}
-
-.discover-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
-.discover-breadcrumb-button {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  padding: 0;
-  font: inherit;
-  cursor: pointer;
-}
-
-.discover-breadcrumb-button:hover {
-  color: var(--text-primary);
-}
-
-.discover-breadcrumb-separator {
-  color: var(--text-faint);
-}
-
-.discover-hero-breadcrumb {
-  min-width: 0;
-  padding-bottom: 7px;
-}
-
-.discover-hero-with-app-detail .discover-hero-breadcrumb {
-  padding-bottom: 0;
-}
-
-.discover-fixed-app-detail-header {
-  min-width: 0;
-}
-
-.discover-app-detail-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-.discover-app-detail-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.discover-app-detail-heading-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.discover-app-detail-name {
-  font-size: 30px;
-  line-height: 1.05;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.discover-app-detail-action {
-  flex-shrink: 0;
-}
-
-.discover-app-detail-tagline {
-  font-size: 18px;
-  color: var(--text-muted);
-}
-
-.discover-app-spotlight {
-  border: 1px solid rgba(110, 212, 216, 0.18);
-  border-radius: 18px;
-  padding: 18px 20px;
-  background:
-    radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.12), transparent 38%),
-    linear-gradient(135deg, rgba(44, 56, 125, 0.9), rgba(78, 56, 140, 0.8), rgba(83, 89, 147, 0.72));
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 15px;
-  line-height: 1.55;
-}
-
-.discover-app-detail-section {
-  padding: 18px;
-  gap: 14px;
-  transition: none;
-  will-change: auto;
-}
-
-.discover-app-detail-section:hover,
-.discover-app-detail-section:active {
-  border-color: var(--border-default);
-  background: var(--bg-card);
-  transform: none;
-  box-shadow: none;
-  z-index: auto;
-}
-
-.discover-detail-section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-}
-
-.discover-detail-list {
-  margin: 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 10px;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.discover-connect-note {
-  margin-bottom: 10px;
 }
 
 .discover-connect-grid {
@@ -6892,47 +6509,6 @@ button.community-launch-knowledge-integration-chip:disabled {
   gap: 10px;
 }
 
-.discover-info-grid {
-  display: grid;
-  gap: 0;
-}
-
-.discover-info-row {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 16px;
-  padding: 12px 0;
-  border-top: 1px solid var(--border-muted);
-}
-
-.discover-info-row:first-child {
-  border-top: 0;
-  padding-top: 0;
-}
-
-.discover-info-label {
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
-.discover-info-value {
-  font-size: 13px;
-  color: var(--text-primary);
-  line-height: 1.55;
-}
-
-.discover-info-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--accent-cyan);
-  text-decoration: none;
-}
-
-.discover-info-link:hover {
-  text-decoration: underline;
-}
-
 @media (max-width: 860px) {
   .discover-hero {
     align-items: stretch;
@@ -6952,28 +6528,11 @@ button.community-launch-knowledge-integration-chip:disabled {
     margin-left: 0;
   }
 
-  .discover-app-list {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 720px) {
-  .discover-grid,
-  .discover-app-list {
+  .discover-grid {
     grid-template-columns: 1fr;
-  }
-
-  .discover-app-detail-name {
-    font-size: 26px;
-  }
-
-  .discover-app-detail-tagline {
-    font-size: 16px;
-  }
-
-  .discover-info-row {
-    grid-template-columns: 1fr;
-    gap: 6px;
   }
 }
 
@@ -31324,42 +30883,6 @@ button.message-citation-chip:hover {
   padding-bottom: 18px;
 }
 
-.app-root.mobile-shell .discover-app-list {
-  width: 100%;
-  margin: 0;
-  grid-column: auto;
-  grid-template-columns: 1fr;
-  column-gap: 0;
-  padding-bottom: 18px;
-}
-
-.app-root.mobile-shell .discover-app-row {
-  gap: 12px;
-  padding: 14px 0;
-}
-
-.app-root.mobile-shell .discover-app-row-button {
-  gap: 12px;
-  padding: 14px 0;
-}
-
-.app-root.mobile-shell .discover-app-row-tagline {
-  white-space: normal;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.app-root.mobile-shell .discover-app-detail-header {
-  align-items: flex-start;
-}
-
-.app-root.mobile-shell .discover-app-detail-heading-row {
-  flex-direction: column;
-  align-items: flex-start;
-}
-
 .app-root.mobile-shell .discover-card-body {
   padding: 10px 14px 14px;
 }
@@ -31376,24 +30899,6 @@ button.message-citation-chip:hover {
 
 .app-root.mobile-shell .discover-card-desc {
   -webkit-line-clamp: 3;
-}
-
-.app-root.mobile-shell .discover-skill-row-button {
-  gap: 10px;
-  padding: 14px 0;
-}
-
-.app-root.mobile-shell .discover-skill-row-heading {
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.app-root.mobile-shell .discover-skill-row-desc {
-  -webkit-line-clamp: 3;
-}
-
-.app-root.mobile-shell .discover-skill-row-meta {
-  gap: 6px 8px;
 }
 
 .app-root.mobile-shell .community-tab-scroll {

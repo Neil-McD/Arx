@@ -1,19 +1,19 @@
 # MVP Journey Reconciliation
 
-Snapshot: `67c89903add41ff9b8de20929e07429a8d98f3bc`. These are static traces. Authenticated staging behavior, provider convergence, and destructive recovery remain unproven.
+Snapshot: `67c89903add41ff9b8de20929e07429a8d98f3bc`, with later staging completion receipts reconciled below. Provider-outage convergence, unrelated signed-in journeys, and destructive recovery remain unproven.
 
 ## 1. Authenticate, refresh, logout, delete account
 
 ```text
 browser -> same-origin auth bridge -> OAuth provider -> verified Convex identity
--> users/authSessions -> actor projection -> refresh replacement chain
--> logout revocation -> account lifecycle
+-> users/authSessions -> actor projection -> leased in-place refresh
+-> local-authoritative logout -> quarantined account lifecycle
 ```
 
 - Authority: verified provider identity and actor resolver; cookie is only an opaque pointer.
-- Good: identity mismatch fails closed; one hashed, absolutely expiring session row refreshes in place under a single-owner lease.
-- Gaps: insecure random fallback; logout can clear the handle after revocation failure; account deletion is unbounded, incomplete, and destroys shared DM/community data.
-- Recovery receipt: session/audit events exist; deletion lacks resumable phase receipts.
+- Good: verified subject is the sole account-binding authority; secure random credentials are stored only as hashes; one absolutely expiring row refreshes in place under a single-owner lease; logout revokes locally before provider cleanup.
+- Gaps: end-to-end external deadlines, malformed-cookie recovery, and bounded routine-success diagnostics remain; account deletion is safely unavailable until its resumable lifecycle exists.
+- Recovery receipt: auth/session retention is indexed, bounded, and self-continuing; account deletion still lacks resumable phase receipts.
 
 ## 2. Founder creates and manages a community
 
@@ -108,7 +108,8 @@ checkout request -> Stripe -> webhook/provider verification
 
 - Authority: Stripe event/object state; redirects are UX only.
 - Good: idempotent lifecycle structure and ordinary creator payout boundary exist.
-- Gaps: delayed/reordered/refund/dispute fixtures are unproven; retained secondary Builder Partner policy is coupled into the same webhooks and still implements pre-v3 economics.
+- Good: Builder Partner v3 is community-only 4%, records explicit policy/rate basis, creates no new paid-tool commission, and preserves historical economics.
+- Gaps: delayed/reordered/refund/dispute/Connect convergence and historical legal-lineage/payout reconciliation remain incomplete.
 
 ## 10. Connect an app/skill and project authorized capability
 
@@ -120,7 +121,7 @@ owner/member settings -> developer app or skill package
 
 - Authority: app/skill owner, community/member role, OAuth/provider state, mount policy.
 - Good: private capability state is distinct from public Discover presentation.
-- Gaps: OAuth lifecycle primitives are repeated across provider classes; account deletion and external revocation completeness are unproven; public marketplace CSS remains.
+- Gaps: OAuth lifecycle primitives are repeated across provider classes; account deletion and external revocation completeness are unproven. The deferred public-marketplace CSS residue is removed.
 
 ## 11. Protected coding/community harness and Workspace compatibility
 
@@ -136,4 +137,4 @@ authorized project/thread -> credit admission -> runtime/worker session
 
 ## Journey gate result
 
-The eleven required paths have a canonical authority/state trace. Shared-data ownership and Builder Partner direction are now resolved for planning. The first implementation gate is the destructive-lifecycle safety fixture; remaining upstream work includes Builder Partner v3 migration, eventual-service fairness for crons, and Workspace destination versus protected substrate. Frontend decomposition should wait until obsolete surfaces and these authority migrations are bounded.
+The eleven required paths have a canonical authority/state trace. Shared-data ownership, destructive-path quarantine, Builder Partner v3, and authenticated session continuity are complete on staging. The next upstream architecture gate is the resumable deletion lifecycle, with membership/entitlement authority closed before destructive executors depend on it. Eventual-service fairness, canonical data migrations, and Workspace destination versus protected substrate remain downstream; frontend decomposition still waits.
