@@ -11,11 +11,16 @@ import {
   AUTH_SESSION_TERMINAL_RETENTION_MS,
   hashAuthSessionCredential,
 } from "./authSessionCore";
+import {
+  AUTH_PROVIDER_RESPONSE_TIMEOUT_MS,
+  AUTH_REQUEST_TIMEOUT,
+} from "./authProviderRequest";
 import schema from "./schema";
 
 const modules = import.meta.glob([
   "./authSessions.ts",
   "./authSessionCore.ts",
+  "./authProviderRequest.ts",
   "./providerConnections.ts",
   "./_generated/**/*.*s",
 ]);
@@ -67,7 +72,10 @@ async function createSession(
   );
 }
 
-async function createRefreshActionFixture(subject: string) {
+async function createRefreshActionFixture(
+  subject: string,
+  options: { accessTokenExpiresAt?: number } = {},
+) {
   vi.stubEnv("ARX_DB_KEY", "auth-session-state-machine-test-key");
   vi.stubEnv("ARX_AUTH_TOKEN_URL", "https://auth.example.test/token");
   vi.stubEnv("ARX_AUTH_CLIENT_ID", "test-client-id");
@@ -86,7 +94,7 @@ async function createRefreshActionFixture(subject: string) {
     userId,
     accessToken: "expired-access-token",
     refreshToken: "refresh-token-v1",
-    accessTokenExpiresAt: Math.floor(nowMs / 1_000) - 1,
+    accessTokenExpiresAt: options.accessTokenExpiresAt ?? Math.floor(nowMs / 1_000) - 1,
     externalUserId: subject,
     nowMs,
   });
@@ -340,6 +348,77 @@ test("an unverifiable successful refresh response never commits and releases its
   expect(row).toMatchObject({ secretRevision: 0 });
   expect(row?.revokedAt).toBeUndefined();
   expect(row?.refreshLeaseId).toBeUndefined();
+});
+
+test("a provider timeout releases the lease and never commits expired session state", async () => {
+  vi.useFakeTimers();
+  const fixture = await createRefreshActionFixture("workos:timeout_expired");
+  let markProviderStarted!: () => void;
+  const providerStarted = new Promise<void>((resolve) => {
+    markProviderStarted = resolve;
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      markProviderStarted();
+      return await new Promise<Response>(() => undefined);
+    }),
+  );
+
+  const resultPromise = fixture.t.action(
+    (internal as any).authSessions.refreshAuthSessionInternal,
+    { sessionTokenHash: fixture.sessionTokenHash },
+  );
+  await providerStarted;
+  await vi.advanceTimersByTimeAsync(AUTH_PROVIDER_RESPONSE_TIMEOUT_MS);
+  const result = await resultPromise;
+
+  expect(result).toEqual({ status: "transient_failure", reason: AUTH_REQUEST_TIMEOUT });
+  const row = await fixture.t.run(async (ctx) => await ctx.db.get(fixture.created.id)) as any;
+  expect(row).toMatchObject({ secretRevision: 0 });
+  expect(row?.revokedAt).toBeUndefined();
+  expect(row?.refreshLeaseId).toBeUndefined();
+  expect(row?.refreshLeaseExpiresAt).toBeUndefined();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("a provider timeout preserves a still-usable stored token without committing", async () => {
+  vi.useFakeTimers();
+  const nowSec = Math.floor(Date.now() / 1_000);
+  const fixture = await createRefreshActionFixture("workos:timeout_recovery", {
+    accessTokenExpiresAt: nowSec + 3_600,
+  });
+  let markProviderStarted!: () => void;
+  const providerStarted = new Promise<void>((resolve) => {
+    markProviderStarted = resolve;
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      markProviderStarted();
+      return await new Promise<Response>(() => undefined);
+    }),
+  );
+
+  const resultPromise = fixture.t.action(
+    (internal as any).authSessions.refreshAuthSessionInternal,
+    { sessionTokenHash: fixture.sessionTokenHash },
+  );
+  await providerStarted;
+  await vi.advanceTimersByTimeAsync(AUTH_PROVIDER_RESPONSE_TIMEOUT_MS);
+  const result = await resultPromise;
+
+  expect(result).toMatchObject({
+    status: "ready",
+    session: { access_token: "expired-access-token" },
+    trace: { bootstrapPath: "stored_token", recoveredAfterRefreshFailure: true },
+  });
+  const row = await fixture.t.run(async (ctx) => await ctx.db.get(fixture.created.id)) as any;
+  expect(row).toMatchObject({ secretRevision: 0 });
+  expect(row?.revokedAt).toBeUndefined();
+  expect(row?.refreshLeaseId).toBeUndefined();
+  expect(row?.refreshLeaseExpiresAt).toBeUndefined();
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 test("unsupported encrypted-secret versions fail closed and become terminally purgeable", async () => {

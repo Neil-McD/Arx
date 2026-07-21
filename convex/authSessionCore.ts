@@ -3,7 +3,6 @@ export const AUTH_SECURE_RANDOM_UNAVAILABLE = "auth_secure_random_unavailable" a
 export const AUTH_SESSION_ABSOLUTE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 export const AUTH_SESSION_TERMINAL_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
 export const AUTH_SESSION_REFRESH_LEASE_MS = 30_000;
-export const AUTH_PROVIDER_REFRESH_TIMEOUT_MS = 10_000;
 export const AUTH_PROVIDER_LOGOUT_TIMEOUT_MS = 5_000;
 export const AUTH_SESSION_SECRET_VERSION = 1;
 

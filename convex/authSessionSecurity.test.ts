@@ -10,6 +10,12 @@ import {
   hashAuthSessionCredential,
   resolveAuthSessionLifecycle,
 } from "./authSessions";
+import {
+  AUTH_PROVIDER_RESPONSE_TIMEOUT_MS,
+  AUTH_REQUEST_TIMEOUT,
+  fetchAuthProviderText,
+} from "./authProviderRequest";
+import { registerRuntimeAuthRoutes } from "./httpAuth";
 import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
 import {
   readAuthSessionCookie,
@@ -61,8 +67,159 @@ async function invokeWebLogoutWithCookie() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+});
+
+describe("auth provider whole-response deadline", () => {
+  test("returns one text snapshot and clears the deadline on success", async () => {
+    vi.useFakeTimers();
+    const providerResponse = new Response('{"ok":true}', {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+    const readBody = vi.spyOn(providerResponse, "text");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => providerResponse),
+    );
+
+    const result = await fetchAuthProviderText("https://auth.example.test/token", {
+      method: "POST",
+    });
+
+    expect(result).toMatchObject({ ok: true, status: 200, bodyText: '{"ok":true}' });
+    expect(readBody).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("times out a provider stall before headers and clears the deadline", async () => {
+    vi.useFakeTimers();
+    let providerSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        providerSignal = init?.signal ?? undefined;
+        return await new Promise<Response>(() => undefined);
+      }),
+    );
+
+    const resultPromise = fetchAuthProviderText("https://auth.example.test/token");
+    const rejection = expect(resultPromise).rejects.toThrow(AUTH_REQUEST_TIMEOUT);
+    await vi.advanceTimersByTimeAsync(AUTH_PROVIDER_RESPONSE_TIMEOUT_MS);
+
+    await rejection;
+    expect(providerSignal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("times out a stalled response body after headers and reads it only once", async () => {
+    vi.useFakeTimers();
+    let providerSignal: AbortSignal | undefined;
+    const providerResponse = new Response(null, {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+    const readBody = vi
+      .spyOn(providerResponse, "text")
+      .mockImplementation(async () => await new Promise<string>(() => undefined));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        providerSignal = init?.signal ?? undefined;
+        return providerResponse;
+      }),
+    );
+
+    const resultPromise = fetchAuthProviderText("https://auth.example.test/token");
+    const rejection = expect(resultPromise).rejects.toThrow(AUTH_REQUEST_TIMEOUT);
+    await vi.advanceTimersByTimeAsync(AUTH_PROVIDER_RESPONSE_TIMEOUT_MS);
+
+    await rejection;
+    expect(providerSignal?.aborted).toBe(true);
+    expect(readBody).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("clears the deadline after a non-timeout provider failure", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("provider unavailable");
+      }),
+    );
+
+    await expect(fetchAuthProviderText("https://auth.example.test/token")).rejects.toThrow(
+      "provider unavailable",
+    );
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("PKCE body timeout returns one canonical retryable response", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
+    vi.stubEnv("ARX_AUTH_TOKEN_URL", "https://auth.example.test/token");
+    vi.stubEnv("ARX_AUTH_CLIENT_ID", "test-client-id");
+    const routes: Array<{ path: string; method: string; handler: any }> = [];
+    const providerResponse = new Response(null, {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+    const readBody = vi
+      .spyOn(providerResponse, "text")
+      .mockImplementation(async () => await new Promise<string>(() => undefined));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => providerResponse),
+    );
+    registerRuntimeAuthRoutes({
+      http: { route: (config) => routes.push(config) },
+      httpAction: (handler) => handler,
+      buildCorsHeaders: () => new Headers(),
+      jsonResponse: (_req, status, payload) =>
+        new Response(JSON.stringify(payload), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        }),
+      optionsResponse: () => new Response(null, { status: 204 }),
+      parseOptionalString: (raw) => (typeof raw === "string" && raw.trim() ? raw.trim() : null),
+    });
+    const route = routes.find(
+      (candidate) =>
+        candidate.path === "/runtime/auth_exchange_pkce_code" && candidate.method === "POST",
+    );
+    expect(route).toBeDefined();
+
+    const responsePromise = route!.handler(
+      {},
+      new Request("https://polynet.test/runtime/auth_exchange_pkce_code", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Arx-Auth-Bridge-Secret": "test-bridge-secret",
+        },
+        body: JSON.stringify({
+          auth_code: "provider-code",
+          code_verifier: "pkce-verifier",
+          redirect_to: "https://polynet.test/api/auth/google/callback",
+        }),
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(AUTH_PROVIDER_RESPONSE_TIMEOUT_MS);
+    const response = await responsePromise;
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      ok: false,
+      code: AUTH_REQUEST_TIMEOUT,
+      error: AUTH_REQUEST_TIMEOUT,
+      message: "Auth provider request timed out.",
+    });
+    expect(readBody).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
 
 describe("malformed auth cookie recovery", () => {

@@ -6,7 +6,7 @@ Lane: `codex/semantic-platform-staging-20260719` / `polynet-staging.vercel.app` 
 
 Scope: F-001 and F-003 through F-005 only; production and unrelated access domains untouched.
 
-Status: the original all-dimension `8/10` closure below was superseded by post-acceptance adversarial review. Refresh subject immutability, retention reachability, and malformed-cookie recovery are now closed on staging; end-to-end deadlines and bounded auth diagnostics remain open.
+Status: the original all-dimension `8/10` closure below was superseded by post-acceptance adversarial review. Refresh subject immutability, retention reachability, malformed-cookie recovery, and the Convex-to-provider whole-response deadline are now closed on staging. Outer browser-to-Vercel and Vercel-to-Convex deadlines plus bounded auth diagnostics remain open.
 
 ## Irreducible outcome
 
@@ -31,6 +31,7 @@ sign in
 bootstrap / refresh
   -> reject missing, expired, or revoked state
   -> use valid stored access token, or claim 30-second lease at revision N
+  -> bound provider headers plus complete response body to one 10-second deadline
   -> require fresh provider/JWT subject evidence to equal the original verified subject
   -> reject unverifiable refresh state without commit; revoke mismatched subject state
   -> commit encrypted state in the same row at revision N+1
@@ -79,8 +80,9 @@ Focused persisted and route coverage includes:
 - diagnostic coverage for bootstrap, refresh, contention, commit loss, logout, and provider failures;
 - bounded non-throwing session/flow-cookie decoding with deterministic invalid-cookie convergence before any bridge effect;
 - structural absence of rotation, replacement, legacy lookup, public migration, and full-table maintenance.
+- one provider-response primitive spanning headers and complete body consumption for PKCE and refresh, with deterministic pre-header/body-stall timeout, single body read, timer cleanup, lease release, no refresh-state commit, and valid stored-token recovery.
 
-The focused suites now contain 40 passing behavioral tests: four actor-authority, twenty-three security/route, and thirteen persisted state-machine tests. Convex and web typechecks, the production web build, and the canonical foundation gate all pass. The restricted gate run stopped only at the known `tsx` local-IPC `EPERM`; the identical gate passed outside that runner restriction.
+The focused suites now contain 47 passing behavioral tests: four actor-authority, twenty-eight security/route, and fifteen persisted state-machine tests. Convex and web typechecks, the production web build, and the canonical foundation gate all pass. The restricted gate run stopped only at the known `tsx` local-IPC `EPERM`; the identical gate passed outside that runner restriction.
 
 ## Current score after adversarial review
 
@@ -88,9 +90,9 @@ The focused suites now contain 40 passing behavioral tests: four actor-authority
 | --- | ---: | --- | --- |
 | Simplicity | 8 | one subject selector, one credential row, one refresh transition, one retention owner; no new state or endpoint was needed for subject immutability | provider payload normalization still supports multiple upstream response shapes |
 | Scalability | 7 | refresh creates no replacement rows; lookup and retention are indexed; full batches immediately continue without waiting for the hourly cron | normal successful bootstrap diagnostics remain unbounded |
-| Reliability | 7 | stable cookie, revisioned lease, explicit outcomes, local-authoritative logout | bridge calls have no application deadline and provider body consumption is not covered by the current timer |
+| Reliability | 7 | stable cookie, revisioned lease, explicit outcomes, local-authoritative logout, and one whole-response provider deadline | outer browser-to-Vercel and Vercel-to-Convex calls still have no application deadline |
 | Security | 8 | refresh rejects absent subject evidence and terminally revokes provider/JWT subject drift; malformed session/flow cookies fail closed before bridge work | optional parent-domain/duplicate-cookie policy remains open |
-| Robustness | 7 | contention, commit-loss, subject drift, malformed-cookie recovery, unverifiable refresh responses, corrupt early deadlines, and sustained retention backlogs are explicit and tested | external request stalls are not fully bounded |
+| Robustness | 7 | contention, commit-loss, subject drift, malformed-cookie recovery, provider header/body stalls, unverifiable refresh responses, corrupt early deadlines, and sustained retention backlogs are explicit and tested | outer request stalls are not yet bounded |
 
 The original blanket `8` is no longer treated as current truth. Subject immutability and retention reachability meet their outcomes; the remaining dimensions stay open until their named falsifiers pass.
 
@@ -148,3 +150,16 @@ Accepted at the implementation checkpoint `d945ac5b` on the isolated staging lan
 - no schema, Convex function, persisted row, cookie name, cookie TTL, bridge secret, domain policy, or production target changed.
 
 Malformed-cookie recovery is complete. Whole-operation external deadlines are the next auth/session reliability slice; routine-success diagnostic reduction remains after that.
+
+## Convex-to-provider whole-response deadline acceptance
+
+Implemented on the isolated staging lane on 2026-07-21:
+
+- one `authProviderRequest` primitive owns the canonical `10,000 ms` provider deadline and the `auth_request_timeout` failure code;
+- the deadline spans both `fetch` and complete `response.text()` consumption, aborts the underlying request, snapshots status/headers/body once, and clears its timer on success, timeout, and non-timeout failure;
+- PKCE exchange maps either provider stall phase to one structured retryable `503` and never forwards a partial provider response;
+- refresh timeout remains transient: the claimed lease is released, `secretRevision` and encrypted state are unchanged, an expired stored token returns `auth_request_timeout`, and a still-valid stored token remains usable;
+- existing provider subject mismatch remains terminal and the header-only five-second best-effort logout boundary is unchanged;
+- focused fixtures cover provider stalls before headers and after headers, single body consumption, timer cleanup, expired-token failure, and valid-token recovery.
+
+This closes only the innermost network dependency. Browser-to-Vercel and Vercel-to-Convex whole-operation deadlines remain the next reliability slice; bounded routine-success diagnostics remain after them.

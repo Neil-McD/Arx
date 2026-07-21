@@ -2,9 +2,9 @@ import { internalAction, internalMutation, internalQuery } from "./_generated/se
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { decryptStoredSecret, encryptSecret } from "./providerConnections";
+import { fetchAuthProviderText } from "./authProviderRequest";
 import {
   AUTH_PROVIDER_LOGOUT_TIMEOUT_MS,
-  AUTH_PROVIDER_REFRESH_TIMEOUT_MS,
   AUTH_SECURE_RANDOM_UNAVAILABLE,
   AUTH_SESSION_ABSOLUTE_TTL_MS,
   AUTH_SESSION_REFRESH_LEASE_MS,
@@ -459,26 +459,18 @@ async function refreshUpstreamSession(existing: StoredAuthSessionV1): Promise<St
   }
 
   const upstreamUrl = isWorkOsAuth ? WORKOS_AUTHENTICATE_UPSTREAM_URL : tokenUrlRaw;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), AUTH_PROVIDER_REFRESH_TIMEOUT_MS);
-  let response: Response;
-  try {
-    response = await fetch(upstreamUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: form.toString(),
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  const response = await fetchAuthProviderText(upstreamUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: form.toString(),
+  });
   if (!response.ok) {
-    const text = (await response.text()).trim();
+    const text = response.bodyText.trim();
     throw new Error(text || `auth_refresh_failed_${response.status}`);
   }
-  const payload = (await response.json()) as unknown;
+  const payload = JSON.parse(response.bodyText) as unknown;
   const expectedSubject = normalizeString(existing.user.id);
   const observedSubjects = readObservedRefreshSubjects(payload);
   if (observedSubjects.length === 0) {

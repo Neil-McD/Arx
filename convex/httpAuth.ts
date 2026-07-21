@@ -1,3 +1,10 @@
+import {
+  AUTH_REQUEST_TIMEOUT,
+  fetchAuthProviderText,
+  isAuthProviderRequestTimeout,
+  type AuthProviderTextResponse,
+} from "./authProviderRequest";
+
 type RuntimeAuthBeginGoogleSignInInput = {
   redirect_to?: unknown;
   code_challenge?: unknown;
@@ -159,18 +166,17 @@ function toAuthBridgeUnauthorizedResponse(
   });
 }
 
-async function proxyUpstreamResponse(params: {
+function proxyUpstreamResponse(params: {
   req: Request;
-  upstream: Response;
+  upstream: AuthProviderTextResponse;
   buildCorsHeaders: RegisterRuntimeAuthRoutesArgs["buildCorsHeaders"];
-}): Promise<Response> {
+}): Response {
   const headers = params.buildCorsHeaders(params.req);
   headers.set(
     "Content-Type",
     String(params.upstream.headers.get("content-type") ?? "application/json; charset=utf-8"),
   );
-  const bodyText = await params.upstream.text();
-  return new Response(bodyText, {
+  return new Response(params.upstream.bodyText, {
     status: params.upstream.status,
     headers,
   });
@@ -191,9 +197,9 @@ async function forwardAuthFormRequest(params: {
     return toAuthMisconfiguredResponse(params.req, params.jsonResponse, "Auth upstream URL is invalid.");
   }
 
-  let upstream: Response;
+  let upstream: AuthProviderTextResponse;
   try {
-    upstream = await fetch(upstreamUrl.toString(), {
+    upstream = await fetchAuthProviderText(upstreamUrl.toString(), {
       method: "POST",
       headers: buildAuthProxyHeaders({
         req: params.req,
@@ -203,6 +209,14 @@ async function forwardAuthFormRequest(params: {
       body: params.formData.toString(),
     });
   } catch (error) {
+    if (isAuthProviderRequestTimeout(error)) {
+      return params.jsonResponse(params.req, 503, {
+        ok: false,
+        code: AUTH_REQUEST_TIMEOUT,
+        error: AUTH_REQUEST_TIMEOUT,
+        message: "Auth provider request timed out.",
+      });
+    }
     const message = error instanceof Error ? error.message : String(error);
     return params.jsonResponse(params.req, 503, {
       ok: false,
@@ -212,7 +226,7 @@ async function forwardAuthFormRequest(params: {
     });
   }
 
-  return await proxyUpstreamResponse({
+  return proxyUpstreamResponse({
     req: params.req,
     upstream,
     buildCorsHeaders: params.buildCorsHeaders,
