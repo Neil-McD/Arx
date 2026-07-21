@@ -15,26 +15,26 @@ Let a person control their account and private data without corrupting money rec
 | operational evidence | audit/diagnostic/runtime receipts | bounded retention and pseudonymization; never accidental authority |
 | external-provider state | OAuth, Stripe, worker/provider resources | revoke/delete externally and reconcile local state with receipts |
 
-The ownership matrix is now accepted as product direction. The current implementation does not encode it as one lifecycle contract, and exact legal/financial/security TTLs remain open.
+The ownership matrix is accepted as product direction. `accountLifecyclePolicy.ts` now encodes declarative coverage for all 124 current schema tables, but the bounded executor and exact legal/financial/security TTLs remain open.
 
 ## Account deletion path
 
-`convex/account.ts:349-673` implements `deleteOwnAccount` as one large mutation. It checks finance and mounted-object blockers, then collects and deletes rows across many domains. The broad intent is good, but the operation is transaction-sized, non-resumable, and incomplete relative to 124 current tables.
+`convex/account.ts` now exposes only an authenticated quarantine. It resolves an existing verified actor without provisioning, then throws `account_delete_lifecycle_migration_blocked`. The first-party deletion form, callback, and cloud gateway are gone, so current and stale clients cannot run the retired executor.
 
-Two source-level defects are upstream of all cleanup aesthetics:
+The removed executor established two requirements for its eventual replacement:
 
-1. For every conversation in which the deleting user is a participant, the mutation deletes **all** messages, **all** participant rows, typing rows, and the conversation (`account.ts:597-649`). That erases the surviving participant's shared history. `dmParticipants.status` supports `left`, yet no ordinary leave/delete-conversation operation was found.
-2. It deletes community resources and events solely because the user created them (`account.ts:435-436`). This treats creator attribution as ownership of shared community objects and can destroy community value after contribution.
+1. For every conversation in which the deleting user was a participant, the retired mutation deleted **all** messages, **all** participant rows, typing rows, and the conversation. That erased the surviving participant's shared history. `dmParticipants.status` supports `left`, yet no ordinary leave/delete-conversation operation was found.
+2. It deleted community resources and events solely because the user created them. This treated creator attribution as ownership of shared community objects and could destroy community value after contribution.
 
-The mutation deletes legacy `communityChatMessages` sent by the user, but no canonical interaction roots/replies are included. The schema declares moderation events `privacy_purge_requested` and `privacy_purged` (`schema.ts:2003-2004`), while the interaction core emits ordinary edit/tombstone events and no first-party privacy purge workflow was found. That is an unfinished lifecycle, not a safe retention policy.
+The retired mutation touched legacy `communityChatMessages` but not canonical interaction roots/replies. The schema declares moderation events `privacy_purge_requested` and `privacy_purged`, while no first-party privacy purge workflow was found. That is an unfinished replacement lifecycle, not a safe retention policy.
 
-Static comparison also found user-linked state with no explicit account-deletion edge, including member facts/profile spines, legal acceptances, some source/app OAuth state, workspace settings/snapshots, auto-recharge/customer/runtime lease state, and canonical interaction/evidence attribution. Some rows may correctly require retention; the defect is the lack of a named policy and proof.
+The generated policy now names every table, but 41 user-reference edges still lack the indexes needed for bounded execution. Some rows correctly require retention; coverage vocabulary is not yet execution or proof.
 
-DM attachments embedded in `contentJson` are not explicitly storage-cleaned when messages are deleted. This is a storage-leak inference until attachment representation and live prevalence are checked.
+The replacement policy still needs an explicit rule for DM attachments embedded in `contentJson`. The retired executor did not visibly clean their storage objects; this remains a historical storage-leak inference until attachment representation and live prevalence are checked.
 
 ## Community deletion path
 
-`deleteCommunity` performs wide per-table collects, a global checkout-session scan, and nested thread/message/reaction deletes in one mutation, then schedules cognition cleanup after the community row is removed. Complexity grows with global checkout history plus all community-owned state. It lacks a durable phase/cursor/receipt from which to resume.
+`deleteCommunity` is now a zero-effect quarantine. It resolves the verified actor and current owner, then throws `community_delete_lifecycle_migration_blocked`. It performs no collect, delete, provider call, or schedule; repeated calls are inert. The first-party gateway/controller/modal/action is removed and owner settings expose static paused copy. The prior unbounded cascade is deleted, while the bounded internal cognition drain remains for already-scheduled historical cleanup.
 
 The correct primitive is a deletion state machine:
 
@@ -54,9 +54,9 @@ This looks like legacy/manual maintenance residue. Before deletion, count anonym
 
 | Path | Current order/failure | Required shape |
 | --- | --- | --- |
-| account deletion | `O(all owned/shared history)` in one mutation; partial external effects have no phase receipt | bounded phases with retry and terminal audit |
-| DM cleanup | `O(all messages and participants in every joined conversation)` and destroys other-party state | participant departure plus policy-driven redaction |
-| community deletion | `O(global checkout sessions + all community rows)` in one mutation | community-keyed inventory, cursor, tombstone, finalizer |
+| account deletion | quarantined after verified actor resolution; zero writes | bounded phases with retry and terminal audit |
+| DM cleanup | retired destructive executor cannot run; replacement semantics absent | participant departure plus policy-driven redaction |
+| community deletion | quarantined after verified owner resolution; zero writes/schedules | community-keyed inventory, cursor, tombstone, finalizer |
 | anonymous cleanup | `O(users × scanned reference tables)` with incomplete static foreign-key list | indexed lifecycle state or explicit one-time migration |
 | audit/diagnostic retention | unbounded growth; deletion policy not found | time/need-based retention with preserved minimal receipts |
 
@@ -64,10 +64,10 @@ This looks like legacy/manual maintenance residue. Before deletion, count anonym
 
 | Candidate | Classification | Action | Idiot index | Rationale |
 | --- | --- | --- | ---: | --- |
-| account/community deletion capability | `KEEP (MVP core)` | `HARDEN`, `BOUND` | 1 | legally and operationally required; current algorithm is not |
-| one-transaction cross-domain deletion | `KEEP (MVP core)` | `MIGRATE_THEN_DELETE` | 10 | irreversible work should not depend on one unbounded transaction |
-| delete every DM when one participant deletes an account | `KEEP (MVP core)` | `HARDEN` | 10 | violates shared ownership and destroys another user's data |
-| delete community resources/events by contributor ID | `KEEP (MVP core)` | `HARDEN`, `OBSERVE_FIRST` | 9 | accepted policy preserves community continuity and anonymizes the contributor |
+| account/community deletion capability | `KEEP (MVP core)` | `HARDEN`, `BOUND` | 1 | legally and operationally required; safely unavailable until rebuilt |
+| one-transaction cross-domain deletion | `DELETE (deferred/dead)` complete | `DELETE` | 10 | both destructive executors are quarantined and their first-party action paths are gone |
+| delete every DM when one participant deletes an account | `DELETE (deferred/dead)` complete | replacement `HARDEN` | 10 | the retired behavior violated shared ownership; replacement semantics remain open |
+| delete community resources/events by contributor ID | `DELETE (deferred/dead)` complete | replacement `HARDEN` | 9 | quarantine preserves community continuity until anonymization exists |
 | privacy purge event states without an implemented workflow | `KEEP (MVP core)` | `HARDEN`, `MIGRATE_THEN_DELETE` | 8 | accepted policy requires propagation; state vocabulary alone is false assurance |
 | anonymous-user cleanup hard-coded scans | `DECISION REQUIRED (user confirmation)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 8 | likely residue, but live anonymous accounts and creators are unknown |
 

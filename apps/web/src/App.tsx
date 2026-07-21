@@ -7797,10 +7797,7 @@ export default function App() {
   const communityUi = useWebCommunityUiController<
     AuthSession,
     CommunityRecord,
-    AccountCommerceStatus,
-    AppPage,
-    AppView,
-    CommunityTab
+    AccountCommerceStatus
   >({
     ...authenticatedSessionArg,
     communities,
@@ -7808,8 +7805,6 @@ export default function App() {
     accountCommerceStatus,
     accountCommerceError,
     isAccountSetupComplete: isAccountSetupCompleteForBuilderActions,
-    activeCommunity,
-    activeCommunityId,
     communityInitials,
     loadAccountCommerceStatus,
     persistCreateCommunityIntent,
@@ -7836,19 +7831,8 @@ export default function App() {
     maxCreateImageDataUrlChars: MAX_WEB_IMAGE_DATA_URL_CHARS,
     createUnauthenticatedErrorMessage: "Sign in to create a community.",
     bannerLoadFailureMessage: "Failed to load banner.",
-    loadCommunities,
-    setActiveCommunityId,
-    setActivePage,
-    setActiveView,
-    setCommunityTab,
-    setCommunities,
-    setCommunityRoleById,
-    getCommunityId: (community) => community.id,
   });
-  const {
-    openCreateCommunityModal,
-    openDeleteCommunityModal,
-  } = communityUi;
+  const { openCreateCommunityModal } = communityUi;
 
   const {
     publicFunnelSlug,
@@ -10569,7 +10553,6 @@ export default function App() {
         setCommunitySettingsPriceUsdAnnual,
         communityPricingDirtyRef,
         handleSaveCommunitySettings,
-        openDeleteCommunityModal,
         handleToggleCommunityMute,
         handleLeaveCommunity,
       },

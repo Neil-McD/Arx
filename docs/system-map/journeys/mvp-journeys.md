@@ -25,7 +25,7 @@ authenticated builder -> capacity/tier gate -> createCommunity
 
 - Authority: actor, builder capacity, `communities.ownerId`.
 - Good: owner is not duplicated as a membership row; Published/Unlisted semantics are explicit.
-- Gaps: slug and membership uniqueness are application-level; deletion is an unbounded cascade; deprecated onboarding field remains.
+- Gaps: slug uniqueness remains application-level; community deletion is safely quarantined until a bounded resumable lifecycle exists. Membership uniqueness is fail-closed and the deprecated onboarding storage is gone on staging.
 
 ## 3. Founder publishes or shares the canonical funnel
 
@@ -48,7 +48,7 @@ Discover or shared URL -> public funnel -> verified actor
 
 - Authority: current block, membership, access source, provider-derived subscription.
 - Good: visibility does not bypass access; membership pair reads fail closed on duplicates; activation is idempotent for an active row and reactivation preserves row identity.
-- Gaps: free-form join status remains possible and provider-delay behavior is unproven; the cached active-member-count divergence is closed on staging.
+- Gaps: provider-delay behavior remains unproven. Join-request storage is constrained to `pending | denied`, and cached active-member-count divergence is closed on staging.
 
 ## 5. Member navigates, interacts, uses voice/resources, manages membership
 

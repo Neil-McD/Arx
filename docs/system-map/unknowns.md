@@ -72,7 +72,7 @@ Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-stagin
 | U-026 | Is standalone Workspace UI required by any current MVP journey, or only protected substrate? | route/UI deletion boundary | explicit decision plus navigation telemetry counts |
 | U-027 | Which lexical CSS candidates are dynamically generated or visually used? | safe CSS deletion | instrumented class coverage and screenshot matrix |
 | U-028 | Is another branch-protection workflow running web build/typecheck/journeys? | CI gap severity | GitHub required-check configuration/workflow inventory |
-| U-029 | Which of 247 checks own unique invariants and when are they invoked? | proof deletion/consolidation | generated owner/invocation matrix |
+| U-029 | Which of 253 `check:*` commands own unique invariants and when are they invoked? | proof deletion/consolidation | generated owner/invocation matrix |
 | U-030 | Why are root/web packages independently locked and which Node versions are supported? | dependency drift | explicit deployment/build ownership decision |
 | U-031 | Which env names are actually set in staging/production and read at build/runtime? | template cleanup | names-only deployment inventory matched to static reads |
 | U-032 | What request-rate and payload bounds apply to every public HTTP/API/MCP route? | abuse/cost posture | route contract matrix and boundary fixtures |

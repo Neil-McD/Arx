@@ -28,15 +28,15 @@ Redirects and client success screens are UX only. `checkout_finalize` remains id
 1. **Community commerce:** paid join checkout and creator destination revenue in `communityCommerce.ts`/`creatorCommerce.ts`.
 2. **Premium tier:** platform subscription and `userEntitlements` in `premiumBilling.ts`.
 3. **Workspace/tool credits:** balances, reservations, charges, collection, auto-recharge, Stripe customer in `workspaceCredits.ts`, `workspaceAutoRecharge.ts`, and related modules.
-4. **Builder Partner:** seven dedicated partner/commission/payout tables and 3,533-line `builderPartners.ts`, coupled into Connect state, webhooks, community commerce, workspace credits, settings, Workspace, operator UI, legal terms, and two crons. Current economics include 5% community revenue and paid-tool usage; the accepted target is prospective 4% community-only revenue.
+4. **Builder Partner:** seven dedicated partner/commission/payout tables and 3,525-line `builderPartners.ts`, coupled into Connect state, webhooks, community commerce, settings, operator UI, legal terms, and two crons. Current v3 economics are prospective 4% community-only revenue with no new paid-tool commission; historical v1/v2 obligations retain their recorded economics.
 
 These are not one domain merely because Stripe participates. They have different buyers, beneficiaries, authority rules, ledgers, and retention duties.
 
 ## Resolved direction and remaining drift
 
-Current direction retains Builder Partner but demotes it from a primary MVP journey. The active system is not dead code: it enrolls users, captures attribution, accrues commissions, advances them daily, creates payout cycles, and exposes member/operator UI. The drift is now precise: paid-tool commissions, the prospective 5% formula, stale legal-policy lineage, and primary Workspace/onboarding prominence do not match the accepted target.
+Builder Partner is retained as a secondary capability rather than a launch gate. The active system enrolls users, captures attribution, accrues versioned v3 commissions, advances them daily, creates payout cycles, and exposes Settings/operator UI. Prospective paid-tool commissions, the 5% formula, and primary Workspace/onboarding prominence are removed; historical legal lineage and mixed-policy payout reconciliation remain open.
 
-The bounded staging audit found active partners and pending financial state, so wholesale deletion remains unsafe. The simplification sequence is: define v3 terms/economic policy -> stop paid-tool accrual and the old prospective formula at one versioned boundary -> preserve and reconcile pre-v3 obligations -> require v3 for new eligible accrual -> remove primary-surface coupling -> retain the minimum secondary enrollment/status/operator/payout machinery.
+The bounded staging audit found active partners and pending financial state, so wholesale deletion remains unsafe. The v3 terms/economic boundary, prospective accrual cutover, and secondary placement are complete. Remaining work is to preserve and reconcile pre-v3 obligations and legal lineage while retaining the minimum enrollment/status/operator/payout machinery.
 
 ## Duplication and scale
 
@@ -57,10 +57,10 @@ Static code clearly separates provider verification from redirects, but runtime 
 | provider-verified community access and ordinary creator payout | `KEEP (MVP core)` | `HARDEN` | 0 | required for gated paid communities and builder economics |
 | one shared entitlement resolver | `KEEP (MVP core)` | `CONSOLIDATE`, `BOUND` complete | 1 | one bounded job remains; independent interpretations and append-only default/history rows are deleted |
 | Builder Partner as a secondary growth capability | `KEEP (MVP core)` | `DOCUMENT`, `HARDEN`, `CONSOLIDATE` | 2 | explicitly retained; not a launch gate or primary product journey |
-| paid-tool Builder Partner commission | `DELETE (deferred/dead)` | `MIGRATE_THEN_DELETE`, `VERSION` | 10 | explicitly removed from the target economics; preserve historical rows |
-| 5% prospective community-revenue formula | `DELETE (deferred/dead)` | `MIGRATE_THEN_DELETE`, `VERSION` | 8 | replace with 4% only for new eligible commissions |
+| paid-tool Builder Partner commission | `DELETE (deferred/dead)` complete prospectively | `VERSION` | 10 | v3 creates none; preserve historical rows |
+| 5% prospective community-revenue formula | `DELETE (deferred/dead)` complete prospectively | `VERSION` | 8 | v3 uses 4%; historical obligations remain versioned |
 | Builder Partner advancement/payout machinery | `KEEP (MVP core)` | `HARDEN`, `DOCUMENT` | 3 | needed to settle retained obligations; must enforce policy version, risk, approval, and idempotency |
-| Builder Partner coupling to primary Workspace/onboarding UI | `DELETE (deferred/dead)` | `MIGRATE_THEN_DELETE` | 9 | retained program belongs in coherent secondary Settings/operator surfaces |
+| Builder Partner coupling to primary Workspace/onboarding UI | `DELETE (deferred/dead)` complete | `DELETE` | 9 | retained program now lives in coherent secondary Settings/operator surfaces |
 | ten `billing.ts` transport aliases plus source-module surfaces | `KEEP (MVP core)` | `CONSOLIDATE` | 6 | transport compatibility may be needed; duplicated callable identity should not be permanent |
 | workspace/tool credit accounting | `KEEP (MVP core)` | `DOCUMENT`, `HARDEN` | 3 | protected harness capability depends on it, although standalone Workspace is deferred |
 

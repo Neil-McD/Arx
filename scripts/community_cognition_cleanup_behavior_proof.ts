@@ -356,22 +356,20 @@ assert.deepEqual(
   COMMUNITY_COGNITION_CLEANUP_PHASES.map((definition) => definition.phase),
   "the Convex validator and fixed cleanup allowlist must stay in lockstep",
 );
-const canonicalCommunityDeleteIndex = lifecycle.indexOf(
-  "await ctx.db.delete(community._id as any);",
-);
-const cleanupScheduleIndex = lifecycle.indexOf(
-  "drainDeletedCommunityCognitionInternal",
-  canonicalCommunityDeleteIndex,
-);
-assert.ok(canonicalCommunityDeleteIndex >= 0, "canonical community deletion must remain present");
-assert.ok(
-  cleanupScheduleIndex > canonicalCommunityDeleteIndex,
-  "canonical deletion must atomically schedule cleanup after deleting the community row",
+const deleteCommunityStart = lifecycle.indexOf("export const deleteCommunity = mutation({");
+assert.ok(deleteCommunityStart >= 0, "the cached-client community deletion identity must remain present");
+const deleteCommunityBlock = lifecycle.slice(deleteCommunityStart);
+assert.match(lifecycle, /community_delete_lifecycle_migration_blocked/);
+assert.match(deleteCommunityBlock, /COMMUNITY_DELETION_QUARANTINE_CODE/);
+assert.doesNotMatch(
+  deleteCommunityBlock,
+  /ctx\.db\.delete|ctx\.scheduler|drainDeletedCommunityCognitionInternal/,
+  "quarantined community deletion must not delete rows or schedule new cognition cleanup",
 );
 assert.equal(
-  lifecycle.match(/drainDeletedCommunityCognitionInternal/g)?.length,
-  1,
-  "canonical deletion must have exactly one cleanup entry point",
+  lifecycle.match(/drainDeletedCommunityCognitionInternal/g)?.length ?? 0,
+  0,
+  "the public lifecycle must not be an active cleanup entry point while deletion is quarantined",
 );
 
 for (const [file, expectedCount] of [

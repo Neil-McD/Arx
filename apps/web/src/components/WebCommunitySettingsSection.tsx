@@ -170,7 +170,6 @@ type WebCommunitySettingsSectionProps = {
     setCommunitySettingsPriceUsdAnnual: (value: string) => void;
     setCommunityPricingDirty: () => void;
     handleSaveCommunitySettings: () => Promise<void> | void;
-    openDeleteCommunityModal: () => void;
     handleToggleCommunityMute: (value: boolean) => Promise<void> | void;
     handleLeaveCommunity: () => Promise<void> | void;
   };
@@ -896,24 +895,13 @@ function CommunityMonetizationConfigSection({
   );
 }
 
-function CommunityDangerZoneSection({
-  state,
-  actions,
-}: Pick<WebCommunitySettingsSectionProps, "state"> & Pick<WebCommunitySettingsSectionProps, "actions">) {
+function CommunityDangerZoneSection() {
   return (
     <div className="settings-section" style={{ marginTop: 18 }}>
       <div className="settings-section-title">Danger zone</div>
       <div className="settings-section-desc">
-        Permanently delete this community and all associated data.
+        Community deletion is temporarily paused while resumable cleanup and data-retention safeguards are completed. No community data will be changed from this screen.
       </div>
-      <button
-        type="button"
-        className="danger delete-community-btn"
-        onClick={actions.openDeleteCommunityModal}
-        disabled={state.isSavingCommunitySettings || state.isProcessingCommunitySettingsBanner}
-      >
-        Delete community
-      </button>
     </div>
   );
 }
@@ -962,7 +950,7 @@ function CommunityMemberSettingsSection({
         </div>
         <button
           type="button"
-          className="danger delete-community-btn"
+          className="danger settings-danger-action"
           onClick={() => void actions.handleLeaveCommunity()}
           disabled={state.isLeavingCommunity}
         >
@@ -1119,7 +1107,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               />
             ) : null}
             {selectedSettingsPane === "danger" && canDeleteCommunity ? (
-              <CommunityDangerZoneSection state={state} actions={actions} />
+              <CommunityDangerZoneSection />
             ) : null}
           </div>
         </>

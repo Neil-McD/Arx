@@ -2236,21 +2236,22 @@ manual and memory-scoped:
 - Source-trace, compiler-digest, autonomous change-request, apply, agent
   run-event, archive-projection, and evidence-retrieval audit write seams
   require the canonical community to remain live.
-- Canonical `deleteCommunity` atomically schedules one internal drain after
-  removing the community row. Each scheduled mutation deletes one bounded
-  batch, then schedules the same fixed phase or the next one.
+- Public `deleteCommunity` is currently a verified-owner, zero-effect quarantine
+  and schedules no new drain. The bounded internal drain is retained for
+  already-scheduled historical cleanup and recovery until a resumable
+  community lifecycle exists.
 - The final phase runs the bounded inspection core and fails if any allowlisted
   cognition remains. Convex's scheduled-function record is the execution
   ledger; no cleanup table, cron, public API, action, operator driver, or UI is
   added.
 - The manual inspection and per-phase deletion wrappers are deleted. The
-  scheduled drain is the only runtime cleanup function and canonical community
-  deletion is its only production entry point.
+  scheduled drain remains the only runtime cleanup function, but it has no
+  current public production entry point while community deletion is quarantined.
 
-The automatic lifecycle passed isolated staging acceptance on 2026-07-16. The
+The former automatic entry point passed isolated staging acceptance on 2026-07-16. The
 proof invoked only canonical `deleteCommunity`; sixteen successful scheduled
 mutations removed 218 target cognition rows across all fourteen phases while
 an untouched control and all product-source sentinels remained unchanged. The
 temporary acceptance function and flag were removed afterward. The durable
-certificate is
+historical certificate is
 `docs/community-cognition-cleanup-staging-acceptance-20260716.md`.

@@ -105,7 +105,7 @@ Let `U` be users, `E` entitlement rows for one user, `M` membership rows for a c
 | Membership selection for one pair | indexed lookup | One `.unique()` read returns zero/one row and fails closed on corruption instead of sorting duplicates. |
 | Active member count synchronization | `O(M)` per transition | It deterministically recomputes owner plus active non-owner rows; reliable at current scale, but the full scan is the later optimization target. |
 | Terminal session retention | `O(B log S)` indexed selection plus `O(B)` deletion, `B <= 500` | Cost is bounded per hourly internal run and independent of unrelated non-due rows. |
-| Community deletion | `O(all checkout sessions + domain rows + T×Q×R traversal)` in one mutation | A large community or global checkout history can exceed transaction/time limits and leave deletion behavior unavailable. |
+| Community deletion | `O(1)` verified actor plus owner check, then deterministic quarantine | No destructive work runs until a resumable community-keyed lifecycle exists. |
 | Discover list | bounded to at most 200 communities plus per-community plan/branding reads | Request count is bounded, but still an N+1/fan-out candidate for the later public-boundary pass. |
 
 ## Security and robustness risks
@@ -114,7 +114,7 @@ Explicit membership state is now fail-closed on staging: only `active === true` 
 
 1. Membership pair uniqueness is application-enforced because the schema cannot declare a compound uniqueness constraint; all known reads fail closed if that invariant is externally corrupted.
 2. Join-request uniqueness is application-enforced because Convex indexes are not unique; all pair reads and transitions now fail closed on duplicate rows, while the schema restricts status to `pending | denied`.
-3. Community deletion is an unbounded destructive transaction with a global checkout-session scan and nested interaction deletion. Completeness across all 124 current tables is not yet proven.
+3. Community deletion is quarantined after verified owner resolution and has no first-party action path. Completeness across all 124 current tables must be proven before a resumable replacement is enabled.
 4. Entitlement uniqueness is application-enforced because Convex indexes are not unique; every reader fails closed and every writer uses the single monotonic source upsert, but out-of-band writes must remain forbidden.
 
 ## Reduction candidates

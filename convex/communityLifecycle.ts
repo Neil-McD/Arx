@@ -1,16 +1,9 @@
 import { api, internal } from "./_generated/api";
 import { internalMutation, mutation } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import {
-  type CommunityAgentConfigLike,
-  type CommunityChatMessageLike,
-  type CommunityChatThreadLike,
   type CommunityLike,
-  type CommunityMemberSettingsLike,
-  type CommunityMembershipLike,
-  type CommunityMessageReactionLike,
   type CommunityPricePointLike,
-  type CommunityResourceLike,
   maybeDeleteStorageAsset,
   normalizeAvatarFocus,
   normalizeAvatarZoom,
@@ -30,7 +23,6 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
-import type { CommunityJoinRequestLike } from "./communityJoinRequestCore";
 import {
   normalizeCommunityFunnelConfigInput,
   saveCommunityFunnelConfigInternal,
@@ -47,58 +39,11 @@ import {
   canReceiveCommunityRevenue,
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
-import { COMMUNITY_COGNITION_CLEANUP_FIRST_PHASE } from "./communityCognitionCleanupCore";
 import { deletePendingCommunityJoinRequestsBatch } from "./communityJoinRequestCore";
 
 const PAID_POLICY_PENDING_REQUEST_CLEANUP_BATCH_LIMIT = 100;
-
-type MemberAgentChannelLifecycleLike = {
-  _id: any;
-  activeEpisodeId?: any;
-};
-
-type MemberAgentEpisodeLifecycleLike = {
-  _id: any;
-  channelId: any;
-  status: "active" | "closed";
-};
-
-async function tombstoneLegacyMemberAgentChannelsForDeletedCommunity(args: {
-  ctx: any;
-  community: CommunityLike;
-  nowMs: number;
-}): Promise<void> {
-  const channels = (await args.ctx.db
-    .query("memberAgentChannels")
-    .withIndex("by_community", (q: any) => q.eq("communityId", args.community._id))
-    .collect()) as MemberAgentChannelLifecycleLike[];
-  const communityNameSnapshot =
-    String(args.community.name ?? "Deleted community").trim() || "Deleted community";
-  for (const channel of channels) {
-    if (channel.activeEpisodeId) {
-      const episode = (await args.ctx.db.get(
-        channel.activeEpisodeId,
-      )) as MemberAgentEpisodeLifecycleLike | null;
-      if (
-        episode &&
-        episode.channelId === channel._id &&
-        episode.status === "active"
-      ) {
-        await args.ctx.db.patch(episode._id, {
-          status: "closed",
-          closedAt: args.nowMs,
-          updatedAt: args.nowMs,
-        });
-      }
-    }
-    await args.ctx.db.patch(channel._id, {
-      activeEpisodeId: undefined,
-      communityNameSnapshot,
-      communityDeletedAt: args.nowMs,
-      updatedAt: args.nowMs,
-    });
-  }
-}
+const COMMUNITY_DELETION_QUARANTINE_CODE =
+  "community_delete_lifecycle_migration_blocked" as const;
 
 async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   id: string;
@@ -1025,124 +970,15 @@ export const deleteCommunity = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    (args as { userId?: any }).userId = userId;
-    const { community } = await requireCommunityOwner({
+    await requireCommunityOwner({
       ctx,
       communityId: args.communityId,
-      userId: args.userId,
-    });
-    const nowMs = Date.now();
-
-    const memberships = (await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityMembershipLike[];
-    for (const membership of memberships) {
-      await ctx.db.delete(membership._id as any);
-    }
-
-    const joinRequests = (await ctx.db
-      .query("communityJoinRequests")
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityJoinRequestLike[];
-    for (const row of joinRequests) {
-      await ctx.db.delete(row._id as any);
-    }
-
-    const pricePoints = await ctx.db
-      .query("communityPricePoints" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect();
-    for (const row of pricePoints) {
-      await ctx.db.delete(row._id);
-    }
-
-    const subscriptions = await ctx.db
-      .query("communitySubscriptions" as any)
-      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId))
-      .collect();
-    for (const row of subscriptions) {
-      await ctx.db.delete(row._id);
-    }
-
-    const purchaseClaims = await ctx.db
-      .query("purchaseClaims")
-      .withIndex("by_community_status", (q: any) => q.eq("communityId", args.communityId))
-      .collect();
-    for (const row of purchaseClaims) {
-      await ctx.db.delete(row._id);
-    }
-
-    const checkoutSessions = await ctx.db
-      .query("checkoutSessions")
-      .collect();
-    for (const row of checkoutSessions) {
-      if (String(row.communityId ?? "") !== String(args.communityId)) continue;
-      await ctx.db.delete(row._id);
-    }
-
-    const resources = (await ctx.db
-      .query("communityResources" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityResourceLike[];
-    for (const row of resources) {
-      await ctx.db.delete(row._id as any);
-    }
-
-    const memberSettings = (await ctx.db
-      .query("communityMemberSettings" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityMemberSettingsLike[];
-    for (const row of memberSettings) {
-      await ctx.db.delete(row._id as any);
-    }
-
-    const agentConfigs = (await ctx.db
-      .query("communityAgentConfigs" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityAgentConfigLike[];
-    for (const row of agentConfigs) {
-      await ctx.db.delete(row._id as any);
-    }
-
-    const threads = (await ctx.db
-      .query("communityChatThreads" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityChatThreadLike[];
-    for (const thread of threads) {
-      const messages = (await ctx.db
-        .query("communityChatMessages" as any)
-        .withIndex("by_thread", (q: any) => q.eq("threadId", thread._id))
-        .collect()) as CommunityChatMessageLike[];
-      for (const message of messages) {
-        const reactions = (await ctx.db
-          .query("communityMessageReactions" as any)
-          .withIndex("by_message", (q: any) => q.eq("messageId", message._id))
-          .collect()) as CommunityMessageReactionLike[];
-        for (const reaction of reactions) {
-          await ctx.db.delete(reaction._id as any);
-        }
-        await ctx.db.delete(message._id as any);
-      }
-      await ctx.db.delete(thread._id as any);
-    }
-
-    await tombstoneLegacyMemberAgentChannelsForDeletedCommunity({
-      ctx,
-      community,
-      nowMs,
+      userId,
     });
 
-    await ctx.db.delete(community._id as any);
-    await ctx.scheduler.runAfter(
-      0,
-      (internal as any).communityCognitionCleanup
-        .drainDeletedCommunityCognitionInternal,
-      {
-        communityId: community._id,
-        phase: COMMUNITY_COGNITION_CLEANUP_FIRST_PHASE,
-      },
-    );
-    return { ok: true };
+    throw new ConvexError({
+      code: COMMUNITY_DELETION_QUARANTINE_CODE,
+      reason: COMMUNITY_DELETION_QUARANTINE_CODE,
+    });
   },
 });

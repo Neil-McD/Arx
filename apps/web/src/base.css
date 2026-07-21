@@ -24204,7 +24204,7 @@ button.message-citation-chip:hover {
   color: var(--text-secondary);
 }
 
-.delete-community-btn {
+.settings-danger-action {
   align-self: flex-start;
   width: auto;
   min-width: 200px;

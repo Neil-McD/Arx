@@ -3,6 +3,8 @@
 Status: passed
 Date: 2026-07-16
 
+Current posture update (2026-07-21): this is a historical acceptance certificate, not a description of the current public deletion entry point. `community:deleteCommunity` is now a verified-owner, zero-effect quarantine and schedules no new cleanup. The bounded internal drain remains for already-scheduled historical cleanup and recovery until the resumable community lifecycle is built.
+
 ## Isolated target
 
 - Convex deployment: `coordinated-otter-526`
@@ -17,15 +19,15 @@ acceptance. It temporarily restored one environment-gated fixture module and
 did not change production, shared staging, schema, cron configuration, public
 APIs, or frontend behavior.
 
-## Irreducible runtime
+## Accepted runtime at the time of this proof
 
-The final runtime has one cognition-cleanup function:
+The accepted runtime had one cognition-cleanup function:
 
 - `drainDeletedCommunityCognitionInternal`
 
 The prior manual inspection and per-phase deletion wrappers were removed.
-Canonical `deleteCommunity` now deletes the community row and schedules the
-first drain mutation in the same transaction. Every drain mutation deletes at
+At acceptance time, canonical `deleteCommunity` deleted the community row and
+scheduled the first drain mutation in the same transaction. Every drain mutation deletes at
 most one hundred rows and atomically schedules either the same phase or the
 next fixed phase. The final phase runs the bounded inspection core and fails if
 any allowlisted cognition remains.
@@ -79,7 +81,7 @@ proves:
 Late cognition writes remain guarded by the prior live acceptance and the
 same deterministic contract proof.
 
-## Teardown and final deployed surface
+## Teardown and accepted deployed surface
 
 Fixture teardown removed the control's fourteen cognition rows, ten supporting
 product-source fixture rows, the remaining control membership and community,
@@ -87,8 +89,8 @@ and both fixture users. Final reads found zero fixture communities, users,
 cognition rows, or product-source rows.
 
 The temporary flag and fixture module were removed and the deployment was
-pushed again. The final function specification contains exactly one cognition
-cleanup function, `drainDeletedCommunityCognitionInternal`, and contains
+pushed again. The accepted function specification contained exactly one cognition
+cleanup function, `drainDeletedCommunityCognitionInternal`, and contained
 neither manual wrapper nor any acceptance function.
 
 The machine-readable certificate is

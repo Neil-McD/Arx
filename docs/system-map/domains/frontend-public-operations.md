@@ -6,9 +6,9 @@ Project canonical state through one coherent communities-first product, expose t
 
 ## Frontend state and surface debt
 
-`App.tsx` is 12,068 lines, `base.css` 34,819, and `index.css` 3,497. Large files are symptoms. The upstream causes are retained deferred surfaces, split route state, global orchestration, duplicated loaders/gate projections, and multi-era CSS.
+`App.tsx` is 12,022 lines, `base.css` 34,313, and `index.css` 3,497 after the current deletion slices. Large files are symptoms. The upstream causes are retained deferred surfaces, split route state, global orchestration, duplicated loaders/gate projections, and multi-era CSS.
 
-A lexical scan found 2,649 class selectors in `base.css`; 832 names were not found in TypeScript/TSX/JS source. Dynamic classes make that only a candidate set. The strongest bounded candidate is the `discover-app-*`/`discover-skill-*` marketplace block: current Discover is communities-only and no non-`base.css` reference was found.
+The earlier lexical scan found 2,649 class selectors in `base.css`; 832 names were not found in TypeScript/TSX/JS source. Dynamic classes make that only a candidate set. The strongest bounded `discover-app-*`/`discover-skill-*` marketplace block has since been deleted with production-build and staging visual proof.
 
 The correct order is surface deletion -> state owner consolidation -> route closure -> component extraction -> CSS/token cleanup -> render/performance optimization. Splitting `App.tsx` first would distribute obsolete complexity.
 
@@ -28,7 +28,7 @@ No explicit retention/prune owner was found for audit/diagnostic history. Operat
 
 ## CI and proof posture
 
-The GitHub workflow has three jobs: structural Convex cut guards, dependency audits, and a 22-step foundation baseline. It does **not** install web dependencies in the foundation job or run web typecheck, production build, bundle budget, or browser journey. Of 281 script files, 247 are exposed as `check:*`; 207 read source text. Structural regression evidence is extensive, but behavioral, recovery, scale, and signed-in journey evidence is comparatively thin.
+The GitHub workflow has three jobs: structural Convex cut guards, dependency audits, and a 35-step foundation baseline. It does **not** install web dependencies in the foundation job or run web typecheck, production build, bundle budget, or browser journey. The repository currently has 291 script files and 253 `check:*` package commands. Structural regression evidence is extensive, but behavioral, recovery, scale, and signed-in journey evidence is comparatively thin.
 
 This is proof inversion: the repository is optimized to prove file shapes while launch stability depends on the web build and end-to-end authority/recovery behavior.
 
@@ -49,10 +49,10 @@ This is proof inversion: the repository is optimized to prove file shapes while 
 | Candidate | Classification | Action | Idiot index | Rationale |
 | --- | --- | --- | ---: | --- |
 | communities-first web shell/funnel/member UI | `KEEP (MVP core)` | `HARDEN`, `DECOMPOSE_LATER` | 1 | primary product projection |
-| unreferenced Discover Apps/Skills CSS | `DELETE (deferred/dead)` | `OBSERVE_FIRST` | 10 | deferred surface with no static consumer |
+| unreferenced Discover Apps/Skills CSS | `DELETE (deferred/dead)` complete | `DELETE` | 10 | deferred surface had no static consumer and passed build/visual proof after removal |
 | decompose `App.tsx` before deleting surfaces | `DECISION REQUIRED (user confirmation)` | `DELETE_FIRST` | 8 | optimizes obsolete orchestration instead of removing it |
 | operator full-community N+1 aggregation | `KEEP (MVP core)` | `BOUND`, `CONSOLIDATE` | 9 | diagnostic UI must not become an unbounded production load |
-| 247 permanently retained checks without owners | `DECISION REQUIRED (user confirmation)` | `OBSERVE_FIRST`, `CONSOLIDATE` | 8 | proof volume is not proof quality; classify by CI/release/dev ownership |
+| 253 permanently retained `check:*` commands without owners | `DECISION REQUIRED (user confirmation)` | `OBSERVE_FIRST`, `CONSOLIDATE` | 8 | proof volume is not proof quality; classify by CI/release/dev ownership |
 | web CI without typecheck/build/journey | `KEEP (MVP core)` | `HARDEN`, `REWRITE_PROOF` | 9 | launch stability is not defended by the canonical gate |
 | stale/duplicated env templates and flags | `DELETE (deferred/dead)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 9 | configuration drift creates false operational contracts |
 | independent root/web locks forever | `DECISION REQUIRED (user confirmation)` | `CONSOLIDATE` | 5 | may be intentional deployment isolation, but currently lacks an ownership policy |
