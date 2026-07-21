@@ -6,7 +6,7 @@ Lane: `codex/semantic-platform-staging-20260719` / `polynet-staging.vercel.app` 
 
 Scope: F-001 and F-003 through F-005 only; production and unrelated access domains untouched.
 
-Status: the original all-dimension `8/10` closure below was superseded by post-acceptance adversarial review. Refresh subject immutability and retention reachability are now closed on staging; end-to-end deadlines, malformed-cookie recovery, and bounded auth diagnostics remain open.
+Status: the original all-dimension `8/10` closure below was superseded by post-acceptance adversarial review. Refresh subject immutability, retention reachability, and malformed-cookie recovery are now closed on staging; end-to-end deadlines and bounded auth diagnostics remain open.
 
 ## Irreducible outcome
 
@@ -77,9 +77,10 @@ Focused persisted and route coverage includes:
 - local-before-provider logout, retryable local failure, and provider-failure convergence;
 - self-scheduling multi-batch indexed retention with eventual drain and active-row delete protection;
 - diagnostic coverage for bootstrap, refresh, contention, commit loss, logout, and provider failures;
+- bounded non-throwing session/flow-cookie decoding with deterministic invalid-cookie convergence before any bridge effect;
 - structural absence of rotation, replacement, legacy lookup, public migration, and full-table maintenance.
 
-The focused suites now contain 33 passing behavioral tests: four actor-authority, sixteen security/route, and thirteen persisted state-machine tests. Convex and web typechecks, the production web build, and the canonical foundation gate all pass. The restricted gate run stopped only at the known `tsx` local-IPC `EPERM`; the identical gate passed outside that runner restriction.
+The focused suites now contain 40 passing behavioral tests: four actor-authority, twenty-three security/route, and thirteen persisted state-machine tests. Convex and web typechecks, the production web build, and the canonical foundation gate all pass. The restricted gate run stopped only at the known `tsx` local-IPC `EPERM`; the identical gate passed outside that runner restriction.
 
 ## Current score after adversarial review
 
@@ -88,8 +89,8 @@ The focused suites now contain 33 passing behavioral tests: four actor-authority
 | Simplicity | 8 | one subject selector, one credential row, one refresh transition, one retention owner; no new state or endpoint was needed for subject immutability | provider payload normalization still supports multiple upstream response shapes |
 | Scalability | 7 | refresh creates no replacement rows; lookup and retention are indexed; full batches immediately continue without waiting for the hourly cron | normal successful bootstrap diagnostics remain unbounded |
 | Reliability | 7 | stable cookie, revisioned lease, explicit outcomes, local-authoritative logout | bridge calls have no application deadline and provider body consumption is not covered by the current timer |
-| Security | 8 | refresh now rejects absent subject evidence and terminally revokes any provider/JWT subject drift before commit | malformed-cookie and optional parent-domain cookie hardening remain open |
-| Robustness | 7 | contention, commit-loss, subject drift, unverifiable refresh responses, corrupt early deadlines, and sustained retention backlogs are explicit and tested | malformed cookies can throw and external request stalls are not fully bounded |
+| Security | 8 | refresh rejects absent subject evidence and terminally revokes provider/JWT subject drift; malformed session/flow cookies fail closed before bridge work | optional parent-domain/duplicate-cookie policy remains open |
+| Robustness | 7 | contention, commit-loss, subject drift, malformed-cookie recovery, unverifiable refresh responses, corrupt early deadlines, and sustained retention backlogs are explicit and tested | external request stalls are not fully bounded |
 
 The original blanket `8` is no longer treated as current truth. Subject immutability and retention reachability meet their outcomes; the remaining dimensions stay open until their named falsifiers pass.
 
@@ -133,4 +134,17 @@ Accepted on staging permanent-code commit `7523599f` and backfill-free deploymen
 - the staging-only repair changed all 1,069 existing rows from missing to canonical deadlines, an idempotency pass made zero additional changes, and the temporary internal repair function was deleted before the final Convex deployment;
 - production was not pushed, deployed, queried, or mutated.
 
-F-005 is complete. End-to-end external request deadlines, malformed-cookie recovery, and bounded routine-success diagnostics remain separate slices.
+F-005 is complete. End-to-end external request deadlines and bounded routine-success diagnostics remain separate slices.
+
+## Malformed-cookie recovery acceptance
+
+Accepted at the implementation checkpoint `d945ac5b` on the isolated staging lane on 2026-07-21 EDT / UTC:
+
+- one bounded decoder owns percent-decoding for both the opaque session cookie and signed OAuth-flow cookie and returns explicit `missing`, `valid`, or `invalid` outcomes instead of throwing;
+- invalid bootstrap, refresh, and logout cookies clear locally and converge without any auth-bridge request; bootstrap returns signed-out state, refresh fails closed, and logout is idempotent because no usable server credential was presented;
+- malformed OAuth-flow state clears and redirects through the existing controlled callback failure without exchanging a code or creating a session;
+- valid signed OAuth-flow round-trip, missing-cookie bootstrap, stable-cookie refresh, retryable logout, local-authoritative logout, and terminal clearing semantics remain covered;
+- the focused security/route suite passes all 23 tests; Convex and web typechecks, production build, `git diff --check`, and the complete 28-proof foundation gate pass;
+- no schema, Convex function, persisted row, cookie name, cookie TTL, bridge secret, domain policy, or production target changed.
+
+Malformed-cookie recovery is complete. Whole-operation external deadlines are the next auth/session reliability slice; routine-success diagnostic reduction remains after that.
