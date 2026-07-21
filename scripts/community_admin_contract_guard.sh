@@ -196,8 +196,8 @@ require_multiline_match "$SCHEMA_FILE" \
   'communityJoinRequests: defineTable\([\s\S]*?\.index\("by_community_status_createdAt", \["communityId", "status", "createdAt"\]\)' \
   "communityJoinRequests has community status creation-order index"
 require_multiline_match "$SCHEMA_FILE" \
-  'communities: defineTable\([\s\S]*?activeMemberCount: v\.optional\(v\.number\(\)\)' \
-  "communities carry a durable active member count"
+  'communities: defineTable\([\s\S]*?activeMemberCount: v\.number\(\)' \
+  "communities require a durable active member count"
 require_multiline_match "$COMMUNITY_LIFECYCLE_FILE" \
   'ctx\.db\.insert\("communities", \{[\s\S]*?activeMemberCount: 1,' \
   "new communities initialize active member count with owner"

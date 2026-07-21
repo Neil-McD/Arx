@@ -59,6 +59,7 @@ test("account deletion is quarantined before shared state can be destroyed", asy
       name: "Account deletion safety",
       visibility: "unlisted",
       entryPolicy: "open",
+      activeMemberCount: 1,
       createdAt: now,
       updatedAt: now,
     });

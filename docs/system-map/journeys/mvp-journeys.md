@@ -48,7 +48,7 @@ Discover or shared URL -> public funnel -> verified actor
 
 - Authority: current block, membership, access source, provider-derived subscription.
 - Good: visibility does not bypass access; membership pair reads fail closed on duplicates; activation is idempotent for an active row and reactivation preserves row identity.
-- Gaps: cached active-member counts remain divergent, free-form join status remains possible, and provider-delay behavior is unproven.
+- Gaps: free-form join status remains possible and provider-delay behavior is unproven; the cached active-member-count divergence is closed on staging.
 
 ## 5. Member navigates, interacts, uses voice/resources, manages membership
 

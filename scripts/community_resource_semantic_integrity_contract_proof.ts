@@ -139,7 +139,7 @@ async function main() {
   const ctx = { db };
   const baseNow = 1_700_000_000_000;
   let nowMs = baseNow;
-  const communityId = await db.insert("communities", { name: "Semantic integrity" });
+  const communityId = await db.insert("communities", { name: "Semantic integrity", activeMemberCount: 1 });
   const moduleId = await db.insert("communityResourceModules", {
     communityId,
     createdByUserId: "users_owner",

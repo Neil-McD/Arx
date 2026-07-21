@@ -1296,7 +1296,7 @@ export default defineSchema({
       v.literal("approval"),
       v.literal("paid_subscription"),
     ),
-    activeMemberCount: v.optional(v.number()),
+    activeMemberCount: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

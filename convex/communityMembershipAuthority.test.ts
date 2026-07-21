@@ -4,7 +4,9 @@ import { describe, expect, test } from "vitest";
 import {
   type CommunityMembershipLike,
   communityMembershipRowIsActive,
+  computeCommunityActiveMemberCount,
   getUniqueCommunityMembershipByPair,
+  syncCommunityActiveMemberCount,
 } from "./communityCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import schema from "./schema";
@@ -89,6 +91,8 @@ describe("community membership authority", () => {
 
   test("schema and projections cannot restore missing-active compatibility", () => {
     const schema = read("schema.ts");
+    const communityCore = read("communityCore.ts");
+    const communityLifecycle = read("communityLifecycle.ts");
     const operatorDashboard = read("operatorDashboard.ts");
     const projectionFiles = [
       "communityAppMounts.ts",
@@ -101,8 +105,17 @@ describe("community membership authority", () => {
     expect(schema).toMatch(
       /communityMemberships: defineTable\(\{[\s\S]*?active: v\.boolean\(\)/,
     );
+    expect(schema).toMatch(
+      /communities: defineTable\(\{[\s\S]*?activeMemberCount: v\.number\(\)/,
+    );
+    expect(communityCore).toMatch(/activeMemberCount: number;/);
+    expect(communityLifecycle).toMatch(
+      /ctx\.db\.insert\("communities", \{[\s\S]*?activeMemberCount: 1,/,
+    );
     expect(operatorDashboard).not.toContain("backfillCommunityMembershipActiveFlags");
     expect(operatorDashboard).not.toContain("community_membership_active_flags_backfill");
+    expect(operatorDashboard).not.toContain("backfillCommunityActiveMemberCounts");
+    expect(operatorDashboard).not.toContain("community_active_member_count_backfill");
 
     for (const relativePath of projectionFiles) {
       const source = read(relativePath);
@@ -111,6 +124,76 @@ describe("community membership authority", () => {
       expect(source).not.toMatch(/membership\.active\s*===\s*false/);
       expect(source).not.toMatch(/row\.active\s*!==\s*false/);
     }
+  });
+
+  test("active member count is owner plus active non-owner rows and sync repairs drift", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createAuthorityFixture(t, "member-count");
+
+    const memberId = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("communityMemberships", {
+        communityId: fixture.communityId,
+        userId: fixture.userId,
+        role: "member",
+        accessSource: "free_grant",
+        active: true,
+        activationSequence: 1,
+        activatedAt: fixture.nowMs,
+        createdAt: fixture.nowMs,
+        updatedAt: fixture.nowMs,
+      });
+      await ctx.db.insert("communityMemberships", {
+        communityId: fixture.communityId,
+        userId: fixture.ownerId,
+        role: "member",
+        accessSource: "free_grant",
+        active: true,
+        activationSequence: 1,
+        activatedAt: fixture.nowMs,
+        createdAt: fixture.nowMs,
+        updatedAt: fixture.nowMs,
+      });
+      await ctx.db.patch(fixture.communityId, { activeMemberCount: 99 });
+      return id;
+    });
+
+    expect(
+      await t.run(async (ctx) =>
+        await computeCommunityActiveMemberCount({
+          ctx,
+          communityId: fixture.communityId,
+        }),
+      ),
+    ).toBe(2);
+    expect(
+      await t.run(async (ctx) =>
+        await syncCommunityActiveMemberCount({
+          ctx,
+          communityId: fixture.communityId,
+        }),
+      ),
+    ).toBe(2);
+    expect(
+      await t.run(async (ctx) => (await ctx.db.get(fixture.communityId))?.activeMemberCount),
+    ).toBe(2);
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(memberId, {
+        revokedAt: fixture.nowMs + 1,
+        revokedReason: "member_count_authority_test",
+      });
+    });
+    expect(
+      await t.run(async (ctx) =>
+        await syncCommunityActiveMemberCount({
+          ctx,
+          communityId: fixture.communityId,
+        }),
+      ),
+    ).toBe(1);
+    expect(
+      await t.run(async (ctx) => (await ctx.db.get(fixture.communityId))?.activeMemberCount),
+    ).toBe(1);
   });
 
   test("pair authority returns zero or one row and fails closed on duplicates", async () => {

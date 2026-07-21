@@ -142,8 +142,8 @@ async function main() {
   const db = new FakeDb();
   const ctx = { db };
   const nowMs = 1_700_000_000_000;
-  const communityId = await db.insert("communities", { name: "Integrity community" });
-  const foreignCommunityId = await db.insert("communities", { name: "Foreign community" });
+  const communityId = await db.insert("communities", { name: "Integrity community", activeMemberCount: 1 });
+  const foreignCommunityId = await db.insert("communities", { name: "Foreign community", activeMemberCount: 1 });
 
   assert.equal(parseCommunityEvidenceRef("interaction:root:abc")?.source_type, "interaction");
   assert.equal(parseCommunityEvidenceRef("resource:abc")?.source_type, "resource");

@@ -28,7 +28,7 @@ export type CommunityLike = {
   bannerZoom?: number;
   visibility: "published" | "unlisted";
   entryPolicy?: CommunityEntryPolicy;
-  activeMemberCount?: number;
+  activeMemberCount: number;
   createdAt: number;
   updatedAt: number;
 };

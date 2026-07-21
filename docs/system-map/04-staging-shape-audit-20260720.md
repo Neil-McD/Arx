@@ -142,6 +142,10 @@ Immediately before the explicit-active schema cutover, the same versioned read-o
 
 Before the pair-authority cutover, the versioned read-only identity/access query again scanned the complete staging membership table at `quick-porcupine-949`: 69 rows, zero duplicate pairs, zero multiple-active pairs, zero missing `active`, and zero inactive/revoked rows. The cutover replaces order-dependent duplicate selection with one indexed unique-pair resolver, preserves one activation/reactivation row, and makes duplicate input fail closed. Convex serializable mutation retries provide the concurrency boundary because the indexed pair read and possible insert remain in one mutation transaction. The identical complete aggregate was returned immediately after the exact clean changeset deployed to Dev Convex; neither query changed data or exposed identifiers/content. This closes duplicate-selection compatibility on staging. Active-member-count repair and owner-membership residue remain separate work.
 
+## Active-member-count authority cutover — 2026-07-21 UTC
+
+The independent redacted preflight and the temporary migration dry run both found the same repair set at `quick-porcupine-949`: 44 communities scanned, 35 missing/drifted caches, nine exact caches, zero overcounts, and zero invalid numeric caches. The bounded migration wrote exactly those 35 derived values using the canonical owner-plus-active-non-owner rule and did not mutate membership rows. An independent post-repair audit then returned 44 exact caches, zero missing, zero overcounted, and zero undercounted; a second migration dry run returned zero work. Only after that convergence was the temporary mutation deleted and `activeMemberCount` made schema-required. The two active owner-membership residues remain untouched because their onboarding/subscription references require a separate dependency-safe migration.
+
 ## Auth-session cutover receipt — later authorized slice
 
 This section records a later implementation slice and does not retroactively change the read-only boundary above.

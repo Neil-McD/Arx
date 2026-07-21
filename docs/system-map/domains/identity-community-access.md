@@ -54,7 +54,7 @@ Discover queries only `published` rows and is capped at 200. Direct funnel looku
 
 ### Membership and access
 
-Membership activation looks up all rows for `(communityId,userId)`, chooses the most relevant, updates an active row idempotently, or reactivates/inserts with an incremented `activationSequence` (`convex/communityMembershipLifecycle.ts:15-87`). Onboarding creation is best-effort after access is established, so onboarding cannot block entitlement.
+Membership activation resolves the indexed `(communityId,userId)` pair as zero or one row and fails closed if storage is corrupt with duplicates. It updates an active row idempotently or reactivates/inserts with an incremented `activationSequence` in the same serializable mutation (`convex/communityMembershipLifecycle.ts`). Onboarding creation is best-effort after access is established, so onboarding cannot block entitlement.
 
 Access resolution applies these rules in order:
 
@@ -86,14 +86,14 @@ Platform tier is the latest active row in `userEntitlements`, defaulting to free
 
 ## Complexity and growth risks
 
-Let `U` be users, `E` entitlement rows for one user, `M` membership rows for a community, `D` duplicate membership rows for one pair, `S` auth sessions, and `T/Q/R` community threads/messages/reactions.
+Let `U` be users, `E` entitlement rows for one user, `M` membership rows for a community, `S` auth sessions, and `T/Q/R` community threads/messages/reactions.
 
 | Path | Current order | Why it matters |
 | --- | --- | --- |
 | Actor provisioning | one indexed `by_authSubject` lookup plus one indexed entitlement lookup | Cost is independent of unrelated users; email never selects the actor. |
 | Platform tier resolution | `O(E log E)` per resolver call | Three implementations repeat the collect/filter/sort rule; history grows with grants and billing syncs. |
-| Membership selection for one pair | `O(D log D)` | Schema does not enforce uniqueness; multiple current rows are resolved in application code. |
-| Active member count synchronization | `O(M)` per transition | It scans all community membership rows and counts rows, not distinct users; duplicate active rows can overcount. |
+| Membership selection for one pair | indexed lookup | One `.unique()` read returns zero/one row and fails closed on corruption instead of sorting duplicates. |
+| Active member count synchronization | `O(M)` per transition | It deterministically recomputes owner plus active non-owner rows; reliable at current scale, but the full scan is the later optimization target. |
 | Terminal session retention | `O(B log S)` indexed selection plus `O(B)` deletion, `B <= 500` | Cost is bounded per hourly internal run and independent of unrelated non-due rows. |
 | Community deletion | `O(all checkout sessions + domain rows + T×Q×R traversal)` in one mutation | A large community or global checkout history can exceed transaction/time limits and leave deletion behavior unavailable. |
 | Discover list | bounded to at most 200 communities plus per-community plan/branding reads | Request count is bounded, but still an N+1/fan-out candidate for the later public-boundary pass. |
@@ -102,7 +102,7 @@ Let `U` be users, `E` entitlement rows for one user, `M` membership rows for a c
 
 Explicit membership state is now fail-closed on staging: only `active === true` without a revocation timestamp grants membership, the schema requires the field, and the temporary repair surface is deleted after a complete zero-missing-row preflight.
 
-1. Membership pair uniqueness is still application-resolved rather than schema-enforced, and cached active-member counts remain incomplete.
+1. Membership pair uniqueness is application-enforced because the schema cannot declare a compound uniqueness constraint; all known reads fail closed if that invariant is externally corrupted.
 2. `communityJoinRequests.status` is an unconstrained string even though downstream logic assumes a small state machine.
 3. Community deletion is an unbounded destructive transaction with a global checkout-session scan and nested interaction deletion. Completeness across all 125 tables is not yet proven.
 
@@ -114,7 +114,7 @@ Explicit membership state is now fail-closed on staging: only `active === true` 
 | Three platform-tier resolution implementations | `KEEP (MVP core)` | `CONSOLIDATE`, `BOUND` | 7 | The job is required; three copies of the same append-history rule are not. Owner: platform entitlement. |
 | Full-user email compatibility scan and implicit relink | `DELETE (deferred/dead)` | `DELETE` complete | 10 | Verified subject is the account authority; mutable email must not scan for or silently seize another account. Owner: auth identity. |
 | Raw session IDs, refresh-created replacement rows, traversal, and public/manual pruning | `DELETE (deferred/dead)` | `DELETE` complete | 10 | One hashed bounded credential and one internal retention owner perform the entire required job. Owner: auth session. |
-| Duplicate membership-row compatibility | `DECISION REQUIRED (user confirmation)` | `MIGRATE_THEN_DELETE` | 7 | Staging contains zero duplicate pairs, but concurrent activation still needs one canonical-row invariant before application-side selection can be deleted. Owner: community access. |
+| Duplicate membership-row compatibility | `DELETE (deferred/dead)` | `DELETE` complete | 7 | Staging contains zero duplicate pairs; one indexed resolver now fails closed and concurrent activation stays inside one transaction. Owner: community access. |
 | Missing-`active` membership compatibility | `DELETE (deferred/dead)` | `DELETE` complete | 7 | Complete staging scans found zero dependent rows; missing state now denies access and the schema requires an explicit value. Owner: community access. |
 | Deprecated `communities.memberOnboarding` field | `DELETE (deferred/dead)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 9 | Schema says current product code never reads/writes it; stored-value and migration completion must be verified first. Owner: schema lifecycle. |
 | Join-request free-form status | `KEEP (MVP core)` | `HARDEN` | 6 | Approval flow is required; arbitrary states are not. Owner: community access. |
@@ -122,4 +122,4 @@ Explicit membership state is now fail-closed on staging: only `active === true` 
 
 ## Proof posture
 
-The focused actor fixture proves same-subject idempotency, distinct accounts for equal verified emails, fail-closed supplied-ID mismatch, one default entitlement, and absence of relink/full-scan authority. Persisted Convex fixtures prove one-row creation, raw-credential absence, collision failure, real concurrent refresh ownership, one provider effect, monotonic in-place commit, absolute expiry, unsupported-secret failure, revocation, and multi-batch indexed retention. Vercel-route fixtures prove retryable refresh/logout cookie preservation, stable-cookie success, 30-day browser/server lifetime alignment, and local-before-provider logout ordering. The live staging cutovers independently proved the legacy session index empty and every membership row explicit before their schema deletions; the membership authority fixture proves missing state cannot regain access through known projections. Provider outage behavior is deterministic in tests; a live external-provider outage drill remains broader operational work, not a blocker for these slices.
+The focused actor fixture proves same-subject idempotency, distinct accounts for equal verified emails, fail-closed supplied-ID mismatch, one default entitlement, and absence of relink/full-scan authority. Persisted Convex fixtures prove one-row creation, raw-credential absence, collision failure, real concurrent refresh ownership, one provider effect, monotonic in-place commit, absolute expiry, unsupported-secret failure, revocation, and multi-batch indexed retention. Vercel-route fixtures prove retryable refresh/logout cookie preservation, stable-cookie success, 30-day browser/server lifetime alignment, and local-before-provider logout ordering. The live staging cutovers independently proved the legacy session index empty, every membership row explicit, zero duplicate pairs, and 44/44 exact member-count caches before schema tightening; the membership authority fixture proves missing state cannot regain access, duplicate pairs fail closed, concurrent activation converges, owner residues do not inflate counts, and count sync repairs drift. Provider outage behavior is deterministic in tests; a live external-provider outage drill remains broader operational work, not a blocker for these slices.
