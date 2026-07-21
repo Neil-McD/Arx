@@ -19,6 +19,7 @@ import {
 } from "../shared/accountCommerce";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 import { canReceiveCommunityRevenue } from "./stripeConnectAccountCore";
+import { upsertCurrentAccountEntitlementSource } from "./accountEntitlementCore";
 
 type CanonicalTier = "free" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "architect";
@@ -365,13 +366,13 @@ export const setDevTierOverride = mutation({
     }
 
     const tier = normalizeCanonicalTier(args.tier);
-    await ctx.db.insert("userEntitlements", {
+    await upsertCurrentAccountEntitlementSource({
+      ctx,
       userId: actor.dbUserId,
       tier,
       source: "admin_override",
       startsAt: nowMs,
-      createdAt: nowMs,
-      updatedAt: nowMs,
+      nowMs,
     });
     const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
     return {

@@ -63,7 +63,7 @@ test("subject-authoritative provisioning is idempotent and only patches mutable 
     entitlements: await ctx.db.query("userEntitlements").collect(),
   }));
   expect(state.users).toHaveLength(1);
-  expect(state.entitlements).toHaveLength(1);
+  expect(state.entitlements).toHaveLength(0);
   expect(state.users[0]).toMatchObject({
     authSubject,
     email: "second.user@example.com",
@@ -72,11 +72,6 @@ test("subject-authoritative provisioning is idempotent and only patches mutable 
     displayName: "Profile-only update",
     avatarUrl: "https://example.com/avatar.png",
     updatedAt: 1_750_000_000_200,
-  });
-  expect(state.entitlements[0]).toMatchObject({
-    userId: first.dbUserId,
-    tier: "free",
-    source: "default",
   });
 });
 
@@ -110,7 +105,7 @@ test("verified email equality never selects or relinks an account", async () => 
     firstSubject,
     secondSubject,
   ]);
-  expect(state.entitlements).toHaveLength(2);
+  expect(state.entitlements).toHaveLength(0);
 });
 
 test("a requested user mismatch fails closed without creating or mutating an actor", async () => {
@@ -148,7 +143,7 @@ test("a requested user mismatch fails closed without creating or mutating an act
     email: "existing@example.com",
     updatedAt: 1_750_000_000_000,
   });
-  expect(state.entitlements).toHaveLength(1);
+  expect(state.entitlements).toHaveLength(0);
 });
 
 test("actor provisioning has one indexed subject authority and no relink compatibility surface", () => {

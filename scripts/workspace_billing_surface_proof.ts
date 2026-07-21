@@ -83,8 +83,8 @@ assert.match(
 );
 assert.match(
   premiumBillingSource,
-  /if \(!grantsAccess\) return;[\s\S]*tier: "architect"[\s\S]*source: "premium_subscription"/,
-  "Premium cancellation must expire subscription grants without creating a newer free entitlement that overrides manual/admin grants",
+  /upsertCurrentAccountEntitlementSource\(\{[\s\S]*tier: grantsAccess \? "architect" : "free"[\s\S]*source: "premium_subscription"[\s\S]*: grantsAccess[\s\S]*\? undefined[\s\S]*: args\.nowMs/,
+  "Premium cancellation must retain an inactive monotonic source tombstone without overriding active admin grants",
 );
 assert.match(
   cloudAccountCommerceGatewaySource,

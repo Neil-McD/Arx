@@ -58,6 +58,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
+    .index("by_user_source", ["userId", "source"])
     .index("by_user_startsAt", ["userId", "startsAt"]),
 
   operatorRoles: defineTable({

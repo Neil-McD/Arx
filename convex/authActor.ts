@@ -129,22 +129,6 @@ function toActor(authSubject: string, user: UserRow): AuthenticatedActor {
   };
 }
 
-async function ensureDefaultFreeEntitlement(ctx: any, userId: any, nowMs: number): Promise<void> {
-  const rows = await ctx.db
-    .query("userEntitlements")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .take(1);
-  if (rows.length > 0) return;
-  await ctx.db.insert("userEntitlements", {
-    userId,
-    tier: "free",
-    source: "default",
-    startsAt: nowMs,
-    createdAt: nowMs,
-    updatedAt: nowMs,
-  });
-}
-
 async function findActorByResolvedSubject(args: {
   ctx: any;
   authSubject: string;
@@ -236,7 +220,6 @@ async function ensureActorByResolvedSubject(args: {
   }
 
   if (!dbUserId) throw new Error("user_not_found");
-  await ensureDefaultFreeEntitlement(args.ctx, dbUserId, nowMs);
   const user = (await args.ctx.db.get(dbUserId)) as UserRow | null;
   if (!user) throw new Error("user_not_found");
   return toActor(authSubject, user);

@@ -14,6 +14,7 @@ import {
   attachStripeCustomerToUser,
   ensureStripeCustomerForUser,
 } from "./stripeCustomers";
+import { upsertCurrentAccountEntitlementSource } from "./accountEntitlementCore";
 
 const PREMIUM_CHECKOUT_TTL_MS = 24 * 60 * 60 * 1000;
 const PREMIUM_SUBSCRIPTION_GRANTING_STATUSES = new Set([
@@ -51,30 +52,22 @@ async function syncPremiumEntitlement(args: {
   nowMs: number;
 }) {
   const grantsAccess = premiumSubscriptionGrantsAccess(args.subscriptionStatus);
-  const existing = await args.ctx.db
-    .query("userEntitlements")
-    .withIndex("by_user", (q: any) => q.eq("userId", args.userId))
-    .collect();
-  for (const row of existing) {
-    if (row.source !== "premium_subscription") continue;
-    if (typeof row.endsAt === "number" && row.endsAt <= args.nowMs) continue;
-    await args.ctx.db.patch(row._id, {
-      endsAt: args.nowMs,
-      updatedAt: args.nowMs,
-    });
-  }
-  if (!grantsAccess) return;
-  await args.ctx.db.insert("userEntitlements", {
+  return await upsertCurrentAccountEntitlementSource({
+    ctx: args.ctx,
     userId: args.userId,
-    tier: "architect",
+    tier: grantsAccess ? "architect" : "free",
     source: "premium_subscription",
     startsAt: args.nowMs,
     endsAt:
-      args.cancelAtPeriodEnd === true && typeof args.currentPeriodEndAt === "number"
+      grantsAccess &&
+      args.cancelAtPeriodEnd === true &&
+      typeof args.currentPeriodEndAt === "number" &&
+      args.currentPeriodEndAt > args.nowMs
         ? args.currentPeriodEndAt
-        : undefined,
-    createdAt: args.nowMs,
-    updatedAt: args.nowMs,
+        : grantsAccess
+          ? undefined
+          : args.nowMs,
+    nowMs: args.nowMs,
   });
 }
 
