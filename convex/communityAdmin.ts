@@ -3,10 +3,7 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
-  COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
-  COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
   type CommunityBlockLike,
-  type CommunityJoinRequestLike,
   type CommunityLike,
   type CommunityMemberSettingsLike,
   type CommunityMembershipLike,
@@ -25,6 +22,7 @@ import {
   normalizeRoleAssignment,
   parseIsoMs,
   requireCommunityChatAccess,
+  requireCommunityUserNotBlocked,
   requireCommunityModerator,
   requireCommunityManager,
   resolveCommunityMembershipEntitlementState,
@@ -35,6 +33,16 @@ import {
   syncCommunityActiveMemberCount,
   toIsoString,
 } from "./communityCore";
+import {
+  assertCanonicalCommunityJoinRequest,
+  COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
+  COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
+  type CommunityJoinRequestLike,
+  deleteCommunityJoinRequestByPair,
+  denyCommunityJoinRequest as denyCommunityJoinRequestCore,
+  ensureDeniedCommunityJoinRequest,
+  getUniqueCommunityJoinRequestByPair,
+} from "./communityJoinRequestCore";
 import { readCanonicalAccountTier } from "./accountEntitlementCore";
 import { logStructuredError } from "./errorLogging";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
@@ -728,42 +736,43 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
   nowMs: number;
   grantReason: string;
 }): Promise<{ grantedMembership: boolean }> {
+  const requestStatus = assertCanonicalCommunityJoinRequest(args.request);
+  if (requestStatus !== "pending") throw new Error("join_request_not_pending");
+  if (String(args.community.ownerId) === String(args.request.userId)) {
+    throw new Error("community_owner_join_request_forbidden");
+  }
+  await requireCommunityUserNotBlocked({
+    ctx: args.ctx,
+    communityId: args.request.communityId,
+    userId: args.request.userId,
+  });
   const existingMembership = await getUniqueCommunityMembershipByPair({
     ctx: args.ctx,
     communityId: args.request.communityId,
     userId: args.request.userId,
   });
-  let grantedMembershipMarker: string | null = null;
-  const targetIsOwner = String(args.community.ownerId) === String(args.request.userId);
-  if (
-    !targetIsOwner &&
-    (!existingMembership || !communityMembershipRowIsActive(existingMembership))
-  ) {
-    const restoredAccessSource =
-      existingMembership?.accessSource === "paid_subscription" ||
-      existingMembership?.accessSource === "free_grant" ||
-      existingMembership?.accessSource === "manual_grant"
-        ? existingMembership.accessSource
-        : "free_grant";
-    const activation = await activateCommunityMembershipCore({
-      ctx: args.ctx,
-      communityId: args.request.communityId,
-      userId: args.request.userId,
-      role: existingMembership
-        ? normalizeCommunityRoleForOutput(existingMembership.role) || "member"
-        : "member",
-      accessSource: restoredAccessSource,
-      activationReason: args.grantReason,
-      nowMs: args.nowMs,
-    });
-    grantedMembershipMarker = activation.activationMarker;
+  if (existingMembership && communityMembershipRowIsActive(existingMembership)) {
+    throw new Error("community_membership_already_active");
   }
-  await args.ctx.db.patch(args.request._id as any, {
-    status: "approved",
-    deniedAt: undefined,
-    reapplyAt: undefined,
-    updatedAt: args.nowMs,
+  let grantedMembershipMarker: string | null = null;
+  const restoredAccessSource =
+    existingMembership?.accessSource === "paid_subscription" ||
+    existingMembership?.accessSource === "free_grant" ||
+    existingMembership?.accessSource === "manual_grant"
+      ? existingMembership.accessSource
+      : "free_grant";
+  const activation = await activateCommunityMembershipCore({
+    ctx: args.ctx,
+    communityId: args.request.communityId,
+    userId: args.request.userId,
+    role: existingMembership
+      ? normalizeCommunityRoleForOutput(existingMembership.role) || "member"
+      : "member",
+    accessSource: restoredAccessSource,
+    activationReason: args.grantReason,
+    nowMs: args.nowMs,
   });
+  grantedMembershipMarker = activation.activationMarker;
   if (grantedMembershipMarker) {
     await scheduleCommunityAppGrantSeedingBestEffort({
       ctx: args.ctx,
@@ -783,6 +792,27 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
   return { grantedMembership: Boolean(grantedMembershipMarker) };
 }
 
+async function requireCanonicalCommunityJoinRequestMutationTarget(args: {
+  ctx: any;
+  requestId: any;
+}): Promise<CommunityJoinRequestLike> {
+  const request = (await args.ctx.db.get(args.requestId)) as CommunityJoinRequestLike | null;
+  if (!request) throw new Error("join_request_not_found");
+  const unique = await getUniqueCommunityJoinRequestByPair({
+    ctx: args.ctx,
+    communityId: request.communityId,
+    userId: request.userId,
+  });
+  if (!unique || String(unique._id) !== String(request._id)) {
+    throw new Error("community_join_request_pair_not_unique");
+  }
+  assertCanonicalCommunityJoinRequest(unique);
+  if (!(await args.ctx.db.get(unique.userId))) {
+    throw new Error("join_request_user_not_found");
+  }
+  return unique;
+}
+
 async function approvePendingJoinRequestsForOpenAccessBatch(args: {
   ctx: any;
   community: CommunityLike;
@@ -798,6 +828,27 @@ async function approvePendingJoinRequestsForOpenAccessBatch(args: {
     .take(args.limit + 1)) as CommunityJoinRequestLike[];
   const batch = rows.slice(0, args.limit);
   for (const request of batch) {
+    const existingMembership = await getUniqueCommunityMembershipByPair({
+      ctx: args.ctx,
+      communityId: request.communityId,
+      userId: request.userId,
+    });
+    const shouldDeleteWithoutActivation =
+      String(args.community.ownerId) === String(request.userId) ||
+      Boolean(existingMembership && communityMembershipRowIsActive(existingMembership)) ||
+      Boolean(await getActiveCommunityBlock({
+        ctx: args.ctx,
+        communityId: request.communityId,
+        userId: request.userId,
+      }));
+    if (shouldDeleteWithoutActivation) {
+      await deleteCommunityJoinRequestByPair({
+        ctx: args.ctx,
+        communityId: request.communityId,
+        userId: request.userId,
+      });
+      continue;
+    }
     await approveCommunityJoinRequestForFreeAccess({
       ctx: args.ctx,
       community: args.community,
@@ -1319,8 +1370,10 @@ export const approveCommunityJoinRequest = mutation({
       context: logContext,
       handler: async () => {
         const nowMs = Date.now();
-        const request = (await ctx.db.get(args.requestId)) as CommunityJoinRequestLike | null;
-        if (!request) throw new Error("join_request_not_found");
+        const request = await requireCanonicalCommunityJoinRequestMutationTarget({
+          ctx,
+          requestId: args.requestId,
+        });
         logContext.communityId = String(request.communityId);
         logContext.targetUserId = String(request.userId);
         const { community } = await requireCommunityModerator({
@@ -1366,20 +1419,25 @@ export const denyCommunityJoinRequest = mutation({
       context: logContext,
       handler: async () => {
         const nowMs = Date.now();
-        const request = (await ctx.db.get(args.requestId)) as CommunityJoinRequestLike | null;
-        if (!request) throw new Error("join_request_not_found");
+        const request = await requireCanonicalCommunityJoinRequestMutationTarget({
+          ctx,
+          requestId: args.requestId,
+        });
         logContext.communityId = String(request.communityId);
         logContext.targetUserId = String(request.userId);
-        await requireCommunityModerator({
+        const { community } = await requireCommunityModerator({
           ctx,
           communityId: request.communityId,
           userId: args.userId,
         });
-        await ctx.db.patch(request._id as any, {
-          status: "denied",
-          deniedAt: nowMs,
-          reapplyAt: nowMs + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
-          updatedAt: nowMs,
+        if (String(community.ownerId) === String(request.userId)) {
+          throw new Error("community_owner_join_request_forbidden");
+        }
+        await denyCommunityJoinRequestCore({
+          ctx,
+          request,
+          nowMs,
+          cooldownMs: COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
         });
         return { ok: true };
       },
@@ -1589,32 +1647,13 @@ export const revokeCommunityMemberInternal = internalMutation({
           await ctx.db.delete(memberSettings._id as any);
         }
 
-        const joinRequest = (await ctx.db
-          .query("communityJoinRequests")
-          .withIndex("by_community_user", (q: any) =>
-            q
-              .eq("communityId", args.communityId)
-              .eq("userId", membership.userId),
-          )
-          .first()) as CommunityJoinRequestLike | null;
-        if (joinRequest) {
-          await ctx.db.patch(joinRequest._id as any, {
-            status: "denied",
-            deniedAt: nowMs,
-            reapplyAt: nowMs + COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
-            updatedAt: nowMs,
-          });
-        } else {
-          await ctx.db.insert("communityJoinRequests", {
-            communityId: args.communityId,
-            userId: membership.userId,
-            status: "denied",
-            deniedAt: nowMs,
-            reapplyAt: nowMs + COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
-            createdAt: nowMs,
-            updatedAt: nowMs,
-          });
-        }
+        await ensureDeniedCommunityJoinRequest({
+          ctx,
+          communityId: args.communityId,
+          userId: membership.userId,
+          nowMs,
+          cooldownMs: COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
+        });
         return { ok: true };
       },
     });
@@ -2198,15 +2237,11 @@ export const leaveCommunity = mutation({
         if (memberSettings) {
           await ctx.db.delete(memberSettings._id as any);
         }
-        const joinRequest = (await ctx.db
-          .query("communityJoinRequests")
-          .withIndex("by_community_user", (q: any) =>
-            q.eq("communityId", args.communityId).eq("userId", args.userId),
-          )
-          .first()) as CommunityJoinRequestLike | null;
-        if (joinRequest) {
-          await ctx.db.delete(joinRequest._id as any);
-        }
+        await deleteCommunityJoinRequestByPair({
+          ctx,
+          communityId: args.communityId,
+          userId: args.userId,
+        });
         return { ok: true };
       },
     });

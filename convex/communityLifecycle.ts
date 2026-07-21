@@ -1,11 +1,10 @@
 import { api, internal } from "./_generated/api";
-import { mutation } from "./_generated/server";
+import { internalMutation, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import {
   type CommunityAgentConfigLike,
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
-  type CommunityJoinRequestLike,
   type CommunityLike,
   type CommunityMemberSettingsLike,
   type CommunityMembershipLike,
@@ -31,6 +30,7 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import type { CommunityJoinRequestLike } from "./communityJoinRequestCore";
 import {
   normalizeCommunityFunnelConfigInput,
   saveCommunityFunnelConfigInternal,
@@ -48,6 +48,9 @@ import {
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
 import { COMMUNITY_COGNITION_CLEANUP_FIRST_PHASE } from "./communityCognitionCleanupCore";
+import { deletePendingCommunityJoinRequestsBatch } from "./communityJoinRequestCore";
+
+const PAID_POLICY_PENDING_REQUEST_CLEANUP_BATCH_LIMIT = 100;
 
 type MemberAgentChannelLifecycleLike = {
   _id: any;
@@ -711,6 +714,23 @@ export const saveCommunitySettings = mutation({
       state: settingsState,
       nowMs,
     });
+    if (
+      settingsState.nextEntryPolicy === "paid_subscription" &&
+      resolveCommunityEntryPolicy(community) !== "paid_subscription"
+    ) {
+      const cleanup = await deletePendingCommunityJoinRequestsBatch({
+        ctx,
+        communityId: args.communityId,
+        limit: PAID_POLICY_PENDING_REQUEST_CLEANUP_BATCH_LIMIT,
+      });
+      if (cleanup.hasMore) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.communityLifecycle.deletePendingJoinRequestsForPaidPolicyInternal,
+          { communityId: args.communityId },
+        );
+      }
+    }
 
     const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
     if (!updated) throw new Error("community_not_found");
@@ -733,6 +753,34 @@ export const saveCommunitySettings = mutation({
       banner_zoom: branding.banner_zoom,
       visibility: updated.visibility,
       updated_at: toIsoString(updated.updatedAt),
+    };
+  },
+});
+
+export const deletePendingJoinRequestsForPaidPolicyInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
+    if (!community || resolveCommunityEntryPolicy(community) !== "paid_subscription") {
+      return { deleted_count: 0, has_more: false };
+    }
+    const cleanup = await deletePendingCommunityJoinRequestsBatch({
+      ctx,
+      communityId: args.communityId,
+      limit: PAID_POLICY_PENDING_REQUEST_CLEANUP_BATCH_LIMIT,
+    });
+    if (cleanup.hasMore) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.communityLifecycle.deletePendingJoinRequestsForPaidPolicyInternal,
+        { communityId: args.communityId },
+      );
+    }
+    return {
+      deleted_count: cleanup.deletedCount,
+      has_more: cleanup.hasMore,
     };
   },
 });

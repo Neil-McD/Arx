@@ -61,7 +61,7 @@ export function platformHomeMembershipDisablesAutojoin(
   return Boolean(membership && !communityMembershipRowIsActive(membership));
 }
 
-export function platformHomeMembershipRequiresReapproval(
+export function communityMembershipRequiresManagerReapproval(
   membership: CommunityMembershipLike | null | undefined,
 ): boolean {
   if (!platformHomeMembershipDisablesAutojoin(membership)) return false;
@@ -70,6 +70,12 @@ export function platformHomeMembershipRequiresReapproval(
       .trim()
       .toLowerCase(),
   );
+}
+
+export function platformHomeMembershipRequiresReapproval(
+  membership: CommunityMembershipLike | null | undefined,
+): boolean {
+  return communityMembershipRequiresManagerReapproval(membership);
 }
 
 export async function ensurePlatformHomeCommunityMembership(args: {

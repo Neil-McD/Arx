@@ -9,6 +9,10 @@ import {
   getUniqueCommunityMembershipByPair,
 } from "./communityCore";
 import {
+  assertCanonicalCommunityJoinRequest,
+  getUniqueCommunityJoinRequestByPair,
+} from "./communityJoinRequestCore";
+import {
   insertMemberFacts,
   loadMemberAccountContext,
   readMemberFactsForLens,
@@ -170,11 +174,12 @@ async function loadActiveMembership(ctx: any, communityId: any, userId: any) {
 }
 
 async function hasPendingJoinRequest(ctx: any, communityId: any, userId: any): Promise<boolean> {
-  const request = await ctx.db
-    .query("communityJoinRequests")
-    .withIndex("by_community_user", (q: any) => q.eq("communityId", communityId).eq("userId", userId))
-    .first();
-  return Boolean(request && request.status === "pending");
+  const request = await getUniqueCommunityJoinRequestByPair({
+    ctx,
+    communityId,
+    userId,
+  });
+  return Boolean(request && assertCanonicalCommunityJoinRequest(request) === "pending");
 }
 
 /* The interview confirm card: one batch, one approval marker, community scope.

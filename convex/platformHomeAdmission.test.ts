@@ -3,10 +3,10 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
 import {
-  COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
   type CommunityMembershipLike,
   communityMembershipRowIsActive,
 } from "./communityCore";
+import { COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS } from "./communityJoinRequestCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import {
   ensurePlatformHomeCommunityMembership,
@@ -254,6 +254,10 @@ describe("platform home admission authority", () => {
     expect(state.memberships[0]?.revokedReason).toBe("removed_by_manager");
     expect(state.joinRequests).toHaveLength(1);
     expect(state.joinRequests[0]?.status).toBe("denied");
+    expect(state.joinRequests[0]?.deniedAt).toBe(fixture.nowMs + 2);
+    expect(state.joinRequests[0]?.reapplyAt).toBe(
+      fixture.nowMs + 2 + COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
+    );
     await expect(
       t
         .withIdentity({ subject: fixture.memberSubject })
@@ -296,7 +300,10 @@ describe("platform home admission authority", () => {
         )
         .unique();
       if (!denied) throw new Error("test_denial_missing");
-      await ctx.db.patch(denied._id, { reapplyAt: Date.now() - 1 });
+      await ctx.db.patch(denied._id, {
+        deniedAt: fixture.nowMs - 2,
+        reapplyAt: fixture.nowMs - 1,
+      });
     });
 
     const result = await t
@@ -325,7 +332,10 @@ describe("platform home admission authority", () => {
         )
         .unique();
       if (!denied) throw new Error("test_denial_missing");
-      await ctx.db.patch(denied._id, { reapplyAt: Date.now() - 1 });
+      await ctx.db.patch(denied._id, {
+        deniedAt: fixture.nowMs - 2,
+        reapplyAt: fixture.nowMs - 1,
+      });
       return denied._id;
     });
     await t
@@ -336,7 +346,7 @@ describe("platform home admission authority", () => {
     const pending = (await readPairState(t, fixture)).joinRequests.find(
       (row) => row.status === "pending",
     );
-    expect(pending?._id).not.toEqual(pendingId);
+    expect(pending?._id).toEqual(pendingId);
 
     await t
       .withIdentity({ subject: fixture.ownerSubject })
@@ -351,6 +361,7 @@ describe("platform home admission authority", () => {
         state.memberships[0] as CommunityMembershipLike,
       ),
     ).toBe(true);
+    expect(state.joinRequests).toHaveLength(0);
     await expect(ensureHome(t, fixture)).resolves.toMatchObject({
       status: "already_member",
     });

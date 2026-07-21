@@ -15,7 +15,7 @@ type Membership = {
 type LifecycleState = {
   entryPolicy: EntryPolicy;
   membership: Membership | null;
-  joinRequestStatus: "none" | "pending" | "approved" | "denied" | "canceled";
+  joinRequestStatus: "none" | "pending" | "denied";
   blocked: boolean;
   subscriptionStatus: SubscriptionStatus | null;
 };
@@ -50,21 +50,28 @@ function resolveEntitled(state: LifecycleState): boolean {
 
 function joinPublicCommunity(state: LifecycleState): "joined" | "approval_pending" | "approval_denied" | "paid_plan_required" {
   if (state.blocked) throw new Error("community_user_blocked");
-  if (membershipIsActive(state.membership)) return "joined";
-  if (state.joinRequestStatus === "denied") return "approval_denied";
-  if (state.entryPolicy === "paid_subscription") return "paid_plan_required";
+  if (membershipIsActive(state.membership)) {
+    state.joinRequestStatus = "none";
+    return "joined";
+  }
+  if (state.entryPolicy === "paid_subscription") {
+    state.joinRequestStatus = "none";
+    return "paid_plan_required";
+  }
   if (state.entryPolicy === "approval") {
+    if (state.joinRequestStatus === "denied") return "approval_denied";
     state.joinRequestStatus = "pending";
     return "approval_pending";
   }
   state.membership = { active: true, accessSource: "free_grant", role: "member" };
+  state.joinRequestStatus = "none";
   return "joined";
 }
 
 function approveJoinRequest(state: LifecycleState) {
   if (state.entryPolicy === "paid_subscription") throw new Error("community_paid_checkout_required");
   if (state.joinRequestStatus !== "pending") throw new Error("join_request_not_pending");
-  state.joinRequestStatus = "approved";
+  state.joinRequestStatus = "none";
   state.membership = { active: true, accessSource: "free_grant", role: "member" };
 }
 
@@ -74,6 +81,7 @@ function redeemPaidCheckout(state: LifecycleState, status: SubscriptionStatus = 
   if (!subscriptionGrantsAccess(status)) throw new Error("checkout_session_inactive");
   state.subscriptionStatus = status;
   state.membership = { active: true, accessSource: "paid_subscription", role: "member" };
+  state.joinRequestStatus = "none";
 }
 
 function cancelSubscription(state: LifecycleState) {
@@ -109,6 +117,7 @@ function assertSourceAnchors() {
   const communityCore = readText(new URL("../convex/communityCore.ts", import.meta.url));
   const billingCore = readText(new URL("../convex/billingCore.ts", import.meta.url));
   const audit = readText(new URL("../convex/communityAccessAudit.ts", import.meta.url));
+  const joinRequestCore = readText(new URL("../convex/communityJoinRequestCore.ts", import.meta.url));
   const platformHome = readText(new URL("../convex/platformHomeCommunity.ts", import.meta.url));
 
   assertIncludes(communityPublic, "outcome: \"paid_plan_required\"", "paid public join must route to checkout");
@@ -122,7 +131,10 @@ function assertSourceAnchors() {
   assertExcludes(platformHome, "platform_home_autojoin_opt_out", "platform-home preference no longer overloads join requests");
   assertIncludes(audit, "active_membership_with_active_block", "state audit checks active block drift");
   assertIncludes(audit, "active_paid_membership_without_granting_subscription", "state audit checks paid subscription drift");
-  assertIncludes(audit, "approved_join_request_without_active_membership", "state audit checks approved request drift");
+  assertIncludes(audit, "duplicate_community_join_request_pair", "state audit checks duplicate request drift");
+  assertIncludes(audit, "active_membership_with_join_request", "state audit checks stale request drift");
+  assertIncludes(joinRequestCore, 'export type CommunityJoinRequestStatus = "pending" | "denied";', "join requests expose only current pending or denied state");
+  assertIncludes(joinRequestCore, "await args.ctx.db.delete(existing._id);", "terminal join-request transitions delete current state");
 }
 
 function main() {

@@ -299,6 +299,15 @@ describe("community membership authority", () => {
     const t = convexTest(schema, modules);
     const fixture = await createAuthorityFixture(t, "owner-public-join", true);
     const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
+    await t.run(async (ctx) =>
+      await ctx.db.insert("communityJoinRequests", {
+        communityId: fixture.communityId,
+        userId: fixture.ownerId,
+        status: "pending",
+        createdAt: fixture.nowMs,
+        updatedAt: fixture.nowMs,
+      }),
+    );
 
     await expect(
       asOwner.mutation(api.communityPublic.joinPublicCommunity, {
@@ -319,7 +328,7 @@ describe("community membership authority", () => {
     expect(state.onboardingSessions).toHaveLength(0);
   });
 
-  test("approving an owner join request records the decision without creating membership", async () => {
+  test("approving an impossible owner join request fails closed", async () => {
     const t = convexTest(schema, modules);
     const fixture = await createAuthorityFixture(t, "owner-approval", true);
     const requestId = await t.run(async (ctx) =>
@@ -335,14 +344,14 @@ describe("community membership authority", () => {
 
     await expect(
       asOwner.mutation(api.communityAdmin.approveCommunityJoinRequest, { requestId }),
-    ).resolves.toEqual({ ok: true });
+    ).rejects.toThrow("community_owner_join_request_forbidden");
 
     const state = await t.run(async (ctx) => ({
       request: await ctx.db.get(requestId),
       memberships: await ctx.db.query("communityMemberships").collect(),
       onboardingSessions: await ctx.db.query("communityOnboardingSessions").collect(),
     }));
-    expect(state.request?.status).toBe("approved");
+    expect(state.request?.status).toBe("pending");
     expect(state.memberships).toHaveLength(0);
     expect(state.onboardingSessions).toHaveLength(0);
   });

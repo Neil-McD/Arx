@@ -7,6 +7,11 @@ import {
   communityResourceIsMemberVisiblePage,
   communityResourceModuleIsMemberLive,
 } from "../shared/communityResourceVisibility";
+import {
+  assertCanonicalCommunityJoinRequest,
+  type CommunityJoinRequestLike,
+  getUniqueCommunityJoinRequestByPair,
+} from "./communityJoinRequestCore";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
@@ -96,17 +101,6 @@ export type CommunityAgentConfigLike = {
   communityId: any;
   landingJson?: unknown;
   systemPrompt: string;
-  createdAt: number;
-  updatedAt: number;
-};
-
-export type CommunityJoinRequestLike = {
-  _id: any;
-  communityId: any;
-  userId: any;
-  status: string;
-  deniedAt?: number;
-  reapplyAt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -803,9 +797,6 @@ export async function getUniqueCommunityMembershipByPair(args: {
   }
 }
 
-export const COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
-export const COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
-
 export async function getActiveCommunityBlock(args: {
   ctx: any;
   communityId: any;
@@ -840,44 +831,6 @@ export async function requireCommunityUserNotBlocked(args: {
   if (await communityUserIsBlocked(args)) {
     throw new Error("community_user_blocked");
   }
-}
-
-export function resolveCommunityJoinRequestReapplyAtMs(
-  request: CommunityJoinRequestLike | null | undefined,
-): number | null {
-  if (!request) return null;
-  const status = String(request.status ?? "").trim().toLowerCase();
-  if (status !== "denied") return null;
-  if (typeof request.reapplyAt === "number" && Number.isFinite(request.reapplyAt)) {
-    return request.reapplyAt;
-  }
-  const base = typeof request.deniedAt === "number" && Number.isFinite(request.deniedAt)
-    ? request.deniedAt
-    : typeof request.updatedAt === "number" && Number.isFinite(request.updatedAt)
-      ? request.updatedAt
-      : null;
-  if (base === null) return null;
-  return base + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS;
-}
-
-export function pickMostRelevantCommunityJoinRequest(
-  rows: CommunityJoinRequestLike[] | null | undefined,
-): CommunityJoinRequestLike | null {
-  const list = Array.isArray(rows) ? rows.slice() : [];
-  if (list.length === 0) return null;
-  list.sort((a, b) => {
-    if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
-    return b.createdAt - a.createdAt;
-  });
-  return list[0] ?? null;
-}
-
-export function communityJoinRequestCanReapply(
-  request: CommunityJoinRequestLike | null | undefined,
-  nowMs: number,
-): boolean {
-  const reapplyAt = resolveCommunityJoinRequestReapplyAtMs(request);
-  return reapplyAt !== null && reapplyAt <= nowMs;
 }
 
 export function communitySubscriptionStatusGrantsAccess(
@@ -1147,11 +1100,12 @@ export function mapJoinRequestRow(args: {
   communityId: string;
   row: CommunityJoinRequestLike;
 }) {
+  const status = assertCanonicalCommunityJoinRequest(args.row);
   const deniedAt = typeof args.row.deniedAt === "number" ? args.row.deniedAt : null;
-  const reapplyAt = resolveCommunityJoinRequestReapplyAtMs(args.row);
+  const reapplyAt = status === "denied" ? args.row.reapplyAt! : null;
   return {
     community_id: args.communityId,
-    status: String(args.row.status ?? "").trim().toLowerCase() || "pending",
+    status,
     created_at: toIsoString(args.row.createdAt),
     updated_at: toIsoString(args.row.updatedAt),
     denied_at: deniedAt !== null ? toIsoString(deniedAt) : null,
@@ -1212,15 +1166,16 @@ export async function resolveCommunityAccessBundle(args: {
   let joinRequestStatus: string | null = null;
   let joinRequestReapplyAt: number | null = null;
   if (!isEntitled) {
-    const joinRequestRows = (await args.ctx.db
-      .query("communityJoinRequests")
-      .withIndex("by_community_user", (q: any) =>
-        q.eq("communityId", args.community._id).eq("userId", args.userId),
-      )
-      .collect()) as CommunityJoinRequestLike[];
-    const joinRequest = pickMostRelevantCommunityJoinRequest(joinRequestRows);
-    joinRequestStatus = joinRequest ? String(joinRequest.status ?? "").trim().toLowerCase() || "pending" : null;
-    joinRequestReapplyAt = resolveCommunityJoinRequestReapplyAtMs(joinRequest);
+    const joinRequest = await getUniqueCommunityJoinRequestByPair({
+      ctx: args.ctx,
+      communityId: args.community._id,
+      userId: args.userId,
+    });
+    if (joinRequest) {
+      joinRequestStatus = assertCanonicalCommunityJoinRequest(joinRequest);
+      joinRequestReapplyAt =
+        joinRequestStatus === "denied" ? joinRequest.reapplyAt! : null;
+    }
   }
   const relation: CommunityAccessRelation | null = isOwner
     ? "owner"

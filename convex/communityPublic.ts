@@ -3,8 +3,6 @@ import { extractMessageText } from "./communityChat";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
-  communityJoinRequestCanReapply,
-  type CommunityJoinRequestLike,
   type CommunityLike,
   type CommunityMembershipLike,
   type CommunityPricePointLike,
@@ -20,7 +18,6 @@ import {
   getUniqueCommunityMembershipByPair,
   normalizeCommunityRoleForOutput,
   normalizeSlug,
-  pickMostRelevantCommunityJoinRequest,
   pickPreferredActivePlan,
   requireCommunityChatAccess,
   requireCommunityUserNotBlocked,
@@ -31,10 +28,19 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import {
+  assertCanonicalCommunityJoinRequest,
+  cancelPendingCommunityJoinRequest,
+  communityJoinRequestCanReapply,
+  deleteCommunityJoinRequestByPair,
+  ensurePendingCommunityJoinRequest,
+  getUniqueCommunityJoinRequestByPair,
+} from "./communityJoinRequestCore";
 import { findAuthenticatedActorState } from "./authActor";
 import { resolveCommunityFunnelConfigByCommunityId } from "./communityFunnel";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
+  communityMembershipRequiresManagerReapproval,
   isPlatformHomeCommunity,
   platformHomeMembershipRequiresReapproval,
 } from "./platformHomeCommunity";
@@ -656,11 +662,11 @@ export const getMyJoinRequestBySlug = query({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) return null;
-    const rows = (await ctx.db
-      .query("communityJoinRequests")
-      .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", userId))
-      .collect()) as CommunityJoinRequestLike[];
-    const row = pickMostRelevantCommunityJoinRequest(rows);
+    const row = await getUniqueCommunityJoinRequestByPair({
+      ctx,
+      communityId: community._id,
+      userId,
+    });
     if (!row) return null;
     return mapJoinRequestRow({
       communityId: String(community._id),
@@ -668,48 +674,6 @@ export const getMyJoinRequestBySlug = query({
     });
   },
 });
-
-async function ensurePendingCommunityJoinRequest(args: {
-  ctx: any;
-  communityId: any;
-  userId: any;
-  nowMs: number;
-}): Promise<CommunityJoinRequestLike> {
-  const existingRows = (await args.ctx.db
-    .query("communityJoinRequests")
-    .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
-    .collect()) as CommunityJoinRequestLike[];
-  const existing = pickMostRelevantCommunityJoinRequest(existingRows);
-  if (existing) {
-    if (
-      String(existing.status ?? "").trim().toLowerCase() === "denied" &&
-      communityJoinRequestCanReapply(existing, args.nowMs)
-    ) {
-      const reopenedId = await args.ctx.db.insert("communityJoinRequests", {
-        communityId: args.communityId,
-        userId: args.userId,
-        status: "pending",
-        createdAt: args.nowMs,
-        updatedAt: args.nowMs,
-      });
-      const reopened = (await args.ctx.db.get(reopenedId)) as CommunityJoinRequestLike | null;
-      if (!reopened) throw new Error("join_request_reopen_failed");
-      return reopened;
-    }
-    return existing;
-  }
-
-  const id = await args.ctx.db.insert("communityJoinRequests", {
-    communityId: args.communityId,
-    userId: args.userId,
-    status: "pending",
-    createdAt: args.nowMs,
-    updatedAt: args.nowMs,
-  });
-  const created = (await args.ctx.db.get(id)) as CommunityJoinRequestLike | null;
-  if (!created) throw new Error("join_request_create_failed");
-  return created;
-}
 
 async function joinPublicCommunityInternal(args: {
   ctx: any;
@@ -722,6 +686,11 @@ async function joinPublicCommunityInternal(args: {
   reapply_at?: string | null;
 }> {
   if (String(args.community.ownerId) === String(args.userId)) {
+    await deleteCommunityJoinRequestByPair({
+      ctx: args.ctx,
+      communityId: args.community._id,
+      userId: args.userId,
+    });
     return {
       outcome: "joined",
       community_id: String(args.community._id),
@@ -764,6 +733,11 @@ async function joinPublicCommunityInternal(args: {
   };
 
   if (existingMembership && communityMembershipRowIsActive(existingMembership)) {
+    await deleteCommunityJoinRequestByPair({
+      ctx: args.ctx,
+      communityId: args.community._id,
+      userId: args.userId,
+    });
     await scheduleCommunityAppGrantSeedingBestEffort({
       ctx: args.ctx,
       communityId: args.community._id,
@@ -777,36 +751,40 @@ async function joinPublicCommunityInternal(args: {
     };
   }
 
-  const joinRequestRows = (await args.ctx.db
-    .query("communityJoinRequests")
-    .withIndex("by_community_user", (q: any) => q.eq("communityId", args.community._id).eq("userId", args.userId))
-    .collect()) as CommunityJoinRequestLike[];
-  const joinRequest = pickMostRelevantCommunityJoinRequest(joinRequestRows);
-  const joinRequestStatus = String(joinRequest?.status ?? "")
-    .trim()
-    .toLowerCase();
+  const joinRequest = await getUniqueCommunityJoinRequestByPair({
+    ctx: args.ctx,
+    communityId: args.community._id,
+    userId: args.userId,
+  });
+  const joinRequestStatus = joinRequest
+    ? assertCanonicalCommunityJoinRequest(joinRequest)
+    : null;
+
+  const managerReapprovalRequired =
+    communityMembershipRequiresManagerReapproval(existingMembership);
+  if (managerReapprovalRequired && !joinRequest) {
+    throw new Error("community_manager_removal_denial_missing");
+  }
+  if (
+    managerReapprovalRequired &&
+    joinRequestStatus === "denied" &&
+    !communityJoinRequestCanReapply(joinRequest!, args.nowMs)
+  ) {
+    return {
+      outcome: "approval_denied",
+      community_id: String(args.community._id),
+      reapply_at: toIsoString(joinRequest!.reapplyAt!),
+    };
+  }
 
   const platformHomeRequiresReapproval =
     isPlatformHomeCommunity({ communitySlug: args.community.slug }) &&
     platformHomeMembershipRequiresReapproval(existingMembership);
-  if (platformHomeRequiresReapproval && joinRequestStatus !== "approved") {
+  if (platformHomeRequiresReapproval) {
     if (joinRequestStatus === "pending") {
       return {
         outcome: "approval_pending",
         community_id: String(args.community._id),
-      };
-    }
-    if (
-      joinRequestStatus === "denied" &&
-      !communityJoinRequestCanReapply(joinRequest, args.nowMs)
-    ) {
-      return {
-        outcome: "approval_denied",
-        community_id: String(args.community._id),
-        reapply_at:
-          typeof joinRequest?.reapplyAt === "number"
-            ? toIsoString(joinRequest.reapplyAt)
-            : null,
       };
     }
     await ensurePendingCommunityJoinRequest({
@@ -822,32 +800,25 @@ async function joinPublicCommunityInternal(args: {
   }
 
   const entryPolicy = resolveCommunityEntryPolicy(args.community);
-  if (joinRequestStatus === "denied" && !communityJoinRequestCanReapply(joinRequest, args.nowMs)) {
-    return {
-      outcome: "approval_denied",
-      community_id: String(args.community._id),
-      reapply_at:
-        typeof joinRequest?.reapplyAt === "number"
-          ? toIsoString(joinRequest.reapplyAt)
-          : null,
-    };
-  }
   if (entryPolicy === "paid_subscription") {
+    await deleteCommunityJoinRequestByPair({
+      ctx: args.ctx,
+      communityId: args.community._id,
+      userId: args.userId,
+    });
     return {
       outcome: "paid_plan_required",
       community_id: String(args.community._id),
     };
   }
   if (entryPolicy === "approval") {
-    if (joinRequestStatus === "approved") {
-      // approved requests may enter immediately
-    } else if (joinRequestStatus === "pending") {
+    if (joinRequestStatus === "pending") {
       return {
         outcome: "approval_pending",
         community_id: String(args.community._id),
       };
     } else if (joinRequestStatus === "denied") {
-      if (communityJoinRequestCanReapply(joinRequest, args.nowMs)) {
+      if (communityJoinRequestCanReapply(joinRequest!, args.nowMs)) {
         await ensurePendingCommunityJoinRequest({
           ctx: args.ctx,
           communityId: args.community._id,
@@ -862,10 +833,7 @@ async function joinPublicCommunityInternal(args: {
       return {
         outcome: "approval_denied",
         community_id: String(args.community._id),
-        reapply_at:
-          typeof joinRequest?.reapplyAt === "number"
-            ? toIsoString(joinRequest.reapplyAt)
-            : null,
+        reapply_at: toIsoString(joinRequest!.reapplyAt!),
       };
     } else {
       await ensurePendingCommunityJoinRequest({
@@ -943,7 +911,6 @@ export const cancelMyJoinRequestBySlug = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx });
-    const nowMs = Date.now();
     const slug = normalizeSlug(args.communitySlug);
     const community = (await ctx.db
       .query("communities")
@@ -951,24 +918,10 @@ export const cancelMyJoinRequestBySlug = mutation({
       .first()) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
 
-    const joinRequestRows = (await ctx.db
-      .query("communityJoinRequests")
-      .withIndex("by_community_user", (q: any) => q.eq("communityId", community._id).eq("userId", userId))
-      .collect()) as CommunityJoinRequestLike[];
-    const joinRequest = pickMostRelevantCommunityJoinRequest(joinRequestRows);
-    const status = String(joinRequest?.status ?? "").trim().toLowerCase();
-
-    if (!joinRequest || status === "" || status === "canceled") {
-      return { outcome: "none" as const };
-    }
-    if (status !== "pending") {
-      return { outcome: "ignored" as const, status };
-    }
-
-    await ctx.db.patch(joinRequest._id, {
-      status: "canceled",
-      updatedAt: nowMs,
+    return await cancelPendingCommunityJoinRequest({
+      ctx,
+      communityId: community._id,
+      userId,
     });
-    return { outcome: "canceled" as const };
   },
 });

@@ -11,6 +11,7 @@ echo "== Community admin contract guard =="
 COMMUNITY_FILE="convex/community.ts"
 COMMUNITY_ADMIN_FILE="convex/communityAdmin.ts"
 COMMUNITY_CORE_FILE="convex/communityCore.ts"
+COMMUNITY_JOIN_REQUEST_CORE_FILE="convex/communityJoinRequestCore.ts"
 COMMUNITY_LIFECYCLE_FILE="convex/communityLifecycle.ts"
 COMMUNITY_MEMBERSHIP_LIFECYCLE_FILE="convex/communityMembershipLifecycle.ts"
 COMMUNITY_PUBLIC_FILE="convex/communityPublic.ts"
@@ -38,6 +39,10 @@ if [[ ! -f "$COMMUNITY_ADMIN_FILE" ]]; then
 fi
 if [[ ! -f "$COMMUNITY_CORE_FILE" ]]; then
   echo "FAIL: missing $COMMUNITY_CORE_FILE"
+  exit 1
+fi
+if [[ ! -f "$COMMUNITY_JOIN_REQUEST_CORE_FILE" ]]; then
+  echo "FAIL: missing $COMMUNITY_JOIN_REQUEST_CORE_FILE"
   exit 1
 fi
 if [[ ! -f "$COMMUNITY_LIFECYCLE_FILE" ]]; then
@@ -499,7 +504,7 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const unbanCommunityUser = mutation\(' \
   "unbanCommunityUser mutation exists"
-require_multiline_match "$COMMUNITY_CORE_FILE" \
+require_multiline_match "$COMMUNITY_JOIN_REQUEST_CORE_FILE" \
   'export const COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS = 14 \* 24 \* 60 \* 60 \* 1000;' \
   "removed member reapply cooldown is 14 days"
 

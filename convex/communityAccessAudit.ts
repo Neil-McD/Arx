@@ -2,7 +2,6 @@ import { internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import {
   type CommunityBlockLike,
-  type CommunityJoinRequestLike,
   type CommunityLike,
   type CommunityMembershipLike,
   type CommunityPricePointLike,
@@ -13,6 +12,10 @@ import {
   normalizeMembershipAccessSource,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
+import {
+  type CommunityJoinRequestLike,
+  normalizeCommunityJoinRequestStatus,
+} from "./communityJoinRequestCore";
 
 type CommunityAccessAuditSeverity = "info" | "warning" | "error";
 
@@ -209,22 +212,83 @@ export const listCommunityAccessStateAuditFindingsInternal = internalQuery({
         }
       }
 
+      const joinRequestsByUser = new Map<string, CommunityJoinRequestLike[]>();
       for (const request of joinRequests) {
-        const status = String(request.status ?? "").trim().toLowerCase();
-        if (status !== "approved") continue;
-        const membership = uniqueMembershipByUser.get(String(request.userId)) ?? null;
-        if (!communityMembershipRowIsActive(membership)) {
+        const requestUserId = String(request.userId);
+        joinRequestsByUser.set(requestUserId, [
+          ...(joinRequestsByUser.get(requestUserId) ?? []),
+          request,
+        ]);
+      }
+      for (const [requestUserId, userRequests] of joinRequestsByUser) {
+        if (userRequests.length > 1) {
           pushFinding(findings, community, {
-            code: "approved_join_request_without_active_membership",
-            severity: entryPolicy === "paid_subscription" ? "warning" : "error",
-            user_id: String(request.userId),
-            join_request_id: String(request._id),
-            membership_id: membership ? String(membership._id) : undefined,
+            code: "duplicate_community_join_request_pair",
+            severity: "error",
+            user_id: requestUserId,
             details: {
-              entry_policy: entryPolicy,
-              request_updated_at: request.updatedAt,
+              request_count: userRequests.length,
+              request_ids: userRequests.map((row) => String(row._id)),
             },
           });
+        }
+        for (const request of userRequests) {
+          const status = normalizeCommunityJoinRequestStatus(request.status);
+          const membership = uniqueMembershipByUser.get(requestUserId) ?? null;
+          if (String(community.ownerId) === requestUserId) {
+            pushFinding(findings, community, {
+              code: "community_owner_join_request_forbidden",
+              severity: "error",
+              user_id: requestUserId,
+              join_request_id: String(request._id),
+              details: { request_status: request.status },
+            });
+          }
+          if (!status) {
+            pushFinding(findings, community, {
+              code: "community_join_request_status_invalid",
+              severity: "error",
+              user_id: requestUserId,
+              join_request_id: String(request._id),
+              details: { request_status: request.status },
+            });
+          } else if (
+            status === "pending" &&
+            (request.deniedAt !== undefined || request.reapplyAt !== undefined)
+          ) {
+            pushFinding(findings, community, {
+              code: "community_join_request_pending_fields_invalid",
+              severity: "error",
+              user_id: requestUserId,
+              join_request_id: String(request._id),
+              details: {},
+            });
+          } else if (
+            status === "denied" &&
+            (typeof request.deniedAt !== "number" ||
+              !Number.isFinite(request.deniedAt) ||
+              typeof request.reapplyAt !== "number" ||
+              !Number.isFinite(request.reapplyAt) ||
+              request.reapplyAt <= request.deniedAt)
+          ) {
+            pushFinding(findings, community, {
+              code: "community_join_request_denial_fields_invalid",
+              severity: "error",
+              user_id: requestUserId,
+              join_request_id: String(request._id),
+              details: {},
+            });
+          }
+          if (communityMembershipRowIsActive(membership)) {
+            pushFinding(findings, community, {
+              code: "active_membership_with_join_request",
+              severity: "error",
+              user_id: requestUserId,
+              join_request_id: String(request._id),
+              membership_id: String(membership!._id),
+              details: { request_status: request.status },
+            });
+          }
         }
       }
     }

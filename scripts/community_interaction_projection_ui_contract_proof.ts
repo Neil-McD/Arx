@@ -686,8 +686,8 @@ assert.doesNotMatch(
 );
 assert.match(
   communityAdmin,
-  /approveCommunityJoinRequest = mutation\(\{[\s\S]*requestId: v\.id\("communityJoinRequests"\)[\s\S]*ctx\.db\.get\(args\.requestId\)/,
-  "approve join request should validate request ids as communityJoinRequests ids",
+  /approveCommunityJoinRequest = mutation\(\{[\s\S]*requestId: v\.id\("communityJoinRequests"\)[\s\S]*requireCanonicalCommunityJoinRequestMutationTarget\(\{/,
+  "approve join request should validate a canonical unique request target",
 );
 const freeAccessApprovalHelper = sectionBetween(
   communityAdmin,
@@ -717,8 +717,8 @@ assert.match(
 );
 assert.match(
   communityAdmin,
-  /denyCommunityJoinRequest = mutation\(\{[\s\S]*requestId: v\.id\("communityJoinRequests"\)[\s\S]*ctx\.db\.get\(args\.requestId\)/,
-  "deny join request should validate request ids as communityJoinRequests ids",
+  /denyCommunityJoinRequest = mutation\(\{[\s\S]*requestId: v\.id\("communityJoinRequests"\)[\s\S]*requireCanonicalCommunityJoinRequestMutationTarget\(\{/,
+  "deny join request should validate a canonical unique request target",
 );
 assert.doesNotMatch(
   read("apps/web/src/components/WebWorkspaceUserDataPanel.tsx"),

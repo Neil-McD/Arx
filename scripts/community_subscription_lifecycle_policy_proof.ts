@@ -382,11 +382,12 @@ function assertSourceAnchors() {
   const httpBilling = readText(new URL("../convex/httpBilling.ts", import.meta.url));
   const communityAdmin = readText(new URL("../convex/communityAdmin.ts", import.meta.url));
   const communityCore = readText(new URL("../convex/communityCore.ts", import.meta.url));
+  const communityJoinRequestCore = readText(new URL("../convex/communityJoinRequestCore.ts", import.meta.url));
   const communityPublic = readText(new URL("../convex/communityPublic.ts", import.meta.url));
   const schema = readText(new URL("../convex/schema.ts", import.meta.url));
 
   assertIncludes(
-    communityCore,
+    communityJoinRequestCore,
     "export const COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;",
     "removed members have a 14-day reapply cooldown",
   );
@@ -587,13 +588,13 @@ function assertSourceAnchors() {
   );
   assertIncludes(
     communityAdmin,
-    "reapplyAt: nowMs + COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,",
-    "member removal writes the removal cooldown",
+    "cooldownMs: COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,",
+    "member removal delegates the removal cooldown to the canonical kernel",
   );
   assertIncludes(
     communityAdmin,
-    "reapplyAt: nowMs + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,",
-    "ordinary join denial writes the normal join cooldown",
+    "cooldownMs: COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,",
+    "ordinary join denial delegates the normal cooldown to the canonical kernel",
   );
   assertIncludes(
     communityPublic,
@@ -602,7 +603,7 @@ function assertSourceAnchors() {
   );
   assertIncludes(
     communityPublic,
-    "if (joinRequestStatus === \"denied\" && !communityJoinRequestCanReapply(joinRequest, args.nowMs))",
+    "!communityJoinRequestCanReapply(joinRequest!, args.nowMs)",
     "public join respects denied reapply windows before granting access",
   );
   assertIncludes(

@@ -40,7 +40,12 @@ function main() {
     "active_paid_membership_without_granting_subscription",
     "active_paid_membership_with_stale_subscription_period",
     "paid_community_durable_grant_review",
-    "approved_join_request_without_active_membership",
+    "duplicate_community_join_request_pair",
+    "community_owner_join_request_forbidden",
+    "community_join_request_status_invalid",
+    "community_join_request_pending_fields_invalid",
+    "community_join_request_denial_fields_invalid",
+    "active_membership_with_join_request",
   ]) {
     assertIncludes(audit, findingCode, `audit finding ${findingCode}`);
   }

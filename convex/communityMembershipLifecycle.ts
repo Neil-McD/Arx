@@ -3,9 +3,11 @@ import {
   communityMembershipRowIsActive,
   getUniqueCommunityMembershipByPair,
   normalizeCommunityRoleForOutput,
+  requireCommunityUserNotBlocked,
   syncCommunityActiveMemberCount,
 } from "./communityCore";
 import { createCommunityOnboardingSessionForActivation } from "./communityOnboardingCore";
+import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
 
 export type CommunityMembershipAccessSource =
   | "free_grant"
@@ -31,6 +33,11 @@ export async function activateCommunityMembershipCore(args: {
   if (String(community.ownerId) === String(args.userId)) {
     throw new Error("community_owner_membership_forbidden");
   }
+  await requireCommunityUserNotBlocked({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
 
   // Keep this indexed read in the same mutation transaction as the insert.
   // Convex serializable retries then make concurrent activation attempts
@@ -50,6 +57,11 @@ export async function activateCommunityMembershipCore(args: {
     });
     const refreshed = (await args.ctx.db.get(existing._id)) as CommunityMembershipLike | null;
     if (!refreshed) throw new Error("community_membership_not_found");
+    await deleteCommunityJoinRequestByPair({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
     return {
       membership: refreshed,
       accessGranted: false,
@@ -105,6 +117,11 @@ export async function activateCommunityMembershipCore(args: {
     // Community access is authoritative. Optional onboarding state must never
     // turn an otherwise-valid membership activation into a failed join.
   }
+  await deleteCommunityJoinRequestByPair({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
   return {
     membership,
     accessGranted: true,
