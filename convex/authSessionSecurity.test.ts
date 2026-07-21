@@ -11,9 +11,16 @@ import {
   resolveAuthSessionLifecycle,
 } from "./authSessions";
 import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
-import { setAuthSessionCookie } from "../api/auth/_cookies.js";
+import {
+  readAuthSessionCookie,
+  readVerifiedAuthFlow,
+  setAuthFlowCookie,
+  setAuthSessionCookie,
+} from "../api/auth/_cookies.js";
+import googleAuthCallback from "../api/auth/google/callback.js";
 import logoutWebSession from "../api/auth/logout.js";
 import refreshWebSession from "../api/auth/refresh.js";
+import bootstrapWebSession from "../api/auth/session.js";
 import { completeConfirmedSignOut } from "../apps/web/src/controllers/confirmedSignOut";
 
 const VALID_UUID = "123e4567-e89b-42d3-a456-426614174000";
@@ -56,6 +63,204 @@ async function invokeWebLogoutWithCookie() {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+});
+
+describe("malformed auth cookie recovery", () => {
+  test("the session-cookie boundary distinguishes valid, missing, and invalid input without throwing", () => {
+    const baseHeaders = {
+      host: "localhost:5174",
+      "x-forwarded-proto": "http",
+    };
+    expect(readAuthSessionCookie({ headers: baseHeaders })).toEqual({ status: "missing" });
+    expect(
+      readAuthSessionCookie({
+        headers: { ...baseHeaders, cookie: `arx-auth-session=${VALID_UUID}` },
+      }),
+    ).toEqual({ status: "valid", value: VALID_UUID });
+    expect(
+      readAuthSessionCookie({
+        headers: { ...baseHeaders, cookie: "arx-auth-session=%E0%A4%A" },
+      }),
+    ).toEqual({ status: "invalid" });
+    expect(
+      readAuthSessionCookie({
+        headers: { ...baseHeaders, cookie: `arx-auth-session=${"a".repeat(257)}` },
+      }),
+    ).toEqual({ status: "invalid" });
+  });
+
+  test("valid OAuth flow cookies still round-trip through the same signed boundary", () => {
+    vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
+    const harness = createNodeResponseHarness();
+    const request = {
+      headers: {
+        host: "localhost:5174",
+        "x-forwarded-proto": "http",
+      },
+    };
+    const createdAtMs = Date.now();
+    setAuthFlowCookie(harness.response, request, {
+      state: "valid-state",
+      codeVerifier: "valid-code-verifier",
+      redirectTo: "http://localhost:5174/api/auth/google/callback",
+      returnTo: "/c/polynet/chat",
+      createdAtMs,
+    });
+    const cookie = String(harness.headers.get("Set-Cookie")).split(";", 1)[0];
+
+    expect(
+      readVerifiedAuthFlow({
+        headers: {
+          ...request.headers,
+          cookie,
+        },
+      }),
+    ).toEqual({
+      state: "valid-state",
+      codeVerifier: "valid-code-verifier",
+      redirectTo: "http://localhost:5174/api/auth/google/callback",
+      returnTo: "/c/polynet/chat",
+      createdAtMs,
+    });
+  });
+
+  test("bootstrap preserves the missing-cookie signed-out path without writing a cookie", async () => {
+    const bridgeFetch = vi.fn(async () => {
+      throw new Error("auth bridge must not run");
+    });
+    vi.stubGlobal("fetch", bridgeFetch);
+    const harness = createNodeResponseHarness();
+
+    await bootstrapWebSession(
+      {
+        method: "GET",
+        headers: {
+          host: "polynet.test",
+          origin: "https://polynet.test",
+          "x-forwarded-proto": "https",
+        },
+      },
+      harness.response,
+    );
+
+    expect(harness.response.statusCode).toBe(200);
+    expect(harness.readJson()).toMatchObject({
+      ok: true,
+      session: null,
+      trace: { bootstrap_path: "missing_cookie" },
+    });
+    expect(harness.headers.has("Set-Cookie")).toBe(false);
+    expect(bridgeFetch).not.toHaveBeenCalled();
+  });
+
+  test("bootstrap clears a malformed cookie and returns signed-out state without a bridge call", async () => {
+    const bridgeFetch = vi.fn(async () => {
+      throw new Error("auth bridge must not run");
+    });
+    vi.stubGlobal("fetch", bridgeFetch);
+    const harness = createNodeResponseHarness();
+
+    await bootstrapWebSession(
+      {
+        method: "GET",
+        headers: {
+          host: "polynet.test",
+          origin: "https://polynet.test",
+          "x-forwarded-proto": "https",
+          cookie: "__Secure-arx-auth-session=%E0%A4%A",
+        },
+      },
+      harness.response,
+    );
+
+    expect(harness.response.statusCode).toBe(200);
+    expect(harness.readJson()).toMatchObject({
+      ok: true,
+      session: null,
+      trace: { bootstrap_path: "cleared_invalid_cookie" },
+    });
+    expect(String(harness.headers.get("Set-Cookie"))).toContain("Max-Age=0");
+    expect(bridgeFetch).not.toHaveBeenCalled();
+  });
+
+  test("refresh clears a malformed cookie and fails closed without a bridge call", async () => {
+    const bridgeFetch = vi.fn(async () => {
+      throw new Error("auth bridge must not run");
+    });
+    vi.stubGlobal("fetch", bridgeFetch);
+    const harness = createNodeResponseHarness();
+
+    await refreshWebSession(
+      {
+        method: "POST",
+        headers: {
+          host: "localhost:5174",
+          origin: "http://localhost:5174",
+          "x-forwarded-proto": "http",
+          cookie: "arx-auth-session=%E0%A4%A",
+        },
+      },
+      harness.response,
+    );
+
+    expect(harness.response.statusCode).toBe(401);
+    expect(harness.readJson()).toMatchObject({ ok: false, error: "Missing auth session." });
+    expect(String(harness.headers.get("Set-Cookie"))).toContain("Max-Age=0");
+    expect(bridgeFetch).not.toHaveBeenCalled();
+  });
+
+  test("logout clears a malformed cookie as idempotent success without a bridge call", async () => {
+    const bridgeFetch = vi.fn(async () => {
+      throw new Error("auth bridge must not run");
+    });
+    vi.stubGlobal("fetch", bridgeFetch);
+    const harness = createNodeResponseHarness();
+
+    await logoutWebSession(
+      {
+        method: "POST",
+        headers: {
+          host: "localhost:5174",
+          origin: "http://localhost:5174",
+          "x-forwarded-proto": "http",
+          cookie: "arx-auth-session=%E0%A4%A",
+        },
+      },
+      harness.response,
+    );
+
+    expect(harness.response.statusCode).toBe(200);
+    expect(harness.readJson()).toEqual({ ok: true });
+    expect(String(harness.headers.get("Set-Cookie"))).toContain("Max-Age=0");
+    expect(bridgeFetch).not.toHaveBeenCalled();
+  });
+
+  test("the OAuth callback clears malformed flow state without exchanging credentials", async () => {
+    const bridgeFetch = vi.fn(async () => {
+      throw new Error("auth exchange must not run");
+    });
+    vi.stubGlobal("fetch", bridgeFetch);
+    const harness = createNodeResponseHarness();
+
+    await googleAuthCallback(
+      {
+        method: "GET",
+        headers: {
+          host: "polynet.test",
+          "x-forwarded-proto": "https",
+          cookie: "__Secure-arx-auth-flow=%E0%A4%A",
+        },
+        query: {},
+      },
+      harness.response,
+    );
+
+    expect(harness.response.statusCode).toBe(302);
+    expect(String(harness.headers.get("Location"))).toContain("error=auth_callback_failed");
+    expect(String(harness.headers.get("Set-Cookie"))).toContain("__Secure-arx-auth-flow=");
+    expect(String(harness.headers.get("Set-Cookie"))).toContain("Max-Age=0");
+    expect(bridgeFetch).not.toHaveBeenCalled();
+  });
 });
 
 describe("secure auth session identifiers", () => {

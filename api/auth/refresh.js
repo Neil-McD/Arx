@@ -1,5 +1,5 @@
 import { callAuthBridgeJson, isSameOriginPost, readResponseError, sendJson } from "./_bridge.js";
-import { clearAuthSessionCookie, readAuthSessionId } from "./_cookies.js";
+import { clearAuthSessionCookie, readAuthSessionCookie } from "./_cookies.js";
 
 export default async function handler(req, res) {
   if (req.method === "OPTIONS") {
@@ -18,12 +18,13 @@ export default async function handler(req, res) {
     return;
   }
 
-  const sessionId = readAuthSessionId(req);
-  if (!sessionId) {
+  const sessionCookie = readAuthSessionCookie(req);
+  if (sessionCookie.status !== "valid") {
     clearAuthSessionCookie(res, req);
     sendJson(res, 401, { ok: false, error: "Missing auth session." });
     return;
   }
+  const sessionId = sessionCookie.value;
 
   let response;
   try {

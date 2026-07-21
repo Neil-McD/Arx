@@ -8,6 +8,8 @@ const AUTH_FLOW_TTL_MS = 20 * 60 * 1000;
 const DEFAULT_SESSION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 const MAX_SESSION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 const DEFAULT_POST_SIGN_IN_PATH = "/";
+const MAX_AUTH_SESSION_COOKIE_VALUE_LENGTH = 256;
+const MAX_AUTH_FLOW_COOKIE_VALUE_LENGTH = 4096;
 
 function readEnv(name) {
   return String(process.env?.[name] ?? "").trim();
@@ -72,6 +74,18 @@ function getCookie(req, name) {
     if (cookieName === name) return rest.join("=") || null;
   }
   return null;
+}
+
+function decodeCookieValue(rawValue, maxLength) {
+  if (!rawValue) return { status: "missing" };
+  if (rawValue.length > maxLength) return { status: "invalid" };
+  try {
+    const value = decodeURIComponent(rawValue);
+    if (!value || value.length > maxLength) return { status: "invalid" };
+    return { status: "valid", value };
+  } catch {
+    return { status: "invalid" };
+  }
 }
 
 function encodeBase64Url(value) {
@@ -187,10 +201,9 @@ export function clearAuthSessionCookie(res, req) {
   );
 }
 
-export function readAuthSessionId(req) {
+export function readAuthSessionCookie(req) {
   const name = resolveCookieName(req, "session");
-  const value = getCookie(req, name);
-  return value ? decodeURIComponent(value) : null;
+  return decodeCookieValue(getCookie(req, name), MAX_AUTH_SESSION_COOKIE_VALUE_LENGTH);
 }
 
 export function setAuthFlowCookie(res, req, payload) {
@@ -234,9 +247,9 @@ export function clearAuthFlowCookie(res, req) {
 
 export function readVerifiedAuthFlow(req) {
   const name = resolveCookieName(req, "flow");
-  const rawValue = getCookie(req, name);
-  if (!rawValue) return null;
-  const parsed = verifySignedValue(decodeURIComponent(rawValue));
+  const decoded = decodeCookieValue(getCookie(req, name), MAX_AUTH_FLOW_COOKIE_VALUE_LENGTH);
+  if (decoded.status !== "valid") return null;
+  const parsed = verifySignedValue(decoded.value);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   const createdAtMs = Number(parsed.createdAtMs ?? 0);
   if (!Number.isFinite(createdAtMs) || createdAtMs <= 0) return null;

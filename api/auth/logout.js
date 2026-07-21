@@ -1,5 +1,5 @@
 import { callAuthBridgeJson, isSameOriginPost, sendJson } from "./_bridge.js";
-import { clearAuthSessionCookie, readAuthSessionId } from "./_cookies.js";
+import { clearAuthSessionCookie, readAuthSessionCookie } from "./_cookies.js";
 
 const AUTH_LOGOUT_UNAVAILABLE_MESSAGE = "Sign out could not be confirmed. Please try again.";
 
@@ -20,12 +20,12 @@ export default async function handler(req, res) {
     return;
   }
 
-  const sessionId = readAuthSessionId(req);
-  if (sessionId) {
+  const sessionCookie = readAuthSessionCookie(req);
+  if (sessionCookie.status === "valid") {
     let response;
     try {
       response = await callAuthBridgeJson("/runtime/auth_bridge_session_logout", {
-        payload: { session_id: sessionId },
+        payload: { session_id: sessionCookie.value },
       });
     } catch {
       sendJson(res, 503, {
