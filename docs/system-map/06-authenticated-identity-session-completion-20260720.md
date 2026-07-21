@@ -6,7 +6,7 @@ Lane: `codex/semantic-platform-staging-20260719` / `polynet-staging.vercel.app` 
 
 Scope: F-001 and F-003 through F-005 only; production and unrelated access domains untouched.
 
-Status: the original all-dimension `8/10` closure below was superseded by post-acceptance adversarial review. Refresh subject immutability is now closed on staging; retention reachability, end-to-end deadlines, malformed-cookie recovery, and bounded auth diagnostics remain open.
+Status: the original all-dimension `8/10` closure below was superseded by post-acceptance adversarial review. Refresh subject immutability and retention reachability are now closed on staging; end-to-end deadlines, malformed-cookie recovery, and bounded auth diagnostics remain open.
 
 ## Irreducible outcome
 
@@ -26,6 +26,7 @@ sign in
   -> secure UUID (raw value only in HttpOnly cookie)
   -> SHA-256 lookup hash + encrypted provider state
   -> absolute expiry at sign-in + 30 days
+  -> indexed deletion deadline at absolute expiry + 7 days
 
 bootstrap / refresh
   -> reject missing, expired, or revoked state
@@ -37,15 +38,17 @@ bootstrap / refresh
 
 logout / terminal provider failure
   -> revoke locally first
-  -> assign seven-day indexed purge timestamp
+  -> move the indexed deletion deadline to the earlier terminal event + 7 days
   -> bounded best-effort provider logout (5-second timeout)
   -> clear browser only after local authority confirms
 
 hourly retention
   -> internal cron
-  -> indexed due-row selection for rows already assigned purgeAfterAt
+  -> indexed due-row selection for every session
+  -> recompute the authoritative deadline before deletion
+  -> repair an incorrectly early active deadline instead of deleting the session
   -> at most 500 deletions per transaction
-  -> untouched absolute expiry and full-batch continuation remain open
+  -> immediately schedule the next bounded batch whenever a batch is full
 ```
 
 ## Staging migration receipt
@@ -56,6 +59,8 @@ hourly retention
 - An independent pre-deletion query reported `legacy_rows_exist: false`, zero replacement fields in the first 500 hashed rows, and zero missing/expired absolute lifetimes in that prefix.
 - The final schema deployment deleted `authSessions.by_sessionId` and `authSessions.by_authSubject` and removed the compatibility functions.
 - A full post-deployment bounded scan covered all 1,069 remaining rows: zero malformed hashes, zero invalid revisions, zero missing/expired lifetimes, zero legacy fields, and no overflow beyond the 5,000-row bound.
+- A later bounded retention repair assigned the canonical deletion deadline to all 1,069 remaining rows. The post-repair aggregate reported zero missing deadlines, zero noncanonical deadlines, zero early-active deadlines, and zero currently due rows.
+- An idempotency rerun repaired zero rows; all ten temporary scheduled repair jobs completed successfully before the repair function was deleted and the backfill-free code was redeployed.
 - The temporary staging migration environment secret was unset after its only caller was deleted.
 
 ## Executable proof
@@ -68,25 +73,25 @@ Focused persisted and route coverage includes:
 - two real concurrent refresh actions producing one provider effect and one revision commit;
 - stable browser credential on successful, retryable, and subject-unverifiable refresh;
 - terminal local revocation with no credential commit for provider-user or fresh-JWT subject drift;
-- absolute expiry, revocation, unsupported secret version, and terminal purge behavior;
+- untouched absolute expiry, earlier revocation, legacy deadline repair, unsupported secret version, and terminal purge behavior;
 - local-before-provider logout, retryable local failure, and provider-failure convergence;
-- multi-batch indexed retention with eventual drain;
+- self-scheduling multi-batch indexed retention with eventual drain and active-row delete protection;
 - diagnostic coverage for bootstrap, refresh, contention, commit loss, logout, and provider failures;
 - structural absence of rotation, replacement, legacy lookup, public migration, and full-table maintenance.
 
-The focused suites now contain 30 passing behavioral tests: four actor-authority, sixteen security/route, and ten persisted state-machine tests. Convex and web typechecks, the production web build, and the canonical foundation gate all pass. The restricted gate run stopped only at the known `tsx` local-IPC `EPERM`; the identical gate passed outside that runner restriction.
+The focused suites now contain 33 passing behavioral tests: four actor-authority, sixteen security/route, and thirteen persisted state-machine tests. Convex and web typechecks, the production web build, and the canonical foundation gate all pass. The restricted gate run stopped only at the known `tsx` local-IPC `EPERM`; the identical gate passed outside that runner restriction.
 
 ## Current score after adversarial review
 
 | Dimension | Score | Evidence | Why not higher |
 | --- | ---: | --- | --- |
 | Simplicity | 8 | one subject selector, one credential row, one refresh transition, one retention owner; no new state or endpoint was needed for subject immutability | provider payload normalization still supports multiple upstream response shapes |
-| Scalability | 6 | refresh creates no replacement rows and lookup is indexed | untouched expiry is not purge-reachable; prune capacity is fixed; normal bootstrap diagnostics remain unbounded |
+| Scalability | 7 | refresh creates no replacement rows; lookup and retention are indexed; full batches immediately continue without waiting for the hourly cron | normal successful bootstrap diagnostics remain unbounded |
 | Reliability | 7 | stable cookie, revisioned lease, explicit outcomes, local-authoritative logout | bridge calls have no application deadline and provider body consumption is not covered by the current timer |
 | Security | 8 | refresh now rejects absent subject evidence and terminally revokes any provider/JWT subject drift before commit | malformed-cookie and optional parent-domain cookie hardening remain open |
-| Robustness | 7 | contention, commit-loss, subject-drift, and unverifiable-response behavior are explicit and tested | malformed cookies can throw and external request stalls are not fully bounded |
+| Robustness | 7 | contention, commit-loss, subject drift, unverifiable refresh responses, corrupt early deadlines, and sustained retention backlogs are explicit and tested | malformed cookies can throw and external request stalls are not fully bounded |
 
-The original blanket `8` is no longer treated as current truth. The subject-immutability sub-slice meets its security outcome; the remaining dimensions stay open until their named falsifiers pass.
+The original blanket `8` is no longer treated as current truth. Subject immutability and retention reachability meet their outcomes; the remaining dimensions stay open until their named falsifiers pass.
 
 ## Final acceptance
 
@@ -113,4 +118,19 @@ Accepted on staging code commit `382dcb400fc2ba516efe461634bcfec742be8308` on 20
 - a reload of the existing signed-in browser session remained at `/c/polynet/chat`, rendered the authenticated profile and member chat surface without a sign-in control, and emitted zero browser warnings/errors;
 - production was not pushed, deployed, data-queried, or mutated; its public version marker remained `a936dee72a65f91723f332779390210e4cf783f0`.
 
-The subject-immutability slice is complete. F-005 retention reachability is the next separate slice; no other reviewed gap was changed here.
+The subject-immutability slice was complete at that checkpoint. F-005 retention reachability still remained open at that time and is closed by the separate receipt below.
+
+## Retention-reachability correction acceptance
+
+Accepted on staging permanent-code commit `7523599f` and backfill-free deployment commit `96b1f108` on 2026-07-20 EDT / 2026-07-21 UTC:
+
+- every new session receives `purgeAfterAt = expiresAt + 7 days` in the same creation mutation, so cleanup does not depend on a later browser request;
+- revocation preserves the original revocation time, moves the deadline to seven days after the earlier of expiry or revocation, clears refresh ownership, and repairs already-revoked rows missing that deadline;
+- the indexed pruner recomputes the canonical deadline before deletion, repairs a corrupt early deadline rather than deleting an active session, and schedules one immediate bounded continuation after every full batch;
+- the hourly cron remains the liveness backstop, while a sustained full-batch fixture proves that one invocation drains all due rows without waiting another hour;
+- four actor-authority, sixteen security/route, and thirteen persisted state-machine tests pass, including untouched expiry, early-revocation repair, active-row delete protection, and scheduled multi-batch drain;
+- the complete foundation gate, Convex and web typechecks, `git diff --check`, and the production web build pass;
+- the staging-only repair changed all 1,069 existing rows from missing to canonical deadlines, an idempotency pass made zero additional changes, and the temporary internal repair function was deleted before the final Convex deployment;
+- production was not pushed, deployed, queried, or mutated.
+
+F-005 is complete. End-to-end external request deadlines, malformed-cookie recovery, and bounded routine-success diagnostics remain separate slices.
