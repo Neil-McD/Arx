@@ -1,0 +1,62 @@
+name: Staging UI Canary
+
+on:
+  push:
+    branches:
+      - codex/semantic-platform-staging-20260719
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-ui-canary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  anonymous-public-funnel:
+    name: Anonymous Public Funnel
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      STAGING_DEPLOYMENT_URL: https://polynet-staging.vercel.app
+      EXPECTED_BUILD_ID: ${{ github.sha }}
+      STAGING_DEPLOYMENT_WAIT_MS: "300000"
+      STAGING_UI_ARTIFACT_DIR: artifacts/staging-ui-canary
+
+    steps:
+      - name: Checkout exact staging commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Prove mismatched builds fail closed
+        shell: bash
+        run: |
+          if EXPECTED_BUILD_ID=0000000000000000000000000000000000000000 \
+            STAGING_DEPLOYMENT_WAIT_MS=0 \
+            STAGING_UI_ARTIFACT_DIR="${RUNNER_TEMP}/staging-ui-canary-negative" \
+            npm run smoke:staging-public-funnel-browser; then
+            echo "Canary accepted a mismatched staging build marker."
+            exit 1
+          fi
+
+      - name: Run exact-build anonymous funnel canary
+        run: npm run smoke:staging-public-funnel-browser
+
+      - name: Upload redacted failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-ui-canary-${{ github.sha }}
+          path: artifacts/staging-ui-canary
+          if-no-files-found: ignore
+          retention-days: 7

@@ -208,6 +208,7 @@
     "smoke:workspace-credit-accounting-prod-data": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_prod_data_smoke.ts",
     "plan:workspace-credit-accounting-reconciliation-backlog:prod": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_reconciliation_backlog_plan.ts",
     "smoke:workspace-usage-card-billing": "bash scripts/run_workspace_usage_card_billing_smoke.sh",
+    "smoke:staging-public-funnel-browser": "node scripts/staging_public_funnel_browser_smoke.mjs",
     "check:workspace-inspector-boundary-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_inspector_boundary_proof.ts",
     "check:workspace-file-preview-cache-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_file_preview_cache_proof.ts",
     "check:runtime-prompt-layout-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_layout_proof.ts",
