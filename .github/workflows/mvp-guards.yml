@@ -7,6 +7,7 @@ on:
     branches:
       - main
       - mvp
+      - codex/semantic-platform-staging-20260719
 
 permissions:
   contents: read
@@ -21,14 +22,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install Node dependencies
         run: npm ci
@@ -65,52 +66,59 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install root dependencies
         run: npm ci
 
       - name: Audit root dependencies
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=low
 
       - name: Install web dependencies
         run: npm --prefix apps/web ci
 
       - name: Audit web dependencies
-        run: npm --prefix apps/web audit --audit-level=high
-
-      - name: Setup Node.js for preview proxy
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+        run: npm --prefix apps/web audit --audit-level=low
 
       - name: Install preview proxy dependencies
         run: npm --prefix apps/preview-proxy ci
 
       - name: Audit preview proxy dependencies
-        run: npm --prefix apps/preview-proxy audit --audit-level=moderate
+        run: npm --prefix apps/preview-proxy audit --audit-level=low
 
   foundation-baseline:
     name: Foundation Baseline
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install Node dependencies
         run: npm ci
 
+      - name: Install web dependencies
+        run: npm --prefix apps/web ci
+
       - name: Run foundation baseline gate (canonical)
         run: bash scripts/foundation_baseline_gate.sh
+
+      - name: Typecheck web product
+        run: npm run check:web-typecheck
+
+      - name: Build web product
+        run: npm run build
+
+      - name: Enforce web bundle budget
+        run: npm run check:web-bundle-budget

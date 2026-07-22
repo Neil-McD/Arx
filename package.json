@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "npm run dev:web",
     "dev:web": "npm --prefix apps/web run dev -- --port 5174 --strictPort",

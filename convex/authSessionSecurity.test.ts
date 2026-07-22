@@ -408,7 +408,17 @@ describe("Vercel auth bridge whole-response deadline", () => {
     vi.useFakeTimers();
     vi.stubEnv("ARX_AUTH_BRIDGE_SECRET", "test-bridge-secret");
     vi.stubEnv("VITE_CONVEX_SITE_URL", "https://staging-convex.test");
-    vi.stubGlobal("fetch", vi.fn(async () => await new Promise<Response>(() => undefined)));
+    let resolveFetchStarted!: () => void;
+    const fetchStarted = new Promise<void>((resolve) => {
+      resolveFetchStarted = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        resolveFetchStarted();
+        return await new Promise<Response>(() => undefined);
+      }),
+    );
     const harness = createNodeResponseHarness();
 
     const startPromise = googleAuthStart(
@@ -419,6 +429,7 @@ describe("Vercel auth bridge whole-response deadline", () => {
       },
       harness.response,
     );
+    await fetchStarted;
     await vi.advanceTimersByTimeAsync(AUTH_CONVEX_RESPONSE_TIMEOUT_MS);
     await startPromise;
 
