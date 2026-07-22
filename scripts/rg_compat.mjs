@@ -7,6 +7,7 @@ const args = process.argv.slice(2);
 const options = {
   caseInsensitive: false,
   fixedStrings: false,
+  filesWithMatches: false,
   invert: false,
   lineNumbers: false,
   maxPerFile: Number.POSITIVE_INFINITY,
@@ -36,6 +37,10 @@ for (let i = 0; i < args.length; i += 1) {
   }
   if (arg === "-n") {
     options.lineNumbers = true;
+    continue;
+  }
+  if (arg === "-l" || arg === "--files-with-matches") {
+    options.filesWithMatches = true;
     continue;
   }
   if (arg === "-i") {
@@ -283,6 +288,23 @@ function searchText(text, prefix = "") {
   }
 }
 
+function textHasMatch(text) {
+  if (options.multiline && !options.invert) {
+    regex.lastIndex = 0;
+    return regex.test(text);
+  }
+
+  const lines = text.split(/\r?\n/);
+  if (lines.length > 0 && lines[lines.length - 1] === "" && /\r?\n$/.test(text)) {
+    lines.pop();
+  }
+  return lines.some((line) => {
+    regex.lastIndex = 0;
+    const matched = regex.test(line);
+    return options.invert ? !matched : matched;
+  });
+}
+
 function searchFiles() {
   const targets = options.targets.length > 0 ? options.targets : ["."];
   const files = targets.flatMap((target) => listFiles(target));
@@ -296,6 +318,13 @@ function searchFiles() {
     seen.add(file);
     const text = readUtf8(file);
     if (text === null) continue;
+    if (options.filesWithMatches) {
+      if (textHasMatch(text)) {
+        printed = true;
+        console.log(toRelativePosix(file));
+      }
+      continue;
+    }
     searchText(text, singleExplicitFile ? "" : toRelativePosix(file));
   }
 }
@@ -307,14 +336,14 @@ function readStdin() {
       return fs.readFileSync(0, "utf8");
     }
   } catch {
-    return "";
+    return null;
   }
-  return "";
+  return null;
 }
 
 if (options.targets.length === 0) {
   const stdin = readStdin();
-  if (stdin.length > 0) searchText(stdin);
+  if (stdin !== null) searchText(stdin);
   else searchFiles();
 } else {
   searchFiles();
