@@ -9,7 +9,7 @@ of stopping at structural source proofs:
 - Node 22 is explicit in the root, web, preview-proxy, and workflow contracts;
 - official checkout and setup-node actions are pinned to immutable release SHAs;
 - root, web, and preview-proxy clean installs and low-threshold audits are automatic;
-- the current 37-step foundation baseline remains the single canonical source/runtime gate and now executes the critical-audit event proof;
+- the current 38-step foundation baseline remains the single canonical source/runtime gate and now executes the critical-audit event and account-deletion quarantine proofs;
 - web typecheck, production build, and bundle budget are automatic;
 - the anonymous public funnel is exercised in Chromium only after the canonical
   staging marker equals the exact pushed SHA;

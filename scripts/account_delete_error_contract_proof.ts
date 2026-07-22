@@ -6,6 +6,7 @@ function read(path: string): string {
 }
 
 const account = read("convex/account.ts");
+const accountLifecycle = read("convex/accountLifecycle.ts");
 const app = read("apps/web/src/App.tsx");
 const accountSettings = read("apps/web/src/components/WebAccountSettingsSection.tsx");
 const settingsPanels = read("apps/web/src/components/WebSettingsPanels.tsx");
@@ -39,5 +40,30 @@ assert.doesNotMatch(accountSettings, /deleteAccount|deleteConfirmation|handleDel
 assert.doesNotMatch(settingsPanels, /deleteAccount/, "settings panel props must not carry a dead delete callback");
 assert.doesNotMatch(app, /cloudAccountGateway|deleteCloudOwnAccount|deleteOwnAccountFromSettings|deleteAccount:/, "the app shell must not retain a dead delete call path");
 assert.equal(existsSync("shared/cloudAccountGateway.ts"), false, "the unused account deletion gateway must be removed");
+
+assert.equal(
+  (accountLifecycle.match(/= internalMutation\(/g) ?? []).length,
+  2,
+  "the lifecycle substrate must expose exactly two internal mutations",
+);
+assert.doesNotMatch(accountLifecycle, /= mutation\(/, "the lifecycle substrate must expose no public mutation");
+for (const forbidden of [
+  /ctx\.storage/,
+  /ctx\.scheduler/,
+  /\.delete\(/,
+  /\.replace\(/,
+  /\.collect\(/,
+  /runAction/,
+  /runMutation/,
+  /fetch\(/,
+]) {
+  assert.doesNotMatch(accountLifecycle, forbidden, `the lifecycle substrate must remain metadata-only and bounded: ${forbidden}`);
+}
+for (const match of accountLifecycle.matchAll(/ctx\.db\.insert\("([^"]+)"/g)) {
+  assert.ok(
+    match[1] === "accountLifecycleRequests" || match[1] === "accountLifecycleReceipts",
+    `the lifecycle substrate must not insert product data: ${match[1]}`,
+  );
+}
 
 console.log("PASS: account deletion is an irreducible read-only quarantine with no dead client executor.");

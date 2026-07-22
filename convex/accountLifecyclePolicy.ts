@@ -6,11 +6,11 @@
  * mutation stays quarantined until versioned executors satisfy this contract.
  */
 
-export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v3" as const;
+export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v4" as const;
 
 export const ACCOUNT_LIFECYCLE_SCHEMA_BASELINE = Object.freeze({
-  tableCount: 125,
-  directUserEdgeCount: 120,
+  tableCount: 127,
+  directUserEdgeCount: 121,
   opaqueFieldCount: 26,
   storageFieldCount: 7,
 });
@@ -117,6 +117,21 @@ type PolicyGroup = {
 };
 
 const policyGroups: readonly PolicyGroup[] = [
+  {
+    policy: {
+      ownership: "root_identity",
+      disposition: "root_last",
+      phase: "root_finalize",
+      retentionAuthority: "product_policy",
+      externalEffect: "none",
+      opaqueData: "none",
+      storage: "none",
+      schemaRequirements: ["root_tombstone", "bounded_index"],
+      executorOwner: "account_finalizer",
+      proof: "the account-specific checkpoint remains attached to the root until final invariant proof",
+    },
+    tables: ["accountLifecycleRequests"],
+  },
   {
     policy: {
       ownership: "root_identity",
@@ -341,6 +356,7 @@ const policyGroups: readonly PolicyGroup[] = [
     },
     tables: [
       "criticalAuditEvents",
+      "accountLifecycleReceipts",
       "communityCommerceEventEffects",
       "platformDiagnosticEvents",
       "emailDeliveries",
@@ -665,10 +681,38 @@ export const ACCOUNT_LIFECYCLE_OPAQUE_FIELD_KINDS = Object.freeze({
 });
 
 export const ACCOUNT_LIFECYCLE_EXECUTION_BLOCKERS = Object.freeze([
-  "Historical Builder Partner obligations must retain their recorded policy and economic basis; account deletion cannot rewrite or erase them.",
-  "Finance, legal, security, diagnostic, backup, and provider retention durations need named owners and approved TTLs.",
-  "Every index_required edge must receive a bounded schema index before its executor can run.",
-  "Required actor references need nullable or explicit tombstone schema before shared anonymization.",
-  "Privacy purge lineage must reach archives, evidence, retrieval, and accepted intelligence.",
-  "Account deletion must remain separate from authored-content deletion.",
-]);
+  {
+    code: "historical_partner_retention_unresolved",
+    reason: "Historical Builder Partner obligations must retain their recorded policy and economic basis; account deletion cannot rewrite or erase them.",
+  },
+  {
+    code: "retention_authorities_unapproved",
+    reason: "Finance, legal, security, diagnostic, backup, and provider retention durations need named owners and approved TTLs.",
+  },
+  {
+    code: "bounded_indexes_missing",
+    reason: "Every index_required edge must receive a bounded schema index before its executor can run.",
+  },
+  {
+    code: "actor_tombstones_missing",
+    reason: "Required actor references need nullable or explicit tombstone schema before shared anonymization.",
+  },
+  {
+    code: "privacy_lineage_incomplete",
+    reason: "Privacy purge lineage must reach archives, evidence, retrieval, and accepted intelligence.",
+  },
+  {
+    code: "authored_content_boundary_incomplete",
+    reason: "Account deletion must remain separate from authored-content deletion.",
+  },
+] as const);
+
+export const ACCOUNT_LIFECYCLE_TRANSFER_BLOCKER_CODES = Object.freeze({
+  ownedCommunity: "owned_community_resolution_required",
+  ownedDeveloperApp: "owned_developer_app_resolution_required",
+  ownedSkillPackage: "owned_skill_package_resolution_required",
+} as const);
+
+export type AccountLifecycleBlockerCode =
+  | (typeof ACCOUNT_LIFECYCLE_EXECUTION_BLOCKERS)[number]["code"]
+  | (typeof ACCOUNT_LIFECYCLE_TRANSFER_BLOCKER_CODES)[keyof typeof ACCOUNT_LIFECYCLE_TRANSFER_BLOCKER_CODES];

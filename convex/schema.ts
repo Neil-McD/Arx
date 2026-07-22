@@ -24,6 +24,31 @@ export default defineSchema({
     .index("by_authSubject", ["authSubject"])
     .index("by_normalizedHandle", ["normalizedHandle"]),
 
+  accountLifecycleRequests: defineTable({
+    userId: v.id("users"),
+    policyVersion: v.string(),
+    idempotencyKey: v.string(),
+    status: v.union(v.literal("requested"), v.literal("blocked")),
+    phase: v.literal("preflight_blockers"),
+    checkpointRevision: v.number(),
+    blockerCodes: v.array(v.string()),
+    preflightEvaluatedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user_policy", ["userId", "policyVersion"]),
+
+  accountLifecycleReceipts: defineTable({
+    requestId: v.id("accountLifecycleRequests"),
+    sequence: v.number(),
+    kind: v.union(v.literal("request_recorded"), v.literal("preflight_evaluated")),
+    policyVersion: v.string(),
+    status: v.union(v.literal("requested"), v.literal("blocked")),
+    phase: v.literal("preflight_blockers"),
+    checkpointRevision: v.number(),
+    blockerCodes: v.array(v.string()),
+    createdAt: v.number(),
+  }).index("by_request_sequence", ["requestId", "sequence"]),
+
   authSessions: defineTable({
     sessionTokenHash: v.string(),
     userId: v.id("users"),

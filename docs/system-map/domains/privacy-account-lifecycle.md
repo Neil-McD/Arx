@@ -15,7 +15,7 @@ Let a person control their account and private data without corrupting money rec
 | operational evidence | audit/diagnostic/runtime receipts | bounded retention and pseudonymization; never accidental authority |
 | external-provider state | OAuth, Stripe, worker/provider resources | revoke/delete externally and reconcile local state with receipts |
 
-The ownership matrix is accepted as product direction. `accountLifecyclePolicy.ts` now encodes declarative coverage for all 125 current schema tables, but the bounded executor and exact legal/financial/security TTLs remain open.
+The ownership matrix is accepted as product direction. `accountLifecyclePolicy.ts` now encodes declarative coverage for all 127 current schema tables and 121 direct user-reference edges, but the bounded executor and exact legal/financial/security TTLs remain open.
 
 ## Account deletion path
 
@@ -29,6 +29,8 @@ The removed executor established two requirements for its eventual replacement:
 The retired mutation touched legacy `communityChatMessages` but not canonical interaction roots/replies. The schema declares moderation events `privacy_purge_requested` and `privacy_purged`, while no first-party privacy purge workflow was found. That is an unfinished replacement lifecycle, not a safe retention policy.
 
 The generated policy names every table and its contract proof owns the current coverage counts. Some direct user-reference edges still require bounded indexes, while other rows correctly require retention; coverage vocabulary is not yet execution or behavioral proof.
+
+C2.1 adds only the durable safety substrate: one account-specific checkpoint plus append-only transition receipts. Authenticated internal request creation moves to `requested`; an indexed preflight can move only to `blocked`. It records stable policy-versioned blocker codes and supports idempotent replay and interruption/resumption, but it cannot freeze access, delete or patch product data, schedule work, call providers or storage, finalize a root, or become publicly callable. The public deletion mutation remains quarantined.
 
 The replacement policy still needs an explicit rule for DM attachments embedded in `contentJson`. The retired executor did not visibly clean their storage objects; this remains a historical storage-leak inference until attachment representation and live prevalence are checked.
 
@@ -46,7 +48,7 @@ request -> block new writes -> inventory by ownership policy -> external revoke
 
 ## Anonymous-user cleanup
 
-The generic cleanup executor and its audit script are deleted. They had no runtime caller or scheduled invocation, originated as a one-time migration, and treated absence from a manually maintained 55-edge reference list as permission to hard-delete a user root even though the current schema contains 120 direct user-reference edges.
+The generic cleanup executor and its audit script are deleted. They had no runtime caller or scheduled invocation, originated as a one-time migration, and treated absence from a manually maintained 55-edge reference list as permission to hard-delete a user root even though the current schema contains 121 direct user-reference edges.
 
 The 56 development rows remain unchanged. No active creator path exists in current source, but their reference state and final disposition remain U-013. Any eventual data change requires a schema-derived, redacted, expectation-locked migration or the completed account lifecycle; there is no retained generic deletion capability.
 
@@ -54,7 +56,7 @@ The 56 development rows remain unchanged. No active creator path exists in curre
 
 | Path | Current order/failure | Required shape |
 | --- | --- | --- |
-| account deletion | quarantined after verified actor resolution; zero writes | bounded phases with retry and terminal audit |
+| account deletion | public path quarantined; internal metadata-only request/preflight is resumable and can only become blocked | bounded phases with retry and terminal audit |
 | DM cleanup | retired destructive executor cannot run; replacement semantics absent | participant departure plus policy-driven redaction |
 | community deletion | quarantined after verified owner resolution; zero writes/schedules | community-keyed inventory, cursor, tombstone, finalizer |
 | anonymous roots | generic executor removed; 56 development roots remain | schema-derived evidence, then explicit migration or account lifecycle |

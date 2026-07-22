@@ -203,7 +203,7 @@ const directEdgeKeys = new Set(directUserEdges.map((edge) => edge.key));
 const opaqueFields = tables.flatMap((table) => table.opaqueFields.map((field) => `${table.name}.${field}`));
 const storageFields = tables.flatMap((table) => table.storageFields.map((field) => `${table.name}.${field}`));
 
-assert.equal(ACCOUNT_LIFECYCLE_POLICY_VERSION, "account-lifecycle-v3", "policy version must change for semantic revisions");
+assert.equal(ACCOUNT_LIFECYCLE_POLICY_VERSION, "account-lifecycle-v4", "policy version must change for semantic revisions");
 assert.equal(tables.length, ACCOUNT_LIFECYCLE_SCHEMA_BASELINE.tableCount, "schema table count changed; review lifecycle coverage");
 assert.equal(
   directUserEdges.length,
@@ -285,6 +285,15 @@ for (const edgeKey of Object.keys(ACCOUNT_LIFECYCLE_FIELD_OVERRIDES)) {
 }
 
 assert.ok(ACCOUNT_LIFECYCLE_EXECUTION_BLOCKERS.length >= 6, "executor blockers must remain explicit while deletion is quarantined");
+assert.equal(
+  new Set(ACCOUNT_LIFECYCLE_EXECUTION_BLOCKERS.map((blocker) => blocker.code)).size,
+  ACCOUNT_LIFECYCLE_EXECUTION_BLOCKERS.length,
+  "executor blocker codes must be unique",
+);
+for (const blocker of ACCOUNT_LIFECYCLE_EXECUTION_BLOCKERS) {
+  assert.ok(blocker.code.trim(), "executor blocker codes must be non-empty");
+  assert.ok(blocker.reason.trim(), `${blocker.code} must retain an explicit reason`);
+}
 assert.doesNotMatch(policySource, /\bctx\s*\./, "policy module must not execute through a Convex context");
 assert.doesNotMatch(policySource, /\.\s*(?:delete|insert|patch|replace)\s*\(/, "policy module must not mutate data");
 assert.doesNotMatch(policySource, /\b(?:runMutation|runAction|scheduler|fetch)\s*\(/, "policy module must not schedule or call external effects");

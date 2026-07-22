@@ -2,7 +2,7 @@
 
 Status: planning authority only. Runtime deletion remains quarantined.
 
-Current policy version: `account-lifecycle-v3`
+Current policy version: `account-lifecycle-v4`
 
 Code authority: `convex/accountLifecyclePolicy.ts`
 
@@ -45,7 +45,7 @@ They may share small checkpoint and receipt mechanics. They must not share owner
 
 `convex/accountLifecyclePolicy.ts` and `scripts/account_lifecycle_policy_contract_proof.ts` are the only current schema-count authority. Narrative documents must not maintain a second manual registry.
 
-At the 2026-07-22 C2 truth-closure receipt, the proof covers 125 schema tables, 120 direct user-ID fields, 26 opaque fields, and seven storage-ID fields. It identifies 40 direct edges without a user-first index: 33 require a new bounded index and seven use a declared bounded parent cascade.
+At the 2026-07-22 C2.1 receipt, the proof covers 127 schema tables, 121 direct user-ID fields, 26 opaque fields, and seven storage-ID fields. The two added tables are the account-specific checkpoint and its append-only receipts; the one added direct edge is indexed by account and policy version. The proof still identifies 40 direct edges without a user-first index: 33 require a new bounded index and seven use a declared bounded parent cascade.
 
 The remaining tables are still classified because they may be connected indirectly through a community, conversation, app, resource, thread, run, evidence record, or parent object.
 
@@ -184,7 +184,7 @@ These blockers prevent execution, not policy classification. Undecided behavior 
 1. **Complete groundwork:** declarative account policy, schema drift proof, destructive-executor quarantine, and prospective Builder Partner v3 economics.
 2. **Complete in C2.0A:** reconcile stale policy/document/blocker truth and separate the three lifecycle jobs.
 3. **Complete in C2.0B:** delete the unowned anonymous-user executor/tooling without executing it or changing the 56 development roots.
-4. Build an account-specific request/preflight/checkpoint/receipt substrate with no destructive executor or public UI.
+4. **Complete in C2.1:** build an account-specific request/preflight/checkpoint/receipt substrate with no destructive executor or public UI.
 5. Add access-freeze, private-state, and external-provider executors behind interruption fixtures.
 6. Add DM participant-departure and shared tombstone execution.
 7. Add community-content attribution and ownership execution.
@@ -193,6 +193,12 @@ These blockers prevent execution, not policy classification. Undecided behavior 
 10. Add invariant audit, root-last finalizer, and terminal receipt.
 11. Define and build the separate community lifecycle from its own ownership matrix.
 12. Re-enable self-service deletion only after full interruption, scale, orphan, provider, and cross-user behavioral proofs.
+
+### C2.1 implementation receipt
+
+The substrate has two account-specific tables, two authenticated internal mutations, two states (`requested` and `blocked`), and two receipt kinds. Request creation is one-per-account-per-policy and idempotent. Preflight combines the versioned global blocker codes with bounded indexed existence checks for owned communities, developer apps, and skill packages. An unchanged replay returns the existing checkpoint and receipt; a changed blocker set advances the revision atomically.
+
+The behavioral fixture proves missing or mismatched identity fails without provisioning, request replay does not duplicate state, interruption after request persistence resumes at preflight, preflight replay does not duplicate receipts, and shared product rows remain byte-for-byte unchanged. The public deletion mutation remains the same zero-effect quarantine. No executor, public function, UI, schedule, action, provider call, storage call, scan, delete, or root-finalization state exists in this slice.
 
 ## Proof required before re-enabling deletion
 

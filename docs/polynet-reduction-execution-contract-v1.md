@@ -361,6 +361,21 @@ and unrelated proof coupling are deleted after zero-caller and zero-schedule
 proof. All 56 development roots remain unchanged, and U-013 retains their
 reference/disposition decision. No production state or surface changed.
 
-The next separately planned slice is C2.1: the smallest account-specific,
-internal-only request/preflight/checkpoint/receipt substrate. It must have zero
-destructive effects and no public UI.
+C2.1 is complete on the canonical staging lane. The account-specific lifecycle
+kernel consists of one checkpoint table, one append-only receipt table, and two
+authenticated internal mutations. It supports only `requested -> blocked`, uses
+the versioned policy plus three user-first ownership indexes, and is idempotent
+across request replay, preflight replay, and interruption between them. Its
+behavioral fixture proves product state remains unchanged. The public quarantine
+is unchanged; there is no executor, public API/UI, action, scheduler, provider,
+storage, scan, delete, or root-finalization capability.
+
+The development receipt on `quick-porcupine-949` registers exactly the two
+intended lifecycle mutations, leaves both lifecycle tables empty, and schedules
+no lifecycle job. Existing development state remains 120 users, 56 legacy
+anonymous roots, and 11 scheduled functions. No lifecycle mutation was invoked.
+
+The next separately planned slice is C2.2: access-freeze authority only. It must
+first define what becomes non-writable, reuse canonical session/entitlement/
+operator boundaries, and prove reversible interruption without deleting private
+or shared data.

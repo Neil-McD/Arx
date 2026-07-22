@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=37
+TOTAL_STEPS=38
 CURRENT_STEP=1
 
 run_step() {
@@ -40,6 +40,7 @@ run_step "Auth session persisted state machine" npm run test:auth-session-state-
 run_step "No legacy Builder plan infra guard" npm run check:no-builder-plan-infra
 run_step "Checkout route hygiene proof" npm run check:checkout-route-hygiene-proof
 run_step "Frontend privacy hygiene proof" npm run check:frontend-privacy-hygiene-proof
+run_step "Account deletion quarantine contract" npm run check:account-delete-error-contract
 run_step "Account deletion safety behavior" npm run test:account-deletion-safety
 run_step "Community deletion quarantine contract" npm run check:community-deletion-quarantine-contract
 run_step "Community deletion safety behavior" npm run test:community-deletion-safety

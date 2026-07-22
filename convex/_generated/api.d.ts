@@ -10,6 +10,7 @@
 
 import type * as account from "../account.js";
 import type * as accountEntitlementCore from "../accountEntitlementCore.js";
+import type * as accountLifecycle from "../accountLifecycle.js";
 import type * as accountLifecyclePolicy from "../accountLifecyclePolicy.js";
 import type * as accountSetupCore from "../accountSetupCore.js";
 import type * as appConnections from "../appConnections.js";
@@ -245,6 +246,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   account: typeof account;
   accountEntitlementCore: typeof accountEntitlementCore;
+  accountLifecycle: typeof accountLifecycle;
   accountLifecyclePolicy: typeof accountLifecyclePolicy;
   accountSetupCore: typeof accountSetupCore;
   appConnections: typeof appConnections;
