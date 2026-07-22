@@ -31,7 +31,7 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 | 8 | canonical and legacy community interaction stacks should coexist indefinitely | `DECISION REQUIRED (user confirmation)` | interactions | migration residue doubles readers, lifecycle, and privacy scope | finish read migration and delete residue |
 | 8 | resource metadata row and content row may both own the body | `DECISION REQUIRED (user confirmation)` | resources | dual read authority makes migration and privacy ambiguous | bounded migrate, single reader, remove fields |
 | 8 | every source module, `community.ts`, and `communityExperience.ts` should remain publicly callable | `KEEP (MVP core)` | backend API | transport identity multiplies without product value | one supported public identity per operation |
-| 8 | route parser and controllers may disagree about Workspace | `DECISION REQUIRED (user confirmation)` | frontend routing | refresh and in-memory navigation are different products | one route state machine after destination decision |
+| 8 | route parser and controllers may disagree about Workspace | `DELETE (deferred/dead)` for unsupported destination surface | frontend routing | the destination is deferred; refresh and in-memory navigation must not remain different products | inventory callers, migrate compatibility, then keep one retained route state machine |
 | 8 | hundreds of structural proof scripts may persist without owners | `DECISION REQUIRED (user confirmation)` | engineering | check count is bureaucracy unless each owns a unique invariant | classify/merge/delete; preserve behavioral proof |
 | 8 | `App.tsx` should be decomposed before obsolete surfaces are removed | `DECISION REQUIRED (user confirmation)` | frontend | spreads dead complexity into more files | delete surfaces and consolidate state first |
 | 8 | anonymous-user deletion can rely on a hand-maintained reference list | `DECISION REQUIRED (user confirmation)` | identity/privacy | table growth silently invalidates safety | inventory live state and replace/delete cleanup |
@@ -45,7 +45,7 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 | 6 | legacy `workspace_*` MCP names are permanent domain vocabulary | `DECISION REQUIRED (user confirmation)` | official MCP | current wire compatibility is real, internal semantic drift is not | version and deprecate externally, normalize internally |
 | 6 | join requests may store arbitrary status strings | `DELETE (deferred/dead)` complete | access | required workflow had an unnecessary invalid-state space | staging enumerated and migrated; schema now permits only `pending \| denied` |
 | 5 | root and web require independent manifests/locks forever | `DECISION REQUIRED (user confirmation)` | build/release | could be deployment isolation, but no policy explains version drift | choose workspace or explicit independent ownership |
-| 5 | expanded semantic-platform thesis is present-day authority | `DECISION REQUIRED (user confirmation)` | product architecture | valuable long-term input is not current executable contract | adopt/redline/reject in one canonical doc |
+| 5 | an expanded thesis may silently claim proposed work is implemented | `DELETE (deferred/dead)` complete | product architecture | direction and implementation truth are different classes | one reconciled thesis now labels implemented, next, proposed, and deferred elements |
 | 3 | workspace/tool credit accounting exists although Workspace UI is deferred | `KEEP (MVP core)` | harness/economy | protected execution still consumes real provider cost | retain bounded accounting; detach UI assumptions |
 | 2 | Builder Partner exists as a secondary growth capability | `KEEP (MVP core)` | product/finance | current direction retains it and the ledger has real obligations | simplify economics and prominence; harden versioned payout |
 | 2 | external provider-specific source adapters exist | `KEEP (MVP core)` | resources/integrations | Drive, GitHub, file, and URL acquisition differ physically | converge on one canonical source contract |
@@ -82,7 +82,7 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 - exact financial/legal/audit/backup retention periods;
 - privacy purge, audit retention, and legal evidence preservation;
 - anonymous accounts and cleanup path;
-- package topology and semantic-thesis adoption.
+- package topology.
 
 ### D — protected core; simplify internally, do not delete
 

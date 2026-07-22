@@ -47,7 +47,7 @@ flowchart TD
 | Agent context | stored thread/episode plus explicit current community selector and current access | prompt and runtime manifest are orientation | member/community agent and MCP server authority | confirmed; transport duplication exists |
 | Native tool meaning | shared tool registry plus Polynet exposure/authority rows | UI schemas, worker adapters, official MCP schemas | server dispatch/authority resolver | confirmed; semantic declarations duplicated across transports |
 | Apps/skills | developer app/connection/mount and skill package/revision/install/attachment records | catalog metadata and UI | owner/member authorization and OAuth/provider checks | confirmed; public catalog deferred |
-| Workspace/harness | cloud project/thread/runtime/terminal state and external provider state | standalone Workspace UI is a destination/compatibility concern | runtime actions, provider lease, path/tool boundary | protected substrate; UI boundary contradictory |
+| Workspace/harness | cloud project/thread/runtime/terminal state and external provider state | standalone Workspace UI is a deferred destination/compatibility concern | runtime actions, provider lease, path/tool boundary | protected substrate; destination decision resolved, caller retirement proof open |
 | Audit/diagnostics | operational evidence tables | operator dashboards are projections | operator authorization plus diagnostic queries | confirmed authority; retention and scale incomplete |
 
 ## Things that are never authority

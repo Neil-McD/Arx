@@ -27,6 +27,8 @@ The bounded aggregate audit resolved or narrowed these questions for the isolate
 | U-022 | one of five intelligence nodes is legacy-unversioned |
 | U-024 | current staging is below scheduler caps; the no-cursor defect is latent |
 | U-033 | diagnostics and runtime events each exceed the 2,000-row cap; retention policy remains unknown |
+| U-026 | resolved at doctrine level: standalone Workspace is deferred while protected harness/thread substrate remains; caller inventory still gates route/UI deletion |
+| U-038 | resolved by C0: one repository thesis owns the active destination with explicit implementation states |
 
 Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-staging-shape-audit-20260720.md). “Resolved” here normally means data shape observed in this staging snapshot, not a production claim. U-004 additionally has staging-deployed runtime invariants: pair reads fail closed, activation keeps the indexed read plus insert in one transaction, and every community must persist its derived count.
 
@@ -69,7 +71,7 @@ Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-stagin
 | --- | --- | --- | --- |
 | U-024 | Are there more than 500 communities, 2,000 AI-feed communities, or capped recurring events/recipients? | determines current starvation impact | cardinality counts only; defect exists regardless |
 | U-025 | Which first-party/external clients depend on `communityExperience`, source-module callable names, or legacy MCP wire names? | transport deletion readiness | static plus access-log/API consumer inventory |
-| U-026 | Is standalone Workspace UI required by any current MVP journey, or only protected substrate? | route/UI deletion boundary | explicit decision plus navigation telemetry counts |
+| U-026 | **Resolved at doctrine level:** standalone Workspace UI is not an MVP destination; protected harness/thread substrate remains. Which routes/controllers still have real callers is separately open. | route/UI migration and deletion boundary | static/external caller inventory plus navigation telemetry counts |
 | U-027 | Which lexical CSS candidates are dynamically generated or visually used? | safe CSS deletion | instrumented class coverage and screenshot matrix |
 | U-028 | Is another branch-protection workflow running web build/typecheck/journeys? | CI gap severity | GitHub required-check configuration/workflow inventory |
 | U-029 | Which of 253 `check:*` commands own unique invariants and when are they invoked? | proof deletion/consolidation | generated owner/invocation matrix |
@@ -81,7 +83,7 @@ Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-stagin
 | U-035 | What are product-data backup provider, cadence, retention, RPO/RTO, and tested restore steps? | disaster recovery | configuration evidence and isolated restore drill |
 | U-036 | Which browser security headers are required by the threat model? | avoid cargo-cult header changes | documented baseline and automated response assertions |
 | U-037 | Does the signed-in staging product complete all eleven journeys at the frozen commit? | static map is not runtime truth | bounded scripted/manual smoke with receipts |
-| U-038 | Is the expanded semantic-platform thesis adopted? | prevents second normative plane | explicit adoption/redline/rejection |
+| U-038 | **Resolved by C0:** the semantic-platform destination is adopted in one repository thesis, with implementation states preventing a second normative plane. | prevents direction from masquerading as current code | canonical thesis plus doctrine/finding reconciliation |
 
 ## Next evidence slices
 

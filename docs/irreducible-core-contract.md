@@ -13,7 +13,8 @@ These surfaces are non-negotiable for MVP and must not be deleted during reducti
    - internal architect/dev-only
 2. Canonical community interaction substrate + canonical community UX.
 3. Community agentic harness + community AI feed + community research.
-4. Project-bound workspace tools.
+4. Protected project-bound coding/workspace tool and runtime substrate; this
+   does not require a standalone Workspace destination.
 5. User-funded ChatGPT-auth lane for OpenAI inference.
 6. Voice UX.
 7. Community monetization rails (including Stripe Connect Express onboarding).
@@ -39,7 +40,8 @@ Core AI-agent paths:
 
 - User-funded ChatGPT lane path for eligible OpenAI aliases.
 - Platform and public fallback lanes.
-- Workspace tooling remains available to authenticated users with sufficient tool balance.
+- Protected Workspace tooling may remain available through retained authorized
+  surfaces; this does not preserve Workspace as a navigation destination.
 - Public and private edge routing contracts remain explicit.
 
 ## Monetization Rails (Must Keep)
@@ -59,5 +61,5 @@ Safe deletions are limited to dead code and duplicate/legacy paths outside this 
 Any change to a listed surface must:
 
 1. Update this document.
-2. Keep `scripts/irreducible_core_contract_guard.sh` passing.
+2. Run every executable contract guard that covers the changed surface.
 3. Keep `scripts/foundation_baseline_gate.sh` passing.

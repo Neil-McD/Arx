@@ -17,7 +17,7 @@ The paid-community access-authority kernel is also complete on staging: first ve
 No product write.
 
 1. **Resolved:** retain Builder Partner as a secondary capability; remove paid-tool commission eligibility; move new eligible community-revenue commissions prospectively from 5% to 4%; preserve previously earned ledger economics.
-2. Decide that protected Workspace/harness means capability substrate, and separately name any user-facing Workspace destination that remains required.
+2. **Resolved in C0:** protected Workspace/harness means capability substrate and bounded compatibility; no standalone user-facing Workspace destination remains required.
 3. **Resolved at the ownership level:** hard-delete private state, anonymize shared state, preserve minimum financial/legal evidence, and propagate explicit privacy purges through derived intelligence. Exact TTLs remain for finance/legal/security owners.
 4. **Complete:** run bounded redacted staging aggregates for identity, membership, entitlement, legacy interactions/resource bodies, Builder Partner liabilities, anonymous users, and retention-state prevalence.
 5. Record external official-MCP consumers and supported callable Convex names before transport retirement.
@@ -100,7 +100,7 @@ Exit proof: adapter parity is generated/tested and every operation reaches one a
 
 ## Step 8 — Delete deferred product surfaces and configuration drift
 
-1. Close the Workspace destination decision; remove route builders/controllers/host paths that are not protected substrate.
+1. **Destination decision complete in C0:** inventory and migrate callers, then remove route builders/controllers/host paths that are not protected substrate.
 2. Remove Builder Partner Workspace/onboarding/headline UI after Step 2; retain the minimum coherent Settings/operator enrollment, terms, status, and payout controls.
 3. Remove Discover Apps/Skills marketplace CSS and unused projections after build/screenshot proof.
 4. Correct product docs and status indexes.
