@@ -7,6 +7,7 @@ import { api, internal } from "./_generated/api";
 import schema from "./schema";
 
 const modules = import.meta.glob([
+  "./communityAdmin.ts",
   "./communityCommerce.ts",
   "./email.ts",
   "./userPlatformAppMounts.ts",
@@ -185,6 +186,42 @@ async function applyAccessEvent(
 }
 
 describe("paid community access authority", () => {
+  test("legacy leave fails closed for a paid membership without changing access", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t, "paid-leave-guard");
+    await completeCheckout(t, fixture);
+
+    await expect(
+      t.withIdentity({ subject: fixture.userSubject }).mutation(
+        (api as any).communityAdmin.leaveCommunity,
+        { communityId: fixture.communityId },
+      ),
+    ).rejects.toThrow("paid_subscription_cancel_required");
+
+    const state = await t.run(async (ctx) => ({
+      membership: await ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community_user", (q) =>
+          q.eq("communityId", fixture.communityId).eq("userId", fixture.userId),
+        )
+        .unique(),
+      subscription: await ctx.db
+        .query("communitySubscriptions")
+        .withIndex("by_providerSubscriptionId", (q) =>
+          q.eq("providerSubscriptionId", fixture.providerSubscriptionId),
+        )
+        .unique(),
+    }));
+    expect(state.membership).toMatchObject({
+      active: true,
+      accessSource: "paid_subscription",
+    });
+    expect(state.subscription).toMatchObject({
+      status: "active",
+      cancelAtPeriodEnd: false,
+    });
+  });
+
   test("verified checkout completion atomically creates membership and one subscription", async () => {
     const t = convexTest(schema, modules);
     const fixture = await createFixture(t, "complete");

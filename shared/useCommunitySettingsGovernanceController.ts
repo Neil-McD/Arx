@@ -2,8 +2,10 @@ import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
 import { getCommunityPublishReadinessMissingFields } from "./communityPublishReadiness";
+import type { CommunityAccess } from "./communityTypes";
 
 import {
+  cancelCloudCommunitySubscription,
   leaveCloudCommunity,
   prepareCloudCommunityBrandingField,
   saveCloudCommunityMemberSettings,
@@ -19,10 +21,12 @@ type SessionLike = {
 
 type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> = {
   activeCommunityId: string | null;
+  activeCommunityAccess: CommunityAccess | null;
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
   confirmAction: (message: string) => boolean;
   loadCommunities: (session: SessionT) => Promise<void>;
+  reloadActiveCommunityAccess: (communityId: string, session: SessionT) => Promise<void>;
   onLeaveCommunityLocalState: (leavingCommunityId: string) => void;
 
   setCommunityMemberSettingsError: Dispatch<SetStateAction<string | null>>;
@@ -134,16 +138,32 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
     const communityId = current.activeCommunityId;
     if (!session || !communityId) return;
 
-    const confirmed = current.confirmAction("Leave this community? You will lose access immediately.");
+    const isPaidSubscription =
+      current.activeCommunityAccess?.community_id === communityId &&
+      current.activeCommunityAccess.access_source === "paid_subscription";
+    const confirmed = current.confirmAction(
+      isPaidSubscription
+        ? "Cancel this subscription? It will not renew, and you will keep access through the current billing period."
+        : "Leave this community? You will lose access immediately.",
+    );
     if (!confirmed) return;
     current.setCommunityMemberSettingsError(null);
     current.setIsLeavingCommunity(true);
     try {
-      await leaveCloudCommunity({
-        session,
-        communityId,
-      });
-      current.onLeaveCommunityLocalState(communityId);
+      if (isPaidSubscription) {
+        const result = await cancelCloudCommunitySubscription({ session, communityId });
+        if (
+          result.subscription_status === "ended" ||
+          result.subscription_status === "canceled"
+        ) {
+          current.onLeaveCommunityLocalState(communityId);
+        } else {
+          await current.reloadActiveCommunityAccess(communityId, session);
+        }
+      } else {
+        await leaveCloudCommunity({ session, communityId });
+        current.onLeaveCommunityLocalState(communityId);
+      }
       await current.loadCommunities(session);
     } catch (error) {
       const message =
@@ -151,7 +171,9 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
           ? error
           : error instanceof Error
             ? error.message
-            : "Failed to leave community.";
+            : isPaidSubscription
+              ? "Failed to cancel subscription."
+              : "Failed to leave community.";
       current.setCommunityMemberSettingsError(message);
     } finally {
       current.setIsLeavingCommunity(false);

@@ -14,6 +14,7 @@ import {
   listCommunityMembershipsAdmin as listCommunityMembershipsAdminImpl,
   listCommunityMembershipsAdminPage as listCommunityMembershipsAdminPageImpl,
   banCommunityMember as banCommunityMemberImpl,
+  cancelMyCommunitySubscription as cancelMyCommunitySubscriptionImpl,
   removeCommunityMember as removeCommunityMemberImpl,
   saveCommunityMemberSettings as saveCommunityMemberSettingsImpl,
   setCommunityFreeAccessMode as setCommunityFreeAccessModeImpl,
@@ -221,6 +222,7 @@ export const saveCommunityMemberSettings = saveCommunityMemberSettingsImpl;
 export const listCommunityPricePoints = listCommunityPricePointsImpl;
 export const setCommunityFreeAccessMode = setCommunityFreeAccessModeImpl;
 export const leaveCommunity = leaveCommunityImpl;
+export const cancelMyCommunitySubscription = cancelMyCommunitySubscriptionImpl;
 export const listCommunityResources = listCommunityResourcesImpl;
 export const listCommunityResourceModules = listCommunityResourceModulesImpl;
 export const countCommunityResources = countCommunityResourcesImpl;

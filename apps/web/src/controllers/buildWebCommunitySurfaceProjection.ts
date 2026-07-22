@@ -22,6 +22,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   activePage: AppPage;
   communityTab: CommunityTab;
   activeCommunity: CommunitySurfaceCommunityLike | null;
+  activeCommunityAccess: WebCommunitySecondaryPanelsProps["settings"]["activeCommunityAccess"];
   session: WebCommunityChatPanelProps["session"];
   ensureSession: WebCommunitySecondaryPanelsProps["settings"]["ensureSession"];
   selectedActiveCommunitySlug: string | null;
@@ -181,6 +182,7 @@ export function buildWebCommunitySurfaceProjection(
     communityTab: params.communityTab,
     settings: {
       activeCommunity: params.activeCommunity,
+      activeCommunityAccess: params.activeCommunityAccess,
       session: params.session,
       ensureSession: params.ensureSession,
       hasSession: params.hasAuthenticatedPresentation,

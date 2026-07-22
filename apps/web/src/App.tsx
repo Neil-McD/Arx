@@ -5552,9 +5552,11 @@ export default function App() {
     activeCommunityAvatarUrl: activeCommunitySettingsSource?.avatar_url ?? null,
     activeCommunityBannerUrl: activeCommunitySettingsSource?.banner_url ?? null,
     activeCommunityId,
+    activeCommunityAccess,
     ...authenticatedSessionArg,
     confirmAction: (message) => confirm(message),
     loadCommunities,
+    reloadActiveCommunityAccess,
     onLeaveCommunityLocalState: (leavingId) => {
       applyCommunityShellState({
         communityId: null,
@@ -10350,6 +10352,7 @@ export default function App() {
       activePage,
       communityTab,
       activeCommunity,
+      activeCommunityAccess,
       session: session,
       ensureSession: ensureUsableAuthSession,
       selectedActiveCommunitySlug,

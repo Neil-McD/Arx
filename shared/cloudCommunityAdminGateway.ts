@@ -276,6 +276,18 @@ type CloudCommunityFreeAccessModeResult = {
   updated_at?: string;
 };
 
+export type CloudCommunitySubscriptionCancellationResult = {
+  ok: boolean;
+  subscription_status:
+    | "active"
+    | "past_due"
+    | "cancel_at_period_end"
+    | "canceled"
+    | "ended";
+  current_period_end_at: string | null;
+  provider_updated: boolean;
+};
+
 export type CloudCommunityBrandingKind = "avatar" | "banner";
 
 export type CloudCommunityBrandingFieldInput = {
@@ -1756,6 +1768,18 @@ export async function leaveCloudCommunity<SessionT>(
     authSubject,
     communityId: params.communityId,
   });
+}
+
+export async function cancelCloudCommunitySubscription<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<CloudCommunitySubscriptionCancellationResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return (await client.action("community:cancelMyCommunitySubscription" as any, {
+    authSubject,
+    communityId: params.communityId,
+  })) as CloudCommunitySubscriptionCancellationResult;
 }
 
 export async function saveCloudCommunitySettings<SessionT>(

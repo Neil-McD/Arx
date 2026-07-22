@@ -45,6 +45,9 @@ import {
   getUniqueCommunityJoinRequestByPair,
 } from "./communityJoinRequestCore";
 import { readCanonicalAccountTier } from "./accountEntitlementCore";
+import { normalizeStripeCommunitySubscriptionStatus } from "./billingCore";
+import { communitySubscriptionStatusGrantsAccess } from "./communitySubscriptionAccessCore";
+import { scheduleProviderSubscriptionCancellationAtPeriodEnd } from "./communitySubscriptionCancellationCore";
 import { logStructuredError } from "./errorLogging";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
@@ -1673,6 +1676,191 @@ async function cancelStripeSubscriptionIfActive(providerSubscriptionId: string):
   await stripe.subscriptions.cancel(subscriptionId);
 }
 
+function stripeResourceMissing(error: unknown): boolean {
+  const candidate = error as { statusCode?: number; code?: string } | null;
+  return candidate?.statusCode === 404 || candidate?.code === "resource_missing";
+}
+
+function toStripeTimestampMs(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  return Math.floor(value * 1000);
+}
+
+function readStripeSubscriptionCycle(subscription: any): {
+  cycleStartedAt: number | null;
+  cycleEndsAt: number | null;
+} {
+  const firstItem = subscription?.items?.data?.[0];
+  const itemCycleStartedAt = toStripeTimestampMs(firstItem?.current_period_start);
+  const itemCycleEndsAt = toStripeTimestampMs(firstItem?.current_period_end);
+  if (itemCycleStartedAt && itemCycleEndsAt) {
+    return { cycleStartedAt: itemCycleStartedAt, cycleEndsAt: itemCycleEndsAt };
+  }
+  return {
+    cycleStartedAt: toStripeTimestampMs(subscription?.current_period_start),
+    cycleEndsAt: toStripeTimestampMs(subscription?.current_period_end),
+  };
+}
+
+function readStripeSubscriptionApplicationFeeBps(subscription: any): number | null {
+  const applicationFeePercent = Number(subscription?.application_fee_percent);
+  if (
+    !Number.isFinite(applicationFeePercent) ||
+    applicationFeePercent < 0 ||
+    applicationFeePercent > 100
+  ) {
+    return null;
+  }
+  return Math.round(applicationFeePercent * 100);
+}
+
+export const prepareMyCommunitySubscriptionCancellationInternal = internalQuery({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
+    if (!community) throw new Error("community_not_found");
+    if (String(community.ownerId) === String(userId)) {
+      throw new Error("community_owner_cannot_cancel_membership");
+    }
+    const membership = await getUniqueCommunityMembershipByPair({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    if (!membership || !communityMembershipRowIsActive(membership)) {
+      throw new Error("community_membership_not_found");
+    }
+    if (String(membership.accessSource ?? "").trim() !== "paid_subscription") {
+      throw new Error("community_subscription_not_paid_membership");
+    }
+    const subscription = await getUniqueCommunitySubscriptionByMembership({
+      ctx,
+      membershipId: membership._id,
+    });
+    if (!subscription) throw new Error("community_subscription_not_found");
+    const status = String(subscription.status ?? "").trim().toLowerCase() as
+      | "active"
+      | "past_due"
+      | "cancel_at_period_end"
+      | "canceled"
+      | "ended";
+    if (!communitySubscriptionStatusGrantsAccess(status)) {
+      throw new Error("community_subscription_not_active");
+    }
+    const providerSubscriptionId = String(
+      subscription.providerSubscriptionId ?? "",
+    ).trim();
+    if (!providerSubscriptionId) {
+      throw new Error("community_subscription_provider_id_required");
+    }
+    return {
+      community_id: args.communityId,
+      user_id: userId,
+      price_point_id: subscription.pricePointId,
+      provider_subscription_id: providerSubscriptionId,
+    };
+  },
+});
+
+export const cancelMyCommunitySubscription = action({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const prepared = (await ctx.runQuery(
+      internal.communityAdmin.prepareMyCommunitySubscriptionCancellationInternal as any,
+      {
+        userId: args.userId,
+        authSubject: args.authSubject ?? undefined,
+        communityId: args.communityId,
+      },
+    )) as {
+      community_id: any;
+      user_id: any;
+      price_point_id: any;
+      provider_subscription_id: string;
+    };
+    const stripe = getStripeClient();
+    const providerResult = await scheduleProviderSubscriptionCancellationAtPeriodEnd({
+      providerSubscriptionId: prepared.provider_subscription_id,
+      retrieve: async (providerSubscriptionId) =>
+        await stripe.subscriptions.retrieve(providerSubscriptionId),
+      update: async (providerSubscriptionId, patch) =>
+        await stripe.subscriptions.update(providerSubscriptionId, patch),
+      isResourceMissing: stripeResourceMissing,
+    });
+
+    if (providerResult.outcome === "missing") {
+      await ctx.runMutation(
+        internal.communityCommerce.syncCommunitySubscriptionLifecycleInternal as any,
+        {
+          communityId: prepared.community_id,
+          userId: prepared.user_id,
+          pricePointId: prepared.price_point_id,
+          providerSubscriptionId: prepared.provider_subscription_id,
+          status: "ended",
+          cancelAtPeriodEnd: false,
+          nowMs: Date.now(),
+        },
+      );
+      return {
+        ok: true,
+        subscription_status: "ended",
+        current_period_end_at: null,
+        provider_updated: false,
+      };
+    }
+
+    const subscription = providerResult.subscription as any;
+    const cycle = readStripeSubscriptionCycle(subscription);
+    const status = normalizeStripeCommunitySubscriptionStatus({
+      subscriptionStatus: subscription.status,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    });
+    await ctx.runMutation(
+      internal.communityCommerce.syncCommunitySubscriptionLifecycleInternal as any,
+      {
+        communityId: prepared.community_id,
+        userId: prepared.user_id,
+        pricePointId: prepared.price_point_id,
+        providerPriceId: subscription.items?.data?.[0]?.price?.id ?? null,
+        providerSubscriptionId: prepared.provider_subscription_id,
+        providerCustomerId:
+          typeof subscription.customer === "string" ? subscription.customer : null,
+        platformFeeBps: readStripeSubscriptionApplicationFeeBps(subscription),
+        status,
+        currentPeriodStartIso: cycle.cycleStartedAt
+          ? new Date(cycle.cycleStartedAt).toISOString()
+          : null,
+        currentPeriodEndIso: cycle.cycleEndsAt
+          ? new Date(cycle.cycleEndsAt).toISOString()
+          : null,
+        cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
+        nowMs: Date.now(),
+      },
+    );
+    return {
+      ok: true,
+      subscription_status: status,
+      current_period_end_at: cycle.cycleEndsAt
+        ? new Date(cycle.cycleEndsAt).toISOString()
+        : null,
+      provider_updated: providerResult.provider_updated,
+    };
+  },
+});
+
 export const removeCommunityMember = action({
   args: {
     userId: v.optional(v.id("users")),
@@ -2190,6 +2378,9 @@ export const leaveCommunity = mutation({
           throw new Error("community_membership_inactive");
         }
         if (membership) {
+          if (String(membership.accessSource ?? "").trim() === "paid_subscription") {
+            throw new Error("paid_subscription_cancel_required");
+          }
           await endCommunitySubscriptionsForMembership({
             ctx,
             membershipId: membership._id,

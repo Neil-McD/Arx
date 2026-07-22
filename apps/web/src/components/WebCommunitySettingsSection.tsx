@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DragEvent } from "react";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
+import type { CommunityAccess } from "../../../../shared/communityTypes";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
@@ -49,6 +50,7 @@ type ActiveCommunity = {
 
 type WebCommunitySettingsSectionProps = {
   activeCommunity: ActiveCommunity | null;
+  activeCommunityAccess: CommunityAccess | null;
   session: unknown;
   ensureSession: (session: any) => Promise<any | null>;
   hasSession: boolean;
@@ -908,11 +910,26 @@ function CommunityDangerZoneSection() {
 
 function CommunityMemberSettingsSection({
   activeCommunity,
+  activeCommunityAccess,
   state,
   actions,
 }: SharedSettingsProps & {
   activeCommunity: ActiveCommunity;
+  activeCommunityAccess: CommunityAccess | null;
 }) {
+  const isPaidSubscription =
+    activeCommunityAccess?.access_source === "paid_subscription";
+  const isCancellationScheduled =
+    isPaidSubscription &&
+    activeCommunityAccess?.subscription_status === "cancel_at_period_end";
+  const entitlementEndMs = Date.parse(activeCommunityAccess?.entitlement_ends_at ?? "");
+  const entitlementEndLabel = Number.isFinite(entitlementEndMs)
+    ? new Intl.DateTimeFormat(undefined, {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }).format(new Date(entitlementEndMs))
+    : null;
   return (
     <div className="create-community-form community-settings-form">
       <div className="settings-section">
@@ -944,18 +961,40 @@ function CommunityMemberSettingsSection({
         ) : null}
       </div>
       <div className="settings-section" style={{ marginTop: 18 }}>
-        <div className="settings-section-title">Leave community</div>
-        <div className="settings-section-desc">
-          Leave this community and remove your member access.
+        <div className="settings-section-title">
+          {isCancellationScheduled
+            ? "Subscription cancellation scheduled"
+            : isPaidSubscription
+              ? "Cancel subscription"
+              : "Leave community"}
         </div>
-        <button
-          type="button"
-          className="danger settings-danger-action"
-          onClick={() => void actions.handleLeaveCommunity()}
-          disabled={state.isLeavingCommunity}
-        >
-          {state.isLeavingCommunity ? "Leaving..." : "Leave community"}
-        </button>
+        <div className="settings-section-desc">
+          {isCancellationScheduled
+            ? entitlementEndLabel
+              ? `Your subscription will not renew. You retain access through ${entitlementEndLabel}.`
+              : "Your subscription will not renew. You retain access through the current billing period."
+            : isPaidSubscription
+              ? entitlementEndLabel
+                ? `Stop renewal and keep access through ${entitlementEndLabel}.`
+                : "Stop renewal and keep access through the current billing period."
+              : "Leave this community and remove your member access."}
+        </div>
+        {!isCancellationScheduled ? (
+          <button
+            type="button"
+            className="danger settings-danger-action"
+            onClick={() => void actions.handleLeaveCommunity()}
+            disabled={state.isLeavingCommunity}
+          >
+            {state.isLeavingCommunity
+              ? isPaidSubscription
+                ? "Canceling..."
+                : "Leaving..."
+              : isPaidSubscription
+                ? "Cancel subscription"
+                : "Leave community"}
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -964,6 +1003,7 @@ function CommunityMemberSettingsSection({
 export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionProps) {
   const {
     activeCommunity,
+    activeCommunityAccess,
     hasSession,
     canViewActiveCommunitySettings,
     communitySettingsLayer,
@@ -1029,6 +1069,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
       ) : !canManageCommunitySettings ? (
         <CommunityMemberSettingsSection
           activeCommunity={activeCommunity}
+          activeCommunityAccess={activeCommunityAccess}
           state={state}
           actions={actions}
         />
