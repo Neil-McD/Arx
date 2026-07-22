@@ -116,8 +116,6 @@ import type * as communitySkillAttachments from "../communitySkillAttachments.js
 import type * as communitySourceUrlPolicy from "../communitySourceUrlPolicy.js";
 import type * as communitySubscriptionAccessCore from "../communitySubscriptionAccessCore.js";
 import type * as communitySubscriptionEventConvergenceCore from "../communitySubscriptionEventConvergenceCore.js";
-import type * as communitySubscriptionRecovery from "../communitySubscriptionRecovery.js";
-import type * as communitySubscriptionRecoveryCore from "../communitySubscriptionRecoveryCore.js";
 import type * as communityText from "../communityText.js";
 import type * as communityWikiArchitect from "../communityWikiArchitect.js";
 import type * as creatorCommerce from "../creatorCommerce.js";
@@ -354,8 +352,6 @@ declare const fullApi: ApiFromModules<{
   communitySourceUrlPolicy: typeof communitySourceUrlPolicy;
   communitySubscriptionAccessCore: typeof communitySubscriptionAccessCore;
   communitySubscriptionEventConvergenceCore: typeof communitySubscriptionEventConvergenceCore;
-  communitySubscriptionRecovery: typeof communitySubscriptionRecovery;
-  communitySubscriptionRecoveryCore: typeof communitySubscriptionRecoveryCore;
   communityText: typeof communityText;
   communityWikiArchitect: typeof communityWikiArchitect;
   creatorCommerce: typeof creatorCommerce;

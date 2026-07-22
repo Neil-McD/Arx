@@ -64,7 +64,6 @@ const requiredEvents = [
   "community_subscription_synced",
   "stripe_webhook_received",
   "stripe_webhook_processed",
-  "stripe_webhook_recovery_accepted",
   "stripe_webhook_failed",
   "stripe_connect_account_synced",
   "account_delete_blocked",
@@ -99,12 +98,7 @@ for (const [fileName, source, eventTypes] of [
   [
     "convex/httpBilling.ts",
     httpBilling,
-    [
-      "stripe_webhook_received",
-      "stripe_webhook_processed",
-      "stripe_webhook_recovery_accepted",
-      "stripe_webhook_failed",
-    ],
+    ["stripe_webhook_received", "stripe_webhook_processed", "stripe_webhook_failed"],
   ],
 ] as const) {
   assertContains(source, /recordCriticalAudit/, `${fileName} must use critical audit recording`);

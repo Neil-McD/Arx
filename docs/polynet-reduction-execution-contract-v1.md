@@ -150,7 +150,7 @@ These are audit judgments, not measured service-level indicators:
 | --- | ---: | --- |
 | Simplicity | 6.5 | compatibility paths, aliases, duplicate schemas, and concentrated surfaces |
 | Scalability | 5.5-6 | scheduler continuation gaps and broad/N+1 operator projections |
-| Reliability | 7.5 | asynchronous provider recovery and some live journeys remain incomplete |
+| Reliability | 7.5 | the live paid-access and creator-settlement journey remains incomplete |
 | Robustness | 6 | deletion is quarantined rather than resumable; restore proof is absent |
 | Security | 8 | core authority is strong; privacy lifecycle and operational controls remain |
 | Semantic-platform maturity | 5 | authority/read seams exist; namespace, registry, and adapter convergence do not |
@@ -165,7 +165,7 @@ Exactly one milestone or bounded sub-slice may be `IN_PROGRESS`.
 | ID | Outcome | Status | Exit boundary |
 | --- | --- | --- | --- |
 | C0 | Reconcile and adopt one architecture thesis | `COMPLETE` | one repository contract distinguishes implemented, next, proposed, and deferred architecture without attachment/chat dependency |
-| C1 | Finish payment recovery and ordinary creator settlement | `IN_PROGRESS` | bounded retries/stuck recovery, live staging event proof, and one receipted settlement authority |
+| C1 | Finish paid-access proof and ordinary creator settlement | `IN_PROGRESS` | one live staging checkout/cancellation journey and one receipted Connect settlement authority |
 | C2 | Complete resumable deletion and privacy lifecycles | `PLANNED` | interruption-safe phases, external revocation, privacy propagation, invariant audit, and root-last finalization |
 | C3 | Finish canonical resource, interaction, and intelligence migrations | `PLANNED` | one authority per concern and zero compatibility reads/writes through an observation window |
 | C4 | Guarantee scheduler fairness and bounded operations | `PLANNED` | every eligible object eventually receives service across caps and restarts; operator work is bounded |
@@ -258,7 +258,8 @@ change for the platform-wide baseline.
 | D-004 | Treat the four control surfaces as logical responsibilities before generalized infrastructure | `ACCEPTED` | prevents abstraction without a real adapter requirement |
 | D-005 | Make only community/self/resources plus bounded list/read the next semantic substrate | `ACCEPTED` | search/write/call and wider mounts remain separately gated |
 | D-006 | Preserve protected Workspace/harness substrate but not the standalone destination | `ACCEPTED` | resolves N-005 and F-013 without deleting protected core |
-| D-007 | Make subscription lifecycle recovery the first C1 sub-slice | `ACCEPTED` | only `customer.subscription.updated` and `customer.subscription.deleted`; identity-only durable recovery; no raw Stripe payload, settlement, Builder Partner, or UI expansion |
+| D-007 | Make subscription lifecycle recovery the first C1 sub-slice | `SUPERSEDED BY D-008` | the bounded queue was implemented, then rejected after first-principles review because it duplicated Stripe delivery retry and could not recover events that never reached the endpoint |
+| D-008 | Keep Stripe delivery retry plus idempotent current-provider convergence as the MVP recovery boundary | `ACCEPTED` | processing failures remain non-2xx; a broader reconciliation mechanism requires observed operational evidence and separate authorization |
 
 Superseded decisions remain visible with a pointer to their replacement. Never
 rewrite a historical decision to make the sequence look cleaner than it was.
@@ -317,14 +318,14 @@ human sequencing decision. Avoid percentages and “mostly complete.”
 
 ## 10. Current next action
 
-C1.1 is active and explicitly authorized. First checkpoint this reconciled C0
-documentation bundle so implementation begins from an intentional clean base.
-Then add bounded recovery for only `customer.subscription.updated` and
-`customer.subscription.deleted`, reusing current provider-truth convergence and
-community-access effect idempotency.
+C1.1 is the authorized recovery-queue deletion slice. Remove the identity-only
+queue introduced at `31cacf3f` after proving its development table is empty.
+Retain Stripe signature verification, current-provider convergence, atomic
+community-access effects, idempotency, failure audit, and a non-2xx response on
+processing failure.
 
-The admissible implementation is one identity-only, indexed, leased recovery
-record with token-fenced completion, capped retry/backoff, expired-lease repair,
-terminal audit evidence, and behavioral failure proof. It must not store raw
-Stripe payloads, create a generalized workflow engine, add user-facing UI,
-change ordinary creator settlement, touch Builder Partner, or move production.
+After the deletion is proved and deployed on canonical staging, the only next
+C1 work is a separately planned live checkout/cancellation and Connect
+settlement acceptance journey. No generalized recovery mechanism, settlement
+rewrite, Builder Partner work, user-facing expansion, or production move is
+authorized by this contract.

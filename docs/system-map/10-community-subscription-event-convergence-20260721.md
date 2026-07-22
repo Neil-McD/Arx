@@ -121,10 +121,14 @@ convergence, and atomic rollback when receipt identity is corrupt.
 
 ## Remaining U-017 boundary
 
-U-017 is narrowed but not closed. A later slice must add a bounded asynchronous
-retry/stuck-recovery queue for provider outages and then prove live Stripe test
-events against the configured staging webhook endpoint. Creator settlement is a
-separate authority. Builder Partner remains explicitly last.
+U-017 is narrowed but not closed. First-principles review rejected a separate
+subscription-event recovery queue for MVP: failures already propagate as
+non-2xx responses for Stripe retry, and current-provider convergence safely
+handles duplicate and reordered delivery. A local queue would duplicate that
+delivery owner and could not recover an event that never reached the endpoint.
+Remaining closure is live Stripe staging checkout/cancellation evidence and a
+separate creator-settlement receipt. Broader reconciliation requires observed
+operational evidence and separate authorization. Builder Partner remains last.
 
 ## Authority-surface reduction
 

@@ -1467,44 +1467,6 @@ export default defineSchema({
     ])
     .index("by_deleteAfter", ["deleteAfter"]),
 
-  communitySubscriptionEventRecoveries: defineTable({
-    provider: v.literal("stripe"),
-    providerAccountId: v.string(),
-    providerEventId: v.string(),
-    providerEventType: v.union(
-      v.literal("customer.subscription.updated"),
-      v.literal("customer.subscription.deleted"),
-    ),
-    providerSubscriptionId: v.string(),
-    livemode: v.boolean(),
-    providerCreatedAt: v.number(),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("leased"),
-      v.literal("succeeded"),
-      v.literal("ignored"),
-      v.literal("terminal"),
-    ),
-    attemptCount: v.number(),
-    nextAttemptAt: v.number(),
-    leaseToken: v.optional(v.string()),
-    leaseExpiresAt: v.optional(v.number()),
-    lastAttemptAt: v.optional(v.number()),
-    lastErrorCode: v.optional(v.string()),
-    completedAt: v.optional(v.number()),
-    deleteAfter: v.optional(v.number()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_provider_account_event", [
-      "provider",
-      "providerAccountId",
-      "providerEventId",
-    ])
-    .index("by_status_nextAttemptAt", ["status", "nextAttemptAt"])
-    .index("by_status_leaseExpiresAt", ["status", "leaseExpiresAt"])
-    .index("by_status_deleteAfter", ["status", "deleteAfter"]),
-
   communityChatThreads: defineTable({
     communityId: v.id("communities"),
     lastSeq: v.number(),

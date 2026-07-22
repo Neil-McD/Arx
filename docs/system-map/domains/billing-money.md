@@ -48,13 +48,14 @@ The bounded staging audit found active partners and pending financial state, so 
 
 ## Failure and recovery questions
 
-Static code clearly separates provider verification from redirects. First verified community-checkout completion creates membership and the single Stripe subscription projection in one Convex transaction; checkout success only observes that authority. Subscription, refund, and dispute access effects re-read current Stripe state before one atomic mutation updates explicit financial blocks, subscription/membership projections, canonical member count, and a bounded effect receipt. Duplicate/reordered events, failed-refund recovery, receipt corruption rollback, and non-financial revocation precedence are proven locally. Bounded asynchronous provider-outage recovery, live staging Stripe test events, Connect unavailability, charge collection failure, and creator settlement remain unproven.
+Static code clearly separates provider verification from redirects. First verified community-checkout completion creates membership and the single Stripe subscription projection in one Convex transaction; checkout success only observes that authority. Subscription, refund, and dispute access effects re-read current Stripe state before one atomic mutation updates explicit financial blocks, subscription/membership projections, canonical member count, and a bounded effect receipt. Duplicate/reordered events, failed-refund recovery, receipt corruption rollback, and non-financial revocation precedence are proven locally. Processing failures remain non-2xx for Stripe delivery retry; a separate subscription-event queue was rejected as duplicate infrastructure. Live staging checkout/cancellation, Connect settlement, provider unavailability, and charge-collection behavior remain unproven.
 
 ## Reduction candidates
 
 | Candidate | Classification | Action | Idiot index | Rationale |
 | --- | --- | --- | ---: | --- |
 | provider-verified community access and ordinary creator payout | `KEEP (MVP core)` | `HARDEN` | 0 | required for gated paid communities and builder economics |
+| Polynet-owned subscription-event retry queue | `DELETE (deferred/dead)` complete | `DELETE` | 9 | duplicates Stripe delivery retry, adds a second scheduler/state machine, and cannot recover events that never reach Polynet |
 | one shared entitlement resolver | `KEEP (MVP core)` | `CONSOLIDATE`, `BOUND` complete | 1 | one bounded job remains; independent interpretations and append-only default/history rows are deleted |
 | Builder Partner as a secondary growth capability | `KEEP (MVP core)` | `DOCUMENT`, `HARDEN`, `CONSOLIDATE` | 2 | explicitly retained; not a launch gate or primary product journey |
 | paid-tool Builder Partner commission | `DELETE (deferred/dead)` complete prospectively | `VERSION` | 10 | v3 creates none; preserve historical rows |

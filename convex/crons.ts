@@ -24,16 +24,6 @@ crons.interval(
 );
 
 crons.interval(
-  "recover community subscription events",
-  { minutes: 1 },
-  (internal as any).communitySubscriptionRecovery
-    .processDueCommunitySubscriptionEventRecoveriesInternal,
-  {
-    limit: 10,
-  },
-);
-
-crons.interval(
   "process pending email outbox",
   { minutes: 5 },
   (internal as any).email.processPendingEmailOutboxInternal,
