@@ -129,6 +129,7 @@ const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
   ],
   stripe_webhook_failed: ["stripeEventType", "stripeEventId", "requestPath", "errorMessage"],
   stripe_webhook_processed: ["stripeEventType", "stripeEventId"],
+  stripe_webhook_recovery_accepted: ["stripeEventType", "stripeEventId"],
   stripe_webhook_received: ["stripeEventType", "stripeEventId"],
 };
 

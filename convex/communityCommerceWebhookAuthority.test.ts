@@ -7,6 +7,11 @@ const communityCommerce = readFileSync(
   "utf8",
 );
 const schema = readFileSync(new URL("./schema.ts", import.meta.url), "utf8");
+const recovery = readFileSync(
+  new URL("./communitySubscriptionRecovery.ts", import.meta.url),
+  "utf8",
+);
+const crons = readFileSync(new URL("./crons.ts", import.meta.url), "utf8");
 
 describe("community commerce webhook authority wiring", () => {
   test("refund access uses current cumulative charge truth before one access mutation", () => {
@@ -51,5 +56,27 @@ describe("community commerce webhook authority wiring", () => {
     expect(receiptTable).not.toMatch(/payload|metadata|body|content|email|userId/);
     expect(communityCommerce).toContain("COMMUNITY_COMMERCE_EVENT_EFFECT_RETENTION_MS");
     expect(communityCommerce).toContain("pruneCommunityCommerceEventEffectsInternal");
+  });
+
+  test("community subscription recovery is identity-only, leased, bounded, and wired", () => {
+    const recoveryTable = schema.match(
+      /communitySubscriptionEventRecoveries: defineTable\(\{[\s\S]*?\.index\("by_status_deleteAfter", \["status", "deleteAfter"\]\)/,
+    )?.[0] ?? "";
+    expect(recoveryTable).toContain("by_provider_account_event");
+    expect(recoveryTable).toContain("by_status_nextAttemptAt");
+    expect(recoveryTable).toContain("by_status_leaseExpiresAt");
+    expect(recoveryTable).toContain("by_status_deleteAfter");
+    expect(recoveryTable).toContain("leaseToken");
+    expect(recoveryTable).not.toMatch(/payload|metadata|body|content|email|customerId|userId/);
+    expect(httpBilling).toContain("hasRecoverableCommunitySubscriptionAuthority");
+    expect(httpBilling).toContain("processCommunitySubscriptionEventWithRecovery");
+    expect(httpBilling).toContain("beginCommunitySubscriptionEventRecoveryInternal");
+    expect(httpBilling).toContain("failCommunitySubscriptionEventRecoveryInternal");
+    expect(httpBilling).toMatch(
+      /"acknowledgedOnly" in communityResult[\s\S]*?communityResult\.acknowledgedOnly[\s\S]*?return processedResponse\([\s\S]*?"stripe_webhook_recovery_accepted"/,
+    );
+    expect(recovery).toContain("validateRecoveredCommunitySubscriptionEvent");
+    expect(recovery).toContain("community_subscription_recovery_stale_lease");
+    expect(crons).toContain("recover community subscription events");
   });
 });

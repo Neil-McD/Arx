@@ -14,6 +14,7 @@ import {
   currentChargeRequiresRefundAccessBlock,
   currentDisputeAccessBlock,
 } from "./communitySubscriptionAccessCore";
+import { communitySubscriptionRecoveryErrorCode } from "./communitySubscriptionRecoveryCore";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -40,7 +41,11 @@ async function recordStripeWebhookAudit(
   ctx: any,
   args: {
     eventKey: string;
-    eventType: "stripe_webhook_received" | "stripe_webhook_processed" | "stripe_webhook_failed";
+    eventType:
+      | "stripe_webhook_received"
+      | "stripe_webhook_processed"
+      | "stripe_webhook_recovery_accepted"
+      | "stripe_webhook_failed";
     severity?: "info" | "warning" | "error";
     status: "started" | "succeeded" | "failed" | "ignored";
     stripeEventType?: string | null;
@@ -692,7 +697,7 @@ async function syncCommunityAccessForCurrentDispute(
   );
 }
 
-async function syncCommunitySubscriptionEventFromCurrentProvider(
+export async function syncCommunitySubscriptionEventFromCurrentProvider(
   ctx: any,
   event: Stripe.Event,
   deliveredSubscription: Stripe.Subscription,
@@ -825,6 +830,116 @@ async function syncCommunitySubscriptionEventFromCurrentProvider(
   };
 }
 
+async function hasRecoverableCommunitySubscriptionAuthority(
+  ctx: any,
+  deliveredSubscription: Stripe.Subscription,
+): Promise<boolean> {
+  const providerSubscriptionId = String(deliveredSubscription.id ?? "").trim();
+  if (!providerSubscriptionId) {
+    throw new Error("community_subscription_event_identity_missing");
+  }
+  const existingCommunitySubscription = await ctx.runQuery(
+    internal.communityCommerce
+      .getCommunitySubscriptionByProviderSubscriptionIdInternal as any,
+    { providerSubscriptionId },
+  );
+  if (existingCommunitySubscription?.communityId) return true;
+  const localSessionId = readStripeMetadataString(
+    deliveredSubscription.metadata,
+    "local_session_id",
+  );
+  if (!localSessionId) return false;
+  const communityCheckoutSession = await ctx.runQuery(
+    internal.communityCommerce.getCommunityJoinCheckoutSessionInternal as any,
+    { sessionId: localSessionId },
+  );
+  return Boolean(communityCheckoutSession?.communityId);
+}
+
+async function processCommunitySubscriptionEventWithRecovery(
+  ctx: any,
+  event: Stripe.Event,
+  deliveredSubscription: Stripe.Subscription,
+): Promise<{
+  status: "succeeded" | "ignored";
+  payload: Record<string, unknown>;
+  acknowledgedOnly?: boolean;
+}> {
+  const effect = buildCommunityAccessEventEffect(event);
+  const leaseToken = `stripe_subscription_${crypto.randomUUID()}`;
+  const recovery = await ctx.runMutation(
+    (internal as any).communitySubscriptionRecovery
+      .beginCommunitySubscriptionEventRecoveryInternal,
+    {
+      providerAccountId: effect.providerAccountId,
+      providerEventId: effect.providerEventId,
+      providerEventType: event.type,
+      providerSubscriptionId: String(deliveredSubscription.id ?? "").trim(),
+      livemode: effect.livemode,
+      providerCreatedAt: effect.providerCreatedAt,
+      leaseToken,
+      nowMs: Date.now(),
+    },
+  );
+  if (!recovery?.claimed) {
+    return {
+      status: recovery?.status === "ignored" ? "ignored" : "succeeded",
+      payload: {
+        received: true,
+        reason: "community_subscription_recovery_already_owned",
+        recovery_status: recovery?.status ?? "unknown",
+      },
+      acknowledgedOnly: true,
+    };
+  }
+
+  try {
+    const result = await syncCommunitySubscriptionEventFromCurrentProvider(
+      ctx,
+      event,
+      deliveredSubscription,
+    );
+    const completion = await ctx.runMutation(
+      (internal as any).communitySubscriptionRecovery
+        .completeCommunitySubscriptionEventRecoveryInternal,
+      {
+        recoveryId: recovery.recoveryId,
+        leaseToken,
+        outcome: result.status,
+        nowMs: Date.now(),
+      },
+    );
+    if (!completion?.ok) {
+      throw new Error("community_subscription_recovery_stale_lease");
+    }
+    return result;
+  } catch (error) {
+    const failure = await ctx.runMutation(
+      (internal as any).communitySubscriptionRecovery
+        .failCommunitySubscriptionEventRecoveryInternal,
+      {
+        recoveryId: recovery.recoveryId,
+        leaseToken,
+        errorCode: communitySubscriptionRecoveryErrorCode(error),
+        nowMs: Date.now(),
+      },
+    );
+    if (!failure?.ok) throw error;
+    return {
+      status: "succeeded",
+      payload: {
+        received: true,
+        reason: failure.terminal
+          ? "community_subscription_recovery_terminal"
+          : "community_subscription_recovery_queued",
+        recovery_status: failure.status,
+        next_attempt_at: failure.nextAttemptAt,
+      },
+      acknowledgedOnly: true,
+    };
+  }
+}
+
 export function registerRuntimeBillingRoutes(
   args: RegisterRuntimeBillingRoutesArgs,
 ): void {
@@ -879,17 +994,30 @@ export function registerRuntimeBillingRoutes(
         const processedResponse = async (
           responsePayload: Record<string, unknown>,
           status: "succeeded" | "ignored" = "succeeded",
+          auditEventType:
+            | "stripe_webhook_processed"
+            | "stripe_webhook_recovery_accepted" = "stripe_webhook_processed",
         ) => {
-          await recordStripeWebhookAudit(ctx, {
-            eventKey: `stripe_webhook_processed:${stripeEventId ?? "unknown"}:${status}:${String(responsePayload.reason ?? responsePayload.event ?? "received")}`,
-            eventType: "stripe_webhook_processed",
+          const auditSuffix = `${stripeEventId ?? "unknown"}:${status}:${String(responsePayload.reason ?? responsePayload.event ?? "received")}`;
+          const auditIdentity = {
             status,
             stripeEventType,
             stripeEventId,
-            metadata: {
-              response: responsePayload,
-            },
-          });
+            metadata: { response: responsePayload },
+          };
+          if (auditEventType === "stripe_webhook_recovery_accepted") {
+            await recordStripeWebhookAudit(ctx, {
+              ...auditIdentity,
+              eventKey: `stripe_webhook_recovery_accepted:${auditSuffix}`,
+              eventType: "stripe_webhook_recovery_accepted",
+            });
+          } else {
+            await recordStripeWebhookAudit(ctx, {
+              ...auditIdentity,
+              eventKey: `stripe_webhook_processed:${auditSuffix}`,
+              eventType: "stripe_webhook_processed",
+            });
+          }
           return jsonResponse(req, 200, responsePayload);
         };
 
@@ -1674,12 +1802,32 @@ export function registerRuntimeBillingRoutes(
             });
           }
 
-          const communityResult =
-            await syncCommunitySubscriptionEventFromCurrentProvider(
+          const communityRecoveryEnabled =
+            await hasRecoverableCommunitySubscriptionAuthority(
               ctx,
-              event,
               deliveredSubscription,
             );
+          const communityResult = communityRecoveryEnabled
+            ? await processCommunitySubscriptionEventWithRecovery(
+                ctx,
+                event,
+                deliveredSubscription,
+              )
+            : await syncCommunitySubscriptionEventFromCurrentProvider(
+                ctx,
+                event,
+                deliveredSubscription,
+              );
+          if (
+            "acknowledgedOnly" in communityResult &&
+            communityResult.acknowledgedOnly
+          ) {
+            return processedResponse({
+              ok: true,
+              event: event.type,
+              ...communityResult.payload,
+            }, "succeeded", "stripe_webhook_recovery_accepted");
+          }
           return processedResponse({
             ok: true,
             event: event.type,
