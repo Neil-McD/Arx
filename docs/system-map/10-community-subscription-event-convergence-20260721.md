@@ -1,6 +1,6 @@
 # Community Commerce Event Convergence — U-017 Authority Slices
 
-Status: second authority slice implemented and locally proven on the isolated staging lane
+Status: second authority slice deployed and verified on the isolated staging lane
 Scope: paid-community subscription, refund, and dispute access effects only
 
 ## Irreducible job
@@ -106,6 +106,18 @@ The behavioral fixture proves cumulative partial/full refunds, unknown provider
 states, duplicate delivery, reordered dispute recovery, failed-refund recovery,
 multiple authority invariants, manager-removal precedence, active-member-count
 convergence, and atomic rollback when receipt identity is corrupt.
+
+## Staging release receipt — 2026-07-22
+
+- code commit: `551dd0172929d0b3949bf2c59aa50a55e477d471`;
+- Convex target: `dev:quick-porcupine-949`, deployed only through the staging identity guard;
+- canonical web marker: `https://polynet-staging.vercel.app/version.json` served the exact code commit;
+- Staging UI Canary run `29929229366`: success;
+- MVP Guards run `29929229418`: success, including the 36-step foundation gate, web typecheck/build, and bundle budget;
+- post-deploy tables: zero `communitySubscriptionAccessBlocks` and zero `communityCommerceEventEffects` rows;
+- post-deploy migration recheck: all 67 memberships scanned, zero inactive paid memberships, zero legacy financial revocation strings;
+- bounded receipt pruner: `{ deleted: 0, has_more: false, ok: true }`;
+- production marker remained `a936dee72a65f91723f332779390210e4cf783f0`.
 
 ## Remaining U-017 boundary
 
