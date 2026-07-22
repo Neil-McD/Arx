@@ -333,6 +333,15 @@ through the provider period; retries are idempotent; provider failure leaves
 local state unchanged; terminal provider truth revokes access. No table, queue,
 cron, portal, ledger, checkout, charge, or Builder Partner behavior was added.
 
+The final purchase-claim storage residue is also closed on staging. On
+2026-07-22, the undeclared `purchaseClaims` table in
+`quick-porcupine-949` was re-proven empty with zero live schema/runtime call
+paths and then physically deleted through the authenticated Convex dashboard.
+Post-deletion inventory no longer lists the table; all 49 focused paid-access,
+checkout-start, and subscription-convergence cases pass. At deletion time, the
+staging web marker remained `e1af0c481d2235ac2f7e71d089a76c03634bfa93`, and
+production remained untouched at `a936dee72a65f91723f332779390210e4cf783f0`.
+
 The next separately planned slice is C1.3: one real staging checkout followed by
 the staged cancellation path, plus a separate receipted Connect settlement.
 This is acceptance proof, not permission for a generalized recovery mechanism,

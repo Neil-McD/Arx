@@ -53,7 +53,11 @@ retained_unexpired_claims: 0
 retained_unexpired_checkout_tokens: 0
 ```
 
-An immediate idempotent rerun reported zero claims scanned, zero tokens scrubbed, and zero unexpired residue. Only then were the migration function, table, schema field, and lifecycle-policy references removed.
+An immediate idempotent rerun reported zero claims scanned, zero tokens scrubbed,
+and zero unexpired residue. Only then were the migration function, schema
+declaration and call paths, checkout field, and lifecycle-policy references
+removed. The resulting empty undeclared physical development table was closed
+separately below.
 
 ## Proof receipt
 
@@ -72,5 +76,22 @@ The final validation completed with:
 The later U-017 authority slices added identity-only atomic access receipts and current-truth refund/dispute convergence, then removed their redundant compatibility surface. A subsequently implemented subscription-event recovery queue was rejected as duplicate infrastructure: processing failures already remain non-2xx for Stripe retry, while the retained idempotent convergence path re-reads current provider truth. Its verified-empty undeclared `stripeBillingEvents` table was deleted from development after a second zero-row and zero-reference check.
 
 Paid-member cancellation authority is now also deployed on staging at `86c4aa1a`. The legacy immediate-leave mutation rejects paid memberships before local mutation. The member control schedules provider cancellation at period end, re-reads Stripe, and feeds that snapshot through the existing lifecycle projector; free/manual leave and manager removal remain separate and unchanged. Provider failure cannot change local state, duplicate requests do not repeat the provider update, provider-confirmed absence converges terminally, and scheduled cancellation retains access through the canonical period end. The focused paid-access suite now has 28 passing cases, the 37-step foundation gate, web/Convex typechecks, production build, bundle budget, exact-build signed-in staging smoke, and an unchanged production marker all pass.
+
+### Physical table closure receipt (2026-07-22)
+
+Before deletion, an explicit query against development deployment
+`quick-porcupine-949` reported no documents in `purchaseClaims`, while the
+physical table inventory still listed it. Repository revalidation found no live
+schema or runtime call path; the remaining references were historical
+documentation/snapshots and retired-event assertions in a contract proof. The
+authenticated Convex dashboard independently identified `polynet`,
+`Development (Cloud)`, and `quick-porcupine-949`, showed the table as empty, and
+returned `Table deleted.` after the table-only operation.
+
+The post-deletion CLI inventory no longer lists `purchaseClaims`. The 28-case
+paid-access suite, 15-case checkout-start suite, and 6-case subscription-event
+convergence suite pass. At deletion time, the staging web marker remained
+`e1af0c481d2235ac2f7e71d089a76c03634bfa93`; production remained the separate build
+`a936dee72a65f91723f332779390210e4cf783f0`.
 
 Remaining work is one real staging checkout followed by this cancellation path and separate creator-settlement proof. Reintroducing a browser claim flow or another recovery engine is not part of that work.
