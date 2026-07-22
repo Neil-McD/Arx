@@ -91,7 +91,7 @@ This closes the observed advisory set; it does not make dependency risk permanen
 
 - `npm ci` still emits non-advisory deprecation warnings for `@hey-api/client-fetch@0.10.2` and `glob@10.5.0`. They are upstream transitive hygiene debt, not a reason to replace reachable provider capability inside this slice.
 - The legacy Daytona stage-identity proof is hard-coded to obsolete June worktree names. The canonical semantic-platform staging guards pass; the obsolete proof is a deletion/consolidation candidate under F-044.
-- Audit, typecheck, build, and provider smoke are not yet mandatory branch-protection gates. F-043 remains the next security-reliability control-plane slice.
+- Root/web/preview audits, web typecheck, production build, and bundle budget now run automatically in canonical CI. Provider smoke remains a staging/release proof; a critical browser journey and account-supported required-check rules remain open under F-043.
 - Existing large web bundles remain F-040/F-043 debt and were not increased or redesigned here.
 
 ## Slice score
@@ -108,4 +108,4 @@ These scores apply to this dependency-security boundary, not to the whole platfo
 
 ## Next causal slice
 
-Enforce the already-proven dependency audit, web typecheck, production build, and smallest critical browser/runtime journey in canonical CI. Only after the enforcement surface is minimal and non-duplicative should work return to the remaining U-017 money-event convergence.
+Finish F-043 with one bounded critical browser/runtime journey and enable required-check enforcement when the repository account supports it. The audit, web typecheck, production build, and bundle budget are already automatic and should not be duplicated. Only after that smallest remaining proof should work return to the remaining U-017 money-event convergence.
