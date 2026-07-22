@@ -28,7 +28,7 @@ The removed executor established two requirements for its eventual replacement:
 
 The retired mutation touched legacy `communityChatMessages` but not canonical interaction roots/replies. The schema declares moderation events `privacy_purge_requested` and `privacy_purged`, while no first-party privacy purge workflow was found. That is an unfinished replacement lifecycle, not a safe retention policy.
 
-The generated policy now names every table, but 41 user-reference edges still lack the indexes needed for bounded execution. Some rows correctly require retention; coverage vocabulary is not yet execution or proof.
+The generated policy names every table and its contract proof owns the current coverage counts. Some direct user-reference edges still require bounded indexes, while other rows correctly require retention; coverage vocabulary is not yet execution or behavioral proof.
 
 The replacement policy still needs an explicit rule for DM attachments embedded in `contentJson`. The retired executor did not visibly clean their storage objects; this remains a historical storage-leak inference until attachment representation and live prevalence are checked.
 

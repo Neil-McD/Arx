@@ -2,19 +2,29 @@
 
 Status: planning authority only. Runtime deletion remains quarantined.
 
-Policy version: `account-lifecycle-v1`
+Current policy version: `account-lifecycle-v3`
 
 Code authority: `convex/accountLifecyclePolicy.ts`
 
 Drift proof: `scripts/account_lifecycle_policy_contract_proof.ts`
 
-Schema baseline: containment commit `6e603244b6a28892494e8949655419e1e17ad391`
+Historical containment baseline: commit `6e603244b6a28892494e8949655419e1e17ad391`
 
 ## Irreducible job
 
 Delete one person's private account state without deleting another person's history, corrupting community-owned value, erasing required financial/legal evidence, leaking provider credentials, orphaning storage, or allowing purged information to reappear through derived intelligence.
 
 Account deletion is not authored-content deletion. The first severs an identity and private state. The second is a separate explicit privacy operation that may remove content and must propagate through archives, evidence, retrieval, and intelligence.
+
+## C2 lifecycle boundaries
+
+C2 contains three different destructive lifecycles:
+
+1. **Account identity deletion** severs one person's account and private state while preserving shared and community-owned continuity.
+2. **Authored-content privacy purge** removes selected content and propagates the purge through archives, evidence, retrieval, and derived intelligence without implicitly deleting the account.
+3. **Community deletion** removes community-owned state while reconciling access, billing, providers, storage, and retained evidence under a separate community ownership policy.
+
+They may share small checkpoint and receipt mechanics. They must not share ownership semantics or collapse into one generic deletion executor.
 
 ## Non-negotiable invariants
 
@@ -31,18 +41,11 @@ Account deletion is not authored-content deletion. The first severs an identity 
 11. The account root is finalized last, after an orphan and invariant audit.
 12. A terminal receipt cannot claim success unless all required phases and external effects are proven complete.
 
-## Schema coverage baseline
+## Schema coverage authority
 
-The v1 proof mechanically extracts the current Convex schema and compares it with the declarative policy:
+`convex/accountLifecyclePolicy.ts` and `scripts/account_lifecycle_policy_contract_proof.ts` are the only current schema-count authority. Narrative documents must not maintain a second manual registry.
 
-| Surface | Count | Required treatment |
-| --- | ---: | --- |
-| schema tables | 124 | every table has exactly one policy |
-| direct user-ID fields | 122 | every edge inherits or overrides a field disposition |
-| tables with direct user-ID fields | 106 | no table is inferred safe from its name |
-| direct edges without a user-first index | 41 | each declares `index_required` or a bounded `parent_cascade` |
-| opaque JSON/`v.any()` fields | 26 | each table declares opaque-data handling |
-| storage-ID fields | 7 | each declares private deletion or shared preservation |
+At the 2026-07-22 C2 truth-closure receipt, the proof covers 125 schema tables, 120 direct user-ID fields, 26 opaque fields, and seven storage-ID fields. It identifies 40 direct edges without a user-first index: 33 require a new bounded index and seven use a declared bounded parent cascade.
 
 The remaining tables are still classified because they may be connected indirectly through a community, conversation, app, resource, thread, run, evidence record, or parent object.
 
@@ -160,13 +163,13 @@ A direct user reference is executable only when one of these is true:
 1. a schema index begins with that exact user field; or
 2. the policy names a bounded parent cascade whose parent is itself indexed by the user.
 
-The current contract identifies 41 edges that do not have a user-first index. Most require new indexes. A small number are intentionally reached through a bounded parent, such as partner children through `builderPartners` and private workspace snapshots through their owned project.
+The current proof identifies 40 edges that do not have a user-first index. Thirty-three require new indexes; seven are intentionally reached through a bounded parent, such as partner children through `builderPartners` and private workspace snapshots through their owned project.
 
 No executor may replace a missing index with `.collect()`, a global scan, or a hard-coded list of “known” referencing tables.
 
 ## Execution blockers
 
-1. Builder Partner v3 must version prospective economics before partner-finance retention runs.
+1. Historical Builder Partner obligations must preserve their recorded policy and economic basis; account deletion cannot rewrite or erase them.
 2. Finance/legal/security/provider/backup retention owners must approve explicit TTLs and bases.
 3. Every `index_required` edge must receive its bounded index.
 4. Required actor references need nullable or explicit tombstone schema.
@@ -178,16 +181,18 @@ These blockers prevent execution, not policy classification. Undecided behavior 
 
 ## Implementation order
 
-1. **This slice:** declarative policy, schema drift proof, and documentation only.
-2. Builder Partner v3 policy/terms/ledger migration, preserving historical obligations.
-3. Lifecycle request/freeze/phase/receipt substrate with no destructive executor.
-4. Private-state and external-provider executors.
-5. DM participant-departure and shared tombstone executor.
-6. Community-content attribution and ownership executor.
-7. Evidence/intelligence privacy propagation.
-8. Finance/legal/audit minimization and retention enforcement.
-9. Invariant audit, root-last finalizer, and terminal receipt.
-10. Re-enable self-service deletion only after full interruption, scale, orphan, provider, and cross-user behavioral proofs.
+1. **Complete groundwork:** declarative account policy, schema drift proof, destructive-executor quarantine, and prospective Builder Partner v3 economics.
+2. **Complete in C2.0A:** reconcile stale policy/document/blocker truth and separate the three lifecycle jobs.
+3. Classify the anonymous-user cleanup without executing it.
+4. Build an account-specific request/preflight/checkpoint/receipt substrate with no destructive executor or public UI.
+5. Add access-freeze, private-state, and external-provider executors behind interruption fixtures.
+6. Add DM participant-departure and shared tombstone execution.
+7. Add community-content attribution and ownership execution.
+8. Add evidence/intelligence privacy propagation.
+9. Add finance/legal/audit minimization and retention enforcement.
+10. Add invariant audit, root-last finalizer, and terminal receipt.
+11. Define and build the separate community lifecycle from its own ownership matrix.
+12. Re-enable self-service deletion only after full interruption, scale, orphan, provider, and cross-user behavioral proofs.
 
 ## Proof required before re-enabling deletion
 
@@ -215,6 +220,10 @@ The proof must demonstrate retry safety, bounded reads, other-party/community co
 | guess legal/security TTLs in product code | 9 | forbidden |
 | build a generic workflow engine before domain semantics | 8 | forbidden |
 | typed declarative policy plus schema drift proof | 1 | keep |
+
+## C2 non-goals
+
+C2 does not authorize a generic workflow engine, public deletion controls, an operator dashboard, an automation framework, one cross-domain deletion mutation, guessed retention periods, or automatic destruction of shared authored content.
 
 ## Non-effects of this contract
 

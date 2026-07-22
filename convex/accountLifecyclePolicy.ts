@@ -665,7 +665,7 @@ export const ACCOUNT_LIFECYCLE_OPAQUE_FIELD_KINDS = Object.freeze({
 });
 
 export const ACCOUNT_LIFECYCLE_EXECUTION_BLOCKERS = Object.freeze([
-  "Builder Partner v3 must version prospective economics before finance retention executes.",
+  "Historical Builder Partner obligations must retain their recorded policy and economic basis; account deletion cannot rewrite or erase them.",
   "Finance, legal, security, diagnostic, backup, and provider retention durations need named owners and approved TTLs.",
   "Every index_required edge must receive a bounded schema index before its executor can run.",
   "Required actor references need nullable or explicit tombstone schema before shared anonymization.",

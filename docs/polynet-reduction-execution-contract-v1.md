@@ -165,8 +165,8 @@ Exactly one milestone or bounded sub-slice may be `IN_PROGRESS`.
 | ID | Outcome | Status | Exit boundary |
 | --- | --- | --- | --- |
 | C0 | Reconcile and adopt one architecture thesis | `COMPLETE` | one repository contract distinguishes implemented, next, proposed, and deferred architecture without attachment/chat dependency |
-| C1 | Finish paid-access proof and ordinary creator settlement | `IN_PROGRESS` | one live staging checkout/cancellation journey and one receipted Connect settlement authority |
-| C2 | Complete resumable deletion and privacy lifecycles | `PLANNED` | interruption-safe phases, external revocation, privacy propagation, invariant audit, and root-last finalization |
+| C1 | Finish paid-access proof and ordinary creator settlement | `DEFERRED_ACCEPTED` | implementation accepted for sequencing; the unperformed live checkout/cancellation and Connect-settlement evidence remains explicit under U-017 |
+| C2 | Complete resumable deletion and privacy lifecycles | `IN_PROGRESS` | interruption-safe phases, external revocation, privacy propagation, invariant audit, and root-last finalization |
 | C3 | Finish canonical resource, interaction, and intelligence migrations | `PLANNED` | one authority per concern and zero compatibility reads/writes through an observation window |
 | C4 | Guarantee scheduler fairness and bounded operations | `PLANNED` | every eligible object eventually receives service across caps and restarts; operator work is bounded |
 | C5 | Collapse capability, transport, and public-function duplication | `PLANNED` | one authority/executor/receipt owner per semantic operation with thin versioned adapters |
@@ -313,8 +313,10 @@ At the end of every future slice:
 5. confirm whether staging, production, data, or configuration changed.
 
 Allowed milestone statuses are `PLANNED`, `IN_PROGRESS`, `BLOCKED`,
-`COMPLETE`, and `SUPERSEDED`. `PLANNED_LAST` is permitted only for an explicit
-human sequencing decision. Avoid percentages and “mostly complete.”
+`COMPLETE`, and `SUPERSEDED`. `DEFERRED_ACCEPTED` records an explicit human
+decision to move on without representing the missing exit evidence as complete.
+`PLANNED_LAST` is permitted only for an explicit human sequencing decision.
+Avoid percentages and “mostly complete.”
 
 ## 10. Current next action
 
@@ -342,8 +344,17 @@ checkout-start, and subscription-convergence cases pass. At deletion time, the
 staging web marker remained `e1af0c481d2235ac2f7e71d089a76c03634bfa93`, and
 production remained untouched at `a936dee72a65f91723f332779390210e4cf783f0`.
 
-The next separately planned slice is C1.3: one real staging checkout followed by
-the staged cancellation path, plus a separate receipted Connect settlement.
-This is acceptance proof, not permission for a generalized recovery mechanism,
-settlement rewrite, Builder Partner work, user-facing expansion, or production
-move.
+The user explicitly accepted deferring C1.3 on 2026-07-22 and moving to C2.
+U-017 continues to own the missing real staging checkout/cancellation and
+Connect-settlement receipts; this evidence is deferred, not complete.
+
+C2 is now active. C2.0A is complete in the canonical staging worktree: the
+account policy and documents agree, account deletion, authored-content purge,
+and community deletion are separate jobs, and the resolved Builder Partner v3
+prerequisite is gone. Focused policy, structural-quarantine, and behavioral-
+quarantine proofs pass. The slice changed no schema, runtime behavior, UI,
+staging data, providers, or production.
+
+The next separately planned slice is C2.0B: determine whether the unowned,
+hard-coded anonymous-user cleanup should be deleted, quarantined, or migrated.
+It may inspect references but may not execute deletion.
