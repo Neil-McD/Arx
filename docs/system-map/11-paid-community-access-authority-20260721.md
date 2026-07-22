@@ -55,8 +55,18 @@ retained_unexpired_checkout_tokens: 0
 
 An immediate idempotent rerun reported zero claims scanned, zero tokens scrubbed, and zero unexpired residue. Only then were the migration function, table, schema field, and lifecycle-policy references removed.
 
-## Proof boundary
+## Proof receipt
 
-`communityPaidAccessAuthority.test.ts` exercises atomic activation, replay, terminal non-reactivation, block rollback, duplicate fail-closed behavior, owner rejection, and observational finalization. Existing checkout-start, subscription-event convergence, membership-authority, web typecheck, Convex typecheck, full foundation gate, and staging deployment proofs remain required before this receipt is final.
+`communityPaidAccessAuthority.test.ts` passes seven behavioral cases covering atomic activation, non-granting pending behavior, replay, terminal non-reactivation, block rollback, duplicate membership/provider identity, owner rejection, and observational finalization. The checkout-start, subscription-event convergence, and membership-authority suites also pass.
+
+The final validation completed with:
+
+- Convex and web TypeScript checks;
+- the 36-step foundation baseline gate;
+- a production-mode Vite build;
+- final staging Convex deployment with all four `purchaseClaims` indexes deleted;
+- `polynet-staging.vercel.app/version.json` matching the pushed staging `HEAD` and Sentry release;
+- a signed-in Chrome smoke proving the normal community session loads, `/claim` canonicalizes to `/`, Account settings exposes no claim/pending-purchase controls, the checkout-success route remains an observational boundary, and no browser warnings or errors appear;
+- a production-marker recheck proving `polynet.ai` remained on its separate pre-existing build.
 
 The remaining U-017 work is narrower: durable atomic webhook receipts, refund/dispute ordering, creator settlement, and provider-outage convergence. Reintroducing a browser claim flow is not part of that work.
