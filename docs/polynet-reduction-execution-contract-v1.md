@@ -318,14 +318,23 @@ human sequencing decision. Avoid percentages and “mostly complete.”
 
 ## 10. Current next action
 
-C1.1 is the authorized recovery-queue deletion slice. Remove the identity-only
-queue introduced at `31cacf3f` after proving its development table is empty.
-Retain Stripe signature verification, current-provider convergence, atomic
-community-access effects, idempotency, failure audit, and a non-2xx response on
-processing failure.
+C1.1 is complete on canonical staging. The duplicate subscription-event recovery
+queue remains deleted, and its verified-empty undeclared `stripeBillingEvents`
+development table was removed from `quick-porcupine-949`. Stripe signature
+verification, current-provider convergence, atomic community-access effects,
+idempotency, failure audit, and non-2xx retry authority remain intact.
 
-After the deletion is proved and deployed on canonical staging, the only next
-C1 work is a separately planned live checkout/cancellation and Connect
-settlement acceptance journey. No generalized recovery mechanism, settlement
-rewrite, Builder Partner work, user-facing expansion, or production move is
-authorized by this contract.
+C1.2 is also complete on staging at `86c4aa1a`. Free/manual members retain the
+existing immediate leave path. Paid members can no longer use that local-only
+path: it fails closed before mutation and the member-facing control instead asks
+Stripe to stop renewal at period end, re-reads provider truth, and projects it
+through the existing canonical subscription lifecycle. Access remains active
+through the provider period; retries are idempotent; provider failure leaves
+local state unchanged; terminal provider truth revokes access. No table, queue,
+cron, portal, ledger, checkout, charge, or Builder Partner behavior was added.
+
+The next separately planned slice is C1.3: one real staging checkout followed by
+the staged cancellation path, plus a separate receipted Connect settlement.
+This is acceptance proof, not permission for a generalized recovery mechanism,
+settlement rewrite, Builder Partner work, user-facing expansion, or production
+move.
