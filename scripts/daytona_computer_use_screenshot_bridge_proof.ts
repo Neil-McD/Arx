@@ -235,7 +235,7 @@ assert.match(
 
 assert.match(
   runtimeTurnHandlers,
-  /workerRuntimeToolBridgeRequired = true[\s\S]*resolveCodexHarnessToolPolicy\(\{[\s\S]*workspaceServeAvailable: workerRuntimeToolBridgeRequired[\s\S]*computerAdaptersAvailable: workerRuntimeToolBridgeRequired[\s\S]*workerPlatformTools\.length > 0 \|\| workerRuntimeToolBridgeRequired[\s\S]*buildPolynetCodexWorkerToolTarget[\s\S]*runtime_tool_names: codexHarnessToolPolicy\.runtimeAdapterToolNames/,
+  /workerRuntimeToolBridgeRequired = true[\s\S]*resolveCodexHarnessToolPolicy\(\{[\s\S]*workspaceServeAvailable: workerRuntimeToolBridgeRequired[\s\S]*computerAdaptersAvailable: workerRuntimeToolBridgeRequired[\s\S]*workerPlatformTools\.length > 0\s*\|\|\s*workerRuntimeToolBridgeRequired[\s\S]*buildPolynetCodexWorkerToolTarget[\s\S]*runtime_tool_names: codexHarnessToolPolicy\.runtimeAdapterToolNames/,
   "Daytona worker turns must mint the tool bridge even when no PolyNet platform tools are projected",
 );
 
