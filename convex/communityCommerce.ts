@@ -1402,6 +1402,7 @@ export const startPublicCommunityCheckout = action({
             await stripe.checkout.sessions.create(
               {
                 mode: "subscription",
+                payment_method_types: ["card"],
                 customer: attempt.providerCustomerId,
                 success_url: attempt.successUrl,
                 cancel_url: attempt.cancelUrl,

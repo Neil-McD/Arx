@@ -11,6 +11,10 @@ const checkoutHook = read("apps/web/src/controllers/useWebPublicCheckoutStart.ts
 const checkoutAction = read("apps/web/src/publicCommunityCheckoutStartAction.ts");
 const funnelActions = read("apps/web/src/controllers/useWebPublicFunnelActions.ts");
 const app = read("apps/web/src/App.tsx");
+const checkoutStart = commerce.slice(
+  commerce.indexOf("export const startPublicCommunityCheckout = action({"),
+  commerce.indexOf("export const requirePublicCommunityCheckoutNotBlockedInternal"),
+);
 
 assert.match(schema, /checkoutAttemptId:\s*v\.optional\(v\.string\(\)\)/);
 assert.match(schema, /checkoutAttemptExpiresAt:\s*v\.optional\(v\.number\(\)\)/);
@@ -21,13 +25,8 @@ assert.match(
 
 assert.match(commerce, /checkoutAttemptId:\s*v\.string\(\)/);
 assert.match(commerce, /authSubject:\s*v\.string\(\)/);
-assert.doesNotMatch(
-  commerce.slice(
-    commerce.indexOf("export const startPublicCommunityCheckout = action({"),
-    commerce.indexOf("export const requirePublicCommunityCheckoutNotBlockedInternal"),
-  ),
-  /userId:\s*v\.optional/,
-);
+assert.doesNotMatch(checkoutStart, /userId:\s*v\.optional/);
+assert.match(checkoutStart, /payment_method_types:\s*\["card"\]/);
 assert.match(commerce, /reservePublicCommunityCheckoutAttemptInternal/);
 assert.match(commerce, /\.take\(2\)/);
 assert.match(commerce, /requireUniquePublicCommunityCheckoutAttempt/);
