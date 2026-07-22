@@ -18,7 +18,7 @@ The bounded aggregate audit resolved or narrowed these questions for the isolate
 | U-008 | sessions exceed 5,000; bounded prefix is dominated by revoked/replacement rows, but total and chain validity remain unknown |
 | U-009 | resolved at the code-contract level: unconfirmed bridge/local-revocation failures preserve the browser session and cookie; confirmed local revocation precedes bounded best-effort provider logout; live provider behavior remains configuration-specific |
 | U-011 | resolved at ownership level: delete private state, anonymize shared state, preserve minimum finance/legal evidence, and propagate explicit privacy purges; exact TTLs remain open |
-| U-013 | 56 anonymous subjects exist; creator/reference lifecycle remains unknown |
+| U-013 | 56 anonymous subjects remain unchanged; no active creator path exists and the unowned cleanup executor/tooling are deleted, while reference state and final disposition remain open |
 | U-015 | resolved: retain Builder Partner as a secondary capability; prospective 4% community-only economics; no paid-tool commissions |
 | U-016 | active/payable/pending partner state and aggregate staging amounts are known; old obligations are preserved, while exact legal lineage and retention treatment remain open |
 | U-019 | 67 legacy messages and links remain; runtime read frequency remains unknown |
@@ -48,7 +48,7 @@ Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-stagin
 | U-010 | Which table fields reference users, communities, DMs, storage, or external objects but lack lifecycle policy? | deletion completeness | generated schema/source ownership matrix |
 | U-011 | What should survive account deletion for DMs, community contributions, evidence, finance, legal, and audit? **Resolved at the ownership level; exact finance/legal/security TTLs remain open.** | current algorithm can now be judged against a stable ownership policy | decision record plus field-level lifecycle matrix |
 | U-012 | Do DM messages embed storage references and are any orphaned? | storage privacy/cost | encoding inventory and orphan counts, no content |
-| U-013 | How many `anon:` users exist and what still creates them? | cleanup may be obsolete or dangerous | counts by age/creator path/reference state |
+| U-013 | Which references still point to the 56 legacy `anon:` roots, and should each root be migrated, expired, retained, or later processed through C2? The active creator path is gone and the generic cleanup is deleted. | prevents unsafe root deletion while closing legacy identity residue | schema-derived redacted reference counts followed by an expectation-locked decision; no generic executor |
 | U-014 | Can account/community deletion resume after interruption without orphaning or double external effects? | destructive robustness | isolated large synthetic fixture |
 
 ## Money and canonical migrations

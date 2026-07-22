@@ -355,6 +355,12 @@ prerequisite is gone. Focused policy, structural-quarantine, and behavioral-
 quarantine proofs pass. The slice changed no schema, runtime behavior, UI,
 staging data, providers, or production.
 
-The next separately planned slice is C2.0B: determine whether the unowned,
-hard-coded anonymous-user cleanup should be deleted, quarantined, or migrated.
-It may inspect references but may not execute deletion.
+C2.0B is complete on the canonical staging lane. The unowned anonymous-user
+hard-delete mutation, production-default audit script, generated API surface,
+and unrelated proof coupling are deleted after zero-caller and zero-schedule
+proof. All 56 development roots remain unchanged, and U-013 retains their
+reference/disposition decision. No production state or surface changed.
+
+The next separately planned slice is C2.1: the smallest account-specific,
+internal-only request/preflight/checkpoint/receipt substrate. It must have zero
+destructive effects and no public UI.

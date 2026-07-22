@@ -64,8 +64,6 @@ const nativeToolProtocol = read("shared/nativeToolProtocol.ts");
 const openRouterTransport = read("convex/openRouterNativeTransport.ts");
 const runtimeTurnResolution = read("convex/runtimeTurnResolution.ts");
 const cognitionContract = read("docs/community-agent-cognition-contract-v1.md");
-const anonymousUserCleanup = read("convex/anonymousUserCleanup.ts");
-const communityLifecycle = read("convex/communityLifecycle.ts");
 const profiles = read("convex/profiles.ts");
 const runtimePrompt = read("shared/runtimePrompt.ts");
 const timelineUi = read("shared/runtimeTimelineUi.ts");
@@ -495,16 +493,6 @@ assert.match(
   "global channel lookup must fail closed if the one-channel-per-member invariant is violated",
 );
 assert.match(
-  communityLifecycle,
-  /tombstoneLegacyMemberAgentChannelsForDeletedCommunity[\s\S]*\.withIndex\("by_community"[\s\S]*status: "closed"[\s\S]*activeEpisodeId: undefined[\s\S]*communityDeletedAt: args\.nowMs/,
-  "community deletion must disable only legacy community channels without deleting private history",
-);
-assert.match(
-  communityLifecycle,
-  /await tombstoneLegacyMemberAgentChannelsForDeletedCommunity\([\s\S]*await ctx\.db\.delete\(community\._id/,
-  "legacy channel tombstones must commit before the community record is removed",
-);
-assert.match(
   threads,
   /if \(explicitMessageKey\)[\s\S]*return existingByMessageKey;[\s\S]*requireWritableMemberAgentThread/,
   "idempotent retries may resolve an existing user message after rotation without reopening the episode",
@@ -513,11 +501,6 @@ assert.equal(
   (threads.match(/requireWritableMemberAgentThread\(\{/g) ?? []).length,
   4,
   "both message creation paths plus upload-ticket issuance and claims must reject retained legacy episodes",
-);
-assert.match(
-  anonymousUserCleanup,
-  /memberAgentChannels[\s\S]*by_owner[\s\S]*ownerId/,
-  "anonymous-user cleanup must treat a member-agent channel as a live user reference",
 );
 assert.match(
   threads,
@@ -972,7 +955,6 @@ assert.match(
 assert.equal(supportsModelImageInput("gpt-5.6-sol"), true);
 assert.equal(supportsModelImageInput("gpt-oss-120b-free"), false);
 assert.equal(supportsModelImageInput("unknown-future-model"), false);
-assert.match(packageJson, /"@hey-api\/openapi-ts": "0\.97\.3"[\s\S]*"js-yaml": "4\.2\.0"/);
 assert.match(
   runtimeTurnResolution,
   /member_agent_image_model_unsupported[\s\S]*member_agent_image_runtime_unsupported[\s\S]*hasMemberAgentImageInput && runtimeExecutionMode !== "agentic"/,

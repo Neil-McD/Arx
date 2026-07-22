@@ -183,7 +183,7 @@ These blockers prevent execution, not policy classification. Undecided behavior 
 
 1. **Complete groundwork:** declarative account policy, schema drift proof, destructive-executor quarantine, and prospective Builder Partner v3 economics.
 2. **Complete in C2.0A:** reconcile stale policy/document/blocker truth and separate the three lifecycle jobs.
-3. Classify the anonymous-user cleanup without executing it.
+3. **Complete in C2.0B:** delete the unowned anonymous-user executor/tooling without executing it or changing the 56 development roots.
 4. Build an account-specific request/preflight/checkpoint/receipt substrate with no destructive executor or public UI.
 5. Add access-freeze, private-state, and external-provider executors behind interruption fixtures.
 6. Add DM participant-departure and shared tombstone execution.

@@ -46,9 +46,9 @@ request -> block new writes -> inventory by ownership policy -> external revoke
 
 ## Anonymous-user cleanup
 
-`convex/anonymousUserCleanup.ts` identifies accounts whose subject begins `anon:`. Its internal cleanup scans users and repeatedly full-scans a hard-coded list of referencing tables to decide safety. No scheduled or first-party runtime owner was found in the static snapshot. The reference list is necessarily fragile as tables evolve; absence from the list is not proof of safe deletion.
+The generic cleanup executor and its audit script are deleted. They had no runtime caller or scheduled invocation, originated as a one-time migration, and treated absence from a manually maintained 55-edge reference list as permission to hard-delete a user root even though the current schema contains 120 direct user-reference edges.
 
-This looks like legacy/manual maintenance residue. Before deletion, count anonymous rows, identify their creation path, compare every user foreign-key field against the cleanup list, and decide whether the accounts should be migrated, expired, or retained.
+The 56 development rows remain unchanged. No active creator path exists in current source, but their reference state and final disposition remain U-013. Any eventual data change requires a schema-derived, redacted, expectation-locked migration or the completed account lifecycle; there is no retained generic deletion capability.
 
 ## Complexity and failure posture
 
@@ -57,7 +57,7 @@ This looks like legacy/manual maintenance residue. Before deletion, count anonym
 | account deletion | quarantined after verified actor resolution; zero writes | bounded phases with retry and terminal audit |
 | DM cleanup | retired destructive executor cannot run; replacement semantics absent | participant departure plus policy-driven redaction |
 | community deletion | quarantined after verified owner resolution; zero writes/schedules | community-keyed inventory, cursor, tombstone, finalizer |
-| anonymous cleanup | `O(users × scanned reference tables)` with incomplete static foreign-key list | indexed lifecycle state or explicit one-time migration |
+| anonymous roots | generic executor removed; 56 development roots remain | schema-derived evidence, then explicit migration or account lifecycle |
 | audit/diagnostic retention | unbounded growth; deletion policy not found | time/need-based retention with preserved minimal receipts |
 
 ## Reduction candidates
@@ -69,7 +69,7 @@ This looks like legacy/manual maintenance residue. Before deletion, count anonym
 | delete every DM when one participant deletes an account | `DELETE (deferred/dead)` complete | replacement `HARDEN` | 10 | the retired behavior violated shared ownership; replacement semantics remain open |
 | delete community resources/events by contributor ID | `DELETE (deferred/dead)` complete | replacement `HARDEN` | 9 | quarantine preserves community continuity until anonymization exists |
 | privacy purge event states without an implemented workflow | `KEEP (MVP core)` | `HARDEN`, `MIGRATE_THEN_DELETE` | 8 | accepted policy requires propagation; state vocabulary alone is false assurance |
-| anonymous-user cleanup hard-coded scans | `DECISION REQUIRED (user confirmation)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 8 | likely residue, but live anonymous accounts and creators are unknown |
+| anonymous-user cleanup hard-coded scans | `DELETE (deferred/dead)` complete | data decision remains U-013 | 9 | unowned migration machinery cannot safely infer root deletion from an incomplete reference list |
 
 ## Proof required before any destructive change
 
