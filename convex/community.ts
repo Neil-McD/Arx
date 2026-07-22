@@ -6,8 +6,6 @@ import {
   getCommunityMemberBillingHistory as getCommunityMemberBillingHistoryImpl,
   getCommunityMemberSettings as getCommunityMemberSettingsImpl,
   getCommunityAnalyticsSnapshot as getCommunityAnalyticsSnapshotImpl,
-  getCommunityAnalyticsSummary as getCommunityAnalyticsSummaryImpl,
-  listCommunityFunnelVisitCreatedAtRows as listCommunityFunnelVisitCreatedAtRowsImpl,
   listCommunityPricePoints as listCommunityPricePointsImpl,
   leaveCommunity as leaveCommunityImpl,
   listCommunityJoinRequests as listCommunityJoinRequestsImpl,
@@ -15,7 +13,6 @@ import {
   listCommunityMemberships as listCommunityMembershipsImpl,
   listCommunityMembershipsAdmin as listCommunityMembershipsAdminImpl,
   listCommunityMembershipsAdminPage as listCommunityMembershipsAdminPageImpl,
-  listCommunityRevenueSeries as listCommunityRevenueSeriesImpl,
   banCommunityMember as banCommunityMemberImpl,
   removeCommunityMember as removeCommunityMemberImpl,
   saveCommunityMemberSettings as saveCommunityMemberSettingsImpl,
@@ -220,13 +217,10 @@ export const banCommunityMember = banCommunityMemberImpl;
 export const unbanCommunityUser = unbanCommunityUserImpl;
 export const getCommunityMemberSettings = getCommunityMemberSettingsImpl;
 export const getCommunityAnalyticsSnapshot = getCommunityAnalyticsSnapshotImpl;
-export const getCommunityAnalyticsSummary = getCommunityAnalyticsSummaryImpl;
-export const listCommunityFunnelVisitCreatedAtRows = listCommunityFunnelVisitCreatedAtRowsImpl;
 export const saveCommunityMemberSettings = saveCommunityMemberSettingsImpl;
 export const listCommunityPricePoints = listCommunityPricePointsImpl;
 export const setCommunityFreeAccessMode = setCommunityFreeAccessModeImpl;
 export const leaveCommunity = leaveCommunityImpl;
-export const listCommunityRevenueSeries = listCommunityRevenueSeriesImpl;
 export const listCommunityResources = listCommunityResourcesImpl;
 export const listCommunityResourceModules = listCommunityResourceModulesImpl;
 export const countCommunityResources = countCommunityResourcesImpl;
