@@ -28,14 +28,14 @@ No explicit retention/prune owner was found for audit/diagnostic history. Operat
 
 ## CI and proof posture
 
-The GitHub workflow has three jobs: structural Convex cut guards, dependency audits, and a 35-step foundation baseline. It does **not** install web dependencies in the foundation job or run web typecheck, production build, bundle budget, or browser journey. The repository currently has 291 script files and 253 `check:*` package commands. Structural regression evidence is extensive, but behavioral, recovery, scale, and signed-in journey evidence is comparatively thin.
+Canonical CI has three baseline jobs—Convex cut guards, low-threshold dependency audits, and the 36-step foundation baseline with web dependency install, typecheck, production build, and bundle budget. A separate staging-branch canary waits until `polynet-staging.vercel.app/version.json` equals the exact pushed SHA, then exercises the anonymous `/c/polynet` funnel in Chromium. It asserts accessible join UI and fails on browser errors, Polynet/Convex request failures, or first-party 5xxs; it performs no click, sign-in, or product mutation. Wrong-SHA rejection is exercised on every run, and browser failures produce bounded redacted artifacts.
 
-This is proof inversion: the repository is optimized to prove file shapes while launch stability depends on the web build and end-to-end authority/recovery behavior.
+The remaining proof imbalance is narrower: signed-in authority/recovery journeys, scale behavior, and provider outage convergence are still comparatively thin. Required-check enforcement is unavailable on the current private-repository account plan.
 
 ## Packages, environment, docs, and release
 
 - Root, web, and preview proxy each have a manifest/lock; root and web duplicate React/Vite/Convex/markdown dependency ownership without npm workspaces or an explicit version policy.
-- CI uses Node 20 for root/web while preview proxy declares Node 22; root/web declare no engines.
+- Root, web, preview proxy, and CI now share an explicit Node 22 policy.
 - `.env.convex.quickstart.example` duplicates/stales the primary template and instructs a development-key posture; no first-party owner was found.
 - `.env.example` uses `PLATFORM_MODEL_MAP_JSON`, while code reads `ARX_PLATFORM_MODEL_MAP_JSON`.
 - `apps/web/.env.example` documents `VITE_DAYTONA_*`, while runtime reads `VITE_WORKSPACE_*`.
@@ -53,7 +53,7 @@ This is proof inversion: the repository is optimized to prove file shapes while 
 | decompose `App.tsx` before deleting surfaces | `DECISION REQUIRED (user confirmation)` | `DELETE_FIRST` | 8 | optimizes obsolete orchestration instead of removing it |
 | operator full-community N+1 aggregation | `KEEP (MVP core)` | `BOUND`, `CONSOLIDATE` | 9 | diagnostic UI must not become an unbounded production load |
 | 253 permanently retained `check:*` commands without owners | `DECISION REQUIRED (user confirmation)` | `OBSERVE_FIRST`, `CONSOLIDATE` | 8 | proof volume is not proof quality; classify by CI/release/dev ownership |
-| web CI without typecheck/build/journey | `KEEP (MVP core)` | `HARDEN`, `REWRITE_PROOF` | 9 | launch stability is not defended by the canonical gate |
+| web CI with one exact-build anonymous journey | `KEEP (MVP core)` | `KEEP_BOUNDED` | 2 | current gate defends the shipped build and one mutation-free public boundary; additional journeys need distinct risk justification |
 | stale/duplicated env templates and flags | `DELETE (deferred/dead)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 9 | configuration drift creates false operational contracts |
 | independent root/web locks forever | `DECISION REQUIRED (user confirmation)` | `CONSOLIDATE` | 5 | may be intentional deployment isolation, but currently lacks an ownership policy |
 | product-data backup/restore as an undocumented provider assumption | `KEEP (MVP core)` | `DOCUMENT`, `PROVE` | 10 | reliability without tested recovery is a claim, not a property |

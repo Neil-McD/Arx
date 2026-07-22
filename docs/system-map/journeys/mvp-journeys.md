@@ -1,6 +1,6 @@
 # MVP Journey Reconciliation
 
-Snapshot: `67c89903add41ff9b8de20929e07429a8d98f3bc`, with later staging completion receipts reconciled below. Provider-outage convergence, unrelated signed-in journeys, and destructive recovery remain unproven.
+Snapshot: `67c89903add41ff9b8de20929e07429a8d98f3bc`, with later staging completion receipts reconciled below. The exact-build anonymous public-funnel browser boundary is proven; provider-outage convergence, signed-in browser journeys, and destructive recovery remain unproven.
 
 ## 1. Authenticate, refresh, logout, delete account
 
@@ -36,7 +36,8 @@ owner settings -> visibility/entry policy -> /c/:slug public funnel
 
 - Authority: owner mutation; funnel is a projection and never grants entry.
 - Good: Published drives Discover; Unlisted is addressable by shared slug; both remain gated.
-- Gap: route/product docs still carry old Workspace destination claims; public boundary behavior needs signed-out/signed-in staging smoke.
+- Good: the staging canary binds `/c/polynet` to the exact deployed SHA, then proves the anonymous avatar, join-gated composer projection, free instant-access policy, and enabled Join action without clicking or mutating state.
+- Gap: route/product docs still carry old Workspace destination claims; signed-in funnel continuation still needs a separate bounded staging smoke.
 
 ## 4. Visitor discovers or opens funnel, passes gate, joins
 
