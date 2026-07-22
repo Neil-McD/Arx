@@ -13,6 +13,17 @@ crons.interval(
 );
 
 crons.interval(
+  "prune community commerce event receipts",
+  {
+    hours: 1,
+  },
+  (internal as any).communityCommerce.pruneCommunityCommerceEventEffectsInternal,
+  {
+    limit: 500,
+  },
+);
+
+crons.interval(
   "process pending email outbox",
   { minutes: 5 },
   (internal as any).email.processPendingEmailOutboxInternal,

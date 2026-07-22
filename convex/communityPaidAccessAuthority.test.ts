@@ -126,6 +126,66 @@ async function completeCheckout(
   );
 }
 
+function communityAccessEventEffect(args: {
+  eventId: string;
+  eventType: string;
+  objectType: string;
+  objectId: string;
+  createdAt?: number;
+}) {
+  return {
+    providerAccountId: "platform",
+    providerEventId: args.eventId,
+    providerEventType: args.eventType,
+    providerObjectType: args.objectType,
+    providerObjectId: args.objectId,
+    livemode: false,
+    providerCreatedAt: args.createdAt ?? NOW_MS,
+  };
+}
+
+async function applyAccessEvent(
+  t: ReturnType<typeof convexTest>,
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  args: {
+    eventId: string;
+    eventType: string;
+    objectType: string;
+    objectId: string;
+    blockKind: "refund" | "dispute";
+    blockSourceProviderObjectId: string;
+    blockAction: "set" | "clear";
+    blockReason?:
+      | "subscription_refunded"
+      | "subscription_dispute_opened"
+      | "subscription_dispute_lost";
+    blockTerminal?: boolean;
+    status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
+    nowMs?: number;
+  },
+) {
+  return await t.mutation(
+    (internal as any).communityCommerce.applyCommunitySubscriptionAccessEventInternal,
+    {
+      providerSubscriptionId: fixture.providerSubscriptionId,
+      status: args.status ?? "active",
+      blockKind: args.blockKind,
+      blockSourceProviderObjectId: args.blockSourceProviderObjectId,
+      blockAction: args.blockAction,
+      blockReason: args.blockReason,
+      blockTerminal: args.blockTerminal,
+      eventEffect: communityAccessEventEffect({
+        eventId: args.eventId,
+        eventType: args.eventType,
+        objectType: args.objectType,
+        objectId: args.objectId,
+        createdAt: args.nowMs,
+      }),
+      nowMs: args.nowMs ?? NOW_MS + 10,
+    },
+  );
+}
+
 describe("paid community access authority", () => {
   test("verified checkout completion atomically creates membership and one subscription", async () => {
     const t = convexTest(schema, modules);
@@ -192,17 +252,17 @@ describe("paid community access authority", () => {
     const fixture = await createFixture(t, "terminal");
     await completeCheckout(t, fixture);
 
-    await t.mutation(
-      (internal as any).communityCommerce.syncCommunitySubscriptionLifecycleInternal,
-      {
-        communityId: fixture.communityId,
-        userId: fixture.userId,
-        providerSubscriptionId: fixture.providerSubscriptionId,
-        status: "ended",
-        revokedReason: "subscription_refunded",
-        nowMs: NOW_MS + 10,
-      },
-    );
+    await applyAccessEvent(t, fixture, {
+      eventId: "evt_terminal_refund",
+      eventType: "refund.updated",
+      objectType: "refund",
+      objectId: "re_terminal",
+      blockKind: "refund",
+      blockSourceProviderObjectId: "ch_terminal",
+      blockAction: "set",
+      blockReason: "subscription_refunded",
+      blockTerminal: true,
+    });
     await completeCheckout(t, fixture, NOW_MS + 20);
 
     const state = await t.run(async (ctx) => ({
@@ -223,7 +283,239 @@ describe("paid community access authority", () => {
       active: false,
       revokedReason: "subscription_refunded",
     });
-    expect(state.subscription).toMatchObject({ status: "ended" });
+    expect(state.subscription).toMatchObject({ status: "active" });
+  });
+
+  test("duplicate and reordered dispute events converge through one explicit block", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t, "dispute-convergence");
+    await completeCheckout(t, fixture);
+
+    const opened = {
+      eventId: "evt_dispute_opened",
+      eventType: "charge.dispute.created",
+      objectType: "dispute",
+      objectId: "dp_convergence",
+      blockKind: "dispute" as const,
+      blockSourceProviderObjectId: "dp_convergence",
+      blockAction: "set" as const,
+      blockReason: "subscription_dispute_opened" as const,
+      blockTerminal: false,
+      nowMs: NOW_MS + 10,
+    };
+    await applyAccessEvent(t, fixture, opened);
+    await applyAccessEvent(t, fixture, opened);
+    await applyAccessEvent(t, fixture, {
+      ...opened,
+      eventId: "evt_dispute_won",
+      eventType: "charge.dispute.closed",
+      blockAction: "clear",
+      blockReason: undefined,
+      nowMs: NOW_MS + 20,
+    });
+
+    const state = await t.run(async (ctx) => ({
+      membership: await ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community_user", (q) =>
+          q.eq("communityId", fixture.communityId).eq("userId", fixture.userId),
+        )
+        .unique(),
+      blocks: await ctx.db.query("communitySubscriptionAccessBlocks").collect(),
+      receipts: await ctx.db.query("communityCommerceEventEffects").collect(),
+      community: await ctx.db.get(fixture.communityId),
+    }));
+    expect(state.membership).toMatchObject({ active: true });
+    expect(state.membership?.revokedReason).toBeUndefined();
+    expect(state.blocks).toHaveLength(0);
+    expect(state.receipts).toHaveLength(2);
+    expect(state.receipts.find((row) => row.providerEventId === opened.eventId)).toMatchObject({
+      attemptCount: 2,
+    });
+    expect(state.community?.activeMemberCount).toBe(2);
+  });
+
+  test("a failed full refund clears only its charge block and restores eligible access", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t, "refund-recovery");
+    await completeCheckout(t, fixture);
+    await applyAccessEvent(t, fixture, {
+      eventId: "evt_refund_pending",
+      eventType: "refund.created",
+      objectType: "refund",
+      objectId: "re_recovery",
+      blockKind: "refund",
+      blockSourceProviderObjectId: "ch_recovery",
+      blockAction: "set",
+      blockReason: "subscription_refunded",
+      blockTerminal: false,
+      nowMs: NOW_MS + 10,
+    });
+    await applyAccessEvent(t, fixture, {
+      eventId: "evt_refund_failed",
+      eventType: "refund.failed",
+      objectType: "refund",
+      objectId: "re_recovery",
+      blockKind: "refund",
+      blockSourceProviderObjectId: "ch_recovery",
+      blockAction: "clear",
+      status: "active",
+      nowMs: NOW_MS + 20,
+    });
+
+    const state = await t.run(async (ctx) => ({
+      membership: await ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community_user", (q) =>
+          q.eq("communityId", fixture.communityId).eq("userId", fixture.userId),
+        )
+        .unique(),
+      blocks: await ctx.db.query("communitySubscriptionAccessBlocks").collect(),
+    }));
+    expect(state.membership).toMatchObject({ active: true });
+    expect(state.membership?.revokedReason).toBeUndefined();
+    expect(state.blocks).toHaveLength(0);
+  });
+
+  test("payment recovery cannot reactivate a manager-removed member", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t, "manager-removal");
+    await completeCheckout(t, fixture);
+    await t.run(async (ctx) => {
+      const membership = await ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community_user", (q) =>
+          q.eq("communityId", fixture.communityId).eq("userId", fixture.userId),
+        )
+        .unique();
+      if (!membership) throw new Error("membership_missing");
+      await ctx.db.patch(membership._id, {
+        active: false,
+        revokedAt: NOW_MS + 5,
+        revokedReason: "removed_by_manager",
+        updatedAt: NOW_MS + 5,
+      });
+      await ctx.db.patch(fixture.communityId, { activeMemberCount: 1 });
+    });
+
+    await applyAccessEvent(t, fixture, {
+      eventId: "evt_dispute_won_after_removal",
+      eventType: "charge.dispute.closed",
+      objectType: "dispute",
+      objectId: "dp_manager_removal",
+      blockKind: "dispute",
+      blockSourceProviderObjectId: "dp_manager_removal",
+      blockAction: "clear",
+      status: "active",
+      nowMs: NOW_MS + 20,
+    });
+    const state = await t.run(async (ctx) => ({
+      membership: await ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community_user", (q) =>
+          q.eq("communityId", fixture.communityId).eq("userId", fixture.userId),
+        )
+        .unique(),
+      community: await ctx.db.get(fixture.communityId),
+    }));
+    expect(state.membership).toMatchObject({
+      active: false,
+      revokedReason: "removed_by_manager",
+    });
+    expect(state.community?.activeMemberCount).toBe(1);
+  });
+
+  test("receipt identity corruption aborts the entire access transition", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t, "atomic-rollback");
+    await completeCheckout(t, fixture);
+    const effect = communityAccessEventEffect({
+      eventId: "evt_atomic_rollback",
+      eventType: "refund.updated",
+      objectType: "refund",
+      objectId: "re_atomic_rollback",
+    });
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 2; index += 1) {
+        await ctx.db.insert("communityCommerceEventEffects", {
+          provider: "stripe",
+          ...effect,
+          effect: "community_access",
+          attemptCount: 1,
+          deleteAfter: NOW_MS + 1_000,
+          createdAt: NOW_MS + index,
+          updatedAt: NOW_MS + index,
+        });
+      }
+    });
+
+    await expect(applyAccessEvent(t, fixture, {
+      eventId: effect.providerEventId,
+      eventType: effect.providerEventType,
+      objectType: effect.providerObjectType,
+      objectId: effect.providerObjectId,
+      blockKind: "refund",
+      blockSourceProviderObjectId: "ch_atomic_rollback",
+      blockAction: "set",
+      blockReason: "subscription_refunded",
+      blockTerminal: true,
+      nowMs: NOW_MS + 20,
+    })).rejects.toThrow("community_commerce_event_effect_duplicate_rows");
+
+    const state = await t.run(async (ctx) => ({
+      membership: await ctx.db
+        .query("communityMemberships")
+        .withIndex("by_community_user", (q) =>
+          q.eq("communityId", fixture.communityId).eq("userId", fixture.userId),
+        )
+        .unique(),
+      blocks: await ctx.db.query("communitySubscriptionAccessBlocks").collect(),
+    }));
+    expect(state.membership).toMatchObject({ active: true });
+    expect(state.blocks).toHaveLength(0);
+  });
+
+  test("per-request entitlement denies an explicit block even if membership projection drifts active", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t, "block-read-authority");
+    await completeCheckout(t, fixture);
+    await t.run(async (ctx) => {
+      const subscription = await ctx.db
+        .query("communitySubscriptions")
+        .withIndex("by_providerSubscriptionId", (q) =>
+          q.eq("providerSubscriptionId", fixture.providerSubscriptionId),
+        )
+        .unique();
+      if (!subscription) throw new Error("subscription_missing");
+      await ctx.db.insert("communitySubscriptionAccessBlocks", {
+        communitySubscriptionId: subscription._id,
+        kind: "refund",
+        sourceProviderObjectId: "ch_block_read_authority",
+        reason: "subscription_refunded",
+        terminal: true,
+        providerEventId: "evt_block_read_authority",
+        createdAt: NOW_MS + 10,
+        updatedAt: NOW_MS + 10,
+      });
+    });
+
+    await expect(
+      t.withIdentity({ subject: fixture.userSubject }).query(
+        api.communityCommerce.finalizeCheckoutSession,
+        { sessionId: fixture.sessionId },
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      status: "unavailable",
+      message: "checkout_access_unavailable",
+    });
+    const membership = await t.run(async (ctx) => await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_user", (q) =>
+        q.eq("communityId", fixture.communityId).eq("userId", fixture.userId),
+      )
+      .unique());
+    expect(membership).toMatchObject({ active: true });
   });
 
   test("a non-granting completion stays pending until verified granting state arrives", async () => {

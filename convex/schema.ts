@@ -1425,6 +1425,50 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_community_status", ["communityId", "status"]),
 
+  communitySubscriptionAccessBlocks: defineTable({
+    communitySubscriptionId: v.id("communitySubscriptions"),
+    kind: v.union(v.literal("refund"), v.literal("dispute")),
+    sourceProviderObjectId: v.string(),
+    reason: v.union(
+      v.literal("subscription_refunded"),
+      v.literal("subscription_dispute_opened"),
+      v.literal("subscription_dispute_lost"),
+    ),
+    terminal: v.boolean(),
+    providerEventId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_subscription", ["communitySubscriptionId"])
+    .index("by_subscription_kind_object", [
+      "communitySubscriptionId",
+      "kind",
+      "sourceProviderObjectId",
+    ]),
+
+  communityCommerceEventEffects: defineTable({
+    provider: v.literal("stripe"),
+    providerAccountId: v.string(),
+    providerEventId: v.string(),
+    providerEventType: v.string(),
+    providerObjectType: v.string(),
+    providerObjectId: v.string(),
+    livemode: v.boolean(),
+    effect: v.literal("community_access"),
+    attemptCount: v.number(),
+    providerCreatedAt: v.number(),
+    deleteAfter: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_provider_account_event_effect", [
+      "provider",
+      "providerAccountId",
+      "providerEventId",
+      "effect",
+    ])
+    .index("by_deleteAfter", ["deleteAfter"]),
+
   communityChatThreads: defineTable({
     communityId: v.id("communities"),
     lastSeq: v.number(),

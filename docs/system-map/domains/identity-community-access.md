@@ -28,6 +28,7 @@ All five are MVP core. UI, prompts, manifests, and agent-selected arguments are 
 | `communities` | canonical community identity, owner, visibility, entry policy | `convex/schema.ts:1253-1301` |
 | `communityMemberships` | canonical non-owner membership/access-source relationship | `convex/schema.ts:1303-1327` |
 | `communitySubscriptions` | provider-derived paid community-access state | `convex/schema.ts:1466-1494` |
+| `communitySubscriptionAccessBlocks` | explicit active refund/dispute denial state keyed to one subscription and provider source object | `convex/schema.ts` |
 | `communityBlocks` | negative community access override | `convex/schema.ts:1391-1402` |
 | `communityJoinRequests` | one current `pending` or cooldown-bearing `denied` admission state; never access authority | `convex/schema.ts`; `convex/communityJoinRequestCore.ts` |
 | onboarding config/sessions | activation workflow and progress, not access authority | `convex/schema.ts:1329-1363` |
@@ -84,6 +85,7 @@ Writers update one row per source monotonically. An older event is stale, an exa
 - Community owner is derived from `communities.ownerId`; persisted membership roles are only admin, moderator, and member.
 - Visibility is only Published or Unlisted; Published is discoverability, not entitlement.
 - Community access is reevaluated from current block, membership, access source, and subscription state.
+- Paid subscription projection also requires zero explicit financial access blocks; payment recovery cannot reverse a manager or other non-financial revocation.
 - Membership activation is idempotent for an already-active row.
 - Onboarding state is downstream from access and cannot create access.
 - Each sign-in has one hashed credential row with a 30-day absolute lifetime; refresh changes only encrypted provider state and the monotonic revision.
@@ -114,7 +116,7 @@ Explicit membership state is now fail-closed on staging: only `active === true` 
 
 1. Membership pair uniqueness is application-enforced because the schema cannot declare a compound uniqueness constraint; all known reads fail closed if that invariant is externally corrupted.
 2. Join-request uniqueness is application-enforced because Convex indexes are not unique; all pair reads and transitions now fail closed on duplicate rows, while the schema restricts status to `pending | denied`.
-3. Community deletion is quarantined after verified owner resolution and has no first-party action path. Completeness across all 123 current tables must be proven before a resumable replacement is enabled.
+3. Community deletion is quarantined after verified owner resolution and has no first-party action path. Completeness across all 125 current tables must be proven before a resumable replacement is enabled.
 4. Entitlement uniqueness is application-enforced because Convex indexes are not unique; every reader fails closed and every writer uses the single monotonic source upsert, but out-of-band writes must remain forbidden.
 
 ## Reduction candidates

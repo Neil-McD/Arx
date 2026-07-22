@@ -12,6 +12,7 @@ import {
   type CommunityJoinRequestLike,
   getUniqueCommunityJoinRequestByPair,
 } from "./communityJoinRequestCore";
+import { MAX_COMMUNITY_SUBSCRIPTION_ACCESS_BLOCKS } from "./communitySubscriptionAccessCore";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
@@ -1056,6 +1057,22 @@ export async function getUniqueCommunitySubscriptionByProviderSubscriptionId(arg
   return rows[0] ?? null;
 }
 
+async function communitySubscriptionHasActiveAccessBlock(args: {
+  ctx: any;
+  communitySubscriptionId: any;
+}): Promise<boolean> {
+  const rows = await args.ctx.db
+    .query("communitySubscriptionAccessBlocks" as any)
+    .withIndex("by_subscription", (q: any) =>
+      q.eq("communitySubscriptionId", args.communitySubscriptionId),
+    )
+    .take(MAX_COMMUNITY_SUBSCRIPTION_ACCESS_BLOCKS + 1);
+  if (rows.length > MAX_COMMUNITY_SUBSCRIPTION_ACCESS_BLOCKS) {
+    throw new Error("community_subscription_access_block_limit_exceeded");
+  }
+  return rows.length > 0;
+}
+
 export async function resolveCommunityMembershipEntitlementState(args: {
   ctx: any;
   community: CommunityLike;
@@ -1093,8 +1110,16 @@ export async function resolveCommunityMembershipEntitlementState(args: {
     membershipId: args.membership!._id,
   });
   const subscriptionStatus = normalizeCommunitySubscriptionStatus(subscription?.status);
+  const hasFinancialAccessBlock = subscription
+    ? await communitySubscriptionHasActiveAccessBlock({
+        ctx: args.ctx,
+        communitySubscriptionId: subscription._id,
+      })
+    : false;
   return {
-    isEntitled: communitySubscriptionStatusGrantsAccess(subscriptionStatus),
+    isEntitled:
+      communitySubscriptionStatusGrantsAccess(subscriptionStatus) &&
+      !hasFinancialAccessBlock,
     accessSource: accessSource || null,
     subscriptionStatus,
     subscriptionCurrentPeriodEndAt:

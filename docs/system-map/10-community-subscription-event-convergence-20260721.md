@@ -1,7 +1,7 @@
-# Community Subscription Event Convergence — First U-017 Slice
+# Community Commerce Event Convergence — U-017 Authority Slices
 
-Status: implemented and locally proven on the isolated staging lane
-Scope: `customer.subscription.updated` and `customer.subscription.deleted` for paid communities only
+Status: second authority slice implemented and locally proven on the isolated staging lane
+Scope: paid-community subscription, refund, and dispute access effects only
 
 ## Irreducible job
 
@@ -59,4 +59,57 @@ This slice does not change:
 - refund/dispute risk ordering;
 - atomic webhook event receipts or replay leases.
 
-U-017 remains open. The next money-authority slice is an atomic, retryable community webhook receipt plus explicit refund/dispute risk state so duplicate and reordered financial events converge without relying on membership `revokedReason` as a hidden state machine.
+## Second authority slice: atomic access effects
+
+The next irreducible defect was the local authority boundary. Refund and dispute
+handlers wrote financial state into `communityMemberships.revokedReason`, then
+asked later subscription events to preserve a small allowlist of magic strings.
+That hidden state machine could leave a failed refund stuck and could reactivate
+a membership removed by a community manager.
+
+The paid-community access effect now has three explicit parts:
+
+1. `communitySubscriptions` remains the current provider-derived subscription projection.
+2. `communitySubscriptionAccessBlocks` stores only active refund/dispute access blocks, keyed by subscription plus provider source object.
+3. `communityCommerceEventEffects` stores a bounded `community_access` receipt per Stripe account/event, without raw webhook payloads.
+
+Provider reads happen before the mutation. One Convex mutation then atomically
+applies the access-block transition, subscription projection, membership
+projection, canonical member count, and effect receipt. Provider failures occur
+before that mutation and therefore cannot leave a partial local transition.
+
+Receipts do not suppress a replay. A duplicate or reordered delivery re-reads
+current Stripe truth and reapplies the idempotent local projection; the receipt
+records the attempt and expectation-locks event identity. Receipts expire after
+45 days and are pruned hourly in bounded batches. `criticalAuditEvents` remains
+best-effort observability and is not processing authority.
+
+The access policy is now explicit:
+
+- cumulative current charge truth below a full refund clears the charge refund block;
+- cumulative current charge truth at a full refund sets the charge refund block;
+- open/under-review disputes block access;
+- won/closed warnings clear their dispute block;
+- lost disputes retain a terminal block;
+- unknown dispute or malformed charge state fails before local mutation;
+- clearing a financial block can reactivate only subscription-projected revocation, never a manager or other non-financial revocation.
+
+The staging preflight on 2026-07-22 scanned all 67 memberships without
+truncation. It found zero inactive paid memberships and zero legacy financial
+revocation strings, so this staging lane requires no compatibility backfill.
+The local environment has no authenticated Stripe CLI, so the staging endpoint's
+configured API version and enabled-event list remain externally unverified. No
+existing refund, dispute, charge-refund, invoice, or subscription handler was
+deleted on that assumption.
+
+The behavioral fixture proves cumulative partial/full refunds, unknown provider
+states, duplicate delivery, reordered dispute recovery, failed-refund recovery,
+multiple authority invariants, manager-removal precedence, active-member-count
+convergence, and atomic rollback when receipt identity is corrupt.
+
+## Remaining U-017 boundary
+
+U-017 is narrowed but not closed. A later slice must add a bounded asynchronous
+retry/stuck-recovery queue for provider outages and then prove live Stripe test
+events against the configured staging webhook endpoint. Creator settlement is a
+separate authority. Builder Partner remains explicitly last.

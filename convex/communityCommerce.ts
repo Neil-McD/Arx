@@ -59,6 +59,12 @@ import {
   type PublicCommunityCheckoutAttemptBinding,
   type PublicCommunityCheckoutAttemptSnapshot,
 } from "./communityCheckoutStartCore";
+import {
+  deriveCommunitySubscriptionMembershipProjection,
+  MAX_COMMUNITY_SUBSCRIPTION_ACCESS_BLOCKS,
+  type CommunitySubscriptionAccessBlockReason,
+  type CommunitySubscriptionAccessStatus,
+} from "./communitySubscriptionAccessCore";
 
 type CommunityCheckoutSessionRow = {
   _id: any;
@@ -174,6 +180,367 @@ function toProviderCheckoutSessionSnapshot(
   };
 }
 
+const COMMUNITY_COMMERCE_EVENT_EFFECT_RETENTION_MS = 45 * 24 * 60 * 60 * 1_000;
+
+type CommunityAccessEventEffectInput = {
+  providerAccountId: string;
+  providerEventId: string;
+  providerEventType: string;
+  providerObjectType: string;
+  providerObjectId: string;
+  livemode: boolean;
+  providerCreatedAt: number;
+};
+
+type SyncCommunitySubscriptionLifecycleArgs = {
+  communityId: any;
+  userId: any;
+  status: string;
+  pricePointId?: any;
+  providerPriceId?: string | null;
+  providerSubscriptionId?: string | null;
+  providerCustomerId?: string | null;
+  platformFeeBps?: number | null;
+  currentPeriodStartIso?: string | null;
+  currentPeriodEndIso?: string | null;
+  cancelAtPeriodEnd?: boolean | null;
+  eventEffect?: CommunityAccessEventEffectInput;
+  nowMs: number;
+};
+
+function requireBoundedCommerceEventIdentity(
+  raw: unknown,
+  errorCode: string,
+  maxLength: number,
+): string {
+  const value = String(raw ?? "").trim();
+  if (!value || value.length > maxLength) throw new Error(errorCode);
+  return value;
+}
+
+async function recordCommunityAccessEventEffect(args: {
+  ctx: any;
+  effect: CommunityAccessEventEffectInput;
+  processedAt: number;
+}): Promise<{ duplicate: boolean; attemptCount: number }> {
+  const providerAccountId = requireBoundedCommerceEventIdentity(
+    args.effect.providerAccountId,
+    "community_commerce_event_account_invalid",
+    200,
+  );
+  const providerEventId = requireBoundedCommerceEventIdentity(
+    args.effect.providerEventId,
+    "community_commerce_event_id_invalid",
+    200,
+  );
+  const providerEventType = requireBoundedCommerceEventIdentity(
+    args.effect.providerEventType,
+    "community_commerce_event_type_invalid",
+    160,
+  );
+  const providerObjectType = requireBoundedCommerceEventIdentity(
+    args.effect.providerObjectType,
+    "community_commerce_object_type_invalid",
+    80,
+  );
+  const providerObjectId = requireBoundedCommerceEventIdentity(
+    args.effect.providerObjectId,
+    "community_commerce_object_id_invalid",
+    200,
+  );
+  const providerCreatedAt = Number(args.effect.providerCreatedAt);
+  if (!Number.isFinite(providerCreatedAt) || providerCreatedAt <= 0) {
+    throw new Error("community_commerce_event_created_at_invalid");
+  }
+  const rows = await args.ctx.db
+    .query("communityCommerceEventEffects" as any)
+    .withIndex("by_provider_account_event_effect", (q: any) =>
+      q
+        .eq("provider", "stripe")
+        .eq("providerAccountId", providerAccountId)
+        .eq("providerEventId", providerEventId)
+        .eq("effect", "community_access"),
+    )
+    .take(2);
+  if (rows.length > 1) throw new Error("community_commerce_event_effect_duplicate_rows");
+  const existing = rows[0] ?? null;
+  if (
+    existing &&
+    (
+      existing.providerEventType !== providerEventType ||
+      existing.providerObjectType !== providerObjectType ||
+      existing.providerObjectId !== providerObjectId ||
+      existing.livemode !== args.effect.livemode ||
+      existing.providerCreatedAt !== providerCreatedAt
+    )
+  ) {
+    throw new Error("community_commerce_event_identity_conflict");
+  }
+  const deleteAfter = args.processedAt + COMMUNITY_COMMERCE_EVENT_EFFECT_RETENTION_MS;
+  if (existing) {
+    const attemptCount = Math.max(1, Math.floor(Number(existing.attemptCount ?? 1))) + 1;
+    await args.ctx.db.patch(existing._id, {
+      attemptCount,
+      deleteAfter,
+      updatedAt: args.processedAt,
+    });
+    return { duplicate: true, attemptCount };
+  }
+  await args.ctx.db.insert("communityCommerceEventEffects" as any, {
+    provider: "stripe",
+    providerAccountId,
+    providerEventId,
+    providerEventType,
+    providerObjectType,
+    providerObjectId,
+    livemode: args.effect.livemode,
+    effect: "community_access",
+    attemptCount: 1,
+    providerCreatedAt,
+    deleteAfter,
+    createdAt: args.processedAt,
+    updatedAt: args.processedAt,
+  });
+  return { duplicate: false, attemptCount: 1 };
+}
+
+async function listCommunitySubscriptionAccessBlockReasons(args: {
+  ctx: any;
+  communitySubscriptionId: any;
+}): Promise<CommunitySubscriptionAccessBlockReason[]> {
+  const rows = await args.ctx.db
+    .query("communitySubscriptionAccessBlocks" as any)
+    .withIndex("by_subscription", (q: any) =>
+      q.eq("communitySubscriptionId", args.communitySubscriptionId),
+    )
+    .take(MAX_COMMUNITY_SUBSCRIPTION_ACCESS_BLOCKS + 1);
+  if (rows.length > MAX_COMMUNITY_SUBSCRIPTION_ACCESS_BLOCKS) {
+    throw new Error("community_subscription_access_block_limit_exceeded");
+  }
+  return rows.map((row: any) => row.reason as CommunitySubscriptionAccessBlockReason);
+}
+
+async function applyCommunitySubscriptionAccessBlock(args: {
+  ctx: any;
+  communitySubscriptionId: any;
+  kind: "refund" | "dispute";
+  sourceProviderObjectId: string;
+  action: "set" | "clear";
+  reason?: CommunitySubscriptionAccessBlockReason;
+  terminal?: boolean;
+  providerEventId: string;
+  nowMs: number;
+}): Promise<"set" | "cleared" | "already_clear"> {
+  const sourceProviderObjectId = requireBoundedCommerceEventIdentity(
+    args.sourceProviderObjectId,
+    "community_subscription_access_block_object_invalid",
+    200,
+  );
+  const rows = await args.ctx.db
+    .query("communitySubscriptionAccessBlocks" as any)
+    .withIndex("by_subscription_kind_object", (q: any) =>
+      q
+        .eq("communitySubscriptionId", args.communitySubscriptionId)
+        .eq("kind", args.kind)
+        .eq("sourceProviderObjectId", sourceProviderObjectId),
+    )
+    .take(2);
+  if (rows.length > 1) throw new Error("community_subscription_access_block_duplicate_rows");
+  const existing = rows[0] ?? null;
+  if (args.action === "clear") {
+    if (!existing) return "already_clear";
+    await args.ctx.db.delete(existing._id);
+    return "cleared";
+  }
+  if (!args.reason) throw new Error("community_subscription_access_block_reason_required");
+  if (args.kind === "refund" && args.reason !== "subscription_refunded") {
+    throw new Error("community_subscription_refund_block_reason_invalid");
+  }
+  if (args.kind === "dispute" && args.reason === "subscription_refunded") {
+    throw new Error("community_subscription_dispute_block_reason_invalid");
+  }
+  const patch = {
+    reason: args.reason,
+    terminal: args.terminal === true,
+    providerEventId: args.providerEventId,
+    updatedAt: args.nowMs,
+  };
+  if (existing) {
+    await args.ctx.db.patch(existing._id, patch);
+    return "set";
+  }
+  await args.ctx.db.insert("communitySubscriptionAccessBlocks" as any, {
+    communitySubscriptionId: args.communitySubscriptionId,
+    kind: args.kind,
+    sourceProviderObjectId,
+    ...patch,
+    createdAt: args.nowMs,
+  });
+  return "set";
+}
+
+async function syncCommunitySubscriptionLifecycleCore(
+  ctx: any,
+  args: SyncCommunitySubscriptionLifecycleArgs,
+) {
+  const nowMs = args.nowMs;
+  const status = normalizeCommunitySubscriptionStatus(args.status) as
+    | CommunitySubscriptionAccessStatus
+    | null;
+  if (!status) throw new Error("community_subscription_status_invalid");
+  const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
+  if (!community) throw new Error("community_not_found");
+  const membership = await getUniqueCommunityMembershipByPair({
+    ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  if (!membership) throw new Error("community_membership_not_found");
+  if (String(membership.accessSource ?? "").trim().toLowerCase() !== "paid_subscription") {
+    throw new Error("community_membership_not_subscription");
+  }
+
+  const current = await getUniqueCommunitySubscriptionByMembership({
+    ctx,
+    membershipId: membership._id,
+  });
+  const previousStatus = String(current?.status ?? "").trim().toLowerCase();
+  let pricePointId = args.pricePointId ?? current?.pricePointId ?? membership.pricePointId ?? undefined;
+  const providerPriceId = String(args.providerPriceId ?? "").trim();
+  if (!pricePointId && providerPriceId) {
+    const pricePoints = (await ctx.db
+      .query("communityPricePoints" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunityPricePointLike[];
+    const matched = pricePoints.find(
+      (row) => String(row.providerPriceId ?? "").trim() === providerPriceId,
+    ) ?? null;
+    pricePointId = matched?._id;
+  }
+  if (!pricePointId) throw new Error("community_subscription_price_point_required");
+
+  const currentPeriodStartAt = parseIsoMs(args.currentPeriodStartIso);
+  const currentPeriodEndAt = parseIsoMs(args.currentPeriodEndIso);
+  const cancelAtPeriodEnd = args.cancelAtPeriodEnd === null
+    ? false
+    : Boolean(args.cancelAtPeriodEnd ?? current?.cancelAtPeriodEnd);
+  const nextProviderSubscriptionId =
+    String(args.providerSubscriptionId ?? "").trim() ||
+    String(current?.providerSubscriptionId ?? "").trim() ||
+    undefined;
+  const nextProviderCustomerId =
+    String(args.providerCustomerId ?? "").trim() ||
+    String(current?.providerCustomerId ?? "").trim() ||
+    undefined;
+  const requestedPlatformFeeBps =
+    typeof args.platformFeeBps === "number" ? args.platformFeeBps : Number.NaN;
+  const nextPlatformFeeBps =
+    Number.isFinite(requestedPlatformFeeBps) &&
+    requestedPlatformFeeBps >= 0 &&
+    requestedPlatformFeeBps <= 10000
+      ? Math.round(requestedPlatformFeeBps)
+      : current?.platformFeeBps;
+  if (!nextProviderSubscriptionId) {
+    throw new Error("community_subscription_provider_id_required");
+  }
+
+  await createCommunitySubscriptionForMembership({
+    ctx,
+    communityId: args.communityId,
+    membershipId: membership._id,
+    userId: args.userId,
+    pricePointId,
+    providerSubscriptionId: nextProviderSubscriptionId,
+    providerCustomerId: nextProviderCustomerId,
+    platformFeeBps: nextPlatformFeeBps,
+    currentPeriodStartAt,
+    currentPeriodEndAt,
+    status,
+    cancelAtPeriodEnd,
+    nowMs,
+  });
+  const subscription = await getUniqueCommunitySubscriptionByMembership({
+    ctx,
+    membershipId: membership._id,
+  });
+  if (!subscription) throw new Error("community_subscription_not_found");
+  const activeBlockReasons = await listCommunitySubscriptionAccessBlockReasons({
+    ctx,
+    communitySubscriptionId: subscription._id,
+  });
+  const projection = deriveCommunitySubscriptionMembershipProjection({
+    membershipActive: membership.active !== false,
+    membershipRevokedAt: membership.revokedAt,
+    membershipRevokedReason: membership.revokedReason,
+    subscriptionStatus: status,
+    activeBlockReasons,
+    nowMs,
+  });
+  const updatedMembership = {
+    ...membership,
+    pricePointId,
+    active: projection.active,
+    revokedAt: projection.revokedAt,
+    revokedReason: projection.revokedReason,
+    updatedAt: nowMs,
+  } as CommunityMembershipLike;
+  await ctx.db.patch(membership._id, {
+    pricePointId,
+    active: updatedMembership.active,
+    revokedAt: updatedMembership.revokedAt,
+    revokedReason: updatedMembership.revokedReason,
+    updatedAt: nowMs,
+  });
+  await adjustCommunityActiveMemberCountForMembershipTransition({
+    ctx,
+    communityId: args.communityId,
+    before: membership,
+    after: updatedMembership,
+  });
+
+  if (status === "past_due" && previousStatus !== "past_due") {
+    const issueMarker = [
+      nextProviderSubscriptionId || String(membership._id),
+      String(currentPeriodEndAt ?? current?.currentPeriodEndAt ?? nowMs),
+    ].join(":");
+    await enqueueCommunityBillingIssueEmailInternal({
+      ctx,
+      userId: args.userId,
+      communityId: args.communityId,
+      issueMarker,
+      nowMs,
+    });
+  }
+  const receipt = args.eventEffect
+    ? await recordCommunityAccessEventEffect({
+        ctx,
+        effect: args.eventEffect,
+        processedAt: nowMs,
+      })
+    : null;
+  return {
+    ok: true,
+    community_id: String(args.communityId),
+    user_id: String(args.userId),
+    price_point_id: String(pricePointId),
+    source: "stripe",
+    subscription_status: status,
+    access_block_count: activeBlockReasons.length,
+    preserved_non_financial_revocation: projection.preservedNonFinancialRevocation,
+    duplicate_event: receipt?.duplicate ?? false,
+  };
+}
+
+const communityAccessEventEffectValidator = v.object({
+  providerAccountId: v.string(),
+  providerEventId: v.string(),
+  providerEventType: v.string(),
+  providerObjectType: v.string(),
+  providerObjectId: v.string(),
+  livemode: v.boolean(),
+  providerCreatedAt: v.number(),
+});
+
 export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
@@ -187,151 +554,93 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     currentPeriodStartIso: v.optional(v.union(v.string(), v.null())),
     currentPeriodEndIso: v.optional(v.union(v.string(), v.null())),
     cancelAtPeriodEnd: v.optional(v.union(v.boolean(), v.null())),
-    revokedReason: v.optional(v.string()),
-    preserveRiskRevocation: v.optional(v.boolean()),
+    eventEffect: v.optional(communityAccessEventEffectValidator),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => await syncCommunitySubscriptionLifecycleCore(ctx, {
+    ...args,
+    nowMs: args.nowMs ?? Date.now(),
+  }),
+});
+
+export const applyCommunitySubscriptionAccessEventInternal = internalMutation({
+  args: {
+    providerSubscriptionId: v.optional(v.string()),
+    status: v.optional(v.string()),
+    providerPriceId: v.optional(v.union(v.string(), v.null())),
+    providerCustomerId: v.optional(v.union(v.string(), v.null())),
+    platformFeeBps: v.optional(v.union(v.number(), v.null())),
+    currentPeriodStartIso: v.optional(v.union(v.string(), v.null())),
+    currentPeriodEndIso: v.optional(v.union(v.string(), v.null())),
+    cancelAtPeriodEnd: v.optional(v.union(v.boolean(), v.null())),
+    blockKind: v.union(v.literal("refund"), v.literal("dispute")),
+    blockSourceProviderObjectId: v.string(),
+    blockAction: v.union(v.literal("set"), v.literal("clear")),
+    blockReason: v.optional(v.union(
+      v.literal("subscription_refunded"),
+      v.literal("subscription_dispute_opened"),
+      v.literal("subscription_dispute_lost"),
+    )),
+    blockTerminal: v.optional(v.boolean()),
+    eventEffect: communityAccessEventEffectValidator,
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
+    if (!providerSubscriptionId) {
+      return { ok: true, ignored: true, reason: "community_subscription_id_missing" };
+    }
+    const subscription = await getUniqueCommunitySubscriptionByProviderSubscriptionId({
+      ctx,
+      providerSubscriptionId,
+    });
+    if (!subscription?.communityId || !subscription?.userId) {
+      return { ok: true, ignored: true, reason: "community_subscription_not_found" };
+    }
     const status = normalizeCommunitySubscriptionStatus(args.status);
     if (!status) throw new Error("community_subscription_status_invalid");
-    const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
-    if (!community) throw new Error("community_not_found");
-    const membership = await getUniqueCommunityMembershipByPair({
+    const blockResult = await applyCommunitySubscriptionAccessBlock({
       ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    if (!membership) throw new Error("community_membership_not_found");
-    if (String(membership.accessSource ?? "").trim().toLowerCase() !== "paid_subscription") {
-      throw new Error("community_membership_not_subscription");
-    }
-
-    const current = await getUniqueCommunitySubscriptionByMembership({
-      ctx,
-      membershipId: membership._id,
-    });
-    const previousStatus = String(current?.status ?? "")
-      .trim()
-      .toLowerCase();
-
-    let pricePointId = args.pricePointId ?? current?.pricePointId ?? membership.pricePointId ?? undefined;
-    const providerPriceId = String(args.providerPriceId ?? "").trim();
-    if (!pricePointId && providerPriceId) {
-      const pricePoints = (await ctx.db
-        .query("communityPricePoints" as any)
-        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-        .collect()) as CommunityPricePointLike[];
-      const matched =
-        pricePoints.find((row) => String(row.providerPriceId ?? "").trim() === providerPriceId) ?? null;
-      pricePointId = matched?._id;
-    }
-    if (!pricePointId) throw new Error("community_subscription_price_point_required");
-
-    const currentPeriodStartAt = parseIsoMs(args.currentPeriodStartIso);
-    const currentPeriodEndAt = parseIsoMs(args.currentPeriodEndIso);
-    const cancelAtPeriodEnd =
-      args.cancelAtPeriodEnd === null
-        ? false
-        : Boolean(args.cancelAtPeriodEnd ?? current?.cancelAtPeriodEnd);
-    const nextProviderSubscriptionId =
-      String(args.providerSubscriptionId ?? "").trim() ||
-      String(current?.providerSubscriptionId ?? "").trim() ||
-      undefined;
-    const nextProviderCustomerId =
-      String(args.providerCustomerId ?? "").trim() ||
-      String(current?.providerCustomerId ?? "").trim() ||
-      undefined;
-    const requestedPlatformFeeBps =
-      typeof args.platformFeeBps === "number" ? args.platformFeeBps : Number.NaN;
-    const nextPlatformFeeBps =
-      Number.isFinite(requestedPlatformFeeBps) &&
-      requestedPlatformFeeBps >= 0 &&
-      requestedPlatformFeeBps <= 10000
-        ? Math.round(requestedPlatformFeeBps)
-        : current?.platformFeeBps;
-
-    if (!nextProviderSubscriptionId) {
-      throw new Error("community_subscription_provider_id_required");
-    }
-    await createCommunitySubscriptionForMembership({
-      ctx,
-      communityId: args.communityId,
-      membershipId: membership._id,
-      userId: args.userId,
-      pricePointId,
-      providerSubscriptionId: nextProviderSubscriptionId,
-      providerCustomerId: nextProviderCustomerId,
-      platformFeeBps: nextPlatformFeeBps,
-      currentPeriodStartAt,
-      currentPeriodEndAt,
-      status,
-      cancelAtPeriodEnd,
+      communitySubscriptionId: subscription._id,
+      kind: args.blockKind,
+      sourceProviderObjectId: args.blockSourceProviderObjectId,
+      action: args.blockAction,
+      reason: args.blockReason,
+      terminal: args.blockTerminal,
+      providerEventId: args.eventEffect.providerEventId,
       nowMs,
     });
-
-    const grantsAccess = communitySubscriptionStatusGrantsAccess(status);
-    const revokedReason = String(args.revokedReason ?? "")
-      .trim()
-      .slice(0, 160);
-    const existingRevokedReason = String(membership.revokedReason ?? "").trim();
-    const shouldPreserveRiskRevocation =
-      grantsAccess &&
-      args.preserveRiskRevocation === true &&
-      membership.active === false &&
-      (
-        existingRevokedReason === "subscription_refunded" ||
-        existingRevokedReason === "subscription_dispute_opened" ||
-        existingRevokedReason === "subscription_dispute_lost"
-      );
-    const updatedMembership = {
-      ...membership,
-      pricePointId,
-      active: shouldPreserveRiskRevocation ? false : grantsAccess,
-      revokedAt: shouldPreserveRiskRevocation
-        ? membership.revokedAt ?? nowMs
-        : grantsAccess ? undefined : nowMs,
-      revokedReason: shouldPreserveRiskRevocation
-        ? existingRevokedReason
-        : grantsAccess ? undefined : revokedReason || `subscription_${status}`,
-      updatedAt: nowMs,
-    } as CommunityMembershipLike;
-    await ctx.db.patch(membership._id, {
-      pricePointId,
-      active: updatedMembership.active,
-      revokedAt: updatedMembership.revokedAt,
-      revokedReason: updatedMembership.revokedReason,
-      updatedAt: nowMs,
+    const lifecycle = await syncCommunitySubscriptionLifecycleCore(ctx, {
+      communityId: subscription.communityId,
+      userId: subscription.userId,
+      pricePointId: subscription.pricePointId,
+      providerSubscriptionId,
+      providerPriceId: args.providerPriceId,
+      providerCustomerId: args.providerCustomerId,
+      platformFeeBps: args.platformFeeBps,
+      currentPeriodStartIso: args.currentPeriodStartIso,
+      currentPeriodEndIso: args.currentPeriodEndIso,
+      cancelAtPeriodEnd: args.cancelAtPeriodEnd,
+      status,
+      eventEffect: args.eventEffect,
+      nowMs,
     });
-    await adjustCommunityActiveMemberCountForMembershipTransition({
-      ctx,
-      communityId: args.communityId,
-      before: membership,
-      after: updatedMembership,
-    });
+    return { ...lifecycle, block_result: blockResult };
+  },
+});
 
-    if (status === "past_due" && previousStatus !== "past_due") {
-      const issueMarker = [
-        String(args.providerSubscriptionId ?? "").trim() || String(current?.providerSubscriptionId ?? "").trim() || String(membership._id),
-        String(currentPeriodEndAt ?? current?.currentPeriodEndAt ?? nowMs),
-      ].join(":");
-      await enqueueCommunityBillingIssueEmailInternal({
-        ctx,
-        userId: args.userId,
-        communityId: args.communityId,
-        issueMarker,
-        nowMs,
-      });
-    }
-
-    return {
-      ok: true,
-      community_id: String(args.communityId),
-      user_id: String(args.userId),
-      price_point_id: String(pricePointId),
-      source: "stripe",
-      subscription_status: status,
-    };
+export const pruneCommunityCommerceEventEffectsInternal = internalMutation({
+  args: { limit: v.optional(v.number()), nowMs: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 250)));
+    const rows = await ctx.db
+      .query("communityCommerceEventEffects" as any)
+      .withIndex("by_deleteAfter", (q: any) => q.lte("deleteAfter", nowMs))
+      .take(limit);
+    for (const row of rows) await ctx.db.delete(row._id);
+    return { ok: true, deleted: rows.length, has_more: rows.length === limit };
   },
 });
 

@@ -10,6 +10,10 @@ import { buildStripeConnectAccountSnapshot } from "./stripeConnectAccountCore";
 import { normalizeStripeCommunitySubscriptionStatus } from "./billingCore";
 import { resolveCurrentCommunitySubscriptionEvent } from "./communitySubscriptionEventConvergenceCore";
 import { calculateBuilderPartnerEligibleSettledRevenueBaseUnits } from "../shared/builderPartnerProgram";
+import {
+  currentChargeRequiresRefundAccessBlock,
+  currentDisputeAccessBlock,
+} from "./communitySubscriptionAccessCore";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -394,6 +398,18 @@ async function retrieveStripeInvoiceForEvidence(invoiceId: string | null): Promi
   }
 }
 
+async function retrieveStripeDisputeForEvidence(
+  disputeId: string | null,
+): Promise<Stripe.Dispute | null> {
+  if (!disputeId) return null;
+  try {
+    return await getStripeClient().disputes.retrieve(disputeId);
+  } catch (error: any) {
+    if (stripeResourceMissing(error)) return null;
+    throw error;
+  }
+}
+
 function toStripeTimestampMs(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0)
     return null;
@@ -439,6 +455,19 @@ function readStripeEventCreatedAtMs(event: Stripe.Event): number {
   return Number(event.created ?? 0) > 0 ? Number(event.created) * 1000 : Date.now();
 }
 
+function buildCommunityAccessEventEffect(event: Stripe.Event) {
+  const object = event.data.object as any;
+  return {
+    providerAccountId: String((event as any).account ?? "platform").trim() || "platform",
+    providerEventId: String(event.id ?? "").trim(),
+    providerEventType: String(event.type ?? "").trim(),
+    providerObjectType: String(object?.object ?? "").trim(),
+    providerObjectId: String(object?.id ?? "").trim(),
+    livemode: event.livemode === true,
+    providerCreatedAt: readStripeEventCreatedAtMs(event),
+  };
+}
+
 function toIsoStringOrUndefined(ms: number | null): string | undefined {
   return typeof ms === "number" && Number.isFinite(ms)
     ? new Date(ms).toISOString()
@@ -473,15 +502,6 @@ function readSettledInvoiceRevenueExcludingTax(invoice: Stripe.Invoice): number 
   });
 }
 
-function stripeRefundFullyRefundsCharge(refund: Stripe.Refund, charge: Stripe.Charge | null): boolean {
-  const chargeAmount = Number(charge?.amount ?? 0);
-  if (!Number.isFinite(chargeAmount) || chargeAmount <= 0) return false;
-  const totalRefunded = Number((charge as any)?.amount_refunded ?? 0);
-  if (Number.isFinite(totalRefunded) && totalRefunded >= chargeAmount) return true;
-  const refundAmount = Number(refund.amount ?? 0);
-  return Number.isFinite(refundAmount) && refundAmount >= chargeAmount;
-}
-
 async function retrieveStripeSubscriptionForEvidence(
   subscriptionId: string | null,
 ): Promise<Stripe.Subscription | null> {
@@ -508,9 +528,6 @@ async function syncCommunitySubscriptionFromStripeSubscription(
   ctx: any,
   event: Stripe.Event,
   subscription: Stripe.Subscription | null,
-  options?: {
-    preserveRiskRevocation?: boolean;
-  },
 ): Promise<Record<string, unknown>> {
   const providerSubscriptionId = String(subscription?.id ?? "").trim();
   if (!subscription || !providerSubscriptionId) {
@@ -547,8 +564,8 @@ async function syncCommunitySubscriptionFromStripeSubscription(
       currentPeriodStartIso: toIsoStringOrUndefined(cycleStartedAt),
       currentPeriodEndIso: toIsoStringOrUndefined(cycleEndsAt),
       cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
-      preserveRiskRevocation: options?.preserveRiskRevocation === true,
-      nowMs: readStripeEventCreatedAtMs(event),
+      eventEffect: buildCommunityAccessEventEffect(event),
+      nowMs: Date.now(),
     },
   );
   return {
@@ -589,8 +606,8 @@ async function syncCommunitySubscriptionRiskStatus(
       pricePointId: existingCommunitySubscription.pricePointId ?? undefined,
       providerSubscriptionId,
       status: args.status,
-      revokedReason: args.revokedReason,
-      nowMs: readStripeEventCreatedAtMs(event),
+      eventEffect: buildCommunityAccessEventEffect(event),
+      nowMs: Date.now(),
     },
   );
   return {
@@ -601,67 +618,82 @@ async function syncCommunitySubscriptionRiskStatus(
   };
 }
 
-async function syncCommunityAccessForRefund(
-  ctx: any,
-  event: Stripe.Event,
-  args: {
-    refund: Stripe.Refund;
-    charge: Stripe.Charge | null;
-  },
-): Promise<Record<string, unknown>> {
-  if (!args.charge) return { ok: true, ignored: true, reason: "refund_charge_missing" };
-  const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(args.charge);
-  if (!stripeRefundFullyRefundsCharge(args.refund, args.charge)) {
-    return {
-      ok: true,
-      ignored: true,
-      reason: "partial_refund_access_retained",
-      provider_subscription_id: providerSubscriptionId,
-    };
-  }
-  return await syncCommunitySubscriptionRiskStatus(ctx, event, {
-    providerSubscriptionId,
-    status: "ended",
-    revokedReason: "subscription_refunded",
-  });
+function communitySubscriptionMutationSnapshot(
+  subscription: Stripe.Subscription | null,
+): Record<string, unknown> {
+  if (!subscription) return { status: "ended" };
+  const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
+  const { cycleStartedAt, cycleEndsAt } = readStripeSubscriptionCycle(subscription);
+  return {
+    status: normalizeStripeCommunitySubscriptionStatus({
+      subscriptionStatus: subscription.status,
+      cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
+    }),
+    providerPriceId,
+    providerCustomerId:
+      typeof subscription.customer === "string" ? subscription.customer : null,
+    platformFeeBps: readStripeSubscriptionApplicationFeeBps(subscription),
+    currentPeriodStartIso: toIsoStringOrUndefined(cycleStartedAt),
+    currentPeriodEndIso: toIsoStringOrUndefined(cycleEndsAt),
+    cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+  };
 }
 
-async function syncCommunityAccessForDispute(
+async function syncCommunityAccessForCurrentRefund(
   ctx: any,
   event: Stripe.Event,
   args: {
-    charge: Stripe.Charge | null;
-    outcome: "opened" | "won" | "lost" | "funds_reinstated" | "unknown";
+    charge: Stripe.Charge;
   },
 ): Promise<Record<string, unknown>> {
   const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(args.charge);
-  if (!providerSubscriptionId) {
-    return { ok: true, ignored: true, reason: "dispute_subscription_missing" };
-  }
-  if (args.outcome === "opened") {
-    return await syncCommunitySubscriptionRiskStatus(ctx, event, {
-      providerSubscriptionId,
-      status: "ended",
-      revokedReason: "subscription_dispute_opened",
-    });
-  }
-  if (args.outcome === "lost") {
-    return await syncCommunitySubscriptionRiskStatus(ctx, event, {
-      providerSubscriptionId,
-      status: "ended",
-      revokedReason: "subscription_dispute_lost",
-    });
-  }
-  if (args.outcome === "won" || args.outcome === "funds_reinstated") {
-    const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
-    return await syncCommunitySubscriptionFromStripeSubscription(ctx, event, subscription);
-  }
-  return {
-    ok: true,
-    ignored: true,
-    reason: "dispute_outcome_unknown",
-    provider_subscription_id: providerSubscriptionId,
-  };
+  const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+  const blockRequired = currentChargeRequiresRefundAccessBlock({
+    amountBaseUnits: args.charge.amount,
+    amountRefundedBaseUnits: (args.charge as any).amount_refunded,
+    refunded: args.charge.refunded,
+  });
+  return await ctx.runMutation(
+    internal.communityCommerce.applyCommunitySubscriptionAccessEventInternal as any,
+    {
+      providerSubscriptionId: providerSubscriptionId ?? undefined,
+      ...communitySubscriptionMutationSnapshot(subscription),
+      blockKind: "refund",
+      blockSourceProviderObjectId: args.charge.id,
+      blockAction: blockRequired ? "set" : "clear",
+      blockReason: blockRequired ? "subscription_refunded" : undefined,
+      blockTerminal: false,
+      eventEffect: buildCommunityAccessEventEffect(event),
+      nowMs: Date.now(),
+    },
+  );
+}
+
+async function syncCommunityAccessForCurrentDispute(
+  ctx: any,
+  event: Stripe.Event,
+  args: {
+    dispute: Stripe.Dispute;
+    charge: Stripe.Charge;
+  },
+): Promise<Record<string, unknown>> {
+  const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(args.charge);
+  const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+  const block = currentDisputeAccessBlock({ status: args.dispute.status });
+  return await ctx.runMutation(
+    internal.communityCommerce.applyCommunitySubscriptionAccessEventInternal as any,
+    {
+      providerSubscriptionId: providerSubscriptionId ?? undefined,
+      ...communitySubscriptionMutationSnapshot(subscription),
+      blockKind: "dispute",
+      blockSourceProviderObjectId: args.dispute.id,
+      blockAction: block.action,
+      blockReason: block.action === "set" ? block.reason : undefined,
+      blockTerminal: block.action === "set" ? block.terminal : undefined,
+      eventEffect: buildCommunityAccessEventEffect(event),
+      nowMs: Date.now(),
+    },
+  );
 }
 
 async function syncCommunitySubscriptionEventFromCurrentProvider(
@@ -780,7 +812,6 @@ async function syncCommunitySubscriptionEventFromCurrentProvider(
       ctx,
       event,
       subscription,
-      { preserveRiskRevocation: true },
     );
   if (!communityLifecycleResult.ignored) {
     return {
@@ -1321,9 +1352,7 @@ export function registerRuntimeBillingRoutes(
           }
           const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
           const communityLifecycleResult = subscription
-            ? await syncCommunitySubscriptionFromStripeSubscription(ctx, event, subscription, {
-              preserveRiskRevocation: true,
-            })
+            ? await syncCommunitySubscriptionFromStripeSubscription(ctx, event, subscription)
             : await syncCommunitySubscriptionRiskStatus(ctx, event, {
               providerSubscriptionId,
               status: "past_due",
@@ -1343,34 +1372,6 @@ export function registerRuntimeBillingRoutes(
           event.type === "refund.failed"
         ) {
           const refund = event.data.object as Stripe.Refund;
-          const refundStatus = String((refund as any)?.status ?? "")
-            .trim()
-            .toLowerCase();
-          if (
-            event.type === "refund.failed" ||
-            refundStatus === "failed" ||
-            refundStatus === "canceled"
-          ) {
-            const refundEvidence = readStripeRefundEvidence(refund);
-            const charge = await retrieveStripeChargeForEvidence(
-              refundEvidence.sourceProviderChargeId,
-            );
-            const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(charge);
-            const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
-            const communityAccessResult = await syncCommunitySubscriptionFromStripeSubscription(
-              ctx,
-              event,
-              subscription,
-              { preserveRiskRevocation: true },
-            );
-            return processedResponse({
-              ok: true,
-              received: true,
-              event: event.type,
-              reason: "refund_failed_no_reversal",
-              communityAccessResult,
-            });
-          }
           const refundEvidence = readStripeRefundEvidence(refund);
           if (!refundEvidence.sourceProviderRefundId) {
             return processedResponse({
@@ -1383,7 +1384,29 @@ export function registerRuntimeBillingRoutes(
           const charge = await retrieveStripeChargeForEvidence(
             refundEvidence.sourceProviderChargeId,
           );
-          const chargeEvidence = charge ? readStripeChargeEvidence(charge) : null;
+          if (!charge) throw new Error("stripe_refund_charge_current_truth_missing");
+          const chargeEvidence = readStripeChargeEvidence(charge);
+          const refundStatus = String((refund as any)?.status ?? "")
+            .trim()
+            .toLowerCase();
+          const refundFailed =
+            event.type === "refund.failed" ||
+            refundStatus === "failed" ||
+            refundStatus === "canceled";
+          if (refundFailed) {
+            const communityAccessResult = await syncCommunityAccessForCurrentRefund(
+              ctx,
+              event,
+              { charge },
+            );
+            return processedResponse({
+              ok: true,
+              received: true,
+              event: event.type,
+              reason: "refund_current_charge_reconciled",
+              communityAccessResult,
+            });
+          }
           const partnerAdjustmentResult = await (ctx as any).runMutation(
             internal.builderPartners
               .recordPartnerCommissionRefundAdjustmentInternal as any,
@@ -1412,10 +1435,11 @@ export function registerRuntimeBillingRoutes(
                 : Date.now(),
             },
           );
-          const communityAccessResult = await syncCommunityAccessForRefund(ctx, event, {
-            refund,
-            charge,
-          });
+          const communityAccessResult = await syncCommunityAccessForCurrentRefund(
+            ctx,
+            event,
+            { charge },
+          );
           return processedResponse({
             ok: true,
             received: true,
@@ -1426,20 +1450,17 @@ export function registerRuntimeBillingRoutes(
         }
 
         if (event.type === "charge.refunded") {
-          const charge = event.data.object as Stripe.Charge;
+          const deliveredCharge = event.data.object as Stripe.Charge;
+          const deliveredChargeId = readStripeObjectId(deliveredCharge);
+          const charge = await retrieveStripeChargeForEvidence(deliveredChargeId);
+          if (!charge) throw new Error("stripe_refunded_charge_current_truth_missing");
           const chargeEvidence = readStripeChargeEvidence(charge);
-          const refunds = Array.isArray((charge as any)?.refunds?.data)
-            ? (charge as any).refunds.data as Stripe.Refund[]
+          const refunds = Array.isArray((deliveredCharge as any)?.refunds?.data)
+            ? (deliveredCharge as any).refunds.data as Stripe.Refund[]
             : [];
-          if (refunds.length <= 0) {
-            return processedResponse({
-              ok: true,
-              ignored: true,
-              event: event.type,
-              reason: "charge_refunded_refunds_missing",
-              sourceProviderChargeId: chargeEvidence.sourceProviderChargeId,
-            }, "ignored");
-          }
+          const partnerAdjustmentReason = refunds.length <= 0
+            ? "charge_refunded_refunds_missing"
+            : undefined;
           const results = [];
           for (const refund of refunds) {
             const refundEvidence = readStripeRefundEvidence(refund);
@@ -1472,20 +1493,22 @@ export function registerRuntimeBillingRoutes(
                   : Date.now(),
               },
             );
-            const communityAccessResult = await syncCommunityAccessForRefund(ctx, event, {
-              refund,
-              charge,
-            });
             results.push({
               partnerAdjustmentResult,
-              communityAccessResult,
             });
           }
+          const communityAccessResult = await syncCommunityAccessForCurrentRefund(
+            ctx,
+            event,
+            { charge },
+          );
           return processedResponse({
             ok: true,
             received: true,
             event: event.type,
             results,
+            partnerAdjustmentReason,
+            communityAccessResult,
           });
         }
 
@@ -1504,10 +1527,16 @@ export function registerRuntimeBillingRoutes(
               reason: "dispute_id_missing",
             }, "ignored");
           }
-          const charge = await retrieveStripeChargeForEvidence(
-            disputeEvidence.sourceProviderChargeId,
+          const currentDispute = await retrieveStripeDisputeForEvidence(
+            disputeEvidence.sourceProviderDisputeId,
           );
-          const chargeEvidence = charge ? readStripeChargeEvidence(charge) : null;
+          if (!currentDispute) throw new Error("stripe_dispute_current_truth_missing");
+          const currentDisputeEvidence = readStripeDisputeEvidence(currentDispute);
+          const charge = await retrieveStripeChargeForEvidence(
+            currentDisputeEvidence.sourceProviderChargeId,
+          );
+          if (!charge) throw new Error("stripe_dispute_charge_current_truth_missing");
+          const chargeEvidence = readStripeChargeEvidence(charge);
           if (event.type === "charge.dispute.created") {
             const partnerAdjustmentResult = await (ctx as any).runMutation(
               internal.builderPartners
@@ -1537,9 +1566,9 @@ export function registerRuntimeBillingRoutes(
                   : Date.now(),
               },
             );
-            const communityAccessResult = await syncCommunityAccessForDispute(ctx, event, {
+            const communityAccessResult = await syncCommunityAccessForCurrentDispute(ctx, event, {
+              dispute: currentDispute,
               charge,
-              outcome: "opened",
             });
             return processedResponse({
               ok: true,
@@ -1587,9 +1616,9 @@ export function registerRuntimeBillingRoutes(
                 : Date.now(),
             },
           );
-          const communityAccessResult = await syncCommunityAccessForDispute(ctx, event, {
+          const communityAccessResult = await syncCommunityAccessForCurrentDispute(ctx, event, {
+            dispute: currentDispute,
             charge,
-            outcome,
           });
           return processedResponse({
             ok: true,

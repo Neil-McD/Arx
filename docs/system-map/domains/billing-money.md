@@ -15,7 +15,7 @@ Builder Partner is a retained fourth, secondary growth economy—not a launch ga
 | Concern | Owner | Local role |
 | --- | --- | --- |
 | checkout/payment/subscription settlement | Stripe | idempotent checkout/session/subscription projections and webhook receipts |
-| community access | current membership plus provider-derived `communitySubscriptions` | per-request access decision |
+| community access | current membership plus provider-derived `communitySubscriptions` and explicit `communitySubscriptionAccessBlocks` | atomic access projection and per-request decision |
 | platform tier | sparse `userEntitlements` current-source rows; absence is Free | bounded effective tier/gate projection |
 | workspace/tool usage | credit balance, reservation, usage charge/collection ledgers | reserve, settle, retry, reconcile |
 | creator payout readiness | Stripe Connect account plus community commerce state | destination transfer configuration and operator visibility |
@@ -48,7 +48,7 @@ The bounded staging audit found active partners and pending financial state, so 
 
 ## Failure and recovery questions
 
-Static code clearly separates provider verification from redirects. First verified community-checkout completion now creates membership and the single Stripe subscription projection in the same Convex transaction; checkout success only observes that authority. Subscription lifecycle events re-read current Stripe state, duplicate identities fail closed, transient retrieval failure retries, and provider-confirmed absence fails closed. Atomic webhook receipts, refund/dispute risk ordering, Connect unavailability, charge collection failure, creator settlement, and idempotency across deployment retries remain unproven. These require provider fixtures and redacted staging receipts, not source inspection alone.
+Static code clearly separates provider verification from redirects. First verified community-checkout completion creates membership and the single Stripe subscription projection in one Convex transaction; checkout success only observes that authority. Subscription, refund, and dispute access effects re-read current Stripe state before one atomic mutation updates explicit financial blocks, subscription/membership projections, canonical member count, and a bounded effect receipt. Duplicate/reordered events, failed-refund recovery, receipt corruption rollback, and non-financial revocation precedence are proven locally. Bounded asynchronous provider-outage recovery, live staging Stripe test events, Connect unavailability, charge collection failure, and creator settlement remain unproven.
 
 ## Reduction candidates
 
@@ -66,4 +66,4 @@ Static code clearly separates provider verification from redirects. First verifi
 
 ## Correct decomposition target
 
-Use one provider event kernel and separate bounded policies for community subscription, premium tier, usage credit, creator settlement, and Builder Partner. Share money/idempotency primitives; do not share business state machines merely to reduce files. Builder Partner v3 must record its policy version and rate basis on every new obligation.
+Use effect-specific provider receipts and separate bounded policies for community access, premium tier, usage credit, creator settlement, and Builder Partner. Share only physically common verification/idempotency primitives; do not create a generic webhook business-state machine merely to reduce files. Builder Partner v3 must record its policy version and rate basis on every new obligation.

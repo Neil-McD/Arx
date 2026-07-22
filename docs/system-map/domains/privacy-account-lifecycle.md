@@ -15,7 +15,7 @@ Let a person control their account and private data without corrupting money rec
 | operational evidence | audit/diagnostic/runtime receipts | bounded retention and pseudonymization; never accidental authority |
 | external-provider state | OAuth, Stripe, worker/provider resources | revoke/delete externally and reconcile local state with receipts |
 
-The ownership matrix is accepted as product direction. `accountLifecyclePolicy.ts` now encodes declarative coverage for all 123 current schema tables, but the bounded executor and exact legal/financial/security TTLs remain open.
+The ownership matrix is accepted as product direction. `accountLifecyclePolicy.ts` now encodes declarative coverage for all 125 current schema tables, but the bounded executor and exact legal/financial/security TTLs remain open.
 
 ## Account deletion path
 

@@ -405,7 +405,7 @@ require_multiline_match "$BILLING_CORE_FILE" \
   'ensureCommunityMembership[\s\S]*activateCommunityMembershipCore' \
   "paid membership creation maintains active member count"
 require_multiline_match "$COMMUNITY_COMMERCE_FILE" \
-  'syncCommunitySubscriptionLifecycleInternal[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
+  'syncCommunitySubscriptionLifecycleCore[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
   "subscription status changes maintain active member count"
 require_multiline_match "$PLATFORM_HOME_COMMUNITY_FILE" \
   'ensurePlatformHomeCommunityMembership[\s\S]*activateCommunityMembershipCore' \

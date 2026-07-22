@@ -63,6 +63,7 @@ import type * as communityArchiveDocuments from "../communityArchiveDocuments.js
 import type * as communityAttention from "../communityAttention.js";
 import type * as communityCapabilityContext from "../communityCapabilityContext.js";
 import type * as communityChat from "../communityChat.js";
+import type * as communityCheckoutStartCore from "../communityCheckoutStartCore.js";
 import type * as communityCognitionCleanup from "../communityCognitionCleanup.js";
 import type * as communityCognitionCleanupCore from "../communityCognitionCleanupCore.js";
 import type * as communityCognitionLifecycle from "../communityCognitionLifecycle.js";
@@ -113,6 +114,8 @@ import type * as communityResourceMemoryProjection from "../communityResourceMem
 import type * as communityResources from "../communityResources.js";
 import type * as communitySkillAttachments from "../communitySkillAttachments.js";
 import type * as communitySourceUrlPolicy from "../communitySourceUrlPolicy.js";
+import type * as communitySubscriptionAccessCore from "../communitySubscriptionAccessCore.js";
+import type * as communitySubscriptionEventConvergenceCore from "../communitySubscriptionEventConvergenceCore.js";
 import type * as communityText from "../communityText.js";
 import type * as communityWikiArchitect from "../communityWikiArchitect.js";
 import type * as creatorCommerce from "../creatorCommerce.js";
@@ -296,6 +299,7 @@ declare const fullApi: ApiFromModules<{
   communityAttention: typeof communityAttention;
   communityCapabilityContext: typeof communityCapabilityContext;
   communityChat: typeof communityChat;
+  communityCheckoutStartCore: typeof communityCheckoutStartCore;
   communityCognitionCleanup: typeof communityCognitionCleanup;
   communityCognitionCleanupCore: typeof communityCognitionCleanupCore;
   communityCognitionLifecycle: typeof communityCognitionLifecycle;
@@ -346,6 +350,8 @@ declare const fullApi: ApiFromModules<{
   communityResources: typeof communityResources;
   communitySkillAttachments: typeof communitySkillAttachments;
   communitySourceUrlPolicy: typeof communitySourceUrlPolicy;
+  communitySubscriptionAccessCore: typeof communitySubscriptionAccessCore;
+  communitySubscriptionEventConvergenceCore: typeof communitySubscriptionEventConvergenceCore;
   communityText: typeof communityText;
   communityWikiArchitect: typeof communityWikiArchitect;
   creatorCommerce: typeof creatorCommerce;
