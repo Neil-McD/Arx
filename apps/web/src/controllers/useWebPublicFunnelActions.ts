@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import {
-  classifyPublicCommunityJoinError, getErrorMessage, joinPublicCommunityRpc, } from "../../../../shared/pay_first";
+  classifyPublicCommunityJoinError, getErrorMessage, joinPublicCommunityRpc, } from "../../../../shared/publicCommunityJoin";
 import type { PendingAuthIntentInput } from "../../../../shared/authResumeState";
 import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisibility";
 

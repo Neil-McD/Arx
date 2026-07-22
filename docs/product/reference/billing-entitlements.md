@@ -23,7 +23,7 @@ The simple cash path is:
 3. The builder shares the community funnel.
 4. A prospective member signs in and chooses the paid access path.
 5. Checkout sends the member through the payment provider.
-6. Checkout finalization and provider/webhook verification create or update backend entitlement.
+6. Provider/webhook verification atomically creates or updates backend membership and subscription truth.
 7. The member can enter the community only after backend access truth exists.
 8. Builder revenue and payouts remain tied to verified provider and community revenue state.
 
@@ -35,7 +35,7 @@ Community creator revenue uses Stripe Connect subscriptions, not a Polynet-manag
 
 Community member access follows provider-backed subscription truth. Recurring invoice success refreshes the active subscription window. Payment failure follows Stripe subscription lifecycle state, usually a `past_due` grace state before terminal revocation. Full refunds revoke paid community access immediately. Partial refunds retain access unless subscription state later changes. Failed or canceled refunds restore from current Stripe subscription truth. Disputes and chargebacks suspend access when opened, remain revoked when lost, and restore only when Stripe shows a valid subscription after a win or funds reinstatement.
 
-Public community checkout start has one bounded caller attempt identity. That identity atomically owns one local checkout row and purchase claim, freezes the provider request, and supplies one deterministic Stripe idempotency key. Replays return the same still-open provider session; ambiguous failures preserve the local reconciliation record. Checkout-attempt expiry is separate from the longer claim/finalization window, and only the initiating route, authenticated subject, selected plan, and current browser operation may consume the response.
+Public community checkout start has one bounded caller attempt identity. That identity owns one local checkout row, freezes the provider request, and supplies one deterministic Stripe idempotency key. Replays return the same still-open provider session; ambiguous failures preserve the local reconciliation record. Verified Stripe completion performs the first membership/subscription activation and checkout completion in one backend transaction. The checkout-success page is only an authenticated observer of that authority; it cannot grant access. Duplicate completion after a later refund or terminal lifecycle event cannot reactivate access.
 
 Premium tool usage is entitled through Polynet Premium. Internally, paid tools should still write tool, vendor, Polynet price, raw vendor cost, cost-source evidence, and settlement evidence into the internal ledger so provider-cost accounting remains auditable.
 
@@ -65,6 +65,7 @@ Payout readiness does not grant community access. It determines whether the buil
 14. Community creator revenue stays Stripe-native unless Polynet intentionally changes to a held-funds payout architecture.
 15. Full refunds and opened disputes revoke or suspend paid community access through backend subscription lifecycle state.
 16. Paid-tool reporting should distinguish exact provider cost, estimated provider cost, and mixed provider evidence.
+17. A community membership and provider subscription must have one fail-closed subscription identity; duplicate rows are corruption, not a ranking problem.
 
 ## Common Mistakes
 

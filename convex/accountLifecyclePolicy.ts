@@ -6,11 +6,11 @@
  * mutation stays quarantined until versioned executors satisfy this contract.
  */
 
-export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v1" as const;
+export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v2" as const;
 
 export const ACCOUNT_LIFECYCLE_SCHEMA_BASELINE = Object.freeze({
-  tableCount: 124,
-  directUserEdgeCount: 122,
+  tableCount: 123,
+  directUserEdgeCount: 120,
   opaqueFieldCount: 26,
   storageFieldCount: 7,
 });
@@ -306,7 +306,6 @@ const policyGroups: readonly PolicyGroup[] = [
       "creditLedgerEntries",
       "checkoutSessions",
       "userStripeCustomers",
-      "purchaseClaims",
       "communityPricePoints",
       "communitySubscriptions",
     ],
@@ -626,7 +625,6 @@ export const ACCOUNT_LIFECYCLE_UNINDEXED_EDGE_POLICIES: Readonly<
   "workspaceDirectorySnapshots.ownerId": { lookup: "parent_cascade", reason: "delete snapshots through the owned cloud project", parentTable: "cloudProjects", parentIndex: "by_owner", childForeignKey: "projectId", childIndex: "by_project_path" },
   "workspaceFilePreviewSnapshots.ownerId": { lookup: "parent_cascade", reason: "delete previews through the owned cloud project", parentTable: "cloudProjects", parentIndex: "by_owner", childForeignKey: "projectId", childIndex: "by_project_path" },
   "criticalAuditEvents.subjectUserId": { lookup: "index_required", reason: "subject identity minimization cannot scan audit history" },
-  "purchaseClaims.redeemedByUserId": { lookup: "index_required", reason: "redeemer identity minimization requires bounded finance lookup" },
   "memberFacts.createdByUserId": { lookup: "index_required", reason: "creator attribution may reference the account outside owned facts" },
   "communityOnboardingConfigs.updatedByUserId": { lookup: "index_required", reason: "onboarding attribution must be detached without community-wide scans" },
   "communityBlocks.createdByUserId": { lookup: "index_required", reason: "moderation authorship requires a bounded lookup" },

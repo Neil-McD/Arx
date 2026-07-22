@@ -28,7 +28,7 @@ The branch now:
 3. retrieves the current Stripe subscription before updating community state;
 4. projects the current provider snapshot into pending checkout and membership/subscription state;
 5. propagates transient provider failures so Stripe can retry;
-6. marks a provider-confirmed missing community subscription `ended`, preventing pending claim redemption and revoking existing paid access when locally attributable.
+6. marks a provider-confirmed missing community subscription `ended`, preventing pending checkout activation and revoking existing paid access when locally attributable.
 
 ## Executable evidence
 
@@ -40,7 +40,7 @@ The branch now:
 - transient provider failures propagate rather than being acknowledged as success;
 - missing or mismatched provider identity fails closed.
 
-The existing community subscription lifecycle proof additionally requires the runtime handler to use this resolver and retain the provider-missing revocation path.
+The paid-community access authority suite additionally requires the runtime handler to retain the provider-missing revocation path and one fail-closed subscription identity.
 
 ## Staging shape and migration boundary
 

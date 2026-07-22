@@ -1,7 +1,7 @@
 import type {
   PublicCommunityJoinErrorKind,
   PublicCommunityJoinResult,
-} from "../../../shared/pay_first";
+} from "../../../shared/publicCommunityJoin";
 
 export type ReconciledAdmissionStatus =
   | "entered"

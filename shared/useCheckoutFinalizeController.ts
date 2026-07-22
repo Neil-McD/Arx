@@ -8,12 +8,9 @@ export type CheckoutFinalizeStatus = "idle" | "loading" | "pending" | "succeeded
 type UseCheckoutFinalizeControllerArgs = {
   checkoutSuccessSessionId: string | null;
   getSession: () => AuthSession | null;
-  redeemPurchaseClaim: (token: string) => Promise<void>;
-  persistClaimToken: (token: string) => void;
+  onAccessReady: (community: { id: string; slug: string | null }) => Promise<void> | void;
   setCheckoutStatus: Dispatch<SetStateAction<CheckoutFinalizeStatus>>;
   setCheckoutError: Dispatch<SetStateAction<string | null>>;
-  setCheckoutClaimToken: Dispatch<SetStateAction<string | null>>;
-  setRedeemClaimError: Dispatch<SetStateAction<string | null>>;
   maxPendingAttempts?: number;
 };
 
@@ -79,8 +76,6 @@ export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControlle
       inFlightRef.current = true;
       currentArgs.setCheckoutStatus((prev) => (prev === "pending" ? "pending" : "loading"));
       currentArgs.setCheckoutError(null);
-      currentArgs.setCheckoutClaimToken(null);
-      currentArgs.setRedeemClaimError(null);
       try {
         const schedulePendingRetry = () => {
           currentArgs.setCheckoutStatus("pending");
@@ -109,7 +104,7 @@ export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControlle
           ok?: boolean;
           status?: string;
           message?: string;
-          claim?: { token?: string };
+          community?: { id?: string; slug?: string | null };
         };
         if (cancelled) return;
         if (payload?.status === "pending") {
@@ -122,19 +117,21 @@ export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControlle
             : "Failed to finalize checkout.");
         }
 
-        const token = typeof payload?.claim?.token === "string" ? payload.claim.token.trim() : "";
-        if (!token) throw new Error("Missing claim token.");
-
-        currentArgs.setCheckoutStatus("succeeded");
-        currentArgs.setCheckoutClaimToken(token);
+        const communityId =
+          typeof payload?.community?.id === "string" ? payload.community.id.trim() : "";
+        if (!communityId) throw new Error("Checkout access is missing its community.");
         if (pollTimeoutRef.current) {
           window.clearTimeout(pollTimeoutRef.current);
           pollTimeoutRef.current = null;
         }
-        currentArgs.persistClaimToken(token);
-        if (currentArgs.getSession()) {
-          await currentArgs.redeemPurchaseClaim(token);
-        }
+        await currentArgs.onAccessReady({
+          id: communityId,
+          slug:
+            typeof payload.community?.slug === "string"
+              ? payload.community.slug.trim() || null
+              : null,
+        });
+        currentArgs.setCheckoutStatus("succeeded");
       } catch (error) {
         const message =
           typeof error === "string"

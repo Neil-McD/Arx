@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api } from "./_generated/api";
-import { redeemClaimRow } from "./billingCore";
 import {
   type CommunityMembershipLike,
   communityMembershipRowIsActive,
@@ -353,64 +352,6 @@ describe("community membership authority", () => {
     }));
     expect(state.request?.status).toBe("pending");
     expect(state.memberships).toHaveLength(0);
-    expect(state.onboardingSessions).toHaveLength(0);
-  });
-
-  test("redeeming an owner paid claim preserves the claim without membership or subscription", async () => {
-    const t = convexTest(schema, modules);
-    const fixture = await createAuthorityFixture(t, "owner-paid-claim", true);
-    const seeded = await t.run(async (ctx) => {
-      await ctx.db.patch(fixture.communityId, { entryPolicy: "paid_subscription" });
-      const pricePointId = await ctx.db.insert("communityPricePoints", {
-        communityId: fixture.communityId,
-        billingPeriod: "monthly",
-        name: "Owner authority test",
-        amountBaseUnits: 1_000,
-        currency: "usd",
-        currencyDecimals: 2,
-        isCurrent: true,
-        createdAt: fixture.nowMs,
-        updatedAt: fixture.nowMs,
-      });
-      const claimId = await ctx.db.insert("purchaseClaims", {
-        claimToken: "owner-authority-paid-claim",
-        communityId: fixture.communityId,
-        pricePointId,
-        ownerUserId: fixture.ownerId,
-        status: "pending",
-        expiresAt: fixture.nowMs + 60_000,
-        createdAt: fixture.nowMs,
-        updatedAt: fixture.nowMs,
-      });
-      return { claimId };
-    });
-
-    const redemption = await t.run(async (ctx) => {
-      const claim = await ctx.db.get(seeded.claimId);
-      if (!claim) throw new Error("test_claim_missing");
-      return await redeemClaimRow({
-        ctx,
-        claim: claim as any,
-        userId: fixture.ownerId,
-        nowMs: fixture.nowMs + 1,
-      });
-    });
-    expect(redemption).toEqual({
-      communityId: String(fixture.communityId),
-      accessGranted: false,
-      grantMarker: null,
-    });
-
-    const state = await t.run(async (ctx) => ({
-      claim: await ctx.db.get(seeded.claimId),
-      memberships: await ctx.db.query("communityMemberships").collect(),
-      subscriptions: await ctx.db.query("communitySubscriptions").collect(),
-      onboardingSessions: await ctx.db.query("communityOnboardingSessions").collect(),
-    }));
-    expect(state.claim?.status).toBe("redeemed");
-    expect(state.claim?.redeemedByUserId).toEqual(fixture.ownerId);
-    expect(state.memberships).toHaveLength(0);
-    expect(state.subscriptions).toHaveLength(0);
     expect(state.onboardingSessions).toHaveLength(0);
   });
 

@@ -537,7 +537,6 @@ async function syncCommunitySubscriptionFromStripeSubscription(
     {
       communityId: existingCommunitySubscription.communityId,
       userId: existingCommunitySubscription.userId,
-      source: "stripe",
       pricePointId: existingCommunitySubscription.pricePointId ?? undefined,
       providerPriceId,
       providerSubscriptionId,
@@ -587,7 +586,6 @@ async function syncCommunitySubscriptionRiskStatus(
     {
       communityId: existingCommunitySubscription.communityId,
       userId: existingCommunitySubscription.userId,
-      source: "stripe",
       pricePointId: existingCommunitySubscription.pricePointId ?? undefined,
       providerSubscriptionId,
       status: args.status,

@@ -15,6 +15,7 @@ import {
   getCommunityAndMembership,
   getActiveCommunityBlock,
   getUniqueCommunityMembershipByPair,
+  getUniqueCommunitySubscriptionByMembership,
   listCommunityMembershipRowsForManager,
   mapCommunityMemberSettingsRow,
   mapCommunityPricingRow,
@@ -332,32 +333,28 @@ async function endCommunitySubscriptionsForMembership(args: {
   membershipId: any;
   nowMs: number;
 }): Promise<void> {
-  const rows = await args.ctx.db
-    .query("communitySubscriptions" as any)
-    .withIndex("by_membership", (q: any) =>
-      q.eq("membershipId", args.membershipId),
-    )
-    .collect();
-  for (const row of rows) {
-    await args.ctx.db.patch(row._id, {
-      status: "ended",
-      cancelAtPeriodEnd: false,
-      endedAt: args.nowMs,
-      updatedAt: args.nowMs,
-    });
-  }
+  const row = await getUniqueCommunitySubscriptionByMembership({
+    ctx: args.ctx,
+    membershipId: args.membershipId,
+  });
+  if (!row) return;
+  await args.ctx.db.patch(row._id, {
+    status: "ended",
+    cancelAtPeriodEnd: false,
+    endedAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
 }
 
 async function listCommunitySubscriptionRowsForMembership(args: {
   ctx: any;
   membershipId: any;
 }): Promise<CommunitySubscriptionLike[]> {
-  return (await args.ctx.db
-    .query("communitySubscriptions" as any)
-    .withIndex("by_membership", (q: any) =>
-      q.eq("membershipId", args.membershipId),
-    )
-    .collect()) as CommunitySubscriptionLike[];
+  const row = await getUniqueCommunitySubscriptionByMembership({
+    ctx: args.ctx,
+    membershipId: args.membershipId,
+  });
+  return row ? [row] : [];
 }
 
 function isCommunityOwnerUser(community: CommunityLike, userId: any): boolean {

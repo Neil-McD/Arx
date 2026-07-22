@@ -102,12 +102,12 @@ MCP OAuth/client -> official transport -> explicit community context selector
 
 ```text
 checkout request -> Stripe -> webhook/provider verification
--> checkout/subscription projection -> per-request access
+-> atomic checkout/membership/subscription projection -> per-request access
 -> destination/Connect creator settlement -> audit/operator projection
 ```
 
 - Authority: Stripe event/object state; redirects are UX only.
-- Good: idempotent lifecycle structure and ordinary creator payout boundary exist.
+- Good: verified completion owns first activation, redirects are observational, duplicate subscription identity fails closed, and ordinary creator payout remains separate.
 - Good: Builder Partner v3 is community-only 4%, records explicit policy/rate basis, creates no new paid-tool commission, and preserves historical economics.
 - Gaps: delayed/reordered/refund/dispute/Connect convergence and historical legal-lineage/payout reconciliation remain incomplete.
 

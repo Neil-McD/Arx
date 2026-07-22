@@ -80,7 +80,7 @@ Each diagnostic signal should be classified with one of these statuses:
 | Tools, MCP, and workspace runtime | MCP validation, tool calls, terminal/computer use, sandbox lifecycle | Can tools actually execute? | Blaxel, Convex runtime events, Sentry spans, MCP diagnostics | tool success rate, tool failures by app/tool, sandbox create failures, timeout rate, MCP live/not-live reasons | partial |
 | Integrations and harness | Settings-managed apps/skills, canonical harness projection | Are apps and skills configured and projected correctly? | Convex, PostHog, Sentry | setup success rate, duplicate/canonicalization conflicts, setup-needed count, validation failures, click-to-live rate | partial |
 | Community core | chat, feed, resources, events, members, settings | Are communities usable once joined? | Convex, PostHog, Sentry | message send failures, resource load failures, event creation failures, member action failures, community route errors | partial |
-| Funnel and join | public funnel, join request, paid join, claim flow | Can visitors become members? | PostHog, Convex, Stripe, Sentry | page visits, join starts, join completions, conversion rate, checkout failures, pending claim age | partial |
+| Funnel and join | public funnel, join request, paid join, checkout activation | Can visitors become members? | PostHog, Convex, Stripe, Sentry | page visits, join starts, join completions, conversion rate, checkout failures, pending checkout age | partial |
 | Billing and entitlements | account commerce, credits, community subscriptions, payouts | Is money state correct? | Stripe, Convex audit, Sentry | checkout completion, webhook failures, subscription sync failures, credit reservation/settlement failures, payout blocked count | partial |
 | Operator panel health | operator panel load, snapshots, attention queue | Can the operator trust the panel? | Convex, Sentry, proof scripts | snapshot freshness, query failures, missing evidence, unknown error codes, stale diagnostics | partial |
 
@@ -170,7 +170,7 @@ Each diagnostic signal should be classified with one of these statuses:
 | Join starts | Join requests or checkout starts | Convex and PostHog | Convex, PostHog | now |
 | Join completions | Approved/joined/paid unlocked memberships | Convex membership/access state | Convex | now |
 | Conversion rate | Join completions divided by funnel visits | Convex analytics rollup | Convex | now |
-| Pending claim age | Oldest unresolved purchase claim | Convex purchase claims | Convex | now |
+| Pending checkout age | Oldest provider-backed community checkout awaiting verified completion | Convex checkout sessions | Convex | now |
 | Checkout failure rate | Failed/expired checkouts by surface | Stripe/Convex checkout sessions | Stripe, Convex | now |
 
 ### Billing and Entitlements

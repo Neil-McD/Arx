@@ -22,9 +22,6 @@ import {
   type AuthSession,
 } from "./auth";
 import {
-  clearPendingPurchaseClaimToken, readPendingPurchaseClaimToken, storePendingPurchaseClaimToken, type PendingPurchaseClaim
-} from "../../../shared/pay_first";
-import {
   buildPathWithSearchParamsRemoved,
   buildTelemetryRouteLabel,
 } from "../../../shared/routePrivacy";
@@ -458,7 +455,7 @@ import {
   type CommunityMembersJoinReviewMode,
 } from "./communityJoinPolicy";
 import { useWebAccountCommerceActions } from "./controllers/useWebAccountCommerceActions";
-import { useWebCommerceClaimActions } from "./controllers/useWebCommerceClaimActions";
+import { useWebAccountCommerceStatusActions } from "./controllers/useWebAccountCommerceStatusActions";
 import { useWebPublicFunnelActions } from "./controllers/useWebPublicFunnelActions";
 import { useWebPublicCheckoutStart } from "./controllers/useWebPublicCheckoutStart";
 import { useWebCommunityChatPreloadLifecycle } from "./controllers/useWebCommunityChatPreloadLifecycle";
@@ -1698,9 +1695,6 @@ export default function App() {
         communityTab: "chat",
       });
       personalMemoryUi.setPersonalMemoryItems([]);
-      setPendingPurchaseClaims([]);
-      setPendingPurchasesError(null);
-      setPendingPurchasesSuccess(null);
       setCloudProfile(null);
       setAccountSetupStatus(null);
       setIsLoadingAccountSetupStatus(false);
@@ -2113,20 +2107,9 @@ export default function App() {
   >();
   const billingUi = useWebBillingUiController<
     AccountCommerceStatus,
-    WorkspaceCreditBalance,
-    PendingPurchaseClaim
+    WorkspaceCreditBalance
   >();
   const {
-    pendingPurchaseClaims,
-    setPendingPurchaseClaims,
-    isLoadingPendingPurchases,
-    setIsLoadingPendingPurchases,
-    pendingPurchasesError,
-    setPendingPurchasesError,
-    isRedeemingPendingPurchases,
-    setIsRedeemingPendingPurchases,
-    pendingPurchasesSuccess,
-    setPendingPurchasesSuccess,
     accountCommerceStatus,
     setAccountCommerceStatus,
     isLoadingAccountCommerce,
@@ -2149,18 +2132,7 @@ export default function App() {
     setCheckoutStatus,
     checkoutError,
     setCheckoutError,
-    checkoutClaimToken,
-    setCheckoutClaimToken,
-    isRedeemingClaim,
-    setIsRedeemingClaim,
-    redeemClaimError,
-    setRedeemClaimError,
-    manualClaimToken,
-    setManualClaimToken,
-    redeemPendingPurchasesInFlightRef,
   } = billingUi;
-
-  const [, setIsPendingPurchasesBannerDismissed] = useState(false);
   const [builderPartnerProgram, setBuilderPartnerProgram] =
     useState<BuilderPartnerProgramSnapshot | null>(null);
   const [isLoadingBuilderPartnerProgram, setIsLoadingBuilderPartnerProgram] =
@@ -2179,9 +2151,6 @@ export default function App() {
   const lastTrackedAuthSessionUserIdRef = useRef<string | null>(null);
   const [isFreeAccountInfoOpen, setIsFreeAccountInfoOpen] = useState(false);
   const [stripeConnectReturn, setStripeConnectReturn] = useState<StripeConnectReturn | null>(null);
-  const lastAutoRedeemPendingPurchasesUserIdRef = useRef<string | null>(null);
-  const autoRedeemPendingPurchasesAttemptRef = useRef(0);
-  const autoRedeemPendingPurchasesTimeoutRef = useRef<number | null>(null);
 
   const [modelToggles, setModelToggles] = useState<ModelToggle[]>(DEFAULT_MODEL_TOGGLES);
   const [modelProviderById, setModelProviderById] = useState<Record<string, string>>({});
@@ -4088,7 +4057,7 @@ export default function App() {
     }
   }
 
-  /* One gatekeeper for every entry path (free join, claim redemption, enter
+  /* One gatekeeper for every entry path (free join, paid checkout, enter
      click): incomplete setup on the funnel route opens the bridge instead of
      entering; everything else passes straight through. */
   function enterCommunityThroughBridge(entry: {
@@ -7176,17 +7145,11 @@ export default function App() {
 	        }
 	        openCommunityLaunchCreateFlow();
 	      },
-      redeem_purchase_claim: (payload) => {
-        void redeemPurchaseClaim(payload.token);
-      },
       join_public_community: (payload) => {
         void joinPublicCommunity({
           communitySlug: payload.community_slug,
           origin: "auth_resume",
         });
-      },
-      redeem_pending_purchases: (payload) => {
-        void redeemPendingPurchases({ navigate: payload.navigate, silentNoop: payload.silent_noop });
       },
       try_polynet_free: () => {
         void routeTryPolynetFree(session);
@@ -7342,34 +7305,11 @@ export default function App() {
       navigateToUrl: (url) => window.location.assign(url),
     });
 
-  const {
-    redeemPurchaseClaim,
-    loadPendingPurchaseClaims,
-    loadAccountCommerceStatus,
-    redeemPendingPurchases,
-  } = useWebCommerceClaimActions({
-    getSession: () => sessionRef.current,
+  const { loadAccountCommerceStatus } = useWebAccountCommerceStatusActions({
     ensureSession: ensureUsableAuthSession,
-    requireSignIn,
-    openCommunityWorkspace: ({ communityId, communitySlug }) => {
-      enterCommunityThroughBridge({ communityId, communitySlug: communitySlug ?? null });
-    },
-    loadCommunities,
-    clearPendingPurchaseClaimToken,
-    storePendingPurchaseClaimToken,
-    setCheckoutClaimToken,
-    setCheckoutStatus,
-    setIsRedeemingClaim,
-    setRedeemClaimError,
-    setIsLoadingPendingPurchases,
-    setPendingPurchasesError,
-    setPendingPurchaseClaims,
-    setIsRedeemingPendingPurchases,
-    setPendingPurchasesSuccess,
     setIsLoadingAccountCommerce,
     setAccountCommerceError,
     setAccountCommerceStatus,
-    redeemPendingPurchasesInFlightRef,
   });
 
   const loadBuilderPartnerProgram = useCallback(
@@ -7838,7 +7778,6 @@ export default function App() {
     publicFunnelSlug,
     isPublicFunnelPreviewRoute,
     checkoutSuccessSessionId,
-    claimTokenParam,
     isPublicCommunityFunnel,
     showPublicSignIn,
     selectedPublicCommunityPlan,
@@ -7888,15 +7827,6 @@ export default function App() {
   /* Visitor lens: locked shell-nav tabs reopen the join gate on the funnel
      surface (nonce bump crosses the shell/surface boundary). */
   const [visitorGateNonce, setVisitorGateNonce] = useState(0);
-  const pendingPurchaseBannerKey = pendingPurchaseClaims
-    .map((claim) => claim.community_id)
-    .sort()
-    .join("|");
-
-  useEffect(() => {
-    setIsPendingPurchasesBannerDismissed(false);
-  }, [pendingPurchaseBannerKey]);
-
   useWebJoinedCommunityRouteResolution<AuthSession, CommunityRecord, CommunityAccess>({
     publicRouteKind: shellPublicRoute.kind,
     activePage,
@@ -7912,19 +7842,9 @@ export default function App() {
 
   useWebPostAuthBillingLifecycle({
     session: session,
-    sessionRef,
-    claimTokenParam,
-    isRedeemingClaim,
-    lastAutoRedeemPendingPurchasesUserIdRef,
-    autoRedeemPendingPurchasesAttemptRef,
-    autoRedeemPendingPurchasesTimeoutRef,
     setAccountCommerceStatus,
     setAccountCommerceError,
     setIsLoadingAccountCommerce,
-    getAuthUid: getAuthUid,
-    redeemPurchaseClaim,
-    redeemPendingPurchases,
-    loadPendingPurchaseClaims,
     loadAccountCommerceStatus,
   });
 
@@ -7940,18 +7860,22 @@ export default function App() {
   const { retryCheckoutFinalize } = useCheckoutFinalizeController({
     checkoutSuccessSessionId,
     getSession: () => sessionRef.current,
-    redeemPurchaseClaim,
-    persistClaimToken: storePendingPurchaseClaimToken,
+    onAccessReady: async (community) => {
+      const activeSession = sessionRef.current;
+      if (!activeSession) throw new Error("Authentication required.");
+      await loadCommunities(activeSession);
+      enterCommunityThroughBridge({
+        communityId: community.id,
+        communitySlug: community.slug,
+      });
+    },
     setCheckoutStatus,
     setCheckoutError,
-      setCheckoutClaimToken,
-      setRedeemClaimError,
   });
 
   useEffect(() => {
-    if (claimTokenParam) scrubCurrentRouteSearchParams(["token"]);
     if (checkoutSuccessSessionId) scrubCurrentRouteSearchParams(["session_id"]);
-  }, [checkoutSuccessSessionId, claimTokenParam]);
+  }, [checkoutSuccessSessionId]);
 
   type WorkspaceLensTarget = {
     threadId: string;
@@ -9393,9 +9317,6 @@ export default function App() {
     session,
   ]);
 
-  const pendingToken =
-    (checkoutClaimToken ?? (publicRoute.kind === "claim" ? publicRoute.token : "")).trim() ||
-    readPendingPurchaseClaimToken();
   const handlePublicLandingPrimaryAction = () => {
     if (isPublicFunnelPreviewRoute) return;
     if (publicCommunityAdmissionStatus !== "ready") return;
@@ -9405,13 +9326,6 @@ export default function App() {
         communityId: publicCommunityUi.publicCommunityAccess.community_id,
         communitySlug: publicCommunityUi.publicCommunity.slug ?? null,
       });
-      return;
-    }
-    /* A completed-but-unredeemed purchase must redeem, never re-checkout —
-       otherwise the paid-return window can charge twice. */
-    const unredeemedClaimToken = readPendingPurchaseClaimToken();
-    if (unredeemedClaimToken) {
-      void redeemPurchaseClaim(unredeemedClaimToken);
       return;
     }
     if (canJoinWithCheckout && selectedPublicCommunityPlan) {
@@ -9433,20 +9347,6 @@ export default function App() {
     });
   };
 
-  const handlePublicCheckoutContinue = () => {
-    if (!pendingToken) return;
-    if (showPublicSignIn) {
-      requireSignIn({ reason: "redeem_purchase_claim", payload: { token: pendingToken } });
-      return;
-    }
-    void redeemPurchaseClaim(pendingToken);
-  };
-
-  const handlePublicClaimContinue = () => {
-    const token = (pendingToken || manualClaimToken).trim();
-    if (!token) return;
-    void redeemPurchaseClaim(token);
-  };
   const handleCancelPendingPublicJoinRequest = () => {
     if (publicCommunityAdmissionStatus !== "ready") return;
     const slug = publicCommunityUi.publicCommunity?.slug ?? publicFunnelSlug ?? "";
@@ -11086,13 +10986,6 @@ export default function App() {
       },
       canUseDevTierOverride,
       setDevAccountTier,
-      redeemPendingPurchases: async () => {
-        await redeemPendingPurchases();
-      },
-      ensureSession: ensureUsableAuthSession,
-      loadPendingPurchaseClaims: async (session) => {
-        await loadPendingPurchaseClaims(session as AuthSession);
-      },
       providerConnectionUi,
       billingUi,
     },
@@ -11256,17 +11149,9 @@ export default function App() {
     publicRouteKind: publicRoute.kind,
     showSignIn: showPublicSignIn,
     requireSignIn,
-    handleSignOut,
     checkoutStatus,
     retryCheckoutFinalize,
-    handlePublicCheckoutContinue,
-    handlePublicClaimContinue,
     checkoutError,
-    pendingToken,
-    manualClaimToken,
-    setManualClaimToken,
-    isRedeemingClaim,
-    redeemClaimError,
     authError,
   });
 
@@ -11509,7 +11394,7 @@ export default function App() {
       showSignIn: showPublicSignIn,
       bridge:
         /* The pitch converts first: the bridge opens on an entry ATTEMPT
-           (join/enter/claim), never on arrival. */
+           (join/enter/checkout), never on arrival. */
         !isPublicFunnelPreviewRoute &&
         session &&
         publicCommunityAdmissionStatus === "ready" &&

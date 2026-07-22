@@ -17,13 +17,6 @@ function sliceBetween(source: string, startMarker: string, endMarker?: string): 
 
 assert.equal(
   buildTelemetryRouteLabel({
-    pathname: "/claim",
-    search: "?token=claim_secret&tab=community",
-  }),
-  "/claim?tab=community",
-);
-assert.equal(
-  buildTelemetryRouteLabel({
     pathname: "/checkout/success",
     search: "?session_id=checkout_secret&source=funnel",
   }),
@@ -39,7 +32,6 @@ assert.equal(
 
 const appSource = readText(new URL("../apps/web/src/App.tsx", import.meta.url));
 const mainSource = readText(new URL("../apps/web/src/main.tsx", import.meta.url));
-const payFirstSource = readText(new URL("../shared/pay_first.ts", import.meta.url));
 const billingCoreSource = readText(new URL("../convex/billingCore.ts", import.meta.url));
 const communityCommerceSource = readText(new URL("../convex/communityCommerce.ts", import.meta.url));
 const workspaceCreditsSource = readText(new URL("../convex/workspaceCredits.ts", import.meta.url));
@@ -61,19 +53,6 @@ assert.ok(
 assert.ok(
   mainSource.includes("buildTelemetryRouteLabel({"),
   "expected module-load recovery target to use sanitized route labels",
-);
-
-assert.ok(
-  payFirstSource.includes("PENDING_PURCHASE_CLAIM_TOKEN_TTL_MS"),
-  "expected pending purchase claim token storage to define a TTL",
-);
-assert.ok(
-  payFirstSource.includes("expires_at"),
-  "expected pending purchase claim token storage to persist an expiry",
-);
-assert.ok(
-  payFirstSource.includes("clearPendingPurchaseClaimToken();"),
-  "expected expired pending purchase claim tokens to be cleared",
 );
 
 assert.ok(
@@ -121,4 +100,4 @@ assert.ok(
   "workspace credit top-up deletion must remove the direct Stripe payment checkout creator",
 );
 
-console.log("PASS: purchase token hygiene boundaries are enforced");
+console.log("PASS: checkout route hygiene boundaries are enforced");

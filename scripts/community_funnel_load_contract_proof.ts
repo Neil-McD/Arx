@@ -12,7 +12,7 @@ const accessTypes = read("shared/communityTypes.ts");
 const communityCore = read("convex/communityCore.ts");
 const app = read("apps/web/src/App.tsx");
 const authResumeState = read("shared/authResumeState.ts");
-const payFirst = read("shared/pay_first.ts");
+const publicCommunityJoin = read("shared/publicCommunityJoin.ts");
 const postAuthBilling = read("apps/web/src/controllers/useWebPostAuthBillingLifecycle.ts");
 const admissionAction = read("apps/web/src/publicCommunityAdmissionAction.ts");
 const routeState = read("shared/webAppRouteState.ts");
@@ -138,7 +138,7 @@ assert.match(
   /parsePublicCommunityFunnelRoutePath[\s\S]{0,500}normalizeCommunitySlugIdentity/,
   "public funnel routes must canonicalize slug identity before projection",
 );
-for (const source of [payFirst, postAuthBilling, app]) {
+for (const source of [publicCommunityJoin, postAuthBilling, app]) {
   assert.doesNotMatch(
     source,
     /PENDING_PUBLIC_JOIN|storePendingPublicJoin|readPendingPublicJoin|clearPendingPublicJoin/,
@@ -163,27 +163,27 @@ assert.match(
 
 // --- The browser has one strict slug-owned join RPC and never fabricates success ---
 assert.match(
-  payFirst,
+  publicCommunityJoin,
   /joinPublicCommunityRpc[\s\S]{0,160}communitySlug:\s*string/,
   "the public join gateway must require the canonical community slug",
 );
 assert.doesNotMatch(
-  payFirst,
+  publicCommunityJoin,
   /joinPublicCommunityRpc[\s\S]{0,220}communityId\??:/,
   "the unused client ID join representation must remain deleted",
 );
 assert.doesNotMatch(
-  payFirst,
+  publicCommunityJoin,
   /client\.mutation\("community:joinPublicCommunity"\s+as any/,
   "the client gateway must not retain the unreferenced ID mutation path",
 );
 assert.match(
-  payFirst,
+  publicCommunityJoin,
   /return requirePublicCommunityJoinResult\(result\)/,
   "null and malformed join responses must fail closed through the strict result contract",
 );
 assert.doesNotMatch(
-  payFirst,
+  publicCommunityJoin,
   /result\s*\?\?\s*\{[\s\S]{0,100}outcome:\s*"joined"/,
   "the client gateway must never synthesize a joined result",
 );

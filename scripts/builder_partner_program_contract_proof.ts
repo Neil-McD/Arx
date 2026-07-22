@@ -868,9 +868,9 @@ function proveReductionDoctrine(docsSource: string) {
 function proveAttributionRoutePrivacy() {
   assert.equal(
     buildAttributionRouteLabel({
-      href: "https://www.polynet.ai/claim?token=secret&partner=bob&ok=1#access_token=bad",
+      href: "https://www.polynet.ai/checkout/success?session_id=secret&partner=bob&ok=1#access_token=bad",
     }),
-    "/claim?ok=1",
+    "/checkout/success?ok=1",
   );
   assert.equal(
     buildAttributionRouteLabel({

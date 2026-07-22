@@ -33,7 +33,6 @@ function attempt(
     successUrl: "https://polynet-staging.vercel.app/checkout/success?session_id=chk_1",
     cancelUrl: "https://polynet-staging.vercel.app/c/polynet",
     sessionId: "chk_1",
-    claimToken: "claim_1",
     pricePointId: "price_point_1",
     providerPriceId: "price_1",
     providerCustomerId: "cus_1",

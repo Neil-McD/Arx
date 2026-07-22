@@ -15,13 +15,6 @@ type SessionLike = {
   };
 } | null;
 
-type PendingPurchaseClaim = {
-  community_id: string;
-  community_name?: string | null;
-  community_slug?: string | null;
-  expires_at: string;
-};
-
 type ChatgptConnection = {
   connected: boolean;
   email?: string | null;
@@ -85,13 +78,6 @@ type WebAccountSettingsSectionProps = {
   isSettingDevAccountTier: boolean;
   setDevAccountTier: (tier: "free" | "architect") => Promise<void> | void;
   devAccountTierError: string | null;
-  pendingPurchaseClaims: PendingPurchaseClaim[];
-  isLoadingPendingPurchases: boolean;
-  isRedeemingPendingPurchases: boolean;
-  redeemPendingPurchases: () => Promise<void> | void;
-  refreshPendingPurchases: () => Promise<void> | void;
-  pendingPurchasesError: string | null;
-  pendingPurchasesSuccess: string | null;
 };
 
 export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps) {
@@ -135,13 +121,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     isSettingDevAccountTier,
     setDevAccountTier,
     devAccountTierError,
-    pendingPurchaseClaims,
-    isLoadingPendingPurchases,
-    isRedeemingPendingPurchases,
-    redeemPendingPurchases,
-    refreshPendingPurchases,
-    pendingPurchasesError,
-    pendingPurchasesSuccess,
   } = props;
   const storedStripeConnectCountry = accountCommerceStatus?.stripe_connect.country ?? null;
 
@@ -537,62 +516,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
           })()}
         </div>
       )}
-
-      {session &&
-        (isLoadingPendingPurchases ||
-          pendingPurchaseClaims.length > 0 ||
-          pendingPurchasesError ||
-          pendingPurchasesSuccess) && (
-          <div className="settings-section">
-            <div className="settings-section-title">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-              Pending purchases
-            </div>
-            <div className="settings-section-desc">
-              Recover access if you paid but didn&apos;t finish the join flow.
-            </div>
-            {isLoadingPendingPurchases && (
-              <div className="chat-loading">
-                <div className="loading-spinner" />
-                <span>Checking…</span>
-              </div>
-            )}
-            {!isLoadingPendingPurchases && pendingPurchaseClaims.length > 0 && (
-              <div className="model-list">
-                {pendingPurchaseClaims.map((claim) => (
-                  <div key={`${claim.community_id}:${claim.expires_at}`} className="model-toggle">
-                    <span>{claim.community_name || claim.community_slug || claim.community_id}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {!isLoadingPendingPurchases && pendingPurchaseClaims.length === 0 && pendingPurchasesSuccess && (
-              <div className="auth-status">{pendingPurchasesSuccess}</div>
-            )}
-            <div className="auth-actions">
-              <button
-                type="button"
-                onClick={() => void redeemPendingPurchases()}
-                disabled={
-                  isRedeemingPendingPurchases ||
-                  isLoadingPendingPurchases ||
-                  pendingPurchaseClaims.length === 0
-                }
-              >
-                {isRedeemingPendingPurchases ? "Claiming…" : "Claim access"}
-              </button>
-              <button
-                className="secondary"
-                type="button"
-                onClick={() => void refreshPendingPurchases()}
-                disabled={isRedeemingPendingPurchases || isLoadingPendingPurchases}
-              >
-                Refresh
-              </button>
-            </div>
-            {pendingPurchasesError && <div className="auth-error">{pendingPurchasesError}</div>}
-          </div>
-        )}
 
       {session && (
         <div className="settings-section">

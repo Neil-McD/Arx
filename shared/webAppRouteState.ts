@@ -16,8 +16,7 @@ export type PublicRoute =
   | { kind: "app" }
   | { kind: "community_funnel"; slug: string }
   | { kind: "community_funnel_preview"; slug: string }
-  | { kind: "checkout_success"; sessionId: string }
-  | { kind: "claim"; token: string };
+  | { kind: "checkout_success"; sessionId: string };
 
 export type AppShellVariant = "standard" | "mobile";
 
@@ -102,7 +101,7 @@ function appendWorkspaceDraftProjectSearch(path: string, projectId?: string | nu
 
 function isPublicRoutePath(pathname: string): boolean {
   const segments = splitPathSegments(pathname);
-  if (pathname === "/checkout/success" || pathname === "/claim") return true;
+  if (pathname === "/checkout/success") return true;
   if (segments[0] !== "c") return false;
   return segments.length === 2 || (segments.length === 3 && segments[2] === "preview");
 }
@@ -513,12 +512,6 @@ export function readPublicRouteFromLocation(): PublicRoute {
     const sessionId = (params.get("session_id") ?? "").trim();
     return { kind: "checkout_success", sessionId };
   }
-  if (path === "/claim") {
-    const params = new URLSearchParams(window.location.search);
-    const token = (params.get("token") ?? "").trim();
-    return { kind: "claim", token };
-  }
-
   const communityFunnelRoute = parsePublicCommunityFunnelRoutePath(path);
   if (communityFunnelRoute) return communityFunnelRoute;
 

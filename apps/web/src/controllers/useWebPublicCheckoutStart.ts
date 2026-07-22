@@ -7,7 +7,7 @@ import {
 import { normalizeCommunitySlugIdentity } from "../../../../shared/communitySlug";
 import type { CommunityBillingPeriod } from "../../../../shared/communityTypes";
 import { applyShellVariantToPublicPath, readShellVariantFromPathname } from "../../../../shared/webAppRouteState";
-import { getErrorMessage } from "../../../../shared/pay_first";
+import { getErrorMessage } from "../../../../shared/publicCommunityJoin";
 import type { PendingAuthIntentInput } from "../../../../shared/authResumeState";
 import type { AuthSession } from "../auth";
 import {

@@ -137,10 +137,11 @@ export type CommunitySubscriptionLike = {
   userId: any;
   membershipId: any;
   pricePointId: any;
-  source?: "stripe" | "external_sync";
+  source?: "stripe";
   status: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
   providerSubscriptionId?: string;
   providerCustomerId?: string;
+  platformFeeBps?: number;
   currentPeriodStartAt?: number;
   currentPeriodEndAt?: number;
   cancelAtPeriodEnd: boolean;
@@ -1027,26 +1028,32 @@ export async function getCommunityAndMembership(args: {
   return { community, membership };
 }
 
-async function resolveMostRelevantCommunitySubscription(args: {
+export async function getUniqueCommunitySubscriptionByMembership(args: {
   ctx: any;
   membershipId: any;
 }): Promise<CommunitySubscriptionLike | null> {
   const rows = (await args.ctx.db
     .query("communitySubscriptions" as any)
     .withIndex("by_membership", (q: any) => q.eq("membershipId", args.membershipId))
-    .collect()) as CommunitySubscriptionLike[];
-  return (
-    rows
-      .slice()
-      .sort((a, b) => {
-        const aStatus = normalizeCommunitySubscriptionStatus(a.status);
-        const bStatus = normalizeCommunitySubscriptionStatus(b.status);
-        if (communitySubscriptionStatusGrantsAccess(aStatus) !== communitySubscriptionStatusGrantsAccess(bStatus)) {
-          return communitySubscriptionStatusGrantsAccess(aStatus) ? -1 : 1;
-        }
-        return b.updatedAt - a.updatedAt;
-      })[0] ?? null
-  );
+    .take(2)) as CommunitySubscriptionLike[];
+  if (rows.length > 1) throw new Error("community_subscription_duplicate_membership");
+  return rows[0] ?? null;
+}
+
+export async function getUniqueCommunitySubscriptionByProviderSubscriptionId(args: {
+  ctx: any;
+  providerSubscriptionId: string;
+}): Promise<CommunitySubscriptionLike | null> {
+  const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
+  if (!providerSubscriptionId) return null;
+  const rows = (await args.ctx.db
+    .query("communitySubscriptions" as any)
+    .withIndex("by_providerSubscriptionId", (q: any) =>
+      q.eq("providerSubscriptionId", providerSubscriptionId),
+    )
+    .take(2)) as CommunitySubscriptionLike[];
+  if (rows.length > 1) throw new Error("community_subscription_duplicate_provider");
+  return rows[0] ?? null;
 }
 
 export async function resolveCommunityMembershipEntitlementState(args: {
@@ -1081,7 +1088,7 @@ export async function resolveCommunityMembershipEntitlementState(args: {
       subscriptionCurrentPeriodEndAt: null,
     };
   }
-  const subscription = await resolveMostRelevantCommunitySubscription({
+  const subscription = await getUniqueCommunitySubscriptionByMembership({
     ctx: args.ctx,
     membershipId: args.membership!._id,
   });

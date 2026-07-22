@@ -36,7 +36,6 @@ Current canonical/pathname routes include:
 - `/c/:slug/funnel`
 - `/c/:slug/analytics`
 - `/checkout/success`
-- `/claim`
 
 ## Canonical Direction
 
@@ -145,7 +144,6 @@ never to a legacy Workspace route.
 Keep special transactional routes explicit and separate from entity routes:
 
 - `/checkout/success`
-- `/claim`
 
 These are not entity homes and should not be overloaded into other route families.
 

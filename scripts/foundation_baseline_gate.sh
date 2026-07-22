@@ -38,7 +38,7 @@ run_step "Auth actor subject authority behavior" npm run test:auth-actor-subject
 run_step "Auth session secure identifier behavior" npm run test:auth-session-security
 run_step "Auth session persisted state machine" npm run test:auth-session-state-machine
 run_step "No legacy Builder plan infra guard" npm run check:no-builder-plan-infra
-run_step "Purchase token hygiene proof" npm run check:purchase-token-hygiene-proof
+run_step "Checkout route hygiene proof" npm run check:checkout-route-hygiene-proof
 run_step "Frontend privacy hygiene proof" npm run check:frontend-privacy-hygiene-proof
 run_step "Account deletion safety behavior" npm run test:account-deletion-safety
 run_step "Community deletion quarantine contract" npm run check:community-deletion-quarantine-contract
@@ -52,7 +52,7 @@ run_step "Account lifecycle policy contract" npm run check:account-lifecycle-pol
 run_step "Community admin contract guard" bash scripts/community_admin_contract_guard.sh
 run_step "Community public identity guard" bash scripts/community_public_identity_guard.sh
 run_step "Community access role policy proof" npm run check:community-access-role-policy-proof
-run_step "Community subscription lifecycle policy proof" npm run check:community-subscription-lifecycle-policy-proof
+run_step "Paid community access authority" npm run test:community-paid-access-authority
 run_step "Runtime turn contract guard" bash scripts/runtime_turn_contract_guard.sh
 run_step "No legacy provider repo guard" bash scripts/no_legacy_provider_repo_guard.sh
 run_step "No legacy runtime-lane wording guard" bash scripts/no_platform_fallback_guard.sh

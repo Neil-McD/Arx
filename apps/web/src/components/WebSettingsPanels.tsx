@@ -5,7 +5,6 @@ import type { AccountCommerceStatus } from "../../../../shared/accountCommerceSt
 import type { BuilderPartnerProgramSnapshot } from "../../../../shared/builderPartnerProgramGateway";
 import type { SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
-import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type { EffectiveSkill } from "../../../../shared/effectiveSkills";
 import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
@@ -93,14 +92,10 @@ export type WebSettingsPanelsProps = {
     }) => Promise<void> | void;
     canUseDevTierOverride: boolean;
     setDevAccountTier: (tier: "free" | "architect") => Promise<void> | void;
-    redeemPendingPurchases: () => Promise<void> | void;
-    ensureSession: () => Promise<SessionLike>;
-    loadPendingPurchaseClaims: (session: NonNullable<SessionLike>) => Promise<void>;
 	    providerConnectionUi: UseWebProviderConnectionUiControllerResult;
 	    billingUi: UseWebBillingUiControllerResult<
 	      AccountCommerceStatus,
-	      WorkspaceCreditBalance,
-	      PendingPurchaseClaim
+	      WorkspaceCreditBalance
 	    >;
 	  };
   agent: {
@@ -143,8 +138,7 @@ export type WebSettingsPanelsProps = {
 	    startPremiumSubscriptionCheckout: () => Promise<void> | void;
 	    billingUi: UseWebBillingUiControllerResult<
 	      AccountCommerceStatus,
-	      WorkspaceCreditBalance,
-	      PendingPurchaseClaim
+	      WorkspaceCreditBalance
 	    >;
 	  };
   integrations: {
@@ -315,17 +309,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     isSettingDevAccountTier: account.billingUi.isSettingDevAccountTier,
     setDevAccountTier: account.setDevAccountTier,
     devAccountTierError: account.billingUi.devAccountTierError,
-    pendingPurchaseClaims: account.billingUi.pendingPurchaseClaims,
-    isLoadingPendingPurchases: account.billingUi.isLoadingPendingPurchases,
-    isRedeemingPendingPurchases: account.billingUi.isRedeemingPendingPurchases,
-    redeemPendingPurchases: account.redeemPendingPurchases,
-    refreshPendingPurchases: async () => {
-      const session = await account.ensureSession();
-      if (!session) return;
-      await account.loadPendingPurchaseClaims(session);
-    },
-    pendingPurchasesError: account.billingUi.pendingPurchasesError,
-    pendingPurchasesSuccess: account.billingUi.pendingPurchasesSuccess,
   };
 
   const agentSectionProps = {

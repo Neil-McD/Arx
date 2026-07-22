@@ -48,7 +48,7 @@ The bounded staging audit found active partners and pending financial state, so 
 
 ## Failure and recovery questions
 
-Static code clearly separates provider verification from redirects. Paid-community `customer.subscription.updated/deleted` events now re-read current Stripe state, so delayed, reordered, and duplicate deliveries cannot regress that projection merely by carrying an older event snapshot; transient retrieval failure retries, and provider-confirmed absence fails closed. Atomic webhook receipts, refund/dispute risk ordering, Connect unavailability, charge collection failure, creator settlement, and idempotency across deployment retries remain unproven. These require provider fixtures and redacted staging receipts, not source inspection alone.
+Static code clearly separates provider verification from redirects. First verified community-checkout completion now creates membership and the single Stripe subscription projection in the same Convex transaction; checkout success only observes that authority. Subscription lifecycle events re-read current Stripe state, duplicate identities fail closed, transient retrieval failure retries, and provider-confirmed absence fails closed. Atomic webhook receipts, refund/dispute risk ordering, Connect unavailability, charge collection failure, creator settlement, and idempotency across deployment retries remain unproven. These require provider fixtures and redacted staging receipts, not source inspection alone.
 
 ## Reduction candidates
 

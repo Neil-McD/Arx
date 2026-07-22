@@ -24,7 +24,6 @@ const INDEXED_USER_REFERENCES: IndexedReferenceSpec[] = [
   { table: "criticalAuditEvents", index: "by_actor_createdAt", field: "actorUserId" },
   { table: "platformDiagnosticEvents", index: "by_user_createdAt", field: "userId" },
   { table: "checkoutSessions", index: "by_owner", field: "ownerUserId" },
-  { table: "purchaseClaims", index: "by_owner", field: "ownerUserId" },
   { table: "userMemorySettings", index: "by_user", field: "userId" },
   { table: "userProviderConnections", index: "by_user", field: "userId" },
   { table: "userProviderAuthStates", index: "by_user_provider", field: "userId" },
@@ -66,7 +65,6 @@ const INDEXED_USER_REFERENCES: IndexedReferenceSpec[] = [
 const SCANNED_USER_REFERENCES: ScanReferenceSpec[] = [
   { table: "operatorRoles", field: "createdBy" },
   { table: "criticalAuditEvents", field: "subjectUserId" },
-  { table: "purchaseClaims", field: "redeemedByUserId" },
   { table: "communityBlocks", field: "createdByUserId" },
   { table: "communityAnalyticsEvents", field: "userId" },
   { table: "communityAppMounts", field: "mountedByUserId" },

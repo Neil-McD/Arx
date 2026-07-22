@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   getStripeClient,
@@ -9,30 +9,33 @@ import {
   type CommunityLike,
   type CommunityMembershipLike,
   type CommunityPricePointLike,
-  type PurchaseClaimLike,
+  createCommunitySubscriptionForMembership,
+  ensureCommunityMembership,
   newOpaqueToken,
   normalizeBillingPeriod,
-  normalizeClaimToken,
   normalizeSessionId,
   normalizeSlug,
   normalizeStripeCommunitySubscriptionStatus,
   requireCanonicalCheckoutReturnUrl,
-  redeemClaimRow,
   resolveCheckoutPricePoint,
   resolveUserIdForAuthenticatedRequest,
-  toIsoString,
 } from "./billingCore";
 import {
   adjustCommunityActiveMemberCountForMembershipTransition,
   communitySubscriptionStatusGrantsAccess,
-  communityUserIsBlocked,
+  getUniqueCommunitySubscriptionByProviderSubscriptionId,
+  getUniqueCommunitySubscriptionByMembership,
   getUniqueCommunityMembershipByPair,
   normalizeCommunitySubscriptionStatus,
   parseIsoMs,
   requireCommunityUserNotBlocked,
+  resolveCommunityMembershipEntitlementState,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
-import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
+import {
+  enqueueCommunityAccessGrantedEmailInternal,
+  enqueueCommunityBillingIssueEmailInternal,
+} from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { recordCommunityRevenuePartnerCommission } from "./builderPartners";
 import {
@@ -70,7 +73,6 @@ type CommunityCheckoutSessionRow = {
   currencyDecimals?: number;
   platformFeeBps?: number;
   ownerUserId?: any;
-  claimToken?: string;
   checkoutAttemptId?: string;
   checkoutAttemptExpiresAt?: number;
   checkoutCommunitySlug?: string;
@@ -94,6 +96,18 @@ type CommunityCheckoutSessionRow = {
   updatedAt: number;
 };
 
+async function getUniqueCommunityCheckoutSessionBySessionId(args: {
+  ctx: any;
+  sessionId: string;
+}): Promise<CommunityCheckoutSessionRow | null> {
+  const rows = (await args.ctx.db
+    .query("checkoutSessions")
+    .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
+    .take(2)) as CommunityCheckoutSessionRow[];
+  if (rows.length > 1) throw new Error("community_checkout_session_duplicate_rows");
+  return rows[0] ?? null;
+}
+
 function requireStoredPublicCommunityCheckoutAttempt(
   row: CommunityCheckoutSessionRow,
 ): PublicCommunityCheckoutAttemptSnapshot {
@@ -113,7 +127,6 @@ function requireStoredPublicCommunityCheckoutAttempt(
       "checkout_attempt_contract_invalid",
     ),
     sessionId: normalizeSessionId(row.sessionId),
-    claimToken: normalizeClaimToken(row.claimToken),
     pricePointId: String(row.pricePointId ?? "").trim(),
     providerPriceId: String(row.providerPriceId ?? "").trim(),
     providerCustomerId: String(row.providerCustomerId ?? "").trim(),
@@ -165,7 +178,6 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
     userId: v.id("users"),
-    source: v.union(v.literal("stripe"), v.literal("external_sync")),
     status: v.string(),
     pricePointId: v.optional(v.id("communityPricePoints")),
     providerPriceId: v.optional(v.union(v.string(), v.null())),
@@ -181,7 +193,6 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const source = args.source;
     const status = normalizeCommunitySubscriptionStatus(args.status);
     if (!status) throw new Error("community_subscription_status_invalid");
     const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
@@ -196,51 +207,10 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       throw new Error("community_membership_not_subscription");
     }
 
-    const currentRows = (await ctx.db
-      .query("communitySubscriptions" as any)
-      .withIndex("by_membership", (q: any) => q.eq("membershipId", membership._id))
-      .collect()) as Array<Record<string, any>>;
-    const current =
-      currentRows
-        .slice()
-        .sort((a, b) => {
-          const aMatch =
-            String(a.providerSubscriptionId ?? "").trim() &&
-            String(a.providerSubscriptionId ?? "").trim() === String(args.providerSubscriptionId ?? "").trim();
-          const bMatch =
-            String(b.providerSubscriptionId ?? "").trim() &&
-            String(b.providerSubscriptionId ?? "").trim() === String(args.providerSubscriptionId ?? "").trim();
-          if (aMatch !== bMatch) return aMatch ? -1 : 1;
-          return Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0);
-        })[0] ?? null;
-    await attachStripeCustomerToUser({
+    const current = await getUniqueCommunitySubscriptionByMembership({
       ctx,
-      userId: args.userId,
-      providerCustomerId: args.providerCustomerId,
-      nowMs,
+      membershipId: membership._id,
     });
-    const currentSource = String(current?.source ?? "")
-      .trim()
-      .toLowerCase();
-    if (
-      currentSource &&
-      currentSource !== "stripe" &&
-      currentSource !== "external_sync"
-    ) {
-      throw new Error("community_subscription_source_invalid");
-    }
-    if (currentSource && currentSource !== source) {
-      return {
-        ok: true,
-        ignored: true,
-        reason: "community_subscription_source_conflict",
-        community_id: String(args.communityId),
-        user_id: String(args.userId),
-        price_point_id: String(current?.pricePointId ?? membership.pricePointId ?? ""),
-        source: currentSource,
-        subscription_status: String(current?.status ?? status),
-      };
-    }
     const previousStatus = String(current?.status ?? "")
       .trim()
       .toLowerCase();
@@ -264,10 +234,6 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       args.cancelAtPeriodEnd === null
         ? false
         : Boolean(args.cancelAtPeriodEnd ?? current?.cancelAtPeriodEnd);
-    const endedAt =
-      status === "canceled" || status === "ended"
-        ? nowMs
-        : undefined;
     const nextProviderSubscriptionId =
       String(args.providerSubscriptionId ?? "").trim() ||
       String(current?.providerSubscriptionId ?? "").trim() ||
@@ -285,37 +251,24 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         ? Math.round(requestedPlatformFeeBps)
         : current?.platformFeeBps;
 
-    const patch = {
-      source: currentSource === "stripe" || currentSource === "external_sync" ? current?.source : source,
+    if (!nextProviderSubscriptionId) {
+      throw new Error("community_subscription_provider_id_required");
+    }
+    await createCommunitySubscriptionForMembership({
+      ctx,
+      communityId: args.communityId,
+      membershipId: membership._id,
+      userId: args.userId,
       pricePointId,
-      status,
       providerSubscriptionId: nextProviderSubscriptionId,
       providerCustomerId: nextProviderCustomerId,
       platformFeeBps: nextPlatformFeeBps,
-      currentPeriodStartAt:
-        typeof currentPeriodStartAt === "number"
-          ? currentPeriodStartAt
-          : current?.currentPeriodStartAt,
-      currentPeriodEndAt:
-        typeof currentPeriodEndAt === "number"
-          ? currentPeriodEndAt
-          : current?.currentPeriodEndAt,
+      currentPeriodStartAt,
+      currentPeriodEndAt,
+      status,
       cancelAtPeriodEnd,
-      endedAt,
-      updatedAt: nowMs,
-    };
-
-    if (current) {
-      await ctx.db.patch(current._id, patch);
-    } else {
-      await ctx.db.insert("communitySubscriptions" as any, {
-        communityId: args.communityId,
-        userId: args.userId,
-        membershipId: membership._id,
-        createdAt: nowMs,
-        ...patch,
-      });
-    }
+      nowMs,
+    });
 
     const grantsAccess = communitySubscriptionStatusGrantsAccess(status);
     const revokedReason = String(args.revokedReason ?? "")
@@ -376,7 +329,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       community_id: String(args.communityId),
       user_id: String(args.userId),
       price_point_id: String(pricePointId),
-      source,
+      source: "stripe",
       subscription_status: status,
     };
   },
@@ -527,7 +480,6 @@ export const reservePublicCommunityCheckoutAttemptInternal = internalMutation({
     providerCustomerId: v.string(),
     providerDestinationAccountId: v.string(),
     ownerUserId: v.id("users"),
-    claimToken: v.string(),
     checkoutAttemptId: v.string(),
     checkoutAttemptExpiresAt: v.number(),
     successUrl: v.string(),
@@ -576,7 +528,6 @@ export const reservePublicCommunityCheckoutAttemptInternal = internalMutation({
     const snapshot: PublicCommunityCheckoutAttemptSnapshot = {
       ...requested,
       sessionId: normalizeSessionId(args.sessionId),
-      claimToken: normalizeClaimToken(args.claimToken),
       pricePointId: String(args.pricePointId),
       providerPriceId: String(args.providerPriceId).trim(),
       providerCustomerId: String(args.providerCustomerId).trim(),
@@ -609,7 +560,6 @@ export const reservePublicCommunityCheckoutAttemptInternal = internalMutation({
       providerCustomerId: snapshot.providerCustomerId,
       providerDestinationAccountId: snapshot.providerDestinationAccountId,
       ownerUserId: args.ownerUserId,
-      claimToken: snapshot.claimToken,
       checkoutAttemptId: snapshot.checkoutAttemptId,
       checkoutAttemptExpiresAt: snapshot.checkoutAttemptExpiresAt,
       checkoutCommunitySlug: snapshot.communitySlug,
@@ -643,39 +593,6 @@ export const reservePublicCommunityCheckoutAttemptInternal = internalMutation({
       },
       createdAt: nowMs,
     });
-    await ctx.db.insert("purchaseClaims", {
-      claimToken: snapshot.claimToken,
-      communityId: args.communityId,
-      billingPeriod: snapshot.billingPeriod,
-      pricePointId: args.pricePointId,
-      amountBaseUnits: args.amountBaseUnits,
-      currency: args.currency,
-      currencyDecimals: args.currencyDecimals,
-      ownerUserId: args.ownerUserId,
-      status: "pending",
-      sourceSessionId: snapshot.sessionId,
-      expiresAt: args.expiresAt,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    await recordCriticalAuditEventBestEffort(ctx, {
-      eventKey: `community_purchase_claim_created:${snapshot.claimToken}`,
-      eventType: "community_purchase_claim_created",
-      status: "started",
-      actorUserId: args.ownerUserId,
-      subjectUserId: args.ownerUserId,
-      communityId: args.communityId,
-      checkoutSessionId: snapshot.sessionId,
-      provider: "stripe",
-      providerObjectId: args.providerPriceId,
-      metadata: {
-        billingPeriod: snapshot.billingPeriod,
-        pricePointId: String(args.pricePointId),
-        amountBaseUnits: args.amountBaseUnits,
-        currency: args.currency,
-      },
-      createdAt: nowMs,
-    });
     return snapshot;
   },
 });
@@ -691,10 +608,10 @@ export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const row = (await ctx.db
-      .query("checkoutSessions")
-      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
-      .first()) as CommunityCheckoutSessionRow | null;
+    const row = await getUniqueCommunityCheckoutSessionBySessionId({
+      ctx,
+      sessionId: args.sessionId,
+    });
     if (!row) throw new Error("community_checkout_session_not_found");
     if (row.mode !== "community_join") throw new Error("community_checkout_session_invalid");
     const requestedProviderCheckoutSessionId = String(
@@ -770,10 +687,10 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const row = (await ctx.db
-      .query("checkoutSessions")
-      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
-      .first()) as CommunityCheckoutSessionRow | null;
+    const row = await getUniqueCommunityCheckoutSessionBySessionId({
+      ctx,
+      sessionId: args.sessionId,
+    });
     if (!row) throw new Error("community_checkout_session_not_found");
     if (row.mode !== "community_join") throw new Error("community_checkout_session_invalid");
     await attachStripeCustomerToUser({
@@ -786,33 +703,94 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
       subscriptionStatus: args.subscriptionStatus,
       cancelAtPeriodEnd: args.cancelAtPeriodEnd,
     });
+    const providerSubscriptionId =
+      String(args.providerSubscriptionId ?? "").trim() ||
+      String(row.providerSubscriptionId ?? "").trim();
+    const providerCustomerId =
+      String(args.providerCustomerId ?? "").trim() ||
+      String(row.providerCustomerId ?? "").trim() ||
+      undefined;
+    const platformFeeBps =
+      typeof args.platformFeeBps === "number"
+        ? Math.max(0, Math.min(10000, Math.round(args.platformFeeBps)))
+        : row.platformFeeBps;
+    const currentPeriodStartAt =
+      typeof args.currentPeriodStartAt === "number"
+        ? args.currentPeriodStartAt
+        : row.currentPeriodStartAt;
+    const currentPeriodEndAt =
+      typeof args.currentPeriodEndAt === "number"
+        ? args.currentPeriodEndAt
+        : row.currentPeriodEndAt;
+    const cancelAtPeriodEnd = Boolean(
+      args.cancelAtPeriodEnd ?? communitySubscriptionStatus === "cancel_at_period_end",
+    );
+    const shouldCompleteProjection =
+      args.markComplete === true &&
+      communitySubscriptionStatusGrantsAccess(communitySubscriptionStatus);
+    const isFirstCompletedProjection = shouldCompleteProjection && row.status !== "complete";
+    if (
+      isFirstCompletedProjection &&
+      communitySubscriptionStatusGrantsAccess(communitySubscriptionStatus)
+    ) {
+      if (!row.communityId || !row.ownerUserId || !row.pricePointId) {
+        throw new Error("community_checkout_access_identity_missing");
+      }
+      if (!providerSubscriptionId) {
+        throw new Error("community_subscription_provider_id_required");
+      }
+      const community = (await ctx.db.get(row.communityId)) as CommunityLike | null;
+      if (!community) throw new Error("community_not_found");
+      const { membership, accessGranted } = await ensureCommunityMembership({
+        ctx,
+        community,
+        communityId: row.communityId,
+        userId: row.ownerUserId,
+        pricePointId: row.pricePointId,
+        nowMs,
+      });
+      await createCommunitySubscriptionForMembership({
+        ctx,
+        communityId: row.communityId,
+        membershipId: membership._id,
+        userId: row.ownerUserId,
+        pricePointId: row.pricePointId,
+        providerSubscriptionId,
+        providerCustomerId,
+        platformFeeBps,
+        currentPeriodStartAt,
+        currentPeriodEndAt,
+        status: communitySubscriptionStatus,
+        cancelAtPeriodEnd,
+        nowMs,
+      });
+      if (accessGranted) {
+        await enqueueCommunityAccessGrantedEmailInternal({
+          ctx,
+          userId: row.ownerUserId,
+          communityId: row.communityId,
+          grantMarker: `${String(membership._id)}:${membership.updatedAt}`,
+          nowMs,
+        });
+      }
+    }
     await ctx.db.patch(row._id, {
       provider: "stripe",
       providerCheckoutSessionId:
         String(args.providerCheckoutSessionId ?? "").trim() || row.providerCheckoutSessionId,
-      providerCustomerId: String(args.providerCustomerId ?? "").trim() || row.providerCustomerId,
-      providerSubscriptionId:
-        String(args.providerSubscriptionId ?? "").trim() || row.providerSubscriptionId,
+      providerCustomerId,
+      providerSubscriptionId: providerSubscriptionId || undefined,
       providerPriceId: String(args.providerPriceId ?? "").trim() || row.providerPriceId,
       settledRevenueBaseUnits:
         typeof args.settledRevenueBaseUnits === "number"
           ? Math.max(0, args.settledRevenueBaseUnits)
           : row.settledRevenueBaseUnits,
-      platformFeeBps:
-        typeof args.platformFeeBps === "number"
-          ? Math.max(0, Math.min(10000, Math.round(args.platformFeeBps)))
-          : row.platformFeeBps,
-      currentPeriodStartAt:
-        typeof args.currentPeriodStartAt === "number"
-          ? args.currentPeriodStartAt
-          : row.currentPeriodStartAt,
-      currentPeriodEndAt:
-        typeof args.currentPeriodEndAt === "number"
-          ? args.currentPeriodEndAt
-          : row.currentPeriodEndAt,
+      platformFeeBps,
+      currentPeriodStartAt,
+      currentPeriodEndAt,
       communitySubscriptionStatus,
-      cancelAtPeriodEnd: Boolean(args.cancelAtPeriodEnd ?? communitySubscriptionStatus === "cancel_at_period_end"),
-      status: args.markComplete ? "complete" : row.status,
+      cancelAtPeriodEnd,
+      status: shouldCompleteProjection ? "complete" : row.status,
       updatedAt: nowMs,
     });
     await recordCriticalAuditEventBestEffort(ctx, {
@@ -827,7 +805,7 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
       providerObjectId: String(args.providerSubscriptionId ?? row.providerSubscriptionId ?? "").trim() || undefined,
       metadata: {
         communitySubscriptionStatus,
-        cancelAtPeriodEnd: Boolean(args.cancelAtPeriodEnd ?? communitySubscriptionStatus === "cancel_at_period_end"),
+        cancelAtPeriodEnd,
         markComplete: Boolean(args.markComplete),
         providerPriceId: args.providerPriceId ?? row.providerPriceId ?? null,
         currentPeriodStartAt: args.currentPeriodStartAt ?? row.currentPeriodStartAt ?? null,
@@ -836,7 +814,7 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
       createdAt: nowMs,
     });
     if (
-      args.markComplete &&
+      isFirstCompletedProjection &&
       row.communityId &&
       communitySubscriptionStatusGrantsAccess(communitySubscriptionStatus)
     ) {
@@ -858,9 +836,7 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
         currency: row.currency,
         currencyDecimals: row.currencyDecimals,
         platformFeeBps:
-          typeof args.platformFeeBps === "number"
-            ? Math.max(0, Math.min(10000, Math.round(args.platformFeeBps)))
-            : undefined,
+          platformFeeBps,
         nowMs,
       });
     }
@@ -874,27 +850,15 @@ export const expirePublicCommunityCheckoutSessionInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const row = (await ctx.db
-      .query("checkoutSessions")
-      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
-      .first()) as CommunityCheckoutSessionRow | null;
+    const row = await getUniqueCommunityCheckoutSessionBySessionId({
+      ctx,
+      sessionId: args.sessionId,
+    });
     if (!row || row.mode !== "community_join") return;
     await ctx.db.patch(row._id, {
       status: "expired",
       updatedAt: nowMs,
     });
-    if (row.claimToken) {
-      const claim = await ctx.db
-        .query("purchaseClaims")
-        .withIndex("by_claimToken", (q: any) => q.eq("claimToken", row.claimToken))
-        .first();
-      if (claim?.status === "pending") {
-        await ctx.db.patch(claim._id, {
-          status: "expired",
-          updatedAt: nowMs,
-        });
-      }
-    }
   },
 });
 
@@ -903,17 +867,16 @@ export const getCommunityJoinCheckoutSessionInternal = internalQuery({
     sessionId: v.string(),
   },
   handler: async (ctx, args) => {
-    const row = (await ctx.db
-      .query("checkoutSessions")
-      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
-      .first()) as CommunityCheckoutSessionRow | null;
+    const row = await getUniqueCommunityCheckoutSessionBySessionId({
+      ctx,
+      sessionId: args.sessionId,
+    });
     if (!row || row.mode !== "community_join") return null;
     return {
       sessionId: row.sessionId,
       communityId: row.communityId ?? null,
       ownerUserId: row.ownerUserId ?? null,
       pricePointId: row.pricePointId ?? null,
-      claimToken: row.claimToken ?? null,
       providerCheckoutSessionId: row.providerCheckoutSessionId ?? null,
       providerCustomerId: row.providerCustomerId ?? null,
       providerSubscriptionId: row.providerSubscriptionId ?? null,
@@ -935,12 +898,10 @@ export const getCommunitySubscriptionByProviderSubscriptionIdInternal = internal
   handler: async (ctx, args) => {
     const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
     if (!providerSubscriptionId) return null;
-    const row = await ctx.db
-      .query("communitySubscriptions" as any)
-      .withIndex("by_providerSubscriptionId", (q: any) =>
-        q.eq("providerSubscriptionId", providerSubscriptionId),
-      )
-      .first();
+    const row = await getUniqueCommunitySubscriptionByProviderSubscriptionId({
+      ctx,
+      providerSubscriptionId,
+    });
     if (!row) return null;
     return {
       communityId: row.communityId,
@@ -1095,7 +1056,6 @@ export const startPublicCommunityCheckout = action({
         if (!providerPriceId) throw new Error("provider_price_id_required");
       }
       const sessionId = newOpaqueToken("chk");
-      const claimToken = newOpaqueToken("claim");
       attempt = (await ctx.runMutation(
         internal.communityCommerce.reservePublicCommunityCheckoutAttemptInternal as any,
         {
@@ -1112,7 +1072,6 @@ export const startPublicCommunityCheckout = action({
           providerCustomerId: stripeCustomerId,
           providerDestinationAccountId: checkoutConfig.destinationAccountId,
           ownerUserId,
-          claimToken,
           checkoutAttemptId,
           checkoutAttemptExpiresAt:
             nowMs + PUBLIC_COMMUNITY_CHECKOUT_ATTEMPT_TTL_MS,
@@ -1152,7 +1111,6 @@ export const startPublicCommunityCheckout = action({
                 line_items: [{ price: attempt.providerPriceId, quantity: 1 }],
                 metadata: {
                   local_session_id: attempt.sessionId,
-                  claim_token: attempt.claimToken,
                   community_id: attempt.communityId,
                   community_slug: attempt.communitySlug,
                   community_price_point_id: attempt.pricePointId,
@@ -1165,7 +1123,6 @@ export const startPublicCommunityCheckout = action({
                   },
                   metadata: {
                     local_session_id: attempt.sessionId,
-                    claim_token: attempt.claimToken,
                     community_id: attempt.communityId,
                     community_slug: attempt.communitySlug,
                     community_price_point_id: attempt.pricePointId,
@@ -1217,6 +1174,11 @@ export const requirePublicCommunityCheckoutNotBlockedInternal = internalQuery({
     userId: v.id("users"),
   },
   handler: async (ctx, args) => {
+    const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
+    if (!community) throw new Error("community_not_found");
+    if (String(community.ownerId) === String(args.userId)) {
+      throw new Error("community_owner_checkout_forbidden");
+    }
     await requireCommunityUserNotBlocked({
       ctx,
       communityId: args.communityId,
@@ -1246,10 +1208,10 @@ export const finalizeCheckoutSession = query({
     });
     const nowMs = Date.now();
     const sessionId = normalizeSessionId(args.sessionId);
-    const session = await ctx.db
-      .query("checkoutSessions")
-      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", sessionId))
-      .first();
+    const session = await getUniqueCommunityCheckoutSessionBySessionId({
+      ctx,
+      sessionId,
+    });
     if (!session) {
       return {
         ok: true,
@@ -1263,210 +1225,72 @@ export const finalizeCheckoutSession = query({
         message: "checkout_session_forbidden",
       };
     }
-    if (session.expiresAt <= nowMs || session.status === "expired") {
+    if (
+      session.status === "expired" ||
+      (session.status !== "complete" && session.expiresAt <= nowMs)
+    ) {
       return {
         ok: false,
         status: "expired",
         message: "checkout_session_expired",
       };
     }
-    if (session.status !== "complete" || !session.claimToken) {
+    if (session.status !== "complete") {
       return {
         ok: true,
         status: "pending",
       };
     }
     const grantsAccess = communitySubscriptionStatusGrantsAccess(
-      normalizeCommunitySubscriptionStatus(session.communitySubscriptionStatus ?? "active") ?? "active",
+      normalizeCommunitySubscriptionStatus(session.communitySubscriptionStatus),
     );
     if (!grantsAccess) {
       return {
         ok: false,
-        status: "expired",
-        message: "checkout_session_inactive",
+        status: "unavailable",
+        message: "checkout_access_unavailable",
+      };
+    }
+    if (!session.communityId) {
+      return {
+        ok: false,
+        status: "unavailable",
+        message: "checkout_access_identity_missing",
+      };
+    }
+    const community = (await ctx.db.get(session.communityId)) as CommunityLike | null;
+    if (!community) {
+      return {
+        ok: false,
+        status: "unavailable",
+        message: "community_not_found",
+      };
+    }
+    const membership = await getUniqueCommunityMembershipByPair({
+      ctx,
+      communityId: session.communityId,
+      userId,
+    });
+    const entitlement = await resolveCommunityMembershipEntitlementState({
+      ctx,
+      community: community as any,
+      membership,
+      userId,
+    });
+    if (!entitlement.isEntitled) {
+      return {
+        ok: false,
+        status: "unavailable",
+        message: "checkout_access_unavailable",
       };
     }
     return {
       ok: true,
       status: "succeeded",
-      claim: {
-        token: session.claimToken,
+      community: {
+        id: String(session.communityId),
+        slug: String(community.slug ?? "") || null,
       },
     };
-  },
-});
-
-export const redeemPurchaseClaim = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    token: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = Date.now();
-    const token = normalizeClaimToken(args.token);
-    const claim = (await ctx.db
-      .query("purchaseClaims")
-      .withIndex("by_claimToken", (q: any) => q.eq("claimToken", token))
-      .first()) as PurchaseClaimLike | null;
-    if (!claim) throw new Error("claim_not_found");
-    if (claim.ownerUserId && String(claim.ownerUserId) !== String(userId)) {
-      throw new Error("claim_owner_mismatch");
-    }
-    if (claim.expiresAt <= nowMs || claim.status === "expired") {
-      await ctx.db.patch(claim._id, {
-        status: "expired",
-        updatedAt: nowMs,
-      });
-      throw new Error("claim_expired");
-    }
-    if (claim.status === "redeemed" && claim.redeemedByUserId !== userId) {
-      throw new Error("claim_already_redeemed");
-    }
-
-    const redemption = await redeemClaimRow({
-      ctx,
-      claim,
-      userId,
-      nowMs,
-    });
-    await recordCriticalAuditEventBestEffort(ctx, {
-      eventKey: `community_purchase_claim_redeemed:${token}:${userId}`,
-      eventType: "community_purchase_claim_redeemed",
-      status: redemption.accessGranted ? "succeeded" : "ignored",
-      actorUserId: userId,
-      subjectUserId: userId,
-      communityId: claim.communityId,
-      checkoutSessionId: claim.sourceSessionId ?? undefined,
-      provider: "polynet",
-      providerObjectId: claim.claimToken,
-      metadata: {
-        accessGranted: redemption.accessGranted,
-        grantMarker: redemption.grantMarker,
-        pricePointId: claim.pricePointId ? String(claim.pricePointId) : null,
-      },
-      createdAt: nowMs,
-    });
-    const communityId = redemption.communityId;
-    if (!communityId) throw new Error("claim_not_redeemable");
-    const community = (await ctx.db.get(communityId as any)) as CommunityLike | null;
-    return [{ community_id: communityId, community_slug: String(community?.slug ?? "") || null }];
-  },
-});
-
-export const listPendingPurchaseClaims = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = Date.now();
-    const rows = (await ctx.db
-      .query("purchaseClaims")
-      .withIndex("by_owner_status", (q: any) => q.eq("ownerUserId", userId).eq("status", "pending"))
-      .collect()) as PurchaseClaimLike[];
-    const out: Array<{
-      community_id: string;
-      community_slug: string;
-      community_name: string;
-      expires_at: string;
-    }> = [];
-    for (const claim of rows) {
-      if (claim.expiresAt <= nowMs) continue;
-      if (claim.sourceSessionId) {
-        const session = (await ctx.db
-          .query("checkoutSessions")
-          .withIndex("by_sessionId", (q: any) => q.eq("sessionId", claim.sourceSessionId))
-          .first()) as CommunityCheckoutSessionRow | null;
-        if (
-          !session ||
-          session.status !== "complete" ||
-          !communitySubscriptionStatusGrantsAccess(
-            normalizeCommunitySubscriptionStatus(session.communitySubscriptionStatus ?? "active") ??
-              "active",
-          )
-        ) {
-          continue;
-        }
-      }
-      const community = (await ctx.db.get(claim.communityId)) as CommunityLike | null;
-      if (
-        community &&
-        await communityUserIsBlocked({
-          ctx,
-          communityId: claim.communityId,
-          userId,
-        })
-      ) {
-        continue;
-      }
-      const communityId = String(claim.communityId);
-      out.push({
-        community_id: communityId,
-        community_slug: String(community?.slug ?? communityId),
-        community_name: String(community?.name ?? community?.slug ?? communityId),
-        expires_at: toIsoString(claim.expiresAt),
-      });
-    }
-    out.sort((a, b) => Date.parse(a.expires_at) - Date.parse(b.expires_at));
-    return out;
-  },
-});
-
-export const redeemPendingPurchaseClaims = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = Date.now();
-    const rows = (await ctx.db
-      .query("purchaseClaims")
-      .withIndex("by_owner_status", (q: any) => q.eq("ownerUserId", userId).eq("status", "pending"))
-      .collect()) as PurchaseClaimLike[];
-    const out: Array<{ community_id: string; community_slug: string | null }> = [];
-    const seen = new Set<string>();
-    for (const claim of rows) {
-      if (
-        await communityUserIsBlocked({
-          ctx,
-          communityId: claim.communityId,
-          userId,
-        })
-      ) {
-        continue;
-      }
-      const redemption = await redeemClaimRow({
-        ctx,
-        claim,
-        userId,
-        nowMs,
-      });
-      const communityId = redemption.communityId;
-      if (!communityId) continue;
-      if (seen.has(communityId)) continue;
-      seen.add(communityId);
-      const community = (await ctx.db.get(communityId as any)) as CommunityLike | null;
-      out.push({
-        community_id: communityId,
-        community_slug: String(community?.slug ?? "") || null,
-      });
-    }
-    return out;
   },
 });

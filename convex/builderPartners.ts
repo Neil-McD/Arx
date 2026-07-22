@@ -25,6 +25,7 @@ import { BUILDER_PARTNER_TERMS_DOCUMENT } from "../shared/legalDocuments";
 import { buildAttributionRouteLabel } from "../shared/routePrivacy";
 import { isCommunityPublishReady } from "../shared/communityPublishReadiness";
 import { loadAccountSetupStatusForUserId } from "./accountSetupCore";
+import { getUniqueCommunitySubscriptionByProviderSubscriptionId } from "./communityCore";
 
 type RequirementKey =
   | "account_setup_complete"
@@ -1169,12 +1170,10 @@ export const recordCommunitySubscriptionInvoicePartnerCommissionInternal = inter
     if (!providerSubscriptionId || !sourceProviderInvoiceId) {
       return { ok: false, reason: "invoice_source_missing" };
     }
-    const subscription = await ctx.db
-      .query("communitySubscriptions" as any)
-      .withIndex("by_providerSubscriptionId", (q: any) =>
-        q.eq("providerSubscriptionId", providerSubscriptionId),
-      )
-      .first();
+    const subscription = await getUniqueCommunitySubscriptionByProviderSubscriptionId({
+      ctx,
+      providerSubscriptionId,
+    });
     if (!subscription?.communityId) {
       return { ok: false, reason: "community_subscription_not_found" };
     }

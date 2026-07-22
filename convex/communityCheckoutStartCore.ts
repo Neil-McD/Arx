@@ -14,7 +14,6 @@ export type PublicCommunityCheckoutAttemptBinding = {
 export type PublicCommunityCheckoutAttemptSnapshot =
   PublicCommunityCheckoutAttemptBinding & {
     sessionId: string;
-    claimToken: string;
     pricePointId: string;
     providerPriceId: string;
     providerCustomerId: string;

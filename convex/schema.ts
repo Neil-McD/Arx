@@ -717,7 +717,6 @@ export default defineSchema({
     workspaceCreditsGrantedAt: v.optional(v.number()),
     workspaceCreditsUncollectedPaid: v.optional(v.number()),
     ownerUserId: v.optional(v.id("users")),
-    claimToken: v.optional(v.string()),
     // Public community checkout-start identity. Optional only for rows created
     // before the idempotent attempt boundary was introduced.
     checkoutAttemptId: v.optional(v.string()),
@@ -761,28 +760,6 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_providerCustomerId", ["providerCustomerId"])
     .index("by_providerDefaultPaymentMethodId", ["providerDefaultPaymentMethodId"]),
-
-  purchaseClaims: defineTable({
-    claimToken: v.string(),
-    communityId: v.id("communities"),
-    billingPeriod: v.optional(v.string()),
-    pricePointId: v.optional(v.id("communityPricePoints")),
-    amountBaseUnits: v.optional(v.number()),
-    currency: v.optional(v.string()),
-    currencyDecimals: v.optional(v.number()),
-    ownerUserId: v.optional(v.id("users")),
-    status: v.union(v.literal("pending"), v.literal("redeemed"), v.literal("expired")),
-    sourceSessionId: v.optional(v.string()),
-    redeemedByUserId: v.optional(v.id("users")),
-    redeemedAt: v.optional(v.number()),
-    expiresAt: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_claimToken", ["claimToken"])
-    .index("by_owner", ["ownerUserId"])
-    .index("by_owner_status", ["ownerUserId", "status"])
-    .index("by_community_status", ["communityId", "status"]),
 
   userMemorySettings: defineTable({
     userId: v.id("users"),
@@ -1422,7 +1399,7 @@ export default defineSchema({
     userId: v.id("users"),
     membershipId: v.id("communityMemberships"),
     pricePointId: v.id("communityPricePoints"),
-    source: v.optional(v.union(v.literal("stripe"), v.literal("external_sync"))),
+    source: v.optional(v.literal("stripe")),
     status: v.union(
       v.literal("active"),
       v.literal("past_due"),

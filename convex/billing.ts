@@ -15,7 +15,4 @@ export {
   syncCommunitySubscriptionLifecycleInternal,
   startPublicCommunityCheckout,
   finalizeCheckoutSession,
-  redeemPurchaseClaim,
-  listPendingPurchaseClaims,
-  redeemPendingPurchaseClaims,
 } from "./communityCommerce";

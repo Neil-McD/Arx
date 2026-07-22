@@ -1,7 +1,6 @@
 const SENSITIVE_ROUTE_SEARCH_PARAM_NAMES = new Set([
   "access_token",
   "app_oauth_finalize_token",
-  "claim_token",
   "checkout_session_id",
   "code",
   "id_token",

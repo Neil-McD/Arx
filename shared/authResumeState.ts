@@ -25,16 +25,8 @@ export type PendingAuthIntent =
       payload: { draft: CreateCommunityIntentDraft | null };
     }
   | {
-      reason: "redeem_purchase_claim";
-      payload: { token: string };
-    }
-  | {
       reason: "join_public_community";
       payload: { community_slug: string };
-    }
-  | {
-      reason: "redeem_pending_purchases";
-      payload: { navigate: boolean; silent_noop: boolean };
     }
   | {
       reason: "try_polynet_free";
@@ -90,12 +82,6 @@ function normalizePendingAuthIntent(
     return { reason, payload: { draft } };
   }
 
-  if (reason === "redeem_purchase_claim") {
-    const token = typeof payload.token === "string" ? payload.token.trim() : "";
-    if (!token) return null;
-    return { reason, payload: { token } };
-  }
-
   if (reason === "join_public_community") {
     const community_slug =
       typeof payload.community_slug === "string"
@@ -103,14 +89,6 @@ function normalizePendingAuthIntent(
         : "";
     if (!community_slug) return null;
     return { reason, payload: { community_slug } };
-  }
-
-  if (reason === "redeem_pending_purchases") {
-    const navigate = payload.navigate;
-    const silent_noop = payload.silent_noop;
-    if (typeof navigate !== "boolean") return null;
-    if (typeof silent_noop !== "boolean") return null;
-    return { reason, payload: { navigate, silent_noop } };
   }
 
   if (reason === "try_polynet_free") {

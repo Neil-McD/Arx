@@ -10,7 +10,7 @@ import {
   getErrorMessage,
   requirePublicCommunityJoinResult,
   type PublicCommunityJoinResult,
-} from "../shared/pay_first";
+} from "../shared/publicCommunityJoin";
 import { parsePublicCommunityFunnelRoutePath } from "../shared/webAppRouteState";
 
 type Access = { community_id: string };

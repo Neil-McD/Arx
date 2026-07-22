@@ -381,7 +381,6 @@ runConvex("communityCommerce:reservePublicCommunityCheckoutAttemptInternal", {
   providerCustomerId: `cus_${runId.replace(/[^a-zA-Z0-9]/g, "_")}`,
   providerDestinationAccountId: checkoutConfig.destinationAccountId,
   ownerUserId: referred.userId,
-  claimToken: `claim_${runId}`,
   checkoutAttemptId: `checkout_${runId.replace(/[^a-zA-Z0-9]/g, "_")}`,
   checkoutAttemptExpiresAt: purchaseNowMs + 23 * 60 * 60 * 1000,
   successUrl: `${checkoutAppOrigin}/checkout/success?session_id=${sessionId}`,

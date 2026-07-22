@@ -47,7 +47,7 @@ const tableGroups = {
     "partnerCommissionAdjustments", "partnerPayoutBatches", "partnerPayoutTransfers", "partnerPayoutItems",
     "workspaceCreditBalances", "workspaceAutoRechargeSettings", "workspaceAutoRechargeAttempts",
     "workspaceComputeCharges", "providerCostEntries", "workspaceUsageCollections", "creditLedgerEntries",
-    "checkoutSessions", "userStripeCustomers", "purchaseClaims",
+    "checkoutSessions", "userStripeCustomers",
   ],
   interactions: [
     "communityPresence", "communityAnalyticsEvents", "platformBusinessVisits", "communityChatThreads",
