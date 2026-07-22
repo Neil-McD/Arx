@@ -62,8 +62,6 @@ const requiredEvents = [
   "community_checkout_created",
   "community_checkout_attached_to_stripe",
   "community_subscription_synced",
-  "community_purchase_claim_created",
-  "community_purchase_claim_redeemed",
   "stripe_webhook_received",
   "stripe_webhook_processed",
   "stripe_webhook_failed",
@@ -73,7 +71,11 @@ const requiredEvents = [
 ];
 
 for (const eventType of requiredEvents) {
-  assertContains(criticalAudit, new RegExp(`"${eventType}"`), `critical event type missing from constants: ${eventType}`);
+  assertContains(
+    criticalAudit,
+    new RegExp(`(?:["']${eventType}["']|\\b${eventType}\\s*:)`),
+    `critical event type missing from metadata policy: ${eventType}`,
+  );
 }
 
 for (const [fileName, source, eventTypes] of [
@@ -90,8 +92,6 @@ for (const [fileName, source, eventTypes] of [
     [
       "community_checkout_created",
       "community_checkout_attached_to_stripe",
-      "community_purchase_claim_created",
-      "community_purchase_claim_redeemed",
     ],
   ],
   ["convex/billingCore.ts", billingCore, ["community_subscription_synced"]],
@@ -105,6 +105,22 @@ for (const [fileName, source, eventTypes] of [
   for (const eventType of eventTypes) {
     assertContains(source, new RegExp(`eventType: "${eventType}"`), `${fileName} missing ${eventType}`);
   }
+}
+
+for (const retiredEventType of [
+  "community_purchase_claim_created",
+  "community_purchase_claim_redeemed",
+]) {
+  assert.doesNotMatch(
+    criticalAudit,
+    new RegExp(retiredEventType),
+    `retired event type remains in critical-audit runtime: ${retiredEventType}`,
+  );
+  assert.doesNotMatch(
+    communityCommerce,
+    new RegExp(retiredEventType),
+    `retired event type remains in community-commerce runtime: ${retiredEventType}`,
+  );
 }
 
 console.log("critical_audit_events_proof: ok");

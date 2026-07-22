@@ -15,6 +15,7 @@ function extractBetween(source: string, startMarker: string, endMarker: string, 
 
 const schema = read("convex/schema.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
+const communitySubscriptionAccessCore = read("convex/communitySubscriptionAccessCore.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
 const businessAnalytics = read("convex/businessAnalytics.ts");
 const businessAnalyticsCore = read("convex/businessAnalyticsCore.ts");
@@ -136,8 +137,13 @@ assert.doesNotMatch(
 
 assert.match(
   operatorIntelligence,
-  /ACTIVE_SUBSCRIPTION_STATUSES = new Set\(\["active", "past_due", "cancel_at_period_end"\]\)/,
-  "operator MRR should include revenue-bearing subscription statuses",
+  /COMMUNITY_SUBSCRIPTION_ACCESS_STATUSES/,
+  "operator MRR should reuse the canonical granting-status policy",
+);
+assert.match(
+  communitySubscriptionAccessCore,
+  /COMMUNITY_SUBSCRIPTION_ACCESS_STATUSES = new Set<[\s\S]*?\(\["active", "past_due", "cancel_at_period_end"\]\)/,
+  "canonical access policy should include every revenue-bearing subscription status",
 );
 
 assert.match(

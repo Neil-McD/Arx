@@ -22,7 +22,6 @@ import {
 } from "./billingCore";
 import {
   adjustCommunityActiveMemberCountForMembershipTransition,
-  communitySubscriptionStatusGrantsAccess,
   getUniqueCommunitySubscriptionByProviderSubscriptionId,
   getUniqueCommunitySubscriptionByMembership,
   getUniqueCommunityMembershipByPair,
@@ -60,6 +59,7 @@ import {
   type PublicCommunityCheckoutAttemptSnapshot,
 } from "./communityCheckoutStartCore";
 import {
+  communitySubscriptionStatusGrantsAccess,
   deriveCommunitySubscriptionMembershipProjection,
   MAX_COMMUNITY_SUBSCRIPTION_ACCESS_BLOCKS,
   type CommunitySubscriptionAccessBlockReason,
@@ -90,9 +90,6 @@ type CommunityCheckoutSessionRow = {
   providerCheckoutSessionId?: string;
   providerCustomerId?: string;
   providerSubscriptionId?: string;
-  sourceProviderInvoiceId?: string;
-  sourceProviderPaymentIntentId?: string;
-  sourceProviderChargeId?: string;
   providerPriceId?: string;
   currentPeriodStartAt?: number;
   currentPeriodEndAt?: number;
@@ -222,7 +219,7 @@ async function recordCommunityAccessEventEffect(args: {
   ctx: any;
   effect: CommunityAccessEventEffectInput;
   processedAt: number;
-}): Promise<{ duplicate: boolean; attemptCount: number }> {
+}): Promise<{ duplicate: boolean }> {
   const providerAccountId = requireBoundedCommerceEventIdentity(
     args.effect.providerAccountId,
     "community_commerce_event_account_invalid",
@@ -278,13 +275,11 @@ async function recordCommunityAccessEventEffect(args: {
   }
   const deleteAfter = args.processedAt + COMMUNITY_COMMERCE_EVENT_EFFECT_RETENTION_MS;
   if (existing) {
-    const attemptCount = Math.max(1, Math.floor(Number(existing.attemptCount ?? 1))) + 1;
     await args.ctx.db.patch(existing._id, {
-      attemptCount,
       deleteAfter,
       updatedAt: args.processedAt,
     });
-    return { duplicate: true, attemptCount };
+    return { duplicate: true };
   }
   await args.ctx.db.insert("communityCommerceEventEffects" as any, {
     provider: "stripe",
@@ -295,13 +290,12 @@ async function recordCommunityAccessEventEffect(args: {
     providerObjectId,
     livemode: args.effect.livemode,
     effect: "community_access",
-    attemptCount: 1,
     providerCreatedAt,
     deleteAfter,
     createdAt: args.processedAt,
     updatedAt: args.processedAt,
   });
-  return { duplicate: false, attemptCount: 1 };
+  return { duplicate: false };
 }
 
 async function listCommunitySubscriptionAccessBlockReasons(args: {
@@ -327,7 +321,6 @@ async function applyCommunitySubscriptionAccessBlock(args: {
   sourceProviderObjectId: string;
   action: "set" | "clear";
   reason?: CommunitySubscriptionAccessBlockReason;
-  terminal?: boolean;
   providerEventId: string;
   nowMs: number;
 }): Promise<"set" | "cleared" | "already_clear"> {
@@ -361,7 +354,6 @@ async function applyCommunitySubscriptionAccessBlock(args: {
   }
   const patch = {
     reason: args.reason,
-    terminal: args.terminal === true,
     providerEventId: args.providerEventId,
     updatedAt: args.nowMs,
   };
@@ -581,7 +573,6 @@ export const applyCommunitySubscriptionAccessEventInternal = internalMutation({
       v.literal("subscription_dispute_opened"),
       v.literal("subscription_dispute_lost"),
     )),
-    blockTerminal: v.optional(v.boolean()),
     eventEffect: communityAccessEventEffectValidator,
     nowMs: v.optional(v.number()),
   },
@@ -607,7 +598,6 @@ export const applyCommunitySubscriptionAccessEventInternal = internalMutation({
       sourceProviderObjectId: args.blockSourceProviderObjectId,
       action: args.blockAction,
       reason: args.blockReason,
-      terminal: args.blockTerminal,
       providerEventId: args.eventEffect.providerEventId,
       nowMs,
     });
@@ -1133,11 +1123,11 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
         sourceProviderSubscriptionId:
           String(args.providerSubscriptionId ?? row.providerSubscriptionId ?? "").trim() || undefined,
         sourceProviderInvoiceId:
-          String(args.sourceProviderInvoiceId ?? row.sourceProviderInvoiceId ?? "").trim() || undefined,
+          String(args.sourceProviderInvoiceId ?? "").trim() || undefined,
         sourceProviderPaymentIntentId:
-          String(args.sourceProviderPaymentIntentId ?? row.sourceProviderPaymentIntentId ?? "").trim() || undefined,
+          String(args.sourceProviderPaymentIntentId ?? "").trim() || undefined,
         sourceProviderChargeId:
-          String(args.sourceProviderChargeId ?? row.sourceProviderChargeId ?? "").trim() || undefined,
+          String(args.sourceProviderChargeId ?? "").trim() || undefined,
         amountBaseUnits:
           typeof args.settledRevenueBaseUnits === "number"
             ? Math.max(0, args.settledRevenueBaseUnits)

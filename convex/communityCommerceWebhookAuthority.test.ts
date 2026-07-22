@@ -46,8 +46,8 @@ describe("community commerce webhook authority wiring", () => {
       /communityCommerceEventEffects: defineTable\(\{[\s\S]*?\.index\("by_deleteAfter", \["deleteAfter"\]\)/,
     )?.[0] ?? "";
     expect(receiptTable).toContain("by_provider_account_event_effect");
-    expect(receiptTable).toContain("attemptCount");
     expect(receiptTable).toContain("deleteAfter");
+    expect(receiptTable).not.toContain("attemptCount");
     expect(receiptTable).not.toMatch(/payload|metadata|body|content|email|userId/);
     expect(communityCommerce).toContain("COMMUNITY_COMMERCE_EVENT_EFFECT_RETENTION_MS");
     expect(communityCommerce).toContain("pruneCommunityCommerceEventEffectsInternal");

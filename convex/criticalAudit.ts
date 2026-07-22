@@ -1,34 +1,6 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
-export const CRITICAL_AUDIT_EVENT_TYPES = [
-  "account_delete_blocked",
-  "account_delete_completed",
-  "community_checkout_attached_to_stripe",
-  "community_checkout_created",
-  "community_purchase_claim_created",
-  "community_purchase_claim_redeemed",
-  "community_subscription_synced",
-  "builder_partner_payout_batch_created",
-  "builder_partner_payout_batch_approved",
-  "builder_partner_payout_cycle_retried",
-  "builder_partner_payout_cycle_held",
-  "builder_partner_payout_cycle_rejected",
-  "builder_partner_payout_execution_started",
-  "builder_partner_payout_transfer_succeeded",
-  "builder_partner_payout_transfer_failed",
-  "builder_partner_payout_batch_finalized",
-  "harness_app_source_provenance_backfill",
-  "operator_dashboard_accessed",
-  "operator_role_deactivated",
-  "operator_role_upserted",
-  "stripe_connect_onboarding_failed",
-  "stripe_connect_account_synced",
-  "stripe_webhook_failed",
-  "stripe_webhook_processed",
-  "stripe_webhook_received",
-] as const;
-
 const SEVERITY_VALIDATOR = v.union(v.literal("info"), v.literal("warning"), v.literal("error"));
 const STATUS_VALIDATOR = v.union(
   v.literal("started"),
@@ -92,8 +64,6 @@ const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
     "expiresAt",
   ],
   community_checkout_attached_to_stripe: ["providerCustomerId", "providerSubscriptionId", "providerPriceId"],
-  community_purchase_claim_created: ["billingPeriod", "pricePointId", "amountBaseUnits", "currency"],
-  community_purchase_claim_redeemed: ["accessGranted", "grantMarker", "pricePointId"],
   community_subscription_synced: [
     "membershipId",
     "pricePointId",

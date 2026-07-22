@@ -12,7 +12,10 @@ import {
   type CommunityJoinRequestLike,
   getUniqueCommunityJoinRequestByPair,
 } from "./communityJoinRequestCore";
-import { MAX_COMMUNITY_SUBSCRIPTION_ACCESS_BLOCKS } from "./communitySubscriptionAccessCore";
+import {
+  communitySubscriptionStatusGrantsAccess,
+  MAX_COMMUNITY_SUBSCRIPTION_ACCESS_BLOCKS,
+} from "./communitySubscriptionAccessCore";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
@@ -832,12 +835,6 @@ export async function requireCommunityUserNotBlocked(args: {
   if (await communityUserIsBlocked(args)) {
     throw new Error("community_user_blocked");
   }
-}
-
-export function communitySubscriptionStatusGrantsAccess(
-  status: CommunitySubscriptionLike["status"] | null,
-): boolean {
-  return status === "active" || status === "past_due" || status === "cancel_at_period_end";
 }
 
 function communityAccessSourceIsDurable(

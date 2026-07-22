@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  communitySubscriptionStatusGrantsAccess,
   currentChargeRequiresRefundAccessBlock,
   currentDisputeAccessBlock,
   deriveCommunitySubscriptionMembershipProjection,
@@ -9,6 +10,15 @@ import {
 const NOW_MS = 1_753_000_000_000;
 
 describe("community subscription access policy", () => {
+  test("owns the complete granting-status policy", () => {
+    expect(communitySubscriptionStatusGrantsAccess("active")).toBe(true);
+    expect(communitySubscriptionStatusGrantsAccess("past_due")).toBe(true);
+    expect(communitySubscriptionStatusGrantsAccess("cancel_at_period_end")).toBe(true);
+    expect(communitySubscriptionStatusGrantsAccess("canceled")).toBe(false);
+    expect(communitySubscriptionStatusGrantsAccess("ended")).toBe(false);
+    expect(communitySubscriptionStatusGrantsAccess(null)).toBe(false);
+  });
+
   test("uses cumulative current charge truth for full and partial refunds", () => {
     expect(currentChargeRequiresRefundAccessBlock({
       amountBaseUnits: 1_000,
@@ -44,12 +54,10 @@ describe("community subscription access policy", () => {
     expect(currentDisputeAccessBlock({ status: "needs_response" })).toEqual({
       action: "set",
       reason: "subscription_dispute_opened",
-      terminal: false,
     });
     expect(currentDisputeAccessBlock({ status: "lost" })).toEqual({
       action: "set",
       reason: "subscription_dispute_lost",
-      terminal: true,
     });
     expect(currentDisputeAccessBlock({ status: "won" })).toEqual({ action: "clear" });
     expect(() => currentDisputeAccessBlock({ status: "mystery" })).toThrow(

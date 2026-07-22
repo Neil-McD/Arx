@@ -581,7 +581,6 @@ async function syncCommunitySubscriptionRiskStatus(
   args: {
     providerSubscriptionId: string | null;
     status: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
-    revokedReason: string;
   },
 ): Promise<Record<string, unknown>> {
   const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
@@ -614,7 +613,6 @@ async function syncCommunitySubscriptionRiskStatus(
     ok: true,
     provider_subscription_id: providerSubscriptionId,
     subscription_status: args.status,
-    revoked_reason: args.revokedReason,
   };
 }
 
@@ -662,7 +660,6 @@ async function syncCommunityAccessForCurrentRefund(
       blockSourceProviderObjectId: args.charge.id,
       blockAction: blockRequired ? "set" : "clear",
       blockReason: blockRequired ? "subscription_refunded" : undefined,
-      blockTerminal: false,
       eventEffect: buildCommunityAccessEventEffect(event),
       nowMs: Date.now(),
     },
@@ -689,7 +686,6 @@ async function syncCommunityAccessForCurrentDispute(
       blockSourceProviderObjectId: args.dispute.id,
       blockAction: block.action,
       blockReason: block.action === "set" ? block.reason : undefined,
-      blockTerminal: block.action === "set" ? block.terminal : undefined,
       eventEffect: buildCommunityAccessEventEffect(event),
       nowMs: Date.now(),
     },
@@ -756,7 +752,6 @@ async function syncCommunitySubscriptionEventFromCurrentProvider(
       await syncCommunitySubscriptionRiskStatus(ctx, event, {
         providerSubscriptionId,
         status: "ended",
-        revokedReason: "subscription_provider_missing",
       });
     if (communityCheckoutSession || !communityLifecycleResult.ignored) {
       return {
@@ -1356,7 +1351,6 @@ export function registerRuntimeBillingRoutes(
             : await syncCommunitySubscriptionRiskStatus(ctx, event, {
               providerSubscriptionId,
               status: "past_due",
-              revokedReason: "subscription_payment_failed",
             });
           return processedResponse({
             ok: true,

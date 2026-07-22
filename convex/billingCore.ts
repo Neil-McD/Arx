@@ -2,10 +2,10 @@ import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { internal } from "./_generated/api";
 import {
-  communitySubscriptionStatusGrantsAccess,
   getUniqueCommunitySubscriptionByMembership,
   normalizeCommunitySubscriptionStatus,
 } from "./communityCore";
+import { communitySubscriptionStatusGrantsAccess } from "./communitySubscriptionAccessCore";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { attachStripeCustomerToUser } from "./stripeCustomers";

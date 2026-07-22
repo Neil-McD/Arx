@@ -12,14 +12,14 @@ export type CommunitySubscriptionAccessBlockReason =
 
 export const MAX_COMMUNITY_SUBSCRIPTION_ACCESS_BLOCKS = 16;
 
+export const COMMUNITY_SUBSCRIPTION_ACCESS_STATUSES = new Set<
+  CommunitySubscriptionAccessStatus
+>(["active", "past_due", "cancel_at_period_end"]);
+
 const SUBSCRIPTION_PROJECTION_REASONS = new Set<string>([
   "subscription_refunded",
   "subscription_dispute_opened",
   "subscription_dispute_lost",
-  "subscription_payment_failed",
-  "subscription_provider_missing",
-  "subscription_past_due",
-  "subscription_cancel_at_period_end",
   "subscription_canceled",
   "subscription_ended",
 ]);
@@ -33,14 +33,10 @@ const ACCESS_BLOCK_REASON_PRIORITY: Record<
   subscription_dispute_opened: 1,
 };
 
-export function communitySubscriptionStatusGrantsProjectedAccess(
-  status: CommunitySubscriptionAccessStatus,
+export function communitySubscriptionStatusGrantsAccess(
+  status: CommunitySubscriptionAccessStatus | null | undefined,
 ): boolean {
-  return (
-    status === "active" ||
-    status === "past_due" ||
-    status === "cancel_at_period_end"
-  );
+  return status != null && COMMUNITY_SUBSCRIPTION_ACCESS_STATUSES.has(status);
 }
 
 export function isCommunitySubscriptionProjectionReason(
@@ -88,7 +84,7 @@ export function deriveCommunitySubscriptionMembershipProjection(args: {
     };
   }
 
-  if (communitySubscriptionStatusGrantsProjectedAccess(args.subscriptionStatus)) {
+  if (communitySubscriptionStatusGrantsAccess(args.subscriptionStatus)) {
     return {
       active: true,
       revokedAt: undefined,
@@ -128,7 +124,6 @@ export function currentDisputeAccessBlock(args: {
   | {
     action: "set";
     reason: "subscription_dispute_opened" | "subscription_dispute_lost";
-    terminal: boolean;
   } {
   const status = String(args.status ?? "").trim().toLowerCase();
   if (status === "won" || status === "warning_closed") {
@@ -138,7 +133,6 @@ export function currentDisputeAccessBlock(args: {
     return {
       action: "set",
       reason: "subscription_dispute_lost",
-      terminal: true,
     };
   }
   if (
@@ -150,7 +144,6 @@ export function currentDisputeAccessBlock(args: {
     return {
       action: "set",
       reason: "subscription_dispute_opened",
-      terminal: false,
     };
   }
   throw new Error("stripe_dispute_status_unknown");

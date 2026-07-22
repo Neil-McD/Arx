@@ -69,4 +69,4 @@ The final validation completed with:
 - a signed-in Chrome smoke proving the normal community session loads, `/claim` canonicalizes to `/`, Account settings exposes no claim/pending-purchase controls, the checkout-success route remains an observational boundary, and no browser warnings or errors appear;
 - a production-marker recheck proving `polynet.ai` remained on its separate pre-existing build.
 
-The remaining U-017 work is narrower: durable atomic webhook receipts, refund/dispute ordering, creator settlement, and provider-outage convergence. Reintroducing a browser claim flow is not part of that work.
+The later U-017 authority slices added identity-only atomic access receipts and current-truth refund/dispute convergence, then removed their redundant compatibility surface. Remaining work is bounded asynchronous provider-outage recovery, live Stripe staging evidence, and separate creator settlement. Reintroducing a browser claim flow is not part of that work.

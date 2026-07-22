@@ -7,11 +7,11 @@ import {
   type CommunityPricePointLike,
   type CommunitySubscriptionLike,
   communityMembershipRowIsActive,
-  communitySubscriptionStatusGrantsAccess,
   normalizeCommunitySubscriptionStatus,
   normalizeMembershipAccessSource,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
+import { communitySubscriptionStatusGrantsAccess } from "./communitySubscriptionAccessCore";
 import {
   type CommunityJoinRequestLike,
   normalizeCommunityJoinRequestStatus,

@@ -22,6 +22,7 @@ import type { DeveloperAppAuthType } from "../shared/communityAppMountTypes";
 import { isAnonymousAuthSubject } from "../shared/authSubject";
 import { buildAccountSetupStatusForRows } from "./accountSetupCore";
 import { communityMembershipRowIsActive } from "./communityCore";
+import { COMMUNITY_SUBSCRIPTION_ACCESS_STATUSES } from "./communitySubscriptionAccessCore";
 import { readCanonicalAccountTier } from "./accountEntitlementCore";
 
 type MoneyMetric = {
@@ -30,7 +31,6 @@ type MoneyMetric = {
   currencyDecimals: number;
 };
 
-const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "past_due", "cancel_at_period_end"]);
 const CHECKOUT_STATUSES = ["pending", "complete", "expired"] as const;
 const FREE_ACCOUNT_COMMUNITY_PLATFORM_FEE_BPS = 1000;
 const ARCHITECT_ACCOUNT_COMMUNITY_PLATFORM_FEE_BPS = 300;
@@ -1493,7 +1493,11 @@ async function readPayoutStatus(ctx: any, userId: any) {
   return row?.status ?? "not_connected";
 }
 
-async function readCommunitySubscriptionsByStatuses(ctx: any, communityId: any, statuses: Set<string>) {
+async function readCommunitySubscriptionsByStatuses(
+  ctx: any,
+  communityId: any,
+  statuses: ReadonlySet<string>,
+) {
   const rows = [];
   for (const status of statuses) {
     const statusRows = await ctx.db
@@ -1538,7 +1542,11 @@ async function buildOperatorCommunityRecord(ctx: any, community: any, nowMs: num
     .query("communityPricePoints")
     .withIndex("by_community_current", (q: any) => q.eq("communityId", community._id).eq("isCurrent", true))
     .first();
-  const revenueSubscriptions = await readCommunitySubscriptionsByStatuses(ctx, community._id, ACTIVE_SUBSCRIPTION_STATUSES);
+  const revenueSubscriptions = await readCommunitySubscriptionsByStatuses(
+    ctx,
+    community._id,
+    COMMUNITY_SUBSCRIPTION_ACCESS_STATUSES,
+  );
   const activePaidMembers = revenueSubscriptions.length;
   const checkouts = await readCheckoutSessionsByCommunity(ctx, community._id);
   const pendingCheckouts = checkouts.filter((row: any) => row.status === "pending");
@@ -2005,7 +2013,7 @@ export const getOperatorMonetizationInternal = internalQuery({
       ? emailDeliveryRows
       : emailDeliveryRows.filter((row: any) => row.createdAt >= rangeStart);
     const activeSubscriptions = [];
-    for (const status of ACTIVE_SUBSCRIPTION_STATUSES) {
+    for (const status of COMMUNITY_SUBSCRIPTION_ACCESS_STATUSES) {
       const rows = await ctx.db
         .query("communitySubscriptions")
         .withIndex("by_status", (q: any) => q.eq("status", status))

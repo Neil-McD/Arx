@@ -28,7 +28,7 @@ No explicit retention/prune owner was found for audit/diagnostic history. Operat
 
 ## CI and proof posture
 
-Canonical CI has three baseline jobs—Convex cut guards, low-threshold dependency audits, and the 36-step foundation baseline with web dependency install, typecheck, production build, and bundle budget. A separate staging-branch canary waits until `polynet-staging.vercel.app/version.json` equals the exact pushed SHA, then exercises the anonymous `/c/polynet` funnel in Chromium. It asserts accessible join UI and fails on browser errors, Polynet/Convex request failures, or first-party 5xxs; it performs no click, sign-in, or product mutation. Wrong-SHA rejection is exercised on every run, and browser failures produce bounded redacted artifacts.
+Canonical CI has three baseline jobs—Convex cut guards, low-threshold dependency audits, and the 37-step foundation baseline with critical-audit coverage, web dependency install, typecheck, production build, and bundle budget. A separate staging-branch canary waits until `polynet-staging.vercel.app/version.json` equals the exact pushed SHA, then exercises the anonymous `/c/polynet` funnel in Chromium. It asserts accessible join UI and fails on browser errors, Polynet/Convex request failures, or first-party 5xxs; it performs no click, sign-in, or product mutation. Wrong-SHA rejection is exercised on every run, and browser failures produce bounded redacted artifacts.
 
 The remaining proof imbalance is narrower: signed-in authority/recovery journeys, scale behavior, and provider outage convergence are still comparatively thin. Required-check enforcement is unavailable on the current private-repository account plan.
 

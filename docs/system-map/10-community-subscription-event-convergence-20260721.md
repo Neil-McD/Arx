@@ -80,7 +80,7 @@ before that mutation and therefore cannot leave a partial local transition.
 
 Receipts do not suppress a replay. A duplicate or reordered delivery re-reads
 current Stripe truth and reapplies the idempotent local projection; the receipt
-records the attempt and expectation-locks event identity. Receipts expire after
+expectation-locks event identity and refreshes its retention deadline. Receipts expire after
 45 days and are pruned hourly in bounded batches. `criticalAuditEvents` remains
 best-effort observability and is not processing authority.
 
@@ -90,7 +90,7 @@ The access policy is now explicit:
 - cumulative current charge truth at a full refund sets the charge refund block;
 - open/under-review disputes block access;
 - won/closed warnings clear their dispute block;
-- lost disputes retain a terminal block;
+- lost disputes retain a block whose reason encodes the lost outcome;
 - unknown dispute or malformed charge state fails before local mutation;
 - clearing a financial block can reactivate only subscription-projected revocation, never a manager or other non-financial revocation.
 
@@ -125,3 +125,21 @@ U-017 is narrowed but not closed. A later slice must add a bounded asynchronous
 retry/stuck-recovery queue for provider outages and then prove live Stripe test
 events against the configured staging webhook endpoint. Creator settlement is a
 separate authority. Builder Partner remains explicitly last.
+
+## Authority-surface reduction
+
+The follow-up cleanup keeps the same access behavior while deleting redundant
+state and policy owners. `communitySubscriptionAccessCore.ts` now owns the sole
+granting-status policy used by entitlement, checkout, billing, audit, and
+operator reporting. The unused access-block `terminal` bit and receipt
+`attemptCount` are deleted after a live staging query proved both tables empty.
+Lost-dispute semantics remain explicit in the block reason, while receipt replay
+still re-applies current provider truth and refreshes retention.
+
+The checkout row type no longer pretends to persist invoice, payment-intent, or
+charge evidence that its schema never stored. Stale financial projection reasons
+and unused risk-response fields are gone. Retired purchase-claim event names are
+removed from the critical-audit runtime, and the repaired proof is now executed
+by the foundation baseline. The uninvoked lifecycle proof that still modeled
+claim redemption is deleted rather than repaired as a second access-authority
+model. Historical checkout and audit rows are unchanged.

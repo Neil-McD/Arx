@@ -159,7 +159,6 @@ async function applyAccessEvent(
       | "subscription_refunded"
       | "subscription_dispute_opened"
       | "subscription_dispute_lost";
-    blockTerminal?: boolean;
     status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
     nowMs?: number;
   },
@@ -173,7 +172,6 @@ async function applyAccessEvent(
       blockSourceProviderObjectId: args.blockSourceProviderObjectId,
       blockAction: args.blockAction,
       blockReason: args.blockReason,
-      blockTerminal: args.blockTerminal,
       eventEffect: communityAccessEventEffect({
         eventId: args.eventId,
         eventType: args.eventType,
@@ -247,7 +245,7 @@ describe("paid community access authority", () => {
     });
   });
 
-  test("a duplicate completion cannot reactivate access after a later terminal event", async () => {
+  test("a duplicate completion cannot reactivate access after a later financial block", async () => {
     const t = convexTest(schema, modules);
     const fixture = await createFixture(t, "terminal");
     await completeCheckout(t, fixture);
@@ -261,7 +259,6 @@ describe("paid community access authority", () => {
       blockSourceProviderObjectId: "ch_terminal",
       blockAction: "set",
       blockReason: "subscription_refunded",
-      blockTerminal: true,
     });
     await completeCheckout(t, fixture, NOW_MS + 20);
 
@@ -300,7 +297,6 @@ describe("paid community access authority", () => {
       blockSourceProviderObjectId: "dp_convergence",
       blockAction: "set" as const,
       blockReason: "subscription_dispute_opened" as const,
-      blockTerminal: false,
       nowMs: NOW_MS + 10,
     };
     await applyAccessEvent(t, fixture, opened);
@@ -329,9 +325,13 @@ describe("paid community access authority", () => {
     expect(state.membership?.revokedReason).toBeUndefined();
     expect(state.blocks).toHaveLength(0);
     expect(state.receipts).toHaveLength(2);
-    expect(state.receipts.find((row) => row.providerEventId === opened.eventId)).toMatchObject({
-      attemptCount: 2,
+    const openedReceipt = state.receipts.find(
+      (row) => row.providerEventId === opened.eventId,
+    );
+    expect(openedReceipt).toMatchObject({
+      updatedAt: NOW_MS + 10,
     });
+    expect(openedReceipt).not.toHaveProperty("attemptCount");
     expect(state.community?.activeMemberCount).toBe(2);
   });
 
@@ -348,7 +348,6 @@ describe("paid community access authority", () => {
       blockSourceProviderObjectId: "ch_recovery",
       blockAction: "set",
       blockReason: "subscription_refunded",
-      blockTerminal: false,
       nowMs: NOW_MS + 10,
     });
     await applyAccessEvent(t, fixture, {
@@ -441,7 +440,6 @@ describe("paid community access authority", () => {
           provider: "stripe",
           ...effect,
           effect: "community_access",
-          attemptCount: 1,
           deleteAfter: NOW_MS + 1_000,
           createdAt: NOW_MS + index,
           updatedAt: NOW_MS + index,
@@ -458,7 +456,6 @@ describe("paid community access authority", () => {
       blockSourceProviderObjectId: "ch_atomic_rollback",
       blockAction: "set",
       blockReason: "subscription_refunded",
-      blockTerminal: true,
       nowMs: NOW_MS + 20,
     })).rejects.toThrow("community_commerce_event_effect_duplicate_rows");
 
@@ -492,7 +489,6 @@ describe("paid community access authority", () => {
         kind: "refund",
         sourceProviderObjectId: "ch_block_read_authority",
         reason: "subscription_refunded",
-        terminal: true,
         providerEventId: "evt_block_read_authority",
         createdAt: NOW_MS + 10,
         updatedAt: NOW_MS + 10,

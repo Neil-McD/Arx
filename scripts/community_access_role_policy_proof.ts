@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { communitySubscriptionStatusGrantsAccess } from "../convex/communitySubscriptionAccessCore.ts";
 
 type Role = "admin" | "moderator" | "member" | null;
 type EntryPolicy = "open" | "approval" | "paid_subscription";
@@ -41,10 +42,6 @@ function assertNotIncludes(haystack: string, needle: string, label: string) {
   assert.ok(!haystack.includes(needle), `expected ${label} not to include ${needle}`);
 }
 
-function subscriptionGrantsAccess(status: SubscriptionStatus): boolean {
-  return status === "active" || status === "past_due" || status === "cancel_at_period_end";
-}
-
 function accessSourceIsDurable(source: AccessScenario["accessSource"]): boolean {
   return source === "" || source === "free_grant" || source === "manual_grant";
 }
@@ -65,7 +62,7 @@ function resolveScenarioAccess(scenario: AccessScenario): AccessProjection {
       ? false
       : entryPolicy !== "paid_subscription" || accessSourceIsDurable(accessSource)
         ? true
-        : subscriptionGrantsAccess(subscriptionStatus);
+        : communitySubscriptionStatusGrantsAccess(subscriptionStatus);
   const isAdmin = !isOwner && isEntitled && role === "admin";
   const isModerator = !isOwner && isEntitled && role === "moderator";
   const relation: Relation = isOwner
@@ -106,15 +103,23 @@ function assertScenario(
 
 function assertSourceAnchors() {
   const communityCore = readText(new URL("../convex/communityCore.ts", import.meta.url));
+  const subscriptionAccessCore = readText(
+    new URL("../convex/communitySubscriptionAccessCore.ts", import.meta.url),
+  );
   const communityAdmin = readText(new URL("../convex/communityAdmin.ts", import.meta.url));
   const communityResources = readText(new URL("../convex/communityResources.ts", import.meta.url));
   const resourceViewer = readText(new URL("../apps/web/src/components/WebCommunityResourceViewerModal.tsx", import.meta.url));
   const linkEmbedUi = readText(new URL("../shared/linkEmbedUi.tsx", import.meta.url));
 
   assertIncludes(
+    subscriptionAccessCore,
+    "export function communitySubscriptionStatusGrantsAccess",
+    "canonical community subscription access policy",
+  );
+  assertIncludes(
     communityCore,
-    "return status === \"active\" || status === \"past_due\" || status === \"cancel_at_period_end\";",
-    "community subscription access policy",
+    "communitySubscriptionStatusGrantsAccess(subscriptionStatus)",
+    "community entitlement uses canonical subscription access policy",
   );
   assertIncludes(
     communityCore,
