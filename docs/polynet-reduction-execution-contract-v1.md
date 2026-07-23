@@ -501,7 +501,20 @@ functions, historical rows, mappings, backfill, attachment fallback, digest,
 featured-message state, and lifecycle reachability are intentionally unchanged.
 No schema or Convex function changed and no historical migration ran.
 
-C3 remains `IN_PROGRESS`. After C3.2B exact-build acceptance, the next
-separately planned slice is the R-006 first-party no-call proof and deletion of
-the unreachable legacy UI mutation/write surface. This receipt authorizes no
-historical migration, digest/featured product decision, or table deletion.
+Exact runtime commit `d2aa605f` was `READY` and `PROMOTED` on the canonical
+`polynet-staging` project. Signed-in acceptance loaded the populated Polynet
+canonical feed and the empty Distribution Engineering and test feeds, exposed
+an enabled canonical composer on each surface, and switched communities without
+showing stale roots. Browser diagnostics contained no errors. The bounded
+development aggregate remained four legacy threads, three empty threads, 67
+legacy messages, and three legacy reactions before and after navigation.
+
+Nine focused interaction contracts, web typecheck, production build, bundle
+budget, the 38-step foundation baseline, staging identity guard, and diff
+hygiene passed. The initial sandboxed foundation run stopped only because
+`tsx` could not create its local IPC socket; the complete permitted rerun passed.
+
+C3 remains `IN_PROGRESS`. The next separately planned slice is the R-006
+first-party no-call proof and deletion of the unreachable legacy UI
+mutation/write surface. This receipt authorizes no historical migration,
+digest/featured product decision, or table deletion.

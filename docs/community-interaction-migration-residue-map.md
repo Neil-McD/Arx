@@ -58,6 +58,12 @@ Integrity checks found zero unlinked legacy messages, duplicate message links,
 dangling message/root/reply links, or canonical replies without content blocks.
 Counts are evidence, not expectations; no test should freeze them.
 
+C3.2B acceptance compared the same bounded aggregate before and after
+authenticated navigation on exact runtime commit `d2aa605f` across the
+Polynet, Distribution Engineering, and test community chat surfaces. It
+remained four legacy threads, three empty threads, 67 legacy messages, and
+three legacy reactions. No entry or switch created legacy chat state.
+
 ## Current Residue
 
 | ID | Job | Classification | Current owner and first-party path | Delete condition |
