@@ -536,6 +536,18 @@ baseline, staging identity guard and guard proof, generated API reconciliation,
 and diff hygiene pass locally. The slice deletes six complete runtime modules
 and removes several thousand more lines than it adds.
 
+Exact runtime commit `6c7f976e` was `READY` and automatically promoted by the
+canonical `polynet-staging` project after the development Convex deployment
+reported its functions ready. Signed-in acceptance loaded the populated
+Polynet canonical feed, kept Distribution Engineering and test empty without
+stale roots, opened a seven-reply canonical thread, and enabled then disabled
+the reply composer as its draft was entered and cleared. No interaction was
+submitted. Browser diagnostics contained only successful Convex health probes.
+The final read-only development aggregate remained four legacy threads, three
+empty threads, 67 legacy messages, three legacy reactions, and two historical
+activity events, proving that navigation and composer exercise did not recreate
+or mutate legacy chat state.
+
 C3 remains `IN_PROGRESS`, but live legacy chat authority is closed. The next
 work is a product-requirement decision, not another compatibility
 implementation: question and either delete or explicitly retain R-008 weekly
