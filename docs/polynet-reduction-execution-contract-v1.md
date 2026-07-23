@@ -555,3 +555,39 @@ digest and R-009 public featured messages before migrating any remaining
 legacy attachment, reaction, link, or row state. This receipt authorizes no
 historical migration, digest/featured retention, schema-table deletion, or
 production change.
+
+C3.2D1 closes R-008's legacy dependency while retaining the weekly community
+digest as an explicit MVP return loop. Exact runtime commit
+`4755560e48250294a2ed07fe2a4d68a64a52d56e` replaces the legacy
+`communityChatThreads` and `communityChatMessages` reads with
+`communityInteractionRoots` and `communityInteractionReplies`. Each canonical
+index read is capped at 51 rows and admits at most 50. Only live community or
+public rows are eligible. A recent reply is included only when its parent root
+is still live, belongs to the same community, and is community-readable,
+including when that root predates the seven-day digest window. Rendering uses
+the current canonical `contentSummary`; it does not hydrate blocks,
+attachments, or legacy links.
+
+The focused Convex behavior fixture proves canonical-only roots and replies,
+current edited summaries, an in-window reply to an older root, fail-closed
+hidden/deleted/private/admin rows, fail-closed hidden or foreign parents, and
+the deterministic 50-root plus 50-reply bound. The migration residue proof,
+archive/resource/workspace dependency proofs, Convex typecheck, and complete
+38-step foundation baseline pass. No schema, cron, recipient selection,
+threshold, ranking, dedupe, renderer, preference, enqueue, or send behavior
+changed.
+
+The guarded development Convex deployment reported its functions ready, and
+`polynet-staging.vercel.app/version.json` reported the exact runtime commit as
+both build ID and Sentry release. The independent read-only email ledger
+contained 129 rows before and after deployment, including 115 historical
+weekly-digest rows, with zero pending or sending rows. No preview enqueue or
+email send ran. A direct live batch preview was not executed because the
+execution safety gate would not recognize the internal query as provably
+read-only; it was not bypassed.
+
+R-009 public featured-message state is now the only unresolved product
+requirement before the retained legacy attachment/reaction/link history can be
+resolved in causal order. This receipt authorizes no featured-message decision,
+historical migration or deletion, email-policy expansion, production Convex
+deployment, or production web release.
