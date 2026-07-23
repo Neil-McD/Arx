@@ -533,8 +533,8 @@ replacement subsystem was added.
 Nine focused interaction contracts, the evidence-integrity contract, web and
 Convex typechecks, production build, bundle budget, the 38-step foundation
 baseline, staging identity guard and guard proof, generated API reconciliation,
-and diff hygiene pass locally. The slice deletes six complete runtime modules
-and removes several thousand more lines than it adds.
+and diff hygiene pass locally. The slice deletes four complete runtime modules,
+one redundant proof file, and several thousand more lines than it adds.
 
 Exact runtime commit `6c7f976e` was `READY` and automatically promoted by the
 canonical `polynet-staging` project after the development Convex deployment
