@@ -7,6 +7,7 @@ function read(path: string): string {
 
 const account = read("convex/account.ts");
 const accountLifecycle = read("convex/accountLifecycle.ts");
+const schema = read("convex/schema.ts");
 const app = read("apps/web/src/App.tsx");
 const accountSettings = read("apps/web/src/components/WebAccountSettingsSection.tsx");
 const settingsPanels = read("apps/web/src/components/WebSettingsPanels.tsx");
@@ -47,6 +48,30 @@ assert.equal(
   "the lifecycle substrate must expose exactly two internal mutations",
 );
 assert.doesNotMatch(accountLifecycle, /= mutation\(/, "the lifecycle substrate must expose no public mutation");
+const requestSchema = schema.slice(
+  schema.indexOf("accountLifecycleRequests: defineTable"),
+  schema.indexOf("accountLifecycleReceipts: defineTable"),
+);
+assert.match(
+  requestSchema,
+  /\.index\("by_user", \["userId"\]\)/,
+  "the lifecycle root must have one canonical account-first lookup",
+);
+assert.doesNotMatch(
+  requestSchema,
+  /idempotencyKey|by_user_policy/,
+  "the lifecycle root must not duplicate account/policy authority in an idempotency field or policy-scoped index",
+);
+assert.match(
+  accountLifecycle,
+  /\.withIndex\("by_user",[\s\S]*?\.unique\(\)/,
+  "request replay must resolve exactly one lifecycle root for the account",
+);
+assert.doesNotMatch(
+  accountLifecycle,
+  /ACCOUNT_LIFECYCLE_IDEMPOTENCY_KEY|idempotencyKey|by_user_policy/,
+  "the runtime must not retain the deleted policy-scoped root identity",
+);
 for (const forbidden of [
   /ctx\.storage/,
   /ctx\.scheduler/,

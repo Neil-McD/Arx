@@ -27,7 +27,6 @@ export default defineSchema({
   accountLifecycleRequests: defineTable({
     userId: v.id("users"),
     policyVersion: v.string(),
-    idempotencyKey: v.string(),
     status: v.union(v.literal("requested"), v.literal("blocked")),
     phase: v.literal("preflight_blockers"),
     checkpointRevision: v.number(),
@@ -35,7 +34,7 @@ export default defineSchema({
     preflightEvaluatedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_user_policy", ["userId", "policyVersion"]),
+  }).index("by_user", ["userId"]),
 
   accountLifecycleReceipts: defineTable({
     requestId: v.id("accountLifecycleRequests"),

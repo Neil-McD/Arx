@@ -227,6 +227,125 @@ test("internal lifecycle request rejects missing identity without provisioning o
   expect(await t.run(async (ctx) => await ctx.db.query("accountLifecycleReceipts").collect())).toEqual([]);
 });
 
+test("account lifecycle has one canonical root per account across policy versions", async () => {
+  const t = convexTest(schema, modules);
+  const now = 1_750_050_000_000;
+  const firstSubject = "account-lifecycle-root-first";
+  const secondSubject = "account-lifecycle-root-second";
+  const stalePolicySubject = "account-lifecycle-root-stale-policy";
+
+  const { stalePolicyUserId } = await t.run(async (ctx) => {
+    await ctx.db.insert("users", {
+      authSubject: firstSubject,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("users", {
+      authSubject: secondSubject,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const stalePolicyUserId = await ctx.db.insert("users", {
+      authSubject: stalePolicySubject,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("accountLifecycleRequests", {
+      userId: stalePolicyUserId,
+      policyVersion: "account-lifecycle-policy-stale-fixture",
+      status: "requested",
+      phase: "preflight_blockers",
+      checkpointRevision: 0,
+      blockerCodes: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { stalePolicyUserId };
+  });
+
+  const asFirstUser = t.withIdentity({ subject: firstSubject });
+  const first = await asFirstUser.mutation(
+    internal.accountLifecycle.recordOwnAccountDeletionRequestInternal,
+    {},
+  );
+  expect(
+    await asFirstUser.mutation(
+      internal.accountLifecycle.recordOwnAccountDeletionRequestInternal,
+      {},
+    ),
+  ).toEqual(first);
+
+  const second = await t.withIdentity({ subject: secondSubject }).mutation(
+    internal.accountLifecycle.recordOwnAccountDeletionRequestInternal,
+    {},
+  );
+  expect(second.requestId).not.toEqual(first.requestId);
+
+  await expect(
+    t.withIdentity({ subject: stalePolicySubject }).mutation(
+      internal.accountLifecycle.recordOwnAccountDeletionRequestInternal,
+      {},
+    ),
+  ).rejects.toThrow("account_lifecycle_request_corrupt");
+
+  const state = await t.run(async (ctx) => ({
+    requests: await ctx.db.query("accountLifecycleRequests").collect(),
+    receipts: await ctx.db.query("accountLifecycleReceipts").collect(),
+    stalePolicyRoots: await ctx.db
+      .query("accountLifecycleRequests")
+      .withIndex("by_user", (q) => q.eq("userId", stalePolicyUserId))
+      .collect(),
+  }));
+  expect(state.requests).toHaveLength(3);
+  expect(state.receipts).toHaveLength(2);
+  expect(state.stalePolicyRoots).toHaveLength(1);
+  expect(state.stalePolicyRoots[0]?.policyVersion).toBe("account-lifecycle-policy-stale-fixture");
+});
+
+test("duplicate lifecycle roots fail closed instead of selecting one", async () => {
+  const t = convexTest(schema, modules);
+  const now = 1_750_075_000_000;
+  const subject = "account-lifecycle-duplicate-root";
+
+  const userId = await t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", {
+      authSubject: subject,
+      createdAt: now,
+      updatedAt: now,
+    });
+    for (let index = 0; index < 2; index += 1) {
+      await ctx.db.insert("accountLifecycleRequests", {
+        userId,
+        policyVersion: ACCOUNT_LIFECYCLE_POLICY_VERSION,
+        status: "requested",
+        phase: "preflight_blockers",
+        checkpointRevision: 0,
+        blockerCodes: [],
+        createdAt: now + index,
+        updatedAt: now + index,
+      });
+    }
+    return userId;
+  });
+
+  await expect(
+    t.withIdentity({ subject }).mutation(
+      internal.accountLifecycle.recordOwnAccountDeletionRequestInternal,
+      {},
+    ),
+  ).rejects.toThrow();
+
+  expect(
+    await t.run(async (ctx) =>
+      await ctx.db
+        .query("accountLifecycleRequests")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect(),
+    ),
+  ).toHaveLength(2);
+  expect(await t.run(async (ctx) => await ctx.db.query("accountLifecycleReceipts").collect())).toEqual([]);
+});
+
 test("account lifecycle request and preflight are idempotent, resumable, and metadata-only", async () => {
   const t = convexTest(schema, modules);
   const now = 1_750_100_000_000;

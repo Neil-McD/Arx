@@ -34,6 +34,14 @@ C2.1 adds only the durable safety substrate: one account-specific checkpoint plu
 
 C2.2A reduces the authority surface before freeze exists. `authActor` is now the sole executable selector from a verified current subject to the account row for the live gate, business-visitor identity binding, and thread ownership. Two uncalled gate projections, one uncalled subject-tier query, and the duplicate thread-local internal user lookup are deleted. Preflight now canonically precedes final confirmation and freeze; freeze will deny account authority without rewriting entitlements or operator roles. There is still no frozen state, session effect, public lifecycle surface, or destructive executor.
 
+C2.2B makes the request itself one canonical lifecycle root per account.
+`policyVersion` remains audit evidence, but it no longer participates in root
+identity; a policy bump therefore cannot create a parallel request or obscure a
+future frozen state. The redundant root `idempotencyKey` is deleted. Replay
+uses the unique account lookup plus checkpoint receipts, while policy drift and
+duplicate roots fail closed. No frozen state, session effect, public lifecycle
+surface, or destructive executor exists yet.
+
 The replacement policy still needs an explicit rule for DM attachments embedded in `contentJson`. The retired executor did not visibly clean their storage objects; this remains a historical storage-leak inference until attachment representation and live prevalence are checked.
 
 ## Community deletion path

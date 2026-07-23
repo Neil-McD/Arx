@@ -9,14 +9,11 @@ import {
 } from "./accountLifecyclePolicy";
 
 const ACCOUNT_LIFECYCLE_PHASE = "preflight_blockers" as const;
-const ACCOUNT_LIFECYCLE_IDEMPOTENCY_KEY =
-  `account_identity_deletion:${ACCOUNT_LIFECYCLE_POLICY_VERSION}` as const;
 
 type AccountLifecycleRequestRow = {
   _id: any;
   userId: any;
   policyVersion: string;
-  idempotencyKey: string;
   status: "requested" | "blocked";
   phase: typeof ACCOUNT_LIFECYCLE_PHASE;
   checkpointRevision: number;
@@ -63,7 +60,6 @@ function assertCurrentRequest(row: AccountLifecycleRequestRow): void {
     : row.checkpointRevision >= 1 && row.blockerCodes.length > 0 && typeof row.preflightEvaluatedAt === "number";
   if (
     row.policyVersion !== ACCOUNT_LIFECYCLE_POLICY_VERSION ||
-    row.idempotencyKey !== ACCOUNT_LIFECYCLE_IDEMPOTENCY_KEY ||
     row.phase !== ACCOUNT_LIFECYCLE_PHASE ||
     !Number.isSafeInteger(row.checkpointRevision) ||
     row.checkpointRevision < 0 ||
@@ -140,9 +136,7 @@ export const recordOwnAccountDeletionRequestInternal = internalMutation({
     });
     const existing = (await ctx.db
       .query("accountLifecycleRequests")
-      .withIndex("by_user_policy", (q: any) =>
-        q.eq("userId", actor.dbUserId).eq("policyVersion", ACCOUNT_LIFECYCLE_POLICY_VERSION),
-      )
+      .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
       .unique()) as AccountLifecycleRequestRow | null;
 
     if (existing) {
@@ -172,7 +166,6 @@ export const recordOwnAccountDeletionRequestInternal = internalMutation({
     const requestId = await ctx.db.insert("accountLifecycleRequests", {
       userId: actor.dbUserId,
       policyVersion: ACCOUNT_LIFECYCLE_POLICY_VERSION,
-      idempotencyKey: ACCOUNT_LIFECYCLE_IDEMPOTENCY_KEY,
       status: "requested",
       phase: ACCOUNT_LIFECYCLE_PHASE,
       checkpointRevision: 0,

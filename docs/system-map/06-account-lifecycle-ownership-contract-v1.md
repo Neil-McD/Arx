@@ -188,19 +188,20 @@ These blockers prevent execution, not policy classification. Undecided behavior 
 3. **Complete in C2.0B:** delete the unowned anonymous-user executor/tooling without executing it or changing the 56 development roots.
 4. **Complete in C2.1:** build an account-specific request/preflight/checkpoint/receipt substrate with no destructive executor or public UI.
 5. **Complete in C2.2A:** consolidate authenticated subject-to-account authority behind `authActor`, delete uncalled duplicate gate/tier/user lookup surfaces, and reconcile preflight-before-freeze plus non-destructive grant semantics.
-6. Add the internal access-freeze checkpoint and denial boundary behind interruption fixtures.
-7. Add bounded local-session revocation, private-state, and external-provider executors.
-8. Add DM participant-departure and shared tombstone execution.
-9. Add community-content attribution and ownership execution.
-10. Add evidence/intelligence privacy propagation.
-11. Add finance/legal/audit minimization and retention enforcement.
-12. Add invariant audit, root-last finalizer, and terminal receipt.
-13. Define and build the separate community lifecycle from its own ownership matrix.
-14. Re-enable self-service deletion only after full interruption, scale, orphan, provider, and cross-user behavioral proofs.
+6. **Complete in C2.2B:** collapse policy-scoped request identity to one canonical lifecycle root per account and delete the redundant root idempotency field.
+7. Add the internal access-freeze checkpoint and denial boundary behind interruption fixtures.
+8. Add bounded local-session revocation, private-state, and external-provider executors.
+9. Add DM participant-departure and shared tombstone execution.
+10. Add community-content attribution and ownership execution.
+11. Add evidence/intelligence privacy propagation.
+12. Add finance/legal/audit minimization and retention enforcement.
+13. Add invariant audit, root-last finalizer, and terminal receipt.
+14. Define and build the separate community lifecycle from its own ownership matrix.
+15. Re-enable self-service deletion only after full interruption, scale, orphan, provider, and cross-user behavioral proofs.
 
 ### C2.1 implementation receipt
 
-The substrate has two account-specific tables, two authenticated internal mutations, two states (`requested` and `blocked`), and two receipt kinds. Request creation is one-per-account-per-policy and idempotent. Preflight combines the versioned global blocker codes with bounded indexed existence checks for owned communities, developer apps, and skill packages. An unchanged replay returns the existing checkpoint and receipt; a changed blocker set advances the revision atomically.
+The substrate has two account-specific tables, two authenticated internal mutations, two states (`requested` and `blocked`), and two receipt kinds. C2.1 initially made request creation one-per-account-per-policy and idempotent; C2.2B replaces that provisional identity with one canonical root per account. Preflight combines the versioned global blocker codes with bounded indexed existence checks for owned communities, developer apps, and skill packages. An unchanged replay returns the existing checkpoint and receipt; a changed blocker set advances the revision atomically.
 
 The behavioral fixture proves missing or mismatched identity fails without provisioning, request replay does not duplicate state, interruption after request persistence resumes at preflight, preflight replay does not duplicate receipts, and shared product rows remain byte-for-byte unchanged. The public deletion mutation remains the same zero-effect quarantine. No executor, public function, UI, schedule, action, provider call, storage call, scan, delete, or root-finalization state exists in this slice.
 
@@ -211,6 +212,22 @@ Authenticated subject-to-account selection now has one executable owner: `authAc
 This slice adds no frozen status, checkpoint transition, session revocation, entitlement or operator-role mutation, public API/UI, scheduler, provider/storage effect, or destructive behavior. It only makes the later freeze enforceable at one account-authority seam and corrects the contract: preflight precedes freeze, access freeze does not manufacture state by deleting grants, and cancellation belongs before final confirmation.
 
 Convex typecheck, the affected gate/actor/entitlement/thread/analytics proofs, the account lifecycle/quarantine proofs, and the complete 38-step foundation baseline pass. The staging identity guard confirmed the isolated worktree, branch, `dev:quick-porcupine-949`, and `polynet-staging` linkage before the development Convex function surface was updated successfully. No schema, stored row, schedule, Vercel project, provider, or production target changed.
+
+### C2.2B single-root authority receipt
+
+An account now has one lifecycle request root, selected through `by_user` and
+required to be unique. `policyVersion` remains on that root as audit metadata;
+a version mismatch fails closed and cannot create a second root. The root-level
+`idempotencyKey` is deleted because it merely repeated the operation and policy
+already represented by the row and did not provide uniqueness. Future
+effect-level idempotency keys remain required.
+
+The focused behavior proof covers replay, independent accounts, stale-policy
+state, and duplicate-root corruption. Both stale-policy and duplicate-root
+states fail without adding a root or receipt. The bounded development preflight
+proved zero request rows, zero receipt rows, and zero lifecycle schedules before
+the schema change. This slice adds no status, phase, freeze, session effect,
+public caller, provider/storage effect, or product-data mutation.
 
 ## Proof required before re-enabling deletion
 

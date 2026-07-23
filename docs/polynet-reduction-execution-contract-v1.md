@@ -387,6 +387,15 @@ storage, or deletion behavior. Convex typecheck, focused affected proofs, and
 the full 38-step foundation baseline pass; the development Convex function
 surface was updated successfully after the exact staging identity guard passed.
 
-The next separately planned slice is C2.2B: the internal access-freeze
-checkpoint and denial boundary only. Existing-session revocation remains a
-later bounded subphase; no private or shared data deletion is authorized.
+C2.2B is complete on the canonical staging lane. The lifecycle request is now
+one canonical root per account rather than one root per account/policy pair.
+`policyVersion` remains audit metadata, while the duplicate root-level
+`idempotencyKey` and `by_user_policy` index are deleted. Policy drift and
+duplicate roots fail closed instead of creating or selecting another root.
+The expectation-locked development preflight found zero request rows, zero
+receipt rows, and zero lifecycle jobs before the schema change.
+
+The next separately planned slice is C2.2C: the internal access-freeze
+checkpoint and denial boundary only. It must build on the one-account root;
+existing-session revocation remains a later bounded subphase, and no private or
+shared data deletion is authorized.
