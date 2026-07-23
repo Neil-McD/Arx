@@ -13,6 +13,7 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import { hydrateCommunityResourceBody } from "./communityResourceContent";
 import {
   buildCommunityInteractionEvidenceRef,
   communityInteractionVisibilityIsEvidenceReadable,
@@ -245,7 +246,10 @@ async function listRecentResourceItems(args: {
       if (Boolean(a.pinned) !== Boolean(b.pinned)) return Boolean(a.pinned) ? -1 : 1;
       return b.createdAt - a.createdAt;
     });
-  const items = sorted.map((row) => {
+  const hydratedRows = await Promise.all(
+    sorted.map(async (row) => (await hydrateCommunityResourceBody(args.ctx, row)) ?? row),
+  );
+  const items = hydratedRows.map((row) => {
     const snippetSource = [row.title, row.bodyMd ?? "", row.url ?? ""].filter(Boolean).join(" — ");
     const snippet = truncateText(snippetSource, 280);
     return {
@@ -261,7 +265,7 @@ async function listRecentResourceItems(args: {
       resource_status: normalizeResourceStatus(row.status),
     };
   }).slice(0, RESOURCE_WINDOW_LIMIT);
-  return { items, considered: sorted.length };
+  return { items, considered: hydratedRows.length };
 }
 
 function selectRecentContextItems(allItems: RecentContextItem[]): { items: RecentContextItem[]; fallbackUsed: boolean } {

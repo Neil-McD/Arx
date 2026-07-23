@@ -8,6 +8,10 @@ import {
   revokeCommunityResourceMemoryProjection,
   syncCommunityResourceMemoryProjection,
 } from "../convex/communityResourceMemoryProjection.ts";
+import {
+  readCommunityResourceBodyMd,
+  writeCommunityResourceBodyContent,
+} from "../convex/communityResourceContent.ts";
 
 type Row = Record<string, any> & { _id: string };
 
@@ -150,6 +154,71 @@ async function main() {
     createdAt: nowMs,
     updatedAt: nowMs,
   });
+  const missingContentResourceId = await db.insert("communityResources", {
+    communityId,
+    createdByUserId: "users_owner",
+    type: "note",
+    title: "Missing canonical body",
+    bodyChars: 4,
+    pinned: false,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  await assert.rejects(
+    readCommunityResourceBodyMd(ctx, (await db.get(missingContentResourceId))!),
+    /community_resource_content_missing/,
+  );
+
+  const scopeMismatchResourceId = await db.insert("communityResources", {
+    communityId,
+    createdByUserId: "users_owner",
+    type: "note",
+    title: "Scoped canonical body",
+    bodyChars: 4,
+    pinned: false,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  await db.insert("communityResourceContents", {
+    communityId: "communities_foreign",
+    resourceId: scopeMismatchResourceId,
+    bodyMd: "body",
+    bodyChars: 4,
+    bodyHash: "scope",
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  await assert.rejects(
+    readCommunityResourceBodyMd(ctx, (await db.get(scopeMismatchResourceId))!),
+    /community_resource_content_scope_mismatch/,
+  );
+
+  const duplicateContentResourceId = await db.insert("communityResources", {
+    communityId,
+    createdByUserId: "users_owner",
+    type: "note",
+    title: "Duplicate canonical body",
+    bodyChars: 4,
+    pinned: false,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  for (let index = 0; index < 2; index += 1) {
+    await db.insert("communityResourceContents", {
+      communityId,
+      resourceId: duplicateContentResourceId,
+      bodyMd: "body",
+      bodyChars: 4,
+      bodyHash: `duplicate-${index}`,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  }
+  await assert.rejects(
+    readCommunityResourceBodyMd(ctx, (await db.get(duplicateContentResourceId))!),
+    /community_resource_content_duplicate/,
+  );
+
   const longPrefix = "A".repeat(4_600);
   const resourceId = await db.insert("communityResources", {
     communityId,
@@ -158,12 +227,18 @@ async function main() {
     type: "note",
     role: "page",
     title: "Canonical guide",
-    bodyMd: `${longPrefix}TAIL_ONE`,
+    bodyChars: 0,
     url: "https://example.com/guide",
     pinned: false,
     sortOrder: 0,
     createdAt: nowMs,
     updatedAt: nowMs,
+  });
+  await writeCommunityResourceBodyContent(ctx, {
+    communityId,
+    resourceId,
+    bodyMd: `${longPrefix}TAIL_ONE`,
+    nowMs: ++nowMs,
   });
   const sourceRef = buildCommunityResourceEvidenceRef(resourceId);
 
@@ -203,7 +278,12 @@ async function main() {
     "ordering must not supersede an evidence citation",
   );
 
-  await db.patch(resourceId, { bodyMd: `${longPrefix}TAIL_TWO`, updatedAt: ++nowMs });
+  await writeCommunityResourceBodyContent(ctx, {
+    communityId,
+    resourceId,
+    bodyMd: `${longPrefix}TAIL_TWO`,
+    nowMs: ++nowMs,
+  });
   await syncCommunityResourceMemoryProjection(ctx, (await db.get(resourceId))!, ++nowMs);
   trace = resourceTrace(db, sourceRef);
   assert.equal(trace.compilerState, "pending", "tail-only edits after character 4000 must reopen work");
@@ -227,7 +307,16 @@ async function main() {
       traceId: trace._id,
       nowMs: ++nowMs,
     });
-    await db.patch(resourceId, { ...patch, updatedAt: ++nowMs });
+    if (label === "body") {
+      await writeCommunityResourceBodyContent(ctx, {
+        communityId,
+        resourceId,
+        bodyMd: patch.bodyMd,
+        nowMs: ++nowMs,
+      });
+    } else {
+      await db.patch(resourceId, { ...patch, updatedAt: ++nowMs });
+    }
     await syncCommunityResourceMemoryProjection(ctx, (await db.get(resourceId))!, ++nowMs);
     trace = resourceTrace(db, sourceRef);
     assert.equal(trace.compilerState, "pending", `${label} edits must reopen compiler work`);

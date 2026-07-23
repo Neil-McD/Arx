@@ -408,10 +408,10 @@ assert.match(
   /sourceIngestionStatus: args\.status[\s\S]*sourceOriginalFilename[\s\S]*writeCommunityResourceBodyContent[\s\S]*syncCommunityResourceMemoryProjection/,
   "source ingestion should persist extracted text and keep canonical memory projections in sync",
 );
-assert.match(
+assert.doesNotMatch(
   resources,
-  /compactCommunityResourceBodyStorage[\s\S]*writeCommunityResourceBodyContent[\s\S]*resourceUpdatedAt: row\.updatedAt/,
-  "body-storage compaction should move legacy bodies without making old resources look newly edited",
+  /compactCommunityResourceBodyStorage/,
+  "temporary resource-body migration machinery must not remain in the product function surface",
 );
 assert.match(
   resources,

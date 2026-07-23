@@ -194,10 +194,11 @@ export type CommunityResourceLike = {
   status?: string;
   sourceResourceId?: any;
   title: string;
+  // Hydrated response fields only. Durable communityResources rows own
+  // metadata and bodyChars; communityResourceContents owns bodyMd/bodyHash.
   bodyMd?: string;
   bodyChars?: number;
   bodyHash?: string;
-  bodyMigratedAt?: number;
   url?: string;
   fileKey?: string;
   sourceIngestionStatus?: string;
@@ -598,8 +599,6 @@ export function normalizeResourceSourceIngestionKind(
 }
 
 export function communityResourceBodyChars(row: CommunityResourceLike): number {
-  const legacyBody = String(row.bodyMd ?? "").trim();
-  if (legacyBody) return legacyBody.length;
   const chars = Number(row.bodyChars ?? 0);
   return Number.isFinite(chars) && chars > 0 ? Math.floor(chars) : 0;
 }

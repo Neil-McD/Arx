@@ -121,7 +121,7 @@ assert.match(
 
 const builderEditBody = resources.slice(
   resources.indexOf("export const editCommunityResourceBuilderResource"),
-  resources.indexOf("export const compactCommunityResourceBodyStorage"),
+  resources.indexOf("export async function buildCommunityResourceBuilderHealthReport"),
 );
 assert.ok(builderEditBody.length > 0, "builder edit body should be discoverable");
 assert.doesNotMatch(

@@ -16,6 +16,8 @@ const panel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const viewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
 const resources = read("convex/communityResources.ts");
 const resourceEvidence = read("convex/communityResourceEvidence.ts");
+const recentContext = read("convex/communityRecentContext.ts");
+const emailDigests = read("convex/emailDigests.ts");
 const core = read("convex/communityCore.ts");
 const content = read("convex/communityResourceContent.ts");
 const markdown = read("shared/markdownUi.tsx");
@@ -42,13 +44,28 @@ assert.match(
 );
 assert.match(
   content,
-  /export async function hydrateCommunityResourceBody[\s\S]*getCommunityResourceContentRow[\s\S]*bodyMd: bodyMd \|\| undefined[\s\S]*bodyChars:/,
+  /export async function hydrateCommunityResourceBody[\s\S]*getCommunityResourceContentRow[\s\S]*bodyMd: content\.bodyMd[\s\S]*bodyChars: content\.bodyChars[\s\S]*bodyHash: content\.bodyHash/,
   "resource body hydration must read split body storage and return bodyMd/bodyChars together",
 );
 assert.match(
   content,
-  /export async function writeCommunityResourceBodyContent[\s\S]*ctx\.db\.insert\("communityResourceContents"[\s\S]*bodyMd,[\s\S]*bodyChars,[\s\S]*bodyHash,[\s\S]*await ctx\.db\.patch\(args\.resourceId[\s\S]*bodyMd: undefined,[\s\S]*bodyChars,[\s\S]*bodyHash,[\s\S]*bodyMigratedAt:/,
-  "resource body writes must persist markdown in the split content table while leaving body counters on the resource row",
+  /export async function writeCommunityResourceBodyContent[\s\S]*ctx\.db\.insert\("communityResourceContents"[\s\S]*bodyMd,[\s\S]*bodyChars,[\s\S]*bodyHash,[\s\S]*await ctx\.db\.patch\(args\.resourceId[\s\S]*bodyChars,[\s\S]*updatedAt:/,
+  "resource body writes must persist markdown and hashes only in the split content table while leaving the list counter on the resource row",
+);
+assert.match(
+  content,
+  /\.take\(2\)[\s\S]*community_resource_content_duplicate/,
+  "resource content lookup must fail closed instead of selecting an arbitrary duplicate",
+);
+assert.doesNotMatch(
+  content,
+  /resource\.bodyMd|bodyMigratedAt|bodyHash:\s*undefined/,
+  "canonical body storage must not read or maintain inline resource-body compatibility",
+);
+assert.doesNotMatch(
+  resources,
+  /compactCommunityResourceBodyStorage/,
+  "temporary body-storage compaction must be absent after canonical closure",
 );
 assert.match(
   resources,
@@ -74,6 +91,16 @@ assert.match(
   resourceEvidence,
   /export const searchRecentCommunityResourceEvidenceInternal = internalQuery\([\s\S]*const hydrated = await Promise\.all\([\s\S]*hydrateCommunityResourceBody\(ctx, row\)[\s\S]*scoreResource\(resource, tokens\)/,
   "bounded resource evidence search must hydrate split body content before scoring and excerpting",
+);
+assert.match(
+  recentContext,
+  /async function listRecentResourceItems[\s\S]*hydrateCommunityResourceBody\(args\.ctx, row\)[\s\S]*snippetSource = \[row\.title, row\.bodyMd/,
+  "recent context must hydrate canonical resource bodies before matching or excerpting",
+);
+assert.match(
+  emailDigests,
+  /async function listRecentResources[\s\S]*hydrateCommunityResourceBody\(ctx, row\)[\s\S]*buildDigestItems/,
+  "weekly digest resource summaries must hydrate canonical body content before rendering",
 );
 assert.match(
   resources,

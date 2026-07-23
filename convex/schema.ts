@@ -2504,10 +2504,7 @@ export default defineSchema({
     ),
     sourceResourceId: v.optional(v.id("communityResources")),
     title: v.string(),
-    bodyMd: v.optional(v.string()),
     bodyChars: v.optional(v.number()),
-    bodyHash: v.optional(v.string()),
-    bodyMigratedAt: v.optional(v.number()),
     url: v.optional(v.string()),
     fileKey: v.optional(v.string()),
     sourceIngestionStatus: v.optional(

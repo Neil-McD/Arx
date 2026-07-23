@@ -30,10 +30,32 @@ async function getCommunityResourceContentRow(
   ctx: { db: any },
   resourceId: any,
 ): Promise<CommunityResourceContentLike | null> {
-  return ((await ctx.db
+  const rows = (await ctx.db
     .query("communityResourceContents" as any)
     .withIndex("by_resource", (q: any) => q.eq("resourceId", resourceId))
-    .first()) as CommunityResourceContentLike | null) ?? null;
+    .take(2)) as CommunityResourceContentLike[];
+  if (rows.length > 1) throw new Error("community_resource_content_duplicate");
+  return rows[0] ?? null;
+}
+
+function requireCommunityResourceContentMatchesResource(
+  content: CommunityResourceContentLike,
+  resource: CommunityResourceLike,
+): void {
+  if (
+    normalizeIdValue(content.resourceId) !== normalizeIdValue(resource._id) ||
+    normalizeIdValue(content.communityId) !== normalizeIdValue(resource.communityId)
+  ) {
+    throw new Error("community_resource_content_scope_mismatch");
+  }
+  const bodyMd = String(content.bodyMd ?? "");
+  const bodyChars = bodyMd.trim().length;
+  if (!bodyMd.trim() || content.bodyChars !== bodyChars) {
+    throw new Error("community_resource_content_invalid");
+  }
+  if (communityResourceBodyChars(resource) !== content.bodyChars) {
+    throw new Error("community_resource_content_projection_mismatch");
+  }
 }
 
 export async function readCommunityResourceBodyMd(
@@ -41,12 +63,15 @@ export async function readCommunityResourceBodyMd(
   resource: CommunityResourceLike | null | undefined,
 ): Promise<string | null> {
   if (!resource) return null;
-  const legacyBody = String(resource.bodyMd ?? "").trim();
-  if (legacyBody) return String(resource.bodyMd ?? "");
   const content = await getCommunityResourceContentRow(ctx, resource._id);
-  if (!content) return null;
-  if (normalizeIdValue(content.communityId) !== normalizeIdValue(resource.communityId)) return null;
-  return String(content.bodyMd ?? "").trim() ? String(content.bodyMd ?? "") : null;
+  if (!content) {
+    if (communityResourceBodyChars(resource) > 0) {
+      throw new Error("community_resource_content_missing");
+    }
+    return null;
+  }
+  requireCommunityResourceContentMatchesResource(content, resource);
+  return String(content.bodyMd);
 }
 
 export async function hydrateCommunityResourceBody(
@@ -54,23 +79,19 @@ export async function hydrateCommunityResourceBody(
   resource: CommunityResourceLike | null | undefined,
 ): Promise<CommunityResourceLike | null> {
   if (!resource) return null;
-  const legacyBody = String(resource.bodyMd ?? "").trim();
-  if (legacyBody) {
-    return {
-      ...resource,
-      bodyChars: communityResourceBodyChars(resource),
-    };
-  }
   const content = await getCommunityResourceContentRow(ctx, resource._id);
-  if (!content || normalizeIdValue(content.communityId) !== normalizeIdValue(resource.communityId)) {
+  if (!content) {
+    if (communityResourceBodyChars(resource) > 0) {
+      throw new Error("community_resource_content_missing");
+    }
     return resource;
   }
-  const bodyMd = String(content.bodyMd ?? "");
+  requireCommunityResourceContentMatchesResource(content, resource);
   return {
     ...resource,
-    bodyMd: bodyMd || undefined,
-    bodyChars: Number.isFinite(content.bodyChars) ? Math.max(0, Math.floor(content.bodyChars)) : bodyMd.trim().length,
-    bodyHash: String(content.bodyHash ?? "") || resource.bodyHash,
+    bodyMd: content.bodyMd,
+    bodyChars: content.bodyChars,
+    bodyHash: content.bodyHash,
   };
 }
 
@@ -96,14 +117,19 @@ export async function writeCommunityResourceBodyContent(
   const resourceUpdatedAt = typeof args.resourceUpdatedAt === "number" && Number.isFinite(args.resourceUpdatedAt)
     ? Math.floor(args.resourceUpdatedAt)
     : args.nowMs;
+  const resource = await ctx.db.get(args.resourceId as any) as CommunityResourceLike | null;
+  if (
+    !resource ||
+    normalizeIdValue(resource.communityId) !== normalizeIdValue(args.communityId)
+  ) {
+    throw new Error("community_resource_content_scope_mismatch");
+  }
   const existing = await getCommunityResourceContentRow(ctx, args.resourceId);
+  if (existing) requireCommunityResourceContentMatchesResource(existing, resource);
   if (!bodyMd) {
     if (existing) await ctx.db.delete(existing._id as any);
     await ctx.db.patch(args.resourceId as any, {
-      bodyMd: undefined,
       bodyChars: 0,
-      bodyHash: undefined,
-      bodyMigratedAt: args.nowMs,
       updatedAt: resourceUpdatedAt,
     });
     return {
@@ -136,10 +162,7 @@ export async function writeCommunityResourceBodyContent(
     });
   }
   await ctx.db.patch(args.resourceId as any, {
-    bodyMd: undefined,
     bodyChars,
-    bodyHash,
-    bodyMigratedAt: args.nowMs,
     updatedAt: resourceUpdatedAt,
   });
   return {

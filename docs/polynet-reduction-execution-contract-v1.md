@@ -167,7 +167,7 @@ Exactly one milestone or bounded sub-slice may be `IN_PROGRESS`.
 | C0 | Reconcile and adopt one architecture thesis | `COMPLETE` | one repository contract distinguishes implemented, next, proposed, and deferred architecture without attachment/chat dependency |
 | C1 | Finish paid-access proof and ordinary creator settlement | `DEFERRED_ACCEPTED` | implementation accepted for sequencing; the unperformed live checkout/cancellation and Connect-settlement evidence remains explicit under U-017 |
 | C2 | Complete resumable deletion and privacy lifecycles | `BLOCKED` | interruption-safe phases, external revocation, privacy propagation, invariant audit, and root-last finalization |
-| C3 | Finish canonical resource, interaction, and intelligence migrations | `PLANNED` | one authority per concern and zero compatibility reads/writes through an observation window |
+| C3 | Finish canonical resource, interaction, and intelligence migrations | `IN_PROGRESS` | one authority per concern and zero compatibility reads/writes through an observation window |
 | C4 | Guarantee scheduler fairness and bounded operations | `PLANNED` | every eligible object eventually receives service across caps and restarts; operator work is bounded |
 | C5 | Collapse capability, transport, and public-function duplication | `PLANNED` | one authority/executor/receipt owner per semantic operation with thin versioned adapters |
 | C6 | Land the read-only semantic community repository | `PLANNED` | bounded authorized list/read of only real initial mounts across native and external surfaces |
@@ -412,5 +412,28 @@ temporary migration is absent from final source. Lifecycle policy v5 now covers
 C2 is now `BLOCKED`, not complete. C2.2C remains the future access-freeze slice,
 but implementing a lock before C3 canonicalizes interaction, resource, and
 intelligence authority would create state without a correct complete executor.
-The next separately planned causal slice is C3.1 canonical resource-content
-authority. No C3 implementation is authorized by this receipt.
+
+C3.1A canonical resource-body authority is complete on the canonical staging
+lane. The expectation-locked development preflight found 10 resources, eight
+content rows, two inline-only bodies, and zero duplicate, orphan,
+cross-community, or inline/content-conflict rows. The two bodies moved
+atomically into `communityResourceContents` without changing resource
+timestamps; replay performed zero work. A second expectation-locked checkpoint
+proved all 10 parent hash/migration projections matched canonical content,
+cleared them, and replayed as a zero-op.
+
+`communityResourceContents` is now the sole durable body/hash owner.
+`communityResources` retains only the derived `bodyChars` list projection.
+Duplicate, missing, malformed, projection-mismatched, or cross-community
+content fails closed. Inline fields, inline-first reads, the public full-collect
+compactor, and both temporary internal migration functions are absent from the
+final source and development function surface. Recent context and weekly
+digest readers now hydrate canonical content instead of reading removed inline
+fields. The complete post-closure development audit found 10 resource rows,
+10 content rows, and zero integrity or legacy-field defects. Production was
+not queried or changed.
+
+C3 remains `IN_PROGRESS`: resource listing still collects all community
+resources and hydrates every body. The next separately planned slice is C3.1B,
+bounded metadata-only resource listing plus on-demand content reads. This
+receipt does not authorize that slice.

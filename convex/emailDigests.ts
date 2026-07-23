@@ -4,11 +4,13 @@ import { v } from "convex/values";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
 import { listActiveCommunityRecipientUserIds } from "./communityRecipientCore";
 import {
+  type CommunityResourceLike,
   type CommunityResourceModuleLike,
   communityMembershipRowIsActive,
   communityResourceIsLiveModulePage,
   communityResourceModuleIsLive,
 } from "./communityCore";
+import { hydrateCommunityResourceBody } from "./communityResourceContent";
 import {
   buildWeeklyDigestDedupeKey,
   buildWeeklyDigestPeriod,
@@ -61,17 +63,7 @@ type CommunityAiFeedPostRow = {
   createdAt: number;
 };
 
-type CommunityResourceRow = {
-  _id: any;
-  title: string;
-  bodyMd?: string;
-  url?: string;
-  fileKey?: string;
-  type: string;
-  status?: string;
-  pinned: boolean;
-  createdAt: number;
-};
+type CommunityResourceRow = CommunityResourceLike;
 
 type DigestItemCandidate = {
   priority: number;
@@ -266,7 +258,7 @@ async function listRecentResources(ctx: any, params: {
   for (const row of recentRows as CommunityResourceRow[]) {
     uniqueRows.set(String(row._id), row);
   }
-  return Array.from(uniqueRows.values())
+  const sorted = Array.from(uniqueRows.values())
     .filter(
       (row) =>
         row.createdAt <= params.periodEndMs &&
@@ -276,6 +268,10 @@ async function listRecentResources(ctx: any, params: {
       if (Boolean(a.pinned) !== Boolean(b.pinned)) return Boolean(a.pinned) ? -1 : 1;
       return b.createdAt - a.createdAt;
     });
+  const hydratedHead = await Promise.all(
+    sorted.slice(0, 3).map(async (row) => (await hydrateCommunityResourceBody(ctx, row)) ?? row),
+  );
+  return [...hydratedHead, ...sorted.slice(3)];
 }
 
 async function countNewActiveMembers(ctx: any, params: {
