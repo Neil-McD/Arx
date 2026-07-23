@@ -626,3 +626,64 @@ Their destructive row deletion, table removal, maintenance cleanup, and
 lifecycle-policy cleanup remain a separately authorized slice. The four
 historical attachment targets and their canonical-first fallback remain
 untouched.
+
+C3.2D2B completes the authorized R-009/R-010 destructive cleanup on the
+isolated development staging lane. Temporary checkpoint
+`1f5663ece8b7a73d315db51b090f6b8e6ffb66c4` introduced one staging-only,
+expectation-locked internal migration. Its independent preflight found exactly
+two featured-pointer rows
+(`kn7pdhckf29vm3zm6rxhq01bgd89r622`,
+`kn7tf4p1kr1df5y2z2p7gk2vsd89rc5h`) and exactly three legacy-reaction rows
+(`m170n5jyyn5bd4hzxrj3vxa4jn834mf6`,
+`m175k32zwgg5p44hhqsce2z6b982wgbn`,
+`m17cs4swzkfhthk423pvg8fdfx835vy5`). Every row had a valid legacy message,
+thread, canonical link, and canonical root or reply target; one featured target
+carried a legacy attachment and no reaction target did.
+
+The dry run deleted zero rows. The exact live mutation deleted those five rows
+and nothing else. An immediate zero-work replay deleted zero rows. These five
+rows were intentionally and permanently discarded; this slice created no
+application backup or recovery path for them.
+
+Permanent runtime checkpoint
+`a75c508c0f96e438b7a6b9e6057f9935355093bb` removes both table definitions,
+all five associated indexes, the legacy reaction maintenance and account-
+lifecycle branches, the obsolete reaction type, the generated migration
+surface, and the temporary migration and test. Account lifecycle policy v6 now
+covers 125 tables, 118 direct user edges, 38 unindexed edges, 26 opaque edges,
+and seven storage edges. The permanent development function surface contains
+no cleanup function.
+
+After that exact clean checkpoint was guarded and deployed to
+`quick-porcupine-949`, the two residual physical tables were independently
+proven empty and then deleted through the development Convex dashboard.
+`communityFeaturedMessages` and `communityMessageReactions` are absent from
+the deployed table inventory, not merely omitted from the declared schema.
+That physical table deletion is irreversible through the application and
+dashboard.
+
+The independent postflight still finds 67 historical chat messages and 67
+one-to-one canonical legacy links, with zero broken message or canonical-target
+references. All four attachment-bearing historical messages remain:
+`k572wektvtg7a4dwk0m95vr3xn89h8qf`,
+`k578x3hng7hyv3n5z4tysxajk589h7mr`,
+`k5792fer8rj8kymy193vxypk3d89hxt2`, and
+`k57dsybwndqxv3efhd6ha1q0wd89gada`. All eight canonical interaction reactions
+remain and have valid targets. The canonical attachment table remains empty;
+the four measured attachments are still the explicitly bounded legacy-message
+fallback.
+
+Nine focused interaction/archive/resource contracts, the account-lifecycle
+policy proof, canonical community-deletion behavior, Convex and web
+typechecks, production build, bundle budget, the complete 38-step foundation
+baseline, staging guards, generated API reconciliation, and diff hygiene pass.
+`polynet-staging.vercel.app/version.json` serves the exact permanent runtime
+checkpoint, and its anonymous `/c/polynet` browser canary passes without a
+product mutation. `www.polynet.ai/version.json` remains at
+`a936dee72a65f91723f332779390210e4cf783f0`; production was not deployed,
+queried for product data, or changed.
+
+R-009 and R-010 are closed. The next interaction cleanup decision is limited
+to the four retained legacy attachment targets and the mapping/history
+substrate that still makes them readable; this receipt authorizes neither that
+future deletion nor any production action.
