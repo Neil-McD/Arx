@@ -677,9 +677,10 @@ Nine focused interaction/archive/resource contracts, the account-lifecycle
 policy proof, canonical community-deletion behavior, Convex and web
 typechecks, production build, bundle budget, the complete 38-step foundation
 baseline, staging guards, generated API reconciliation, and diff hygiene pass.
-`polynet-staging.vercel.app/version.json` serves the exact permanent runtime
-checkpoint, and its anonymous `/c/polynet` browser canary passes without a
-product mutation. `www.polynet.ai/version.json` remains at
+`polynet-staging.vercel.app/version.json` served the exact permanent runtime
+checkpoint, and the final docs-only receipt build serves the same application
+runtime. The anonymous `/c/polynet` browser canary passes on both exact builds
+without a product mutation. `www.polynet.ai/version.json` remains at
 `a936dee72a65f91723f332779390210e4cf783f0`; production was not deployed,
 queried for product data, or changed.
 
