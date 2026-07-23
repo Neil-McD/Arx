@@ -87,6 +87,7 @@ import type * as communityInteractionEvidence from "../communityInteractionEvide
 import type * as communityInteractionEvidenceCore from "../communityInteractionEvidenceCore.js";
 import type * as communityInteractionLegacyAttachments from "../communityInteractionLegacyAttachments.js";
 import type * as communityInteractionLegacyBridge from "../communityInteractionLegacyBridge.js";
+import type * as communityInteractionResidueCleanup from "../communityInteractionResidueCleanup.js";
 import type * as communityInteractions from "../communityInteractions.js";
 import type * as communityJoinRequestCore from "../communityJoinRequestCore.js";
 import type * as communityLaunchSetup from "../communityLaunchSetup.js";
@@ -322,6 +323,7 @@ declare const fullApi: ApiFromModules<{
   communityInteractionEvidenceCore: typeof communityInteractionEvidenceCore;
   communityInteractionLegacyAttachments: typeof communityInteractionLegacyAttachments;
   communityInteractionLegacyBridge: typeof communityInteractionLegacyBridge;
+  communityInteractionResidueCleanup: typeof communityInteractionResidueCleanup;
   communityInteractions: typeof communityInteractions;
   communityJoinRequestCore: typeof communityJoinRequestCore;
   communityLaunchSetup: typeof communityLaunchSetup;
