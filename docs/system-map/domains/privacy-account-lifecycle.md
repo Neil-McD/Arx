@@ -32,6 +32,8 @@ The generated policy names every table and its contract proof owns the current c
 
 C2.1 adds only the durable safety substrate: one account-specific checkpoint plus append-only transition receipts. Authenticated internal request creation moves to `requested`; an indexed preflight can move only to `blocked`. It records stable policy-versioned blocker codes and supports idempotent replay and interruption/resumption, but it cannot freeze access, delete or patch product data, schedule work, call providers or storage, finalize a root, or become publicly callable. The public deletion mutation remains quarantined.
 
+C2.2A reduces the authority surface before freeze exists. `authActor` is now the sole executable selector from a verified current subject to the account row for the live gate, business-visitor identity binding, and thread ownership. Two uncalled gate projections, one uncalled subject-tier query, and the duplicate thread-local internal user lookup are deleted. Preflight now canonically precedes final confirmation and freeze; freeze will deny account authority without rewriting entitlements or operator roles. There is still no frozen state, session effect, public lifecycle surface, or destructive executor.
+
 The replacement policy still needs an explicit rule for DM attachments embedded in `contentJson`. The retired executor did not visibly clean their storage objects; this remains a historical storage-leak inference until attachment representation and live prevalence are checked.
 
 ## Community deletion path

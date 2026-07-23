@@ -263,8 +263,8 @@ assert.match(
 );
 assert.match(
   businessAnalytics,
-  /resolveAuthenticatedSubject\(\{[\s\S]*ctx,[\s\S]*authSubject: args\.authSubject/,
-  "business visitor identification should require the verified authenticated subject",
+  /findAuthenticatedActorState\(\{[\s\S]*ctx,[\s\S]*authSubject: args\.authSubject[\s\S]*actor\.dbUserId/,
+  "business visitor identification should use the canonical verified actor",
 );
 assert.match(
   businessAnalytics,

@@ -30,7 +30,7 @@ They may share small checkpoint and receipt mechanics. They must not share owner
 
 1. Account deletion stays fail-closed until every executor satisfies this contract.
 2. Verified identity and current authority are resolved before a lifecycle request is accepted.
-3. New sessions and new privileged effects freeze before destructive phases.
+3. A non-mutating preflight resolves every blocker before final confirmation and access freeze.
 4. Owned communities, developer apps, and skill packages are transferred or explicitly removed first.
 5. Shared DM sequence and content survive for remaining participants unless separately purged.
 6. Community-owned resources, events, interactions, and accepted contributions survive contributor departure.
@@ -104,8 +104,10 @@ Delete or irreversibly tombstone the product identity only after every phase rec
 
 ```text
 request
--> access_freeze
 -> preflight_blockers
+-> final_confirmation
+-> access_freeze
+-> preflight_revalidation
 -> external_revoke
 -> private_delete
 -> shared_anonymize
@@ -130,7 +132,7 @@ Every future phase must have:
 
 ### Identity and private state
 
-Sessions revoke first. Entitlements and operator authority stop granting effects. Profile, personal memory, preferences, provider auth state, member profile state, and private agent/thread state delete in bounded phases.
+Access freeze is a terminal account-authority boundary after final confirmation: the canonical actor stops resolving for account-bound product access, new session creation/refresh stops, and existing local sessions revoke in bounded resumable work. There is no second read-only session class or post-freeze self-service cancellation lane. Entitlements and operator roles are not rewritten or deleted to create the freeze; their grants become unreachable through the frozen actor and their rows delete later with private account state. Profile, personal memory, preferences, provider auth state, member profile state, and private agent/thread state delete in bounded phases.
 
 ### Direct messages
 
@@ -185,20 +187,30 @@ These blockers prevent execution, not policy classification. Undecided behavior 
 2. **Complete in C2.0A:** reconcile stale policy/document/blocker truth and separate the three lifecycle jobs.
 3. **Complete in C2.0B:** delete the unowned anonymous-user executor/tooling without executing it or changing the 56 development roots.
 4. **Complete in C2.1:** build an account-specific request/preflight/checkpoint/receipt substrate with no destructive executor or public UI.
-5. Add access-freeze, private-state, and external-provider executors behind interruption fixtures.
-6. Add DM participant-departure and shared tombstone execution.
-7. Add community-content attribution and ownership execution.
-8. Add evidence/intelligence privacy propagation.
-9. Add finance/legal/audit minimization and retention enforcement.
-10. Add invariant audit, root-last finalizer, and terminal receipt.
-11. Define and build the separate community lifecycle from its own ownership matrix.
-12. Re-enable self-service deletion only after full interruption, scale, orphan, provider, and cross-user behavioral proofs.
+5. **Complete in C2.2A:** consolidate authenticated subject-to-account authority behind `authActor`, delete uncalled duplicate gate/tier/user lookup surfaces, and reconcile preflight-before-freeze plus non-destructive grant semantics.
+6. Add the internal access-freeze checkpoint and denial boundary behind interruption fixtures.
+7. Add bounded local-session revocation, private-state, and external-provider executors.
+8. Add DM participant-departure and shared tombstone execution.
+9. Add community-content attribution and ownership execution.
+10. Add evidence/intelligence privacy propagation.
+11. Add finance/legal/audit minimization and retention enforcement.
+12. Add invariant audit, root-last finalizer, and terminal receipt.
+13. Define and build the separate community lifecycle from its own ownership matrix.
+14. Re-enable self-service deletion only after full interruption, scale, orphan, provider, and cross-user behavioral proofs.
 
 ### C2.1 implementation receipt
 
 The substrate has two account-specific tables, two authenticated internal mutations, two states (`requested` and `blocked`), and two receipt kinds. Request creation is one-per-account-per-policy and idempotent. Preflight combines the versioned global blocker codes with bounded indexed existence checks for owned communities, developer apps, and skill packages. An unchanged replay returns the existing checkpoint and receipt; a changed blocker set advances the revision atomically.
 
 The behavioral fixture proves missing or mismatched identity fails without provisioning, request replay does not duplicate state, interruption after request persistence resumes at preflight, preflight replay does not duplicate receipts, and shared product rows remain byte-for-byte unchanged. The public deletion mutation remains the same zero-effect quarantine. No executor, public function, UI, schedule, action, provider call, storage call, scan, delete, or root-finalization state exists in this slice.
+
+### C2.2A authority-consolidation receipt
+
+Authenticated subject-to-account selection now has one executable owner: `authActor`. The live runtime gate decision, business-visitor identification, and thread ownership paths call that owner instead of independently resolving a verified subject and querying `users.by_authSubject`. The uncalled gate-context bundle, gate bundle, subject-based entitlement query, and thread-local internal user lookup are deleted. The existing verified-identity guard prevents those parallel authority paths from returning.
+
+This slice adds no frozen status, checkpoint transition, session revocation, entitlement or operator-role mutation, public API/UI, scheduler, provider/storage effect, or destructive behavior. It only makes the later freeze enforceable at one account-authority seam and corrects the contract: preflight precedes freeze, access freeze does not manufacture state by deleting grants, and cancellation belongs before final confirmation.
+
+Convex typecheck, the affected gate/actor/entitlement/thread/analytics proofs, the account lifecycle/quarantine proofs, and the complete 38-step foundation baseline pass. The staging identity guard confirmed the isolated worktree, branch, `dev:quick-porcupine-949`, and `polynet-staging` linkage before the development Convex function surface was updated successfully. No schema, stored row, schedule, Vercel project, provider, or production target changed.
 
 ## Proof required before re-enabling deletion
 
@@ -225,6 +237,8 @@ The proof must demonstrate retry safety, bounded reads, other-party/community co
 | maintain a second manual table list without schema drift proof | 10 | forbidden |
 | guess legal/security TTLs in product code | 9 | forbidden |
 | build a generic workflow engine before domain semantics | 8 | forbidden |
+| add a second read-only session class only for post-freeze cancellation | 8 | forbidden |
+| rewrite entitlements or operator roles to represent account freeze | 9 | forbidden |
 | typed declarative policy plus schema drift proof | 1 | keep |
 
 ## C2 non-goals

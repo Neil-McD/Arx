@@ -1,7 +1,7 @@
 import { api, internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { resolveAuthenticatedSubject } from "./authIdentity";
+import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import {
   applyRuntimeHarnessTelemetryEvent,
   buildRuntimeHarnessScorecard,
@@ -502,26 +502,31 @@ async function resolveOwnerIdForAuthenticatedRequest(args: {
   ownerId?: any;
   authSubject?: string | null;
 }): Promise<any> {
-  const ownerIdInput = normalizeIdValue(args.ownerId);
-  const authSubject = await resolveAuthenticatedSubject({
-    ctx: args.ctx,
-    authSubject: args.authSubject ?? null,
-  });
-  const user =
-    args.ctx?.db?.query
-      ? await args.ctx.db
-          .query("users")
-          .withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject))
-          .first()
-      : await args.ctx.runQuery(internal.threads.getUserByAuthSubjectInternal as any, {
-          authSubject,
-        });
-  if (!user) throw new Error("user_not_found");
-  const resolvedOwnerId = normalizeIdValue(user._id);
-  if (ownerIdInput && ownerIdInput !== resolvedOwnerId) {
-    throw new Error("owner_id_mismatch");
+  try {
+    if (args.ctx?.db?.query) {
+      return await resolveUserIdForAuthenticatedRequest({
+        ctx: args.ctx,
+        userId: args.ownerId,
+        authSubject: args.authSubject ?? null,
+      });
+    }
+    const actor = (await args.ctx.runQuery(
+      internal.authActor.resolveAuthenticatedActorInternal as any,
+      { authSubject: args.authSubject ?? undefined },
+    )) as { dbUserId?: unknown } | null;
+    if (!actor?.dbUserId) throw new Error("user_not_found");
+    const ownerIdInput = normalizeIdValue(args.ownerId);
+    const resolvedOwnerId = normalizeIdValue(actor.dbUserId);
+    if (ownerIdInput && ownerIdInput !== resolvedOwnerId) {
+      throw new Error("user_id_mismatch");
+    }
+    return actor.dbUserId;
+  } catch (error) {
+    if (error instanceof Error && error.message === "user_id_mismatch") {
+      throw new Error("owner_id_mismatch");
+    }
+    throw error;
   }
-  return user._id;
 }
 
 function normalizeThreadKey(raw: unknown): string {
@@ -3080,20 +3085,6 @@ export const listStaleRunningRuntimeRunsInternal = internalQuery({
       )
       .take(safeLimit)) as RuntimeRunLike[];
     return rows.filter((run) => isRuntimeRunStale({ run, nowMs }));
-  },
-});
-
-export const getUserByAuthSubjectInternal = internalQuery({
-  args: {
-    authSubject: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const authSubject = String(args.authSubject ?? "").trim();
-    if (!authSubject) return null;
-    return await ctx.db
-      .query("users")
-      .withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject))
-      .first();
   },
 });
 

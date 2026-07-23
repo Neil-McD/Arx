@@ -1,7 +1,7 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { hashBusinessVisitorKey } from "./businessAnalyticsCore";
-import { resolveAuthenticatedSubject } from "./authIdentity";
+import { findAuthenticatedActorState } from "./authActor";
 
 const BUSINESS_VISIT_BUCKET_MS = 24 * 60 * 60 * 1000;
 const BUSINESS_VISITOR_IDENTIFY_LOOKBACK_MS = 180 * BUSINESS_VISIT_BUCKET_MS;
@@ -20,16 +20,6 @@ function normalizeSource(value: unknown): BusinessVisitSource {
     return normalized;
   }
   return "unknown";
-}
-
-async function resolveUserIdByAuthSubject(ctx: any, authSubject: string): Promise<any | undefined> {
-  const normalized = authSubject.trim();
-  if (!normalized) return undefined;
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_authSubject", (q: any) => q.eq("authSubject", normalized))
-    .first();
-  return user?._id;
 }
 
 export const recordBusinessPageVisit = mutation({
@@ -113,14 +103,14 @@ export const identifyBusinessVisitor = mutation({
       return { ok: false, reason: "missing_visitor_key" };
     }
 
-    const authSubject = await resolveAuthenticatedSubject({
+    const { actor } = await findAuthenticatedActorState({
       ctx,
       authSubject: args.authSubject,
     });
-    const userId = await resolveUserIdByAuthSubject(ctx, authSubject);
-    if (!userId) {
+    if (!actor) {
       return { ok: false, reason: "user_not_found" };
     }
+    const userId = actor.dbUserId;
 
     const nowMs = Date.now();
     const visitorKeyHash = await hashBusinessVisitorKey(rawVisitorKey);

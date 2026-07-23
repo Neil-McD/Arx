@@ -375,7 +375,18 @@ intended lifecycle mutations, leaves both lifecycle tables empty, and schedules
 no lifecycle job. Existing development state remains 120 users, 56 legacy
 anonymous roots, and 11 scheduled functions. No lifecycle mutation was invoked.
 
-The next separately planned slice is C2.2: access-freeze authority only. It must
-first define what becomes non-writable, reuse canonical session/entitlement/
-operator boundaries, and prove reversible interruption without deleting private
-or shared data.
+C2.2A is complete on the canonical staging lane. Authenticated
+subject-to-account selection now converges on `authActor`; the surviving gate,
+business-visitor, and thread-owner paths use it, while two uncalled gate
+projections, the uncalled subject-tier query, and the duplicate thread-local
+user lookup are deleted. The lifecycle order is preflight before final
+confirmation and access freeze. Freeze will deny account authority rather than
+rewrite entitlement or operator-role state. This slice adds no freeze state,
+session effect, data mutation, executor, public API/UI, scheduler, provider,
+storage, or deletion behavior. Convex typecheck, focused affected proofs, and
+the full 38-step foundation baseline pass; the development Convex function
+surface was updated successfully after the exact staging identity guard passed.
+
+The next separately planned slice is C2.2B: the internal access-freeze
+checkpoint and denial boundary only. Existing-session revocation remains a
+later bounded subphase; no private or shared data deletion is authorized.
