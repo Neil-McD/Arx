@@ -77,7 +77,7 @@ const pendingFirstLinkEmbed = {
 const publicCommunityStatsMapper = sectionBetween(
   communityPublic,
   "function mapPublicCommunityStats",
-  "const PUBLIC_FEATURED_MESSAGE_LIMIT",
+  "export const resolvePublicFunnelBySlug",
 );
 const memberPresenceSummaryQuery = sectionBetween(
   communityPublic,
