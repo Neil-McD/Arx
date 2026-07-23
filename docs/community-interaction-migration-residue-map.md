@@ -75,7 +75,7 @@ deleted.
 ## Development Staging Snapshot
 
 Read-only attachment postflight captured on 2026-07-23 from
-`dev:quick-porcupine-949` at migration checkpoint `bdf7aaf7`:
+`dev:quick-porcupine-949` at permanent runtime checkpoint `cf1033ba`:
 
 | Shape | Count | Meaning |
 | --- | ---: | --- |

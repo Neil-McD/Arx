@@ -688,3 +688,51 @@ R-009 and R-010 are closed. The next interaction cleanup decision is limited
 to the four retained legacy attachment targets and the mapping/history
 substrate that still makes them readable; this receipt authorizes neither that
 future deletion nor any production action.
+
+C3.2E1 closes R-004 on the isolated development staging lane. Temporary
+checkpoint `bdf7aaf7dc8d75c9d223019dca2effe117ee6499` introduced one
+staging-only, expectation-locked internal migration for the four previously
+measured attachment-bearing messages. Its independent audit and dry run found
+exactly four live community roots, four one-to-one legacy links, four existing
+storage objects, zero canonical attachment rows, and no extra attachment
+payload. The atomic live mutation created exactly four
+`communityInteractionAttachments` metadata rows, each referencing its existing
+blob. The immediate replay created zero rows.
+
+Permanent runtime checkpoint
+`cf1033ba7f34a565f9e9d7b03f9a4f26d25b4cf7` makes canonical attachment rows
+the sole root/reply read authority. It deletes the legacy-message attachment
+hydration module, both conditional fallback branches, the temporary
+migration/test, and both generated function identities. It intentionally keeps
+the bounded attachment normalization/materialization helper used by the
+remaining historical backfill. The permanent change removes 573 lines and adds
+90 lines, primarily stronger contracts and absence proofs.
+
+After guarded deployment to `dev:quick-porcupine-949`, an independent bounded
+postflight reported 67 legacy messages, 67 links, four legacy attachment
+payloads, four canonical attachment rows, no scan overflow, and exact
+message/link/root/name/type/MIME/size/storage parity for every target. All four
+storage objects remain present. The deployed function surface contains neither
+the cutover function nor the deleted fallback module.
+
+Six focused interaction contracts, Convex and web typechecks, production build,
+bundle budget, diff hygiene, and the complete 38-step foundation baseline pass.
+The canonical staging marker served exact runtime checkpoint `cf1033ba`, and
+the anonymous public-funnel canary passed. Signed-in acceptance on
+`/c/polynet/chat` rendered all four canonical attachment containers: three
+900-by-900 images and one 2048-by-2048 image loaded completely from the
+development Convex storage origin with zero browser errors. No browser product
+mutation was performed.
+
+The only data effect was creation of four canonical metadata rows referencing
+four existing blobs. No attachment bytes were copied; no blob, legacy message,
+link, thread, activity row, or other historical state was changed or deleted.
+The new metadata rows are recoverable by an exact-row rollback if required, but
+this receipt does not authorize that rollback. Production remained untouched;
+`www.polynet.ai/version.json` still served
+`a936dee72a65f91723f332779390210e4cf783f0`.
+
+R-004 is closed. The next interaction slice is limited to a bounded final
+historical backfill and integrity replay for R-003/R-007. This receipt
+authorizes no link, backfill, message, thread, activity-history, lifecycle,
+schema-table, blob, or production deletion.
