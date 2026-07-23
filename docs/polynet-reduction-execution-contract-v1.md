@@ -591,3 +591,38 @@ requirement before the retained legacy attachment/reaction/link history can be
 resolved in causal order. This receipt authorizes no featured-message decision,
 historical migration or deletion, email-policy expansion, production Convex
 deployment, or production web release.
+
+C3.2D2A deletes R-009's live product surface rather than migrating an
+unmaintainable optional feature. Exact runtime commit
+`4a46224c1dbda78c830cc0366380ae2395d70247` removes the callerless
+feature/unfeature mutations and generated function surface, the public funnel's
+legacy message/reaction reader and response field, and the browser's
+featured-message types, props, synthetic roots, profile projections, and
+featured-specific prompt branch. The founder introduction, join gate,
+statistics, member preview, ghost conversation, and canonical access authority
+remain.
+
+The slice deletes 221 lines and adds 67 lines, primarily strengthening the
+existing residue contract. It also corrects one stale visitor-access proof that
+still expected a direct membership-table lookup even though runtime authority
+already used the canonical unique-pair helper; no access behavior changed.
+Focused interaction-residue, visitor-access, and funnel-load proofs, Convex and
+web typechecks, production build, bundle budget, and the complete 38-step
+foundation baseline pass.
+
+Development Convex reported its functions ready from the exact clean runtime
+commit. The canonical `polynet-staging` build marker matched that commit, and
+the anonymous `/c/polynet` Playwright canary passed with its avatar, anonymous
+composer, free instant-access policy, enabled join action, and no browser,
+console, Convex request, or first-party server error. A bounded read-only
+postflight still reports exactly two featured pointer rows and three legacy
+reaction rows, with neither scan truncated. No stored row, schema table,
+lifecycle policy, maintenance behavior, provider, production Convex deployment,
+or production web release changed.
+
+R-009's two stored pointers and R-010's three legacy reactions are now
+quarantined deletion candidates with no first-party product reader or writer.
+Their destructive row deletion, table removal, maintenance cleanup, and
+lifecycle-policy cleanup remain a separately authorized slice. The four
+historical attachment targets and their canonical-first fallback remain
+untouched.
