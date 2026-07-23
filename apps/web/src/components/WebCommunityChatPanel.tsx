@@ -1118,9 +1118,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const showInteractionProjection = Boolean(
     interactionProjection?.enabled &&
     activeCommunity &&
-    hasAuthenticatedPresentation &&
-    hasResolvedCommunityChat &&
-    !isLoadingChat,
+    hasAuthenticatedPresentation,
   );
   const communityComposerFocusTargetKey = (() => {
     if (
@@ -1128,8 +1126,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       !hasAuthenticatedPresentation ||
       isAuthRecoveringSignedIn ||
       !canUseComposer ||
-      !hasResolvedCommunityChat ||
-      isLoadingChat ||
+      (!showInteractionProjection && (!hasResolvedCommunityChat || isLoadingChat)) ||
       profilePanelUserId
     ) {
       return null;
@@ -1348,7 +1345,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     hasAuthenticatedPresentation &&
     (isAuthRecoveringSignedIn ||
     (isResolvingSelectedCommunity ||
-      (!!activeCommunity &&
+      (!showInteractionProjection &&
+        !!activeCommunity &&
         !hasCommunityTimelineItems &&
         !communityChatError &&
         (isLoadingChat || !hasResolvedCommunityChat))));

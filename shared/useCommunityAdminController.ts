@@ -42,7 +42,6 @@ type UseCommunityAdminControllerArgs<
   activeCommunityId: string | null;
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
-  ensureCommunityChatThread: (communityId: string, session: SessionT) => Promise<string>;
   confirmAction?: (message: string) => boolean;
   reloadCommunities: (session: SessionT) => Promise<void>;
   reloadCommunityAccess: (communityId: string, session: SessionT) => Promise<void>;

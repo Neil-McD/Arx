@@ -84,6 +84,16 @@ const memberPresenceSummaryQuery = sectionBetween(
   "export const getCommunityPresenceSummary",
   "export const listPublicDiscoverCommunities",
 );
+const interactionProjectionVisibility = sectionBetween(
+  chatPanel,
+  "const showInteractionProjection",
+  "const communityComposerFocusTargetKey",
+);
+const communityChatBootstrap = sectionBetween(
+  chatPanel,
+  "const showCommunityChatBootstrap",
+  "const renderCommunityAttachmentsPreview",
+);
 
 assert.match(
   packageJson,
@@ -123,7 +133,7 @@ assert.match(
 );
 assert.match(
   app,
-  /useCommunityChatRealtime\(\{[\s\S]*isEnabled: activePage === "community" && hasResolvedCommunityChat && !COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
+  /useCommunityChatRealtime\(\{[\s\S]*isEnabled: activePage === "community" && !COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
   "legacy chat realtime should remain disabled while canonical projection is the normal chat surface",
 );
 assert.match(
@@ -148,9 +158,29 @@ assert.match(
   "chat panel should render the canonical projection component",
 );
 assert.match(
-  chatPanel,
-  /showInteractionProjection[\s\S]*interactionProjection\?\.enabled[\s\S]*hasResolvedCommunityChat[\s\S]*!isLoadingChat/,
-  "chat panel should only switch projections once the authenticated chat surface is resolved",
+  interactionProjectionVisibility,
+  /interactionProjection\?\.enabled[\s\S]*activeCommunity[\s\S]*hasAuthenticatedPresentation/,
+  "chat panel should select the canonical projection from canonical surface authority",
+);
+assert.doesNotMatch(
+  interactionProjectionVisibility,
+  /hasResolvedCommunityChat|isLoadingChat/,
+  "canonical projection visibility should not depend on legacy chat readiness",
+);
+assert.match(
+  communityChatBootstrap,
+  /!showInteractionProjection[\s\S]*isLoadingChat \|\| !hasResolvedCommunityChat/,
+  "legacy readiness should remain isolated to the dormant legacy projection",
+);
+assert.match(
+  app,
+  /isLoadingRoots:\s*isLoadingCommunityInteractions\s*\|\|\s*communityInteractionRootChangeReason === "reset"\s*\|\|\s*communityInteractionProjectionBoundaryRef\.current !==/,
+  "canonical projection should own its initial loading boundary without a second readiness state",
+);
+assert.match(
+  app,
+  /function appendPendingRoots[\s\S]*roots\.filter\(\(bundle\) => bundle\.root\.community_id === communityId\)[\s\S]*\[\.\.\.scopedRoots, \.\.\.extra\]/,
+  "canonical root presentation should synchronously exclude stale rows after a community switch",
 );
 assert.match(
   chatPanel,
@@ -903,7 +933,7 @@ assert.match(
 );
 assert.match(
   app,
-  /function appendPendingRoots[\s\S]*new Set\(roots\.map\(\(bundle\) => bundle\.root\.idempotency_key\)\)[\s\S]*composerStoredIdempotencyKey\(p\.idempotencyKey, "root"\)/,
+  /function appendPendingRoots[\s\S]*new Set\(scopedRoots\.map\(\(bundle\) => bundle\.root\.idempotency_key\)\)[\s\S]*composerStoredIdempotencyKey\(p\.idempotencyKey, "root"\)/,
   "pending root overlays should dedupe against visible canonical roots by stored idempotency key",
 );
 assert.match(

@@ -11,10 +11,10 @@ The canonical substrate is `communityInteractionRoots`, replies, content blocks,
 `docs/community-interaction-migration-residue-map.md` is the single detailed
 compatibility inventory. The normal feed, composer, interaction actions,
 attention state, recent context, and evidence paths are canonical. The
-remaining shell defect is narrower and more causal: opening community chat
-still preloads legacy messages and reactions and ensures a legacy thread before
-the canonical projection is marked ready. That invisible dependency can create
-empty legacy threads even though the visible product path is canonical.
+normal shell preload/readiness defect is closed: canonical entry and scrolling
+do not ensure a legacy thread or list legacy messages/reactions. The existing
+canonical projection owns loading/error/empty presentation and synchronously
+excludes rows from a previously selected community.
 
 Development staging currently has 67 legacy messages with 67 valid mapping
 links, four legacy attachment payloads without canonical attachment rows, three
@@ -51,7 +51,6 @@ Canonical moderation event types include privacy purge request/completion states
 | Candidate | Classification | Action | Idiot index | Rationale |
 | --- | --- | --- | ---: | --- |
 | canonical community interaction substrate | `KEEP (MVP core)` | `HARDEN` | 0 | core participation and evidence source |
-| normal web legacy chat preload/readiness gate | `DELETE CANDIDATE` | `DELETE` after signed-in no-call proof | 10 | invisible read/write dependency creates empty legacy threads before rendering the canonical feed |
 | legacy message writer and mutation surface | `DELETE CANDIDATE` | `DELETE` after preload removal and first-party no-call proof | 9 | historical rows do not require a live writer |
 | legacy mapping/backfill/attachment bridge | `KEEP TEMPORARILY` | `MIGRATE_THEN_DELETE` | 3 | 67 mappings are valid; four attachment targets still need canonical rows |
 | weekly digest reading legacy chat | `DECISION REQUIRED` | `DELETE` or canonicalize | 9 | not named in MVP must-keep scope and currently omits canonical-only activity |
@@ -63,8 +62,7 @@ Canonical moderation event types include privacy purge request/completion states
 
 ## Migration order
 
-Remove the normal web legacy preload/readiness dependency -> delete unreachable
-legacy UI writer/edit/delete/reaction paths -> decide whether digest and featured
+Delete unreachable legacy UI writer/edit/delete/reaction paths -> decide whether digest and featured
 messages should exist -> migrate only retained attachment/reaction/featured
 history -> replay and audit historical backfill -> observe zero legacy reads and
 writes -> delete legacy APIs, links, tables, and lifecycle residue.

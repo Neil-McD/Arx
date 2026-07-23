@@ -458,7 +458,6 @@ import { useWebAccountCommerceActions } from "./controllers/useWebAccountCommerc
 import { useWebAccountCommerceStatusActions } from "./controllers/useWebAccountCommerceStatusActions";
 import { useWebPublicFunnelActions } from "./controllers/useWebPublicFunnelActions";
 import { useWebPublicCheckoutStart } from "./controllers/useWebPublicCheckoutStart";
-import { useWebCommunityChatPreloadLifecycle } from "./controllers/useWebCommunityChatPreloadLifecycle";
 import { useWebDiscoverPreloadLifecycle } from "./controllers/useWebDiscoverPreloadLifecycle";
 import { useWebBillingUiController } from "./controllers/useWebBillingUiController";
 import { useWebGuestThreadLifecycle } from "./controllers/useWebGuestThreadLifecycle";
@@ -858,7 +857,8 @@ function appendPendingRoots(
   communityId: string | null,
 ): CommunityInteractionRootBundle[] {
   if (!communityId) return roots;
-  const visibleStoredKeys = new Set(roots.map((bundle) => bundle.root.idempotency_key));
+  const scopedRoots = roots.filter((bundle) => bundle.root.community_id === communityId);
+  const visibleStoredKeys = new Set(scopedRoots.map((bundle) => bundle.root.idempotency_key));
   const extra = pending
     .filter(
       (p) =>
@@ -867,7 +867,7 @@ function appendPendingRoots(
         !visibleStoredKeys.has(composerStoredIdempotencyKey(p.idempotencyKey, "root")),
     )
     .map(buildOptimisticRootBundle);
-  return extra.length ? [...roots, ...extra] : roots;
+  return extra.length ? [...scopedRoots, ...extra] : scopedRoots;
 }
 
 function appendPendingReplies(
@@ -2521,7 +2521,10 @@ export default function App() {
     capturePrependAnchor,
     clearPendingPrependAnchor,
   } = useCommunityChatViewport({
-    isEnabled: activePage === "community" && communityTab === "chat",
+    isEnabled:
+      activePage === "community" &&
+      communityTab === "chat" &&
+      !COMMUNITY_INTERACTION_PROJECTION_ENABLED,
     communityMessages,
     communityChatListRef,
     isUserAtBottom,
@@ -2530,7 +2533,8 @@ export default function App() {
     setUnreadCount,
     loadMoreThresholdPx: COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX,
     canLoadOlder: Boolean(
-      session
+      !COMMUNITY_INTERACTION_PROJECTION_ENABLED
+      && session
       && activeCommunityId
       && activePage === "community"
       && communityTab === "chat"
@@ -3005,7 +3009,7 @@ export default function App() {
   useCommunityChatRealtime({
     // The normal web UI uses canonical interaction roots/replies; keep legacy chat
     // realtime disabled here so it cannot pull production back to the old timeline.
-    isEnabled: activePage === "community" && hasResolvedCommunityChat && !COMMUNITY_INTERACTION_PROJECTION_ENABLED,
+    isEnabled: activePage === "community" && !COMMUNITY_INTERACTION_PROJECTION_ENABLED,
     session: session,
     ensureSession: ensureUsableAuthSession,
     activeCommunityId,
@@ -3047,12 +3051,12 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    if (activePage !== "community" || !activeCommunityId || !hasResolvedCommunityChat) return;
+    if (activePage !== "community" || !activeCommunityId) return;
     if (communityTab === "chat") return;
     if (!isUserAtBottomRef.current) return;
     setIsUserAtBottom(false);
     isUserAtBottomRef.current = false;
-  }, [activeCommunityId, activePage, communityTab, hasResolvedCommunityChat]);
+  }, [activeCommunityId, activePage, communityTab]);
 
   const canMentionEverybodyRef = useRef(false);
   const {
@@ -3073,9 +3077,7 @@ export default function App() {
     ensureCommunityChatThread,
     useCanonicalCommunityInteractions: Boolean(
       COMMUNITY_INTERACTION_PROJECTION_ENABLED &&
-      activeCommunity &&
-      hasResolvedCommunityChat &&
-      !isLoadingChat
+      activeCommunity
     ),
     onCanonicalOptimisticInsert: (pending) => {
       setPendingCanonicalInteractions((prev) => [
@@ -3348,7 +3350,7 @@ export default function App() {
   ]);
 
   const communityTypingUsers = useCommunityTypingPresence({
-    isEnabled: activePage === "community" && communityTab === "chat" && hasResolvedCommunityChat,
+    isEnabled: activePage === "community" && communityTab === "chat" && Boolean(activeCommunityId),
     session,
     ensureSession: ensureUsableAuthSession,
     activeCommunityId,
@@ -4999,7 +5001,6 @@ export default function App() {
   >({
     activeCommunityId,
     ...authenticatedSessionArg,
-    ensureCommunityChatThread,
     confirmAction: (message) => confirm(message),
     reloadCommunities: loadCommunities,
     reloadCommunityAccess: reloadActiveCommunityAccess,
@@ -6658,14 +6659,6 @@ export default function App() {
   const shouldHydrateCommunityContextPanel =
     activePage === "community" &&
     communityTab === "chat";
-  useWebCommunityChatPreloadLifecycle<AuthSession>({
-    session: session,
-    activePage,
-    activeCommunityId,
-    hasResolvedCommunityChat,
-    loadCommunityChat,
-  });
-
   useCommunitySettingsAccessLifecycle<AuthSession, CommunityRecord>({
     activePage,
     communityTab,
@@ -6756,7 +6749,6 @@ export default function App() {
       activePage !== "community"
       || communityTab !== "chat"
       || !activeCommunityId
-      || !hasResolvedCommunityChat
       || !isUserAtBottom
       || latestActiveCommunityChatActivityAt === null
     ) {
@@ -6777,7 +6769,6 @@ export default function App() {
     activeCommunityId,
     activePage,
     communityTab,
-    hasResolvedCommunityChat,
     isUserAtBottom,
     latestActiveCommunityChatActivityAt,
     markCommunitySurfaceSeen,
@@ -10775,7 +10766,11 @@ export default function App() {
           pendingCanonicalInteractions,
           selectedCommunityInteractionRootId,
         ),
-        isLoadingRoots: isLoadingCommunityInteractions,
+        isLoadingRoots:
+          isLoadingCommunityInteractions ||
+          communityInteractionRootChangeReason === "reset" ||
+          communityInteractionProjectionBoundaryRef.current !==
+            `${canonicalSessionUserId}:${activeCommunityId}`,
         isLoadingReplies:
           selectedCommunityInteractionRootId !== null
           && loadingCommunityInteractionRepliesRootId === selectedCommunityInteractionRootId,

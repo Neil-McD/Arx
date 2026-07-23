@@ -50,8 +50,8 @@ export function WebCommunityHost(props: WebCommunityHostProps) {
       focusFirstPostComposer();
     }
   }, [
+    chatPanelProps.activeCommunity?.id,
     chatPanelProps.canPostMessages,
-    chatPanelProps.hasResolvedCommunityChat,
     chatPanelProps.isAuthRecoveringSignedIn,
     chatPanelProps.isProfileSetupComplete,
     communityTab,

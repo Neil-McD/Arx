@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
@@ -24,7 +24,6 @@ const chatGateway = read("shared/cloudCommunityChatGateway.ts");
 const interactionGateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const dataController = read("shared/useCommunityChatDataController.ts");
 const sendController = read("shared/useCommunityChatMutationController.ts");
-const preloadLifecycle = read("apps/web/src/controllers/useWebCommunityChatPreloadLifecycle.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const communityAttention = read("convex/communityAttention.ts");
 const recentContext = read("convex/communityRecentContext.ts");
@@ -63,7 +62,6 @@ assert.match(
 );
 
 [
-  "| R-001 | Legacy shell preload, thread ensure, message list, and reaction list | `DELETE CANDIDATE` |",
   "| R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` |",
   "| R-004 | Legacy attachment hydration fallback | `KEEP TEMPORARILY` |",
   "| R-006 | Legacy message writer, edit/delete/reaction endpoints, gateway methods, and send-controller branch | `DELETE CANDIDATE` |",
@@ -72,11 +70,16 @@ assert.match(
   "| R-009 | Public featured-message system backed by legacy message pointers | `DECISION REQUIRED` |",
   "| R-010 | Legacy reaction rows | `KEEP TEMPORARILY` |",
   "| R-011 | Maintenance and account-lifecycle reachability for historical legacy rows | `KEEP TEMPORARILY` |",
-  "opening the normal community chat",
+  "C3.2B removed the normal shell's legacy preload and pagination activation.",
   "Counts are evidence, not expectations; no test should freeze them.",
   "No migration should be implemented for a feature that should be deleted.",
-  "**C3.2B:** remove the normal web legacy preload/readiness dependency.",
+  "**C3.2B complete:** the normal web legacy preload/readiness and scroll",
 ].forEach((needle) => assertIncludes("residue map", residueMap, needle));
+assert.doesNotMatch(
+  residueMap,
+  /\| R-001 \|/,
+  "completed preload residue should not remain in the current deletion queue",
+);
 
 assert.match(
   interactions,
@@ -130,15 +133,20 @@ assert.doesNotMatch(
   /createThreadUserMessage|createCloudThreadUserMessageRows|communityChatMessages/,
   "web interaction gateway should not call legacy chat mutations or tables",
 );
-assert.match(
-  preloadLifecycle,
-  /useWebCommunityChatPreloadLifecycle[\s\S]*void params\.loadCommunityChat\(params\.activeCommunityId, session\)/,
-  "the residue map should remain grounded in the active legacy chat preload",
+assert.equal(
+  existsSync(join(root, "apps/web/src/controllers/useWebCommunityChatPreloadLifecycle.ts")),
+  false,
+  "the normal web shell should not retain a legacy chat preload lifecycle",
+);
+assert.doesNotMatch(
+  app,
+  /useWebCommunityChatPreloadLifecycle|void loadCommunityChat\(activeCommunityId, session\)/,
+  "canonical community entry should not invoke the legacy chat loader",
 );
 assert.match(
-  dataController,
-  /loadCommunityChat[\s\S]*ensureCommunityChatThread\(communityId, usableSession\)[\s\S]*listCloudThreadMessages[\s\S]*loadMessageReactions/,
-  "the active preload should still expose its legacy thread/message/reaction dependency until C3.2B",
+  app,
+  /useCommunityChatViewport\(\{[\s\S]*isEnabled:[\s\S]*!COMMUNITY_INTERACTION_PROJECTION_ENABLED[\s\S]*canLoadOlder: Boolean\([\s\S]*!COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
+  "canonical projection scrolling should not invoke legacy history pagination",
 );
 for (const [label, source] of [
   ["recent context", recentContext],
@@ -262,7 +270,7 @@ assert.match(
 );
 assert.match(
   app,
-  /useCommunityChatRealtime\(\{[\s\S]*isEnabled: activePage === "community" && hasResolvedCommunityChat && !COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
+  /useCommunityChatRealtime\(\{[\s\S]*isEnabled: activePage === "community" && !COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
   "legacy chat realtime should be disabled for the normal web chat UI",
 );
 assert.doesNotMatch(

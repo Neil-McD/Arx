@@ -29,12 +29,12 @@ architecture.
 - Legacy chat rows are historical migration input. They are not a second
   product authority.
 
-The remaining shell debt is more specific: opening the normal community chat
-still runs `useWebCommunityChatPreloadLifecycle -> loadCommunityChat`, which
-ensures a legacy thread and reads legacy messages and reactions before the
-canonical projection is considered ready. Consequently, a canonical-only
-community visit can still create an empty legacy thread even though the visible
-feed and composer are canonical.
+C3.2B removed the normal shell's legacy preload and pagination activation.
+Canonical projection visibility, loading, error, empty, composer, typing, and
+seen-state behavior no longer depend on a legacy thread/message/reaction read.
+The canonical root projection owns its existing request boundary, and stored
+roots are synchronously community-scoped during navigation so an old
+community's rows cannot flash before the next request begins.
 
 ## Development Staging Snapshot
 
@@ -62,10 +62,9 @@ Counts are evidence, not expectations; no test should freeze them.
 
 | ID | Job | Classification | Current owner and first-party path | Delete condition |
 | --- | --- | --- | --- | --- |
-| R-001 | Legacy shell preload, thread ensure, message list, and reaction list | `DELETE CANDIDATE` | `useWebCommunityChatPreloadLifecycle` -> `useCommunityChatDataController.loadCommunityChat` -> `cloudCommunityChatGateway` -> `communityChat` | Give canonical projection its own readiness boundary; prove signed-in chat loads without legacy thread/message/reaction calls; verify no new empty legacy thread is created. |
 | R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `communityInteractionLegacyBridge.ts` | Delete after historical attachment/reaction/featured decisions are closed, no canonical read needs legacy IDs, and the backfill replay reports zero work. |
 | R-004 | Legacy attachment hydration fallback | `KEEP TEMPORARILY` | `communityInteractionLegacyAttachments.ts` behind canonical-first reads | Backfill the four observed targets, prove canonical rendering parity, then delete the fallback module and lookup. |
-| R-006 | Legacy message writer, edit/delete/reaction endpoints, gateway methods, and send-controller branch | `DELETE CANDIDATE` | `communityChat.ts`, `cloudCommunityChatGateway.ts`, `useCommunityChatMutationController.ts` | After R-001, prove the normal web surface has no first-party call path and canonical writer absence fails closed; then remove the branch, gateway methods, facade exports, and public functions. Historical rows do not require a live writer. |
+| R-006 | Legacy message writer, edit/delete/reaction endpoints, gateway methods, and send-controller branch | `DELETE CANDIDATE` | `communityChat.ts`, `cloudCommunityChatGateway.ts`, `useCommunityChatMutationController.ts` | R-001 is closed. Prove the remaining dormant fallback has no first-party product call path and canonical writer absence fails closed; then remove the branch, gateway methods, facade exports, and public functions. Historical rows do not require a live writer. |
 | R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` | `communityInteractionBackfill.ts` | Keep only until all 67 historical messages and retained attachment/reaction/featured state pass a final bounded replay and integrity audit. |
 | R-008 | Weekly community digest reading legacy messages | `DECISION REQUIRED` | `emailDigests.ts` | Weekly digest is not named in the MVP must-keep contract. Delete the digest job if it is not required; otherwise move it to bounded canonical root/reply reads and prove canonical-only activity appears. |
 | R-009 | Public featured-message system backed by legacy message pointers | `DECISION REQUIRED` | `communityFeatured.ts`, `communityPublic.ts`, `communityFeaturedMessages` | No first-party feature/unfeature caller was found, but two pointers still render in public funnels. Delete if highlights are not required; otherwise migrate the pointer to canonical interactions before removing legacy rows. |
@@ -103,9 +102,8 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
 
 ## Causal Deletion Order
 
-1. **C3.2B:** remove the normal web legacy preload/readiness dependency. This
-   stops legacy thread creation and invisible message/reaction reads without
-   touching historical data.
+1. **C3.2B complete:** the normal web legacy preload/readiness and scroll
+   pagination dependency is deleted without touching historical data.
 2. Delete the now-unreachable legacy UI mutation/send branch and its public
    writer/edit/delete/reaction surface after a focused no-call proof.
 3. Decide R-008 and R-009 before writing migrations. Delete optional product

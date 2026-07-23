@@ -488,8 +488,20 @@ Only documentation and proof files changed; no runtime function or development
 data changed, no Convex deployment was required, and production was not queried
 or changed.
 
-C3 remains `IN_PROGRESS`. The next separately planned implementation slice is
-C3.2B: remove the normal web legacy preload/readiness dependency, prove signed-in
-canonical chat makes no legacy thread/message/reaction call and creates no empty
-legacy thread, then stop. This receipt authorizes no deletion, migration, or
-product decision.
+C3.2B removes the normal web legacy preload/readiness dependency without a
+replacement readiness subsystem. The preload lifecycle is deleted; canonical
+entry and scrolling no longer activate legacy thread/message/reaction reads;
+canonical projection visibility, composer routing, typing, and seen
+acknowledgement no longer wait on legacy state. Existing canonical
+loading/error/empty states own presentation, and roots are synchronously scoped
+to the active community during navigation.
+
+The dormant legacy writer, mutation controller branch, gateway/backend
+functions, historical rows, mappings, backfill, attachment fallback, digest,
+featured-message state, and lifecycle reachability are intentionally unchanged.
+No schema or Convex function changed and no historical migration ran.
+
+C3 remains `IN_PROGRESS`. After C3.2B exact-build acceptance, the next
+separately planned slice is the R-006 first-party no-call proof and deletion of
+the unreachable legacy UI mutation/write surface. This receipt authorizes no
+historical migration, digest/featured product decision, or table deletion.
