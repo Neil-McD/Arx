@@ -103,6 +103,7 @@ const COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_TOTAL_CHARS = 36_000;
 const COMMUNITY_RESOURCE_BATCH_READ_MAX_TOTAL_CHARS = 50_000;
 const COMMUNITY_RESOURCE_BATCH_READ_DEFAULT_PER_RESOURCE_CHARS = 12_000;
 const COMMUNITY_RESOURCE_BATCH_READ_MAX_PER_RESOURCE_CHARS = 20_000;
+const COMMUNITY_RESOURCE_UI_DIRECTORY_LIMIT = 200;
 const COMMUNITY_RESOURCE_BUILDER_LIST_DEFAULT_LIMIT = 50;
 const COMMUNITY_RESOURCE_BUILDER_LIST_MAX_LIMIT = 250;
 const COMMUNITY_RESOURCE_BUILDER_HEALTH_ISSUE_LIMIT = 50;
@@ -5806,49 +5807,6 @@ function buildCommunityResourceBuilderHealthReportFromRows(args: {
   };
 }
 
-export const listCommunityResourceModules = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    await requireCommunityChatAccess({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    const canManageResources = await canManageCommunityResources({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 200)));
-    const rows = (await ctx.db
-      .query("communityResourceModules" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityResourceModuleLike[];
-    return await Promise.all(
-      rows
-        .slice()
-        .sort((a, b) => {
-          if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-          return b.createdAt - a.createdAt;
-        })
-        .filter((row) => canManageResources || communityResourceModuleIsLive(row))
-        .slice(0, limit)
-        .map((row) => mapCommunityResourceModuleRow(ctx, row)),
-    );
-  },
-});
-
 export const saveCommunityResourceModule = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -6082,7 +6040,6 @@ export const listCommunityResources = query({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -6101,32 +6058,94 @@ export const listCommunityResources = query({
       communityId: args.communityId,
       userId: args.userId,
     });
-    const limit = Math.max(1, Math.min(5000, Math.floor(args.limit ?? 200)));
-    const rows = (await ctx.db
-      .query("communityResources" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityResourceLike[];
-    const modules = canManageResources
-      ? []
-      : ((await ctx.db
+    const [resourceScan, moduleScan] = await Promise.all([
+      ctx.db
+        .query("communityResources" as any)
+        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+        .take(COMMUNITY_RESOURCE_UI_DIRECTORY_LIMIT + 1) as Promise<CommunityResourceLike[]>,
+      ctx.db
           .query("communityResourceModules" as any)
           .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-          .collect()) as CommunityResourceModuleLike[]);
+          .take(COMMUNITY_RESOURCE_UI_DIRECTORY_LIMIT + 1) as Promise<CommunityResourceModuleLike[]>,
+    ]);
+    if (moduleScan.length > COMMUNITY_RESOURCE_UI_DIRECTORY_LIMIT) {
+      throw new Error("community_resource_module_capacity_exceeded");
+    }
+    const truncated = resourceScan.length > COMMUNITY_RESOURCE_UI_DIRECTORY_LIMIT;
+    const modules = moduleScan
+      .filter((row) => canManageResources || communityResourceModuleIsLive(row))
+      .sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return b.createdAt - a.createdAt;
+      });
     const liveModuleIds = new Set(
-      modules
+      moduleScan
         .filter(communityResourceModuleIsLive)
         .map((module) => normalizeIdValue(module._id)),
     );
     const userIdCache = new Map<string, string | null>();
-    const moduleNameCache = new Map<string, string | null>();
-    return await Promise.all(
-      rows
-        .slice()
+    const moduleNameCache = new Map(
+      moduleScan.map((module) => [normalizeIdValue(module._id), module.name]),
+    );
+    const resources = await Promise.all(
+      resourceScan
+        .slice(0, COMMUNITY_RESOURCE_UI_DIRECTORY_LIMIT)
         .filter((row) => canManageResources || communityResourceIsLiveModulePage(row, liveModuleIds))
         .sort(compareCommunityResources)
-        .slice(0, limit)
-        .map((row) => mapCommunityResourceRowWithBody(ctx, row, userIdCache, moduleNameCache)),
+        .map((row) => mapCommunityResourceRow(ctx, row, userIdCache, moduleNameCache)),
     );
+    return {
+      limit: COMMUNITY_RESOURCE_UI_DIRECTORY_LIMIT,
+      truncated,
+      modules: await Promise.all(modules.map((row) => mapCommunityResourceModuleRow(ctx, row))),
+      resources,
+    };
+  },
+});
+
+export const readCommunityResource = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    resourceId: v.id("communityResources"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const resource = (await ctx.db.get(args.resourceId)) as CommunityResourceLike | null;
+    if (!resource || normalizeIdValue(resource.communityId) !== normalizeIdValue(args.communityId)) {
+      throw new Error("community_resource_not_found");
+    }
+    const canManageResources = await canManageCommunityResources({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    if (!canManageResources) {
+      const module = resource.moduleId
+        ? ((await ctx.db.get(resource.moduleId)) as CommunityResourceModuleLike | null)
+        : null;
+      const liveModuleIds = new Set(
+        module &&
+          normalizeIdValue(module.communityId) === normalizeIdValue(args.communityId) &&
+          communityResourceModuleIsLive(module)
+          ? [normalizeIdValue(module._id)]
+          : [],
+      );
+      if (!communityResourceIsLiveModulePage(resource, liveModuleIds)) {
+        throw new Error("community_resource_not_found");
+      }
+    }
+    return await mapCommunityResourceRowWithBody(ctx, resource);
   },
 });
 

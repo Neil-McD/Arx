@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -481,7 +482,6 @@ function ResourceRailItem(props: {
     isDragging,
     isDropTarget,
   } = props;
-  const summary = (resource.body_md ?? "").trim();
   const isEditDisabled = resourceNeedsBodyHydration(resource);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -540,7 +540,6 @@ function ResourceRailItem(props: {
           <div className="knowledge-resource-item-title">{resource.title}</div>
           {resource.pinned ? <PinIcon /> : null}
         </div>
-        {summary ? <div className="knowledge-resource-item-summary">{summary}</div> : null}
       </div>
       {canManage ? (
         <div className="knowledge-resource-item-actions">
@@ -659,7 +658,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     useState<WebCommunityResourceInlineEditorField | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isCreatingPageDraft, setIsCreatingPageDraft] = useState(false);
-  const pendingBodyHydrationRefreshIdsRef = useRef(new Set<string>());
+  const pendingBodyHydrationKeysRef = useRef(new Set<string>());
+  const [bodyHydrationErrorKey, setBodyHydrationErrorKey] = useState<string | null>(null);
   const canManageResources = capabilities.canOperateResources && !isPreviewMode;
   const previewSwitcherStyle = buildPlatformSwitcherStyle(2, isPreviewMode ? 1 : 0);
 
@@ -726,7 +726,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     () => moduleViews.filter((module) => !module.is_virtual).map((module) => module.id),
     [moduleViews],
   );
-  const canReorderModules = canManageResources && reorderableModuleIds.length > 1;
+  const canReorderModules =
+    canManageResources && !state.directoryTruncated && reorderableModuleIds.length > 1;
   const resourcesBySelectionId = useMemo(() => {
     const map = new Map<string, CommunityResource[]>();
     moduleViews.forEach((module) => {
@@ -776,7 +777,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     () => new Set(displayableResources.map((resource) => resource.id)),
     [displayableResources],
   );
-  const isRefreshingResources = state.isLoadingResources || state.isLoadingResourceModules;
+  const isRefreshingResources = state.isLoadingResources;
   const lastRenderableSelectedResourceRef = useRef<CommunityResource | null>(null);
   const selectedResource = useMemo(() => {
     if (!selectedResourceId || !displayableResourceIds.has(selectedResourceId)) return null;
@@ -793,6 +794,14 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     );
   const isReaderShowingRefreshSnapshot = Boolean(readerResource && !selectedResource);
   const selectedResourceNeedsBodyHydration = resourceNeedsBodyHydration(selectedResource);
+  const selectedResourceBodyKey = selectedResource
+    ? `${selectedResource.id}:${selectedResource.updated_at}`
+    : null;
+  const selectedResourceBodyLoadFailed = Boolean(
+    selectedResourceNeedsBodyHydration &&
+      selectedResourceBodyKey &&
+      bodyHydrationErrorKey === selectedResourceBodyKey,
+  );
   const selectedResourceCategoryId = selectedResource ? getResourceCategoryId(selectedResource) : null;
   const selectedModule = useMemo(() => {
     const selectedModuleExists = selectedModuleId
@@ -929,20 +938,35 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     }
   }, [pendingDeleteResource, pendingDeleteResourceId]);
 
-  useEffect(() => {
-    if (!selectedResource || selectedResourceNeedsBodyHydration) return;
-    pendingBodyHydrationRefreshIdsRef.current.delete(selectedResource.id);
-  }, [selectedResource, selectedResourceNeedsBodyHydration]);
+  const requestResourceBodyHydration = useCallback((resource: CommunityResource) => {
+    const key = `${resource.id}:${resource.updated_at}`;
+    if (pendingBodyHydrationKeysRef.current.has(key)) return;
+    pendingBodyHydrationKeysRef.current.add(key);
+    setBodyHydrationErrorKey((current) => current === key ? null : current);
+    void actions.loadResourceContent(resource.id, resource.updated_at ?? null).then((loaded) => {
+      pendingBodyHydrationKeysRef.current.delete(key);
+      if (!loaded) setBodyHydrationErrorKey(key);
+    });
+  }, [actions]);
 
   useEffect(() => {
     if (!selectedResource || !selectedResourceNeedsBodyHydration) return;
-    if (isRefreshingResources || !actions.reloadResources) return;
-    if (pendingBodyHydrationRefreshIdsRef.current.has(selectedResource.id)) return;
-    pendingBodyHydrationRefreshIdsRef.current.add(selectedResource.id);
-    void Promise.resolve(actions.reloadResources()).catch(() => {
-      pendingBodyHydrationRefreshIdsRef.current.delete(selectedResource.id);
-    });
-  }, [actions, isRefreshingResources, selectedResource, selectedResourceNeedsBodyHydration]);
+    if (isRefreshingResources || selectedResourceBodyLoadFailed) return;
+    requestResourceBodyHydration(selectedResource);
+  }, [
+    isRefreshingResources,
+    requestResourceBodyHydration,
+    selectedResource,
+    selectedResourceBodyLoadFailed,
+    selectedResourceNeedsBodyHydration,
+  ]);
+
+  useEffect(() => {
+    if (!selectedResource || selectedResourceNeedsBodyHydration) return;
+    setBodyHydrationErrorKey((current) =>
+      current?.startsWith(`${selectedResource.id}:`) ? null : current,
+    );
+  }, [selectedResource, selectedResourceNeedsBodyHydration]);
 
   useEffect(() => {
     if (!pendingOpenResourceId) return;
@@ -1191,6 +1215,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     const canMoveAcrossCategories = moduleViews.some((module) => module.id !== categoryId);
     const canReorderResource =
       canManageResources &&
+      !state.directoryTruncated &&
       getResourceRole(resource) === "page" &&
       (reorderableIds.length > 1 || canMoveAcrossCategories);
 
@@ -1290,8 +1315,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
             }`}
           >
             <div className="resources-header-admin-actions">
-              <div className="feed-header-badge" aria-label={`${allPageResources.length} pages`}>
-                {allPageResources.length}
+              <div
+                className="feed-header-badge"
+                aria-label={`${allPageResources.length}${state.directoryTruncated ? " or more" : ""} pages`}
+              >
+                {allPageResources.length}{state.directoryTruncated ? "+" : ""}
               </div>
               {capabilities.hasActiveCommunity && canManageResources ? (
                 <div className="resources-add-split" role="group" aria-label="Resource actions">
@@ -1342,6 +1370,20 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
 
         {isRefreshingResources && !showInitialResourceLoading ? (
           <div className="analytics-refreshing-note">Refreshing knowledge...</div>
+        ) : null}
+        {state.directoryError ? (
+          <div className="analytics-refreshing-note" role="alert">
+            Resources could not be refreshed.{" "}
+            <button type="button" onClick={() => void actions.reloadDirectory()}>
+              Retry
+            </button>
+          </div>
+        ) : null}
+        {state.directoryTruncated ? (
+          <div className="analytics-refreshing-note">
+            Showing the first {state.directoryLimit} resources. Organization controls are disabled for this
+            incomplete directory.
+          </div>
         ) : null}
 
         {showInitialResourceLoading ? (
@@ -1434,12 +1476,33 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
             <div className="knowledge-resource-reader">
               {readerResource ? (
                 <>
-                  <WebCommunityResourceViewerContent
-                    resource={readerResource}
-                    sourceLineage={isReaderShowingRefreshSnapshot ? null : selectedSourceLineage}
-                    editor={isReaderShowingRefreshSnapshot ? null : selectedResourceInlineEditor}
-                  />
-                  {selectedResource && canManageResources && getResourceRole(selectedResource) === "source" ? (
+                  {selectedResource && selectedResourceBodyLoadFailed ? (
+                    <div className="community-panel-state-shell">
+                      <div className="chat-empty-state" role="alert">
+                        <div className="chat-empty-title">Page content could not be loaded</div>
+                        <div className="chat-empty-text">
+                          The directory is still available. Retry this page without reloading every resource.
+                        </div>
+                        <button
+                          className="resources-add-choice"
+                          type="button"
+                          onClick={() => requestResourceBodyHydration(selectedResource)}
+                        >
+                          Retry page
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <WebCommunityResourceViewerContent
+                      resource={readerResource}
+                      sourceLineage={isReaderShowingRefreshSnapshot ? null : selectedSourceLineage}
+                      editor={isReaderShowingRefreshSnapshot ? null : selectedResourceInlineEditor}
+                    />
+                  )}
+                  {selectedResource &&
+                  !selectedResourceBodyLoadFailed &&
+                  canManageResources &&
+                  getResourceRole(selectedResource) === "source" ? (
                     <div className="resource-reader-inline-actions">
                       <button
                         className="resources-add-choice"

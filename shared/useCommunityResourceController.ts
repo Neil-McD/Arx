@@ -1,13 +1,17 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
+import {
+  mergeCommunityResourceContentRow,
+  mergeCommunityResourceDirectoryRows,
+} from "./communityResourceDirectoryState";
 
 import {
   createCloudCommunityResourcePageDraftFromSource,
   deleteCloudCommunityResource,
   deleteCloudCommunityResourceModule,
-  listCloudCommunityResourceModuleRows,
-  listCloudCommunityResourceRows,
+  listCloudCommunityResourceDirectory,
   moveCloudCommunityResourceToModule,
+  readCloudCommunityResource,
   reorderCloudCommunityResourceModules,
   reorderCloudCommunityResources,
   saveCloudCommunityResource,
@@ -18,6 +22,7 @@ type SessionLike = unknown;
 
 type ResourceLike = {
   id: string;
+  community_id?: string | null;
   module_id?: string | null;
   type: string;
   resource_role?: "page" | "source";
@@ -29,6 +34,7 @@ type ResourceLike = {
   pinned: boolean;
   sort_order?: number | null;
   created_at?: string;
+  updated_at?: string;
 };
 
 type ResourceModuleLike = {
@@ -75,11 +81,14 @@ type UseCommunityResourceControllerArgs<
   moduleNameInput: string;
   editingResourceId: string | null;
   editingResourceModuleId: string | null;
+  communityResources: ResourceT[];
   beforeSaveValidate?: (payload: { title: string; description: string; rawUrl: string }) => Promise<string | null>;
   setCommunityResources: Dispatch<SetStateAction<ResourceT[]>>;
   setCommunityResourceModules: Dispatch<SetStateAction<ResourceModuleT[]>>;
   setIsLoadingResources: Dispatch<SetStateAction<boolean>>;
-  setIsLoadingResourceModules: Dispatch<SetStateAction<boolean>>;
+  setResourceDirectoryLimit: Dispatch<SetStateAction<number>>;
+  setResourceDirectoryTruncated: Dispatch<SetStateAction<boolean>>;
+  setResourceDirectoryError: Dispatch<SetStateAction<string | null>>;
   setIsSavingResource: Dispatch<SetStateAction<boolean>>;
   setIsSavingResourceModule: Dispatch<SetStateAction<boolean>>;
   setResourceError: Dispatch<SetStateAction<string | null>>;
@@ -106,7 +115,7 @@ export function useCommunityResourceController<
   const argsRef = useRef(args);
   argsRef.current = args;
   const resourceLoadGenerationRef = useRef(0);
-  const moduleLoadGenerationRef = useRef(0);
+  const resourceContentLoadGenerationRef = useRef(0);
 
   const resetResourceEditor = useCallback((clearError: boolean) => {
     const current = argsRef.current;
@@ -132,56 +141,90 @@ export function useCommunityResourceController<
     }
   }, []);
 
-  const loadCommunityResourceModules = useCallback(async (communityId: string, session: SessionT) => {
-    const current = argsRef.current;
-    const usableSession = await resolveUsableSession(session, current.ensureSession);
-    if (!usableSession) return;
-    const generation = (moduleLoadGenerationRef.current += 1);
-    current.setIsLoadingResourceModules(true);
-    try {
-      try {
-        const rows = await listCloudCommunityResourceModuleRows<SessionT, ResourceModuleT>({
-          session: usableSession,
-          communityId,
-          limit: 200,
-        });
-        if (moduleLoadGenerationRef.current !== generation) return;
-        current.setCommunityResourceModules(rows);
-      } catch {
-        return;
-      }
-    } finally {
-      if (moduleLoadGenerationRef.current === generation) {
-        current.setIsLoadingResourceModules(false);
-      }
-    }
-  }, []);
-
   const loadCommunityResources = useCallback(async (communityId: string, session: SessionT) => {
     const current = argsRef.current;
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) return;
     const generation = (resourceLoadGenerationRef.current += 1);
     current.setIsLoadingResources(true);
+    current.setResourceDirectoryError(null);
     try {
-      try {
-        const rows = await listCloudCommunityResourceRows<SessionT, ResourceT>({
-          session: usableSession,
-          communityId,
-          limit: 200,
-        });
-        if (resourceLoadGenerationRef.current !== generation) return;
-        current.setCommunityResources(rows);
-        await loadCommunityResourceModules(communityId, usableSession);
-      } catch {
+      const directory = await listCloudCommunityResourceDirectory<
+        SessionT,
+        ResourceT,
+        ResourceModuleT
+      >({
+        session: usableSession,
+        communityId,
+      });
+      if (
+        resourceLoadGenerationRef.current !== generation ||
+        argsRef.current.activeCommunityId !== communityId
+      ) {
         return;
       }
+      current.setCommunityResources((previousRows) => {
+        return mergeCommunityResourceDirectoryRows(previousRows, directory.resources);
+      });
+      current.setCommunityResourceModules(directory.modules);
+      current.setResourceDirectoryLimit(directory.limit);
+      current.setResourceDirectoryTruncated(directory.truncated);
+    } catch (error) {
+      if (resourceLoadGenerationRef.current !== generation) return;
+      const message = error instanceof Error ? error.message : "community_resource_directory_unavailable";
+      current.setResourceDirectoryError(message);
     } finally {
       if (resourceLoadGenerationRef.current === generation) {
         current.setIsLoadingResources(false);
       }
     }
-  }, [loadCommunityResourceModules]);
+  }, []);
+
+  const loadCommunityResourceContent = useCallback(async (
+    resourceId: string,
+    expectedUpdatedAt: string | null,
+  ): Promise<boolean> => {
+    const current = argsRef.current;
+    const communityId = current.activeCommunityId;
+    const usableSession = await resolveUsableSession(current.session, current.ensureSession);
+    if (!usableSession || !communityId) return false;
+    const directoryGeneration = resourceLoadGenerationRef.current;
+    const contentGeneration = (resourceContentLoadGenerationRef.current += 1);
+    try {
+      const resource = await readCloudCommunityResource<SessionT, ResourceT>({
+        session: usableSession,
+        communityId,
+        resourceId,
+      });
+      if (
+        resourceContentLoadGenerationRef.current !== contentGeneration ||
+        resourceLoadGenerationRef.current !== directoryGeneration ||
+        argsRef.current.activeCommunityId !== communityId ||
+        resource.id !== resourceId ||
+        (resource.community_id && resource.community_id !== communityId)
+      ) {
+        return false;
+      }
+      const currentMerge = mergeCommunityResourceContentRow({
+        rows: argsRef.current.communityResources,
+        resource,
+        communityId,
+        expectedUpdatedAt,
+      });
+      if (!currentMerge.accepted) return false;
+      current.setCommunityResources((rows) =>
+        mergeCommunityResourceContentRow({
+          rows,
+          resource,
+          communityId,
+          expectedUpdatedAt,
+        }).rows,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
 
   const handleSaveCommunityResource = useCallback(async () => {
     const current = argsRef.current;
@@ -295,7 +338,7 @@ export function useCommunityResourceController<
       });
       current.setShowResourceModuleModal(false);
       resetModuleEditor(true);
-      await loadCommunityResourceModules(current.activeCommunityId, session);
+      await loadCommunityResources(current.activeCommunityId, session);
     } catch (error) {
       const message = typeof error === "string"
         ? error
@@ -306,7 +349,7 @@ export function useCommunityResourceController<
     } finally {
       current.setIsSavingResourceModule(false);
     }
-  }, [loadCommunityResourceModules, resetModuleEditor]);
+  }, [loadCommunityResources, resetModuleEditor]);
 
   const handleDeleteCommunityResourceModule = useCallback(async (moduleId: string) => {
     const current = argsRef.current;
@@ -330,10 +373,9 @@ export function useCommunityResourceController<
       current.setShowResourceModuleModal(false);
       resetModuleEditor(true);
     }
-    await loadCommunityResourceModules(current.activeCommunityId, session);
     await loadCommunityResources(current.activeCommunityId, session);
     return true;
-  }, [loadCommunityResourceModules, loadCommunityResources, resetModuleEditor]);
+  }, [loadCommunityResources, resetModuleEditor]);
 
   const handleSetCommunityResourceModuleStatus = useCallback(
     async (module: ResourceModuleT, status: "draft" | "live") => {
@@ -356,7 +398,6 @@ export function useCommunityResourceController<
           isPatch: true,
           payload: { module_status: status },
         });
-        await loadCommunityResourceModules(current.activeCommunityId, session);
         await loadCommunityResources(current.activeCommunityId, session);
         return true;
       } catch (error) {
@@ -370,7 +411,7 @@ export function useCommunityResourceController<
         return false;
       }
     },
-    [loadCommunityResourceModules, loadCommunityResources],
+    [loadCommunityResources],
   );
 
   const handleReorderCommunityResourceModules = useCallback(async (moduleIds: string[]) => {
@@ -400,7 +441,7 @@ export function useCommunityResourceController<
         communityId: current.activeCommunityId,
         moduleIds,
       });
-      await loadCommunityResourceModules(current.activeCommunityId, session);
+      await loadCommunityResources(current.activeCommunityId, session);
       return true;
     } catch (error) {
       current.setCommunityResourceModules(previousModules);
@@ -412,7 +453,7 @@ export function useCommunityResourceController<
       current.setResourceModuleError(message);
       return false;
     }
-  }, [loadCommunityResourceModules]);
+  }, [loadCommunityResources]);
 
   const handleReorderCommunityResources = useCallback(async (moduleId: string | null, resourceIds: string[]) => {
     const current = argsRef.current;
@@ -582,8 +623,8 @@ export function useCommunityResourceController<
   }, [loadCommunityResources]);
 
   return {
-    loadCommunityResourceModules,
     loadCommunityResources,
+    loadCommunityResourceContent,
     handleSaveCommunityResourceModule,
     handleSetCommunityResourceModuleStatus,
     handleDeleteCommunityResourceModule,

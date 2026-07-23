@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  mergeCommunityResourceContentRow,
+  mergeCommunityResourceDirectoryRows,
+} from "../shared/communityResourceDirectoryState.ts";
 
 const root = process.cwd();
 
@@ -22,6 +26,8 @@ const core = read("convex/communityCore.ts");
 const content = read("convex/communityResourceContent.ts");
 const markdown = read("shared/markdownUi.tsx");
 const linkEmbedUi = read("shared/linkEmbedUi.tsx");
+const gateway = read("shared/cloudCommunityAdminGateway.ts");
+const experience = read("convex/communityExperience.ts");
 
 assert.match(
   packageJson,
@@ -70,12 +76,59 @@ assert.doesNotMatch(
 assert.match(
   resources,
   /async function mapCommunityResourceRowWithBody[\s\S]*hydrateCommunityResourceBody\(ctx, row\)[\s\S]*mapCommunityResourceRow\(ctx, hydrated/,
-  "resource list mapper must hydrate split body content before projecting rows to clients",
+  "the exact resource mapper must hydrate split body content before projecting rows to clients",
 );
 assert.match(
   resources,
-  /export const listCommunityResources = query\([\s\S]*\.map\(\(row\) => mapCommunityResourceRowWithBody\(ctx, row, userIdCache, moduleNameCache\)\)/,
-  "main Resources UI list query must use the hydrated row mapper",
+  /const COMMUNITY_RESOURCE_UI_DIRECTORY_LIMIT = 200/,
+  "the Resources UI directory must have one explicit fixed capacity",
+);
+assert.match(
+  resources,
+  /export const listCommunityResources = query\([\s\S]*\.take\(COMMUNITY_RESOURCE_UI_DIRECTORY_LIMIT \+ 1\)[\s\S]*truncated[\s\S]*modules:[\s\S]*resources,/,
+  "the Resources UI directory must return one bounded modules-and-resources snapshot with truncation truth",
+);
+assert.match(
+  resources,
+  /export const listCommunityResources = query\([\s\S]*\.map\(\(row\) => mapCommunityResourceRow\(ctx, row, userIdCache, moduleNameCache\)\)/,
+  "the Resources UI directory must project metadata without hydrating every body",
+);
+const listCommunityResourcesBlock =
+  resources.match(/export const listCommunityResources = query\([\s\S]*?\n\}\);\n\nexport const readCommunityResource = query\(/)?.[0] ?? "";
+assert.doesNotMatch(
+  listCommunityResourcesBlock,
+  /mapCommunityResourceRowWithBody|hydrateCommunityResourceBody/,
+  "the bounded Resources UI directory must not amplify reads by hydrating body content",
+);
+assert.match(
+  resources,
+  /export const readCommunityResource = query\([\s\S]*requireCommunityChatAccess[\s\S]*ctx\.db\.get\(args\.resourceId\)[\s\S]*community_resource_not_found[\s\S]*communityResourceIsLiveModulePage[\s\S]*mapCommunityResourceRowWithBody\(ctx, resource\)/,
+  "one exact authorized UI read must hydrate only the selected resource body and fail closed for hidden rows",
+);
+assert.doesNotMatch(
+  resources,
+  /export const listCommunityResourceModules = query\(/,
+  "the duplicate standalone module-list query must be deleted",
+);
+assert.doesNotMatch(
+  experience,
+  /listCommunityResourceModules/,
+  "the deleted standalone module-list query must not remain exported",
+);
+assert.match(
+  gateway,
+  /export async function listCloudCommunityResourceDirectory[\s\S]*community:listCommunityResources[\s\S]*payload\.modules[\s\S]*payload\.resources[\s\S]*community_resource_directory_invalid/,
+  "the web gateway must validate the combined directory envelope",
+);
+assert.match(
+  gateway,
+  /export async function readCloudCommunityResource[\s\S]*community:readCommunityResource[\s\S]*resourceId/,
+  "the web gateway must expose one exact selected-resource read",
+);
+assert.doesNotMatch(
+  gateway,
+  /listCloudCommunityResourceRows|listCloudCommunityResourceModuleRows/,
+  "duplicate web list gateways must be deleted",
 );
 assert.match(
   resources,
@@ -136,8 +189,8 @@ assert.match(
 
 assert.match(
   contracts,
-  /reloadResources\?: \(\) => Promise<void> \| void/,
-  "Resources actions should expose a narrow reload hook for impossible hydration states",
+  /loadResourceContent: \(resourceId: string, expectedUpdatedAt: string \| null\) => Promise<boolean>[\s\S]*reloadDirectory: \(\) => Promise<void>/,
+  "Resources actions should separate exact content reads from whole-directory retry",
 );
 assert.match(
   panel,
@@ -146,8 +199,8 @@ assert.match(
 );
 assert.match(
   panel,
-  /pendingBodyHydrationRefreshIdsRef[\s\S]*actions\.reloadResources/,
-  "Resources panel should trigger a bounded reload for missing hydrated content",
+  /pendingBodyHydrationKeysRef[\s\S]*actions\.loadResourceContent\(resource\.id, resource\.updated_at \?\? null\)[\s\S]*setBodyHydrationErrorKey/,
+  "Resources panel should deduplicate exact body reads by resource version and expose failure state",
 );
 assert.match(
   panel,
@@ -196,8 +249,83 @@ assert.match(
 );
 assert.match(
   app,
-  /reloadResources: async \(\) => \{[\s\S]*ensureUsableAuthSession\(\)[\s\S]*loadCommunityResources\(activeCommunityId, usableSession\)/,
-  "App should wire Resources reload through the existing authenticated list path",
+  /loadResourceContent: loadCommunityResourceContent[\s\S]*reloadDirectory: async \(\) => \{[\s\S]*ensureUsableAuthSession\(\)[\s\S]*loadCommunityResources\(activeCommunityId, usableSession\)/,
+  "App should wire exact content reads separately from authenticated directory retry",
 );
+
+type TestResource = {
+  id: string;
+  community_id: string;
+  body_md: string | null;
+  body_chars: number;
+  updated_at: string;
+  title: string;
+};
+
+const hydratedV1: TestResource = {
+  id: "resource-a",
+  community_id: "community-a",
+  body_md: "canonical body",
+  body_chars: 14,
+  updated_at: "2026-07-23T10:00:00.000Z",
+  title: "A",
+};
+const metadataV1: TestResource = { ...hydratedV1, body_md: null };
+assert.deepEqual(
+  mergeCommunityResourceDirectoryRows([hydratedV1], [metadataV1]),
+  [hydratedV1],
+  "same-version directory refresh should retain an already hydrated body",
+);
+const metadataV2: TestResource = {
+  ...metadataV1,
+  updated_at: "2026-07-23T10:01:00.000Z",
+};
+assert.deepEqual(
+  mergeCommunityResourceDirectoryRows([hydratedV1], [metadataV2]),
+  [metadataV2],
+  "newer metadata must evict a stale hydrated body",
+);
+assert.equal(
+  mergeCommunityResourceContentRow({
+    rows: [metadataV1],
+    resource: hydratedV1,
+    communityId: "community-a",
+    expectedUpdatedAt: metadataV1.updated_at,
+  }).accepted,
+  true,
+  "an exact current-version body should merge",
+);
+for (const rejected of [
+  {
+    rows: [metadataV2],
+    resource: hydratedV1,
+    communityId: "community-a",
+    expectedUpdatedAt: metadataV1.updated_at,
+  },
+  {
+    rows: [metadataV2],
+    resource: hydratedV1,
+    communityId: "community-a",
+    expectedUpdatedAt: metadataV2.updated_at,
+  },
+  {
+    rows: [metadataV1],
+    resource: { ...hydratedV1, community_id: "community-b" },
+    communityId: "community-a",
+    expectedUpdatedAt: metadataV1.updated_at,
+  },
+  {
+    rows: [metadataV1],
+    resource: { ...hydratedV1, body_md: null },
+    communityId: "community-a",
+    expectedUpdatedAt: metadataV1.updated_at,
+  },
+] as const) {
+  assert.equal(
+    mergeCommunityResourceContentRow(rejected).accepted,
+    false,
+    "stale, cross-community, and impossible empty body responses must be rejected",
+  );
+}
 
 console.log("community resource content hydration contract proof passed");

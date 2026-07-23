@@ -10,16 +10,19 @@ type SessionLike = unknown;
 
 type ResourceLike = {
   id: string;
+  community_id?: string | null;
   module_id?: string | null;
   type: string;
   resource_role?: "page" | "source";
   resource_status?: "draft" | "review" | "published" | "processing" | "failed";
   title: string;
   body_md: string | null;
+  body_chars?: number | null;
   url: string | null;
   pinned: boolean;
   sort_order?: number | null;
   created_at?: string;
+  updated_at?: string;
 };
 
 type ResourceModuleLike = {
@@ -43,7 +46,6 @@ type UseWebCommunityResourceUiControllerParams<
   setCommunityResources: Dispatch<SetStateAction<ResourceT[]>>;
   setCommunityResourceModules: Dispatch<SetStateAction<ResourceModuleT[]>>;
   setIsLoadingResources: Dispatch<SetStateAction<boolean>>;
-  setIsLoadingResourceModules: Dispatch<SetStateAction<boolean>>;
 };
 
 export type UseWebCommunityResourceUiControllerResult<
@@ -96,8 +98,11 @@ export type UseWebCommunityResourceUiControllerResult<
   resourceModuleModalProps: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModalProps: ComponentProps<typeof WebDeleteResourceModuleModal>;
   resourceModalProps: ComponentProps<typeof WebCommunityResourceModal>;
-  loadCommunityResourceModules: (communityId: string, session: SessionT) => Promise<void>;
   loadCommunityResources: (communityId: string, session: SessionT) => Promise<void>;
+  loadCommunityResourceContent: (resourceId: string, expectedUpdatedAt: string | null) => Promise<boolean>;
+  resourceDirectoryLimit: number;
+  resourceDirectoryTruncated: boolean;
+  resourceDirectoryError: string | null;
 };
 
 export function useWebCommunityResourceUiController<
@@ -129,10 +134,13 @@ export function useWebCommunityResourceUiController<
   const [moduleDeleteNameInput, setModuleDeleteNameInput] = useState("");
   const [moduleDeleteWordInput, setModuleDeleteWordInput] = useState("");
   const [isDeletingResourceModule, setIsDeletingResourceModule] = useState(false);
+  const [resourceDirectoryLimit, setResourceDirectoryLimit] = useState(200);
+  const [resourceDirectoryTruncated, setResourceDirectoryTruncated] = useState(false);
+  const [resourceDirectoryError, setResourceDirectoryError] = useState<string | null>(null);
 
   const {
-    loadCommunityResourceModules,
     loadCommunityResources,
+    loadCommunityResourceContent,
     handleSaveCommunityResourceModule,
     handleSetCommunityResourceModuleStatus,
     handleDeleteCommunityResourceModule,
@@ -163,10 +171,13 @@ export function useWebCommunityResourceUiController<
     moduleNameInput,
     editingResourceId,
     editingResourceModuleId,
+    communityResources: params.communityResources,
     setCommunityResources: params.setCommunityResources,
     setCommunityResourceModules: params.setCommunityResourceModules,
     setIsLoadingResources: params.setIsLoadingResources,
-    setIsLoadingResourceModules: params.setIsLoadingResourceModules,
+    setResourceDirectoryLimit,
+    setResourceDirectoryTruncated,
+    setResourceDirectoryError,
     setIsSavingResource,
     setIsSavingResourceModule,
     setResourceError,
@@ -261,6 +272,10 @@ export function useWebCommunityResourceUiController<
   };
 
   const handleDeleteModule = async (moduleId: string) => {
+    if (resourceDirectoryTruncated) {
+      setResourceModuleError("Load the complete resource directory before deleting a category.");
+      return false;
+    }
     const module = params.communityResourceModules.find((candidate) => candidate.id === moduleId);
     if (!module) {
       setResourceModuleError("Category not found. Refresh resources and try again.");
@@ -389,7 +404,10 @@ export function useWebCommunityResourceUiController<
       onChangeBody: setResourceBodyInput,
       onChangePinned: setResourcePinnedInput,
     },
-    loadCommunityResourceModules,
     loadCommunityResources,
+    loadCommunityResourceContent,
+    resourceDirectoryLimit,
+    resourceDirectoryTruncated,
+    resourceDirectoryError,
   };
 }

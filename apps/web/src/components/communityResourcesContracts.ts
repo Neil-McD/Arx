@@ -29,6 +29,7 @@ export type CommunityResource = {
   pinned: boolean;
   sort_order: number | null;
   created_at: string;
+  updated_at: string;
 };
 
 export type CommunityResourceModule = {
@@ -55,7 +56,9 @@ export type CommunityResourcesCapabilities = {
 
 export type CommunityResourcesState = {
   isLoadingResources: boolean;
-  isLoadingResourceModules: boolean;
+  directoryLimit: number;
+  directoryTruncated: boolean;
+  directoryError: string | null;
   modules: CommunityResourceModule[];
   resources: CommunityResource[];
   selectedModuleId: string | null;
@@ -98,5 +101,6 @@ export type CommunityResourcesActions = {
   handleDeleteResource: (resourceId: string) => Promise<boolean> | boolean;
   handleCreatePageDraftFromSource: (resource: CommunityResource) => Promise<CommunityResource | null>;
   handleCreateBlankPageDraft: (moduleId?: string | null) => Promise<CommunityResource | null>;
-  reloadResources?: () => Promise<void> | void;
+  loadResourceContent: (resourceId: string, expectedUpdatedAt: string | null) => Promise<boolean>;
+  reloadDirectory: () => Promise<void>;
 };

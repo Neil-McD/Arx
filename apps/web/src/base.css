@@ -15391,44 +15391,6 @@ button.chat-reply-quote:hover {
   font-weight: 650;
 }
 
-.knowledge-resource-item-meta {
-  display: flex;
-  align-items: center;
-  gap: 4px 14px;
-  min-width: 0;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.knowledge-resource-item-meta span {
-  position: relative;
-}
-
-.knowledge-resource-item-meta span+span::before {
-  content: "•";
-  position: absolute;
-  left: -9px;
-  color: color-mix(in srgb, var(--text-muted) 58%, transparent);
-}
-
-.knowledge-resource-item-summary {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.knowledge-category-pages .knowledge-resource-item-summary,
-.knowledge-source-inbox-section .knowledge-resource-item-summary {
-  display: none;
-}
-
 .knowledge-resource-item-actions {
   position: relative;
   display: inline-flex;

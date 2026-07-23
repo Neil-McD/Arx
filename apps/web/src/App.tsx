@@ -1189,6 +1189,7 @@ type CommunityResource = {
   pinned: boolean;
   sort_order: number | null;
   created_at: string;
+  updated_at: string;
 };
 
 type CommunityResourceModule = {
@@ -3186,7 +3187,6 @@ export default function App() {
   >([]);
   const [communityResourceModules, setCommunityResourceModules] = useState<CommunityResourceModule[]>([]);
   const [isLoadingResources, setIsLoadingResources] = useState(false);
-  const [isLoadingResourceModules, setIsLoadingResourceModules] = useState(false);
   const [openResourceEmbedId, setOpenResourceEmbedId] = useState<string | null>(null);
   const [communityEventsByCacheKey, setCommunityEventsByCacheKey] = useState<Record<string, CommunityEvent[]>>({});
   const [isLoadingCommunityEvents, setIsLoadingCommunityEvents] = useState(false);
@@ -3452,8 +3452,11 @@ export default function App() {
   }, [session]);
 
   const {
-    loadCommunityResourceModules,
     loadCommunityResources,
+    loadCommunityResourceContent,
+    resourceDirectoryLimit,
+    resourceDirectoryTruncated,
+    resourceDirectoryError,
     openNewModuleModal,
     handleEditModule,
     handleSetModuleStatus,
@@ -3488,7 +3491,6 @@ export default function App() {
     setCommunityResources,
     setCommunityResourceModules,
     setIsLoadingResources,
-    setIsLoadingResourceModules,
   });
   const loadCommunityLaunchKnowledgeSources = useCallback(async (
     communityId: string,
@@ -6125,10 +6127,7 @@ export default function App() {
       if (!activeSession) return;
       void (async () => {
         try {
-          await Promise.all([
-            loadCommunityResourceModules(detail.communityId, activeSession),
-            loadCommunityResources(detail.communityId, activeSession),
-          ]);
+          await loadCommunityResources(detail.communityId, activeSession);
         } catch (error) {
           console.warn("[community-resources] failed to refresh after resource mutation:", error);
         }
@@ -6140,7 +6139,6 @@ export default function App() {
     };
   }, [
     activeCommunityId,
-    loadCommunityResourceModules,
     loadCommunityResources,
     session,
     sessionRef,
@@ -10604,7 +10602,9 @@ export default function App() {
       },
       resourcesState: {
         isLoadingResources,
-        isLoadingResourceModules,
+        directoryLimit: resourceDirectoryLimit,
+        directoryTruncated: resourceDirectoryTruncated,
+        directoryError: resourceDirectoryError,
         modules: communityResourceModules,
         resources: communityResources,
         selectedModuleId: communityResourceModuleId,
@@ -10626,7 +10626,8 @@ export default function App() {
         handleDeleteResource,
         handleCreatePageDraftFromSource,
         handleCreateBlankPageDraft,
-        reloadResources: async () => {
+        loadResourceContent: loadCommunityResourceContent,
+        reloadDirectory: async () => {
           const usableSession = await ensureUsableAuthSession();
           if (!usableSession || !activeCommunityId) return;
           await loadCommunityResources(activeCommunityId, usableSession);

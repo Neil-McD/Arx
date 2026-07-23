@@ -139,7 +139,7 @@ import {
   rejectCommunityResourceBuilderChangeset as rejectCommunityResourceBuilderChangesetImpl,
   applyCommunityResourceBuilderChangeset as applyCommunityResourceBuilderChangesetImpl,
   listCommunityResources as listCommunityResourcesImpl,
-  listCommunityResourceModules as listCommunityResourceModulesImpl,
+  readCommunityResource as readCommunityResourceImpl,
   listPublicDiscoverCommunities as listPublicDiscoverCommunitiesImpl,
   resolvePublicCommunityAccessBySlug as resolvePublicCommunityAccessBySlugImpl,
   resolvePublicFunnelBySlug as resolvePublicFunnelBySlugImpl,
@@ -224,7 +224,7 @@ export const setCommunityFreeAccessMode = setCommunityFreeAccessModeImpl;
 export const leaveCommunity = leaveCommunityImpl;
 export const cancelMyCommunitySubscription = cancelMyCommunitySubscriptionImpl;
 export const listCommunityResources = listCommunityResourcesImpl;
-export const listCommunityResourceModules = listCommunityResourceModulesImpl;
+export const readCommunityResource = readCommunityResourceImpl;
 export const countCommunityResources = countCommunityResourcesImpl;
 export const listCommunityResourceBuilderDirectory = listCommunityResourceBuilderDirectoryImpl;
 export const stageCommunityResourceBuilderChangeset = stageCommunityResourceBuilderChangesetImpl;

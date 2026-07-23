@@ -7,6 +7,13 @@ type CloudCommunityAdminGatewayParams<SessionT> = {
   session: SessionT;
 };
 
+export type CloudCommunityResourceDirectory<TResource, TModule> = {
+  limit: number;
+  truncated: boolean;
+  modules: TModule[];
+  resources: TResource[];
+};
+
 export type CloudCommunityMemberBillingHistoryEvent = {
   id: string;
   kind: "checkout" | "subscription" | "subscription_event";
@@ -1393,40 +1400,50 @@ export async function listCloudCommunityPricePointRows<SessionT, TPricingRow = u
   return coerceGatewayRows<TPricingRow>(payload);
 }
 
-export async function listCloudCommunityResourceRows<SessionT, TResource = unknown>(
+export async function listCloudCommunityResourceDirectory<
+  SessionT,
+  TResource = unknown,
+  TModule = unknown,
+>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
-    limit?: number;
   },
-): Promise<TResource[]> {
+): Promise<CloudCommunityResourceDirectory<TResource, TModule>> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityResources" as any, {
+  const payload = (await client.query("community:listCommunityResources" as any, {
     authSubject,
     communityId: params.communityId,
-    limit:
-      typeof params.limit === "number" && Number.isFinite(params.limit)
-        ? Math.max(1, Math.floor(params.limit))
-        : 200,
-  });
-  return coerceGatewayRows<TResource>(payload);
+  })) as Record<string, unknown> | null;
+  if (
+    !payload ||
+    !Array.isArray(payload.modules) ||
+    !Array.isArray(payload.resources) ||
+    typeof payload.limit !== "number" ||
+    !Number.isFinite(payload.limit) ||
+    typeof payload.truncated !== "boolean"
+  ) {
+    throw new Error("community_resource_directory_invalid");
+  }
+  return {
+    limit: Math.max(1, Math.floor(payload.limit)),
+    truncated: payload.truncated,
+    modules: coerceGatewayRows<TModule>(payload.modules),
+    resources: coerceGatewayRows<TResource>(payload.resources),
+  };
 }
 
-export async function listCloudCommunityResourceModuleRows<SessionT, TModule = unknown>(
+export async function readCloudCommunityResource<SessionT, TResource = unknown>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
-    limit?: number;
+    resourceId: string;
   },
-): Promise<TModule[]> {
+): Promise<TResource> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityResourceModules" as any, {
+  return (await client.query("community:readCommunityResource" as any, {
     authSubject,
     communityId: params.communityId,
-    limit:
-      typeof params.limit === "number" && Number.isFinite(params.limit)
-        ? Math.max(1, Math.floor(params.limit))
-        : 200,
-  });
-  return coerceGatewayRows<TModule>(payload);
+    resourceId: params.resourceId,
+  })) as TResource;
 }
 
 export async function saveCloudCommunityResource<SessionT, TResult = unknown>(

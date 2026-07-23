@@ -17,8 +17,8 @@ export {
 } from "./communityPublic";
 
 export {
-  listCommunityResourceModules,
   listCommunityResources,
+  readCommunityResource,
   countCommunityResources,
   editCommunityResourceBuilderResource,
   beginGoogleDriveSourceOAuth,

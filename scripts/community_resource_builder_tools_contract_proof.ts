@@ -451,8 +451,13 @@ assert.match(
 );
 assert.match(
   app,
-  /COMMUNITY_RESOURCES_MUTATED_EVENT[\s\S]*readCommunityResourcesMutatedEventDetail[\s\S]*loadCommunityResourceModules[\s\S]*loadCommunityResources/,
-  "workspace should refresh modules and resources after a verified resource mutation",
+  /COMMUNITY_RESOURCES_MUTATED_EVENT[\s\S]*readCommunityResourcesMutatedEventDetail[\s\S]*await loadCommunityResources\(detail\.communityId, activeSession\)/,
+  "workspace should refresh the combined resource directory after a verified resource mutation",
+);
+assert.doesNotMatch(
+  app,
+  /loadCommunityResourceModules/,
+  "workspace must not retain the deleted duplicate module refresh path",
 );
 
 console.log("community_resource_builder_tools_contract_proof: ok");
