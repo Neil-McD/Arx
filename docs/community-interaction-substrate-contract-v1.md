@@ -214,7 +214,8 @@ No big-bang rewrite. No duplicated product truth.
 
 The active migration residue inventory lives in `docs/community-interaction-migration-residue-map.md`.
 Anything touching legacy chat tables during the interaction migration must be classified there as
-`KEEP TEMPORARILY`, `BLOCKED BY PARITY`, or `DELETE CANDIDATE`.
+`KEEP TEMPORARILY`, `DELETE CANDIDATE`, or `DECISION REQUIRED`. A parity gap is
+a deletion gate, not a separate classification.
 
 ## Current Additive Schema Slice
 

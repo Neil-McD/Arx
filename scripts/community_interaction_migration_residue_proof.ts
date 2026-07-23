@@ -24,8 +24,15 @@ const chatGateway = read("shared/cloudCommunityChatGateway.ts");
 const interactionGateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const dataController = read("shared/useCommunityChatDataController.ts");
 const sendController = read("shared/useCommunityChatMutationController.ts");
+const preloadLifecycle = read("apps/web/src/controllers/useWebCommunityChatPreloadLifecycle.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const communityAttention = read("convex/communityAttention.ts");
+const recentContext = read("convex/communityRecentContext.ts");
+const interactionEvidence = read("convex/communityInteractionEvidence.ts");
+const emailDigests = read("convex/emailDigests.ts");
+const communityPublic = read("convex/communityPublic.ts");
+const communityMaintenance = read("convex/communityMaintenance.ts");
+const accountLifecyclePolicy = read("convex/accountLifecyclePolicy.ts");
 
 function assertIncludes(sourceName: string, source: string, needle: string): void {
   assert.ok(source.includes(needle), `${sourceName} should include: ${needle}`);
@@ -46,7 +53,7 @@ assert.match(
 
 assert.match(
   contract,
-  /community-interaction-migration-residue-map\.md[\s\S]*KEEP TEMPORARILY[\s\S]*BLOCKED BY PARITY[\s\S]*DELETE CANDIDATE/,
+  /community-interaction-migration-residue-map\.md[\s\S]*KEEP TEMPORARILY[\s\S]*DELETE CANDIDATE[\s\S]*DECISION REQUIRED[\s\S]*parity gap is[\s\S]*deletion gate/,
   "substrate contract should point cleanup work at the residue map",
 );
 assert.match(
@@ -56,20 +63,19 @@ assert.match(
 );
 
 [
-  "| R-001 | Legacy chat writer `community:createThreadUserMessage` | `BLOCKED BY PARITY` |",
-  "| R-003 | Legacy chat to interaction mapping table | `KEEP TEMPORARILY` |",
-  "| R-004 | Legacy attachment hydration fallback in canonical read bundles | `BLOCKED BY PARITY` |",
-  "| R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` |",
-  "| R-002 | Legacy compatibility message rows created by canonical composer | Deleted for the staging clean-room composer.",
-  "| R-005 | Projection feature flag and legacy timeline fallback | Deleted for production projection promotion.",
-  "Canonical interaction reads must not use legacy chat rows as source-of-truth.",
-  "Canonical interaction writes must not insert legacy chat rows directly.",
-  "The web interaction gateway must not call legacy chat mutations.",
-  "Legacy chat realtime must remain disabled for the normal web chat UI; canonical projection refresh must use canonical interaction reads/subscriptions.",
-  "Community attention chat dots must derive from canonical interaction roots/replies, not `communityChatMessages`.",
-  "No longer blockers: canonical composer sends, canonical projection sends, canonical optimistic reconciliation, production chat rendering, and community attention chat dots no longer require legacy chat row replacement; canonical sends no longer fall back to the legacy chat writer when the canonical writer is missing.",
-  "The shared community send controller may keep legacy sends only for non-projection compatibility call paths; normal web chat uses canonical projection sends, and a missing canonical writer fails closed.",
-  "Canonical projection reply targets without a canonical root id fail closed.",
+  "| R-001 | Legacy shell preload, thread ensure, message list, and reaction list | `DELETE CANDIDATE` |",
+  "| R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` |",
+  "| R-004 | Legacy attachment hydration fallback | `KEEP TEMPORARILY` |",
+  "| R-006 | Legacy message writer, edit/delete/reaction endpoints, gateway methods, and send-controller branch | `DELETE CANDIDATE` |",
+  "| R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` |",
+  "| R-008 | Weekly community digest reading legacy messages | `DECISION REQUIRED` |",
+  "| R-009 | Public featured-message system backed by legacy message pointers | `DECISION REQUIRED` |",
+  "| R-010 | Legacy reaction rows | `KEEP TEMPORARILY` |",
+  "| R-011 | Maintenance and account-lifecycle reachability for historical legacy rows | `KEEP TEMPORARILY` |",
+  "opening the normal community chat",
+  "Counts are evidence, not expectations; no test should freeze them.",
+  "No migration should be implemented for a feature that should be deleted.",
+  "**C3.2B:** remove the normal web legacy preload/readiness dependency.",
 ].forEach((needle) => assertIncludes("residue map", residueMap, needle));
 
 assert.match(
@@ -123,6 +129,51 @@ assert.doesNotMatch(
   interactionGateway,
   /createThreadUserMessage|createCloudThreadUserMessageRows|communityChatMessages/,
   "web interaction gateway should not call legacy chat mutations or tables",
+);
+assert.match(
+  preloadLifecycle,
+  /useWebCommunityChatPreloadLifecycle[\s\S]*void params\.loadCommunityChat\(params\.activeCommunityId, session\)/,
+  "the residue map should remain grounded in the active legacy chat preload",
+);
+assert.match(
+  dataController,
+  /loadCommunityChat[\s\S]*ensureCommunityChatThread\(communityId, usableSession\)[\s\S]*listCloudThreadMessages[\s\S]*loadMessageReactions/,
+  "the active preload should still expose its legacy thread/message/reaction dependency until C3.2B",
+);
+for (const [label, source] of [
+  ["recent context", recentContext],
+  ["interaction evidence", interactionEvidence],
+] as const) {
+  assert.doesNotMatch(
+    source,
+    /communityChatMessages|communityChatThreads/,
+    `${label} should remain canonical rather than being mislabeled as legacy residue`,
+  );
+}
+assert.match(
+  recentContext,
+  /communityInteractionRoots[\s\S]*communityInteractionReplies/,
+  "recent context should read canonical roots and replies",
+);
+assert.match(
+  emailDigests,
+  /query\("communityChatThreads" as any\)[\s\S]*query\("communityChatMessages" as any\)/,
+  "weekly digest legacy reads should remain explicit until the product requirement is decided",
+);
+assert.match(
+  communityPublic,
+  /communityFeaturedMessages[\s\S]*row\.messageId[\s\S]*communityMessageReactions/,
+  "public featured-message projection should remain classified as legacy-backed",
+);
+assert.match(
+  communityMaintenance,
+  /communityChatThreads[\s\S]*communityChatMessages[\s\S]*communityMessageReactions/,
+  "maintenance should retain explicit historical legacy reachability",
+);
+assert.match(
+  accountLifecyclePolicy,
+  /communityChatMessages[\s\S]*communityFeaturedMessages[\s\S]*communityInteractionRoots[\s\S]*communityChatThreads[\s\S]*communityInteractionLegacyChatLinks/,
+  "lifecycle policy should retain both historical and canonical interaction reachability",
 );
 assert.match(
   chatGateway,
@@ -182,16 +233,6 @@ assert.doesNotMatch(
   sendController,
   /canonicalEligible|canUseCanonicalComposer|reason:\s*"reply_target_unmapped"/,
   "shared send controller should not keep duplicated canonical eligibility booleans",
-);
-assert.match(
-  sendController,
-  /const legacyReplyToId[\s\S]*replySnapshot\?\.legacy_message_id[\s\S]*return replyRootId \? null : replyToId/,
-  "shared send controller should separate legacy reply ids from canonical reply target ids",
-);
-assert.match(
-  sendController,
-  /createCloudThreadUserMessageRows[\s\S]*attachments: serializedAttachments[\s\S]*replyToId: legacyReplyToId/,
-  "shared send controller should keep the legacy fallback explicit and payload-bounded",
 );
 assert.match(
   sendController,

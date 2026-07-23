@@ -461,6 +461,35 @@ development audit remained 10 resource rows, 10 content rows, and zero
 duplicates, missing rows, orphans, cross-community rows, parent-counter
 mismatches, or legacy parent fields. Production was not queried or changed.
 
-C3 remains `IN_PROGRESS`. The next separately planned slice is a read-only
-C3.2 interaction-authority and data-distribution map before any interaction
-migration or deletion. This receipt does not authorize that slice.
+C3.2A interaction-authority truth reconciliation is complete on the canonical
+staging lane without runtime behavior or data changes. The normal feed,
+composer, edit/delete/reaction actions, attention, recent context, and evidence
+paths are canonical. The remaining web-shell dependency is narrower: community
+chat preload still ensures a legacy thread and reads legacy messages and
+reactions before marking the canonical projection ready.
+
+The redacted development snapshot found four legacy threads, three empty; 67
+legacy messages with 67 valid one-to-one mapping links; 54 canonical roots, 23
+canonical replies, and 76 content blocks; three canonical-only roots and seven
+canonical-only replies; four legacy attachment targets with zero canonical
+attachment rows; three legacy and eight canonical reactions; and two legacy
+featured-message pointers. There were zero unlinked messages, duplicate links,
+or dangling message/root/reply links.
+
+The residue inventory now has only three decisions: `KEEP TEMPORARILY`,
+`DELETE CANDIDATE`, and `DECISION REQUIRED`; parity is a deletion gate rather
+than a fourth state. Recent-context/evidence claims were corrected, weekly
+digest and featured-message requirements were surfaced for deletion-first
+decisions, and the stale migration proof stopped duplicating the canonical
+reply-target behavior proof.
+
+Nine focused interaction contracts and the 38-step foundation baseline passed.
+Only documentation and proof files changed; no runtime function or development
+data changed, no Convex deployment was required, and production was not queried
+or changed.
+
+C3 remains `IN_PROGRESS`. The next separately planned implementation slice is
+C3.2B: remove the normal web legacy preload/readiness dependency, prove signed-in
+canonical chat makes no legacy thread/message/reaction call and creates no empty
+legacy thread, then stop. This receipt authorizes no deletion, migration, or
+product decision.

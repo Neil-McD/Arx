@@ -1027,8 +1027,13 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-interaction-embed-play:focus-visible[\s\S]*\.community-interaction-embed-video-link:focus-visible[\s\S]*\.community-interaction-embed-summary[\s\S]*grid-template-columns:[\s\S]*\.community-interaction-embed-player[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-embed\.is-social-post[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*background:\s*#000;[\s\S]*\.community-interaction-embed-social-identity[\s\S]*unicode-bidi:\s*plaintext;[\s\S]*\.community-interaction-embed-social-meta[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*5;/,
-  "video previews should retain horizontal play rows while social previews use compact isolated provenance-and-text cards",
+  /\.community-interaction-embed-summary[\s\S]*grid-template-columns:[\s\S]*\.community-interaction-embed-play:focus-visible[\s\S]*\.community-interaction-embed-video-link:focus-visible[\s\S]*\.community-interaction-embed-player[\s\S]*aspect-ratio:\s*16\s*\/\s*9;/,
+  "video previews should retain horizontal play rows, keyboard focus, and 16:9 players",
+);
+assert.match(
+  baseCss,
+  /\.community-interaction-embed\.is-social-post[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*background:\s*#000;[\s\S]*\.community-interaction-embed-social-identity[\s\S]*unicode-bidi:\s*plaintext;[\s\S]*\.community-interaction-embed-social-meta[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*5;/,
+  "social previews should use compact isolated provenance-and-text cards",
 );
 assert.match(
   read("shared/linkEmbedUi.tsx"),

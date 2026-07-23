@@ -8,16 +8,21 @@ Members need one authorized community interaction system for posts/chat/replies/
 
 The canonical substrate is `communityInteractionRoots`, replies, content blocks, attachments, embeds, reactions, mentions, moderation events, visibility rules, and evidence-sync state. The normal UI writes canonical interactions.
 
-`docs/community-interaction-migration-residue-map.md` names the remaining compatibility queue:
+`docs/community-interaction-migration-residue-map.md` is the single detailed
+compatibility inventory. The normal feed, composer, interaction actions,
+attention state, recent context, and evidence paths are canonical. The
+remaining shell defect is narrower and more causal: opening community chat
+still preloads legacy messages and reactions and ensures a legacy thread before
+the canonical projection is marked ready. That invisible dependency can create
+empty legacy threads even though the visible product path is canonical.
 
-- legacy writer `community:createThreadUserMessage`;
-- `communityInteractionLegacyChatLinks`;
-- legacy attachment hydration/link state;
-- backfill API and remaining legacy chat readers.
-
-Current canonical writes no longer need legacy message creation, but legacy reads still feed archive documents, recent context, weekly digests, cleanup, and backfill. This is a migration, not harmless duplication.
-
-The weekly digest path reads up to 500 legacy `communityChatMessages` from the oldest canonical legacy chat thread (`emailDigests.ts:196-225`). New canonical-only interactions can therefore be missing from digest activity and content. The digest should read canonical interaction roots/replies before legacy chat is removed.
+Development staging currently has 67 legacy messages with 67 valid mapping
+links, four legacy attachment payloads without canonical attachment rows, three
+legacy reactions, and two featured-message pointers. It also has three
+canonical-only roots and seven canonical-only replies. The weekly digest still
+reads up to 500 legacy messages, so canonical-only activity can be omitted.
+Whether the weekly digest and featured-message system belong in MVP must be
+decided before either is migrated.
 
 ## Direct messages
 
@@ -46,13 +51,20 @@ Canonical moderation event types include privacy purge request/completion states
 | Candidate | Classification | Action | Idiot index | Rationale |
 | --- | --- | --- | ---: | --- |
 | canonical community interaction substrate | `KEEP (MVP core)` | `HARDEN` | 0 | core participation and evidence source |
-| legacy community message writer/link/attachment stack | `DECISION REQUIRED (user confirmation)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 8 | replacement exists, but remaining archive/digest/backfill consumers must migrate first |
-| weekly digest reading legacy chat | `KEEP (MVP core)` | `MIGRATE_THEN_DELETE` | 9 | produces a stale projection of current product activity |
-| no-cursor “most recently updated” digest selection | `KEEP (MVP core)` | `BOUND`, `HARDEN` | 8 | a bounded job that permanently starves objects is false reliability |
+| normal web legacy chat preload/readiness gate | `DELETE CANDIDATE` | `DELETE` after signed-in no-call proof | 10 | invisible read/write dependency creates empty legacy threads before rendering the canonical feed |
+| legacy message writer and mutation surface | `DELETE CANDIDATE` | `DELETE` after preload removal and first-party no-call proof | 9 | historical rows do not require a live writer |
+| legacy mapping/backfill/attachment bridge | `KEEP TEMPORARILY` | `MIGRATE_THEN_DELETE` | 3 | 67 mappings are valid; four attachment targets still need canonical rows |
+| weekly digest reading legacy chat | `DECISION REQUIRED` | `DELETE` or canonicalize | 9 | not named in MVP must-keep scope and currently omits canonical-only activity |
+| public featured legacy messages | `DECISION REQUIRED` | `DELETE` or canonicalize | 8 | two rows render, but no first-party feature/unfeature caller was found |
+| no-cursor “most recently updated” digest selection | `DECISION REQUIRED` | delete with digest or `BOUND`, `HARDEN` | 8 | do not optimize a scheduler for an optional product job |
 | DM participant departure state without a leave flow | `KEEP (MVP core)` | `HARDEN` | 7 | schema state with no user lifecycle owner |
 | delete whole DM conversation on one account deletion | `KEEP (MVP core)` | `HARDEN` | 10 | destroys other-party history |
 | canonical privacy purge event vocabulary without workflow | `KEEP (MVP core)` | `HARDEN`, `MIGRATE_THEN_DELETE` | 8 | accepted purge policy has no transition owner; vocabulary alone creates false assurances |
 
 ## Migration order
 
-Backfill canonical attachments and links -> switch archive/context/digest/cleanup reads -> compare bounded parity -> disable legacy writer -> observe zero legacy reads/writes -> preserve/migrate required history -> delete legacy APIs/tables/fields. Skipping the read migration would silently erase product projections even though the primary UI still works.
+Remove the normal web legacy preload/readiness dependency -> delete unreachable
+legacy UI writer/edit/delete/reaction paths -> decide whether digest and featured
+messages should exist -> migrate only retained attachment/reaction/featured
+history -> replay and audit historical backfill -> observe zero legacy reads and
+writes -> delete legacy APIs, links, tables, and lifecycle residue.

@@ -61,7 +61,10 @@ community route -> current access bundle -> canonical interaction/resource opera
 
 - Authority: each operation re-resolves community access and role.
 - Good: canonical interaction substrate and resource/evidence coupling are explicit.
-- Gaps: legacy chat still feeds digests/archive/context; resource body has dual read authority; privacy purge and membership departure semantics are incomplete.
+- Gaps: the normal canonical chat surface is still gated by a legacy
+  thread/message/reaction preload; weekly digest and public featured messages
+  remain legacy-backed; privacy purge and membership departure semantics are
+  incomplete. Resource body authority is closed.
 
 ## 6. Personal agent acts under one community lens
 
