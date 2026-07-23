@@ -203,7 +203,7 @@ const directEdgeKeys = new Set(directUserEdges.map((edge) => edge.key));
 const opaqueFields = tables.flatMap((table) => table.opaqueFields.map((field) => `${table.name}.${field}`));
 const storageFields = tables.flatMap((table) => table.storageFields.map((field) => `${table.name}.${field}`));
 
-assert.equal(ACCOUNT_LIFECYCLE_POLICY_VERSION, "account-lifecycle-v4", "policy version must change for semantic revisions");
+assert.equal(ACCOUNT_LIFECYCLE_POLICY_VERSION, "account-lifecycle-v5", "policy version must change for semantic revisions");
 assert.equal(tables.length, ACCOUNT_LIFECYCLE_SCHEMA_BASELINE.tableCount, "schema table count changed; review lifecycle coverage");
 assert.equal(
   directUserEdges.length,

@@ -42,6 +42,12 @@ const platformBusinessVisitSchema = extractBetween(
   "communityPricePoints: defineTable",
   "platform business visit schema",
 );
+const communityAnalyticsEventSchema = extractBetween(
+  schema,
+  "communityAnalyticsEvents: defineTable",
+  "platformBusinessVisits: defineTable",
+  "community analytics event schema",
+);
 const recordBusinessVisitMutation = extractBetween(
   businessAnalytics,
   "export const recordBusinessPageVisit = mutation",
@@ -308,8 +314,38 @@ assert.match(
 );
 assert.match(
   publicFunnelVisitMutation,
-  /visitorKeyHash = visitorKey \? await hashBusinessVisitorKey\(visitorKey\) : undefined/,
+  /visitorKeyHash = await hashBusinessVisitorKey\(visitorKey\)/,
   "community funnel analytics should hash visitor keys before storage",
+);
+assert.doesNotMatch(
+  publicFunnelVisitMutation,
+  /authSubject|by_authSubject|\buserId\b/,
+  "public funnel analytics must not accept or resolve user identity",
+);
+assert.match(
+  communityAnalyticsEventSchema,
+  /visitorKeyHash: v\.string\(\)/,
+  "community funnel analytics should require a hashed visitor key",
+);
+assert.doesNotMatch(
+  communityAnalyticsEventSchema,
+  /visitorKey:|userId:|by_community_visitor_event/,
+  "community funnel analytics schema should not retain raw keys or user identity",
+);
+assert.match(
+  communityAnalyticsEventSchema,
+  /by_community_visitor_hash_event[\s\S]*"createdAt"/,
+  "community funnel analytics deduplication index should include time",
+);
+assert.match(
+  publicFunnelVisitMutation,
+  /withIndex\("by_community_visitor_hash_event"[\s\S]*\.gte\("createdAt", dedupeAfterMs\)[\s\S]*\.first\(\)/,
+  "community funnel analytics should use a bounded recent-row lookup",
+);
+assert.doesNotMatch(
+  publicFunnelVisitMutation,
+  /\.collect\(\)/,
+  "community funnel analytics must not scan all historical visits for a visitor",
 );
 assert.match(
   publicFunnelAnalyticsInsert,
@@ -323,8 +359,8 @@ assert.doesNotMatch(
 );
 assert.match(
   cloudPublicFunnelGateway,
-  /visitorKey: visitorKey \?\? undefined/,
-  "public funnel client should omit unavailable visitor keys instead of sending null",
+  /if \(visitorKey\) \{[\s\S]*visitorKey,[\s\S]*\}/,
+  "public funnel client should skip analytics when a visitor key is unavailable",
 );
 assert.match(
   operatorTypes,

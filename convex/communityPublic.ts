@@ -483,8 +483,7 @@ export const resolvePublicCommunityAccessBySlug = query({
 export const recordPublicFunnelVisitBySlug = mutation({
   args: {
     communitySlug: v.string(),
-    visitorKey: v.optional(v.string()),
-    authSubject: v.optional(v.string()),
+    visitorKey: v.string(),
   },
   handler: async (ctx, args) => {
     const slug = normalizeSlug(args.communitySlug);
@@ -495,19 +494,22 @@ export const recordPublicFunnelVisitBySlug = mutation({
     if (!community) return { ok: false };
 
     const nowMs = Date.now();
-    const visitorKey = String(args.visitorKey ?? "").trim();
-    const visitorKeyHash = visitorKey ? await hashBusinessVisitorKey(visitorKey) : undefined;
-    if (visitorKeyHash) {
-      const recentRows = (await ctx.db
-        .query("communityAnalyticsEvents" as any)
-        .withIndex("by_community_visitor_hash_event", (q: any) =>
-          q.eq("communityId", community._id).eq("visitorKeyHash", visitorKeyHash).eq("eventType", "funnel_visit"),
-        )
-        .collect()) as Array<{ createdAt: number }>;
-      const dedupeAfterMs = nowMs - FUNNEL_VISIT_DEDUPE_WINDOW_MS;
-      if (recentRows.some((row) => row.createdAt >= dedupeAfterMs)) {
-        return { ok: true, deduped: true };
-      }
+    const visitorKey = args.visitorKey.trim();
+    if (!visitorKey) return { ok: false, reason: "missing_visitor_key" };
+    const visitorKeyHash = await hashBusinessVisitorKey(visitorKey);
+    const dedupeAfterMs = nowMs - FUNNEL_VISIT_DEDUPE_WINDOW_MS;
+    const recentRow = await ctx.db
+      .query("communityAnalyticsEvents")
+      .withIndex("by_community_visitor_hash_event", (q) =>
+        q
+          .eq("communityId", community._id)
+          .eq("visitorKeyHash", visitorKeyHash)
+          .eq("eventType", "funnel_visit")
+          .gte("createdAt", dedupeAfterMs),
+      )
+      .first();
+    if (recentRow) {
+      return { ok: true, deduped: true };
     }
 
     await ctx.db.insert("communityAnalyticsEvents", {

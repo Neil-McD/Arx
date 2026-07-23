@@ -1367,15 +1367,17 @@ export default defineSchema({
   communityAnalyticsEvents: defineTable({
     communityId: v.id("communities"),
     eventType: v.union(v.literal("funnel_visit")),
-    visitorKey: v.optional(v.string()),
-    visitorKeyHash: v.optional(v.string()),
-    userId: v.optional(v.id("users")),
+    visitorKeyHash: v.string(),
     createdAt: v.number(),
   })
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_event_createdAt", ["communityId", "eventType", "createdAt"])
-    .index("by_community_visitor_hash_event", ["communityId", "visitorKeyHash", "eventType"])
-    .index("by_community_visitor_event", ["communityId", "visitorKey", "eventType"]),
+    .index("by_community_visitor_hash_event", [
+      "communityId",
+      "visitorKeyHash",
+      "eventType",
+      "createdAt",
+    ]),
 
   platformBusinessVisits: defineTable({
     pathKind: v.union(v.literal("home"), v.literal("community_funnel")),

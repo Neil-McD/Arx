@@ -2,7 +2,7 @@
 
 Status: planning authority only. Runtime deletion remains quarantined.
 
-Current policy version: `account-lifecycle-v4`
+Current policy version: `account-lifecycle-v5`
 
 Code authority: `convex/accountLifecyclePolicy.ts`
 
@@ -46,6 +46,12 @@ They may share small checkpoint and receipt mechanics. They must not share owner
 `convex/accountLifecyclePolicy.ts` and `scripts/account_lifecycle_policy_contract_proof.ts` are the only current schema-count authority. Narrative documents must not maintain a second manual registry.
 
 At the 2026-07-22 C2.1 receipt, the proof covers 127 schema tables, 121 direct user-ID fields, 26 opaque fields, and seven storage-ID fields. The two added tables are the account-specific checkpoint and its append-only receipts; the one added direct edge is indexed by account and policy version. The proof still identifies 40 direct edges without a user-first index: 33 require a new bounded index and seven use a declared bounded parent cascade.
+
+The C2 analytics closeout removed the unnecessary
+`communityAnalyticsEvents.userId` edge after its sole development value was
+cleared under an expectation lock. The current proof therefore covers 127
+tables, 120 direct user-ID fields, 26 opaque fields, and seven storage-ID
+fields; 39 direct edges remain without a user-first index.
 
 The remaining tables are still classified because they may be connected indirectly through a community, conversation, app, resource, thread, run, evidence record, or parent object.
 
@@ -165,7 +171,7 @@ A direct user reference is executable only when one of these is true:
 1. a schema index begins with that exact user field; or
 2. the policy names a bounded parent cascade whose parent is itself indexed by the user.
 
-The current proof identifies 40 edges that do not have a user-first index. Thirty-three require new indexes; seven are intentionally reached through a bounded parent, such as partner children through `builderPartners` and private workspace snapshots through their owned project.
+The current proof identifies 39 edges that do not have a user-first index. Thirty-two require new indexes; seven are intentionally reached through a bounded parent, such as partner children through `builderPartners` and private workspace snapshots through their owned project.
 
 No executor may replace a missing index with `.collect()`, a global scan, or a hard-coded list of “known” referencing tables.
 
@@ -189,15 +195,16 @@ These blockers prevent execution, not policy classification. Undecided behavior 
 4. **Complete in C2.1:** build an account-specific request/preflight/checkpoint/receipt substrate with no destructive executor or public UI.
 5. **Complete in C2.2A:** consolidate authenticated subject-to-account authority behind `authActor`, delete uncalled duplicate gate/tier/user lookup surfaces, and reconcile preflight-before-freeze plus non-destructive grant semantics.
 6. **Complete in C2.2B:** collapse policy-scoped request identity to one canonical lifecycle root per account and delete the redundant root idempotency field.
-7. Add the internal access-freeze checkpoint and denial boundary behind interruption fixtures.
-8. Add bounded local-session revocation, private-state, and external-provider executors.
-9. Add DM participant-departure and shared tombstone execution.
-10. Add community-content attribution and ownership execution.
-11. Add evidence/intelligence privacy propagation.
-12. Add finance/legal/audit minimization and retention enforcement.
-13. Add invariant audit, root-last finalizer, and terminal receipt.
-14. Define and build the separate community lifecycle from its own ownership matrix.
-15. Re-enable self-service deletion only after full interruption, scale, orphan, provider, and cross-user behavioral proofs.
+7. **Complete in the C2 analytics closeout:** delete the spoofable community-funnel identity edge, raw-key schema residue, and unbounded historical dedupe lookup.
+8. **Blocked until C3 canonical-data prerequisites are complete:** add the internal access-freeze checkpoint and denial boundary behind interruption fixtures.
+9. Add bounded local-session revocation, private-state, and external-provider executors.
+10. Add DM participant-departure and shared tombstone execution.
+11. Add community-content attribution and ownership execution.
+12. Add evidence/intelligence privacy propagation.
+13. Add finance/legal/audit minimization and retention enforcement.
+14. Add invariant audit, root-last finalizer, and terminal receipt.
+15. Define and build the separate community lifecycle from its own ownership matrix.
+16. Re-enable self-service deletion only after full interruption, scale, orphan, provider, and cross-user behavioral proofs.
 
 ### C2.1 implementation receipt
 
@@ -228,6 +235,29 @@ states fail without adding a root or receipt. The bounded development preflight
 proved zero request rows, zero receipt rows, and zero lifecycle schedules before
 the schema change. This slice adds no status, phase, freeze, session effect,
 public caller, provider/storage effect, or product-data mutation.
+
+### C2 analytics identity-reduction receipt
+
+Community funnel analytics is now anonymous, hash-only operational evidence.
+The public mutation no longer accepts or resolves `authSubject`, and
+`communityAnalyticsEvents` no longer stores `userId`, raw `visitorKey`, or its
+legacy index. The retained hash is required, and duplicate detection performs
+one hash-and-time-bounded indexed lookup instead of collecting the visitor's
+entire community history. Authenticated operator conversion attribution remains
+separate in `platformBusinessVisits` and resolves through `authActor`.
+
+The compatibility checkpoint first stopped identity writes while accepting the
+obsolete argument inertly. Development then contained 96 rows: all 96 hashed,
+one user-linked, and zero raw-key rows. The expectation lock detected one new
+anonymous visit between the initial read and mutation, refused the stale
+95-row expectation, and the corrected atomic run cleared exactly the one
+identity link. The physical schema deletion followed only after a 96/96/0/0
+receipt. The temporary mutation is deleted from final source.
+
+C2.2C remains the name of the future access-freeze slice; it is not implemented
+here. Building a freeze before interaction, resource, and intelligence
+authorities are canonical would create a lock without a correct complete
+executor. C2 therefore pauses fail-closed while C3 closes those prerequisites.
 
 ## Proof required before re-enabling deletion
 

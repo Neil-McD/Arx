@@ -6,11 +6,11 @@
  * mutation stays quarantined until versioned executors satisfy this contract.
  */
 
-export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v4" as const;
+export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v5" as const;
 
 export const ACCOUNT_LIFECYCLE_SCHEMA_BASELINE = Object.freeze({
   tableCount: 127,
-  directUserEdgeCount: 121,
+  directUserEdgeCount: 120,
   opaqueFieldCount: 26,
   storageFieldCount: 7,
 });
@@ -646,7 +646,6 @@ export const ACCOUNT_LIFECYCLE_UNINDEXED_EDGE_POLICIES: Readonly<
   "memberFacts.createdByUserId": { lookup: "index_required", reason: "creator attribution may reference the account outside owned facts" },
   "communityOnboardingConfigs.updatedByUserId": { lookup: "index_required", reason: "onboarding attribution must be detached without community-wide scans" },
   "communityBlocks.createdByUserId": { lookup: "index_required", reason: "moderation authorship requires a bounded lookup" },
-  "communityAnalyticsEvents.userId": { lookup: "index_required", reason: "analytics pseudonymization requires a retention-bounded index" },
   "platformBusinessVisits.userId": { lookup: "index_required", reason: "visit aggregation and pseudonymization require bounded lookup" },
   "communityActivityEvents.actorUserId": { lookup: "index_required", reason: "community activity attribution must detach without scanning communities" },
   "communityFeaturedMessages.featuredByUserId": { lookup: "index_required", reason: "feature attribution must detach without scanning messages" },

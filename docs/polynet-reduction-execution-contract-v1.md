@@ -166,7 +166,7 @@ Exactly one milestone or bounded sub-slice may be `IN_PROGRESS`.
 | --- | --- | --- | --- |
 | C0 | Reconcile and adopt one architecture thesis | `COMPLETE` | one repository contract distinguishes implemented, next, proposed, and deferred architecture without attachment/chat dependency |
 | C1 | Finish paid-access proof and ordinary creator settlement | `DEFERRED_ACCEPTED` | implementation accepted for sequencing; the unperformed live checkout/cancellation and Connect-settlement evidence remains explicit under U-017 |
-| C2 | Complete resumable deletion and privacy lifecycles | `IN_PROGRESS` | interruption-safe phases, external revocation, privacy propagation, invariant audit, and root-last finalization |
+| C2 | Complete resumable deletion and privacy lifecycles | `BLOCKED` | interruption-safe phases, external revocation, privacy propagation, invariant audit, and root-last finalization |
 | C3 | Finish canonical resource, interaction, and intelligence migrations | `PLANNED` | one authority per concern and zero compatibility reads/writes through an observation window |
 | C4 | Guarantee scheduler fairness and bounded operations | `PLANNED` | every eligible object eventually receives service across caps and restarts; operator work is bounded |
 | C5 | Collapse capability, transport, and public-function duplication | `PLANNED` | one authority/executor/receipt owner per semantic operation with thin versioned adapters |
@@ -395,7 +395,22 @@ duplicate roots fail closed instead of creating or selecting another root.
 The expectation-locked development preflight found zero request rows, zero
 receipt rows, and zero lifecycle jobs before the schema change.
 
-The next separately planned slice is C2.2C: the internal access-freeze
-checkpoint and denial boundary only. It must build on the one-account root;
-existing-session revocation remains a later bounded subphase, and no private or
-shared data deletion is authorized.
+The C2 analytics identity closeout is complete on the canonical staging lane.
+Community funnel analytics now has one anonymous hash-only job. The public
+mutation and gateway no longer accept, resolve, or write user identity; the
+event schema no longer carries `userId`, raw `visitorKey`, or its legacy index;
+and duplicate detection uses a hash-and-time-bounded lookup. Authenticated
+visitor conversion remains separate in `platformBusinessVisits` through
+verified `authActor`.
+
+The two-checkpoint development receipt preserved all 96 rows, cleared exactly
+the sole user link after an expectation lock caught one legitimate new
+anonymous visit, and proved all 96 rows carried hashes with no raw keys. The
+temporary migration is absent from final source. Lifecycle policy v5 now covers
+120 direct user edges and 39 unindexed edges.
+
+C2 is now `BLOCKED`, not complete. C2.2C remains the future access-freeze slice,
+but implementing a lock before C3 canonicalizes interaction, resource, and
+intelligence authority would create state without a correct complete executor.
+The next separately planned causal slice is C3.1 canonical resource-content
+authority. No C3 implementation is authorized by this receipt.

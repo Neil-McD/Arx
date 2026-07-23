@@ -85,10 +85,12 @@ export async function recordCloudPublicFunnelVisit(params: {
 }): Promise<void> {
   const client = createConvexClient();
   const visitorKey = getBusinessVisitorKey();
-  await client.mutation("community:recordPublicFunnelVisitBySlug" as any, {
-    communitySlug: params.communitySlug,
-    visitorKey: visitorKey ?? undefined,
-  });
+  if (visitorKey) {
+    await client.mutation("community:recordPublicFunnelVisitBySlug" as any, {
+      communitySlug: params.communitySlug,
+      visitorKey,
+    });
+  }
   await recordCloudBusinessPageVisit({
     pathKind: "community_funnel",
     communitySlug: params.communitySlug,

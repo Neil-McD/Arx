@@ -40,7 +40,7 @@
     "test:account-deletion-safety": "vitest run convex/accountDeletionSafety.test.ts",
     "check:community-deletion-quarantine-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_deletion_quarantine_contract_proof.ts",
     "test:community-deletion-safety": "vitest run convex/communityDeletionSafety.test.ts",
-    "test:community-membership-authority": "vitest run convex/communityMembershipAuthority.test.ts convex/platformHomeAdmission.test.ts convex/communityJoinRequestCore.test.ts convex/publicFunnelAccessProjection.test.ts convex/publicFunnelAuthResume.test.ts convex/publicFunnelAdmissionAction.test.ts",
+    "test:community-membership-authority": "vitest run convex/communityMembershipAuthority.test.ts convex/platformHomeAdmission.test.ts convex/communityJoinRequestCore.test.ts convex/publicFunnelAccessProjection.test.ts convex/publicFunnelAuthResume.test.ts convex/publicFunnelAdmissionAction.test.ts convex/communityPublicFunnelAnalytics.test.ts",
     "test:public-community-checkout-start": "vitest run convex/publicCommunityCheckoutStart.test.ts",
     "test:community-subscription-event-convergence": "vitest run convex/communitySubscriptionEventConvergence.test.ts",
     "test:community-paid-access-authority": "vitest run convex/communitySubscriptionAccessCore.test.ts convex/communitySubscriptionCancellationCore.test.ts convex/communityPaidAccessAuthority.test.ts convex/communityCommerceWebhookAuthority.test.ts",

@@ -15,7 +15,7 @@ Let a person control their account and private data without corrupting money rec
 | operational evidence | audit/diagnostic/runtime receipts | bounded retention and pseudonymization; never accidental authority |
 | external-provider state | OAuth, Stripe, worker/provider resources | revoke/delete externally and reconcile local state with receipts |
 
-The ownership matrix is accepted as product direction. `accountLifecyclePolicy.ts` now encodes declarative coverage for all 127 current schema tables and 121 direct user-reference edges, but the bounded executor and exact legal/financial/security TTLs remain open.
+The ownership matrix is accepted as product direction. `accountLifecyclePolicy.ts` now encodes declarative coverage for all 127 current schema tables and 120 direct user-reference edges, but the bounded executor and exact legal/financial/security TTLs remain open.
 
 ## Account deletion path
 
@@ -42,6 +42,14 @@ uses the unique account lookup plus checkpoint receipts, while policy drift and
 duplicate roots fail closed. No frozen state, session effect, public lifecycle
 surface, or destructive executor exists yet.
 
+The C2 analytics closeout removes one unnecessary privacy edge rather than
+building an executor around it. Community funnel visits are anonymous,
+hash-only operational evidence; the caller-supplied subject, event `userId`,
+raw visitor-key residue, and unbounded historical dedupe scan are deleted.
+Authenticated visitor conversion remains a separate verified-actor projection
+in `platformBusinessVisits`. The current policy covers 120 direct user edges,
+39 of which still require a new index or declared parent cascade.
+
 The replacement policy still needs an explicit rule for DM attachments embedded in `contentJson`. The retired executor did not visibly clean their storage objects; this remains a historical storage-leak inference until attachment representation and live prevalence are checked.
 
 ## Community deletion path
@@ -58,7 +66,7 @@ request -> block new writes -> inventory by ownership policy -> external revoke
 
 ## Anonymous-user cleanup
 
-The generic cleanup executor and its audit script are deleted. They had no runtime caller or scheduled invocation, originated as a one-time migration, and treated absence from a manually maintained 55-edge reference list as permission to hard-delete a user root even though the current schema contains 121 direct user-reference edges.
+The generic cleanup executor and its audit script are deleted. They had no runtime caller or scheduled invocation, originated as a one-time migration, and treated absence from a manually maintained 55-edge reference list as permission to hard-delete a user root even though the current schema contains 120 direct user-reference edges.
 
 The 56 development rows remain unchanged. No active creator path exists in current source, but their reference state and final disposition remain U-013. Any eventual data change requires a schema-derived, redacted, expectation-locked migration or the completed account lifecycle; there is no retained generic deletion capability.
 
