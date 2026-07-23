@@ -433,7 +433,34 @@ fields. The complete post-closure development audit found 10 resource rows,
 10 content rows, and zero integrity or legacy-field defects. Production was
 not queried or changed.
 
-C3 remains `IN_PROGRESS`: resource listing still collects all community
-resources and hydrates every body. The next separately planned slice is C3.1B,
-bounded metadata-only resource listing plus on-demand content reads. This
-receipt does not authorize that slice.
+C3.1B resource UI list/read authority is complete on the canonical staging
+lane. One `take(201)` query now returns at most 200 resource metadata rows plus
+module metadata with explicit truncation; it does not hydrate bodies. One exact
+authorized query reads only the selected body and fails closed for
+cross-community or member-hidden rows. The duplicate public module-list query,
+duplicate browser list gateways, and duplicate post-mutation module refresh
+are deleted.
+
+Directory and body results are accepted only for the current community,
+request generation, resource ID, and `updated_at`. Same-version directory
+refreshes retain hydrated content; newer metadata evicts it. Incomplete
+directories remain readable but expose truncation and disable operations that
+require complete ordering. Exact body failures expose page-local retry rather
+than reloading every body.
+
+The first signed-in staging edit found a pre-existing C3.1A write-order defect:
+the canonical body write updated the parent counter, then the handler hydrated
+an older parent object and failed with
+`community_resource_content_projection_mismatch`, rolling back the
+transaction. Body writes now return the matching post-write resource, and all
+create/edit paths consume that exact projection. Focused behavior proofs, web
+typecheck, production build, bundle budget, the 38-step foundation baseline,
+Convex deployment typecheck, and the exact-build signed-in page-load plus
+edit/save/restore journey passed. Browser errors were empty. The final
+development audit remained 10 resource rows, 10 content rows, and zero
+duplicates, missing rows, orphans, cross-community rows, parent-counter
+mismatches, or legacy parent fields. Production was not queried or changed.
+
+C3 remains `IN_PROGRESS`. The next separately planned slice is a read-only
+C3.2 interaction-authority and data-distribution map before any interaction
+migration or deletion. This receipt does not authorize that slice.
