@@ -498,8 +498,7 @@ export function useWebPublicFunnelActions<
         argsRef.current.setIsLoadingPublicCommunity(false);
 
         if (opts?.recordVisit !== false) {
-          void recordCloudPublicFunnelVisit<AuthSession>({
-            session: argsRef.current.getSession(),
+          void recordCloudPublicFunnelVisit({
             communitySlug: resolvedSlug,
           }).catch((error) => {
             console.warn("Failed to record public funnel visit:", error);

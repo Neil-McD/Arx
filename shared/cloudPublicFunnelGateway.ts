@@ -3,7 +3,6 @@ import {
   createConvexClient,
 } from "./convexAuthenticatedClient";
 import type { CommunityBillingPeriod } from "./communityTypes";
-import { resolveAuthSubject } from "./authSession";
 import { firstGatewayRow } from "./cloudGateway";
 import {
   getBusinessVisitorKey,
@@ -81,22 +80,16 @@ export async function fetchCloudPublicCommunityMemoryOverview<SessionT, TOvervie
   };
 }
 
-export async function recordCloudPublicFunnelVisit<SessionT>(
-  params: CloudPublicFunnelParams<SessionT> & {
-    session?: SessionT | null;
-    communitySlug: string;
-  },
-): Promise<void> {
+export async function recordCloudPublicFunnelVisit(params: {
+  communitySlug: string;
+}): Promise<void> {
   const client = createConvexClient();
   const visitorKey = getBusinessVisitorKey();
-  const authSubject = params.session ? resolveAuthSubject(params.session as any) : undefined;
   await client.mutation("community:recordPublicFunnelVisitBySlug" as any, {
     communitySlug: params.communitySlug,
     visitorKey: visitorKey ?? undefined,
-    authSubject: authSubject ?? undefined,
   });
-  await recordCloudBusinessPageVisit<SessionT>({
-    session: params.session ?? null,
+  await recordCloudBusinessPageVisit({
     pathKind: "community_funnel",
     communitySlug: params.communitySlug,
   });

@@ -62,8 +62,7 @@ function resolveBusinessVisitSource(): BusinessVisitSource {
   }
 }
 
-export async function recordCloudBusinessPageVisit<SessionT>(params: {
-  session?: SessionT | null;
+export async function recordCloudBusinessPageVisit(params: {
   pathKind: BusinessVisitPathKind;
   communitySlug?: string | null;
 }): Promise<void> {

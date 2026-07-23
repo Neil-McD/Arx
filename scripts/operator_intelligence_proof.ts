@@ -303,7 +303,7 @@ assert.match(
 );
 assert.match(
   cloudPublicFunnelGateway,
-  /recordCloudBusinessPageVisit<SessionT>\(\{[\s\S]*pathKind: "community_funnel"/,
+  /recordCloudBusinessPageVisit\(\{[\s\S]*pathKind: "community_funnel"/,
   "public community funnels should record first-party business visits",
 );
 assert.match(
@@ -318,8 +318,8 @@ assert.match(
 );
 assert.doesNotMatch(
   publicFunnelAnalyticsInsert,
-  /visitorKey\s*,/,
-  "community funnel analytics should not write raw visitor keys",
+  /visitorKey\s*,|userId/,
+  "community funnel analytics should not write raw visitor keys or user identity",
 );
 assert.match(
   cloudPublicFunnelGateway,

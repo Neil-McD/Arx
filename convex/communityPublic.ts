@@ -494,16 +494,6 @@ export const recordPublicFunnelVisitBySlug = mutation({
       .first()) as CommunityLike | null;
     if (!community) return { ok: false };
 
-    let userId: any = undefined;
-    const authSubject = String(args.authSubject ?? "").trim();
-    if (authSubject) {
-      const user = await ctx.db
-        .query("users")
-        .withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject))
-        .first();
-      userId = user?._id;
-    }
-
     const nowMs = Date.now();
     const visitorKey = String(args.visitorKey ?? "").trim();
     const visitorKeyHash = visitorKey ? await hashBusinessVisitorKey(visitorKey) : undefined;
@@ -524,7 +514,6 @@ export const recordPublicFunnelVisitBySlug = mutation({
       communityId: community._id,
       eventType: "funnel_visit",
       visitorKeyHash,
-      userId,
       createdAt: nowMs,
     });
     return { ok: true };
