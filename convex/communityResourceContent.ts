@@ -105,11 +105,7 @@ export async function writeCommunityResourceBodyContent(
     maxChars?: number;
     resourceUpdatedAt?: number;
   },
-): Promise<{
-  bodyMd: string | null;
-  bodyChars: number;
-  bodyHash: string | null;
-}> {
+): Promise<CommunityResourceLike> {
   const bodyMd = normalizeCommunityResourceBodyMd(
     args.bodyMd,
     args.maxChars ?? COMMUNITY_RESOURCE_BODY_DEFAULT_MAX_CHARS,
@@ -133,9 +129,9 @@ export async function writeCommunityResourceBodyContent(
       updatedAt: resourceUpdatedAt,
     });
     return {
-      bodyMd: null,
+      ...resource,
       bodyChars: 0,
-      bodyHash: null,
+      updatedAt: resourceUpdatedAt,
     };
   }
 
@@ -166,9 +162,11 @@ export async function writeCommunityResourceBodyContent(
     updatedAt: resourceUpdatedAt,
   });
   return {
+    ...resource,
     bodyMd,
     bodyChars,
     bodyHash,
+    updatedAt: resourceUpdatedAt,
   };
 }
 

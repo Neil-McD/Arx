@@ -9,6 +9,7 @@ import {
   syncCommunityResourceMemoryProjection,
 } from "../convex/communityResourceMemoryProjection.ts";
 import {
+  hydrateCommunityResourceBody,
   readCommunityResourceBodyMd,
   writeCommunityResourceBodyContent,
 } from "../convex/communityResourceContent.ts";
@@ -234,12 +235,21 @@ async function main() {
     createdAt: nowMs,
     updatedAt: nowMs,
   });
-  await writeCommunityResourceBodyContent(ctx, {
+  const preWriteBodyChars = Number((await db.get(resourceId))?.bodyChars ?? 0);
+  const firstBodyWrite = await writeCommunityResourceBodyContent(ctx, {
     communityId,
     resourceId,
     bodyMd: `${longPrefix}TAIL_ONE`,
     nowMs: ++nowMs,
   });
+  assert.equal(preWriteBodyChars, 0);
+  assert.equal(firstBodyWrite.bodyChars, `${longPrefix}TAIL_ONE`.length);
+  assert.equal(firstBodyWrite.bodyMd, `${longPrefix}TAIL_ONE`);
+  assert.equal(
+    (await hydrateCommunityResourceBody(ctx, firstBodyWrite))?.bodyMd,
+    `${longPrefix}TAIL_ONE`,
+    "the write result must already match the canonical parent projection",
+  );
   const sourceRef = buildCommunityResourceEvidenceRef(resourceId);
 
   await syncCommunityResourceMemoryProjection(ctx, (await db.get(resourceId))!, ++nowMs);

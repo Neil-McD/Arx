@@ -55,8 +55,8 @@ assert.match(
 );
 assert.match(
   content,
-  /export async function writeCommunityResourceBodyContent[\s\S]*ctx\.db\.insert\("communityResourceContents"[\s\S]*bodyMd,[\s\S]*bodyChars,[\s\S]*bodyHash,[\s\S]*await ctx\.db\.patch\(args\.resourceId[\s\S]*bodyChars,[\s\S]*updatedAt:/,
-  "resource body writes must persist markdown and hashes only in the split content table while leaving the list counter on the resource row",
+  /export async function writeCommunityResourceBodyContent[\s\S]*Promise<CommunityResourceLike>[\s\S]*ctx\.db\.insert\("communityResourceContents"[\s\S]*bodyMd,[\s\S]*bodyChars,[\s\S]*bodyHash,[\s\S]*await ctx\.db\.patch\(args\.resourceId[\s\S]*bodyChars,[\s\S]*updatedAt:[\s\S]*return \{[\s\S]*bodyMd,[\s\S]*bodyChars,[\s\S]*bodyHash,[\s\S]*updatedAt: resourceUpdatedAt/,
+  "resource body writes must persist canonical content, update the parent counter, and return the matching post-write resource",
 );
 assert.match(
   content,
@@ -72,6 +72,11 @@ assert.doesNotMatch(
   resources,
   /compactCommunityResourceBodyStorage/,
   "temporary body-storage compaction must be absent after canonical closure",
+);
+assert.doesNotMatch(
+  resources,
+  /await writeCommunityResourceBodyContent\([\s\S]{0,500}?\);\n\s*(?:\}\n\s*)?const hydrated = await hydrateCommunityResourceBody\([^,]+,\s*(created|updated)\)/,
+  "resource writes must not hydrate a stale pre-write parent snapshot",
 );
 assert.match(
   resources,

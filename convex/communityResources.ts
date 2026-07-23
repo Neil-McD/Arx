@@ -2961,16 +2961,17 @@ async function createPageFromChangesetOperation(args: {
   });
   const created = (await args.ctx.db.get(id as any)) as CommunityResourceLike | null;
   if (!created) throw new Error("community_resource_create_failed");
-  if (args.operation.body_md) {
-    await writeCommunityResourceBodyContent(args.ctx, {
-      communityId: args.communityId,
-      resourceId: created._id,
-      bodyMd: args.operation.body_md,
-      nowMs: args.nowMs,
-      maxChars: 20_000,
-    });
-  }
-  const hydrated = await hydrateCommunityResourceBody(args.ctx, created) ?? created;
+  const hydrated = args.operation.body_md
+    ? (
+        await writeCommunityResourceBodyContent(args.ctx, {
+          communityId: args.communityId,
+          resourceId: created._id,
+          bodyMd: args.operation.body_md,
+          nowMs: args.nowMs,
+          maxChars: 20_000,
+        })
+      )
+    : created;
   await syncCommunityResourceMemoryProjection(args.ctx, hydrated, args.nowMs);
   return hydrated;
 }
@@ -3037,16 +3038,17 @@ async function editPageFromChangesetOperation(args: {
   });
   const updated = (await args.ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
   if (!updated) throw new Error("community_resource_not_found");
-  if (bodyChanged) {
-    await writeCommunityResourceBodyContent(args.ctx, {
-      communityId: args.communityId,
-      resourceId: updated._id,
-      bodyMd: args.operation.body_md ?? null,
-      nowMs: args.nowMs,
-      maxChars: 20_000,
-    });
-  }
-  const hydrated = await hydrateCommunityResourceBody(args.ctx, updated) ?? updated;
+  const hydrated = bodyChanged
+    ? (
+        await writeCommunityResourceBodyContent(args.ctx, {
+          communityId: args.communityId,
+          resourceId: updated._id,
+          bodyMd: args.operation.body_md ?? null,
+          nowMs: args.nowMs,
+          maxChars: 20_000,
+        })
+      )
+    : await hydrateCommunityResourceBody(args.ctx, updated) ?? updated;
   await syncCommunityResourceMemoryProjection(args.ctx, hydrated, args.nowMs);
   return hydrated;
 }
@@ -5489,16 +5491,17 @@ export const writeCommunityResourceBuilderResource = mutation({
     });
     const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
     if (!created) throw new Error("community_resource_create_failed");
-    if (bodyMd) {
-      await writeCommunityResourceBodyContent(ctx, {
-        communityId: args.communityId,
-        resourceId: created._id,
-        bodyMd,
-        nowMs,
-        maxChars: 20_000,
-      });
-    }
-    const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
+    const hydrated = bodyMd
+      ? (
+          await writeCommunityResourceBodyContent(ctx, {
+            communityId: args.communityId,
+            resourceId: created._id,
+            bodyMd,
+            nowMs,
+            maxChars: 20_000,
+          })
+        )
+      : created;
     await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
     return {
       ok: true,
@@ -5666,16 +5669,17 @@ export const editCommunityResourceBuilderResource = mutation({
     });
     const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
     if (!updated) throw new Error("community_resource_not_found");
-    if (bodyChanged) {
-      await writeCommunityResourceBodyContent(ctx, {
-        communityId: updated.communityId,
-        resourceId: updated._id,
-        bodyMd: nextBodyMd,
-        nowMs,
-        maxChars: 20_000,
-      });
-    }
-    const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
+    const hydrated = bodyChanged
+      ? (
+          await writeCommunityResourceBodyContent(ctx, {
+            communityId: updated.communityId,
+            resourceId: updated._id,
+            bodyMd: nextBodyMd,
+            nowMs,
+            maxChars: 20_000,
+          })
+        )
+      : await hydrateCommunityResourceBody(ctx, updated) ?? updated;
     await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
     return {
       ok: true,
@@ -8240,29 +8244,23 @@ export const patchCommunitySourceIngestionInternal = internalMutation({
         : {}),
       updatedAt: nowMs,
     };
-    if (Object.prototype.hasOwnProperty.call(args, "bodyMd")) {
-      const normalizedBodyMd = normalizeCommunityResourceBodyMd(
-        args.bodyMd,
-        COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS,
-      );
-      patch.bodyChars = normalizedBodyMd ? normalizedBodyMd.trim().length : 0;
-    }
     if (Object.prototype.hasOwnProperty.call(args, "url")) {
       patch.url = normalizeOptionalUrl(args.url);
     }
     await ctx.db.patch(existing._id as any, patch);
     const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
     if (!updated) return null;
-    if (Object.prototype.hasOwnProperty.call(args, "bodyMd")) {
-      await writeCommunityResourceBodyContent(ctx, {
-        communityId: updated.communityId,
-        resourceId: updated._id,
-        bodyMd: args.bodyMd,
-        nowMs,
-        maxChars: COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS,
-      });
-    }
-    const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
+    const hydrated = Object.prototype.hasOwnProperty.call(args, "bodyMd")
+      ? (
+          await writeCommunityResourceBodyContent(ctx, {
+            communityId: updated.communityId,
+            resourceId: updated._id,
+            bodyMd: args.bodyMd,
+            nowMs,
+            maxChars: COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS,
+          })
+        )
+      : await hydrateCommunityResourceBody(ctx, updated) ?? updated;
     await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
     return await mapCommunityResourceRow(ctx, hydrated);
   },
@@ -9705,16 +9703,17 @@ export const saveCommunityResource = mutation({
       });
       const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
       if (!updated) throw new Error("community_resource_not_found");
-      if (bodyChanged) {
-        await writeCommunityResourceBodyContent(ctx, {
-          communityId: updated.communityId,
-          resourceId: updated._id,
-          bodyMd: nextBodyMd,
-          nowMs,
-          maxChars: 20_000,
-        });
-      }
-      const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
+      const hydrated = bodyChanged
+        ? (
+            await writeCommunityResourceBodyContent(ctx, {
+              communityId: updated.communityId,
+              resourceId: updated._id,
+              bodyMd: nextBodyMd,
+              nowMs,
+              maxChars: 20_000,
+            })
+          )
+        : await hydrateCommunityResourceBody(ctx, updated) ?? updated;
       await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
       return await mapCommunityResourceRow(ctx, hydrated);
     }
@@ -9805,16 +9804,17 @@ export const saveCommunityResource = mutation({
     });
     const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
     if (!created) throw new Error("community_resource_create_failed");
-    if (bodyMd) {
-      await writeCommunityResourceBodyContent(ctx, {
-        communityId: community._id,
-        resourceId: created._id,
-        bodyMd,
-        nowMs,
-        maxChars: 20_000,
-      });
-    }
-    const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
+    const hydrated = bodyMd
+      ? (
+          await writeCommunityResourceBodyContent(ctx, {
+            communityId: community._id,
+            resourceId: created._id,
+            bodyMd,
+            nowMs,
+            maxChars: 20_000,
+          })
+        )
+      : created;
     await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
     const createdModule = moduleId
       ? ((await ctx.db.get(moduleId as any)) as CommunityResourceModuleLike | null)
@@ -9893,14 +9893,15 @@ export const createCommunityResourcePageDraftFromSource = mutation({
     });
     const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
     if (!created) throw new Error("community_resource_create_failed");
-    await writeCommunityResourceBodyContent(ctx, {
-      communityId: source.communityId,
-      resourceId: created._id,
-      bodyMd: buildPageDraftBodyFromSource(source),
-      nowMs,
-      maxChars: 20_000,
-    });
-    const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
+    const hydrated = (
+      await writeCommunityResourceBodyContent(ctx, {
+        communityId: source.communityId,
+        resourceId: created._id,
+        bodyMd: buildPageDraftBodyFromSource(source),
+        nowMs,
+        maxChars: 20_000,
+      })
+    );
     await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
     return await mapCommunityResourceRow(ctx, hydrated);
   },
