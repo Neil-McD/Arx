@@ -19,7 +19,6 @@ const communityCore = read("convex/communityCore.ts");
 const interactions = read("convex/communityInteractions.ts");
 const backfill = read("convex/communityInteractionBackfill.ts");
 const legacyBridge = read("convex/communityInteractionLegacyBridge.ts");
-const legacyAttachments = read("convex/communityInteractionLegacyAttachments.ts");
 const schema = read("convex/schema.ts");
 const emailDigests = read("convex/emailDigests.ts");
 const communityPublic = read("convex/communityPublic.ts");
@@ -47,11 +46,12 @@ assert.doesNotMatch(
 );
 for (const needle of [
   "| R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` |",
-  "| R-004 | Legacy attachment hydration fallback | `KEEP TEMPORARILY` |",
   "| R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` |",
   "| R-008 | Weekly community digest retention email | `KEEP (MVP core)` |",
   "| R-011 | Maintenance and account-lifecycle reachability for historical legacy rows | `KEEP TEMPORARILY` |",
   "**C3.2D2B complete:**",
+  "**C3.2E1 complete:**",
+  "R-004: four exact legacy attachment payloads were preserved as four canonical attachment rows",
   "Counts are evidence, not expectations; no test should freeze them.",
   "No migration should be implemented for a feature that should be deleted.",
 ]) {
@@ -69,6 +69,9 @@ for (const path of [
   "shared/useCommunityChatViewport.ts",
   "convex/communityActivity.ts",
   "convex/communityFeatured.ts",
+  "convex/communityInteractionLegacyAttachments.ts",
+  "convex/communityInteractionAttachmentCutover.ts",
+  "convex/communityInteractionAttachmentCutover.test.ts",
   "convex/communityInteractionResidueCleanup.ts",
   "convex/communityInteractionResidueCleanup.test.ts",
 ] as const) {
@@ -123,10 +126,10 @@ assert.match(
   /getLegacyChatLinkByMessage[\s\S]*communityInteractionLegacyChatLinks[\s\S]*insertLegacyChatLinkIfMissing/,
   "legacy mapping access should remain isolated for migration",
 );
-assert.match(
-  legacyAttachments,
-  /Migration-only bridge[\s\S]*communityInteractionAttachments/,
-  "legacy attachment fallback should remain explicitly migration-only",
+assert.doesNotMatch(
+  interactions,
+  /communityInteractionLegacyAttachments|resolveLegacyMessageAttachments/,
+  "canonical interaction reads should not retain the deleted attachment fallback",
 );
 assert.match(
   schema,
@@ -208,8 +211,8 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   generatedApi,
-  /communityInteractionResidueCleanup/,
-  "the temporary destructive function identity should be deleted",
+  /communityInteractionResidueCleanup|communityInteractionAttachmentCutover|communityInteractionLegacyAttachments/,
+  "temporary cleanup and deleted attachment fallback function identities should be absent",
 );
 
 console.log("community_interaction_migration_residue_proof: ok");

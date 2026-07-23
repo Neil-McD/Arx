@@ -27,7 +27,6 @@ import {
   normalizeInteractionAttachmentInputs,
   type NormalizedInteractionAttachmentInput,
 } from "./communityInteractionAttachmentBridge";
-import { resolveLegacyMessageAttachments } from "./communityInteractionLegacyAttachments";
 import {
   normalizeCommunitySourcePolicyString,
   requireSafeCommunitySourceFetcherEndpoint,
@@ -806,10 +805,7 @@ async function mapRootBundle(
   const embeds = await listEmbedsForRoot(ctx, root._id);
   const mentions = await listMentionsForRoot(ctx, root._id);
   const legacyLink = await getLegacyChatLinkByRoot(ctx, root._id);
-  const canonicalAttachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, rootId: root._id });
-  const attachments = canonicalAttachments.length > 0
-    ? canonicalAttachments
-    : await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
+  const attachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, rootId: root._id });
   const publicActorUserId = root.actorUserId
     ? await resolvePublicUserId(ctx, root.actorUserId, userIdCache)
     : null;
@@ -869,10 +865,7 @@ async function mapReplyBundle(
   const embeds = await listEmbedsForReply(ctx, reply._id);
   const mentions = await listMentionsForReply(ctx, reply._id);
   const legacyLink = await getLegacyChatLinkByReply(ctx, reply._id);
-  const canonicalAttachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, replyId: reply._id });
-  const attachments = canonicalAttachments.length > 0
-    ? canonicalAttachments
-    : await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
+  const attachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, replyId: reply._id });
   const publicActorUserId = reply.actorUserId
     ? await resolvePublicUserId(ctx, reply.actorUserId, userIdCache)
     : null;

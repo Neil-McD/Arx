@@ -71,7 +71,7 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 
 ### B — migrate, observe zero, then delete
 
-- legacy interaction writer/link/attachment/backfill/read stack;
+- legacy interaction writer/link/backfill/read stack;
 - inline resource body fields and compactor;
 - raw retrieval query fields and legacy evidence states;
 - duplicate public Convex aliases and legacy MCP wire names;

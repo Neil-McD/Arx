@@ -116,8 +116,8 @@ export function bundleText(blocks: CommunityInteractionContentBlock[], fallback:
   return text || fallback;
 }
 
-// The projection flattens legacy attachments to a "Shared attachment: name" text line. Now that the
-// real attachment renders, drop that redundant summary line from the displayed body.
+// Canonical attachment rows render the real attachment. Drop the redundant
+// "Shared attachment: name" summary from migrated message text.
 export function stripSharedAttachmentSummary(text: string, hasAttachments: boolean): string {
   if (!hasAttachments) return text;
   return text

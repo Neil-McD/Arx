@@ -289,9 +289,9 @@ Rules:
 - reply reads return only live `community` and `public` replies
 - reply reads return only one-level drawer replies
 - read APIs do not use legacy chat tables as source-of-truth
-- read bundles prefer canonical `communityInteractionAttachments` rows before using legacy attachment fallback
-- migration-only legacy attachment hydration may resolve linked legacy chat attachments only when canonical attachment rows are absent, until canonical attachment backfill is complete
-- migration-only legacy attachment hydration lives outside the canonical interaction core in `communityInteractionLegacyAttachments`
+- read bundles load attachments only from canonical `communityInteractionAttachments` rows
+- the four exact historical attachment payloads are preserved as four canonical rows that reference their existing storage objects
+- the legacy attachment read fallback is deleted after the expectation-locked four-row cutover and zero-work replay
 - canonical attachment row reads and storage URL resolution live outside the canonical interaction core in `communityInteractionAttachmentBridge`
 - viewer reaction state must be loaded only for the visible root/reply target ids, never by scanning all reactions for a viewer
 - reaction summary updates must not rescan every reaction on a target
@@ -413,6 +413,9 @@ Rules:
 - canonical edit/delete/reaction operations remain the visible product actions
 - authenticated typing presence and attachment upload URL generation remain
   because the canonical composer still uses them
+- canonical root and reply reads load attachments only from
+  `communityInteractionAttachments`; historical attachment payloads remain
+  migration input but have no live read fallback
 - the unconsumed ambient activity timeline, read API, browser gateway, and
   best-effort writers are deleted; its historical table remains reachable only
   through lifecycle policy until retention is decided

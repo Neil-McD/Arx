@@ -62,10 +62,20 @@ edges, temporary cleanup function, and generated function identity are absent.
 All five referenced messages, links, canonical targets, four historical
 attachment payloads, and eight canonical reactions remain.
 
+C3.2E1 preserves the four exact historical attachment payloads as four
+canonical `communityInteractionAttachments` rows that reference the existing
+storage objects. An expectation-locked, staging-only mutation created one row
+per target, then replayed with zero work. Independent postflight proved exact
+message/link/target/storage parity and resolvable URLs. Canonical root and reply
+reads now load attachments only from canonical rows; the legacy read fallback,
+temporary mutation/test, and generated function identities are absent. No
+legacy message, link, thread, activity row, or storage object was mutated or
+deleted.
+
 ## Development Staging Snapshot
 
-Read-only postflight captured on 2026-07-23 from
-`dev:quick-porcupine-949` at cleanup commit `1f5663ec`:
+Read-only attachment postflight captured on 2026-07-23 from
+`dev:quick-porcupine-949` at migration checkpoint `bdf7aaf7`:
 
 | Shape | Count | Meaning |
 | --- | ---: | --- |
@@ -75,8 +85,8 @@ Read-only postflight captured on 2026-07-23 from
 | canonical roots / replies | 54 / 23 | current interaction authority |
 | canonical-only roots / replies | 3 / 7 | cannot be represented by a legacy-only reader |
 | canonical content blocks | 76 | typed content projection |
-| legacy attachment-bearing messages | 4 | all four still need canonical attachment rows |
-| canonical attachment rows | 0 | legacy attachment fallback is still active for four targets |
+| legacy attachment-bearing messages | 4 | preserved historical migration input; no live read fallback |
+| canonical attachment rows | 4 | one exact row per historical attachment target |
 | legacy / canonical reactions | 0 / 8 | only canonical reaction state remains |
 | legacy featured-message pointers | 0 | retired product state is drained |
 
@@ -94,8 +104,7 @@ three legacy reactions. No entry or switch created legacy chat state.
 
 | ID | Job | Classification | Current owner and first-party path | Delete condition |
 | --- | --- | --- | --- | --- |
-| R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `communityInteractionLegacyBridge.ts` | Reaction/featured decisions are closed; delete after the four attachments are resolved, no canonical read needs legacy IDs, and the backfill replay reports zero work. |
-| R-004 | Legacy attachment hydration fallback | `KEEP TEMPORARILY` | `communityInteractionLegacyAttachments.ts` behind canonical-first reads | Backfill the four observed targets, prove canonical rendering parity, then delete the fallback module and lookup. |
+| R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `communityInteractionLegacyBridge.ts` | Attachment/reaction/featured decisions are closed and canonical reads no longer need legacy IDs; delete after the bounded historical backfill replay reports zero work and its integrity audit passes. |
 | R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` | `communityInteractionBackfill.ts` | Keep only until all 67 historical messages and retained attachment state pass a final bounded replay and integrity audit. |
 | R-008 | Weekly community digest retention email | `KEEP (MVP core)` | `emailDigests.ts` reads bounded canonical `communityInteractionRoots` and `communityInteractionReplies` | Legacy chat dependency closed by C3.2D1. Reconsider the product job only if the MVP return-loop requirement changes. |
 | R-011 | Maintenance and account-lifecycle reachability for historical legacy rows | `KEEP TEMPORARILY` | `communityMaintenance.ts`, `accountLifecyclePolicy.ts` | Replace only after canonical privacy/anonymization handling and final historical deletion; do not weaken shared-history retention to simplify migration. |
@@ -125,6 +134,7 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
   featured-message/reaction projection, response field, and visitor adapter.
 - R-009/R-010 storage: two featured pointers, three legacy reactions, both
   schema tables, five indexes, maintenance handling, and lifecycle edges.
+- R-004: four exact legacy attachment payloads were preserved as four canonical attachment rows; the live legacy hydration fallback, temporary cutover function/test, and generated identities were deleted.
 - Ambient activity timeline: browser timeline, public read API, gateway, CSS,
   and best-effort writers. Historical rows remain lifecycle-reachable pending
   retention policy.
@@ -134,8 +144,8 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
 - Canonical interaction modules must not directly query or insert legacy chat
   tables.
 - The canonical composer must not create legacy messages, threads, or links.
-- Canonical reads prefer canonical attachment rows; the legacy fallback is
-  migration-only.
+- Canonical reads load attachments only from canonical rows; no legacy
+  attachment read fallback remains.
 - The normal web interaction gateway must not call legacy chat mutations.
 - Missing canonical writer or reply identity fails closed; it never silently
   falls back from the canonical projection.
@@ -155,11 +165,12 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
 5. **C3.2D2B complete:** delete the quarantined R-009 pointer rows and R-010
    legacy reaction rows, then remove their tables, maintenance handling, and
    lifecycle edges.
-6. Resolve the four retained attachment targets and delete their fallback
-   immediately after explicit preservation or deletion.
+6. **C3.2E1 complete:** preserve the four exact attachment targets as canonical
+   rows, prove exact parity and zero-work replay, then delete their live read
+   fallback and temporary migration surface.
 7. Run the bounded historical backfill/integrity replay, observe zero legacy
    reads and writes, then delete the link/backfill/table residue and update
    lifecycle policy.
 
-This map authorizes no attachment, link, backfill, activity-history, message,
-thread, or remaining schema-table deletion.
+This map authorizes no further attachment, link, backfill, activity-history,
+message, thread, or remaining schema-table deletion.
