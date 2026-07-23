@@ -12,7 +12,6 @@ import { formatCompactStat } from "../../../../shared/communityFunnelUi";
 import type { CommunityFunnelHeroMediaKind } from "../../../../shared/communityTypes";
 import {
   buildWebCommunityVisitorProjection,
-  type VisitorFeaturedMessageLike,
   type VisitorHostLike,
 } from "../controllers/buildWebCommunityVisitorProjection";
 import {
@@ -60,7 +59,6 @@ type WebCommunityVisitorSurfaceProps = {
   heroMediaUrl: string | null;
   heroArtImageUrl?: string | null;
   heroArtImageStyle?: CSSProperties | null;
-  featuredMessages: VisitorFeaturedMessageLike[] | null;
   stats: WebCommunityVisitorSurfaceStats;
   memoryOverview: CloudCommunityPolynetOverview | null;
   pricingLabel: string;
@@ -159,10 +157,9 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
         communityName: title,
         aboutText,
         host,
-        featuredMessages: props.featuredMessages,
         communityCreatedAt: props.communityCreatedAt,
       }),
-    [title, aboutText, host, props.featuredMessages, props.communityCreatedAt],
+    [title, aboutText, host, props.communityCreatedAt],
   );
 
   const presenceFaces = useMemo(
@@ -189,9 +186,7 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
 
   const ropePrompt = props.isMobileLayout
     ? "Join to participate"
-    : props.featuredMessages?.length
-      ? `Reply to ${profilesByUserId["visitor-sender-0"]?.display_name ?? "the room"}, ask the room anything…`
-      : "This is where you'd talk — and where the community answers you, any hour…";
+    : "This is where you'd talk — and where the community answers you, any hour…";
 
   /* The frost: everything in the feed below the pinned host post sits behind
      glass. Measured against the real DOM (static content, remeasured on
@@ -221,8 +216,7 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
         ? firstGroup.getBoundingClientRect().bottom + 6
         : feedRect.top;
       const top = Math.max(feedRect.top, groupBottom) - shellRect.top;
-      /* The frost fills everything below the pinned post — real featured
-         rows behind it when they exist, the ghost thread when they don't. */
+      /* The frost fills everything below the pinned post and the ghost thread. */
       const height = feedRect.bottom - shellRect.top - top;
       if (height < 48) {
         setFrostRect(null);

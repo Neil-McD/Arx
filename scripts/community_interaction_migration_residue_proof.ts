@@ -22,6 +22,10 @@ const legacyAttachments = read("convex/communityInteractionLegacyAttachments.ts"
 const schema = read("convex/schema.ts");
 const emailDigests = read("convex/emailDigests.ts");
 const communityPublic = read("convex/communityPublic.ts");
+const generatedApi = read("convex/_generated/api.d.ts");
+const visitorProjection = read("apps/web/src/controllers/buildWebCommunityVisitorProjection.ts");
+const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
+const publicFunnel = read("apps/web/src/components/WebPublicCommunityFunnel.tsx");
 const maintenance = read("convex/communityMaintenance.ts");
 const lifecycle = read("convex/accountLifecyclePolicy.ts");
 
@@ -45,8 +49,8 @@ for (const needle of [
   "| R-004 | Legacy attachment hydration fallback | `KEEP TEMPORARILY` |",
   "| R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` |",
   "| R-008 | Weekly community digest retention email | `KEEP (MVP core)` |",
-  "| R-009 | Public featured-message system backed by legacy message pointers | `DECISION REQUIRED` |",
-  "| R-010 | Legacy reaction rows | `KEEP TEMPORARILY` |",
+  "| R-009 | Historical featured-message pointer rows and table | `DELETE CANDIDATE` |",
+  "| R-010 | Legacy reaction rows and table | `DELETE CANDIDATE` |",
   "| R-011 | Maintenance and account-lifecycle reachability for historical legacy rows | `KEEP TEMPORARILY` |",
   "Counts are evidence, not expectations; no test should freeze them.",
   "No migration should be implemented for a feature that should be deleted.",
@@ -64,6 +68,7 @@ for (const path of [
   "shared/useCommunityChatRealtime.ts",
   "shared/useCommunityChatViewport.ts",
   "convex/communityActivity.ts",
+  "convex/communityFeatured.ts",
 ] as const) {
   assert.equal(existsSync(join(root, path)), false, `${path} should be deleted`);
 }
@@ -123,7 +128,7 @@ assert.match(
 );
 assert.match(
   schema,
-  /communityChatThreads: defineTable[\s\S]*communityChatMessages: defineTable[\s\S]*communityActivityEvents: defineTable[\s\S]*communityMessageReactions: defineTable[\s\S]*communityInteractionLegacyChatLinks: defineTable/,
+  /communityChatThreads: defineTable[\s\S]*communityChatMessages: defineTable[\s\S]*communityActivityEvents: defineTable[\s\S]*communityMessageReactions: defineTable[\s\S]*communityFeaturedMessages: defineTable[\s\S]*communityInteractionLegacyChatLinks: defineTable/,
   "historical legacy and activity rows should remain schema-reachable",
 );
 assert.match(
@@ -141,10 +146,33 @@ assert.doesNotMatch(
   /communityChatThreads|communityChatMessages|contentJson/,
   "the weekly digest should not retain legacy chat authority",
 );
-assert.match(
+for (const [label, source] of [
+  ["public community API", communityPublic],
+  ["generated API", generatedApi],
+  ["visitor projection", visitorProjection],
+  ["visitor surface", visitorSurface],
+  ["public funnel", publicFunnel],
+] as const) {
+  assert.doesNotMatch(
+    source,
+    /communityFeatured|communityFeaturedMessages|featured_messages|featuredMessages|VisitorFeaturedMessage|visitor-featured/,
+    `${label} should not retain the deleted featured-message product surface`,
+  );
+}
+assert.doesNotMatch(
   communityPublic,
-  /communityFeaturedMessages[\s\S]*row\.messageId[\s\S]*communityMessageReactions/,
-  "the undecided featured-message legacy dependency should remain explicit",
+  /communityChatMessages|communityMessageReactions|extractMessageText/,
+  "the public funnel should not read legacy chat or reaction rows",
+);
+assert.match(
+  visitorProjection,
+  /visitor-pinned-note[\s\S]*VISITOR_HOST_USER_ID/,
+  "the visitor projection should retain the founder introduction",
+);
+assert.match(
+  visitorSurface,
+  /CommunityVisitorGhostThread[\s\S]*CommunityVisitorGate/,
+  "the public funnel should retain its ghost conversation and join gate",
 );
 assert.match(
   maintenance,

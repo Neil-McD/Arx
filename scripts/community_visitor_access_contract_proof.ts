@@ -41,8 +41,8 @@ assert.match(
 );
 assert.match(
   accessQuery,
-  /if \(userId\) \{[\s\S]*communityMemberships[\s\S]*by_community_user/,
-  "membership lookup must only run for identified callers",
+  /if \(userId\) \{[\s\S]*getUniqueCommunityMembershipByPair\(\{[\s\S]*communityId: community\._id,[\s\S]*userId/,
+  "membership lookup must only run for identified callers through the canonical unique-pair authority",
 );
 assert.match(
   accessQuery,

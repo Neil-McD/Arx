@@ -60,19 +60,6 @@ export type PublicCommunityFunnelCommunityLike = {
     avatar_focus_y?: number | null;
     avatar_zoom?: number | null;
   } | null;
-  featured_messages?: Array<{
-    id: string;
-    body: string;
-    created_at?: string | null;
-    sender?: {
-      display_name?: string | null;
-      avatar_url?: string | null;
-      avatar_focus_x?: number | null;
-      avatar_focus_y?: number | null;
-      avatar_zoom?: number | null;
-    } | null;
-    reactions?: Array<{ emoji: string; count: number }> | null;
-  }> | null;
   funnel?: CommunityFunnelConfig | null;
 };
 
@@ -342,7 +329,6 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       heroMediaUrl={funnel?.hero_media_url ?? null}
       heroArtImageUrl={actionCardArt.imageUrl}
       heroArtImageStyle={actionCardArt.imageStyle ?? null}
-      featuredMessages={publicCommunity?.featured_messages ?? null}
       stats={{
         onlineCount,
         onlineFaces,

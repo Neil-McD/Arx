@@ -1,7 +1,6 @@
-/* Visitor-mode projection builder: maps the PUBLIC data plane (pinned host
-   note + host-featured messages + faces) onto the REAL interaction-feed
-   bundle shapes, so /c/:slug renders through the same components a member
-   sees. Pure function of its inputs — no queries, no state. */
+/* Visitor-mode projection builder: maps the public host note and face onto the
+   real interaction-feed bundle shape, so /c/:slug renders through the same
+   components a member sees. Pure function of its inputs — no queries, no state. */
 import type {
   CommunityInteractionContentBlock,
   CommunityInteractionRootBundle,
@@ -9,20 +8,6 @@ import type {
 import type { UserProfile } from "../../../../shared/communityTypes";
 
 export const VISITOR_HOST_USER_ID = "visitor-host";
-
-export type VisitorFeaturedMessageLike = {
-  id: string;
-  body: string;
-  created_at?: string | null;
-  sender?: {
-    display_name?: string | null;
-    avatar_url?: string | null;
-    avatar_focus_x?: number | null;
-    avatar_focus_y?: number | null;
-    avatar_zoom?: number | null;
-  } | null;
-  reactions?: Array<{ emoji: string; count: number }> | null;
-};
 
 export type VisitorHostLike = {
   display_name: string | null;
@@ -36,7 +21,6 @@ type BuildVisitorProjectionArgs = {
   communityName: string;
   aboutText: string;
   host: VisitorHostLike | null;
-  featuredMessages: VisitorFeaturedMessageLike[] | null;
   communityCreatedAt: string | null;
 };
 
@@ -60,12 +44,10 @@ function markdownBlock(rootId: string, text: string): CommunityInteractionConten
 
 function visitorRoot(args: {
   id: string;
-  kind: "announcement" | "discussion";
   actorUserId: string;
   body: string;
   createdAt: string;
   pinnedAt: string | null;
-  reactions: Array<{ emoji: string; count: number }>;
 }): CommunityInteractionRootBundle {
   return {
     deduped: false,
@@ -75,13 +57,13 @@ function visitorRoot(args: {
       actor_type: "human",
       actor_user_id: args.actorUserId,
       actor_agent_key: null,
-      kind: args.kind,
+      kind: "announcement",
       status: "live",
       visibility_scope: "public",
       title: null,
       content_summary: args.body,
       reply_count: 0,
-      reaction_summary: args.reactions.map((entry) => ({ emoji: entry.emoji, count: entry.count })),
+      reaction_summary: [],
       viewer_emojis: [],
       idempotency_key: args.id,
       last_reply_at: null,
@@ -118,50 +100,19 @@ export function buildWebCommunityVisitorProjection(args: BuildVisitorProjectionA
     avatar_zoom: args.host?.avatar_zoom ?? null,
   };
 
-  const featured = args.featuredMessages ?? [];
-  const oldestFeaturedAt = featured
-    .map((entry) => entry.created_at)
-    .filter((value): value is string => Boolean(value))
-    .sort()[0] ?? null;
-
-  const pinnedNoteAt = args.communityCreatedAt ?? oldestFeaturedAt ?? "";
+  const pinnedNoteAt = args.communityCreatedAt ?? "";
   const aboutText = args.aboutText.trim();
   if (aboutText && pinnedNoteAt) {
     roots.push(
       visitorRoot({
         id: "visitor-pinned-note",
-        kind: "announcement",
         actorUserId: VISITOR_HOST_USER_ID,
         body: aboutText,
         createdAt: pinnedNoteAt,
         pinnedAt: pinnedNoteAt,
-        reactions: [],
       }),
     );
   }
-
-  featured.forEach((entry, index) => {
-    const senderId = `visitor-sender-${index}`;
-    profilesByUserId[senderId] = {
-      user_id: senderId,
-      display_name: entry.sender?.display_name?.trim() || "Member",
-      avatar_url: entry.sender?.avatar_url ?? null,
-      avatar_focus_x: entry.sender?.avatar_focus_x ?? null,
-      avatar_focus_y: entry.sender?.avatar_focus_y ?? null,
-      avatar_zoom: entry.sender?.avatar_zoom ?? null,
-    };
-    roots.push(
-      visitorRoot({
-        id: `visitor-featured-${entry.id}`,
-        kind: "discussion",
-        actorUserId: senderId,
-        body: entry.body,
-        createdAt: entry.created_at ?? "",
-        pinnedAt: null,
-        reactions: entry.reactions ?? [],
-      }),
-    );
-  });
 
   return { roots, profilesByUserId };
 }
