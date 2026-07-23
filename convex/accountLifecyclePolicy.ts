@@ -6,11 +6,11 @@
  * mutation stays quarantined until versioned executors satisfy this contract.
  */
 
-export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v5" as const;
+export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v6" as const;
 
 export const ACCOUNT_LIFECYCLE_SCHEMA_BASELINE = Object.freeze({
-  tableCount: 127,
-  directUserEdgeCount: 120,
+  tableCount: 125,
+  directUserEdgeCount: 118,
   opaqueFieldCount: 26,
   storageFieldCount: 7,
 });
@@ -459,7 +459,6 @@ const policyGroups: readonly PolicyGroup[] = [
       "communityOnboardingConfigs",
       "communityChatMessages",
       "communityActivityEvents",
-      "communityFeaturedMessages",
       "communityInteractionRoots",
       "communityInteractionReplies",
       "communityInteractionContentBlocks",
@@ -500,7 +499,7 @@ const policyGroups: readonly PolicyGroup[] = [
       executorOwner: "community_interactions",
       proof: "personal reactions are removed and community aggregates are deterministically recomputed",
     },
-    tables: ["communityMessageReactions", "communityInteractionReactions", "communityAiFeedReactions"],
+    tables: ["communityInteractionReactions", "communityAiFeedReactions"],
   },
   {
     policy: {
@@ -648,7 +647,6 @@ export const ACCOUNT_LIFECYCLE_UNINDEXED_EDGE_POLICIES: Readonly<
   "communityBlocks.createdByUserId": { lookup: "index_required", reason: "moderation authorship requires a bounded lookup" },
   "platformBusinessVisits.userId": { lookup: "index_required", reason: "visit aggregation and pseudonymization require bounded lookup" },
   "communityActivityEvents.actorUserId": { lookup: "index_required", reason: "community activity attribution must detach without scanning communities" },
-  "communityFeaturedMessages.featuredByUserId": { lookup: "index_required", reason: "feature attribution must detach without scanning messages" },
   "communityInteractionAttachments.createdByUserId": { lookup: "index_required", reason: "shared attachment attribution requires bounded detachment" },
   "communityInteractionContentBlocks.mentionedUserId": { lookup: "index_required", reason: "deleted-user mentions require bounded tombstone projection" },
   "communityMentionBroadcasts.actorUserId": { lookup: "index_required", reason: "broadcast actor attribution requires bounded detachment" },

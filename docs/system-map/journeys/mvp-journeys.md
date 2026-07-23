@@ -60,11 +60,13 @@ community route -> current access bundle -> canonical interaction/resource opera
 ```
 
 - Authority: each operation re-resolves community access and role.
-- Good: canonical interaction substrate and resource/evidence coupling are explicit.
-- Gaps: the normal canonical chat surface is still gated by a legacy
-  thread/message/reaction preload; weekly digest and public featured messages
-  remain legacy-backed; privacy purge and membership departure semantics are
-  incomplete. Resource body authority is closed.
+- Good: canonical interaction substrate and resource/evidence coupling are
+  explicit; normal interaction reads/writes and weekly digest activity are
+  canonical; the obsolete public featured surface and its stored pointers are
+  deleted.
+- Gaps: four historical attachment payloads still use migration-only fallback;
+  privacy purge and membership departure semantics are incomplete. Resource
+  body authority is closed.
 
 ## 6. Personal agent acts under one community lens
 

@@ -22,12 +22,11 @@ activity timeline and its writers are deleted while its historical rows remain
 lifecycle-reachable.
 
 Development staging currently has 67 legacy messages with 67 valid mapping
-links, four legacy attachment payloads without canonical attachment rows, three
-legacy reactions, and two featured-message pointers. It also has three
-canonical-only roots and seven canonical-only replies. The weekly digest still
-reads up to 500 legacy messages, so canonical-only activity can be omitted.
-Whether the weekly digest and featured-message system belong in MVP must be
-decided before either is migrated.
+links and four legacy attachment payloads without canonical attachment rows.
+The three legacy reactions and two featured-message pointers are deleted, while
+all eight canonical reactions remain. The weekly digest is retained as an MVP
+return loop and reads bounded canonical roots and replies. The public
+featured-message product was rejected rather than migrated.
 
 ## Direct messages
 
@@ -58,15 +57,15 @@ Canonical moderation event types include privacy purge request/completion states
 | canonical community interaction substrate | `KEEP (MVP core)` | `HARDEN` | 0 | core participation and evidence source |
 | legacy message writer and mutation surface | `DELETE (deferred/dead)` complete | deleted after preload removal and first-party no-call proof | 9 | historical rows do not require a live writer |
 | legacy mapping/backfill/attachment bridge | `KEEP TEMPORARILY` | `MIGRATE_THEN_DELETE` | 3 | 67 mappings are valid; four attachment targets still need canonical rows |
-| weekly digest reading legacy chat | `DECISION REQUIRED` | `DELETE` or canonicalize | 9 | not named in MVP must-keep scope and currently omits canonical-only activity |
-| public featured legacy messages | `DECISION REQUIRED` | `DELETE` or canonicalize | 8 | two rows render, but no first-party feature/unfeature caller was found |
-| no-cursor “most recently updated” digest selection | `DECISION REQUIRED` | delete with digest or `BOUND`, `HARDEN` | 8 | do not optimize a scheduler for an optional product job |
+| weekly digest reading legacy chat | `DELETE (deferred/dead)` complete | canonical reader retained; legacy reader deleted | 9 | retained product job now sees current interaction truth |
+| public featured legacy messages | `DELETE (deferred/dead)` complete | live surface, two pointers, schema, and lifecycle residue deleted | 8 | founder introduction and gate cover the visitor job without a second curation system |
+| no-cursor “most recently updated” digest selection | `KEEP (MVP core)` | `BOUND`, `HARDEN` | 8 | retained return loop still needs eventual-service proof |
 | DM participant departure state without a leave flow | `KEEP (MVP core)` | `HARDEN` | 7 | schema state with no user lifecycle owner |
 | delete whole DM conversation on one account deletion | `KEEP (MVP core)` | `HARDEN` | 10 | destroys other-party history |
 | canonical privacy purge event vocabulary without workflow | `KEEP (MVP core)` | `HARDEN`, `MIGRATE_THEN_DELETE` | 8 | accepted purge policy has no transition owner; vocabulary alone creates false assurances |
 
 ## Migration order
 
-Decide whether digest and featured messages should exist -> migrate only retained attachment/reaction/featured
-history -> replay and audit historical backfill -> observe zero legacy reads and
-writes -> delete legacy APIs, links, tables, and lifecycle residue.
+Resolve the four retained attachment payloads -> replay and audit historical
+backfill -> observe zero legacy reads and writes -> delete legacy links,
+helpers, tables, and lifecycle residue.

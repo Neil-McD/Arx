@@ -1542,27 +1542,6 @@ export default defineSchema({
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_dedupeKey", ["communityId", "dedupeKey"]),
 
-  communityMessageReactions: defineTable({
-    messageId: v.id("communityChatMessages"),
-    userId: v.id("users"),
-    emoji: v.string(),
-    createdAt: v.number(),
-  })
-    .index("by_message", ["messageId"])
-    .index("by_message_user_emoji", ["messageId", "userId", "emoji"])
-    .index("by_user", ["userId"]),
-
-  /* Host-curated messages projected public-safely to visitors on the community
-     funnel (/c/:slug). Pointer table — never touches the message rows. */
-  communityFeaturedMessages: defineTable({
-    communityId: v.id("communities"),
-    messageId: v.id("communityChatMessages"),
-    featuredByUserId: v.id("users"),
-    createdAt: v.number(),
-  })
-    .index("by_community_createdAt", ["communityId", "createdAt"])
-    .index("by_message", ["messageId"]),
-
   communityTypingPresence: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),

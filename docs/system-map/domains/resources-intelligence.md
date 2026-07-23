@@ -64,12 +64,13 @@ a stale pre-write object. The final redacted audit remained 10 resources,
 ## Interaction/evidence coupling
 
 Canonical interaction writes schedule evidence synchronization, and current
-recent-context/evidence reads use canonical roots and replies. Legacy rows still
-feed the invisible web-shell preload, weekly digest, public featured messages,
-maintenance, and historical backfill. Privacy or account deletion must define
-whether source traces and accepted intelligence are deleted, redacted,
-tombstoned, or retained when their contributing interaction is purged.
-Otherwise the intelligence layer can re-project deleted content.
+recent-context/evidence and weekly-digest reads use canonical roots and
+replies. Legacy rows now feed only the retained attachment fallback,
+maintenance, and historical backfill; the shell preload and public featured
+surface are deleted. Privacy or account deletion must define whether source
+traces and accepted intelligence are deleted, redacted, tombstoned, or
+retained when their contributing interaction is purged. Otherwise the
+intelligence layer can re-project deleted content.
 
 ## Legacy fields and compatibility
 

@@ -81,14 +81,6 @@ export type CommunityChatMessageLike = {
   updatedAt: number;
 };
 
-export type CommunityMessageReactionLike = {
-  _id: any;
-  messageId: any;
-  userId: any;
-  emoji: string;
-  createdAt: number;
-};
-
 export type CommunityTypingPresenceLike = {
   _id: any;
   communityId: any;

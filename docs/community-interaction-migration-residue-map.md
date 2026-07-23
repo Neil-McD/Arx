@@ -54,17 +54,22 @@ C3.2D2A deletes the unmaintainable public featured-message product surface.
 The callerless feature/unfeature mutations, public legacy message/reaction
 reader, response field, and visitor-feed adapter are absent. The public funnel
 keeps its founder introduction, gate, statistics, and ghost conversation.
-Stored pointer rows remain quarantined behind schema and lifecycle reachability
-until their separate destructive deletion slice.
+
+C3.2D2B closes the quarantined storage. An exact-ID, staging-only mutation
+deleted two featured pointers and three legacy reactions, then replayed with
+zero work. The two tables, their five indexes, maintenance branch, lifecycle
+edges, temporary cleanup function, and generated function identity are absent.
+All five referenced messages, links, canonical targets, four historical
+attachment payloads, and eight canonical reactions remain.
 
 ## Development Staging Snapshot
 
-Read-only aggregate captured on 2026-07-23 from
-`dev:quick-porcupine-949` at web commit `878b7bc6`:
+Read-only postflight captured on 2026-07-23 from
+`dev:quick-porcupine-949` at cleanup commit `1f5663ec`:
 
 | Shape | Count | Meaning |
 | --- | ---: | --- |
-| legacy chat threads | 4 | three have no messages; normal shell preload can create these |
+| legacy chat threads | 4 | three have no messages; no normal product path creates them |
 | legacy chat messages | 67 | historical migration input |
 | legacy-to-canonical links | 67 | every legacy message has exactly one link |
 | canonical roots / replies | 54 / 23 | current interaction authority |
@@ -72,8 +77,8 @@ Read-only aggregate captured on 2026-07-23 from
 | canonical content blocks | 76 | typed content projection |
 | legacy attachment-bearing messages | 4 | all four still need canonical attachment rows |
 | canonical attachment rows | 0 | legacy attachment fallback is still active for four targets |
-| legacy / canonical reactions | 3 / 8 | separate historical and canonical reaction state remains |
-| legacy featured-message pointers | 2 | public funnel still projects them |
+| legacy / canonical reactions | 0 / 8 | only canonical reaction state remains |
+| legacy featured-message pointers | 0 | retired product state is drained |
 
 Integrity checks found zero unlinked legacy messages, duplicate message links,
 dangling message/root/reply links, or canonical replies without content blocks.
@@ -89,12 +94,10 @@ three legacy reactions. No entry or switch created legacy chat state.
 
 | ID | Job | Classification | Current owner and first-party path | Delete condition |
 | --- | --- | --- | --- | --- |
-| R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `communityInteractionLegacyBridge.ts` | Delete after historical attachment/reaction/featured decisions are closed, no canonical read needs legacy IDs, and the backfill replay reports zero work. |
+| R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `communityInteractionLegacyBridge.ts` | Reaction/featured decisions are closed; delete after the four attachments are resolved, no canonical read needs legacy IDs, and the backfill replay reports zero work. |
 | R-004 | Legacy attachment hydration fallback | `KEEP TEMPORARILY` | `communityInteractionLegacyAttachments.ts` behind canonical-first reads | Backfill the four observed targets, prove canonical rendering parity, then delete the fallback module and lookup. |
-| R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` | `communityInteractionBackfill.ts` | Keep only until all 67 historical messages and retained attachment/reaction/featured state pass a final bounded replay and integrity audit. |
+| R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` | `communityInteractionBackfill.ts` | Keep only until all 67 historical messages and retained attachment state pass a final bounded replay and integrity audit. |
 | R-008 | Weekly community digest retention email | `KEEP (MVP core)` | `emailDigests.ts` reads bounded canonical `communityInteractionRoots` and `communityInteractionReplies` | Legacy chat dependency closed by C3.2D1. Reconsider the product job only if the MVP return-loop requirement changes. |
-| R-009 | Historical featured-message pointer rows and table | `DELETE CANDIDATE` | `communityFeaturedMessages` is schema- and lifecycle-reachable only; no first-party reader or writer remains | Run the bounded destructive row deletion separately, prove zero rows, then remove the table and lifecycle edge. |
-| R-010 | Legacy reaction rows and table | `DELETE CANDIDATE` | `communityMessageReactions` is maintenance- and lifecycle-reachable only; normal interaction UI uses `communityInteractionReactions` | Delete the three observed historical rows in the bounded destructive slice, then remove maintenance handling, the table, and lifecycle policy. |
 | R-011 | Maintenance and account-lifecycle reachability for historical legacy rows | `KEEP TEMPORARILY` | `communityMaintenance.ts`, `accountLifecyclePolicy.ts` | Replace only after canonical privacy/anonymization handling and final historical deletion; do not weaken shared-history retention to simplify migration. |
 
 ## Confirmed Non-Blockers
@@ -120,6 +123,8 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
   surface, including the dormant fallback send path.
 - R-009 live surface: callerless feature/unfeature mutations, public legacy
   featured-message/reaction projection, response field, and visitor adapter.
+- R-009/R-010 storage: two featured pointers, three legacy reactions, both
+  schema tables, five indexes, maintenance handling, and lifecycle edges.
 - Ambient activity timeline: browser timeline, public read API, gateway, CSS,
   and best-effort writers. Historical rows remain lifecycle-reachable pending
   retention policy.
@@ -147,14 +152,14 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
    interactions.
 4. **C3.2D2A complete:** delete R-009's live public product surface without
    mutating its stored historical pointers.
-5. Delete the quarantined R-009 pointer rows and R-010 legacy reaction rows in
-   a separately authorized bounded destructive slice, then remove their tables,
-   maintenance handling, and lifecycle edges.
+5. **C3.2D2B complete:** delete the quarantined R-009 pointer rows and R-010
+   legacy reaction rows, then remove their tables, maintenance handling, and
+   lifecycle edges.
 6. Resolve the four retained attachment targets and delete their fallback
    immediately after explicit preservation or deletion.
 7. Run the bounded historical backfill/integrity replay, observe zero legacy
    reads and writes, then delete the link/backfill/table residue and update
    lifecycle policy.
 
-This map authorizes no stored-row, schema-table, attachment, link, backfill, or
-remaining historical deletion.
+This map authorizes no attachment, link, backfill, activity-history, message,
+thread, or remaining schema-table deletion.

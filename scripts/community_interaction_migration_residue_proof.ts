@@ -15,6 +15,7 @@ const chatGateway = read("shared/cloudCommunityChatGateway.ts");
 const interactionGateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const communityChat = read("convex/communityChat.ts");
 const facade = read("convex/community.ts");
+const communityCore = read("convex/communityCore.ts");
 const interactions = read("convex/communityInteractions.ts");
 const backfill = read("convex/communityInteractionBackfill.ts");
 const legacyBridge = read("convex/communityInteractionLegacyBridge.ts");
@@ -49,9 +50,8 @@ for (const needle of [
   "| R-004 | Legacy attachment hydration fallback | `KEEP TEMPORARILY` |",
   "| R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` |",
   "| R-008 | Weekly community digest retention email | `KEEP (MVP core)` |",
-  "| R-009 | Historical featured-message pointer rows and table | `DELETE CANDIDATE` |",
-  "| R-010 | Legacy reaction rows and table | `DELETE CANDIDATE` |",
   "| R-011 | Maintenance and account-lifecycle reachability for historical legacy rows | `KEEP TEMPORARILY` |",
+  "**C3.2D2B complete:**",
   "Counts are evidence, not expectations; no test should freeze them.",
   "No migration should be implemented for a feature that should be deleted.",
 ]) {
@@ -69,6 +69,8 @@ for (const path of [
   "shared/useCommunityChatViewport.ts",
   "convex/communityActivity.ts",
   "convex/communityFeatured.ts",
+  "convex/communityInteractionResidueCleanup.ts",
+  "convex/communityInteractionResidueCleanup.test.ts",
 ] as const) {
   assert.equal(existsSync(join(root, path)), false, `${path} should be deleted`);
 }
@@ -128,8 +130,13 @@ assert.match(
 );
 assert.match(
   schema,
-  /communityChatThreads: defineTable[\s\S]*communityChatMessages: defineTable[\s\S]*communityActivityEvents: defineTable[\s\S]*communityMessageReactions: defineTable[\s\S]*communityFeaturedMessages: defineTable[\s\S]*communityInteractionLegacyChatLinks: defineTable/,
-  "historical legacy and activity rows should remain schema-reachable",
+  /communityChatThreads: defineTable[\s\S]*communityChatMessages: defineTable[\s\S]*communityActivityEvents: defineTable[\s\S]*communityInteractionLegacyChatLinks: defineTable/,
+  "retained historical messages, activity, and mapping rows should remain schema-reachable",
+);
+assert.doesNotMatch(
+  schema,
+  /communityMessageReactions: defineTable|communityFeaturedMessages: defineTable/,
+  "drained featured pointers and legacy reactions should have no schema tables",
 );
 assert.match(
   emailDigests,
@@ -176,13 +183,33 @@ assert.match(
 );
 assert.match(
   maintenance,
-  /communityChatThreads[\s\S]*communityChatMessages[\s\S]*communityMessageReactions/,
-  "maintenance should retain historical legacy reachability",
+  /communityChatThreads[\s\S]*communityChatMessages/,
+  "maintenance should retain historical message reachability",
+);
+assert.doesNotMatch(
+  maintenance,
+  /communityMessageReactions|message_reactions/,
+  "maintenance should not retain the deleted legacy reaction table",
+);
+assert.doesNotMatch(
+  communityCore,
+  /CommunityMessageReactionLike/,
+  "the legacy reaction row type should be deleted",
 );
 assert.match(
   lifecycle,
-  /communityChatMessages[\s\S]*communityFeaturedMessages[\s\S]*communityInteractionRoots[\s\S]*communityChatThreads[\s\S]*communityInteractionLegacyChatLinks[\s\S]*communityActivityEvents/,
-  "lifecycle policy should retain historical and canonical interaction reachability",
+  /communityChatMessages[\s\S]*communityActivityEvents[\s\S]*communityInteractionRoots[\s\S]*communityChatThreads[\s\S]*communityInteractionLegacyChatLinks/,
+  "lifecycle policy should retain remaining historical and canonical interaction reachability",
+);
+assert.doesNotMatch(
+  lifecycle,
+  /communityFeaturedMessages|communityMessageReactions/,
+  "lifecycle policy should not retain deleted table edges",
+);
+assert.doesNotMatch(
+  generatedApi,
+  /communityInteractionResidueCleanup/,
+  "the temporary destructive function identity should be deleted",
 );
 
 console.log("community_interaction_migration_residue_proof: ok");

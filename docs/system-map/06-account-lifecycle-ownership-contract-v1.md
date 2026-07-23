@@ -2,7 +2,7 @@
 
 Status: planning authority only. Runtime deletion remains quarantined.
 
-Current policy version: `account-lifecycle-v5`
+Current policy version: `account-lifecycle-v6`
 
 Code authority: `convex/accountLifecyclePolicy.ts`
 
@@ -49,9 +49,11 @@ At the 2026-07-22 C2.1 receipt, the proof covers 127 schema tables, 121 direct u
 
 The C2 analytics closeout removed the unnecessary
 `communityAnalyticsEvents.userId` edge after its sole development value was
-cleared under an expectation lock. The current proof therefore covers 127
-tables, 120 direct user-ID fields, 26 opaque fields, and seven storage-ID
-fields; 39 direct edges remain without a user-first index.
+cleared under an expectation lock. C3.2D2B then deleted the drained
+`communityFeaturedMessages` and `communityMessageReactions` tables and their
+two obsolete user edges. The current proof therefore covers 125 tables, 118
+direct user-ID fields, 26 opaque fields, and seven storage-ID fields; 38 direct
+edges remain without a user-first index.
 
 The remaining tables are still classified because they may be connected indirectly through a community, conversation, app, resource, thread, run, evidence record, or parent object.
 
@@ -171,7 +173,7 @@ A direct user reference is executable only when one of these is true:
 1. a schema index begins with that exact user field; or
 2. the policy names a bounded parent cascade whose parent is itself indexed by the user.
 
-The current proof identifies 39 edges that do not have a user-first index. Thirty-two require new indexes; seven are intentionally reached through a bounded parent, such as partner children through `builderPartners` and private workspace snapshots through their owned project.
+The current proof identifies 38 edges that do not have a user-first index. Thirty-one require new indexes; seven are intentionally reached through a bounded parent, such as partner children through `builderPartners` and private workspace snapshots through their owned project.
 
 No executor may replace a missing index with `.collect()`, a global scan, or a hard-coded list of “known” referencing tables.
 

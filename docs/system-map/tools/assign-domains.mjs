@@ -51,7 +51,7 @@ const tableGroups = {
   ],
   interactions: [
     "communityPresence", "communityAnalyticsEvents", "platformBusinessVisits", "communityChatThreads",
-    "communityChatMessages", "communityActivityEvents", "communityMessageReactions", "communityFeaturedMessages",
+    "communityChatMessages", "communityActivityEvents",
     "communityTypingPresence", "communityInteractionRoots", "communityInteractionReplies",
     "communityInteractionAttachments", "communityInteractionEmbeds", "communityInteractionContentBlocks",
     "communityInteractionMentions", "communityMentionBroadcasts", "communityAgentServeRequests",

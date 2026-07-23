@@ -150,12 +150,6 @@ test("community deletion quarantine preserves every representative community dom
       createdAt: now,
       updatedAt: now,
     });
-    const legacyReactionId = await ctx.db.insert("communityMessageReactions", {
-      messageId: legacyMessageId,
-      userId: ownerId,
-      emoji: "check",
-      createdAt: now,
-    });
     const canonicalInteractionId = await ctx.db.insert("communityInteractionRoots", {
       communityId,
       actorType: "human",
@@ -165,10 +159,20 @@ test("community deletion quarantine preserves every representative community dom
       visibilityScope: "community",
       contentSummary: "Canonical history must survive quarantine.",
       replyCount: 0,
-      reactionSummary: [],
+      reactionSummary: [{ emoji: "check", count: 1 }],
       idempotencyKey: "community-deletion-safety-root",
       createdAt: now,
       updatedAt: now,
+    });
+    const canonicalReactionId = await ctx.db.insert("communityInteractionReactions", {
+      communityId,
+      targetType: "root",
+      rootId: canonicalInteractionId,
+      actorType: "human",
+      actorKey: String(ownerId),
+      actorUserId: ownerId,
+      emoji: "check",
+      createdAt: now,
     });
     const resourceId = await ctx.db.insert("communityResources", {
       communityId,
@@ -263,8 +267,8 @@ test("community deletion quarantine preserves every representative community dom
         checkoutSessionId,
         legacyThreadId,
         legacyMessageId,
-        legacyReactionId,
         canonicalInteractionId,
+        canonicalReactionId,
         resourceId,
         eventId,
         sourceTraceId,

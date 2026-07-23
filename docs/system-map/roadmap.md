@@ -12,6 +12,14 @@ The account-deletion safety fixture, declarative lifecycle ownership policy, Bui
 
 The paid-community access-authority kernel is also complete on staging: first verified Stripe completion atomically creates the membership/subscription identity, checkout success is observational, duplicate identity fails closed, paid cancellation is provider-first and period-end, and the purchase-claim plus duplicate-recovery surfaces are deleted after their respective migrations and zero-state proofs. Dependency-advisory reachability and remediation are complete: all three package graphs audit at zero, compatible Daytona/Blaxel descendants are pinned without replacing either reachable provider SDK, and both providers passed bounded staging diagnostics. F-043 is technically complete on staging: canonical CI automatically enforces Node 22 clean installs, low-threshold audits, the 38-step foundation baseline, web typecheck, production build, bundle budget, and one exact-build anonymous public-funnel browser/runtime journey. Required-check enforcement remains operationally blocked until the private-repository account supports it. The user explicitly accepted deferring the remaining real Stripe checkout/cancellation and Connect-settlement receipts under U-017. C2.0A truth reconciliation, C2.0B anonymous-cleanup deletion, the C2.1 zero-effect account lifecycle checkpoint/receipt kernel, C2.2A authenticated actor-authority consolidation, C2.2B single-account lifecycle-root simplification, and the anonymous hash-only community-funnel analytics closeout are complete on the canonical staging lane; all 56 development roots remain unchanged under U-013. C2 remains fail-closed and blocked before access freeze until C3 canonicalizes resource, interaction, and intelligence authority. C3.1A resource-body authority is complete on development staging: 10 resources now map one-to-one to 10 canonical content rows, legacy inline/hash/migration fields and the public compactor are deleted, corruption fails closed, and no temporary migration function remains. C3.1B resource UI list/read authority is also complete: one bounded metadata directory replaces duplicate list calls and per-row body amplification, selected bodies load through one exact authorized read, stale responses fail closed, and the signed-in edit/save/restore journey passes. C3.2A interaction truth reconciliation is complete: current canonical and legacy jobs are separated, all 67 legacy messages have valid canonical links, four attachment fallbacks and the remaining reaction/featured state are measured, recent context/evidence are confirmed canonical, and digest/featured requirements are explicitly undecided. C3.2B deletes the normal web preload, readiness, and scroll-pagination dependency on legacy chat state; canonical projection loading/error/empty behavior now stands alone and stale-community roots are synchronously excluded. C3 remains active. The missing C1 evidence remains visible rather than being represented as complete.
 
+C3.2C-D2B subsequently closed the live legacy mutation/timeline surface,
+retained the weekly digest on bounded canonical interactions, rejected the
+optional featured-message system, and deleted its two pointers plus three
+unread legacy reactions, both tables, maintenance handling, and lifecycle
+edges. The remaining interaction migration residue is now four attachment
+payloads, their 67 mapping links, the bounded backfill, and historical
+thread/message/activity retention.
+
 ## Step 0 — Freeze decisions and gather minimum live shape
 
 No product write.
@@ -80,7 +88,7 @@ Exit proof: every eligible object eventually receives service, and the canonical
 
 ## Step 6 — Finish canonical data migrations
 
-1. Canonical interactions: **normal web legacy preload/readiness and live mutation/timeline surface deletion complete**; next decide digest/featured requirements, migrate only retained attachment/reaction/featured history, replay/observe zero, and remove backfill/link/chat residue.
+1. Canonical interactions: **normal web legacy authority, digest reader migration, and featured/reaction storage deletion complete**; next resolve the four retained attachment payloads, replay/observe zero, and remove backfill/link/chat residue.
 2. **Complete on staging:** resource contents have one canonical body owner, no inline compatibility fields or compactor, and a bounded metadata directory plus exact authorized body reads.
 3. Intelligence: scrub/remove raw legacy query fields and migrate `legacy_unversioned` evidence after retention/citation proof.
 4. Re-run account/community deletion and evidence/privacy fixtures against the single authorities.

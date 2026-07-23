@@ -207,8 +207,9 @@ Migration order:
 4. Move reactions, embeds, mentions, and moderation onto canonical tables; keep
    the community unread boundary in `communityMemberSettings`.
 5. Delete live legacy chat writes and browser reads after parity.
-6. Decide optional digest and featured-message requirements before migrating them.
-7. Backfill retained historical state, observe zero remaining compatibility
+6. Retain the digest on canonical interactions and delete the optional
+   featured-message system rather than migrating it.
+7. Backfill retained attachment state, observe zero remaining compatibility
    reads/writes, then delete migration links, helpers, and legacy tables.
 
 No big-bang rewrite. No duplicated product truth.
@@ -415,8 +416,8 @@ Rules:
 - the unconsumed ambient activity timeline, read API, browser gateway, and
   best-effort writers are deleted; its historical table remains reachable only
   through lifecycle policy until retention is decided
-- no historical message, reaction, mapping, featured, digest, attachment, or
-  lifecycle rows are migrated or deleted by this slice
+- no historical message, mapping, attachment, activity, or remaining lifecycle
+  rows are deleted by the live-surface slice
 - migration-only legacy planning/materialization helpers remain owned by the
   bounded backfill, not by a live dual-write path
 - `communityInteractionLegacyChatLinks` access remains isolated in
