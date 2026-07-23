@@ -36,6 +36,13 @@ The canonical root projection owns its existing request boundary, and stored
 roots are synchronously community-scoped during navigation so an old
 community's rows cannot flash before the next request begins.
 
+C3.2C removes the now-unreachable legacy browser timeline, message
+edit/delete/reaction actions, fallback send branch, gateway methods, and public
+legacy chat functions. It also removes the ambient activity timeline's
+unconsumed readers and writers while retaining its historical table in
+lifecycle policy. Typing and attachment upload remain canonical-composer
+dependencies.
+
 ## Development Staging Snapshot
 
 Read-only aggregate captured on 2026-07-23 from
@@ -70,7 +77,6 @@ three legacy reactions. No entry or switch created legacy chat state.
 | --- | --- | --- | --- | --- |
 | R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `communityInteractionLegacyBridge.ts` | Delete after historical attachment/reaction/featured decisions are closed, no canonical read needs legacy IDs, and the backfill replay reports zero work. |
 | R-004 | Legacy attachment hydration fallback | `KEEP TEMPORARILY` | `communityInteractionLegacyAttachments.ts` behind canonical-first reads | Backfill the four observed targets, prove canonical rendering parity, then delete the fallback module and lookup. |
-| R-006 | Legacy message writer, edit/delete/reaction endpoints, gateway methods, and send-controller branch | `DELETE CANDIDATE` | `communityChat.ts`, `cloudCommunityChatGateway.ts`, `useCommunityChatMutationController.ts` | R-001 is closed. Prove the remaining dormant fallback has no first-party product call path and canonical writer absence fails closed; then remove the branch, gateway methods, facade exports, and public functions. Historical rows do not require a live writer. |
 | R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` | `communityInteractionBackfill.ts` | Keep only until all 67 historical messages and retained attachment/reaction/featured state pass a final bounded replay and integrity audit. |
 | R-008 | Weekly community digest reading legacy messages | `DECISION REQUIRED` | `emailDigests.ts` | Weekly digest is not named in the MVP must-keep contract. Delete the digest job if it is not required; otherwise move it to bounded canonical root/reply reads and prove canonical-only activity appears. |
 | R-009 | Public featured-message system backed by legacy message pointers | `DECISION REQUIRED` | `communityFeatured.ts`, `communityPublic.ts`, `communityFeaturedMessages` | No first-party feature/unfeature caller was found, but two pointers still render in public funnels. Delete if highlights are not required; otherwise migrate the pointer to canonical interactions before removing legacy rows. |
@@ -93,6 +99,15 @@ three legacy reactions. No entry or switch created legacy chat state.
 Historical archive/evidence materialization remains part of R-007, but current
 recent-context and interaction-evidence readers do not query legacy chat rows.
 
+## Completed Deletions
+
+- R-001: normal web legacy preload/readiness and pagination activation.
+- R-006: live legacy thread/message/reaction browser and public mutation
+  surface, including the dormant fallback send path.
+- Ambient activity timeline: browser timeline, public read API, gateway, CSS,
+  and best-effort writers. Historical rows remain lifecycle-reachable pending
+  retention policy.
+
 ## Drift Boundaries
 
 - Canonical interaction modules must not directly query or insert legacy chat
@@ -110,8 +125,8 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
 
 1. **C3.2B complete:** the normal web legacy preload/readiness and scroll
    pagination dependency is deleted without touching historical data.
-2. Delete the now-unreachable legacy UI mutation/send branch and its public
-   writer/edit/delete/reaction surface after a focused no-call proof.
+2. **C3.2C complete:** delete the now-unreachable legacy UI mutation/send
+   branch and its public writer/edit/delete/reaction surface.
 3. Decide R-008 and R-009 before writing migrations. Delete optional product
    jobs rather than porting them.
 4. Backfill the four retained attachment targets and any explicitly retained
@@ -120,4 +135,4 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
    reads and writes, then delete the link/backfill/table residue and update
    lifecycle policy.
 
-This map authorizes no migration or deletion.
+This map authorizes no remaining migration or deletion.

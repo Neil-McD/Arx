@@ -57,16 +57,8 @@ import {
   listOwnedSkillPackages as listOwnedSkillPackagesImpl,
 } from "./skillPackages";
 import {
-  createMessageReaction as createMessageReactionImpl,
-  createThreadUserMessage as createThreadUserMessageImpl,
-  deleteMessageReactionById as deleteMessageReactionByIdImpl,
-  deleteOwnMessage as deleteOwnMessageImpl,
-  ensureCommunityChatThread as ensureCommunityChatThreadImpl,
   generateCommunityChatAttachmentUploadUrl as generateCommunityChatAttachmentUploadUrlImpl,
   listCommunityTyping as listCommunityTypingImpl,
-  listMessageReactions as listMessageReactionsImpl,
-  listThreadMessages as listThreadMessagesImpl,
-  patchOwnMessageContent as patchOwnMessageContentImpl,
   setCommunityTyping as setCommunityTypingImpl,
 } from "./communityChat";
 import {
@@ -84,9 +76,6 @@ import {
   backfillCommunityInteractionsFromLegacyChatBatch as backfillCommunityInteractionsFromLegacyChatBatchImpl,
 } from "./communityInteractionBackfill";
 import { readCommunityRecentContext as readCommunityRecentContextImpl } from "./communityRecentContext";
-import {
-  listCommunityActivityEvents as listCommunityActivityEventsImpl,
-} from "./communityActivity";
 import {
   hideCommunityAiFeedPost as hideCommunityAiFeedPostImpl,
   listCommunityAiFeedBundle as listCommunityAiFeedBundleImpl,
@@ -259,18 +248,9 @@ export const heartbeatCommunityPresence = heartbeatCommunityPresenceImpl;
 export const joinPublicCommunityBySlug = joinPublicCommunityBySlugImpl;
 export const joinPublicCommunity = joinPublicCommunityImpl;
 export const cancelMyJoinRequestBySlug = cancelMyJoinRequestBySlugImpl;
-export const ensureCommunityChatThread = ensureCommunityChatThreadImpl;
 export const generateCommunityChatAttachmentUploadUrl = generateCommunityChatAttachmentUploadUrlImpl;
-export const listThreadMessages = listThreadMessagesImpl;
-export const listCommunityActivityEvents = listCommunityActivityEventsImpl;
 export const listCommunityTyping = listCommunityTypingImpl;
 export const setCommunityTyping = setCommunityTypingImpl;
-export const createThreadUserMessage = createThreadUserMessageImpl;
-export const patchOwnMessageContent = patchOwnMessageContentImpl;
-export const deleteOwnMessage = deleteOwnMessageImpl;
-export const createMessageReaction = createMessageReactionImpl;
-export const deleteMessageReactionById = deleteMessageReactionByIdImpl;
-export const listMessageReactions = listMessageReactionsImpl;
 export const createCommunityInteractionComposerMessage = createCommunityInteractionComposerMessageImpl;
 export const getMyCommunityAgentDockTranscript = getMyCommunityAgentDockTranscriptImpl;
 export const getMyCommunityAgentDockTurn = getMyCommunityAgentDockTurnImpl;

@@ -1210,16 +1210,6 @@ export async function materializeLegacyChatRootInteractionPlan(ctx: any, plan: L
   return await mapRootBundle(ctx, root, false);
 }
 
-export async function createInteractionRootFromLegacyChatMessageCore(args: {
-  ctx: any;
-  thread: CommunityChatThreadLike;
-  message: CommunityChatMessageLike;
-  nowMs?: number;
-}) {
-  const plan = await planInteractionRootFromLegacyChatMessageCore(args);
-  return await materializeLegacyChatRootInteractionPlan(args.ctx, plan);
-}
-
 export async function planInteractionReplyFromLegacyChatMessageCore(args: {
   ctx: any;
   thread: CommunityChatThreadLike;
@@ -1414,48 +1404,6 @@ export async function materializeLegacyChatReplyInteractionPlan(ctx: any, plan: 
     objectId: replyId,
   });
   return await mapReplyBundle(ctx, reply, false);
-}
-
-export async function createInteractionReplyFromLegacyChatMessageCore(args: {
-  ctx: any;
-  thread: CommunityChatThreadLike;
-  message: CommunityChatMessageLike;
-  nowMs?: number;
-}) {
-  const plan = await planInteractionReplyFromLegacyChatMessageCore(args);
-  return await materializeLegacyChatReplyInteractionPlan(args.ctx, plan);
-}
-
-export async function recordLegacyChatMessageInteractionBestEffort(args: {
-  ctx: any;
-  thread: CommunityChatThreadLike;
-  message: CommunityChatMessageLike;
-  nowMs?: number;
-}) {
-  if (args.message.replyToMessageId) {
-    let plan: LegacyChatReplyInteractionPlan;
-    try {
-      plan = await planInteractionReplyFromLegacyChatMessageCore(args);
-    } catch (error) {
-      return {
-        ok: false as const,
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-    await materializeLegacyChatReplyInteractionPlan(args.ctx, plan);
-    return { ok: true as const, link_kind: "reply" as const };
-  }
-  let plan: LegacyChatRootInteractionPlan;
-  try {
-    plan = await planInteractionRootFromLegacyChatMessageCore(args);
-  } catch (error) {
-    return {
-      ok: false as const,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-  await materializeLegacyChatRootInteractionPlan(args.ctx, plan);
-  return { ok: true as const, link_kind: "root" as const };
 }
 
 async function nextReplySeq(ctx: any, rootId: any): Promise<number> {
@@ -2410,8 +2358,6 @@ async function editCommunityInteractionTargetCore(args: {
   actorUserId: any;
   nowMs: number;
   syncLegacyMessage: boolean;
-  legacyMessageId?: any;
-  legacyAttachments?: unknown[];
 }): Promise<void> {
   if (args.target.status !== "live") throw new Error("interaction_not_editable");
   const blocks: NormalizedContentBlock[] = args.text
@@ -2447,30 +2393,6 @@ async function editCommunityInteractionTargetCore(args: {
     editedAt: args.nowMs,
     updatedAt: args.nowMs,
   });
-  if (Array.isArray(args.legacyAttachments)) {
-    const parentField = args.targetType === "root" ? "rootId" : "replyId";
-    const parentIndex = args.targetType === "root" ? "by_root" : "by_reply";
-    const existingAttachments = await args.ctx.db
-      .query("communityInteractionAttachments" as any)
-      .withIndex(parentIndex, (q: any) => q.eq(parentField, args.target._id))
-      .take(33);
-    if (existingAttachments.length > 32) {
-      throw new Error("interaction_attachment_replace_limit_exceeded");
-    }
-    for (const attachment of existingAttachments) {
-      await args.ctx.db.delete(attachment._id as any);
-    }
-    const normalizedAttachments = normalizeInteractionAttachmentInputs(args.legacyAttachments);
-    await insertCanonicalInteractionAttachmentsForTarget({
-      ctx: args.ctx,
-      communityId: args.communityId,
-      ...(args.targetType === "root" ? { rootId: args.target._id } : { replyId: args.target._id }),
-      attachments: normalizedAttachments,
-      actorUserId: args.actorUserId,
-      nowMs: args.nowMs,
-      contentHashPrefix: `legacy-chat-edit:${normalizeIdValue(args.legacyMessageId) || normalizeIdValue(args.target._id)}`,
-    });
-  }
   await suppressPendingMentionsMissingFromInteractionText({
     ctx: args.ctx,
     targetType: args.targetType,
@@ -2508,46 +2430,6 @@ async function editCommunityInteractionTargetCore(args: {
     objectType: args.targetType,
     objectId: args.target._id,
   });
-}
-
-export async function syncLegacyChatMessageEditToInteractionCore(args: {
-  ctx: any;
-  communityId: any;
-  messageId: any;
-  text: string;
-  attachments: unknown[];
-  actorUserId: any;
-  nowMs: number;
-}): Promise<{ synced: boolean }> {
-  const link = await getLegacyChatLinkByMessage(args.ctx, args.messageId);
-  if (!link) return { synced: false };
-  if (normalizeIdValue(link.communityId) !== normalizeIdValue(args.communityId)) {
-    throw new Error("legacy_chat_interaction_link_conflict");
-  }
-  const targetType = link.linkKind === "root" ? "root" : "reply";
-  const targetId = targetType === "root" ? link.rootId : link.replyId;
-  if (!targetId) throw new Error("legacy_chat_interaction_link_target_missing");
-  const { target, communityId } = await loadCommunityInteractionTarget({
-    ctx: args.ctx,
-    targetType,
-    targetId: normalizeIdValue(targetId),
-  });
-  if (normalizeIdValue(communityId) !== normalizeIdValue(args.communityId)) {
-    throw new Error("legacy_chat_interaction_link_target_invalid");
-  }
-  await editCommunityInteractionTargetCore({
-    ctx: args.ctx,
-    targetType,
-    target,
-    communityId,
-    text: args.text,
-    actorUserId: args.actorUserId,
-    nowMs: args.nowMs,
-    syncLegacyMessage: false,
-    legacyMessageId: args.messageId,
-    legacyAttachments: args.attachments,
-  });
-  return { synced: true };
 }
 
 async function tombstoneCommunityInteractionTargetCore(args: {
@@ -2607,40 +2489,6 @@ async function tombstoneCommunityInteractionTargetCore(args: {
     objectType: args.targetType,
     objectId: args.target._id,
   });
-}
-
-export async function syncLegacyChatMessageDeleteToInteractionCore(args: {
-  ctx: any;
-  communityId: any;
-  messageId: any;
-  actorUserId: any;
-  nowMs: number;
-}): Promise<{ synced: boolean }> {
-  const link = await getLegacyChatLinkByMessage(args.ctx, args.messageId);
-  if (!link) return { synced: false };
-  if (normalizeIdValue(link.communityId) !== normalizeIdValue(args.communityId)) {
-    throw new Error("legacy_chat_interaction_link_conflict");
-  }
-  const targetType = link.linkKind === "root" ? "root" : "reply";
-  const targetId = targetType === "root" ? link.rootId : link.replyId;
-  if (!targetId) throw new Error("legacy_chat_interaction_link_target_missing");
-  const { target, communityId } = await loadCommunityInteractionTarget({
-    ctx: args.ctx,
-    targetType,
-    targetId: normalizeIdValue(targetId),
-  });
-  if (normalizeIdValue(communityId) !== normalizeIdValue(args.communityId)) {
-    throw new Error("legacy_chat_interaction_link_target_invalid");
-  }
-  await tombstoneCommunityInteractionTargetCore({
-    ctx: args.ctx,
-    targetType,
-    target,
-    communityId,
-    actorUserId: args.actorUserId,
-    nowMs: args.nowMs,
-  });
-  return { synced: true };
 }
 
 export const editCommunityInteractionMessage = mutation({

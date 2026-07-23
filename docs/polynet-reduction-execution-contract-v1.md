@@ -514,7 +514,32 @@ budget, the 38-step foundation baseline, staging identity guard, and diff
 hygiene passed. The initial sandboxed foundation run stopped only because
 `tsx` could not create its local IPC socket; the complete permitted rerun passed.
 
-C3 remains `IN_PROGRESS`. The next separately planned slice is the R-006
-first-party no-call proof and deletion of the unreachable legacy UI
-mutation/write surface. This receipt authorizes no historical migration,
-digest/featured product decision, or table deletion.
+C3.2C closes R-006 by deleting the unreachable live legacy chat and ambient
+activity surface instead of porting or deprecating it. The normal browser now
+has one community-interaction presentation and mutation path: the canonical
+interaction projection. The legacy timeline, preload controllers, viewport
+state, fallback composer, legacy edit/delete/reaction actions, activity
+markers, gateway methods, public Convex chat/activity functions, and
+best-effort activity writers are absent.
+
+Typing presence and attachment upload remain because the canonical composer
+uses them. Historical legacy chat rows, their one-to-one mapping links,
+backfill/materialization helpers, canonical-first attachment fallback, legacy
+reaction/featured dependencies, lifecycle reachability, and the
+`communityActivityEvents` table remain intentionally bounded migration or
+retention residue. No historical row was migrated or deleted, and no generic
+replacement subsystem was added.
+
+Nine focused interaction contracts, the evidence-integrity contract, web and
+Convex typechecks, production build, bundle budget, the 38-step foundation
+baseline, staging identity guard and guard proof, generated API reconciliation,
+and diff hygiene pass locally. The slice deletes six complete runtime modules
+and removes several thousand more lines than it adds.
+
+C3 remains `IN_PROGRESS`, but live legacy chat authority is closed. The next
+work is a product-requirement decision, not another compatibility
+implementation: question and either delete or explicitly retain R-008 weekly
+digest and R-009 public featured messages before migrating any remaining
+legacy attachment, reaction, link, or row state. This receipt authorizes no
+historical migration, digest/featured retention, schema-table deletion, or
+production change.

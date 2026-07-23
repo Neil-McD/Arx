@@ -97,22 +97,9 @@ type BuildWebCommunitySurfaceProjectionParams = {
   resourceModalProps: WebCommunitySecondaryPanelsProps["resourceModal"];
   canPostMessagesActiveCommunity: WebCommunityChatPanelProps["canPostMessages"];
   isProfileSetupComplete: WebCommunityChatPanelProps["isProfileSetupComplete"];
-  isLoadingChat: WebCommunityChatPanelProps["isLoadingChat"];
-  hasResolvedCommunityChat: WebCommunityChatPanelProps["hasResolvedCommunityChat"];
-  isLoadingMoreChat: WebCommunityChatPanelProps["isLoadingMoreChat"];
-  communityChatHasMore: WebCommunityChatPanelProps["communityChatHasMore"];
-  communityMessages: WebCommunityChatPanelProps["communityMessages"];
-  communityActivityEvents: WebCommunityChatPanelProps["communityActivityEvents"];
-  communityMessageById: WebCommunityChatPanelProps["communityMessageById"];
-  messageReactions: WebCommunityChatPanelProps["messageReactions"];
-  typingPresence: WebCommunityChatPanelProps["typingPresence"];
   onThreadTypingSignal: WebCommunityChatPanelProps["onThreadTypingSignal"];
   profilesByUserId: WebCommunityChatPanelProps["profilesByUserId"];
   mentionableCommunityMembers: WebCommunityChatPanelProps["mentionableCommunityMembers"];
-  editingMessageId: WebCommunityChatPanelProps["editingMessageId"];
-  editingMessageText: WebCommunityChatPanelProps["editingMessageText"];
-  reactionPickerMessageId: WebCommunityChatPanelProps["reactionPickerMessageId"];
-  replyingToMessage: WebCommunityChatPanelProps["replyingToMessage"];
   communityAttachments: WebCommunityChatPanelProps["communityAttachments"];
   communityMessageInput: WebCommunityChatPanelProps["communityMessageInput"];
   communityMessageMentions: WebCommunityChatPanelProps["communityMessageMentions"];
@@ -122,17 +109,10 @@ type BuildWebCommunitySurfaceProjectionParams = {
   onConnectCommunityAgentServeProvider: WebCommunityChatPanelProps["onConnectCommunityAgentServeProvider"];
   isSendingCommunityMessage: WebCommunityChatPanelProps["isSendingCommunityMessage"];
   communityChatError: WebCommunityChatPanelProps["communityChatError"];
-  isUserAtBottom: WebCommunityChatPanelProps["isUserAtBottom"];
-  unreadCount: WebCommunityChatPanelProps["unreadCount"];
-  copiedCommunityMessageId: WebCommunityChatPanelProps["copiedCommunityMessageId"];
-  reactionEmojis: WebCommunityChatPanelProps["reactionEmojis"];
   messageListRef: WebCommunityChatPanelProps["messageListRef"];
   fileInputRef: WebCommunityChatPanelProps["fileInputRef"];
   chatInputRef: WebCommunityChatPanelProps["chatInputRef"];
-  onChatScroll: WebCommunityChatPanelProps["onChatScroll"];
   onFinishProfileSetup: WebCommunityChatPanelProps["onFinishProfileSetup"];
-  onScrollToBottom: WebCommunityChatPanelProps["onScrollToBottom"];
-  onSetReplyingToMessage: WebCommunityChatPanelProps["onSetReplyingToMessage"];
   onRemoveCommunityAttachment: WebCommunityChatPanelProps["onRemoveCommunityAttachment"];
   onCommunityAttachmentError: WebCommunityChatPanelProps["onCommunityAttachmentError"];
   onIngestCommunityAttachmentsFromFileList:
@@ -147,24 +127,11 @@ type BuildWebCommunitySurfaceProjectionParams = {
   onCommunityMessageInputChange: WebCommunityChatPanelProps["onCommunityMessageInputChange"];
   onSendCommunityMessage: WebCommunityChatPanelProps["onSendCommunityMessage"];
   displayName: WebCommunityChatPanelProps["displayName"];
-  shouldShowCommunitySenderMeta: WebCommunityChatPanelProps["shouldShowCommunitySenderMeta"];
   getAvatarColor: WebCommunityChatPanelProps["getAvatarColor"];
   getInitials: WebCommunityChatPanelProps["getInitials"];
   formatChatTime: WebCommunityChatPanelProps["formatChatTime"];
-  parseReplyPrefix: WebCommunityChatPanelProps["parseReplyPrefix"];
-  truncateReplyPreview: WebCommunityChatPanelProps["truncateReplyPreview"];
   renderTextWithLinks: WebCommunityChatPanelProps["renderTextWithLinks"];
-  onScrollToReplyMessage: WebCommunityChatPanelProps["onScrollToReplyMessage"];
   onOpenCommunityChatLightbox: WebCommunityChatPanelProps["onOpenCommunityChatLightbox"];
-  onToggleReaction: WebCommunityChatPanelProps["onToggleReaction"];
-  onSetReactionPickerMessageId: WebCommunityChatPanelProps["onSetReactionPickerMessageId"];
-  onStartReply: WebCommunityChatPanelProps["onStartReply"];
-  onCopyMessage: WebCommunityChatPanelProps["onCopyMessage"];
-  onStartEdit: WebCommunityChatPanelProps["onStartEdit"];
-  onDeleteMessage: WebCommunityChatPanelProps["onDeleteMessage"];
-  onEditingMessageTextChange: WebCommunityChatPanelProps["onEditingMessageTextChange"];
-  onSaveEdit: WebCommunityChatPanelProps["onSaveEdit"];
-  onCancelEdit: WebCommunityChatPanelProps["onCancelEdit"];
   voiceButtonProps: WebCommunityChatPanelProps["voiceButtonProps"];
   drawerVoiceButtonProps: WebCommunityChatPanelProps["drawerVoiceButtonProps"];
   onCommunityVoiceInputClick: WebCommunityChatPanelProps["onCommunityVoiceInputClick"];
@@ -332,25 +299,11 @@ export function buildWebCommunitySurfaceProjection(
     sessionUserId: params.sessionUserId,
     canPostMessages: params.canPostMessagesActiveCommunity,
     isProfileSetupComplete: params.isProfileSetupComplete,
-    canModerateMessages: params.canModerateContentActiveCommunity,
     canMentionEverybody: params.canManageMembersActiveCommunity,
     everybodyMemberCount: params.communityMemberCount,
-    isLoadingChat: params.isLoadingChat,
-    hasResolvedCommunityChat: params.hasResolvedCommunityChat,
-    isLoadingMoreChat: params.isLoadingMoreChat,
-    communityChatHasMore: params.communityChatHasMore,
-    communityMessages: params.communityMessages,
-    communityActivityEvents: params.communityActivityEvents,
-    communityMessageById: params.communityMessageById,
-    messageReactions: params.messageReactions,
-    typingPresence: params.typingPresence,
     onThreadTypingSignal: params.onThreadTypingSignal,
     profilesByUserId: params.profilesByUserId,
     mentionableCommunityMembers: params.mentionableCommunityMembers,
-    editingMessageId: params.editingMessageId,
-    editingMessageText: params.editingMessageText,
-    reactionPickerMessageId: params.reactionPickerMessageId,
-    replyingToMessage: params.replyingToMessage,
     communityAttachments: params.communityAttachments,
     communityMessageInput: params.communityMessageInput,
     communityMessageMentions: params.communityMessageMentions,
@@ -360,18 +313,11 @@ export function buildWebCommunitySurfaceProjection(
     onConnectCommunityAgentServeProvider: params.onConnectCommunityAgentServeProvider,
     isSendingCommunityMessage: params.isSendingCommunityMessage,
     communityChatError: params.communityChatError,
-    isUserAtBottom: params.isUserAtBottom,
-    unreadCount: params.unreadCount,
-    copiedCommunityMessageId: params.copiedCommunityMessageId,
-    reactionEmojis: params.reactionEmojis,
     messageListRef: params.messageListRef,
     fileInputRef: params.fileInputRef,
     chatInputRef: params.chatInputRef,
-    onChatScroll: params.onChatScroll,
     onRequireSignIn: params.requireSignIn,
     onFinishProfileSetup: params.onFinishProfileSetup,
-    onScrollToBottom: params.onScrollToBottom,
-    onSetReplyingToMessage: params.onSetReplyingToMessage,
     onRemoveCommunityAttachment: params.onRemoveCommunityAttachment,
     onCommunityAttachmentError: params.onCommunityAttachmentError,
     onIngestCommunityAttachmentsFromFileList: params.onIngestCommunityAttachmentsFromFileList,
@@ -385,24 +331,11 @@ export function buildWebCommunitySurfaceProjection(
     onCommunityMessageInputChange: params.onCommunityMessageInputChange,
     onSendCommunityMessage: params.onSendCommunityMessage,
     displayName: params.displayName,
-    shouldShowCommunitySenderMeta: params.shouldShowCommunitySenderMeta,
     getAvatarColor: params.getAvatarColor,
     getInitials: params.getInitials,
     formatChatTime: params.formatChatTime,
-    parseReplyPrefix: params.parseReplyPrefix,
-    truncateReplyPreview: params.truncateReplyPreview,
     renderTextWithLinks: params.renderTextWithLinks,
-    onScrollToReplyMessage: params.onScrollToReplyMessage,
     onOpenCommunityChatLightbox: params.onOpenCommunityChatLightbox,
-    onToggleReaction: params.onToggleReaction,
-    onSetReactionPickerMessageId: params.onSetReactionPickerMessageId,
-    onStartReply: params.onStartReply,
-    onCopyMessage: params.onCopyMessage,
-    onStartEdit: params.onStartEdit,
-    onDeleteMessage: params.onDeleteMessage,
-    onEditingMessageTextChange: params.onEditingMessageTextChange,
-    onSaveEdit: params.onSaveEdit,
-    onCancelEdit: params.onCancelEdit,
     voiceButtonProps: params.voiceButtonProps,
     drawerVoiceButtonProps: params.drawerVoiceButtonProps,
     onCommunityVoiceInputClick: params.onCommunityVoiceInputClick,

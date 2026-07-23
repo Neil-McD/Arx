@@ -1,12 +1,5 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 
-import {
-  createCloudMessageReaction,
-  createCloudThreadUserMessageRows,
-  deleteCloudMessageReactionById,
-  deleteCloudOwnMessage,
-  patchCloudOwnMessageContent,
-} from "./cloudCommunityChatGateway";
 import { resolveAuthSubject } from "./authSession";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { textContainsMentionToken } from "./communityMentionRendering";
@@ -21,12 +14,6 @@ type EverybodyMentionSendConfirmation = {
 
 type SessionLike = {
   user: { id: string };
-};
-
-type ReplyPrefixLike = {
-  sender: string;
-  preview: string;
-  rest: string;
 };
 
 type CommunityReplyTarget<
@@ -69,7 +56,6 @@ export type CommunityMessageSendDraft<
 
 type UseCommunityChatMutationControllerArgs<
   SessionT extends SessionLike,
-  RowT,
   AttachmentT,
   MessageT extends {
     id: string;
@@ -81,21 +67,12 @@ type UseCommunityChatMutationControllerArgs<
     created_at: string;
     seq: number;
   },
-  ReactionT extends {
-    id: string;
-    message_id: string;
-    user_id: string;
-    emoji: string;
-    created_at: string;
-  },
 > = {
   activeCommunityId: string | null;
   canMentionEverybodyRef?: MutableRefObject<boolean>;
   session: SessionT | null;
   sessionUserId: string | null;
   ensureSession?: EnsureSessionFn<SessionT>;
-  missingPayloadMessage: string;
-  ensureCommunityChatThread: (communityId: string, session: SessionT) => Promise<string>;
   createCommunityInteractionMessageRows?: (params: {
     session: SessionT;
     communityId: string;
@@ -105,8 +82,7 @@ type UseCommunityChatMutationControllerArgs<
     replyToMessageId?: string | null;
     mentions?: { userId?: string; agentKey?: string; roleKey?: string }[];
     attachments?: unknown[];
-  }) => Promise<RowT[]>;
-  useCanonicalCommunityInteractions?: boolean;
+  }) => Promise<unknown>;
   onCanonicalOptimisticInsert?: (pending: {
     idempotencyKey: string;
     communityId: string;
@@ -120,10 +96,6 @@ type UseCommunityChatMutationControllerArgs<
     senderId: string;
   }) => void;
   onCanonicalOptimisticSettle?: (settle: { idempotencyKey: string; status: "failed" }) => void;
-  toCommunityChatMessage: (row: RowT) => MessageT | null;
-  loadCommunityChat: (communityId: string, session: SessionT) => Promise<void>;
-  parseReplyPrefix: (body: string) => ReplyPrefixLike | null;
-  buildReplyPrefix: (sender: string, preview: string) => string;
   beforeSendValidate?: (text: string) => Promise<string | null>;
   confirmEverybodyMentionSend?: (confirmation: EverybodyMentionSendConfirmation) => Promise<boolean> | boolean;
   prepareAttachmentsForSend?: (
@@ -132,7 +104,7 @@ type UseCommunityChatMutationControllerArgs<
     communityId: string,
   ) => Promise<AttachmentT[]>;
   serializeAttachmentsForWrite?: (attachments: AttachmentT[]) => unknown[];
-  onOptimisticSendScrollIntent: () => void;
+  onOptimisticSendScrollIntent?: () => void;
   onCommunityMessageSent?: (params: {
     communityId: string;
     messageId: string;
@@ -153,21 +125,8 @@ type UseCommunityChatMutationControllerArgs<
     emailMode?: EverybodyMentionEmailMode | null;
     emailCooldownUntil?: string | null;
   }[];
-  communityMessages: MessageT[];
-  messageReactions: ReactionT[];
-  replyingToMessage: CommunityReplyTarget<MessageT> | null;
-  editingMessageId: string | null;
-  editingMessageText: string;
-  editingMessagePrefix: string | null;
-  setCommunityMessages: Dispatch<SetStateAction<MessageT[]>>;
-  setMessageReactions: Dispatch<SetStateAction<ReactionT[]>>;
   setCommunityMessageInput: Dispatch<SetStateAction<string>>;
   setCommunityAttachments: Dispatch<SetStateAction<AttachmentT[]>>;
-  setReplyingToMessage: Dispatch<SetStateAction<CommunityReplyTarget<MessageT> | null>>;
-  setReactionPickerMessageId: Dispatch<SetStateAction<string | null>>;
-  setEditingMessageId: Dispatch<SetStateAction<string | null>>;
-  setEditingMessageText: Dispatch<SetStateAction<string>>;
-  setEditingMessagePrefix: Dispatch<SetStateAction<string | null>>;
   setIsSendingCommunityMessage: Dispatch<SetStateAction<boolean>>;
   setCommunityChatError: Dispatch<SetStateAction<string | null>>;
 };
@@ -202,15 +161,8 @@ function mapCommunityChatMutationErrorMessage(error: unknown): string {
   if (message.includes("profile_setup_required")) {
     return "Finish your profile before posting in communities.";
   }
-  if (message.includes("message_attachment_limit_exceeded")) {
-    return "You can attach up to 8 files per message.";
-  }
-  if (message.includes("message_attachment_payload_too_large")) {
-    return "One attachment preview is too large. Try a smaller image.";
-  }
   if (
     message.includes("community_interaction_reply_target_unmapped") ||
-    message.includes("interaction_legacy_reply_target") ||
     message.includes("interaction_target_reply_invalid")
   ) {
     return "Reply target is unavailable. Reopen the thread and try again.";
@@ -238,27 +190,12 @@ function createCommunityComposerIdempotencyKey(communityId: string, rootId: stri
   ].join(":");
 }
 
-type CommunityChatSendRoute =
-  | {
-      kind: "canonical";
-      rootId: string | null;
-      idempotencyKey: string;
-    }
-  | {
-      kind: "legacy";
-      reason: "projection_disabled";
-    };
-
-function resolveCommunityChatSendRoute(args: {
-  useCanonicalCommunityInteractions?: boolean;
+function resolveCanonicalCommunityChatSendRoute(args: {
   hasCanonicalWriter: boolean;
   activeCommunityId: string;
   hasReplyTarget: boolean;
   replyRootId: string | null;
-}): CommunityChatSendRoute {
-  if (!args.useCanonicalCommunityInteractions) {
-    return { kind: "legacy", reason: "projection_disabled" };
-  }
+}): { rootId: string | null; idempotencyKey: string } {
   if (!args.hasCanonicalWriter) {
     throw new Error("community_interaction_writer_missing");
   }
@@ -266,7 +203,6 @@ function resolveCommunityChatSendRoute(args: {
     throw new Error("community_interaction_reply_target_unmapped");
   }
   return {
-    kind: "canonical",
     rootId: args.replyRootId,
     idempotencyKey: createCommunityComposerIdempotencyKey(args.activeCommunityId, args.replyRootId),
   };
@@ -274,7 +210,6 @@ function resolveCommunityChatSendRoute(args: {
 
 export function useCommunityChatMutationController<
   SessionT extends SessionLike,
-  RowT,
   AttachmentT,
   MessageT extends {
     id: string;
@@ -286,14 +221,7 @@ export function useCommunityChatMutationController<
     created_at: string;
     seq: number;
   },
-  ReactionT extends {
-    id: string;
-    message_id: string;
-    user_id: string;
-    emoji: string;
-    created_at: string;
-  },
->(args: UseCommunityChatMutationControllerArgs<SessionT, RowT, AttachmentT, MessageT, ReactionT>) {
+>(args: UseCommunityChatMutationControllerArgs<SessionT, AttachmentT, MessageT>) {
   const argsRef = useRef(args);
   argsRef.current = args;
 
@@ -301,141 +229,6 @@ export function useCommunityChatMutationController<
     const explicit = String(argsRef.current.sessionUserId ?? "").trim();
     if (explicit) return explicit;
     return resolveAuthSubject(session as any);
-  }, []);
-
-  const handleToggleReaction = useCallback(async (messageId: string, emoji: string) => {
-    const current = argsRef.current;
-    const session = await resolveUsableSession(current.session, current.ensureSession);
-    if (!session) return;
-    const sessionUserId = resolveRuntimeSessionUserId(session);
-    if (!sessionUserId) return;
-    const existingReaction = current.messageReactions.find(
-      (reaction) => (
-        reaction.message_id === messageId
-        && reaction.user_id === sessionUserId
-        && reaction.emoji === emoji
-      ),
-    );
-
-    if (existingReaction) {
-      current.setMessageReactions((prev) => prev.filter((reaction) => reaction.id !== existingReaction.id));
-      try {
-        await deleteCloudMessageReactionById({
-          session,
-          reactionId: existingReaction.id,
-        });
-      } catch {
-        current.setMessageReactions((prev) => [...prev, existingReaction]);
-      }
-    } else {
-      const optimisticId = `pending-${Date.now()}`;
-      const optimisticReaction = {
-        id: optimisticId,
-        message_id: messageId,
-        user_id: sessionUserId,
-        emoji,
-        created_at: new Date().toISOString(),
-      } as ReactionT;
-      current.setMessageReactions((prev) => [...prev, optimisticReaction]);
-
-      try {
-        const created = await createCloudMessageReaction<SessionT, ReactionT>({
-          session,
-          messageId,
-          emoji,
-        });
-        if (created.length > 0) {
-          current.setMessageReactions((prev) => prev.map((reaction) => (reaction.id === optimisticId ? created[0] : reaction)));
-        } else {
-          current.setMessageReactions((prev) => prev.filter((reaction) => reaction.id !== optimisticId));
-        }
-      } catch {
-        current.setMessageReactions((prev) => prev.filter((reaction) => reaction.id !== optimisticId));
-      }
-    }
-
-    current.setReactionPickerMessageId(null);
-  }, []);
-
-  const handleStartReply = useCallback((message: CommunityReplyTarget<MessageT>) => {
-    if (message.id.startsWith("pending-")) return;
-    const current = argsRef.current;
-    current.setReplyingToMessage(message);
-    current.setReactionPickerMessageId(null);
-    current.setEditingMessageId(null);
-    current.setEditingMessageText("");
-    current.setEditingMessagePrefix(null);
-    setTimeout(() => current.chatInputRef.current?.focus(), 0);
-  }, []);
-
-  const handleStartEdit = useCallback((message: Pick<MessageT, "id" | "body">) => {
-    const current = argsRef.current;
-    const reply = current.parseReplyPrefix(message.body);
-    current.setEditingMessageId(message.id);
-    current.setEditingMessageText(reply ? reply.rest : message.body);
-    current.setEditingMessagePrefix(reply ? current.buildReplyPrefix(reply.sender, reply.preview) : null);
-  }, []);
-
-  const handleCancelEdit = useCallback(() => {
-    const current = argsRef.current;
-    current.setEditingMessageId(null);
-    current.setEditingMessageText("");
-    current.setEditingMessagePrefix(null);
-  }, []);
-
-  const handleSaveEdit = useCallback(async () => {
-    const current = argsRef.current;
-    const session = await resolveUsableSession(current.session, current.ensureSession);
-    if (!session || !current.editingMessageId) return;
-    const text = current.editingMessageText.trim();
-    if (!text) return;
-    const existingAttachments = current.communityMessages.find((message) => message.id === current.editingMessageId)?.attachments ?? [];
-    const serializedAttachments = current.serializeAttachmentsForWrite
-      ? current.serializeAttachmentsForWrite(existingAttachments)
-      : existingAttachments;
-    const bodyToSave = current.editingMessagePrefix ? current.editingMessagePrefix + text : text;
-
-    current.setCommunityMessages((prev) => prev.map((message) => (
-      message.id === current.editingMessageId ? { ...message, body: bodyToSave } : message
-    )));
-    current.setEditingMessageId(null);
-    current.setEditingMessageText("");
-    current.setEditingMessagePrefix(null);
-
-    try {
-      await patchCloudOwnMessageContent({
-        session,
-        messageId: current.editingMessageId,
-        contentJson: {
-          text: bodyToSave,
-          ...(serializedAttachments.length > 0 ? { attachments: serializedAttachments } : {}),
-        },
-      });
-    } catch (error) {
-      current.setCommunityChatError(mapCommunityChatMutationErrorMessage(error));
-      if (current.activeCommunityId) {
-        await current.loadCommunityChat(current.activeCommunityId, session);
-      }
-    }
-  }, []);
-
-  const handleDeleteMessage = useCallback(async (messageId: string) => {
-    const current = argsRef.current;
-    const session = await resolveUsableSession(current.session, current.ensureSession);
-    if (!session) return;
-    current.setCommunityMessages((prev) => prev.filter((message) => message.id !== messageId));
-    current.setMessageReactions((prev) => prev.filter((reaction) => reaction.message_id !== messageId));
-
-    try {
-      await deleteCloudOwnMessage({
-        session,
-        messageId,
-      });
-    } catch {
-      if (current.activeCommunityId) {
-        await current.loadCommunityChat(current.activeCommunityId, session);
-      }
-    }
   }, []);
 
   const handleSendCommunityMessage = useCallback(async (
@@ -448,16 +241,13 @@ export function useCommunityChatMutationController<
     const sessionUserId = resolveRuntimeSessionUserId(session);
     if (!sessionUserId) return;
 
-    const hasExplicitDraft = Boolean(draft);
     const rawText = String(draft?.text ?? current.communityMessageInput).trim();
     const attachmentsToSend = draft?.attachments
       ? [...draft.attachments]
       : [...current.communityAttachmentsRef.current];
     if (!rawText && attachmentsToSend.length === 0) return;
 
-    const replySnapshot = hasExplicitDraft
-      ? draft?.replyingToMessage ?? null
-      : current.replyingToMessage;
+    const replySnapshot = draft?.replyingToMessage ?? null;
     const replyToId = replySnapshot ? replySnapshot.id : null;
     const replyRootId = String(replySnapshot?.interaction_root_id ?? "").trim() || null;
     const interactionReplyToId = String(replySnapshot?.interaction_reply_id ?? "").trim() || null;
@@ -536,18 +326,7 @@ export function useCommunityChatMutationController<
       if (!confirmed) return;
     }
 
-    const optimisticId = `pending-${Date.now()}`;
     const optimisticCreatedAt = new Date().toISOString();
-    const optimisticMessage = {
-      id: optimisticId,
-      community_id: current.activeCommunityId,
-      sender_id: sessionUserId,
-      body: bodyToSend,
-      attachments: attachmentsToSend,
-      reply_to_id: legacyReplyToMessageId,
-      created_at: optimisticCreatedAt,
-      seq: Number.MAX_SAFE_INTEGER,
-    } as MessageT;
 
     const restoreDraft = () => {
       if (draft?.restoreDraft) {
@@ -556,18 +335,15 @@ export function useCommunityChatMutationController<
       }
       current.setCommunityMessageInput(rawText);
       current.setCommunityAttachments(attachmentsToSend);
-      current.setReplyingToMessage(replySnapshot);
     };
 
-    current.setCommunityMessages((prev) => [...prev, optimisticMessage]);
     if (draft?.clearDraft) {
       draft.clearDraft();
     } else {
       current.setCommunityMessageInput("");
       current.setCommunityAttachments([]);
-      current.setReplyingToMessage(null);
     }
-    current.onOptimisticSendScrollIntent();
+    current.onOptimisticSendScrollIntent?.();
 
     const inputRef = draft?.inputRef ?? current.chatInputRef;
     if (inputRef?.current) {
@@ -585,15 +361,14 @@ export function useCommunityChatMutationController<
         ? current.serializeAttachmentsForWrite(preparedAttachments)
         : preparedAttachments;
       const createCanonicalMessageRows = current.createCommunityInteractionMessageRows;
-      const sendRoute = resolveCommunityChatSendRoute({
-        useCanonicalCommunityInteractions: current.useCanonicalCommunityInteractions,
+      const sendRoute = resolveCanonicalCommunityChatSendRoute({
         hasCanonicalWriter: Boolean(createCanonicalMessageRows),
         activeCommunityId,
         hasReplyTarget: Boolean(replySnapshot),
         replyRootId,
       });
 
-      if (sendRoute.kind === "canonical" && current.onCanonicalOptimisticInsert) {
+      if (current.onCanonicalOptimisticInsert) {
         canonicalOptimisticIdempotencyKey = sendRoute.idempotencyKey;
         current.onCanonicalOptimisticInsert({
           idempotencyKey: sendRoute.idempotencyKey,
@@ -609,69 +384,28 @@ export function useCommunityChatMutationController<
         });
       }
 
-      if (sendRoute.kind === "canonical") {
-        if (!createCanonicalMessageRows) throw new Error("community_interaction_writer_missing");
-        await createCanonicalMessageRows({
-          session,
-          communityId: activeCommunityId,
-          idempotencyKey: sendRoute.idempotencyKey,
-          text: bodyToSend,
-          rootId: sendRoute.rootId,
-          replyToMessageId: canonicalReplyToMessageId,
-          mentions: mentionsToSend,
-          attachments: serializedAttachments,
-        });
-        current.setCommunityMessages((prev) => prev.filter((message) => message.id !== optimisticId));
-        current.onCommunityMessageSent?.({
-          communityId: activeCommunityId,
-          messageId: sendRoute.idempotencyKey,
-          hasAttachments: preparedAttachments.length > 0,
-          hasReply: Boolean(replySnapshot),
-        });
-        return;
-      }
-
-      const threadId = await current.ensureCommunityChatThread(activeCommunityId, session);
-      const created = await createCloudThreadUserMessageRows<SessionT, RowT>({
+      if (!createCanonicalMessageRows) throw new Error("community_interaction_writer_missing");
+      await createCanonicalMessageRows({
         session,
-        threadId,
+        communityId: activeCommunityId,
+        idempotencyKey: sendRoute.idempotencyKey,
         text: bodyToSend,
+        rootId: sendRoute.rootId,
+        replyToMessageId: canonicalReplyToMessageId,
+        mentions: mentionsToSend,
         attachments: serializedAttachments,
-        replyToId: legacyReplyToMessageId,
-      });
-      const record = created[0] ? current.toCommunityChatMessage(created[0]) : null;
-      if (!record) {
-        current.setCommunityChatError(current.missingPayloadMessage);
-        current.setCommunityMessages((prev) => prev.filter((message) => message.id !== optimisticId));
-        if (canonicalOptimisticIdempotencyKey) {
-          current.onCanonicalOptimisticSettle?.({
-            idempotencyKey: canonicalOptimisticIdempotencyKey,
-            status: "failed",
-          });
-        }
-        restoreDraft();
-        return;
-      }
-
-      current.setCommunityMessages((prev) => {
-        const withoutOptimistic = prev.filter((message) => message.id !== optimisticId);
-        if (withoutOptimistic.some((message) => message.id === record.id)) return withoutOptimistic;
-        const next = [...withoutOptimistic, record];
-        next.sort((left, right) => left.seq - right.seq);
-        return next;
       });
       current.onCommunityMessageSent?.({
         communityId: activeCommunityId,
-        messageId: record.id,
+        messageId: sendRoute.idempotencyKey,
         hasAttachments: preparedAttachments.length > 0,
-        hasReply: Boolean(replyToId),
+        hasReply: Boolean(replySnapshot),
       });
     } catch (error) {
       if (isProfileSetupRequiredError(error)) {
         current.onProfileSetupRequired?.();
       }
       current.setCommunityChatError(mapCommunityChatMutationErrorMessage(error));
-      current.setCommunityMessages((prev) => prev.filter((message) => message.id !== optimisticId));
       if (canonicalOptimisticIdempotencyKey) {
         current.onCanonicalOptimisticSettle?.({
           idempotencyKey: canonicalOptimisticIdempotencyKey,
@@ -685,12 +419,6 @@ export function useCommunityChatMutationController<
   }, []);
 
   return {
-    handleToggleReaction,
-    handleStartReply,
-    handleStartEdit,
-    handleCancelEdit,
-    handleSaveEdit,
-    handleDeleteMessage,
     handleSendCommunityMessage,
   };
 }

@@ -225,7 +225,6 @@ import {
   getAvatarColor,
   getInitials,
   shortId,
-  shouldShowCommunitySenderMeta,
 } from "../../../shared/chatUi";
 import {
   type AppPage,
@@ -249,11 +248,8 @@ import type {
   CommunityAnalyticsSeries as SharedCommunityAnalyticsSeries,
   CommunityAgentConfig as SharedCommunityAgentConfig,
   CommunityAnalyticsSummary as SharedCommunityAnalyticsSummary,
-  CommunityActivityEvent as SharedCommunityActivityEvent,
-  CommunityChatMessage as SharedCommunityChatMessage,
   CommunityFunnelConfig as SharedCommunityFunnelConfig,
   DiscoverCommunitySnapshot as SharedDiscoverCommunitySnapshot,
-  MessageReaction as SharedMessageReaction,
   PublicPlanSummary as SharedPublicPlanSummary,
   UserProfile as SharedUserProfile,
   UserProfileDetail as SharedUserProfileDetail,
@@ -344,12 +340,9 @@ import {
   type AppTheme,
 } from "../../../shared/theme";
 import { useLastClickWinsController } from "../../../shared/useLastClickWinsController";
-import { useCommunityChatRealtime } from "../../../shared/useCommunityChatRealtime";
 import { useCommunityTypingPresence } from "../../../shared/useCommunityTypingPresence";
-import { useCommunityChatViewport } from "../../../shared/useCommunityChatViewport";
 import { useCommunityChatLightbox } from "../../../shared/useCommunityChatLightbox";
 import { useMessageAttachmentInputController } from "../../../shared/useMessageAttachmentInputController";
-import { useCommunityChatDataController } from "../../../shared/useCommunityChatDataController";
 import { useCommunityChatMutationController } from "../../../shared/useCommunityChatMutationController";
 import { useCommunityRailOrder } from "../../../shared/useCommunityRailOrder";
 import { useRailPointerReorder } from "../../../shared/useRailPointerReorder";
@@ -722,12 +715,6 @@ type MessageAttachment = CommunityMessageAttachment & {
   file?: File | null;
 };
 
-type CommunityChatMessage = SharedCommunityChatMessage<MessageAttachment>;
-type CommunityReplyTarget = Pick<CommunityChatMessage, "id" | "sender_id" | "body"> & {
-  interaction_root_id?: string | null;
-  legacy_message_id?: string | null;
-};
-type CommunityActivityEvent = SharedCommunityActivityEvent;
 type CommunityInteractionRoot = CommunityInteractionRootBundle;
 type CommunityInteractionReply = CommunityInteractionReplyBundle;
 type CommunityInteractionRootChangeReason = "initial" | "newer" | "older" | "reset";
@@ -1155,8 +1142,6 @@ function guestStoredToThreadMessages(storage: GuestThreadStorageV1): ThreadMessa
   return out;
 }
 
-type MessageReaction = SharedMessageReaction;
-
 type CommunityResource = {
   id: string;
   community_id?: string | null;
@@ -1268,9 +1253,6 @@ type NavSnapshot = NavSnapshotBase & {
 
 type AccountGraphHydrationPhase = "idle" | "critical" | "secondary" | "ready";
 
-const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
-const COMMUNITY_CHAT_PAGE_SIZE = 50;
-const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
 const COMMUNITY_INTERACTION_ROOT_LIMIT = 50;
 const COMMUNITY_INTERACTION_REPLY_LIMIT = 80;
 const INTERACTION_SELECTED_ROOT_STORAGE_PREFIX = "polynet:interaction:selectedRoot:";
@@ -1306,8 +1288,6 @@ const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
 const WEB_RAIL_WIDTH = 72;
 const WEB_SESSIONS_DRAWER_WIDTH = 240;
 const MIN_DOCKED_WORKSPACE_CENTER_WIDTH = 400;
-
-const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;
 
 function formatCommunityInteractionProjectionError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error ?? "");
@@ -1575,21 +1555,9 @@ export default function App() {
         setCommunityRoleById,
         setActiveCommunityId,
         setCommunityTab,
-        setCommunityMessages,
-        setCommunityActivityEvents,
         setCommunityMessageInput,
         setCommunityChatError,
-        resetCommunityChatDataState,
-        setUnreadCount,
-        setIsUserAtBottom,
-        isUserAtBottomRef,
         setIsSendingCommunityMessage,
-        setReplyingToMessage,
-        setMessageReactions,
-        setReactionPickerMessageId,
-        setEditingMessageId,
-        setEditingMessageText,
-        setEditingMessagePrefix,
         setCommunityResources,
         setIsLoadingResources,
         setShowResourceModal,
@@ -1649,21 +1617,9 @@ export default function App() {
         setCommunityRoleById,
         setActiveCommunityId,
         setCommunityTab,
-        setCommunityMessages,
-        setCommunityActivityEvents,
         setCommunityMessageInput,
         setCommunityChatError,
-        resetCommunityChatDataState,
-        setUnreadCount,
-        setIsUserAtBottom,
-        isUserAtBottomRef,
         setIsSendingCommunityMessage,
-        setReplyingToMessage,
-        setMessageReactions,
-        setReactionPickerMessageId,
-        setEditingMessageId,
-        setEditingMessageText,
-        setEditingMessagePrefix,
         setCommunityResources,
         setIsLoadingResources,
         setShowResourceModal,
@@ -2272,8 +2228,6 @@ export default function App() {
     setCommunityTab,
   });
 
-  const [communityMessages, setCommunityMessages] = useState<CommunityChatMessage[]>([]);
-  const [communityActivityEvents, setCommunityActivityEvents] = useState<CommunityActivityEvent[]>([]);
   const [communityInteractionRoots, setCommunityInteractionRoots] = useState<CommunityInteractionRoot[]>([]);
   const [communityInteractionNextBeforeCreatedAt, setCommunityInteractionNextBeforeCreatedAt] =
     useState<number | null>(null);
@@ -2428,14 +2382,8 @@ export default function App() {
     lastSetupGateErrorRef.current = setupGateMessage;
     openProfileSetup();
   }, [communityChatError, communityInteractionError, openProfileSetup]);
-  const [copiedCommunityMessageId, setCopiedCommunityMessageId] = useState<string | null>(null);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isUserAtBottom, setIsUserAtBottom] = useState(true);
-  const isUserAtBottomRef = useRef(true);
   const communitySeenAcknowledgeKeyBySurfaceRef = useRef<Record<string, string>>({});
-  const communityMessageIdsRef = useRef<Set<string>>(new Set());
   const communityChatListRef = useRef<HTMLDivElement | null>(null);
-  const loadOlderFromScrollRef = useRef<(() => void) | null>(null);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const communityFileInputRef = useRef<HTMLInputElement | null>(null);
   const communityVoiceTranscriptTargetRef = useRef<CommunityVoiceTranscriptTarget | null>(null);
@@ -2465,95 +2413,6 @@ export default function App() {
     setError: setCommunityChatError,
     ingestAttachmentsFromFileList: ingestCommunityAttachmentsFromFileList,
   });
-  const [replyingToMessage, setReplyingToMessage] = useState<CommunityReplyTarget | null>(null);
-  const [messageReactions, setMessageReactions] = useState<MessageReaction[]>([]);
-  const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editingMessageText, setEditingMessageText] = useState("");
-  const [editingMessagePrefix, setEditingMessagePrefix] = useState<string | null>(null);
-  const capturePrependAnchorRef = useRef<() => void>(() => {});
-  const clearPendingPrependAnchorRef = useRef<() => void>(() => {});
-
-  const {
-    isLoadingChat,
-    isLoadingMoreChat,
-    communityChatHasMore,
-    hasResolvedCommunityChat,
-    toCommunityChatMessage,
-    ensureCommunityChatThread,
-    loadCommunityChat,
-    loadOlderCommunityChat,
-    resetCommunityChatDataState,
-  } = useCommunityChatDataController<
-    AuthSession,
-    MessageAttachment,
-    CommunityChatMessage,
-    MessageReaction
-  >({
-    extractTextFromContentJson,
-    parseMessageAttachments,
-    ensureSession: ensureUsableAuthSession,
-    pageSize: COMMUNITY_CHAT_PAGE_SIZE,
-    setCommunityMessages,
-    setMessageReactions,
-    setUnreadCount,
-    setIsUserAtBottom,
-    isUserAtBottomRef,
-    capturePrependAnchor: () => {
-      capturePrependAnchorRef.current();
-    },
-    clearPendingPrependAnchor: () => {
-      clearPendingPrependAnchorRef.current();
-    },
-    onLoadChatStart: () => {
-      setCommunityChatError(null);
-    },
-    onLoadChatError: (message) => {
-      setCommunityChatError(message);
-    },
-    onHydrateProfiles: (userIds, session) => {
-      return loadUserProfiles(userIds, session);
-    },
-  });
-
-  const {
-    handleChatScroll,
-    capturePrependAnchor,
-    clearPendingPrependAnchor,
-  } = useCommunityChatViewport({
-    isEnabled:
-      activePage === "community" &&
-      communityTab === "chat" &&
-      !COMMUNITY_INTERACTION_PROJECTION_ENABLED,
-    communityMessages,
-    communityChatListRef,
-    isUserAtBottom,
-    isUserAtBottomRef,
-    setIsUserAtBottom,
-    setUnreadCount,
-    loadMoreThresholdPx: COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX,
-    canLoadOlder: Boolean(
-      !COMMUNITY_INTERACTION_PROJECTION_ENABLED
-      && session
-      && activeCommunityId
-      && activePage === "community"
-      && communityTab === "chat"
-      && communityChatHasMore
-      && !isLoadingChat
-      && !isLoadingMoreChat,
-    ),
-    onLoadOlder: () => {
-      loadOlderFromScrollRef.current?.();
-    },
-  });
-
-  capturePrependAnchorRef.current = capturePrependAnchor;
-  clearPendingPrependAnchorRef.current = clearPendingPrependAnchor;
-  loadOlderFromScrollRef.current = () => {
-    if (!session || !activeCommunityId) return;
-    void loadOlderCommunityChat(activeCommunityId, session);
-  };
-
   const resetCommunityInteractionProjection = useCallback(() => {
     communityInteractionRootsRequestIdRef.current += 1;
     communityInteractionRepliesRequestIdRef.current = {};
@@ -2574,7 +2433,7 @@ export default function App() {
     activeSessionRaw: AuthSession | null = session,
   ) => {
     const rootId = String(rootIdRaw ?? "").trim();
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !rootId) return;
+    if (!rootId) return;
     const usableSession = await ensureUsableAuthSession(activeSessionRaw ?? undefined);
     if (!usableSession) return;
     const requestId = (communityInteractionRepliesRequestIdRef.current[rootId] ?? 0) + 1;
@@ -2610,7 +2469,7 @@ export default function App() {
     activeSessionRaw: AuthSession | null = session,
   ) => {
     const communityId = String(communityIdRaw ?? "").trim();
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !communityId) {
+    if (!communityId) {
       resetCommunityInteractionProjection();
       return;
     }
@@ -2663,8 +2522,7 @@ export default function App() {
     const communityId = String(communityIdRaw ?? "").trim();
     const beforeCreatedAt = communityInteractionNextBeforeCreatedAtRef.current;
     if (
-      !COMMUNITY_INTERACTION_PROJECTION_ENABLED
-      || !communityId
+      !communityId
       || beforeCreatedAt === null
       || isLoadingOlderCommunityInteractionRootsRef.current
     ) {
@@ -2699,7 +2557,7 @@ export default function App() {
   }, [activeCommunityId, ensureUsableAuthSession, session]);
 
   useEffect(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !session) return;
+    if (!activeCommunityId || !session) return;
     let cancelled = false;
     let liveClient: CloudCommunityChatLiveClient | null = null;
     let unsubscribe: (() => void) | null = null;
@@ -2752,7 +2610,6 @@ export default function App() {
 
   useEffect(() => {
     if (
-      !COMMUNITY_INTERACTION_PROJECTION_ENABLED ||
       activePage !== "community" ||
       communityTab !== "chat" ||
       !activeCommunityId ||
@@ -2805,7 +2662,7 @@ export default function App() {
   }, [activeCommunityId, activePage, communityTab, ensureUsableAuthSession, session]);
 
   useEffect(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !selectedCommunityInteractionRootId || !session) return;
+    if (!selectedCommunityInteractionRootId || !session) return;
     const rootId = selectedCommunityInteractionRootId;
     let cancelled = false;
     let liveClient: CloudCommunityChatLiveClient | null = null;
@@ -2918,7 +2775,7 @@ export default function App() {
 
   const restoredInteractionSelectionForCommunityRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId) return;
+    if (!activeCommunityId) return;
     if (shellVariant === "mobile") return;
     if (restoredInteractionSelectionForCommunityRef.current === activeCommunityId) return;
     // Restore only once the feed's roots are actually loaded FOR THIS community,
@@ -3006,32 +2863,12 @@ export default function App() {
     session,
   ]);
 
-  useCommunityChatRealtime({
-    // The normal web UI uses canonical interaction roots/replies; keep legacy chat
-    // realtime disabled here so it cannot pull production back to the old timeline.
-    isEnabled: activePage === "community" && !COMMUNITY_INTERACTION_PROJECTION_ENABLED,
-    session: session,
-    ensureSession: ensureUsableAuthSession,
-    activeCommunityId,
-    ensureCommunityChatThread,
-    toCommunityChatMessage,
-    communityMessageIdsRef,
-    isUserAtBottomRef,
-    setUnreadCount,
-    setCommunityMessages,
-    setMessageReactions,
-    setCommunityActivityEvents,
-    onLoadProfiles: (userIds, session) => {
-      return loadUserProfiles(userIds, session);
-    },
-  });
-
   // Keep the interaction projection loaded whenever a community is active — NOT only on the chat
   // page. The workspace right panel renders the same feed (compact) on the workspace page, so the
   // roots must persist across page navigation. Only reset when there's no active community/session.
   useEffect(() => {
     const sessionUserId = String(canonicalSessionUserId ?? "").trim();
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !session || !sessionUserId) {
+    if (!activeCommunityId || !session || !sessionUserId) {
       communityInteractionProjectionBoundaryRef.current = null;
       resetCommunityInteractionProjection();
       return;
@@ -3050,35 +2887,13 @@ export default function App() {
     session,
   ]);
 
-  useEffect(() => {
-    if (activePage !== "community" || !activeCommunityId) return;
-    if (communityTab === "chat") return;
-    if (!isUserAtBottomRef.current) return;
-    setIsUserAtBottom(false);
-    isUserAtBottomRef.current = false;
-  }, [activeCommunityId, activePage, communityTab]);
-
   const canMentionEverybodyRef = useRef(false);
-  const {
-    handleToggleReaction,
-    handleStartReply,
-    handleStartEdit,
-    handleCancelEdit,
-    handleSaveEdit,
-    handleDeleteMessage,
-    handleSendCommunityMessage,
-  } = useCommunityChatMutationController({
+  const { handleSendCommunityMessage } = useCommunityChatMutationController({
     activeCommunityId,
     canMentionEverybodyRef,
     session: session,
     sessionUserId: canonicalSessionUserId,
     ensureSession: ensureUsableAuthSession,
-    missingPayloadMessage: "Message sent, but no payload returned.",
-    ensureCommunityChatThread,
-    useCanonicalCommunityInteractions: Boolean(
-      COMMUNITY_INTERACTION_PROJECTION_ENABLED &&
-      activeCommunity
-    ),
     onCanonicalOptimisticInsert: (pending) => {
       setPendingCanonicalInteractions((prev) => [
         ...prev.filter((item) => item.idempotencyKey !== pending.idempotencyKey),
@@ -3091,7 +2906,7 @@ export default function App() {
       );
     },
     createCommunityInteractionMessageRows: (params) =>
-      createCloudCommunityInteractionComposerMessageRows<AuthSession, Parameters<typeof toCommunityChatMessage>[0]>({
+      createCloudCommunityInteractionComposerMessageRows<AuthSession>({
         session: params.session,
         communityId: params.communityId,
         idempotencyKey: params.idempotencyKey,
@@ -3101,10 +2916,6 @@ export default function App() {
         mentions: params.mentions,
         attachments: params.attachments,
       }),
-    toCommunityChatMessage,
-    loadCommunityChat,
-    parseReplyPrefix,
-    buildReplyPrefix,
     beforeSendValidate: async () => {
       if (!isProfileSetupCompleteForPublicActions) {
         openProfileSetup();
@@ -3125,10 +2936,6 @@ export default function App() {
     onProfileSetupRequired: openProfileSetup,
     prepareAttachmentsForSend: prepareCommunityAttachmentsForSend,
     serializeAttachmentsForWrite: serializeCommunityAttachmentsForWrite,
-    onOptimisticSendScrollIntent: () => {
-      setIsUserAtBottom(true);
-      isUserAtBottomRef.current = true;
-    },
     onCommunityMessageSent: ({ communityId, hasAttachments, hasReply }) => {
       captureProductAnalyticsEvent("community message sent", {
         community_id: communityId,
@@ -3136,43 +2943,20 @@ export default function App() {
         has_reply: hasReply,
         surface: "community_chat",
       });
-      if (COMMUNITY_INTERACTION_PROJECTION_ENABLED) {
-        void loadCommunityInteractionRoots(communityId, session);
-        if (hasReply && selectedCommunityInteractionRootId) {
-          void loadCommunityInteractionReplies(selectedCommunityInteractionRootId, session);
-        }
+      void loadCommunityInteractionRoots(communityId, session);
+      if (hasReply && selectedCommunityInteractionRootId) {
+        void loadCommunityInteractionReplies(selectedCommunityInteractionRootId, session);
       }
     },
     chatInputRef,
     communityAttachmentsRef,
     communityMessageInput,
     communityMessageMentions,
-    communityMessages,
-    messageReactions,
-    replyingToMessage,
-    editingMessageId,
-    editingMessageText,
-    editingMessagePrefix,
-    setCommunityMessages,
-    setMessageReactions,
     setCommunityMessageInput,
     setCommunityAttachments,
-    setReplyingToMessage,
-    setReactionPickerMessageId,
-    setEditingMessageId,
-    setEditingMessageText,
-    setEditingMessagePrefix,
     setIsSendingCommunityMessage,
     setCommunityChatError,
   });
-
-  const handleCopyCommunityMessage = useCallback(async (messageId: string, text: string): Promise<void> => {
-    await copyTextToClipboard(text);
-    setCopiedCommunityMessageId(messageId);
-    window.setTimeout(() => {
-      setCopiedCommunityMessageId((prev) => (prev === messageId ? null : prev));
-    }, 2000);
-  }, []);
 
   const [communityResources, setCommunityResources] = useState<CommunityResource[]>([]);
   const [communityLaunchLinkSources, setCommunityLaunchLinkSources] = useState<
@@ -4684,7 +4468,6 @@ export default function App() {
     setActivePage,
     setActiveView,
     applyCommunityShellState,
-    setUnreadCount,
   });
   const workspaceCore = useWebWorkspaceCoreController<AuthSession, ThreadRecord>({
     project: workspaceProject,
@@ -5795,7 +5578,6 @@ export default function App() {
     handleCopyMessage,
     showMemoryToastMessage,
     showAppToastMessage,
-    scrollToCommunityMessage,
   } = useWebWorkspaceUiActionsController({
     copyTextToClipboard,
     setCopiedMessageId,
@@ -6486,14 +6268,6 @@ export default function App() {
       const userId = String(member.user_id ?? "").trim();
       if (userId) ids.add(userId);
     }
-    for (const message of communityMessages) {
-      const senderId = String(message.sender_id ?? "").trim();
-      if (senderId) ids.add(senderId);
-    }
-    for (const event of communityActivityEvents) {
-      const actorId = String(event.actor_user_id ?? "").trim();
-      if (actorId) ids.add(actorId);
-    }
     for (const bundle of communityInteractionRoots) {
       const actorId = String(bundle.root.actor_user_id ?? "").trim();
       if (actorId) ids.add(actorId);
@@ -6511,11 +6285,9 @@ export default function App() {
   }, [
     activePage,
     canonicalSessionUserId,
-    communityActivityEvents,
     communityDirectoryMembers,
     communityInteractionRepliesByRootId,
     communityInteractionRoots,
-    communityMessages,
   ]);
 
   const savedProfilesByUserId = useMemo(() => {
@@ -6622,9 +6394,6 @@ export default function App() {
 
   useEffect(() => {
     setCommunityChatError(null);
-    setCommunityMessages([]);
-    setCommunityActivityEvents([]);
-    setMessageReactions([]);
     setCommunityResources([]);
     setCommunityLaunchLinkSources([]);
     setCommunityLaunchFileSources([]);
@@ -6633,22 +6402,12 @@ export default function App() {
     setCommunityResourceModules([]);
     setIsLoadingCommunityEvents(false);
     setCommunityEventsError(null);
-    setReplyingToMessage(null);
-    setEditingMessageId(null);
-    setEditingMessageText("");
-    setEditingMessagePrefix(null);
     setCommunityMessageMentions([]);
-    setReactionPickerMessageId(null);
-    setUnreadCount(0);
-    setIsUserAtBottom(true);
-    isUserAtBottomRef.current = true;
-    resetCommunityChatDataState();
-    clearPendingPrependAnchor();
     setOpenResourceEmbedId(null);
     if (chatInputRef.current) {
       chatInputRef.current.style.height = "auto";
     }
-  }, [activeCommunityId, clearPendingPrependAnchor, resetCommunityChatDataState]);
+  }, [activeCommunityId]);
 
   useWebDiscoverPreloadLifecycle({
     activePage,
@@ -6707,12 +6466,8 @@ export default function App() {
         pushIsoTimestamp(bundle.reply.created_at);
       }
     }
-    for (const message of communityMessages) {
-      if (String(message.id ?? "").startsWith("pending-")) continue;
-      pushIsoTimestamp(message.created_at);
-    }
     return timestamps.length > 0 ? Math.max(...timestamps) : null;
-  }, [communityInteractionRepliesByRootId, communityInteractionRoots, communityMessages]);
+  }, [communityInteractionRepliesByRootId, communityInteractionRoots]);
 
   const latestActiveCommunityAiFeedCreatedAt = useMemo(() => {
     const timestamps = activeCommunityFeedState.live
@@ -6749,7 +6504,6 @@ export default function App() {
       activePage !== "community"
       || communityTab !== "chat"
       || !activeCommunityId
-      || !isUserAtBottom
       || latestActiveCommunityChatActivityAt === null
     ) {
       return;
@@ -6769,7 +6523,6 @@ export default function App() {
     activeCommunityId,
     activePage,
     communityTab,
-    isUserAtBottom,
     latestActiveCommunityChatActivityAt,
     markCommunitySurfaceSeen,
   ]);
@@ -8658,16 +8411,6 @@ export default function App() {
       : "idle";
   const drawerCommunityVoiceButtonState =
     activeCommunityVoiceButtonOwner === "drawer" ? communityVoiceUiState : "idle";
-
-  const communityMessageById = useMemo(() => {
-    const map = new Map<string, CommunityChatMessage>();
-    for (const message of communityMessages) map.set(message.id, message);
-    return map;
-  }, [communityMessages]);
-
-  useEffect(() => {
-    communityMessageIdsRef.current = new Set(communityMessages.map((m) => m.id));
-  }, [communityMessages]);
 
 	  const displayName = useCallback(
 	    (userId: string): string => {
@@ -10648,22 +10391,9 @@ export default function App() {
       resourceModalProps,
       canPostMessagesActiveCommunity,
       isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
-      isLoadingChat,
-      hasResolvedCommunityChat,
-      isLoadingMoreChat,
-      communityChatHasMore,
-      communityMessages,
-      communityActivityEvents,
-      communityMessageById,
-      messageReactions,
-      typingPresence: communityTypingUsers,
       onThreadTypingSignal: signalThreadTyping,
       profilesByUserId: savedProfilesByUserId,
       mentionableCommunityMembers: communityDirectoryMembers,
-      editingMessageId,
-      editingMessageText,
-      reactionPickerMessageId,
-      replyingToMessage,
       communityAttachments,
       communityMessageInput,
       communityMessageMentions,
@@ -10673,25 +10403,10 @@ export default function App() {
       onConnectCommunityAgentServeProvider: handleConnectCommunityAgentServeProvider,
       isSendingCommunityMessage,
       communityChatError,
-      copiedCommunityMessageId,
-      isUserAtBottom,
-      unreadCount,
-      reactionEmojis: REACTION_EMOJIS,
       messageListRef: communityChatListRef,
       fileInputRef: communityFileInputRef,
       chatInputRef,
-      onChatScroll: handleChatScroll,
       onFinishProfileSetup: openProfileSetup,
-      onScrollToBottom: () => {
-        setIsUserAtBottom(true);
-        isUserAtBottomRef.current = true;
-        setUnreadCount(0);
-        communityChatListRef.current?.scrollTo({
-          top: communityChatListRef.current.scrollHeight,
-          behavior: "smooth",
-        });
-      },
-      onSetReplyingToMessage: setReplyingToMessage,
       onRemoveCommunityAttachment: removeCommunityAttachment,
       onCommunityAttachmentError: setCommunityChatError,
       onIngestCommunityAttachmentsFromFileList: ingestCommunityAttachmentsFromFileList,
@@ -10710,24 +10425,11 @@ export default function App() {
       },
       onSendCommunityMessage: handleSendCommunityMessage,
       displayName,
-      shouldShowCommunitySenderMeta,
       getAvatarColor,
       getInitials,
       formatChatTime,
-      parseReplyPrefix,
-      truncateReplyPreview,
       renderTextWithLinks,
-      onScrollToReplyMessage: scrollToCommunityMessage,
       onOpenCommunityChatLightbox: openCommunityChatLightbox,
-      onToggleReaction: handleToggleReaction,
-      onSetReactionPickerMessageId: setReactionPickerMessageId,
-      onStartReply: handleStartReply,
-      onCopyMessage: handleCopyCommunityMessage,
-      onStartEdit: handleStartEdit,
-      onDeleteMessage: handleDeleteMessage,
-      onEditingMessageTextChange: setEditingMessageText,
-      onSaveEdit: handleSaveEdit,
-      onCancelEdit: handleCancelEdit,
       voiceButtonProps: {
         state: mainCommunityVoiceButtonState,
         title: activeCommunityVoiceButtonOwner === "drawer"
@@ -10752,7 +10454,6 @@ export default function App() {
         onClose: closeCommunityChatLightbox,
       },
       interactionProjection: {
-        enabled: COMMUNITY_INTERACTION_PROJECTION_ENABLED,
         mobileThreadPage: mobileThreadPageOpen,
         onMobileReadingModeChange: mobileChromeScrollTrackingEnabled
           ? setMobileChromeReadingMode
@@ -11058,7 +10759,7 @@ export default function App() {
     ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false, events: false })
     : { chat: false, ai_feed: false, resources: false, events: false };
   const activeCommunityAttentionCount =
-    Number(Boolean(activeCommunityAttentionSummary.chat || (activePage === "community" && activeCommunityId && unreadCount > 0))) +
+    Number(Boolean(activeCommunityAttentionSummary.chat)) +
     Number(Boolean(activeCommunityAttentionSummary.ai_feed)) +
     Number(Boolean(activeCommunityAttentionSummary.resources)) +
     Number(Boolean(activeCommunityAttentionSummary.events));
@@ -11113,11 +10814,6 @@ export default function App() {
   ) : null;
   const handleSelectCommunityTab = useCallback((tab: CommunityTab) => {
     setCommunityResourceModuleId(null);
-    if (tab === "chat") {
-      setUnreadCount(0);
-      setIsUserAtBottom(true);
-      isUserAtBottomRef.current = true;
-    }
     if (isCommunityRouteManagedTab(tab)) {
       const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
       if (nextCommunitySlug) {
@@ -11129,11 +10825,8 @@ export default function App() {
   }, [
     activeCommunity,
     applyCommunityShellState,
-    isUserAtBottomRef,
     openCommunityTab,
     selectedActiveCommunitySlug,
-    setIsUserAtBottom,
-    setUnreadCount,
   ]);
   const handleSelectCommunityTabFromMobile = useCallback((tab: CommunityTab) => {
     setMobileOverlay(null);
@@ -11710,9 +11403,8 @@ export default function App() {
   const activeIndicators = activeCommunityId
     ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false, events: false, mentions: false })
     : { chat: false, ai_feed: false, resources: false, events: false, mentions: false };
-  const localActiveCommunityChatAttention = Boolean(activePage === "community" && activeCommunityId && unreadCount > 0);
   const communityTabIndicators = {
-    chat: Boolean(activeIndicators.chat || localActiveCommunityChatAttention),
+    chat: Boolean(activeIndicators.chat),
     ai_feed: Boolean(activeIndicators.ai_feed),
     resources: Boolean(activeIndicators.resources),
     events: Boolean(activeIndicators.events),
@@ -11724,9 +11416,6 @@ export default function App() {
     if (indicators.chat || indicators.ai_feed || indicators.resources || indicators.events || indicators.mentions) {
       communityRailAttentionById[communityId] = true;
     }
-  }
-  if (activeCommunityId && localActiveCommunityChatAttention) {
-    communityRailAttentionById[activeCommunityId] = true;
   }
   /* The visitor lens on the shell: /c/:slug feeds the SAME nav the member
      page uses — community identity from the public payload, every capability

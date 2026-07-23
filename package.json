@@ -117,7 +117,6 @@
     "check:community-archive-runtime-severance-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_archive_runtime_severance_contract_proof.ts",
     "check:community-resource-semantic-integrity-proof": "tsx scripts/community_resource_semantic_integrity_contract_proof.ts",
     "check:community-ai-feed-evidence-spine-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_ai_feed_evidence_spine_contract_proof.ts",
-    "check:community-interactions-legacy-chat-adapter-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interactions_legacy_chat_adapter_contract_proof.ts",
     "check:community-interactions-legacy-chat-backfill-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interactions_legacy_chat_backfill_contract_proof.ts",
     "check:community-interaction-migration-residue-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interaction_migration_residue_proof.ts",
     "check:community-interaction-projection-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interaction_projection_ui_contract_proof.ts",

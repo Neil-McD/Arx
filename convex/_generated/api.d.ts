@@ -45,7 +45,6 @@ import type * as chatgptResponsesTransport from "../chatgptResponsesTransport.js
 import type * as community from "../community.js";
 import type * as communityAccessAudit from "../communityAccessAudit.js";
 import type * as communityAccessQueries from "../communityAccessQueries.js";
-import type * as communityActivity from "../communityActivity.js";
 import type * as communityAdmin from "../communityAdmin.js";
 import type * as communityAgent from "../communityAgent.js";
 import type * as communityAgentConcierge from "../communityAgentConcierge.js";
@@ -115,6 +114,7 @@ import type * as communityResources from "../communityResources.js";
 import type * as communitySkillAttachments from "../communitySkillAttachments.js";
 import type * as communitySourceUrlPolicy from "../communitySourceUrlPolicy.js";
 import type * as communitySubscriptionAccessCore from "../communitySubscriptionAccessCore.js";
+import type * as communitySubscriptionCancellationCore from "../communitySubscriptionCancellationCore.js";
 import type * as communitySubscriptionEventConvergenceCore from "../communitySubscriptionEventConvergenceCore.js";
 import type * as communityText from "../communityText.js";
 import type * as communityWikiArchitect from "../communityWikiArchitect.js";
@@ -281,7 +281,6 @@ declare const fullApi: ApiFromModules<{
   community: typeof community;
   communityAccessAudit: typeof communityAccessAudit;
   communityAccessQueries: typeof communityAccessQueries;
-  communityActivity: typeof communityActivity;
   communityAdmin: typeof communityAdmin;
   communityAgent: typeof communityAgent;
   communityAgentConcierge: typeof communityAgentConcierge;
@@ -351,6 +350,7 @@ declare const fullApi: ApiFromModules<{
   communitySkillAttachments: typeof communitySkillAttachments;
   communitySourceUrlPolicy: typeof communitySourceUrlPolicy;
   communitySubscriptionAccessCore: typeof communitySubscriptionAccessCore;
+  communitySubscriptionCancellationCore: typeof communitySubscriptionCancellationCore;
   communitySubscriptionEventConvergenceCore: typeof communitySubscriptionEventConvergenceCore;
   communityText: typeof communityText;
   communityWikiArchitect: typeof communityWikiArchitect;

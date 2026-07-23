@@ -52,7 +52,6 @@ import {
   normalizeCommunityResourceBodyMd,
   writeCommunityResourceBodyContent,
 } from "./communityResourceContent";
-import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import {
   requireSafeCommunitySourceFetcherEndpoint,
   requireSafeCommunitySourceUrl,
@@ -9816,27 +9815,6 @@ export const saveCommunityResource = mutation({
         )
       : created;
     await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
-    const createdModule = moduleId
-      ? ((await ctx.db.get(moduleId as any)) as CommunityResourceModuleLike | null)
-      : null;
-    const liveModuleIds = new Set(
-      createdModule && communityResourceModuleIsLive(createdModule)
-        ? [normalizeIdValue(createdModule._id)]
-        : [],
-    );
-    if (communityResourceIsLiveModulePage(hydrated, liveModuleIds)) {
-      await recordCommunityActivityEventBestEffort({
-        ctx,
-        communityId: community._id,
-        type: "resource_added",
-        actorUserId: args.userId,
-        targetType: "resource",
-        targetId: hydrated._id,
-        targetTitle: hydrated.title,
-        dedupeKey: `resource_added:${normalizeIdValue(hydrated._id)}`,
-        nowMs,
-      });
-    }
     return await mapCommunityResourceRow(ctx, hydrated);
   },
 });

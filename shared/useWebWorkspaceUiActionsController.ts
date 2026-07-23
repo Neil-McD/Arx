@@ -46,16 +46,9 @@ export function useWebWorkspaceUiActionsController(args: UseWebWorkspaceUiAction
     }, 2400);
   }, []);
 
-  const scrollToCommunityMessage = useCallback((messageId: string) => {
-    const target = document.getElementById(`msg-${messageId}`);
-    if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, []);
-
   return {
     handleCopyMessage,
     showMemoryToastMessage,
     showAppToastMessage,
-    scrollToCommunityMessage,
   };
 }

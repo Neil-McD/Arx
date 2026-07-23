@@ -10,6 +10,7 @@ echo "== Community public identity guard =="
 
 COMMUNITY_FILE="convex/community.ts"
 COMMUNITY_CHAT_FILE="convex/communityChat.ts"
+COMMUNITY_INTERACTIONS_FILE="convex/communityInteractions.ts"
 COMMUNITY_ADMIN_FILE="convex/communityAdmin.ts"
 COMMUNITY_CORE_FILE="convex/communityCore.ts"
 COMMUNITY_EXPERIENCE_FILE="convex/communityExperience.ts"
@@ -22,6 +23,10 @@ if [[ ! -f "$COMMUNITY_FILE" ]]; then
 fi
 if [[ ! -f "$COMMUNITY_CHAT_FILE" ]]; then
   echo "FAIL: missing $COMMUNITY_CHAT_FILE"
+  exit 1
+fi
+if [[ ! -f "$COMMUNITY_INTERACTIONS_FILE" ]]; then
+  echo "FAIL: missing $COMMUNITY_INTERACTIONS_FILE"
   exit 1
 fi
 if [[ ! -f "$COMMUNITY_ADMIN_FILE" ]]; then
@@ -56,20 +61,23 @@ require_multiline_match() {
   echo "OK: $description"
 }
 
-echo "[1/9] Ensuring public user-ID resolver exists..."
+echo "[1/10] Ensuring public user-ID resolver exists..."
 require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function resolvePublicUserId\(\s*ctx: any,\s*rawUserId: unknown,' \
   "resolvePublicUserId helper exists"
 
-echo "[2/9] Ensuring chat and reaction payloads resolve browser-facing IDs..."
-require_multiline_match "$COMMUNITY_CHAT_FILE" \
-  'async function mapCommunityChatMessageRow\([\s\S]*?sender_id: await resolvePublicUserId\(ctx, row\.senderUserId, userIdCache\)' \
-  "community chat rows resolve public sender IDs"
-require_multiline_match "$COMMUNITY_CHAT_FILE" \
-  'async function mapCommunityMessageReactionRow\([\s\S]*?user_id:\s*\(await resolvePublicUserId\(ctx, row\.userId, userIdCache\)\) \?\?\s*String\(row\.userId\)' \
-  "community reaction rows resolve public user IDs"
+echo "[2/10] Ensuring canonical interaction payloads resolve browser-facing IDs..."
+require_multiline_match "$COMMUNITY_INTERACTIONS_FILE" \
+  'async function mapRootBundle\([\s\S]*?publicActorUserId = root\.actorUserId[\s\S]*?resolvePublicUserId\(ctx, root\.actorUserId, userIdCache\)[\s\S]*?actor_user_id: publicActorUserId' \
+  "canonical interaction roots resolve public actor IDs"
+require_multiline_match "$COMMUNITY_INTERACTIONS_FILE" \
+  'async function mapReplyBundle\([\s\S]*?publicActorUserId = reply\.actorUserId[\s\S]*?resolvePublicUserId\(ctx, reply\.actorUserId, userIdCache\)[\s\S]*?actor_user_id: publicActorUserId' \
+  "canonical interaction replies resolve public actor IDs"
+require_multiline_match "$COMMUNITY_INTERACTIONS_FILE" \
+  'async function mapMention\([\s\S]*?mentioned_user_id: row\.mentionedUserId[\s\S]*?resolvePublicUserId\(ctx, row\.mentionedUserId, userIdCache\)' \
+  "canonical interaction mentions resolve public user IDs"
 
-echo "[3/9] Ensuring core community records resolve public owner IDs..."
+echo "[3/10] Ensuring core community records resolve public owner IDs..."
 require_multiline_match "$COMMUNITY_LIFECYCLE_FILE" \
   'async function mapCommunityRecord\([\s\S]*?owner_id:\s*\(await resolvePublicUserId\(ctx, row\.ownerId, userIdCache\)\) \?\?\s*String\(row\.ownerId\)' \
   "community records resolve public owner IDs"
@@ -105,10 +113,12 @@ require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function mapCommunityResourceRow\([\s\S]*?created_by:\s*\(await resolvePublicUserId\(ctx, row\.createdByUserId, userIdCache\)\) \?\?\s*String\(row\.createdByUserId\)' \
   "resource rows resolve public creator IDs"
 
-echo "[9/10] Ensuring chat message sender IDs stay in the same public namespace..."
-require_multiline_match "$COMMUNITY_CHAT_FILE" \
-  'sender_id: await resolvePublicUserId\(ctx, row\.senderUserId, userIdCache\)' \
-  "chat message rows use public sender IDs"
+echo "[9/10] Ensuring retired legacy browser message mappers stay deleted..."
+if rg -n 'mapCommunityChatMessageRow|mapCommunityMessageReactionRow' "$COMMUNITY_CHAT_FILE" >/dev/null; then
+  echo "FAIL: legacy browser chat identity mappers must stay deleted"
+  exit 1
+fi
+echo "OK: legacy browser chat identity mappers are deleted"
 
 echo "[10/10] Guard passed."
 echo "PASS: community browser-facing user references are normalized to public IDs."

@@ -3,16 +3,16 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
-const packageJson = readFileSync(join(root, "package.json"), "utf8");
-const communityChat = readFileSync(join(root, "convex/communityChat.ts"), "utf8");
-const gateway = readFileSync(join(root, "shared/cloudCommunityChatGateway.ts"), "utf8");
-const mutationController = readFileSync(join(root, "shared/useCommunityChatMutationController.ts"), "utf8");
+const read = (path: string) => readFileSync(join(root, path), "utf8");
 
-function extractNumberConst(source: string, name: string): number {
-  const match = source.match(new RegExp(`const ${name} = ([0-9_]+);`));
-  assert.ok(match, `expected const ${name}`);
-  return Number(match[1].replaceAll("_", ""));
-}
+const packageJson = read("package.json");
+const app = read("apps/web/src/App.tsx");
+const attachmentBridge = read("convex/communityInteractionAttachmentBridge.ts");
+const interactions = read("convex/communityInteractions.ts");
+const communityChat = read("convex/communityChat.ts");
+const facade = read("convex/community.ts");
+const gateway = read("shared/cloudCommunityChatGateway.ts");
+const mutationController = read("shared/useCommunityChatMutationController.ts");
 
 assert.match(
   packageJson,
@@ -20,68 +20,48 @@ assert.match(
   "package scripts should expose the community chat attachment policy proof",
 );
 
-assert.equal(
-  extractNumberConst(communityChat, "MAX_STORED_CHAT_ATTACHMENTS"),
-  8,
-  "backend should own the max community chat attachment count",
-);
-assert.equal(
-  extractNumberConst(communityChat, "MAX_STORED_CHAT_IMAGE_DATA_URL_CHARS"),
-  600000,
-  "backend should cap stored image data URL fallbacks",
-);
-
 assert.match(
-  communityChat,
-  /raw\.length > MAX_STORED_CHAT_ATTACHMENTS[\s\S]*message_attachment_limit_exceeded/,
-  "write normalization should reject over-limit attachment arrays",
+  app,
+  /const MAX_WEB_ATTACHMENTS_PER_MESSAGE = 8;[\s\S]*MAX_WEB_ATTACHMENTS_PER_MESSAGE - existing\.length[\s\S]*You can attach up to \$\{MAX_WEB_ATTACHMENTS_PER_MESSAGE\} files per message/,
+  "the browser should enforce the eight-attachment composer limit before upload",
 );
 assert.match(
-  communityChat,
-  /out\.length >= MAX_STORED_CHAT_ATTACHMENTS\) break;/,
-  "read normalization should bound legacy attachment arrays without throwing",
+  attachmentBridge,
+  /const MAX_LEGACY_INTERACTION_ATTACHMENTS = 8;[\s\S]*out\.length >= MAX_LEGACY_INTERACTION_ATTACHMENTS[\s\S]*normalizedDataUrl\.length <= MAX_LEGACY_IMAGE_DATA_URL_CHARS/,
+  "canonical normalization and migration fallback should remain bounded",
+);
+assert.match(
+  interactions,
+  /normalizeInteractionAttachmentInputs\(args\.attachments \?\? \[\]\)[\s\S]*insertCanonicalInteractionAttachmentsForTarget\(\{[\s\S]*rootId: root\._id,[\s\S]*attachments[\s\S]*insertCanonicalInteractionAttachmentsForTarget\(\{[\s\S]*replyId: reply\._id,[\s\S]*attachments/,
+  "canonical composer writes should own root and reply attachment rows",
 );
 assert.match(
   communityChat,
-  /attachments\.length === 0[\s\S]*Array\.isArray\(record\.attachments\)[\s\S]*\{ \.\.\.record, attachments: \[\] \}/,
-  "read mapping should not return unsanitized legacy attachment arrays when all entries are dropped",
-);
-assert.match(
-  communityChat,
-  /normalizedDataUrl\.startsWith\("data:image\/"\)[\s\S]*normalizedDataUrl\.length > MAX_STORED_CHAT_IMAGE_DATA_URL_CHARS[\s\S]*message_attachment_payload_too_large/,
-  "write normalization should reject oversized image data URL fallbacks",
-);
-assert.match(
-  communityChat,
-  /const attachments = normalizeStoredChatAttachments\(args\.attachments, \{ enforceWritePolicy: true \}\);/,
-  "message creation should use write-enforced attachment normalization",
-);
-assert.match(
-  communityChat,
-  /normalizeStoredChatAttachments\(\(args\.contentJson as Record<string, unknown>\)\.attachments, \{ enforceWritePolicy: true \}\)/,
-  "message edits should use write-enforced attachment normalization",
-);
-
-assert.equal(
-  extractNumberConst(gateway, "MAX_REACTION_MESSAGE_IDS_PER_REQUEST"),
-  extractNumberConst(communityChat, "MAX_REACTION_MESSAGE_IDS_PER_REQUEST"),
-  "live reaction subscription cap should match the backend reaction read cap",
+  /generateCommunityChatAttachmentUploadUrl[\s\S]*requireCommunityChatAccess[\s\S]*requireProfileSetupCompleteForUser[\s\S]*ctx\.storage\.generateUploadUrl/,
+  "the retained upload-url boundary should stay access and profile gated",
 );
 assert.match(
   gateway,
-  /\.slice\(0, MAX_REACTION_MESSAGE_IDS_PER_REQUEST\)/,
-  "live reaction subscriptions should use the named reaction cap",
+  /generateCommunityChatAttachmentUploadUrl[\s\S]*uploadCloudCommunityChatAttachmentFile/,
+  "the browser should retain only the provider-bounded attachment upload path",
 );
 
-assert.match(
+for (const [label, source] of [
+  ["community chat backend", communityChat],
+  ["community facade", facade],
+  ["community chat gateway", gateway],
+  ["send controller", mutationController],
+] as const) {
+  assert.doesNotMatch(
+    source,
+    /createThreadUserMessage|patchOwnMessageContent|deleteOwnMessage|createMessageReaction|listMessageReactions/,
+    `${label} should not retain the legacy message mutation surface`,
+  );
+}
+assert.doesNotMatch(
   mutationController,
-  /message_attachment_limit_exceeded[\s\S]*You can attach up to 8 files per message/,
-  "attachment count policy errors should map to user-facing chat copy",
-);
-assert.match(
-  mutationController,
-  /message_attachment_payload_too_large[\s\S]*One attachment preview is too large/,
-  "attachment payload policy errors should map to user-facing chat copy",
+  /message_attachment_limit_exceeded|message_attachment_payload_too_large/,
+  "the canonical send controller should not retain error branches owned only by the deleted legacy writer",
 );
 
 console.log("community_chat_attachment_policy_proof: ok");

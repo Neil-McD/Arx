@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   interactionPresentationForEmbeds,
@@ -111,10 +111,10 @@ assert.doesNotMatch(
   /VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION/,
   "App should not gate the production canonical projection behind a Vite env flag",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;/,
-  "App should make canonical interaction projection the normal web chat surface",
+  /COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
+  "App should not retain a projection flag after the canonical surface becomes unconditional",
 );
 assert.match(
   app,
@@ -123,7 +123,7 @@ assert.match(
 );
 assert.match(
   app,
-  /interactionProjection:\s*\{[\s\S]*enabled:\s*COMMUNITY_INTERACTION_PROJECTION_ENABLED[\s\S]*roots:\s*appendPendingRoots\(communityInteractionRoots, pendingCanonicalInteractions, activeCommunityId\)[\s\S]*selectedRootId:\s*selectedCommunityInteractionRootId/,
+  /interactionProjection:\s*\{[\s\S]*roots:\s*appendPendingRoots\(communityInteractionRoots, pendingCanonicalInteractions, activeCommunityId\)[\s\S]*selectedRootId:\s*selectedCommunityInteractionRootId/,
   "App should pass the canonical projection with optimistic roots into the chat panel",
 );
 assert.match(
@@ -131,10 +131,10 @@ assert.match(
   /subscribeCloudCommunityInteractionRoots[\s\S]*subscribeCloudCommunityInteractionReplies/,
   "App should subscribe to canonical interaction roots and replies directly",
 );
-assert.match(
-  app,
-  /useCommunityChatRealtime\(\{[\s\S]*isEnabled: activePage === "community" && !COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
-  "legacy chat realtime should remain disabled while canonical projection is the normal chat surface",
+assert.equal(
+  existsSync(join(root, "shared/useCommunityChatRealtime.ts")),
+  false,
+  "retired legacy chat realtime should be deleted rather than kept disabled",
 );
 assert.match(
   app,
@@ -159,7 +159,7 @@ assert.match(
 );
 assert.match(
   interactionProjectionVisibility,
-  /interactionProjection\?\.enabled[\s\S]*activeCommunity[\s\S]*hasAuthenticatedPresentation/,
+  /interactionProjection &&[\s\S]*activeCommunity &&[\s\S]*hasAuthenticatedPresentation/,
   "chat panel should select the canonical projection from canonical surface authority",
 );
 assert.doesNotMatch(
@@ -169,8 +169,8 @@ assert.doesNotMatch(
 );
 assert.match(
   communityChatBootstrap,
-  /!showInteractionProjection[\s\S]*isLoadingChat \|\| !hasResolvedCommunityChat/,
-  "legacy readiness should remain isolated to the dormant legacy projection",
+  /hasAuthenticatedPresentation[\s\S]*isAuthRecoveringSignedIn \|\| isResolvingSelectedCommunity/,
+  "chat bootstrap should depend only on authenticated route resolution",
 );
 assert.match(
   app,
@@ -184,8 +184,8 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /showInteractionProjection && interactionProjection[\s\S]*community-interaction-scroll[\s\S]*WebCommunityInteractionProjection[\s\S]*:\s*\([\s\S]*className="chat-messages"/,
-  "chat panel should keep the legacy message timeline as the fallback projection",
+  /showInteractionProjection && interactionProjection[\s\S]*community-interaction-scroll[\s\S]*WebCommunityInteractionProjection[\s\S]*:\s*\([\s\S]*Sign in to access community chat[\s\S]*Select a community to start chatting/,
+  "chat panel should expose only canonical projection plus signed-out or no-community states",
 );
 assert.match(
   chatPanel,
@@ -194,8 +194,8 @@ assert.match(
 );
 assert.match(
   app,
-  /renderTextWithLinks,[\s\S]*onScrollToReplyMessage: scrollToCommunityMessage/,
-  "App should pass safe link rendering into the community chat panel",
+  /buildWebCommunitySurfaceProjection\(\{[\s\S]*renderTextWithLinks,/,
+  "App should pass safe link rendering into the canonical community surface",
 );
 assert.doesNotMatch(
   chatPanel,
@@ -918,13 +918,13 @@ assert.match(
 );
 assert.match(
   sendController,
-  /resolveCommunityChatSendRoute[\s\S]*projection_disabled[\s\S]*community_interaction_writer_missing[\s\S]*community_interaction_reply_target_unmapped/,
-  "send controller should keep canonical projection writes behind one explicit fail-closed route decision",
+  /resolveCanonicalCommunityChatSendRoute[\s\S]*community_interaction_writer_missing[\s\S]*community_interaction_reply_target_unmapped/,
+  "send controller should keep canonical writes behind one explicit fail-closed route decision",
 );
 assert.doesNotMatch(
   sendController,
-  /reason:\s*"writer_missing"|return\s+\{\s*kind:\s*"legacy",\s*reason:\s*"writer_missing"\s*\}/,
-  "projection-active sends should not fall back to legacy when the canonical writer is missing",
+  /createCloudThreadUserMessageRows|createThreadUserMessage|kind:\s*"legacy"|projection_disabled/,
+  "canonical sends should not retain a legacy writer branch",
 );
 assert.match(
   sendController,
@@ -1083,7 +1083,7 @@ assert.match(
 
 assert.match(
   contract,
-  /Current UI Projection Slice[\s\S]*canonical projection is the normal production and staging chat surface[\s\S]*legacy chat timeline is not a production UI routing option[\s\S]*projection subscribes to canonical interaction roots and replies directly[\s\S]*legacy chat realtime is disabled for the normal web chat UI[\s\S]*canonical interaction read bundles expose public actor user ids[\s\S]*top-level composer sends use the canonical composer bridge[\s\S]*missing canonical writer fails closed[\s\S]*canonical projection does not rely on legacy chat realtime[\s\S]*stale interaction reads must not overwrite/,
+  /Current UI Projection Slice[\s\S]*canonical projection is the normal production and staging chat surface[\s\S]*legacy chat timeline is not a production UI routing option[\s\S]*projection subscribes to canonical interaction roots and replies directly[\s\S]*legacy chat realtime is deleted from the normal web chat UI[\s\S]*canonical interaction read bundles expose public actor user ids[\s\S]*top-level composer sends use the canonical composer bridge[\s\S]*missing canonical writer fails closed[\s\S]*canonical projection does not rely on legacy chat realtime[\s\S]*stale interaction reads must not overwrite/,
   "interaction contract should document the active UI projection slice",
 );
 assert.match(

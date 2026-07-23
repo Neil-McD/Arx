@@ -204,11 +204,12 @@ Migration order:
 1. Add canonical interaction tables and read/write APIs.
 2. Project existing chat messages into interaction roots/replies for compatibility.
 3. Route web UI reads and writes through the canonical projection/composer.
-4. Keep the legacy chat writer only for compatibility consumers and migration/backfill.
-5. Move reactions, embeds, mentions, and moderation onto canonical tables; keep
+4. Move reactions, embeds, mentions, and moderation onto canonical tables; keep
    the community unread boundary in `communityMemberSettings`.
-6. Delete legacy chat writes after parity.
-7. Delete legacy chat reads after backfill and UI projection are stable.
+5. Delete live legacy chat writes and browser reads after parity.
+6. Decide optional digest and featured-message requirements before migrating them.
+7. Backfill retained historical state, observe zero remaining compatibility
+   reads/writes, then delete migration links, helpers, and legacy tables.
 
 No big-bang rewrite. No duplicated product truth.
 
@@ -307,13 +308,12 @@ Rules:
 - the projection reads roots with `listCommunityInteractionRoots`
 - the projection opens exactly one drawer with replies from `listCommunityInteractionReplies`
 - the projection subscribes to canonical interaction roots and replies directly
-- legacy chat realtime is disabled for the normal web chat UI
+- legacy chat realtime is deleted from the normal web chat UI
 - canonical interaction read bundles expose public actor user ids for UI identity/profile hydration
 - top-level composer sends use the canonical composer bridge, including prepared attachments
 - drawer reply sends use the canonical composer bridge when the reply target has a canonical root id, including prepared attachments
 - a missing canonical writer fails closed instead of falling back to the legacy chat writer
-- legacy timeline sends remain on the legacy chat writer only for non-projection compatibility call paths
-- successful sends may request a canonical projection reload, but canonical projection does not rely on legacy chat realtime
+- successful sends may request a canonical projection reload; canonical projection does not rely on legacy chat realtime
 - stale interaction reads must not overwrite the projection after a community switch or reset
 - post-style and Slack-style presentation remain UI decisions over the same root/reply data
 
@@ -335,7 +335,6 @@ Rules:
 - pending canonical projection overlays reconcile by canonical idempotency keys, not legacy chat row replacement
 - drawer replies require a canonical `rootId`; optional reply targets may resolve through canonical reply ids or pre-existing legacy links
 - canonical projection reply targets without a canonical `rootId` fail closed instead of falling back to legacy sends
-- legacy timeline replies stay on `createThreadUserMessage`
 - idempotency keys use a composer namespace, not `legacy_chat_message:*`
 - the bridge does not call public root/reply mutations
 - the bridge may schedule async link-embed enrichment after creating pending embed records
@@ -396,25 +395,32 @@ Bounded chat formatting rules:
 - formatting and contact linking are derived presentation only; they do not mutate canonical message text, composer behavior, content blocks, mentions, or embed records
 - fenced code protects matching standalone URL lines from in-flow embed replacement
 
-## Current Legacy Chat Adapter Slice
+## Retired Legacy Live Chat Surface
 
-The compatibility adapter keeps the legacy chat mutation alive while dual-writing canonical interactions for old-path compatibility sends:
+C3.2C removes the live legacy browser and public mutation surface. Historical
+rows remain migration input; they do not require a live product API.
 
-- `createThreadUserMessage` remains the legacy write entrypoint for old clients, migration tools, and compatibility paths
-- top-level chat messages are translated into `communityInteractionRoots`
-- chat replies are translated into `communityInteractionReplies`
-- legacy reply targets map to one drawer root; reply-to-reply targets become `targetReplyId` quote/context only
-- deterministic idempotency keys use the legacy message id
-- `communityInteractionLegacyChatLinks` stores legacy message to interaction root/reply mappings
-- adapter validation failures are skipped without failing the legacy chat send path
-- adapter write/materialization failures are not swallowed after writes begin; Convex must abort the transaction instead of committing partial canonical rows
-- adapter writes do not call the public interaction mutations
-- adapter writes do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously
-- adapter writes do not write source traces, archive truth, or compiler state synchronously; they schedule the same idempotent derived-evidence sync as canonical writes
-- the legacy adapter shadow-writes bounded canonical `communityInteractionAttachments` rows from legacy message payloads
-- attachment-only legacy messages become bounded markdown summaries so projection does not silently drop them
-- legacy chat response shape is unchanged
-- legacy chat link table access for the legacy adapter and backfill lives in `communityInteractionLegacyBridge`
+Rules:
+
+- the browser has no legacy chat preload, data controller, realtime controller,
+  viewport controller, message timeline, edit/delete/reaction actions, or
+  fallback send branch
+- the public community API does not expose legacy thread ensure/list,
+  message create/edit/delete, or legacy reaction create/delete/list operations
+- the community send controller always uses the canonical composer and fails
+  closed when its writer or canonical reply root is unavailable
+- canonical edit/delete/reaction operations remain the visible product actions
+- authenticated typing presence and attachment upload URL generation remain
+  because the canonical composer still uses them
+- the unconsumed ambient activity timeline, read API, browser gateway, and
+  best-effort writers are deleted; its historical table remains reachable only
+  through lifecycle policy until retention is decided
+- no historical message, reaction, mapping, featured, digest, attachment, or
+  lifecycle rows are migrated or deleted by this slice
+- migration-only legacy planning/materialization helpers remain owned by the
+  bounded backfill, not by a live dual-write path
+- `communityInteractionLegacyChatLinks` access remains isolated in
+  `communityInteractionLegacyBridge`
 
 ## Current Legacy Chat Backfill Slice
 

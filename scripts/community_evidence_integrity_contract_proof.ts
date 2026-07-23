@@ -466,7 +466,10 @@ async function main() {
     new URL("../convex/communityCompilerCandidates.ts", import.meta.url),
     "utf8",
   );
-  const legacyChat = await readFile(new URL("../convex/communityChat.ts", import.meta.url), "utf8");
+  const interactions = await readFile(
+    new URL("../convex/communityInteractions.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(schema, /communityEvidenceCitations: defineTable/);
   assert.match(directory, /requireCommunityEvidenceCitationsActiveCore/);
   assert.match(directory, /community_evidence_citation_review_required/);
@@ -475,7 +478,10 @@ async function main() {
   assert.match(recentContext, /query\("communityInteractionRoots"/);
   assert.match(recentContext, /query\("communityAiFeedPosts"/);
   assert.match(recentContext, /query\("communityResourceModules"[\s\S]*communityResourceIsLiveModulePage/);
-  assert.match(legacyChat, /syncLegacyChatMessageDeleteToInteractionCore/);
+  assert.match(
+    interactions,
+    /tombstoneCommunityInteractionTargetCore[\s\S]*scheduleCommunityInteractionEvidenceSync[\s\S]*deleteCommunityInteractionMessage/,
+  );
   assert.match(
     compilerCandidates,
     /resolveCurrentDigestItemTrace[\s\S]*sourceTraceIds\.length !== 1[\s\S]*sourceRevisions/,

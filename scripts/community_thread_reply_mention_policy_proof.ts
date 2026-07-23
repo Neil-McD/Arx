@@ -16,7 +16,7 @@ const packageJson = read("package.json");
 
 assert.match(
   chatPanel,
-  /type CommunityReplyTarget = Pick<CommunityChatMessage, "id" \| "sender_id" \| "body"> & \{[\s\S]*interaction_root_id\?: string \| null;[\s\S]*interaction_reply_id\?: string \| null;[\s\S]*legacy_message_id\?: string \| null;/,
+  /type CommunityReplyTarget = \{[\s\S]*id: string;[\s\S]*sender_id: string;[\s\S]*body: string;[\s\S]*interaction_root_id\?: string \| null;[\s\S]*interaction_reply_id\?: string \| null;[\s\S]*legacy_message_id\?: string \| null;/,
   "drawer reply targets must carry an explicit canonical interaction reply id",
 );
 assert.match(
@@ -94,10 +94,10 @@ assert.match(
   /createCanonicalMessageRows\(\{[\s\S]*rootId: sendRoute\.rootId,[\s\S]*replyToMessageId: canonicalReplyToMessageId,/,
   "canonical thread replies must submit the hidden target reply id",
 );
-assert.match(
+assert.doesNotMatch(
   mutationController,
-  /createCloudThreadUserMessageRows[\s\S]*replyToId: legacyReplyToMessageId,/,
-  "legacy chat sends must keep using legacy chat reply ids",
+  /createCloudThreadUserMessageRows|createThreadUserMessage/,
+  "reply sends must not retain the retired legacy chat writer",
 );
 assert.match(
   app,

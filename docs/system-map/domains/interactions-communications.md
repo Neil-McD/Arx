@@ -15,6 +15,11 @@ normal shell preload/readiness defect is closed: canonical entry and scrolling
 do not ensure a legacy thread or list legacy messages/reactions. The existing
 canonical projection owns loading/error/empty presentation and synchronously
 excludes rows from a previously selected community.
+The dormant legacy browser timeline, fallback send/edit/delete/reaction paths,
+and public legacy chat functions are also deleted. Typing and attachment upload
+remain because the canonical composer uses them. The unconsumed ambient
+activity timeline and its writers are deleted while its historical rows remain
+lifecycle-reachable.
 
 Development staging currently has 67 legacy messages with 67 valid mapping
 links, four legacy attachment payloads without canonical attachment rows, three
@@ -51,7 +56,7 @@ Canonical moderation event types include privacy purge request/completion states
 | Candidate | Classification | Action | Idiot index | Rationale |
 | --- | --- | --- | ---: | --- |
 | canonical community interaction substrate | `KEEP (MVP core)` | `HARDEN` | 0 | core participation and evidence source |
-| legacy message writer and mutation surface | `DELETE CANDIDATE` | `DELETE` after preload removal and first-party no-call proof | 9 | historical rows do not require a live writer |
+| legacy message writer and mutation surface | `DELETE (deferred/dead)` complete | deleted after preload removal and first-party no-call proof | 9 | historical rows do not require a live writer |
 | legacy mapping/backfill/attachment bridge | `KEEP TEMPORARILY` | `MIGRATE_THEN_DELETE` | 3 | 67 mappings are valid; four attachment targets still need canonical rows |
 | weekly digest reading legacy chat | `DECISION REQUIRED` | `DELETE` or canonicalize | 9 | not named in MVP must-keep scope and currently omits canonical-only activity |
 | public featured legacy messages | `DECISION REQUIRED` | `DELETE` or canonicalize | 8 | two rows render, but no first-party feature/unfeature caller was found |
@@ -62,7 +67,6 @@ Canonical moderation event types include privacy purge request/completion states
 
 ## Migration order
 
-Delete unreachable legacy UI writer/edit/delete/reaction paths -> decide whether digest and featured
-messages should exist -> migrate only retained attachment/reaction/featured
+Decide whether digest and featured messages should exist -> migrate only retained attachment/reaction/featured
 history -> replay and audit historical backfill -> observe zero legacy reads and
 writes -> delete legacy APIs, links, tables, and lifecycle residue.

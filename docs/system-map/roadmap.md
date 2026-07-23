@@ -80,7 +80,7 @@ Exit proof: every eligible object eventually receives service, and the canonical
 
 ## Step 6 — Finish canonical data migrations
 
-1. Canonical interactions: **normal web legacy preload/readiness deletion complete**; next delete unreachable legacy UI mutations, decide digest/featured requirements, migrate only retained attachment/reaction/featured history, replay/observe zero, and remove backfill/link/chat residue.
+1. Canonical interactions: **normal web legacy preload/readiness and live mutation/timeline surface deletion complete**; next decide digest/featured requirements, migrate only retained attachment/reaction/featured history, replay/observe zero, and remove backfill/link/chat residue.
 2. **Complete on staging:** resource contents have one canonical body owner, no inline compatibility fields or compactor, and a bounded metadata directory plus exact authorized body reads.
 3. Intelligence: scrub/remove raw legacy query fields and migrate `legacy_unversioned` evidence after retention/citation proof.
 4. Re-run account/community deletion and evidence/privacy fixtures against the single authorities.
