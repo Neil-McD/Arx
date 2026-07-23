@@ -39,17 +39,29 @@ type CommunityMembershipRow = {
   createdAt: number;
 };
 
-type CommunityChatThreadRow = {
+type CommunityInteractionDigestRootRow = {
   _id: any;
   communityId: any;
+  status: "live" | "hidden" | "deleted";
+  visibilityScope: "private" | "admin" | "community" | "public";
+  contentSummary: string;
   createdAt: number;
-  updatedAt: number;
 };
 
-type CommunityChatMessageRow = {
+type CommunityInteractionDigestReplyRow = {
   _id: any;
-  seq: number;
-  contentJson: unknown;
+  communityId: any;
+  rootId: any;
+  status: "live" | "hidden" | "deleted";
+  visibilityScope: "private" | "admin" | "community" | "public";
+  contentSummary: string;
+  createdAt: number;
+};
+
+type CommunityInteractionDigestMessageRow = {
+  _id: any;
+  objectType: "root" | "reply";
+  contentSummary: string;
   createdAt: number;
 };
 
@@ -99,6 +111,8 @@ const PUBLIC_APP_URL_ENV_KEYS = [
   "VITE_APP_URL",
 ] as const;
 
+const COMMUNITY_DIGEST_INTERACTION_LIMIT = 50;
+
 function readEnv(name: string): string {
   try {
     const value = (globalThis as any)?.process?.env?.[name];
@@ -146,13 +160,6 @@ function stripMarkdown(raw: unknown): string {
   );
 }
 
-function extractChatMessageText(contentJson: unknown): string {
-  if (typeof contentJson === "string") return truncateText(contentJson, 240);
-  if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) return "";
-  const record = contentJson as Record<string, unknown>;
-  return truncateText(record.text ?? "", 240);
-}
-
 function formatDigestDateLabel(periodStartDay: string, periodEndDay: string): string {
   const start = new Date(`${periodStartDay}T00:00:00.000Z`);
   const end = new Date(`${periodEndDay}T00:00:00.000Z`);
@@ -191,29 +198,100 @@ async function listDigestCommunities(ctx: any, args: {
     .slice(0, args.limit * 2);
 }
 
-async function getCanonicalCommunityChatThread(ctx: any, communityId: any): Promise<CommunityChatThreadRow | null> {
-  const rows = (await ctx.db
-    .query("communityChatThreads" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .collect()) as CommunityChatThreadRow[];
-  return rows.slice().sort((a, b) => a.createdAt - b.createdAt || a.updatedAt - b.updatedAt)[0] ?? null;
+function communityInteractionIsDigestReadable(
+  row: CommunityInteractionDigestRootRow | CommunityInteractionDigestReplyRow,
+): boolean {
+  return (
+    row.status === "live" &&
+    (row.visibilityScope === "community" || row.visibilityScope === "public")
+  );
 }
 
-async function listRecentCommunityChatMessages(ctx: any, params: {
+export async function listRecentCanonicalCommunityChatMessages(ctx: any, params: {
   communityId: any;
   periodStartMs: number;
   periodEndMs: number;
-}): Promise<CommunityChatMessageRow[]> {
-  const thread = await getCanonicalCommunityChatThread(ctx, params.communityId);
-  if (!thread?._id) return [];
-  const rows = (await ctx.db
-    .query("communityChatMessages" as any)
-    .withIndex("by_thread_seq", (q: any) => q.eq("threadId", thread._id))
-    .order("desc")
-    .take(500)) as CommunityChatMessageRow[];
-  return rows
-    .filter((row) => row.createdAt >= params.periodStartMs && row.createdAt <= params.periodEndMs)
-    .sort((a, b) => b.createdAt - a.createdAt);
+}): Promise<CommunityInteractionDigestMessageRow[]> {
+  const [rootWindow, replyWindow] = (await Promise.all([
+    ctx.db
+      .query("communityInteractionRoots" as any)
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q
+          .eq("communityId", params.communityId)
+          .eq("status", "live")
+          .gte("createdAt", params.periodStartMs)
+          .lte("createdAt", params.periodEndMs),
+      )
+      .order("desc")
+      .take(COMMUNITY_DIGEST_INTERACTION_LIMIT + 1),
+    ctx.db
+      .query("communityInteractionReplies" as any)
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q
+          .eq("communityId", params.communityId)
+          .eq("status", "live")
+          .gte("createdAt", params.periodStartMs)
+          .lte("createdAt", params.periodEndMs),
+      )
+      .order("desc")
+      .take(COMMUNITY_DIGEST_INTERACTION_LIMIT + 1),
+  ])) as [CommunityInteractionDigestRootRow[], CommunityInteractionDigestReplyRow[]];
+  const recentRoots = rootWindow.slice(0, COMMUNITY_DIGEST_INTERACTION_LIMIT);
+  const recentReplies = replyWindow.slice(0, COMMUNITY_DIGEST_INTERACTION_LIMIT);
+  const readableParentRoots = new Map(
+    recentRoots
+      .filter(communityInteractionIsDigestReadable)
+      .map((root) => [String(root._id), root]),
+  );
+  const missingParentIds = new Map<string, any>();
+  for (const reply of recentReplies) {
+    if (!readableParentRoots.has(String(reply.rootId))) {
+      missingParentIds.set(String(reply.rootId), reply.rootId);
+    }
+  }
+  const fetchedParents = await Promise.all(
+    Array.from(missingParentIds.entries()).map(async ([key, rootId]) => [
+      key,
+      (await ctx.db.get(rootId)) as CommunityInteractionDigestRootRow | null,
+    ] as const),
+  );
+  for (const [key, root] of fetchedParents) {
+    if (
+      root &&
+      String(root.communityId) === String(params.communityId) &&
+      communityInteractionIsDigestReadable(root)
+    ) {
+      readableParentRoots.set(key, root);
+    }
+  }
+
+  return [
+    ...recentRoots
+      .filter(communityInteractionIsDigestReadable)
+      .map((root) => ({
+        _id: root._id,
+        objectType: "root" as const,
+        contentSummary: root.contentSummary,
+        createdAt: root.createdAt,
+      })),
+    ...recentReplies
+      .filter(
+        (reply) =>
+          communityInteractionIsDigestReadable(reply) &&
+          readableParentRoots.has(String(reply.rootId)),
+      )
+      .map((reply) => ({
+        _id: reply._id,
+        objectType: "reply" as const,
+        contentSummary: reply.contentSummary,
+        createdAt: reply.createdAt,
+      })),
+  ].sort(
+    (a, b) =>
+      b.createdAt - a.createdAt ||
+      a.objectType.localeCompare(b.objectType) ||
+      String(a._id).localeCompare(String(b._id)),
+  );
 }
 
 async function listRecentAiFeedPosts(ctx: any, params: {
@@ -295,7 +373,7 @@ function buildDigestItems(args: {
   communitySlug: string;
   aiFeedPosts: CommunityAiFeedPostRow[];
   resources: CommunityResourceRow[];
-  chatMessages: CommunityChatMessageRow[];
+  chatMessages: CommunityInteractionDigestMessageRow[];
 }): DigestItemCandidate[] {
   const items: DigestItemCandidate[] = [];
   for (const post of args.aiFeedPosts.slice(0, 4)) {
@@ -321,7 +399,7 @@ function buildDigestItems(args: {
     });
   }
   for (const message of args.chatMessages.slice(0, 3)) {
-    const text = extractChatMessageText(message.contentJson);
+    const text = truncateText(message.contentSummary, 240);
     if (!text) continue;
     items.push({
       priority: 100,
@@ -366,7 +444,7 @@ export const buildWeeklyCommunityDigestBatchesInternal = internalQuery({
       if (!communitySlug) continue;
 
       const [chatMessages, aiFeedPosts, resources, newMemberCount] = await Promise.all([
-        listRecentCommunityChatMessages(ctx, {
+        listRecentCanonicalCommunityChatMessages(ctx, {
           communityId: community._id,
           periodStartMs: period.periodStartMs,
           periodEndMs: period.periodEndMs,

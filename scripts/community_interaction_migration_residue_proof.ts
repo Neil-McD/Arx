@@ -44,7 +44,7 @@ for (const needle of [
   "| R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` |",
   "| R-004 | Legacy attachment hydration fallback | `KEEP TEMPORARILY` |",
   "| R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` |",
-  "| R-008 | Weekly community digest reading legacy messages | `DECISION REQUIRED` |",
+  "| R-008 | Weekly community digest retention email | `KEEP (MVP core)` |",
   "| R-009 | Public featured-message system backed by legacy message pointers | `DECISION REQUIRED` |",
   "| R-010 | Legacy reaction rows | `KEEP TEMPORARILY` |",
   "| R-011 | Maintenance and account-lifecycle reachability for historical legacy rows | `KEEP TEMPORARILY` |",
@@ -128,8 +128,18 @@ assert.match(
 );
 assert.match(
   emailDigests,
-  /query\("communityChatThreads" as any\)[\s\S]*query\("communityChatMessages" as any\)/,
-  "the undecided weekly digest legacy dependency should remain explicit",
+  /listRecentCanonicalCommunityChatMessages[\s\S]*query\("communityInteractionRoots" as any\)[\s\S]*query\("communityInteractionReplies" as any\)[\s\S]*COMMUNITY_DIGEST_INTERACTION_LIMIT \+ 1/,
+  "the retained weekly digest should read bounded canonical roots and replies",
+);
+assert.match(
+  emailDigests,
+  /visibilityScope === "community" \|\| row\.visibilityScope === "public"[\s\S]*readableParentRoots\.has\(String\(reply\.rootId\)\)/,
+  "digest interactions and reply parents should fail closed on visibility",
+);
+assert.doesNotMatch(
+  emailDigests,
+  /communityChatThreads|communityChatMessages|contentJson/,
+  "the weekly digest should not retain legacy chat authority",
 );
 assert.match(
   communityPublic,

@@ -7,6 +7,8 @@ architecture.
 
 ## Classification Rules
 
+- `KEEP (MVP core)`: required by the accepted MVP product contract and owned by
+  canonical authority.
 - `KEEP TEMPORARILY`: physically required by a named historical or lifecycle
   dependency. Its deletion gate must be explicit.
 - `DELETE CANDIDATE`: replacement authority exists; remove after the named
@@ -43,6 +45,11 @@ unconsumed readers and writers while retaining its historical table in
 lifecycle policy. Typing and attachment upload remain canonical-composer
 dependencies.
 
+C3.2D1 retains the weekly digest as an MVP return loop but closes its legacy
+chat dependency. Digest chat activity now comes from bounded canonical roots
+and replies, uses current canonical summaries, and excludes unreadable rows or
+replies whose parent root is not live and community-readable.
+
 ## Development Staging Snapshot
 
 Read-only aggregate captured on 2026-07-23 from
@@ -78,7 +85,7 @@ three legacy reactions. No entry or switch created legacy chat state.
 | R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `communityInteractionLegacyBridge.ts` | Delete after historical attachment/reaction/featured decisions are closed, no canonical read needs legacy IDs, and the backfill replay reports zero work. |
 | R-004 | Legacy attachment hydration fallback | `KEEP TEMPORARILY` | `communityInteractionLegacyAttachments.ts` behind canonical-first reads | Backfill the four observed targets, prove canonical rendering parity, then delete the fallback module and lookup. |
 | R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` | `communityInteractionBackfill.ts` | Keep only until all 67 historical messages and retained attachment/reaction/featured state pass a final bounded replay and integrity audit. |
-| R-008 | Weekly community digest reading legacy messages | `DECISION REQUIRED` | `emailDigests.ts` | Weekly digest is not named in the MVP must-keep contract. Delete the digest job if it is not required; otherwise move it to bounded canonical root/reply reads and prove canonical-only activity appears. |
+| R-008 | Weekly community digest retention email | `KEEP (MVP core)` | `emailDigests.ts` reads bounded canonical `communityInteractionRoots` and `communityInteractionReplies` | Legacy chat dependency closed by C3.2D1. Reconsider the product job only if the MVP return-loop requirement changes. |
 | R-009 | Public featured-message system backed by legacy message pointers | `DECISION REQUIRED` | `communityFeatured.ts`, `communityPublic.ts`, `communityFeaturedMessages` | No first-party feature/unfeature caller was found, but two pointers still render in public funnels. Delete if highlights are not required; otherwise migrate the pointer to canonical interactions before removing legacy rows. |
 | R-010 | Legacy reaction rows | `KEEP TEMPORARILY` | `communityMessageReactions`; normal interaction UI uses `communityInteractionReactions`, while public featured projection still reads legacy reactions | Close R-009, preserve any explicitly retained reaction history, then delete legacy reaction reads, mutations, and rows. |
 | R-011 | Maintenance and account-lifecycle reachability for historical legacy rows | `KEEP TEMPORARILY` | `communityMaintenance.ts`, `accountLifecyclePolicy.ts` | Replace only after canonical privacy/anonymization handling and final historical deletion; do not weaken shared-history retention to simplify migration. |
@@ -127,8 +134,8 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
    pagination dependency is deleted without touching historical data.
 2. **C3.2C complete:** delete the now-unreachable legacy UI mutation/send
    branch and its public writer/edit/delete/reaction surface.
-3. Decide R-008 and R-009 before writing migrations. Delete optional product
-   jobs rather than porting them.
+3. **C3.2D1 complete:** retain R-008 but move its chat input to canonical
+   interactions; decide R-009 before migrating featured-message state.
 4. Backfill the four retained attachment targets and any explicitly retained
    reaction/featured state; delete their fallbacks immediately after parity.
 5. Run the bounded historical backfill/integrity replay, observe zero legacy

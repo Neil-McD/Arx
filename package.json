@@ -50,6 +50,7 @@
     "test:auth-actor-subject-authority": "vitest run convex/authActorSubjectAuthority.test.ts",
     "test:auth-session-security": "vitest run convex/authSessionSecurity.test.ts",
     "test:auth-session-state-machine": "vitest run convex/authSessionStateMachine.test.ts",
+    "test:weekly-community-digest": "vitest run convex/emailDigests.test.ts",
     "check:avatar-framing-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/avatar_framing_contract_proof.ts",
     "check:profile-display-fallback-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_display_fallback_contract_proof.ts",
     "check:profile-text-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_text_contract_proof.ts",
