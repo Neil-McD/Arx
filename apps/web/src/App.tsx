@@ -731,7 +731,7 @@ type PendingCanonicalInteraction = {
   communityId: string;
   kind: "root" | "reply";
   rootId: string | null;
-  replyToMessageId: string | null;
+  targetReplyId: string | null;
   text: string;
   attachments: MessageAttachment[];
   serializedAttachments: unknown[];
@@ -796,8 +796,6 @@ function buildOptimisticRootBundle(p: PendingCanonicalInteraction): CommunityInt
       last_reply_actor_user_id: null,
       pinned_at: null,
       locked_at: null,
-      legacy_thread_id: null,
-      legacy_message_id: null,
       created_at: p.createdAt,
       updated_at: p.createdAt,
       edited_at: null,
@@ -821,16 +819,13 @@ function buildOptimisticReplyBundle(p: PendingCanonicalInteraction): CommunityIn
       actor_type: "human",
       actor_user_id: p.senderId,
       actor_agent_key: null,
-      target_reply_id: p.replyToMessageId,
+      target_reply_id: p.targetReplyId,
       status: "active",
       visibility_scope: "community",
       content_summary: p.text,
       reaction_summary: [],
       viewer_emojis: [],
       idempotency_key: composerStoredIdempotencyKey(p.idempotencyKey, p.kind),
-      legacy_thread_id: null,
-      legacy_message_id: null,
-      legacy_target_message_id: null,
       created_at: p.createdAt,
       updated_at: p.createdAt,
       edited_at: null,
@@ -2738,7 +2733,7 @@ export default function App() {
           idempotencyKey: pending.idempotencyKey,
           text: pending.text,
           rootId: pending.rootId,
-          replyToMessageId: pending.replyToMessageId,
+          targetReplyId: pending.targetReplyId,
           attachments: pending.serializedAttachments,
         });
         void loadCommunityInteractionRoots(pending.communityId, activeSession);
@@ -2912,7 +2907,7 @@ export default function App() {
         idempotencyKey: params.idempotencyKey,
         text: params.text,
         rootId: params.rootId ?? null,
-        replyToMessageId: params.replyToMessageId ?? null,
+        targetReplyId: params.targetReplyId ?? null,
         mentions: params.mentions,
         attachments: params.attachments,
       }),

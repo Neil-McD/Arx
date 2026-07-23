@@ -131,6 +131,24 @@ assert.doesNotMatch(
   /communityInteractionLegacyAttachments|resolveLegacyMessageAttachments/,
   "canonical interaction reads should not retain the deleted attachment fallback",
 );
+assert.doesNotMatch(
+  interactions,
+  /getLegacyChatLinkByRoot|getLegacyChatLinkByReply|syncLegacyMessage|legacy_(?:thread|message|target_message)_id/,
+  "live canonical reads, composer writes, and edits should not depend on legacy chat identity",
+);
+for (const [label, source] of [
+  ["interaction gateway", interactionGateway],
+  ["send controller", sendController],
+  ["chat panel", chatPanel],
+  ["app", app],
+  ["visitor projection", visitorProjection],
+] as const) {
+  assert.doesNotMatch(
+    source,
+    /legacy_(?:thread|message|target_message)_id|replyToMessageId/,
+    `${label} should not retain legacy chat identity`,
+  );
+}
 assert.match(
   schema,
   /communityChatThreads: defineTable[\s\S]*communityChatMessages: defineTable[\s\S]*communityActivityEvents: defineTable[\s\S]*communityInteractionLegacyChatLinks: defineTable/,

@@ -65,14 +65,11 @@ export type WebCommunityInteractionProjectionProps = {
   onSelectRoot: (rootId: string) => void;
   onCloseDrawer: () => void;
   onStartRootReply?: (message: {
-    id: string;
     sender_id: string;
-    body: string;
     reply_author_label: string;
     mention_candidate: MentionCandidate;
     interaction_root_id: string;
-    interaction_reply_id?: string | null;
-    legacy_message_id?: string | null;
+    interaction_reply_id: string;
   }) => void;
   mainComposer?: ReactNode;
   firstRootBodyExpansion?: {
@@ -867,14 +864,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                           onReact={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}
                           onReply={replyMentionCandidate && props.onStartRootReply
                             ? () => props.onStartRootReply?.({
-                                id: reply.legacy_message_id ?? reply.id,
                                 sender_id: reply.actor_user_id ?? "community_agent",
-                                body,
                                 reply_author_label: replyMentionCandidate.displayName,
                                 mention_candidate: replyMentionCandidate,
                                 interaction_root_id: reply.root_id,
                                 interaction_reply_id: reply.id,
-                                legacy_message_id: reply.legacy_message_id ?? null,
                               })
                             : undefined}
                           replyLabel="Reply to this message"

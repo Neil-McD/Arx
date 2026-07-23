@@ -28,6 +28,9 @@ architecture.
   interactions.
 - The canonical composer does not create legacy messages or legacy mapping
   links.
+- Live canonical root/reply reads expose canonical ids only. Reply targeting
+  accepts only a typed canonical reply id, and canonical edits do not mirror
+  into historical messages.
 - Legacy chat rows are historical migration input. They are not a second
   product authority.
 
@@ -72,6 +75,15 @@ temporary mutation/test, and generated function identities are absent. No
 legacy message, link, thread, activity row, or storage object was mutated or
 deleted.
 
+C3.2E2A severs the remaining live identity bridge. Canonical read bundles no
+longer query mapping links or emit legacy thread/message/target ids. The
+composer accepts only typed canonical root/reply ids, validates targets against
+the same community and root plus live/readable state, rejects unreadable root
+ids, and preserves target identity across idempotent retries. Canonical edits
+no longer mirror content into historical messages. The 67 mapping rows,
+bounded backfill, historical
+messages/threads/activity, and lifecycle reachability remain unchanged.
+
 ## Development Staging Snapshot
 
 Read-only attachment postflight captured on 2026-07-23 from
@@ -82,6 +94,8 @@ Read-only attachment postflight captured on 2026-07-23 from
 | legacy chat threads | 4 | three have no messages; no normal product path creates them |
 | legacy chat messages | 67 | historical migration input |
 | legacy-to-canonical links | 67 | every legacy message has exactly one link |
+| links matching the canonical target's migration idempotency key | 12 | redundant correspondence evidence after final audit |
+| links that are the sole legacy-to-canonical correspondence receipt | 55 | retain until final audit/retention decision |
 | canonical roots / replies | 54 / 23 | current interaction authority |
 | canonical-only roots / replies | 3 / 7 | cannot be represented by a legacy-only reader |
 | canonical content blocks | 76 | typed content projection |
@@ -94,6 +108,11 @@ Integrity checks found zero unlinked legacy messages, duplicate message links,
 dangling message/root/reply links, or canonical replies without content blocks.
 Counts are evidence, not expectations; no test should freeze them.
 
+The E2A preflight also found 63 readable interactions without canonical source
+traces and one malformed/orphaned community-visible interaction trace. No
+citation or intelligence node depends on that orphan. E2A intentionally does
+not repair or delete evidence; that reconciliation is the next isolated slice.
+
 C3.2B acceptance compared the same bounded aggregate before and after
 authenticated navigation on exact runtime commit `d2aa605f` across the
 Polynet, Distribution Engineering, and test community chat surfaces. It
@@ -104,8 +123,8 @@ three legacy reactions. No entry or switch created legacy chat state.
 
 | ID | Job | Classification | Current owner and first-party path | Delete condition |
 | --- | --- | --- | --- | --- |
-| R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `communityInteractionLegacyBridge.ts` | Attachment/reaction/featured decisions are closed and canonical reads no longer need legacy IDs; delete after the bounded historical backfill replay reports zero work and its integrity audit passes. |
-| R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` | `communityInteractionBackfill.ts` | Keep only until all 67 historical messages and retained attachment state pass a final bounded replay and integrity audit. |
+| R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `communityInteractionLegacyBridge.ts` | Live reads/writes/edits are severed. Keep 55 sole correspondence receipts and all 67 rows until the bounded backfill replay, evidence reconciliation, integrity audit, and retention decision authorize removal. |
+| R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` | `communityInteractionBackfill.ts` | Keep only until all 67 historical messages and retained attachment/evidence state pass a final bounded replay and integrity audit. |
 | R-008 | Weekly community digest retention email | `KEEP (MVP core)` | `emailDigests.ts` reads bounded canonical `communityInteractionRoots` and `communityInteractionReplies` | Legacy chat dependency closed by C3.2D1. Reconsider the product job only if the MVP return-loop requirement changes. |
 | R-011 | Maintenance and account-lifecycle reachability for historical legacy rows | `KEEP TEMPORARILY` | `communityMaintenance.ts`, `accountLifecyclePolicy.ts` | Replace only after canonical privacy/anonymization handling and final historical deletion; do not weaken shared-history retention to simplify migration. |
 
@@ -120,7 +139,8 @@ three legacy reactions. No entry or switch created legacy chat state.
 - Interaction evidence/source-trace synchronization for new canonical
   interactions.
 - Canonical reply targeting. Its behavior contract is owned by
-  `community_thread_reply_mention_policy_proof.ts`, not duplicated here.
+  `community_thread_reply_mention_policy_proof.ts`; it accepts canonical
+  root/reply identity only.
 
 Historical archive/evidence materialization remains part of R-007, but current
 recent-context and interaction-evidence readers do not query legacy chat rows.
@@ -135,6 +155,9 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
 - R-009/R-010 storage: two featured pointers, three legacy reactions, both
   schema tables, five indexes, maintenance handling, and lifecycle edges.
 - R-004: four exact legacy attachment payloads were preserved as four canonical attachment rows; the live legacy hydration fallback, temporary cutover function/test, and generated identities were deleted.
+- Live legacy identity bridge: mapping-link lookups and legacy ids in canonical
+  root/reply payloads, legacy reply-target fallback, and canonical edit
+  mirroring into historical messages.
 - Ambient activity timeline: browser timeline, public read API, gateway, CSS,
   and best-effort writers. Historical rows remain lifecycle-reachable pending
   retention policy.
@@ -144,6 +167,10 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
 - Canonical interaction modules must not directly query or insert legacy chat
   tables.
 - The canonical composer must not create legacy messages, threads, or links.
+- Canonical root/reply payloads and browser projections must not expose legacy
+  thread/message/target ids.
+- Canonical reply targeting must not consult mapping links.
+- Canonical edits must not patch historical chat messages.
 - Canonical reads load attachments only from canonical rows; no legacy
   attachment read fallback remains.
 - The normal web interaction gateway must not call legacy chat mutations.
@@ -168,9 +195,14 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
 6. **C3.2E1 complete:** preserve the four exact attachment targets as canonical
    rows, prove exact parity and zero-work replay, then delete their live read
    fallback and temporary migration surface.
-7. Run the bounded historical backfill/integrity replay, observe zero legacy
-   reads and writes, then delete the link/backfill/table residue and update
-   lifecycle policy.
+7. **C3.2E2A complete:** remove legacy ids and mapping-link lookups from live
+   reads, accept only canonical reply targets, and stop edit mirroring without
+   mutating historical state.
+8. **C3.2E2B next:** reconcile missing, malformed, and orphaned interaction
+   evidence before treating the historical bridge as removable.
+9. Run the bounded historical backfill/integrity replay, observe zero live
+   legacy reads and writes, then audit link/backfill/table residue and update
+   lifecycle policy only if retention and evidence gates authorize deletion.
 
 This map authorizes no further attachment, link, backfill, activity-history,
 message, thread, or remaining schema-table deletion.

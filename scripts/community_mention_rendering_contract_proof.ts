@@ -141,12 +141,12 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   // display-label token, disambiguated by the AGENT badge.
   assert.match(
     menuSource,
-    /\(candidate\.kind \?\? "user"\) === "user" && !candidate\.handle[\s\S]*?close\(\);[\s\S]*?return;/,
+    /function committedMentionFromCandidate[\s\S]*const kind = candidate\.kind \?\? "user"[\s\S]*const normalizedHandle = String\(candidate\.handle \?\? ""\)\.trim\(\)\.replace\(\/\^@\+\/, ""\)[\s\S]*if \(kind === "user" && !normalizedHandle\) return null/,
     "picker must refuse handle-less user mentions instead of falling back to display names",
   );
   assert.match(
     menuSource,
-    /candidate\.kind === "role"[\s\S]*?`@\$\{candidate\.roleKey \?\? "everybody"\}`[\s\S]*?candidate\.kind === "community_agent"[\s\S]*?`@\$\{candidate\.displayName\}`[\s\S]*?`@\$\{candidate\.handle\}`/,
+    /const token = kind === "role"[\s\S]*?`@\$\{candidate\.roleKey \?\? "everybody"\}`[\s\S]*?kind === "community_agent"[\s\S]*?`@\$\{candidate\.displayName\}`[\s\S]*?`@\$\{normalizedHandle\}`/,
     "picker must insert @handle for users, @displayName for the community agent, and the canonical role token for @everybody",
   );
   assert.match(
@@ -161,7 +161,7 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     menuSource,
-    /candidate\.kind === "role"[\s\S]*roleKey: candidate\.roleKey \?\? "everybody"[\s\S]*emailMode: candidate\.emailMode \?\? null/,
+    /kind === "role"[\s\S]*roleKey: candidate\.roleKey \?\? "everybody"[\s\S]*emailMode: candidate\.emailMode \?\? null[\s\S]*emailCooldownUntil: candidate\.emailCooldownUntil \?\? null/,
     "committed @everybody mentions must preserve the role key and email warning metadata for send serialization",
   );
 }
@@ -288,7 +288,7 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     chatPanelSource,
-    /const agentCandidate: MentionCandidate \| null = agentDisplayName[\s\S]*userId: "community_agent"[\s\S]*kind: "community_agent" as const[\s\S]*const localMainMentionCandidates = useMemo<MentionCandidate\[\]>\([\s\S]*localMentionCandidateParts\.agentCandidate[\s\S]*!replyingToMessage && localMentionCandidateParts\.everybodyCandidate[\s\S]*localMentionCandidateParts\.memberCandidates/,
+    /const agentCandidate: MentionCandidate \| null = agentDisplayName[\s\S]*userId: "community_agent"[\s\S]*kind: "community_agent" as const[\s\S]*const localMainMentionCandidates = useMemo<MentionCandidate\[\]>\([\s\S]*localMentionCandidateParts\.agentCandidate[\s\S]*localMentionCandidateParts\.everybodyCandidate[\s\S]*localMentionCandidateParts\.memberCandidates/,
     "root composer mention candidates must pin the community agent before @everybody and humans",
   );
   assert.match(

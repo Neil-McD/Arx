@@ -16,7 +16,7 @@ const packageJson = read("package.json");
 
 assert.match(
   chatPanel,
-  /type CommunityReplyTarget = \{[\s\S]*id: string;[\s\S]*sender_id: string;[\s\S]*body: string;[\s\S]*interaction_root_id\?: string \| null;[\s\S]*interaction_reply_id\?: string \| null;[\s\S]*legacy_message_id\?: string \| null;/,
+  /type CommunityReplyTarget = \{[\s\S]*sender_id: string;[\s\S]*interaction_root_id: string;[\s\S]*interaction_reply_id: string \| null;/,
   "drawer reply targets must carry an explicit canonical interaction reply id",
 );
 assert.match(
@@ -71,7 +71,7 @@ assert.match(
 );
 assert.match(
   interactionProjection,
-  /onReply=\{replyMentionCandidate && props\.onStartRootReply[\s\S]*mention_candidate: replyMentionCandidate,[\s\S]*interaction_reply_id: reply\.id,[\s\S]*legacy_message_id: reply\.legacy_message_id \?\? null,/,
+  /onReply=\{replyMentionCandidate && props\.onStartRootReply[\s\S]*mention_candidate: replyMentionCandidate,[\s\S]*interaction_root_id: reply\.root_id,[\s\S]*interaction_reply_id: reply\.id,/,
   "mentionable thread replies must pass identity and canonical reply id together",
 );
 assert.doesNotMatch(
@@ -81,18 +81,23 @@ assert.doesNotMatch(
 );
 assert.match(
   mutationController,
-  /interaction_reply_id\?: string \| null;/,
+  /interaction_root_id: string;[\s\S]*interaction_reply_id: string \| null;/,
   "send drafts must preserve canonical interaction reply ids",
 );
 assert.match(
   mutationController,
-  /const interactionReplyToId = String\(replySnapshot\?\.interaction_reply_id \?\? ""\)\.trim\(\) \|\| null;[\s\S]*const canonicalReplyToMessageId = interactionReplyToId \?\? legacyReplyToMessageId;/,
-  "canonical sends should prefer the explicit interaction reply id before falling back to legacy chat ids",
+  /const targetReplyId = String\(replySnapshot\?\.interaction_reply_id \?\? ""\)\.trim\(\) \|\| null;/,
+  "canonical sends should derive the hidden target only from canonical interaction identity",
 );
 assert.match(
   mutationController,
-  /createCanonicalMessageRows\(\{[\s\S]*rootId: sendRoute\.rootId,[\s\S]*replyToMessageId: canonicalReplyToMessageId,/,
+  /createCanonicalMessageRows\(\{[\s\S]*rootId: sendRoute\.rootId,[\s\S]*targetReplyId,/,
   "canonical thread replies must submit the hidden target reply id",
+);
+assert.doesNotMatch(
+  mutationController,
+  /legacy_message_id|legacyReplyToMessageId|canonicalReplyToMessageId|replyToMessageId/,
+  "canonical send drafts should not retain legacy reply-target identity",
 );
 assert.doesNotMatch(
   mutationController,
@@ -101,7 +106,7 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /target_reply_id: p\.replyToMessageId,/,
+  /target_reply_id: p\.targetReplyId,/,
   "optimistic canonical replies should keep the same hidden target pointer",
 );
 assert.doesNotMatch(

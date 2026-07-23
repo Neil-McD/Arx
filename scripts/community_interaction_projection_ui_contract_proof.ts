@@ -943,19 +943,32 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /const rootReplyTarget[\s\S]*if \(!root\?\.id \|\| !root\.actor_user_id\) return null[\s\S]*id: root\.legacy_message_id \?\? root\.id[\s\S]*legacy_message_id: root\.legacy_message_id \?\? null/,
-  "canonical drawer root reply target should not require a legacy message id",
+  /const rootReplyTarget[\s\S]*if \(!root\?\.id \|\| !root\.actor_user_id\) return null[\s\S]*sender_id: root\.actor_user_id[\s\S]*interaction_root_id: root\.id[\s\S]*interaction_reply_id: null/,
+  "canonical drawer root reply target should carry only canonical interaction identity",
 );
 assert.match(
   projection,
-  /onReply=\{replyMentionCandidate && props\.onStartRootReply[\s\S]*id: reply\.legacy_message_id \?\? reply\.id[\s\S]*mention_candidate: replyMentionCandidate[\s\S]*interaction_root_id: reply\.root_id[\s\S]*legacy_message_id: reply\.legacy_message_id \?\? null/,
-  "canonical drawer reply action should carry mention identity, canonical root id, and optional legacy metadata",
+  /onReply=\{replyMentionCandidate && props\.onStartRootReply[\s\S]*mention_candidate: replyMentionCandidate[\s\S]*interaction_root_id: reply\.root_id[\s\S]*interaction_reply_id: reply\.id/,
+  "canonical drawer reply action should carry mention identity and canonical root/reply ids",
 );
 assert.doesNotMatch(
   gateway,
   /createThreadUserMessage|sendCloudCommunityMessage|communityChatMessages/,
   "interaction gateway should not fall back to legacy chat tables",
 );
+for (const [label, source] of [
+  ["interaction gateway", gateway],
+  ["send controller", sendController],
+  ["chat panel", chatPanel],
+  ["interaction projection", projection],
+  ["app projection", app],
+] as const) {
+  assert.doesNotMatch(
+    source,
+    /legacy_(?:thread|message|target_message)_id|replyToMessageId/,
+    `${label} should not retain legacy chat identity`,
+  );
+}
 assert.match(
   interactions,
   /mapRootBundle[\s\S]*resolvePublicUserId\(ctx, root\.actorUserId[\s\S]*actor_user_id: publicActorUserId/,

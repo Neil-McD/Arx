@@ -93,8 +93,6 @@ export type CommunityInteractionRootRecord = {
   last_reply_actor_user_id: string | null;
   pinned_at: string | null;
   locked_at: string | null;
-  legacy_thread_id: string | null;
-  legacy_message_id: string | null;
   created_at: string;
   updated_at: string;
   edited_at: string | null;
@@ -115,9 +113,6 @@ export type CommunityInteractionReplyRecord = {
   reaction_summary: CommunityInteractionReactionSummary[];
   viewer_emojis: string[];
   idempotency_key: string;
-  legacy_thread_id: string | null;
-  legacy_message_id: string | null;
-  legacy_target_message_id: string | null;
   created_at: string;
   updated_at: string;
   edited_at: string | null;
@@ -262,7 +257,7 @@ export async function createCloudCommunityInteractionComposerMessageRows<Session
     idempotencyKey: string;
     text: string;
     rootId?: string | null;
-    replyToMessageId?: string | null;
+    targetReplyId?: string | null;
     mentions?: { userId?: string; agentKey?: string; roleKey?: string }[];
     attachments?: unknown[];
   },
@@ -274,7 +269,7 @@ export async function createCloudCommunityInteractionComposerMessageRows<Session
     idempotencyKey: params.idempotencyKey,
     text: params.text,
     rootId: params.rootId ?? null,
-    replyToMessageId: params.replyToMessageId ?? null,
+    targetReplyId: params.targetReplyId ?? null,
     ...(params.mentions && params.mentions.length ? { mentions: params.mentions } : null),
     ...(params.attachments && params.attachments.length ? { attachments: params.attachments } : null),
   });

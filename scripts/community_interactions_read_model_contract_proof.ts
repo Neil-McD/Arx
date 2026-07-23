@@ -76,6 +76,14 @@ assert.doesNotMatch(
   /query\("communityChatThreads"|query\("communityChatMessages"|\.collect\(\)/,
   "canonical attachment hydration should not scan legacy chat tables",
 );
+for (const functionName of ["mapRootBundle", "mapReplyBundle"] as const) {
+  const bundleMapper = functionBlock(interactions, functionName);
+  assert.doesNotMatch(
+    bundleMapper,
+    /getLegacyChatLink|communityInteractionLegacyChatLinks|legacy_(?:thread|message|target_message)_id/,
+    `${functionName} should expose only canonical interaction identity`,
+  );
+}
 assert.doesNotMatch(
   interactions,
   /SEED_PEOPLE|SEED_AUTH_PREFIX/,

@@ -15,8 +15,6 @@ import {
 import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
 import {
   getLegacyChatLinkByMessage,
-  getLegacyChatLinkByReply,
-  getLegacyChatLinkByRoot,
   insertLegacyChatLinkIfMissing,
   legacyChatIdempotencyKey,
 } from "./communityInteractionLegacyBridge";
@@ -323,32 +321,24 @@ async function mapCommunityAgentDockMessage(ctx: any, reply: InteractionReplyRow
   };
 }
 
-async function resolveOptionalReplyTargetForCanonicalComposer(args: {
+async function resolveCanonicalReplyTargetForComposer(args: {
   ctx: any;
   root: InteractionRootRow;
-  replyToMessageId?: string | null;
-}): Promise<{ targetReplyId?: any }> {
-  const requestedTargetId = String(args.replyToMessageId ?? "").trim();
-  if (!requestedTargetId) return {};
-
-  const directReply = (await args.ctx.db.get(requestedTargetId as any)) as InteractionReplyRow | null;
-  if (directReply?.rootId) {
-    if (normalizeIdValue(directReply.rootId) !== normalizeIdValue(args.root._id)) {
-      throw new Error("interaction_target_reply_invalid");
-    }
-    return { targetReplyId: directReply._id };
-  }
-
-  const targetLink = await getLegacyChatLinkByMessage(args.ctx, requestedTargetId as any);
-  if (!targetLink?.replyId) return {};
-  if (normalizeIdValue(targetLink.rootId) !== normalizeIdValue(args.root._id)) {
+  targetReplyId?: any | null;
+}): Promise<any | undefined> {
+  if (!args.targetReplyId) return undefined;
+  const targetReply = (await args.ctx.db.get(args.targetReplyId)) as InteractionReplyRow | null;
+  if (
+    !targetReply ||
+    !isInteractionReplyRow(targetReply) ||
+    normalizeIdValue(targetReply.communityId) !== normalizeIdValue(args.root.communityId) ||
+    normalizeIdValue(targetReply.rootId) !== normalizeIdValue(args.root._id) ||
+    targetReply.status !== "live" ||
+    !interactionVisibilityIsCommunityReadable(targetReply.visibilityScope)
+  ) {
     throw new Error("interaction_target_reply_invalid");
   }
-  const targetReply = (await args.ctx.db.get(targetLink.replyId as any)) as InteractionReplyRow | null;
-  if (!targetReply || normalizeIdValue(targetReply.rootId) !== normalizeIdValue(args.root._id)) {
-    throw new Error("interaction_target_reply_invalid");
-  }
-  return { targetReplyId: targetReply._id };
+  return targetReply._id;
 }
 
 function extractLegacyChatMessageText(message: CommunityChatMessageLike): string {
@@ -804,7 +794,6 @@ async function mapRootBundle(
   const blocks = await listContentBlocksForRoot(ctx, root._id);
   const embeds = await listEmbedsForRoot(ctx, root._id);
   const mentions = await listMentionsForRoot(ctx, root._id);
-  const legacyLink = await getLegacyChatLinkByRoot(ctx, root._id);
   const attachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, rootId: root._id });
   const publicActorUserId = root.actorUserId
     ? await resolvePublicUserId(ctx, root.actorUserId, userIdCache)
@@ -841,8 +830,6 @@ async function mapRootBundle(
         lastReplyPublicId ?? (lastReply?.actorUserId ? normalizeIdValue(lastReply.actorUserId) : null),
       pinned_at: typeof root.pinnedAt === "number" ? toIsoString(root.pinnedAt) : null,
       locked_at: typeof root.lockedAt === "number" ? toIsoString(root.lockedAt) : null,
-      legacy_thread_id: legacyLink?.threadId ? normalizeIdValue(legacyLink.threadId) : null,
-      legacy_message_id: legacyLink?.messageId ? normalizeIdValue(legacyLink.messageId) : null,
       created_at: toIsoString(root.createdAt),
       updated_at: toIsoString(root.updatedAt),
       edited_at: typeof root.editedAt === "number" ? toIsoString(root.editedAt) : null,
@@ -864,7 +851,6 @@ async function mapReplyBundle(
   const blocks = await listContentBlocksForReply(ctx, reply._id);
   const embeds = await listEmbedsForReply(ctx, reply._id);
   const mentions = await listMentionsForReply(ctx, reply._id);
-  const legacyLink = await getLegacyChatLinkByReply(ctx, reply._id);
   const attachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, replyId: reply._id });
   const publicActorUserId = reply.actorUserId
     ? await resolvePublicUserId(ctx, reply.actorUserId, userIdCache)
@@ -886,9 +872,6 @@ async function mapReplyBundle(
       reaction_summary: mapReactionSummary(reply.reactionSummary),
       viewer_emojis: viewerEmojis ?? [],
       idempotency_key: reply.idempotencyKey,
-      legacy_thread_id: legacyLink?.threadId ? normalizeIdValue(legacyLink.threadId) : null,
-      legacy_message_id: legacyLink?.messageId ? normalizeIdValue(legacyLink.messageId) : null,
-      legacy_target_message_id: legacyLink?.targetMessageId ? normalizeIdValue(legacyLink.targetMessageId) : null,
       created_at: toIsoString(reply.createdAt),
       updated_at: toIsoString(reply.updatedAt),
       edited_at: typeof reply.editedAt === "number" ? toIsoString(reply.editedAt) : null,
@@ -1631,7 +1614,7 @@ export const createCommunityInteractionComposerMessage = mutation({
     idempotencyKey: v.string(),
     text: v.string(),
     rootId: v.optional(v.union(v.id("communityInteractionRoots"), v.null())),
-    replyToMessageId: v.optional(v.union(v.string(), v.null())),
+    targetReplyId: v.optional(v.union(v.id("communityInteractionReplies"), v.null())),
     // userId accepts a canonical users id OR an auth subject — the profiles
     // projection (the composer's member source) only knows the latter.
     mentions: v.optional(
@@ -1678,6 +1661,7 @@ export const createCommunityInteractionComposerMessage = mutation({
     const nowMs = Date.now();
 
     if (!args.rootId) {
+      if (args.targetReplyId) throw new Error("interaction_target_reply_requires_root");
       const idempotencyKey = composerIdempotencyKey(normalizeIdempotencyKey(args.idempotencyKey), "root");
       let root = await getExistingRootByIdempotencyKey(ctx, args.communityId, idempotencyKey);
       let deduped = true;
@@ -1762,7 +1746,8 @@ export const createCommunityInteractionComposerMessage = mutation({
     if (normalizeIdValue(root.communityId) !== normalizeIdValue(args.communityId)) {
       throw new Error("interaction_root_community_mismatch");
     }
-    if (root.status !== "live" || root.lockedAt) {
+    assertCommunityReadableRoot(root);
+    if (root.lockedAt) {
       throw new Error("interaction_root_closed");
     }
     if (root.idempotencyKey.startsWith("community_agent_dock:root:")) {
@@ -1776,14 +1761,20 @@ export const createCommunityInteractionComposerMessage = mutation({
     if (reply && normalizeIdValue(reply.rootId) !== normalizeIdValue(root._id)) {
       throw new Error("interaction_idempotency_key_conflict");
     }
-
-    const replyTarget = await resolveOptionalReplyTargetForCanonicalComposer({
-      ctx,
-      root,
-      replyToMessageId: args.replyToMessageId ?? null,
-    });
+    const requestedTargetReplyId = args.targetReplyId ?? null;
+    if (
+      reply &&
+      normalizeIdValue(reply.targetReplyId) !== normalizeIdValue(requestedTargetReplyId)
+    ) {
+      throw new Error("interaction_idempotency_key_conflict");
+    }
 
     if (!reply) {
+      const targetReplyId = await resolveCanonicalReplyTargetForComposer({
+        ctx,
+        root,
+        targetReplyId: requestedTargetReplyId,
+      });
       const visibilityScope = resolveReplyVisibilityScope(root.visibilityScope, root.visibilityScope);
       const seq = await nextReplySeq(ctx, root._id);
       const replyId = await ctx.db.insert("communityInteractionReplies" as any, {
@@ -1792,7 +1783,7 @@ export const createCommunityInteractionComposerMessage = mutation({
         seq,
         actorType: "human",
         actorUserId: userId,
-        ...(replyTarget.targetReplyId ? { targetReplyId: replyTarget.targetReplyId } : {}),
+        ...(targetReplyId ? { targetReplyId } : {}),
         status: "live",
         visibilityScope,
         contentSummary: summary,
@@ -2350,7 +2341,6 @@ async function editCommunityInteractionTargetCore(args: {
   text: string;
   actorUserId: any;
   nowMs: number;
-  syncLegacyMessage: boolean;
 }): Promise<void> {
   if (args.target.status !== "live") throw new Error("interaction_not_editable");
   const blocks: NormalizedContentBlock[] = args.text
@@ -2393,21 +2383,6 @@ async function editCommunityInteractionTargetCore(args: {
     text: args.text,
     nowMs: args.nowMs,
   });
-  if (args.syncLegacyMessage) {
-    const legacyLink =
-      args.targetType === "root"
-        ? await getLegacyChatLinkByRoot(args.ctx, args.target._id)
-        : await getLegacyChatLinkByReply(args.ctx, args.target._id);
-    if (legacyLink?.messageId) {
-      const message = await args.ctx.db.get(legacyLink.messageId as any);
-      if (message) {
-        await args.ctx.db.patch(legacyLink.messageId as any, {
-          contentJson: { text: args.text },
-          updatedAt: args.nowMs,
-        });
-      }
-    }
-  }
   await args.ctx.db.insert("communityInteractionModerationEvents" as any, {
     communityId: args.communityId,
     targetType: args.targetType,
@@ -2520,7 +2495,6 @@ export const editCommunityInteractionMessage = mutation({
       text,
       actorUserId: userId,
       nowMs: Date.now(),
-      syncLegacyMessage: true,
     });
     return { ok: true };
   },

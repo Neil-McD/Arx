@@ -70,8 +70,6 @@ function visitorRoot(args: {
       last_reply_actor_user_id: null,
       pinned_at: args.pinnedAt,
       locked_at: null,
-      legacy_thread_id: null,
-      legacy_message_id: null,
       created_at: args.createdAt,
       updated_at: args.createdAt,
       edited_at: null,

@@ -207,7 +207,7 @@ assert.match(
 );
 assert.match(
   interactions,
-  /editCommunityInteractionMessage[\s\S]*textContainsEverybodyMentionToken\(text\)[\s\S]*args\.targetType === "reply"[\s\S]*interaction_mention_everybody_reply_not_allowed[\s\S]*previousText[\s\S]*interaction_mention_everybody_edit_create_not_allowed/,
+  /editCommunityInteractionTargetCore[\s\S]*textContainsEverybodyMentionToken\(args\.text\)[\s\S]*args\.targetType === "reply"[\s\S]*interaction_mention_everybody_reply_not_allowed[\s\S]*previousText[\s\S]*interaction_mention_everybody_edit_create_not_allowed/,
   "edits must not introduce @everybody and replies must not retain @everybody",
 );
 assert.match(
@@ -263,8 +263,8 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /activeMentionIncludesRoles = activeMentionOwner === "main" && !replyingToMessage/,
-  "the main composer must hide @everybody while it is replying",
+  /activeMentionIncludesRoles = activeMentionOwner === "main"/,
+  "only the top-level main composer may request @everybody candidates",
 );
 assert.match(
   chatPanel,

@@ -16,26 +16,13 @@ type SessionLike = {
   user: { id: string };
 };
 
-type CommunityReplyTarget<
-  MessageT extends {
-    id: string;
-    sender_id: string;
-    body: string;
-  },
-> = Pick<MessageT, "id" | "sender_id" | "body"> & {
-  interaction_root_id?: string | null;
-  interaction_reply_id?: string | null;
-  legacy_message_id?: string | null;
+type CommunityReplyTarget = {
+  sender_id: string;
+  interaction_root_id: string;
+  interaction_reply_id: string | null;
 };
 
-export type CommunityMessageSendDraft<
-  MessageT extends {
-    id: string;
-    sender_id: string;
-    body: string;
-  },
-  AttachmentT,
-> = {
+export type CommunityMessageSendDraft<AttachmentT> = {
   text?: string;
   attachments?: AttachmentT[];
   mentions?: {
@@ -48,7 +35,7 @@ export type CommunityMessageSendDraft<
     emailMode?: EverybodyMentionEmailMode | null;
     emailCooldownUntil?: string | null;
   }[];
-  replyingToMessage?: CommunityReplyTarget<MessageT> | null;
+  replyingToMessage?: CommunityReplyTarget | null;
   inputRef?: MutableRefObject<HTMLTextAreaElement | null> | null;
   clearDraft?: () => void;
   restoreDraft?: () => void;
@@ -57,16 +44,6 @@ export type CommunityMessageSendDraft<
 type UseCommunityChatMutationControllerArgs<
   SessionT extends SessionLike,
   AttachmentT,
-  MessageT extends {
-    id: string;
-    community_id: string;
-    sender_id: string;
-    body: string;
-    attachments?: AttachmentT[];
-    reply_to_id?: string | null;
-    created_at: string;
-    seq: number;
-  },
 > = {
   activeCommunityId: string | null;
   canMentionEverybodyRef?: MutableRefObject<boolean>;
@@ -79,7 +56,7 @@ type UseCommunityChatMutationControllerArgs<
     idempotencyKey: string;
     text: string;
     rootId?: string | null;
-    replyToMessageId?: string | null;
+    targetReplyId?: string | null;
     mentions?: { userId?: string; agentKey?: string; roleKey?: string }[];
     attachments?: unknown[];
   }) => Promise<unknown>;
@@ -88,7 +65,7 @@ type UseCommunityChatMutationControllerArgs<
     communityId: string;
     kind: "root" | "reply";
     rootId: string | null;
-    replyToMessageId: string | null;
+    targetReplyId: string | null;
     text: string;
     attachments: AttachmentT[];
     serializedAttachments: unknown[];
@@ -163,7 +140,8 @@ function mapCommunityChatMutationErrorMessage(error: unknown): string {
   }
   if (
     message.includes("community_interaction_reply_target_unmapped") ||
-    message.includes("interaction_target_reply_invalid")
+    message.includes("interaction_target_reply_invalid") ||
+    message.includes("interaction_target_reply_requires_root")
   ) {
     return "Reply target is unavailable. Reopen the thread and try again.";
   }
@@ -211,17 +189,7 @@ function resolveCanonicalCommunityChatSendRoute(args: {
 export function useCommunityChatMutationController<
   SessionT extends SessionLike,
   AttachmentT,
-  MessageT extends {
-    id: string;
-    community_id: string;
-    sender_id: string;
-    body: string;
-    attachments?: AttachmentT[];
-    reply_to_id?: string | null;
-    created_at: string;
-    seq: number;
-  },
->(args: UseCommunityChatMutationControllerArgs<SessionT, AttachmentT, MessageT>) {
+>(args: UseCommunityChatMutationControllerArgs<SessionT, AttachmentT>) {
   const argsRef = useRef(args);
   argsRef.current = args;
 
@@ -232,7 +200,7 @@ export function useCommunityChatMutationController<
   }, []);
 
   const handleSendCommunityMessage = useCallback(async (
-    draft?: CommunityMessageSendDraft<MessageT, AttachmentT>,
+    draft?: CommunityMessageSendDraft<AttachmentT>,
   ) => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
@@ -248,15 +216,8 @@ export function useCommunityChatMutationController<
     if (!rawText && attachmentsToSend.length === 0) return;
 
     const replySnapshot = draft?.replyingToMessage ?? null;
-    const replyToId = replySnapshot ? replySnapshot.id : null;
     const replyRootId = String(replySnapshot?.interaction_root_id ?? "").trim() || null;
-    const interactionReplyToId = String(replySnapshot?.interaction_reply_id ?? "").trim() || null;
-    const legacyReplyToMessageId = (() => {
-      const legacyId = String(replySnapshot?.legacy_message_id ?? "").trim();
-      if (legacyId) return legacyId;
-      return replyRootId ? null : replyToId;
-    })();
-    const canonicalReplyToMessageId = interactionReplyToId ?? legacyReplyToMessageId;
+    const targetReplyId = String(replySnapshot?.interaction_reply_id ?? "").trim() || null;
     const bodyToSend = rawText;
     const isReplySend = Boolean(replySnapshot);
     if (isReplySend && textContainsEverybodyMentionToken(bodyToSend)) {
@@ -375,7 +336,7 @@ export function useCommunityChatMutationController<
           communityId: activeCommunityId,
           kind: sendRoute.rootId ? "reply" : "root",
           rootId: sendRoute.rootId,
-          replyToMessageId: canonicalReplyToMessageId,
+          targetReplyId,
           text: bodyToSend,
           attachments: preparedAttachments,
           serializedAttachments,
@@ -391,7 +352,7 @@ export function useCommunityChatMutationController<
         idempotencyKey: sendRoute.idempotencyKey,
         text: bodyToSend,
         rootId: sendRoute.rootId,
-        replyToMessageId: canonicalReplyToMessageId,
+        targetReplyId,
         mentions: mentionsToSend,
         attachments: serializedAttachments,
       });

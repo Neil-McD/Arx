@@ -289,6 +289,8 @@ Rules:
 - reply reads return only live `community` and `public` replies
 - reply reads return only one-level drawer replies
 - read APIs do not use legacy chat tables as source-of-truth
+- root/reply read bundles expose canonical interaction ids only; they do not
+  resolve or emit legacy thread/message/target ids
 - read bundles load attachments only from canonical `communityInteractionAttachments` rows
 - the four exact historical attachment payloads are preserved as four canonical rows that reference their existing storage objects
 - the legacy attachment read fallback is deleted after the expectation-locked four-row cutover and zero-work replay
@@ -334,7 +336,14 @@ Rules:
   fail closed unless the visible current-community-name token is present
 - the mutation returns an empty legacy `rows` array; canonical projection completion depends on canonical mutation success and idempotency-key reconciliation
 - pending canonical projection overlays reconcile by canonical idempotency keys, not legacy chat row replacement
-- drawer replies require a canonical `rootId`; optional reply targets may resolve through canonical reply ids or pre-existing legacy links
+- drawer replies require a live, community-readable canonical `rootId`
+- an optional `targetReplyId` is a typed canonical
+  `communityInteractionReplies` id; it must belong to the same community and
+  root and remain live and community-readable
+- a root write carrying `targetReplyId`, or an invalid, hidden, deleted,
+  cross-root, cross-community, missing, or wrong-table target, fails closed
+- idempotent reply retries must preserve the originally requested canonical
+  target; changing it under the same key is an idempotency conflict
 - canonical projection reply targets without a canonical `rootId` fail closed instead of falling back to legacy sends
 - idempotency keys use a composer namespace, not `legacy_chat_message:*`
 - the bridge does not call public root/reply mutations
@@ -411,6 +420,8 @@ Rules:
 - the community send controller always uses the canonical composer and fails
   closed when its writer or canonical reply root is unavailable
 - canonical edit/delete/reaction operations remain the visible product actions
+- canonical edits update canonical interaction content only; they do not mirror
+  content into historical `communityChatMessages`
 - authenticated typing presence and attachment upload URL generation remain
   because the canonical composer still uses them
 - canonical root and reply reads load attachments only from

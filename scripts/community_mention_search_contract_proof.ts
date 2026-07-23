@@ -77,7 +77,7 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /activeMentionIncludesRoles = activeMentionOwner === "main" && !replyingToMessage[\s\S]*includeRoles/,
+  /activeMentionIncludesRoles = activeMentionOwner === "main"[\s\S]*includeRoles/,
   "chat panel must only request role mention candidates for the non-reply main composer",
 );
 assert.match(

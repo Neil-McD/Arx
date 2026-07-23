@@ -145,7 +145,7 @@ assert.match(
 
 assert.match(
   interactions,
-  /editCommunityInteractionMessage[\s\S]*suppressPendingMentionsMissingFromInteractionText/,
+  /editCommunityInteractionTargetCore[\s\S]*suppressPendingMentionsMissingFromInteractionText[\s\S]*export const editCommunityInteractionMessage[\s\S]*editCommunityInteractionTargetCore/,
   "editing an interaction source must suppress only stale pending mention notifications",
 );
 

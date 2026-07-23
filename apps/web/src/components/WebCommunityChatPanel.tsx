@@ -57,14 +57,11 @@ type CommunityMentionMember = {
   user_id?: string | null;
 };
 type CommunityReplyTarget = {
-  id: string;
   sender_id: string;
-  body: string;
   reply_author_label?: string | null;
   mention_candidate?: MentionCandidate | null;
-  interaction_root_id?: string | null;
-  interaction_reply_id?: string | null;
-  legacy_message_id?: string | null;
+  interaction_root_id: string;
+  interaction_reply_id: string | null;
 };
 
 type CommunityChatSendDraft = {
@@ -826,18 +823,13 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     const root = selectedInteractionRootBundle?.root;
     if (!root?.id || !root.actor_user_id) return null;
     return {
-      id: root.legacy_message_id ?? root.id,
       sender_id: root.actor_user_id,
-      body: root.content_summary ?? "",
       interaction_root_id: root.id,
       interaction_reply_id: null,
-      legacy_message_id: root.legacy_message_id ?? null,
     };
   }, [
-    selectedInteractionRootBundle?.root.legacy_message_id,
     selectedInteractionRootBundle?.root.actor_user_id,
     selectedInteractionRootBundle?.root.id,
-    selectedInteractionRootBundle?.root.content_summary,
   ]);
 
   const profilePanelProfile = profilePanelUserId ? profilesByUserId[profilePanelUserId] ?? null : null;

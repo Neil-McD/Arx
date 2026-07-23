@@ -157,7 +157,7 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /idempotencyKey: v\.string\(\)[\s\S]*text: v\.string\(\)[\s\S]*rootId: v\.optional[\s\S]*replyToMessageId: v\.optional[\s\S]*mentions: v\.optional\([\s\S]*userId: v\.optional\(v\.string\(\)\)[\s\S]*agentKey: v\.optional\(v\.string\(\)\)[\s\S]*roleKey: v\.optional\(v\.string\(\)\)[\s\S]*\)/,
+  /idempotencyKey: v\.string\(\)[\s\S]*text: v\.string\(\)[\s\S]*rootId: v\.optional\(v\.union\(v\.id\("communityInteractionRoots"\), v\.null\(\)\)\)[\s\S]*targetReplyId: v\.optional\(v\.union\(v\.id\("communityInteractionReplies"\), v\.null\(\)\)\)[\s\S]*mentions: v\.optional\([\s\S]*userId: v\.optional\(v\.string\(\)\)[\s\S]*agentKey: v\.optional\(v\.string\(\)\)[\s\S]*roleKey: v\.optional\(v\.string\(\)\)[\s\S]*\)/,
   "composer bridge should expose only the canonical composer write shape",
 );
 assert.doesNotMatch(
@@ -192,13 +192,18 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /if \(normalizeIdValue\(root\.communityId\) !== normalizeIdValue\(args\.communityId\)\)[\s\S]*interaction_root_community_mismatch[\s\S]*root\.status !== "live" \|\| root\.lockedAt[\s\S]*interaction_root_closed/,
-  "composer reply writes should verify root community and live/open state",
+  /if \(normalizeIdValue\(root\.communityId\) !== normalizeIdValue\(args\.communityId\)\)[\s\S]*interaction_root_community_mismatch[\s\S]*assertCommunityReadableRoot\(root\)[\s\S]*if \(root\.lockedAt\)[\s\S]*interaction_root_closed/,
+  "composer reply writes should verify root community, member readability, and live/open state",
 );
 assert.match(
   createComposerMessage,
-  /resolveOptionalReplyTargetForCanonicalComposer\(\{[\s\S]*replyToMessageId: args\.replyToMessageId \?\? null/,
-  "composer reply quote targets should resolve through the same-root helper",
+  /if \(!args\.rootId\) \{[\s\S]*args\.targetReplyId[\s\S]*interaction_target_reply_requires_root/,
+  "root composer writes should reject reply targets",
+);
+assert.match(
+  createComposerMessage,
+  /const requestedTargetReplyId = args\.targetReplyId \?\? null[\s\S]*reply\.targetReplyId[\s\S]*interaction_idempotency_key_conflict[\s\S]*if \(!reply\) \{[\s\S]*resolveCanonicalReplyTargetForComposer\(\{[\s\S]*targetReplyId: requestedTargetReplyId/,
+  "composer reply retries should preserve canonical target identity and new replies should resolve it once",
 );
 assert.match(
   createComposerMessage,
@@ -242,6 +247,11 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   createComposerMessage,
+  /replyToMessageId|getLegacyChatLink|legacy_(?:thread|message|target_message)_id/,
+  "composer bridge should not accept or emit legacy chat identity",
+);
+assert.doesNotMatch(
+  createComposerMessage,
   /createCommunityInteractionRoot|createCommunityInteractionReply/,
   "composer bridge should not call public root or reply mutations",
 );
@@ -261,6 +271,18 @@ assert.match(
   mentionResolver,
   /MAX_INTERACTION_MENTIONS_PER_WRITE[\s\S]*interaction_mentions_limit_exceeded/,
   "mention resolver should cap mentions per write",
+);
+
+const replyTargetResolver = functionBlock(interactions, "resolveCanonicalReplyTargetForComposer");
+assert.match(
+  replyTargetResolver,
+  /ctx\.db\.get\(args\.targetReplyId\)[\s\S]*isInteractionReplyRow\(targetReply\)[\s\S]*targetReply\.communityId[\s\S]*args\.root\.communityId[\s\S]*targetReply\.rootId[\s\S]*args\.root\._id[\s\S]*targetReply\.status !== "live"[\s\S]*interactionVisibilityIsCommunityReadable\(targetReply\.visibilityScope\)[\s\S]*interaction_target_reply_invalid/,
+  "reply targets should be canonical, same-community, same-root, live, and community-readable",
+);
+assert.doesNotMatch(
+  replyTargetResolver,
+  /getLegacyChatLink|communityInteractionLegacyChatLinks|replyToMessageId/,
+  "reply target resolution should not consult legacy chat identity",
 );
 assert.match(
   mentionResolver,
@@ -293,6 +315,13 @@ for (const exportName of ["toggleCommunityInteractionReaction", "editCommunityIn
     `${exportName} should validate target type, live state, and community access`,
   );
 }
+
+const editMessage = exportedConstBlock(interactions, "editCommunityInteractionMessage");
+assert.doesNotMatch(
+  editMessage,
+  /syncLegacyMessage|getLegacyChatLink|communityChatMessages|contentJson/,
+  "canonical edits should not mirror into historical legacy chat rows",
+);
 
 const deleteMessage = exportedConstBlock(interactions, "deleteCommunityInteractionMessage");
 assert.match(
