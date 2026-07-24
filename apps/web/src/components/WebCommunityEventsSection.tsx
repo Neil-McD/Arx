@@ -31,6 +31,12 @@ type EventDraft = {
   recurrence_until: string;
 };
 
+type EventDayGroup = {
+  key: string;
+  date: Date;
+  events: CommunityEvent[];
+};
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_EVENT_TIME_ZONES = [
   "UTC",
@@ -63,7 +69,7 @@ function toLocalDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function getDefaultSelectedDayForMonth(monthDate: Date): string {
+function getDefaultEventDayForMonth(monthDate: Date): string {
   const today = new Date();
   if (today.getFullYear() === monthDate.getFullYear() && today.getMonth() === monthDate.getMonth()) {
     return toLocalDateKey(today);
@@ -73,6 +79,23 @@ function getDefaultSelectedDayForMonth(monthDate: Date): string {
 
 function formatMonthLabel(date: Date): string {
   return new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(date);
+}
+
+function isSameLocalMonth(date: Date, monthDate: Date): boolean {
+  return date.getFullYear() === monthDate.getFullYear() && date.getMonth() === monthDate.getMonth();
+}
+
+function formatEventDay(date: Date): { weekday: string; day: string; full: string } {
+  return {
+    weekday: new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date).toUpperCase(),
+    day: new Intl.DateTimeFormat(undefined, { day: "numeric" }).format(date),
+    full: new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(date),
+  };
 }
 
 function getUniqueTimeZoneOptions(currentTimeZone: string): string[] {
@@ -97,42 +120,39 @@ function formatTimeZoneLabel(timeZone: string, referenceDate: Date = new Date())
 function formatEventTimeInZone(event: CommunityEvent, timeZone: string, includeZoneName: boolean): string {
   const startsAt = new Date(event.starts_at);
   const endsAt = event.ends_at ? new Date(event.ends_at) : null;
-  const dateFormatter = new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    timeZone,
-  });
   const timeFormatter = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
     timeZone,
     timeZoneName: includeZoneName ? "short" : undefined,
   });
-  const startLabel = `${dateFormatter.format(startsAt)} at ${timeFormatter.format(startsAt)}`;
+  const startLabel = timeFormatter.format(startsAt);
   if (!endsAt) return startLabel;
-  return `${startLabel} - ${timeFormatter.format(endsAt)}`;
+  return `${startLabel} – ${timeFormatter.format(endsAt)}`;
 }
 
 function formatEventTime(event: CommunityEvent): { primary: string; secondary: string | null } {
   const viewerTimeZone = getCommunityEventViewerTimeZone();
   const eventTimeZone = normalizeCommunityEventTimeZone(event.timezone);
-  const startsAt = new Date(event.starts_at);
-  const primary = `${formatEventTimeInZone(event, viewerTimeZone, false)} (your time)`;
   if (eventTimeZone === viewerTimeZone) {
-    return { primary, secondary: formatTimeZoneLabel(eventTimeZone, startsAt) };
+    return {
+      primary: formatEventTimeInZone(event, viewerTimeZone, true),
+      secondary: null,
+    };
   }
   return {
-    primary,
+    primary: `${formatEventTimeInZone(event, viewerTimeZone, true)} · your time`,
     secondary: `Event time: ${formatEventTimeInZone(event, eventTimeZone, true)}`,
   };
 }
 
-function buildCalendarDays(monthDate: Date): Date[] {
-  const monthStart = startOfLocalMonth(monthDate);
-  const gridStart = new Date(monthStart);
-  gridStart.setDate(monthStart.getDate() - monthStart.getDay());
-  return Array.from({ length: 42 }, (_, index) => new Date(gridStart.getTime() + index * DAY_MS));
+function formatRecurrenceLabel(event: CommunityEvent): string | null {
+  if (event.recurrence_frequency === "none") return null;
+  const eventTimeZone = normalizeCommunityEventTimeZone(event.timezone);
+  const until = event.recurrence_until
+    ? ` until ${new Date(event.recurrence_until).toLocaleDateString(undefined, { timeZone: eventTimeZone })}`
+    : "";
+  return `Repeats ${event.recurrence_frequency}${until}`;
 }
 
 function makeDraft(dayKey: string | null): EventDraft {
@@ -213,13 +233,17 @@ function EventModal(props: {
     <div className="modal-overlay" role="presentation" onMouseDown={onClose}>
       <form
         className="modal community-event-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="community-event-modal-title"
+        aria-busy={isSaving}
         onSubmit={handleSubmit}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <div className="modal-title">{title}</div>
+          <div className="modal-title" id="community-event-modal-title">{title}</div>
           <button className="modal-close" type="button" onClick={onClose} aria-label="Close event editor">
-            x
+            ×
           </button>
         </div>
         <div className="modal-body community-event-form">
@@ -319,15 +343,16 @@ function EventModal(props: {
                 <option value="monthly">Monthly</option>
               </select>
             </label>
-            <label>
-              <span>Repeats until</span>
-              <input
-                type="datetime-local"
-                value={draft.recurrence_until}
-                disabled={draft.recurrence_frequency === "none"}
-                onChange={(event) => onChange({ ...draft, recurrence_until: event.target.value })}
-              />
-            </label>
+            {draft.recurrence_frequency !== "none" ? (
+              <label>
+                <span>Repeats until</span>
+                <input
+                  type="datetime-local"
+                  value={draft.recurrence_until}
+                  onChange={(event) => onChange({ ...draft, recurrence_until: event.target.value })}
+                />
+              </label>
+            ) : null}
           </div>
           {error ? <div className="community-event-error">{error}</div> : null}
         </div>
@@ -346,7 +371,6 @@ function EventModal(props: {
 
 export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps) {
   const { capabilities, state, actions } = props;
-  const [selectedDayKey, setSelectedDayKey] = useState(() => toLocalDateKey(new Date()));
   const [draft, setDraft] = useState<EventDraft | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -355,19 +379,31 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const hasCompletedEventsLoadRef = useRef(false);
 
   const monthDate = useMemo(() => startOfLocalMonth(new Date(state.visibleMonthIso)), [state.visibleMonthIso]);
-  const days = useMemo(() => buildCalendarDays(monthDate), [monthDate]);
-  const eventsByDay = useMemo(() => {
-    const grouped = new Map<string, CommunityEvent[]>();
-    for (const event of state.events) {
-      const key = toLocalDateKey(new Date(event.starts_at));
-      grouped.set(key, [...(grouped.get(key) ?? []), event]);
+  const visibleMonthEvents = useMemo(
+    () =>
+      state.events
+        .filter((event) => {
+          const startsAt = new Date(event.starts_at);
+          return Number.isFinite(startsAt.getTime()) && isSameLocalMonth(startsAt, monthDate);
+        })
+        .slice()
+        .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at)),
+    [monthDate, state.events],
+  );
+  const eventDayGroups = useMemo(() => {
+    const grouped = new Map<string, EventDayGroup>();
+    for (const event of visibleMonthEvents) {
+      const date = new Date(event.starts_at);
+      const key = toLocalDateKey(date);
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.events.push(event);
+      } else {
+        grouped.set(key, { key, date, events: [event] });
+      }
     }
-    for (const events of grouped.values()) {
-      events.sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
-    }
-    return grouped;
-  }, [state.events]);
-  const selectedEvents = eventsByDay.get(selectedDayKey) ?? [];
+    return Array.from(grouped.values());
+  }, [visibleMonthEvents]);
   const editingSourceEvent = useMemo(
     () =>
       editingEventId
@@ -406,8 +442,8 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
     const isRecurring = isRecurringCommunityEvent(event);
     const confirmed = window.confirm(
       isRecurring
-        ? `Cancel "${event.title}" series? This will remove every occurrence from the calendar.`
-        : `Cancel "${event.title}"? This will remove it from the calendar.`,
+        ? `Cancel "${event.title}" series? This will remove every occurrence from events.`
+        : `Cancel "${event.title}"? This will remove it from events.`,
     );
     if (!confirmed) return;
     void actions.cancelEvent(event.parent_event_id, currentRange);
@@ -416,7 +452,6 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const showMonth = (date: Date) => {
     const nextMonth = startOfLocalMonth(date);
     actions.setVisibleMonthIso(toMonthIso(nextMonth));
-    setSelectedDayKey(getDefaultSelectedDayForMonth(nextMonth));
   };
 
   const submitDraft = async () => {
@@ -480,178 +515,159 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         <div className="feed-header-copy">
           <div className="resources-header">Events</div>
           <div className="feed-header-subtitle">
-            Calls, launches, and community moments for {capabilities.activeCommunityName ?? "this community"}.
+            Calls and community events for {capabilities.activeCommunityName ?? "this community"}.
           </div>
         </div>
-        <div className="feed-header-actions">
+        {capabilities.hasActiveCommunity && capabilities.canManageEvents ? (
           <button
-            className="community-events-month-btn"
+            className="community-events-new-btn"
             type="button"
-            onClick={() => showMonth(addMonths(monthDate, -1))}
+            onClick={() => openNewEvent(getDefaultEventDayForMonth(monthDate))}
           >
-            Prev
+            New event
           </button>
-          <div className="feed-header-badge" aria-label={`${state.events.length} events`}>
-            {state.events.length}
-          </div>
-          <button
-            className="community-events-month-btn"
-            type="button"
-            onClick={() => showMonth(addMonths(monthDate, 1))}
-          >
-            Next
-          </button>
-          {capabilities.hasActiveCommunity && capabilities.canManageEvents ? (
-            <button className="resources-add-btn" type="button" onClick={() => openNewEvent(selectedDayKey)}>
-              +
-            </button>
-          ) : null}
-        </div>
+        ) : null}
       </div>
 
-      {state.eventsError ? <div className="community-event-error">{state.eventsError}</div> : null}
-      {state.isLoadingEvents && !showInitialEventsLoading ? (
-        <div className="analytics-refreshing-note">Refreshing events...</div>
+      <div className="community-events-month-nav" role="group" aria-label="Event month">
+        <button
+          className="community-events-month-btn"
+          type="button"
+          aria-label="Previous month"
+          onClick={() => showMonth(addMonths(monthDate, -1))}
+        >
+          ‹
+        </button>
+        <div className="community-events-month-copy">
+          <h2>{formatMonthLabel(monthDate)}</h2>
+          {state.isLoadingEvents && !showInitialEventsLoading ? (
+            <span className="community-events-refreshing" role="status">Updating…</span>
+          ) : null}
+        </div>
+        <button
+          className="community-events-month-btn"
+          type="button"
+          aria-label="Next month"
+          onClick={() => showMonth(addMonths(monthDate, 1))}
+        >
+          ›
+        </button>
+      </div>
+
+      {state.eventsError ? (
+        <div className="community-event-error" role="alert">
+          <span>{state.eventsError}</span>
+          <button type="button" onClick={() => void actions.reloadEvents(currentRange)}>Retry</button>
+        </div>
       ) : null}
 
-      <div className="community-events-shell">
-        <section className="community-events-calendar" aria-label={formatMonthLabel(monthDate)}>
-          <div className="community-events-calendar-header">
-            <h3>{formatMonthLabel(monthDate)}</h3>
-            <button type="button" onClick={() => void actions.reloadEvents(currentRange)}>
-              Refresh
-            </button>
+      <div className="community-events-content" aria-busy={state.isLoadingEvents}>
+        {showInitialEventsLoading ? (
+          <div className="community-events-state" role="status">Loading events…</div>
+        ) : eventDayGroups.length === 0 ? (
+          <div className="community-events-state">
+            <div>No events in {formatMonthLabel(monthDate)}.</div>
+            {capabilities.hasActiveCommunity && capabilities.canManageEvents ? (
+              <button
+                type="button"
+                onClick={() => openNewEvent(getDefaultEventDayForMonth(monthDate))}
+              >
+                New event
+              </button>
+            ) : null}
           </div>
-          <div className="community-events-weekdays" aria-hidden="true">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-              <div key={day}>{day}</div>
-            ))}
-          </div>
-          <div className="community-events-grid">
-            {days.map((day) => {
-              const dayKey = toLocalDateKey(day);
-              const dayEvents = eventsByDay.get(dayKey) ?? [];
-              const isCurrentMonth = day.getMonth() === monthDate.getMonth();
+        ) : (
+          <div className="community-events-list">
+            {eventDayGroups.map((group) => {
+              const dayLabel = formatEventDay(group.date);
               return (
-                <button
-                  key={dayKey}
-                  type="button"
-                  aria-label={`${dayKey}, ${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"}`}
-                  aria-pressed={selectedDayKey === dayKey}
-                  className={[
-                    "community-events-day",
-                    isCurrentMonth ? "" : "is-muted",
-                    selectedDayKey === dayKey ? "is-selected" : "",
-                  ].filter(Boolean).join(" ")}
-                  onClick={() => setSelectedDayKey(dayKey)}
-                >
-                  <span className="community-events-day-number">{day.getDate()}</span>
-                  {dayEvents.length > 0 ? (
-                    <span className="community-events-day-marker" aria-hidden="true">
-                      <span className="community-events-day-dot" />
-                      <span className="community-events-day-count">{dayEvents.length}</span>
-                    </span>
-                  ) : null}
-                  {dayEvents.slice(0, 2).map((event) => (
-                    <span key={event.id} id={`community-event-pill-${event.id}`} className="community-events-day-pill">
-                      {event.title}
-                    </span>
-                  ))}
-                  {dayEvents.length > 2 ? (
-                    <span className="community-events-day-more">+{dayEvents.length - 2}</span>
-                  ) : null}
-                </button>
+                <section key={group.key} className="community-events-day-group" aria-label={dayLabel.full}>
+                  <time className="community-events-date" dateTime={group.key}>
+                    <span>{dayLabel.weekday}</span>
+                    <strong>{dayLabel.day}</strong>
+                  </time>
+                  <div className="community-events-day-list">
+                    {group.events.map((event) => {
+                      const isRecurring = isRecurringCommunityEvent(event);
+                      const editLabel = isRecurring ? "Edit series" : "Edit event";
+                      const cancelLabel = isRecurring ? "Cancel series" : "Cancel event";
+                      const eventTimeLabel = formatEventTime(event);
+                      const recurrenceLabel = formatRecurrenceLabel(event);
+                      const eventLinkLabel = event.location_type === "online" ? "Join" : "Open event";
+                      return (
+                        <article key={event.id} id={`community-event-${event.id}`} className="community-events-item">
+                          <div className="community-events-item-copy">
+                            <h3>{event.title}</h3>
+                            <div className="community-events-time">
+                              <span>{eventTimeLabel.primary}</span>
+                              {eventTimeLabel.secondary ? <span>{eventTimeLabel.secondary}</span> : null}
+                            </div>
+                            {event.location_label || recurrenceLabel ? (
+                              <div className="community-events-meta">
+                                {event.location_label ? <span>{event.location_label}</span> : null}
+                                {recurrenceLabel ? <span>{recurrenceLabel}</span> : null}
+                              </div>
+                            ) : null}
+                            {event.description_md ? (
+                              <p className="community-events-description">{event.description_md}</p>
+                            ) : null}
+                          </div>
+                          <div className="community-events-actions">
+                            {event.url ? (
+                              <a
+                                className="community-events-primary-link"
+                                href={event.url}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {eventLinkLabel}
+                              </a>
+                            ) : null}
+                            <a
+                              className="community-events-calendar-link"
+                              href={buildGoogleCalendarUrl(event)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <img
+                                className="community-events-google-calendar-icon"
+                                src="/app-logos/google-calendar.svg"
+                                alt=""
+                                aria-hidden="true"
+                              />
+                              <span>Add to calendar</span>
+                            </a>
+                            {capabilities.canManageEvents ? (
+                              <>
+                                <button
+                                  type="button"
+                                  aria-label={editLabel}
+                                  title={editLabel}
+                                  onClick={() => openEditEvent(event)}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="is-danger"
+                                  type="button"
+                                  aria-label={cancelLabel}
+                                  title={cancelLabel}
+                                  onClick={() => confirmCancelEvent(event)}
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : null}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
               );
             })}
           </div>
-        </section>
-
-        <aside className="community-events-agenda">
-          <div className="community-events-agenda-header">
-            <div>
-              <div className="community-events-agenda-title">Agenda</div>
-              <div className="community-events-agenda-date">{selectedDayKey}</div>
-            </div>
-          </div>
-          {showInitialEventsLoading ? (
-            <div className="community-events-muted">Loading events...</div>
-          ) : selectedEvents.length === 0 ? (
-            <div className="community-events-empty">
-              {capabilities.canManageEvents ? "No events yet. Add one for this day." : "No events scheduled."}
-            </div>
-          ) : (
-            <div className="community-events-agenda-list">
-              {selectedEvents.map((event) => {
-                const isRecurring = isRecurringCommunityEvent(event);
-                const editLabel = isRecurring ? "Edit series" : "Edit event";
-                const cancelLabel = isRecurring ? "Cancel series" : "Cancel event";
-                const eventTimeLabel = formatEventTime(event);
-                const eventTimeZone = normalizeCommunityEventTimeZone(event.timezone);
-                return (
-                  <article key={event.id} id={`community-event-${event.id}`} className="community-events-agenda-item">
-                    <div className="community-events-agenda-item-top">
-                      <h4>{event.title}</h4>
-                      {capabilities.canManageEvents ? (
-                        <div className="community-events-agenda-actions">
-                          <button type="button" aria-label={editLabel} title={editLabel} onClick={() => openEditEvent(event)}>
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={cancelLabel}
-                            title={cancelLabel}
-                            onClick={() => confirmCancelEvent(event)}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="community-events-agenda-meta community-events-agenda-time">
-                      <span>{eventTimeLabel.primary}</span>
-                      {eventTimeLabel.secondary ? <span>{eventTimeLabel.secondary}</span> : null}
-                    </div>
-                    {event.recurrence_frequency !== "none" ? (
-                      <div className="community-events-agenda-meta">
-                        Repeats {event.recurrence_frequency}
-                        {event.recurrence_until
-                          ? ` until ${new Date(event.recurrence_until).toLocaleDateString(undefined, { timeZone: eventTimeZone })}`
-                          : ""}
-                      </div>
-                    ) : null}
-                    {event.location_label || event.url ? (
-                      <div className="community-events-agenda-meta community-events-agenda-location-row">
-                        {event.location_label ? <span>{event.location_label}</span> : null}
-                        {event.url ? (
-                          <a className="community-events-open-link" href={event.url} target="_blank" rel="noreferrer">
-                            Open link
-                          </a>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {event.description_md ? (
-                      <p className="community-events-agenda-description">{event.description_md}</p>
-                    ) : null}
-                    <a
-                      className="community-events-google-calendar-link"
-                      href={buildGoogleCalendarUrl(event)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <img
-                        className="community-events-google-calendar-icon"
-                        src="/app-logos/google-calendar.svg"
-                        alt=""
-                        aria-hidden="true"
-                      />
-                      <span>Add to Google Calendar</span>
-                    </a>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </aside>
+        )}
       </div>
 
       {draft ? (

@@ -245,6 +245,7 @@ assert.equal(
   "--text-muted: #6B6974;",
   "--border-strong: rgba(23, 23, 25, 0.22);",
   "--border-default: rgba(23, 23, 25, 0.1);",
+  "--divider-accent: rgba(23, 23, 25, 0.22);",
   "--accent-selection: #2F55FF;",
   "--accent-agent: #2F55FF;",
   "--text-link: #2F55FF;",
@@ -253,6 +254,16 @@ assert.equal(
   assert.ok(crisThemeBlock.includes(token), `CRIS should define ${token}`);
 });
 assert.match(crisThemeBlock, /color-scheme:\s*light;/);
+assert.match(
+  baseCss,
+  /\.community-interaction-day::before,[\s\S]*?\.community-interaction-day::after\s*\{[\s\S]*?background:\s*var\(--stroke-divider-accent\);/,
+  "live community-feed day separators should consume the semantic structural-divider role",
+);
+assert.match(
+  baseCss,
+  /\.chat-date-separator::before,[\s\S]*?\.chat-date-separator::after\s*\{[\s\S]*?background:\s*var\(--stroke-divider-accent\);/,
+  "legacy chat day separators should consume the same structural-divider role",
+);
 
 assert.match(baseCss, /:root\[data-theme-family="dark"\]\s*\.model-picker-nav-logo-img\.monochrome/);
 assert.match(indexCss, /:root\[data-theme-family="dark"\]\s*\.message-item\.assistant \.message-text/);

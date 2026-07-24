@@ -141,12 +141,12 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   // display-label token, disambiguated by the AGENT badge.
   assert.match(
     menuSource,
-    /\(candidate\.kind \?\? "user"\) === "user" && !candidate\.handle[\s\S]*?close\(\);[\s\S]*?return;/,
+    /const kind = candidate\.kind \?\? "user";[\s\S]*?const normalizedHandle = String\(candidate\.handle \?\? ""\)[\s\S]*?if \(kind === "user" && !normalizedHandle\) return null;/,
     "picker must refuse handle-less user mentions instead of falling back to display names",
   );
   assert.match(
     menuSource,
-    /candidate\.kind === "role"[\s\S]*?`@\$\{candidate\.roleKey \?\? "everybody"\}`[\s\S]*?candidate\.kind === "community_agent"[\s\S]*?`@\$\{candidate\.displayName\}`[\s\S]*?`@\$\{candidate\.handle\}`/,
+    /const token = kind === "role"[\s\S]*?`@\$\{candidate\.roleKey \?\? "everybody"\}`[\s\S]*?kind === "community_agent"[\s\S]*?`@\$\{candidate\.displayName\}`[\s\S]*?`@\$\{normalizedHandle\}`/,
     "picker must insert @handle for users, @displayName for the community agent, and the canonical role token for @everybody",
   );
   assert.match(
@@ -161,7 +161,7 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     menuSource,
-    /candidate\.kind === "role"[\s\S]*roleKey: candidate\.roleKey \?\? "everybody"[\s\S]*emailMode: candidate\.emailMode \?\? null/,
+    /kind === "role"[\s\S]*roleKey: candidate\.roleKey \?\? "everybody"[\s\S]*emailMode: candidate\.emailMode \?\? null/,
     "committed @everybody mentions must preserve the role key and email warning metadata for send serialization",
   );
 }
@@ -184,6 +184,23 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     feedSource,
     /key: `\$\{mention\.id\}:name`/,
     "the display-name chip fallback must not return — handles are the ground truth",
+  );
+}
+
+// A self-mention should stay as legible as any other human mention. Attention
+// belongs to the message-level edge and wash, not a filled inline name chip.
+{
+  const { readFileSync } = await import("node:fs");
+  const styles = readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8");
+  assert.doesNotMatch(
+    styles,
+    /\.community-mention-chip\.is-self\s*\{/,
+    "self mentions must not replace the readable human-mention treatment with a filled accent",
+  );
+  assert.match(
+    styles,
+    /\.community-interaction-message\.is-self-mentioned\s*\{[\s\S]*?border-left:\s*2px solid var\(--accent\);/,
+    "self-mention attention should remain on the message container",
   );
 }
 

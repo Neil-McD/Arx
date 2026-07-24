@@ -233,7 +233,7 @@ assert.match(
 );
 assert.match(
   eventsPanel,
-  /showInitialEventsLoading[\s\S]*Refreshing events\.\.\.[\s\S]*\{showInitialEventsLoading \?/,
+  /state\.isLoadingEvents && !showInitialEventsLoading[\s\S]*Updating…[\s\S]*\{showInitialEventsLoading \?/,
   "events tab must keep existing content visible during background refresh",
 );
 assert.match(
