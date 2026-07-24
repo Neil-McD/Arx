@@ -1,7 +1,7 @@
 /* Visitor conversion chrome: the join gate and the composer-slot rope.
    The gate is the community's front door — logo, banner, VSL, member count,
    who's online, the one-liner, Join, and "View it first". Nothing else. */
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { Lock } from "lucide-react";
 
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
@@ -21,6 +21,8 @@ export function CommunityVisitorGate(props: {
   onViewFirst: () => void;
 }) {
   const { action } = props;
+  const titleId = useId();
+  const descriptionId = useId();
   /* No banner in the gate: the VSL is the only hero when present; otherwise
      the card leads with the logo. The banner belongs to the page, not the popup. */
   return (
@@ -29,6 +31,10 @@ export function CommunityVisitorGate(props: {
         props.isMediaPlaying ? " cvs-gatecard-wide" : ""
       }`}
       style={props.isMediaPlaying ? { width: "min(720px, 94vw)" } : undefined}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
     >
       <div className="cfg-gav cvs-gav-plain">
         <CommunityAvatar
@@ -41,8 +47,12 @@ export function CommunityVisitorGate(props: {
           alt={`${action.communityName} avatar`}
         />
       </div>
-      <div className="cfg-gname">{action.communityName}</div>
-      <p className="cfg-gpromise">{action.cardBlurb}</p>
+      <div className="cfg-gname" id={titleId}>
+        {action.communityName}
+      </div>
+      <p className="cfg-gpromise" id={descriptionId}>
+        {action.cardBlurb}
+      </p>
       {props.media ? <div className="cvs-gate-media">{props.media}</div> : null}
       <div className="cfg-gstats">
         {typeof action.memberCount === "number" ? (

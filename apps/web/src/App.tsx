@@ -343,6 +343,9 @@ import {
   type ModelToggle,
 } from "../../../shared/modelCatalog";
 import {
+  APP_THEME_STORAGE_KEY,
+  DEFAULT_APP_THEME,
+  LEGACY_APP_THEME_STORAGE_KEY,
   applyAppThemeAttributes,
   parseAppTheme,
   type AppTheme,
@@ -937,8 +940,6 @@ const ACTIVE_RUNTIME_ENGINE_CODEX_DEFAULT_MIGRATION_KEY =
   "polynet_active_runtime_engine_codex_default_v1";
 const ACTIVE_RUNTIME_ENGINE_POLYNET_DEFAULT_RESTORE_KEY =
   "polynet_active_runtime_engine_polynet_default_restore_v1";
-const APP_THEME_STORAGE_KEY = "polynet-theme";
-const LEGACY_APP_THEME_STORAGE_KEY = "arx-theme";
 const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
 const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
@@ -1991,9 +1992,9 @@ export default function App() {
         readFirstLocalStorageValue([APP_THEME_STORAGE_KEY, LEGACY_APP_THEME_STORAGE_KEY]),
       );
       if (stored) return stored;
-      return "polynet";
+      return DEFAULT_APP_THEME;
     } catch {
-      return "polynet";
+      return DEFAULT_APP_THEME;
     }
   });
   useEffect(() => {
@@ -6506,7 +6507,6 @@ export default function App() {
 
   useWebUiPersistenceLifecycle({
     communityAnalyticsRange,
-    appTheme,
     profileStorageUserId,
     profileName: profileUi.profileName,
     profileHandle: profileUi.profileHandle,

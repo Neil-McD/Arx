@@ -14,12 +14,13 @@ export function WebAppearanceSettingsSection(props: WebAppearanceSettingsSection
       <div className="appearance-panel">
         <div className="appearance-selector">
           <div className="appearance-title">Theme</div>
-          <div className="appearance-options">
+          <div className="appearance-options" role="group" aria-label="Theme">
             {APP_THEME_OPTIONS.map((theme) => (
               <button
                 key={theme.id}
                 className={`appearance-option${appTheme === theme.id ? " active" : ""}${theme.disabled ? " disabled" : ""}`}
                 type="button"
+                aria-pressed={appTheme === theme.id}
                 onClick={() => {
                   if (!theme.disabled) {
                     setAppTheme(theme.id);

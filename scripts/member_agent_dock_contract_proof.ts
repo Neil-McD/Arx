@@ -786,8 +786,28 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher \{[\s\S]*?width: 60px;[\s\S]*?height: 60px;[\s\S]*?color: var\(--member-agent-accent\);[\s\S]*?background: color-mix\(in srgb, var\(--member-agent-accent\) 18%, #111115\);[\s\S]*?border: 1px solid var\(--member-agent-accent-border\);[\s\S]*?border-radius: 16px;/,
+  /\.member-agent-dock-launcher \{[\s\S]*?width: 60px;[\s\S]*?height: 60px;[\s\S]*?color: var\(--member-agent-accent\);[\s\S]*?background: color-mix\(in srgb, var\(--member-agent-accent\) 18%, var\(--member-agent-launcher-surface\) 82%\);[\s\S]*?border: 1px solid var\(--member-agent-accent-border\);[\s\S]*?border-radius: 16px;/,
   "the agent launcher must keep its theme-derived identity inside a compact, high-contrast control",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock \{[\s\S]*?--member-agent-launcher-surface: #111115;/,
+  "the two existing dark themes must retain the launcher's exact legacy surface",
+);
+assert.match(
+  styles,
+  /:root\[data-theme-family="light"\] \.member-agent-dock \{\s*--member-agent-launcher-surface: var\(--surface-card\);\s*\}/,
+  "the light family must adapt the launcher through the scoped surface role",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock-error \{[\s\S]*?color: #e8b4c4;[\s\S]*?background: rgba\(214, 106, 138, 0\.1\);[\s\S]*?border-left: 2px solid var\(--accent-gold\);/,
+  "the two existing dark themes must retain the dock error's exact legacy treatment",
+);
+assert.match(
+  styles,
+  /:root\[data-theme-family="light"\] \.member-agent-dock-error \{[\s\S]*?color: var\(--accent-error\);[\s\S]*?background: color-mix\(in srgb, var\(--accent-error\) 10%, transparent\);[\s\S]*?border-left-color: var\(--accent-error\);/,
+  "light-family dock errors must use the functional error role",
 );
 assert.match(
   styles,
@@ -811,7 +831,7 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher:hover \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*background: color-mix\(in srgb, var\(--member-agent-accent\) 24%, #111115\);[\s\S]*border-color: color-mix\(in srgb, var\(--member-agent-accent\) 48%, transparent\);/,
+  /\.member-agent-dock-launcher:hover \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*background: color-mix\(in srgb, var\(--member-agent-accent\) 24%, var\(--member-agent-launcher-surface\) 76%\);[\s\S]*border-color: color-mix\(in srgb, var\(--member-agent-accent\) 48%, transparent\);/,
   "hover must clarify the floating control without moving it",
 );
 assert.doesNotMatch(

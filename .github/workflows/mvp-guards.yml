@@ -112,5 +112,8 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
+      - name: Run CRIS theme contract proof
+        run: npm run check:cris-theme-contract-proof
+
       - name: Run foundation baseline gate (canonical)
         run: bash scripts/foundation_baseline_gate.sh

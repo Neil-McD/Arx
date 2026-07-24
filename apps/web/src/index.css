@@ -61,14 +61,11 @@
 /* Web-only: remove the "bar" treatment so the header blends into the page.
    Note: theme variables in src/index.css use :root[data-theme=...] (higher specificity),
    so we override per-theme here too. */
-:root,
-:root[data-theme="dark"],
-:root[data-theme="polynet"] {
+:root {
   --header-border: none;
 }
 
-:root[data-theme="dark"],
-:root[data-theme="polynet"] {
+:root[data-theme-family="dark"] {
   --web-floating-chrome-bg: rgba(20, 20, 23, 0.97);
   --web-floating-chrome-border: rgba(255, 255, 255, 0.06);
   --web-floating-chrome-shadow: none;
@@ -77,9 +74,7 @@
 
 /* Prefer deriving the "glass" tint from the current theme's background so it matches. */
 @supports (background: color-mix(in srgb, #000 50%, transparent)) {
-  :root,
-  :root[data-theme="dark"],
-  :root[data-theme="polynet"] {
+  :root {
     --web-floating-chrome-bg: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 55%, var(--bg-app, #121214));
     --web-floating-chrome-border: color-mix(in srgb, var(--text-primary) 6%, transparent);
     --web-floating-chrome-shadow: none;
@@ -747,8 +742,7 @@
   display: block;
 }
 
-:root[data-theme="dark"] .web-download-logo.monochrome,
-:root[data-theme="polynet"] .web-download-logo.monochrome {
+:root[data-theme-family="dark"] .web-download-logo.monochrome {
   filter: invert(1);
 }
 
@@ -1019,14 +1013,12 @@
 }
 
 /* Dark web themes: push assistant text a little brighter for readability. */
-:root[data-theme="dark"] .message-item.assistant .message-text,
-:root[data-theme="polynet"] .message-item.assistant .message-text {
+:root[data-theme-family="dark"] .message-item.assistant .message-text {
   color: #f3f5f7;
 }
 
 @supports (color: color-mix(in srgb, #fff 50%, #000 50%)) {
-  :root[data-theme="dark"] .message-item.assistant .message-text,
-  :root[data-theme="polynet"] .message-item.assistant .message-text {
+  :root[data-theme-family="dark"] .message-item.assistant .message-text {
     color: color-mix(in srgb, var(--text-primary) 78%, #ffffff 22%);
   }
 }
@@ -1709,8 +1701,7 @@
   display: block;
 }
 
-:root[data-theme="dark"] .model-picker-nav-logo-img.monochrome,
-:root[data-theme="polynet"] .model-picker-nav-logo-img.monochrome {
+:root[data-theme-family="dark"] .model-picker-nav-logo-img.monochrome {
   filter: invert(1);
 }
 
@@ -2207,8 +2198,8 @@
   height: 34px;
   border-radius: 999px;
   border: none;
-  background: #fff !important;
-  color: #111 !important;
+  background: var(--conversation-primary-action-surface) !important;
+  color: var(--conversation-primary-action-foreground) !important;
   box-shadow: none;
 }
 
@@ -2218,14 +2209,14 @@
 }
 
 .ask-send-btn.ask-send-btn-v2:hover:not(:disabled) {
-  background: #fff !important;
-  color: #111 !important;
+  background: var(--conversation-primary-action-hover-surface) !important;
+  color: var(--conversation-primary-action-foreground) !important;
   opacity: 0.95;
 }
 
 .ask-send-btn.ask-send-btn-v2:disabled {
-  background: #fff !important;
-  color: #111 !important;
+  background: var(--conversation-primary-action-surface) !important;
+  color: var(--conversation-primary-action-foreground) !important;
   opacity: 0.35;
   box-shadow: none;
 }
@@ -2277,8 +2268,8 @@
 }
 
 .community-chat .chat-send.ask-send-btn {
-  background: #fff;
-  color: #111;
+  background: var(--conversation-primary-action-surface);
+  color: var(--conversation-primary-action-foreground);
 }
 
 .community-chat .chat-send.ask-send-btn:hover:not(:disabled) {
@@ -2291,8 +2282,8 @@
 
 /* AI workspace composer: match the community chat send button style. */
 .ask-bar.ask-bar-v2 .chat-send.ask-send-btn {
-  background: #fff;
-  color: #111;
+  background: var(--conversation-primary-action-surface);
+  color: var(--conversation-primary-action-foreground);
 }
 
 .ask-bar.ask-bar-v2 .chat-send.ask-send-btn:hover:not(:disabled) {
@@ -2395,8 +2386,7 @@
   gap: 10px;
 }
 
-:root[data-theme="dark"] .auth-gate-google-button,
-:root[data-theme="polynet"] .auth-gate-google-button {
+:root[data-theme-family="dark"] .auth-gate-google-button {
   border-color: rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.92);
 }
@@ -3210,11 +3200,6 @@
   height: 96px;
   border-radius: 12px;
   padding: 12px 14px;
-}
-
-.mobile-drawer.mobile-community-drawer .community-nav-name {
-  font-size: 15px;
-  font-weight: 700;
 }
 
 .mobile-drawer .community-nav .nav-item {

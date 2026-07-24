@@ -154,10 +154,17 @@ assert.doesNotMatch(
 );
 
 // --- CSS: the inline About resting/editing state keeps native styling ---
+const genericSettingsButtonSelector =
+  baseCss.match(/\.settings-panel button[^{]+\{/)?.[0] ?? "";
 assert.match(
-  baseCss,
-  /\.settings-panel button:not\(\.funnel-editor-about-trigger\):not\(\.platform-save-button\)/,
+  genericSettingsButtonSelector,
+  /:not\(\.funnel-editor-about-trigger\)/,
   "generic settings button styling must not apply to the inline Funnel About resting state",
+);
+assert.match(
+  genericSettingsButtonSelector,
+  /:not\(\.platform-save-button\)/,
+  "generic settings button styling must not override the canonical settings save action",
 );
 assert.match(
   baseCss,

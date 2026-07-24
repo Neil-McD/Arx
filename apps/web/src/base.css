@@ -26,6 +26,9 @@
   --bg-button: #efeff2;
   --bg-button-hover: #ffffff;
   --bg-button-text: #101114;
+  --conversation-primary-action-surface: #ffffff;
+  --conversation-primary-action-hover-surface: #ffffff;
+  --conversation-primary-action-foreground: #111111;
   --bg-terminal: #0d0d10;
 
   /* Accent color */
@@ -269,6 +272,107 @@
   --status-proposed: #372730;
   --status-approved: #223229;
   --status-executed: #202d3f;
+}
+
+/* CRIS theme - "Paper Intelligence" */
+:root[data-theme="cris"] {
+  color-scheme: light;
+
+  /*
+   * CRIS Signature Palette
+   * Philosophy: paper is the dominant work surface, lavender identifies
+   * operating context, and intelligence blue marks live agency and selection.
+   */
+
+  /* === FOUNDATION: Paper canvas + lavender context === */
+  --bg-app: #F8F8F4;
+  --bg-header: rgba(248, 248, 244, 0.94);
+  --bg-panel: #EBE9FB;
+  --bg-modal: #FFFFFF;
+  --bg-workspace: #F8F8F4;
+  --bg-card: #FFFFFF;
+  --bg-card-solid: #FFFFFF;
+  --bg-card-alt: #F8F8F4;
+  --bg-card-hover: color-mix(in srgb, #EBE9FB 58%, #F8F8F4 42%);
+  --bg-input: #FFFFFF;
+  --bg-terminal: #171719;
+  --surface-rail: #F8F8F4;
+  --surface-nav: #EBE9FB;
+  --workspace-composer-bg: #FFFFFF;
+  --workspace-landing-action-bg: #FFFFFF;
+  --workspace-landing-action-hover-bg: color-mix(in srgb, #EBE9FB 58%, #F8F8F4 42%);
+
+  /* === CONTROLS: Ink on paper === */
+  --bg-button: #171719;
+  --bg-button-hover: color-mix(in srgb, #171719 88%, #FFFFFF 12%);
+  --bg-button-text: #FFFFFF;
+
+  /* === INTELLIGENCE: One active blue === */
+  --accent-gold: #2F55FF;
+  --accent-gold-subtle: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+  --accent-gold-glow: rgba(47, 85, 255, 0.18);
+  --accent-brand: #2F55FF;
+  --accent-selection: #2F55FF;
+  --accent-agent: #2F55FF;
+  --accent-agent-strong: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+  --accent-agent-foreground: #2F55FF;
+  --accent-agent-surface: rgba(47, 85, 255, 0.1);
+  --accent-attention: #2F55FF;
+  --focus-ring: rgba(47, 85, 255, 0.52);
+  --text-link: #2F55FF;
+  --text-link-hover: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+  --accent-cyan: #2F55FF;
+  --accent-cyan-subtle: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+  --accent-cyan-glow: rgba(47, 85, 255, 0.16);
+  --chat-link: #2F55FF;
+  --chat-link-hover: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+
+  /* Functional feedback stays semantically distinct from the brand palette. */
+  --accent-success: #147A4B;
+  --accent-error: #B42318;
+
+  /* === TYPOGRAPHY: Accessible ink === */
+  --text-primary: #171719;
+  --text-secondary: #6B6974;
+  --text-muted: #6B6974;
+  --text-faint: #6B6974;
+  --text-terminal: #FFFFFF;
+
+  /* === STRUCTURE: Ink-derived lines === */
+  --border-default: rgba(23, 23, 25, 0.1);
+  --border-strong: rgba(23, 23, 25, 0.22);
+  --border-muted: rgba(23, 23, 25, 0.1);
+  --border-active: #2F55FF;
+  --divider-accent: rgba(23, 23, 25, 0.1);
+  --header-border: none;
+
+  /* === ICONS + INTERACTION === */
+  --icon-default: #6B6974;
+  --icon-hover: #171719;
+  --icon-active: #2F55FF;
+  --hover-overlay: rgba(23, 23, 25, 0.04);
+  --active-overlay: rgba(23, 23, 25, 0.08);
+  --panel-shadow: none;
+
+  /* === SELECTED STATE: Lavender field + blue structure === */
+  --surface-selected: #DCD8F7;
+  --stroke-selected: #2F55FF;
+  --text-selected: #171719;
+
+  /* === COMPOSER: Raised white work surface === */
+  --composer-surface: #FFFFFF;
+  --composer-border: rgba(23, 23, 25, 0.1);
+  --composer-focus-ring: rgba(47, 85, 255, 0.42);
+
+  /* === STATUS: Light semantic surfaces === */
+  --status-default: #FFFFFF;
+  --status-proposed: #DCD8F7;
+  --status-approved: color-mix(in srgb, #147A4B 12%, #FFFFFF 88%);
+  --status-executed: rgba(47, 85, 255, 0.1);
+
+  --community-rail-button-border: 1px solid rgba(23, 23, 25, 0.1);
+  --scrollbar-thumb: rgba(23, 23, 25, 0.22);
+  --scrollbar-thumb-hover: #6B6974;
 }
 
 * {
@@ -651,8 +755,7 @@ body {
 }
 
 /* Theme-level rail surface assignment (component rule stays generic). */
-:root[data-theme="dark"],
-:root[data-theme="polynet"] {
+:root[data-theme-family="dark"] {
   --surface-rail: var(--bg-workspace, var(--bg-app));
 }
 
@@ -869,18 +972,6 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.community-nav-banner-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.55));
-}
-
-.community-nav-name {
-  position: relative;
-  z-index: 1;
-  font-size: 14px;
 }
 
 .rail-main,
@@ -19485,8 +19576,7 @@ button.chat-reply-quote:hover {
   display: block;
 }
 
-:root[data-theme="dark"] .model-picker-nav-logo-img.monochrome,
-:root[data-theme="polynet"] .model-picker-nav-logo-img.monochrome {
+:root[data-theme-family="dark"] .model-picker-nav-logo-img.monochrome {
   filter: invert(1);
 }
 
@@ -20693,8 +20783,7 @@ button.message-citation-chip:hover {
   justify-content: center;
 }
 
-:root[data-theme="dark"] .auth-gate-google-button,
-:root[data-theme="polynet"] .auth-gate-google-button {
+:root[data-theme-family="dark"] .auth-gate-google-button {
   border-color: rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.92);
 }
@@ -24569,7 +24658,7 @@ button.message-citation-chip:hover {
 }
 
 /* Settings panel buttons - consistent styling */
-.settings-panel button:not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back) {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back) {
   padding: 10px 16px;
   font-size: 12px;
   font-weight: 500;
@@ -24581,12 +24670,12 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
-.settings-panel button:not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back):hover:not(:disabled) {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back):hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--bg-card-hover);
 }
 
-.settings-panel button:not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back):disabled {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back):disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -28466,7 +28555,7 @@ button.message-citation-chip:hover {
 
 .appearance-options {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 16px;
 }
 
@@ -28491,9 +28580,14 @@ button.message-citation-chip:hover {
   background: var(--bg-card-hover);
 }
 
-.appearance-option.active {
+.settings-panel .appearance-option.active {
   border-color: var(--border-active);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-active) 52%, transparent);
+}
+
+.settings-panel .appearance-option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .appearance-option.disabled {
@@ -28582,6 +28676,43 @@ button.message-citation-chip:hover {
 .appearance-option-preview[data-preview-theme="polynet"] .preview-line.short {
   width: 60%;
   background: #d66a8a;
+}
+
+.appearance-option-preview[data-preview-theme="cris"] {
+  background: #F8F8F4;
+  box-shadow: inset 0 0 0 1px rgba(23, 23, 25, 0.1);
+}
+
+.appearance-option-preview[data-preview-theme="cris"] .preview-header {
+  background: #FFFFFF;
+  grid-column: 1 / -1;
+  border-radius: 3px;
+  box-shadow: inset 0 -1px 0 rgba(23, 23, 25, 0.1);
+}
+
+.appearance-option-preview[data-preview-theme="cris"] .preview-sidebar {
+  background: #EBE9FB;
+  border-radius: 3px;
+}
+
+.appearance-option-preview[data-preview-theme="cris"] .preview-content {
+  background: #F8F8F4;
+  border-radius: 3px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.appearance-option-preview[data-preview-theme="cris"] .preview-line {
+  background: rgba(23, 23, 25, 0.22);
+  height: 4px;
+  border-radius: 2px;
+}
+
+.appearance-option-preview[data-preview-theme="cris"] .preview-line.short {
+  width: 60%;
+  background: #2F55FF;
 }
 
 .appearance-option-label {
@@ -34816,4 +34947,139 @@ button.message-citation-chip:hover {
   .community-chat .community-interaction-main-composer .chat-input-bar.is-onboarding-first-post {
     animation: none;
   }
+}
+
+/*
+ * Light-family component adapters.
+ *
+ * These selectors intentionally leave the legacy dark component values intact.
+ * They adapt only controls whose old white/pink literals do not remain legible
+ * on light surfaces. Shared component rules stay frozen for Polynet Dark and Dark.
+ */
+:root[data-theme-family="light"] .plan-badge {
+  background: var(--hover-overlay);
+}
+
+:root[data-theme-family="light"] .plan-feature-icon.x {
+  background: var(--hover-overlay);
+  color: var(--text-muted);
+}
+
+:root[data-theme-family="light"] .plan-feature-icon.check {
+  background: color-mix(in srgb, var(--accent-success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-success) 34%, transparent);
+  color: var(--accent-success);
+}
+
+:root[data-theme-family="light"] .plan-cta,
+:root[data-theme-family="light"] .modal.modal-account-info .plan-cta {
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+}
+
+:root[data-theme-family="light"] .plan-cta:hover,
+:root[data-theme-family="light"] .modal.modal-account-info .plan-cta:hover {
+  background: var(--bg-button-hover);
+}
+
+:root[data-theme-family="light"] .status.canceled,
+:root[data-theme-family="light"] .status.failed {
+  background: color-mix(in srgb, var(--accent-error) 14%, transparent);
+  color: var(--accent-error);
+}
+
+:root[data-theme-family="light"] .action-buttons .danger {
+  border-color: color-mix(in srgb, var(--accent-error) 54%, transparent);
+  color: var(--accent-error);
+}
+
+:root[data-theme-family="light"] .action-buttons .danger:hover {
+  background: color-mix(in srgb, var(--accent-error) 10%, transparent);
+}
+
+:root[data-theme-family="light"] .action-error {
+  border-color: color-mix(in srgb, var(--accent-error) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-error) 10%, transparent);
+  color: var(--accent-error);
+}
+
+:root[data-theme-family="light"] .settings-section {
+  border-bottom-color: var(--border-default);
+}
+
+:root[data-theme-family="light"] .settings-panel button.danger,
+:root[data-theme-family="light"] .create-community-actions .danger {
+  border-color: color-mix(in srgb, var(--accent-error) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-error) 10%, transparent);
+  color: var(--accent-error);
+}
+
+:root[data-theme-family="light"] .settings-panel button.danger:hover:not(:disabled),
+:root[data-theme-family="light"] .create-community-actions .danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent-error) 54%, transparent);
+  background: color-mix(in srgb, var(--accent-error) 14%, transparent);
+}
+
+/*
+ * Core conversation loop. These are live controls used by workspace, community
+ * chat, direct messages, and the member-agent dock.
+ */
+:root[data-theme-family="light"] {
+  --conversation-primary-action-surface: var(--bg-button);
+  --conversation-primary-action-hover-surface: var(--bg-button-hover);
+  --conversation-primary-action-foreground: var(--bg-button-text);
+}
+
+:root[data-theme-family="light"] .ask-icon-btn.ask-mic.recording {
+  background: color-mix(in srgb, var(--accent-error) 12%, transparent);
+  color: var(--accent-error);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent-error) 32%, transparent),
+    0 6px 18px color-mix(in srgb, var(--accent-error) 16%, transparent);
+}
+
+:root[data-theme-family="light"] .ask-icon-btn.ask-mic.recording .ask-mic-ripple {
+  border-color: color-mix(in srgb, var(--accent-error) 42%, transparent);
+}
+
+:root[data-theme-family="light"] .ask-icon-btn.ask-mic.transcribing {
+  background: color-mix(
+    in srgb,
+    var(--accent, var(--accent-selection)) 12%,
+    transparent
+  );
+  color: var(--accent, var(--accent-selection));
+  box-shadow: inset 0 0 0 1px
+    color-mix(
+      in srgb,
+      var(--accent, var(--accent-selection)) 32%,
+      transparent
+    );
+}
+
+:root[data-theme-family="light"] .ask-engine-menu {
+  border-color: var(--border-strong);
+  background: var(--bg-modal);
+  box-shadow:
+    0 18px 46px rgba(23, 23, 25, 0.18),
+    0 0 0 1px var(--border-default) inset;
+}
+
+:root[data-theme-family="light"] .ask-engine-premium-pill {
+  border-color: color-mix(in srgb, var(--accent-selection) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-selection) 8%, transparent);
+  color: var(--accent-selection);
+}
+
+:root[data-theme-family="light"] .ask-engine-option-check {
+  color: var(--accent-selection);
+}
+
+:root[data-theme-family="light"] .ask-engine-option:hover,
+:root[data-theme-family="light"] .ask-engine-option:focus-visible {
+  background: color-mix(in srgb, var(--accent-selection) 10%, transparent);
+}
+
+:root[data-theme-family="light"] .ask-engine-option.is-selected {
+  background: var(--surface-selected);
 }
