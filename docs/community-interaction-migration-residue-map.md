@@ -84,6 +84,15 @@ no longer mirror content into historical messages. The 67 mapping rows,
 bounded backfill, historical
 messages/threads/activity, and lifecycle reachability remain unchanged.
 
+The separate dormant `communityArchiveDocuments` substrate is closed. An
+expectation-locked development-only drain deleted exactly 66 disconnected
+derived rows and replayed with zero work. The module, table, five indexes,
+cleanup and lifecycle handling, generated identity, temporary drain, obsolete
+proof surface, and two callerless legacy-link lookup helpers are absent. The
+empty physical table shell was then deleted from the Dev Convex inventory.
+This closure did not mutate canonical interactions, source traces, digests,
+links, historical messages, or any evidence state.
+
 ## Development Staging Snapshot
 
 Read-only attachment postflight captured on 2026-07-23 from
@@ -103,6 +112,7 @@ Read-only attachment postflight captured on 2026-07-23 from
 | canonical attachment rows | 4 | one exact row per historical attachment target |
 | legacy / canonical reactions | 0 / 8 | only canonical reaction state remains |
 | legacy featured-message pointers | 0 | retired product state is drained |
+| dormant community archive rows | 0 | exact 66-row derived corpus drained; physical table absent |
 
 Integrity checks found zero unlinked legacy messages, duplicate message links,
 dangling message/root/reply links, or canonical replies without content blocks.
@@ -142,7 +152,7 @@ three legacy reactions. No entry or switch created legacy chat state.
   `community_thread_reply_mention_policy_proof.ts`; it accepts canonical
   root/reply identity only.
 
-Historical archive/evidence materialization remains part of R-007, but current
+Historical evidence materialization remains part of R-007, but current
 recent-context and interaction-evidence readers do not query legacy chat rows.
 
 ## Completed Deletions
@@ -158,6 +168,9 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
 - Live legacy identity bridge: mapping-link lookups and legacy ids in canonical
   root/reply payloads, legacy reply-target fallback, and canonical edit
   mirroring into historical messages.
+- Dormant community archive: 66 disconnected derived rows, archive module,
+  table, five indexes, cleanup/lifecycle/generated/proof surface, temporary
+  drain, and two callerless legacy-link lookup helpers.
 - Ambient activity timeline: browser timeline, public read API, gateway, CSS,
   and best-effort writers. Historical rows remain lifecycle-reachable pending
   retention policy.
@@ -198,9 +211,13 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
 7. **C3.2E2A complete:** remove legacy ids and mapping-link lookups from live
    reads, accept only canonical reply targets, and stop edit mirroring without
    mutating historical state.
-8. **C3.2E2B next:** reconcile missing, malformed, and orphaned interaction
+8. **Archive closure complete:** expectation-lock and drain the 66-row dormant
+   derived corpus, prove zero-work replay, then delete its module, schema,
+   indexes, lifecycle/cleanup/proof surface, physical Dev table shell, and two
+   callerless legacy-link helpers.
+9. **C3.2E2B next:** reconcile missing, malformed, and orphaned interaction
    evidence before treating the historical bridge as removable.
-9. Run the bounded historical backfill/integrity replay, observe zero live
+10. Run the bounded historical backfill/integrity replay, observe zero live
    legacy reads and writes, then audit link/backfill/table residue and update
    lifecycle policy only if retention and evidence gates authorize deletion.
 

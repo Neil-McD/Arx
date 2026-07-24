@@ -784,3 +784,40 @@ The next authorized interaction cleanup slice is C3.2E2B: reconcile missing,
 malformed, and orphaned canonical interaction evidence before any bounded
 backfill replay or retention decision. This receipt authorizes no legacy-link,
 message, thread, activity-history, trace, schema-table, or production deletion.
+
+The dormant community-archive substrate is now closed on the isolated
+development staging lane. Temporary checkpoint
+`8f089cb6addad32fba0c7e59d515a01c4e2bda9e` introduced one internal,
+deployment-locked drain. Its expectation-locked dry run found exactly 66
+derived rows for one community: 63 chat and three AI-feed rows; 60 pending and
+six embedded rows; six inline embeddings; and zero interaction, resource, PDF,
+URL, or failed rows. The atomic committed run deleted exactly those 66 rows,
+and its immediate replay deleted zero.
+
+Permanent runtime checkpoint
+`1765e18356e5e087d65744f5cc4c7eced63a90ee` deletes the 550-line archive
+module, temporary drain, schema table, four ordinary indexes, 768-dimensional
+vector index, generated identity, cognition-cleanup phase, lifecycle edge,
+domain assignment, obsolete proof command and proof, and two callerless legacy
+chat-link lookup helpers. Account-lifecycle policy is now v7 and covers 124
+declared tables. From the pre-slice checkpoint, the implementation removes 711
+net lines across 18 files.
+
+Convex deployed the permanent checkpoint only to
+`dev:quick-porcupine-949` and explicitly removed all five archive indexes. An
+independent bounded read returned zero rows. The signed-in Convex dashboard
+then showed the exact development deployment and an empty
+`communityArchiveDocuments` table; its physical empty table shell was deleted
+and was absent from the resulting table inventory.
+
+The archive data had no canonical consumer and was intentionally discarded as
+derived, disconnected state; no application backup or recovery path was
+created. Canonical interactions, messages, source traces, digests, legacy
+links, historical chat rows, resources, MCP compatibility, and production
+were not changed. No interaction-evidence repair or backfill was performed.
+
+Convex and web typechecks, focused interaction/resource/compiler/lifecycle
+contracts, production build, bundle budget, diff hygiene, and the complete
+38-step foundation baseline pass. C3.2E2B interaction-evidence reconciliation
+remains the next authorized slice; this archive closure does not authorize an
+evidence, link, message, thread, activity-history, or production mutation.
