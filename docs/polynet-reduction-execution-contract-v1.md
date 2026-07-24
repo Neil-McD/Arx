@@ -2,7 +2,7 @@
 
 Status: active execution tracker; not product or architecture authority
 
-Last verified: 2026-07-22
+Last verified: 2026-07-23
 
 ## 1. Irreducible job
 
@@ -736,3 +736,51 @@ R-004 is closed. The next interaction slice is limited to a bounded final
 historical backfill and integrity replay for R-003/R-007. This receipt
 authorizes no link, backfill, message, thread, activity-history, lifecycle,
 schema-table, blob, or production deletion.
+
+C3.2E2A closes live legacy interaction identity authority on the isolated
+development staging lane at exact runtime checkpoint
+`58d84cd5efd6dac339d53a708060966746d96294`. Canonical root/reply read bundles
+no longer return legacy thread, message, or target-message ids. The browser
+gateway, controller, optimistic projection, thread drawer, and composer accept
+only canonical root and reply ids. Root and nested-reply targets must be live,
+community-readable, and scoped to the same community and root. Invalid,
+hidden, deleted, admin-only, cross-root, cross-community, missing, and
+wrong-table targets fail closed. Idempotent retries preserve the originally
+stored target, including when that target is later hidden.
+
+Canonical edits no longer mirror content into historical
+`communityChatMessages`. Migration-only link reads and legacy reply metadata
+remain confined to bounded backfill planning. No schema, migration, stored row,
+thread, message, link, trace, citation, intelligence object, attachment,
+lifecycle policy, provider, production Convex deployment, or production web
+release changed.
+
+The focused canonical-identity behavior fixture, relevant interaction,
+migration, projection, attachment, reply/mention, digest, and link-preview
+proofs, Convex and web typechecks, production build, bundle budget, diff
+hygiene, and the complete 38-step foundation baseline all pass. Dev Convex
+`quick-porcupine-949` reported its functions ready from the exact clean runtime
+checkpoint, and `polynet-staging.vercel.app/version.json` served that exact
+build and Sentry release.
+
+Signed-in acceptance on `/c/polynet/chat` rendered the canonical feed, opened
+the existing canonical smoke thread, selected its nested canonical reply
+target, and seeded the expected author mention in the drawer composer. Nothing
+was submitted; the drawer was closed back to an empty channel composer, and
+the browser console reported zero warnings or errors.
+
+An independent bounded read-only Dev Convex postflight still reports 54 roots,
+23 replies, 67 historical links, 12 links whose canonical target retains the
+matching migration idempotency key, and 55 links that are the sole
+correspondence receipt. All 63 community-readable interactions still lack
+canonical source traces. The one malformed/orphaned community-visible
+interaction trace still has zero citation, intelligence-node, intelligence-
+edge, mutation, or change-request dependents. Every scan completed below its
+1,000-row bound. Production remained untouched;
+`www.polynet.ai/version.json` still served
+`a936dee72a65f91723f332779390210e4cf783f0`.
+
+The next authorized interaction cleanup slice is C3.2E2B: reconcile missing,
+malformed, and orphaned canonical interaction evidence before any bounded
+backfill replay or retention decision. This receipt authorizes no legacy-link,
+message, thread, activity-history, trace, schema-table, or production deletion.
