@@ -1,13 +1,14 @@
 # Community Convex Facade Reduction Map — 2026-07-24
 
-- Status: intermediate-facade and bounded legacy public-identity deletions
-  `COMPLETE` on the local staging worktree and development Convex
-- Mapping source: `81d68ab85b2466a2c74ac0a1232f38662008cd11`
-- Implementation base: `81d68ab85b2466a2c74ac0a1232f38662008cd11`
+- Status: intermediate facade, bounded legacy public identities, and unused
+  private plugin-import subsystem deletions `COMPLETE` on the local staging
+  worktree and development Convex
+- Mapping source: `8fd1b8b9cbd90dffc0f259fdd2163791bdd1c9e6`
+- Implementation base: `8fd1b8b9cbd90dffc0f259fdd2163791bdd1c9e6`
 - Worktree:
   `/Users/neilmcdevitt/code/arx/.worktrees/semantic-platform-staging-20260719`
 - Branch: `codex/semantic-platform-staging-20260719`
-- Product, schema, data, provider, UI, and production changes: none
+- Product, schema, data, provider, active UI, and production changes: none
 - Development deployment: `dev:quick-porcupine-949`
 
 ## Irreducible job
@@ -26,13 +27,14 @@ community compiler, official MCP, or any source authority module.
 
 | Surface | Current shape | First-party evidence | Disposition |
 | --- | ---: | --- | --- |
-| `convex/community.ts` | 144 registered aliases | 118 aliases referenced by first-party runtime code; two legacy public aliases deleted | `KEEP` as the current web/cached-client facade; reduce per alias later |
+| `convex/community.ts` | 141 registered aliases | 118 aliases referenced by first-party runtime code; two legacy public aliases and three unused private-import aliases deleted | `KEEP` as the current web/cached-client facade; reduce per alias later |
 | `convex/communityExperience.ts` | deleted | zero `api.communityExperience.*` or `communityExperience:*` runtime calls | `DELETE COMPLETE` |
 | `communityAccessQueries` | 2 former intermediate aliases | imported directly by `community.ts` | source owner kept |
 | `communityPublic` | 8 retained former intermediate aliases | imported directly by `community.ts`; source has an internal runtime consumer | source owner kept |
 | `communityResources` | 45 former intermediate aliases | imported directly by `community.ts`; source is used by runtime and official MCP paths | protected source owner kept |
 | generated `api.communityExperience` namespace | deleted | disappeared with the file | `DELETE COMPLETE` |
 | legacy public access/join identities | four source/facade registrations deleted | zero first-party runtime callers; canonical slug identities remain | `DELETE COMPLETE` |
+| private plugin-manifest import subsystem | three source/facade identities, two internal actions, one developer-app upsert, compiler, contract, and four obsolete proofs deleted | zero runtime callers; the promised picker UI was already absent and its proof failed; canonical app connection/setup remains | `DELETE COMPLETE` |
 | facade-specific structural proofs | eight scripts reduced | now check source/outer-facade authority or enforce facade absence | complete |
 | `communityExperienceMode` route state | unrelated UI mode name | active onboarding-preview route state | `KEEP`; do not confuse it with the Convex facade |
 
@@ -67,8 +69,9 @@ The corrected static scan found 118 of the original 146 `community.ts` aliases
 referenced by first-party runtime code. The earlier 115 count missed dynamic
 `api.community.*` callers for `crawlWebRoot`,
 `getMyCommunityAgentDockTranscript`, and `getMyCommunityAgentDockTurn`.
-Deleting the two proven legacy public aliases leaves 118 referenced aliases and
-26 remaining outer aliases requiring separate compatibility decisions:
+Deleting the two proven legacy public aliases and three unused private-import
+aliases leaves 118 referenced aliases and 23 remaining outer aliases requiring
+separate compatibility decisions:
 
 | Source area | No first-party `community:*` caller found |
 | --- | --- |
@@ -77,10 +80,9 @@ Deleting the two proven legacy public aliases leaves 118 referenced aliases and
 | resource/builder/source | `listCommunityResourceBuilderDirectory`, `stageCommunityResourceBuilderChangeset`, `readCommunityResourceBuilderResource`, `writeCommunityResourceBuilderResource`, `editCommunityResourceBuilderResource`, `ingestCommunitySourceFiles`, `ingestCommunitySourceGitHub`, `ingestCommunitySourceGoogleDrive` |
 | interaction/AI Feed | `publishCommunityAiFeedAgentPost` |
 | destructive lifecycle compatibility | `deleteCommunity` |
-| private app/MCP capability | `listPrivateCommunityMcpOptions`, `addPrivateCommunityMcpApp`, `applyPrivateCommunityPluginManifest` |
 | intelligence/compiler | `createCommunityIntelligenceChangeRequest`, `listCommunityIntelligenceChangeRequests`, `decideCommunityIntelligenceChangeRequest`, `applyCommunityIntelligenceChangeRequest`, `listCommunityIntelligenceDirectoryView`, `listCommunityIntelligenceEdges`, `listCommunityIntelligenceMutations`, `runCommunityCompilerDigestPass`, `listCommunityCompilerDigests` |
 
-These 26 are alias candidates, not capability-deletion candidates. Several source
+These 23 are alias candidates, not capability-deletion candidates. Several source
 implementations have internal, MCP, scheduled, proof, or cached-client jobs.
 `deleteCommunity` must retain its deterministic quarantine identity until that
 cached-client contract is deliberately retired.
@@ -118,7 +120,7 @@ supported external contract. Staging deletion can be exercised independently.
 | preserve a 57-function intermediate facade with no first-party caller | 10 | delete |
 | keep the facade “just in case” without a named external contract | 9 | reject |
 | build telemetry/workflow machinery before staging deletion | 9 | reject |
-| delete all 26 remaining unreferenced outer aliases in the same slice | 8 | reject; classify separately |
+| delete all 23 remaining unreferenced outer aliases in the same slice | 8 | reject; classify separately |
 
 ## First completed deletion unit
 
@@ -206,11 +208,61 @@ production query, or production deployment was added.
 - no join, payment, post, resource, schema, data, provider, or production
   mutation was performed.
 
+## Third completed deletion unit
+
+The unused private community plugin-manifest import subsystem is deleted as one
+bounded unit:
+
+1. delete `listPrivateCommunityMcpOptions`,
+   `addPrivateCommunityMcpApp`, and
+   `applyPrivateCommunityPluginManifest` from both their source module and
+   `community.ts`;
+2. delete the two internal actions used only by the manifest apply loop and the
+   developer-app upsert used only by its staging action;
+3. delete the standalone manifest compiler, its active-but-unimplemented
+   contract, four dedicated proof scripts, and their package commands;
+4. remove the obsolete proof-specific legacy-provider scan exclusion;
+5. make the existing MCP app architecture proof own permanent absence of the
+   retired import surface and continued presence of canonical app
+   connection/setup.
+
+The reviewed MCP registry, `connectCommunityApp`,
+`setupImportedCommunityMcpApp`, existing mounted app state, imported-app
+configuration, user-owned harness state, and official Polynet MCP remain.
+
+## Third deletion validation receipt
+
+- the retired picker UI already had zero source call path and its dedicated
+  proof failed because the promised gateway/controller surface was absent;
+- the six removed Convex source functions had no runtime caller outside the
+  deleted subsystem;
+- the manifest compiler and its contract/proofs had no other consumer;
+- the focused MCP app architecture proof passes with explicit absence and
+  retained-path assertions;
+- Convex TypeScript passes;
+- all focused app, registry, harness, identity, and provider guards pass;
+- the 40-step foundation baseline, web TypeScript, production build, and bundle
+  budget pass;
+- development Convex reports functions ready on `dev:quick-porcupine-949`;
+- read-only development function metadata contains only the five reviewed
+  retained identities in this slice:
+  `community:connectCommunityApp`,
+  `community:setupImportedCommunityMcpApp`,
+  `communityAppMounts:connectCommunityApp`,
+  `communityAppMounts:setupImportedCommunityMcpApp`, and
+  `developerApps:configureImportedMcpDeveloperAppInternal`;
+- `community.ts` now exports 141 aliases: 118 referenced plus 23 separately
+  classified follow-up candidates;
+- no schema, data, provider, current app UI, official MCP behavior, or
+  production target changed.
+
 ## Verdict
 
-`communityExperience.ts` and four legacy public access/join registrations are
-deleted and validated on the staging lane. Canonical anonymous funnel,
-authenticated access, and slug-owned admission behavior remain.
+`communityExperience.ts`, four legacy public access/join registrations, and the
+unused private plugin-import subsystem are deleted on the staging lane.
+Canonical anonymous funnel, authenticated access, slug-owned admission,
+community app connection/setup, registry policy, and official MCP behavior
+remain.
 
-Do not combine this with the 26 remaining outer-alias decisions. The next
+Do not combine this with the 23 remaining outer-alias decisions. The next
 public-surface reduction must classify one coherent job at a time.

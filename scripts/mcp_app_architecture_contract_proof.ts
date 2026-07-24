@@ -19,6 +19,10 @@ function main() {
   const contract = readText(join(root, "docs/mcp-app-architecture-contract.md"));
   const discoverCatalog = readText(join(root, "shared/discoverCatalog.ts"));
   const schema = readText(join(root, "convex/schema.ts"));
+  const communityAppMounts = readText(join(root, "convex/communityAppMounts.ts"));
+  const communityFacade = readText(join(root, "convex/community.ts"));
+  const developerApps = readText(join(root, "convex/developerApps.ts"));
+  const packageJson = readText(join(root, "package.json"));
   const runtimeAgentLoop = readText(join(root, "convex/runtimeAgentLoop.ts"));
   const runtimeHarnessComposition = readText(
     join(root, "convex/runtimeHarnessComposition.ts"),
@@ -189,6 +193,70 @@ function main() {
   assertIncludes(schema, "developerApps: defineTable({", "app definition table");
   assertIncludes(schema, "communityAppMounts: defineTable({", "community app bundle table");
   assertIncludes(schema, "userPlatformAppMounts: defineTable({", "user app state table");
+
+  for (const retiredPrivateImportSurface of [
+    "privateCommunityPluginManifest",
+    "listPrivateCommunityMcpOptions",
+    "addPrivateCommunityMcpApp",
+    "applyPrivateCommunityPluginManifest",
+    "stageCommunityMcpAppForSetupInternal",
+    "connectImportedCommunityMcpAppInternal",
+    "upsertImportedMcpDeveloperAppInternal",
+  ]) {
+    assertNotIncludes(
+      communityAppMounts,
+      retiredPrivateImportSurface,
+      "retired private community plugin-import backend",
+    );
+    assertNotIncludes(
+      communityFacade,
+      retiredPrivateImportSurface,
+      "retired private community plugin-import facade",
+    );
+    assertNotIncludes(
+      developerApps,
+      retiredPrivateImportSurface,
+      "retired private community plugin-import developer-app path",
+    );
+  }
+  for (const retiredPrivateImportCommand of [
+    "check:private-community-plugin-manifest-contract-proof",
+    "check:private-community-plugin-manifest-apply-proof",
+    "check:private-community-mcp-add-proof",
+    "check:private-community-mcp-ui-proof",
+  ]) {
+    assertNotIncludes(
+      packageJson,
+      retiredPrivateImportCommand,
+      "retired private community plugin-import command",
+    );
+  }
+  for (const retainedCommunityAppIdentity of [
+    "export const connectCommunityApp = action({",
+    "export const setupImportedCommunityMcpApp = action({",
+    "resolveCommunityWorkflowImportMcpRegistryConnectPolicy",
+  ]) {
+    assertIncludes(
+      communityAppMounts,
+      retainedCommunityAppIdentity,
+      "retained canonical community app path",
+    );
+  }
+  assertIncludes(
+    developerApps,
+    "export const configureImportedMcpDeveloperAppInternal = internalMutation({",
+    "retained existing imported MCP setup path",
+  );
+  for (const retainedCommunityFacadeIdentity of [
+    "export const connectCommunityApp = connectCommunityAppImpl;",
+    "export const setupImportedCommunityMcpApp = setupImportedCommunityMcpAppImpl;",
+  ]) {
+    assertIncludes(
+      communityFacade,
+      retainedCommunityFacadeIdentity,
+      "retained community app facade",
+    );
+  }
 
   assertIncludes(
     runtimeAgentLoop,
