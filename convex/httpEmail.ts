@@ -92,9 +92,9 @@ export function registerEmailRoutes(args: RegisterEmailRoutesArgs): void {
       const eventType = readWebhookEventType(event);
       await ctx.runMutation((internal as any).email.recordEmailDeliveryWebhookInternal, {
         provider: "resend",
+        providerEventId: svixId,
         providerMessageId,
         eventType,
-        payload: event,
         nowMs: Date.now(),
       });
 

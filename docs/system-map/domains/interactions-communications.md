@@ -38,7 +38,19 @@ This must be fixed at the lifecycle contract, not by adding another cleanup exce
 
 ## Notifications, events, and email
 
-Email uses an outbox with status, dedupe, bounded processing, retry, preference suppression, and provider delivery projection. Mention repair and link preview queues are also bounded/leased. These are good patterns to reuse.
+Email uses an outbox with status, terminal dedupe, bounded processing, retry,
+preference suppression, and normalized provider delivery projection. Weekly,
+mention, and DM jobs queue only bounded source coordinates. Send time resolves
+the current verified address, preference, access, visibility, presence/read
+state, and canonical content, so recipients still receive useful short excerpts
+without those excerpts becoming durable queue copies. Suppressed and terminal
+rows retain no address or authored prose. Provider receipts are idempotent by
+provider event id, retain no raw body, and expire with terminal outbox receipts
+after 90 days. The bounded staging migration minimized all 129 historical
+terminal outbox rows and its replay performed zero work.
+
+Mention repair and link preview queues are also bounded/leased. These are good
+patterns to reuse.
 
 Fairness gaps remain:
 
@@ -60,6 +72,8 @@ Canonical moderation event types include privacy purge request/completion states
 | legacy message writer and mutation surface | `DELETE (deferred/dead)` complete | deleted after preload removal and first-party no-call proof | 9 | historical rows do not require a live writer |
 | legacy mapping/backfill bridge | `KEEP TEMPORARILY` | `MIGRATE_THEN_DELETE` | 3 | 67 mappings remain valid historical migration state; attachment reads are already canonical-only |
 | weekly digest reading legacy chat | `DELETE (deferred/dead)` complete | canonical reader retained; legacy reader deleted | 9 | retained product job now sees current interaction truth |
+| durable email excerpt/address copies | `DELETE (deferred/dead)` complete | source-reference queue, send-time authorization/hydration, immediate terminal minimization, 90-day receipt TTL | 10 | useful recipient context does not require retained duplicate content |
+| raw provider webhook bodies | `DELETE (deferred/dead)` complete | retain only normalized idempotency/status receipt | 10 | replay safety needs identity, not arbitrary provider payload retention |
 | public featured legacy messages | `DELETE (deferred/dead)` complete | live surface, two pointers, schema, and lifecycle residue deleted | 8 | founder introduction and gate cover the visitor job without a second curation system |
 | no-cursor “most recently updated” digest selection | `KEEP (MVP core)` | `BOUND`, `HARDEN` | 8 | retained return loop still needs eventual-service proof |
 | DM participant departure state without a leave flow | `KEEP (MVP core)` | `HARDEN` | 7 | schema state with no user lifecycle owner |

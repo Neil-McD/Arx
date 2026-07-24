@@ -33,6 +33,18 @@ crons.interval(
 );
 
 crons.daily(
+  "prune terminal email receipts",
+  {
+    hourUTC: 4,
+    minuteUTC: 30,
+  },
+  (internal as any).email.pruneTerminalEmailReceiptsInternal,
+  {
+    limit: 500,
+  },
+);
+
+crons.daily(
   "enqueue weekly community digests",
   {
     hourUTC: 13,

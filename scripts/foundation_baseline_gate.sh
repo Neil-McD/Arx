@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=39
+TOTAL_STEPS=40
 CURRENT_STEP=1
 
 run_step() {
@@ -43,6 +43,7 @@ run_step "Frontend privacy hygiene proof" npm run check:frontend-privacy-hygiene
 run_step "Account deletion quarantine contract" npm run check:account-delete-error-contract
 run_step "Account deletion safety behavior" npm run test:account-deletion-safety
 run_step "Community evidence revocation behavior" npm run test:community-evidence-revocation
+run_step "Email content retention behavior" npm run test:weekly-community-digest
 run_step "Community deletion quarantine contract" npm run check:community-deletion-quarantine-contract
 run_step "Community deletion safety behavior" npm run test:community-deletion-safety
 run_step "Community membership fail-closed authority" npm run test:community-membership-authority

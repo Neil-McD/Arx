@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import { stripChatInlineMarkdown } from "../shared/chatInlineMarkdown";
+import { buildConfiguredPublicAppUrl } from "./emailCore";
 
 const DM_EMAIL_SNIPPET_MAX_CHARS = 120;
 const DM_EMAIL_DEDUPE_WINDOW_MS = 4 * 60 * 60 * 1000;
@@ -67,6 +68,9 @@ export const evaluateDirectMessageEmailInternal = internalQuery({
     if (!message) {
       return { shouldSend: false as const, skipped: "message_missing" };
     }
+    if (normalizeIdValue(message.senderUserId) !== normalizeIdValue(args.senderUserId)) {
+      return { shouldSend: false as const, skipped: "sender_mismatch" };
+    }
 
     const presenceRows = (await ctx.db
       .query("communityPresence" as any)
@@ -79,27 +83,92 @@ export const evaluateDirectMessageEmailInternal = internalQuery({
       }
     }
 
-    const sender = args.senderUserId ? await ctx.db.get(args.senderUserId) : null;
+    const dedupeBucket = Math.floor(Date.now() / DM_EMAIL_DEDUPE_WINDOW_MS);
+    return {
+      shouldSend: true as const,
+      dedupeKey: `dm:${normalizeIdValue(args.conversationId)}:${normalizeIdValue(args.recipientUserId)}:${dedupeBucket}`,
+      payload: {
+        conversationId: args.conversationId,
+        messageSeq: args.messageSeq,
+      },
+    };
+  },
+});
+
+export const resolveDirectMessageEmailPayloadForSendInternal = internalQuery({
+  args: {
+    recipientUserId: v.id("users"),
+    payload: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const payload =
+      args.payload && typeof args.payload === "object" && !Array.isArray(args.payload)
+        ? (args.payload as Record<string, any>)
+        : {};
+    const conversationId = payload.conversationId;
+    const messageSeq = Number(payload.messageSeq);
+    if (!conversationId || !Number.isFinite(messageSeq)) {
+      return { ok: false as const, reason: "email_content_reference_missing" };
+    }
+    const participant = (await ctx.db
+      .query("dmParticipants" as any)
+      .withIndex("by_conversation_user", (q: any) =>
+        q.eq("conversationId", conversationId).eq("userId", args.recipientUserId),
+      )
+      .first()) as Record<string, any> | null;
+    if (
+      !participant ||
+      participant.status !== "active" ||
+      participant.mutedAt ||
+      Math.max(0, Math.floor(Number(participant.lastReadSeq ?? 0))) >= messageSeq
+    ) {
+      return { ok: false as const, reason: "email_recipient_access_revoked" };
+    }
+    const message = (await ctx.db
+      .query("dmMessages" as any)
+      .withIndex("by_conversation_seq", (q: any) =>
+        q.eq("conversationId", conversationId).eq("seq", messageSeq),
+      )
+      .first()) as Record<string, any> | null;
+    if (!message) {
+      return { ok: false as const, reason: "email_content_unavailable" };
+    }
+    const presenceRows = (await ctx.db
+      .query("communityPresence" as any)
+      .withIndex("by_user", (q: any) => q.eq("userId", args.recipientUserId))
+      .take(MAX_DM_EMAIL_PRESENCE_ROWS)) as Array<Record<string, any>>;
+    if (
+      presenceRows.some((row) => {
+        const lastSeenAt = Number(row.lastSeenAt ?? 0);
+        return Number.isFinite(lastSeenAt) && lastSeenAt >= Number(message.createdAt ?? 0);
+      })
+    ) {
+      return { ok: false as const, reason: "email_recipient_present" };
+    }
+    const senderUserId = message.senderUserId;
+    const sender = senderUserId ? await ctx.db.get(senderUserId) : null;
     const senderProfile = sender
       ? await resolveUserProfileDisplayProjectionForUser(ctx, sender)
       : null;
     const senderName =
       String(senderProfile?.display_name ?? (sender as any)?.displayName ?? "").trim() ||
       "Someone";
-    const conversation = (await ctx.db.get(args.conversationId)) as Record<string, any> | null;
-    const community = conversation?.createdFromCommunityId
+    const conversation = (await ctx.db.get(conversationId)) as Record<string, any> | null;
+    if (!conversation) {
+      return { ok: false as const, reason: "email_content_unavailable" };
+    }
+    const community = conversation.createdFromCommunityId
       ? ((await ctx.db.get(conversation.createdFromCommunityId)) as Record<string, any> | null)
       : null;
-
-    const dedupeBucket = Math.floor(Date.now() / DM_EMAIL_DEDUPE_WINDOW_MS);
     return {
-      shouldSend: true as const,
-      dedupeKey: `dm:${normalizeIdValue(args.conversationId)}:${normalizeIdValue(args.recipientUserId)}:${dedupeBucket}`,
+      ok: true as const,
       payload: {
         senderName,
         communityName: String(community?.name ?? "").trim() || null,
         snippet: readMessageSnippet(message.contentJson),
-        actionUrl: `https://www.polynet.ai/?dm=${normalizeIdValue(args.conversationId)}`,
+        actionUrl: buildConfiguredPublicAppUrl(
+          `/?dm=${encodeURIComponent(normalizeIdValue(conversationId))}`,
+        ),
       },
     };
   },

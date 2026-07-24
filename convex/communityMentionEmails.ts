@@ -11,6 +11,7 @@ import {
   EVERYBODY_MENTION_ROLE_KEY,
   mentionBroadcastAllowsEmail,
 } from "./communityMentionBroadcasts";
+import { buildConfiguredPublicAppUrl } from "./emailCore";
 
 // M2b: the mention email ping. In-app attention (the accent dot) is the
 // primary signal; email is the fallback for people who are not around. A
@@ -30,22 +31,6 @@ const MENTION_EMAIL_BATCH_LIMIT = 25;
 const MENTION_EMAIL_SNIPPET_MAX_CHARS = 140;
 
 const internalRefs = internal as any;
-
-const PUBLIC_APP_URL_ENV_KEYS = ["ARX_PUBLIC_APP_URL", "PUBLIC_APP_URL", "VITE_PUBLIC_APP_URL", "VITE_APP_URL"] as const;
-
-// Same resolution as the digest emails; empty string (no CTA button) when the
-// public URL is not configured, rather than failing the whole ping run.
-function buildAppActionUrl(path: string): string {
-  for (const key of PUBLIC_APP_URL_ENV_KEYS) {
-    try {
-      const value = String((globalThis as any)?.process?.env?.[key] ?? "").trim().replace(/\/+$/, "");
-      if (value && /^https?:\/\//i.test(value)) return new URL(path, `${value}/`).toString();
-    } catch {
-      // ignore
-    }
-  }
-  return "";
-}
 
 function boundedText(raw: unknown, maxLength: number): string {
   return String(raw ?? "").trim().slice(0, maxLength);
@@ -93,10 +78,6 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
       recipientUserId: string;
       suppressed: boolean;
       collapsed: boolean;
-      communityName: string;
-      mentionerName: string;
-      snippet: string;
-      urlPath: string;
       emailSkipped?: boolean;
     }> = [];
     const suppressOnlyJob = (mention: Record<string, any>) => {
@@ -105,10 +86,6 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
         recipientUserId: normalizeIdValue(mention.mentionedUserId),
         suppressed: true,
         collapsed: false,
-        communityName: "",
-        mentionerName: "",
-        snippet: "",
-        urlPath: "/",
       });
     };
     // Per-recipient email caps: one send per run, and a cooldown since the
@@ -144,10 +121,6 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
           suppressed: false,
           collapsed: false,
           emailSkipped: true,
-          communityName: "",
-          mentionerName: "",
-          snippet: "",
-          urlPath: "/",
         });
         continue;
       }
@@ -203,7 +176,10 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
         .withIndex("by_user", (q: any) => q.eq("userId", mention.mentionedUserId))
         .first()) as Record<string, any> | null;
       const suppressed =
-        !communityMembershipRowIsActive(membership as any) ||
+        (
+          normalizeIdValue(community.ownerId) !== normalizeIdValue(mention.mentionedUserId) &&
+          !communityMembershipRowIsActive(membership as any)
+        ) ||
         preferences?.mentionEmailsEnabled === false;
       const recipientKey = normalizeIdValue(mention.mentionedUserId);
       let collapsed = false;
@@ -230,29 +206,129 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
           emailJobsThisRun += 1;
         }
       }
-      const author = authorUserId
-        ? ((await ctx.db.get(authorUserId)) as Record<string, any> | null)
-        : null;
-      const snippet =
-        suppressed || collapsed
-          ? ""
-          : await readFirstMarkdownBlockText(ctx, {
-              rootId: mention.rootId,
-              replyId: mention.replyId,
-            });
-      const slug = boundedText(community.slug, 200);
       jobs.push({
         mentionId: normalizeIdValue(mention._id),
         recipientUserId: recipientKey,
         suppressed,
         collapsed,
-        communityName: boundedText(community.name, 200) || "your community",
-        mentionerName: boundedText(author?.displayName, 120) || "A community member",
-        snippet,
-        urlPath: slug ? `/c/${encodeURIComponent(slug)}/chat` : "/",
       });
     }
     return jobs;
+  },
+});
+
+export const resolveMentionEmailPayloadForSendInternal = internalQuery({
+  args: {
+    recipientUserId: v.id("users"),
+    payload: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const payload =
+      args.payload && typeof args.payload === "object" && !Array.isArray(args.payload)
+        ? (args.payload as Record<string, any>)
+        : {};
+    const mentionId = payload.mentionId;
+    if (!mentionId) {
+      return { ok: false as const, reason: "email_content_reference_missing" };
+    }
+    const mention = (await ctx.db.get(mentionId)) as Record<string, any> | null;
+    if (
+      !mention ||
+      normalizeIdValue(mention.mentionedUserId) !== normalizeIdValue(args.recipientUserId)
+    ) {
+      return { ok: false as const, reason: "email_content_unavailable" };
+    }
+    const isBroadcastCreatedMention =
+      mention.sourceBroadcastId &&
+      mention.mentionKind === "user" &&
+      mention.mentionedRoleKey === EVERYBODY_MENTION_ROLE_KEY &&
+      typeof mention.emailEligible === "boolean";
+    if (
+      mention.emailEligible === false ||
+      (
+        isBroadcastCreatedMention &&
+        !(await mentionBroadcastAllowsEmail({
+          ctx,
+          broadcastId: mention.sourceBroadcastId,
+        }))
+      )
+    ) {
+      return { ok: false as const, reason: "email_content_unavailable" };
+    }
+    const source = mention.replyId
+      ? ((await ctx.db.get(mention.replyId)) as Record<string, any> | null)
+      : mention.rootId
+        ? ((await ctx.db.get(mention.rootId)) as Record<string, any> | null)
+        : null;
+    if (
+      !source ||
+      source.status !== "live" ||
+      !["community", "public"].includes(String(source.visibilityScope ?? ""))
+    ) {
+      return { ok: false as const, reason: "email_content_unavailable" };
+    }
+    if (mention.replyId) {
+      const root = source.rootId
+        ? ((await ctx.db.get(source.rootId)) as Record<string, any> | null)
+        : null;
+      if (
+        !root ||
+        root.status !== "live" ||
+        !["community", "public"].includes(String(root.visibilityScope ?? ""))
+      ) {
+        return { ok: false as const, reason: "email_content_unavailable" };
+      }
+    }
+    const community = (await ctx.db.get(mention.communityId)) as Record<string, any> | null;
+    if (!community || normalizeIdValue(source.communityId) !== normalizeIdValue(community._id)) {
+      return { ok: false as const, reason: "email_content_unavailable" };
+    }
+    if (normalizeIdValue(community.ownerId) !== normalizeIdValue(args.recipientUserId)) {
+      let membership;
+      try {
+        membership = await getUniqueCommunityMembershipByPair({
+          ctx,
+          communityId: community._id,
+          userId: args.recipientUserId,
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "community_membership_pair_not_unique"
+        ) {
+          return { ok: false as const, reason: "email_recipient_access_revoked" };
+        }
+        throw error;
+      }
+      if (!communityMembershipRowIsActive(membership)) {
+        return { ok: false as const, reason: "email_recipient_access_revoked" };
+      }
+    }
+    const authorUserId = source.actorUserId ?? null;
+    if (
+      authorUserId &&
+      normalizeIdValue(authorUserId) === normalizeIdValue(args.recipientUserId)
+    ) {
+      return { ok: false as const, reason: "email_content_unavailable" };
+    }
+    const author = authorUserId
+      ? ((await ctx.db.get(authorUserId)) as Record<string, any> | null)
+      : null;
+    const slug = boundedText(community.slug, 200);
+    return {
+      ok: true as const,
+      payload: {
+        communityName: boundedText(community.name, 200) || "your community",
+        mentionerName: boundedText(author?.displayName, 120) || "A community member",
+        snippet: await readFirstMarkdownBlockText(ctx, {
+          rootId: mention.rootId,
+          replyId: mention.replyId,
+        }),
+        actionUrl: buildConfiguredPublicAppUrl(
+          slug ? `/c/${encodeURIComponent(slug)}/chat` : "/",
+        ),
+      },
+    };
   },
 });
 
@@ -288,10 +364,6 @@ export const processPendingMentionEmailsInternal = internalAction({
       recipientUserId: string;
       suppressed: boolean;
       collapsed: boolean;
-      communityName: string;
-      mentionerName: string;
-      snippet: string;
-      urlPath: string;
       emailSkipped?: boolean;
     }>;
     let enqueued = 0;
@@ -322,10 +394,7 @@ export const processPendingMentionEmailsInternal = internalAction({
         recipientUserId: job.recipientUserId,
         templateKey: "mention_notification",
         payload: {
-          communityName: job.communityName,
-          mentionerName: job.mentionerName,
-          snippet: job.snippet,
-          actionUrl: buildAppActionUrl(job.urlPath),
+          mentionId: job.mentionId,
         },
         dedupeKey: `mention_notification:${job.mentionId}`,
       });

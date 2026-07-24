@@ -6,12 +6,12 @@
  * mutation stays quarantined until versioned executors satisfy this contract.
  */
 
-export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v7" as const;
+export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v8" as const;
 
 export const ACCOUNT_LIFECYCLE_SCHEMA_BASELINE = Object.freeze({
   tableCount: 124,
   directUserEdgeCount: 118,
-  opaqueFieldCount: 26,
+  opaqueFieldCount: 25,
   storageFieldCount: 7,
 });
 

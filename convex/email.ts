@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { internalAction, internalMutation } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import {
   EMAIL_TEMPLATE_KEYS,
@@ -12,6 +12,8 @@ const EMAIL_TEMPLATE_VALIDATOR = v.union(
 );
 
 type EmailOutboxStatus = "pending" | "sending" | "sent" | "failed" | "suppressed";
+const EMAIL_RECEIPT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+const TERMINAL_EMAIL_STATUSES = ["sent", "failed", "suppressed"] as const;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -56,6 +58,12 @@ function readRetryDelayMs(attemptCount: number): number {
   return 2 * 60 * 60 * 1000;
 }
 
+function normalizeFailureReason(value: unknown): string {
+  const reason = readString(value).toLowerCase();
+  if (/^[a-z0-9_.:-]{1,120}$/.test(reason)) return reason;
+  return "email_provider_rejected";
+}
+
 function isStaleSendingRow(row: Record<string, unknown>, nowMs: number): boolean {
   const status = readString(row.status).toLowerCase();
   if (status !== "sending") return false;
@@ -73,7 +81,8 @@ function isPreferenceControlledTemplate(templateKey: EmailTemplateKey): boolean 
     templateKey === "weekly_member_digest" ||
     templateKey === "weekly_founder_digest" ||
     templateKey === "event_reminder" ||
-    templateKey === "mention_notification"
+    templateKey === "mention_notification" ||
+    templateKey === "dm_message_notification"
   );
 }
 
@@ -90,20 +99,21 @@ function preferenceAllowsTemplate(preferences: Record<string, unknown>, template
   if (templateKey === "event_reminder") {
     return preferences.eventReminderEnabled !== false;
   }
+  if (templateKey === "dm_message_notification") {
+    return preferences.dmEmailsEnabled !== false;
+  }
   return true;
 }
 
 async function getUserEmailDeliveryState(ctx: any, userId: any): Promise<{
   userExists: boolean;
   verifiedEmail: string | null;
-  recordEmail: string | null;
 }> {
   const user = await ctx.db.get(userId);
   if (!user) {
     return {
       userExists: false,
       verifiedEmail: null,
-      recordEmail: null,
     };
   }
   let recordEmail: string | null = null;
@@ -115,15 +125,16 @@ async function getUserEmailDeliveryState(ctx: any, userId: any): Promise<{
   return {
     userExists: true,
     verifiedEmail: typeof user.emailVerifiedAt === "number" ? recordEmail : null,
-    recordEmail,
   };
 }
 
 async function getEmailPreferencesByUserId(ctx: any, userId: any): Promise<Record<string, unknown>> {
-  const row = await ctx.db
+  const rows = await ctx.db
     .query("emailPreferences")
     .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .first();
+    .take(2);
+  if (rows.length > 1) throw new Error("email_preferences_not_unique");
+  const row = rows[0];
   return row
     ? {
         weeklyDigestEnabled: Boolean(row.weeklyDigestEnabled),
@@ -132,20 +143,24 @@ async function getEmailPreferencesByUserId(ctx: any, userId: any): Promise<Recor
         // Opt-out (absent = enabled): keeps the outbox-layer gate real so a
         // preference change between enqueue and send is still honored.
         mentionEmailsEnabled: row.mentionEmailsEnabled !== false,
+        dmEmailsEnabled: row.dmEmailsEnabled !== false,
       }
     : {
         weeklyDigestEnabled: true,
         founderDigestEnabled: true,
         eventReminderEnabled: true,
         mentionEmailsEnabled: true,
+        dmEmailsEnabled: true,
       };
 }
 
 async function findExistingDedupeRow(ctx: any, dedupeKey: string) {
-  return await ctx.db
+  const rows = await ctx.db
     .query("emailOutbox")
     .withIndex("by_dedupeKey", (q: any) => q.eq("dedupeKey", dedupeKey))
-    .first();
+    .take(2);
+  if (rows.length > 1) throw new Error("email_outbox_dedupe_not_unique");
+  return rows[0] ?? null;
 }
 
 export const enqueueEmailJobInternal = internalMutation({
@@ -164,7 +179,7 @@ export const enqueueEmailJobInternal = internalMutation({
     const dedupeKey = readString(args.dedupeKey) || null;
     if (dedupeKey) {
       const existing = await findExistingDedupeRow(ctx, dedupeKey);
-      if (existing && ["pending", "sending", "sent"].includes(existing.status)) {
+      if (existing) {
         return {
           ok: true,
           deduped: true,
@@ -184,18 +199,14 @@ export const enqueueEmailJobInternal = internalMutation({
     }
 
     const templateKey = args.templateKey as EmailTemplateKey;
-    let recipientEmail: string;
+    let recipientEmail: string | null = null;
     let suppressionReason: string | null = null;
     if (recipientUserId) {
       const deliveryState = await getUserEmailDeliveryState(ctx, recipientUserId);
-      if (deliveryState.verifiedEmail) {
-        recipientEmail = deliveryState.verifiedEmail;
-      } else {
+      if (!deliveryState.verifiedEmail) {
         suppressionReason = deliveryState.userExists
           ? "email_recipient_unverified"
           : "email_recipient_missing";
-        recipientEmail =
-          deliveryState.recordEmail || `suppressed+${String(recipientUserId)}@invalid.local`;
       }
     } else {
       recipientEmail = normalizeRecipientEmail(rawRecipientEmail);
@@ -214,19 +225,57 @@ export const enqueueEmailJobInternal = internalMutation({
     const outboxId = await ctx.db.insert("emailOutbox", {
       kind: readString(args.kind) || templateKey,
       recipientUserId: recipientUserId ?? undefined,
-      recipientEmail,
+      ...(!suppressed && recipientEmail ? { recipientEmail } : null),
       templateKey,
-      payload: args.payload ?? {},
+      ...(!suppressed ? { payload: args.payload ?? {} } : null),
       dedupeKey: dedupeKey ?? undefined,
       provider: "resend",
       status,
       scheduledAt: Math.max(nowMs, Math.floor(args.scheduledAt ?? nowMs)),
       attemptCount: 0,
       ...(suppressed ? { failureReason: suppressionReason as string } : null),
+      ...(suppressed ? { contentMinimizedAt: nowMs } : null),
       createdAt: nowMs,
       updatedAt: nowMs,
     });
     return { ok: true, deduped: false, outboxId, status };
+  },
+});
+
+export const resolveEmailRecipientForSendInternal = internalQuery({
+  args: {
+    recipientUserId: v.optional(v.id("users")),
+    recipientEmail: v.optional(v.string()),
+    templateKey: EMAIL_TEMPLATE_VALIDATOR,
+  },
+  handler: async (ctx, args) => {
+    const templateKey = args.templateKey as EmailTemplateKey;
+    if (args.recipientUserId) {
+      const deliveryState = await getUserEmailDeliveryState(ctx, args.recipientUserId);
+      if (!deliveryState.verifiedEmail) {
+        return {
+          ok: false as const,
+          reason: deliveryState.userExists
+            ? "email_recipient_unverified"
+            : "email_recipient_missing",
+        };
+      }
+      if (isPreferenceControlledTemplate(templateKey)) {
+        const preferences = await getEmailPreferencesByUserId(ctx, args.recipientUserId);
+        if (!preferenceAllowsTemplate(preferences, templateKey)) {
+          return { ok: false as const, reason: "email_preference_disabled" };
+        }
+      }
+      return { ok: true as const, recipientEmail: deliveryState.verifiedEmail };
+    }
+    try {
+      return {
+        ok: true as const,
+        recipientEmail: normalizeRecipientEmail(args.recipientEmail),
+      };
+    } catch {
+      return { ok: false as const, reason: "email_recipient_invalid" };
+    }
   },
 });
 
@@ -262,9 +311,10 @@ export const claimDueEmailOutboxBatchInternal = internalMutation({
     return rows.map((row) => ({
       _id: row._id,
       kind: row.kind,
+      recipientUserId: row.recipientUserId,
       recipientEmail: row.recipientEmail,
       templateKey: row.templateKey,
-      payload: row.payload,
+      payload: row.payload ?? {},
       dedupeKey: row.dedupeKey ?? null,
       attemptCount: Number(row.attemptCount ?? 0) + 1,
     }));
@@ -283,7 +333,29 @@ export const markEmailJobSentInternal = internalMutation({
       status: "sent",
       provider: "resend",
       providerMessageId: readString(args.providerMessageId) || undefined,
+      recipientEmail: undefined,
+      payload: undefined,
+      contentMinimizedAt: nowMs,
       sentAt: nowMs,
+      updatedAt: nowMs,
+    });
+  },
+});
+
+export const markEmailJobSuppressedInternal = internalMutation({
+  args: {
+    outboxId: v.id("emailOutbox"),
+    reason: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    await ctx.db.patch(args.outboxId, {
+      status: "suppressed",
+      failureReason: normalizeFailureReason(args.reason),
+      recipientEmail: undefined,
+      payload: undefined,
+      contentMinimizedAt: nowMs,
       updatedAt: nowMs,
     });
   },
@@ -303,8 +375,15 @@ export const markEmailJobFailedInternal = internalMutation({
     const terminal = attemptCount >= 3;
     await ctx.db.patch(row._id, {
       status: terminal ? "failed" : "pending",
-      failureReason: readString(args.reason) || "email_send_failed",
+      failureReason: normalizeFailureReason(args.reason || "email_send_failed"),
       scheduledAt: terminal ? row.scheduledAt : nowMs + readRetryDelayMs(attemptCount),
+      ...(terminal
+        ? {
+            recipientEmail: undefined,
+            payload: undefined,
+            contentMinimizedAt: nowMs,
+          }
+        : null),
       updatedAt: nowMs,
     });
   },
@@ -313,27 +392,45 @@ export const markEmailJobFailedInternal = internalMutation({
 export const recordEmailDeliveryWebhookInternal = internalMutation({
   args: {
     provider: v.string(),
+    providerEventId: v.string(),
     providerMessageId: v.optional(v.union(v.string(), v.null())),
     eventType: v.string(),
-    payload: v.any(),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    const provider = readString(args.provider) || "resend";
+    const providerEventId = readString(args.providerEventId);
+    if (!providerEventId) throw new Error("email_provider_event_id_missing");
+    const existingEvents = await ctx.db
+      .query("emailDeliveries")
+      .withIndex("by_provider_providerEventId", (q: any) =>
+        q.eq("provider", provider).eq("providerEventId", providerEventId),
+      )
+      .take(2);
+    if (existingEvents.length > 1) throw new Error("email_provider_event_id_not_unique");
+    if (existingEvents.length === 1) {
+      return {
+        ok: true,
+        deduped: true,
+        outboxId: existingEvents[0].outboxId ?? null,
+      };
+    }
     const providerMessageId = readString(args.providerMessageId) || null;
-    const outbox =
-      providerMessageId
-        ? await ctx.db
-            .query("emailOutbox")
-            .withIndex("by_providerMessageId", (q: any) => q.eq("providerMessageId", providerMessageId))
-            .first()
-        : null;
+    const outboxRows = providerMessageId
+      ? await ctx.db
+          .query("emailOutbox")
+          .withIndex("by_providerMessageId", (q: any) => q.eq("providerMessageId", providerMessageId))
+          .take(2)
+      : [];
+    if (outboxRows.length > 1) throw new Error("email_provider_message_id_not_unique");
+    const outbox = outboxRows[0] ?? null;
     await ctx.db.insert("emailDeliveries", {
       outboxId: outbox?._id,
-      provider: readString(args.provider) || "resend",
+      provider,
+      providerEventId,
       providerMessageId: providerMessageId ?? undefined,
       eventType: readString(args.eventType) || "unknown",
-      payload: args.payload ?? {},
       createdAt: nowMs,
     });
     const terminalFailureEvents = new Set([
@@ -346,10 +443,58 @@ export const recordEmailDeliveryWebhookInternal = internalMutation({
       await ctx.db.patch(outbox._id, {
         status: "failed",
         failureReason: readString(args.eventType),
+        recipientEmail: undefined,
+        payload: undefined,
+        contentMinimizedAt: nowMs,
         updatedAt: nowMs,
       });
     }
-    return { ok: true, outboxId: outbox?._id ?? null };
+    return { ok: true, deduped: false, outboxId: outbox?._id ?? null };
+  },
+});
+
+export const pruneTerminalEmailReceiptsInternal = internalMutation({
+  args: {
+    limit: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const cutoff = nowMs - EMAIL_RECEIPT_RETENTION_MS;
+    const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 100)));
+    const deliveries = await ctx.db
+      .query("emailDeliveries")
+      .withIndex("by_createdAt", (q: any) => q.lte("createdAt", cutoff))
+      .take(limit);
+    for (const delivery of deliveries) {
+      await ctx.db.delete(delivery._id);
+    }
+    let deletedOutboxRows = 0;
+    const remainingLimit = limit - deliveries.length;
+    for (const status of TERMINAL_EMAIL_STATUSES) {
+      if (deletedOutboxRows >= remainingLimit) break;
+      const rows = await ctx.db
+        .query("emailOutbox")
+        .withIndex("by_status_updatedAt", (q: any) =>
+          q.eq("status", status).lte("updatedAt", cutoff),
+        )
+        .take(remainingLimit - deletedOutboxRows);
+      for (const row of rows) {
+        const retainedDelivery = await ctx.db
+          .query("emailDeliveries")
+          .withIndex("by_outbox", (q: any) => q.eq("outboxId", row._id))
+          .first();
+        if (retainedDelivery) continue;
+        await ctx.db.delete(row._id);
+        deletedOutboxRows += 1;
+      }
+    }
+    return {
+      ok: true,
+      cutoff,
+      deletedDeliveries: deliveries.length,
+      deletedOutboxRows,
+    };
   },
 });
 
@@ -365,7 +510,8 @@ export const processPendingEmailOutboxInternal = internalAction({
       nowMs,
     })) as Array<{
       _id: any;
-      recipientEmail: string;
+      recipientUserId?: any;
+      recipientEmail?: string;
       templateKey: EmailTemplateKey;
       payload: unknown;
       dedupeKey?: string | null;
@@ -373,12 +519,71 @@ export const processPendingEmailOutboxInternal = internalAction({
 
     let sent = 0;
     let failed = 0;
+    let suppressed = 0;
     for (const job of claimed) {
       try {
+        const recipient = (await ctx.runQuery(
+          (internal as any).email.resolveEmailRecipientForSendInternal,
+          {
+            recipientUserId: job.recipientUserId,
+            recipientEmail: job.recipientEmail,
+            templateKey: job.templateKey,
+          },
+        )) as
+          | { ok: true; recipientEmail: string }
+          | { ok: false; reason: string };
+        if (!recipient.ok) {
+          await ctx.runMutation((internal as any).email.markEmailJobSuppressedInternal, {
+            outboxId: job._id,
+            reason: recipient.reason,
+            nowMs: Date.now(),
+          });
+          suppressed += 1;
+          continue;
+        }
+        let renderedPayload = job.payload;
+        if (
+          job.templateKey === "weekly_member_digest" ||
+          job.templateKey === "mention_notification" ||
+          job.templateKey === "dm_message_notification"
+        ) {
+          if (!job.recipientUserId) {
+            await ctx.runMutation((internal as any).email.markEmailJobSuppressedInternal, {
+              outboxId: job._id,
+              reason: "email_recipient_missing",
+              nowMs: Date.now(),
+            });
+            suppressed += 1;
+            continue;
+          }
+          const resolver =
+            job.templateKey === "weekly_member_digest"
+              ? (internal as any).emailDigests.resolveWeeklyMemberDigestPayloadForSendInternal
+              : job.templateKey === "mention_notification"
+                ? (internal as any).communityMentionEmails.resolveMentionEmailPayloadForSendInternal
+                : (internal as any).directMessageEmails.resolveDirectMessageEmailPayloadForSendInternal;
+          const content = (await ctx.runQuery(resolver, {
+            recipientUserId: job.recipientUserId,
+            payload: job.payload,
+            ...(job.templateKey === "weekly_member_digest" ? { nowMs: Date.now() } : null),
+          })) as
+            | { ok: true; payload: Record<string, unknown> }
+            | { ok: false; reason: string };
+          if (!content.ok) {
+            await ctx.runMutation((internal as any).email.markEmailJobSuppressedInternal, {
+              outboxId: job._id,
+              reason: content.reason,
+              nowMs: Date.now(),
+            });
+            suppressed += 1;
+            continue;
+          }
+          renderedPayload = content.payload;
+        }
         const response = await sendRenderedEmail({
-          to: job.recipientEmail,
+          to: recipient.recipientEmail,
           templateKey: job.templateKey,
-          payload: job.payload,
+          payload: renderedPayload,
           idempotencyKey: readString(job.dedupeKey) || String(job._id),
         });
         await ctx.runMutation((internal as any).email.markEmailJobSentInternal, {
@@ -403,6 +608,7 @@ export const processPendingEmailOutboxInternal = internalAction({
       claimed: claimed.length,
       sent,
       failed,
+      suppressed,
     };
   },
 });

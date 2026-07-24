@@ -43,19 +43,24 @@ function readFirstEnv(keys: readonly string[]): string {
   return "";
 }
 
-function readPublicAppBaseUrl(): string {
+function readConfiguredPublicAppBaseUrl(): string | null {
   const value = readFirstEnv([
     "ARX_PUBLIC_APP_URL",
     "PUBLIC_APP_URL",
     "VITE_PUBLIC_APP_URL",
     "VITE_APP_URL",
   ]).replace(/\/+$/, "");
-  if (/^https?:\/\//i.test(value)) return value;
-  return "https://www.polynet.ai";
+  return /^https?:\/\//i.test(value) ? value : null;
+}
+
+export function buildConfiguredPublicAppUrl(path: string): string {
+  const baseUrl = readConfiguredPublicAppBaseUrl();
+  if (!baseUrl) throw new Error("public_app_url_missing");
+  return new URL(path, `${baseUrl}/`).toString();
 }
 
 function readEmailBrandLogoUrl(): string {
-  return `${readPublicAppBaseUrl()}/favicon.png`;
+  return `${readConfiguredPublicAppBaseUrl() ?? "https://www.polynet.ai"}/favicon.png`;
 }
 
 function escapeHtml(value: unknown): string {

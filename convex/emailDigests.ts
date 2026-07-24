@@ -9,8 +9,10 @@ import {
   communityMembershipRowIsActive,
   communityResourceIsLiveModulePage,
   communityResourceModuleIsLive,
+  getUniqueCommunityMembershipByPair,
 } from "./communityCore";
 import { hydrateCommunityResourceBody } from "./communityResourceContent";
+import { buildConfiguredPublicAppUrl } from "./emailCore";
 import {
   buildWeeklyDigestDedupeKey,
   buildWeeklyDigestPeriod,
@@ -88,53 +90,15 @@ type DigestItemCandidate = {
 
 type DigestBatch = {
   communityId: string;
-  communityName: string;
-  communitySlug: string;
+  periodStartMs: number;
+  periodEndMs: number;
   periodStartDay: string;
   periodEndDay: string;
-  dateLabel: string;
-  intro: string;
   activity: WeeklyDigestActivityCounts;
-  items: Array<{
-    title: string;
-    summary?: string;
-    meta?: string;
-    urlPath: string;
-  }>;
   recipientUserIds: any[];
 };
 
-const PUBLIC_APP_URL_ENV_KEYS = [
-  "ARX_PUBLIC_APP_URL",
-  "PUBLIC_APP_URL",
-  "VITE_PUBLIC_APP_URL",
-  "VITE_APP_URL",
-] as const;
-
 const COMMUNITY_DIGEST_INTERACTION_LIMIT = 50;
-
-function readEnv(name: string): string {
-  try {
-    const value = (globalThis as any)?.process?.env?.[name];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  } catch {
-    // ignore
-  }
-  return "";
-}
-
-function readPublicAppBaseUrl(): string {
-  for (const key of PUBLIC_APP_URL_ENV_KEYS) {
-    const value = readEnv(key).replace(/\/+$/, "");
-    if (!value) continue;
-    if (/^https?:\/\//i.test(value)) return value;
-  }
-  throw new Error("public_app_url_missing");
-}
-
-function buildAppUrl(path: string): string {
-  return new URL(path, `${readPublicAppBaseUrl()}/`).toString();
-}
 
 function normalizePositiveLimit(value: unknown, fallback: number, max: number): number {
   const parsed = Number(value);
@@ -416,6 +380,146 @@ function buildDigestItems(args: {
   );
 }
 
+function asRecord(value: unknown): Record<string, any> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, any>)
+    : {};
+}
+
+function readQueuedDigestActivity(value: unknown): WeeklyDigestActivityCounts {
+  const activity = asRecord(value);
+  const readCount = (raw: unknown) => {
+    const count = Number(raw);
+    return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+  };
+  return {
+    chatMessageCount: readCount(activity.chatMessageCount),
+    aiFeedPostCount: readCount(activity.aiFeedPostCount),
+    resourceCount: readCount(activity.resourceCount),
+    newMemberCount: readCount(activity.newMemberCount),
+  };
+}
+
+async function recipientCanReadDigestCommunity(
+  ctx: any,
+  community: CommunityRow,
+  recipientUserId: any,
+  nowMs: number,
+): Promise<boolean> {
+  if (String(community.ownerId) !== String(recipientUserId)) {
+    let membership;
+    try {
+      membership = await getUniqueCommunityMembershipByPair({
+        ctx,
+        communityId: community._id,
+        userId: recipientUserId,
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === "community_membership_pair_not_unique"
+      ) {
+        return false;
+      }
+      throw error;
+    }
+    if (!communityMembershipRowIsActive(membership)) return false;
+  }
+  const settingsRows = await ctx.db
+    .query("communityMemberSettings" as any)
+    .withIndex("by_community_user", (q: any) =>
+      q.eq("communityId", community._id).eq("userId", recipientUserId),
+    )
+    .take(2);
+  if (settingsRows.length > 1) return false;
+  const settings = settingsRows[0] as Record<string, any> | undefined;
+  if (settings?.muted === true) return false;
+  if (typeof settings?.mutedUntil === "number" && settings.mutedUntil > nowMs) return false;
+  return true;
+}
+
+export const resolveWeeklyMemberDigestPayloadForSendInternal = internalQuery({
+  args: {
+    recipientUserId: v.id("users"),
+    payload: v.any(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const queued = asRecord(args.payload);
+    const communityId = queued.communityId;
+    const periodStartMs = Number(queued.periodStartMs);
+    const periodEndMs = Number(queued.periodEndMs);
+    if (
+      !communityId ||
+      !Number.isFinite(periodStartMs) ||
+      !Number.isFinite(periodEndMs) ||
+      periodStartMs > periodEndMs
+    ) {
+      return { ok: false as const, reason: "email_content_reference_missing" };
+    }
+    const community = (await ctx.db.get(communityId)) as CommunityRow | null;
+    if (
+      !community ||
+      !(await recipientCanReadDigestCommunity(
+        ctx,
+        community,
+        args.recipientUserId,
+        args.nowMs ?? Date.now(),
+      ))
+    ) {
+      return { ok: false as const, reason: "email_recipient_access_revoked" };
+    }
+    const [chatMessages, aiFeedPosts, resources] = await Promise.all([
+      listRecentCanonicalCommunityChatMessages(ctx, {
+        communityId: community._id,
+        periodStartMs,
+        periodEndMs,
+      }),
+      listRecentAiFeedPosts(ctx, {
+        communityId: community._id,
+        periodStartMs,
+        periodEndMs,
+      }),
+      listRecentResources(ctx, {
+        communityId: community._id,
+        periodStartMs,
+        periodEndMs,
+      }),
+    ]);
+    const items = buildDigestItems({
+      communitySlug: community.slug,
+      aiFeedPosts,
+      resources,
+      chatMessages,
+    }).map(({ title, summary, meta, urlPath }) => ({
+      title,
+      ...(summary ? { summary } : null),
+      ...(meta ? { meta } : null),
+      url: buildConfiguredPublicAppUrl(urlPath),
+    }));
+    if (items.length === 0) {
+      return { ok: false as const, reason: "email_content_unavailable" };
+    }
+    const periodStartDay = String(queued.periodStartDay ?? "").trim();
+    const periodEndDay = String(queued.periodEndDay ?? "").trim();
+    return {
+      ok: true as const,
+      payload: {
+        communityName: String(community.name ?? community.slug).trim() || "your community",
+        dateLabel:
+          periodStartDay && periodEndDay
+            ? formatDigestDateLabel(periodStartDay, periodEndDay)
+            : "",
+        intro: formatWeeklyDigestStats(readQueuedDigestActivity(queued.activity)),
+        ctaLabel: "View community",
+        actionUrl: buildConfiguredPublicAppUrl(itemUrlPath(community.slug, "chat")),
+        footerNote: "You can change digest emails from account settings.",
+        items,
+      },
+    };
+  },
+});
+
 export const buildWeeklyCommunityDigestBatchesInternal = internalQuery({
   args: {
     communityId: v.optional(v.id("communities")),
@@ -487,24 +591,16 @@ export const buildWeeklyCommunityDigestBatchesInternal = internalQuery({
         aiFeedPosts,
         resources,
         chatMessages,
-      }).map(({ title, summary, meta, urlPath }) => ({
-        title,
-        ...(summary ? { summary } : null),
-        ...(meta ? { meta } : null),
-        urlPath,
-      }));
+      });
       if (items.length === 0) continue;
 
       batches.push({
         communityId,
-        communityName: String(community.name ?? communitySlug).trim() || "your community",
-        communitySlug,
+        periodStartMs: period.periodStartMs,
+        periodEndMs: period.periodEndMs,
         periodStartDay: period.periodStartDay,
         periodEndDay: period.periodEndDay,
-        dateLabel: formatDigestDateLabel(period.periodStartDay, period.periodEndDay),
-        intro: formatWeeklyDigestStats(activity),
         activity,
-        items,
         recipientUserIds,
       });
     }
@@ -538,20 +634,13 @@ export const enqueueWeeklyCommunityDigestsInternal = internalAction({
     let deduped = 0;
     let suppressed = 0;
     for (const batch of batches) {
-      const actionUrl = buildAppUrl(itemUrlPath(batch.communitySlug, "chat"));
       const payload = {
-        communityName: batch.communityName,
-        dateLabel: batch.dateLabel,
-        intro: batch.intro,
-        ctaLabel: "View community",
-        actionUrl,
-        footerNote: "You can change digest emails from account settings.",
-        items: batch.items.map((item) => ({
-          title: item.title,
-          ...(item.summary ? { summary: item.summary } : null),
-          ...(item.meta ? { meta: item.meta } : null),
-          url: buildAppUrl(item.urlPath),
-        })),
+        communityId: batch.communityId,
+        periodStartMs: batch.periodStartMs,
+        periodEndMs: batch.periodEndMs,
+        periodStartDay: batch.periodStartDay,
+        periodEndDay: batch.periodEndDay,
+        activity: batch.activity,
       };
       for (const userId of batch.recipientUserIds) {
         const result = (await ctx.runMutation(

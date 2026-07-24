@@ -942,9 +942,9 @@ export default defineSchema({
   emailOutbox: defineTable({
     kind: v.string(),
     recipientUserId: v.optional(v.id("users")),
-    recipientEmail: v.string(),
+    recipientEmail: v.optional(v.string()),
     templateKey: v.string(),
-    payload: v.any(),
+    payload: v.optional(v.any()),
     dedupeKey: v.optional(v.string()),
     provider: v.optional(v.string()),
     providerMessageId: v.optional(v.string()),
@@ -960,10 +960,12 @@ export default defineSchema({
     lastAttemptAt: v.optional(v.number()),
     sentAt: v.optional(v.number()),
     failureReason: v.optional(v.string()),
+    contentMinimizedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_status_scheduledAt", ["status", "scheduledAt"])
+    .index("by_status_updatedAt", ["status", "updatedAt"])
     .index("by_dedupeKey", ["dedupeKey"])
     .index("by_recipientUserId", ["recipientUserId"])
     .index("by_providerMessageId", ["providerMessageId"]),
@@ -971,13 +973,15 @@ export default defineSchema({
   emailDeliveries: defineTable({
     outboxId: v.optional(v.id("emailOutbox")),
     provider: v.string(),
+    providerEventId: v.string(),
     providerMessageId: v.optional(v.string()),
     eventType: v.string(),
-    payload: v.any(),
     createdAt: v.number(),
   })
     .index("by_outbox", ["outboxId"])
-    .index("by_providerMessageId", ["providerMessageId"]),
+    .index("by_providerMessageId", ["providerMessageId"])
+    .index("by_provider_providerEventId", ["provider", "providerEventId"])
+    .index("by_createdAt", ["createdAt"]),
 
   personalMemoryItems: defineTable({
     userId: v.id("users"),
