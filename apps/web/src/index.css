@@ -82,6 +82,18 @@
   }
 }
 
+/* Utility panels must not reveal unrelated content through translucent theme tokens. */
+@supports (color: rgb(from #000 r g b)) {
+  :root {
+    --web-context-panel-surface: rgb(
+      from var(--surface-panel, var(--bg-panel))
+      r
+      g
+      b
+    );
+  }
+}
+
 /* Web-only dark rail override, expressed as a surface token assignment. */
 :root[data-theme="dark"] {
   --surface-rail: #1e1e1e;
