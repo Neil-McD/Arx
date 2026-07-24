@@ -47,8 +47,8 @@ The generated assignment reports zero fallback schema tables. Counts overlap onl
 | `convex/operatorIntelligence.ts` | 2,832 lines | many broad projections; several unbounded full-domain scans/N+1 paths |
 | `shared/toolRegistry.ts` | 2,296 lines | canonical native schema gravity; should project rather than be copied |
 | `shared/polynetMcp.ts` | 1,200 lines | independent external wire schema with compatibility names |
-| `convex/community.ts` | 158 function aliases | de facto web-facing facade, while source modules remain callable too |
-| `convex/communityExperience.ts` | 58 function aliases | intermediate facade whose registered functions are re-exported again |
+| `convex/community.ts` | 146 function aliases | de facto web-facing facade; 115 have current first-party runtime references, while source modules remain callable too |
+| `convex/communityExperience.ts` | 57 function aliases | intermediate facade with zero first-party namespace calls; every alias is re-exported again |
 | root `package.json` | 293 scripts, 253 checks | operational discoverability and proof ownership have collapsed into one manifest |
 
 ## Boundary map

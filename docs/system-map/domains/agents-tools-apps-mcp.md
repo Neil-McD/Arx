@@ -29,9 +29,20 @@ The official MCP still uses several `workspace_*` fields/tool names for communit
 
 ## Convex transport duplication
 
-`convex/community.ts` re-exports 159 registered functions and is the de facto web-facing facade. The original registered functions remain callable under their source modules. `communityExperience.ts` adds another 58 registered re-exports and is then re-exported through `community.ts`. Generated API therefore exposes overlapping public identities for the same implementation.
+`convex/community.ts` re-exports 146 registered functions and is the de facto
+web-facing facade. Static runtime scanning finds 115 referenced aliases and 31
+without a first-party `community:*` caller. The original registered functions
+remain callable under their source modules. `communityExperience.ts` adds 57
+registered re-exports and all 57 are then re-exported through `community.ts`.
+Generated API therefore exposes overlapping public identities for the same
+implementation.
 
-`communityExperience.ts` has no clear first-party runtime consumer outside the outer facade/proofs/generated references. It is the cleanest facade-deletion candidate, but external callers and generated API compatibility must be checked. Long term, expose one supported public transport identity per operation and keep internal modules internal.
+`communityExperience.ts` has zero first-party namespace calls. Its only runtime
+source owner is the outer facade; all other code references are generated API
+typing or eight structural proofs. It is the cleanest facade-deletion candidate,
+but unknown external Convex callers remain a compatibility decision. Long term,
+expose one supported public transport identity per operation and keep internal
+modules internal.
 
 ## Apps, skills, and OAuth
 
