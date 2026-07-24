@@ -44,9 +44,10 @@ async function createFixture(t: TestRuntime, suffix: string) {
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    const communitySlug = "polynet";
     const communityId = await ctx.db.insert("communities", {
       ownerId,
-      slug: "polynet",
+      slug: communitySlug,
       name: "Polynet",
       visibility: "published",
       entryPolicy: "open",
@@ -56,6 +57,7 @@ async function createFixture(t: TestRuntime, suffix: string) {
     });
     return {
       communityId,
+      communitySlug,
       ownerId,
       ownerSubject,
       userId,
@@ -219,8 +221,8 @@ describe("platform home admission authority", () => {
     });
 
     await expect(
-      asMember.mutation(api.communityPublic.joinPublicCommunity, {
-        communityId: fixture.communityId,
+      asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+        communitySlug: fixture.communitySlug,
       }),
     ).resolves.toMatchObject({ outcome: "joined" });
     const state = await readPairState(t, fixture);
@@ -280,8 +282,8 @@ describe("platform home admission authority", () => {
 
     const result = await t
       .withIdentity({ subject: fixture.memberSubject })
-      .mutation(api.communityPublic.joinPublicCommunity, {
-        communityId: fixture.communityId,
+      .mutation(api.communityPublic.joinPublicCommunityBySlug, {
+        communitySlug: fixture.communitySlug,
       });
     expect(result.outcome).toBe("approval_denied");
     expect(Date.parse(String(result.reapply_at))).toBeGreaterThan(Date.now());
@@ -308,8 +310,8 @@ describe("platform home admission authority", () => {
 
     const result = await t
       .withIdentity({ subject: fixture.memberSubject })
-      .mutation(api.communityPublic.joinPublicCommunity, {
-        communityId: fixture.communityId,
+      .mutation(api.communityPublic.joinPublicCommunityBySlug, {
+        communitySlug: fixture.communitySlug,
       });
     expect(result.outcome).toBe("approval_pending");
     expect(
@@ -340,8 +342,8 @@ describe("platform home admission authority", () => {
     });
     await t
       .withIdentity({ subject: fixture.memberSubject })
-      .mutation(api.communityPublic.joinPublicCommunity, {
-        communityId: fixture.communityId,
+      .mutation(api.communityPublic.joinPublicCommunityBySlug, {
+        communitySlug: fixture.communitySlug,
       });
     const pending = (await readPairState(t, fixture)).joinRequests.find(
       (row) => row.status === "pending",
@@ -391,8 +393,8 @@ describe("platform home admission authority", () => {
     await expect(
       t
         .withIdentity({ subject: fixture.memberSubject })
-        .mutation(api.communityPublic.joinPublicCommunity, {
-          communityId: fixture.communityId,
+        .mutation(api.communityPublic.joinPublicCommunityBySlug, {
+          communitySlug: fixture.communitySlug,
         }),
     ).rejects.toThrow("community_user_blocked");
   });
@@ -471,8 +473,8 @@ describe("platform home admission authority", () => {
     expect((await readPairState(t, fixture)).joinRequests).toHaveLength(0);
     await t
       .withIdentity({ subject: fixture.memberSubject })
-      .mutation(api.communityPublic.joinPublicCommunity, {
-        communityId: fixture.communityId,
+      .mutation(api.communityPublic.joinPublicCommunityBySlug, {
+        communitySlug: fixture.communitySlug,
       });
     await revokeMember(t, fixture, activation.membership._id);
     const requests = (await readPairState(t, fixture)).joinRequests;

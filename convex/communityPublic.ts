@@ -3,7 +3,6 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
   type CommunityLike,
-  type CommunityMembershipLike,
   type CommunityPricePointLike,
   type CommunityResourceModuleLike,
   type PublicPlanSummaryLike,
@@ -19,7 +18,6 @@ import {
   pickPreferredActivePlan,
   requireCommunityChatAccess,
   requireCommunityUserNotBlocked,
-  resolveCommunityAccessBundle,
   resolveCommunityBrandingFields,
   resolveCommunityEntryPolicy,
   resolvePublicUserId,
@@ -34,7 +32,6 @@ import {
   ensurePendingCommunityJoinRequest,
   getUniqueCommunityJoinRequestByPair,
 } from "./communityJoinRequestCore";
-import { findAuthenticatedActorState } from "./authActor";
 import { resolveCommunityFunnelConfigByCommunityId } from "./communityFunnel";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
@@ -380,53 +377,6 @@ export const resolvePublicFunnelStatsBySlug = query({
         resource_count_capped: activityCounts.resourceCountCapped,
         memory_note_count: activityCounts.memoryNoteCount,
         memory_note_count_capped: activityCounts.memoryNoteCountCapped,
-      },
-    };
-  },
-});
-
-export const resolvePublicCommunityAccessBySlug = query({
-  args: {
-    communitySlug: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const slug = normalizeSlug(args.communitySlug);
-    const community = (await ctx.db
-      .query("communities")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .first()) as CommunityLike | null;
-    if (!community) return { ok: false as const };
-
-    let userId: any = null;
-    try {
-      const { actor } = await findAuthenticatedActorState({ ctx, authSubject: null });
-      userId = actor?.dbUserId ?? null;
-    } catch {
-      userId = null;
-    }
-
-    let membership: CommunityMembershipLike | null = null;
-    if (userId) {
-      membership = await getUniqueCommunityMembershipByPair({
-        ctx,
-        communityId: community._id,
-        userId,
-      });
-    }
-
-    const access = await resolveCommunityAccessBundle({
-      ctx,
-      community,
-      membership,
-      userId,
-    });
-    if (!access.relation) return { ok: false as const };
-
-    return {
-      ok: true as const,
-      access: {
-        ...access,
-        user_id: userId ? access.user_id : null,
       },
     };
   },
@@ -787,24 +737,6 @@ export const joinPublicCommunityBySlug = mutation({
       .query("communities")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
-    if (!community) throw new Error("community_not_found");
-    return await joinPublicCommunityInternal({
-      ctx,
-      community,
-      userId,
-      nowMs,
-    });
-  },
-});
-
-export const joinPublicCommunity = mutation({
-  args: {
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({ ctx });
-    const nowMs = Date.now();
-    const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
     return await joinPublicCommunityInternal({
       ctx,

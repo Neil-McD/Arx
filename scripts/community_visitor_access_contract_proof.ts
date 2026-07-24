@@ -7,6 +7,7 @@ function read(path: string): string {
 
 const communityPublic = read("convex/communityPublic.ts");
 const communityModule = read("convex/community.ts");
+const communityAccessQueries = read("convex/communityAccessQueries.ts");
 const communityCore = read("convex/communityCore.ts");
 const appSource = read("apps/web/src/App.tsx");
 const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
@@ -21,58 +22,47 @@ function sliceExport(source: string, name: string): string {
   return source.slice(start, end === -1 ? source.length : start + 1 + end);
 }
 
-const accessQuery = sliceExport(communityPublic, "resolvePublicCommunityAccessBySlug");
+const accessQuery = sliceExport(communityAccessQueries, "getMyCommunityAccessBySlug");
 
 assert.match(
   accessQuery,
-  /query\(\{[\s\S]*communitySlug: v\.string\(\)/,
-  "public access resolution must be a public query keyed by slug only — no identity args",
+  /query\(\{[\s\S]*authSubject: v\.optional\(v\.string\(\)\)[\s\S]*communitySlug: v\.string\(\)/,
+  "signed-in access resolution must be an authenticated query keyed by slug",
+);
+assert.match(
+  accessQuery,
+  /resolveUserIdForAuthenticatedRequest\(\{[\s\S]*authSubject: args\.authSubject \?\? null/,
+  "signed-in access must resolve its actor through the canonical fail-closed identity owner",
+);
+assert.match(
+  accessQuery,
+  /getUniqueCommunityMembershipByPair\(\{[\s\S]*communityId: community\._id,[\s\S]*userId/,
+  "signed-in access must use the canonical unique membership pair",
+);
+assert.match(
+  accessQuery,
+  /mapCommunityAccessRow\(\{/,
+  "signed-in access must project the canonical access bundle",
 );
 assert.doesNotMatch(
-  accessQuery,
-  /authSubject: v\.|userId: v\./,
-  "public access resolution must not accept caller-supplied identity — identity comes from ctx.auth alone",
-);
-assert.match(
-  accessQuery,
-  /try \{[\s\S]*findAuthenticatedActorState\(\{ ctx, authSubject: null \}\)[\s\S]*\} catch \{[\s\S]*userId = null/,
-  "anonymous callers must resolve through the canonical identity path and fall back to userId null — one path, no fork",
-);
-assert.match(
-  accessQuery,
-  /if \(userId\) \{[\s\S]*getUniqueCommunityMembershipByPair\(\{[\s\S]*communityId: community\._id,[\s\S]*userId/,
-  "membership lookup must only run for identified callers through the canonical unique-pair authority",
-);
-assert.match(
-  accessQuery,
-  /resolveCommunityAccessBundle\(\{/,
-  "the visitor state must come from the same access bundle members use — relation decides, no parallel ladder",
-);
-assert.match(
-  accessQuery,
-  /if \(!access\.relation\) return \{ ok: false as const \}/,
-  "null relation (blocked callers only) must be absent, not teased",
-);
-assert.match(
-  accessQuery,
-  /user_id: userId \? access\.user_id : null/,
-  "anonymous callers must get user_id null, never a stringified null",
+  communityPublic,
+  /export const resolvePublicCommunityAccessBySlug\s*=/,
+  "the mixed anonymous/authenticated access query must remain deleted from its former source",
 );
 assert.doesNotMatch(
-  accessQuery,
-  /communityMessages|requireCommunityChatAccess/,
-  "the access query must not read chat content — visitor content flows through the public funnel projection only",
-);
-
-assert.match(
   communityModule,
-  /resolvePublicCommunityAccessBySlug as resolvePublicCommunityAccessBySlugImpl/,
-  "community.ts must import the public access query directly from its owner",
+  /resolvePublicCommunityAccessBySlug as resolvePublicCommunityAccessBySlugImpl|export const resolvePublicCommunityAccessBySlug\s*=/,
+  "the outer community wire must not restore the mixed anonymous/authenticated access query",
 );
 assert.match(
   communityModule,
-  /export const resolvePublicCommunityAccessBySlug = resolvePublicCommunityAccessBySlugImpl/,
-  "community.ts must expose the public access query — without this the frontend silently gets undefined",
+  /getMyCommunityAccessBySlug as getMyCommunityAccessBySlugImpl/,
+  "community.ts must import the authenticated slug access query directly from its owner",
+);
+assert.match(
+  communityModule,
+  /export const getMyCommunityAccessBySlug = getMyCommunityAccessBySlugImpl;/,
+  "community.ts must expose the authenticated slug access query",
 );
 
 assert.match(

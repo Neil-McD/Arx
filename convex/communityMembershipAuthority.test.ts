@@ -57,9 +57,10 @@ async function createAuthorityFixture(
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    const communitySlug = `membership-authority-${suffix}`;
     const communityId = await ctx.db.insert("communities", {
       ownerId,
-      slug: `membership-authority-${suffix}`,
+      slug: communitySlug,
       name: "Membership authority",
       visibility: "unlisted",
       entryPolicy: "open",
@@ -76,7 +77,7 @@ async function createAuthorityFixture(
         updatedAt: nowMs,
       });
     }
-    return { communityId, ownerId, ownerSubject, userId, nowMs };
+    return { communityId, communitySlug, ownerId, ownerSubject, userId, nowMs };
   });
 }
 
@@ -309,8 +310,8 @@ describe("community membership authority", () => {
     );
 
     await expect(
-      asOwner.mutation(api.communityPublic.joinPublicCommunity, {
-        communityId: fixture.communityId,
+      asOwner.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+        communitySlug: fixture.communitySlug,
       }),
     ).resolves.toEqual({
       outcome: "joined",

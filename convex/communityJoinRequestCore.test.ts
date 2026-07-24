@@ -46,9 +46,10 @@ async function createFixture(t: ReturnType<typeof convexTest>, suffix: string) {
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    const communitySlug = `join-kernel-${suffix}`;
     const communityId = await ctx.db.insert("communities", {
       ownerId,
-      slug: `join-kernel-${suffix}`,
+      slug: communitySlug,
       name: "Join kernel",
       visibility: "unlisted",
       entryPolicy: "approval",
@@ -65,6 +66,7 @@ async function createFixture(t: ReturnType<typeof convexTest>, suffix: string) {
       otherUserId,
       otherSubject,
       communityId,
+      communitySlug,
     };
   });
 }
@@ -181,8 +183,8 @@ describe("canonical community join-request kernel", () => {
     const fixture = await createFixture(t, "approval");
     const asMember = t.withIdentity({ subject: fixture.userSubject });
     const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
-    await asMember.mutation(api.communityPublic.joinPublicCommunity, {
-      communityId: fixture.communityId,
+    await asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+      communitySlug: fixture.communitySlug,
     });
     const request = await t.run(async (ctx) =>
       await getUniqueCommunityJoinRequestByPair({
@@ -216,8 +218,8 @@ describe("canonical community join-request kernel", () => {
     const fixture = await createFixture(t, "approval-guards");
     const asMember = t.withIdentity({ subject: fixture.userSubject });
     const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
-    await asMember.mutation(api.communityPublic.joinPublicCommunity, {
-      communityId: fixture.communityId,
+    await asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+      communitySlug: fixture.communitySlug,
     });
     const request = await t.run(async (ctx) =>
       await getUniqueCommunityJoinRequestByPair({
@@ -318,12 +320,12 @@ describe("canonical community join-request kernel", () => {
     const t = convexTest(schema, modules);
     const fixture = await createFixture(t, "open");
     await t.withIdentity({ subject: fixture.userSubject }).mutation(
-      api.communityPublic.joinPublicCommunity,
-      { communityId: fixture.communityId },
+      api.communityPublic.joinPublicCommunityBySlug,
+      { communitySlug: fixture.communitySlug },
     );
     await t.withIdentity({ subject: fixture.otherSubject }).mutation(
-      api.communityPublic.joinPublicCommunity,
-      { communityId: fixture.communityId },
+      api.communityPublic.joinPublicCommunityBySlug,
+      { communitySlug: fixture.communitySlug },
     );
     await t.run(async (ctx) => {
       await ctx.db.insert("communityBlocks", {
@@ -353,8 +355,8 @@ describe("canonical community join-request kernel", () => {
     const fixture = await createFixture(t, "denied-to-open");
     const asMember = t.withIdentity({ subject: fixture.userSubject });
     const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
-    await asMember.mutation(api.communityPublic.joinPublicCommunity, {
-      communityId: fixture.communityId,
+    await asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+      communitySlug: fixture.communitySlug,
     });
     const request = await t.run(async (ctx) =>
       await getUniqueCommunityJoinRequestByPair({
@@ -372,8 +374,8 @@ describe("canonical community join-request kernel", () => {
       mode: "open",
     });
     await expect(
-      asMember.mutation(api.communityPublic.joinPublicCommunity, {
-        communityId: fixture.communityId,
+      asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+        communitySlug: fixture.communitySlug,
       }),
     ).resolves.toMatchObject({ outcome: "joined" });
     expect(
@@ -452,8 +454,8 @@ describe("canonical community join-request kernel", () => {
     });
     await expect(
       t.withIdentity({ subject: fixture.userSubject }).mutation(
-        api.communityPublic.joinPublicCommunity,
-        { communityId: fixture.communityId },
+        api.communityPublic.joinPublicCommunityBySlug,
+        { communitySlug: fixture.communitySlug },
       ),
     ).resolves.toMatchObject({ outcome: "paid_plan_required" });
     expect(

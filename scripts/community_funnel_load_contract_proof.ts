@@ -16,6 +16,8 @@ const publicCommunityJoin = read("shared/publicCommunityJoin.ts");
 const postAuthBilling = read("apps/web/src/controllers/useWebPostAuthBillingLifecycle.ts");
 const admissionAction = read("apps/web/src/publicCommunityAdmissionAction.ts");
 const routeState = read("shared/webAppRouteState.ts");
+const communityModule = read("convex/community.ts");
+const communityPublic = read("convex/communityPublic.ts");
 
 // --- The base load must MERGE into the same community, never replace it ---
 // The memory graph + stats are folded in by async fetches; a bare replace on a
@@ -176,6 +178,26 @@ assert.doesNotMatch(
   publicCommunityJoin,
   /client\.mutation\("community:joinPublicCommunity"\s+as any/,
   "the client gateway must not retain the unreferenced ID mutation path",
+);
+assert.match(
+  communityPublic,
+  /export const joinPublicCommunityBySlug = mutation\(\{/,
+  "the source owner must retain the canonical slug mutation",
+);
+assert.match(
+  communityModule,
+  /export const joinPublicCommunityBySlug = joinPublicCommunityBySlugImpl;/,
+  "the outer community wire must retain the canonical slug mutation",
+);
+assert.doesNotMatch(
+  communityPublic,
+  /export const joinPublicCommunity\s*=\s*mutation\(\{/,
+  "the source owner must not restore the retired ID mutation",
+);
+assert.doesNotMatch(
+  communityModule,
+  /joinPublicCommunity as joinPublicCommunityImpl|export const joinPublicCommunity\s*=/,
+  "the outer community wire must not restore the retired ID mutation",
 );
 assert.match(
   publicCommunityJoin,

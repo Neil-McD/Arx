@@ -87,11 +87,9 @@ import {
   cancelMyJoinRequestBySlug as cancelMyJoinRequestBySlugImpl,
   getCommunityPresenceSummary as getCommunityPresenceSummaryImpl,
   heartbeatCommunityPresence as heartbeatCommunityPresenceImpl,
-  joinPublicCommunity as joinPublicCommunityImpl,
   joinPublicCommunityBySlug as joinPublicCommunityBySlugImpl,
   listPublicDiscoverCommunities as listPublicDiscoverCommunitiesImpl,
   recordPublicFunnelVisitBySlug as recordPublicFunnelVisitBySlugImpl,
-  resolvePublicCommunityAccessBySlug as resolvePublicCommunityAccessBySlugImpl,
   resolvePublicFunnelBySlug as resolvePublicFunnelBySlugImpl,
   resolvePublicFunnelStatsBySlug as resolvePublicFunnelStatsBySlugImpl,
 } from "./communityPublic";
@@ -241,13 +239,11 @@ export const cancelCommunityEvent = cancelCommunityEventImpl;
 export const getMyCommunityAccess = getMyCommunityAccessImpl;
 export const getMyCommunityAccessBySlug = getMyCommunityAccessBySlugImpl;
 export const getCommunityPresenceSummary = getCommunityPresenceSummaryImpl;
-export const resolvePublicCommunityAccessBySlug = resolvePublicCommunityAccessBySlugImpl;
 export const resolvePublicFunnelBySlug = resolvePublicFunnelBySlugImpl;
 export const resolvePublicFunnelStatsBySlug = resolvePublicFunnelStatsBySlugImpl;
 export const listPublicDiscoverCommunities = listPublicDiscoverCommunitiesImpl;
 export const heartbeatCommunityPresence = heartbeatCommunityPresenceImpl;
 export const joinPublicCommunityBySlug = joinPublicCommunityBySlugImpl;
-export const joinPublicCommunity = joinPublicCommunityImpl;
 export const cancelMyJoinRequestBySlug = cancelMyJoinRequestBySlugImpl;
 export const generateCommunityChatAttachmentUploadUrl = generateCommunityChatAttachmentUploadUrlImpl;
 export const listCommunityTyping = listCommunityTypingImpl;
