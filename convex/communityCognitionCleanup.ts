@@ -19,7 +19,6 @@ const communityCognitionCleanupPhaseValidator = v.union(
   v.literal("nodes"),
   v.literal("evidence_citations"),
   v.literal("source_traces"),
-  v.literal("archive_documents"),
 );
 
 export const drainDeletedCommunityCognitionInternal = internalMutation({

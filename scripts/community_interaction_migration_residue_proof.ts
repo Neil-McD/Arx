@@ -132,9 +132,9 @@ assert.doesNotMatch(
   "canonical interaction reads should not retain the deleted attachment fallback",
 );
 assert.doesNotMatch(
-  interactions,
+  interactions + legacyBridge,
   /getLegacyChatLinkByRoot|getLegacyChatLinkByReply|syncLegacyMessage|legacy_(?:thread|message|target_message)_id/,
-  "live canonical reads, composer writes, and edits should not depend on legacy chat identity",
+  "live canonical paths and the retained migration bridge should not expose unused legacy identity lookups",
 );
 for (const [label, source] of [
   ["interaction gateway", interactionGateway],

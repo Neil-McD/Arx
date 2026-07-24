@@ -58,7 +58,6 @@ import type * as communityAiFeed from "../communityAiFeed.js";
 import type * as communityAiFeedEvidence from "../communityAiFeedEvidence.js";
 import type * as communityAiFeedEvidenceCore from "../communityAiFeedEvidenceCore.js";
 import type * as communityAppMounts from "../communityAppMounts.js";
-import type * as communityArchiveDocuments from "../communityArchiveDocuments.js";
 import type * as communityAttention from "../communityAttention.js";
 import type * as communityCapabilityContext from "../communityCapabilityContext.js";
 import type * as communityChat from "../communityChat.js";
@@ -292,7 +291,6 @@ declare const fullApi: ApiFromModules<{
   communityAiFeedEvidence: typeof communityAiFeedEvidence;
   communityAiFeedEvidenceCore: typeof communityAiFeedEvidenceCore;
   communityAppMounts: typeof communityAppMounts;
-  communityArchiveDocuments: typeof communityArchiveDocuments;
   communityAttention: typeof communityAttention;
   communityCapabilityContext: typeof communityCapabilityContext;
   communityChat: typeof communityChat;

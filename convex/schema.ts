@@ -2704,56 +2704,6 @@ export default defineSchema({
     .index("by_status_recurrenceFrequency_startsAt", ["status", "recurrenceFrequency", "startsAt"])
     .index("by_createdBy", ["createdByUserId"]),
 
-  communityArchiveDocuments: defineTable({
-    communityId: v.id("communities"),
-    sourceType: v.union(
-      v.literal("chat"),
-      v.literal("interaction"),
-      v.literal("ai_feed"),
-      v.literal("resource"),
-    ),
-    sourceId: v.string(),
-    title: v.optional(v.string()),
-    sourceText: v.string(),
-    pdfText: v.optional(v.string()),
-    text: v.string(),
-    snippet: v.string(),
-    url: v.optional(v.string()),
-    authorLabel: v.optional(v.string()),
-    postType: v.optional(
-      v.union(v.literal("observation"), v.literal("recommendation"), v.literal("action")),
-    ),
-    resourceType: v.optional(v.string()),
-    resourceRole: v.optional(v.union(v.literal("page"), v.literal("source"))),
-    resourceStatus: v.optional(
-      v.union(
-        v.literal("draft"),
-        v.literal("review"),
-        v.literal("published"),
-        v.literal("processing"),
-        v.literal("failed"),
-      ),
-    ),
-    isPdf: v.boolean(),
-    embeddingStatus: v.union(v.literal("pending"), v.literal("embedded"), v.literal("failed")),
-    embedding: v.optional(v.array(v.float64())),
-    embeddingError: v.optional(v.string()),
-    embeddingModel: v.optional(v.string()),
-    embeddingDimensions: v.optional(v.number()),
-    embeddingUpdatedAt: v.optional(v.number()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_community", ["communityId"])
-    .index("by_community_createdAt", ["communityId", "createdAt"])
-    .index("by_community_source", ["communityId", "sourceType", "sourceId"])
-    .index("by_community_embeddingStatus", ["communityId", "embeddingStatus"])
-    .vectorIndex("by_embedding", {
-      vectorField: "embedding",
-      dimensions: 768,
-      filterFields: ["communityId", "sourceType"],
-    }),
-
   communitySourceTraces: defineTable({
     communityId: v.id("communities"),
     sourceType: v.union(

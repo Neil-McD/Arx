@@ -62,7 +62,7 @@ const tableGroups = {
   "resources-intelligence": [
     "communityAiFeedPosts", "communityAiFeedReactions", "communityResources", "communityResourceContents",
     "communitySourceUnits", "communitySourceUnitContents", "communitySourceCrawlJobs", "communityResourceModules",
-    "communityResourceBuilderChangesets", "communityArchiveDocuments", "communitySourceTraces",
+    "communityResourceBuilderChangesets", "communitySourceTraces",
     "communityEvidenceCitations", "communityEvidenceRetrievalLogs", "communityIntelligenceNodes",
     "communityIntelligenceEdges", "communityIntelligenceMutations", "communityIntelligenceChangeRequests",
     "communityIntelligenceRetrievalLogs", "communityOutcomeObservations", "communityMemoryMetabolizerRuns",

@@ -23,7 +23,6 @@ const [
   evidence,
   audit,
   recent,
-  communityChat,
   interactions,
   runtimeLoop,
   retrievalTools,
@@ -39,7 +38,6 @@ const [
   read("convex/communityInteractionEvidence.ts"),
   read("convex/communityEvidenceAudit.ts"),
   read("convex/communityRecentContext.ts"),
-  read("convex/communityChat.ts"),
   read("convex/communityInteractions.ts"),
   read("convex/runtimeAgentLoop.ts"),
   read("shared/retrievalTools.ts"),
@@ -115,7 +113,6 @@ assert.match(recent, /recent_context_v2/);
 
 assert.match(evidence, /"communityInteractionRoots" as any/);
 assert.match(evidence, /"communityInteractionReplies" as any/);
-assert.doesNotMatch(communityChat, /communityArchiveDocuments|deleteArchiveDocumentBySource/);
 assert.match(interactions, /scheduleCommunityInteractionEvidenceSync/);
 
 for (const source of [retrievalTools, invocationSurface, conciergeTools, runtimeLoop]) {

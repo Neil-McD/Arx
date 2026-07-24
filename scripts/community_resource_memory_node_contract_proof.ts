@@ -53,12 +53,11 @@ assert.match(projection, /COMMUNITY_RESOURCE_TRACE_SUMMARY_MAX_CHARS = 4_000/);
 assert.match(projection, /const existing = await readCommunityResourceSourceTrace/);
 assert.match(projection, /if \(!existing\) return false/);
 assert.match(projection, /visibilityScope: "admin"[\s\S]*sourceVisibility: "redacted"/);
-assert.doesNotMatch(projection, /communityArchiveDocuments|upsertArchive|deleteArchive/);
+assert.doesNotMatch(projection, /upsertArchive|deleteArchive/);
 assert.match(projection, /return \{ visible: false, traced, sourceRef \}/);
 assert.match(projection, /return \{ visible: true, traced: true, sourceRef \}/);
 
 assert.match(resources, /from "\.\/communityResourceMemoryProjection"/);
-assert.doesNotMatch(resources, /from "\.\/communityArchiveDocuments"/);
 assert.doesNotMatch(resources, /upsertArchiveDocumentForResource|deleteArchiveDocumentBySource/);
 assert.ok(
   (resources.match(/syncCommunityResourceMemoryProjection/g) ?? []).length >= 12,
@@ -94,8 +93,6 @@ assert.match(gateway, /learned_node_count: number[\s\S]*source_node_count: numbe
 
 assert.match(compiler, /selectedSourceTraceRows/);
 assert.match(compiler, /row\.sourceType === "resource"/);
-assert.doesNotMatch(compiler, /communityArchiveDocuments/);
-
 assert.match(lineageContract, /published resource[\s\S]*source trace/i);
 assert.match(lineageContract, /credit = null/);
 assert.match(cognitionContract, /canonical resource source node/i);

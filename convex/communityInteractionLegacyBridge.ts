@@ -29,26 +29,6 @@ export async function getLegacyChatLinkByMessage(
     .first()) as CommunityInteractionLegacyChatLinkRow | null;
 }
 
-export async function getLegacyChatLinkByRoot(
-  ctx: any,
-  rootId: any,
-): Promise<CommunityInteractionLegacyChatLinkRow | null> {
-  return (await ctx.db
-    .query("communityInteractionLegacyChatLinks" as any)
-    .withIndex("by_root", (q: any) => q.eq("rootId", rootId))
-    .first()) as CommunityInteractionLegacyChatLinkRow | null;
-}
-
-export async function getLegacyChatLinkByReply(
-  ctx: any,
-  replyId: any,
-): Promise<CommunityInteractionLegacyChatLinkRow | null> {
-  return (await ctx.db
-    .query("communityInteractionLegacyChatLinks" as any)
-    .withIndex("by_reply", (q: any) => q.eq("replyId", replyId))
-    .first()) as CommunityInteractionLegacyChatLinkRow | null;
-}
-
 export async function insertLegacyChatLinkIfMissing(args: {
   ctx: any;
   communityId: any;

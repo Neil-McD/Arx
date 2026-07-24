@@ -65,7 +65,6 @@ assert.doesNotMatch(
   "continuation scheduling must not mutate semantic evidence or lifecycle timestamps",
 );
 for (const forbiddenSource of [
-  "communityArchiveDocuments",
   "communityAiFeedPosts",
   "communityOutcomeObservations",
   "communityEvents",

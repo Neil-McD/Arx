@@ -265,8 +265,14 @@ async function runScheduledDrain(fakeDb: FakeDb) {
 }
 
 const scheduledDrain = await runScheduledDrain(scheduledDb);
-assert.equal(scheduledDrain.executionCount, 16);
-assert.equal(scheduledDrain.deletedTotal, 218);
+assert.equal(
+  scheduledDrain.executionCount,
+  COMMUNITY_COGNITION_CLEANUP_PHASES.length + 2,
+);
+assert.equal(
+  scheduledDrain.deletedTotal,
+  205 + COMMUNITY_COGNITION_CLEANUP_PHASES.length - 1,
+);
 assert.equal(scheduledDrain.phaseExecutionCounts.get("source_traces"), 3);
 assert.equal(scheduledDrain.finalInspection?.empty, true);
 for (const definition of COMMUNITY_COGNITION_CLEANUP_PHASES) {
@@ -376,7 +382,6 @@ for (const [file, expectedCount] of [
   ["../convex/communityIntelligenceDirectory.ts", 3],
   ["../convex/communityCompilerDigest.ts", 1],
   ["../convex/communityAgentRuntime.ts", 1],
-  ["../convex/communityArchiveDocuments.ts", 1],
   ["../convex/communityEvidenceAudit.ts", 1],
 ] as const) {
   const source = readFileSync(new URL(file, import.meta.url), "utf8");

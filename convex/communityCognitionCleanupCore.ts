@@ -68,11 +68,6 @@ export const COMMUNITY_COGNITION_CLEANUP_PHASES = [
     table: "communitySourceTraces",
     index: "by_community_createdAt",
   },
-  {
-    phase: "archive_documents",
-    table: "communityArchiveDocuments",
-    index: "by_community_createdAt",
-  },
 ] as const;
 
 export type CommunityCognitionCleanupPhase =

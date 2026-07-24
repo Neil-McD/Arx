@@ -2,7 +2,7 @@
 
 Status: planning authority only. Runtime deletion remains quarantined.
 
-Current policy version: `account-lifecycle-v6`
+Current policy version: `account-lifecycle-v7`
 
 Code authority: `convex/accountLifecyclePolicy.ts`
 

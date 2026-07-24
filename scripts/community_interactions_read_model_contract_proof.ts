@@ -113,8 +113,8 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   exportedConstBlock(interactions, "listCommunityInteractionRoots") + exportedConstBlock(interactions, "listCommunityInteractionReplies"),
-  /communitySourceTraces" as any|communityArchiveDocuments|communityCompiler|communityIntelligenceNodes|communityIntelligenceChangeRequests/,
-  "interaction read model should not read source trace, archive, compiler, or directory truth tables",
+  /communitySourceTraces" as any|communityCompiler|communityIntelligenceNodes|communityIntelligenceChangeRequests/,
+  "interaction read model should not read source trace, compiler, or directory truth tables",
 );
 
 const mapRootBundle = functionBlock(interactions, "mapRootBundle");

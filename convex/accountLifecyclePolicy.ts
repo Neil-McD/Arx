@@ -6,10 +6,10 @@
  * mutation stays quarantined until versioned executors satisfy this contract.
  */
 
-export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v6" as const;
+export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v7" as const;
 
 export const ACCOUNT_LIFECYCLE_SCHEMA_BASELINE = Object.freeze({
-  tableCount: 125,
+  tableCount: 124,
   directUserEdgeCount: 118,
   opaqueFieldCount: 26,
   storageFieldCount: 7,
@@ -575,7 +575,6 @@ const policyGroups: readonly PolicyGroup[] = [
     tables: [
       "communitySourceUnits",
       "communitySourceUnitContents",
-      "communityArchiveDocuments",
       "communitySourceTraces",
       "communityEvidenceCitations",
       "communityEvidenceRetrievalLogs",
