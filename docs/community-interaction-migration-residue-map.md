@@ -100,10 +100,18 @@ replayed with zero work. The temporary function is absent. The current
 interaction evidence bridge emits only typed canonical root/reply refs, so no
 replacement validation layer was added.
 
+C3.2E2B2A rejects automatic historical cognition admission. The recursive
+internal interaction-trace batch query/action is deleted rather than run.
+Current write-driven sync still creates typed traces for new or edited readable
+interactions. Historical canonical refs remain directly readable and
+searchable, but the 63-row backlog does not become compiler-pending merely to
+finish a migration. No new admission table, state machine, scheduler, cron,
+operator UI, or trace state was added.
+
 ## Development Staging Snapshot
 
 Read-only interaction postflight refreshed on 2026-07-23 from
-`dev:quick-porcupine-949` at permanent runtime checkpoint `b542a2ae`:
+`dev:quick-porcupine-949` at permanent runtime checkpoint `e9c72236`:
 
 | Shape | Count | Meaning |
 | --- | ---: | --- |
@@ -131,6 +139,10 @@ traces and one malformed/orphaned community-visible interaction trace. E2B1
 deleted that zero-dependent malformed row. Ordinary canonical behavior added
 one root, one reply, and their two valid traces between audits, so 65
 interactions are now readable while the historical missing count remains 63.
+After E2B2A, the deployed function surface contains neither historical trace
+batch function, the live sync remains registered, and the scheduled-function
+ledger contains zero bulk replay jobs. Counts and citation dependencies remain
+unchanged.
 
 C3.2B acceptance compared the same bounded aggregate before and after
 authenticated navigation on exact runtime commit `d2aa605f` across the
@@ -229,10 +241,10 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
    callerless legacy-link helpers.
 9. **C3.2E2B1 complete:** delete the one malformed zero-dependent interaction
    trace, prove zero-work replay, and remove the temporary drain.
-10. **C3.2E2B2 next:** explicitly decide whether and how the 63 historical
-   interactions enter compiler cognition before materializing their canonical
-   traces.
-11. Run the bounded historical backfill/integrity replay, observe zero live
+10. **C3.2E2B2A complete:** do not admit all 63 historical interactions into
+   cognition automatically; delete the recursive bulk trace replay while
+   retaining live write-driven sync.
+11. **Next:** run the bounded historical backfill/integrity replay, observe zero live
    legacy reads and writes, then audit link/backfill/table residue and update
    lifecycle policy only if retention and evidence gates authorize deletion.
 

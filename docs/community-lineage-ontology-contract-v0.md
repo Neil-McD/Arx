@@ -89,11 +89,14 @@ Evidence has one stable reference, one canonical source record, source-owned
 timestamps, source-owned visibility, an actor, and a lifecycle state. Derived
 indexes may cache content, but they never become evidence authority.
 
-Searchability is not acceptance. Readable community/public evidence is
-automatically projected into the source-trace ledger for permissioned retrieval
-and bounded compiler admission. That projection is evidence intake, not a claim
+Searchability is not acceptance. New or edited readable community/public
+evidence is projected through its live write-driven sync into the source-trace
+ledger for permissioned retrieval and bounded compiler admission. Historical
+migration rows are not bulk-projected merely because they are readable; their
+canonical refs remain searchable until a separate bounded decision admits
+selected history. A source-trace projection is evidence intake, not a claim
 that the evidence is durable or canonical memory; the autonomous compiler must
-still retain, carry forward, or dismiss every exact versioned trace.
+still retain, carry forward, or dismiss every exact versioned trace it receives.
 
 For current interactions:
 

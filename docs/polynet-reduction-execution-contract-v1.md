@@ -852,5 +852,38 @@ reactions, citations, intelligence objects, compiler digests, agent runs,
 memory state, account lifecycle, schemas, and production were not mutated.
 The 63-trace historical projection remains deliberately unrun because the
 current source-trace writer would admit those rows as pending compiler evidence
-and could trigger owner-funded cognition. C3.2E2B2 must decide and explicitly
-authorize that historical cognition replay before any trace backfill.
+and could trigger owner-funded cognition. It therefore remained blocked pending
+the explicit E2B2 decision recorded below.
+
+C3.2E2B2A resolves that decision by deletion. Historical canonical interactions
+remain directly readable and searchable, but they do not enter cognition merely
+because a migration can enumerate them. Runtime checkpoint
+`e9c7223614038175386e5d3ace80f490a587772f` deletes the recursive internal
+historical interaction-trace batch query/action and its pagination dependency.
+It adds no replacement table, state, workflow, scheduler, cron, UI, trace,
+citation, or admission mode. The existing write-driven sync remains unchanged
+for new and edited readable interactions.
+
+The exact runtime checkpoint was deployed only to
+`dev:quick-porcupine-949`. The deployed function specification contains neither
+removed function and still contains `syncCommunityInteractionEvidenceInternal`;
+the scheduled-function ledger contains zero historical replay jobs. A bounded
+read-only postflight remains 55 roots, 24 replies, 65 readable interactions,
+two valid typed traces, 63 intentionally missing historical traces, zero
+malformed or duplicate trace keys, zero interaction-citation dependencies, four
+historical threads, 67 historical messages, and 67 mapping links. Every scan
+completed below its 2,001-row bound.
+
+The focused interaction identity, write, read, migration-residue, evidence,
+compiler-digest, and compiler-evidence checks pass, as do Convex typecheck,
+web typecheck, production build, bundle budget, diff hygiene, and the complete
+38-step foundation baseline. `polynet-staging.vercel.app/version.json` served
+the exact runtime checkpoint, while `www.polynet.ai/version.json` remained
+unchanged at `a936dee72a65f91723f332779390210e4cf783f0`. No product row, source
+trace, citation, compiler digest, agent run, historical link/message/thread,
+schema table, provider, or production deployment changed.
+
+The next interaction slice is a bounded integrity replay and retirement review
+for the legacy backfill module, bridge, and migration-only planning helpers.
+This receipt authorizes no historical row, link, lifecycle, schema-table, or
+production deletion.

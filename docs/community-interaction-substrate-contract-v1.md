@@ -61,6 +61,11 @@ trace is evidence rather than retained community intelligence. The compiler
 must explicitly retain, carry forward, or dismiss that evidence; most activity
 should never become memory.
 
+Canonical readability does not itself authorize retroactive cognition. New or
+edited interactions enter the existing write-driven evidence sync. Historical
+migration rows remain readable through their canonical interaction refs unless
+a separately authorized, bounded decision admits them into compiler evidence.
+
 ### Delete Hard Delete As Normal Moderation
 
 Normal deletion is a tombstone plus moderation event.
@@ -188,8 +193,11 @@ Rules:
 - Creating an interaction does not automatically create community truth.
 - Community/public interactions may enter a permissioned retrieval archive without
   becoming compiler input.
-- Every readable interaction sync creates or updates one permissioned
+- Every invoked live write-driven interaction sync creates or updates one permissioned
   `communitySourceTraces` row keyed by its canonical evidence reference.
+- There is no recursive bulk historical interaction-trace replay. Historical
+  migration completeness is audited without converting the full backlog into
+  compiler-pending work.
 - Archive synchronization and source-trace projection are separate idempotent
   derived records. Neither one directly creates retained memory.
 - Source traces must preserve actor, visibility, evidence, and provenance.
@@ -454,6 +462,8 @@ Rules:
 - legacy replies become one-level interaction replies only when their target mapping exists
 - missing target mappings are counted as `unresolved_replies`, not guessed
 - running the batch repeatedly must not duplicate roots or replies
+- already-linked historical messages are counted and skipped; they do not
+  schedule evidence sync or retroactive cognition
 - backfill write/materialization failures are not caught after writes begin
 - backfill does not migrate reactions, edits, deletes, or moderation state
 - backfill does not write source traces, archive truth, or compiler state synchronously; materialized interactions schedule idempotent derived-evidence sync and do not change UI behavior
@@ -485,7 +495,9 @@ Rules:
 - the interaction root is the conversation episode; replies point to their targeted reply when present and otherwise to the root
 - personal-agent dock and community Concierge calls stay bound to the active community; external MCP calls select a community by slug and the server validates access
 - every search/read appends a `communityEvidenceRetrievalLogs` row with actor, surface, capability, and returned refs
-- every readable interaction sync creates or updates one exact source trace; related root and reply traces share an episode scheduling key without collapsing identity
+- every invoked live write-driven interaction sync creates or updates one exact source trace; related root and reply traces share an episode scheduling key without collapsing identity
+- the recursive historical trace backfill is absent; canonical historical refs
+  remain readable without becoming compiler-pending by migration side effect
 - private, admin-only, hidden, deleted, missing, or parent-hidden evidence is excluded or redacted and fails closed at read time even if a derived index is stale
 - interaction writes do not wait for compiler work; idempotent derived synchronization is scheduled after canonical mutation success
 - legacy chat tables and links remain migration substrate for unrelated compatibility consumers, but they are no longer memory/evidence search authority
