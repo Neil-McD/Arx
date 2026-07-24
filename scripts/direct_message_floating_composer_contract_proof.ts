@@ -46,8 +46,13 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-dm-panel-composer \{[\s\S]*border-radius: var\(--composer-radius\);[\s\S]*background: var\(--composer-surface\);/,
-  "DM composer should use the canonical opaque pill surface",
+  /\.community-dm-panel-composer \{[\s\S]*border-radius: var\(--composer-radius\);[\s\S]*background: var\(--web-context-panel-surface\);/,
+  "DM composer should continue the canonical context-panel surface",
+);
+assert.match(
+  baseCss,
+  /\.community-dm-composer-float::before \{[\s\S]*linear-gradient\([\s\S]*var\(--web-context-panel-surface\) 100%/,
+  "DM feed should dissolve into the same context-panel surface behind the composer",
 );
 assert.doesNotMatch(
   baseCss.slice(

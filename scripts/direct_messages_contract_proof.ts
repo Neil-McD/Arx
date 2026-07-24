@@ -428,7 +428,8 @@ assert.doesNotMatch(css.match(/\.community-dm-panel \{[\s\S]*?\n\}/)?.[0] ?? "",
 assert.match(dmInternalChromeCss, /\.community-dm-panel-header,[\s\S]*\.community-dm-inbox-header,[\s\S]*\.community-dm-recipient-search \{[\s\S]*position: relative;[\s\S]*z-index: 2;[\s\S]*border-radius: 14px;[\s\S]*background: transparent;/, "DM fixed headers must inherit the stable context-panel surface");
 assert.doesNotMatch(dmInternalChromeCss, /backdrop-filter/, "DM fixed chrome must not create nested blur layers");
 assert.doesNotMatch(dmInternalChromeCss, /\.community-dm-panel-composer/, "DM composer must not inherit the translucent fixed-header material");
-assert.match(css, /\.community-dm-panel-composer \{[\s\S]*background: var\(--composer-surface\);/, "DM composer must use the canonical solid input surface");
+assert.match(css, /\.community-dm-panel-composer \{[\s\S]*background: var\(--web-context-panel-surface\);/, "DM composer must continue the canonical opaque context-panel surface");
+assert.match(css, /\.community-dm-composer-float::before \{[\s\S]*linear-gradient\([\s\S]*var\(--web-context-panel-surface\) 100%/, "DM floating composer fade must end in the canonical context-panel surface");
 assert.doesNotMatch(dmInternalChromeCss, /box-shadow:|border: 1px solid/, "DM fixed chrome must not become nested glass cards");
 assert.match(dmPanelMessagesCss, /overflow: auto;[\s\S]*margin: -8px -12px -14px 0;[\s\S]*padding: 10px 14px calc\(var\(--community-dm-composer-float-height, 62px\) \+ 26px\) 2px;[\s\S]*mask-image: linear-gradient/, "DM conversation messages must use an edge-aligned viewport with measured floating-composer clearance");
 assert.doesNotMatch(dmPanelMessagesCss, /padding: 10px 14px 12px 2px|padding: 56px 14px 50px 2px/, "DM conversation messages must not fall back to fixed-footer clearance");

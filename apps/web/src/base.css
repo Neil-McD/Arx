@@ -12045,7 +12045,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   background: linear-gradient(
     to bottom,
     transparent 0,
-    color-mix(in srgb, var(--bg-workspace) 76%, transparent) 100%
+    var(--web-context-panel-surface) 100%
   );
 }
 
@@ -12646,7 +12646,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   padding: 10px 12px;
   border: 1px solid var(--composer-border);
   border-radius: var(--composer-radius);
-  background: var(--composer-surface);
+  background: var(--web-context-panel-surface);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
 }
 
