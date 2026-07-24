@@ -1004,3 +1004,34 @@ remain truthful; the next C2 slice must resolve the authored-content privacy
 propagation contract before access freeze can safely lead to completion.
 Focused lifecycle/evidence proofs, Convex typecheck, diff hygiene, and the full
 38-step foundation baseline pass.
+
+C2.3B1 closes the immediate authored-content revocation gap without building a
+destructive executor. A complete bounded development read found 55 roots, 24
+replies, two ordinary-deleted roots that still retain summaries and content
+blocks, eight moderation events, zero privacy-purge events, two live
+interaction traces, and zero interaction-derived citations, intelligence
+nodes, change requests, mutations, outcomes, or compiler digests. No
+development data migration is warranted.
+
+The runtime now resolves every retained evidence trace back to its current
+canonical interaction, Resource, AI Feed, or operational trace before exposing
+derived content. The rule covers non-compiler and compiler memory nodes,
+connected edges, member search/read, manager directory/digest/change-request
+projections, compiler handoff, and community-agent filesystem
+list/read/search. Revoked manager audit records preserve structural identity
+but redact copied payload content; the community agent receives no revoked
+artifact and cannot claim its digest. The directory and edge readers no longer
+collect an entire community table, and digest projection is capped at the
+existing 20-row product window.
+
+The focused behavioral fixture keeps a live root owned by one member and
+tombstones a reply owned by another. Before scheduled evidence sync, the
+reply, content block, unredacted source trace, citation, accepted node, edge,
+digest, and change request still physically exist. Direct evidence, member
+memory, manager directory/edges, compiler claim, and community-agent filesystem
+reads all fail closed; manager digest/request reads expose only neutral
+redaction. This proves containment, not erasure. C2.3B2 must still implement
+the separate bounded physical scrub for canonical blocks, attachment storage,
+source-trace text, accepted intelligence, digests, and opaque audit payloads.
+No schema, lifecycle table, public mutation, UI, provider, staging data, or
+production target changes in C2.3B1.

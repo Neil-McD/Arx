@@ -2,6 +2,12 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { normalizeIdValue, toIsoString } from "./communityCore";
 import { settleCommunityIntelligenceFromDigestItemsCore } from "./communityCompilerCandidates";
+import {
+  communityCompilerDigestEvidenceIsCurrentlyActive,
+  communityEvidenceLineageIsCurrentlyActive,
+  communityIntelligenceNodeEvidenceIsCurrentlyActive,
+  communitySourceTraceHasCurrentCanonicalEvidence,
+} from "./communityDerivedEvidenceReadability";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import { normalizeCommunityMemoryDecision } from "../shared/communityMemoryDecisionContract";
 
@@ -56,6 +62,9 @@ type NodeRow = {
   evidenceStrength: string;
   workflowIds: string[];
   tags: string[];
+  sourceTraceIds: any[];
+  evidenceCitationIds?: any[];
+  evidencePolicyVersion?: string;
   updatedAt: number;
   createdAt: number;
 };
@@ -82,6 +91,7 @@ type ChangeRequestRow = {
   status: string;
   requestedPayload: unknown;
   sourceTraceIds: any[];
+  evidenceCitationIds?: any[];
   targetNodeIds: any[];
   targetEdgeIds: any[];
   confidence: number;
@@ -178,6 +188,7 @@ function isNodeRow(row: unknown): row is NodeRow {
     hasString(row, "evidenceStrength") &&
     hasArray(row, "workflowIds") &&
     hasArray(row, "tags") &&
+    hasArray(row, "sourceTraceIds") &&
     hasNumber(row, "createdAt") &&
     hasNumber(row, "updatedAt")
   );
@@ -264,6 +275,9 @@ async function resolveFilesystemContext(
       digest.agentClaimId !== normalizeContextToken(context.heartbeatId, 200)
     ) {
       throw new Error("community_agent_filesystem_digest_claim_mismatch");
+    }
+    if (!await communityCompilerDigestEvidenceIsCurrentlyActive({ ctx, digest })) {
+      throw new Error("community_agent_filesystem_digest_evidence_not_readable");
     }
   }
   return {
@@ -357,14 +371,14 @@ function mapEdge(row: EdgeRow) {
   };
 }
 
-function mapChangeRequest(row: ChangeRequestRow) {
-  const payload = payloadObject(row.requestedPayload);
+function mapChangeRequest(row: ChangeRequestRow, evidenceReadable = true) {
+  const payload = evidenceReadable ? payloadObject(row.requestedPayload) : {};
   return {
     id: normalizeIdValue(row._id),
     path: `/directory/change-requests/${normalizeIdValue(row._id)}`,
     operation: row.operation,
     status: row.status,
-    requested_payload: payload,
+    requested_payload: evidenceReadable ? payload : { privacy_redacted: true },
     source_trace_ids: (row.sourceTraceIds ?? []).map(normalizeIdValue),
     target_node_ids: (row.targetNodeIds ?? []).map(normalizeIdValue),
     target_edge_ids: (row.targetEdgeIds ?? []).map(normalizeIdValue),
@@ -383,12 +397,68 @@ function mapChangeRequest(row: ChangeRequestRow) {
   };
 }
 
+async function nodeEvidenceIsReadableForCommunityAgent(ctx: any, row: NodeRow): Promise<boolean> {
+  if (
+    row.visibilityScope === "private" ||
+    row.sourceVisibility === "private" ||
+    row.sourceVisibility === "redacted"
+  ) {
+    return false;
+  }
+  return await communityIntelligenceNodeEvidenceIsCurrentlyActive({ ctx, node: row });
+}
+
+async function changeRequestEvidenceIsCurrentlyActive(
+  ctx: any,
+  row: ChangeRequestRow,
+): Promise<boolean> {
+  return await communityEvidenceLineageIsCurrentlyActive({
+    ctx,
+    communityId: row.communityId,
+    sourceTraceIds: row.sourceTraceIds,
+    evidenceCitationIds: row.evidenceCitationIds,
+  });
+}
+
+async function edgeEvidenceIsReadableForCommunityAgent(
+  ctx: any,
+  communityId: any,
+  row: EdgeRow,
+): Promise<boolean> {
+  const fromNode = await ctx.db.get(row.fromNodeId as any);
+  if (!isNodeRow(fromNode) || !await nodeEvidenceIsReadableForCommunityAgent(ctx, fromNode)) {
+    return false;
+  }
+  if (row.toNodeId) {
+    const toNode = await ctx.db.get(row.toNodeId as any);
+    if (!isNodeRow(toNode) || !await nodeEvidenceIsReadableForCommunityAgent(ctx, toNode)) {
+      return false;
+    }
+  }
+  if (row.toReferenceType === "trace" && row.toReferenceId) {
+    return await communitySourceTraceHasCurrentCanonicalEvidence({
+      ctx,
+      communityId,
+      sourceTraceId: row.toReferenceId,
+    });
+  }
+  return true;
+}
+
 async function latestDigests(ctx: any, communityId: any, limit: number): Promise<DigestRow[]> {
-  return (await ctx.db
+  const boundedDigestLimit = Math.min(20, limit);
+  const rows = (await ctx.db
     .query("communityCompilerDigests" as any)
     .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
     .order("desc")
-    .take(limit)) as DigestRow[];
+    .take(Math.min(40, boundedDigestLimit * 2))) as DigestRow[];
+  const readable: DigestRow[] = [];
+  for (const row of rows) {
+    if (!await communityCompilerDigestEvidenceIsCurrentlyActive({ ctx, digest: row })) continue;
+    readable.push(row);
+    if (readable.length >= boundedDigestLimit) break;
+  }
+  return readable;
 }
 
 async function latestChangeRequests(ctx: any, communityId: any, limit: number): Promise<ChangeRequestRow[]> {
@@ -412,7 +482,13 @@ async function latestNodes(ctx: any, communityId: any, limit: number): Promise<N
       .take(Math.max(5, Math.ceil(limit / 2)))) as NodeRow[];
     rows.push(...batch);
   }
-  return rows.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
+  const readable: NodeRow[] = [];
+  for (const row of rows.sort((a, b) => b.updatedAt - a.updatedAt)) {
+    if (!await nodeEvidenceIsReadableForCommunityAgent(ctx, row)) continue;
+    readable.push(row);
+    if (readable.length >= limit) break;
+  }
+  return readable;
 }
 
 async function latestEdges(ctx: any, communityId: any, limit: number): Promise<EdgeRow[]> {
@@ -420,7 +496,13 @@ async function latestEdges(ctx: any, communityId: any, limit: number): Promise<E
     .query("communityIntelligenceEdges" as any)
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
     .take(Math.max(100, limit * 4))) as EdgeRow[];
-  return rows.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
+  const readable: EdgeRow[] = [];
+  for (const row of rows.sort((a, b) => b.updatedAt - a.updatedAt)) {
+    if (!await edgeEvidenceIsReadableForCommunityAgent(ctx, communityId, row)) continue;
+    readable.push(row);
+    if (readable.length >= limit) break;
+  }
+  return readable;
 }
 
 async function readExpectedRow<T extends { communityId?: any }>(
@@ -457,6 +539,9 @@ async function compilerDigestsForContext(
   );
   if (digest.versionKey !== context.compilerDigestVersionKey) {
     throw new Error("community_agent_filesystem_digest_identity_mismatch");
+  }
+  if (!await communityCompilerDigestEvidenceIsCurrentlyActive({ ctx, digest })) {
+    throw new Error("community_agent_filesystem_digest_evidence_not_readable");
   }
   return [digest];
 }
@@ -606,22 +691,37 @@ export const readCommunityAgentFilesystemInternal = internalQuery({
         throw new Error("community_agent_filesystem_digest_outside_claim");
       }
       const row = await readExpectedRow(ctx, context.communityId, parts[2], "community_compiler_digest_not_found", isDigestRow);
+      if (!await communityCompilerDigestEvidenceIsCurrentlyActive({ ctx, digest: row })) {
+        throw new Error("community_agent_filesystem_digest_evidence_not_readable");
+      }
       return { ...contextMetadata(context), path, kind: "compiler_digest", digest: mapDigest(row) };
     }
 
     if (parts[0] === "directory" && parts[1] === "nodes" && parts[2]) {
       const row = await readExpectedRow(ctx, context.communityId, parts[2], "community_intelligence_node_not_found", isNodeRow);
+      if (!await nodeEvidenceIsReadableForCommunityAgent(ctx, row)) {
+        throw new Error("community_agent_filesystem_node_evidence_not_readable");
+      }
       return { ...contextMetadata(context), path, kind: "directory_node", node: mapNode(row) };
     }
 
     if (parts[0] === "directory" && parts[1] === "edges" && parts[2]) {
       const row = await readExpectedRow(ctx, context.communityId, parts[2], "community_intelligence_edge_not_found", isEdgeRow);
+      if (!await edgeEvidenceIsReadableForCommunityAgent(ctx, context.communityId, row)) {
+        throw new Error("community_agent_filesystem_edge_evidence_not_readable");
+      }
       return { ...contextMetadata(context), path, kind: "directory_edge", edge: mapEdge(row) };
     }
 
     if (parts[0] === "directory" && parts[1] === "change-requests" && parts[2]) {
       const row = await readExpectedRow(ctx, context.communityId, parts[2], "community_intelligence_change_request_not_found", isChangeRequestRow);
-      return { ...contextMetadata(context), path, kind: "directory_change_request", change_request: mapChangeRequest(row) };
+      const evidenceReadable = await changeRequestEvidenceIsCurrentlyActive(ctx, row);
+      return {
+        ...contextMetadata(context),
+        path,
+        kind: "directory_change_request",
+        change_request: mapChangeRequest(row, evidenceReadable),
+      };
     }
 
     throw new Error("community_agent_filesystem_path_not_readable");
@@ -644,6 +744,12 @@ export const searchCommunityAgentFilesystemInternal = internalQuery({
       latestNodes(ctx, context.communityId, limit),
       latestChangeRequests(ctx, context.communityId, limit),
     ]);
+    const readableChangeRequests: ChangeRequestRow[] = [];
+    for (const row of changeRequests) {
+      if (await changeRequestEvidenceIsCurrentlyActive(ctx, row)) {
+        readableChangeRequests.push(row);
+      }
+    }
     const matches = [
       ...digests
         .filter((row) => `${row.summary} ${row.dedupeKey}`.toLowerCase().includes(queryText))
@@ -651,7 +757,7 @@ export const searchCommunityAgentFilesystemInternal = internalQuery({
       ...nodes
         .filter((row) => `${row.title} ${row.bodyMd} ${row.type} ${row.status}`.toLowerCase().includes(queryText))
         .map((row) => ({ kind: "directory_node", path: `/directory/nodes/${normalizeIdValue(row._id)}`, score: 0.9, item: mapNode(row) })),
-      ...changeRequests
+      ...readableChangeRequests
         .filter((row) => JSON.stringify(row.requestedPayload ?? {}).toLowerCase().includes(queryText))
         .map((row) => ({ kind: "directory_change_request", path: `/directory/change-requests/${normalizeIdValue(row._id)}`, score: 0.8, item: mapChangeRequest(row) })),
     ];
@@ -675,6 +781,18 @@ export const inspectCommunityCompilerDigestSettlementInternal = internalQuery({
       throw new Error("community_compiler_digest_not_found");
     }
     const items = Array.isArray((digest as any).items) ? (digest as any).items : [];
+    if (!await communityCompilerDigestEvidenceIsCurrentlyActive({
+      ctx,
+      digest: digest as DigestRow,
+    })) {
+      return {
+        complete: false,
+        item_count: items.length,
+        unsettled_work_keys: items.map((item: any) =>
+          String(item?.workKey ?? "").trim() || "unreadable_evidence"
+        ),
+      };
+    }
     const unsettledWorkKeys: string[] = [];
     for (const item of items) {
       const workKey = String(item?.workKey ?? "").trim();

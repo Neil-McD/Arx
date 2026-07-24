@@ -111,6 +111,7 @@
     "check:community-interactions-write-core-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interactions_write_core_contract_proof.ts",
     "check:community-interactions-read-model-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interactions_read_model_contract_proof.ts",
     "test:community-interaction-canonical-identity": "vitest run convex/communityInteractionCanonicalIdentity.test.ts",
+    "test:community-evidence-revocation": "vitest run convex/communityEvidenceRevocation.test.ts",
     "check:community-lineage-ontology-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_lineage_ontology_contract_proof.ts",
     "check:community-evidence-integrity-proof": "tsx scripts/community_evidence_integrity_contract_proof.ts",
     "check:community-interaction-evidence-spine-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interaction_evidence_spine_contract_proof.ts",

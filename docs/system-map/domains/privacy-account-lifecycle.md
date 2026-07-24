@@ -55,6 +55,22 @@ fixture row and the storage object unchanged. This proves only that the current
 kernel remains metadata-only; it does not prove anonymization, revocation,
 privacy propagation, retention, or deletion.
 
+C2.3B1 adds the immediate containment boundary without adding a purge
+executor. One canonical helper resolves retained source traces back to current
+interaction, Resource, AI Feed, or trace truth. Every evidenced node, connected
+edge, compiler handoff, manager digest/change-request projection, and
+community-agent filesystem read now fails closed or redacts copied payload
+content when that source becomes unreadable. The focused fixture tombstones a
+human-authored reply and proves containment before the scheduled trace sync:
+the root and every stored derivative remain present, while no first-party
+derived read or compiler claim can return the revoked content. The previously
+unbounded directory and edge collections are replaced with indexed caps.
+
+This is revocation, not erasure. Canonical blocks, attachment objects, source
+trace text, intelligence bodies, digests, and audit payloads remain lifecycle
+state until C2.3B2 defines and proves the bounded, resumable physical scrub.
+Account deletion still does not imply authored-content purge.
+
 The C2 analytics closeout removes one unnecessary privacy edge rather than
 building an executor around it. Community funnel visits are anonymous,
 hash-only operational evidence; the caller-supplied subject, event `userId`,

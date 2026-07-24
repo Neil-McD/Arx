@@ -6,6 +6,9 @@ import {
   buildCommunitySourceTraceRevision,
   measureCommunityCompilerEvidenceForCommunity,
 } from "./communityCompilerEvidenceCore";
+import {
+  communitySourceTraceRowHasCurrentCanonicalEvidence,
+} from "./communityDerivedEvidenceReadability";
 
 const COMMUNITY_AGENT_HEARTBEAT_MAX_DELAY_MS = 24 * 60 * 60 * 1000;
 const COMMUNITY_AGENT_HEARTBEAT_MAX_TOOL_STEPS = 8;
@@ -72,6 +75,13 @@ async function classifyCommunityCompilerDigestWork(
     if (!workKey || traceIds.length !== 1 || revisions.length !== 1) return "superseded";
     const trace = (await ctx.db.get(traceIds[0] as any)) as Record<string, any> | null;
     if (!trace || normalizeIdValue(trace.communityId) !== normalizeIdValue(communityId)) {
+      return "superseded";
+    }
+    if (!await communitySourceTraceRowHasCurrentCanonicalEvidence({
+      ctx,
+      communityId,
+      trace,
+    })) {
       return "superseded";
     }
     if (await buildCommunitySourceTraceRevision(trace as any) !== String(revisions[0])) {

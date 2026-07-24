@@ -198,15 +198,17 @@ These blockers prevent execution, not policy classification. Undecided behavior 
 5. **Complete in C2.2A:** consolidate authenticated subject-to-account authority behind `authActor`, delete uncalled duplicate gate/tier/user lookup surfaces, and reconcile preflight-before-freeze plus non-destructive grant semantics.
 6. **Complete in C2.2B:** collapse policy-scoped request identity to one canonical lifecycle root per account and delete the redundant root idempotency field.
 7. **Complete in the C2 analytics closeout:** delete the spoofable community-funnel identity edge, raw-key schema residue, and unbounded historical dedupe lookup.
-8. **Blocked until C3 canonical-data prerequisites are complete:** add the internal access-freeze checkpoint and denial boundary behind interruption fixtures.
-9. Add bounded local-session revocation, private-state, and external-provider executors.
-10. Add DM participant-departure and shared tombstone execution.
-11. Add community-content attribution and ownership execution.
-12. Add evidence/intelligence privacy propagation.
-13. Add finance/legal/audit minimization and retention enforcement.
-14. Add invariant audit, root-last finalizer, and terminal receipt.
-15. Define and build the separate community lifecycle from its own ownership matrix.
-16. Re-enable self-service deletion only after full interruption, scale, orphan, provider, and cross-user behavioral proofs.
+8. **Complete in C2.3A:** broaden the zero-effect preservation fixture across the canonical private/shared/community/evidence spine.
+9. **Complete in C2.3B1:** make current canonical source truth an immediate, bounded revocation barrier across every first-party derived read.
+10. Add the separate C2.3B2 authored-content physical scrub, beginning with a reply-only interruption fixture.
+11. Add the internal access-freeze checkpoint and denial boundary behind interruption fixtures.
+12. Add bounded local-session revocation, private-state, and external-provider executors.
+13. Add DM participant-departure and shared tombstone execution.
+14. Add community-content attribution and ownership execution.
+15. Add finance/legal/audit minimization and retention enforcement.
+16. Add invariant audit, root-last finalizer, and terminal receipt.
+17. Define and build the separate community lifecycle from its own ownership matrix.
+18. Re-enable self-service deletion only after full interruption, scale, orphan, provider, and cross-user behavioral proofs.
 
 ### C2.1 implementation receipt
 
@@ -257,9 +259,32 @@ identity link. The physical schema deletion followed only after a 96/96/0/0
 receipt. The temporary mutation is deleted from final source.
 
 C2.2C remains the name of the future access-freeze slice; it is not implemented
-here. Building a freeze before interaction, resource, and intelligence
-authorities are canonical would create a lock without a correct complete
-executor. C2 therefore pauses fail-closed while C3 closes those prerequisites.
+here. C3 has closed the interaction, Resource, and active-intelligence
+authority prerequisites. C2.3A and C2.3B1 now prove preservation plus immediate
+derived revocation before the account freeze introduces an executable denial
+state.
+
+### C2.3B1 canonical-revocation receipt
+
+Canonical source status now outranks every retained derived copy. Interaction,
+Resource, AI Feed, and operational trace lineage is re-resolved on read;
+evidenced nodes and edges disappear when their source is revoked, compiler
+digests cannot be claimed, manager digest/change-request projections redact
+copied payloads, and the community-agent filesystem cannot read or search the
+revoked node, edge, digest, or request content. The same boundary applies
+before asynchronous source-trace synchronization.
+
+The focused behavioral fixture uses a live root owned by one member and a reply
+owned by another. It retains the tombstoned reply, content block, source trace,
+citation, accepted node, edge, digest, and change request, while proving that
+no first-party derived read returns their copied content and the digest becomes
+terminally superseded. The root and other-party authority remain intact.
+Directory and edge reads use indexed caps instead of full-table collection.
+
+This receipt does not claim physical purge, add a lifecycle table, expose a
+public purge mutation, delete storage, run a migration, or change account,
+community, billing, provider, UI, scheduler, or production behavior. C2.3B2
+must still scrub the retained copies with bounded, resumable receipts.
 
 ## Proof required before re-enabling deletion
 

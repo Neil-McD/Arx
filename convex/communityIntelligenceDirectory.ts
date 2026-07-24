@@ -20,11 +20,15 @@ import {
 import {
   COMMUNITY_EVIDENCE_POLICY_VERSION,
   captureCommunityEvidenceCitationsForSourceTracesCore,
-  checkCommunityEvidenceCitationCore,
   requireCommunityEvidenceCitationVisibilityCore,
   requireCommunityEvidenceCitationsActiveCore,
 } from "./communityEvidenceCitations";
 import { communityEvidenceSurfaceValidator } from "./communityEvidenceAudit";
+import {
+  communityEvidenceLineageIsCurrentlyActive,
+  communityIntelligenceNodeEvidenceIsCurrentlyActive,
+  communitySourceTraceRowHasCurrentCanonicalEvidence,
+} from "./communityDerivedEvidenceReadability";
 import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
 import { isCommunityMemoryWorkKey } from "./communityMemoryWorkKey";
 import {
@@ -604,39 +608,30 @@ function canViewerReadTrace(row: SourceTraceRow, isManager: boolean, userId?: an
   return canViewerReadVisibility(row.sourceVisibility, false);
 }
 
-async function compilerMemoryEvidenceIsCurrentlyReadable(args: {
+async function communityMemoryEvidenceIsCurrentlyReadable(args: {
   ctx: any;
   node: IntelligenceNodeRow;
   isManager: boolean;
 }): Promise<boolean> {
-  if (!(args.node.tags ?? []).includes("compiler_memory")) return true;
-  if ((args.node.sourceTraceIds ?? []).length === 0) return false;
   for (const traceId of args.node.sourceTraceIds ?? []) {
     const trace = (await args.ctx.db.get(traceId as any)) as SourceTraceRow | null;
     if (
       !trace ||
       normalizeIdValue(trace.communityId) !== normalizeIdValue(args.node.communityId) ||
-      !canViewerReadTrace(trace, args.isManager)
+      !canViewerReadTrace(trace, args.isManager) ||
+      !await communitySourceTraceRowHasCurrentCanonicalEvidence({
+        ctx: args.ctx,
+        communityId: args.node.communityId,
+        trace,
+      })
     ) {
       return false;
     }
   }
-  if (
-    args.node.evidencePolicyVersion !== COMMUNITY_EVIDENCE_POLICY_VERSION ||
-    (args.node.evidenceCitationIds ?? []).length === 0
-  ) {
-    return false;
-  }
-  for (const citationId of args.node.evidenceCitationIds ?? []) {
-    if (await checkCommunityEvidenceCitationCore({
-      ctx: args.ctx,
-      communityId: args.node.communityId,
-      citationId,
-    }) !== "active") {
-      return false;
-    }
-  }
-  return true;
+  return await communityIntelligenceNodeEvidenceIsCurrentlyActive({
+    ctx: args.ctx,
+    node: args.node,
+  });
 }
 
 async function canViewerReadNodeWithCurrentEvidence(args: {
@@ -646,7 +641,7 @@ async function canViewerReadNodeWithCurrentEvidence(args: {
 }): Promise<boolean> {
   return (
     canViewerReadNode(args.node, args.isManager) &&
-    await compilerMemoryEvidenceIsCurrentlyReadable(args)
+    await communityMemoryEvidenceIsCurrentlyReadable(args)
   );
 }
 
@@ -1398,7 +1393,10 @@ function memoryToolError(error: unknown, fallbackCode: string) {
   };
 }
 
-function mapChangeRequestRow(row: IntelligenceChangeRequestRow) {
+function mapChangeRequestRow(
+  row: IntelligenceChangeRequestRow,
+  evidenceReadable = true,
+) {
   return {
     id: normalizeIdValue(row._id),
     community_id: normalizeIdValue(row.communityId),
@@ -1422,7 +1420,9 @@ function mapChangeRequestRow(row: IntelligenceChangeRequestRow) {
       edge_id: normalizeIdValue(snapshot.edgeId),
       updated_at: toIsoString(snapshot.updatedAt),
     })),
-    requested_payload: row.requestedPayload ?? {},
+    requested_payload: evidenceReadable
+      ? row.requestedPayload ?? {}
+      : { privacy_redacted: true },
     confidence: row.confidence,
     privacy_risk: row.privacyRisk,
     created_by_actor_type: row.createdByActorType,
@@ -1431,7 +1431,7 @@ function mapChangeRequestRow(row: IntelligenceChangeRequestRow) {
     decided_by_actor_type: row.decidedByActorType ?? null,
     decided_by_user_id: row.decidedByUserId ? normalizeIdValue(row.decidedByUserId) : null,
     decided_by_agent_key: row.decidedByAgentKey ?? null,
-    decision_reason: row.decisionReason ?? null,
+    decision_reason: evidenceReadable ? row.decisionReason ?? null : null,
     applied_mutation_id: row.appliedMutationId ? normalizeIdValue(row.appliedMutationId) : null,
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
@@ -1600,11 +1600,14 @@ async function canViewerReadEdge(args: {
   isManager: boolean;
 }): Promise<boolean> {
   if (!canViewerReadVisibility(args.edge.visibilityScope, args.isManager)) return false;
-  if (args.isManager) return true;
   const fromNode = await getIntelligenceNodeOrThrow(args.ctx, args.edge.fromNodeId);
   if (
     normalizeIdValue(fromNode.communityId) !== normalizeIdValue(args.communityId) ||
-    !(await canViewerReadNodeWithCurrentEvidence({ ctx: args.ctx, node: fromNode, isManager: false }))
+    !(await canViewerReadNodeWithCurrentEvidence({
+      ctx: args.ctx,
+      node: fromNode,
+      isManager: args.isManager,
+    }))
   ) {
     return false;
   }
@@ -1612,7 +1615,11 @@ async function canViewerReadEdge(args: {
     const toNode = await getIntelligenceNodeOrThrow(args.ctx, args.edge.toNodeId);
     if (
       normalizeIdValue(toNode.communityId) !== normalizeIdValue(args.communityId) ||
-      !(await canViewerReadNodeWithCurrentEvidence({ ctx: args.ctx, node: toNode, isManager: false }))
+      !(await canViewerReadNodeWithCurrentEvidence({
+        ctx: args.ctx,
+        node: toNode,
+        isManager: args.isManager,
+      }))
     ) {
       return false;
     }
@@ -1620,7 +1627,14 @@ async function canViewerReadEdge(args: {
   if (args.edge.toReferenceType === "trace" && args.edge.toReferenceId) {
     const trace = (await args.ctx.db.get(args.edge.toReferenceId as any)) as unknown;
     if (!isSourceTraceRow(trace) || normalizeIdValue(trace.communityId) !== normalizeIdValue(args.communityId)) return false;
-    return canViewerReadTrace(trace, false, args.userId);
+    return (
+      canViewerReadTrace(trace, args.isManager, args.userId) &&
+      await communitySourceTraceRowHasCurrentCanonicalEvidence({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        trace,
+      })
+    );
   }
   if (args.edge.toReferenceType === "outcome" && args.edge.toReferenceId) {
     const outcome = (await args.ctx.db.get(args.edge.toReferenceId as any)) as unknown;
@@ -1629,7 +1643,7 @@ async function canViewerReadEdge(args: {
       ctx: args.ctx,
       outcome,
       userId: args.userId,
-      isManager: false,
+      isManager: args.isManager,
     });
   }
   return true;
@@ -2372,22 +2386,21 @@ function actorUserPatch(actor: PolicyDecisionActor, userField: string, agentFiel
       };
 }
 
-function typeMatchesView(type: NodeType, view: string): boolean {
-  if (view === "all" || view === "workflow_context") return true;
-  if (view === "playbooks") return type === "playbook";
-  if (view === "insights") return type === "insight";
-  if (view === "examples") return type === "example";
-  if (view === "warnings") return type === "warning_failure";
-  if (view === "decisions") return type === "decision_judgment";
-  if (view === "open_questions") return type === "open_question";
-  return true;
-}
-
 function statusMatchesView(status: NodeStatus, view: string): boolean {
   if (view === "canonical") return status === "canonical";
   if (view === "contested") return status === "contested";
   if (view === "stale") return status === "stale";
   return true;
+}
+
+function nodeTypeForDirectoryView(view: string): NodeType | null {
+  if (view === "playbooks") return "playbook";
+  if (view === "insights") return "insight";
+  if (view === "examples") return "example";
+  if (view === "warnings") return "warning_failure";
+  if (view === "decisions") return "decision_judgment";
+  if (view === "open_questions") return "open_question";
+  return null;
 }
 
 function textScore(node: IntelligenceNodeRow, queryText: string): number {
@@ -3057,10 +3070,22 @@ export const listCommunityIntelligenceChangeRequests = query({
           .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
           .order("desc")
           .take(limit * 2)) as IntelligenceChangeRequestRow[]);
-    return rows
+    const selectedRows = rows
       .filter((row) => !args.operation || row.operation === args.operation)
-      .slice(0, limit)
-      .map(mapChangeRequestRow);
+      .slice(0, limit);
+    const mappedRows = [];
+    for (const row of selectedRows) {
+      mappedRows.push(mapChangeRequestRow(
+        row,
+        await communityEvidenceLineageIsCurrentlyActive({
+          ctx,
+          communityId: args.communityId,
+          sourceTraceIds: row.sourceTraceIds,
+          evidenceCitationIds: row.evidenceCitationIds,
+        }),
+      ));
+    }
+    return mappedRows;
   },
 });
 
@@ -3584,11 +3609,30 @@ export async function listCommunityIntelligenceDirectoryViewCore(args: {
   const isManager = await viewerCanManageCommunity(args.ctx, args.communityId, args.userId);
   const view = args.view ?? "all";
   const workflowId = normalizeWorkflowId(args.workflowId);
-  const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 100)));
-  const rows = (await args.ctx.db
-    .query("communityIntelligenceNodes" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-    .collect()) as IntelligenceNodeRow[];
+  const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 100)));
+  const type = nodeTypeForDirectoryView(view);
+  const statuses = (isManager ? Array.from(NODE_STATUSES) : ACTIVE_RETRIEVAL_STATUSES)
+    .filter((status) => statusMatchesView(status, view));
+  const rows = (await Promise.all(
+    statuses.map(async (status) => {
+      if (type) {
+        return await args.ctx.db
+          .query("communityIntelligenceNodes" as any)
+          .withIndex("by_community_type_status_updatedAt", (q: any) =>
+            q.eq("communityId", args.communityId).eq("type", type).eq("status", status),
+          )
+          .order("desc")
+          .take(limit);
+      }
+      return await args.ctx.db
+        .query("communityIntelligenceNodes" as any)
+        .withIndex("by_community_status_updatedAt", (q: any) =>
+          q.eq("communityId", args.communityId).eq("status", status),
+        )
+        .order("desc")
+        .take(limit);
+    }),
+  )).flat() as IntelligenceNodeRow[];
   const readableRows: IntelligenceNodeRow[] = [];
   for (const row of rows) {
     if (await canViewerReadNodeWithCurrentEvidence({ ctx: args.ctx, node: row, isManager })) {
@@ -3596,8 +3640,7 @@ export async function listCommunityIntelligenceDirectoryViewCore(args: {
     }
   }
   return readableRows
-    .filter((row) => typeMatchesView(row.type, view))
-    .filter((row) => statusMatchesView(row.status, view))
+    .filter((row) => !type || row.type === type)
     .filter((row) => {
       if (view !== "workflow_context" || !workflowId) return true;
       if ((row.workflowIds ?? []).length === 0) return true;
@@ -3664,16 +3707,18 @@ export const listCommunityIntelligenceEdges = query({
     });
     await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
     const isManager = await viewerCanManageCommunity(ctx, args.communityId, userId);
-    const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 100)));
+    const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 100)));
+    const candidateLimit = Math.min(200, limit * 2);
     const rows = args.nodeId
       ? ((await ctx.db
           .query("communityIntelligenceEdges" as any)
           .withIndex("by_fromNode", (q: any) => q.eq("fromNodeId", args.nodeId))
-          .collect()) as IntelligenceEdgeRow[])
+          .order("desc")
+          .take(candidateLimit)) as IntelligenceEdgeRow[])
       : ((await ctx.db
           .query("communityIntelligenceEdges" as any)
           .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-          .collect()) as IntelligenceEdgeRow[]);
+          .take(candidateLimit)) as IntelligenceEdgeRow[]);
     const readableRows: IntelligenceEdgeRow[] = [];
     for (const row of rows) {
       if (normalizeIdValue(row.communityId) !== normalizeIdValue(args.communityId)) continue;
@@ -4056,7 +4101,7 @@ export const readCommunityMemoryInternal = internalMutation({
       ) {
         throw new Error("community_intelligence_node_not_readable");
       }
-      if (!(await compilerMemoryEvidenceIsCurrentlyReadable({ ctx, node, isManager }))) {
+      if (!(await communityMemoryEvidenceIsCurrentlyReadable({ ctx, node, isManager }))) {
         throw new Error("community_intelligence_node_evidence_not_readable");
       }
 
@@ -4112,7 +4157,7 @@ export const readCommunityMemoryInternal = internalMutation({
               normalizeIdValue(neighborNode.communityId) === normalizeIdValue(args.communityId) &&
               ACCEPTED_MEMBER_MEMORY_STATUSES.includes(neighborNode.status) &&
               canViewerReadNode(neighborNode, isManager) &&
-              await compilerMemoryEvidenceIsCurrentlyReadable({ ctx, node: neighborNode, isManager })
+              await communityMemoryEvidenceIsCurrentlyReadable({ ctx, node: neighborNode, isManager })
             ) {
               neighbor = mapCompactMemoryNode(neighborNode);
             }

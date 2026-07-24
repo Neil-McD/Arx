@@ -17,6 +17,9 @@ import {
   buildCommunityMemoryWorkKey,
 } from "./communityMemoryWorkKey";
 import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
+import {
+  communityCompilerDigestItemEvidenceIsCurrentlyActive,
+} from "./communityDerivedEvidenceReadability";
 
 const COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS = 30;
 const COMMUNITY_COMPILER_DIGEST_WINDOW_MS = COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -122,7 +125,11 @@ function digestItemContentRevision(item: DigestItem & { workKey: string }): stri
   });
 }
 
-function mapDigestRow(row: CompilerDigestRow) {
+function mapDigestRow(
+  row: CompilerDigestRow,
+  items: DigestItem[] = row.items,
+  privacyRedactedItemCount = 0,
+) {
   return {
     id: normalizeIdValue(row._id),
     community_id: normalizeIdValue(row.communityId),
@@ -135,7 +142,8 @@ function mapDigestRow(row: CompilerDigestRow) {
     window_ended_at: toIsoString(row.windowEndedAt),
     summary: row.summary,
     item_count: row.itemCount,
-    items: row.items,
+    items,
+    privacy_redacted_item_count: privacyRedactedItemCount,
     signal_counts: row.signalCounts,
     created_by_actor_type: row.createdByActorType,
     created_by_user_id: row.createdByUserId ? normalizeIdValue(row.createdByUserId) : null,
@@ -143,6 +151,38 @@ function mapDigestRow(row: CompilerDigestRow) {
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
   };
+}
+
+async function mapCompilerDigestForManagerRead(ctx: any, row: CompilerDigestRow) {
+  const items: DigestItem[] = [];
+  let privacyRedactedItemCount = 0;
+  for (const item of row.items) {
+    if (await communityCompilerDigestItemEvidenceIsCurrentlyActive({
+      ctx,
+      communityId: row.communityId,
+      item,
+    })) {
+      items.push(item);
+      continue;
+    }
+    privacyRedactedItemCount += 1;
+    items.push({
+      workKey: item.workKey,
+      category: item.category,
+      title: "Evidence unavailable",
+      summary: "Canonical source evidence is no longer readable.",
+      priority: item.priority,
+      confidence: item.confidence,
+      sourceTypes: [],
+      sourceIds: [],
+      sourceTraceIds: item.sourceTraceIds,
+      sourceRevisions: [],
+    });
+  }
+  const mapped = mapDigestRow(row, items, privacyRedactedItemCount);
+  return privacyRedactedItemCount > 0
+    ? { ...mapped, summary: "Some canonical source evidence is no longer readable." }
+    : mapped;
 }
 
 export const runCommunityCompilerDigestPass = mutation({
@@ -346,12 +386,14 @@ export const listCommunityCompilerDigests = query({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    const limit = Math.max(1, Math.min(50, Math.floor(args.limit ?? 20)));
+    const limit = Math.max(1, Math.min(20, Math.floor(args.limit ?? 20)));
     const rows = (await ctx.db
       .query("communityCompilerDigests" as any)
       .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
       .order("desc")
       .take(limit)) as CompilerDigestRow[];
-    return rows.map(mapDigestRow);
+    const mapped = [];
+    for (const row of rows) mapped.push(await mapCompilerDigestForManagerRead(ctx, row));
+    return mapped;
   },
 });
