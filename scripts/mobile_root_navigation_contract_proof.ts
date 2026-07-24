@@ -318,8 +318,8 @@ assert.match(
 );
 assert.match(
   indexCss,
-  /--mobile-floating-chrome-bg:\s*color-mix\([\s\S]*var\(--surface-workspace, var\(--bg-workspace\)\) 90%,[\s\S]*transparent[\s\S]*\.mobile-topbar-left \{[\s\S]*background: var\(--mobile-floating-chrome-bg\);[\s\S]*\.mobile-topbar-center \{[\s\S]*background: var\(--mobile-floating-chrome-bg\);[\s\S]*\.mobile-topbar-members \{[\s\S]*background: var\(--mobile-floating-chrome-bg\);/,
-  "the three mobile header islands should share one dense workspace-derived glass material",
+  /--mobile-floating-chrome-bg:\s*var\(--web-floating-chrome-surface\);[\s\S]*--web-floating-chrome-surface:\s*var\(--surface-workspace, var\(--bg-workspace\)\);[\s\S]*@supports[\s\S]*--web-floating-chrome-surface:\s*color-mix\([\s\S]*var\(--surface-workspace, var\(--bg-workspace\)\) 88%,[\s\S]*transparent[\s\S]*\.mobile-topbar-left \{[\s\S]*background: var\(--mobile-floating-chrome-bg\);[\s\S]*\.mobile-topbar-center \{[\s\S]*background: var\(--mobile-floating-chrome-bg\);[\s\S]*\.mobile-topbar-members \{[\s\S]*background: var\(--mobile-floating-chrome-bg\);/,
+  "the three mobile header islands should share the canonical workspace-derived floating material",
 );
 assert.match(
   bottomRail,

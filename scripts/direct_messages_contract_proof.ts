@@ -421,10 +421,12 @@ assert.match(app, /onUnreadCountChange=\{setDirectMessagesUnreadCount\}/, "globa
 assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");
 assert.doesNotMatch(dmHost, /onProfileSetupRequired|isProfileSetupComplete|DIRECT_MESSAGE_PROFILE_SETUP_REQUIRED|directMessageSendRequiresProfileSetup|profile_setup_required/, "DM host must not preflight or recover through public-profile setup");
 assert.doesNotMatch(app, /directMessageProfileSetupComplete|openDirectMessageProfileSetup|isIdentityOnlyOnboarding|identityOnly:/, "app shell must not couple DMs to account-setup state");
-assert.match(css, /\.community-dm-panel/, "DM panel must have glass side-panel styling");
+assert.match(css, /\.community-dm-panel/, "DM panel must have canonical context-panel styling");
 assert.doesNotMatch(css, /\.community-dm-panel::before|\.community-dm-panel::after/, "DM panel must not cover readable inbox or chat content with global pseudo-element scrims");
-assert.match(css, /\.community-dm-panel \{[\s\S]*background: var\(--web-floating-chrome-bg,[\s\S]*backdrop-filter: blur\(16px\) saturate\(130%\)/, "DM panel root must keep the profile-style glass material");
-assert.match(dmInternalChromeCss, /\.community-dm-panel-header,[\s\S]*\.community-dm-inbox-header,[\s\S]*\.community-dm-recipient-search \{[\s\S]*position: relative;[\s\S]*z-index: 2;[\s\S]*border-radius: 14px;[\s\S]*background: var\(--web-floating-chrome-bg,[\s\S]*backdrop-filter: blur\(16px\) saturate\(130%\)/, "DM fixed headers may keep a light glass material");
+assert.match(css, /\.community-dm-panel \{[\s\S]*border: 1px solid var\(--web-context-panel-border\);[\s\S]*background: var\(--web-context-panel-surface\);[\s\S]*box-shadow: var\(--web-context-panel-shadow\);/, "DM panel root must share the canonical context-panel material");
+assert.doesNotMatch(css.match(/\.community-dm-panel \{[\s\S]*?\n\}/)?.[0] ?? "", /backdrop-filter/, "the stable DM context panel must not blur its own content surface");
+assert.match(dmInternalChromeCss, /\.community-dm-panel-header,[\s\S]*\.community-dm-inbox-header,[\s\S]*\.community-dm-recipient-search \{[\s\S]*position: relative;[\s\S]*z-index: 2;[\s\S]*border-radius: 14px;[\s\S]*background: transparent;/, "DM fixed headers must inherit the stable context-panel surface");
+assert.doesNotMatch(dmInternalChromeCss, /backdrop-filter/, "DM fixed chrome must not create nested blur layers");
 assert.doesNotMatch(dmInternalChromeCss, /\.community-dm-panel-composer/, "DM composer must not inherit the translucent fixed-header material");
 assert.match(css, /\.community-dm-panel-composer \{[\s\S]*background: var\(--composer-surface\);/, "DM composer must use the canonical solid input surface");
 assert.doesNotMatch(dmInternalChromeCss, /box-shadow:|border: 1px solid/, "DM fixed chrome must not become nested glass cards");
@@ -440,7 +442,7 @@ assert.match(css, /\.community-dm-panel-typing\.is-empty \{[\s\S]*display: none/
 assert.match(css, /\.community-dm-attachment-state-overlay/, "DM composer images must style attachment upload state overlays");
 assert.match(css, /\.community-dm-attachment-retry/, "DM composer must style failed attachment retry controls");
 assert.match(css, /\.community-dm-attachment-item\.is-failed/, "DM composer file chips must style failed attachment state");
-assert.match(css, /\.community-dm-inbox-panel/, "DM inbox panel must use the shared glass side-panel styling");
+assert.match(css, /\.community-dm-inbox-panel/, "DM inbox panel must use the shared context-panel styling");
 assert.match(css, /\.community-dm-inbox-panel \{[\s\S]*height: auto/, "DM inbox must size to content instead of forcing full conversation-panel height");
 assert.match(css, /\.community-dm-inbox-avatar \{[\s\S]*position: relative/, "DM inbox avatars must provide the canonical positioned frame for focused avatar crops");
 assert.match(css, /\.community-dm-inbox-icon-button/, "DM inbox must style the new-message icon button");

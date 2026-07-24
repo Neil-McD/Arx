@@ -10,11 +10,7 @@
   --mobile-topbar-side-inset: 12px;
   --mobile-topbar-top-offset: 8px;
   --mobile-topbar-clearance: calc(env(safe-area-inset-top, 0px) + 54px);
-  --mobile-floating-chrome-bg: color-mix(
-    in srgb,
-    var(--surface-workspace, var(--bg-workspace)) 90%,
-    transparent
-  );
+  --mobile-floating-chrome-bg: var(--web-floating-chrome-surface);
   --mobile-bottom-rail-height: 62px;
   --mobile-left-panel-width: min(74vw, 304px);
   --web-rail-width: 72px;
@@ -23,11 +19,21 @@
   --web-rail-balance-shift: calc((var(--web-rail-control-size) - var(--web-rail-width)) / 4);
   --web-sessions-drawer-width: 240px;
 
-  /* Minimal glassmorphism controls (web only). */
-  --web-floating-chrome-bg: rgba(255, 255, 255, 0.5);
-  --web-floating-chrome-border: rgba(0, 0, 0, 0.06);
+  /*
+   * Three web materials, each with one job:
+   * - floating chrome camouflages itself against the workspace until content passes beneath it;
+   * - context panels use the stable navigation/panel surface;
+   * - popovers are raised, readable cards.
+   */
+  --web-floating-chrome-surface: var(--surface-workspace, var(--bg-workspace));
   --web-floating-chrome-shadow: none;
-  --web-floating-chrome-highlight: rgba(255, 255, 255, 0.22);
+  --web-floating-chrome-highlight: transparent;
+  --web-context-panel-surface: var(--surface-panel, var(--bg-panel));
+  --web-context-panel-border: var(--stroke-strong, var(--border-default));
+  --web-context-panel-shadow: none;
+  --web-popover-surface: var(--surface-card, var(--bg-card));
+  --web-popover-border: var(--stroke-default, var(--border-default));
+  --web-popover-shadow: 0 14px 40px rgba(0, 0, 0, 0.22);
 
   --snippet-code-bg: color-mix(in srgb, var(--bg-card) 82%, var(--bg-workspace) 18%);
   --snippet-code-header-bg: color-mix(in srgb, var(--bg-card-alt) 78%, var(--bg-workspace) 22%);
@@ -65,20 +71,14 @@
   --header-border: none;
 }
 
-:root[data-theme-family="dark"] {
-  --web-floating-chrome-bg: rgba(20, 20, 23, 0.97);
-  --web-floating-chrome-border: rgba(255, 255, 255, 0.06);
-  --web-floating-chrome-shadow: none;
-  --web-floating-chrome-highlight: transparent;
-}
-
-/* Prefer deriving the "glass" tint from the current theme's background so it matches. */
+/* Preserve exact theme color at rest while allowing content beneath to reveal the blur. */
 @supports (background: color-mix(in srgb, #000 50%, transparent)) {
   :root {
-    --web-floating-chrome-bg: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 55%, var(--bg-app, #121214));
-    --web-floating-chrome-border: color-mix(in srgb, var(--text-primary) 6%, transparent);
-    --web-floating-chrome-shadow: none;
-    --web-floating-chrome-highlight: transparent;
+    --web-floating-chrome-surface: color-mix(
+      in srgb,
+      var(--surface-workspace, var(--bg-workspace)) 88%,
+      transparent
+    );
   }
 }
 
@@ -139,7 +139,7 @@
   padding: 6px 8px;
   border-radius: 12px;
   border: 1px solid transparent;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 78%, transparent));
+  background: var(--web-floating-chrome-surface);
   box-shadow:
     var(--web-floating-chrome-shadow, 0 16px 42px rgba(0, 0, 0, 0.28)),
     inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.06));
@@ -173,7 +173,7 @@
   padding: 6px 8px;
   border-radius: 12px;
   border: 1px solid transparent;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 78%, transparent));
+  background: var(--web-floating-chrome-surface);
   box-shadow:
     var(--web-floating-chrome-shadow, 0 16px 42px rgba(0, 0, 0, 0.28)),
     inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.06));
@@ -186,7 +186,7 @@
   padding: 2px;
   border: 1px solid transparent;
   border-radius: 13px;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 78%, transparent));
+  background: var(--web-floating-chrome-surface);
   box-shadow:
     var(--web-floating-chrome-shadow, 0 16px 42px rgba(0, 0, 0, 0.28)),
     inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.06));

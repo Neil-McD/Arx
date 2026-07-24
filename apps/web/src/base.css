@@ -10776,10 +10776,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--web-popover-border);
   border-radius: 999px;
-  background: var(--web-floating-chrome-bg);
-  box-shadow: var(--web-floating-chrome-shadow), inset 0 1px 0 var(--web-floating-chrome-highlight);
+  background: var(--web-popover-surface);
+  box-shadow: var(--web-popover-shadow);
   backdrop-filter: blur(14px) saturate(120%);
   -webkit-backdrop-filter: blur(14px) saturate(120%);
   color: var(--text-primary);
@@ -10791,7 +10791,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 }
 
 .community-interaction-jump-latest:hover {
-  background: color-mix(in srgb, var(--web-floating-chrome-bg) 80%, var(--accent) 20%);
+  background: color-mix(in srgb, var(--web-popover-surface) 80%, var(--accent) 20%);
 }
 
 .community-interaction-jump-latest:active {
@@ -11528,12 +11528,10 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex-direction: column;
   gap: 8px;
   overflow: hidden;
-  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 74%, transparent));
+  border: 1px solid var(--web-popover-border);
   border-radius: 16px;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 82%, transparent));
-  box-shadow:
-    var(--web-floating-chrome-shadow, 0 22px 60px rgba(0, 0, 0, 0.34)),
-    inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.08));
+  background: var(--web-popover-surface);
+  box-shadow: var(--web-popover-shadow);
   color: var(--text-primary);
   opacity: 0;
   pointer-events: none;
@@ -11685,7 +11683,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   width: auto;
   min-height: 32px;
   padding: 0 13px;
-  border: 1px solid color-mix(in srgb, var(--accent-pink) 34%, var(--web-floating-chrome-border, transparent) 66%);
+  border: 1px solid color-mix(in srgb, var(--accent-pink) 34%, var(--web-popover-border) 66%);
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent-pink) 14%, transparent);
   color: color-mix(in srgb, var(--accent-pink) 50%, var(--text-primary) 50%);
@@ -11741,15 +11739,11 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex-direction: column;
   gap: 12px;
   overflow: auto;
-  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 74%, transparent));
+  border: 1px solid var(--web-context-panel-border);
   border-radius: 18px;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 82%, transparent));
-  box-shadow:
-    var(--web-floating-chrome-shadow, 0 24px 70px rgba(0, 0, 0, 0.38)),
-    inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.08));
+  background: var(--web-context-panel-surface);
+  box-shadow: var(--web-context-panel-shadow);
   color: var(--text-primary);
-  backdrop-filter: blur(16px) saturate(130%);
-  -webkit-backdrop-filter: blur(16px) saturate(130%);
 }
 
 .community-profile-panel-top {
@@ -11854,7 +11848,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   gap: 7px;
   min-height: 30px;
   padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 82%, transparent);
   border-radius: 999px;
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--bg-card) 38%, transparent);
@@ -11902,7 +11896,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   gap: 12px;
   min-height: 34px;
   padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 74%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 74%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-card) 32%, transparent);
   color: var(--text-secondary);
@@ -11948,7 +11942,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   width: 38px;
   height: 38px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 78%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-card) 42%, transparent);
   box-shadow:
@@ -11983,15 +11977,11 @@ button.community-launch-knowledge-integration-chip:disabled {
   flex-direction: column;
   gap: 8px;
   overflow: hidden;
-  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 74%, transparent));
+  border: 1px solid var(--web-context-panel-border);
   border-radius: 18px;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 82%, transparent));
-  box-shadow:
-    var(--web-floating-chrome-shadow, 0 24px 70px rgba(0, 0, 0, 0.38)),
-    inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.08));
+  background: var(--web-context-panel-surface);
+  box-shadow: var(--web-context-panel-shadow);
   color: var(--text-primary);
-  backdrop-filter: blur(16px) saturate(130%);
-  -webkit-backdrop-filter: blur(16px) saturate(130%);
 }
 
 .community-dm-attachment-drop-surface.drag-over {
@@ -12018,9 +12008,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   position: relative;
   z-index: 2;
   border-radius: 14px;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 82%, transparent));
-  backdrop-filter: blur(16px) saturate(130%);
-  -webkit-backdrop-filter: blur(16px) saturate(130%);
+  background: transparent;
 }
 
 .community-dm-panel-header {
@@ -12283,7 +12271,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-dm-panel-message-bubble {
   max-width: min(348px, 76%);
   padding: 9px 12px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 70%, transparent);
   border-radius: 15px;
   background: color-mix(in srgb, var(--bg-card) 50%, transparent);
   color: var(--text-primary);
@@ -12567,7 +12555,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-dm-composer-attachments .community-dm-attachment-item {
   max-width: 100%;
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 64%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 64%, transparent);
   border-radius: 10px;
   background: color-mix(in srgb, var(--bg-card) 34%, transparent);
 }
@@ -12629,7 +12617,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   width: 22px;
   height: 22px;
   flex: 0 0 22px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 70%, transparent);
   border-radius: 999px;
   display: grid;
   place-items: center;
@@ -12772,7 +12760,7 @@ button.community-launch-knowledge-integration-chip:disabled {
   width: 30px;
   height: 30px;
   flex: 0 0 30px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 70%, transparent);
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
@@ -12847,7 +12835,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-dm-recipient-search input {
   width: 100%;
   height: 38px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 70%, transparent);
   border-radius: 14px;
   padding: 0 12px;
   color: var(--text-primary);
@@ -12934,7 +12922,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-dm-discovery-card {
   margin: 4px 0 8px;
   padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 70%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-card) 50%, transparent);
   display: flex;
@@ -13007,7 +12995,7 @@ button.community-launch-knowledge-integration-chip:disabled {
 .community-dm-inbox-row:focus-visible,
 .community-dm-recipient-row:hover,
 .community-dm-recipient-row:focus-visible {
-  border-color: color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 70%, transparent);
+  border-color: color-mix(in srgb, var(--web-context-panel-border) 70%, transparent);
   background: color-mix(in srgb, var(--bg-card) 42%, transparent);
 }
 
@@ -15615,12 +15603,10 @@ button.chat-reply-quote:hover {
   position: absolute;
   z-index: 70;
   min-width: 164px;
-  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 74%, transparent));
+  border: 1px solid var(--web-popover-border);
   border-radius: 12px;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 86%, transparent));
-  box-shadow:
-    var(--web-floating-chrome-shadow, 0 22px 60px rgba(0, 0, 0, 0.34)),
-    inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.08));
+  background: var(--web-popover-surface);
+  box-shadow: var(--web-popover-shadow);
   color: var(--text-primary);
   padding: 6px;
   display: grid;

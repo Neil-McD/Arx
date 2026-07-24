@@ -278,6 +278,46 @@ assert.doesNotMatch(
   /:root\[data-theme="cris"\][^{]*\{[^}]*filter:\s*invert\(1\)/,
   "the light CRIS family must not inherit dark-only image inversion",
 );
+assert.match(
+  indexCss,
+  /--web-floating-chrome-surface:\s*var\(--surface-workspace,[^;]+;[\s\S]*--web-context-panel-surface:\s*var\(--surface-panel,[^;]+;[\s\S]*--web-popover-surface:\s*var\(--surface-card,[^;]+;/,
+  "web chrome should expose one canonical material role for floating controls, context panels, and popovers",
+);
+assert.match(
+  indexCss,
+  /@supports \(background: color-mix\(in srgb, #000 50%, transparent\)\)[\s\S]*--web-floating-chrome-surface:\s*color-mix\([\s\S]*var\(--surface-workspace, var\(--bg-workspace\)\) 88%,[\s\S]*transparent/,
+  "floating chrome should visually disappear into the active workspace until content passes underneath",
+);
+assert.doesNotMatch(
+  indexCss,
+  /:root\[data-theme-family="dark"\]\s*\{[^}]*--web-floating-chrome/,
+  "floating chrome must derive from each theme's workspace instead of carrying a dark-family paint override",
+);
+assert.match(
+  indexCss,
+  /\.app-root\.web-header-islands \.app-topbar \.topbar-left,[\s\S]*background:\s*var\(--web-floating-chrome-surface\);/,
+  "desktop top chrome should consume the canonical floating material",
+);
+assert.match(
+  indexCss,
+  /\.community-interaction-drawer-back\s*\{[\s\S]*background:\s*var\(--web-floating-chrome-surface\);/,
+  "thread navigation should consume the same floating material",
+);
+assert.match(
+  baseCss,
+  /\.community-profile-panel\s*\{[\s\S]*background:\s*var\(--web-context-panel-surface\);[\s\S]*box-shadow:\s*var\(--web-context-panel-shadow\);/,
+  "member profile utility panels should consume the canonical context-panel material",
+);
+assert.match(
+  baseCss,
+  /\.chat-profile-hover-card\s*\{[\s\S]*background:\s*var\(--web-popover-surface\);[\s\S]*box-shadow:\s*var\(--web-popover-shadow\);/,
+  "hover cards should consume the canonical raised popover material",
+);
+assert.doesNotMatch(
+  `${indexCss}\n${baseCss}`,
+  /--web-floating-chrome-(?:bg|border)/,
+  "the retired overloaded glass background and border roles must not reappear",
+);
 
 assert.match(appearance, /role="group" aria-label="Theme"/);
 assert.match(appearance, /aria-pressed=\{appTheme === theme\.id\}/);
@@ -334,18 +374,28 @@ assert.match(
 
 assert.match(
   memberAgentCss,
-  /\.member-agent-dock\s*\{[\s\S]*?--member-agent-launcher-surface:\s*#111115;/,
-  "the existing dark themes should retain the launcher's exact legacy surface",
+  /\.member-agent-dock\s*\{[\s\S]*?--member-agent-launcher-background:\s*color-mix\(\s*in srgb,\s*var\(--member-agent-accent\) 18%,\s*#111115 82%\s*\);[\s\S]*?--member-agent-launcher-shadow:\s*0 8px 24px rgba\(0, 0, 0, 0\.46\),\s*0 2px 8px rgba\(0, 0, 0, 0\.34\),\s*inset 0 1px 0 color-mix\(in srgb, var\(--member-agent-accent-strong\) 10%, transparent\);/,
+  "the existing dark themes should retain the launcher's exact legacy surface and elevation",
 );
 assert.match(
   memberAgentCss,
-  /:root\[data-theme-family="light"\]\s*\.member-agent-dock\s*\{\s*--member-agent-launcher-surface:\s*var\(--surface-card\);\s*\}/,
-  "the light family should adapt the launcher onto a light semantic surface",
+  /:root\[data-theme-family="light"\]\s*\.member-agent-dock\s*\{[\s\S]*?--member-agent-launcher-background:\s*var\(--surface-selected\);[\s\S]*?--member-agent-launcher-border:\s*var\(--stroke-default\);[\s\S]*?--member-agent-launcher-shadow:\s*0 4px 12px rgba\(23, 23, 25, 0\.14\);[\s\S]*?--member-agent-launcher-glyph-filter:\s*none;/,
+  "the light family should use the raised lavender surface without dark-theme highlights or glyph shadow",
 );
 assert.match(
   memberAgentCss,
-  /\.member-agent-dock-launcher\s*\{[\s\S]*?background:\s*color-mix\(in srgb,\s*var\(--member-agent-accent\) 18%,\s*var\(--member-agent-launcher-surface\) 82%\);/,
-  "the launcher should consume the scoped surface adapter",
+  /\.member-agent-dock-launcher\s*\{[\s\S]*?background:\s*var\(--member-agent-launcher-background\);[\s\S]*?border:\s*1px solid var\(--member-agent-launcher-border\);[\s\S]*?box-shadow:\s*var\(--member-agent-launcher-shadow\);/,
+  "the launcher should consume the scoped visual adapter",
+);
+assert.match(
+  memberAgentCss,
+  /\.member-agent-dock-panel\s*\{[\s\S]*?background:\s*var\(--web-context-panel-surface\);[\s\S]*?border:\s*1px solid var\(--web-context-panel-border\);[\s\S]*?box-shadow:\s*var\(--web-context-panel-shadow\);/,
+  "the open member-agent panel should use the same semantic context material as other utility panels",
+);
+assert.doesNotMatch(
+  memberAgentCss,
+  /backdrop-filter/,
+  "the opaque launcher should not carry a visually inert backdrop filter",
 );
 
 [
