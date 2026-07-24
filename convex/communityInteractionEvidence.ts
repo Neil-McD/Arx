@@ -1,5 +1,4 @@
 import { v } from "convex/values";
-import { paginationOptsValidator } from "convex/server";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import {
@@ -747,78 +746,6 @@ export const redactCommunityInteractionEvidenceChildrenInternal = internalMutati
       redacted,
       complete: batch.isDone,
       continue_cursor: batch.continueCursor,
-    };
-  },
-});
-
-export const listCommunityInteractionEvidenceBackfillBatchInternal = internalQuery({
-  args: {
-    communityId: v.id("communities"),
-    objectType: evidenceObjectTypeValidator,
-    paginationOpts: paginationOptsValidator,
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query(
-        args.objectType === "root"
-          ? ("communityInteractionRoots" as any)
-          : ("communityInteractionReplies" as any),
-      )
-      .withIndex("by_community_createdAt", (q: any) =>
-        q.eq("communityId", args.communityId),
-      )
-      .order("asc")
-      .paginate(args.paginationOpts);
-  },
-});
-
-export const backfillCommunityInteractionEvidenceInternal = internalAction({
-  args: {
-    communityId: v.id("communities"),
-    objectType: evidenceObjectTypeValidator,
-    cursor: v.optional(v.string()),
-  },
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    const batch: any = await ctx.runQuery(
-      (internal as any).communityInteractionEvidence.listCommunityInteractionEvidenceBackfillBatchInternal,
-      {
-        communityId: args.communityId,
-        objectType: args.objectType,
-        paginationOpts: {
-          numItems: 50,
-          cursor: args.cursor ?? null,
-        },
-      },
-    );
-    let synced = 0;
-    for (const row of Array.isArray(batch?.page) ? batch.page : []) {
-      await ctx.runMutation(
-        (internal as any).communityInteractionEvidence.syncCommunityInteractionEvidenceInternal,
-        {
-          communityId: args.communityId,
-          objectType: args.objectType,
-          objectId: normalizeIdValue(row._id),
-        },
-      );
-      synced += 1;
-    }
-    if (!batch?.isDone && batch?.continueCursor) {
-      await ctx.scheduler.runAfter(
-        0,
-        (internal as any).communityInteractionEvidence.backfillCommunityInteractionEvidenceInternal,
-        {
-          communityId: args.communityId,
-          objectType: args.objectType,
-          cursor: batch.continueCursor,
-        },
-      );
-    }
-    return {
-      ok: true,
-      object_type: args.objectType,
-      synced,
-      complete: Boolean(batch?.isDone),
-      continue_cursor: batch?.continueCursor ?? null,
     };
   },
 });

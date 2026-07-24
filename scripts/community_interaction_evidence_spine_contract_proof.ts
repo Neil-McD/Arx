@@ -62,7 +62,11 @@ assert.match(evidence, /actorAgentKey: actor\.actorAgentKey/);
 assert.match(evidence, /deriveCommunityInteractionLineageEnvelope/);
 assert.match(evidence, /lineage,/);
 assert.doesNotMatch(evidence, /syncArchiveDocumentForInteraction|deleteArchiveDocumentBySource/);
-assert.match(evidence, /backfillCommunityInteractionEvidenceInternal/);
+assert.doesNotMatch(
+  evidence,
+  /listCommunityInteractionEvidenceBackfillBatchInternal|backfillCommunityInteractionEvidenceInternal|paginationOptsValidator/,
+  "historical interaction evidence must not have a recursive bulk cognition-admission surface",
+);
 assert.match(evidence, /sourceVisibility: "redacted"/);
 assert.match(evidence, /compilerState: "excluded_by_visibility"/);
 assert.match(evidence, /compilerDecision: undefined/);
@@ -83,15 +87,16 @@ const syncBlock = evidence.slice(syncStart, redactionStart);
 assert.match(
   syncBlock,
   /const traced = await upsertInteractionSourceTrace\([\s\S]*traced: true/,
-  "every live readable interaction should enter the compiler evidence ledger without a promotion gate",
+  "every invoked live write-driven sync should enter the compiler evidence ledger without a promotion gate",
 );
 
 assert.match(audit, /export const recordCommunityEvidenceRetrievalInternal/);
 assert.doesNotMatch(audit, /query: v\.optional/);
 assert.doesNotMatch(audit, /args\.query/);
 
-const backfillStart = evidence.indexOf("export const listCommunityInteractionEvidenceBackfillBatchInternal");
-const redactionBlock = evidence.slice(redactionStart, backfillStart);
+const scheduleStart = evidence.indexOf("export async function scheduleCommunityInteractionEvidenceSync");
+assert.ok(scheduleStart > redactionStart, "redaction and live scheduling blocks must exist");
+const redactionBlock = evidence.slice(redactionStart, scheduleStart);
 assert.match(redactionBlock, /query\("communityInteractionReplies" as any\)/);
 assert.doesNotMatch(redactionBlock, /query\("communityInteractionSourceTraceLinks" as any\)/);
 
