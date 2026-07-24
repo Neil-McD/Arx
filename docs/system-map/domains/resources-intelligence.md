@@ -74,7 +74,7 @@ intelligence layer can re-project deleted content.
 
 ## Legacy fields and compatibility
 
-- `communityEvidenceRetrievalLogs.query` and `communityIntelligenceRetrievalLogs.query` remain optional schema fields while current writers avoid raw query storage. They are retention/privacy migration candidates.
+- Raw retrieval-query storage is closed on development staging. Current writers already omitted it; the five legacy fields across seven intelligence receipts were scrubbed, both optional schema fields were deleted, and the final bounded audit found zero residue.
 - `communityIntelligenceDirectory` labels older evidence as `legacy_unversioned` when source trace IDs exist without current citation state. This is legitimate read compatibility until a bounded migration proves all retained nodes versioned.
 - source ingestion supports URL, file, Drive, GitHub, crawl jobs, content units, lineage, and evidence. These are separate acquisition adapters around the same canonical resource/evidence spine, not automatically duplicate products.
 
@@ -96,10 +96,10 @@ intelligence layer can re-project deleted content.
 | inline `communityResources.bodyMd` authority | `DELETE complete` | closed in C3.1A | 10 | 10/10 canonical content rows; schema/read fallback removed |
 | public full-collect resource body compactor | `DELETE complete` | closed in C3.1A | 10 | temporary migration and registered function removed |
 | full-collect, body-hydrating resource list | `DELETE complete` | replaced in C3.1B by one bounded metadata directory and exact read | 8 | duplicate module call and body amplification removed |
-| raw optional retrieval-query legacy fields | `DECISION REQUIRED (user confirmation)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 7 | current privacy posture avoids them; retained rows may still need scrubbing |
+| raw optional retrieval-query legacy fields | `DELETE complete` | closed in C3.3A | 9 | five private-input remnants were scrubbed; schema and temporary mutation are absent |
 | `legacy_unversioned` intelligence evidence state forever | `DECISION REQUIRED (user confirmation)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 6 | compatibility is justified only until retained nodes are migrated |
 | protected source adapters as a blanket deletion target | `KEEP (MVP core)` | `CONSOLIDATE` | 2 | ingestion adapters differ by provider but should converge on one source contract |
 
 ## Correct optimization order
 
-Do not optimize compiler or retrieval algorithms while interaction authority remains dual. Resource body and UI list/read authority are closed; next map and close the interaction migration, measure retrieval cost/quality, consolidate provider adapters around the canonical source contract, and only then optimize indexing/context size.
+Resource and interaction authority are closed on development staging, and raw retrieval-query storage is deleted. Resolve the single retained `legacy_unversioned` node from its actual trace, citation, retention, and consumption truth; then rerun C2 privacy propagation against the canonical evidence spine before optimizing retrieval or consolidating provider adapters.

@@ -98,7 +98,7 @@ Exit proof: every eligible object eventually receives service, and the canonical
 
 1. Canonical interactions: **normal web legacy authority, digest reader migration, featured/reaction storage deletion, four-row attachment cutover/fallback deletion, live legacy-identity severance, archive closure, malformed-trace deletion, recursive historical cognition replay deletion, and zero-work legacy migration-runtime retirement complete**; the 63 missing historical traces remain intentionally unmaterialized, the live write-driven sync remains canonical, and historical link/message/thread rows remain lifecycle-only retention state pending C2 privacy policy.
 2. **Complete on staging:** resource contents have one canonical body owner, no inline compatibility fields or compactor, and a bounded metadata directory plus exact authorized body reads.
-3. Intelligence: scrub/remove raw legacy query fields and migrate `legacy_unversioned` evidence after retention/citation proof.
+3. Intelligence: **raw retrieval-query cleanup complete on development staging**; five legacy fields were scrubbed, both optional schema fields and the temporary mutation are deleted, and all seven retained receipts now contain zero query fields. One of five nodes remains `legacy_unversioned` pending a one-row trace/citation/retention and consumption decision.
 4. Re-run account/community deletion and evidence/privacy fixtures against the single authorities.
 
 Exit proof: one canonical owner per content concern and zero compatibility reads/writes for an observation window.

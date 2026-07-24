@@ -936,3 +936,37 @@ canonical smoke record, and both enabled composers with zero browser warnings
 or errors. The canonical staging marker served the exact runtime checkpoint.
 Production was not changed by this slice and remained at independently current
 marker `dbcd080d4e62fa73fdfa3042d005c09ede750cc1`.
+
+C3.3A closes raw retrieval-query privacy residue on development staging.
+The bounded preflight scanned zero evidence retrieval receipts and seven
+intelligence retrieval receipts. Exactly five intelligence rows physically
+contained the optional `query` field; evidence contained zero. Current evidence
+and intelligence writers already omitted the field, so the retained storage had
+no runtime authority or reader.
+
+Temporary checkpoint `5ebad0575f46146eac35737037bf0cd5acdfe781`
+introduced one internal, 100-row-bounded mutation. It refused any preflight or
+apply shape other than zero evidence fields and five intelligence fields. The
+atomic apply scrubbed exactly five fields, and its committed zero-mode replay
+then reported zero evidence and zero intelligence query fields across the same
+seven retained receipts.
+
+Permanent runtime checkpoint
+`fe2ab65d17aff17fd6b052bf8f5437e13aa24f55` removes both optional schema
+fields and deletes the temporary mutation. The deployed Dev function
+specification retains canonical community-memory search and read functions and
+contains no scrub identity. A final independent bounded audit reports zero
+evidence rows, seven intelligence receipts, zero stored query fields, five
+intelligence nodes, and the same single `legacy_unversioned` node.
+
+No receipt, node, citation, outcome, source trace, user, community, interaction,
+resource, lifecycle row, provider, UI behavior, or production target was
+deleted or changed. Focused receipt, evidence, cognition-cleanup, and lifecycle
+proofs pass, as do Convex and web typechecks, production build, bundle budget,
+diff hygiene, and the complete 38-step foundation baseline.
+
+C3 remains active only for the separately bounded
+`legacy_unversioned` evidence decision. The next slice must inspect that one
+node's trace validity, citation reconstructability, retention authority, and
+actual consumption. It must not fabricate a historical citation or introduce a
+generic migration engine.

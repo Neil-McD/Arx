@@ -61,8 +61,8 @@ Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-stagin
 | U-018 | Which public billing function names have external callers? | alias retirement | gateway logs/client inventory without payloads |
 | U-019 | What legacy community chat/link/attachment rows and reads/writes remain? | interaction migration closure | redacted counts and instrumentation |
 | U-020 | **Resolved on development staging:** zero resources retain inline/hash/migration fields; all 10 resources have one canonical content row; recent context, digest, evidence, archive, memory, builder, wiki, UI, and tool reads hydrate through the shared owner. | single content authority | C3.1A migration/replay, function-surface audit, complete post-closure aggregate |
-| U-021 | Do retrieval logs retain raw query fields? | privacy/schema cleanup | non-null counts/age only |
-| U-022 | How many intelligence nodes are `legacy_unversioned`? | citation migration | grouped evidence-state counts |
+| U-021 | **Resolved on development staging:** zero evidence receipts and all seven intelligence receipts now contain zero stored query fields; both optional schema fields and the one-use scrub are deleted. | privacy/schema cleanup | expectation-locked scrub, postflight field-presence count, permanent schema proof |
+| U-022 | **Narrowed on development staging:** one of five intelligence nodes remains `legacy_unversioned`; this slice did not change it. | citation migration | trace/citation/retention and actual-consumption audit for the one row |
 | U-023 | How should privacy purge propagate through evidence, accepted intelligence, archives, email, and retrieval receipts? | prevents deleted content reappearing | explicit policy plus synthetic lineage fixture |
 
 ## Runtime, frontend, operations, and release
