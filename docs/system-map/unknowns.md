@@ -23,7 +23,7 @@ The bounded aggregate audit resolved or narrowed these questions for the isolate
 | U-016 | active/payable/pending partner state and aggregate staging amounts are known; old obligations are preserved, while exact legal lineage and retention treatment remain open |
 | U-019 | 67 legacy messages and links remain; runtime read frequency remains unknown |
 | U-020 | two of ten resources retain inline body; the other eight have content rows |
-| U-021 | five of seven intelligence retrieval receipts retain raw query text |
+| U-021 | the 2026-07-20 audit found five of seven intelligence retrieval receipts with raw query text; C3.3A later scrubbed all five and removed the fields |
 | U-022 | one of five intelligence nodes is legacy-unversioned |
 | U-024 | current staging is below scheduler caps; the no-cursor defect is latent |
 | U-033 | diagnostics and runtime events each exceed the 2,000-row cap; retention policy remains unknown |
