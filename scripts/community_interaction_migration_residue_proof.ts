@@ -17,8 +17,6 @@ const communityChat = read("convex/communityChat.ts");
 const facade = read("convex/community.ts");
 const communityCore = read("convex/communityCore.ts");
 const interactions = read("convex/communityInteractions.ts");
-const backfill = read("convex/communityInteractionBackfill.ts");
-const legacyBridge = read("convex/communityInteractionLegacyBridge.ts");
 const schema = read("convex/schema.ts");
 const emailDigests = read("convex/emailDigests.ts");
 const communityPublic = read("convex/communityPublic.ts");
@@ -41,16 +39,16 @@ assert.match(
 );
 assert.doesNotMatch(
   residueMap,
-  /\| R-006 \|/,
-  "the completed writer residue should not remain in the current deletion queue",
+  /\| R-006 \||\| R-007 \|/,
+  "completed writer and backfill residues should not remain in the current deletion queue",
 );
 for (const needle of [
   "| R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` |",
-  "| R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` |",
   "| R-008 | Weekly community digest retention email | `KEEP (MVP core)` |",
   "| R-011 | Maintenance and account-lifecycle reachability for historical legacy rows | `KEEP TEMPORARILY` |",
   "**C3.2D2B complete:**",
   "**C3.2E1 complete:**",
+  "**C3.2E2C complete:**",
   "R-004: four exact legacy attachment payloads were preserved as four canonical attachment rows",
   "Counts are evidence, not expectations; no test should freeze them.",
   "No migration should be implemented for a feature that should be deleted.",
@@ -59,8 +57,8 @@ for (const needle of [
 }
 assert.match(
   contract,
-  /Retired Legacy Live Chat Surface[\s\S]*no legacy chat preload[\s\S]*public community API does not expose[\s\S]*legacy thread ensure\/list[\s\S]*authenticated typing presence and attachment upload URL generation remain[\s\S]*migration-only legacy planning\/materialization helpers remain owned by the[\s\S]*bounded backfill/,
-  "the substrate contract should separate deleted live authority from retained migration state",
+  /Retired Legacy Live Chat Surface[\s\S]*no legacy chat preload[\s\S]*public community API does not expose[\s\S]*legacy thread ensure\/list[\s\S]*authenticated typing presence and attachment upload URL generation remain[\s\S]*migration-only legacy planning,[\s\S]*materialization, bridge, and public backfill[\s\S]*surfaces are deleted/,
+  "the substrate contract should record the deleted live and migration authority",
 );
 
 for (const path of [
@@ -74,6 +72,9 @@ for (const path of [
   "convex/communityInteractionAttachmentCutover.test.ts",
   "convex/communityInteractionResidueCleanup.ts",
   "convex/communityInteractionResidueCleanup.test.ts",
+  "convex/communityInteractionBackfill.ts",
+  "convex/communityInteractionLegacyBridge.ts",
+  "scripts/community_interactions_legacy_chat_backfill_contract_proof.ts",
 ] as const) {
   assert.equal(existsSync(join(root, path)), false, `${path} should be deleted`);
 }
@@ -116,25 +117,20 @@ assert.match(
   "the chat backend should retain only canonical-composer upload and typing support",
 );
 
-assert.match(
-  backfill,
-  /planInteractionReplyFromLegacyChatMessageCore[\s\S]*planInteractionRootFromLegacyChatMessageCore[\s\S]*materializeLegacyChatReplyInteractionPlan[\s\S]*materializeLegacyChatRootInteractionPlan/,
-  "the bounded historical backfill should retain direct plan and materialize helpers",
-);
-assert.match(
-  legacyBridge,
-  /getLegacyChatLinkByMessage[\s\S]*communityInteractionLegacyChatLinks[\s\S]*insertLegacyChatLinkIfMissing/,
-  "legacy mapping access should remain isolated for migration",
+assert.doesNotMatch(
+  interactions,
+  /communityInteractionLegacyAttachments|resolveLegacyMessageAttachments|LegacyChatRootInteractionPlan|LegacyChatReplyInteractionPlan|planInteractionRootFromLegacyChatMessageCore|planInteractionReplyFromLegacyChatMessageCore|materializeLegacyChatRootInteractionPlan|materializeLegacyChatReplyInteractionPlan|insertCanonicalInteractionAttachmentsFromLegacyMessage/,
+  "canonical interactions should not retain deleted legacy migration or attachment materialization helpers",
 );
 assert.doesNotMatch(
   interactions,
-  /communityInteractionLegacyAttachments|resolveLegacyMessageAttachments/,
-  "canonical interaction reads should not retain the deleted attachment fallback",
+  /getLegacyChatLinkByRoot|getLegacyChatLinkByReply|syncLegacyMessage|legacy_(?:thread|message|target_message)_id/,
+  "live canonical paths should not expose unused legacy identity lookups",
 );
 assert.doesNotMatch(
-  interactions + legacyBridge,
-  /getLegacyChatLinkByRoot|getLegacyChatLinkByReply|syncLegacyMessage|legacy_(?:thread|message|target_message)_id/,
-  "live canonical paths and the retained migration bridge should not expose unused legacy identity lookups",
+  facade + generatedApi + packageJson,
+  /communityInteractionBackfill|communityInteractionLegacyBridge|backfillCommunityInteractionsFromLegacyChatBatch|community-interactions-legacy-chat-backfill-proof/,
+  "public API, generated identities, and package scripts should not retain deleted migration surfaces",
 );
 for (const [label, source] of [
   ["interaction gateway", interactionGateway],
@@ -229,8 +225,8 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   generatedApi,
-  /communityInteractionResidueCleanup|communityInteractionAttachmentCutover|communityInteractionLegacyAttachments/,
-  "temporary cleanup and deleted attachment fallback function identities should be absent",
+  /communityInteractionResidueCleanup|communityInteractionAttachmentCutover|communityInteractionLegacyAttachments|communityInteractionBackfill|communityInteractionLegacyBridge/,
+  "temporary cleanup, attachment fallback, and migration function identities should be absent",
 );
 
 console.log("community_interaction_migration_residue_proof: ok");

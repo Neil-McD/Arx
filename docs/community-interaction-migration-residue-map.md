@@ -108,6 +108,15 @@ searchable, but the 63-row backlog does not become compiler-pending merely to
 finish a migration. No new admission table, state machine, scheduler, cron,
 operator UI, or trace state was added.
 
+C3.2E2C retires the completed legacy-to-canonical repair path. The final
+moderator-authenticated dry run covered all four historical threads and
+returned an aggregate 67 scanned, 67 already linked, zero roots or replies to
+create, zero unresolved replies, zero failures, and null final cursors. The
+public backfill mutation, module, legacy link bridge, interaction planning and
+materialization branch, legacy attachment materializer, generated identities,
+and dedicated presence proof are deleted. Historical rows, links, attachments,
+traces, schema tables, and lifecycle policy were not mutated.
+
 ## Development Staging Snapshot
 
 Read-only interaction postflight refreshed on 2026-07-23 from
@@ -154,8 +163,7 @@ three legacy reactions. No entry or switch created legacy chat state.
 
 | ID | Job | Classification | Current owner and first-party path | Delete condition |
 | --- | --- | --- | --- | --- |
-| R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `communityInteractionLegacyBridge.ts` | Live reads/writes/edits are severed. Keep 55 sole correspondence receipts and all 67 rows until the bounded backfill replay, evidence reconciliation, integrity audit, and retention decision authorize removal. |
-| R-007 | Legacy-to-canonical backfill API | `KEEP TEMPORARILY` | `communityInteractionBackfill.ts` | Keep only until all 67 historical messages and retained attachment/evidence state pass a final bounded replay and integrity audit. |
+| R-003 | Legacy message-to-interaction mapping | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks` schema rows; lifecycle policy only | Live reads, writes, edits, reply targeting, planning, materialization, and bridge code are severed. Keep the 67 correspondence receipts until C2 privacy/anonymization and retention policy authorize disposition. |
 | R-008 | Weekly community digest retention email | `KEEP (MVP core)` | `emailDigests.ts` reads bounded canonical `communityInteractionRoots` and `communityInteractionReplies` | Legacy chat dependency closed by C3.2D1. Reconsider the product job only if the MVP return-loop requirement changes. |
 | R-011 | Maintenance and account-lifecycle reachability for historical legacy rows | `KEEP TEMPORARILY` | `communityMaintenance.ts`, `accountLifecyclePolicy.ts` | Replace only after canonical privacy/anonymization handling and final historical deletion; do not weaken shared-history retention to simplify migration. |
 
@@ -173,8 +181,9 @@ three legacy reactions. No entry or switch created legacy chat state.
   `community_thread_reply_mention_policy_proof.ts`; it accepts canonical
   root/reply identity only.
 
-Historical evidence materialization remains part of R-007, but current
-recent-context and interaction-evidence readers do not query legacy chat rows.
+Historical evidence materialization is intentionally retired. Current
+recent-context and interaction-evidence readers use canonical interaction refs
+and do not query legacy chat rows.
 
 ## Completed Deletions
 
@@ -195,6 +204,9 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
 - Malformed interaction evidence: one disconnected compiler-era trace with a
   non-canonical composite source ref; the expectation-locked drain replayed
   with zero work and was removed.
+- R-007 migration runtime: final four-thread dry run proved zero work; public
+  backfill, bridge, legacy planning/materialization, legacy attachment
+  materializer, generated identities, and dedicated presence proof are deleted.
 - Ambient activity timeline: browser timeline, public read API, gateway, CSS,
   and best-effort writers. Historical rows remain lifecycle-reachable pending
   retention policy.
@@ -244,9 +256,12 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
 10. **C3.2E2B2A complete:** do not admit all 63 historical interactions into
    cognition automatically; delete the recursive bulk trace replay while
    retaining live write-driven sync.
-11. **Next:** run the bounded historical backfill/integrity replay, observe zero live
-   legacy reads and writes, then audit link/backfill/table residue and update
-   lifecycle policy only if retention and evidence gates authorize deletion.
+11. **C3.2E2C complete:** run the bounded four-thread dry run, prove exact
+   zero-work migration state, and delete the public backfill, bridge,
+   planning/materialization, legacy attachment materializer, generated
+   identities, and presence proof.
+12. **Next:** leave historical link/message/thread rows lifecycle-reachable
+   until C2 privacy, anonymization, and retention policy authorizes disposition.
 
-This map authorizes no further attachment, link, backfill, activity-history,
+This map authorizes no further attachment, link, activity-history,
 message, thread, or remaining schema-table deletion.

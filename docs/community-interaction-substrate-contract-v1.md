@@ -440,33 +440,31 @@ Rules:
   through lifecycle policy until retention is decided
 - no historical message, mapping, attachment, activity, or remaining lifecycle
   rows are deleted by the live-surface slice
-- migration-only legacy planning/materialization helpers remain owned by the
-  bounded backfill, not by a live dual-write path
-- `communityInteractionLegacyChatLinks` access remains isolated in
-  `communityInteractionLegacyBridge`
+- migration-only legacy planning, materialization, bridge, and public backfill
+  surfaces are deleted after the final bounded dry run proved zero work
+- `communityInteractionLegacyChatLinks` remains retained schema data with no
+  live interaction-runtime module; lifecycle policy owns its eventual
+  disposition
 
-## Current Legacy Chat Backfill Slice
+## Retired Legacy Chat Backfill
 
-The first repair/backfill API is a bounded batch tool for migrating old legacy chat rows into canonical interaction rows.
+C3.2E2C closes the completed legacy-to-canonical repair path. The final
+moderator-authenticated dry run covered all four historical threads and
+returned an aggregate 67 scanned, 67 already linked, zero roots or replies to
+create, zero unresolved replies, zero failures, and null final cursors.
 
 Rules:
 
-- `backfillCommunityInteractionsFromLegacyChatBatch` is moderator-gated
-- `dryRun` defaults to true
-- each batch processes one legacy chat thread
-- when no `threadId` is supplied, the canonical first community chat thread is used
-- reads are bounded by `limit` and ordered by legacy message `seq`
-- `afterSeq` is the forward cursor
-- dry-run predicts links created earlier in the same batch before counting reply outcomes
-- top-level legacy messages become interaction roots
-- legacy replies become one-level interaction replies only when their target mapping exists
-- missing target mappings are counted as `unresolved_replies`, not guessed
-- running the batch repeatedly must not duplicate roots or replies
-- already-linked historical messages are counted and skipped; they do not
-  schedule evidence sync or retroactive cognition
-- backfill write/materialization failures are not caught after writes begin
-- backfill does not migrate reactions, edits, deletes, or moderation state
-- backfill does not write source traces, archive truth, or compiler state synchronously; materialized interactions schedule idempotent derived-evidence sync and do not change UI behavior
+- there is no public legacy interaction backfill function
+- canonical interaction code contains no legacy message planning or
+  materialization branch
+- the legacy link bridge and legacy attachment materializer are absent
+- retained historical messages and mapping links are not live read, write,
+  reply-target, attachment, or evidence authority
+- the final integrity proof did not create or modify a canonical interaction,
+  attachment, link, trace, citation, or compiler row
+- historical rows and their schema tables remain lifecycle-owned until the C2
+  privacy, anonymization, and retention decision authorizes disposition
 
 ## Canonical Interaction Evidence Spine
 

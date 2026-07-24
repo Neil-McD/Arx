@@ -27,8 +27,13 @@ assert.match(
 );
 assert.match(
   attachmentBridge,
-  /const MAX_LEGACY_INTERACTION_ATTACHMENTS = 8;[\s\S]*out\.length >= MAX_LEGACY_INTERACTION_ATTACHMENTS[\s\S]*normalizedDataUrl\.length <= MAX_LEGACY_IMAGE_DATA_URL_CHARS/,
-  "canonical normalization and migration fallback should remain bounded",
+  /const MAX_INTERACTION_ATTACHMENTS = 8;[\s\S]*out\.length >= MAX_INTERACTION_ATTACHMENTS[\s\S]*normalizedDataUrl\.length <= MAX_INTERACTION_IMAGE_DATA_URL_CHARS/,
+  "canonical attachment normalization should remain bounded",
+);
+assert.doesNotMatch(
+  attachmentBridge,
+  /CommunityChatMessageLike|readLegacyInteractionAttachmentPayloads|insertCanonicalInteractionAttachmentsFromLegacyMessage|legacy-chat:|MAX_LEGACY_|normalizeLegacyAttachmentKind|hasCanonicalInteractionAttachmentsForTarget|skipIfExisting/,
+  "canonical attachment behavior should not retain deleted legacy migration vocabulary or materialization",
 );
 assert.match(
   interactions,

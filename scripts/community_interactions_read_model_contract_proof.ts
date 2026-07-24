@@ -63,7 +63,7 @@ assert.equal(
 );
 assert.match(
   attachmentBridge,
-  /listCanonicalInteractionAttachmentsForTarget[\s\S]*query\("communityInteractionAttachments" as any\)[\s\S]*withIndex\("by_root"[\s\S]*withIndex\("by_reply"[\s\S]*take\(MAX_LEGACY_INTERACTION_ATTACHMENTS\)/,
+  /listCanonicalInteractionAttachmentsForTarget[\s\S]*query\("communityInteractionAttachments" as any\)[\s\S]*withIndex\("by_root"[\s\S]*withIndex\("by_reply"[\s\S]*take\(MAX_INTERACTION_ATTACHMENTS\)/,
   "canonical attachment reads should stay bounded and indexed in the attachment bridge",
 );
 assert.match(

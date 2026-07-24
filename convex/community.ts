@@ -72,9 +72,6 @@ import {
   listCommunityInteractionRoots as listCommunityInteractionRootsImpl,
   toggleCommunityInteractionReaction as toggleCommunityInteractionReactionImpl,
 } from "./communityInteractions";
-import {
-  backfillCommunityInteractionsFromLegacyChatBatch as backfillCommunityInteractionsFromLegacyChatBatchImpl,
-} from "./communityInteractionBackfill";
 import { readCommunityRecentContext as readCommunityRecentContextImpl } from "./communityRecentContext";
 import {
   hideCommunityAiFeedPost as hideCommunityAiFeedPostImpl,
@@ -260,7 +257,6 @@ export const listCommunityInteractionReplies = listCommunityInteractionRepliesIm
 export const toggleCommunityInteractionReaction = toggleCommunityInteractionReactionImpl;
 export const editCommunityInteractionMessage = editCommunityInteractionMessageImpl;
 export const deleteCommunityInteractionMessage = deleteCommunityInteractionMessageImpl;
-export const backfillCommunityInteractionsFromLegacyChatBatch = backfillCommunityInteractionsFromLegacyChatBatchImpl;
 export const listCommunityAiFeedBundle = listCommunityAiFeedBundleImpl;
 export const hideCommunityAiFeedPost = hideCommunityAiFeedPostImpl;
 export const publishCommunityAiFeedAgentPost = publishCommunityAiFeedAgentPostImpl;

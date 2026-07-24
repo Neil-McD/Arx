@@ -887,3 +887,25 @@ The next interaction slice is a bounded integrity replay and retirement review
 for the legacy backfill module, bridge, and migration-only planning helpers.
 This receipt authorizes no historical row, link, lifecycle, schema-table, or
 production deletion.
+
+C3.2E2C closes that migration runtime by proving it has no work and deleting it.
+The existing moderator-gated function was invoked only with `dryRun: true`
+against all four Dev historical threads. Aggregate output was 67 scanned, 67
+already linked, zero roots created or predicted, zero replies created or
+predicted, zero unresolved replies, zero failures, empty error arrays, and null
+final cursors. Three threads contained zero messages; the Polynet thread
+contained all 67 messages and links.
+
+The public backfill mutation and facade identity, 282-line backfill module,
+legacy mapping bridge, root/reply planning and materialization branch, legacy
+attachment materializer, generated function identities, and dedicated
+backfill-presence proof are deleted. Canonical attachment normalization, writes,
+reads, interaction evidence sync, digest reads, UI projection, maintenance, and
+lifecycle policy remain.
+
+This slice adds no table, state, workflow, scheduler, cron, operator UI,
+migration engine, or replacement API. It does not run the write replay or
+mutate historical messages, links, threads, canonical interactions,
+attachments, traces, citations, compiler state, lifecycle state, or production.
+The retained 67 mapping rows and their historical parents are now
+lifecycle-only evidence pending C2 privacy, anonymization, and retention policy.
