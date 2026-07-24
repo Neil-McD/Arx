@@ -18,8 +18,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-dm-panel-composer \{[\s\S]*background: var\(--web-context-panel-surface\);/,
-  "DMs should use their canonical opaque context-panel surface",
+  /\.community-dm-panel-composer \{[\s\S]*background: var\(--composer-surface\);/,
+  "DMs should preserve their canonical composer surface",
 );
 assert.match(
   baseCss,

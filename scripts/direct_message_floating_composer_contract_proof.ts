@@ -46,8 +46,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-dm-panel-composer \{[\s\S]*border-radius: var\(--composer-radius\);[\s\S]*background: var\(--web-context-panel-surface\);/,
-  "DM composer should continue the canonical context-panel surface",
+  /\.community-dm-panel-composer \{[\s\S]*border-radius: var\(--composer-radius\);[\s\S]*background: var\(--composer-surface\);/,
+  "DM composer should preserve the canonical composer surface",
 );
 assert.match(
   baseCss,
