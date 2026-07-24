@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -60,6 +60,10 @@ const receiptSchema = schema.slice(
   schema.indexOf("communityIntelligenceRetrievalLogs: defineTable"),
   schema.indexOf("communityOutcomeObservations: defineTable"),
 );
+const evidenceReceiptSchema = schema.slice(
+  schema.indexOf("communityEvidenceRetrievalLogs: defineTable"),
+  schema.indexOf("communityIntelligenceNodes: defineTable"),
+);
 assert.match(
   receiptSchema,
   /receiptVersion: v\.optional\(v\.literal\("community_memory_retrieval_receipt:v1"\)\)/,
@@ -70,10 +74,15 @@ assert.match(
   /surface: v\.optional\([\s\S]*"member_agent_dock"[\s\S]*"external_mcp"[\s\S]*"community_concierge"/,
   "historical rows may omit surface while new receipts use one of three canonical surfaces",
 );
-assert.match(
+assert.doesNotMatch(
   receiptSchema,
-  /Historical compatibility only[\s\S]*query: v\.optional\(v\.string\(\)\)/,
-  "the raw query field should be documented as historical compatibility only",
+  /\bquery\s*:/,
+  "accepted-memory receipts must have no durable raw-query field",
+);
+assert.doesNotMatch(
+  evidenceReceiptSchema,
+  /\bquery\s*:/,
+  "evidence retrieval receipts must have no durable raw-query field",
 );
 assert.match(
   receiptSchema,
@@ -106,6 +115,11 @@ assert.equal(
   (directory.match(/insert\("communityIntelligenceRetrievalLogs"/g) ?? []).length,
   1,
   "the canonical receipt helper should be the only retrieval-log writer",
+);
+assert.equal(
+  existsSync("convex/communityRetrievalQueryPrivacyMigration.ts"),
+  false,
+  "the completed retrieval-query privacy migration must not remain callable",
 );
 assert.doesNotMatch(
   directory,

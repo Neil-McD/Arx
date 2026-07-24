@@ -2851,9 +2851,6 @@ export default defineSchema({
       v.literal("community_ai_feed_search"),
       v.literal("community_ai_feed_read"),
     ),
-    // Compatibility only for rows written before the metadata-only audit
-    // contract. New retrieval logs must not copy raw search text.
-    query: v.optional(v.string()),
     resultRefs: v.array(v.string()),
     createdAt: v.number(),
   })
@@ -3146,9 +3143,6 @@ export default defineSchema({
       ),
     ),
     workflowId: v.optional(v.string()),
-    // Historical compatibility only. New receipts never persist raw search
-    // text; the query is used transiently for deterministic retrieval.
-    query: v.optional(v.string()),
     retrievedNodeIds: v.array(v.id("communityIntelligenceNodes")),
     injectedNodeIds: v.array(v.id("communityIntelligenceNodes")),
     // Historical compatibility only. The active V1 contract records
