@@ -120,7 +120,7 @@ traces, schema tables, and lifecycle policy were not mutated.
 ## Development Staging Snapshot
 
 Read-only interaction postflight refreshed on 2026-07-23 from
-`dev:quick-porcupine-949` at permanent runtime checkpoint `e9c72236`:
+`dev:quick-porcupine-949` at permanent runtime checkpoint `377537b8`:
 
 | Shape | Count | Meaning |
 | --- | ---: | --- |
@@ -152,6 +152,14 @@ After E2B2A, the deployed function surface contains neither historical trace
 batch function, the live sync remains registered, and the scheduled-function
 ledger contains zero bulk replay jobs. Counts and citation dependencies remain
 unchanged.
+
+After E2C, the deployed function surface also contains no legacy interaction
+backfill or mapping-bridge module/function identity. The live interaction
+evidence sync remains registered. The same bounded postflight remains four
+threads, 67 messages, 67 links, 55 roots, 24 replies, four canonical
+attachments, 65 readable interactions, two valid traces, 63 intentionally
+missing traces, and zero malformed traces, duplicate trace keys, interaction
+citations, or scheduled bulk replay jobs.
 
 C3.2B acceptance compared the same bounded aggregate before and after
 authenticated navigation on exact runtime commit `d2aa605f` across the

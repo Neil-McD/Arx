@@ -909,3 +909,30 @@ mutate historical messages, links, threads, canonical interactions,
 attachments, traces, citations, compiler state, lifecycle state, or production.
 The retained 67 mapping rows and their historical parents are now
 lifecycle-only evidence pending C2 privacy, anonymization, and retention policy.
+
+Permanent runtime checkpoint
+`377537b825d9a46716e2c57e9ce49318c37645ac` removes 1,108 lines and adds
+102 contract/proof lines, for a net deletion of 1,006 lines. The exact clean
+commit was deployed to `dev:quick-porcupine-949` before its staging-branch push.
+The deployed function specification contains no
+`communityInteractionBackfill`, `communityInteractionLegacyBridge`, or
+`backfillCommunityInteractionsFromLegacyChatBatch` identity and still contains
+`syncCommunityInteractionEvidenceInternal`.
+
+The bounded postflight reports four historical threads, 67 historical
+messages, 67 links, 55 canonical roots, 24 replies, four canonical attachments,
+65 readable interactions, two valid interaction traces, 63 intentionally
+missing historical traces, and zero malformed traces, duplicate trace keys,
+interaction citations, or scheduled bulk replay jobs. Every scan completed
+below its 2,001-row bound.
+
+Focused interaction identity, attachment, reply-target, write, read,
+migration-residue, evidence, compiler-digest, and compiler-evidence checks
+pass, as do Convex and web typechecks, production build, bundle budget, diff
+hygiene, and the complete 38-step foundation baseline. Signed-in read-only
+acceptance on `polynet-staging.vercel.app/c/polynet/chat` rendered 48 historical
+paragraphs, 49 reply actions, all four historical attachment images, the
+canonical smoke record, and both enabled composers with zero browser warnings
+or errors. The canonical staging marker served the exact runtime checkpoint.
+Production was not changed by this slice and remained at independently current
+marker `dbcd080d4e62fa73fdfa3042d005c09ede750cc1`.
