@@ -821,3 +821,36 @@ contracts, production build, bundle budget, diff hygiene, and the complete
 38-step foundation baseline pass. C3.2E2B interaction-evidence reconciliation
 remains the next authorized slice; this archive closure does not authorize an
 evidence, link, message, thread, activity-history, or production mutation.
+
+C3.2E2B1 removes the sole malformed interaction source trace from the isolated
+development staging lane. Temporary checkpoint
+`14c61500707452f8fa7b431d4710fa4089f86efb` introduced one staging-locked,
+exact-row drain. Its dry run required the exact trace, community, malformed
+composite source ref, compiler provenance, and historical digest pointer. It
+also completed bounded scans of every schema-level inbound reference surface:
+citations, Concierge serve requests, intelligence nodes and edges, mutations,
+change requests, and compiler digest items. All dependency counts were zero.
+
+The committed run deleted exactly one derived trace and verified its absence in
+the same transaction. The immediate committed empty-state replay deleted zero.
+No backup was created for the disconnected derived row. Permanent checkpoint
+`b542a2ae9fce9676c2541692793fa00aff353a03` removes the temporary function;
+the deployed Dev function specification confirms that no drain identity
+remains. Current source has no emitter for the retired composite ref:
+interaction traces are created only from typed canonical root/reply refs.
+
+The bounded postflight completed below its 2,001-row limits and reports 55
+canonical roots, 24 replies, 65 readable interactions, two valid interaction
+source traces, 63 missing historical traces, zero malformed traces, zero
+duplicate trace keys, and an absent deletion target. The two valid traces and
+the new root/reply appeared through ordinary canonical behavior between the
+planning and execution audits; the deletion guard intentionally did not freeze
+or mutate that live state.
+
+Canonical interactions, historical messages, mapping links, attachments,
+reactions, citations, intelligence objects, compiler digests, agent runs,
+memory state, account lifecycle, schemas, and production were not mutated.
+The 63-trace historical projection remains deliberately unrun because the
+current source-trace writer would admit those rows as pending compiler evidence
+and could trigger owner-funded cognition. C3.2E2B2 must decide and explicitly
+authorize that historical cognition replay before any trace backfill.

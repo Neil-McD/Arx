@@ -93,10 +93,17 @@ empty physical table shell was then deleted from the Dev Convex inventory.
 This closure did not mutate canonical interactions, source traces, digests,
 links, historical messages, or any evidence state.
 
+C3.2E2B1 deletes the one malformed `interaction` source trace. An exact-row,
+staging-only drain proved zero citation, serve-request, intelligence,
+mutation, change-request, or digest-item dependents, deleted one row, and
+replayed with zero work. The temporary function is absent. The current
+interaction evidence bridge emits only typed canonical root/reply refs, so no
+replacement validation layer was added.
+
 ## Development Staging Snapshot
 
-Read-only attachment postflight captured on 2026-07-23 from
-`dev:quick-porcupine-949` at permanent runtime checkpoint `cf1033ba`:
+Read-only interaction postflight refreshed on 2026-07-23 from
+`dev:quick-porcupine-949` at permanent runtime checkpoint `b542a2ae`:
 
 | Shape | Count | Meaning |
 | --- | ---: | --- |
@@ -105,23 +112,25 @@ Read-only attachment postflight captured on 2026-07-23 from
 | legacy-to-canonical links | 67 | every legacy message has exactly one link |
 | links matching the canonical target's migration idempotency key | 12 | redundant correspondence evidence after final audit |
 | links that are the sole legacy-to-canonical correspondence receipt | 55 | retain until final audit/retention decision |
-| canonical roots / replies | 54 / 23 | current interaction authority |
-| canonical-only roots / replies | 3 / 7 | cannot be represented by a legacy-only reader |
-| canonical content blocks | 76 | typed content projection |
+| canonical roots / replies | 55 / 24 | current interaction authority |
+| canonical-only roots / replies | 4 / 8 | cannot be represented by a legacy-only reader |
+| canonical content blocks | 78 | typed content projection |
 | legacy attachment-bearing messages | 4 | preserved historical migration input; no live read fallback |
 | canonical attachment rows | 4 | one exact row per historical attachment target |
-| legacy / canonical reactions | 0 / 8 | only canonical reaction state remains |
+| legacy / canonical reactions | 0 / 9 | only canonical reaction state remains |
 | legacy featured-message pointers | 0 | retired product state is drained |
 | dormant community archive rows | 0 | exact 66-row derived corpus drained; physical table absent |
+| canonical interaction source traces | 2 valid / 63 missing / 0 malformed | live sync works; historical admission remains intentionally unrun |
 
 Integrity checks found zero unlinked legacy messages, duplicate message links,
 dangling message/root/reply links, or canonical replies without content blocks.
 Counts are evidence, not expectations; no test should freeze them.
 
-The E2A preflight also found 63 readable interactions without canonical source
-traces and one malformed/orphaned community-visible interaction trace. No
-citation or intelligence node depends on that orphan. E2A intentionally does
-not repair or delete evidence; that reconciliation is the next isolated slice.
+The E2A preflight found 63 readable interactions without canonical source
+traces and one malformed/orphaned community-visible interaction trace. E2B1
+deleted that zero-dependent malformed row. Ordinary canonical behavior added
+one root, one reply, and their two valid traces between audits, so 65
+interactions are now readable while the historical missing count remains 63.
 
 C3.2B acceptance compared the same bounded aggregate before and after
 authenticated navigation on exact runtime commit `d2aa605f` across the
@@ -171,6 +180,9 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
 - Dormant community archive: 66 disconnected derived rows, archive module,
   table, five indexes, cleanup/lifecycle/generated/proof surface, temporary
   drain, and two callerless legacy-link lookup helpers.
+- Malformed interaction evidence: one disconnected compiler-era trace with a
+  non-canonical composite source ref; the expectation-locked drain replayed
+  with zero work and was removed.
 - Ambient activity timeline: browser timeline, public read API, gateway, CSS,
   and best-effort writers. Historical rows remain lifecycle-reachable pending
   retention policy.
@@ -215,9 +227,12 @@ recent-context and interaction-evidence readers do not query legacy chat rows.
    derived corpus, prove zero-work replay, then delete its module, schema,
    indexes, lifecycle/cleanup/proof surface, physical Dev table shell, and two
    callerless legacy-link helpers.
-9. **C3.2E2B next:** reconcile missing, malformed, and orphaned interaction
-   evidence before treating the historical bridge as removable.
-10. Run the bounded historical backfill/integrity replay, observe zero live
+9. **C3.2E2B1 complete:** delete the one malformed zero-dependent interaction
+   trace, prove zero-work replay, and remove the temporary drain.
+10. **C3.2E2B2 next:** explicitly decide whether and how the 63 historical
+   interactions enter compiler cognition before materializing their canonical
+   traces.
+11. Run the bounded historical backfill/integrity replay, observe zero live
    legacy reads and writes, then audit link/backfill/table residue and update
    lifecycle policy only if retention and evidence gates authorize deletion.
 

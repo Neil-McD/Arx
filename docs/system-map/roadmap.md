@@ -96,7 +96,7 @@ Exit proof: every eligible object eventually receives service, and the canonical
 
 ## Step 6 — Finish canonical data migrations
 
-1. Canonical interactions: **normal web legacy authority, digest reader migration, featured/reaction storage deletion, four-row attachment cutover/fallback deletion, and live legacy-identity severance complete**; next reconcile interaction evidence, then replay and audit the bounded historical backfill and remove link/backfill/chat residue only if evidence, retention, and zero-live-use gates authorize it.
+1. Canonical interactions: **normal web legacy authority, digest reader migration, featured/reaction storage deletion, four-row attachment cutover/fallback deletion, live legacy-identity severance, archive closure, and malformed-trace deletion complete**; next decide the owner-funded cognition boundary for 63 missing historical traces, then reconcile evidence, replay and audit the bounded historical backfill, and remove link/backfill/chat residue only if evidence, retention, and zero-live-use gates authorize it.
 2. **Complete on staging:** resource contents have one canonical body owner, no inline compatibility fields or compactor, and a bounded metadata directory plus exact authorized body reads.
 3. Intelligence: scrub/remove raw legacy query fields and migrate `legacy_unversioned` evidence after retention/citation proof.
 4. Re-run account/community deletion and evidence/privacy fixtures against the single authorities.
