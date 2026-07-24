@@ -295,7 +295,7 @@ assert.doesNotMatch(
 );
 assert.match(
   indexCss,
-  /@supports \(color: rgb\(from #000 r g b\)\)[\s\S]*--web-context-panel-surface:\s*rgb\([\s\S]*from var\(--surface-panel, var\(--bg-panel\)\)[\s\S]*\br\b[\s\S]*\bg\b[\s\S]*\bb\b/,
+  /@supports \(color: rgb\(from #000 r g b\)\)[\s\S]*--web-context-panel-surface:\s*rgb\([\s\S]*from var\(--surface-panel, var\(--bg-panel\)\)[\s\S]*\br\b[\s\S]*\bg\b[\s\S]*\bb\b[\s\S]*\/ 1/,
   "context panels should preserve the theme panel color while stripping alpha that would reveal unrelated content",
 );
 assert.match(
