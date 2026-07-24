@@ -19,7 +19,7 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 | 9 | weekly digest may describe canonical activity using legacy chat only | `DELETE (deferred/dead)` complete | communications | a retained return loop cannot omit current canonical activity | legacy reader deleted; bounded canonical roots/replies now own digest activity |
 | 9 | operator dashboards may scan/re-query the whole product per view | `KEEP (MVP core)` | operations | diagnostics should not become a scaling incident | indexed windows/materialized bounded projections |
 | 9 | web launch CI need not build/typecheck the web app | `KEEP (MVP core)` | engineering/release | canonical gate does not defend the shipped artifact | add build/typecheck and one vertical journey |
-| 10 | `communityExperience.ts` needs a registered intermediate public facade | `DELETE (deferred/dead)` | backend transport | adds 57 public identities without owning semantics or a first-party namespace caller | direct-source rewire, generated API proof, delete |
+| 10 | `communityExperience.ts` needs a registered intermediate public facade | `DELETE (deferred/dead)` complete on staging | backend transport | added 57 public identities without owning semantics or a first-party namespace caller | direct-source rewire, generated API proof, and staging validation complete |
 | 9 | stale env templates/flags are useful “just in case” | `DELETE (deferred/dead)` | operations | false configuration contracts cause deployment drift | compare deployed names, remove/update together |
 | 9 | Workspace is a primary product destination during community-first MVP | `DELETE (deferred/dead)` | product/frontend | explicit doctrine says substrate, not destination | decide compatibility, migrate callers, retire route/UI |
 | 9 | Workspace/onboarding should contain primary Builder Partner product UI | `DELETE (deferred/dead)` | frontend/product | a retained secondary growth capability should not distort the core community journey | retain minimum Settings/operator controls only |
@@ -31,7 +31,7 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 | 8 | new Builder Partner community commissions should remain 5% | `DELETE (deferred/dead)` | product/finance | accepted prospective model is 4%; old obligations cannot be rewritten | version v3, change only new eligible accrual |
 | 8 | canonical and legacy community interaction stacks should coexist indefinitely | `DECISION REQUIRED (user confirmation)` | interactions | migration residue doubles readers, lifecycle, and privacy scope | finish read migration and delete residue |
 | 8 | resource metadata row and content row may both own the body | `DECISION REQUIRED (user confirmation)` | resources | dual read authority makes migration and privacy ambiguous | bounded migrate, single reader, remove fields |
-| 8 | every source module, `community.ts`, and `communityExperience.ts` should remain publicly callable | `KEEP (MVP core)` | backend API | transport identity multiplies without product value | one supported public identity per operation |
+| 8 | every source module and `community.ts` alias should remain publicly callable forever | `KEEP (MVP core)` | backend API | transport identity still multiplies without product value after the intermediate facade deletion | one supported public identity per operation |
 | 8 | route parser and controllers may disagree about Workspace | `DELETE (deferred/dead)` for unsupported destination surface | frontend routing | the destination is deferred; refresh and in-memory navigation must not remain different products | inventory callers, migrate compatibility, then keep one retained route state machine |
 | 8 | hundreds of structural proof scripts may persist without owners | `DECISION REQUIRED (user confirmation)` | engineering | check count is bureaucracy unless each owns a unique invariant | classify/merge/delete; preserve behavioral proof |
 | 8 | `App.tsx` should be decomposed before obsolete surfaces are removed | `DECISION REQUIRED (user confirmation)` | frontend | spreads dead complexity into more files | delete surfaces and consolidate state first |
@@ -67,7 +67,7 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 - Discover Apps/Skills CSS with zero source references.
 - stale quickstart env template and no-op flags/names after deployment-name confirmation.
 - stale docs/index wording.
-- intermediate `communityExperience.ts` facade after external/API compatibility inventory.
+- intermediate `communityExperience.ts` facade is deleted and validated on staging.
 
 ### B — migrate, observe zero, then delete
 

@@ -9,7 +9,6 @@ cd "$ROOT_DIR"
 echo "== Community admin contract guard =="
 
 COMMUNITY_FILE="convex/community.ts"
-COMMUNITY_EXPERIENCE_FILE="convex/communityExperience.ts"
 COMMUNITY_ADMIN_FILE="convex/communityAdmin.ts"
 COMMUNITY_CORE_FILE="convex/communityCore.ts"
 COMMUNITY_JOIN_REQUEST_CORE_FILE="convex/communityJoinRequestCore.ts"
@@ -276,7 +275,6 @@ require_block_no_match "$COMMUNITY_CORE_FILE" \
   "join-request persistence type does not retain the deleted applicant message field"
 for file in \
   "$COMMUNITY_FILE" \
-  "$COMMUNITY_EXPERIENCE_FILE" \
   "$COMMUNITY_PUBLIC_FILE" \
   "$PUBLIC_FUNNEL_GATEWAY_FILE" \
   "$WEB_APP_FILE" \

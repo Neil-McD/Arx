@@ -6,7 +6,6 @@ function read(path: string): string {
 }
 
 const communityPublic = read("convex/communityPublic.ts");
-const communityExperience = read("convex/communityExperience.ts");
 const communityModule = read("convex/community.ts");
 const communityCore = read("convex/communityCore.ts");
 const appSource = read("apps/web/src/App.tsx");
@@ -66,14 +65,9 @@ assert.doesNotMatch(
 );
 
 assert.match(
-  communityExperience,
-  /resolvePublicCommunityAccessBySlug,[\s\S]*\} from "\.\/communityPublic"/,
-  "communityExperience must re-export the public access query (re-export chain hop 1)",
-);
-assert.match(
   communityModule,
   /resolvePublicCommunityAccessBySlug as resolvePublicCommunityAccessBySlugImpl/,
-  "community.ts must import the public access query (re-export chain hop 2)",
+  "community.ts must import the public access query directly from its owner",
 );
 assert.match(
   communityModule,

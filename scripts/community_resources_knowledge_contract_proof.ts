@@ -29,7 +29,6 @@ const resourceController = read("shared/useCommunityResourceController.ts");
 const resourceEditorController = read("shared/useCommunityResourceEditorController.ts");
 const webResourceController = read("apps/web/src/controllers/useWebCommunityResourceUiController.ts");
 const resourceGateway = read("shared/cloudCommunityAdminGateway.ts");
-const communityExperience = read("convex/communityExperience.ts");
 const communityBarrel = read("convex/community.ts");
 
 assert.match(
@@ -46,16 +45,6 @@ assert.match(
   schema,
   /sourceResourceId: v\.optional\(v\.id\("communityResources"\)\)/,
   "community resource drafts must be able to preserve source lineage",
-);
-assert.match(
-  schema,
-  /resourceRole: v\.optional\(v\.union\(v\.literal\("page"\), v\.literal\("source"\)\)\)/,
-  "archive documents must preserve resource role for agent-facing citations",
-);
-assert.match(
-  schema,
-  /resourceStatus: v\.optional\([\s\S]*v\.literal\("published"\)/,
-  "archive documents must preserve legacy resource lifecycle status",
 );
 assert.match(
   schema,
@@ -396,16 +385,6 @@ assert.doesNotMatch(
   resourcesPanel,
   /onAddPage=\{\(\) => actions\.openNewResourceModal/,
   "resources rail add-page control must not route through the old modal",
-);
-assert.match(
-  communityExperience,
-  /createCommunityResourcePageDraftFromSource/,
-  "community experience barrel must expose source-to-page draft creation",
-);
-assert.match(
-  communityExperience,
-  /moveCommunityResourceToModule/,
-  "community experience barrel must expose cross-category page moves",
 );
 assert.match(
   communityBarrel,

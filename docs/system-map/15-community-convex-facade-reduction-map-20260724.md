@@ -1,11 +1,14 @@
 # Community Convex Facade Reduction Map — 2026-07-24
 
-- Status: `COMPLETE` read-only staging source map; deletion not yet implemented
-- Source: `cee60b5582c31436a5f1601ddfc5ec236e865dd7`
+- Status: `COMPLETE` on the local staging worktree and development Convex;
+  GitHub staging-branch push pending explicit egress approval
+- Mapping source: `cee60b5582c31436a5f1601ddfc5ec236e865dd7`
+- Implementation base: `a436865efcb600b552cd7b44e2a1f87de53a6847`
 - Worktree:
   `/Users/neilmcdevitt/code/arx/.worktrees/semantic-platform-staging-20260719`
 - Branch: `codex/semantic-platform-staging-20260719`
-- Product, schema, data, provider, deployment, and production changes: none
+- Product, schema, data, provider, UI, and production changes: none
+- Development deployment: `dev:quick-porcupine-949`
 
 ## Irreducible job
 
@@ -24,19 +27,19 @@ community compiler, official MCP, or any source authority module.
 | Surface | Current shape | First-party evidence | Disposition |
 | --- | ---: | --- | --- |
 | `convex/community.ts` | 146 registered aliases | 115 aliases referenced across 19 runtime source files; web gateways use `community:*` | `KEEP` as the current web/cached-client facade; reduce per alias later |
-| `convex/communityExperience.ts` | 57 registered re-exports | zero `api.communityExperience.*` or `communityExperience:*` runtime calls | `DELETE CANDIDATE` |
-| `communityAccessQueries` through the intermediate facade | 2 aliases | both are re-exported again by `community.ts` | rewire `community.ts` directly |
-| `communityPublic` through the intermediate facade | 10 aliases | all are re-exported again by `community.ts`; `communityPublic` itself has an internal runtime consumer | rewire; keep source module |
-| `communityResources` through the intermediate facade | 45 aliases | all are re-exported again by `community.ts`; source module is used by runtime and official MCP paths | rewire; protected source module stays |
-| generated `api.communityExperience` namespace | 57 callable identities | generated solely because the file exists | delete with the facade |
-| facade-specific structural proofs | eight scripts | they read or scan the facade; none is a product caller | rewrite to source/outer-facade authority |
+| `convex/communityExperience.ts` | deleted | zero `api.communityExperience.*` or `communityExperience:*` runtime calls | `DELETE COMPLETE` |
+| `communityAccessQueries` | 2 former intermediate aliases | imported directly by `community.ts` | source owner kept |
+| `communityPublic` | 10 former intermediate aliases | imported directly by `community.ts`; source has an internal runtime consumer | source owner kept |
+| `communityResources` | 45 former intermediate aliases | imported directly by `community.ts`; source is used by runtime and official MCP paths | protected source owner kept |
+| generated `api.communityExperience` namespace | deleted | disappeared with the file | `DELETE COMPLETE` |
+| facade-specific structural proofs | eight scripts reduced | now check source/outer-facade authority or enforce facade absence | complete |
 | `communityExperienceMode` route state | unrelated UI mode name | active onboarding-preview route state | `KEEP`; do not confuse it with the Convex facade |
 
-All 57 intermediate aliases are also exported by `community.ts`.
-`community.ts` is the only runtime source import of the intermediate module.
-The other repository references are generated API typing and structural proof
-scripts. A retained-history search found no first-party
-`api.communityExperience` or `communityExperience:*` call site.
+All 57 former intermediate aliases remain exported by `community.ts`, which
+now imports them directly from their three source owners. Runtime and generated
+API source no longer registers `communityExperience`. The only intentional
+source-path reference is a guard that fails if the retired file reappears.
+`communityExperienceMode` remains an unrelated active UI route-state name.
 
 This proves that the intermediate facade has no first-party product job. It
 does not prove that an unknown external Convex client has never called its
@@ -113,9 +116,9 @@ supported external contract. Staging deletion can be exercised independently.
 | build telemetry/workflow machinery before staging deletion | 9 | reject |
 | delete all 31 unreferenced outer aliases in the same slice | 8 | reject; classify separately |
 
-## First deletion unit
+## Completed deletion unit
 
-One bounded staging-only change:
+One bounded staging-only change completed:
 
 1. import the 57 functions directly into `community.ts` from
    `communityAccessQueries`, `communityPublic`, and `communityResources`;
@@ -131,16 +134,38 @@ One bounded staging-only change:
 No schema, data migration, provider, UI behavior, community capability,
 production query, production deployment, or generic compatibility machinery.
 
-Stop if the generated `community` contract changes, a real first-party caller
-appears, a protected source capability must move, or an explicit external
-consumer is identified.
+The generated API pass also repaired one pre-existing stale binding for the
+already-tracked `communityDerivedEvidenceReadability` module. It did not add a
+new implementation or change this slice's boundary.
+
+## Validation receipt
+
+- all 146 `community.ts` exported function names are byte-for-byte unchanged;
+- all eight focused facade-adjacent proofs pass;
+- Convex TypeScript passes;
+- the 40-step foundation baseline passes;
+- web TypeScript and the production web build pass;
+- `git diff --check` passes;
+- development Convex reports functions ready on
+  `dev:quick-porcupine-949`;
+- anonymous `https://polynet-staging.vercel.app/c/public-funnel-preview-20260308`
+  loads the shared community shell and correctly gates chat;
+- signed-in `/c/polynet/chat` loads community threads and manager controls;
+- signed-in `/c/polynet/resources` loads the directory and a selected resource
+  body;
+- both staging browser sessions reported zero console errors;
+- no join, post, payment, resource, schema, data, or production mutation was
+  performed.
+
+The GitHub staging branch remains behind the local worktree because the
+external push was safety-blocked pending a new explicit GitHub-egress approval.
 
 ## Verdict
 
-`communityExperience.ts` is a high-confidence staging deletion candidate. Its
-removal deletes 57 callable identities and one 65-line facade while preserving
+`communityExperience.ts` is deleted and validated on the staging lane. The
+change removes 57 callable identities and one 65-line facade while preserving
 every current first-party `community:*` route and every source authority.
 
-Do not combine it with the 31 outer-alias decisions. Delete the provably
-ownerless intermediate hop first, verify, then return to the larger public
-surface.
+Do not combine it with the 31 outer-alias decisions. Deletion of the provably
+ownerless intermediate hop is complete; the larger public surface is the next
+separate decision area.

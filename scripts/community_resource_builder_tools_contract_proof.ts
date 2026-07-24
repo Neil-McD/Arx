@@ -12,7 +12,6 @@ const packageJson = read("package.json");
 const resources = read("convex/communityResources.ts");
 const schema = read("convex/schema.ts");
 const community = read("convex/community.ts");
-const experience = read("convex/communityExperience.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const launchModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const app = read("apps/web/src/App.tsx");
@@ -43,7 +42,6 @@ for (const exportName of [
 ] as const) {
   assert.match(resources, new RegExp(`export const ${exportName} = (query|mutation)\\(`));
   assert.match(community, new RegExp(`export const ${exportName} = ${exportName}Impl`));
-  assert.match(experience, new RegExp(`${exportName}`));
 }
 
 assert.match(

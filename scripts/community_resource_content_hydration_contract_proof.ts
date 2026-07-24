@@ -27,7 +27,6 @@ const content = read("convex/communityResourceContent.ts");
 const markdown = read("shared/markdownUi.tsx");
 const linkEmbedUi = read("shared/linkEmbedUi.tsx");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
-const experience = read("convex/communityExperience.ts");
 
 assert.match(
   packageJson,
@@ -114,11 +113,6 @@ assert.doesNotMatch(
   resources,
   /export const listCommunityResourceModules = query\(/,
   "the duplicate standalone module-list query must be deleted",
-);
-assert.doesNotMatch(
-  experience,
-  /listCommunityResourceModules/,
-  "the deleted standalone module-list query must not remain exported",
 );
 assert.match(
   gateway,

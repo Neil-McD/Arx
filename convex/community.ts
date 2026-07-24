@@ -80,8 +80,22 @@ import {
   reactToCommunityAiFeedPost as reactToCommunityAiFeedPostImpl,
 } from "./communityAiFeed";
 import {
+  getMyCommunityAccess as getMyCommunityAccessImpl,
+  getMyCommunityAccessBySlug as getMyCommunityAccessBySlugImpl,
+} from "./communityAccessQueries";
+import {
   cancelMyJoinRequestBySlug as cancelMyJoinRequestBySlugImpl,
   getCommunityPresenceSummary as getCommunityPresenceSummaryImpl,
+  heartbeatCommunityPresence as heartbeatCommunityPresenceImpl,
+  joinPublicCommunity as joinPublicCommunityImpl,
+  joinPublicCommunityBySlug as joinPublicCommunityBySlugImpl,
+  listPublicDiscoverCommunities as listPublicDiscoverCommunitiesImpl,
+  recordPublicFunnelVisitBySlug as recordPublicFunnelVisitBySlugImpl,
+  resolvePublicCommunityAccessBySlug as resolvePublicCommunityAccessBySlugImpl,
+  resolvePublicFunnelBySlug as resolvePublicFunnelBySlugImpl,
+  resolvePublicFunnelStatsBySlug as resolvePublicFunnelStatsBySlugImpl,
+} from "./communityPublic";
+import {
   countCommunityResources as countCommunityResourcesImpl,
   editCommunityResourceBuilderResource as editCommunityResourceBuilderResourceImpl,
   beginGoogleDriveSourceOAuth as beginGoogleDriveSourceOAuthImpl,
@@ -91,7 +105,6 @@ import {
   finalizeGoogleDriveSourceOAuth as finalizeGoogleDriveSourceOAuthImpl,
   finalizeGitHubSourceOAuth as finalizeGitHubSourceOAuthImpl,
   generateCommunityResourceSourceUploadUrl as generateCommunityResourceSourceUploadUrlImpl,
-  heartbeatCommunityPresence as heartbeatCommunityPresenceImpl,
   getGitHubSourceConnectionStatus as getGitHubSourceConnectionStatusImpl,
   getGoogleDriveSourceConnectionStatus as getGoogleDriveSourceConnectionStatusImpl,
   crawlWebRoot as crawlWebRootImpl,
@@ -110,14 +123,9 @@ import {
   listGitHubSourceFiles as listGitHubSourceFilesImpl,
   listGitHubSourceRepositories as listGitHubSourceRepositoriesImpl,
   listGoogleDriveSourceFiles as listGoogleDriveSourceFilesImpl,
-  recordPublicFunnelVisitBySlug as recordPublicFunnelVisitBySlugImpl,
   createCommunityResourcePageDraftFromSource as createCommunityResourcePageDraftFromSourceImpl,
   deleteCommunityResource as deleteCommunityResourceImpl,
   deleteCommunityResourceModule as deleteCommunityResourceModuleImpl,
-  getMyCommunityAccess as getMyCommunityAccessImpl,
-  getMyCommunityAccessBySlug as getMyCommunityAccessBySlugImpl,
-  joinPublicCommunity as joinPublicCommunityImpl,
-  joinPublicCommunityBySlug as joinPublicCommunityBySlugImpl,
   listCommunityResourceBuilderDirectory as listCommunityResourceBuilderDirectoryImpl,
   stageCommunityResourceBuilderChangeset as stageCommunityResourceBuilderChangesetImpl,
   getCommunityResourceBuilderChangesetStatus as getCommunityResourceBuilderChangesetStatusImpl,
@@ -126,10 +134,6 @@ import {
   applyCommunityResourceBuilderChangeset as applyCommunityResourceBuilderChangesetImpl,
   listCommunityResources as listCommunityResourcesImpl,
   readCommunityResource as readCommunityResourceImpl,
-  listPublicDiscoverCommunities as listPublicDiscoverCommunitiesImpl,
-  resolvePublicCommunityAccessBySlug as resolvePublicCommunityAccessBySlugImpl,
-  resolvePublicFunnelBySlug as resolvePublicFunnelBySlugImpl,
-  resolvePublicFunnelStatsBySlug as resolvePublicFunnelStatsBySlugImpl,
   moveCommunityResourceToModule as moveCommunityResourceToModuleImpl,
   reorderCommunityResourceModules as reorderCommunityResourceModulesImpl,
   reorderCommunityResources as reorderCommunityResourcesImpl,
@@ -137,7 +141,7 @@ import {
   saveCommunityResource as saveCommunityResourceImpl,
   saveCommunityResourceModule as saveCommunityResourceModuleImpl,
   writeCommunityResourceBuilderResource as writeCommunityResourceBuilderResourceImpl,
-} from "./communityExperience";
+} from "./communityResources";
 import {
   cancelCommunityEvent as cancelCommunityEventImpl,
   listCommunityEvents as listCommunityEventsImpl,

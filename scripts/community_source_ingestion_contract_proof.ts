@@ -16,7 +16,6 @@ const core = read("convex/communityCore.ts");
 const resources = read("convex/communityResources.ts");
 const sourceUrlPolicy = read("convex/communitySourceUrlPolicy.ts");
 const community = read("convex/community.ts");
-const experience = read("convex/communityExperience.ts");
 const sourceIntegrationHttp = read("convex/httpCommunitySourceIntegrations.ts");
 const http = read("convex/http.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
@@ -600,11 +599,6 @@ assert.match(
   "main Convex HTTP router should mount source integration callback routes",
 );
 
-assert.match(
-  experience,
-  /(?=[\s\S]*generateCommunityResourceSourceUploadUrl)(?=[\s\S]*disconnectGoogleDriveSourceConnection)(?=[\s\S]*disconnectGitHubSourceConnection)(?=[\s\S]*crawlCommunitySourceRoot)(?=[\s\S]*getCommunitySourceCrawlJob)(?=[\s\S]*getCommunitySourceCrawlerStatus)(?=[\s\S]*ingestCommunitySourceFiles)(?=[\s\S]*ingestCommunitySourceGitHub)(?=[\s\S]*ingestCommunitySourceGoogleDrive)(?=[\s\S]*ingestCommunitySourceLinks)(?=[\s\S]*ingestCommunitySources)(?=[\s\S]*listCommunityLaunchKnowledgeSources)(?=[\s\S]*listCommunitySourceCrawlJobs)/,
-  "community experience barrel should expose source ingestion",
-);
 assert.match(
   community,
   /(?=[\s\S]*generateCommunityResourceSourceUploadUrl as generateCommunityResourceSourceUploadUrlImpl)(?=[\s\S]*disconnectGoogleDriveSourceConnection as disconnectGoogleDriveSourceConnectionImpl)(?=[\s\S]*disconnectGitHubSourceConnection as disconnectGitHubSourceConnectionImpl)(?=[\s\S]*crawlCommunitySourceRoot as crawlCommunitySourceRootImpl)(?=[\s\S]*getCommunitySourceCrawlJob as getCommunitySourceCrawlJobImpl)(?=[\s\S]*getCommunitySourceCrawlerStatus as getCommunitySourceCrawlerStatusImpl)(?=[\s\S]*ingestCommunitySources as ingestCommunitySourcesImpl)(?=[\s\S]*ingestCommunitySourceLinks as ingestCommunitySourceLinksImpl)(?=[\s\S]*ingestCommunitySourceFiles as ingestCommunitySourceFilesImpl)(?=[\s\S]*ingestCommunitySourceGoogleDrive as ingestCommunitySourceGoogleDriveImpl)(?=[\s\S]*ingestCommunitySourceGitHub as ingestCommunitySourceGitHubImpl)(?=[\s\S]*listCommunityLaunchKnowledgeSources as listCommunityLaunchKnowledgeSourcesImpl)(?=[\s\S]*listCommunitySourceCrawlJobs as listCommunitySourceCrawlJobsImpl)(?=[\s\S]*export const beginGoogleDriveSourceOAuth)(?=[\s\S]*export const beginGitHubSourceOAuth)(?=[\s\S]*export const disconnectGoogleDriveSourceConnection)(?=[\s\S]*export const disconnectGitHubSourceConnection)(?=[\s\S]*export const finalizeGoogleDriveSourceOAuth)(?=[\s\S]*export const finalizeGitHubSourceOAuth)(?=[\s\S]*export const crawlCommunitySourceRoot(?:: any)? = crawlCommunitySourceRootImpl)(?=[\s\S]*export const getCommunitySourceCrawlJob)(?=[\s\S]*export const getCommunitySourceCrawlerStatus)(?=[\s\S]*export const listCommunityLaunchKnowledgeSources)(?=[\s\S]*export const listCommunitySourceCrawlJobs)(?=[\s\S]*export const listGoogleDriveSourceFiles)(?=[\s\S]*export const listGitHubSourceFiles)(?=[\s\S]*export const importGoogleDriveSourceFiles)(?=[\s\S]*export const importGitHubSourceFiles)(?=[\s\S]*export const ingestCommunitySourceGoogleDrive(?:: any)? = ingestCommunitySourceGoogleDriveImpl)(?=[\s\S]*export const ingestCommunitySourceGitHub(?:: any)? = ingestCommunitySourceGitHubImpl)/,

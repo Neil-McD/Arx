@@ -48,7 +48,6 @@ The generated assignment reports zero fallback schema tables. Counts overlap onl
 | `shared/toolRegistry.ts` | 2,296 lines | canonical native schema gravity; should project rather than be copied |
 | `shared/polynetMcp.ts` | 1,200 lines | independent external wire schema with compatibility names |
 | `convex/community.ts` | 146 function aliases | de facto web-facing facade; 115 have current first-party runtime references, while source modules remain callable too |
-| `convex/communityExperience.ts` | 57 function aliases | intermediate facade with zero first-party namespace calls; every alias is re-exported again |
 | root `package.json` | 293 scripts, 253 checks | operational discoverability and proof ownership have collapsed into one manifest |
 
 ## Boundary map
@@ -75,7 +74,7 @@ The desired reduction is not one transport. It is one semantic operation and one
 
 ## Main deletion queues
 
-1. **Immediate static candidates:** stale quickstart residue, stale product-doc claims, and the intermediate `communityExperience` facade after external-consumer proof. The no-op runtime flag, false template names, and unreferenced Discover Apps/Skills CSS are removed.
+1. **Immediate static candidates:** stale quickstart residue and stale product-doc claims. The no-op runtime flag, false template names, unreferenced Discover Apps/Skills CSS, and intermediate `communityExperience` facade are removed on the staging lane.
 2. **Migration candidates:** inline resource bodies, legacy community chat/link/attachment reads, absent-membership-active compatibility, duplicate membership rows, legacy retrieval query fields, and old MCP wire names.
 3. **Decision-required systems:** exact audit/privacy/legal retention periods and package ownership. Builder Partner v3, shared-content account-deletion ownership, the deferred standalone Workspace destination, and semantic-thesis adoption are resolved; safe lifecycle execution and compatibility retirement remain architecture work.
 4. **Never blanket-delete:** coding/community harnesses, compiler, resources/memory, references, canonical interaction/intelligence history, ordinary creator payout, and official MCP capability.

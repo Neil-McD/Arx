@@ -32,17 +32,15 @@ The official MCP still uses several `workspace_*` fields/tool names for communit
 `convex/community.ts` re-exports 146 registered functions and is the de facto
 web-facing facade. Static runtime scanning finds 115 referenced aliases and 31
 without a first-party `community:*` caller. The original registered functions
-remain callable under their source modules. `communityExperience.ts` adds 57
-registered re-exports and all 57 are then re-exported through `community.ts`.
-Generated API therefore exposes overlapping public identities for the same
-implementation.
+remain callable under their source modules. The former 57-function
+`communityExperience.ts` intermediate facade is deleted on staging;
+`community.ts` now imports those implementations directly from the protected
+resource/public/access owners.
 
-`communityExperience.ts` has zero first-party namespace calls. Its only runtime
-source owner is the outer facade; all other code references are generated API
-typing or eight structural proofs. It is the cleanest facade-deletion candidate,
-but unknown external Convex callers remain a compatibility decision. Long term,
-expose one supported public transport identity per operation and keep internal
-modules internal.
+All 146 `community:*` exports are unchanged and the generated
+`api.communityExperience` namespace is gone. Unknown external use remains only
+a production-port compatibility decision. Long term, expose one supported
+public transport identity per operation and keep internal modules internal.
 
 ## Apps, skills, and OAuth
 
@@ -58,7 +56,7 @@ Provider connections are split by role: inference provider connections, Drive/Gi
 | --- | --- | --- | ---: | --- |
 | explicit member/community/MCP context authority | `KEEP (MVP core)` | `HARDEN` | 0 | central security invariant |
 | community-agent two-tool protocol | `KEEP (MVP core)` | `DOCUMENT` | 1 | intentionally small protocol for a distinct principal |
-| intermediate `communityExperience.ts` registered facade | `DELETE (deferred/dead)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 9 | adds callable identities without owning semantics |
+| intermediate `communityExperience.ts` registered facade | `DELETE (deferred/dead)` complete on staging | `DELETE` | 9 | removed 57 callable identities without changing outer API behavior |
 | source-module public functions plus outer facade aliases forever | `KEEP (MVP core)` | `CONSOLIDATE` | 8 | one operation should have one supported public identity |
 | independent native and MCP semantic schema declarations | `KEEP (MVP core)` | `CONSOLIDATE` | 7 | transports differ; semantic meaning and authority should not |
 | legacy `workspace_*` official MCP wire names forever | `DECISION REQUIRED (user confirmation)` | `VERSION`, `MIGRATE_THEN_DELETE` | 6 | current external compatibility may justify them temporarily |
