@@ -250,6 +250,11 @@ assert.equal(
   "--accent-agent: #2F55FF;",
   "--text-link: #2F55FF;",
   "--text-selected: #171719;",
+  "--community-social-embed-surface: var(--surface-card);",
+  "--community-social-embed-surface-hover: var(--surface-card-hover);",
+  "--community-social-embed-stroke: var(--stroke-default);",
+  "--community-social-embed-text: var(--text-ink-primary);",
+  "--community-social-embed-muted: var(--text-ink-secondary);",
 ].forEach((token) => {
   assert.ok(crisThemeBlock.includes(token), `CRIS should define ${token}`);
 });
