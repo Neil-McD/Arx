@@ -166,8 +166,8 @@ Exactly one milestone or bounded sub-slice may be `IN_PROGRESS`.
 | --- | --- | --- | --- |
 | C0 | Reconcile and adopt one architecture thesis | `COMPLETE` | one repository contract distinguishes implemented, next, proposed, and deferred architecture without attachment/chat dependency |
 | C1 | Finish paid-access proof and ordinary creator settlement | `DEFERRED_ACCEPTED` | implementation accepted for sequencing; the unperformed live checkout/cancellation and Connect-settlement evidence remains explicit under U-017 |
-| C2 | Complete resumable deletion and privacy lifecycles | `BLOCKED` | interruption-safe phases, external revocation, privacy propagation, invariant audit, and root-last finalization |
-| C3 | Finish canonical resource, interaction, and intelligence migrations | `IN_PROGRESS` | one authority per concern and zero compatibility reads/writes through an observation window |
+| C2 | Complete resumable deletion and privacy lifecycles | `IN_PROGRESS` | interruption-safe phases, external revocation, privacy propagation, invariant audit, and root-last finalization |
+| C3 | Finish canonical resource, interaction, and intelligence migrations | `COMPLETE` | one authority per concern and zero compatibility reads/writes through an observation window |
 | C4 | Guarantee scheduler fairness and bounded operations | `PLANNED` | every eligible object eventually receives service across caps and restarts; operator work is bounded |
 | C5 | Collapse capability, transport, and public-function duplication | `PLANNED` | one authority/executor/receipt owner per semantic operation with thin versioned adapters |
 | C6 | Land the read-only semantic community repository | `PLANNED` | bounded authorized list/read of only real initial mounts across native and external surfaces |
@@ -965,8 +965,42 @@ deleted or changed. Focused receipt, evidence, cognition-cleanup, and lifecycle
 proofs pass, as do Convex and web typechecks, production build, bundle budget,
 diff hygiene, and the complete 38-step foundation baseline.
 
-C3 remains active only for the separately bounded
-`legacy_unversioned` evidence decision. The next slice must inspect that one
-node's trace validity, citation reconstructability, retention authority, and
-actual consumption. It must not fabricate a historical citation or introduce a
-generic migration engine.
+C3.3B closes the final active `legacy_unversioned` evidence decision on the
+isolated development deployment. Read-only semantic review proved that the
+provisional `promising` node, its sole community-visible source trace, and the
+canonical live same-community AI Feed post describe the same claim. The
+existing authenticated manager airlock captured the exact current source into
+one immutable citation, accepted the expectation-locked version-1 target, and
+atomically applied one `attach_evidence` mutation without changing the claim,
+status, visibility, trace, or historical receipts.
+
+The complete bounded postcondition scan reports five intelligence nodes, four
+archived historical nodes, zero active `legacy_unversioned` nodes, one
+`citation_v1` node at version 2, one citation, 11 change requests, 11 mutation
+receipts, seven retrieval receipts, and 373 traces. The four archived nodes
+remain audit-linked and were not deletion candidates. No code, schema, UI,
+scheduler, provider, Vercel, or production state changed. C3 is complete within
+the accepted resource/interaction/intelligence cleanup boundary.
+
+C2.3A restarts C2 with proof rather than execution. The current policy contract
+passes against 124 tables, 118 direct user-reference edges, 38 unindexed edges,
+26 opaque fields, and seven storage fields; the privacy dossier's stale
+125-table statement is corrected. A complete bounded development scan found
+zero lifecycle requests, zero lifecycle receipts, zero interaction privacy
+purge events, 55 user-authored canonical roots, 21 user-authored replies, seven
+DM messages, eight DM participants, and zero attachment-bearing messages.
+
+The existing lifecycle behavioral fixture now includes one representative
+preservation target for private identity/session state, encrypted provider
+credentials, settled finance, audit evidence, ownership-transfer blockers, a
+shared DM with a surviving participant and real stored attachment, canonical
+interaction and Resource content, and the canonical
+interaction -> trace -> citation -> accepted-memory -> retrieval/outcome ->
+compiler-digest chain. Request/preflight interruption and every replay leave
+all product rows and the storage object unchanged. This slice adds no runtime
+state, lifecycle phase, index, public function, UI, scheduler, provider effect,
+anonymization, deletion, or production behavior. The six execution blockers
+remain truthful; the next C2 slice must resolve the authored-content privacy
+propagation contract before access freeze can safely lead to completion.
+Focused lifecycle/evidence proofs, Convex typecheck, diff hygiene, and the full
+38-step foundation baseline pass.

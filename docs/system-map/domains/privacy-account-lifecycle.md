@@ -15,7 +15,7 @@ Let a person control their account and private data without corrupting money rec
 | operational evidence | audit/diagnostic/runtime receipts | bounded retention and pseudonymization; never accidental authority |
 | external-provider state | OAuth, Stripe, worker/provider resources | revoke/delete externally and reconcile local state with receipts |
 
-The ownership matrix is accepted as product direction. `accountLifecyclePolicy.ts` now encodes declarative coverage for all 125 current schema tables and 118 direct user-reference edges, but the bounded executor and exact legal/financial/security TTLs remain open.
+The ownership matrix is accepted as product direction. `accountLifecyclePolicy.ts` now encodes declarative coverage for all 124 current schema tables and 118 direct user-reference edges, but the bounded executor and exact legal/financial/security TTLs remain open.
 
 ## Account deletion path
 
@@ -42,6 +42,19 @@ uses the unique account lookup plus checkpoint receipts, while policy drift and
 duplicate roots fail closed. No frozen state, session effect, public lifecycle
 surface, or destructive executor exists yet.
 
+C2.3A broadens the existing zero-effect lifecycle proof without adding an
+executor. Its representative fixture now spans an active auth session,
+encrypted provider credentials, settled financial evidence, retained audit
+evidence, an owned community/app/skill, a shared DM with a real stored
+attachment and surviving participant, a canonical interaction root/reply and
+content block, canonical Resource content, and the exact
+interaction -> trace -> citation -> accepted-memory -> retrieval/outcome ->
+compiler-digest chain. Request creation, replay, interruption, preflight,
+preflight replay, blocked-request replay, and cross-actor rejection leave every
+fixture row and the storage object unchanged. This proves only that the current
+kernel remains metadata-only; it does not prove anonymization, revocation,
+privacy propagation, retention, or deletion.
+
 The C2 analytics closeout removes one unnecessary privacy edge rather than
 building an executor around it. Community funnel visits are anonymous,
 hash-only operational evidence; the caller-supplied subject, event `userId`,
@@ -51,7 +64,14 @@ in `platformBusinessVisits`. After the C3 legacy featured/reaction storage
 closeout, the current policy covers 118 direct user edges, 38 of which still
 require a new index or declared parent cascade.
 
-The replacement policy still needs an explicit rule for DM attachments embedded in `contentJson`. The retired executor did not visibly clean their storage objects; this remains a historical storage-leak inference until attachment representation and live prevalence are checked.
+The DM attachment representation and current development prevalence are now
+known. The writer stores attachments inside `dmMessages.contentJson` with a
+nested `storageId`; a complete bounded development scan found seven messages
+and zero attachment-bearing messages. The C2.3A fixture nevertheless includes a
+real stored DM attachment and proves preflight preserves it. The eventual
+authored-content or account-private purge rule for that object remains
+unresolved; zero current development prevalence is not permission to omit the
+storage lifecycle.
 
 ## Community deletion path
 
