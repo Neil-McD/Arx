@@ -121,33 +121,37 @@ assert.match(
   /cycle\.ok === true && cycle\.completed === true[\s\S]*outcome: handled \? "handled" : "retry"/,
   "only a completed role cycle should terminally handle a digest",
 );
+const settleBlock = exportedFunctionBlock(
+  heartbeat,
+  "settleCommunityCompilerDigestHandoffInternal",
+);
+assert.match(
+  settleBlock,
+  /if \(args\.outcome === "handled"\)[\s\S]*runCommunityCompilerDigestPassInternal[\s\S]*requireTrigger: true/,
+  "handled digest settlement should release the next bounded compiler pass",
+);
+assert.doesNotMatch(
+  settleBlock,
+  /if \(args\.outcome === "retry"\)[\s\S]*runCommunityCompilerDigestPassInternal/,
+  "retry settlement should not create a competing compiler continuation",
+);
 
 const sweepBlock = exportedFunctionBlock(heartbeat, "runCommunityMemorySweepInternal");
 assert.match(
   sweepBlock,
-  /settleCommunityMemorySignalsInternal[\s\S]*assessCommunityAgentCycleInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
-  "memory sweep should metabolize independently, plan work, and enqueue immediately",
+  /assessCommunityAgentCycleInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
+  "memory sweep should plan compiler and handoff work and enqueue immediately",
 );
 assert.doesNotMatch(
   sweepBlock,
-  /runCommunityCompilerDigestPassInternal|COMMUNITY_AGENT_SWEEP_HEARTBEAT_DELAY_MS/,
-  "memory sweep must not compile or own an arbitrary delay",
+  /runCommunityCompilerDigestPassInternal|COMMUNITY_AGENT_SWEEP_HEARTBEAT_DELAY_MS|settleCommunityMemorySignalsInternal|recordCommunityMemoryMetabolizerErrorRunInternal|metabolized/,
+  "memory sweep must not compile, own an arbitrary delay, or run mechanical memory metabolism",
 );
 assert.match(sweepBlock, /enqueueCommunityAgentHeartbeatInternal[\s\S]*runAfterMs: 0/);
 assert.match(
   sweepBlock,
-  /settleCommunityMemorySignalsInternal[\s\S]*communityId: target\.communityId/,
-  "metabolizer settlement should be scoped to the same single community target as the sweep",
-);
-assert.match(
-  sweepBlock,
-  /catch \(error\) \{[\s\S]*Score settlement is mechanical memory metabolism[\s\S]*block the heartbeat's evidence gate/,
-  "metabolizer failures should not block heartbeat evidence assessment",
-);
-assert.match(
-  sweepBlock,
-  /metabolized[\s\S]*settled_node_count[\s\S]*return \{ ok: true, targets: targets\.length, enqueued, metabolized, skipped \}/,
-  "memory sweep should expose compact metabolizer settlement diagnostics",
+  /return \{ ok: true, targets: targets\.length, enqueued, skipped \}/,
+  "memory sweep should expose only compiler and heartbeat scheduling diagnostics",
 );
 
 assert.match(

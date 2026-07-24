@@ -122,6 +122,16 @@ assert.match(
   "new source traces should enter the compiler lifecycle through the visibility-aware lifecycle patch",
 );
 assert.match(
+  directory,
+  /scheduleCommunityCompilerEvaluation[\s\S]*runCommunityCompilerDigestPassInternal[\s\S]*requireTrigger: true/,
+  "source trace transitions should schedule the deterministic compiler evaluator",
+);
+assert.match(
+  directory,
+  /if \(compilerLifecyclePatch\.compilerState === "pending"\) \{[\s\S]*scheduleCommunityCompilerEvaluation\(args\.ctx, args\.communityId\)/,
+  "only lifecycle transitions that materially enter pending should schedule evaluation",
+);
+assert.match(
   docs,
   /Eleventh Implementation Slice[\s\S]*Evidence Unit \+ Priority Tier \+ Pending Backlog[\s\S]*`communitySourceTraces` own compiler lifecycle state/,
   "docs should describe the simple evidence measurement model",

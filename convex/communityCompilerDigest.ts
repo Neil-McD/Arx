@@ -1,4 +1,5 @@
 import { internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import {
   normalizeIdValue,
@@ -8,6 +9,7 @@ import {
 } from "./communityCore";
 import {
   buildCommunitySourceTraceRevision,
+  COMPILER_EVIDENCE_AGE_THRESHOLD_MS,
   drainSelfAuthoredPendingSourceTracesForCommunity,
   measureCommunityCompilerEvidenceForCommunity,
   type SourceTraceRow,
@@ -24,7 +26,9 @@ import {
 const COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS = 30;
 const COMMUNITY_COMPILER_DIGEST_WINDOW_MS = COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 const COMMUNITY_COMPILER_DIGEST_AGENT_KEY = "community_compiler_digest_v1";
+const COMMUNITY_COMPILER_MIN_RECHECK_DELAY_MS = 1_000;
 const MAX_DIGEST_ITEMS = 96;
+const internalRefs = internal as any;
 
 type DigestCategory =
   | "chat_activity"
@@ -239,6 +243,24 @@ async function runCommunityCompilerDigestPassCore(
       nowMs,
     });
     if (args.requireTrigger && !compilerEvidence.measurement.should_run) {
+      const oldestPendingAt = Date.parse(String(compilerEvidence.measurement.oldest_pending_at ?? ""));
+      if (compilerEvidence.measurement.pending_total > 0 && Number.isFinite(oldestPendingAt)) {
+        const runAfterMs = Math.max(
+          COMMUNITY_COMPILER_MIN_RECHECK_DELAY_MS,
+          Math.min(
+            COMPILER_EVIDENCE_AGE_THRESHOLD_MS,
+            oldestPendingAt + COMPILER_EVIDENCE_AGE_THRESHOLD_MS - nowMs,
+          ),
+        );
+        await ctx.scheduler.runAfter(
+          runAfterMs,
+          internalRefs.communityCompilerDigest.runCommunityCompilerDigestPassInternal,
+          {
+            communityId: args.communityId,
+            requireTrigger: true,
+          },
+        );
+      }
       return {
         ok: true,
         skipped: true,
@@ -368,6 +390,13 @@ async function runCommunityCompilerDigestPassCore(
           compilerContinuationReady: true,
         });
       }
+    }
+    if (!existing && sortedItems.length > 0) {
+      await ctx.scheduler.runAfter(
+        0,
+        internalRefs.communityAgentHeartbeat.runCommunityAgentHeartbeatInternal,
+        { communityId: args.communityId },
+      );
     }
     return mapDigestRow(row);
 }

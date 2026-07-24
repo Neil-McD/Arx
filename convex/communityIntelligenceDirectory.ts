@@ -1,4 +1,5 @@
 import { internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import {
   communityResourceIsLiveModulePage,
@@ -1960,6 +1961,14 @@ async function insertMutationLog(args: {
   });
 }
 
+async function scheduleCommunityCompilerEvaluation(ctx: any, communityId: any) {
+  await ctx.scheduler.runAfter(
+    0,
+    (internal as any).communityCompilerDigest.runCommunityCompilerDigestPassInternal,
+    { communityId, requireTrigger: true },
+  );
+}
+
 export async function upsertCommunitySourceTrace(args: {
   ctx: any;
   communityId: any;
@@ -2056,6 +2065,9 @@ export async function upsertCommunitySourceTrace(args: {
       // supersede otherwise-active citations by advancing a transport clock.
       updatedAt: materialChanged ? args.nowMs : existing.updatedAt,
     });
+    if (compilerLifecyclePatch.compilerState === "pending") {
+      await scheduleCommunityCompilerEvaluation(args.ctx, args.communityId);
+    }
     const updated = (await args.ctx.db.get(existing._id as any)) as SourceTraceRow | null;
     if (!updated) throw new Error("community_source_trace_not_found");
     return mapTraceRow(updated);
@@ -2089,6 +2101,9 @@ export async function upsertCommunitySourceTrace(args: {
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
+  if (compilerLifecyclePatch.compilerState === "pending") {
+    await scheduleCommunityCompilerEvaluation(args.ctx, args.communityId);
+  }
   const created = (await args.ctx.db.get(id as any)) as SourceTraceRow | null;
   if (!created) throw new Error("community_source_trace_create_failed");
   return mapTraceRow(created);
@@ -4337,13 +4352,14 @@ export const recordCommunityOutcomeObservationInternal = internalMutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    let result: Awaited<ReturnType<typeof recordCommunityOutcomeObservationCore>>;
     try {
       const userId = await resolveUserIdForAuthenticatedRequest({
         ctx,
         userId: args.userId,
         authSubject: args.authSubject ?? null,
       });
-      const result = await recordCommunityOutcomeObservationCore({
+      result = await recordCommunityOutcomeObservationCore({
         ctx,
         userId,
         communityId: args.communityId,
@@ -4353,15 +4369,29 @@ export const recordCommunityOutcomeObservationInternal = internalMutation({
         resultStatus: args.resultStatus,
         notes: args.notes,
       });
-      return {
-        ok: true,
-        outcome_observation_id: result.outcome.id,
-        outcome: result.outcome,
-        deduplicated: result.deduplicated,
-      };
     } catch (error) {
       return memoryToolError(error, "community_memory_outcome_failed");
     }
+    if (!result.deduplicated) {
+      // Outcome creation is the durable eligibility event for mechanical
+      // memory metabolism. This scheduler call deliberately sits outside the
+      // error-conversion block: scheduling failure must abort the mutation so
+      // a committed new outcome cannot exist without its settlement intent.
+      await ctx.scheduler.runAfter(
+        0,
+        (internal as any).communityMemoryMetabolizer.settleCommunityMemorySignalsInternal,
+        {
+          communityId: args.communityId,
+          trigger: "internal",
+        },
+      );
+    }
+    return {
+      ok: true,
+      outcome_observation_id: result.outcome.id,
+      outcome: result.outcome,
+      deduplicated: result.deduplicated,
+    };
   },
 });
 

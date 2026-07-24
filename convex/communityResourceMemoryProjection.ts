@@ -12,6 +12,7 @@ const COMMUNITY_RESOURCE_TRACE_SUMMARY_MAX_CHARS = 4_000;
 
 type ResourceMemoryProjectionContext = {
   db: any;
+  scheduler: any;
 };
 
 function resourceEvidenceRef(resource: CommunityResourceLike): string {

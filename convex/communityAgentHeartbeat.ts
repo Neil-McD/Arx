@@ -304,6 +304,16 @@ export const settleCommunityCompilerDigestHandoffInternal = internalMutation({
           agentTerminalReason: undefined,
           updatedAt: nowMs,
         });
+    if (args.outcome === "handled") {
+      await ctx.scheduler.runAfter(
+        0,
+        internalRefs.communityCompilerDigest.runCommunityCompilerDigestPassInternal,
+        {
+          communityId: args.communityId,
+          requireTrigger: true,
+        },
+      );
+    }
     return {
       ok: true,
       digest_id: normalizeIdValue(args.digestId),
@@ -582,36 +592,8 @@ export const runCommunityMemorySweepInternal = internalAction({
       limit: args.limitCommunities,
     })) as Array<{ communityId: string; ownerId: string }>;
     let enqueued = 0;
-    let metabolized = 0;
     const skipped: Record<string, number> = {};
     for (const target of targets) {
-      // Mechanical memory metabolism is independent of paid cognition work.
-      try {
-        const metabolizerResult = (await ctx.runMutation(
-          internalRefs.communityMemoryMetabolizer.settleCommunityMemorySignalsInternal,
-          {
-            communityId: target.communityId,
-            trigger: "sweep",
-          },
-        )) as Record<string, any>;
-        if (Number(metabolizerResult.settled_node_count ?? 0) > 0) metabolized += 1;
-      } catch (error) {
-        // Score settlement is mechanical memory metabolism; it should not
-        // block the heartbeat's evidence gate or role cycle.
-        try {
-          await ctx.runMutation(
-            internalRefs.communityMemoryMetabolizer.recordCommunityMemoryMetabolizerErrorRunInternal,
-            {
-              communityId: target.communityId,
-              trigger: "sweep",
-              errorCode: error instanceof Error ? error.message.slice(0, 120) : "community_metabolizer_error",
-              errorMessage: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
-            },
-          );
-        } catch {
-          // Error ledger failure must not block the heartbeat either.
-        }
-      }
       const assessment = (await ctx.runQuery(internalRefs.communityAgentHeartbeat.assessCommunityAgentCycleInternal, {
         communityId: target.communityId,
       })) as { enqueue: boolean; reason: string };
@@ -634,6 +616,6 @@ export const runCommunityMemorySweepInternal = internalAction({
       });
       enqueued += 1;
     }
-    return { ok: true, targets: targets.length, enqueued, metabolized, skipped };
+    return { ok: true, targets: targets.length, enqueued, skipped };
   },
 });

@@ -45,6 +45,16 @@ assert.match(
   /withIndex\("by_community_versionKey"[\s\S]*agentHandoffState: sortedItems\.length > 0 \? "pending" as const : "handled" as const/,
   "non-empty immutable digests should enter the autonomous handoff queue",
 );
+assert.match(
+  digest,
+  /pending_total > 0[\s\S]*oldestPendingAt \+ COMPILER_EVIDENCE_AGE_THRESHOLD_MS - nowMs[\s\S]*runCommunityCompilerDigestPassInternal[\s\S]*requireTrigger: true/,
+  "sub-threshold pending evidence should schedule one bounded age-deadline recheck",
+);
+assert.match(
+  digest,
+  /if \(!existing && sortedItems\.length > 0\)[\s\S]*runCommunityAgentHeartbeatInternal/,
+  "only insertion of a new non-empty digest version should schedule the heartbeat",
+);
 assert.doesNotMatch(
   digest,
   /markSelectedSourceTracesCompiled|compilerState: "compiled"/,

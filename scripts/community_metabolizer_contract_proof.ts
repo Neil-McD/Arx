@@ -5,6 +5,7 @@ import { join } from "node:path";
 const root = process.cwd();
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const metabolizer = readFileSync(join(root, "convex/communityMemoryMetabolizer.ts"), "utf8");
+const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
 const heartbeat = readFileSync(join(root, "convex/communityAgentHeartbeat.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
@@ -44,9 +45,14 @@ assert.match(
   "metabolizer should compute the three derived learning scores deterministically",
 );
 assert.match(
+  directory,
+  /ctx\.scheduler\.runAfter\([\s\S]*communityMemoryMetabolizer\.settleCommunityMemorySignalsInternal[\s\S]*communityId: args\.communityId[\s\S]*trigger: "internal"/,
+  "new canonical outcomes should atomically schedule same-community metabolism",
+);
+assert.doesNotMatch(
   heartbeat,
-  /internalRefs\.communityMemoryMetabolizer\.settleCommunityMemorySignalsInternal/,
-  "memory sweep should call the dedicated metabolizer module, not the directory module",
+  /settleCommunityMemorySignalsInternal|recordCommunityMemoryMetabolizerErrorRunInternal|metabolized/,
+  "the global community sweep should not own mechanical memory metabolism",
 );
 
 const block = exportedFunctionBlock(metabolizer, "settleCommunityMemorySignalsInternal");
@@ -174,9 +180,14 @@ assert.match(
   "error run recording should fail closed on missing community and never invent changed nodes",
 );
 assert.match(
-  heartbeat,
-  /settleCommunityMemorySignalsInternal[\s\S]*communityId: target\.communityId[\s\S]*trigger: "sweep"[\s\S]*recordCommunityMemoryMetabolizerErrorRunInternal[\s\S]*status|settleCommunityMemorySignalsInternal[\s\S]*communityId: target\.communityId[\s\S]*trigger: "sweep"[\s\S]*recordCommunityMemoryMetabolizerErrorRunInternal/,
-  "memory sweep should pass the sweep trigger and record error runs without blocking the heartbeat",
+  directory,
+  /if \(existingOutcome\) \{[\s\S]*deduplicated: true/,
+  "canonical outcome replay should deduplicate before scheduling",
+);
+assert.match(
+  directory,
+  /catch \(error\) \{[\s\S]*memoryToolError\(error, "community_memory_outcome_failed"\)[\s\S]*if \(!result\.deduplicated\) \{[\s\S]*ctx\.scheduler\.runAfter\([\s\S]*settleCommunityMemorySignalsInternal/,
+  "only a new outcome should schedule metabolism, and scheduling must sit outside domain error conversion so failure rolls back the mutation",
 );
 assert.match(
   listRunsBlock,
@@ -191,8 +202,13 @@ assert.match(
 
 assert.match(
   docs,
-  /Metabolizer v0[\s\S]*deterministic score settlement[\s\S]*settles persistent derived scores for nodes touched by recent bounded evidence[\s\S]*no-signal nodes are left unchanged[\s\S]*communityMemoryMetabolizerRuns[\s\S]*noop[\s\S]*manager-readable/,
-  "architecture doc should describe the metabolizer v0 boundary and run ledger",
+  /Metabolizer v0[\s\S]*deterministic score settlement[\s\S]*communityMemoryMetabolizerRuns[\s\S]*manager-readable/,
+  "architecture doc should describe the bounded metabolizer and its manager-readable run ledger",
+);
+assert.match(
+  docs,
+  /new canonical outcome observation[\s\S]*atomically schedules[\s\S]*no longer enumerates every community/,
+  "architecture doc should describe event-driven metabolizer eligibility",
 );
 
 console.log("community_metabolizer_contract_proof: ok");

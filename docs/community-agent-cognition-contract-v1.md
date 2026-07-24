@@ -1568,9 +1568,9 @@ Rules:
 - A completed Steward pass with durable decisions for every item marks the
   exact handoff handled. Known failures return it to pending; abandoned running
   claims become retryable after the lease.
-- The sweep never compiles evidence itself and never uses an arbitrary delay.
-  It settles deterministic metabolizer state independently, then immediately
-  schedules only planner-approved agent work.
+- The sweep never compiles evidence itself, never runs deterministic
+  metabolizer settlement, and never uses an arbitrary delay. It immediately
+  schedules only planner-approved compiler and handoff work.
 - Historical mutable daily digests have no version or handoff state and are
   never claimed as autonomous work.
 
@@ -1687,28 +1687,75 @@ Rules:
 - Its node update cap limits actual settled nodes, not noisy signal inspection.
 - It writes a `communityIntelligenceMutations` audit row with before/after snapshots for every changed node.
 - It writes a compact `communityMemoryMetabolizerRuns` ledger row for every successful settlement attempt, including `noop` runs where no node changed.
-- Sweep-triggered settlement errors are recorded as `communityMemoryMetabolizerRuns` rows with `status = error`; failed settlement mutations remain rollback-safe and do not commit partial score updates.
+- A new canonical outcome observation atomically schedules one same-community
+  settlement mutation. Deduplicated outcome replay schedules no second
+  settlement.
+- Failed settlement mutations remain rollback-safe and do not commit partial score updates.
 - The metabolizer run ledger is same-community scoped and manager-readable; it is the truth surface for "ran vs no-op vs failed."
 - It does not call an LLM. Metabolizer v0 is mechanical metabolism, not a new agent role.
 
 ## Twenty-Second Implementation Slice
 
-The memory sweep now wires metabolism into cadence:
+Memory execution separates event-born mechanical metabolism from paid
+compiler/agent ignition:
 
 ```txt
-6-hour memory sweep
-  -> refresh compiler digest
-  -> settle metabolizer scores
-  -> enqueue delayed heartbeat
-  -> heartbeat evidence gate decides whether roles wake
+new canonical outcome observation
+  -> atomically schedule same-community metabolizer mutation
+  -> settle bounded derived scores
+
+6-hour compiler ignition sweep
+  -> assess canonical compiler and handoff work
+  -> immediately enqueue planner-approved heartbeat
+  -> heartbeat evidence and cost gates decide whether roles wake
 ```
 
 Rules:
 
-- Settlement runs for the same explicit `communityId` as the sweep target.
-- Digest refresh still runs before score settlement so the compiler window is fresh before the knock.
-- Metabolizer failure does not block the delayed heartbeat; derived score settlement is learning pressure, not the source of truth or the wake gate.
-- The sweep returns compact `metabolized` diagnostics. Changed-node audit remains in `communityIntelligenceMutations`; run/no-op/error audit lives in `communityMemoryMetabolizerRuns`.
+- The canonical outcome commit is the durable eligibility event for mechanical
+  metabolism. The metabolizer no longer enumerates every community on a timer.
+- Scheduling is inside the outcome mutation, so a committed new outcome cannot
+  exist without its settlement intent and a rejected outcome cannot schedule
+  work.
+- Outcome deduplication occurs before scheduling.
+- The existing sweep retains only compiler/handoff discovery until the separate
+  C4 fairness slice replaces that prefix scan.
+- Derived score settlement remains independent of the paid heartbeat, its
+  founder connection, and its daily inference cap.
+- Changed-node audit remains in `communityIntelligenceMutations`; bounded
+  run/no-op/error audit remains in `communityMemoryMetabolizerRuns`.
+
+## C4.2A Event-Driven Compiler Ignition
+
+The pending source-trace queue now drives compiler execution directly:
+
+```txt
+eligible source trace becomes pending
+  -> atomically schedule same-community compiler evaluation
+  -> below threshold: recheck at the oldest packet's bounded 72-hour deadline
+  -> threshold met: insert one immutable digest version
+  -> atomically schedule one same-community heartbeat
+  -> handled digest atomically schedules the next bounded compiler pass
+```
+
+Rules:
+
+- Only a new or materially changed eligible trace schedules evaluation.
+  Idempotent source replay, private/redacted evidence, and community-agent
+  self-authored output schedule nothing.
+- Source traces remain the queue truth. Scheduled evaluator jobs are
+  idempotent knocks and do not own evidence state.
+- A sub-threshold backlog schedules a bounded age-deadline recheck; an empty
+  backlog schedules nothing.
+- Digest version identity remains the heartbeat idempotency boundary. Only
+  insertion of a new non-empty digest schedules a heartbeat; replay of the same
+  digest version does not.
+- Terminal handling schedules compiler reevaluation so bounded overflow can
+  continue without waiting for global discovery.
+- The existing six-hour sweep remains temporarily as a repair path in C4.2A.
+  It is not the primary path and is not deleted until due-work repair is proven.
+- This slice adds no schema, public API, UI, provider call, generic queue, or
+  workflow engine.
 
 ## Twenty-Third Implementation Slice
 
@@ -1950,14 +1997,15 @@ Two payment lanes, split by what the spend produces:
 
 ### Cadence (resolved 2026-07-01)
 
-A memory sweep runs every six hours. It settles metabolizer scores from
-retrieval/outcome signals independently, measures canonical compiler and
-handoff work, and immediately schedules eligible communities. The heartbeat
-rechecks the owner off-switch, daily cycle cap, and founder connection before
-tokens can be spent, then owns the compile -> claim -> Steward pass -> settlement
-transition. Unchanged handled digest versions never re-wake the Steward.
-Frequency controls worst-case latency only; durable work state and cost gates
-own execution.
+A compiler ignition sweep currently runs every six hours. It measures canonical
+compiler and handoff work and immediately schedules eligible communities. The
+heartbeat rechecks the owner off-switch, daily cycle cap, and founder connection
+before tokens can be spent, then owns the compile -> claim -> Steward pass ->
+settlement transition. Unchanged handled digest versions never re-wake the
+Steward. Mechanical score metabolism is not part of this cadence: each new
+canonical outcome atomically schedules bounded same-community settlement.
+Frequency controls compiler wake latency only; durable work state and cost
+gates own paid execution.
 
 ### Decisions Pending
 
