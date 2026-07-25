@@ -2,7 +2,8 @@
 
 - Status: intermediate facade, bounded legacy public identities, unused
   private plugin-import subsystem, and unused public agent-transport wrapper
-  deletions `COMPLETE` on the local staging worktree and development Convex
+  and admin-read deletions `COMPLETE` on the local staging worktree and
+  development Convex
 - Mapping source: `8fd1b8b9cbd90dffc0f259fdd2163791bdd1c9e6`
 - Implementation base: `8fd1b8b9cbd90dffc0f259fdd2163791bdd1c9e6`
 - Worktree:
@@ -27,7 +28,7 @@ community compiler, official MCP, or any source authority module.
 
 | Surface | Current shape | First-party evidence | Disposition |
 | --- | ---: | --- | --- |
-| `convex/community.ts` | 138 registered aliases | 117 aliases referenced by first-party runtime code; two unused public agent-transport aliases deleted in the latest unit | `KEEP` as the current web/cached-client facade; reduce per alias later |
+| `convex/community.ts` | 136 registered aliases | 117 aliases referenced by first-party runtime code; two obsolete admin-read aliases deleted in the latest unit | `KEEP` as the current web/cached-client facade; reduce per alias later |
 | `convex/communityExperience.ts` | deleted | zero `api.communityExperience.*` or `communityExperience:*` runtime calls | `DELETE COMPLETE` |
 | `communityAccessQueries` | 2 former intermediate aliases | imported directly by `community.ts` | source owner kept |
 | `communityPublic` | 8 retained former intermediate aliases | imported directly by `community.ts`; source has an internal runtime consumer | source owner kept |
@@ -71,20 +72,21 @@ referenced by first-party runtime code. The earlier 115 count missed dynamic
 `getMyCommunityAgentDockTranscript`, and `getMyCommunityAgentDockTurn`.
 The later AI Feed simplification replaced two referenced aliases with one,
 leaving 117 referenced aliases and 23 candidates. Deleting the two proven
-unused public agent-transport aliases leaves 117 referenced aliases and 21
-remaining outer aliases requiring separate compatibility decisions:
+unused public agent-transport aliases left 117 referenced aliases and 21
+outer aliases. Deleting two obsolete admin-read aliases leaves 117 referenced
+aliases and 19 aliases with no first-party caller:
 
 | Source area | No first-party `community:*` caller found |
 | --- | --- |
-| membership/admin | `listCommunityMembershipsAdmin`, `communityOwnerHasArchitectAccess`, `unbanCommunityUser` |
+| membership/admin | `unbanCommunityUser` (`KEEP`: reversible moderation recovery) |
 | resource/builder/source | `listCommunityResourceBuilderDirectory`, `stageCommunityResourceBuilderChangeset`, `readCommunityResourceBuilderResource`, `writeCommunityResourceBuilderResource`, `editCommunityResourceBuilderResource`, `ingestCommunitySourceFiles`, `ingestCommunitySourceGitHub`, `ingestCommunitySourceGoogleDrive` |
 | destructive lifecycle compatibility | `deleteCommunity` |
 | intelligence/compiler | `createCommunityIntelligenceChangeRequest`, `listCommunityIntelligenceChangeRequests`, `decideCommunityIntelligenceChangeRequest`, `applyCommunityIntelligenceChangeRequest`, `listCommunityIntelligenceDirectoryView`, `listCommunityIntelligenceEdges`, `listCommunityIntelligenceMutations`, `runCommunityCompilerDigestPass`, `listCommunityCompilerDigests` |
 
-These 21 are alias candidates, not capability-deletion candidates. Several source
-implementations have internal, MCP, scheduled, proof, or cached-client jobs.
-`deleteCommunity` must retain its deterministic quarantine identity until that
-cached-client contract is deliberately retired.
+Of these 19 aliases, `unbanCommunityUser` and `deleteCommunity` are resolved
+`KEEP` surfaces: active Ban must be reversible, and community deletion must
+retain its deterministic quarantine identity. The remaining 17 belong to
+protected resource or compiler surfaces and require separate confirmation.
 
 ## External compatibility boundary
 
@@ -119,7 +121,7 @@ supported external contract. Staging deletion can be exercised independently.
 | preserve a 57-function intermediate facade with no first-party caller | 10 | delete |
 | keep the facade “just in case” without a named external contract | 9 | reject |
 | build telemetry/workflow machinery before staging deletion | 9 | reject |
-| delete all 21 remaining unreferenced outer aliases in the same slice | 8 | reject; classify separately |
+| delete all 19 remaining unreferenced outer aliases in the same slice | 8 | reject; two keep, 17 protected |
 
 ## First completed deletion unit
 
@@ -268,14 +270,23 @@ metadata moved from 907 to 903 functions with exactly those four removals and
 zero additions. No UI, schema, data, provider, scheduler, public MCP behavior,
 or production target changed.
 
+## Fifth completed deletion unit
+
+The superseded unpaginated `listCommunityMembershipsAdmin` query and unused
+`communityOwnerHasArchitectAccess` client preflight are deleted from their
+source and facade registrations. The active paginated roster remains the sole
+member-directory read, and authorization stays inside canonical operations.
+Existing admin and public-identity guards enforce the deletion while retaining
+Ban and Unban as distinct reversible moderation operations.
+
 ## Verdict
 
 `communityExperience.ts`, four legacy public access/join registrations, and the
-unused private plugin-import subsystem and public agent-transport wrappers are
-deleted on the staging lane.
+unused private plugin-import subsystem, public agent-transport wrappers, and
+obsolete admin-read wrappers are deleted on the staging lane.
 Canonical anonymous funnel, authenticated access, slug-owned admission,
 community app connection/setup, registry policy, recent-context retrieval,
 AI Feed publication, and official MCP behavior remain.
 
-Do not combine this with the 21 remaining outer-alias decisions. The next
-public-surface reduction must classify one coherent job at a time.
+Do not bulk-delete the 19 remaining no-caller aliases. Two are resolved keep
+surfaces and the remaining 17 cross protected resource/compiler boundaries.

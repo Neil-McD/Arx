@@ -10,7 +10,6 @@ CORE_FILE="convex/accountEntitlementCore.ts"
 SCHEMA_FILE="convex/schema.ts"
 READERS=(
   convex/auth.ts
-  convex/communityAdmin.ts
   convex/entitlements.ts
   convex/gates.ts
   convex/memberOntologyCore.ts

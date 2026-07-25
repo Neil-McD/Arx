@@ -44,7 +44,6 @@ import {
   ensureDeniedCommunityJoinRequest,
   getUniqueCommunityJoinRequestByPair,
 } from "./communityJoinRequestCore";
-import { readCanonicalAccountTier } from "./accountEntitlementCore";
 import { normalizeStripeCommunitySubscriptionStatus } from "./billingCore";
 import { communitySubscriptionStatusGrantsAccess } from "./communitySubscriptionAccessCore";
 import { scheduleProviderSubscriptionCancellationAtPeriodEnd } from "./communitySubscriptionCancellationCore";
@@ -992,59 +991,6 @@ export const listCommunityMemberships = query({
   },
 });
 
-export const listCommunityMembershipsAdmin = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const limit = Math.max(1, Math.min(5000, Math.floor(args.limit ?? 200)));
-    const { community } = await resolveCommunityAdminMembersContext({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-      communityId: args.communityId,
-    });
-    const userIdCache = new Map<string, string | null>();
-    const ownerRow = await mapCommunityOwnerAdminMemberRow({
-      ctx,
-      community,
-      userIdCache,
-    });
-    const memberLimit = Math.max(0, limit - 1);
-    const scanLimit = Math.min(5000, Math.max(memberLimit, memberLimit * 3));
-    const rows =
-      scanLimit > 0
-        ? ((await ctx.db
-            .query("communityMemberships")
-            .withIndex("by_community_createdAt", (q) =>
-              q.eq("communityId", args.communityId),
-            )
-            .order("asc")
-            .take(scanLimit)) as CommunityMembershipLike[])
-        : [];
-    const activeRows = rows
-      .filter(
-        (row) =>
-          communityMembershipRowIsActive(row) &&
-          String(row.userId) !== String(community.ownerId),
-      )
-      .slice(0, memberLimit);
-    const memberRows = await Promise.all(
-      activeRows.map((row) =>
-        mapCommunityAdminMembershipRow({
-          ctx,
-          row,
-          userIdCache,
-        }),
-      ),
-    );
-    return [ownerRow, ...memberRows].slice(0, limit);
-  },
-});
-
 export const listCommunityMembershipsAdminPage = query({
   args: {
     userId: v.optional(v.id("users")),
@@ -1280,29 +1226,6 @@ export const listCommunityMembershipCreatedAtRows = query({
       .sort((a, b) => a.createdAt - b.createdAt)
       .slice(0, limit)
       .map((row) => ({ created_at: toIsoString(row.createdAt) }));
-  },
-});
-
-export const communityOwnerHasArchitectAccess = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    const nowMs = Date.now();
-    const { community } = await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    return (await readCanonicalAccountTier(ctx, community.ownerId, nowMs)) === "architect";
   },
 });
 

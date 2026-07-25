@@ -165,10 +165,7 @@ require_multiline_match "$ADMIN_GATEWAY_FILE" \
   'export async function fetchCloudCommunityAnalyticsSnapshot<[\s\S]*?client\.query\("community:getCommunityAnalyticsSnapshot" as any, \{\s*authSubject,\s*communityId:' \
   "canonical analytics snapshot gateway forwards authSubject"
 
-echo "[2/12] Ensuring admin/member analytics queries accept authSubject..."
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityMembershipsAdmin = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
-  "listCommunityMembershipsAdmin accepts authSubject"
+echo "[2/12] Ensuring canonical admin/member analytics queries accept authSubject..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMembershipsAdminPage = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),\s*communityId: v\.id\("communities"\),\s*paginationOpts: paginationOptsValidator,' \
   "listCommunityMembershipsAdminPage accepts authSubject and pagination options"
@@ -182,11 +179,20 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMembershipCreatedAtRows = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
   "listCommunityMembershipCreatedAtRows accepts authSubject"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const communityOwnerHasArchitectAccess = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
-  "communityOwnerHasArchitectAccess accepts authSubject"
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const getCommunityAnalyticsSnapshot = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
   "getCommunityAnalyticsSnapshot accepts authSubject"
+require_no_match "$COMMUNITY_ADMIN_FILE" \
+  'export const listCommunityMembershipsAdmin = query' \
+  "legacy unpaginated membership admin query is deleted"
+require_no_match "$COMMUNITY_ADMIN_FILE" \
+  'export const communityOwnerHasArchitectAccess = query' \
+  "unused owner-tier preflight query is deleted"
+require_no_match "$COMMUNITY_FILE" \
+  'listCommunityMembershipsAdmin as listCommunityMembershipsAdminImpl|export const listCommunityMembershipsAdmin = listCommunityMembershipsAdminImpl' \
+  "community facade does not re-register the legacy membership admin query"
+require_no_match "$COMMUNITY_FILE" \
+  'communityOwnerHasArchitectAccess' \
+  "community facade does not re-register the owner-tier preflight"
 
 echo "[3/12] Ensuring manager access centralizes membership-row reads..."
 require_multiline_match "$COMMUNITY_CORE_FILE" \
@@ -240,9 +246,6 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMembershipsAdminPage = query\([\s\S]*?rawPage\.page\.filter\([\s\S]*?communityMembershipRowIsActive\(row\)' \
   "listCommunityMembershipsAdminPage keeps legacy rows release-safe through the canonical active predicate"
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityMembershipsAdmin = query\([\s\S]*?withIndex\("by_community_createdAt"[\s\S]*?\.take\(scanLimit\)' \
-  "legacy listCommunityMembershipsAdmin is bounded by take"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const countCommunityMemberships = query\([\s\S]*?resolveCommunityAdminMembersContext\(\{\s*ctx,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,\s*communityId: args\.communityId,' \
   "countCommunityMemberships uses entitled community context"
@@ -417,21 +420,15 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
 
 echo "[5/12] Ensuring public user identity is returned for admin membership rows..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'user_id:\s*\(await resolvePublicUserId\(ctx, row\.userId, userIdCache\)\) \?\?\s*String\(row\.userId\)' \
+  'async function mapCommunityAdminMembershipRow\([\s\S]*?user_id:\s*\(await resolvePublicUserId\(args\.ctx, args\.row\.userId, args\.userIdCache\)\) \?\?\s*String\(args\.row\.userId\)' \
   "admin membership rows resolve public user IDs"
 
-echo "[6/12] Ensuring manager-owned analytics queries resolve authenticated subject before access checks..."
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const communityOwnerHasArchitectAccess = query\([\s\S]*?const userId = await resolveUserIdForAuthenticatedRequest\(\{\s*ctx,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
-  "communityOwnerHasArchitectAccess resolves authenticated subject"
+echo "[6/12] Ensuring manager-owned analytics resolves authenticated subject before access checks..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const getCommunityAnalyticsSnapshot = query\([\s\S]*?const userId = await resolveUserIdForAuthenticatedRequest\(\{\s*ctx,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
   "getCommunityAnalyticsSnapshot resolves authenticated subject"
 
-echo "[7/12] Ensuring analytics queries still require manager access..."
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const communityOwnerHasArchitectAccess = query\([\s\S]*?await requireCommunityManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,' \
-  "communityOwnerHasArchitectAccess requires manager access"
+echo "[7/12] Ensuring canonical analytics still requires manager access..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const getCommunityAnalyticsSnapshot = query\([\s\S]*?await listCommunityMembershipRowsForManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId,' \
   "getCommunityAnalyticsSnapshot uses the manager-scoped membership helper"

@@ -1,6 +1,5 @@
 import {
   approveCommunityJoinRequest as approveCommunityJoinRequestImpl,
-  communityOwnerHasArchitectAccess as communityOwnerHasArchitectAccessImpl,
   countCommunityMemberships as countCommunityMembershipsImpl,
   denyCommunityJoinRequest as denyCommunityJoinRequestImpl,
   getCommunityMemberBillingHistory as getCommunityMemberBillingHistoryImpl,
@@ -11,7 +10,6 @@ import {
   listCommunityJoinRequests as listCommunityJoinRequestsImpl,
   listCommunityMembershipCreatedAtRows as listCommunityMembershipCreatedAtRowsImpl,
   listCommunityMemberships as listCommunityMembershipsImpl,
-  listCommunityMembershipsAdmin as listCommunityMembershipsAdminImpl,
   listCommunityMembershipsAdminPage as listCommunityMembershipsAdminPageImpl,
   banCommunityMember as banCommunityMemberImpl,
   cancelMyCommunitySubscription as cancelMyCommunitySubscriptionImpl,
@@ -180,7 +178,6 @@ import {
 export const createCommunity = createCommunityImpl;
 export const generateCommunityBrandingUploadUrl = generateCommunityBrandingUploadUrlImpl;
 export const listCommunityMemberships = listCommunityMembershipsImpl;
-export const listCommunityMembershipsAdmin = listCommunityMembershipsAdminImpl;
 export const listCommunityMembershipsAdminPage = listCommunityMembershipsAdminPageImpl;
 export const countCommunityMemberships = countCommunityMembershipsImpl;
 export const syncCommunityMembershipCount = syncCommunityMembershipCountImpl;
@@ -188,7 +185,6 @@ export const listCommunityMembershipCreatedAtRows = listCommunityMembershipCreat
 export const listCommunityDirectoryPage = listCommunityDirectoryPageImpl;
 export const countCommunityDirectoryMembers = countCommunityDirectoryMembersImpl;
 export const searchCommunityMentionCandidates = searchCommunityMentionCandidatesImpl;
-export const communityOwnerHasArchitectAccess = communityOwnerHasArchitectAccessImpl;
 export const listCommunityJoinRequests = listCommunityJoinRequestsImpl;
 export const approveCommunityJoinRequest = approveCommunityJoinRequestImpl;
 export const denyCommunityJoinRequest = denyCommunityJoinRequestImpl;
