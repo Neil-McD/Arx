@@ -138,8 +138,10 @@ require_match_in_file "$TOOL_TYPES_FILE" '"search_product_docs"' \
   "tool name type includes search_product_docs"
 require_match_in_file "$TOOL_TYPES_FILE" '"get_product_doc"' \
   "tool name type includes get_product_doc"
-require_match_in_file "$TOOL_TYPES_FILE" '"get_active_community_context"' \
-  "tool name type includes get_active_community_context"
+require_match_in_file "$TOOL_TYPES_FILE" '"polynet_list"' \
+  "tool name type includes polynet_list"
+require_match_in_file "$TOOL_TYPES_FILE" '"polynet_read"' \
+  "tool name type includes polynet_read"
 require_match_in_file "$TOOL_TYPES_FILE" '"community_resources_map"' \
   "tool name type includes community_resources_map"
 require_match_in_file "$TOOL_TYPES_FILE" '"community_resources_read"' \
@@ -176,8 +178,10 @@ require_match_in_file "$NATIVE_LOOP_FILE" 'providerCallId' \
   "native tool loop treats provider call id as first-class"
 require_match_in_file "$NATIVE_LOOP_FILE" 'buildToolResultEnvelope' \
   "native tool loop uses a canonical tool result envelope"
-require_match_in_file "$RESOLUTION_FILE" '"get_active_community_context"' \
-  "runtime capability resolution includes active community context tool"
+require_match_in_file "$RESOLUTION_FILE" '"polynet_list"' \
+  "runtime capability resolution includes semantic community listing"
+require_match_in_file "$RESOLUTION_FILE" '"polynet_read"' \
+  "runtime capability resolution includes semantic community reading"
 require_match_in_file "$RESOLUTION_FILE" '"community_resources_map"' \
   "runtime capability resolution includes community resource map tool"
 require_match_in_file "$RESOLUTION_FILE" '"community_resources_read"' \

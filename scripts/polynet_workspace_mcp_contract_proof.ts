@@ -864,8 +864,8 @@ assertIncludes(
 );
 assertIncludes(
   communityCapabilityContext,
-  'query("communityMemberships")',
-  "canonical context membership lookup",
+  "getUniqueCommunityMembershipByPair",
+  "canonical unique context membership lookup",
 );
 assertIncludes(
   communityCapabilityContextContract,

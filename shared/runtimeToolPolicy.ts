@@ -154,8 +154,21 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     requiresCommunity: false,
     requiresMcpSession: false,
   },
-  get_active_community_context: {
-    toolName: "get_active_community_context",
+  polynet_list: {
+    toolName: "polynet_list",
+    source: "fixed",
+    category: "community",
+    riskLevel: "read",
+    readOnly: true,
+    mutatesState: false,
+    parallelSafe: true,
+    exclusive: false,
+    requiresWorkspace: false,
+    requiresCommunity: true,
+    requiresMcpSession: false,
+  },
+  polynet_read: {
+    toolName: "polynet_read",
     source: "fixed",
     category: "community",
     riskLevel: "read",

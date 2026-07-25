@@ -1,7 +1,8 @@
 export const RETRIEVAL_TOOL_NAMES = [
   "search_product_docs",
   "get_product_doc",
-  "get_active_community_context",
+  "polynet_list",
+  "polynet_read",
   "member_conversations_list",
   "member_conversation_read",
   "polynet_list_communities",
@@ -97,7 +98,8 @@ export const SANDBOX_TOOL_NAMES: readonly RetrievalToolName[] = [
 export const NON_SANDBOX_TOOL_NAMES: readonly RetrievalToolName[] = [
   "search_product_docs",
   "get_product_doc",
-  "get_active_community_context",
+  "polynet_list",
+  "polynet_read",
   "member_conversations_list",
   "member_conversation_read",
   "polynet_list_communities",

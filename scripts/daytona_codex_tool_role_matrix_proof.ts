@@ -29,7 +29,8 @@ const runtimeTurnHandlersSource = read("convex/runtimeTurnHandlers.ts");
 
 const productDocTools = ["search_product_docs", "get_product_doc"] as const;
 const communityReadTools = [
-  "get_active_community_context",
+  "polynet_list",
+  "polynet_read",
   "community_search",
   "community_memory_search",
   "community_memory_read",

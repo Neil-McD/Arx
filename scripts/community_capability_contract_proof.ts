@@ -69,6 +69,7 @@ const community: CommunityCapabilityCommunityInput = {
   about: "A community for collective intelligence.",
   visibility: "published",
   entryPolicy: "approval",
+  updatedAt: 1_721_234_567_890,
 };
 
 function membership(
@@ -229,9 +230,9 @@ const contextContractSource = read("shared/communityCapabilityContextContract.ts
 for (const required of [
   "internalQuery",
   'query("communities")',
-  'query("communityMemberships")',
   'withIndex("by_slug"',
-  'withIndex("by_community_user"',
+  ".take(2)",
+  "getUniqueCommunityMembershipByPair",
   "mapCommunityAccessRow",
 ]) {
   assert.ok(contextSource.includes(required), `community capability context should include ${required}`);

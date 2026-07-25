@@ -32,7 +32,8 @@ type FixedRuntimeToolCategory = Exclude<
 const FIXED_TOOL_FAMILIES = {
   docs: ["search_product_docs", "get_product_doc"],
   community: [
-    "get_active_community_context",
+    "polynet_list",
+    "polynet_read",
     "member_conversations_list",
     "member_conversation_read",
     "polynet_list_communities",
@@ -188,7 +189,8 @@ function proveFixedPolicyBoundaries() {
   const parallelReadTools: RetrievalToolName[] = [
     "search_product_docs",
     "get_product_doc",
-    "get_active_community_context",
+    "polynet_list",
+    "polynet_read",
     "community_resources_map",
     "community_resources_read",
     "community_resources_list",
@@ -253,13 +255,15 @@ function proveFixedPolicyBoundaries() {
   assert.equal(getFixedRuntimeToolPolicy("get_product_doc").category, "docs");
   assert.equal(getFixedRuntimeToolPolicy("get_product_doc").requiresCommunity, false);
   assert.equal(
-    getFixedRuntimeToolPolicy("get_active_community_context").category,
+    getFixedRuntimeToolPolicy("polynet_list").category,
     "community",
   );
   assert.equal(
-    getFixedRuntimeToolPolicy("get_active_community_context").requiresCommunity,
+    getFixedRuntimeToolPolicy("polynet_list").requiresCommunity,
     true,
   );
+  assert.equal(getFixedRuntimeToolPolicy("polynet_read").category, "community");
+  assert.equal(getFixedRuntimeToolPolicy("polynet_read").requiresCommunity, true);
   for (const toolName of [
     "community_resources_map",
     "community_resources_read",

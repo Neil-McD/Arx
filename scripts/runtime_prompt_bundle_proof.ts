@@ -40,7 +40,8 @@ const fullParams = {
   allowedToolNames: [
     "search_product_docs",
     "get_product_doc",
-    "get_active_community_context",
+    "polynet_list",
+    "polynet_read",
     "community_resources_map",
     "community_resource_builder_list",
     "community_resource_builder_read",

@@ -39,7 +39,15 @@ export type PolynetPlatformToolSurfaceEntry = {
 
 export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceEntry[] = [
   {
-    toolName: "get_active_community_context",
+    toolName: "polynet_list",
+    billingPolicy: "free",
+    requiresCommunity: true,
+    riskLevel: "read",
+    requiredCommunityResourceLane: "member",
+    requiredCommunityAuthority: "member",
+  },
+  {
+    toolName: "polynet_read",
     billingPolicy: "free",
     requiresCommunity: true,
     riskLevel: "read",

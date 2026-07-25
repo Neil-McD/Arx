@@ -58,7 +58,8 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
     maxNoProgressSteps: 3,
   },
   allowedToolNames: [
-    "get_active_community_context",
+    "polynet_list",
+    "polynet_read",
     "community_resources_map",
     "community_resources_read",
     "community_resources_list",
@@ -281,7 +282,7 @@ assert.match(prompt, /When the member asks your name, answer with the configured
 assert.match(prompt, /You are the member's Polynet agent: a sharp little intelligence/);
 assert.match(prompt, /Keep proofs tight/);
 assert.match(prompt, /Use this lens as background context/);
-assert.match(prompt, /Use get_active_community_context when the answer depends on the active community's identity/);
+assert.match(prompt, /Use polynet_read with path \/community\.md when the answer depends on the active community's full identity/);
 assert.match(prompt, /When available, use community resource tools when canonical resource navigation/);
 assert.match(prompt, /Use community_resources_map first/);
 assert.match(prompt, /Use community_resources_read to batch-read/);

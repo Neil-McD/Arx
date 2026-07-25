@@ -177,7 +177,8 @@ assert.deepEqual(
     invocationSurface: "member_agent_dock",
     toolNames: [
       "search_product_docs",
-      "get_active_community_context",
+      "polynet_list",
+      "polynet_read",
       "member_conversations_list",
       "member_conversation_read",
       "polynet_list_communities",
@@ -194,7 +195,8 @@ assert.deepEqual(
   }),
   [
     "search_product_docs",
-    "get_active_community_context",
+    "polynet_list",
+    "polynet_read",
     "member_conversations_list",
     "member_conversation_read",
     "polynet_list_communities",

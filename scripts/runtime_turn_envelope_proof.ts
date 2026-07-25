@@ -31,7 +31,8 @@ const builderEnvelope = buildRuntimeTurnEnvelope({
     can_use_resource_builder: true,
   },
   allowedToolNames: [
-    "get_active_community_context",
+    "polynet_list",
+    "polynet_read",
     "community_resources_map",
     "community_resource_builder_list",
     "community_resource_builder_read",

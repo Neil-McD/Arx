@@ -127,22 +127,22 @@ function proveCodexPayloadPreservesReasoningAndMetadata() {
     tools: [
       {
         type: "function",
-        name: "get_active_community_context",
-        description: "Read active community context",
+        name: "polynet_read",
+        description: "Read active community profile",
         parameters: {
           type: "object",
           additionalProperties: false,
-          properties: {},
-          required: [],
+          properties: { path: { type: "string" } },
+          required: ["path"],
         },
         strict: true,
       },
     ],
-    toolChoice: { type: "function", name: "get_active_community_context" },
+    toolChoice: { type: "function", name: "polynet_read" },
   });
   assert.deepEqual(forcedToolPayload.tool_choice, {
     type: "function",
-    name: "get_active_community_context",
+    name: "polynet_read",
   });
 
   const finalAnswerPayload = buildChatgptCodexRequestPayload({
@@ -152,13 +152,13 @@ function proveCodexPayloadPreservesReasoningAndMetadata() {
     tools: [
       {
         type: "function",
-        name: "get_active_community_context",
-        description: "Read active community context",
+        name: "polynet_read",
+        description: "Read active community profile",
         parameters: {
           type: "object",
           additionalProperties: false,
-          properties: {},
-          required: [],
+          properties: { path: { type: "string" } },
+          required: ["path"],
         },
         strict: true,
       },

@@ -817,6 +817,62 @@ async function handleToolCall(args: {
     };
   }
 
+  if (toolName === "polynet_list" || toolName === "polynet_read") {
+    const communitySlug = normalizeCommunityCapabilitySlug(
+      toolArgs.community_slug,
+    );
+    if (!communitySlug) {
+      return {
+        ok: false,
+        type: "tool",
+        message: "community_slug is required and must be canonical.",
+      };
+    }
+    const path =
+      typeof toolArgs.path === "string" && toolArgs.path.length <= 1_024
+        ? toolArgs.path
+        : "";
+    if (!path) {
+      return { ok: false, type: "tool", message: "path is required." };
+    }
+    try {
+      const semanticResult = (await ctx.runQuery(
+        internal.communityCapabilityContext
+          .resolveCommunitySemanticRepositoryInternal as any,
+        {
+          authSubject,
+          communitySlug,
+          operation: toolName === "polynet_list" ? "list" : "read",
+          path,
+        },
+      )) as Record<string, unknown>;
+      if (semanticResult.ok !== true) {
+        return {
+          ok: false,
+          type: "tool",
+          message:
+            normalizeString(semanticResult.message, 500) ??
+            "Semantic path not found or not accessible.",
+        };
+      }
+      return {
+        ok: true,
+        result: {
+          content: buildToolTextContent(semanticResult),
+          structuredContent: semanticResult,
+          isError: false,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        ok: false,
+        type: "tool",
+        message: message || "Community semantic read failed.",
+      };
+    }
+  }
+
   if (toolName === "polynet_get_my_profile") {
     try {
       const profile = (await ctx.runQuery(

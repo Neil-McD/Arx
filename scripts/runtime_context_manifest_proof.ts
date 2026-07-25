@@ -31,7 +31,8 @@ const envelope = buildRuntimeTurnEnvelope({
   allowedToolNames: [
     "search_product_docs",
     "get_product_doc",
-    "get_active_community_context",
+    "polynet_list",
+    "polynet_read",
     "community_resources_map",
     "community_resource_builder_stage_changeset",
     "community_memory_search",
@@ -90,7 +91,8 @@ const fullManifest = buildRuntimeContextManifest({
   allowedToolNames: [
     "search_product_docs",
     "get_product_doc",
-    "get_active_community_context",
+    "polynet_list",
+    "polynet_read",
     "community_resources_map",
     "community_resource_builder_stage_changeset",
     "community_memory_search",

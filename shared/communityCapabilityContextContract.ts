@@ -21,6 +21,7 @@ export type CommunityMembershipProjection = {
 export type ResolvedCommunityCapabilityContext = {
   communityId: string;
   communitySlug: string;
+  communityUpdatedAt: number;
   membership: CommunityMembershipProjection;
   access: CommunityAccess;
   authority: CommunityCapabilityAuthority;
@@ -40,6 +41,7 @@ export type CommunityCapabilityCommunityInput = {
   about?: string | null;
   visibility: "published" | "unlisted";
   entryPolicy?: "open" | "approval" | "paid_subscription" | null;
+  updatedAt: number;
 };
 
 export type CommunityCapabilityMembershipInput = {
@@ -78,6 +80,9 @@ export function buildResolvedCommunityCapabilityContext(args: {
   ) {
     return { ok: false, code: "community_access_unavailable" };
   }
+  if (!Number.isFinite(args.community.updatedAt) || args.community.updatedAt < 0) {
+    return { ok: false, code: "community_access_unavailable" };
+  }
   if (!communityAccessIsOpen(args.access)) {
     return { ok: false, code: "community_access_closed" };
   }
@@ -97,7 +102,7 @@ export function buildResolvedCommunityCapabilityContext(args: {
       slug: communitySlug,
       name: boundedString(args.community.name, 180),
       one_liner: boundedString(args.community.oneLiner, 280),
-      about: boundedString(args.community.about, 4000),
+      about: boundedString(args.community.about, 8000),
       visibility: args.community.visibility,
       entry_policy:
         args.community.entryPolicy === "open" ||
@@ -112,6 +117,7 @@ export function buildResolvedCommunityCapabilityContext(args: {
     context: {
       communityId: args.community.id,
       communitySlug,
+      communityUpdatedAt: Math.floor(args.community.updatedAt),
       membership,
       access: args.access,
       authority: deriveCommunityCapabilityAuthority(args.access),

@@ -55,9 +55,6 @@ import {
   executeGetProductDocTool,
   executeSearchProductDocsTool,
 } from "../shared/productDocsRuntime.ts";
-import {
-  buildActiveCommunityContextToolPayload,
-} from "../shared/communityContextTool.ts";
 import type { ProductDocsSearchIndex } from "../shared/productDocsSearch.ts";
 import {
   extractTextFromNativeToolMessageContent,
@@ -180,7 +177,7 @@ function buildEffectiveAllowedToolNames(params: {
   selectedPlatformSkills: readonly PlatformSkillSelectionSummary[];
 }): RetrievalToolName[] {
   const allowed = [...params.baseAllowedToolNames];
-  if (!allowed.includes("get_active_community_context")) return allowed;
+  if (!allowed.includes("polynet_read")) return allowed;
   for (const toolName of buildPlatformSkillToolNamesForSelection(
     params.selectedPlatformSkills,
   )) {
@@ -375,7 +372,10 @@ export async function executeRetrievalHarnessTool(params: {
     };
   }
 
-  if (params.toolName === "get_active_community_context") {
+  if (
+    params.toolName === "polynet_list" ||
+    params.toolName === "polynet_read"
+  ) {
     if (!params.communityId) {
       return {
         status: "error",
@@ -383,28 +383,46 @@ export async function executeRetrievalHarnessTool(params: {
         outputText: "",
         errorCode: "community_required",
         errorMessage:
-          "get_active_community_context requires an active community context.",
+          `${params.toolName} requires an active community context.`,
+      };
+    }
+    const authSubject = String(params.authSubject ?? "").trim();
+    if (!authSubject) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "authenticated_user_required",
+        errorMessage: `${params.toolName} requires an authenticated user.`,
       };
     }
     try {
-      const resolvedCommunity = await params.ctx.runQuery(
-        internal.communityAgent.resolveRuntimeCommunityPromptContextInternal as any,
+      const payload = (await params.ctx.runQuery(
+        internal.communityCapabilityContext
+          .resolveCommunitySemanticRepositoryInternal as any,
         {
           userId: params.userId,
-          authSubject: params.authSubject ?? undefined,
+          authSubject,
           communityId: params.communityId,
+          operation: params.toolName === "polynet_list" ? "list" : "read",
+          path: String(normalizedArgs.path ?? ""),
         },
-      );
-      const resolvedCommunityId = String(
-        (resolvedCommunity as { community_id?: unknown } | null)?.community_id ??
-          "",
-      ).trim();
-      if (!resolvedCommunityId) {
-        throw new Error("community_context_unavailable");
+      )) as {
+        ok?: boolean;
+        code?: unknown;
+        message?: unknown;
+      };
+      if (!payload?.ok) {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: formatJsonToolOutput(payload),
+          errorCode: String(payload?.code ?? "community_semantic_read_failed"),
+          errorMessage:
+            String(payload?.message ?? "").trim() ||
+            "Community semantic read failed.",
+        };
       }
-      const payload = buildActiveCommunityContextToolPayload(
-        (resolvedCommunity ?? {}) as Record<string, unknown>,
-      );
       return {
         status: "ok",
         exitCode: 0,
@@ -418,8 +436,8 @@ export async function executeRetrievalHarnessTool(params: {
         status: "error",
         exitCode: null,
         outputText: "",
-        errorCode: "community_context_failed",
-        errorMessage: message || "Community context lookup failed.",
+        errorCode: "community_semantic_read_failed",
+        errorMessage: message || "Community semantic read failed.",
       };
     }
   }

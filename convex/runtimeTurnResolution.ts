@@ -276,7 +276,8 @@ export function resolveAllowedToolNames(params: {
   }
   if (params.activeCapabilityFamilies.includes("community_tools")) {
     toolNames.push(
-      "get_active_community_context",
+      "polynet_list",
+      "polynet_read",
       "community_resources_map",
       "community_resources_read",
       "community_resources_list",

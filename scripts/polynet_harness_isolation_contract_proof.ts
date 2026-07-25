@@ -188,7 +188,8 @@ assert.deepEqual(
 
 const mixedPolyNetPolicy = resolvePolynetHarnessToolPolicy({
   allowedToolNames: [
-    "get_active_community_context",
+    "polynet_list",
+    "polynet_read",
     "community_resources_search",
     "web_research",
     ...SANDBOX_TOOL_NAMES,
@@ -197,7 +198,8 @@ const mixedPolyNetPolicy = resolvePolynetHarnessToolPolicy({
 assert.deepEqual(
   mixedPolyNetPolicy.fixedRuntimeToolNames,
   [
-    "get_active_community_context",
+    "polynet_list",
+    "polynet_read",
     "community_resources_search",
     "web_research",
     ...SANDBOX_FILE_SHELL_TOOL_NAMES,
@@ -267,7 +269,8 @@ assert.deepEqual(
 
 for (const toolName of NON_SANDBOX_TOOL_NAMES) {
   if (
-    toolName === "get_active_community_context" ||
+    toolName === "polynet_list" ||
+    toolName === "polynet_read" ||
     toolName === "community_resources_search" ||
     toolName === "web_research"
   ) {

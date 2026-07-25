@@ -15,7 +15,8 @@ const MEMBER_AGENT_DOCK_CAPABILITY_FAMILY_SET = new Set<CapabilityFamily>([
 const MEMBER_AGENT_DOCK_TOOL_NAME_SET = new Set<RetrievalToolName>([
   "search_product_docs",
   "get_product_doc",
-  "get_active_community_context",
+  "polynet_list",
+  "polynet_read",
   "member_conversations_list",
   "member_conversation_read",
   "polynet_list_communities",

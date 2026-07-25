@@ -152,7 +152,7 @@ for (const toolName of [
 
 assert.match(
   retrievalTools,
-  /"get_active_community_context"[\s\S]*"community_resources_map"[\s\S]*"community_resources_read"[\s\S]*"community_resources_list"[\s\S]*"community_resource_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
+  /"polynet_list"[\s\S]*"polynet_read"[\s\S]*"community_resources_map"[\s\S]*"community_resources_read"[\s\S]*"community_resources_list"[\s\S]*"community_resource_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
   "resource tools should live in the fixed community tool family before broad community search/write",
 );
 assert.match(toolRegistry, /COMMUNITY_RESOURCES_MAP_TOOL_SCHEMA/);
@@ -165,7 +165,7 @@ assert.match(runtimeToolPolicy, /community_resources_read:[\s\S]*requiresCommuni
 assert.match(runtimeToolPolicy, /community_resources_list:[\s\S]*requiresCommunity: true/);
 assert.match(
   runtimeTurnResolution,
-  /if \(params\.activeCapabilityFamilies\.includes\("community_tools"\)\)[\s\S]*"get_active_community_context"[\s\S]*"community_resources_map"[\s\S]*"community_resources_read"[\s\S]*"community_resources_list"[\s\S]*"community_resource_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
+  /if \(params\.activeCapabilityFamilies\.includes\("community_tools"\)\)[\s\S]*"polynet_list"[\s\S]*"polynet_read"[\s\S]*"community_resources_map"[\s\S]*"community_resources_read"[\s\S]*"community_resources_list"[\s\S]*"community_resource_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
   "community resource tools should activate only through the backend-validated community_tools family",
 );
 

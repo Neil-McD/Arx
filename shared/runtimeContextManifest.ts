@@ -187,7 +187,8 @@ const PRODUCT_DOC_TOOL_NAMES = new Set<RetrievalToolName>([
 ]);
 
 const COMMUNITY_CONTEXT_TOOL_NAMES = new Set<RetrievalToolName>([
-  "get_active_community_context",
+  "polynet_list",
+  "polynet_read",
 ]);
 
 const MEMBER_CONVERSATION_TOOL_NAMES = new Set<RetrievalToolName>([
@@ -642,8 +643,8 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
       owner: "community",
       retrieval: "tool_available",
       visibility: "member",
-      source: "get_active_community_context",
-      reason: "bounded active-lens community context",
+      source: "polynet_list/polynet_read",
+      reason: "deterministic active-community semantic profile",
     });
   }
   if (hasAnyTool(params.allowedToolNames, COMMUNITY_RESOURCE_TOOL_NAMES)) {
