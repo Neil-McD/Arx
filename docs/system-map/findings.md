@@ -53,7 +53,7 @@ For table compactness, `KEEP`, `DELETE`, and `DECISION REQUIRED` are exact short
 
 | ID | Pri | Finding | Classification / action | Confidence | Cheapest falsifier |
 | --- | --- | --- | --- | --- | --- |
-| F-031 | P0 | Six-hour community memory sweep repeatedly takes the first 500 communities with no cursor; suffix communities can starve forever. | `KEEP`; `HARDEN`, `BOUND` | confirmed source | >500 deterministic fixture proving eventual service |
+| F-031 | P0 | **Resolved on staging:** the cap-biased global community memory sweep and attempted generic repair drain are deleted. Eligible trace transitions schedule compiler mutations; each new immutable digest owns one exact checkpoint that retries its at-most-once heartbeat only while the digest remains pending or its claim is stale. | duplicate global discovery `DELETE` complete | focused interruption/resumption fixture, compiler/heartbeat proofs, typechecks, and 40-step foundation gate | any reintroduced community enumeration, unowned action retry, or recovery state outside the digest |
 | F-032 | P1 | Monthly AI-feed prune processes at most eight pages × 250 then restarts at null next month; no persisted continuation exists. | `KEEP`; `HARDEN`, `BOUND` | confirmed source | >2,000 community fixture across two runs |
 | F-033 | P1 | Weekly digest selects recent prefixes by visibility with no cursor; older communities may never be evaluated. | `KEEP`; `HARDEN`, `BOUND` | confirmed source | >limit fixture across stable digest days |
 | F-034 | P1 | Recurring reminder queries take bounded prefixes for each recurrence type without continuation; high cardinality can starve later events. | `KEEP`; `HARDEN`, `BOUND` | confirmed source | >limit recurring fixture with service receipts |

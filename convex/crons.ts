@@ -197,18 +197,6 @@ crons.daily(
   {},
 );
 
-// Repair only: fresh compiler work schedules itself at the canonical evidence
-// transition. Every 6 hours this bounded cursor drain revisits only overdue
-// traces, pending handoffs, and stale handoff leases that may have lost their
-// event-born knock. The heartbeat retains the final control, connection, cost,
-// claim, and evidence gates.
-crons.interval(
-  "repair community compiler work",
-  { hours: 6 },
-  (internal as any).communityAgentHeartbeat.runCommunityCompilerRepairInternal,
-  {},
-);
-
 // Concierge repair drain: fresh community-agent mentions are born into
 // asker-funded serve requests during the chat write. This deterministic,
 // token-free cron only repairs leftover pending mentions.

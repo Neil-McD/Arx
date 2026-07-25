@@ -1568,9 +1568,9 @@ Rules:
 - A completed Steward pass with durable decisions for every item marks the
   exact handoff handled. Known failures return it to pending; abandoned running
   claims become retryable after the lease.
-- The sweep never compiles evidence itself, never runs deterministic
-  metabolizer settlement, and never uses an arbitrary delay. It immediately
-  schedules only planner-approved compiler and handoff work.
+- Each new non-empty digest owns one exact recovery checkpoint. The checkpoint
+  schedules its heartbeat and stops permanently when that digest version is
+  handled. No global community scan participates in compiler or handoff work.
 - Historical mutable daily digests have no version or handoff state and are
   never claimed as autonomous work.
 
@@ -1704,9 +1704,10 @@ new canonical outcome observation
   -> atomically schedule same-community metabolizer mutation
   -> settle bounded derived scores
 
-6-hour compiler ignition sweep
-  -> assess canonical compiler and handoff work
-  -> immediately enqueue planner-approved heartbeat
+new immutable compiler digest
+  -> exact per-digest recovery checkpoint
+  -> immediately enqueue its heartbeat
+  -> retry only while that digest remains pending or its claim is stale
   -> heartbeat evidence and cost gates decide whether roles wake
 ```
 
@@ -1718,8 +1719,8 @@ Rules:
   exist without its settlement intent and a rejected outcome cannot schedule
   work.
 - Outcome deduplication occurs before scheduling.
-- The existing sweep retains only compiler/handoff discovery until the separate
-  C4 fairness slice replaces that prefix scan.
+- Compiler and handoff work do not use a global discovery scan. Source-trace
+  writes schedule compiler evaluation and each new digest owns its recovery.
 - Derived score settlement remains independent of the paid heartbeat, its
   founder connection, and its daily inference cap.
 - Changed-node audit remains in `communityIntelligenceMutations`; bounded
@@ -1734,7 +1735,8 @@ eligible source trace becomes pending
   -> atomically schedule same-community compiler evaluation
   -> below threshold: recheck at the oldest packet's bounded 72-hour deadline
   -> threshold met: insert one immutable digest version
-  -> atomically schedule one same-community heartbeat
+  -> atomically schedule one exact digest recovery checkpoint
+  -> checkpoint schedules one same-community heartbeat
   -> handled digest atomically schedules the next bounded compiler pass
 ```
 
@@ -1748,55 +1750,34 @@ Rules:
 - A sub-threshold backlog schedules a bounded age-deadline recheck; an empty
   backlog schedules nothing.
 - Digest version identity remains the heartbeat idempotency boundary. Only
-  insertion of a new non-empty digest schedules a heartbeat; replay of the same
-  digest version does not.
+  insertion of a new non-empty digest schedules its recovery checkpoint;
+  replay of the same digest version does not.
 - Terminal handling schedules compiler reevaluation so bounded overflow can
   continue without waiting for global discovery.
-- The existing six-hour sweep remains temporarily as a repair path in C4.2A.
-  It is not the primary path and is not deleted until due-work repair is proven.
+- The global six-hour community sweep is deleted. It duplicated canonical work
+  state, scanned inactive communities, and still could not guarantee action
+  delivery.
 - This slice adds no schema, public API, UI, provider call, generic queue, or
   workflow engine.
 
-## C4.2B Targeted Compiler Repair
+## C4.2B Exact Digest Recovery
 
-Event-born scheduling remains the primary path. The six-hour cron repairs only
-the three durable states that can be stranded by an interrupted scheduler or
-worker:
+Convex mutations durably own scheduling; the paid heartbeat action may fail
+without retry. One internal mutation closes only that gap:
 
 ```txt
-overdue source traces
-  -> pending digest handoffs
-  -> stale running handoffs
-  -> bounded same-community heartbeat knock
+new digest version
+  -> recover exact community + digest id + version
+  -> pending or stale-running: schedule heartbeat and one later checkpoint
+  -> fresh-running: wait for the bounded lease
+  -> handled, missing, legacy, or mismatched: stop
 ```
 
-Rules:
-
-- Overdue means an explicit `compilerState: pending` trace whose
-  `compilerPendingSince` is at least 72 hours old.
-- Pending digest handoffs are new immutable digest versions whose event-born
-  heartbeat did not complete.
-- Stale running handoffs are leases whose `agentClaimedAt` is at least 30
-  minutes old.
-- Each state has one global ordered index over its canonical state and clock.
-  Repair does not enumerate the communities table or introduce a duplicate
-  `dueAt` field.
-- Repair advances one 25-row cursor page at a time and schedules the next page
-  or phase before processing the current page.
-- Candidate community ids are deduplicated inside each page. One candidate
-  failure is isolated and cannot block later candidates.
-- The repair action reuses `assessCommunityAgentCycleInternal`, the owner
-  connection check, and `enqueueCommunityAgentHeartbeatInternal`. It never
-  compiles, claims, invokes an LLM, or settles work directly.
-- Young pending traces remain owned by their event-born 72-hour recheck.
-  Fresh running leases and handled or historical digests are not repair work.
-- Historical digest rows without `agentHandoffState` are not manufactured into
-  autonomous work.
-- The prior cap-biased community-prefix sweep remains temporarily as an
-  uncalled rollback surface. C4.2C deletes it after the targeted cron completes
-  a staging observation window.
-- This slice adds no table, public API, UI, workflow engine, scheduler ledger,
-  lock service, or operator control surface.
+The checkpoint never enumerates communities, queries provider credentials,
+calls a model, creates new work state, or exposes a public surface. The digest
+row remains the only queue. Known action failure returns the handoff to
+`pending`; an abandoned claim becomes retryable after the existing 30-minute
+lease. This is recovery, not a workflow engine.
 
 ## Twenty-Third Implementation Slice
 
@@ -2038,15 +2019,14 @@ Two payment lanes, split by what the spend produces:
 
 ### Cadence (resolved 2026-07-01)
 
-A compiler ignition sweep currently runs every six hours. It measures canonical
-compiler and handoff work and immediately schedules eligible communities. The
+Canonical source-trace writes schedule compiler evaluation. A new non-empty
+digest schedules one exact recovery checkpoint, which immediately knocks its
+heartbeat and checks again only while that same digest remains unfinished. The
 heartbeat rechecks the owner off-switch, daily cycle cap, and founder connection
 before tokens can be spent, then owns the compile -> claim -> Steward pass ->
-settlement transition. Unchanged handled digest versions never re-wake the
-Steward. Mechanical score metabolism is not part of this cadence: each new
+settlement transition. Handled digest versions stop their recovery chain and
+never re-wake the Steward. Mechanical score metabolism is separate: each new
 canonical outcome atomically schedules bounded same-community settlement.
-Frequency controls compiler wake latency only; durable work state and cost
-gates own paid execution.
 
 ### Decisions Pending
 

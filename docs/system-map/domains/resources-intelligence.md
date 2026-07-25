@@ -85,7 +85,7 @@ intelligence layer can re-project deleted content.
 | Resources UI directory | bounded at 200 metadata rows; explicit truncation disables complete-order mutations |
 | ingestion/crawl | page/unit/cardinality and provider cost must remain bounded and receipted |
 | compiler/retrieval | context size and source fan-out need explicit limits; current architecture has bounded selectors in many paths |
-| memory sweep | first 500 communities only with no cursor; later communities can starve forever |
+| digest recovery | one exact checkpoint per unfinished immutable digest; no global community scan |
 | evidence retention | unbounded historical receipts without a stated retention/archive policy |
 
 ## Reduction candidates

@@ -2804,11 +2804,6 @@ export default defineSchema({
       "visibilityScope",
       "compilerPendingSince",
     ])
-    .index("by_compilerState_pendingSince_community", [
-      "compilerState",
-      "compilerPendingSince",
-      "communityId",
-    ])
     .index("by_community_source", ["communityId", "sourceType", "sourceId"])
     .index("by_community_workflow", ["communityId", "workflowId"]),
 
@@ -3335,16 +3330,6 @@ export default defineSchema({
       "communityId",
       "agentHandoffState",
       "createdAt",
-    ])
-    .index("by_agentHandoffState_createdAt_community", [
-      "agentHandoffState",
-      "createdAt",
-      "communityId",
-    ])
-    .index("by_agentHandoffState_claimedAt_community", [
-      "agentHandoffState",
-      "agentClaimedAt",
-      "communityId",
     ]),
 
   memberAgentChannels: defineTable({

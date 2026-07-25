@@ -4,7 +4,6 @@ import { v } from "convex/values";
 import { normalizeIdValue } from "./communityCore";
 import {
   buildCommunitySourceTraceRevision,
-  COMPILER_EVIDENCE_AGE_THRESHOLD_MS,
   measureCommunityCompilerEvidenceForCommunity,
 } from "./communityCompilerEvidenceCore";
 import {
@@ -15,18 +14,8 @@ const COMMUNITY_AGENT_HEARTBEAT_MAX_DELAY_MS = 24 * 60 * 60 * 1000;
 const COMMUNITY_AGENT_HEARTBEAT_MAX_TOOL_STEPS = 8;
 const COMMUNITY_AGENT_CYCLES_PER_DAY_CAP = 2;
 const COMMUNITY_AGENT_HANDOFF_LEASE_MS = 30 * 60 * 1000;
-const COMMUNITY_COMPILER_REPAIR_PAGE_SIZE = 25;
+const COMMUNITY_AGENT_HANDOFF_RECOVERY_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const internalRefs = internal as any;
-const communityCompilerRepairPhaseValidator = v.union(
-  v.literal("due_trace"),
-  v.literal("pending_handoff"),
-  v.literal("stale_handoff"),
-);
-
-type CommunityCompilerRepairPhase =
-  | "due_trace"
-  | "pending_handoff"
-  | "stale_handoff";
 
 function boundedText(raw: unknown, maxLength: number): string {
   return String(raw ?? "").trim().slice(0, maxLength);
@@ -180,6 +169,76 @@ export const enqueueCommunityAgentHeartbeatInternal = internalMutation({
       community_id: normalizeIdValue(args.communityId),
       heartbeat_id: heartbeatId,
       scheduled_after_ms: runAfterMs,
+    };
+  },
+});
+
+// Convex scheduled mutations are the durable checkpoint around the at-most-once
+// heartbeat action. Each new digest owns exactly one recovery chain, which
+// stops when that exact digest version is handled or no longer exists.
+export const recoverCommunityCompilerDigestHandoffInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    digestId: v.id("communityCompilerDigests"),
+    versionKey: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const digest = (await ctx.db.get(args.digestId)) as Record<string, any> | null;
+    const versionKey = boundedText(args.versionKey, 128);
+    if (!digest) return { recovered: false, reason: "digest_not_found" };
+    if (normalizeIdValue(digest.communityId) !== normalizeIdValue(args.communityId)) {
+      return { recovered: false, reason: "community_mismatch" };
+    }
+    if (!versionKey || boundedText(digest.versionKey, 128) !== versionKey) {
+      return { recovered: false, reason: "version_mismatch" };
+    }
+    if (digest.agentHandoffState === "handled") {
+      return { recovered: false, reason: "handoff_handled" };
+    }
+    if (digest.agentHandoffState !== "pending" && digest.agentHandoffState !== "running") {
+      return { recovered: false, reason: "legacy_handoff" };
+    }
+
+    const nowMs = args.nowMs ?? Date.now();
+    const recoveryArgs = {
+      communityId: args.communityId,
+      digestId: args.digestId,
+      versionKey,
+    };
+    if (
+      digest.agentHandoffState === "running" &&
+      Number(digest.agentClaimedAt ?? 0) >= nowMs - COMMUNITY_AGENT_HANDOFF_LEASE_MS
+    ) {
+      const leaseRemainingMs = Math.max(
+        1_000,
+        Number(digest.agentClaimedAt ?? nowMs) +
+          COMMUNITY_AGENT_HANDOFF_LEASE_MS +
+          1_000 -
+          nowMs,
+      );
+      await ctx.scheduler.runAfter(
+        leaseRemainingMs,
+        internalRefs.communityAgentHeartbeat.recoverCommunityCompilerDigestHandoffInternal,
+        recoveryArgs,
+      );
+      return { recovered: false, reason: "handoff_running", retry_after_ms: leaseRemainingMs };
+    }
+
+    await ctx.scheduler.runAfter(
+      0,
+      internalRefs.communityAgentHeartbeat.runCommunityAgentHeartbeatInternal,
+      { communityId: args.communityId },
+    );
+    await ctx.scheduler.runAfter(
+      COMMUNITY_AGENT_HANDOFF_RECOVERY_INTERVAL_MS,
+      internalRefs.communityAgentHeartbeat.recoverCommunityCompilerDigestHandoffInternal,
+      recoveryArgs,
+    );
+    return {
+      recovered: true,
+      reason: digest.agentHandoffState === "running" ? "stale_handoff" : "pending_handoff",
+      retry_after_ms: COMMUNITY_AGENT_HANDOFF_RECOVERY_INTERVAL_MS,
     };
   },
 });
@@ -485,123 +544,9 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
   },
 });
 
-function nextCommunityCompilerRepairPhase(
-  phase: CommunityCompilerRepairPhase,
-): CommunityCompilerRepairPhase | null {
-  if (phase === "due_trace") return "pending_handoff";
-  if (phase === "pending_handoff") return "stale_handoff";
-  return null;
-}
-
-// Event-born scheduling is the primary compiler path. This cursor page reads
-// only the three durable states that can need repair after a lost evaluator,
-// heartbeat, or lease holder. It never enumerates the communities table.
-export const listCommunityCompilerRepairPageInternal = internalQuery({
-  args: {
-    phase: communityCompilerRepairPhaseValidator,
-    cursor: v.optional(v.string()),
-    scanStartedAt: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const page = args.phase === "due_trace"
-      ? await ctx.db
-          .query("communitySourceTraces" as any)
-          .withIndex("by_compilerState_pendingSince_community", (q: any) =>
-            q
-              .eq("compilerState", "pending")
-              .lte(
-                "compilerPendingSince",
-                args.scanStartedAt - COMPILER_EVIDENCE_AGE_THRESHOLD_MS,
-              ),
-          )
-          .order("asc")
-          .paginate({
-            cursor: args.cursor ?? null,
-            numItems: COMMUNITY_COMPILER_REPAIR_PAGE_SIZE,
-            maximumRowsRead: COMMUNITY_COMPILER_REPAIR_PAGE_SIZE,
-          })
-      : args.phase === "pending_handoff"
-        ? await ctx.db
-            .query("communityCompilerDigests" as any)
-            .withIndex("by_agentHandoffState_createdAt_community", (q: any) =>
-              q
-                .eq("agentHandoffState", "pending")
-                .lte("createdAt", args.scanStartedAt),
-            )
-            .order("asc")
-            .paginate({
-              cursor: args.cursor ?? null,
-              numItems: COMMUNITY_COMPILER_REPAIR_PAGE_SIZE,
-              maximumRowsRead: COMMUNITY_COMPILER_REPAIR_PAGE_SIZE,
-            })
-        : await ctx.db
-            .query("communityCompilerDigests" as any)
-            .withIndex("by_agentHandoffState_claimedAt_community", (q: any) =>
-              q
-                .eq("agentHandoffState", "running")
-                .lte(
-                  "agentClaimedAt",
-                  args.scanStartedAt - COMMUNITY_AGENT_HANDOFF_LEASE_MS,
-                ),
-            )
-            .order("asc")
-            .paginate({
-              cursor: args.cursor ?? null,
-              numItems: COMMUNITY_COMPILER_REPAIR_PAGE_SIZE,
-              maximumRowsRead: COMMUNITY_COMPILER_REPAIR_PAGE_SIZE,
-            });
-    const targets: Array<{ communityId: any; ownerId: any }> = [];
-    const seenCommunityIds = new Set<string>();
-    let orphaned = 0;
-    for (const row of page.page as Array<Record<string, any>>) {
-      const communityId = normalizeIdValue(row.communityId);
-      if (!communityId || seenCommunityIds.has(communityId)) continue;
-      seenCommunityIds.add(communityId);
-      const community = (await ctx.db.get(row.communityId as any)) as Record<string, any> | null;
-      if (!community?.ownerId) {
-        orphaned += 1;
-        continue;
-      }
-      targets.push({
-        communityId: row.communityId,
-        ownerId: community.ownerId,
-      });
-    }
-    return {
-      phase: args.phase,
-      rowsScanned: page.page.length,
-      targets,
-      orphaned,
-      isDone: page.isDone,
-      continueCursor: page.continueCursor,
-    };
-  },
-});
-
-// ---------------------------------------------------------------------------
-// Legacy rollback surface for C4.2B. The active cron no longer calls this
-// cap-biased communities-prefix lister; C4.2C deletes it after staging proof.
-// ---------------------------------------------------------------------------
-
-export const listCommunityMemorySweepTargetsInternal = internalQuery({
-  args: {
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const limit = Math.max(1, Math.min(1000, Math.floor(Number(args.limit ?? 500))));
-    const rows = (await ctx.db.query("communities" as any).take(limit)) as Array<Record<string, any>>;
-    return rows
-      .filter((row) => Boolean(row.ownerId))
-      .map((row) => ({
-        communityId: normalizeIdValue(row._id),
-        ownerId: normalizeIdValue(row.ownerId),
-      }));
-  },
-});
-
-// One read-only planner for both the sweep preflight and the heartbeat's final
-// cost gate. Compiler evidence means the compiler has work. A pending or stale
-// digest handoff means the agent has work. Raw source timestamps are neither.
+// One read-only planner for the heartbeat's final cost gate. Compiler evidence
+// means the compiler has work. A pending or stale digest handoff means the
+// agent has work. Raw source timestamps are neither.
 export const assessCommunityAgentCycleInternal = internalQuery({
   args: {
     communityId: v.id("communities"),
@@ -685,142 +630,5 @@ export const assessCommunityAgentCycleInternal = internalQuery({
       return { ...base, enqueue: true, reason: compilerEvidence.reason };
     }
     return { ...base, enqueue: false, reason: "no_compiler_work" };
-  },
-});
-
-// The repair drain schedules one bounded cursor page at a time. It schedules
-// the next page or phase before candidate processing, then isolates failures
-// per community. Existing planner, connection, heartbeat, claim, and runtime
-// gates remain the only authority over paid work.
-export const runCommunityCompilerRepairInternal = internalAction({
-  args: {
-    phase: v.optional(communityCompilerRepairPhaseValidator),
-    cursor: v.optional(v.string()),
-    scanStartedAt: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const phase = (args.phase ?? "due_trace") as CommunityCompilerRepairPhase;
-    const scanStartedAt = args.scanStartedAt ?? Date.now();
-    const page = (await ctx.runQuery(
-      internalRefs.communityAgentHeartbeat.listCommunityCompilerRepairPageInternal,
-      {
-        phase,
-        cursor: args.cursor,
-        scanStartedAt,
-      },
-    )) as {
-      rowsScanned: number;
-      targets: Array<{ communityId: string; ownerId: string }>;
-      orphaned: number;
-      isDone: boolean;
-      continueCursor?: string | null;
-    };
-    const nextPhase = nextCommunityCompilerRepairPhase(phase);
-    let continuationScheduled = false;
-    if (!page.isDone && page.continueCursor) {
-      await ctx.scheduler.runAfter(
-        0,
-        internalRefs.communityAgentHeartbeat.runCommunityCompilerRepairInternal,
-        {
-          phase,
-          cursor: page.continueCursor,
-          scanStartedAt,
-        },
-      );
-      continuationScheduled = true;
-    } else if (nextPhase) {
-      await ctx.scheduler.runAfter(
-        0,
-        internalRefs.communityAgentHeartbeat.runCommunityCompilerRepairInternal,
-        {
-          phase: nextPhase,
-          scanStartedAt,
-        },
-      );
-      continuationScheduled = true;
-    }
-
-    let enqueued = 0;
-    const skipped: Record<string, number> = {};
-    for (const target of page.targets) {
-      try {
-        const assessment = (await ctx.runQuery(
-          internalRefs.communityAgentHeartbeat.assessCommunityAgentCycleInternal,
-          { communityId: target.communityId },
-        )) as { enqueue: boolean; reason: string };
-        if (!assessment.enqueue) {
-          skipped[assessment.reason] = (skipped[assessment.reason] ?? 0) + 1;
-          continue;
-        }
-        const connection = (await ctx.runQuery(
-          internalRefs.providerConnections.getChatgptConnectionForUserInternal,
-          { userId: target.ownerId },
-        )) as Record<string, any> | null;
-        if (!connection?.encryptedSecretHex) {
-          skipped.owner_connection_missing = (skipped.owner_connection_missing ?? 0) + 1;
-          continue;
-        }
-        await ctx.runMutation(
-          internalRefs.communityAgentHeartbeat.enqueueCommunityAgentHeartbeatInternal,
-          {
-            communityId: target.communityId,
-            runAfterMs: 0,
-          },
-        );
-        enqueued += 1;
-      } catch {
-        skipped.candidate_error = (skipped.candidate_error ?? 0) + 1;
-      }
-    }
-    return {
-      ok: true,
-      phase,
-      scan_started_at: scanStartedAt,
-      rows_scanned: page.rowsScanned,
-      targets: page.targets.length,
-      orphaned: page.orphaned,
-      enqueued,
-      skipped,
-      continuation_scheduled: continuationScheduled,
-    };
-  },
-});
-
-// Legacy rollback surface only. The active cron uses the targeted repair drain
-// above; this global prefix scan is deleted in C4.2C after staging proof.
-export const runCommunityMemorySweepInternal = internalAction({
-  args: {
-    limitCommunities: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const targets = (await ctx.runQuery(internalRefs.communityAgentHeartbeat.listCommunityMemorySweepTargetsInternal, {
-      limit: args.limitCommunities,
-    })) as Array<{ communityId: string; ownerId: string }>;
-    let enqueued = 0;
-    const skipped: Record<string, number> = {};
-    for (const target of targets) {
-      const assessment = (await ctx.runQuery(internalRefs.communityAgentHeartbeat.assessCommunityAgentCycleInternal, {
-        communityId: target.communityId,
-      })) as { enqueue: boolean; reason: string };
-      if (!assessment.enqueue) {
-        skipped[assessment.reason] = (skipped[assessment.reason] ?? 0) + 1;
-        continue;
-      }
-      // Founder-funded: no usable owner connection means no cycle, checked
-      // cheaply here and rechecked by the heartbeat immediately before work.
-      const connection = (await ctx.runQuery(internalRefs.providerConnections.getChatgptConnectionForUserInternal, {
-        userId: target.ownerId,
-      })) as Record<string, any> | null;
-      if (!connection?.encryptedSecretHex) {
-        skipped.owner_connection_missing = (skipped.owner_connection_missing ?? 0) + 1;
-        continue;
-      }
-      await ctx.runMutation(internalRefs.communityAgentHeartbeat.enqueueCommunityAgentHeartbeatInternal, {
-        communityId: target.communityId,
-        runAfterMs: 0,
-      });
-      enqueued += 1;
-    }
-    return { ok: true, targets: targets.length, enqueued, skipped };
   },
 });

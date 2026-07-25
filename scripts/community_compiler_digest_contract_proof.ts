@@ -52,8 +52,8 @@ assert.match(
 );
 assert.match(
   digest,
-  /if \(!existing && sortedItems\.length > 0\)[\s\S]*runCommunityAgentHeartbeatInternal/,
-  "only insertion of a new non-empty digest version should schedule the heartbeat",
+  /if \(!existing && sortedItems\.length > 0\)[\s\S]*recoverCommunityCompilerDigestHandoffInternal[\s\S]*digestId[\s\S]*versionKey/,
+  "only insertion of a new non-empty digest version should schedule its exact recovery checkpoint",
 );
 assert.doesNotMatch(
   digest,

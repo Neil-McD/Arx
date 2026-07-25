@@ -90,7 +90,9 @@ canonical mention or scheduled knock -> community-owned agent identity
 
 - Authority: separate community-owned principal, owner off-switch, evidence gate, role/policy boundary.
 - Good: not conflated with member agent; internal protocol is deliberately small.
-- Gap: six-hour memory sweep has no cursor and can starve communities after the first 500.
+- Closed: canonical trace transitions schedule compiler evaluation, and each
+  new immutable digest owns one exact recovery checkpoint. There is no global
+  community sweep or second queue.
 
 ## 8. External harness uses official MCP
 

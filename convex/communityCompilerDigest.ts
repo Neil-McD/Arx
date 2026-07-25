@@ -394,8 +394,12 @@ async function runCommunityCompilerDigestPassCore(
     if (!existing && sortedItems.length > 0) {
       await ctx.scheduler.runAfter(
         0,
-        internalRefs.communityAgentHeartbeat.runCommunityAgentHeartbeatInternal,
-        { communityId: args.communityId },
+        internalRefs.communityAgentHeartbeat.recoverCommunityCompilerDigestHandoffInternal,
+        {
+          communityId: args.communityId,
+          digestId,
+          versionKey,
+        },
       );
     }
     return mapDigestRow(row);

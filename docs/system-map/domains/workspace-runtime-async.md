@@ -20,11 +20,14 @@ This is a split client state machine: in-memory navigation can enter Workspace w
 
 ## Scheduled job inventory
 
-There are 23 crons. Most money/outbox/runtime cleanup jobs use indexes, explicit limits, leases, retry state, or idempotency. Three fairness defects stand out:
+There are 25 crons. Most money/outbox/runtime cleanup jobs use indexes, explicit limits, leases, retry state, or idempotency. Two fairness defects stand out:
 
-1. `runCommunityMemorySweepInternal` asks for `take(limit)` over communities, default 500, with no cursor. Above 500, the same first set can be processed every six hours while later communities never run.
-2. monthly AI-feed pruning paginates at most eight pages of 250 but resets to cursor `null` each monthly run and persists no continuation. Above 2,000 communities, later communities can starve forever.
-3. weekly digest and recurring reminder selection have bounded prefixes but no durable continuation/partition ownership.
+1. monthly AI-feed pruning paginates at most eight pages of 250 but resets to cursor `null` each monthly run and persists no continuation. Above 2,000 communities, later communities can starve forever.
+2. weekly digest and recurring reminder selection have bounded prefixes but no durable continuation/partition ownership.
+
+Community memory no longer has a fairness scan. Canonical trace writes schedule
+compiler mutations, and each new immutable digest owns one exact recovery
+checkpoint around its at-most-once heartbeat action.
 
 Bounded cost is necessary but insufficient. A repeating prefix scan without continuation is not eventually complete.
 
@@ -44,7 +47,7 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 
 | Surface | Scaling variable | Risk |
 | --- | --- | --- |
-| memory sweep | communities `C` | `O(min(C,500))` per run but no service for suffix |
+| compiler digest recovery | unfinished digest versions | `O(1)` exact-row checkpoint per active recovery chain |
 | AI-feed prune | communities `C` | at most 2,000 per month with no persisted continuation |
 | Workspace UI orchestration | app state/callback surfaces | large coupling and refresh-state drift, not merely line count |
 | runtime events/receipts | runs × events | storage retention and operator query cost unclear |
@@ -58,7 +61,7 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | standalone Workspace as primary navigation destination | `DELETE (deferred/dead)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 9 | current MVP selects communities; callers/compatibility must be enumerated |
 | Workspace host coupling to Builder Partner UI | `DELETE (deferred/dead)` | `MIGRATE_THEN_DELETE` | 9 | retained secondary economy is misplaced inside a protected execution surface |
 | workspace route builders/controllers after parser retirement | `DECISION REQUIRED (user confirmation)` | `MIGRATE_THEN_DELETE` | 8 | split state machine; backend substrate is not the same as destination routing |
-| no-cursor repeating prefix sweeps | `KEEP (MVP core)` | `HARDEN`, `BOUND` | 9 | claims reliable automation while permanently starving eligible work |
+| remaining no-cursor repeating prefix sweeps | `KEEP (MVP core)` | `HARDEN`, `BOUND` | 9 | claims reliable automation while permanently starving eligible work |
 | durable runtime receipts | `KEEP (MVP core)` | `RETENTION`, `BOUND` | 2 | necessary for audit/recovery, but not forever at full fidelity |
 
 ## Closure rule

@@ -29,32 +29,10 @@ assert.match(heartbeat, /export const runCommunityAgentHeartbeatInternal = inter
 assert.doesNotMatch(heartbeat, /export const .* = action\(|export const .* = mutation\(/);
 assert.doesNotMatch(heartbeat, /userPrompt|prompt: v\.string|authSubject/);
 assert.doesNotMatch(heartbeat, /\.collect\(\)/);
-
-{
-  const activeHeartbeatAndRepairSurface = heartbeat.slice(
-    0,
-    heartbeat.indexOf("export const listCommunityMemorySweepTargetsInternal"),
-  );
-  assert.doesNotMatch(
-    activeHeartbeatAndRepairSurface,
-    /query\("communities"/,
-    "active heartbeat and repair paths should not enumerate communities",
-  );
-}
-assert.match(
-  heartbeat,
-  /listCommunityMemorySweepTargetsInternal[\s\S]*query\("communities" as any\)\.take\(limit\)/,
-  "the temporarily retained rollback sweep should remain visibly cap-biased until C4.2C deletes it",
-);
-assert.match(
-  crons,
-  /"repair community compiler work"[\s\S]*runCommunityCompilerRepairInternal/,
-  "the six-hour cron should call only the targeted compiler repair drain",
-);
 assert.doesNotMatch(
-  crons,
-  /runCommunityMemorySweepInternal/,
-  "the cap-biased global sweep must not remain on an active cron path",
+  heartbeat,
+  /query\("communities"/,
+  "community heartbeat and recovery must never enumerate communities",
 );
 
 assert.match(
@@ -147,78 +125,39 @@ assert.doesNotMatch(
   "retry settlement should not create a competing compiler continuation",
 );
 
-const repairPageBlock = exportedFunctionBlock(
+const recoveryBlock = exportedFunctionBlock(
   heartbeat,
-  "listCommunityCompilerRepairPageInternal",
+  "recoverCommunityCompilerDigestHandoffInternal",
 );
 assert.match(
-  repairPageBlock,
-  /by_compilerState_pendingSince_community[\s\S]*by_agentHandoffState_createdAt_community[\s\S]*by_agentHandoffState_claimedAt_community/,
-  "repair discovery should read only overdue traces, pending handoffs, and stale handoff leases",
+  recoveryBlock,
+  /communityId: v\.id\("communities"\)[\s\S]*digestId: v\.id\("communityCompilerDigests"\)[\s\S]*versionKey: v\.string\(\)/,
+  "recovery should bind one exact community, digest, and immutable version",
 );
 assert.match(
-  repairPageBlock,
-  /COMPILER_EVIDENCE_AGE_THRESHOLD_MS[\s\S]*COMMUNITY_AGENT_HANDOFF_LEASE_MS/,
-  "repair cutoffs should reuse canonical evidence-age and handoff-lease clocks",
+  recoveryBlock,
+  /ctx\.db\.get\(args\.digestId\)[\s\S]*community_mismatch[\s\S]*version_mismatch[\s\S]*handoff_handled[\s\S]*legacy_handoff/,
+  "recovery should stop on missing, mismatched, handled, or historical work",
 );
 assert.match(
-  repairPageBlock,
-  /\.paginate\([\s\S]*COMMUNITY_COMPILER_REPAIR_PAGE_SIZE/,
-  "repair discovery should be cursor-paginated behind one hard page bound",
+  recoveryBlock,
+  /handoff_running[\s\S]*runCommunityAgentHeartbeatInternal[\s\S]*recoverCommunityCompilerDigestHandoffInternal[\s\S]*stale_handoff[\s\S]*pending_handoff/,
+  "recovery should respect a fresh lease and retry only pending or stale exact work",
 );
 assert.doesNotMatch(
-  repairPageBlock,
-  /query\("communities"|\.collect\(\)/,
-  "repair discovery must not enumerate communities or collect a repair backlog",
+  recoveryBlock,
+  /query\(|runQuery\(|runAction\(|providerConnections|runCommunityCompilerDigestPassInternal/,
+  "recovery must not discover communities, call providers, infer, or create compiler work",
 );
-
-const repairBlock = exportedFunctionBlock(
+assert.doesNotMatch(
   heartbeat,
-  "runCommunityCompilerRepairInternal",
-);
-assert.match(
-  repairBlock,
-  /runCommunityCompilerRepairInternal[\s\S]*continuationScheduled = true[\s\S]*for \(const target of page\.targets\)/,
-  "repair should schedule its next cursor page or phase before candidate processing",
-);
-assert.match(
-  repairBlock,
-  /assessCommunityAgentCycleInternal[\s\S]*getChatgptConnectionForUserInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
-  "repair should reuse the existing planner, owner connection, and heartbeat gates",
-);
-assert.match(
-  repairBlock,
-  /catch \{[\s\S]*skipped\.candidate_error/,
-  "one broken candidate must not abort the remainder of a repair page",
+  /listCommunityMemorySweepTargetsInternal|runCommunityMemorySweepInternal/,
+  "global community memory sweep exports should be deleted",
 );
 assert.doesNotMatch(
-  repairBlock,
-  /runCommunityCompilerDigestPassInternal|runCommunityAgentCycleInternal/,
-  "repair should never compile or invoke paid runtime work directly",
-);
-
-const sweepBlock = exportedFunctionBlock(heartbeat, "runCommunityMemorySweepInternal");
-assert.match(
-  sweepBlock,
-  /assessCommunityAgentCycleInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
-  "memory sweep should plan compiler and handoff work and enqueue immediately",
-);
-assert.doesNotMatch(
-  sweepBlock,
-  /runCommunityCompilerDigestPassInternal|COMMUNITY_AGENT_SWEEP_HEARTBEAT_DELAY_MS|settleCommunityMemorySignalsInternal|recordCommunityMemoryMetabolizerErrorRunInternal|metabolized/,
-  "memory sweep must not compile, own an arbitrary delay, or run mechanical memory metabolism",
-);
-assert.match(sweepBlock, /enqueueCommunityAgentHeartbeatInternal[\s\S]*runAfterMs: 0/);
-assert.match(
-  sweepBlock,
-  /return \{ ok: true, targets: targets\.length, enqueued, skipped \}/,
-  "memory sweep should expose only compiler and heartbeat scheduling diagnostics",
-);
-
-assert.match(
-  docs,
-  /C4\.2B Targeted Compiler Repair[\s\S]*overdue source traces[\s\S]*pending digest handoffs[\s\S]*stale running handoffs/,
-  "cognition contract should describe the three-state repair boundary",
+  crons,
+  /community memory sweep|runCommunityMemorySweepInternal/,
+  "global community memory sweep cron should be deleted",
 );
 
 assert.match(
@@ -273,8 +212,13 @@ assert.match(
 );
 assert.match(
   docs,
-  /Canonical Compiler-to-Agent Handoff[\s\S]*immutable digest version[\s\S]*`pending` is claimable[\s\S]*`running` has a bounded lease[\s\S]*`handled` is\s+terminal[\s\S]*never compiles evidence itself/,
+  /Canonical Compiler-to-Agent Handoff[\s\S]*immutable digest version[\s\S]*`pending` is claimable[\s\S]*`running` has a bounded lease[\s\S]*`handled` is\s+terminal[\s\S]*exact recovery checkpoint/,
   "docs should describe the durable autonomous handoff contract",
+);
+assert.match(
+  docs,
+  /C4\.2B Exact Digest Recovery[\s\S]*community \+ digest id \+ version[\s\S]*pending or stale-running[\s\S]*fresh-running[\s\S]*handled, missing, legacy, or mismatched[\s\S]*not a workflow engine/,
+  "docs should describe the minimal per-digest recovery boundary",
 );
 
 console.log("community_agent_heartbeat_contract_proof: ok");
