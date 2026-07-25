@@ -1119,7 +1119,7 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   community_ai_feed_search: {
     name: "community_ai_feed_search",
-    description: "Search authorized canonical live AI Feed posts in the active community and return stable evidence refs. Retrieval relevance and community reaction signal are reported separately.",
+    description: "Search authorized canonical live AI Feed posts in the active community and return stable evidence refs with bounded query relevance.",
     inputSchema: COMMUNITY_AI_FEED_SEARCH_TOOL_SCHEMA,
   },
   community_ai_feed_read: {

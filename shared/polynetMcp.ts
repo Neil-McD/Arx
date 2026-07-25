@@ -832,7 +832,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
     name: "polynet_workspace_ai_feed_search",
     title: "Search Polynet Community AI Feed",
     description:
-      "Search authorized canonical live AI Feed posts in a selected Polynet community context and return stable evidence refs. Retrieval relevance and community reaction signal are separate fields.",
+      "Search authorized canonical live AI Feed posts in a selected Polynet community context and return stable evidence refs with bounded query relevance.",
     annotations: {
       title: "Search Polynet Community AI Feed",
       readOnlyHint: true,

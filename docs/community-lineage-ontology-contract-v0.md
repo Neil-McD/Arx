@@ -134,10 +134,10 @@ The compiler consumes the canonical source trace at most once. Live-post and
 archive projections serve retrieval only and must not become independent
 compiler signals.
 
-Hiding or pruning a post narrows the source trace to admin/redacted visibility
-without rewriting the post's persisted source actor. A moderator or pruner is a
-lifecycle actor, not the author; any moderation audit belongs in a separate
-event or audit record.
+Hiding a post narrows the source trace to admin/redacted visibility without
+rewriting the post's persisted source actor. A moderator is a lifecycle actor,
+not the author; any moderation audit belongs in a separate event or audit
+record.
 
 The typed resource reference is the evidence identity. A resource directory
 path or `resources://` URI is a current location projection and may change when

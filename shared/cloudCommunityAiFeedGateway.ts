@@ -16,7 +16,10 @@ export async function listCloudCommunityAiFeedPosts<SessionT, TPost = unknown>(
     communityId: params.communityId,
     limit: params.limit ?? 100,
   });
-  return Array.isArray(payload) ? payload as TPost[] : [];
+  if (!Array.isArray(payload)) {
+    throw new Error("community_ai_feed_response_invalid");
+  }
+  return payload as TPost[];
 }
 
 export async function hideCloudCommunityAiFeedPost<SessionT>(

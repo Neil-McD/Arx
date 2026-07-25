@@ -346,9 +346,6 @@ async function main() {
     body: "AI Feed evidence",
     evidence: [],
     status: "live",
-    score: 1,
-    goodCount: 0,
-    lowSignalCount: 0,
     createdAt: nowMs,
     updatedAt: nowMs,
   });

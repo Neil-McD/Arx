@@ -10,6 +10,20 @@ const facade = readFileSync(join(root, "convex/community.ts"), "utf8");
 const gateway = readFileSync(join(root, "shared/cloudCommunityAiFeedGateway.ts"), "utf8");
 const controller = readFileSync(join(root, "shared/useCommunityAiFeedController.ts"), "utf8");
 const panel = readFileSync(join(root, "apps/web/src/components/CommunityAiFeedPanel.tsx"), "utf8");
+const activeContractSources = [
+  "shared/runtimePrompt.ts",
+  "shared/polynetMcp.ts",
+  "shared/toolRegistry.ts",
+].map((path) => readFileSync(join(root, path), "utf8")).join("\n");
+const attention = readFileSync(join(root, "convex/communityAttention.ts"), "utf8");
+const evidenceIntegrityProof = readFileSync(
+  join(root, "scripts/community_evidence_integrity_contract_proof.ts"),
+  "utf8",
+);
+const lineageContract = readFileSync(
+  join(root, "docs/community-lineage-ontology-contract-v0.md"),
+  "utf8",
+);
 
 function blockBetween(source: string, startToken: string, endToken: string): string {
   const start = source.indexOf(startToken);
@@ -69,8 +83,33 @@ assert.doesNotMatch(schema, /communityAiFeedReactions: defineTable/);
 
 assert.match(facade, /export const listCommunityAiFeedPosts = listCommunityAiFeedPostsImpl/);
 assert.match(gateway, /community:listCommunityAiFeedPosts/);
+assert.match(
+  gateway,
+  /if \(!Array\.isArray\(payload\)\)[\s\S]*community_ai_feed_response_invalid/,
+  "AI Feed gateway should expose response contract drift instead of returning a false empty feed",
+);
 assert.match(controller, /posts: CommunityAiFeedPost\[\]/);
 assert.match(panel, /const posts = state\.posts/);
 assert.doesNotMatch(panel, />Ranked<|>Live<|ai-feed-signal-button/);
+assert.doesNotMatch(
+  activeContractSources,
+  /reaction signal|community reaction signal/i,
+  "active agent and tool contracts should not advertise deleted AI Feed reactions",
+);
+assert.doesNotMatch(
+  attention,
+  /status: "live" \| "ranked"/,
+  "AI Feed attention types should use canonical live/hidden status",
+);
+assert.doesNotMatch(
+  evidenceIntegrityProof,
+  /score: 1|goodCount|lowSignalCount/,
+  "AI Feed evidence fixtures should match the contracted canonical schema",
+);
+assert.doesNotMatch(
+  lineageContract,
+  /Hiding or pruning|moderator or pruner/,
+  "AI Feed lineage contract should not preserve the deleted automatic-pruner role",
+);
 
 console.log("community_ai_feed_scaling_contract_proof: ok");

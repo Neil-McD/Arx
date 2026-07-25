@@ -17,7 +17,7 @@ type CommunityAiFeedPostLike = {
   _id: any;
   communityId: any;
   createdAt: number;
-  status: "live" | "ranked";
+  status: "live" | "hidden";
 };
 
 type CommunityAttentionRow = {
