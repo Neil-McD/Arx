@@ -107,6 +107,21 @@ assert.match(
   "source trace schema should support visibility-aware legacy fallback reads",
 );
 assert.match(
+  schema,
+  /\.index\("by_compilerState_pendingSince_community", \[[\s\S]*"compilerState",[\s\S]*"compilerPendingSince",[\s\S]*"communityId",[\s\S]*\]\)/,
+  "source traces should support global overdue-work repair without a communities scan",
+);
+assert.match(
+  schema,
+  /\.index\("by_agentHandoffState_createdAt_community", \[[\s\S]*"agentHandoffState",[\s\S]*"createdAt",[\s\S]*"communityId",[\s\S]*\]\)/,
+  "digest handoffs should support global pending-work repair",
+);
+assert.match(
+  schema,
+  /\.index\("by_agentHandoffState_claimedAt_community", \[[\s\S]*"agentHandoffState",[\s\S]*"agentClaimedAt",[\s\S]*"communityId",[\s\S]*\]\)/,
+  "digest handoffs should support global stale-lease repair",
+);
+assert.match(
   directory,
   /sourceTraceMaterialChanged[\s\S]*shouldMarkSourceTracePending[\s\S]*nextSourceTracePendingSince/,
   "source trace upserts should distinguish idempotent writes from material updates",

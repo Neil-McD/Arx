@@ -12,6 +12,7 @@ const modules = import.meta.glob([
   "./communityAgentHeartbeat.ts",
   "./communityCompilerDigest.ts",
   "./communityIntelligenceDirectory.ts",
+  "./providerConnections.ts",
   "./_generated/**/*.*s",
 ]);
 const NOW_MS = 1_780_000_000_000;
@@ -223,4 +224,254 @@ test("sub-threshold evidence schedules one bounded age recheck", async () => {
   expect(
     await t.run(async (ctx) => ctx.db.query("communityCompilerDigests").collect()),
   ).toEqual([]);
+});
+
+async function seedCompilerDigest(
+  t: ReturnType<typeof convexTest>,
+  args: {
+    communityId: any;
+    key: string;
+    state?: "pending" | "running" | "handled";
+    claimedAt?: number;
+    createdAt: number;
+  },
+) {
+  return await t.run(async (ctx) => await ctx.db.insert("communityCompilerDigests", {
+    communityId: args.communityId,
+    dedupeKey: `repair:${args.key}`,
+    versionKey: `version:${args.key}`,
+    ...(args.state ? { agentHandoffState: args.state } : {}),
+    ...(args.claimedAt !== undefined ? { agentClaimedAt: args.claimedAt } : {}),
+    windowStartedAt: args.createdAt - 1_000,
+    windowEndedAt: args.createdAt,
+    summary: "Repair scheduling fixture",
+    itemCount: 0,
+    items: [],
+    signalCounts: {
+      chat: 0,
+      aiFeed: 0,
+      resources: 0,
+      events: 0,
+      sourceTraces: 0,
+      outcomes: 0,
+      newMembers: 0,
+      activeMembers: 0,
+      postingMembers: 0,
+      aiFeedReactingMembers: 0,
+    },
+    createdByActorType: "compiler",
+    createdAt: args.createdAt,
+    updatedAt: args.createdAt,
+  }));
+}
+
+test("repair pages select only overdue traces and interrupted handoffs", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(NOW_MS);
+  const t = convexTest(schema, modules);
+  const due = await seedCommunity(t, "repair-due-trace");
+  const young = await seedCommunity(t, "repair-young-trace");
+  const pending = await seedCommunity(t, "repair-pending-handoff");
+  const stale = await seedCommunity(t, "repair-stale-handoff");
+  const fresh = await seedCommunity(t, "repair-fresh-handoff");
+  const legacy = await seedCommunity(t, "repair-legacy-digest");
+  await t.run(async (ctx) => {
+    const insertTrace = async (
+      fixture: { communityId: any; ownerId: any },
+      key: string,
+      pendingSince: number,
+      compilerState: "pending" | "excluded_by_visibility",
+    ) => await ctx.db.insert("communitySourceTraces", {
+      communityId: fixture.communityId,
+      sourceType: "interaction",
+      sourceId: key,
+      summary: key,
+      visibilityScope: "community",
+      sourceVisibility: "community",
+      artifactIds: [],
+      outcomeObservationIds: [],
+      actorType: "member",
+      actorUserId: fixture.ownerId,
+      compilerState,
+      compilerPendingSince: pendingSince,
+      createdAt: pendingSince,
+      updatedAt: pendingSince,
+    });
+    await insertTrace(
+      due,
+      "due",
+      NOW_MS - COMPILER_EVIDENCE_AGE_THRESHOLD_MS - 1,
+      "pending",
+    );
+    await insertTrace(young, "young", NOW_MS - 1_000, "pending");
+    await insertTrace(
+      due,
+      "terminal",
+      NOW_MS - COMPILER_EVIDENCE_AGE_THRESHOLD_MS - 1,
+      "excluded_by_visibility",
+    );
+  });
+  await seedCompilerDigest(t, {
+    communityId: pending.communityId,
+    key: "pending",
+    state: "pending",
+    createdAt: NOW_MS - 1_000,
+  });
+  await seedCompilerDigest(t, {
+    communityId: stale.communityId,
+    key: "stale",
+    state: "running",
+    claimedAt: NOW_MS - 31 * 60 * 1_000,
+    createdAt: NOW_MS - 40 * 60 * 1_000,
+  });
+  await seedCompilerDigest(t, {
+    communityId: fresh.communityId,
+    key: "fresh",
+    state: "running",
+    claimedAt: NOW_MS - 29 * 60 * 1_000,
+    createdAt: NOW_MS - 40 * 60 * 1_000,
+  });
+  await seedCompilerDigest(t, {
+    communityId: legacy.communityId,
+    key: "legacy",
+    createdAt: NOW_MS - 24 * 60 * 60 * 1_000,
+  });
+
+  const page = (phase: "due_trace" | "pending_handoff" | "stale_handoff") =>
+    t.query(
+      (internal as any).communityAgentHeartbeat.listCommunityCompilerRepairPageInternal,
+      { phase, scanStartedAt: NOW_MS },
+    );
+  expect((await page("due_trace")).targets.map((row: any) => row.communityId)).toEqual([
+    due.communityId,
+  ]);
+  expect((await page("pending_handoff")).targets.map((row: any) => row.communityId)).toEqual([
+    pending.communityId,
+  ]);
+  expect((await page("stale_handoff")).targets.map((row: any) => row.communityId)).toEqual([
+    stale.communityId,
+  ]);
+});
+
+test("repair cursor reaches every overdue community beyond the page cap", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(NOW_MS);
+  const t = convexTest(schema, modules);
+  const expected = new Set<string>();
+  await t.run(async (ctx) => {
+    for (let index = 0; index < 61; index += 1) {
+      const ownerId = await ctx.db.insert("users", {
+        authSubject: `repair-owner-${index}`,
+        displayName: "Repair owner",
+        createdAt: NOW_MS,
+        updatedAt: NOW_MS,
+      });
+      const communityId = await ctx.db.insert("communities", {
+        ownerId,
+        slug: `repair-community-${index}`,
+        name: "Repair community",
+        visibility: "unlisted",
+        entryPolicy: "approval",
+        activeMemberCount: 1,
+        createdAt: NOW_MS,
+        updatedAt: NOW_MS,
+      });
+      expected.add(String(communityId));
+      await ctx.db.insert("communitySourceTraces", {
+        communityId,
+        sourceType: "interaction",
+        sourceId: `repair-trace-${index}`,
+        summary: `Repair trace ${index}`,
+        visibilityScope: "community",
+        sourceVisibility: "community",
+        artifactIds: [],
+        outcomeObservationIds: [],
+        actorType: "member",
+        actorUserId: ownerId,
+        compilerState: "pending",
+        compilerPendingSince: NOW_MS - COMPILER_EVIDENCE_AGE_THRESHOLD_MS - index - 1,
+        createdAt: NOW_MS - COMPILER_EVIDENCE_AGE_THRESHOLD_MS - index - 1,
+        updatedAt: NOW_MS,
+      });
+    }
+  });
+
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+  let isDone = false;
+  let pages = 0;
+  while (!isDone) {
+    const result = await t.query(
+      (internal as any).communityAgentHeartbeat.listCommunityCompilerRepairPageInternal,
+      {
+        phase: "due_trace",
+        cursor,
+        scanStartedAt: NOW_MS,
+      },
+    ) as any;
+    pages += 1;
+    for (const target of result.targets) seen.add(String(target.communityId));
+    isDone = result.isDone;
+    cursor = result.continueCursor || undefined;
+  }
+  expect(pages).toBe(3);
+  expect(seen).toEqual(expected);
+});
+
+test("repair skips an unfunded candidate without blocking the next community", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(NOW_MS);
+  const t = convexTest(schema, modules);
+  const unfunded = await seedCommunity(t, "repair-unfunded");
+  const funded = await seedCommunity(t, "repair-funded");
+  await t.run(async (ctx) => {
+    for (const fixture of [unfunded, funded]) {
+      await ctx.db.insert("communitySourceTraces", {
+        communityId: fixture.communityId,
+        sourceType: "interaction",
+        sourceId: `repair:${String(fixture.communityId)}`,
+        summary: "Overdue compiler evidence",
+        visibilityScope: "community",
+        sourceVisibility: "community",
+        artifactIds: [],
+        outcomeObservationIds: [],
+        actorType: "member",
+        actorUserId: fixture.ownerId,
+        compilerState: "pending",
+        compilerPendingSince: NOW_MS - COMPILER_EVIDENCE_AGE_THRESHOLD_MS - 1,
+        createdAt: NOW_MS - COMPILER_EVIDENCE_AGE_THRESHOLD_MS - 1,
+        updatedAt: NOW_MS,
+      });
+    }
+    await ctx.db.insert("userProviderConnections", {
+      userId: funded.ownerId,
+      provider: "chatgpt",
+      authKind: "oauth_tokens",
+      encryptedSecretHex: "encrypted",
+      secretIvHex: "iv",
+      secretVersion: 1,
+      validatedAt: NOW_MS,
+      createdAt: NOW_MS,
+      updatedAt: NOW_MS,
+    });
+  });
+
+  expect(await t.action(
+    (internal as any).communityAgentHeartbeat.runCommunityCompilerRepairInternal,
+    { scanStartedAt: NOW_MS },
+  )).toMatchObject({
+    phase: "due_trace",
+    targets: 2,
+    enqueued: 1,
+    skipped: { owner_connection_missing: 1 },
+    continuation_scheduled: true,
+  });
+  const scheduled = await scheduledFunctions(t);
+  expect(scheduled).toHaveLength(2);
+  expect(scheduled.some((row) =>
+    row.name.includes("runCommunityCompilerRepairInternal")
+  )).toBe(true);
+  expect(scheduled.some((row) =>
+    row.name.includes("runCommunityAgentHeartbeatInternal")
+  )).toBe(true);
 });

@@ -1757,6 +1757,47 @@ Rules:
 - This slice adds no schema, public API, UI, provider call, generic queue, or
   workflow engine.
 
+## C4.2B Targeted Compiler Repair
+
+Event-born scheduling remains the primary path. The six-hour cron repairs only
+the three durable states that can be stranded by an interrupted scheduler or
+worker:
+
+```txt
+overdue source traces
+  -> pending digest handoffs
+  -> stale running handoffs
+  -> bounded same-community heartbeat knock
+```
+
+Rules:
+
+- Overdue means an explicit `compilerState: pending` trace whose
+  `compilerPendingSince` is at least 72 hours old.
+- Pending digest handoffs are new immutable digest versions whose event-born
+  heartbeat did not complete.
+- Stale running handoffs are leases whose `agentClaimedAt` is at least 30
+  minutes old.
+- Each state has one global ordered index over its canonical state and clock.
+  Repair does not enumerate the communities table or introduce a duplicate
+  `dueAt` field.
+- Repair advances one 25-row cursor page at a time and schedules the next page
+  or phase before processing the current page.
+- Candidate community ids are deduplicated inside each page. One candidate
+  failure is isolated and cannot block later candidates.
+- The repair action reuses `assessCommunityAgentCycleInternal`, the owner
+  connection check, and `enqueueCommunityAgentHeartbeatInternal`. It never
+  compiles, claims, invokes an LLM, or settles work directly.
+- Young pending traces remain owned by their event-born 72-hour recheck.
+  Fresh running leases and handled or historical digests are not repair work.
+- Historical digest rows without `agentHandoffState` are not manufactured into
+  autonomous work.
+- The prior cap-biased community-prefix sweep remains temporarily as an
+  uncalled rollback surface. C4.2C deletes it after the targeted cron completes
+  a staging observation window.
+- This slice adds no table, public API, UI, workflow engine, scheduler ledger,
+  lock service, or operator control surface.
+
 ## Twenty-Third Implementation Slice
 
 Concierge intake ledger turns community-agent mentions into auditable serve

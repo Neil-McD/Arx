@@ -6,6 +6,7 @@ const root = process.cwd();
 const heartbeat = readFileSync(join(root, "convex/communityAgentHeartbeat.ts"), "utf8");
 const runtime = readFileSync(join(root, "convex/communityAgentRuntime.ts"), "utf8");
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
+const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
 
@@ -30,20 +31,30 @@ assert.doesNotMatch(heartbeat, /userPrompt|prompt: v\.string|authSubject/);
 assert.doesNotMatch(heartbeat, /\.collect\(\)/);
 
 {
-  const singleCommunityHeartbeatSurface = heartbeat.slice(
+  const activeHeartbeatAndRepairSurface = heartbeat.slice(
     0,
     heartbeat.indexOf("export const listCommunityMemorySweepTargetsInternal"),
   );
   assert.doesNotMatch(
-    singleCommunityHeartbeatSurface,
+    activeHeartbeatAndRepairSurface,
     /query\("communities"/,
-    "single-community heartbeat enqueue/run path should not enumerate communities",
+    "active heartbeat and repair paths should not enumerate communities",
   );
 }
 assert.match(
   heartbeat,
   /listCommunityMemorySweepTargetsInternal[\s\S]*query\("communities" as any\)\.take\(limit\)/,
-  "only the platform sweep target lister should enumerate communities, and it must be bounded",
+  "the temporarily retained rollback sweep should remain visibly cap-biased until C4.2C deletes it",
+);
+assert.match(
+  crons,
+  /"repair community compiler work"[\s\S]*runCommunityCompilerRepairInternal/,
+  "the six-hour cron should call only the targeted compiler repair drain",
+);
+assert.doesNotMatch(
+  crons,
+  /runCommunityMemorySweepInternal/,
+  "the cap-biased global sweep must not remain on an active cron path",
 );
 
 assert.match(
@@ -136,6 +147,56 @@ assert.doesNotMatch(
   "retry settlement should not create a competing compiler continuation",
 );
 
+const repairPageBlock = exportedFunctionBlock(
+  heartbeat,
+  "listCommunityCompilerRepairPageInternal",
+);
+assert.match(
+  repairPageBlock,
+  /by_compilerState_pendingSince_community[\s\S]*by_agentHandoffState_createdAt_community[\s\S]*by_agentHandoffState_claimedAt_community/,
+  "repair discovery should read only overdue traces, pending handoffs, and stale handoff leases",
+);
+assert.match(
+  repairPageBlock,
+  /COMPILER_EVIDENCE_AGE_THRESHOLD_MS[\s\S]*COMMUNITY_AGENT_HANDOFF_LEASE_MS/,
+  "repair cutoffs should reuse canonical evidence-age and handoff-lease clocks",
+);
+assert.match(
+  repairPageBlock,
+  /\.paginate\([\s\S]*COMMUNITY_COMPILER_REPAIR_PAGE_SIZE/,
+  "repair discovery should be cursor-paginated behind one hard page bound",
+);
+assert.doesNotMatch(
+  repairPageBlock,
+  /query\("communities"|\.collect\(\)/,
+  "repair discovery must not enumerate communities or collect a repair backlog",
+);
+
+const repairBlock = exportedFunctionBlock(
+  heartbeat,
+  "runCommunityCompilerRepairInternal",
+);
+assert.match(
+  repairBlock,
+  /runCommunityCompilerRepairInternal[\s\S]*continuationScheduled = true[\s\S]*for \(const target of page\.targets\)/,
+  "repair should schedule its next cursor page or phase before candidate processing",
+);
+assert.match(
+  repairBlock,
+  /assessCommunityAgentCycleInternal[\s\S]*getChatgptConnectionForUserInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
+  "repair should reuse the existing planner, owner connection, and heartbeat gates",
+);
+assert.match(
+  repairBlock,
+  /catch \{[\s\S]*skipped\.candidate_error/,
+  "one broken candidate must not abort the remainder of a repair page",
+);
+assert.doesNotMatch(
+  repairBlock,
+  /runCommunityCompilerDigestPassInternal|runCommunityAgentCycleInternal/,
+  "repair should never compile or invoke paid runtime work directly",
+);
+
 const sweepBlock = exportedFunctionBlock(heartbeat, "runCommunityMemorySweepInternal");
 assert.match(
   sweepBlock,
@@ -152,6 +213,12 @@ assert.match(
   sweepBlock,
   /return \{ ok: true, targets: targets\.length, enqueued, skipped \}/,
   "memory sweep should expose only compiler and heartbeat scheduling diagnostics",
+);
+
+assert.match(
+  docs,
+  /C4\.2B Targeted Compiler Repair[\s\S]*overdue source traces[\s\S]*pending digest handoffs[\s\S]*stale running handoffs/,
+  "cognition contract should describe the three-state repair boundary",
 );
 
 assert.match(

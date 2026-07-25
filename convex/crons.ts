@@ -197,17 +197,16 @@ crons.daily(
   {},
 );
 
-// Ignition (contract Amendment v1.1): every 6 hours, refresh each community's
-// compiler digest (free, deterministic) and knock for a memory cycle. The
-// knock is triple-gated — owner off-switch, 2-cycles/day cap, and a delta
-// check so unchanged signal never re-wakes the roles — and the heartbeat's
-// evidence gate has the final word. Founder-funded; no owner connection, no
-// cycle.
+// Repair only: fresh compiler work schedules itself at the canonical evidence
+// transition. Every 6 hours this bounded cursor drain revisits only overdue
+// traces, pending handoffs, and stale handoff leases that may have lost their
+// event-born knock. The heartbeat retains the final control, connection, cost,
+// claim, and evidence gates.
 crons.interval(
-  "community memory sweep",
+  "repair community compiler work",
   { hours: 6 },
-  (internal as any).communityAgentHeartbeat.runCommunityMemorySweepInternal,
-  { limitCommunities: 500 },
+  (internal as any).communityAgentHeartbeat.runCommunityCompilerRepairInternal,
+  {},
 );
 
 // Concierge repair drain: fresh community-agent mentions are born into
