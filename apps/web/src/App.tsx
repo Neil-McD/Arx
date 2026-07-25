@@ -241,7 +241,6 @@ import {
 } from "../../../shared/appShellNavigation";
 import type {
   CommunityAiFeedPost as SharedCommunityAiFeedPost,
-  CommunityAiFeedReactionType as SharedCommunityAiFeedReactionType,
   AnalyticsRange as SharedAnalyticsRange,
   ChatLightboxImage as SharedChatLightboxImage,
   CommunityAccess as SharedCommunityAccess,
@@ -1239,7 +1238,6 @@ type PersonalMemoryItem = {
 type PublicPlanSummary = SharedPublicPlanSummary;
 type DiscoverCommunity = SharedDiscoverCommunitySnapshot;
 type CommunityAiFeedPost = SharedCommunityAiFeedPost;
-type CommunityAiFeedReactionType = SharedCommunityAiFeedReactionType;
 
 type NavSnapshot = NavSnapshotBase & {
   workspaceWantsNewChat: boolean;
@@ -6431,9 +6429,7 @@ export default function App() {
 
   const {
     activeCommunityFeedState,
-    reactingPostId: communityFeedReactingPostId,
     moderatingPostId: communityFeedModeratingPostId,
-    reactToPost: handleReactToCommunityFeedPost,
     hidePost: handleHideCommunityFeedPost,
     retry: retryCommunityAiFeed,
   } = useCommunityAiFeedController<AuthSession>({
@@ -6465,12 +6461,12 @@ export default function App() {
   }, [communityInteractionRepliesByRootId, communityInteractionRoots]);
 
   const latestActiveCommunityAiFeedCreatedAt = useMemo(() => {
-    const timestamps = activeCommunityFeedState.live
+    const timestamps = activeCommunityFeedState.posts
       .map((post) => Date.parse(post.created_at))
       .filter((value) => Number.isFinite(value));
     if (timestamps.length === 0) return null;
     return Math.max(...timestamps);
-  }, [activeCommunityFeedState.live]);
+  }, [activeCommunityFeedState.posts]);
 
   const latestActiveCommunityResourcesCreatedAt = useMemo(() => {
     const timestamps = communityResources
@@ -10198,15 +10194,12 @@ export default function App() {
       communitySettingsBannerZoom,
       markCommunitySettingsDirty,
       feedState: {
-        livePosts: activeCommunityFeedState.live,
-        rankedPosts: activeCommunityFeedState.ranked,
+        posts: activeCommunityFeedState.posts,
         isLoading: activeCommunityFeedState.isLoading,
         error: activeCommunityFeedState.error,
-        reactingPostId: communityFeedReactingPostId,
         moderatingPostId: communityFeedModeratingPostId,
       },
       feedActions: {
-        react: handleReactToCommunityFeedPost,
         hidePost: handleHideCommunityFeedPost,
         retry: retryCommunityAiFeed,
       },

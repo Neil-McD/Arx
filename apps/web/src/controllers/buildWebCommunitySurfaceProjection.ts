@@ -203,7 +203,6 @@ export function buildWebCommunitySurfaceProjection(
     feed: {
       capabilities: {
         hasActiveCommunity: Boolean(params.activeCommunity),
-        hasSession: params.hasAuthenticatedPresentation,
         activeCommunityName: params.activeCommunity?.name ?? null,
         canModerateFeed: params.canModerateContentActiveCommunity,
       },

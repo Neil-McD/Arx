@@ -270,13 +270,6 @@ export type CommunityAgentConfig<TLanding = unknown> = {
 
 export type CommunityAiFeedPostType = "observation" | "recommendation" | "action";
 
-export type CommunityAiFeedReactionType = "good" | "low_signal";
-
-export type CommunityAiFeedReactionCounts = {
-  good: number;
-  low_signal: number;
-};
-
 export type CommunityAiFeedPost = {
   id: string;
   community_id: string;
@@ -288,9 +281,6 @@ export type CommunityAiFeedPost = {
   title: string | null;
   body: string;
   evidence: string[];
-  score: number;
-  reaction_counts: CommunityAiFeedReactionCounts;
-  viewer_reaction: CommunityAiFeedReactionType | null;
   created_at: string;
   updated_at: string;
   pending?: boolean;

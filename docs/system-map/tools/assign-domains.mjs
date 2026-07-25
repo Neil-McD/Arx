@@ -60,7 +60,7 @@ const tableGroups = {
     "communityEvents", "emailPreferences", "emailOutbox", "emailDeliveries",
   ],
   "resources-intelligence": [
-    "communityAiFeedPosts", "communityAiFeedReactions", "communityResources", "communityResourceContents",
+    "communityAiFeedPosts", "communityResources", "communityResourceContents",
     "communitySourceUnits", "communitySourceUnitContents", "communitySourceCrawlJobs", "communityResourceModules",
     "communityResourceBuilderChangesets", "communitySourceTraces",
     "communityEvidenceCitations", "communityEvidenceRetrievalLogs", "communityIntelligenceNodes",

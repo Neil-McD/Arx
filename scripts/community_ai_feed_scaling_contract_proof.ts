@@ -5,17 +5,11 @@ import { join } from "node:path";
 const root = process.cwd();
 const aiFeed = readFileSync(join(root, "convex/communityAiFeed.ts"), "utf8");
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
-
-assert.doesNotMatch(
-  aiFeed,
-  /\.collect\(\)/,
-  "AI feed should not use collect-all reads in user or maintenance paths",
-);
-assert.match(
-  schema,
-  /\.index\("by_community_status_score_createdAt", \["communityId", "status", "score", "createdAt"\]\)/,
-  "AI feed should have a score + createdAt index for deterministic ranked reads",
-);
+const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
+const facade = readFileSync(join(root, "convex/community.ts"), "utf8");
+const gateway = readFileSync(join(root, "shared/cloudCommunityAiFeedGateway.ts"), "utf8");
+const controller = readFileSync(join(root, "shared/useCommunityAiFeedController.ts"), "utf8");
+const panel = readFileSync(join(root, "apps/web/src/components/CommunityAiFeedPanel.tsx"), "utf8");
 
 function blockBetween(source: string, startToken: string, endToken: string): string {
   const start = source.indexOf(startToken);
@@ -25,94 +19,58 @@ function blockBetween(source: string, startToken: string, endToken: string): str
   return source.slice(start, end);
 }
 
-const viewerReactionBlock = blockBetween(
+const listBlock = blockBetween(
   aiFeed,
-  "async function getViewerReactionsByPostId",
-  "async function getFeedPostOrThrow",
+  "async function listCommunityAiFeedPostsInternal",
+  "export const listCommunityAiFeedPosts",
 );
+const aiFeedSchema = blockBetween(
+  schema,
+  "communityAiFeedPosts: defineTable",
+  "communityMemberSettings: defineTable",
+);
+assert.match(listBlock, /MAX_FEED_POST_LIMIT/, "AI Feed should cap its chronological read");
 assert.match(
-  viewerReactionBlock,
-  /MAX_VIEWER_REACTION_POST_LOOKUPS/,
-  "viewer reaction lookup should cap the selected post set",
-);
-assert.match(
-  viewerReactionBlock,
-  /withIndex\("by_post_actorKey"[\s\S]*\.first\(\)/,
-  "viewer reaction lookup should use the exact post + actor index",
-);
-assert.doesNotMatch(
-  viewerReactionBlock,
-  /withIndex\("by_actorKey"[\s\S]*\.collect\(\)/,
-  "viewer reaction lookup should not collect every reaction by actor",
-);
-
-const bundleBlock = blockBetween(
-  aiFeed,
-  "async function listCommunityAiFeedBundleInternal",
-  "export const listCommunityAiFeedBundle",
-);
-assert.match(
-  bundleBlock,
-  /MAX_FEED_BUNDLE_LIMIT/,
-  "AI feed bundle should cap the public read limit",
-);
-assert.match(
-  bundleBlock,
+  listBlock,
   /withIndex\("by_community_status_createdAt"[\s\S]*\.order\("desc"\)[\s\S]*\.take\(limit\)/,
-  "AI feed live tab should read latest posts through a bounded index scan",
+  "AI Feed should read newest live posts through one bounded compound index",
 );
-assert.match(
-  bundleBlock,
-  /withIndex\("by_community_status_score_createdAt"[\s\S]*\.order\("desc"\)[\s\S]*\.take\(limit\)/,
-  "AI feed ranked tab should read exact ranked posts through a bounded compound index scan",
-);
-assert.doesNotMatch(
-  bundleBlock,
-  /\.collect\(\)/,
-  "AI feed bundle should not collect every live post in a community",
-);
-
-const pruneBlock = blockBetween(
-  aiFeed,
-  "export const pruneCommunityAiFeedPostsInternal",
-  "export const pruneAllCommunityAiFeedPostsInternal",
-);
-assert.match(
-  pruneBlock,
-  /withIndex\("by_community_status_score_createdAt"[\s\S]*\.order\("asc"\)[\s\S]*\.take\(MAX_PRUNE_CANDIDATE_FETCH\)/,
-  "AI feed pruning should inspect a bounded low-score oldest-first candidate window",
-);
-assert.doesNotMatch(
-  pruneBlock,
-  /\.collect\(\)/,
-  "AI feed pruning should not collect every live post in a community",
-);
+assert.doesNotMatch(listBlock, /\.collect\(\)/, "AI Feed should not collect unbounded post history");
 
 assert.match(
   aiFeed,
   /withIndex\("by_community_noveltyKey"[\s\S]*\.take\(MAX_NOVELTY_KEY_MATCHES\)/,
-  "AI feed novelty-key reuse should use a bounded lookup",
+  "AI Feed novelty-key reuse should remain bounded",
 );
 assert.match(
   aiFeed,
-  /listCommunityIdsForAiFeedPruneInternal[\s\S]*paginationOptsValidator[\s\S]*query\("communities" as any\)[\s\S]*\.paginate\(\{[\s\S]*MAX_AI_FEED_PRUNE_COMMUNITIES_PER_PAGE/,
-  "AI feed all-community pruning should page community scans",
-);
-assert.match(
-  aiFeed,
-  /pruneAllCommunityAiFeedPostsInternal[\s\S]*MAX_AI_FEED_PRUNE_COMMUNITY_PAGES_PER_RUN[\s\S]*has_more_communities/,
-  "AI feed all-community pruning should bound each run and report continuation",
-);
-assert.match(
-  aiFeed,
-  /withIndex\("by_post"[\s\S]*\.take\(MAX_EXPIRED_POST_REACTION_DELETE_BATCH\)/,
-  "AI feed hidden-post cleanup should delete reactions through bounded batches",
+  /withIndex\("by_status_hiddenAt"[\s\S]*\.take\(limit\)/,
+  "hidden-post retention cleanup should remain bounded",
 );
 
-assert.doesNotMatch(
-  aiFeed,
-  /restoreHiddenCommunityAiFeedPostsInternal|restoreFeedPostToLive/,
-  "transitional AI feed restore surfaces should stay deleted",
-);
+for (const source of [aiFeed, aiFeedSchema, crons, facade, gateway, controller, panel]) {
+  assert.doesNotMatch(
+    source,
+    /communityAiFeedReactions|reactToCommunityAiFeedPost|low_signal|reaction_counts|viewer_reaction/,
+    "AI Feed reaction storage and behavior should stay deleted",
+  );
+  assert.doesNotMatch(
+    source,
+    /by_community_status_score_createdAt|rankedPosts|livePosts|signal_score/,
+    "AI Feed ranking storage and projections should stay deleted",
+  );
+  assert.doesNotMatch(
+    source,
+    /pruneAllCommunityAiFeedPostsInternal|pruneCommunityAiFeedPostsInternal|listCommunityIdsForAiFeedPruneInternal/,
+    "automatic AI Feed pruning should stay deleted",
+  );
+}
+assert.doesNotMatch(schema, /communityAiFeedReactions: defineTable/);
+
+assert.match(facade, /export const listCommunityAiFeedPosts = listCommunityAiFeedPostsImpl/);
+assert.match(gateway, /community:listCommunityAiFeedPosts/);
+assert.match(controller, /posts: CommunityAiFeedPost\[\]/);
+assert.match(panel, /const posts = state\.posts/);
+assert.doesNotMatch(panel, />Ranked<|>Live<|ai-feed-signal-button/);
 
 console.log("community_ai_feed_scaling_contract_proof: ok");

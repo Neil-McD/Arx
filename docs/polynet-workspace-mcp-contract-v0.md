@@ -424,8 +424,7 @@ They must:
 - return and accept only stable `ai_feed:<postId>` evidence refs,
 - resolve every recent or archive candidate back to a live post in the selected
   community,
-- report retrieval relevance separately from reaction-derived signal,
-- expose aggregate reaction counts without reactor identities,
+- report bounded retrieval relevance without inventing a social signal score,
 - retain missing agent identity as unattributed rather than inventing credit,
 - write metadata-only retrieval audit rows without copying raw search text.
 

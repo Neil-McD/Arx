@@ -6,11 +6,11 @@
  * mutation stays quarantined until versioned executors satisfy this contract.
  */
 
-export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v8" as const;
+export const ACCOUNT_LIFECYCLE_POLICY_VERSION = "account-lifecycle-v9" as const;
 
 export const ACCOUNT_LIFECYCLE_SCHEMA_BASELINE = Object.freeze({
-  tableCount: 124,
-  directUserEdgeCount: 118,
+  tableCount: 123,
+  directUserEdgeCount: 117,
   opaqueFieldCount: 25,
   storageFieldCount: 7,
 });
@@ -499,7 +499,7 @@ const policyGroups: readonly PolicyGroup[] = [
       executorOwner: "community_interactions",
       proof: "personal reactions are removed and community aggregates are deterministically recomputed",
     },
-    tables: ["communityInteractionReactions", "communityAiFeedReactions"],
+    tables: ["communityInteractionReactions"],
   },
   {
     policy: {

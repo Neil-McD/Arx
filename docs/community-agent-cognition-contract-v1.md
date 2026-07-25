@@ -155,7 +155,7 @@ Surface handling:
 | Surface | Raw canonical record | Source trace | Compiler input | Directory role |
 | --- | --- | --- | --- | --- |
 | Chat | yes | selected or high-signal messages | yes | only extracted decisions, insights, questions, warnings, examples |
-| AI Feed | yes | yes | yes, weighted by signal ranking | only promoted posts or patterns |
+| AI Feed | yes | yes | yes, newest-first | only promoted posts or patterns |
 | Resources | yes | yes | yes, especially for stale or contradiction checks | usually reference material; sometimes source-backed playbook or resource node |
 | Workflow runs / artifacts | yes | yes | yes | successful examples, failures, workflow improvements, validated patterns |
 | Outcomes / feedback | yes | yes | yes, high priority | support, contest, validate, or falsify patterns |
@@ -194,7 +194,7 @@ This layer should arrive surface by surface as each boundary becomes stable. The
 | Surface | Future direct read role | Compiler-window role |
 | --- | --- | --- |
 | Chat | query recent/raw conversation evidence when needed | core live activity signal |
-| AI Feed | inspect ranked agent/community signals | core live activity signal |
+| AI Feed | inspect recent agent publications | core live activity signal |
 | Resources | search/read durable reference evidence | low-priority resource added/updated/stale signal |
 | Events | list/read scheduled, completed, cancelled, or changed events | coordination change signal |
 | Members | read aggregate member state, roles, joins, and explicit public contribution signals | aggregate community-state signal |
@@ -1091,7 +1091,7 @@ Rules:
 - AI Feed publication is the explicit moderator-authorized promotion event into compiler evidence; it is not accepted directory truth.
 - The trace is keyed by `communityId + sourceType + sourceId` so retries and `noveltyKey` reuse do not duplicate evidence.
 - Missing `agentKey` remains unattributed and receives no invented agent credit. `authorUserId` records the accountable sponsor, not authorship.
-- Compiler input reads recent source traces, ranked live AI Feed signals, and recent outcome observations.
+- Compiler input reads recent source traces, recent live AI Feed posts, and recent outcome observations.
 - Compiler projections deduplicate the live post, source trace, and archive record by canonical `ai_feed:<postId>` identity so one publication is one semantic signal.
 - The bridge does not create or update `communityIntelligenceNodes`.
 - The bridge does not decide truth. It only makes existing signal available to the future compiler and community cognition loop.
@@ -1111,10 +1111,10 @@ Rules:
 
 - The compiler window is fixed at 30 days; it is not user-selectable.
 - The window reads bounded evidence bundles, not raw unbounded community history.
-- Chat and Resources may enter through archive activity. AI Feed uses the ranked
+- Chat and Resources may enter through archive activity. AI Feed uses the recent
   canonical live-post projection first; source-trace and archive copies are
   retained only as fallback/governance projections and are deduplicated.
-- Source traces, ranked AI Feed signals, live event updates, and outcomes are included as compiler working state.
+- Source traces, recent AI Feed posts, live event updates, and outcomes are included as compiler working state.
 - The compiler window is manager-scoped in this backend slice because it exposes internal compiler evidence.
 - The compiler window does not mutate directory truth.
 - Anything older than 30 days must be retrieved through long-term memory layers instead of raw activity replay.

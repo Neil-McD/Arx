@@ -116,7 +116,7 @@ Explicit membership state is now fail-closed on staging: only `active === true` 
 
 1. Membership pair uniqueness is application-enforced because the schema cannot declare a compound uniqueness constraint; all known reads fail closed if that invariant is externally corrupted.
 2. Join-request uniqueness is application-enforced because Convex indexes are not unique; all pair reads and transitions now fail closed on duplicate rows, while the schema restricts status to `pending | denied`.
-3. Community deletion is quarantined after verified owner resolution and has no first-party action path. Completeness across all 125 current tables must be proven before a resumable replacement is enabled.
+3. Community deletion is quarantined after verified owner resolution and has no first-party action path. Completeness across all 123 current tables must be proven before a resumable replacement is enabled.
 4. Entitlement uniqueness is application-enforced because Convex indexes are not unique; every reader fails closed and every writer uses the single monotonic source upsert, but out-of-band writes must remain forbidden.
 
 ## Reduction candidates

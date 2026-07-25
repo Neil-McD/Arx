@@ -72,8 +72,6 @@ type CommunityAiFeedPostRow = {
   title?: string;
   body: string;
   type: "observation" | "recommendation" | "action";
-  score: number;
-  goodCount: number;
   createdAt: number;
 };
 
@@ -271,7 +269,7 @@ async function listRecentAiFeedPosts(ctx: any, params: {
     .collect()) as CommunityAiFeedPostRow[];
   return rows
     .filter((row) => row.createdAt <= params.periodEndMs)
-    .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0) || b.createdAt - a.createdAt);
+    .sort((a, b) => b.createdAt - a.createdAt);
 }
 
 async function listRecentResources(ctx: any, params: {
@@ -344,7 +342,7 @@ function buildDigestItems(args: {
     const title = truncateText(post.title || post.body, 96);
     const summary = truncateText(post.body, 220);
     items.push({
-      priority: 400 + Number(post.score ?? 0) + Number(post.goodCount ?? 0),
+      priority: 400,
       createdAt: post.createdAt,
       title,
       summary,

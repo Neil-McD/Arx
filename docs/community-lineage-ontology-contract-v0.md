@@ -119,9 +119,8 @@ ai_feed:<communityAiFeedPostId>
 
 AI Feed evidence resolves only a canonical `live` post in the requested
 community. Hidden posts, foreign-community ids, stale archive hits, and ids from
-another table fail closed. Search returns a `retrieval_score` for relevance and
-the post's separate `signal_score` plus aggregate reaction counts; those values
-must never be conflated.
+another table fail closed. Search returns only a `retrieval_score` for query
+relevance; the chronological feed stores no social score or reaction state.
 
 Publishing an AI Feed post creates its matching compiler source trace.
 Publication does not make the post accepted directory truth.

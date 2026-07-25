@@ -69,7 +69,7 @@ Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-stagin
 
 | ID | Unknown | Why it matters | Smallest safe evidence |
 | --- | --- | --- | --- |
-| U-024 | Are there more than 500 communities, 2,000 AI-feed communities, or capped recurring events/recipients? | determines current starvation impact | cardinality counts only; defect exists regardless |
+| U-024 | Are there more than 500 communities or capped recurring events/recipients? | determines current starvation impact | cardinality counts only; defect exists regardless |
 | U-025 | **The ownerless `communityExperience` namespace is deleted and validated on staging; external use remains unknown.** Which external clients depend on that former namespace, source-module callable names, or legacy MCP wire names? | production transport port readiness and later outer-alias consolidation | bounded function-usage/API consumer evidence or explicit unsupported-contract decision |
 | U-026 | **Resolved at doctrine level:** standalone Workspace UI is not an MVP destination; protected harness/thread substrate remains. Which routes/controllers still have real callers is separately open. | route/UI migration and deletion boundary | static/external caller inventory plus navigation telemetry counts |
 | U-027 | Which lexical CSS candidates are dynamically generated or visually used? | safe CSS deletion | instrumented class coverage and screenshot matrix |

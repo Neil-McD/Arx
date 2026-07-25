@@ -176,17 +176,6 @@ crons.monthly(
   },
 );
 
-crons.monthly(
-  "prune low-signal community ai feed posts",
-  {
-    day: 1,
-    hourUTC: 4,
-    minuteUTC: 0,
-  },
-  internal.communityAiFeed.pruneAllCommunityAiFeedPostsInternal,
-  {},
-);
-
 crons.daily(
   "delete expired hidden community ai feed posts",
   {

@@ -2,18 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   hideCloudCommunityAiFeedPost,
-  listCloudCommunityAiFeedBundle,
-  reactToCloudCommunityAiFeedPost,
+  listCloudCommunityAiFeedPosts,
 } from "./cloudCommunityAiFeedGateway";
-import type {
-  CommunityAiFeedPost,
-  CommunityAiFeedReactionType,
-} from "./communityTypes";
+import type { CommunityAiFeedPost } from "./communityTypes";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 type CommunityAiFeedState = {
-  live: CommunityAiFeedPost[];
-  ranked: CommunityAiFeedPost[];
+  posts: CommunityAiFeedPost[];
   isLoading: boolean;
   error: string | null;
 };
@@ -27,8 +22,7 @@ type UseCommunityAiFeedControllerArgs<SessionT> = {
 };
 
 const EMPTY_FEED_STATE: CommunityAiFeedState = {
-  live: [],
-  ranked: [],
+  posts: [],
   isLoading: false,
   error: null,
 };
@@ -48,7 +42,6 @@ export function useCommunityAiFeedController<SessionT>(
   const [communityFeedByCommunityId, setCommunityFeedByCommunityId] = useState<
     Record<string, CommunityAiFeedState>
   >({});
-  const [reactingPostId, setReactingPostId] = useState<string | null>(null);
   const [moderatingPostId, setModeratingPostId] = useState<string | null>(null);
   const viewerGenerationRef = useRef(0);
 
@@ -73,8 +66,7 @@ export function useCommunityAiFeedController<SessionT>(
       setCommunityFeedByCommunityId((prev) => ({
         ...prev,
         [communityId]: {
-          live: [],
-          ranked: [],
+          posts: [],
           isLoading: false,
           error: "Sign in to view the AI feed.",
         },
@@ -85,15 +77,14 @@ export function useCommunityAiFeedController<SessionT>(
     setCommunityFeedByCommunityId((prev) => ({
       ...prev,
       [communityId]: {
-        live: prev[communityId]?.live ?? [],
-        ranked: prev[communityId]?.ranked ?? [],
+        posts: prev[communityId]?.posts ?? [],
         isLoading: true,
         error: null,
       },
     }));
 
     try {
-      const { live, ranked } = await listCloudCommunityAiFeedBundle<SessionT, CommunityAiFeedPost>({
+      const posts = await listCloudCommunityAiFeedPosts<SessionT, CommunityAiFeedPost>({
         session,
         communityId,
         limit: 100,
@@ -102,8 +93,7 @@ export function useCommunityAiFeedController<SessionT>(
       setCommunityFeedByCommunityId((prev) => ({
         ...prev,
         [communityId]: {
-          live,
-          ranked,
+          posts,
           isLoading: false,
           error: null,
         },
@@ -113,55 +103,13 @@ export function useCommunityAiFeedController<SessionT>(
       setCommunityFeedByCommunityId((prev) => ({
         ...prev,
         [communityId]: {
-          live: prev[communityId]?.live ?? [],
-          ranked: prev[communityId]?.ranked ?? [],
+          posts: prev[communityId]?.posts ?? [],
           isLoading: false,
           error: error instanceof Error ? error.message : "Failed to load AI feed.",
         },
       }));
     }
   }, [isRequestSnapshotStale]);
-
-  const reactToPost = useCallback(async (postId: string, reactionType: CommunityAiFeedReactionType) => {
-    const current = argsRef.current;
-    const activeCommunityId = current.activeCommunityId;
-    if (!activeCommunityId) return;
-    const requestSnapshot: FeedRequestSnapshot = {
-      generation: viewerGenerationRef.current,
-      viewerCacheKey: current.viewerCacheKey,
-      communityId: activeCommunityId,
-    };
-
-    const session = await resolveUsableSession(current.session, current.ensureSession);
-    if (isRequestSnapshotStale(requestSnapshot)) return;
-    if (!session) return;
-
-    setReactingPostId(postId);
-    try {
-      await reactToCloudCommunityAiFeedPost({
-        session,
-        postId,
-        reactionType,
-      });
-      if (isRequestSnapshotStale(requestSnapshot)) return;
-      await loadCommunityAiFeed(activeCommunityId);
-    } catch (error) {
-      if (isRequestSnapshotStale(requestSnapshot)) return;
-      setCommunityFeedByCommunityId((prev) => ({
-        ...prev,
-        [activeCommunityId]: {
-          live: prev[activeCommunityId]?.live ?? [],
-          ranked: prev[activeCommunityId]?.ranked ?? [],
-          isLoading: false,
-          error: error instanceof Error ? error.message : "Failed to update AI feed.",
-        },
-      }));
-    } finally {
-      if (!isRequestSnapshotStale(requestSnapshot)) {
-        setReactingPostId(null);
-      }
-    }
-  }, [isRequestSnapshotStale, loadCommunityAiFeed]);
 
   const hidePost = useCallback(async (postId: string) => {
     const current = argsRef.current;
@@ -190,8 +138,7 @@ export function useCommunityAiFeedController<SessionT>(
       setCommunityFeedByCommunityId((prev) => ({
         ...prev,
         [activeCommunityId]: {
-          live: prev[activeCommunityId]?.live ?? [],
-          ranked: prev[activeCommunityId]?.ranked ?? [],
+          posts: prev[activeCommunityId]?.posts ?? [],
           isLoading: false,
           error: error instanceof Error ? error.message : "Failed to moderate AI feed.",
         },
@@ -224,7 +171,6 @@ export function useCommunityAiFeedController<SessionT>(
   useEffect(() => {
     viewerGenerationRef.current += 1;
     setCommunityFeedByCommunityId({});
-    setReactingPostId(null);
     setModeratingPostId(null);
   }, [args.viewerCacheKey]);
 
@@ -241,9 +187,7 @@ export function useCommunityAiFeedController<SessionT>(
 
   return {
     activeCommunityFeedState,
-    reactingPostId,
     moderatingPostId,
-    reactToPost,
     hidePost,
     retry,
   };

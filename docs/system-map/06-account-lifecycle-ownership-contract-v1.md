@@ -2,7 +2,7 @@
 
 Status: planning authority only. Runtime deletion remains quarantined.
 
-Current policy version: `account-lifecycle-v8`
+Current policy version: `account-lifecycle-v9`
 
 Code authority: `convex/accountLifecyclePolicy.ts`
 
@@ -53,9 +53,11 @@ cleared under an expectation lock. C3.2D2B then deleted the drained
 `communityFeaturedMessages` and `communityMessageReactions` tables and their
 two obsolete user edges. C2.3A later removed the unowned generic checkpoint
 table, and the email-retention contraction deleted the raw provider webhook
-body field from `emailDeliveries`. The current proof therefore covers 124
-tables, 118 direct user-ID fields, 25 opaque fields, and seven storage-ID
-fields; 38 direct edges remain without a user-first index.
+body field from `emailDeliveries`. The AI Feed simplification then deleted its
+reaction table and the obsolete `actorUserId` edge after the sole development
+reaction was removed. The current proof therefore covers 123 tables, 117
+direct user-ID fields, 25 opaque fields, and seven storage-ID fields; 38 direct
+edges remain without a user-first index.
 
 The remaining tables are still classified because they may be connected indirectly through a community, conversation, app, resource, thread, run, evidence record, or parent object.
 

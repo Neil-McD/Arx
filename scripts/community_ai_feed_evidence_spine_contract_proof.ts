@@ -170,7 +170,10 @@ function proveImplementationBoundaries() {
   assert.ok(!/vectorSearch|embedGemini|archiveAvailable|archiveError/.test(evidence), "AI Feed retrieval must not execute an embedding archive fallback");
   assertIncludes(evidence, "readCommunityAiFeedEvidenceItemsInternal", "archive canonical revalidation");
   assertIncludes(evidence, "retrieval_score", "retrieval relevance field");
-  assertIncludes(evidence, "signal_score", "reaction signal field");
+  assert.ok(
+    !/signal_score|reaction_counts/.test(evidence),
+    "AI Feed evidence should expose retrieval relevance without deleted social ranking state",
+  );
   assertIncludes(evidence, 'capability: "community_ai_feed_search"', "search audit");
   assertIncludes(evidence, 'capability: "community_ai_feed_read"', "read audit");
   assert.ok(!audit.includes("query: v.string()"), "retrieval audit must not accept raw query text");

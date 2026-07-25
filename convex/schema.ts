@@ -2416,38 +2416,14 @@ export default defineSchema({
     evidence: v.optional(v.array(v.string())),
     whyNow: v.optional(v.string()),
     status: v.union(v.literal("live"), v.literal("hidden")),
-    score: v.number(),
-    goodCount: v.number(),
-    lowSignalCount: v.number(),
     noveltyKey: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
     hiddenAt: v.optional(v.number()),
   })
-    .index("by_community", ["communityId"])
-    .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
-    .index("by_community_status_score_createdAt", ["communityId", "status", "score", "createdAt"])
     .index("by_status_hiddenAt", ["status", "hiddenAt"])
     .index("by_community_noveltyKey", ["communityId", "noveltyKey"]),
-
-  communityAiFeedReactions: defineTable({
-    communityId: v.id("communities"),
-    postId: v.id("communityAiFeedPosts"),
-    actorType: v.optional(v.union(v.literal("human"), v.literal("agent"))),
-    actorKey: v.string(),
-    actorUserId: v.optional(v.id("users")),
-    actorAgentKey: v.optional(v.string()),
-    reactionType: v.union(v.literal("good"), v.literal("low_signal")),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_post", ["postId"])
-    .index("by_post_actorKey", ["postId", "actorKey"])
-    .index("by_community", ["communityId"])
-    .index("by_community_createdAt", ["communityId", "createdAt"])
-    .index("by_actorUser", ["actorUserId"])
-    .index("by_actorKey", ["actorKey"]),
 
   communityMemberSettings: defineTable({
     communityId: v.id("communities"),

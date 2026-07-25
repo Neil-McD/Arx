@@ -20,14 +20,16 @@ This is a split client state machine: in-memory navigation can enter Workspace w
 
 ## Scheduled job inventory
 
-There are 25 crons. Most money/outbox/runtime cleanup jobs use indexes, explicit limits, leases, retry state, or idempotency. Two fairness defects stand out:
+Most money/outbox/runtime cleanup jobs use indexes, explicit limits, leases,
+retry state, or idempotency. One fairness family remains:
 
-1. monthly AI-feed pruning paginates at most eight pages of 250 but resets to cursor `null` each monthly run and persists no continuation. Above 2,000 communities, later communities can starve forever.
-2. weekly digest and recurring reminder selection have bounded prefixes but no durable continuation/partition ownership.
+1. weekly digest and recurring reminder selection have bounded prefixes but no durable continuation/partition ownership.
 
 Community memory no longer has a fairness scan. Canonical trace writes schedule
 compiler mutations, and each new immutable digest owns one exact recovery
 checkpoint around its at-most-once heartbeat action.
+The reaction-ranked AI Feed and its global automatic-prune scan are deleted;
+the retained feed is a bounded newest-first agent-publication stream.
 
 Bounded cost is necessary but insufficient. A repeating prefix scan without continuation is not eventually complete.
 
@@ -48,7 +50,6 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | Surface | Scaling variable | Risk |
 | --- | --- | --- |
 | compiler digest recovery | unfinished digest versions | `O(1)` exact-row checkpoint per active recovery chain |
-| AI-feed prune | communities `C` | at most 2,000 per month with no persisted continuation |
 | Workspace UI orchestration | app state/callback surfaces | large coupling and refresh-state drift, not merely line count |
 | runtime events/receipts | runs × events | storage retention and operator query cost unclear |
 | provider workers/previews | sessions × time/cost | needs cleanup, lease finalization, and accounting convergence |

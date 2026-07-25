@@ -14004,8 +14004,7 @@ button.chat-reply-quote:hover {
   opacity: 0.55;
 }
 
-.ai-feed-item-type,
-.ai-feed-item-confidence {
+.ai-feed-item-type {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
@@ -14036,13 +14035,6 @@ button.chat-reply-quote:hover {
 .ai-feed-item-type.observation {
   border-color: color-mix(in srgb, #22c55e 35%, var(--border-default));
 }
-
-
-.ai-feed-item-confidence {
-  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 92%, transparent);
-  color: var(--text-muted);
-}
-
 .ai-feed-item-title {
   margin: 0;
   font-size: 22px;
@@ -14077,68 +14069,6 @@ button.chat-reply-quote:hover {
   line-height: 1.6;
   color: var(--text-secondary);
   white-space: pre-wrap;
-}
-
-.ai-feed-signal-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.ai-feed-signal-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid var(--border-default);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-card-alt) 84%, transparent);
-  color: var(--text-secondary);
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  transition:
-    background 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease,
-    transform 140ms ease;
-}
-
-.ai-feed-signal-button:hover:not(:disabled) {
-  color: var(--text-primary);
-  transform: translateY(-1px);
-}
-
-.ai-feed-signal-button:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.ai-feed-signal-button.good.is-active {
-  border-color: color-mix(in srgb, #22c55e 44%, var(--border-default));
-  background: color-mix(in srgb, #22c55e 16%, var(--bg-card-alt));
-  color: color-mix(in srgb, #22c55e 65%, var(--text-primary));
-}
-
-.ai-feed-signal-button.noise.is-active {
-  border-color: color-mix(in srgb, #ef4444 42%, var(--border-default));
-  background: color-mix(in srgb, #ef4444 14%, var(--bg-card-alt));
-  color: color-mix(in srgb, #ef4444 66%, var(--text-primary));
-}
-
-.ai-feed-signal-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 92%, transparent);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
 }
 
 @media (max-width: 900px) {
@@ -31027,14 +30957,6 @@ button.message-citation-chip:hover {
 .app-root.mobile-shell .ai-feed-item-section-body {
   font-size: 14px;
   line-height: 1.55;
-}
-
-.app-root.mobile-shell .ai-feed-signal-row {
-  gap: 8px;
-}
-
-.app-root.mobile-shell .ai-feed-signal-button {
-  padding: 7px 11px;
 }
 
 .app-root.mobile-shell .resource-grid {

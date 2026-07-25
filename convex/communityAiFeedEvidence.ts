@@ -113,11 +113,6 @@ function mapAiFeedEvidenceItem(args: {
         : null,
     }),
     retrieval_score: args.retrievalScore,
-    signal_score: Number(args.post.score ?? 0),
-    reaction_counts: {
-      good: Math.max(0, Number(args.post.goodCount ?? 0)),
-      low_signal: Math.max(0, Number(args.post.lowSignalCount ?? 0)),
-    },
     created_at: toIsoString(args.post.createdAt),
     updated_at: toIsoString(args.post.updatedAt),
     retrieval_source: args.retrievalSource,

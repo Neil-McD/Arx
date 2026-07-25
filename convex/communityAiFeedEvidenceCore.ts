@@ -15,9 +15,6 @@ export type CommunityAiFeedEvidenceRow = {
   evidence?: string[];
   whyNow?: string;
   status: "live" | "hidden";
-  score: number;
-  goodCount: number;
-  lowSignalCount: number;
   createdAt: number;
   updatedAt: number;
 };
