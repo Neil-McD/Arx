@@ -484,18 +484,15 @@ export type OperatorAuthAccessDiagnosticsSnapshot = {
   computedAt: number;
   range: OperatorRange;
   health: "healthy" | "degraded" | "incident" | "unknown";
-  authAvailability?: {
-    health: "healthy" | "degraded" | "incident" | "unknown";
-    score: number | null;
+  authIncidents?: {
+    health: "healthy" | "degraded" | "incident";
     windowMs: number;
-    attempts: number;
-    successes: number;
     failures: number;
-    successRate: number | null;
     affectedUsers: number;
     unattributedFailures: number;
     bootstrapFailures: number;
     refreshFailures: number;
+    logoutFailures: number;
     unknownFailures: number;
   };
   accessIntegrity?: {
@@ -514,9 +511,6 @@ export type OperatorAuthAccessDiagnosticsSnapshot = {
     warnings: number;
     errors: number;
     authFailures: number;
-    sessionEstablished: number;
-    sessionRefreshFailures: number;
-    operatorAccessGranted: number;
     operatorAccessDenied: number;
     communityAccessDenied: number;
     entitlementFindings: number;

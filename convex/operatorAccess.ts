@@ -190,20 +190,6 @@ export const recordOperatorDashboardAccess = mutation({
           source: operator.source,
         },
       });
-      await recordPlatformDiagnosticEventBestEffort(ctx, {
-        eventKey: `access.operator_access_granted:${String(operator.dbUserId)}:${Date.now()}`,
-        eventType: "access.operator_access_granted",
-        subsystem: "access",
-        severity: "info",
-        status: "succeeded",
-        surface: args.surface ?? "operator_dashboard",
-        userId: operator.dbUserId,
-        metadata: {
-          role: operator.role,
-          source: operator.source,
-        },
-        createdAt: Date.now(),
-      });
       return {
         ok: true,
         role: operator.role,

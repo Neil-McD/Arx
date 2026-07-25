@@ -80,16 +80,10 @@ const DIAGNOSTIC_METADATA_BLOCKED_KEY_PARTS = [
   "encrypted",
 ];
 
-const DIAGNOSTIC_METADATA_SAFE_KEY_EXCEPTIONS = ["refreshLeaseContended"];
-
 const DIAGNOSTIC_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
-  "auth.session_established": ["bootstrapPath", "refreshLeaseContended"],
   "auth.bootstrap_failed": [],
-  "auth.session_refreshed": [],
   "auth.session_refresh_failed": [],
-  "auth.session_logged_out": ["providerLogoutOutcome"],
   "auth.session_logout_failed": [],
-  "access.operator_access_granted": ["role", "source"],
   "access.operator_access_denied": [],
   "billing.stripe_connect_onboarding_failed": [
     "context",
@@ -121,13 +115,6 @@ function normalizeMetadataKey(value: string): string {
 
 function metadataKeyLooksSensitive(key: string): boolean {
   const normalizedKey = normalizeMetadataKey(key);
-  if (
-    DIAGNOSTIC_METADATA_SAFE_KEY_EXCEPTIONS.some(
-      (exception) => normalizeMetadataKey(exception) === normalizedKey,
-    )
-  ) {
-    return false;
-  }
   return DIAGNOSTIC_METADATA_BLOCKED_KEY_PARTS.some((part) =>
     normalizedKey.includes(normalizeMetadataKey(part)),
   );

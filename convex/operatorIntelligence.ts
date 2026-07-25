@@ -89,17 +89,16 @@ const WEB_DEPLOY_MODULE_LOAD_EVENT_TYPES = new Set([
   "deploy.module_load_recovery",
   "deploy.stale_asset_recovered",
 ]);
-const AUTH_AVAILABILITY_EVENT_TYPES = new Set([
-  "auth.session_established",
-  "auth.session_refreshed",
+const AUTH_INCIDENT_EVENT_TYPES = [
   "auth.bootstrap_failed",
   "auth.session_refresh_failed",
-]);
-const AUTH_AVAILABILITY_SUCCESS_EVENT_TYPES = new Set([
-  "auth.session_established",
-  "auth.session_refreshed",
-]);
-const AUTH_AVAILABILITY_RECENT_WINDOW_MS = 24 * 60 * 60 * 1000;
+  "auth.session_logout_failed",
+] as const;
+const ACCESS_INCIDENT_EVENT_TYPES = [
+  "access.operator_access_denied",
+  "access.community_denied",
+] as const;
+const AUTH_INCIDENT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const ACCOUNT_SETUP_SOURCE_TABLES = [
   "users",
   "userProfileDetails",
@@ -465,6 +464,19 @@ async function readDiagnosticEventsBySubsystem(
 ) {
   const query = ctx.db.query("platformDiagnosticEvents").withIndex("by_subsystem_createdAt", (q: any) => {
     const scoped = q.eq("subsystem", subsystem);
+    return rangeStart == null ? scoped : scoped.gte("createdAt", rangeStart);
+  });
+  return await query.order("desc").take(limit);
+}
+
+async function readDiagnosticEventsByType(
+  ctx: any,
+  eventType: string,
+  rangeStart: number | null,
+  limit: number,
+) {
+  const query = ctx.db.query("platformDiagnosticEvents").withIndex("by_type_createdAt", (q: any) => {
+    const scoped = q.eq("eventType", eventType);
     return rangeStart == null ? scoped : scoped.gte("createdAt", rangeStart);
   });
   return await query.order("desc").take(limit);
@@ -2260,28 +2272,31 @@ export const getOperatorAuthAccessDiagnosticsInternal = internalQuery({
     const nowMs = Date.now();
     const range = args.range ?? "30d";
     const rangeStart = normalizeRangeStart(range, nowMs);
-    const scannedEventLimit = 500;
-    const [authRows, accessRows, entitlementFindings]: [any[], any[], any] = await Promise.all([
-      readDiagnosticEventsBySubsystem(ctx, "auth", rangeStart, scannedEventLimit),
-      readDiagnosticEventsBySubsystem(ctx, "access", rangeStart, scannedEventLimit),
+    const perEventTypeLimit = 200;
+    const [authRowGroups, accessRowGroups, entitlementFindings]: [any[][], any[][], any] = await Promise.all([
+      Promise.all(
+        AUTH_INCIDENT_EVENT_TYPES.map((eventType) =>
+          readDiagnosticEventsByType(ctx, eventType, rangeStart, perEventTypeLimit),
+        ),
+      ),
+      Promise.all(
+        ACCESS_INCIDENT_EVENT_TYPES.map((eventType) =>
+          readDiagnosticEventsByType(ctx, eventType, rangeStart, perEventTypeLimit),
+        ),
+      ),
       ctx.runQuery((internal as any).communityAccessAudit.listCommunityAccessStateAuditFindingsInternal, {
         limit: 500,
       }),
     ]);
+    const authRows = authRowGroups.flat().sort((a: any, b: any) => b.createdAt - a.createdAt);
+    const accessRows = accessRowGroups.flat().sort((a: any, b: any) => b.createdAt - a.createdAt);
     const rows: any[] = [...authRows, ...accessRows].sort((a: any, b: any) => b.createdAt - a.createdAt);
     const warningRows = rows.filter((row: any) => row.severity === "warning");
     const errorRows: any[] = rows.filter((row: any) => row.severity === "error");
-    const authFailureRows = rows.filter((row: any) => row.subsystem === "auth" && row.status === "failed");
-    const recentAuthRows = authRows.filter(
-      (row: any) =>
-        Number(row.createdAt ?? 0) >= nowMs - AUTH_AVAILABILITY_RECENT_WINDOW_MS &&
-        AUTH_AVAILABILITY_EVENT_TYPES.has(String(row.eventType ?? "")),
+    const authFailureRows = authRows.filter((row: any) => row.status === "failed");
+    const recentAuthFailureRows = authFailureRows.filter(
+      (row: any) => Number(row.createdAt ?? 0) >= nowMs - AUTH_INCIDENT_WINDOW_MS,
     );
-    const recentAuthSuccessRows = recentAuthRows.filter((row: any) =>
-      AUTH_AVAILABILITY_SUCCESS_EVENT_TYPES.has(String(row.eventType ?? "")) &&
-      row.status === "succeeded",
-    );
-    const recentAuthFailureRows = recentAuthRows.filter((row: any) => row.status === "failed");
     const recentUnknownAuthFailures = recentAuthFailureRows.filter((row: any) => {
       const errorCode = String(row.errorCode ?? "").trim().toLowerCase();
       return !errorCode || errorCode === "unknown" || errorCode === "auth_unknown";
@@ -2292,25 +2307,13 @@ export const getOperatorAuthAccessDiagnosticsInternal = internalQuery({
         .filter(Boolean),
     );
     const recentUnattributedFailures = recentAuthFailureRows.filter((row: any) => !row.userId).length;
-    const authAttempts = recentAuthRows.length;
-    const authSuccessRate = authAttempts > 0 ? recentAuthSuccessRows.length / authAttempts : null;
-    const authAvailabilityScore =
-      authSuccessRate === null
-        ? null
-        : clampOperatorScore(
-            100 -
-              Math.max(recentAuthFailureRows.length > 0 ? 1 : 0, Math.round((1 - authSuccessRate) * 70)) -
-              Math.min(20, recentUnknownAuthFailures.length * 5) -
-              Math.min(12, recentUnattributedFailures * 2),
-          );
-    const authAvailabilityHealth: "healthy" | "degraded" | "incident" | "unknown" =
-      authSuccessRate === null
-        ? "unknown"
-        : authSuccessRate < 0.95 || recentUnknownAuthFailures.length >= 3
-          ? "incident"
-          : authSuccessRate < 0.99 || recentUnknownAuthFailures.length > 0
-            ? "degraded"
-            : "healthy";
+    const authIncidentHealth: "healthy" | "degraded" | "incident" =
+      recentAuthFailureRows.some((row: any) => row.severity === "error") ||
+      recentUnknownAuthFailures.length >= 3
+        ? "incident"
+        : recentAuthFailureRows.length > 0
+          ? "degraded"
+          : "healthy";
     const entitlementFindingsList = Array.isArray(entitlementFindings) ? entitlementFindings : [];
     const entitlementErrorFindings = entitlementFindingsList.filter((finding: any) => finding.severity === "error").length;
     const unknownAuthErrors = authFailureRows.filter((row: any) => {
@@ -2332,11 +2335,9 @@ export const getOperatorAuthAccessDiagnosticsInternal = internalQuery({
           ? "degraded"
           : buildOperatorHealthFromScore(accessIntegrityScore);
     const health: "healthy" | "degraded" | "incident" | "unknown" =
-      authAvailabilityHealth === "incident" || accessIntegrityHealth === "incident"
+      authIncidentHealth === "incident" || accessIntegrityHealth === "incident"
         ? "incident"
-        : authAvailabilityHealth === "unknown"
-          ? "unknown"
-          : authAvailabilityHealth === "degraded" || accessIntegrityHealth === "degraded"
+        : authIncidentHealth === "degraded" || accessIntegrityHealth === "degraded"
             ? "degraded"
             : "healthy";
 
@@ -2344,18 +2345,15 @@ export const getOperatorAuthAccessDiagnosticsInternal = internalQuery({
       computedAt: nowMs,
       range,
       health,
-      authAvailability: {
-        health: authAvailabilityHealth,
-        score: authAvailabilityScore,
-        windowMs: AUTH_AVAILABILITY_RECENT_WINDOW_MS,
-        attempts: authAttempts,
-        successes: recentAuthSuccessRows.length,
+      authIncidents: {
+        health: authIncidentHealth,
+        windowMs: AUTH_INCIDENT_WINDOW_MS,
         failures: recentAuthFailureRows.length,
-        successRate: authSuccessRate,
         affectedUsers: recentAffectedUsers.size,
         unattributedFailures: recentUnattributedFailures,
         bootstrapFailures: recentAuthFailureRows.filter((row: any) => row.eventType === "auth.bootstrap_failed").length,
         refreshFailures: recentAuthFailureRows.filter((row: any) => row.eventType === "auth.session_refresh_failed").length,
+        logoutFailures: recentAuthFailureRows.filter((row: any) => row.eventType === "auth.session_logout_failed").length,
         unknownFailures: recentUnknownAuthFailures.length,
       },
       accessIntegrity: {
@@ -2374,9 +2372,6 @@ export const getOperatorAuthAccessDiagnosticsInternal = internalQuery({
         warnings: warningRows.length,
         errors: errorRows.length,
         authFailures: authFailureRows.length,
-        sessionEstablished: rows.filter((row: any) => row.eventType === "auth.session_established").length,
-        sessionRefreshFailures: rows.filter((row: any) => row.eventType === "auth.session_refresh_failed").length,
-        operatorAccessGranted: rows.filter((row: any) => row.eventType === "access.operator_access_granted").length,
         operatorAccessDenied: rows.filter((row: any) => row.eventType === "access.operator_access_denied").length,
         communityAccessDenied: rows.filter((row: any) => row.eventType === "access.community_denied").length,
         entitlementFindings: entitlementFindingsList.length,
@@ -2386,8 +2381,10 @@ export const getOperatorAuthAccessDiagnosticsInternal = internalQuery({
       latestEvents: rows.slice(0, 8).map(mapDiagnosticEvent),
       evidence: {
         sourceTables: ["platformDiagnosticEvents", "communityAccessAudit"],
-        scannedEventLimit,
-        isTruncated: authRows.length >= scannedEventLimit || accessRows.length >= scannedEventLimit,
+        scannedEventLimit: perEventTypeLimit,
+        isTruncated:
+          authRowGroups.some((group) => group.length >= perEventTypeLimit) ||
+          accessRowGroups.some((group) => group.length >= perEventTypeLimit),
       },
     };
   },

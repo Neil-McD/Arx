@@ -215,20 +215,20 @@ export function OperatorPlatformPanelView(props: {
         <h2>Auth &amp; access</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
-            <span>Auth availability</span>
-            <strong>{formatHealth(props.authAccess?.authAvailability?.health)}</strong>
+            <span>Auth incident status</span>
+            <strong>{formatHealth(props.authAccess?.authIncidents?.health)}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>24h auth success</span>
-            <strong>{formatPercent(props.authAccess?.authAvailability?.successRate)}</strong>
+            <span>24h auth failures</span>
+            <strong>{props.authAccess?.authIncidents?.failures ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>24h auth attempts</span>
-            <strong>{props.authAccess?.authAvailability?.attempts ?? 0}</strong>
+            <span>24h unknown failures</span>
+            <strong>{props.authAccess?.authIncidents?.unknownFailures ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>24h affected users</span>
-            <strong>{props.authAccess?.authAvailability?.affectedUsers ?? 0}</strong>
+            <strong>{props.authAccess?.authIncidents?.affectedUsers ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Access integrity</span>
@@ -243,12 +243,8 @@ export function OperatorPlatformPanelView(props: {
             <strong>{props.authAccess?.totals.events ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>30d auth failures</span>
+            <span>Selected-range auth failures</span>
             <strong>{props.authAccess?.totals.authFailures ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>30d refresh failures</span>
-            <strong>{props.authAccess?.totals.sessionRefreshFailures ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Entitlement findings</span>

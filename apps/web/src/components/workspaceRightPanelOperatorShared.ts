@@ -183,16 +183,10 @@ export function formatHealth(
 
 export function formatDiagnosticEventType(value: string): string {
   switch (value) {
-    case "auth.session_established":
-      return "Session established";
-    case "auth.session_refreshed":
-      return "Session refreshed";
     case "auth.bootstrap_failed":
       return "Auth bootstrap failed";
     case "auth.session_refresh_failed":
       return "Session refresh failed";
-    case "access.operator_access_granted":
-      return "Operator access granted";
     case "access.operator_access_denied":
       return "Operator access denied";
     case "access.community_denied":

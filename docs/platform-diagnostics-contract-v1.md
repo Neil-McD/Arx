@@ -74,7 +74,7 @@ Each diagnostic signal should be classified with one of these statuses:
 | Chunk | Platform Surface | Core Question | Primary Tools | Key KPIs / Signals | Current Status |
 | --- | --- | --- | --- | --- | --- |
 | Web and deploy health | Vercel app, SPA shell, route loading, assets | Is production reachable and running the expected release? | Vercel, Sentry, Convex probe | deploy status, build ID, route load errors, frontend crash rate, failed asset loads, p95 page load | partial |
-| Auth and access | sign-in, auth bootstrap, session refresh, entitlements, community gates, operator gate | Can users get in and only access what they should? | Convex, Sentry, critical audit, PostHog | sign-in/session established, auth bootstrap failures, session refresh failures, entitlement mismatches, denied access, operator access granted/denied | partial |
+| Auth and access | sign-in, auth bootstrap, session refresh, entitlements, community gates, operator gate | Can users get in and only access what they should? | canonical Convex auth state, Sentry, critical audit | auth bootstrap failures, session refresh failures, entitlement mismatches, denied access, operator access audit | partial |
 | Security and audit | privileged mutations, destructive actions, webhooks, operator access | Are trust boundaries holding? | Convex critical audit, Sentry, Stripe | permission denied events, webhook signature failures, account deletion events, operator role changes, suspicious retries | partial |
 | Runtime and AI | workspace turns, model calls, streaming, provider calls | Can the intelligence layer complete work reliably? | Sentry, Convex runtime events, Vercel/Convex logs | turn success rate, time to first token, p95 turn latency, provider failures, rate limits, cost per successful turn | partial |
 | Tools, MCP, and workspace runtime | MCP validation, tool calls, terminal/computer use, sandbox lifecycle | Can tools actually execute? | Blaxel, Convex runtime events, Sentry spans, MCP diagnostics | tool success rate, tool failures by app/tool, sandbox create failures, timeout rate, MCP live/not-live reasons | partial |
@@ -100,12 +100,12 @@ Each diagnostic signal should be classified with one of these statuses:
 
 | KPI | Definition | Source of Truth | Tool | Panel Priority |
 | --- | --- | --- | --- | --- |
-| Auth session established | Successful auth bootstrap into a canonical app session | Convex auth state plus client event | Convex, PostHog | now |
+| Current auth session | Successful auth bootstrap into a canonical app session | canonical Convex auth state | Convex | now |
 | Auth bootstrap failures | Failure to establish identity/session after app load | Convex logs and Sentry | Convex, Sentry | now |
 | Session refresh failures | Failed refresh or expired session recovery failures | Convex auth/session flow | Convex, Sentry | now |
 | Entitlement mismatches | User has paid/access state that does not match entitlement projection | Convex canonical state | Convex | now |
 | Community access denied | Failed community access checks by reason | Convex access/gate records | Convex | now |
-| Operator access granted/denied | Operator panel access attempts and outcomes | `criticalAuditEvents` and operator access query | Convex | now |
+| Operator access granted/denied | Operator panel access attempts and outcomes | `criticalAuditEvents` | Convex | now |
 | Unknown auth errors | Auth failures without normalized error code | Sentry/Convex logs | Sentry, Convex | now |
 
 ### Security and Audit
@@ -213,7 +213,6 @@ Event names should use dotted namespaces when introducing new diagnostics events
 
 Examples:
 
-- `auth.session_established`
 - `auth.bootstrap_failed`
 - `access.community_denied`
 - `security.operator_access_denied`
@@ -234,6 +233,8 @@ Default rules:
 3. Full tool output belongs in first-party/runtime-controlled storage only when required for product function or explicit debugging.
 4. Rich payload capture is allowed only in local/dev or an explicit operator-debug mode.
 5. Operator-facing summaries should show evidence IDs and normalized reasons, not raw secrets or private content.
+6. Routine successful bootstrap, refresh, logout, and access checks do not create durable diagnostic rows; canonical state already proves success.
+7. First-party diagnostics retain exceptional outcomes only and must have bounded retention.
 
 ## Diagnostic Data Shape
 
@@ -298,13 +299,13 @@ Reason:
 
 First implementation should prove:
 
-1. auth session established
+1. canonical auth state remains available without success-event duplication
 2. auth bootstrap failed
 3. session refresh failed
-4. community access denied
-5. entitlement mismatch detected
-6. operator access granted
-7. operator access denied
+4. logout failed
+5. community access denied
+6. entitlement mismatch detected
+7. operator access granted or denied through critical audit
 8. unknown auth/access error
 
 Minimum output:
@@ -327,10 +328,10 @@ This contract is ready to implement from when we can answer:
 
 The first slice is complete when:
 
-1. Auth and Access diagnostics have a durable event contract.
+1. Auth and Access failures have a durable, bounded event contract.
 2. Existing auth/access evidence is mapped to that contract.
 3. Missing events are added narrowly.
-4. The operator panel can show Auth and Access health without reading raw logs manually.
+4. The operator panel shows bounded Auth and Access incidents without claiming an incomplete success rate.
 5. Proof scripts prevent losing the basic auth/access diagnostics surface.
 
 ## Defer

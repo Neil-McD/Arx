@@ -44,13 +44,6 @@ function formatPercent(value: number | null | undefined): string {
   return `${Math.round(value * 100)}%`;
 }
 
-function formatPrecisePercent(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "--";
-  const percent = value * 100;
-  const digits = percent >= 99 && percent < 100 ? 1 : 0;
-  return `${percent.toFixed(digits)}%`;
-}
-
 function formatRoutePassRate(snapshot: OperatorWebDeployDiagnosticsSnapshot): string {
   const live = snapshot.liveSurface;
   const routeChecks = live
@@ -183,33 +176,26 @@ function buildRuntimeCard(runtime: OperatorRuntimeToolDiagnosticsSnapshot | null
 }
 
 function buildAuthCard(auth: OperatorAuthAccessDiagnosticsSnapshot | null): OperatorPlatformHealthCard {
-  if (!auth) return buildUnknownCard("auth", "Auth", "Bootstrap, refresh, and identity-resolution availability.");
-  const availability = auth.authAvailability;
-  if (!availability) {
-    return buildUnknownCard("auth", "Auth", "Bootstrap, refresh, and identity-resolution availability.");
+  if (!auth) return buildUnknownCard("auth", "Auth", "Recent bootstrap, refresh, and logout failures.");
+  const incidents = auth.authIncidents;
+  if (!incidents) {
+    return buildUnknownCard("auth", "Auth", "Recent bootstrap, refresh, and logout failures.");
   }
-  const input: ScoreInput = { score: 100, drivers: [] };
-  input.score = availability.score ?? 100;
-  if (availability.attempts <= 0) {
-    input.drivers.push("No recent auth attempts");
-  } else {
-    input.drivers.push(`${availability.successes}/${availability.attempts} auth attempts succeeded`);
-    if (availability.failures > 0) input.drivers.push(`${availability.failures} recent auth failures`);
-    if (availability.refreshFailures > 0) input.drivers.push(`${availability.refreshFailures} refresh failures`);
-    if (availability.unknownFailures > 0) input.drivers.push(`${availability.unknownFailures} unknown failures`);
-    if (availability.unattributedFailures > 0) input.drivers.push(`${availability.unattributedFailures} unattributed failures`);
-  }
+  const drivers: string[] = [];
+  if (incidents.failures > 0) drivers.push(`${incidents.failures} recent auth failures`);
+  if (incidents.refreshFailures > 0) drivers.push(`${incidents.refreshFailures} refresh failures`);
+  if (incidents.logoutFailures > 0) drivers.push(`${incidents.logoutFailures} logout failures`);
+  if (incidents.unknownFailures > 0) drivers.push(`${incidents.unknownFailures} unknown failures`);
+  if (incidents.unattributedFailures > 0) drivers.push(`${incidents.unattributedFailures} unattributed failures`);
   return finalizeCard({
     id: "auth",
     label: "Auth",
-    primaryMetric: availability.successRate === null
-      ? "No recent auth attempts"
-      : `${formatPrecisePercent(availability.successRate)} auth success`,
-    score: availability.score,
-    status: availability.health,
-    drivers: input.drivers,
-    healthyDriver: "Bootstrap and refresh events clean",
-    evidenceNote: auth.evidence.isTruncated ? "Sampled auth availability diagnostics" : "24h bootstrap and refresh evidence",
+    primaryMetric: `${incidents.failures} auth incidents`,
+    score: null,
+    status: incidents.health,
+    drivers,
+    healthyDriver: "No auth incidents recorded",
+    evidenceNote: auth.evidence.isTruncated ? "Truncated auth incident evidence" : "24h auth failure evidence",
   });
 }
 

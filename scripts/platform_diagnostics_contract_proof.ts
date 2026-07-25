@@ -66,24 +66,15 @@ assert.match(
 );
 assert.match(
   platformDiagnostics,
-  /DIAGNOSTIC_METADATA_ALLOWLIST[\s\S]*"auth\.session_established": \["bootstrapPath", "refreshLeaseContended"\][\s\S]*"auth\.session_refreshed": \[\][\s\S]*"access\.operator_access_granted": \["role", "source"\]/,
-  "platform diagnostics metadata must be event-type allowlisted",
-);
-assert.match(
-  platformDiagnostics,
-  /"auth\.session_logged_out": \["providerLogoutOutcome"\]/,
-  "auth logout diagnostics may retain only the bounded provider outcome",
+  /DIAGNOSTIC_METADATA_ALLOWLIST[\s\S]*"auth\.bootstrap_failed": \[\][\s\S]*"auth\.session_refresh_failed": \[\][\s\S]*"auth\.session_logout_failed": \[\][\s\S]*"access\.operator_access_denied": \[\]/,
+  "platform diagnostics metadata must be limited to exceptional event types",
 );
 assert.match(
   platformDiagnostics,
   /DIAGNOSTIC_METADATA_BLOCKED_KEY_PARTS[\s\S]*"token"[\s\S]*"secret"[\s\S]*"authorization"[\s\S]*"session"[\s\S]*"encrypted"/,
   "platform diagnostics metadata sanitizer must keep a defensive sensitive-key denylist",
 );
-assert.match(
-  platformDiagnostics,
-  /DIAGNOSTIC_METADATA_SAFE_KEY_EXCEPTIONS[\s\S]*"refreshLeaseContended"/,
-  "platform diagnostics sanitizer must preserve explicit safe auth status labels",
-);
+assert.doesNotMatch(platformDiagnostics, /refreshLeaseContended/, "retired success metadata must not remain");
 assert.match(
   platformDiagnostics,
   /DIAGNOSTIC_METADATA_STRING_MAX_LENGTH = 200/,
@@ -110,19 +101,19 @@ assert.doesNotMatch(
   "platform diagnostics must not store caller metadata directly",
 );
 
-for (const eventType of [
-  "auth.session_established",
-  "auth.bootstrap_failed",
-  "auth.session_refreshed",
-  "auth.session_refresh_failed",
-  "auth.session_logged_out",
-  "auth.session_logout_failed",
-]) {
+for (const eventType of ["auth.bootstrap_failed", "auth.session_refresh_failed", "auth.session_logout_failed"]) {
   assert.match(authSessions, new RegExp(eventType.replaceAll(".", "\\.")), `auth sessions must record ${eventType}`);
+}
+for (const eventType of ["auth.session_established", "auth.session_refreshed", "auth.session_logged_out"]) {
+  assert.doesNotMatch(
+    authSessions,
+    new RegExp(eventType.replaceAll(".", "\\.")),
+    `auth sessions must not durably record routine success ${eventType}`,
+  );
 }
 
 const authDiagnosticCalls = authSessions.match(/recordAuthSessionDiagnostic\(ctx, \{[\s\S]*?\n\s*\}\);/g) ?? [];
-assert.ok(authDiagnosticCalls.length >= 6, "auth session flow must record diagnostics at key outcomes");
+assert.ok(authDiagnosticCalls.length >= 1, "auth session flow must retain exceptional diagnostics");
 for (const call of authDiagnosticCalls) {
   for (const forbidden of ["sessionId:", "accessToken:", "refreshToken:", "idToken:"]) {
     assert.doesNotMatch(call, new RegExp(forbidden), "auth diagnostics must not put tokens or session ids in metadata");
@@ -131,13 +122,13 @@ for (const call of authDiagnosticCalls) {
 
 assert.match(
   operatorAccess,
-  /access\.operator_access_granted/,
-  "operator access must record granted diagnostics",
-);
-assert.match(
-  operatorAccess,
   /access\.operator_access_denied/,
   "operator access must record denied diagnostics",
+);
+assert.doesNotMatch(
+  operatorAccess,
+  /access\.operator_access_granted/,
+  "successful operator access must use critical audit only, not duplicate diagnostics",
 );
 assert.match(
   operatorAccess,
@@ -152,9 +143,10 @@ assert.match(
 );
 assert.match(
   operatorTypes,
-  /authAvailability\?: \{[\s\S]*successRate: number \| null;[\s\S]*affectedUsers: number;[\s\S]*unattributedFailures: number;/,
-  "operator auth diagnostics must expose rate and impact based auth availability",
+  /authIncidents\?: \{[\s\S]*failures: number;[\s\S]*affectedUsers: number;[\s\S]*unattributedFailures: number;[\s\S]*logoutFailures: number;/,
+  "operator auth diagnostics must expose bounded failure impact",
 );
+assert.doesNotMatch(operatorTypes, /authAvailability|successRate|attempts: number|successes: number/, "success-rate contract must be deleted");
 assert.match(
   operatorTypes,
   /accessIntegrity\?: \{[\s\S]*operatorAccessDenied: number;[\s\S]*communityAccessDenied: number;[\s\S]*entitlementErrorFindings: number;/,
@@ -177,14 +169,15 @@ assert.match(
 );
 assert.match(
   operatorIntelligence,
-  /AUTH_AVAILABILITY_RECENT_WINDOW_MS = 24 \* 60 \* 60 \* 1000/,
-  "operator auth availability must use a recent window for the headline signal",
+  /AUTH_INCIDENT_WINDOW_MS = 24 \* 60 \* 60 \* 1000/,
+  "operator auth incidents must use a recent window",
 );
 assert.match(
   operatorIntelligence,
-  /authSuccessRate = authAttempts > 0 \? recentAuthSuccessRows\.length \/ authAttempts : null/,
-  "operator auth availability must score by success rate, not raw failure count",
+  /AUTH_INCIDENT_EVENT_TYPES\.map[\s\S]*readDiagnosticEventsByType/,
+  "operator auth incidents must read exact failure types through the indexed helper",
 );
+assert.doesNotMatch(authAccessDiagnosticsBlock, /authSuccessRate|recentAuthSuccessRows|authAttempts/, "operator diagnostics must not infer success rate from capped rows");
 assert.match(
   operatorIntelligence,
   /accessIntegrity: \{[\s\S]*operatorAccessDenied:[\s\S]*communityAccessDenied:[\s\S]*entitlementErrorFindings,/,
@@ -192,8 +185,8 @@ assert.match(
 );
 assert.match(
   authAccessDiagnosticsBlock,
-  /const health: "healthy" \| "degraded" \| "incident" \| "unknown" =[\s\S]*authAvailabilityHealth === "incident" \|\| accessIntegrityHealth === "incident"[\s\S]*authAvailabilityHealth === "degraded" \|\| accessIntegrityHealth === "degraded"/,
-  "operator auth/access compatibility health must mirror nested auth availability and access integrity",
+  /const health: "healthy" \| "degraded" \| "incident" \| "unknown" =[\s\S]*authIncidentHealth === "incident" \|\| accessIntegrityHealth === "incident"[\s\S]*authIncidentHealth === "degraded" \|\| accessIntegrityHealth === "degraded"/,
+  "operator auth/access health must mirror nested auth incidents and access integrity",
 );
 assert.doesNotMatch(
   authAccessDiagnosticsBlock,
@@ -228,9 +221,10 @@ assert.match(
 );
 assert.match(
   operatorPanel,
-  /24h auth success/,
-  "operator panel must label auth availability as a recent success-rate signal",
+  /Auth incident status[\s\S]*24h auth failures[\s\S]*24h affected users/,
+  "operator panel must show bounded auth incident evidence",
 );
+assert.doesNotMatch(operatorPanel, /24h auth success|24h auth attempts/, "operator panel must not claim success rate or attempt volume");
 assert.match(
   operatorPanel,
   /Access integrity/,
@@ -254,13 +248,13 @@ assert.match(
 );
 assert.match(
   platformHealth,
-  /formatPrecisePercent\(availability\.successRate\).*auth success/s,
-  "operator auth card must foreground auth success rate",
+  /const incidents = auth\.authIncidents[\s\S]*primaryMetric: `\$\{incidents\.failures\} auth incidents`/,
+  "operator auth card must foreground bounded incident evidence",
 );
 assert.doesNotMatch(
   platformHealth,
-  /primaryMetric: `\$\{auth\.totals\.sessionEstablished\} sessions`/,
-  "operator auth card must not present raw session-start events as live auth health",
+  /authAvailability|successRate|auth attempts succeeded/,
+  "operator auth card must not present capped success telemetry as health",
 );
 assert.match(
   packageJson,

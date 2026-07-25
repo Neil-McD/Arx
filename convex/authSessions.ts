@@ -896,13 +896,6 @@ async function refreshAuthSessionForAction(params: {
   }
   const nowSec = Math.floor(nowMs / 1_000);
   if (!forceRefresh && hasUsableAccessToken(stored, nowSec, 60)) {
-    await recordAuthSessionDiagnostic(ctx, {
-      eventType: "auth.session_established",
-      status: "succeeded",
-      userId: row.userId,
-      surface,
-      metadata: { bootstrapPath: "stored_token", refreshLeaseContended: false },
-    });
     return {
       status: "ready" as const,
       session: toPublicSession(stored),
@@ -934,15 +927,6 @@ async function refreshAuthSessionForAction(params: {
   )) as { status: string };
   if (claim.status !== "claimed") {
     if ((claim.status === "busy" || claim.status === "stale") && hasUsableAccessToken(stored, nowSec, 0)) {
-      if (!forceRefresh) {
-        await recordAuthSessionDiagnostic(ctx, {
-          eventType: "auth.session_established",
-          status: "succeeded",
-          userId: row.userId,
-          surface,
-          metadata: { bootstrapPath: "stored_token", refreshLeaseContended: true },
-        });
-      }
       return {
         status: "ready" as const,
         session: toPublicSession(stored),
@@ -999,16 +983,6 @@ async function refreshAuthSessionForAction(params: {
       });
       return { status: "transient_failure" as const, reason: "auth_session_refresh_commit_lost" };
     }
-    await recordAuthSessionDiagnostic(ctx, {
-      eventType: forceRefresh ? "auth.session_refreshed" : "auth.session_established",
-      status: "succeeded",
-      userId: row.userId,
-      surface,
-      latencyMs: Date.now() - refreshStartedAt,
-      ...(forceRefresh
-        ? null
-        : { metadata: { bootstrapPath: "upstream_refresh", refreshLeaseContended: false } }),
-    });
     return {
       status: forceRefresh ? ("refreshed" as const) : ("ready" as const),
       session: toPublicSession(refreshed),
@@ -1103,15 +1077,6 @@ export const logoutAuthSessionInternal = internalAction({
       });
       return { status: "transient_failure" as const, reason: "auth_session_logout_unavailable" };
     }
-    await recordAuthSessionDiagnostic(ctx, {
-      eventType: "auth.session_logged_out",
-      status: "succeeded",
-      severity: result.providerLogoutOutcome === "failed" ? "warning" : "info",
-      userId: row.userId,
-      surface: "auth_bridge_logout",
-      latencyMs: Date.now() - logoutStartedAt,
-      metadata: { providerLogoutOutcome: result.providerLogoutOutcome },
-    });
     return { status: "ok" as const };
   },
 });
