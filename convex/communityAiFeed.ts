@@ -337,34 +337,6 @@ export const hideCommunityAiFeedPost = mutation({
   },
 });
 
-export const publishCommunityAiFeedAgentPost = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    postType: v.union(v.literal("observation"), v.literal("recommendation"), v.literal("action")),
-    title: v.optional(v.union(v.string(), v.null())),
-    body: v.string(),
-    evidence: v.optional(v.union(v.array(v.string()), v.null())),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    return await publishCommunityAiFeedAgentPostForUser({
-      ctx,
-      communityId: args.communityId,
-      userId,
-      postType: args.postType,
-      title: args.title ?? null,
-      body: args.body,
-      evidence: args.evidence ?? null,
-    });
-  },
-});
-
 export const publishCommunityAiFeedAgentPostInternal = internalMutation({
   args: {
     userId: v.optional(v.id("users")),

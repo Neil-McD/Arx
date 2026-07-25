@@ -20,6 +20,7 @@ const terminal = read("convex/polynetCodexWorkerTerminal.ts");
 const tool = read("convex/polynetCodexWorkerTool.ts");
 const runToken = read("convex/polynetCodexWorkerRunToken.ts");
 const admission = read("convex/polynetCodexWorkerAdmission.ts");
+const communityFacade = read("convex/community.ts");
 const communityRecentContext = read("convex/communityRecentContext.ts");
 const harnessMounts = read("convex/harnessMounts.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
@@ -300,8 +301,18 @@ assert.match(
 );
 assert.match(
   communityRecentContext,
-  /readCommunityRecentContextForUser[\s\S]*readCommunityRecentContextInternal = internalQuery[\s\S]*userId: v\.id\("users"\)[\s\S]*readCommunityRecentContext = query[\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*readCommunityRecentContextForUser/,
-  "community recent context must keep public verified-auth query and expose an internal pre-resolved-user path for signed runtime tools",
+  /readCommunityRecentContextForUser[\s\S]*readCommunityRecentContextInternal = internalQuery[\s\S]*userId: v\.id\("users"\)[\s\S]*readCommunityRecentContextForUser/,
+  "community recent context must expose one internal pre-resolved-user path for signed runtime tools",
+);
+assert.doesNotMatch(
+  communityRecentContext,
+  /export const readCommunityRecentContext = query/,
+  "community recent context must not retain an unused public wrapper",
+);
+assert.doesNotMatch(
+  communityFacade,
+  /readCommunityRecentContext/,
+  "community facade must not re-register the internal-only recent-context operation",
 );
 assert.match(
   runtimeAgentLoop,

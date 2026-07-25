@@ -69,11 +69,9 @@ import {
   listCommunityInteractionRoots as listCommunityInteractionRootsImpl,
   toggleCommunityInteractionReaction as toggleCommunityInteractionReactionImpl,
 } from "./communityInteractions";
-import { readCommunityRecentContext as readCommunityRecentContextImpl } from "./communityRecentContext";
 import {
   hideCommunityAiFeedPost as hideCommunityAiFeedPostImpl,
   listCommunityAiFeedPosts as listCommunityAiFeedPostsImpl,
-  publishCommunityAiFeedAgentPost as publishCommunityAiFeedAgentPostImpl,
 } from "./communityAiFeed";
 import {
   getMyCommunityAccess as getMyCommunityAccessImpl,
@@ -191,7 +189,6 @@ export const listCommunityDirectoryPage = listCommunityDirectoryPageImpl;
 export const countCommunityDirectoryMembers = countCommunityDirectoryMembersImpl;
 export const searchCommunityMentionCandidates = searchCommunityMentionCandidatesImpl;
 export const communityOwnerHasArchitectAccess = communityOwnerHasArchitectAccessImpl;
-export const readCommunityRecentContext = readCommunityRecentContextImpl;
 export const listCommunityJoinRequests = listCommunityJoinRequestsImpl;
 export const approveCommunityJoinRequest = approveCommunityJoinRequestImpl;
 export const denyCommunityJoinRequest = denyCommunityJoinRequestImpl;
@@ -255,7 +252,6 @@ export const editCommunityInteractionMessage = editCommunityInteractionMessageIm
 export const deleteCommunityInteractionMessage = deleteCommunityInteractionMessageImpl;
 export const listCommunityAiFeedPosts = listCommunityAiFeedPostsImpl;
 export const hideCommunityAiFeedPost = hideCommunityAiFeedPostImpl;
-export const publishCommunityAiFeedAgentPost = publishCommunityAiFeedAgentPostImpl;
 export const saveCommunitySettings = saveCommunitySettingsImpl;
 export const saveCommunityLaunchProfile = saveCommunityLaunchProfileImpl;
 export const saveCommunityOneLiner = saveCommunityOneLinerImpl;

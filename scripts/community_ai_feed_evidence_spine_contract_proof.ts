@@ -156,6 +156,7 @@ function proveToolSurfaces() {
 function proveImplementationBoundaries() {
   const evidence = read("convex/communityAiFeedEvidence.ts");
   const aiFeed = read("convex/communityAiFeed.ts");
+  const communityFacade = read("convex/community.ts");
   const audit = read("convex/communityEvidenceAudit.ts");
   const schema = read("convex/schema.ts");
   const runtime = read("convex/runtimeAgentLoop.ts");
@@ -181,6 +182,19 @@ function proveImplementationBoundaries() {
   assertIncludes(schema, 'v.literal("community_ai_feed_read")', "AI Feed read audit capability");
   assertIncludes(aiFeed, "actorAgentKey: post.agentKey", "persisted agent identity only");
   assertIncludes(aiFeed, "Redaction changes readability, not source authorship", "redaction attribution boundary");
+  assertIncludes(
+    aiFeed,
+    "export const publishCommunityAiFeedAgentPostInternal = internalMutation",
+    "trusted internal agent publication path",
+  );
+  assert.ok(
+    !aiFeed.includes("export const publishCommunityAiFeedAgentPost = mutation"),
+    "AI Feed must not retain an unused public agent-publication wrapper",
+  );
+  assert.ok(
+    !communityFacade.includes("publishCommunityAiFeedAgentPost"),
+    "community facade must not re-register internal-only agent publication",
+  );
   assert.ok(
     !aiFeed.includes('post.agentKey ?? "community_agent"'),
     "AI Feed source trace must not fabricate community_agent",

@@ -1,4 +1,4 @@
-import { internalQuery, query } from "./_generated/server";
+import { internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import {
   type CommunityLike,
@@ -10,7 +10,6 @@ import {
   normalizeResourceRole,
   normalizeResourceStatus,
   requireCommunityChatAccess,
-  resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
 import { hydrateCommunityResourceBody } from "./communityResourceContent";
@@ -386,28 +385,6 @@ export const readCommunityRecentContextInternal = internalQuery({
     return await readCommunityRecentContextForUser({
       ctx,
       userId: args.userId,
-      communityId: args.communityId,
-      query: args.query,
-    });
-  },
-});
-
-export const readCommunityRecentContext = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    query: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    return await readCommunityRecentContextForUser({
-      ctx,
-      userId,
       communityId: args.communityId,
       query: args.query,
     });
