@@ -18,20 +18,6 @@ function normalizePositiveInteger(value: unknown, fallback: number): number {
   return Math.floor(parsed);
 }
 
-export function hashStringToUint32(value: unknown): number {
-  const input = String(value ?? "");
-  let hash = 2166136261;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-export function stableWeeklyDigestDay(value: unknown): number {
-  return hashStringToUint32(value) % 7;
-}
-
 export function utcDayKey(ms: number): string {
   const date = new Date(Math.floor(ms));
   const year = date.getUTCFullYear();

@@ -52,9 +52,15 @@ terminal outbox rows and its replay performed zero work.
 Mention repair and link preview queues are also bounded/leased. These are good
 patterns to reuse.
 
+The weekly digest fairness gap is closed in staging code: one fixed weekly
+mutation walks Published then Unlisted through bounded cursor pages, atomically
+scheduling exactly-once per-community mutations. The old daily hash assignment,
+newest-prefix selection, and action coordinator are deleted. A 52-community
+fixture proves the page checkpoint, interruption/resumption, and idempotent
+replay.
+
 Fairness gaps remain:
 
-- weekly digests select only the 50 most recently updated Published and 50 most recently updated Unlisted communities, with no durable continuation; older communities may never be evaluated;
 - recurring event reminders take the first bounded set for each recurrence frequency with no cursor/partition key; high cardinality can repeatedly starve later rows;
 - recipient caps intentionally bound fan-out but need an explicit continuation or product cap if communities exceed the limit.
 
@@ -75,7 +81,7 @@ Canonical moderation event types include privacy purge request/completion states
 | durable email excerpt/address copies | `DELETE (deferred/dead)` complete | source-reference queue, send-time authorization/hydration, immediate terminal minimization, 90-day receipt TTL | 10 | useful recipient context does not require retained duplicate content |
 | raw provider webhook bodies | `DELETE (deferred/dead)` complete | retain only normalized idempotency/status receipt | 10 | replay safety needs identity, not arbitrary provider payload retention |
 | public featured legacy messages | `DELETE (deferred/dead)` complete | live surface, two pointers, schema, and lifecycle residue deleted | 8 | founder introduction and gate cover the visitor job without a second curation system |
-| no-cursor “most recently updated” digest selection | `KEEP (MVP core)` | `BOUND`, `HARDEN` | 8 | retained return loop still needs eventual-service proof |
+| no-cursor “most recently updated” digest selection | `DELETE (deferred/dead)` complete | fixed weekly cursor chain over Published then Unlisted | 8 | the return loop keeps one canonical scheduler and eventual-service proof |
 | DM participant departure state without a leave flow | `KEEP (MVP core)` | `HARDEN` | 7 | schema state with no user lifecycle owner |
 | delete whole DM conversation on one account deletion | `KEEP (MVP core)` | `HARDEN` | 10 | destroys other-party history |
 | canonical privacy purge event vocabulary without workflow | `KEEP (MVP core)` | `HARDEN`, `MIGRATE_THEN_DELETE` | 8 | accepted purge policy has no transition owner; vocabulary alone creates false assurances |

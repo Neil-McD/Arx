@@ -1,9 +1,18 @@
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { internal } from "./_generated/api";
 import { listRecentCanonicalCommunityChatMessages } from "./emailDigests";
 import schema from "./schema";
 
-const modules = import.meta.glob(["./emailDigests.ts", "./_generated/**/*.*s"]);
+const modules = import.meta.glob([
+  "./email.ts",
+  "./emailCore.ts",
+  "./emailDigests.ts",
+  "./_generated/**/*.*s",
+]);
+const NOW_MS = 1_780_000_000_000;
+
+afterEach(() => vi.useRealTimers());
 
 async function createCommunity(t: ReturnType<typeof convexTest>, suffix: string) {
   return await t.run(async (ctx) => {
@@ -217,5 +226,90 @@ describe("weekly community digest canonical interaction input", () => {
     expect(messages.map((message) => message.createdAt)).toEqual(
       messages.map((message) => message.createdAt).sort((a, b) => b - a),
     );
+  });
+});
+
+describe("weekly community digest scheduling", () => {
+  test("resumes past fifty communities and replay creates no duplicate outbox rows", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW_MS);
+    const t = convexTest(schema, modules);
+    await t.run(async (ctx) => {
+      for (let index = 0; index < 52; index += 1) {
+        const ownerId = await ctx.db.insert("users", {
+          authSubject: `digest-fair-owner-${index}`,
+          displayName: `Digest owner ${index}`,
+          email: `digest-owner-${index}@example.com`,
+          emailVerifiedAt: NOW_MS,
+          createdAt: NOW_MS,
+          updatedAt: NOW_MS,
+        });
+        const communityId = await ctx.db.insert("communities", {
+          ownerId,
+          slug: `digest-fair-${index}`,
+          name: `Digest fair ${index}`,
+          visibility: "unlisted",
+          entryPolicy: "approval",
+          activeMemberCount: 1,
+          createdAt: NOW_MS + index,
+          updatedAt: NOW_MS + index,
+        });
+        await ctx.db.insert("communityAiFeedPosts", {
+          communityId,
+          authorType: "agent",
+          authorLabel: "Community agent",
+          type: "observation",
+          body: `Digest signal ${index}`,
+          status: "live",
+          createdAt: NOW_MS,
+          updatedAt: NOW_MS,
+        });
+      }
+    });
+
+    const run = () =>
+      t.mutation(
+        (internal as any).emailDigests.enqueueWeeklyCommunityDigestsInternal,
+        {
+          visibility: "unlisted",
+          nowMs: NOW_MS,
+          pageSize: 50,
+          limitRecipientsPerCommunity: 1,
+        },
+      );
+    await expect(run()).resolves.toMatchObject({
+      ok: true,
+      visibility: "unlisted",
+      communities: 50,
+      continued: true,
+    });
+    const checkpoint = (await t.run(async (ctx) =>
+      await (ctx.db as any).system.query("_scheduled_functions").collect(),
+    )) as Array<{ name: string }>;
+    expect(checkpoint).toHaveLength(51);
+    expect(
+      checkpoint.filter((row) =>
+        row.name.includes("enqueueWeeklyCommunityDigestForCommunityInternal"),
+      ),
+    ).toHaveLength(50);
+    expect(
+      checkpoint.filter((row) => row.name.includes("enqueueWeeklyCommunityDigestsInternal")),
+    ).toHaveLength(1);
+    expect(await t.run(async (ctx) => await ctx.db.query("emailOutbox").collect())).toEqual([]);
+
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const firstRows = await t.run(async (ctx) => await ctx.db.query("emailOutbox").collect());
+    expect(firstRows).toHaveLength(52);
+    expect(new Set(firstRows.map((row) => row.dedupeKey)).size).toBe(52);
+    expect(firstRows.every((row) => row.status === "pending")).toBe(true);
+    expect(
+      new Set(firstRows.map((row: any) => String(row.payload?.communityId))).size,
+    ).toBe(52);
+
+    await run();
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect(
+      await t.run(async (ctx) => (await ctx.db.query("emailOutbox").collect()).length),
+    ).toBe(52);
   });
 });

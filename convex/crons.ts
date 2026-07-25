@@ -44,15 +44,16 @@ crons.daily(
   },
 );
 
-crons.daily(
+crons.weekly(
   "enqueue weekly community digests",
   {
+    dayOfWeek: "monday",
     hourUTC: 13,
     minuteUTC: 0,
   },
   (internal as any).emailDigests.enqueueWeeklyCommunityDigestsInternal,
   {
-    limitCommunities: 50,
+    pageSize: 50,
     limitRecipientsPerCommunity: 500,
   },
 );

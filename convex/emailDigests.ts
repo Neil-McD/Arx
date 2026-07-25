@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { internalAction, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
 import { listActiveCommunityRecipientUserIds } from "./communityRecipientCore";
@@ -19,7 +19,6 @@ import {
   capWeeklyDigestItems,
   formatWeeklyDigestStats,
   shouldSendWeeklyDigest,
-  stableWeeklyDigestDay,
   type WeeklyDigestActivityCounts,
 } from "../shared/weeklyDigestCore";
 
@@ -87,7 +86,7 @@ type DigestItemCandidate = {
 };
 
 type DigestBatch = {
-  communityId: string;
+  communityId: any;
   periodStartMs: number;
   periodEndMs: number;
   periodStartDay: string;
@@ -135,29 +134,6 @@ function formatDigestDateLabel(periodStartDay: string, periodEndDay: string): st
 
 function itemUrlPath(communitySlug: string, tab: "chat" | "ai_feed" | "resources" | "polynet"): string {
   return buildCommunityTabPath(communitySlug, tab) ?? "/discover";
-}
-
-async function listDigestCommunities(ctx: any, args: {
-  communityId?: any;
-  limit: number;
-}): Promise<CommunityRow[]> {
-  if (args.communityId) {
-    const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
-    return community ? [community] : [];
-  }
-  const published = (await ctx.db
-    .query("communities")
-    .withIndex("by_visibility_updatedAt", (q: any) => q.eq("visibility", "published"))
-    .order("desc")
-    .take(args.limit)) as CommunityRow[];
-  const unlisted = (await ctx.db
-    .query("communities")
-    .withIndex("by_visibility_updatedAt", (q: any) => q.eq("visibility", "unlisted"))
-    .order("desc")
-    .take(args.limit)) as CommunityRow[];
-  return [...published, ...unlisted]
-    .sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))
-    .slice(0, args.limit * 2);
 }
 
 function communityInteractionIsDigestReadable(
@@ -518,162 +494,188 @@ export const resolveWeeklyMemberDigestPayloadForSendInternal = internalQuery({
   },
 });
 
-export const buildWeeklyCommunityDigestBatchesInternal = internalQuery({
+async function buildWeeklyCommunityDigestBatch(
+  ctx: any,
+  community: CommunityRow,
+  nowMs: number,
+  limitRecipientsPerCommunity: number,
+): Promise<DigestBatch | null> {
+  const communitySlug = String(community.slug ?? "").trim();
+  if (!communitySlug) return null;
+  const period = buildWeeklyDigestPeriod(nowMs, 7);
+  const [chatMessages, aiFeedPosts, resources, newMemberCount] = await Promise.all([
+    listRecentCanonicalCommunityChatMessages(ctx, {
+      communityId: community._id,
+      periodStartMs: period.periodStartMs,
+      periodEndMs: period.periodEndMs,
+    }),
+    listRecentAiFeedPosts(ctx, {
+      communityId: community._id,
+      periodStartMs: period.periodStartMs,
+      periodEndMs: period.periodEndMs,
+    }),
+    listRecentResources(ctx, {
+      communityId: community._id,
+      periodStartMs: period.periodStartMs,
+      periodEndMs: period.periodEndMs,
+    }),
+    countNewActiveMembers(ctx, {
+      communityId: community._id,
+      periodStartMs: period.periodStartMs,
+      periodEndMs: period.periodEndMs,
+    }),
+  ]);
+  const activity: WeeklyDigestActivityCounts = {
+    chatMessageCount: chatMessages.length,
+    aiFeedPostCount: aiFeedPosts.length,
+    resourceCount: resources.length,
+    newMemberCount,
+  };
+  if (!shouldSendWeeklyDigest(activity)) return null;
+  const items = buildDigestItems({
+    communitySlug,
+    aiFeedPosts,
+    resources,
+    chatMessages,
+  });
+  if (items.length === 0) return null;
+  const recipientUserIds = await listActiveCommunityRecipientUserIds(ctx, {
+    communityId: community._id,
+    communityOwnerId: community.ownerId,
+    nowMs,
+    limit: limitRecipientsPerCommunity,
+  });
+  if (recipientUserIds.length === 0) return null;
+  return {
+    communityId: community._id,
+    periodStartMs: period.periodStartMs,
+    periodEndMs: period.periodEndMs,
+    periodStartDay: period.periodStartDay,
+    periodEndDay: period.periodEndDay,
+    activity,
+    recipientUserIds,
+  };
+}
+
+export const enqueueWeeklyCommunityDigestForCommunityInternal = internalMutation({
   args: {
-    communityId: v.optional(v.id("communities")),
-    force: v.optional(v.boolean()),
+    communityId: v.id("communities"),
     nowMs: v.optional(v.number()),
-    limitCommunities: v.optional(v.number()),
     limitRecipientsPerCommunity: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<DigestBatch[]> => {
+  handler: async (ctx, args) => {
     const nowMs = Number.isFinite(args.nowMs) ? Math.floor(args.nowMs as number) : Date.now();
-    const todayDigestDay = new Date(nowMs).getUTCDay();
-    const force = Boolean(args.force);
-    const limitCommunities = normalizePositiveLimit(args.limitCommunities, args.communityId ? 1 : 50, 200);
-    const limitRecipientsPerCommunity = normalizePositiveLimit(args.limitRecipientsPerCommunity, 500, 2000);
-    const period = buildWeeklyDigestPeriod(nowMs, 7);
-    const communities = await listDigestCommunities(ctx, {
-      communityId: args.communityId,
-      limit: limitCommunities,
-    });
-    const batches: DigestBatch[] = [];
-
-    for (const community of communities) {
-      const communityId = String(community._id);
-      if (!force && stableWeeklyDigestDay(communityId) !== todayDigestDay) continue;
-      const communitySlug = String(community.slug ?? "").trim();
-      if (!communitySlug) continue;
-
-      const [chatMessages, aiFeedPosts, resources, newMemberCount] = await Promise.all([
-        listRecentCanonicalCommunityChatMessages(ctx, {
-          communityId: community._id,
-          periodStartMs: period.periodStartMs,
-          periodEndMs: period.periodEndMs,
+    const limitRecipientsPerCommunity = normalizePositiveLimit(
+      args.limitRecipientsPerCommunity,
+      500,
+      500,
+    );
+    const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
+    if (!community) return { ok: true, communityId: args.communityId, recipients: 0 };
+    const batch = await buildWeeklyCommunityDigestBatch(
+      ctx,
+      community,
+      nowMs,
+      limitRecipientsPerCommunity,
+    );
+    if (!batch) return { ok: true, communityId: args.communityId, recipients: 0 };
+    const payload = {
+      communityId: batch.communityId,
+      periodStartMs: batch.periodStartMs,
+      periodEndMs: batch.periodEndMs,
+      periodStartDay: batch.periodStartDay,
+      periodEndDay: batch.periodEndDay,
+      activity: batch.activity,
+    };
+    for (const userId of batch.recipientUserIds) {
+      await ctx.scheduler.runAfter(0, (internal as any).email.enqueueEmailJobInternal, {
+        kind: "weekly_member_digest",
+        recipientUserId: userId,
+        templateKey: "weekly_member_digest",
+        payload,
+        dedupeKey: buildWeeklyDigestDedupeKey({
+          communityId: batch.communityId,
+          userId,
+          periodStartDay: batch.periodStartDay,
+          periodEndDay: batch.periodEndDay,
         }),
-        listRecentAiFeedPosts(ctx, {
-          communityId: community._id,
-          periodStartMs: period.periodStartMs,
-          periodEndMs: period.periodEndMs,
-        }),
-        listRecentResources(ctx, {
-          communityId: community._id,
-          periodStartMs: period.periodStartMs,
-          periodEndMs: period.periodEndMs,
-        }),
-        countNewActiveMembers(ctx, {
-          communityId: community._id,
-          periodStartMs: period.periodStartMs,
-          periodEndMs: period.periodEndMs,
-        }),
-      ]);
-
-      const activity: WeeklyDigestActivityCounts = {
-        chatMessageCount: chatMessages.length,
-        aiFeedPostCount: aiFeedPosts.length,
-        resourceCount: resources.length,
-        newMemberCount,
-      };
-      if (!shouldSendWeeklyDigest(activity)) continue;
-
-      const recipientUserIds = await listActiveCommunityRecipientUserIds(ctx, {
-        communityId: community._id,
-        communityOwnerId: community.ownerId,
         nowMs,
-        limit: limitRecipientsPerCommunity,
-      });
-      if (recipientUserIds.length === 0) continue;
-
-      const items = buildDigestItems({
-        communitySlug,
-        aiFeedPosts,
-        resources,
-        chatMessages,
-      });
-      if (items.length === 0) continue;
-
-      batches.push({
-        communityId,
-        periodStartMs: period.periodStartMs,
-        periodEndMs: period.periodEndMs,
-        periodStartDay: period.periodStartDay,
-        periodEndDay: period.periodEndDay,
-        activity,
-        recipientUserIds,
       });
     }
-
-    return batches;
+    return {
+      ok: true,
+      communityId: args.communityId,
+      recipients: batch.recipientUserIds.length,
+    };
   },
 });
 
-export const enqueueWeeklyCommunityDigestsInternal = internalAction({
+export const enqueueWeeklyCommunityDigestsInternal = internalMutation({
   args: {
-    communityId: v.optional(v.id("communities")),
-    force: v.optional(v.boolean()),
+    visibility: v.optional(v.union(v.literal("published"), v.literal("unlisted"))),
+    cursor: v.optional(v.string()),
     nowMs: v.optional(v.number()),
-    limitCommunities: v.optional(v.number()),
+    pageSize: v.optional(v.number()),
     limitRecipientsPerCommunity: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<unknown> => {
+  handler: async (ctx, args) => {
+    const visibility = args.visibility ?? "published";
     const nowMs = Number.isFinite(args.nowMs) ? Math.floor(args.nowMs as number) : Date.now();
-    const batches = (await ctx.runQuery(
-      (internal as any).emailDigests.buildWeeklyCommunityDigestBatchesInternal,
-      {
-        communityId: args.communityId,
-        force: args.force,
-        nowMs,
-        limitCommunities: args.limitCommunities,
-        limitRecipientsPerCommunity: args.limitRecipientsPerCommunity,
-      },
-    )) as DigestBatch[];
-
-    let enqueued = 0;
-    let deduped = 0;
-    let suppressed = 0;
-    for (const batch of batches) {
-      const payload = {
-        communityId: batch.communityId,
-        periodStartMs: batch.periodStartMs,
-        periodEndMs: batch.periodEndMs,
-        periodStartDay: batch.periodStartDay,
-        periodEndDay: batch.periodEndDay,
-        activity: batch.activity,
-      };
-      for (const userId of batch.recipientUserIds) {
-        const result = (await ctx.runMutation(
-          (internal as any).email.enqueueEmailJobInternal,
-          {
-            kind: "weekly_member_digest",
-            recipientUserId: userId,
-            templateKey: "weekly_member_digest",
-            payload,
-            dedupeKey: buildWeeklyDigestDedupeKey({
-              communityId: batch.communityId,
-              userId,
-              periodStartDay: batch.periodStartDay,
-              periodEndDay: batch.periodEndDay,
-            }),
-            nowMs,
-          },
-        )) as { deduped?: boolean; status?: string } | null;
-        if (result?.deduped) {
-          deduped += 1;
-        } else if (result?.status === "suppressed") {
-          suppressed += 1;
-        } else {
-          enqueued += 1;
-        }
-      }
+    const pageSize = normalizePositiveLimit(args.pageSize, 50, 200);
+    const limitRecipientsPerCommunity = normalizePositiveLimit(
+      args.limitRecipientsPerCommunity,
+      500,
+      500,
+    );
+    const page = await ctx.db
+      .query("communities")
+      .withIndex("by_visibility_updatedAt", (q: any) => q.eq("visibility", visibility))
+      .order("asc")
+      .paginate({
+        cursor: args.cursor ?? null,
+        numItems: pageSize,
+        maximumRowsRead: pageSize,
+      });
+    for (const community of page.page) {
+      await ctx.scheduler.runAfter(
+        0,
+        (internal as any).emailDigests.enqueueWeeklyCommunityDigestForCommunityInternal,
+        {
+          communityId: community._id,
+          nowMs,
+          limitRecipientsPerCommunity,
+        },
+      );
     }
-
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(
+        0,
+        (internal as any).emailDigests.enqueueWeeklyCommunityDigestsInternal,
+        {
+          visibility,
+          cursor: page.continueCursor,
+          nowMs,
+          pageSize,
+          limitRecipientsPerCommunity,
+        },
+      );
+    } else if (visibility === "published") {
+      await ctx.scheduler.runAfter(
+        0,
+        (internal as any).emailDigests.enqueueWeeklyCommunityDigestsInternal,
+        {
+          visibility: "unlisted",
+          nowMs,
+          pageSize,
+          limitRecipientsPerCommunity,
+        },
+      );
+    }
     return {
       ok: true,
-      communities: batches.length,
-      recipients: batches.reduce((count, batch) => count + batch.recipientUserIds.length, 0),
-      enqueued,
-      deduped,
-      suppressed,
+      visibility,
+      communities: page.page.length,
+      continued: !page.isDone || visibility === "published",
     };
   },
 });
