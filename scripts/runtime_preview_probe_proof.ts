@@ -61,10 +61,6 @@ const workspaceAppPreviewSource = await readFile(
   new URL("../apps/web/src/components/WebWorkspaceAppPreview.tsx", import.meta.url),
   "utf8",
 );
-const workspaceHostSource = await readFile(
-  new URL("../apps/web/src/components/WebWorkspaceHost.tsx", import.meta.url),
-  "utf8",
-);
 
 assert.match(
   workspaceTerminalsSource,
@@ -130,11 +126,6 @@ assert.match(
   workspaceAppPreviewSource,
   /function isLivePreviewTerminal[\s\S]*isRetryablePreviewStatus\(terminal\.status\)/,
   "inline app previews should only render live starting or running terminals",
-);
-assert.match(
-  workspaceHostSource,
-  /const runTerminals = activePreviewCapableTerminals\.filter/,
-  "thread preview rendering should not include completed terminal snapshots",
 );
 assert.match(
   workspaceTerminalProcessCoreSource,

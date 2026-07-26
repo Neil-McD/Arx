@@ -253,6 +253,7 @@ assert.doesNotMatch(
   "the app surface host must not import, accept, or mount a Workspace presentation",
 );
 for (const retiredPath of [
+  "apps/web/src/components/WebWorkspaceHost.tsx",
   "apps/web/src/components/WebWorkspaceSurfaceHost.tsx",
   "apps/web/src/components/WebWorkspaceShellPanels.tsx",
   "apps/web/src/components/WebWorkspaceShellPanelsHost.tsx",

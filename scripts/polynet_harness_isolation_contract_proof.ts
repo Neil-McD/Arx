@@ -35,7 +35,6 @@ function read(relativePath: string): string {
 
 const packageJson = read("package.json");
 const app = read("apps/web/src/App.tsx");
-const workspaceHost = read("apps/web/src/components/WebWorkspaceHost.tsx");
 const workspaceCoreController = read("apps/web/src/controllers/useWebWorkspaceCoreController.ts");
 const workspaceRouteController = read("apps/web/src/controllers/useWebWorkspaceRouteController.ts");
 const handlers = read("convex/runtimeTurnHandlers.ts");
@@ -82,16 +81,6 @@ assert.match(
   app,
   /normalizeActiveWorkspaceRuntimeEngine\([\s\S]*runtime_engine[\s\S]*activeRuntimeEngine/,
   "thread runtime metadata must normalize through the active runtime allowlist",
-);
-assert.match(
-  workspaceHost,
-  /WorkspaceRuntimeEngineSelector[\s\S]*getRuntimeEngineDisplayName[\s\S]*getRuntimeEngineAccessLevel[\s\S]*(?:Included[\s\S]*Premium|Premium[\s\S]*Included)/,
-  "the workspace composer must label both PolyNet and Codex runtime options with access state",
-);
-assert.match(
-  workspaceHost,
-  /RUNTIME_ENGINE_POLYNET/,
-  "the workspace composer must render PolyNet as an active runtime option",
 );
 assert.deepEqual(
   [...ACTIVE_WORKSPACE_RUNTIME_ENGINES],
