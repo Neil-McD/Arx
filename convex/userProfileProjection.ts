@@ -1,4 +1,5 @@
 import { resolvePublicPremiumMemberBadgeForUserId } from "./premiumMemberBadge";
+import { getUniqueUserProfileDetailByUserId } from "./profileCore";
 
 type UserProfileProjectionUserRow = {
   _id: any;
@@ -49,10 +50,10 @@ export async function resolveUserProfileDisplayProjectionForUser(
 ) {
   const profile =
     detail === undefined
-      ? ((await ctx.db
-          .query("userProfileDetails")
-          .withIndex("by_user", (q: any) => q.eq("userId", user._id))
-          .first()) as UserProfileProjectionDetailRow | null)
+      ? await getUniqueUserProfileDetailByUserId<UserProfileProjectionDetailRow>(
+          ctx,
+          user._id,
+        )
       : detail;
   const storageAvatarUrl = await maybeResolveStorageUrl(ctx, profile?.avatarStorageId);
   const profileAvatarUrl = normalizeOptionalText(profile?.avatarUrl);

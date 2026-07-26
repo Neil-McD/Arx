@@ -25,6 +25,7 @@ import {
   validateProfileBio,
   validateProfileDisplayName,
 } from "../shared/profileText";
+import { getUniqueUserProfileDetailByUserId } from "./profileCore";
 
 type ProfileMutationErrorCode =
   | "profile_avatar_invalid"
@@ -137,10 +138,7 @@ async function findUserBySubject(ctx: any, authSubject: string): Promise<UserRow
 }
 
 async function findProfileDetailByUserId(ctx: any, userId: any): Promise<ProfileDetailRow | null> {
-  return (await ctx.db
-    .query("userProfileDetails")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .first()) as ProfileDetailRow | null;
+  return await getUniqueUserProfileDetailByUserId<ProfileDetailRow>(ctx, userId);
 }
 
 export const resolveMemberAgentIdentityContextInternal = internalQuery({
@@ -413,10 +411,7 @@ export const resolveOnboardingProfileDetail = mutation({
     const user = (await ctx.db.get(actor.dbUserId)) as UserRow | null;
     if (!user) throwProfileMutationError("user_not_found");
 
-    const existingDetail = (await ctx.db
-      .query("userProfileDetails")
-      .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
-      .first()) as ProfileDetailRow | null;
+    const existingDetail = await findProfileDetailByUserId(ctx, actor.dbUserId);
 
     return await mapProfileDetailWithSetup(ctx, user, existingDetail);
   },
@@ -433,10 +428,7 @@ export const getMyAccountSetupStatus = query({
     });
     const user = (await ctx.db.get(userId)) as UserRow | null;
     if (!user) throwProfileMutationError("user_not_found");
-    const detail = (await ctx.db
-      .query("userProfileDetails")
-      .withIndex("by_user", (q: any) => q.eq("userId", userId))
-      .first()) as ProfileDetailRow | null;
+    const detail = await findProfileDetailByUserId(ctx, userId);
     return await loadAccountSetupStatusForUser(ctx, user, detail);
   },
 });
@@ -517,10 +509,7 @@ export const upsertProfileDetail = mutation({
     }
     await ctx.db.patch(actor.dbUserId, userPatch);
 
-    const existingDetail = (await ctx.db
-      .query("userProfileDetails")
-      .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
-      .first()) as ProfileDetailRow | null;
+    const existingDetail = await findProfileDetailByUserId(ctx, actor.dbUserId);
     if (args.avatarStorageId) {
       await assertProfileAvatarStorageResolvable(ctx, args.avatarStorageId);
     }

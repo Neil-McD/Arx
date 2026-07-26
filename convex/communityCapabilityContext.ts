@@ -18,9 +18,16 @@ import {
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import {
   listCommunitySemanticRoot,
+  parsePolynetSemanticPath,
+  POLYNET_SELF_PROFILE_PATH,
   readCommunitySemanticDocument,
   type CommunitySemanticSource,
+  type SelfProfileCommunitySummary,
+  type SelfProfileSemanticSource,
 } from "../shared/communitySemanticRepository";
+import { normalizeSocialProfileLinks } from "../shared/socialProfileLinks";
+import { getUniqueUserProfileDetailByUserId } from "./profileCore";
+import { resolveViewerProfileRelationship } from "./profileRelationshipCore";
 
 export type {
   CommunityCapabilityContextErrorCode,
@@ -183,6 +190,78 @@ function buildCommunitySemanticSource(args: {
   };
 }
 
+type SelfProfileUserRow = {
+  _id: any;
+  displayName?: string;
+  handle?: string;
+};
+
+type SelfProfileDetailRow = {
+  displayName?: string;
+  bio?: string;
+  socialLinks?: Record<string, unknown>;
+};
+
+function mapSelfProfileCommunitySummary(
+  row: { slug?: string | null; name?: string | null },
+): SelfProfileCommunitySummary | null {
+  const slug = String(row.slug ?? "").trim().toLowerCase();
+  const name = String(row.name ?? "").trim();
+  return slug && name ? { slug, name } : null;
+}
+
+function normalizeSelfProfileRole(
+  value: unknown,
+): SelfProfileSemanticSource["currentCommunity"]["role"] {
+  return value === "owner" ||
+    value === "admin" ||
+    value === "moderator"
+    ? value
+    : "member";
+}
+
+async function buildSelfProfileSemanticSource(args: {
+  ctx: any;
+  userId: any;
+  context: ResolvedCommunityCapabilityContext;
+}): Promise<SelfProfileSemanticSource> {
+  const [user, detail, relationship] = await Promise.all([
+    args.ctx.db.get(args.userId) as Promise<SelfProfileUserRow | null>,
+    getUniqueUserProfileDetailByUserId<SelfProfileDetailRow>(
+      args.ctx,
+      args.userId,
+    ),
+    resolveViewerProfileRelationship({
+      ctx: args.ctx,
+      viewerUserId: args.userId,
+      targetUserId: args.userId,
+      preferredCommunityId: args.context.communityId,
+    }),
+  ]);
+  if (!user) throw new Error("self_profile_user_not_found");
+  const ownedCommunities = relationship.owned_communities
+    .map(mapSelfProfileCommunitySummary)
+    .filter((row): row is SelfProfileCommunitySummary => Boolean(row));
+  const accessibleCommunities = relationship.mutual_communities
+    .map(mapSelfProfileCommunitySummary)
+    .filter((row): row is SelfProfileCommunitySummary => Boolean(row));
+  return {
+    displayName: detail?.displayName ?? user.displayName ?? null,
+    handle: user.handle ?? null,
+    bio: detail?.bio ?? null,
+    socialLinks: normalizeSocialProfileLinks(detail?.socialLinks ?? {}),
+    currentCommunity: {
+      slug: args.context.communitySlug,
+      name:
+        String(args.context.membership.communities.name ?? "").trim() ||
+        "Community",
+      role: normalizeSelfProfileRole(args.context.membership.role),
+    },
+    ownedCommunities,
+    accessibleCommunities,
+  };
+}
+
 export const resolveCommunitySemanticRepositoryInternal = internalQuery({
   args: {
     authSubject: v.string(),
@@ -221,11 +300,36 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
         message: "Community not found or not accessible.",
       };
     }
-    return args.operation === "list"
-      ? listCommunitySemanticRoot({ path: args.path })
-      : readCommunitySemanticDocument({
-          source: buildCommunitySemanticSource({ context: resolved.context }),
-          path: args.path,
+    if (args.operation === "list") {
+      return listCommunitySemanticRoot({ path: args.path });
+    }
+    const parsedPath = parsePolynetSemanticPath(args.path);
+    if (!parsedPath.ok) return parsedPath;
+    let selfProfile: SelfProfileSemanticSource | null = null;
+    if (parsedPath.path === POLYNET_SELF_PROFILE_PATH) {
+      try {
+        const actorUserId = await resolveUserIdForAuthenticatedRequest({
+          ctx,
+          userId: args.userId,
+          authSubject: args.authSubject,
         });
+        selfProfile = await buildSelfProfileSemanticSource({
+          ctx,
+          userId: actorUserId,
+          context: resolved.context,
+        });
+      } catch {
+        return {
+          ok: false as const,
+          code: "semantic_context_unavailable" as const,
+          message: "Semantic profile not available.",
+        };
+      }
+    }
+    return readCommunitySemanticDocument({
+      source: buildCommunitySemanticSource({ context: resolved.context }),
+      selfProfile,
+      path: parsedPath.path,
+    });
   },
 });

@@ -20,7 +20,6 @@ import {
   transitionMemberFactConsent,
   type MemberFactRow,
 } from "./memberOntologyCore";
-import { renderMemberContextMarkdown } from "../shared/memberContextMarkdown";
 import {
   buildPolynetProfileFactBatchKey,
   normalizePolynetProfileConfirmInput,
@@ -297,56 +296,5 @@ export const getMemberOrientation = query({
       spine,
       facts: facts.map(mapFactForOutput),
     };
-  },
-});
-
-/* The exact artifact slice 5 injects into the guide's context, and the same
-   one the member sees as "what Polynet knows about me". Self lens. */
-export const getMyMemberContextMarkdown = query({
-  args: {
-    authSubject: v.optional(v.string()),
-    communityId: v.optional(v.id("communities")),
-    includeBillingContext: v.optional(v.boolean()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const [account, facts, community] = await Promise.all([
-      loadMemberAccountContext(ctx, userId, Date.now()),
-      readMemberFactsForLens(ctx, { subjectUserId: userId, lens: { kind: "self" } }),
-      args.communityId ? ctx.db.get(args.communityId) : Promise.resolve(null),
-    ]);
-    const rendered = renderMemberContextMarkdown({
-      account,
-      facts,
-      lens: { kind: "self" },
-      communityId: args.communityId ? String(args.communityId) : null,
-      communityName: community?.name ?? null,
-      includeBillingContext: args.includeBillingContext !== false,
-    });
-    return {
-      member_md: rendered.memberMd,
-      community_md: rendered.communityMd,
-    };
-  },
-});
-
-export const getMyMemberFacts = query({
-  args: {
-    authSubject: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const facts = await readMemberFactsForLens(ctx, {
-      subjectUserId: userId,
-      lens: { kind: "self" },
-    });
-    const spine = await readMemberSpine(ctx, userId);
-    return { spine, facts: facts.map(mapFactForOutput) };
   },
 });

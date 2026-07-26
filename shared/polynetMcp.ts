@@ -362,7 +362,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
             properties: {
               path: {
                 type: "string",
-                enum: ["/community.md"],
+                enum: ["/community.md", "/self.md"],
               },
               kind: {
                 type: "string",
@@ -394,8 +394,8 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
         community_slug: SEMANTIC_COMMUNITY_SLUG_SCHEMA,
         path: {
           type: "string",
-          enum: ["/community.md"],
-          description: "The implemented community profile document.",
+          enum: ["/community.md", "/self.md"],
+          description: "An implemented community or authenticated-self profile document.",
         },
       },
     },
@@ -406,7 +406,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
       properties: {
         path: {
           type: "string",
-          enum: ["/community.md"],
+          enum: ["/community.md", "/self.md"],
         },
         body: {
           type: "string",

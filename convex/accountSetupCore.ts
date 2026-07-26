@@ -8,6 +8,7 @@ import {
   hasAcceptedCurrentPlatformLegalFromRows,
   listPlatformLegalAcceptancesForUser,
 } from "./legalAcceptances";
+import { getUniqueUserProfileDetailByUserId } from "./profileCore";
 
 export type AccountSetupUserRow = {
   _id: any;
@@ -86,10 +87,7 @@ export function isProfileSetupCompleteForRows(
 export async function requireProfileSetupCompleteForUser(ctx: any, userId: any): Promise<void> {
   const [user, detail, legalAcceptances] = (await Promise.all([
     ctx.db.get(userId),
-    ctx.db
-      .query("userProfileDetails")
-      .withIndex("by_user", (q: any) => q.eq("userId", userId))
-      .first(),
+    getUniqueUserProfileDetailByUserId<AccountSetupProfileDetailRow>(ctx, userId),
     listPlatformLegalAcceptancesForUser(ctx, userId),
   ])) as [AccountSetupUserRow | null, AccountSetupProfileDetailRow | null, AccountSetupLegalAcceptanceRow[]];
   if (!isProfileSetupCompleteForRows(user, detail, legalAcceptances)) {
@@ -100,10 +98,7 @@ export async function requireProfileSetupCompleteForUser(ctx: any, userId: any):
 export async function loadAccountSetupStatusForUserId(ctx: any, userId: any): Promise<AccountSetupStatus> {
   const [user, detail] = (await Promise.all([
     ctx.db.get(userId),
-    ctx.db
-      .query("userProfileDetails")
-      .withIndex("by_user", (q: any) => q.eq("userId", userId))
-      .first(),
+    getUniqueUserProfileDetailByUserId<AccountSetupProfileDetailRow>(ctx, userId),
   ])) as [AccountSetupUserRow | null, AccountSetupProfileDetailRow | null];
   if (!user) {
     throw new Error("user_not_found");

@@ -167,8 +167,9 @@ must never become actionable context merely because an agent is reading.
    inside the server-side profile completion mutation so profile state and
    ontology seed facts share one deterministic write path. Bridge identity
    fields, legal acceptance, inference provider, tier, memberships, and browser
-   timezone remain account/profile context for `member.md`; they are not
-   duplicated as ledger facts.
+   timezone remain account/profile context; they are not duplicated as ledger
+   facts. The agent-readable display profile is a separate projection of the
+   same human profile and relationship truth. It does not read this ledger.
 2. **Interview confirmation** → batch of `stated_interview` / `form_answer`
    facts, community scope, born approved-in-scope. The dormant
    `member_profile_confirm_facts` runtime primitive delegates to the same

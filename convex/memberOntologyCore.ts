@@ -17,9 +17,24 @@ import {
   type MemberFactProvenance,
   type MemberOntologyLens,
 } from "../shared/memberOntology";
-import type { MemberAccountContextLike } from "../shared/memberContextMarkdown";
 import { readCanonicalAccountTier } from "./accountEntitlementCore";
 import { communityMembershipRowIsActive } from "./communityCore";
+import { getUniqueUserProfileDetailByUserId } from "./profileCore";
+
+export type MemberAccountContextLike = {
+  displayName: string | null;
+  handle: string | null;
+  tier: "premium" | "free";
+  timezone: string | null;
+  inferenceProvider: "chatgpt" | "openai" | null;
+  socialLinks: string[];
+  memberships: Array<{
+    communityName: string;
+    role: string;
+    accessSource: string;
+  }>;
+  ownedCommunities: Array<{ name: string }>;
+};
 
 export type MemberFactRow = MemberFactLike & {
   _id: any;
@@ -292,10 +307,7 @@ export async function loadMemberAccountContext(
   const [user, detail, providerConnections, membershipRows, ownedRows, canonicalTier] =
     await Promise.all([
       ctx.db.get(userId),
-      ctx.db
-        .query("userProfileDetails")
-        .withIndex("by_user", (q: any) => q.eq("userId", userId))
-        .first(),
+      getUniqueUserProfileDetailByUserId(ctx, userId),
       ctx.db
         .query("userProviderConnections")
         .withIndex("by_user", (q: any) => q.eq("userId", userId))
