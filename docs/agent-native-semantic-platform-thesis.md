@@ -187,24 +187,24 @@ An active community should feel to an agent like a checked-out code repository:
 one explicit community context, one deterministic directory, progressive
 inspection, and no path that can escape into another community.
 
-The first planned namespace is deliberately small:
+The current staging namespace is deliberately small:
 
 ```text
 /
 |- community.md
 |- self.md
+|- members/
 `- resources/
    `- <category>/<resource>.md
 ```
 
-This namespace is `NEXT`, not implemented on the current staging lane. A mount
-exists only after its canonical data, semantic representation, authorization,
-bounds, and proof are real. Empty placeholder directories must not imply
-capabilities that do not exist.
+This namespace is `IMPLEMENTED`. A mount exists only after its canonical data,
+semantic representation, authorization, bounds, and proof are real. Empty
+placeholder directories must not imply capabilities that do not exist.
 
 The self profile remains user-owned even when projected inside a community.
-Future other-member projections are community-scoped and must not expose
-self-only facts.
+Other-member projections under `/members/` are community-scoped and must not
+expose self-only facts.
 
 A readable path is a current location. A canonical semantic URI or typed
 reference is stable identity. Renaming a community, category, handle, or
@@ -240,8 +240,10 @@ Act
 `- polynet_call
 ```
 
-Only bounded `polynet_list` and `polynet_read` are `NEXT`. They initially serve
-only real community, self, and resource mounts.
+Bounded `polynet_list` and `polynet_read` are `IMPLEMENTED` on the staging
+source path. They serve only real community, self, member-directory, and
+resource mounts. The later `/members/` addition followed explicit user
+direction and remains a bounded profile projection, not a generic row browser.
 
 `polynet_search` is `PROPOSED` after list/read. It returns bounded authorized
 references/snippets and revalidates canonical truth; an index is a locator, not
@@ -351,30 +353,35 @@ The labels mean:
 | Separate personal-agent and community-agent identities | `IMPLEMENTED` | delegated personal authority does not create agent membership |
 | Fail-closed community context and authority resolution | `IMPLEMENTED` | current bounded community read/capability seams are the reuse point |
 | Canonical cloud authority for identity, access, money, and history | `IMPLEMENTED` | remaining domain migrations are tracked separately |
-| Stable resource references and permissioned resource reads | `IMPLEMENTED` | resource-body dual authority must be removed before the mount is complete |
+| Stable resource references and permissioned resource reads | `IMPLEMENTED` | exact stable-reference reads hydrate the sole canonical resource-content owner |
 | Domain/runtime events and receipts | `IMPLEMENTED` | a generalized cross-surface receipt projection is not implemented |
-| One read-only semantic namespace for community/self/resources | `NEXT` | requires canonical data and adapter convergence; no current generic mount |
-| Deterministic `community.md` and `self.md` resources | `NEXT` | isolated candidate work exists off-branch only |
-| Bounded `polynet_list` and `polynet_read` | `NEXT` | must reuse current authority/read kernels |
+| One read-only semantic namespace for community/self/members/resources | `IMPLEMENTED` | hard-coded mounts reuse canonical owners; wider mounts remain separately gated |
+| Deterministic `community.md` and `self.md` resources | `IMPLEMENTED` | current actor and community authority are revalidated on every read |
+| Bounded `polynet_list` and `polynet_read` | `IMPLEMENTED` | native and official MCP adapters share semantic owners and fail closed |
 | One generalized capability definition/projection seam | `NEXT` | first collapse duplicated native/MCP declarations |
 | Bounded `polynet_search` | `PROPOSED` | only after list/read and canonical truth revalidation exist |
 | Naturally scoped `polynet_write` | `PROPOSED` | typed domain mutations remain canonical |
 | Discoverable `polynet_call` | `PROPOSED` | no undiscoverable mega-tool behavior |
-| Member, memory, activity, capability, app, workflow, event, and UI mounts | `PROPOSED` | each requires a real semantic and authority contract |
+| Memory, activity, capability, app, workflow, event, and UI mounts | `PROPOSED` | each requires a real semantic and authority contract |
 | External apps integrating once through resources/capabilities/events/surfaces | `PROPOSED` | prove one real integration before generalizing |
 | Independently enrolled agent/service community members | `DEFERRED` | current membership remains user-based |
 | Arbitrary hosted community code or an unrestricted component platform | `DEFERRED` | not required for MVP |
 | Standalone general-purpose Workspace destination | `DEFERRED` | protected harness/thread substrate and bounded compatibility remain |
 
-### Exact current-source caveat
+### Implementation-lineage caveat
 
 At reconciliation baseline `3bcbbf63ee00943803fc1efb68a5ea6de9193144`,
-the current staging branch does not contain the isolated community/self profile
-and runtime-orientation commits `3d5286a6`, `618c249f`, `9783f548`, `bb45ee9c`,
-or `424f9d4b`. They are candidate implementation input, not current staging,
-`origin/main`, deployment, or production truth. Future work must classify their
-logic as reuse, adapt, or discard against the cleaned authority model; it must
-not merge them blindly.
+the staging branch did not contain the isolated community/self profile and
+runtime-orientation commits `3d5286a6`, `618c249f`, `9783f548`, `bb45ee9c`, or
+`424f9d4b`. Those commits were never merged blindly.
+
+The current C6 implementation instead landed as bounded staging slices from
+`b12736e7` through `12b23889`, followed by the locally proved native-tool
+convergence commit `90badc0b`. The implementation reuses canonical authority
+and read owners, adds no semantic Markdown store or generic mount registry, and
+keeps external workspace-MCP compatibility separate from the two-tool native
+surface. Deployment and live proof of `90badc0b` remain distinct from its local
+source proof.
 
 ## Cleanup-led implementation sequence
 
@@ -386,7 +393,7 @@ now. Execution follows `docs/polynet-reduction-execution-contract-v1.md`:
 3. remove competing resource, interaction, and intelligence authorities;
 4. make scheduled/operational work eventually fair and bounded;
 5. collapse duplicated capability, transport, and public-function surfaces;
-6. land bounded list/read for only the three accepted initial mounts;
+6. maintain bounded list/read for only the four currently accepted mounts;
 7. expand search, writes, calls, mounts, and adapters only from demonstrated
    need;
 8. delete deferred Workspace/UI/docs/configuration surface before decomposing

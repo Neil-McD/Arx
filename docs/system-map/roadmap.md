@@ -8,7 +8,7 @@ The aggregate staging shape work in Step 0 is complete for identity/membership c
 
 ## Current implementation checkpoint
 
-**Current authority — 2026-07-24:** C3 is complete through canonical resource,
+**Current authority — 2026-07-26:** C3 is complete through canonical resource,
 interaction, attachment, evidence, retrieval, digest, and intelligence
 reconciliation. C2.3A preservation coverage and C2.3B1 derived-read revocation
 containment are complete on the isolated staging lane.
@@ -26,6 +26,32 @@ its immediate replay performed zero work, the temporary migration was deleted,
 and the contracted audit found zero stored payloads, zero stored recipient
 emails, and zero nonterminal rows. The executable foundation baseline now has
 40 steps.
+
+C6 semantic behavior is live on staging through `12b23889`: the native member
+agent and official MCP expose bounded `polynet_list` and `polynet_read` over
+`/community.md`, `/self.md`, `/members/`, and `/resources/`. The four mounts
+reuse canonical identity, access, profile, resource-content, and evidence
+owners; they add no second Markdown store, mount registry, repository UI,
+search/write/call primitive, shell bridge, or new authority.
+
+An explicitly authorized disposable categorized resource proved native and
+official-MCP path/ref parity, full and windowed reads, truthful continuation,
+cross-community denial, traversal rejection, and both evidence surfaces. The
+fixture was returned to draft and deleted through the normal UI; the stable ref
+then failed closed and the two preexisting `Needs sorting` pages remained
+untouched.
+
+C6.4 convergence is locally proved at `90badc0b`. It deletes the duplicate
+native `community_resources_map`, `community_resources_list`, and
+`community_resource_read` surfaces while preserving resource search, bounded
+batch read, builder tools, external workspace-MCP compatibility, historical
+decoding, and evidence vocabulary. It also exposes the already-supported
+bounded `offset` and `limit` arguments in the native `polynet_read` schema.
+Focused contracts and the 40-step foundation baseline pass. C6 is not complete
+until this candidate is deployed to staging and authenticated native/MCP
+acceptance plus retired-name absence are re-proved. The detailed boundary and
+receipts live in
+[`16-read-only-semantic-community-repository-map-20260725.md`](16-read-only-semantic-community-repository-map-20260725.md).
 
 Production compatibility work is intentionally paused after PC3D. The active
 lane is staging cleanup only: do not resume PC3E, query production, integrate

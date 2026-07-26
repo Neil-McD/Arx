@@ -2,7 +2,7 @@
 
 Status: active execution tracker; not product or architecture authority
 
-Last verified: 2026-07-24
+Last verified: 2026-07-26
 
 ## 1. Irreducible job
 
@@ -77,17 +77,20 @@ Canonical state
 ```
 
 The intended community experience is a virtual, permissioned repository. It is
-not a second mutable filesystem or database. The first admissible read-only
-namespace is expected to be no larger than:
+not a second mutable filesystem or database. The current admissible read-only
+namespace is:
 
 ```text
 /
 |- community.md
 |- self.md
+|- members/
 `- resources/
 ```
 
-The accepted first generic harness contains only bounded
+The original three-mount boundary was later expanded by explicit user direction
+to include bounded other-member profile projections under `/members/`. The
+accepted generic harness still contains only bounded
 `polynet_list` and `polynet_read`. Search, document writes, capability calls,
 additional mounts, and generated adapters require separate evidence and
 authorization.
@@ -139,12 +142,15 @@ platform substrate:
   resumable replacements do not yet exist;
 - interaction, resource-content, intelligence, capability/transport,
   Workspace-surface, scheduler, recovery, and frontend debt remain;
-- a reusable community context/read seam exists, but the generalized semantic
-  namespace and irreducible tool harness are not current staging architecture.
+- the generalized semantic namespace and irreducible two-tool harness are live
+  on staging through `12b23889`; the native duplicate-tool convergence at
+  `90badc0b` is locally proved but not yet deployed.
 
-### 4.3 Directional baseline score
+### 4.3 Historical directional baseline score
 
-These are audit judgments, not measured service-level indicators:
+These are audit judgments from baseline
+`3bcbbf63ee00943803fc1efb68a5ea6de9193144`, not measured service-level
+indicators. The C6 receipt in section 10 owns newer semantic-platform truth.
 
 | Dimension | Baseline | Principal reason it is not 8+ |
 | --- | ---: | --- |
@@ -160,17 +166,19 @@ and the remaining reason the score is not higher.
 
 ## 5. Causal milestone ledger
 
-Exactly one milestone or bounded sub-slice may be `IN_PROGRESS`.
+Exactly one milestone or bounded sub-slice may be `IN_PROGRESS`. Evidence-state
+labels are used when source, local proof, upstream, deployment, and live proof
+must remain distinct.
 
 | ID | Outcome | Status | Exit boundary |
 | --- | --- | --- | --- |
 | C0 | Reconcile and adopt one architecture thesis | `COMPLETE` | one repository contract distinguishes implemented, next, proposed, and deferred architecture without attachment/chat dependency |
 | C1 | Finish paid-access proof and ordinary creator settlement | `DEFERRED_ACCEPTED` | implementation accepted for sequencing; the unperformed live checkout/cancellation and Connect-settlement evidence remains explicit under U-017 |
-| C2 | Complete resumable deletion and privacy lifecycles | `IN_PROGRESS` | interruption-safe phases, external revocation, privacy propagation, invariant audit, and root-last finalization |
+| C2 | Complete resumable deletion and privacy lifecycles | `PAUSED_INCOMPLETE` | interruption-safe phases, external revocation, privacy propagation, invariant audit, and root-last finalization |
 | C3 | Finish canonical resource, interaction, and intelligence migrations | `COMPLETE` | one authority per concern and zero compatibility reads/writes through an observation window |
-| C4 | Guarantee scheduler fairness and bounded operations | `PLANNED` | every eligible object eventually receives service across caps and restarts; operator work is bounded |
-| C5 | Collapse capability, transport, and public-function duplication | `PLANNED` | one authority/executor/receipt owner per semantic operation with thin versioned adapters |
-| C6 | Land the read-only semantic community repository | `PLANNED` | bounded authorized list/read of only real initial mounts across native and external surfaces |
+| C4 | Guarantee scheduler fairness and bounded operations | `SOURCE_IMPLEMENTED` | implementation landed; formal closure and current evidence reconciliation remain |
+| C5 | Collapse capability, transport, and public-function duplication | `SOURCE_IMPLEMENTED` | substantial cleanup landed; formal closure and current evidence reconciliation remain |
+| C6 | Land the read-only semantic community repository | `LOCALLY_PROVED` | namespace behavior is live through `12b23889`; native duplicate-tool convergence at `90badc0b` still requires staging deployment and post-deploy proof |
 | C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `PLANNED` | every retained surface maps to an MVP journey or protected substrate |
 | C8 | Decompose and optimize retained frontend/backend surfaces | `PLANNED` | lower concentration and change fan-out without creating new authority |
 | C9 | Prove backup, restore, RPO/RTO, and operational recovery | `PLANNED` | isolated recovery drills and owned runbooks meet accepted targets |
@@ -196,8 +204,8 @@ The key reductions were:
   services, tables, or generalized registries;
 - the virtual repository is a projection over canonical state, never a second
   mutable store;
-- only `community.md`, `self.md`, and `resources/` are accepted initial mounts;
-- only bounded `polynet_list` and `polynet_read` are next;
+- only `community.md`, `self.md`, and `resources/` were accepted initial mounts;
+- only bounded `polynet_list` and `polynet_read` were accepted next;
 - search, writes, calls, wider mounts, extension primitives, and independently
   enrolled agent/service members remain proposed or deferred;
 - protected Workspace/harness substrate remains, while the standalone
@@ -260,6 +268,7 @@ change for the platform-wide baseline.
 | D-006 | Preserve protected Workspace/harness substrate but not the standalone destination | `ACCEPTED` | resolves N-005 and F-013 without deleting protected core |
 | D-007 | Make subscription lifecycle recovery the first C1 sub-slice | `SUPERSEDED BY D-008` | the bounded queue was implemented, then rejected after first-principles review because it duplicated Stripe delivery retry and could not recover events that never reached the endpoint |
 | D-008 | Keep Stripe delivery retry plus idempotent current-provider convergence as the MVP recovery boundary | `ACCEPTED` | processing failures remain non-2xx; a broader reconciliation mechanism requires observed operational evidence and separate authorization |
+| D-009 | Add bounded other-member profiles under `/members/` without widening the two-tool harness | `ACCEPTED` | explicit later user direction; current source reuses member-profile authority and keeps other proposed mounts gated |
 
 Superseded decisions remain visible with a pointer to their replacement. Never
 rewrite a historical decision to make the sequence look cleaner than it was.
@@ -312,10 +321,12 @@ At the end of every future slice:
 4. name the next causal slice, but do not authorize it;
 5. confirm whether staging, production, data, or configuration changed.
 
-Allowed milestone statuses are `PLANNED`, `IN_PROGRESS`, `BLOCKED`,
-`COMPLETE`, and `SUPERSEDED`. `DEFERRED_ACCEPTED` records an explicit human
-decision to move on without representing the missing exit evidence as complete.
-`PLANNED_LAST` is permitted only for an explicit human sequencing decision.
+Allowed milestone lifecycle statuses are `PLANNED`, `IN_PROGRESS`,
+`PAUSED_INCOMPLETE`, `BLOCKED`, `COMPLETE`, and `SUPERSEDED`.
+`DEFERRED_ACCEPTED` records an explicit human decision to move on without
+representing the missing exit evidence as complete. `PLANNED_LAST` is permitted
+only for an explicit human sequencing decision. The evidence states in section
+8 may replace a lifecycle status when release truth needs finer resolution.
 Avoid percentages and “mostly complete.”
 
 ## 10. Current next action
@@ -1201,3 +1212,48 @@ Account lifecycle policy v8 records the corresponding schema contraction:
 `emailDeliveries` no longer owns an opaque provider payload. The current
 contract covers 124 tables, 118 direct user-reference edges, 38 unindexed
 edges, 25 opaque fields, and seven storage fields.
+
+### C6 current receipt — locally proved
+
+C6 semantic behavior is live on staging through `12b23889`. The implementation
+chain from `b12736e7` through `12b23889` provides `polynet_list`,
+`polynet_read`, `/community.md`, `/self.md`, `/members/`, `/resources/`, stable
+resource refs, exact stable reads, cursorable traversal, deterministic
+Markdown, fail-closed authorization, native member-agent execution, and
+official MCP execution. It adds no semantic Markdown store, generic mount
+registry, search/write/call primitive, repository UI, shell bridge, or new
+canonical authority.
+
+On 2026-07-26, an explicitly authorized disposable staging category and page
+proved the positive resource journey that had previously been missing. Native
+and official-MCP listing returned the same category path and stable resource
+ref. Native exact read returned the full 104-character body. Official MCP
+returned a truthful 80-character first window and a 24-character continuation.
+Cross-community stable refs failed closed, traversal input was rejected, and
+audited reads produced both `member_agent_dock` and `external_mcp` evidence
+receipts. Moving the category to draft immediately made the stable read
+unavailable. The page and category were then deleted through the normal UI;
+`/resources/` returned empty and the stable ref remained unavailable.
+
+The live gate also found one declaration defect: native `polynet_read`
+normalization and dispatch already supported bounded `offset` and `limit`, but
+its published schema did not. The convergence candidate exposes those
+arguments and retires exactly three duplicate native tools:
+`community_resources_map`, `community_resources_list`, and
+`community_resource_read`.
+
+Commit `90badc0b` is the isolated convergence candidate: 24 files, 97
+insertions, 442 deletions. It preserves `community_resources_search`,
+`community_resources_read`, every builder tool, every external
+`polynet_workspace_resources_*` compatibility tool, historical timeline and
+context-receipt decoding, and the `community_resource_read` evidence-capability
+literal. Focused semantic, traversal, resource, evidence, prompt, policy,
+runtime, native/MCP, typecheck, staging-identity, and staging-proof contracts
+pass, as does the 40-step foundation baseline.
+
+C6 therefore remains `LOCALLY_PROVED`, not complete. `90badc0b` has not been
+deployed. The remaining receipt is: obtain a clean documentation state, rerun
+release guards, deploy Convex staging first, push the staging branch, verify the
+Vercel version marker, repeat authenticated native and official-MCP list/read,
+and confirm the three retired native names do not appear in new runtime tool
+events. Production remains untouched and out of scope.
