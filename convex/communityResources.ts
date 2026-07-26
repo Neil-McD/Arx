@@ -91,6 +91,8 @@ const COMMUNITY_RESOURCE_DIRECTORY_TOOL_DEFAULT_LIMIT = 50;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_MAX_LIMIT = 100;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_SCAN_LIMIT = 5000;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_MODULE_SCAN_LIMIT = 500;
+const COMMUNITY_RESOURCE_SEMANTIC_TRAVERSAL_DEFAULT_LIMIT = 24;
+const COMMUNITY_RESOURCE_SEMANTIC_TRAVERSAL_MAX_LIMIT = 50;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_DEFAULT_CHARS = 12_000;
 const COMMUNITY_RESOURCE_DIRECTORY_TOOL_READ_MAX_CHARS = 20_000;
 const COMMUNITY_RESOURCE_MAP_DEFAULT_LIMIT = 100;
@@ -3344,6 +3346,163 @@ async function listResourceDirectoryLivePageResources(
     .sort(compareCommunityResources);
 }
 
+function normalizeCommunityResourceSemanticTraversalLimit(raw: unknown): number {
+  const parsed = Math.floor(
+    Number(raw ?? COMMUNITY_RESOURCE_SEMANTIC_TRAVERSAL_DEFAULT_LIMIT),
+  );
+  if (!Number.isFinite(parsed)) {
+    return COMMUNITY_RESOURCE_SEMANTIC_TRAVERSAL_DEFAULT_LIMIT;
+  }
+  return Math.max(
+    1,
+    Math.min(COMMUNITY_RESOURCE_SEMANTIC_TRAVERSAL_MAX_LIMIT, parsed),
+  );
+}
+
+function normalizeCommunityResourceSemanticTraversalCursor(
+  raw: unknown,
+): string | null {
+  const cursor = String(raw ?? "").trim();
+  if (cursor.length > 2_048) {
+    throw new Error("community_resource_semantic_cursor_invalid");
+  }
+  return cursor || null;
+}
+
+function mapCommunityResourceSemanticModuleEntry(args: {
+  communityId: any;
+  module: CommunityResourceModuleLike;
+}) {
+  const directory = buildCommunityResourceModuleDirectoryFields({
+    communityId: normalizeIdValue(args.communityId),
+    moduleId: normalizeIdValue(args.module._id),
+    moduleName: args.module.name,
+  });
+  return {
+    kind: "directory" as const,
+    name: args.module.name,
+    directory_path: directory.directory_path,
+    directory_uri: directory.directory_uri,
+  };
+}
+
+function mapCommunityResourceSemanticPageEntry(args: {
+  communityId: any;
+  module: CommunityResourceModuleLike;
+  resource: CommunityResourceLike;
+}) {
+  const resourceId = normalizeIdValue(args.resource._id);
+  const directory = buildCommunityResourceDirectoryFields({
+    communityId: normalizeIdValue(args.communityId),
+    moduleId: normalizeIdValue(args.module._id),
+    moduleName: args.module.name,
+    resourceId,
+    resourceTitle: args.resource.title,
+    resourceRole: "page",
+  });
+  return {
+    kind: "document" as const,
+    title: args.resource.title,
+    ref: buildCommunityResourceEvidenceRef(resourceId),
+    directory_path: directory.directory_path,
+    directory_uri: directory.directory_uri,
+  };
+}
+
+/**
+ * Cursorable canonical traversal for the future `/resources/` semantic mount.
+ * This owns no new product state and deliberately excludes bodies, sources,
+ * builder state, counts, and readable-path resolution.
+ */
+export async function listCommunityResourceSemanticDirectoryCore(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+  moduleId?: any;
+  cursor?: string | null;
+  limit?: number | null;
+}) {
+  await requireCommunityResourceDirectoryToolAccess({
+    ctx: args.ctx,
+    userId: args.userId,
+    communityId: args.communityId,
+  });
+  const cursor = normalizeCommunityResourceSemanticTraversalCursor(args.cursor);
+  const limit = normalizeCommunityResourceSemanticTraversalLimit(args.limit);
+
+  if (!args.moduleId) {
+    const page = await args.ctx.db
+      .query("communityResourceModules" as any)
+      .withIndex("by_community_sortOrder", (q: any) =>
+        q.eq("communityId", args.communityId),
+      )
+      .order("asc")
+      .paginate({
+        cursor,
+        numItems: limit,
+        maximumRowsRead: limit,
+      });
+    return {
+      scope: "modules" as const,
+      entries: (page.page as CommunityResourceModuleLike[])
+        .filter(communityResourceModuleIsLive)
+        .map((module) =>
+          mapCommunityResourceSemanticModuleEntry({
+            communityId: args.communityId,
+            module,
+          }),
+        ),
+      next_cursor: page.isDone ? null : page.continueCursor,
+      truncated: !page.isDone,
+    };
+  }
+
+  const module = (await args.ctx.db.get(
+    args.moduleId as any,
+  )) as CommunityResourceModuleLike | null;
+  if (
+    !module ||
+    normalizeIdValue(module.communityId) !== normalizeIdValue(args.communityId) ||
+    !communityResourceModuleIsLive(module)
+  ) {
+    throw new Error("community_resource_semantic_module_not_found");
+  }
+  const page = await args.ctx.db
+    .query("communityResources" as any)
+    .withIndex("by_community_module_sortOrder", (q: any) =>
+      q
+        .eq("communityId", args.communityId)
+        .eq("moduleId", args.moduleId),
+    )
+    .order("asc")
+    .paginate({
+      cursor,
+      numItems: limit,
+      maximumRowsRead: limit,
+    });
+  const liveModuleIds = new Set([normalizeIdValue(module._id)]);
+  return {
+    scope: "resources" as const,
+    module: mapCommunityResourceSemanticModuleEntry({
+      communityId: args.communityId,
+      module,
+    }),
+    entries: (page.page as CommunityResourceLike[])
+      .filter((resource) =>
+        communityResourceIsLiveModulePage(resource, liveModuleIds),
+      )
+      .map((resource) =>
+        mapCommunityResourceSemanticPageEntry({
+          communityId: args.communityId,
+          module,
+          resource,
+        }),
+      ),
+    next_cursor: page.isDone ? null : page.continueCursor,
+    truncated: !page.isDone,
+  };
+}
+
 async function listResourceDirectoryAllResources(
   ctx: any,
   communityId: any,
@@ -4179,6 +4338,25 @@ export const listCommunityResourceDirectoryInternal = internalQuery({
       entries,
     };
   },
+});
+
+export const listCommunityResourceSemanticDirectoryInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    moduleId: v.optional(v.id("communityResourceModules")),
+    cursor: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) =>
+    await listCommunityResourceSemanticDirectoryCore({
+      ctx,
+      userId: args.userId,
+      communityId: args.communityId,
+      moduleId: args.moduleId,
+      cursor: args.cursor,
+      limit: args.limit,
+    }),
 });
 
 export const mapCommunityResourcesForToolInternal = internalQuery({

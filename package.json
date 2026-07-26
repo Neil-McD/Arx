@@ -215,6 +215,7 @@
     "check:runtime-tool-scheduler-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_scheduler_proof.ts",
     "check:runtime-provider-tool-surface-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_provider_tool_surface_proof.ts",
     "check:community-semantic-repository-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_semantic_repository_contract_proof.ts",
+    "test:community-resource-semantic-traversal": "vitest run convex/communityResourceSemanticTraversal.test.ts",
     "check:native-tool-provider-parser-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/native_tool_provider_parser_proof.ts",
     "check:community-app-lifecycle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_app_lifecycle_contract_proof.ts",
     "check:community-skill-attachment-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_skill_attachment_contract_proof.ts",

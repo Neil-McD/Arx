@@ -2504,6 +2504,7 @@ export default defineSchema({
   })
     .index("by_community", ["communityId"])
     .index("by_community_module", ["communityId", "moduleId"])
+    .index("by_community_module_sortOrder", ["communityId", "moduleId", "sortOrder"])
     .index("by_community_role_status", ["communityId", "role", "status"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])

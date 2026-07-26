@@ -178,8 +178,8 @@ assert.doesNotMatch(resources, /export const searchCommunityResourceDirectoryInt
 assert.match(resourceEvidence, /export const searchCommunityResourceEvidenceInternal = internalAction/);
 assert.equal(
   (resources.match(/await requireCommunityResourceDirectoryToolAccess/g) ?? []).length,
-  5,
-  "four member resource queries and the explicit builder map should revalidate community access",
+  6,
+  "the semantic traversal, four member resource queries, and explicit builder map should revalidate community access",
 );
 assert.match(resources, /resolveUserIdForAuthenticatedRequest/);
 assert.match(resources, /requireCommunityChatAccess/);
