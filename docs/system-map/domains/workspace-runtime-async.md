@@ -8,21 +8,21 @@ The coding harness, community harness, worker/runtime, terminals, previews, proj
 
 Schema and runtime modules own projects, threads/messages/attachments, runs/events, terminals, previews, runtime sessions, credits, provider leases, and failure receipts. Web runtime cannot directly execute local filesystem/shell tools. Worker/provider operations enforce root/path and symlink boundaries, use explicit session identity, and emit runtime evidence. These are strong invariants worth retaining.
 
-The UI route state is contradictory:
-
-- builders still generate `/workspace`, `/workspace/:slug`, and `/workspace/thread/:id` paths;
-- workspace controllers set `activePage` to `workspace` and navigate to those paths;
-- `parseAppRouteFromPathname` maps ordinary `/workspace*` paths back to `page: "landing"`, except selected legacy setup redirects.
-
-This is a split client state machine: in-memory navigation can enter Workspace while refresh/deep link resolves elsewhere. It is evidence that the destination was partially retired without closing callers and types.
+The browser route state is now deliberately asymmetric. It cannot represent or
+generate Workspace: the page type, route builders, route controller, and
+Workspace-only shell branches are deleted. The parser still recognizes inbound
+`/workspace*` migration inputs and holds Landing until auth-aware destination
+resolution sends the user to a community, Discover, public funnel, root, or
+legacy launch setup under community Settings.
 
 The unmounted 2,625-line `WebWorkspaceHost.tsx` product host was deleted in
 C7.1A. Builder Partner remains retained through its secondary Settings and
 operator owners; mixed contracts no longer use the dead host as authority.
-The remaining Workspace-named controllers, route builders, App orchestration,
-and child presentation components still require caller-by-caller
-classification before deletion. None of those names alone authorizes removal
-of the protected harness/runtime substrate.
+C7.1B deleted the remaining outbound browser route controller/builders and
+route-backed App orchestration. Thread/project selection remains as non-navigation
+runtime state. Remaining Workspace-named child presentation components and styles
+still require caller-by-caller classification before deletion. None of those
+names alone authorizes removal of the protected harness/runtime substrate.
 
 ## Scheduled job inventory
 
@@ -56,7 +56,7 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | Surface | Scaling variable | Risk |
 | --- | --- | --- |
 | compiler digest recovery | unfinished digest versions | `O(1)` exact-row checkpoint per active recovery chain |
-| remaining Workspace UI orchestration | app state/callback surfaces | legacy controller coupling and refresh-state drift after host-root deletion |
+| remaining Workspace child UI/styles | dormant caller clusters/selectors | dead presentation may remain, but names can also describe protected execution substrate |
 | runtime events/receipts | runs × events | storage retention and operator query cost unclear |
 | provider workers/previews | sessions × time/cost | needs cleanup, lease finalization, and accounting convergence |
 
@@ -65,9 +65,9 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | Candidate | Classification | Action | Idiot index | Rationale |
 | --- | --- | --- | ---: | --- |
 | protected coding/community harness substrate | `KEEP (MVP core)` | `HARDEN` | 1 | explicitly protected and required for external execution |
-| standalone Workspace as primary navigation destination | `DELETE (deferred/dead)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 9 | current MVP selects communities; callers/compatibility must be enumerated |
+| standalone Workspace as primary navigation destination | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1A-B deleted the host and all outbound browser navigation; inbound migration classification remains |
 | Workspace host coupling to Builder Partner UI | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1A deleted the unmounted host; retained partner UI remains in Settings/operator owners |
-| workspace route builders/controllers after parser retirement | `DECISION REQUIRED (user confirmation)` | `MIGRATE_THEN_DELETE` | 8 | split state machine; backend substrate is not the same as destination routing |
+| workspace route builders/controllers after parser retirement | `DELETE (deferred/dead)` | `COMPLETE` | 8 | outbound owners are deleted; inbound classification remains separate from backend substrate |
 | remaining no-cursor repeating prefix sweeps | `KEEP (MVP core)` | `HARDEN`, `BOUND` | 9 | claims reliable automation while permanently starving eligible work |
 | durable runtime receipts | `KEEP (MVP core)` | `RETENTION`, `BOUND` | 2 | necessary for audit/recovery, but not forever at full fidelity |
 

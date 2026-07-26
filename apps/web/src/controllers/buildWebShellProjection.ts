@@ -1,4 +1,4 @@
-import type { AppPage, AppView } from "../../../../shared/appShellNavigation";
+import type { AppPage } from "../../../../shared/appShellNavigation";
 import type { AppShellVariant, PublicRoute } from "../../../../shared/webAppRouteState";
 
 type MobileSettingsView = "index" | "detail";
@@ -11,22 +11,17 @@ export type WebShellProjection = {
   showMobileShell: boolean;
   showMobileSettingsIndex: boolean;
   showMobilePublicFunnel: boolean;
-  sessionsDrawerEnabled: boolean;
-  isSessionsDrawerOpen: boolean;
   showDesktopCommunityRail: boolean;
   showDesktopCommunityNav: boolean;
   hasLeftPanel: boolean;
   mobileShellMode: MobileShellMode;
-  showHeaderIslands: boolean;
 };
 
 export function buildWebShellProjection(params: {
   publicRouteKind: PublicRoute["kind"];
   shellVariant: AppShellVariant;
   activePage: AppPage;
-  activeView: AppView;
   mobileSettingsView: MobileSettingsView;
-  userWantsSessions: boolean;
   isPublicCommunityFunnel: boolean;
 }): WebShellProjection {
   const isAppRoute = params.publicRouteKind === "app";
@@ -47,8 +42,7 @@ export function buildWebShellProjection(params: {
       isAppRoute &&
       !isPublicAppPage &&
       !params.isPublicCommunityFunnel &&
-      (params.activePage === "workspace" ||
-        params.activePage === "settings" ||
+      (params.activePage === "settings" ||
         params.activePage === "community" ||
         params.activePage === "discover" ||
         params.activePage === "operator" ||
@@ -64,10 +58,6 @@ export function buildWebShellProjection(params: {
     !isAppRoute &&
     params.isPublicCommunityFunnel &&
     !isMobileVisitorCommunity;
-  const sessionsDrawerEnabled =
-    isAppRoute &&
-    params.activePage === "workspace";
-  const isSessionsDrawerOpen = sessionsDrawerEnabled && params.userWantsSessions;
   /* The visitor lens: /c/:slug and its /preview render the SAME community
      layout a member sees — shell nav column included. One render path. */
   const showDesktopPublicFunnelNav =
@@ -87,20 +77,11 @@ export function buildWebShellProjection(params: {
     (isGlobalSettings && !showMobileSettingsShell) || showDesktopCommunityNav;
   const mobileShellMode: MobileShellMode = isMobileVisitorCommunity
     ? "community"
-    : params.activePage === "workspace"
-      ? "agent"
-      : params.activePage === "discover"
-        ? "discover"
-        : params.activePage === "operator"
-          ? "discover"
-        : params.activePage === "docs"
-          ? "discover"
-          : "community";
-  const showHeaderIslands =
-    isAppRoute &&
-    params.activePage === "workspace" &&
-    params.activeView === "home";
-
+    : params.activePage === "discover" ||
+        params.activePage === "operator" ||
+        params.activePage === "docs"
+      ? "discover"
+      : "community";
   return {
     isGlobalSettings,
     showMobileAppShell,
@@ -108,12 +89,9 @@ export function buildWebShellProjection(params: {
     showMobileShell,
     showMobileSettingsIndex,
     showMobilePublicFunnel,
-    sessionsDrawerEnabled,
-    isSessionsDrawerOpen,
     showDesktopCommunityRail: shouldShowDesktopCommunityRail,
     showDesktopCommunityNav,
     hasLeftPanel,
     mobileShellMode,
-    showHeaderIslands,
   };
 }

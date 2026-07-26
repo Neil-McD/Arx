@@ -123,10 +123,10 @@ assert.doesNotMatch(
   /requestOnboardingGuide|runAgentTurn|agentLifecycle/,
   "specific community bridge completion must not start a hidden personal agent turn",
 );
-assert.match(
+assert.doesNotMatch(
   routes,
-  /function buildWorkspaceDraftPath[\s\S]*return appendWorkspaceDraftProjectSearch\("\/workspace"/,
-  "legacy Workspace route builders must remain as internal compatibility substrate during isolation",
+  /function buildWorkspaceDraftPath|function buildWorkspaceCommunityDraftPath|function buildWorkspaceThreadPath/,
+  "legacy Workspace compatibility must classify inbound URLs without retaining outbound route builders",
 );
 assert.match(
   routes,

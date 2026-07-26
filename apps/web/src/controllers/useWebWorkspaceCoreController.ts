@@ -1,5 +1,4 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
-import type { AppPage, AppView } from "../../../../shared/appShellNavigation";
 import type { ModelToggle } from "../../../../shared/modelCatalog";
 import type { RuntimeEngine } from "../../../../shared/runtimeEngine";
 import { useWebThreadMutationController } from "../../../../shared/useWebThreadMutationController";
@@ -7,7 +6,6 @@ import {
   emitWorkspaceEvent,
   formatWorkspaceInstrumentationError,
 } from "../lib/workspaceInstrumentation";
-import { useWebWorkspaceRouteController } from "./useWebWorkspaceRouteController";
 import type { WebCloudProjectRecord } from "./useWebProjectUiController";
 
 type ThreadLike = {
@@ -49,16 +47,8 @@ type WorkspaceProjectController<SessionT, ThreadT extends ThreadLike> = {
 type UseWebWorkspaceCoreControllerParams<SessionT, ThreadT extends ThreadLike> = {
   project: WorkspaceProjectController<SessionT, ThreadT>;
   ensureSession: (session: SessionT) => Promise<SessionT | null>;
-  activePage: AppPage;
-  activeView: AppView;
-  activeThreadId: string | null;
-  activeCommunitySlug: string | null;
-  navigateTo: (path: string, opts?: { replace?: boolean }) => void;
-  setActivePage: Dispatch<SetStateAction<AppPage>>;
-  setActiveView: Dispatch<SetStateAction<AppView>>;
   setActiveThreadId: Dispatch<SetStateAction<string | null>>;
   setWorkspaceWantsNewChatMode: (value: boolean | ((prev: boolean) => boolean)) => void;
-  syncCommunitySelection?: (opts: { communityId?: string | null; communitySlug?: string | null }) => void;
   threads: ThreadT[];
   setThreads: Dispatch<SetStateAction<ThreadT[]>>;
   deriveThreadTitleFromUserText: (userText: string) => string | null;
@@ -67,7 +57,6 @@ type UseWebWorkspaceCoreControllerParams<SessionT, ThreadT extends ThreadLike> =
   activeCommunityId: string | null;
   activeModelId: string | null;
   activeRuntimeEngine: RuntimeEngine;
-  resetDraftRuntimeEngine?: () => void;
   modelToggles: ModelToggle[];
   defaultActiveModelId: string;
 };
@@ -75,22 +64,6 @@ type UseWebWorkspaceCoreControllerParams<SessionT, ThreadT extends ThreadLike> =
 export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLike>(
   params: UseWebWorkspaceCoreControllerParams<SessionT, ThreadT>,
 ) {
-  const rawRoute = useWebWorkspaceRouteController({
-    activePage: params.activePage,
-    activeView: params.activeView,
-    activeThreadId: params.activeThreadId,
-    activeCommunitySlug: params.activeCommunitySlug,
-    activeProjectId: params.project.state.activeProjectId,
-    navigateTo: params.navigateTo,
-    setActivePage: params.setActivePage,
-    setActiveView: params.setActiveView,
-    setActiveThreadId: params.setActiveThreadId,
-    setWorkspaceWantsNewChatMode: params.setWorkspaceWantsNewChatMode,
-    setActiveProjectId: params.project.actions.setActiveProjectId,
-    resetDraftRuntimeEngine: params.resetDraftRuntimeEngine,
-    syncCommunitySelection: params.syncCommunitySelection,
-  });
-
   const rawThreadMutation = useWebThreadMutationController<SessionT>({
     deriveThreadTitleFromUserText: params.deriveThreadTitleFromUserText,
     isMissingThreadTitleValue: params.isMissingThreadTitleValue,
@@ -107,210 +80,6 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
     setWorkspaceWantsNewChatMode: params.setWorkspaceWantsNewChatMode,
     setActiveThreadId: params.setActiveThreadId,
   });
-
-  const syncWorkspaceSelection = useCallback<typeof rawRoute.syncWorkspaceSelection>(
-    (opts) => {
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "sync_workspace_selection",
-        status: "start",
-        projectId: params.project.derived.resolvedActiveProjectId,
-        threadId: opts.threadId,
-        page: params.activePage,
-        view: params.activeView,
-        detail: {
-          wantsNewChat: opts.wantsNewChat,
-        },
-      });
-      rawRoute.syncWorkspaceSelection(opts);
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "sync_workspace_selection",
-        status: "success",
-        projectId: params.project.derived.resolvedActiveProjectId,
-        threadId: opts.threadId,
-        page: params.activePage,
-        view: params.activeView,
-        detail: {
-          wantsNewChat: opts.wantsNewChat,
-        },
-      });
-    },
-    [params.activePage, params.activeView, params.project.derived.resolvedActiveProjectId, rawRoute],
-  );
-
-  const applyWorkspaceRouteState = useCallback<typeof rawRoute.applyWorkspaceRouteState>(
-    (opts) => {
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "apply_workspace_route_state",
-        status: "start",
-        projectId: params.project.derived.resolvedActiveProjectId,
-        threadId: opts.threadId,
-        page: opts.page,
-        view: opts.view,
-      });
-      rawRoute.applyWorkspaceRouteState(opts);
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "apply_workspace_route_state",
-        status: "success",
-        projectId: params.project.derived.resolvedActiveProjectId,
-        threadId: opts.threadId,
-        page: opts.page,
-        view: opts.view,
-      });
-    },
-    [params.project.derived.resolvedActiveProjectId, rawRoute],
-  );
-
-  const applyGuestWorkspaceState = useCallback<typeof rawRoute.applyGuestWorkspaceState>(
-    (opts) => {
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "apply_guest_workspace_state",
-        status: "start",
-        projectId: params.project.derived.resolvedActiveProjectId,
-        threadId: opts.hasMessages ? opts.guestThreadId : null,
-        page: params.activePage,
-        view: params.activeView,
-        detail: {
-          hasMessages: opts.hasMessages,
-        },
-      });
-      rawRoute.applyGuestWorkspaceState(opts);
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "apply_guest_workspace_state",
-        status: "success",
-        projectId: params.project.derived.resolvedActiveProjectId,
-        threadId: opts.hasMessages ? opts.guestThreadId : null,
-        page: params.activePage,
-        view: params.activeView,
-        detail: {
-          hasMessages: opts.hasMessages,
-        },
-      });
-    },
-    [params.activePage, params.activeView, params.project.derived.resolvedActiveProjectId, rawRoute],
-  );
-
-  const openWorkspaceDraft = useCallback<typeof rawRoute.openWorkspaceDraft>(
-    (opts) => {
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "open_workspace_draft",
-        status: "start",
-        projectId: opts?.projectId ?? params.project.derived.resolvedActiveProjectId,
-        page: params.activePage,
-        view: params.activeView,
-        detail: {
-          replace: opts?.replace ?? true,
-          hasFocusComposer: Boolean(opts?.focusComposer),
-        },
-      });
-      rawRoute.openWorkspaceDraft(opts);
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "open_workspace_draft",
-        status: "success",
-        projectId: opts?.projectId ?? params.project.derived.resolvedActiveProjectId,
-        page: "workspace",
-        view: "home",
-        detail: {
-          replace: opts?.replace ?? true,
-        },
-      });
-    },
-    [params.activePage, params.activeView, params.project.derived.resolvedActiveProjectId, rawRoute],
-  );
-
-  const openWorkspaceThread = useCallback<typeof rawRoute.openWorkspaceThread>(
-    (opts) => {
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "open_workspace_thread",
-        status: "start",
-        projectId: opts.projectId ?? params.project.derived.resolvedActiveProjectId,
-        threadId: opts.threadId,
-        page: params.activePage,
-        view: params.activeView,
-        detail: {
-          replace: opts.replace ?? true,
-        },
-      });
-      rawRoute.openWorkspaceThread(opts);
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "open_workspace_thread",
-        status: "success",
-        projectId: opts.projectId ?? params.project.derived.resolvedActiveProjectId,
-        threadId: opts.threadId,
-        page: "workspace",
-        view: "home",
-      });
-    },
-    [params.activePage, params.activeView, params.project.derived.resolvedActiveProjectId, rawRoute],
-  );
-
-  const enterWorkspaceThread = useCallback<typeof rawRoute.enterWorkspaceThread>(
-    (opts) => {
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "enter_workspace_thread",
-        status: "start",
-        projectId: opts.projectId ?? params.project.derived.resolvedActiveProjectId,
-        threadId: opts.threadId,
-        page: params.activePage,
-        view: params.activeView,
-        detail: {
-          communityId: opts.communityId ?? null,
-          replace: opts.replace ?? true,
-        },
-      });
-      rawRoute.enterWorkspaceThread(opts);
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "enter_workspace_thread",
-        status: "success",
-        projectId: opts.projectId ?? params.project.derived.resolvedActiveProjectId,
-        threadId: opts.threadId,
-        page: "workspace",
-        view: "home",
-        detail: {
-          communityId: opts.communityId ?? null,
-        },
-      });
-    },
-    [params.activePage, params.activeView, params.project.derived.resolvedActiveProjectId, rawRoute],
-  );
-
-  const handleNewWorkspaceThread = useCallback<typeof rawRoute.handleNewWorkspaceThread>(
-    (opts) => {
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "new_workspace_thread",
-        status: "start",
-        projectId: params.project.derived.resolvedActiveProjectId,
-        page: params.activePage,
-        view: params.activeView,
-        detail: {
-          allowMultipleThreads: opts.allowMultipleThreads,
-          hasFocusComposer: Boolean(opts.focusComposer),
-        },
-      });
-      rawRoute.handleNewWorkspaceThread(opts);
-      emitWorkspaceEvent({
-        scope: "route",
-        name: "new_workspace_thread",
-        status: "success",
-        projectId: params.project.derived.resolvedActiveProjectId,
-        page: "workspace",
-        view: "home",
-      });
-    },
-    [params.activePage, params.activeView, params.project.derived.resolvedActiveProjectId, rawRoute],
-  );
 
   const createThread = useCallback<typeof rawThreadMutation.createThread>(
     async (session) => {
@@ -550,16 +319,6 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
 
   return {
     project: params.project,
-    route: {
-      ...rawRoute,
-      syncWorkspaceSelection,
-      applyWorkspaceRouteState,
-      applyGuestWorkspaceState,
-      openWorkspaceDraft,
-      openWorkspaceThread,
-      enterWorkspaceThread,
-      handleNewWorkspaceThread,
-    },
     threadMutation: {
       ...rawThreadMutation,
       createThread,

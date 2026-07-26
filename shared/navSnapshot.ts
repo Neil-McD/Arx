@@ -6,38 +6,27 @@ export type NavSnapshotBase = {
   settingsPage: SettingsPage;
   communitySlug?: string | null;
   communityTab: CommunityTab;
-  threadId: string | null;
-  workspaceWantsNewChat?: boolean;
 };
 
 export function navSnapshotsEqual(
   a: NavSnapshotBase,
   b: NavSnapshotBase,
-  opts?: { includeWorkspaceWantsNewChat?: boolean },
 ): boolean {
-  if (
+  return !(
     a.page !== b.page ||
     a.view !== b.view ||
     a.settingsPage !== b.settingsPage ||
     (a.communitySlug ?? null) !== (b.communitySlug ?? null) ||
-    a.communityTab !== b.communityTab ||
-    a.threadId !== b.threadId
-  ) {
-    return false;
-  }
-  if (opts?.includeWorkspaceWantsNewChat) {
-    return (a.workspaceWantsNewChat ?? false) === (b.workspaceWantsNewChat ?? false);
-  }
-  return true;
+    a.communityTab !== b.communityTab
+  );
 }
 
 export function pushUniqueNavSnapshot(
   stack: NavSnapshotBase[],
   snapshot: NavSnapshotBase,
-  opts?: { includeWorkspaceWantsNewChat?: boolean },
 ): void {
   const last = stack[stack.length - 1] ?? null;
-  if (last && navSnapshotsEqual(last, snapshot, opts)) return;
+  if (last && navSnapshotsEqual(last, snapshot)) return;
   stack.push(snapshot);
 }
 
@@ -48,12 +37,8 @@ export function popDistinctNavSnapshot<
   while (stack.length > 0) {
     const snapshot = stack.pop() ?? null;
     if (!snapshot) return null;
-    const isQuarantinedWorkspaceHome = snapshot.page === "workspace" && snapshot.view === "home";
     const snapshotRoutePath = String(snapshot.routePath ?? "").trim();
-    if (
-      isQuarantinedWorkspaceHome ||
-      (snapshotRoutePath && snapshotRoutePath === normalizedCurrentRoutePath)
-    ) {
+    if (snapshotRoutePath && snapshotRoutePath === normalizedCurrentRoutePath) {
       continue;
     }
     return snapshot;

@@ -88,7 +88,6 @@ type UseWebProjectUiControllerParams<TSession> = {
   onProjectCreated: (project: WebCloudProjectRecord) => void;
   onProjectUpdated: (project: WebCloudProjectRecord) => void;
   onProjectDeleted: (project: WebCloudProjectRecord) => void;
-  onStartDraftInProject: (projectId: string) => void;
 };
 
 const PROJECT_IMPORT_MAX_BYTES = 150 * 1024 * 1024;
@@ -184,7 +183,6 @@ export function useWebProjectUiController<TSession>(
     onProjectCreated,
     onProjectUpdated,
     onProjectDeleted,
-    onStartDraftInProject,
   } = params;
 
   const [isCreatingProject, setIsCreatingProject] = useState(false);
@@ -343,7 +341,6 @@ export function useWebProjectUiController<TSession>(
       }
       onProjectCreated(nextProject);
       resetCreateProjectModal();
-      onStartDraftInProject(nextProject.id);
     } catch (error) {
       console.warn("Failed to create cloud project:", error);
       if (createdProject) {
@@ -391,7 +388,6 @@ export function useWebProjectUiController<TSession>(
     ensureSession,
     isCreatingProject,
     onProjectCreated,
-    onStartDraftInProject,
     onWorkspaceBillingRequired,
     projectErrorMessageOptions,
     requireSignIn,

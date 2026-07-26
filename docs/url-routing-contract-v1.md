@@ -131,9 +131,11 @@ Legacy entry is auth-aware:
 - signed-out generic or thread entry opens `/`;
 - old community launch setup URLs restore under `/c/:slug/settings/community`.
 
-New code must not generate a `/workspace*` URL. Internal Workspace route helpers
-and the MCP `workspace_context` wire term remain temporarily intact because they
-are compatibility substrate, not reachable product navigation.
+New code must not generate a `/workspace*` URL. The browser exposes no Workspace
+page type, route builder, or navigation controller. Inbound classification is
+the sole retained browser compatibility seam. The MCP `workspace_context` wire
+term remains intact because it is protocol compatibility substrate, not product
+navigation.
 
 Transactional emails, digests, and reminders follow the same rule. If a
 community-specific URL cannot be constructed, they fall back to `/discover`,

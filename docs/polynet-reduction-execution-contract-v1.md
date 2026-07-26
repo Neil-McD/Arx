@@ -1308,3 +1308,34 @@ foundation baseline; and staging authority guards. Live evidence is limited to
 the exact Git-driven staging marker and anonymous non-mutating canary because
 the deleted host was already unreachable and the slice has no cloud-data or
 schema effect.
+
+### C7.1B current receipt — outbound Workspace navigation deletion
+
+The second C7 slice removes Workspace from the browser's representable
+navigation state. `AppPage` no longer includes `workspace`; the three shared
+Workspace route builders, draft-project URL query state, and
+`useWebWorkspaceRouteController.ts` are deleted. App route reconciliation,
+history snapshots, shell projection, path canonicalization, project creation,
+thread adoption, and member-agent context can no longer produce or branch on a
+Workspace destination.
+
+Inbound compatibility remains intentionally asymmetric. `/workspace*` URLs are
+still classified while the browser holds a neutral landing state; authenticated
+requests resolve through the server-authoritative member destination, signed-out
+community requests resolve to the public funnel, and old launch-setup URLs
+restore under community Settings. No retained browser module generates a
+Workspace URL.
+
+Thread/project persistence and execution remain independent of navigation.
+Selecting or creating a thread adopts its community, project, and active-thread
+state without changing the page or URL. The runtime core retains thread mutation,
+provider, billing, harness, worker, MCP, project, and evidence owners, but no
+longer owns a route controller. Project creation no longer auto-opens a deleted
+destination.
+
+The obsolete draft-project route proof is retired. The Workspace quarantine
+contract now owns both halves of the boundary: outbound producer absence and
+inbound redirect compatibility. C7 remains `IN_PROGRESS`: Workspace-named child
+presentation/controller/style clusters still require caller classification
+before deletion, and protected runtime/harness/community memory substrate remains
+out of scope.

@@ -47,7 +47,6 @@ assert.equal(
     communitySlug: null,
     communityTab: "chat",
     operatorTab: "communities",
-    threadId: null,
   }),
   "/operator/communities",
 );
@@ -61,10 +60,7 @@ const operatorProjection = buildWebShellProjection({
   publicRouteKind: "app",
   shellVariant: "standard",
   activePage: "operator",
-  activeView: "home",
   mobileSettingsView: "detail",
-  userWantsSessions: false,
-  hasSelectedCommunity: true,
   isPublicCommunityFunnel: false,
 });
 assert.equal(operatorProjection.showDesktopCommunityRail, false);

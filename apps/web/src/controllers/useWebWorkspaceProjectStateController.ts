@@ -7,7 +7,6 @@ import {
   resolveExistingCloudProjectId,
 } from "../../../../shared/threadSidebarSelectors";
 import { fetchMappedCloudProjects } from "../../../../shared/cloudProjectsGateway";
-import { normalizeWorkspaceDraftProjectId } from "../../../../shared/webAppRouteState";
 import {
   emitWorkspaceEvent,
   formatWorkspaceInstrumentationError,
@@ -27,16 +26,13 @@ type UseWebWorkspaceProjectStateControllerParams<SessionT, ThreadT extends Threa
   setThreads: Dispatch<SetStateAction<ThreadT[]>>;
   setActiveThreadId: Dispatch<SetStateAction<string | null>>;
   setWorkspaceWantsNewChatMode: (next: SetStateAction<boolean>) => void;
-  initialActiveProjectId?: string | null;
 };
 
 export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends ThreadLike>(
   params: UseWebWorkspaceProjectStateControllerParams<SessionT, ThreadT>,
 ) {
   const [projects, setProjects] = useState<WebCloudProjectRecord[]>([]);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(() =>
-    normalizeWorkspaceDraftProjectId(params.initialActiveProjectId),
-  );
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const hasObservedInitialProjectSelectionRef = useRef(false);
 
   const resolvedActiveProjectId = useMemo(

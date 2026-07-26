@@ -349,7 +349,7 @@ The labels mean:
 
 | Architecture element | Status | Current boundary |
 | --- | --- | --- |
-| Communities as primary authenticated context | `IMPLEMENTED` | residual Workspace routes/docs remain cleanup candidates; protected substrate remains |
+| Communities as primary authenticated context | `IMPLEMENTED` | browser Workspace destination is deleted; inbound legacy classification and protected execution substrate remain |
 | Separate personal-agent and community-agent identities | `IMPLEMENTED` | delegated personal authority does not create agent membership |
 | Fail-closed community context and authority resolution | `IMPLEMENTED` | current bounded community read/capability seams are the reuse point |
 | Canonical cloud authority for identity, access, money, and history | `IMPLEMENTED` | remaining domain migrations are tracked separately |
