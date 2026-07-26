@@ -2,7 +2,7 @@
 
 Status: active execution tracker; not product or architecture authority
 
-Last verified: 2026-07-23
+Last verified: 2026-07-24
 
 ## 1. Irreducible job
 
@@ -982,9 +982,9 @@ remain audit-linked and were not deletion candidates. No code, schema, UI,
 scheduler, provider, Vercel, or production state changed. C3 is complete within
 the accepted resource/interaction/intelligence cleanup boundary.
 
-C2.3A restarts C2 with proof rather than execution. The current policy contract
-passes against 124 tables, 118 direct user-reference edges, 38 unindexed edges,
-26 opaque fields, and seven storage fields; the privacy dossier's stale
+C2.3A restarts C2 with proof rather than execution. At that checkpoint, the
+policy contract passed against 124 tables, 118 direct user-reference edges, 38
+unindexed edges, 26 opaque fields, and seven storage fields; the privacy dossier's stale
 125-table statement is corrected. A complete bounded development scan found
 zero lifecycle requests, zero lifecycle receipts, zero interaction privacy
 purge events, 55 user-authored canonical roots, 21 user-authored replies, seven
@@ -1035,3 +1035,169 @@ the separate bounded physical scrub for canonical blocks, attachment storage,
 source-trace text, accepted intelligence, digests, and opaque audit payloads.
 No schema, lifecycle table, public mutation, UI, provider, staging data, or
 production target changes in C2.3B1.
+
+C2.3B2-R0 completes the read-only physical-purge surface reduction at staging
+source `9331f446b47285b1b14ddd6d04998e683f0184de`. The exact reply graph now
+separates structural shell, direct blocks, attachment/storage effects, embeds,
+mentions and broadcasts, agent-provider effects, legacy message copies,
+notification outbox copies, source traces, citations, compiler digests,
+accepted intelligence, audit receipts, and unrelated other-user state.
+
+The map rejects the earlier assumption that attachment rows were the only
+first-slice blocker. Weekly-digest payloads copy reply text without storing a
+reply-level source identity; delivered email and model-provider effects may be
+externally irreversible; compiler and intelligence references use arrays
+without reverse source indexes and may be multi-source; and legacy/opaque
+retention remains unresolved. A terminal `privacy_purged` event would therefore
+be false if only the reply summary and blocks were scrubbed.
+
+The reduced next C2 code candidate is future-copy prevention: preserve useful
+recipient excerpts, but queue only canonical lookup coordinates, hydrate after
+send-time authorization, and minimize the local post-send email ledger under
+an explicit retention owner.
+It adds no lifecycle engine, table, public API, UI, account freeze, or purge
+executor. It remains unauthorized while the production-compatibility contract
+keeps implementation behind requirement reconciliation. PC2A is now complete
+and PC2B is next. This read-only map changed no code, schema, data, provider,
+deployment, or production target.
+
+PC2A then closes the six explicit requirement decisions that blocked deeper
+compatibility work. Staging deployment machinery and permanent temporary
+cleanup code are excluded from the production port; frozen audit machinery is
+reduced to compact durable contracts and receipts; the unowned generic account
+lifecycle substrate is parked rather than expanded; Builder Partner remains
+secondary, prospective 4% community-revenue-only, and last; the weekly digest
+retains its return-loop job and current excerpts while legacy readers and
+durable content copies are deleted; and current production-only CRIS theme,
+community-event, chrome, and embed behavior is a preservation constraint.
+
+PC2A changes no runtime state and does not authorize deletion of the parked
+staging substrate, the future email-copy reduction, a production data query, or
+an integration candidate.
+
+PC2B closes PC2 with one final matrix covering every P01-P27 and M01 job.
+Three safety outcomes are backend-first candidates; 11 stateful authority or
+migration outcomes require expand/migrate/contract; four outcomes require
+rework; nine staged requirements are dropped from the production port; and
+current production-only UI behavior remains already present and protected.
+Every data uncertainty is routed to PC4 rather than represented as product
+indecision, and every protected-core boundary remains explicit.
+
+The next overall slice is PC3A: read-only source, public-contract,
+cached-client, rollback, and UX-failure compatibility for the independent
+account- and community-deletion quarantines. PC2B changed no code, schema, data,
+query, provider, deployment, or production target and does not authorize either
+quarantine release.
+
+PC3A is now complete. It refreshed current production truth to
+`1a71a459e5f7b2099fa85861680642b4d7c71cc4`, while staging remains
+`9331f446b47285b1b14ddd6d04998e683f0184de`. The three production commits
+added after PC0 affect only current UI styles and frontend contract proofs and
+extend M01; neither destructive lifecycle contract changed.
+
+Both quarantines remain independent `PORT BACKEND-FIRST` outcomes. Their
+staging implementations preserve the exact public Convex names and validators,
+retain verified identity and community-owner checks, then return deterministic
+zero-effect errors. That shape safely contains already-loaded clients only when
+the backend leads. UI contraction alone is insufficient, and rollback to either
+destructive production executor is forbidden. Future candidates must be
+semantic rebuilds from then-current `origin/main`, not a merge of the staging
+branch. PC3 is in progress; PC3B is next and will read-only map P27
+revoked-evidence containment. PC3A changed no product code, schema, data, query,
+provider, integration, deployment, or production target.
+
+PC3B is now complete. P27 revoked-evidence containment remains a required
+backend-first security floor. Production already contains the canonical
+evidence-resolution primitives and schema needed for the outcome, and the
+existing public/internal function names, validators, gateway schemas, and
+cached-client response shapes can remain stable while revoked derived content
+contracts to omission or existing fail-closed results.
+
+The staging implementation is evidence, not a port candidate. It bundles
+unrelated compiler/directory result-cap contractions, resolves lineage with
+per-row bounds but no request-wide deduplication or aggregate budget, and
+renamed a helper without repairing the consumption-parity proof. The foundation
+baseline remains green because it does not run that stale proof. A future
+candidate must therefore be a small semantic rebuild from then-current
+`origin/main`: one request-scoped memoized resolver, unchanged public caps and
+shapes, the four required runtime consumers, and repaired parity plus behavioral
+containment proofs. No schema migration is required, and rollback to
+read-through behavior is forbidden because it would re-expose physically
+retained content. PC3C is next and will read-only map P05 auth/session
+compatibility. PC3B changed no product code, schema, data, query, provider,
+integration, deployment, or production target.
+
+PC3C is now complete. P05 remains irreducible auth/session core, and the staged
+hashed, stable, absolutely expiring session state is directionally correct.
+Its migration is not safe to port unchanged: production can accept an ancestor
+replacement-chain cookie when a previous rotation committed but its response
+was lost, while the staged migration deletes those predecessor rows. One
+surviving leaf-session browser does not prove that cached-client case.
+
+The future P05 candidate must therefore be a semantic rebuild using
+`EXPAND-MIGRATE-OBSERVE-CONTRACT`: retain legacy credential/index state, add a
+temporary hash-first/legacy-fallback reader that converges cookies to the
+canonical leaf, deploy the backend before the web, observe zero fallback use
+for at least the maximum historical cookie lifetime, then contract. Duplicate
+subject and session-hash state must fail closed. Routine successful-bootstrap
+diagnostics, email/full-scan relinking, the public manual prune path, and stale
+auth architecture doctrine should be deleted rather than ported. PC3D is next
+and will read-only map P06 membership/community-access compatibility. PC3C
+changed no product code, schema, data, query, provider, configuration,
+integration, deployment, session, or production target.
+
+PC3D is now complete. P06 remains irreducible membership/community-access
+core: ownership comes only from `communities.ownerId`; a non-owner relationship
+has one community/user row; only explicit active, unrevoked state can grant
+membership; and member count means owner plus active non-owner rows.
+
+The staged result is not a production port candidate. Production membership
+shape is unknown, the temporary staging migrations are gone, routine count
+transitions and directory/stat/mention reads still scan whole communities, the
+browser performs a redundant count-repair mutation after successful backend
+work, an unused legacy admin roster/count API family remains beside the real
+directory, and the operator-dashboard proof still requires the correctly
+deleted active-flag backfill.
+
+The future P06 candidate must use `EXPAND-MIGRATE-OBSERVE-CONTRACT`: prevent new
+owner/duplicate state while fields remain optional; run bounded production
+evidence; normalize explicit state, duplicate dependencies, counts, and owner
+residues; require zero-work receipts; then contract. After convergence, member
+count can use an `O(1)` transactional delta and stable indexed reads without a
+queue or repair engine. PC3E is next for P07 account-tier/entitlement
+compatibility. PC3D changed no product code, schema, data, query, provider,
+configuration, integration, deployment, membership, access, or production
+state.
+
+C2.3B2-E completes the staging-only email-copy contraction after explicit
+requirement correction. Weekly digest, mention, and DM emails keep short
+current canonical excerpts, but their outbox rows now contain only bounded
+lookup coordinates. Immediately before send, the runtime resolves the current
+verified recipient, rechecks preferences and source access, rereads current
+canonical content, and suppresses stale, deleted, muted, present, read, or
+unauthorized jobs. DM and community links use the configured public app URL,
+which is `https://polynet-staging.vercel.app` in development.
+
+Terminal outbox rows now remove payload and recipient email immediately.
+Suppressed jobs never persist either field. Provider webhook storage retains
+only the provider event id, provider message id, normalized type, and
+timestamps; complete provider payloads are deleted and retry delivery is
+idempotent. Minimal terminal and delivery receipts expire after 90 days. The
+bounded expand/migrate/contract run on `dev:quick-porcupine-949` scanned 129
+outbox rows and zero delivery rows, minimized all 129 outbox rows, deleted zero
+duplicates, and produced zero work on an immediate replay. The contracted
+read-only audit then reported 129 minimized rows, zero payload fields, zero
+recipient-email fields, and zero pending/sending rows.
+
+The temporary migration function is deleted. Focused behavioral tests prove
+terminal minimization, suppression without copied data, webhook replay
+idempotency, current weekly excerpts, mention and DM preview hydration, staging
+URLs, and fail-closed access revocation. The canonical foundation baseline now
+contains 40 steps. No public API, UI, user setting, generic workflow engine,
+content-lineage table, production query, production data, or production
+deployment changed.
+
+Account lifecycle policy v8 records the corresponding schema contraction:
+`emailDeliveries` no longer owns an opaque provider payload. The current
+contract covers 124 tables, 118 direct user-reference edges, 38 unindexed
+edges, 25 opaque fields, and seven storage fields.

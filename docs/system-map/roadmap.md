@@ -8,14 +8,30 @@ The aggregate staging shape work in Step 0 is complete for identity/membership c
 
 ## Current implementation checkpoint
 
-**Current authority — 2026-07-23:** C3 is complete through canonical
-resource, interaction, attachment, evidence, retrieval, digest, and
-intelligence reconciliation. C2.3A preservation coverage and C2.3B1
-derived-read revocation containment are complete on the isolated staging lane.
-The executable baseline now has 39 steps. The next C2 slice is C2.3B2:
-physically scrub authored content in bounded, resumable phases, starting with
-one reply-only interruption fixture. No access freeze or destructive executor
-is authorized yet.
+**Current authority — 2026-07-24:** C3 is complete through canonical resource,
+interaction, attachment, evidence, retrieval, digest, and intelligence
+reconciliation. C2.3A preservation coverage and C2.3B1 derived-read revocation
+containment are complete on the isolated staging lane.
+
+C2.3B2-E is also complete on staging. Weekly digest, mention, and direct-message
+emails still show short current excerpts, but the queue stores only bounded
+source coordinates. Recipient identity, preferences, authorization, visibility,
+unread/presence state, and current content are resolved immediately before send.
+Suppressed and terminal outbox rows retain neither recipient email nor authored
+content. Webhook receipts retain normalized provider identity/status only, and
+terminal receipts have one 90-day prune owner.
+
+The development migration minimized all 129 historical terminal outbox rows;
+its immediate replay performed zero work, the temporary migration was deleted,
+and the contracted audit found zero stored payloads, zero stored recipient
+emails, and zero nonterminal rows. The executable foundation baseline now has
+40 steps.
+
+Production compatibility work is intentionally paused after PC3D. The active
+lane is staging cleanup only: do not resume PC3E, query production, integrate
+branches, or design a production port until the remaining staging cleanup has
+been closed and the user explicitly reopens reconciliation. No access freeze or
+destructive lifecycle executor is authorized.
 
 The accumulated paragraphs below preserve earlier slice context. Their
 C3.2A attachment observation, 38-step baseline count, and statement that C3
