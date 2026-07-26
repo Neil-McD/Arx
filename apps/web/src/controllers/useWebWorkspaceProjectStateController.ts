@@ -12,7 +12,7 @@ import {
   formatWorkspaceInstrumentationError,
 } from "../lib/workspaceInstrumentation";
 import { formatWorkspaceRestoreErrorMessage } from "../../../../shared/appErrorMappings";
-import type { WebCloudProjectRecord } from "./useWebProjectUiController";
+import type { CloudProjectRecord } from "../../../../shared/cloudProjectsGateway";
 
 type ThreadLike = {
   id: string;
@@ -31,7 +31,7 @@ type UseWebWorkspaceProjectStateControllerParams<SessionT, ThreadT extends Threa
 export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends ThreadLike>(
   params: UseWebWorkspaceProjectStateControllerParams<SessionT, ThreadT>,
 ) {
-  const [projects, setProjects] = useState<WebCloudProjectRecord[]>([]);
+  const [projects, setProjects] = useState<CloudProjectRecord[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const hasObservedInitialProjectSelectionRef = useRef(false);
 
@@ -83,7 +83,7 @@ export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends 
       try {
         const next = (await fetchMappedCloudProjects({
           session: usableSession,
-        })).map((project) => project satisfies WebCloudProjectRecord);
+        })).map((project) => project satisfies CloudProjectRecord);
         const nextActiveProjectId = resolveExistingCloudProjectId(next, requestedActiveProjectId);
         setProjects(next);
         setActiveProjectId((current) =>
@@ -113,7 +113,7 @@ export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends 
     [activeProjectId, params, projects.length, resolvedActiveProjectId],
   );
 
-  const handleProjectCreated = useCallback((project: WebCloudProjectRecord): void => {
+  const handleProjectCreated = useCallback((project: CloudProjectRecord): void => {
     const nextCount = projects.some((entry) => entry.id === project.id) ? projects.length : projects.length + 1;
     setProjects((prev) => {
       const withoutDuplicate = prev.filter((entry) => entry.id !== project.id);
@@ -131,7 +131,7 @@ export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends 
     });
   }, [projects]);
 
-  const handleProjectUpdated = useCallback((updated: WebCloudProjectRecord): void => {
+  const handleProjectUpdated = useCallback((updated: CloudProjectRecord): void => {
     setProjects((prev) =>
       prev
         .map((project) =>
@@ -161,7 +161,7 @@ export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends 
   }, []);
 
   const handleProjectDeleted = useCallback(
-    (project: WebCloudProjectRecord): void => {
+    (project: CloudProjectRecord): void => {
       const nextProjects = projects.filter((entry) => entry.id !== project.id);
       const activeThread = params.threads.find((thread) => thread.id === params.activeThreadId) ?? null;
       const activeThreadCleared = activeThread?.project_id === project.id;

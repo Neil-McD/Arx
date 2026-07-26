@@ -8,7 +8,6 @@ import {
   classifyPaidUsageFailure,
   normalizePaidUsageFailureCode,
   paidUsageBillingModeForPaidToolFailure,
-  paidUsageBillingModeForWorkspaceStorageAction,
 } from "../shared/paidUsageBilling.ts";
 import {
   countWorkspaceProjectsForAdmission,
@@ -40,14 +39,6 @@ assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.agent_run.idleDeleteAfter, "10m
 assert.equal(WORKSPACE_COMPUTER_LIFECYCLE_POLICY.interactive.idleDeleteAfter, "30m");
 assert.equal(getWorkspaceProjectVolumeLimitForTier("free"), 5);
 assert.equal(getWorkspaceProjectVolumeLimitForTier("paid"), 5);
-assert.equal(
-  paidUsageBillingModeForWorkspaceStorageAction("card_required"),
-  "card_required",
-);
-assert.equal(
-  paidUsageBillingModeForWorkspaceStorageAction("funding_required"),
-  "card_preferred",
-);
 assert.equal(
   paidUsageBillingModeForPaidToolFailure("web_research"),
   "card_preferred",
@@ -126,13 +117,6 @@ assert.deepEqual(
     paidUsageBillingMode: "card_preferred",
     toolKind: "workspace_tools",
   },
-);
-assert.equal(
-  formatWorkspaceBillingCheckoutError(
-    new Error("[Request ID: 125828c22457b87f] Server Error: Uncaught Error: stripe_secret_key_missing at getStripeClient (../convex/stripeCore.ts:20:17)"),
-    { kind: "card_setup" },
-  ),
-  "Card setup is temporarily unavailable. Please retry shortly.",
 );
 assert.equal(
   formatWorkspaceBillingCheckoutError(
@@ -832,26 +816,6 @@ assert.match(
 );
 
 const appErrorMappings = read("shared/appErrorMappings.ts");
-assert.match(
-  appErrorMappings,
-  /workspace_volume_limit_reached/,
-  "workspace volume limit errors must have a user-facing mapping",
-);
-assert.match(
-  appErrorMappings,
-  /workspace_volume_funding_required/,
-  "workspace volume funding errors must have a user-facing mapping",
-);
-assert.match(
-  appErrorMappings,
-  /workspace_card_required_for_additional_volume/,
-  "workspace card-required errors must have a user-facing mapping",
-);
-assert.match(
-  appErrorMappings,
-  /workspace_uncollected_usage_blocked/,
-  "workspace uncollected-usage errors must have a user-facing mapping",
-);
 
 const schema = read("convex/schema.ts");
 assert.match(
@@ -942,15 +906,15 @@ assert.match(
 );
 
 const accountCommerceGateway = read("shared/cloudAccountCommerceGateway.ts");
-assert.match(
+assert.doesNotMatch(
   accountCommerceGateway,
-  /startCloudWorkspaceCardSetupCheckout[\s\S]*stripeCustomers:startWorkspaceCardSetupCheckout/,
-  "web gateway must expose card setup checkout",
+  /startCloudWorkspaceCardSetupCheckout|refreshCloudWorkspaceCardOnFileStatus|loadCloudWorkspaceCardOnFileStatus/,
+  "the browser gateway must not expose card setup or card-status adapters after Workspace presentation quarantine",
 );
 assert.match(
   accountCommerceGateway,
-  /refreshCloudWorkspaceCardOnFileStatus[\s\S]*stripeCustomers:refreshWorkspaceCardOnFileStatus/,
-  "web gateway must expose card-on-file refresh",
+  /startCloudPremiumSubscriptionCheckout[\s\S]*premiumBilling:startPremiumSubscriptionCheckout/,
+  "the browser gateway must retain canonical Premium checkout",
 );
 
 const workspaceTerminalsGateway = read("shared/workspaceTerminalsGateway.ts");
@@ -967,51 +931,20 @@ assert.match(
 );
 
 const app = read("apps/web/src/App.tsx");
-const projectUiController = read("apps/web/src/controllers/useWebProjectUiController.ts");
-assert.match(
-  projectUiController,
-  /readWorkspaceBillingActionFromError[\s\S]*workspace_card_required_for_additional_volume[\s\S]*workspace_volume_funding_required[\s\S]*billingAction && onWorkspaceBillingRequired[\s\S]*onWorkspaceBillingRequired\(\{/,
-  "project creation must classify retained storage admission failures before opening billing UI",
-);
-assert.match(
-  app,
-  /onWorkspaceBillingRequired: \(\{ action, message \}\) => \{[\s\S]*openWorkspaceStorageBillingModal\(\{[\s\S]*action,[\s\S]*message: message \?\? null/,
-  "App must route retained project storage admission failures through the canonical billing modal",
-);
-assert.match(
-  app,
-  /startWorkspaceCardSetupCheckout[\s\S]*startCloudWorkspaceCardSetupCheckout[\s\S]*markPendingWorkspaceCardSetupReturn/,
-  "card setup checkout must mark a return refresh",
-);
-assert.match(
-  app,
-  /setWorkspaceCardSetupError\(\s*formatWorkspaceBillingCheckoutError\(error, \{ kind: "card_setup" \}\),\s*\)/,
-  "card setup checkout failures must be sanitized before reaching the billing modal",
-);
-assert.match(
-  app,
-  /loadWorkspaceCardOnFileStatus[\s\S]*catch \(error\)[\s\S]*formatWorkspaceBillingCheckoutError\(error, \{ kind: "card_setup" \}\)[\s\S]*setWorkspaceCardOnFileError\(message\)/,
-  "card status load failures must be sanitized before reaching settings",
-);
-assert.match(
-  app,
-  /refreshPendingWorkspaceCardSetup[\s\S]*catch\(\(error\) => \{[\s\S]*formatWorkspaceBillingCheckoutError\(error, \{ kind: "card_setup" \}\)[\s\S]*setWorkspaceCardSetupError\(message\)[\s\S]*setWorkspaceCardOnFileError\(message\)/,
-  "card setup return-refresh failures must be sanitized before reaching billing UI",
-);
 assert.doesNotMatch(
   app,
-  /setWorkspaceCreditTopupError|startWorkspaceCreditTopupCheckout|startCloudWorkspaceCreditTopupCheckout|manual_balance/,
-  "app shell must not reintroduce the deleted manual balance checkout path",
+  /setWorkspaceCreditTopupError|startWorkspaceCreditTopupCheckout|startCloudWorkspaceCreditTopupCheckout|manual_balance|openWorkspaceStorageBillingModal|startWorkspaceCardSetupCheckout|startCloudWorkspaceCardSetupCheckout|workspaceCardOnFile/,
+  "app shell must not reintroduce deleted manual-balance, project-storage billing, or card-setup presentation",
 );
 assert.match(
   appErrorMappings,
-  /getWorkspaceBillingCheckoutFallback[\s\S]*Card setup is temporarily unavailable[\s\S]*formatWorkspaceBillingCheckoutError[\s\S]*stripe_secret_key_missing/,
-  "workspace billing checkout formatter must hide raw Stripe configuration errors",
+  /getWorkspaceBillingCheckoutFallback[\s\S]*Premium checkout is temporarily unavailable[\s\S]*formatWorkspaceBillingCheckoutError[\s\S]*stripe_secret_key_missing/,
+  "retained Premium checkout formatter must hide raw Stripe configuration errors",
 );
 assert.doesNotMatch(
   appErrorMappings,
-  /manual_balance|Manual balance|workspace_tool_balance_pack_invalid|workspace_credit_topup_success_url_invalid|workspace_credit_topup_cancel_url_invalid/,
-  "workspace billing checkout formatter must not preserve deleted manual-balance product copy",
+  /manual_balance|Manual balance|workspace_tool_balance_pack_invalid|workspace_credit_topup_success_url_invalid|workspace_credit_topup_cancel_url_invalid|workspace_card_setup|Card setup/,
+  "checkout error formatting must not preserve deleted manual-balance or browser card-setup product copy",
 );
 
 const inferenceIssueModal = read("apps/web/src/components/WebInferenceIssueModal.tsx");
@@ -1030,15 +963,11 @@ assert.doesNotMatch(
   /Add card|Prefer prepaid balance\? Add balance manually\.|No charge today|Usage is billed only when premium tools run|onStartWorkspaceCardSetupCheckout|onStartWorkspaceCreditTopupCheckout|WORKSPACE_TOOL_BALANCE_TOPUP_PACKS/,
   "premium-tool billing modal must not reintroduce the legacy card/prepaid upgrade path",
 );
+const turnRunner = read("shared/useWebTurnRunnerController.ts");
 assert.match(
-  app,
-  /paidUsageBillingMode:\s*paidUsageBillingModeForWorkspaceStorageAction\(params\.action\)/,
-  "workspace storage billing actions must be translated through the shared billing-mode contract",
-);
-assert.match(
-  app,
+  turnRunner,
   /paidUsageBillingModeForPaidToolFailure/,
-  "generic paid-tool failures must not silently inherit card-first workspace storage UI",
+  "generic paid-tool failures must retain shared billing classification independently of deleted project UI",
 );
 assert.match(
   app,

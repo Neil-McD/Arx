@@ -1,12 +1,3 @@
-type ProjectOperation = "create" | "update" | "delete";
-
-type ProjectErrorMessageOptions = {
-  operation: ProjectOperation;
-  maxProjects: number;
-  maxImportFiles: number;
-  maxExtractedBytes: number;
-};
-
 function readErrorText(error: unknown, fallback: string): string {
   if (typeof error === "string") {
     const trimmed = error.trim();
@@ -84,67 +75,6 @@ function isTransientServerCode(code: string | null): boolean {
   );
 }
 
-function getProjectFallback(operation: ProjectOperation): string {
-  if (operation === "create") return "Failed to create project.";
-  if (operation === "update") return "Failed to save project.";
-  return "Failed to delete project.";
-}
-
-export function formatProjectOperationErrorMessage(
-  error: unknown,
-  options: ProjectErrorMessageOptions,
-): string {
-  const fallback = getProjectFallback(options.operation);
-  const text = readErrorText(error, fallback);
-  const code = readErrorCode(text);
-
-  if (isAuthBootstrapCode(code)) return "Session expired. Please sign in again.";
-  if (code === "project_limit_reached") return `Projects are capped at ${options.maxProjects}.`;
-  if (code === "workspace_volume_funding_required") {
-    return "Add prepaid credits or a card before using workspace storage.";
-  }
-  if (code === "workspace_card_required_for_additional_volume") {
-    return "Additional workspace storage requires a card on file.";
-  }
-  if (code === "workspace_volume_limit_reached") {
-    return `Project volumes are capped at ${options.maxProjects}.`;
-  }
-  if (code === "workspace_provider_volume_quota_headroom_exhausted") {
-    return "Workspace storage quota is full. Delete an unused project or try again later.";
-  }
-  if (code === "project_name_required") return "Project name is required.";
-  if (code === "project_import_in_progress") {
-    return "This project is already importing in another tab or session.";
-  }
-  if (code === "project_run_in_progress") {
-    return "Stop the active run in this project before deleting it.";
-  }
-  if (code === "project_import_too_large") return "Project imports are limited to 150 MB zipped.";
-  if (code === "project_import_upload_failed") return "Failed to upload the project archive.";
-  if (code === "project_import_download_failed") {
-    return "Failed to download the project archive for import.";
-  }
-  if (code === "project_import_too_many_files") {
-    return `Project imports are limited to ${options.maxImportFiles.toLocaleString()} extracted files.`;
-  }
-  if (code === "project_import_extracted_bytes_exceeded") {
-    return `Project imports are limited to ${Math.round(options.maxExtractedBytes / (1024 * 1024))} MB after extraction.`;
-  }
-  if (code === "project_import_storage_full") {
-    return "The workspace ran out of space while importing this project.";
-  }
-  if (code === "project_import_unsafe_entry") {
-    return "This archive contains unsupported entries such as symlinks or duplicate paths.";
-  }
-  if (code === "project_import_zip_required") return "Upload a single .zip file.";
-  if (code === "project_create_failed") return "Failed to create project.";
-  if (code === "project_update_failed") return "Failed to save project.";
-  if (code === "default_project_missing_id") return "Failed to resolve the default project.";
-
-  if (code) return fallback;
-  return text || fallback;
-}
-
 export function formatProviderConnectionErrorMessage(error: unknown, fallback: string): string {
   const text = readErrorText(error, fallback);
   const code = readErrorCode(text);
@@ -162,7 +92,7 @@ export function formatProviderConnectionErrorMessage(error: unknown, fallback: s
   return text || fallback;
 }
 
-type WorkspaceBillingCheckoutKind = "card_setup" | "premium_subscription";
+type WorkspaceBillingCheckoutKind = "premium_subscription";
 
 function isRawServerErrorText(text: string): boolean {
   const lower = text.trim().toLowerCase();
@@ -179,14 +109,10 @@ function isRawServerErrorText(text: string): boolean {
   );
 }
 
-function getWorkspaceBillingCheckoutFallback(kind: WorkspaceBillingCheckoutKind): string {
-  if (kind === "card_setup") {
-    return "Card setup is temporarily unavailable. Please retry shortly.";
-  }
-  if (kind === "premium_subscription") {
-    return "Premium checkout is temporarily unavailable. Please retry shortly.";
-  }
-  return "Checkout is temporarily unavailable. Please retry shortly.";
+function getWorkspaceBillingCheckoutFallback(
+  _kind: WorkspaceBillingCheckoutKind,
+): string {
+  return "Premium checkout is temporarily unavailable. Please retry shortly.";
 }
 
 function readWorkspaceBillingCheckoutCode(text: string): string | null {
@@ -198,11 +124,8 @@ function readWorkspaceBillingCheckoutCode(text: string): string | null {
     "stripe_webhook_secret_missing",
     "stripe_checkout_url_missing",
     "premium_stripe_price_id_missing",
-    "workspace_card_setup_unavailable",
     "premium_subscription_success_url_invalid",
     "premium_subscription_cancel_url_invalid",
-    "workspace_card_setup_success_url_invalid",
-    "workspace_card_setup_cancel_url_invalid",
     "user_not_found",
   ];
   return knownCodes.find((code) => lower.includes(code)) ?? null;
@@ -224,14 +147,11 @@ export function formatWorkspaceBillingCheckoutError(
   if (
     code === "stripe_secret_key_missing" ||
     code === "stripe_webhook_secret_missing" ||
-    code === "stripe_checkout_url_missing" ||
-    code === "workspace_card_setup_unavailable"
+    code === "stripe_checkout_url_missing"
   ) {
     return fallback;
   }
   if (
-    code === "workspace_card_setup_success_url_invalid" ||
-    code === "workspace_card_setup_cancel_url_invalid" ||
     code === "premium_subscription_success_url_invalid" ||
     code === "premium_subscription_cancel_url_invalid"
   ) {

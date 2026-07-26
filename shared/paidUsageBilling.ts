@@ -5,10 +5,6 @@ export type PaidUsageBillingMode =
   | "card_preferred"
   | "prepaid_required";
 
-export type WorkspaceStorageBillingAction =
-  | "funding_required"
-  | "card_required";
-
 export type PaidUsageFailureCode =
   | "workspace_card_required_for_additional_volume"
   | "workspace_volume_funding_required"
@@ -62,12 +58,6 @@ export function normalizePaidUsageFailureCode(
   if (normalized === "credits_exhausted") return "workspace_credits_exhausted";
   if (normalized === "credits_unavailable") return "workspace_credits_unavailable";
   return null;
-}
-
-export function paidUsageBillingModeForWorkspaceStorageAction(
-  action: WorkspaceStorageBillingAction,
-): PaidUsageBillingMode {
-  return action === "card_required" ? "card_required" : "card_preferred";
 }
 
 export function paidUsageBillingModeForPaidToolFailure(
