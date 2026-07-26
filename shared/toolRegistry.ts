@@ -628,8 +628,17 @@ const POLYNET_SEMANTIC_LIST_TOOL_SCHEMA: JsonSchema = {
   properties: {
     path: {
       type: "string",
-      enum: ["/"],
+      enum: ["/", "/members/"],
       maxLength: 1024,
+    },
+    cursor: {
+      type: ["string", "null"],
+      maxLength: 2048,
+    },
+    limit: {
+      type: "integer",
+      minimum: 2,
+      maximum: 50,
     },
   },
 };
@@ -641,7 +650,7 @@ const POLYNET_SEMANTIC_READ_TOOL_SCHEMA: JsonSchema = {
   properties: {
     path: {
       type: "string",
-      enum: ["/community.md", "/self.md"],
+      minLength: 1,
       maxLength: 1024,
     },
   },
@@ -1048,7 +1057,7 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   polynet_list: {
     name: "polynet_list",
     description:
-      "List the implemented semantic root for the server-selected active community.",
+      "List the implemented semantic root or a bounded member directory page for the server-selected active community.",
     inputSchema: POLYNET_SEMANTIC_LIST_TOOL_SCHEMA,
   },
   polynet_read: {
@@ -1985,16 +1994,35 @@ export function normalizeToolArguments(
     };
   }
   if (toolName === "polynet_list") {
-    if (args.path !== "/") {
-      throw new Error("polynet_list path must be /.");
+    if (args.path !== "/" && args.path !== "/members/") {
+      throw new Error("polynet_list path must be / or /members/.");
     }
-    return { path: "/" };
+    if (args.path === "/") {
+      if (args.cursor != null || args.limit != null) {
+        throw new Error("polynet_list root does not accept cursor or limit.");
+      }
+      return { path: "/" };
+    }
+    const cursor = normalizeString(args.cursor);
+    const limit = normalizeBoundedInteger(args.limit, "polynet_list limit", 2, 50);
+    return {
+      path: "/members/",
+      ...(cursor ? { cursor: cursor.slice(0, 2048) } : {}),
+      ...(limit !== null ? { limit } : {}),
+    };
   }
   if (toolName === "polynet_read") {
-    if (args.path !== "/community.md" && args.path !== "/self.md") {
-      throw new Error("polynet_read path must be /community.md or /self.md.");
+    const path = normalizeString(args.path);
+    if (
+      path !== "/community.md" &&
+      path !== "/self.md" &&
+      !/^\/members\/[a-z0-9][a-z0-9_-]{1,30}[a-z0-9]\.md$/.test(path ?? "")
+    ) {
+      throw new Error(
+        "polynet_read path must be /community.md, /self.md, or a canonical /members/<handle>.md path.",
+      );
     }
-    return { path: args.path };
+    return { path };
   }
   if (toolName === "member_profile_confirm_facts") {
     const confirmMarker = normalizeString(args.confirm_marker ?? args.confirmMarker);

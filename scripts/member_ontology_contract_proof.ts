@@ -208,15 +208,10 @@ assert.doesNotMatch(
   /consentState\s*===|consent_state\s*===/,
   "no ad-hoc consent filtering at query sites — the predicate is the only judge",
 );
-assert.match(
+assert.doesNotMatch(
   surface,
-  /loadActiveMembership\(ctx, args\.communityId, args\.subjectUserId\)/,
-  "orientation requires the SUBJECT's active membership — leaving hides member-to-member (retention-on-leave)",
-);
-assert.match(
-  surface,
-  /loadActiveMembership\(ctx, args\.communityId, viewerUserId\)/,
-  "orientation requires the VIEWER's active membership",
+  /subjectUserId: v\.id\("users"\)/,
+  "the dormant public member-fact orientation selector must stay deleted",
 );
 assert.match(
   surface,
@@ -295,6 +290,16 @@ assert.match(
   contractDoc,
   /Founder\/admin[\s\S]*`approved` facts scoped to that community[\s\S]*There is no community-agent-internal member lens in v1/,
   "the written contract must keep human founder/admin reads separate from future internal agent context",
+);
+assert.match(
+  contractDoc,
+  /MVP[\s\S]*agent-readable member profile[\s\S]*does not[\s\S]*read this ledger/,
+  "the written contract must keep the MVP display profile out of the private fact ledger",
+);
+assert.doesNotMatch(
+  surface,
+  /export const getMemberOrientation/,
+  "the dormant public member-fact orientation query must stay deleted",
 );
 assert.doesNotMatch(
   contractDoc,

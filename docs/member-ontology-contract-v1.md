@@ -19,8 +19,10 @@ Three consumers, one substrate:
    segmentation, at-risk detection, matchmaking, win-backs.
 2. An agent helping a member — injecting who they are and what they want into
    the interaction context.
-3. A member understanding another member — the orientation card behind
-   "who is @handle?".
+3. A future explicitly consented member-to-member fact view. The MVP
+   agent-readable member profile is instead a projection of the existing
+   human display profile and shared-community relationship truth; it does not
+   read this ledger.
 
 Every future feature against member identity is a **new read model over this
 ledger, never a new store**.
@@ -139,9 +141,10 @@ that session, scoped to that community.
 ## The Platform Spine
 
 A compact per-user projection — role, goals, interests, links — recomputed on
-ledger writes. The ledger is truth; the spine is the fast read for profile
-cards. Only `approved` platform-scoped facts project into it. No consumer may
-write the spine directly.
+ledger writes. The ledger is truth; the spine is an internal fast read for
+explicitly permissioned ontology consumers. It is not the MVP display-profile
+projection. Only `approved` platform-scoped facts project into it. No consumer
+may write the spine directly.
 
 ## Read Models
 
@@ -153,7 +156,7 @@ through one shared predicate function; no reader hand-rolls visibility.
 | Founder/admin | one community | spine + `approved` facts scoped to that community; nothing pending, rejected, retracted, superseded, or observed; retains approved facts after member leaves (invariant 4) |
 | Member-help (self lens) | the member's own agent | everything of their own — the richest view; consent trivially satisfied |
 | External profile | authenticated member through Polynet MCP | current `approved` platform facts only; no community facts or audit-history states |
-| Member-to-member (orientation card) | shared community | spine + `approved` facts scoped to the community both share; nothing pending, nothing observed, nothing from other communities |
+| Member-to-member fact lens (no public MVP reader) | shared community | spine + `approved` facts scoped to the community both share; nothing pending, nothing observed, nothing from other communities |
 
 There is no community-agent-internal member lens in v1. If one is introduced,
 it must be a distinct read model with explicit actor and provenance rules. It

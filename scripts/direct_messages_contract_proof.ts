@@ -7,6 +7,7 @@ function read(path: string): string {
 
 const schema = read("convex/schema.ts");
 const directMessages = read("convex/directMessages.ts");
+const profileCore = read("convex/profileCore.ts");
 const relationshipCore = read("convex/profileRelationshipCore.ts");
 const gateway = read("shared/cloudDirectMessagesGateway.ts");
 const communityChatGateway = read("shared/cloudCommunityChatGateway.ts");
@@ -146,7 +147,8 @@ assert.match(schema, /\.index\("by_user_createdAt", \["userId", "createdAt"\]\)/
 assert.match(schema, /\.index\("by_normalizedHandle", \["normalizedHandle"\]\)/, "users must support exact normalized-handle recipient lookup");
 assert.match(directMessages, /withIndex\("by_owner_createdAt"[\s\S]*ownerId/, "viewer-wide DM recipient lookup must include recent communities the viewer owns");
 assert.match(directMessages, /withIndex\("by_user_createdAt"[\s\S]*userId/, "viewer-wide DM recipient lookup must include recent communities the viewer belongs to");
-assert.match(directMessages, /findUserByNormalizedHandle[\s\S]*withIndex\("by_normalizedHandle"[\s\S]*normalizedHandle/, "viewer-wide DM recipient lookup must use indexed exact-handle search");
+assert.match(directMessages, /findUserByNormalizedHandle[\s\S]*getUniqueUserByNormalizedHandle/, "viewer-wide DM recipient lookup must use the canonical exact-handle reader");
+assert.match(profileCore, /getUniqueUserByNormalizedHandle[\s\S]*withIndex\("by_normalizedHandle"[\s\S]*\.take\(2\)/, "canonical handle reads must be indexed and fail closed on duplicates");
 assert.match(directMessages, /exactHandleUser[\s\S]*mapEligibleDirectMessageRecipient\(\{[\s\S]*community,[\s\S]*viewerUserId,[\s\S]*userId: exactHandleUser\._id,[\s\S]*search/, "exact-handle DM recipient result must still pass shared-community recipient mapping and access checks");
 assert.match(directMessages, /MAX_DM_GLOBAL_OWNED_COMMUNITY_ROWS/, "viewer-wide DM source discovery must bound owned-community reads");
 assert.match(directMessages, /MAX_DM_GLOBAL_SOURCE_MEMBERSHIP_ROWS/, "viewer-wide DM source discovery must bound viewer-membership reads");
@@ -299,7 +301,7 @@ assert.doesNotMatch(chatPanel, /subscribeCloudDirectMessages/, "community chat p
 assert.doesNotMatch(chatPanel, /sendCloudDirectMessage/, "community chat panel must not own DM sends");
 assert.doesNotMatch(chatPanel, /cloudDirectMessagesGateway/, "community chat panel must not import the DM gateway directly");
 assert.doesNotMatch(chatPanel, /messages: \[\.\.\.previous\.messages, message\]/, "DM sends must not use local append as the source of truth");
-assert.match(chatPanel, /onMessageSender=\{canOpenDirectMessageFromCommunity \? openDirectMessage : undefined\}/, "profile hover message button must open the DM flow only when community context is available");
+assert.match(chatPanel, /onMessageUser=\{canOpenDirectMessageFromCommunity \? openDirectMessage : undefined\}/, "profile hover message button must open the DM flow only when community context is available");
 assert.doesNotMatch(chatPanel, /<WebDirectMessagePanel/, "community chat panel must not render a duplicate right-side DM panel");
 assert.doesNotMatch(chatPanel, /follow|follower|following/i, "DM UI slice must not add follow controls");
 

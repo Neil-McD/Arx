@@ -406,6 +406,14 @@ export async function executeRetrievalHarnessTool(params: {
           communityId: params.communityId,
           operation: params.toolName === "polynet_list" ? "list" : "read",
           path: String(normalizedArgs.path ?? ""),
+          cursor:
+            typeof normalizedArgs.cursor === "string"
+              ? normalizedArgs.cursor
+              : null,
+          limit:
+            typeof normalizedArgs.limit === "number"
+              ? normalizedArgs.limit
+              : undefined,
         },
       )) as {
         ok?: boolean;

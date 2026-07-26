@@ -2,7 +2,7 @@
    Members approve facts, agents propose facts, admins transition nothing.
    Every read goes through readMemberFactsForLens (the shared predicate). */
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import {
   communityMembershipRowIsActive,
@@ -258,43 +258,5 @@ export const retractMemberFact = mutation({
       nowMs: Date.now(),
     });
     return { ok: true };
-  },
-});
-
-/* "Who is @handle?" — the narrowest lens. Both viewer and subject must hold
-   ACTIVE memberships in the shared community: when a membership ends, this
-   read returns nothing for that community (retention-on-leave invariant —
-   the founder lens, not this one, retains). */
-export const getMemberOrientation = query({
-  args: {
-    authSubject: v.optional(v.string()),
-    subjectUserId: v.id("users"),
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    const viewerUserId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const isSelf = String(viewerUserId) === String(args.subjectUserId);
-    if (!isSelf) {
-      const viewerMembership = await loadActiveMembership(ctx, args.communityId, viewerUserId);
-      const subjectMembership = await loadActiveMembership(ctx, args.communityId, args.subjectUserId);
-      if (!viewerMembership || !subjectMembership) {
-        throw new Error("member_orientation_membership_required");
-      }
-    }
-    const facts = await readMemberFactsForLens(ctx, {
-      subjectUserId: args.subjectUserId,
-      lens: isSelf
-        ? { kind: "self" }
-        : { kind: "member_orientation", communityId: String(args.communityId) },
-    });
-    const spine = await readMemberSpine(ctx, args.subjectUserId);
-    return {
-      subject_user_id: String(args.subjectUserId),
-      spine,
-      facts: facts.map(mapFactForOutput),
-    };
   },
 });

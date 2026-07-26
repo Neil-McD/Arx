@@ -17,17 +17,25 @@ import {
 } from "./communityCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import {
+  listCommunitySemanticMembers,
   listCommunitySemanticRoot,
   parsePolynetSemanticPath,
+  POLYNET_MEMBERS_DIRECTORY_PATH,
+  POLYNET_SEMANTIC_ROOT_PATH,
   POLYNET_SELF_PROFILE_PATH,
   readCommunitySemanticDocument,
   type CommunitySemanticSource,
+  type MemberProfileSemanticSource,
   type SelfProfileCommunitySummary,
   type SelfProfileSemanticSource,
 } from "../shared/communitySemanticRepository";
 import { normalizeSocialProfileLinks } from "../shared/socialProfileLinks";
 import { getUniqueUserProfileDetailByUserId } from "./profileCore";
 import { resolveViewerProfileRelationship } from "./profileRelationshipCore";
+import {
+  listMemberSemanticDirectory,
+  resolveMemberSemanticProfile,
+} from "./communitySemanticMembers";
 
 export type {
   CommunityCapabilityContextErrorCode,
@@ -270,6 +278,8 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
     communitySlug: v.optional(v.string()),
     operation: v.union(v.literal("list"), v.literal("read")),
     path: v.string(),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const usesCommunityId = Boolean(args.communityId);
@@ -300,24 +310,68 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
         message: "Community not found or not accessible.",
       };
     }
-    if (args.operation === "list") {
-      return listCommunitySemanticRoot({ path: args.path });
-    }
     const parsedPath = parsePolynetSemanticPath(args.path);
     if (!parsedPath.ok) return parsedPath;
-    let selfProfile: SelfProfileSemanticSource | null = null;
-    if (parsedPath.path === POLYNET_SELF_PROFILE_PATH) {
+    if (args.operation === "list") {
+      if (parsedPath.path === POLYNET_SEMANTIC_ROOT_PATH) {
+        return listCommunitySemanticRoot({ path: parsedPath.path });
+      }
+      if (parsedPath.path !== POLYNET_MEMBERS_DIRECTORY_PATH) {
+        return listCommunitySemanticRoot({ path: parsedPath.path });
+      }
       try {
         const actorUserId = await resolveUserIdForAuthenticatedRequest({
           ctx,
           userId: args.userId,
           authSubject: args.authSubject,
         });
-        selfProfile = await buildSelfProfileSemanticSource({
+        const memberDirectory = await listMemberSemanticDirectory({
           ctx,
-          userId: actorUserId,
+          actorUserId,
           context: resolved.context,
+          cursor: args.cursor ?? null,
+          limit: args.limit ?? null,
         });
+        return listCommunitySemanticMembers({
+          path: parsedPath.path,
+          source: memberDirectory,
+        });
+      } catch {
+        return {
+          ok: false as const,
+          code: "semantic_context_unavailable" as const,
+          message: "Semantic member directory not available.",
+        };
+      }
+    }
+    let selfProfile: SelfProfileSemanticSource | null = null;
+    let memberProfile: MemberProfileSemanticSource | null = null;
+    const memberHandle =
+      "memberHandle" in parsedPath ? parsedPath.memberHandle : null;
+    if (
+      parsedPath.path === POLYNET_SELF_PROFILE_PATH ||
+      memberHandle
+    ) {
+      try {
+        const actorUserId = await resolveUserIdForAuthenticatedRequest({
+          ctx,
+          userId: args.userId,
+          authSubject: args.authSubject,
+        });
+        if (parsedPath.path === POLYNET_SELF_PROFILE_PATH) {
+          selfProfile = await buildSelfProfileSemanticSource({
+            ctx,
+            userId: actorUserId,
+            context: resolved.context,
+          });
+        } else if (memberHandle) {
+          memberProfile = await resolveMemberSemanticProfile({
+            ctx,
+            actorUserId,
+            context: resolved.context,
+            handle: memberHandle,
+          });
+        }
       } catch {
         return {
           ok: false as const,
@@ -329,6 +383,7 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
     return readCommunitySemanticDocument({
       source: buildCommunitySemanticSource({ context: resolved.context }),
       selfProfile,
+      memberProfile,
       path: parsedPath.path,
     });
   },

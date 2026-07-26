@@ -25,7 +25,10 @@ import {
   validateProfileBio,
   validateProfileDisplayName,
 } from "../shared/profileText";
-import { getUniqueUserProfileDetailByUserId } from "./profileCore";
+import {
+  getUniqueUserByNormalizedHandle,
+  getUniqueUserProfileDetailByUserId,
+} from "./profileCore";
 
 type ProfileMutationErrorCode =
   | "profile_avatar_invalid"
@@ -245,10 +248,10 @@ async function mapProfileDetailWithSetup(
 }
 
 async function assertHandleAvailable(ctx: any, normalizedHandle: string, userId: any): Promise<void> {
-  const existing = await ctx.db
-    .query("users")
-    .withIndex("by_normalizedHandle", (q: any) => q.eq("normalizedHandle", normalizedHandle))
-    .first();
+  const existing = await getUniqueUserByNormalizedHandle<UserRow>(
+    ctx,
+    normalizedHandle,
+  );
   if (existing && existing._id !== userId) {
     throwProfileMutationError("profile_handle_taken");
   }
@@ -276,10 +279,10 @@ export const checkHandleAvailability = query({
           authSubject: args.authSubject,
         })
       : null;
-    const existing = await ctx.db
-      .query("users")
-      .withIndex("by_normalizedHandle", (q: any) => q.eq("normalizedHandle", validation.normalizedHandle))
-      .first();
+    const existing = await getUniqueUserByNormalizedHandle<UserRow>(
+      ctx,
+      validation.normalizedHandle,
+    );
     const ownedByCurrentUser = Boolean(existing && currentUserId && String(existing._id) === String(currentUserId));
     const available = !existing || ownedByCurrentUser;
     return {

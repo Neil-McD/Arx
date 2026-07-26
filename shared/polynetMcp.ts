@@ -10,6 +10,9 @@ type JsonSchema =
       properties?: Record<string, JsonSchema>;
       items?: JsonSchema;
       enum?: string[];
+      pattern?: string;
+      minimum?: number;
+      maximum?: number;
       minLength?: number;
       maxLength?: number;
       minItems?: number;
@@ -323,7 +326,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
     name: "polynet_list",
     title: "List Polynet Community Files",
     description:
-      "List the implemented semantic root for one explicitly selected, authorized Polynet community.",
+      "List the implemented semantic root or a bounded member directory page for one explicitly selected, authorized Polynet community.",
     annotations: {
       title: "List Polynet Community Files",
       readOnlyHint: true,
@@ -339,19 +342,36 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
         community_slug: SEMANTIC_COMMUNITY_SLUG_SCHEMA,
         path: {
           type: "string",
-          enum: ["/"],
-          description: "The implemented semantic root.",
+          enum: ["/", "/members/"],
+          description: "The semantic root or member directory.",
+        },
+        cursor: {
+          type: ["string", "null"],
+          maxLength: 2048,
+          description: "Opaque continuation cursor returned by a prior member-directory page.",
+        },
+        limit: {
+          type: "integer",
+          minimum: 2,
+          maximum: 50,
+          description: "Bounded member-directory page size.",
         },
       },
     },
     outputSchema: {
       type: "object",
       additionalProperties: false,
-      required: ["path", "entries"],
+      required: [
+        "path",
+        "entries",
+        "next_cursor",
+        "truncated",
+        "skipped_incomplete",
+      ],
       properties: {
         path: {
           type: "string",
-          enum: ["/"],
+          enum: ["/", "/members/"],
         },
         entries: {
           type: "array",
@@ -362,14 +382,35 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
             properties: {
               path: {
                 type: "string",
-                enum: ["/community.md", "/self.md"],
+                minLength: 1,
+                maxLength: 1024,
               },
               kind: {
                 type: "string",
-                enum: ["document"],
+                enum: ["document", "directory"],
+              },
+              name: {
+                type: "string",
+                maxLength: 120,
+              },
+              role: {
+                type: "string",
+                enum: ["owner", "admin", "moderator", "member"],
               },
             },
           },
+        },
+        next_cursor: {
+          type: ["string", "null"],
+          maxLength: 2048,
+        },
+        truncated: {
+          type: "boolean",
+        },
+        skipped_incomplete: {
+          type: "integer",
+          minimum: 0,
+          maximum: 1000,
         },
       },
     },
@@ -394,8 +435,9 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
         community_slug: SEMANTIC_COMMUNITY_SLUG_SCHEMA,
         path: {
           type: "string",
-          enum: ["/community.md", "/self.md"],
-          description: "An implemented community or authenticated-self profile document.",
+          pattern:
+            "^(?:/(?:community|self)\\.md|/members/[a-z0-9][a-z0-9_-]{1,30}[a-z0-9]\\.md)$",
+          description: "An implemented community, authenticated-self, or community-member profile document.",
         },
       },
     },
@@ -406,7 +448,8 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
       properties: {
         path: {
           type: "string",
-          enum: ["/community.md", "/self.md"],
+          pattern:
+            "^(?:/(?:community|self)\\.md|/members/[a-z0-9][a-z0-9_-]{1,30}[a-z0-9]\\.md)$",
         },
         body: {
           type: "string",

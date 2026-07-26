@@ -835,6 +835,15 @@ async function handleToolCall(args: {
     if (!path) {
       return { ok: false, type: "tool", message: "path is required." };
     }
+    const cursor =
+      toolName === "polynet_list"
+        ? normalizeString(toolArgs.cursor, 2_048)
+        : null;
+    const requestedLimit = Number(toolArgs.limit);
+    const limit =
+      toolName === "polynet_list" && Number.isFinite(requestedLimit)
+        ? Math.max(2, Math.min(50, Math.floor(requestedLimit)))
+        : undefined;
     try {
       const semanticResponse = (await ctx.runQuery(
         internal.communityCapabilityContext
@@ -844,6 +853,8 @@ async function handleToolCall(args: {
           communitySlug,
           operation: toolName === "polynet_list" ? "list" : "read",
           path,
+          cursor,
+          limit,
         },
       )) as {
         ok?: boolean;
