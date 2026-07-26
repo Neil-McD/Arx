@@ -38,10 +38,7 @@ const communityReadTools = [
   "community_chat_read",
   "community_ai_feed_search",
   "community_ai_feed_read",
-  "community_resources_map",
   "community_resources_read",
-  "community_resources_list",
-  "community_resource_read",
   "community_resources_search",
 ] as const;
 const builderStageTools = [

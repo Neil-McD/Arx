@@ -196,10 +196,7 @@ function provePromptEntrypoints() {
       "get_product_doc",
       "polynet_list",
       "polynet_read",
-      "community_resources_map",
       "community_resources_read",
-      "community_resources_list",
-      "community_resource_read",
       "community_resources_search",
       "community_search",
       "community_memory_search",
@@ -240,7 +237,7 @@ function provePromptEntrypoints() {
   assert.match(platformHarnessPrompt, /AGENT_OPERATING_POLICY/);
   assert.match(platformHarnessPrompt, /THREAD_WORKING_STATE/);
   assert.match(platformHarnessPrompt, /TEMPORAL_CONTEXT/);
-  assert.match(platformHarnessPrompt, /Allowed tools: search_product_docs,get_product_doc,polynet_list,polynet_read,community_resources_map,community_resources_read,community_resources_list,community_resource_read,community_resources_search,community_search,community_memory_search,community_memory_read,community_write,web_research,web_crawl,read,write,bash/);
+  assert.match(platformHarnessPrompt, /Allowed tools: search_product_docs,get_product_doc,polynet_list,polynet_read,community_resources_read,community_resources_search,community_search,community_memory_search,community_memory_read,community_write,web_research,web_crawl,read,write,bash/);
   assert.match(platformHarnessPrompt, /Account plan: Premium/);
   assert.match(platformHarnessPrompt, /Premium tools are still limited to the listed allowed tools/);
   assert.match(platformHarnessPrompt, /Use web_research for current external facts/);
@@ -292,10 +289,7 @@ function provePromptEntrypoints() {
     allowedToolNames: [
       "polynet_list",
       "polynet_read",
-      "community_resources_map",
       "community_resources_read",
-      "community_resources_list",
-      "community_resource_read",
       "community_resources_search",
       "community_resource_builder_list",
       "community_resource_builder_read",
@@ -574,7 +568,7 @@ async function proveSourceContract() {
   );
   assert.match(
     runtimeTurnResolutionSource,
-    /if \(params\.activeCapabilityFamilies\.includes\("community_tools"\)\)[\s\S]*"polynet_list"[\s\S]*"polynet_read"[\s\S]*"community_resources_map"[\s\S]*"community_resources_read"[\s\S]*"community_resources_list"[\s\S]*"community_resource_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
+    /if \(params\.activeCapabilityFamilies\.includes\("community_tools"\)\)[\s\S]*"polynet_list"[\s\S]*"polynet_read"[\s\S]*"community_resources_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
     "community tools should be exposed by capability family, not product tier",
   );
   assert.match(

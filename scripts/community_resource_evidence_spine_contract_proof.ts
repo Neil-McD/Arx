@@ -24,6 +24,7 @@ const [
   evidenceCore,
   audit,
   runtimeLoop,
+  semanticContext,
   concierge,
   mcp,
   httpMcp,
@@ -36,6 +37,7 @@ const [
   read("convex/communityResourceEvidenceCore.ts"),
   read("convex/communityEvidenceAudit.ts"),
   read("convex/runtimeAgentLoop.ts"),
+  read("convex/communityCapabilityContext.ts"),
   read("convex/communityAgentServeWorker.ts"),
   read("shared/polynetMcp.ts"),
   read("convex/httpMcp.ts"),
@@ -91,9 +93,14 @@ assert.doesNotMatch(audit, /query: v\./);
 assert.doesNotMatch(audit, /args\.query/);
 
 assert.match(runtimeLoop, /communityResourceEvidence\.searchCommunityResourceEvidenceInternal/);
-assert.match(runtimeLoop, /communityResourceEvidence\.readCommunityResourceEvidenceForToolInternal/);
+assert.match(runtimeLoop, /readCommunitySemanticRepositoryInternal/);
 assert.match(runtimeLoop, /communityResourceEvidence\.readCommunityResourcesEvidenceForToolInternal/);
 assert.match(runtimeLoop, /surface: params\.evidenceSurface \?\? "member_agent_dock"/);
+assert.match(
+  semanticContext,
+  /readCommunitySemanticRepositoryInternal[\s\S]*communityResourceEvidence[\s\S]*readCommunityResourceEvidenceForToolInternal/,
+  "semantic exact reads should reuse the canonical audited resource action",
+);
 assert.match(concierge, /evidenceSurface: "community_concierge"/);
 assert.match(mcp, /stable resource ref/);
 assert.match(httpMcp, /communityResourceEvidence\.searchCommunityResourceEvidenceInternal/);

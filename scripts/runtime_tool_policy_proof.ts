@@ -38,10 +38,7 @@ const FIXED_TOOL_FAMILIES = {
     "member_conversation_read",
     "polynet_list_communities",
     "polynet_get_community",
-    "community_resources_map",
     "community_resources_read",
-    "community_resources_list",
-    "community_resource_read",
     "community_resources_search",
     "community_resource_builder_list",
     "community_resource_builder_read",
@@ -191,10 +188,7 @@ function proveFixedPolicyBoundaries() {
     "get_product_doc",
     "polynet_list",
     "polynet_read",
-    "community_resources_map",
     "community_resources_read",
-    "community_resources_list",
-    "community_resource_read",
     "community_resources_search",
     "community_resource_builder_list",
     "community_resource_builder_read",
@@ -265,10 +259,7 @@ function proveFixedPolicyBoundaries() {
   assert.equal(getFixedRuntimeToolPolicy("polynet_read").category, "community");
   assert.equal(getFixedRuntimeToolPolicy("polynet_read").requiresCommunity, true);
   for (const toolName of [
-    "community_resources_map",
     "community_resources_read",
-    "community_resources_list",
-    "community_resource_read",
     "community_resources_search",
     "community_resource_builder_list",
     "community_resource_builder_read",

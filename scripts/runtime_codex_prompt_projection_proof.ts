@@ -16,10 +16,7 @@ const codexVisiblePolynetToolNames = [
   "polynet_list",
   "polynet_read",
   "community_search",
-  "community_resources_map",
   "community_resources_read",
-  "community_resources_list",
-  "community_resource_read",
   "community_resources_search",
   "community_resource_builder_list",
   "community_resource_builder_read",
@@ -144,12 +141,12 @@ assert.match(
 );
 assert.match(
   projection.developerInstructions,
-  /Allowed tools: search_product_docs,get_product_doc,polynet_list,polynet_read,community_search,community_resources_map,community_resources_read,community_resources_list,community_resource_read,community_resources_search,community_resource_builder_list,community_resource_builder_read,community_resource_builder_stage_changeset/,
+  /Allowed tools: search_product_docs,get_product_doc,polynet_list,polynet_read,community_search,community_resources_read,community_resources_search,community_resource_builder_list,community_resource_builder_read,community_resource_builder_stage_changeset/,
   "Codex projection must render only the exact PolyNet platform tools projected to Codex",
 );
 assert.match(
   projection.developerInstructions,
-  /Available tools: search_product_docs, get_product_doc, polynet_list, polynet_read, community_search, community_resources_map, community_resources_read, community_resources_list, community_resource_read, community_resources_search, community_resource_builder_list, community_resource_builder_read, community_resource_builder_stage_changeset/,
+  /Available tools: search_product_docs, get_product_doc, polynet_list, polynet_read, community_search, community_resources_read, community_resources_search, community_resource_builder_list, community_resource_builder_read, community_resource_builder_stage_changeset/,
   "Codex runtime envelope must use the exact Codex-visible PolyNet tool surface",
 );
 assert.doesNotMatch(

@@ -278,10 +278,7 @@ export function resolveAllowedToolNames(params: {
     toolNames.push(
       "polynet_list",
       "polynet_read",
-      "community_resources_map",
       "community_resources_read",
-      "community_resources_list",
-      "community_resource_read",
       "community_resources_search",
       "community_search",
       "community_memory_search",

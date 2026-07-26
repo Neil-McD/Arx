@@ -142,16 +142,12 @@ require_match_in_file "$TOOL_TYPES_FILE" '"polynet_list"' \
   "tool name type includes polynet_list"
 require_match_in_file "$TOOL_TYPES_FILE" '"polynet_read"' \
   "tool name type includes polynet_read"
-require_match_in_file "$TOOL_TYPES_FILE" '"community_resources_map"' \
-  "tool name type includes community_resources_map"
 require_match_in_file "$TOOL_TYPES_FILE" '"community_resources_read"' \
   "tool name type includes community_resources_read"
-require_match_in_file "$TOOL_TYPES_FILE" '"community_resources_list"' \
-  "tool name type includes community_resources_list"
-require_match_in_file "$TOOL_TYPES_FILE" '"community_resource_read"' \
-  "tool name type includes community_resource_read"
 require_match_in_file "$TOOL_TYPES_FILE" '"community_resources_search"' \
   "tool name type includes community_resources_search"
+forbid_match_in_file "$TOOL_TYPES_FILE" '"community_resources_map"|"community_resources_list"|"community_resource_read"' \
+  "retired native resource tools are absent from the active tool type"
 require_match_in_file "$TOOL_TYPES_FILE" '"community_write"' \
   "tool name type includes community_write"
 require_match_in_file "$TOOL_TYPES_FILE" '"list_dir"' \
@@ -182,16 +178,14 @@ require_match_in_file "$RESOLUTION_FILE" '"polynet_list"' \
   "runtime capability resolution includes semantic community listing"
 require_match_in_file "$RESOLUTION_FILE" '"polynet_read"' \
   "runtime capability resolution includes semantic community reading"
-require_match_in_file "$RESOLUTION_FILE" '"community_resources_map"' \
-  "runtime capability resolution includes community resource map tool"
 require_match_in_file "$RESOLUTION_FILE" '"community_resources_read"' \
   "runtime capability resolution includes community resource batch read tool"
-require_match_in_file "$RESOLUTION_FILE" '"community_resources_list"' \
-  "runtime capability resolution includes community resource listing tool"
-require_match_in_file "$RESOLUTION_FILE" '"community_resource_read"' \
-  "runtime capability resolution includes community resource read tool"
 require_match_in_file "$RESOLUTION_FILE" '"community_resources_search"' \
   "runtime capability resolution includes community resource search tool"
+forbid_match_in_file "$RESOLUTION_FILE" '"community_resources_map"|"community_resources_list"|"community_resource_read"' \
+  "runtime capability resolution excludes retired native resource tools"
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'toolName === "community_resources_map"|toolName === "community_resources_list"|toolName === "community_resource_read"' \
+  "runtime dispatch excludes retired native resource tools"
 require_match_in_file "$RESOLUTION_FILE" '"community_search"' \
   "runtime capability resolution includes community search tool"
 require_match_in_file "$RESOLUTION_FILE" '"community_write"' \

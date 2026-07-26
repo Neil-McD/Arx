@@ -497,10 +497,9 @@ function hasLiveCommunityResourceTools(
   allowedToolNames: readonly RetrievalToolName[],
 ): boolean {
   return (
-    allowedToolNames.includes("community_resources_map") ||
+    allowedToolNames.includes("polynet_list") ||
+    allowedToolNames.includes("polynet_read") ||
     allowedToolNames.includes("community_resources_read") ||
-    allowedToolNames.includes("community_resources_list") ||
-    allowedToolNames.includes("community_resource_read") ||
     allowedToolNames.includes("community_resources_search")
   );
 }

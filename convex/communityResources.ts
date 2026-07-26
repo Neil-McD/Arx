@@ -4734,7 +4734,7 @@ function missingBuilderRef(args: {
   return {
     ok: false,
     reason_code: "resource_builder_ref_not_found",
-    message: `No resource builder target matched "${args.ref}". Use a module name, page/source title, id, directory_uri, or readable path from community_resource_builder_list or community_resources_map.`,
+    message: `No resource builder target matched "${args.ref}". Use a module name, page/source title, id, directory_uri, or readable path from community_resource_builder_list.`,
     suggested_refs: uniqueBuilderRefMatches([...suggestedModules, ...suggestedResources]),
   };
 }

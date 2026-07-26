@@ -33,7 +33,7 @@ const builderEnvelope = buildRuntimeTurnEnvelope({
   allowedToolNames: [
     "polynet_list",
     "polynet_read",
-    "community_resources_map",
+    "community_resources_read",
     "community_resource_builder_list",
     "community_resource_builder_read",
     "community_resource_builder_stage_changeset",

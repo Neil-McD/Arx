@@ -60,10 +60,7 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   allowedToolNames: [
     "polynet_list",
     "polynet_read",
-    "community_resources_map",
     "community_resources_read",
-    "community_resources_list",
-    "community_resource_read",
     "community_resources_search",
     "community_memory_search",
     "community_memory_read",

@@ -648,7 +648,9 @@ const nativeTools = buildResponsesApiFunctionTools([
 ]);
 assert.equal(nativeTools.length, 2);
 assert.deepEqual(nativeTools[0]?.parameters.required, ["path", "cursor", "limit"]);
-assert.deepEqual(nativeTools[1]?.parameters.required, ["path"]);
+assert.deepEqual(nativeTools[1]?.parameters.required, ["path", "offset", "limit"]);
+assert.equal(nativeTools[1]?.parameters.properties?.offset?.maximum, 1_000_000);
+assert.equal(nativeTools[1]?.parameters.properties?.limit?.maximum, 20_000);
 assert.equal(
   "community_slug" in (nativeTools[0]?.parameters.properties ?? {}),
   false,

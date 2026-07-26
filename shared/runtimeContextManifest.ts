@@ -202,10 +202,7 @@ const COMMUNITY_DIRECTORY_TOOL_NAMES = new Set<RetrievalToolName>([
 ]);
 
 const COMMUNITY_RESOURCE_TOOL_NAMES = new Set<RetrievalToolName>([
-  "community_resources_map",
   "community_resources_read",
-  "community_resources_list",
-  "community_resource_read",
   "community_resources_search",
   "community_resource_builder_list",
   "community_resource_builder_read",
