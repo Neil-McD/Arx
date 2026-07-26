@@ -12,7 +12,7 @@ const operatorIntelligence = read("convex/operatorIntelligence.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
 const operatorPanel = [
-  read("apps/web/src/components/WebWorkspaceRightPanel.tsx"),
+  read("apps/web/src/components/WebOperatorDashboardHost.tsx"),
   read("apps/web/src/components/useOperatorDashboardData.ts"),
   read("apps/web/src/components/OperatorBusinessPanelView.tsx"),
   read("apps/web/src/components/workspaceRightPanelOperatorShared.ts"),
@@ -81,7 +81,7 @@ assert.doesNotMatch(operatorTypes, /OperatorAccountSetupEventSummary/, "operator
 assert.doesNotMatch(operatorPanel, /Setup activity|Setup funnel|Recent setup events/, "operator setup UI should stay focused on current setup state");
 assert.match(operatorGateway, /loadOperatorAccountSetupSnapshotCanonical/, "web gateway must load setup snapshot");
 assert.doesNotMatch(operatorPanel, /"accounts"/, "operator panel must merge account setup into Business, not expose a separate Accounts tab");
-assert.match(operatorPanel, /accountSetup=\{props\.state\.accountSetup\}/, "business tab must receive account setup state");
+assert.match(operatorPanel, /accountSetup=\{operator\.state\.accountSetup\}/, "business tab must receive account setup state");
 assert.doesNotMatch(operatorPanel, /<h2>Account setup<\/h2>/, "operator panel should present this as user readiness, not account setup");
 assert.doesNotMatch(operatorPanel, /Current user setup state from canonical account records/, "operator panel must not render the old empty account setup intro card");
 assert.match(operatorPanel, /<h2>User readiness<\/h2>/, "business tab must include a user readiness section boundary");

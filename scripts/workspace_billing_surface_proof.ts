@@ -13,7 +13,6 @@ const accountCommerceSource = read("shared/accountCommerce.ts");
 const premiumBillingSource = read("convex/premiumBilling.ts");
 const cloudAccountCommerceGatewaySource = read("shared/cloudAccountCommerceGateway.ts");
 const billingSettingsSource = read("apps/web/src/components/WebBillingSettingsSection.tsx");
-const workspacePanelSource = read("apps/web/src/components/WebWorkspaceUserDataPanel.tsx");
 const settingsPanelsSource = read("apps/web/src/components/WebSettingsPanels.tsx");
 const appSource = read("apps/web/src/App.tsx");
 const httpBillingSource = read("convex/httpBilling.ts");
@@ -143,27 +142,5 @@ for (const requiredBillingLabel of [
     `Billing settings must render ${requiredBillingLabel}`,
   );
 }
-
-for (const forbiddenWorkspaceCopy of [
-  "Tool credits",
-  "Pending workspace usage",
-  "prior usage clears from the next top-up",
-  "Add to credit balance",
-  "Set up auto recharge",
-]) {
-  assert.ok(
-    !workspacePanelSource.includes(forbiddenWorkspaceCopy),
-    `workspace panel must not render account usage copy: ${forbiddenWorkspaceCopy}`,
-  );
-}
-
-assert.ok(
-  !workspacePanelSource.includes("formatWorkspaceToolBalanceUsdFromCredits"),
-  "workspace panel must not format or display billing amounts",
-);
-assert.ok(
-  workspacePanelSource.includes("<dt>Billing</dt>"),
-  "workspace panel may keep a simple Billing navigation row",
-);
 
 console.log("workspace_billing_surface_proof: ok");

@@ -170,7 +170,7 @@ Exit proof: adapter parity is generated/tested and every operation reaches one a
 
 ## Step 8 — Delete deferred product surfaces and configuration drift
 
-1. **Destination decision complete in C0; C7.1A-B complete in staging source:** the unmounted host and outbound browser destination are deleted. `/workspace*` remains inbound-only migration input. Continue caller inventory before removing remaining Workspace-named child components/styles; protected runtime, harness, project/thread, provider, MCP, and memory substrate is not a deletion target.
+1. **Destination decision complete in C0; C7.1A-C complete in staging source:** the unmounted host, outbound browser destination, and unreachable right-panel/files browser authority are deleted. `/workspace*` remains inbound-only migration input. Continue caller inventory for the legacy preview/sidebar/message/project-modal and deeper App orchestration clusters; protected runtime, harness, project/thread, provider, MCP, and memory substrate is not a deletion target.
 2. Remove Builder Partner Workspace/onboarding/headline UI after Step 2; retain the minimum coherent Settings/operator enrollment, terms, status, and payout controls.
 3. Remove Discover Apps/Skills marketplace CSS and unused projections after build/screenshot proof.
 4. Correct product docs and status indexes.

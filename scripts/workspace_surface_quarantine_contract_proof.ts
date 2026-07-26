@@ -22,6 +22,7 @@ const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
 const shellHost = read("apps/web/src/components/WebShellChromeHost.tsx");
 const shellClassNames = read("apps/web/src/controllers/buildWebShellChromeClassNames.ts");
 const webCss = read("apps/web/src/index.css");
+const baseCss = read("apps/web/src/base.css");
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx");
 const communityAgentSection = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
@@ -299,11 +300,27 @@ for (const retiredPath of [
   "apps/web/src/components/WebWorkspaceSurfaceHost.tsx",
   "apps/web/src/components/WebWorkspaceShellPanels.tsx",
   "apps/web/src/components/WebWorkspaceShellPanelsHost.tsx",
+  "apps/web/src/components/WebWorkspaceRightPanel.tsx",
+  "apps/web/src/components/WebWorkspaceUserDataPanel.tsx",
+  "apps/web/src/components/useWorkspaceRightPanelController.ts",
+  "apps/web/src/components/workspaceRightPanelData.ts",
+  "apps/web/src/components/workspaceRightPanelModel.ts",
   "apps/web/src/controllers/buildWebWorkspaceLandingProjection.tsx",
   "apps/web/src/controllers/buildWebWorkspaceSurfaceProjection.tsx",
+  "shared/workspaceInspectorGateway.ts",
 ]) {
   assert.equal(existsSync(retiredPath), false, `${retiredPath} must remain deleted`);
 }
+assert.doesNotMatch(
+  app,
+  /useWorkspaceRightPanelController|turnOnWorkspaceComputer|turnOffWorkspaceComputer|startProjectWorkspaceComputer|stopProjectWorkspaceComputer/,
+  "App must not retain right-panel state or manual computer controls for the deleted Workspace presentation",
+);
+assert.doesNotMatch(
+  baseCss,
+  /\.workspace-right-panel|\.workspace-user-data-panel|\.workspace-summary-|\.workspace-community-preview|\.workspace-files-|\.workspace-file-preview|\.workspace-code-preview/,
+  "base CSS must not retain selectors owned only by the deleted Workspace right panel and files browser",
+);
 assert.match(
   settingsSurface,
   /WebSettingsPanels[\s\S]*SettingsNavList/,

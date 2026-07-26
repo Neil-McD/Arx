@@ -1339,3 +1339,36 @@ inbound redirect compatibility. C7 remains `IN_PROGRESS`: Workspace-named child
 presentation/controller/style clusters still require caller classification
 before deletion, and protected runtime/harness/community memory substrate remains
 out of scope.
+
+### C7.1C current receipt — Workspace right-panel/files authority deletion
+
+The third C7 slice deletes the unreachable Workspace right-panel and files
+presentation. `WebWorkspaceRightPanel.tsx`, `WebWorkspaceUserDataPanel.tsx`,
+their panel controller/data/model modules, and the browser-only
+`workspaceInspectorGateway.ts` adapter had no mounted first-party caller after
+C7.1A-B. `App.tsx` no longer initializes dormant right-panel layout state or
+manual project-computer start/stop callbacks.
+
+Presentation authority now follows mounted owners. Operator diagnostics are
+proved through `WebOperatorDashboardHost.tsx`,
+`useOperatorDashboardData.ts`, and the four live operator views. Billing is
+proved through global Billing Settings. Retained project-storage failures route
+through `useWebProjectUiController.ts`, while runtime paid-usage failures remain
+owned by `useWebTurnRunnerController.ts`. Backend inspector traversal, cache
+invalidation, provider accounting, and failure-detail contracts remain intact;
+only their deleted browser files-panel adapter and UI retry/rendering assertions
+are retired.
+
+CSS owned exclusively by the deleted right panel, summary/community preview,
+and files/code preview is removed. The similarly named app-preview styles remain
+because `DaytonaRuntimeAppPreview.tsx` actively uses them. The live
+`workspaceRightPanelOperatorShared.ts` module is also retained despite its stale
+name because the operator views still import it.
+
+This slice changes no Convex function, schema, project/thread data, runtime
+executor, harness policy, provider lease, billing authority, MCP compatibility,
+community resource/memory owner, environment configuration, or production
+state. C7 remains `IN_PROGRESS`: the zero-caller legacy Workspace preview,
+sidebar-state, and message-presentation clusters still need separate lifecycle
+proof before deletion, followed by a distinct project-modal/deeper App
+orchestration audit.

@@ -523,16 +523,15 @@ function provePartnerTermsAgreementContract(args: {
   );
 }
 
-function provePartnerRightPanelContract(
+function provePartnerSurfaceIsolationContract(
   appSource: string,
-  rightPanelSource: string,
-  rightPanelModelSource: string,
+  operatorHostSource: string,
 ) {
   assertIncludes(appSource, "settingsGroup !== \"partners\"", "Builder Partner data loading must remain settings-scoped");
   assert.doesNotMatch(
-    [appSource, rightPanelSource, rightPanelModelSource].join("\n"),
+    [appSource, operatorHostSource].join("\n"),
     /showPartnerTab|builderPartnerProgramPanel|activeInsightTab === "partner"|value === "partner"|id: "partner"/,
-    "Builder Partner must not remain coupled to the primary Workspace right panel",
+    "Builder Partner must remain isolated from the primary app and operator surfaces",
   );
 }
 
@@ -2462,14 +2461,11 @@ function main() {
     new URL("../apps/web/src/controllers/useWebPathRouteLifecycle.ts", import.meta.url),
   );
   const operatorGatewaySource = readText(new URL("../shared/cloudOperatorDashboardGateway.ts", import.meta.url));
-  const rightPanelSource = readText(
-    new URL("../apps/web/src/components/WebWorkspaceRightPanel.tsx", import.meta.url),
-  );
-  const rightPanelModelSource = readText(
-    new URL("../apps/web/src/components/workspaceRightPanelModel.ts", import.meta.url),
+  const operatorHostSource = readText(
+    new URL("../apps/web/src/components/WebOperatorDashboardHost.tsx", import.meta.url),
   );
   const operatorPanelSource = [
-    readText(new URL("../apps/web/src/components/WebWorkspaceRightPanel.tsx", import.meta.url)),
+    operatorHostSource,
     readText(new URL("../apps/web/src/components/useOperatorDashboardData.ts", import.meta.url)),
     readText(new URL("../apps/web/src/components/OperatorBusinessPanelView.tsx", import.meta.url)),
     readText(new URL("../apps/web/src/components/workspaceRightPanelOperatorShared.ts", import.meta.url)),
@@ -2512,7 +2508,7 @@ function main() {
     gatewaySource,
     runtimeSmokeSource,
   });
-  provePartnerRightPanelContract(appSource, rightPanelSource, rightPanelModelSource);
+  provePartnerSurfaceIsolationContract(appSource, operatorHostSource);
   proveBuilderPartnerRuntimeSmokeContract(runtimeSmokeSource);
   proveAutomaticUnlockContract(builderPartnersSource, gatewaySource, appSource);
   proveEndToEndPartnerLifecycleSourceContract(

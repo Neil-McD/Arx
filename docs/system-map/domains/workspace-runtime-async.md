@@ -20,9 +20,13 @@ C7.1A. Builder Partner remains retained through its secondary Settings and
 operator owners; mixed contracts no longer use the dead host as authority.
 C7.1B deleted the remaining outbound browser route controller/builders and
 route-backed App orchestration. Thread/project selection remains as non-navigation
-runtime state. Remaining Workspace-named child presentation components and styles
-still require caller-by-caller classification before deletion. None of those
-names alone authorizes removal of the protected harness/runtime substrate.
+runtime state. C7.1C deleted the unreachable right-panel/files presentation, its
+browser inspector adapter, dormant App panel/manual-computer state, and exclusive
+styles. Operator, Billing Settings, project UI, and turn-runner proofs now follow
+their mounted owners. Remaining Workspace-named preview, sidebar-state, message,
+project-modal, and deeper App orchestration clusters still require caller-by-caller
+classification before deletion. None of those names alone authorizes removal of
+the protected harness/runtime substrate.
 
 ## Scheduled job inventory
 
@@ -56,7 +60,7 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | Surface | Scaling variable | Risk |
 | --- | --- | --- |
 | compiler digest recovery | unfinished digest versions | `O(1)` exact-row checkpoint per active recovery chain |
-| remaining Workspace child UI/styles | dormant caller clusters/selectors | dead presentation may remain, but names can also describe protected execution substrate |
+| remaining Workspace child UI/styles | preview/sidebar/message/project-modal caller clusters | dead presentation may remain, but names can also describe protected execution substrate |
 | runtime events/receipts | runs × events | storage retention and operator query cost unclear |
 | provider workers/previews | sessions × time/cost | needs cleanup, lease finalization, and accounting convergence |
 
@@ -66,6 +70,7 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | --- | --- | --- | ---: | --- |
 | protected coding/community harness substrate | `KEEP (MVP core)` | `HARDEN` | 1 | explicitly protected and required for external execution |
 | standalone Workspace as primary navigation destination | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1A-B deleted the host and all outbound browser navigation; inbound migration classification remains |
+| Workspace right-panel/files browser authority | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1C deleted the unreachable presentation, browser adapter, dormant App controls, and exclusive styles while retaining backend inspector/runtime owners |
 | Workspace host coupling to Builder Partner UI | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1A deleted the unmounted host; retained partner UI remains in Settings/operator owners |
 | workspace route builders/controllers after parser retirement | `DELETE (deferred/dead)` | `COMPLETE` | 8 | outbound owners are deleted; inbound classification remains separate from backend substrate |
 | remaining no-cursor repeating prefix sweeps | `KEEP (MVP core)` | `HARDEN`, `BOUND` | 9 | claims reliable automation while permanently starving eligible work |

@@ -156,7 +156,6 @@ for (const queryName of operatorQueryNames.filter((queryName) => queryName !== "
 assert.doesNotMatch(operatorDashboard, /export const \w+ = action/, "operator dashboard must not expose public actions");
 const operatorMaintenanceMutationNames = [
   "backfillHarnessAppSourceProvenance",
-  "backfillCommunityMembershipActiveFlags",
 ];
 assert.deepEqual(
   [...operatorDashboard.matchAll(/export const (\w+) = mutation/g)].map((match) => match[1]),
@@ -315,8 +314,8 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   baseCss,
-  /\.workspace-right-panel-toggle\s*\{[^}]*position:\s*(fixed|absolute)/,
-  "workspace operator toggle must be laid out by the shared header, not fixed-position CSS",
+  /\.workspace-right-panel|\.workspace-user-data-panel|\.workspace-files-/,
+  "base CSS must not retain the retired Workspace right-panel or files presentation",
 );
 
 console.log("operator_dashboard_gate_proof: ok");
