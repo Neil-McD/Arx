@@ -9,7 +9,7 @@ const operatorSentryDiagnostics = read("convex/operatorSentryDiagnostics.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
 const operatorPanel = [
-  read("apps/web/src/components/WebWorkspaceRightPanel.tsx"),
+  read("apps/web/src/components/WebOperatorDashboardHost.tsx"),
   read("apps/web/src/components/useOperatorDashboardData.ts"),
   read("apps/web/src/components/OperatorPlatformPanelView.tsx"),
 ].join("\n");

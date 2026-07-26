@@ -7,11 +7,8 @@ function read(relativePath: string): string {
 
 const app = read("apps/web/src/App.tsx");
 const threadDataController = read("shared/useWebThreadDataController.ts");
-const workspaceRightPanel = read("apps/web/src/components/WebWorkspaceRightPanel.tsx");
 const baseCss = read("apps/web/src/base.css");
 const operatorDashboardDataHook = read("apps/web/src/components/useOperatorDashboardData.ts");
-const workspaceRightPanelData = read("apps/web/src/components/workspaceRightPanelData.ts");
-const workspaceRightPanelModel = read("apps/web/src/components/workspaceRightPanelModel.ts");
 const operatorPlatformPanelView = read("apps/web/src/components/OperatorPlatformPanelView.tsx");
 const operatorBusinessPanelView = read("apps/web/src/components/OperatorBusinessPanelView.tsx");
 const operatorCommunitiesPanelView = read("apps/web/src/components/OperatorCommunitiesPanelView.tsx");
@@ -60,25 +57,10 @@ assert.match(
   /message\.includes\("operator_access_forbidden"\)[\s\S]*setState\(createEmptyOperatorDashboardState\(\)\)/,
   "operator panel must still clear stale operator data on confirmed access denial",
 );
-assert.doesNotMatch(
-  workspaceRightPanel,
-  /export function useOperatorDashboardData/,
-  "right panel shell must not own operator data loading",
-);
 assert.match(
   operatorDashboardDataHook,
   /export function useOperatorDashboardData/,
   "operator data loading must live in the dedicated hook module",
-);
-assert.match(
-  workspaceRightPanel,
-  /<OperatorPlatformPanelView[\s\S]*<OperatorBusinessPanelView[\s\S]*<OperatorCommunitiesPanelView/,
-  "right panel shell must delegate operator tab rendering to extracted panel views",
-);
-assert.doesNotMatch(
-  workspaceRightPanel,
-  /function Operator(Platform|Business|Community)Insights/,
-  "right panel shell must not re-accumulate operator tab view implementations",
 );
 assert.match(
   operatorPlatformPanelView,
@@ -101,34 +83,9 @@ assert.match(
   "communities operator view must own community performance presentation",
 );
 assert.doesNotMatch(
-  workspaceRightPanelModel,
-  /const OPERATOR_INSIGHT_TABS:[\s\S]*= \[[^\]]*id: "community"/,
-  "workspace community preview tab must stay in user mode and not leak into operator tabs",
-);
-assert.match(
-  workspaceRightPanelModel,
-  /WorkspaceRightPanelTab = "workspace" \| "community" \| "partner" \| OperatorInsightTab/,
-  "workspace right panel should expose the restored community preview tab in user mode",
-);
-assert.match(
-  workspaceRightPanel,
-  /activeInsightTab === "community" && props\.workspaceCommunityPreviewPanel[\s\S]*<WorkspaceCommunityPreviewPanelContent/,
-  "workspace right panel shell should render the restored read-only community preview tab",
-);
-assert.doesNotMatch(
   app,
   /workspaceCommunityPreviewPanel|workspaceCommunityRecentChatPreview|handleOpenWorkspacePanelCommunity/,
   "App must not project the retired Workspace community preview",
-);
-assert.doesNotMatch(
-  workspaceRightPanel,
-  /CommunityPanelContent/,
-  "workspace right panel shell must not render the deleted community projection",
-);
-assert.doesNotMatch(
-  workspaceRightPanelData + app,
-  /buildWorkspaceRightPanelCommunityData|buildWorkspaceRightPanelRecentSignals|workspacePanelCommunityRecentSignals|workspacePanelCommunityIntegrations/,
-  "workspace right panel data must stay workspace-only after community context moved to the chat rail",
 );
 assert.doesNotMatch(
   app,
@@ -148,7 +105,7 @@ assert.match(
 assert.match(
   workspaceActiveProjectSelector,
   /const isFromActiveThread =[\s\S]*currentProjectId === activeThreadProjectId[\s\S]*const currentProjectName =[\s\S]*isFromActiveThread[\s\S]*"Loading project"[\s\S]*params\.resolvedActiveProjectName/,
-  "right panel project name must not fall back to the default project while an active thread project row is still loading",
+  "active project naming must not fall back to the default project while an active thread project row is still loading",
 );
 assert.match(
   threadSidebarSelectors,
@@ -191,41 +148,10 @@ assert.match(
   "project new-thread affordance must make project scope explicit",
 );
 assert.match(
-  app,
-  /const turnOnWorkspaceComputer = useCallback[\s\S]*const projectId = currentWorkspaceProjectId[\s\S]*startProjectWorkspaceComputer\(\{[\s\S]*projectId/,
-  "turn-on computer action must target the same current workspace project shown in the panel",
-);
-assert.doesNotMatch(
-  workspaceRightPanelData,
-  /WorkspaceRightPanelRecentSignal|buildWorkspaceRightPanelRecentSignals|kind: "chat"[\s\S]*kind: "ai_feed"/,
-  "workspace right panel data must not reintroduce a community recent-signal builder",
-);
-assert.doesNotMatch(
-  workspaceRightPanelData,
-  /kind:\s*"(joined|member|membership)"/,
-  "workspace right panel data must not reintroduce joined-member signal feed items",
-);
-assert.match(
-  baseCss,
-  /\.workspace-composer-shell\.workspace-right-panel-open \{[\s\S]*?padding-right: var\(--workspace-right-panel-width\);[\s\S]*?\}/,
-  "right-panel workspace composer shell must reserve the panel through padding, matching the workspace body lane",
-);
-assert.doesNotMatch(
-  baseCss,
-  /\.workspace-composer-shell\.workspace-right-panel-open \{[\s\S]*?margin-right: var\(--workspace-right-panel-width\);[\s\S]*?\}/,
-  "right-panel workspace composer must not add a separate margin offset from the transcript lane",
-);
-assert.match(
   baseCss,
   /\.workspace-composer-lane \{[\s\S]*?max-width: var\(--web-chat-max-width\);[\s\S]*?margin: 0 auto;[\s\S]*?padding-inline: var\(--web-chat-gutter\);[\s\S]*?\}/,
   "workspace composer lane must be the canonical centered max-width contract in both right-panel states",
 );
-assert.doesNotMatch(
-  baseCss,
-  /\.workspace-composer-shell\.workspace-right-panel-open \.workspace-composer-lane/,
-  "right-panel workspace composer must not switch centering authority while opening or closing",
-);
-
 assert.match(
   resourcesPanel,
   /showInitialResourceLoading[\s\S]*Refreshing knowledge\.\.\.[\s\S]*\{showInitialResourceLoading \?/,

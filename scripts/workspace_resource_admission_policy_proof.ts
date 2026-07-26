@@ -960,34 +960,23 @@ assert.match(
   "workspace computer start gateway must preserve backend-paid usage billing mode",
 );
 
-const workspaceInspectorGateway = read("shared/workspaceInspectorGateway.ts");
-assert.match(
-  workspaceInspectorGateway,
-  /normalizeFailure[\s\S]*details\.paid_usage_billing_mode[\s\S]*details\.paidUsageBillingMode/,
-  "workspace inspector gateway must preserve backend-paid usage billing mode",
-);
-
 assert.match(
   workspaceInspector,
   /function mapFailure\([\s\S]*details\?: Record<string, unknown>[\s\S]*details: result\.details/,
-  "workspace inspector action must not drop Blaxel wake failure details before the gateway sees them",
+  "workspace inspector action must preserve Blaxel wake failure details in its public result",
 );
 
 const app = read("apps/web/src/App.tsx");
+const projectUiController = read("apps/web/src/controllers/useWebProjectUiController.ts");
 assert.match(
-  app,
-  /workspace_volume_funding_required[\s\S]*openWorkspaceStorageBillingModal[\s\S]*funding_required/,
-  "workspace volume funding failures must open the storage billing modal",
+  projectUiController,
+  /readWorkspaceBillingActionFromError[\s\S]*workspace_card_required_for_additional_volume[\s\S]*workspace_volume_funding_required[\s\S]*billingAction && onWorkspaceBillingRequired[\s\S]*onWorkspaceBillingRequired\(\{/,
+  "project creation must classify retained storage admission failures before opening billing UI",
 );
 assert.match(
   app,
-  /workspace_card_required_for_additional_volume[\s\S]*openWorkspaceStorageBillingModal[\s\S]*card_required/,
-  "second-volume card-required failures must open the card setup modal path",
-);
-assert.match(
-  app,
-  /workspace_credits_exhausted[\s\S]*openWorkspacePaidToolBillingModal\(\{[\s\S]*paidUsageBillingMode: result\.paidUsageBillingMode/,
-  "workspace computer credit failures must pass backend-selected billing mode into the modal",
+  /onWorkspaceBillingRequired: \(\{ action, message \}\) => \{[\s\S]*openWorkspaceStorageBillingModal\(\{[\s\S]*action,[\s\S]*message: message \?\? null/,
+  "App must route retained project storage admission failures through the canonical billing modal",
 );
 assert.match(
   app,
@@ -1043,11 +1032,6 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /workspace_volume_funding_required[\s\S]*openWorkspaceStorageBillingModal[\s\S]*funding_required/,
-  "volume funding failures must map to an explicit paid usage billing mode",
-);
-assert.match(
-  app,
   /paidUsageBillingMode:\s*paidUsageBillingModeForWorkspaceStorageAction\(params\.action\)/,
   "workspace storage billing actions must be translated through the shared billing-mode contract",
 );
@@ -1058,8 +1042,8 @@ assert.match(
 );
 assert.match(
   app,
-  /const openPremiumBilling = \(\) => openGlobalSettings\("billing"\)[\s\S]*onOpenWorkspaceBilling: openPremiumBilling/,
-  "right-panel workspace billing action must open the canonical billing settings page",
+  /const openPremiumBilling = \(\) => openGlobalSettings\("billing"\)[\s\S]*onOpenPremiumBilling: openPremiumBilling/,
+  "retained premium billing actions must open the canonical billing settings page",
 );
 
 const paidUsageBilling = read("shared/paidUsageBilling.ts");

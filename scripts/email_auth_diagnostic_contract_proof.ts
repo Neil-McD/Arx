@@ -12,8 +12,8 @@ const operatorTypes = read("shared/operatorTypes.ts");
 const operatorDataHook = read("apps/web/src/components/useOperatorDashboardData.ts");
 const businessPanel = read("apps/web/src/components/OperatorBusinessPanelView.tsx");
 const emailPanel = read("apps/web/src/components/OperatorEmailPanelView.tsx");
-const rightPanel = read("apps/web/src/components/WebWorkspaceRightPanel.tsx");
-const rightPanelModel = read("apps/web/src/components/workspaceRightPanelModel.ts");
+const operatorHost = read("apps/web/src/components/WebOperatorDashboardHost.tsx");
+const appShellNavigation = read("shared/appShellNavigation.ts");
 const pkg = read("package.json");
 
 assert.match(
@@ -113,15 +113,15 @@ assert.match(
 );
 
 assert.match(
-  rightPanel,
-  /import \{ OperatorEmailPanelView \}[\s\S]*activeInsightTab === "email"[\s\S]*<OperatorEmailPanelView[\s\S]*monetization=\{props\.state\.monetization\}[\s\S]*emailAuth=\{props\.state\.emailAuth\}/,
-  "workspace operator right panel must route email diagnostics to the dedicated Email tab",
+  operatorHost,
+  /import \{ OperatorEmailPanelView \}[\s\S]*props\.activeTab === "email"[\s\S]*<OperatorEmailPanelView[\s\S]*monetization=\{operator\.state\.monetization\}[\s\S]*emailAuth=\{operator\.state\.emailAuth\}/,
+  "the live operator console must route email diagnostics to the dedicated Email tab",
 );
 
 assert.match(
-  rightPanelModel,
-  /OperatorInsightTab = "platform" \| "business" \| "email" \| "communities"[\s\S]*\{ id: "email", label: "Email" \}[\s\S]*value === "email"[\s\S]*tab === "email"/,
-  "workspace right panel model must expose Email as an operator-only tab",
+  appShellNavigation,
+  /OPERATOR_TABS = \["platform", "business", "email", "communities"\] as const[\s\S]*export type OperatorTab = \(typeof OPERATOR_TABS\)\[number\]/,
+  "canonical operator navigation must expose Email as one of four bounded operator tabs",
 );
 
 assert.match(

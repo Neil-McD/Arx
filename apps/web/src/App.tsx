@@ -434,11 +434,6 @@ import {
   loadWorkspaceCreditBalanceCanonical,
   type WorkspaceCreditBalance,
 } from "../../../shared/workspaceCreditsGateway";
-import {
-  startProjectWorkspaceComputer,
-  stopProjectWorkspaceComputer,
-  type WorkspaceComputerStartResult,
-} from "../../../shared/workspaceTerminalsGateway";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
 import type { PaidToolKind } from "../../../shared/workspaceCredits";
 import {
@@ -499,7 +494,6 @@ import {
   type RuntimeEngine,
 } from "../../../shared/runtimeEngine";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
-import { useWorkspaceRightPanelController } from "./components/useWorkspaceRightPanelController";
 import {
   WebGlobalOverlayHost,
   type WebGlobalOverlayHostProps,
@@ -1952,12 +1946,6 @@ export default function App() {
     () => initialAppRoute?.operatorTab ?? "platform",
   );
   const settingsGroup = settingsGroupForPage(settingsPage);
-  const {
-    workspaceRightPanelLayout,
-    isWorkspaceRightPanelOpen,
-    handleWorkspaceRightPanelLayoutChange,
-    handleToggleWorkspaceRightPanel,
-  } = useWorkspaceRightPanelController();
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
     try {
       const stored = parseAppTheme(
@@ -2157,9 +2145,6 @@ export default function App() {
     useState<string | null>(null);
   const [isAcceptingBuilderPartnerTerms, setIsAcceptingBuilderPartnerTerms] =
     useState(false);
-  const [isStartingWorkspaceComputer, setIsStartingWorkspaceComputer] = useState(false);
-  const [isStoppingWorkspaceComputer, setIsStoppingWorkspaceComputer] = useState(false);
-  const [workspaceComputerStartError, setWorkspaceComputerStartError] = useState<string | null>(null);
   const builderPartnerProgramLoadRequestIdRef = useRef(0);
   const workspaceCreditLoadRequestIdRef = useRef(0);
   const workspaceCardOnFileLoadRequestIdRef = useRef(0);
@@ -8247,140 +8232,6 @@ export default function App() {
     resolveThreadProjectId: workspace.derived.resolveThreadProjectId,
   });
   const currentWorkspaceProjectId = currentWorkspaceProjectSelection.currentProjectId;
-  const currentWorkspaceProjectName = currentWorkspaceProjectSelection.currentProjectName;
-  const turnOnWorkspaceComputer = useCallback(async (): Promise<WorkspaceComputerStartResult> => {
-    const session = await ensureUsableAuthSession();
-    if (!session) {
-      requireSignIn();
-      return {
-        ok: false,
-        status: 401,
-        code: "auth_required",
-        message: "Sign in to open project files.",
-        required_credits: null,
-        paidUsageBillingMode: null,
-      };
-    }
-
-    const projectId = currentWorkspaceProjectId;
-    if (!projectId) {
-      return {
-        ok: false,
-        status: 404,
-        code: "project_not_found",
-        message: "Select a project first.",
-        required_credits: null,
-        paidUsageBillingMode: null,
-      };
-    }
-
-    setWorkspaceComputerStartError(null);
-    setIsStartingWorkspaceComputer(true);
-    try {
-      const result = await startProjectWorkspaceComputer({
-        session,
-        projectId,
-      });
-      if (!result.ok) {
-        setWorkspaceComputerStartError(result.message);
-        if (
-          result.code === "workspace_credits_exhausted" ||
-          result.code === "workspace_credits_unavailable" ||
-          result.code === "workspace_uncollected_usage_blocked"
-        ) {
-          openWorkspacePaidToolBillingModal({
-            toolKind: "workspace_tools",
-            message: result.message,
-            requiredCredits: result.required_credits,
-            paidUsageBillingMode: result.paidUsageBillingMode,
-          });
-        } else if (result.code === "workspace_volume_funding_required") {
-          openWorkspaceStorageBillingModal({
-            action: "funding_required",
-            message: result.message,
-            requiredCredits: result.required_credits,
-          });
-        } else if (result.code === "workspace_card_required_for_additional_volume") {
-          openWorkspaceStorageBillingModal({
-            action: "card_required",
-            message: result.message,
-            requiredCredits: result.required_credits,
-          });
-        }
-        return result;
-      }
-
-      await loadWorkspaceCreditBalance(session);
-      refreshCloudProjectStatuses();
-      return result;
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to start the project workspace.";
-      setWorkspaceComputerStartError(message);
-      return {
-        ok: false,
-        status: 503,
-        code: "workspace_computer_start_failed",
-        message,
-        required_credits: null,
-        paidUsageBillingMode: null,
-      };
-    } finally {
-      setIsStartingWorkspaceComputer(false);
-    }
-  }, [
-    ensureUsableAuthSession,
-    loadWorkspaceCreditBalance,
-    openWorkspacePaidToolBillingModal,
-    openWorkspaceStorageBillingModal,
-    refreshCloudProjectStatuses,
-    requireSignIn,
-    currentWorkspaceProjectId,
-  ]);
-
-  const turnOffWorkspaceComputer = useCallback(async (): Promise<boolean> => {
-    const session = await ensureUsableAuthSession();
-    if (!session) {
-      requireSignIn();
-      return false;
-    }
-
-    const projectId = currentWorkspaceProjectId;
-    if (!projectId) return false;
-
-    setWorkspaceComputerStartError(null);
-    setIsStoppingWorkspaceComputer(true);
-    try {
-      await stopProjectWorkspaceComputer({
-        session,
-        projectId,
-      });
-      await loadWorkspaceCreditBalance(session);
-      refreshCloudProjectStatuses();
-      return true;
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to stop the project workspace.";
-      setWorkspaceComputerStartError(message);
-      return false;
-    } finally {
-      setIsStoppingWorkspaceComputer(false);
-    }
-  }, [
-    ensureUsableAuthSession,
-    loadWorkspaceCreditBalance,
-    refreshCloudProjectStatuses,
-    requireSignIn,
-    currentWorkspaceProjectId,
-  ]);
   const projectUiController = useWebProjectUiController<AuthSession>({
     session: session,
     cloudProjects: workspace.state.projects,

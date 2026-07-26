@@ -689,10 +689,10 @@ assert.match(
   /denyCommunityJoinRequest = mutation\(\{[\s\S]*requestId: v\.id\("communityJoinRequests"\)[\s\S]*ctx\.db\.get\(args\.requestId\)/,
   "deny join request should validate request ids as communityJoinRequests ids",
 );
-assert.doesNotMatch(
-  read("apps/web/src/components/WebWorkspaceUserDataPanel.tsx"),
-  /WorkspaceCommunityOperations|workspace-community-approval|onApproveCommunityJoinRequest/,
-  "old workspace operations approvals projection should stay removed once member-header approvals own the queue",
+assert.equal(
+  existsSync(join(root, "apps/web/src/components/WebWorkspaceUserDataPanel.tsx")),
+  false,
+  "the retired Workspace data panel must remain absent once member-header approvals own the queue",
 );
 assert.doesNotMatch(
   baseCss,

@@ -10,8 +10,6 @@ const blaxelClient = read("convex/blaxelWorkspaceClient.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const runtimeExecutionSession = read("convex/runtimeExecutionSession.ts");
 const schema = read("convex/schema.ts");
-const userDataPanel = read("apps/web/src/components/WebWorkspaceUserDataPanel.tsx");
-const workspaceInspectorGateway = read("shared/workspaceInspectorGateway.ts");
 
 assert.match(
   inspector,
@@ -107,36 +105,6 @@ assert.match(
   blaxelClient,
   /total volume size\|maximum allowed total size\|exceeds maximum allowed[\s\S]*code: "blaxel_volume_quota_exceeded"/,
   "Blaxel total-storage quota errors must not collapse into generic provider failures",
-);
-assert.match(
-  workspaceInspectorGateway,
-  /isWorkspaceInspectorStorageQuotaCode[\s\S]*blaxel_volume_quota_exceeded[\s\S]*formatWorkspaceInspectorFailureMessage[\s\S]*Workspace storage quota is full/,
-  "Workspace inspector gateway must normalize provider storage quota failures into actionable user-facing text",
-);
-assert.match(
-  workspaceInspectorGateway,
-  /isWorkspaceInspectorProviderWakePendingCode[\s\S]*blaxel_sandbox_not_found[\s\S]*blaxel_sandbox_not_ready[\s\S]*blaxel_workspace_recreate_failed[\s\S]*isWorkspaceInspectorWakeRetryableCode[\s\S]*isWorkspaceInspectorProviderWakePendingCode/,
-  "Workspace inspector gateway must normalize transient provider wake states behind a provider-neutral retry helper",
-);
-assert.doesNotMatch(
-  userDataPanel,
-  /blaxel|Blaxel|workspaceFilesProviderId|setWorkspaceFilesProviderId|providerId !== "blaxel"|useState<"blaxel"/,
-  "Files panel UI must not mention, store, or branch on a concrete workspace provider identity",
-);
-assert.match(
-  userDataPanel,
-  /formatWorkspaceInspectorFailureMessage[\s\S]*isWorkspaceInspectorWakeRetryableCode/,
-  "Files panel UI must consume provider-neutral inspector gateway helpers",
-);
-assert.match(
-  userDataPanel,
-  /WORKSPACE_INSPECTOR_WAKE_RETRY_WINDOW_MS = 60_000[\s\S]*workspaceInspectorRetryDelayMs[\s\S]*setDirectoryRefreshNonce/,
-  "Files panel wake retry must be time-bounded, provider-hint aware, and drive a canonical directory refresh",
-);
-assert.match(
-  userDataPanel,
-  /forceDirectoryRefreshRef[\s\S]*refresh: forceRefresh[\s\S]*directoryIndicator[\s\S]*workspace-files-refresh/,
-  "Files panel must default to cached listings and require an explicit refresh for another provider read",
 );
 assert.match(
   inspector,

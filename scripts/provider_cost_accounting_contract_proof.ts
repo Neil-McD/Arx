@@ -31,7 +31,6 @@ const schema = read("convex/schema.ts");
 const workspaceCredits = read("convex/workspaceCredits.ts");
 const crons = read("convex/crons.ts");
 const billingSurface = read("apps/web/src/components/WebBillingSettingsSection.tsx");
-const workspacePanel = read("apps/web/src/components/WebWorkspaceUserDataPanel.tsx");
 const providerCostReconciliationDiagnostic = extractBetween(
   workspaceCredits,
   "export const getProviderCostReconciliationDiagnosticInternal = internalQuery",
@@ -351,10 +350,6 @@ for (const forbidden of [
   assert.ok(
     !billingSurface.includes(forbidden),
     `billing UI must not expose internal provider-cost component: ${forbidden}`,
-  );
-  assert.ok(
-    !workspacePanel.includes(forbidden),
-    `workspace panel must not expose internal provider-cost component: ${forbidden}`,
   );
 }
 
