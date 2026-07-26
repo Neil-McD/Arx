@@ -346,7 +346,32 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
     },
     outputSchema: {
       type: "object",
-      additionalProperties: true,
+      additionalProperties: false,
+      required: ["path", "entries"],
+      properties: {
+        path: {
+          type: "string",
+          enum: ["/"],
+        },
+        entries: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["path", "kind"],
+            properties: {
+              path: {
+                type: "string",
+                enum: ["/community.md"],
+              },
+              kind: {
+                type: "string",
+                enum: ["document"],
+              },
+            },
+          },
+        },
+      },
     },
   },
   polynet_read: {
@@ -376,7 +401,21 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
     },
     outputSchema: {
       type: "object",
-      additionalProperties: true,
+      additionalProperties: false,
+      required: ["path", "body", "truncated"],
+      properties: {
+        path: {
+          type: "string",
+          enum: ["/community.md"],
+        },
+        body: {
+          type: "string",
+          maxLength: 24_000,
+        },
+        truncated: {
+          type: "boolean",
+        },
+      },
     },
   },
   polynet_get_my_profile: {

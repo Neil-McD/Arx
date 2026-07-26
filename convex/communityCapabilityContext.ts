@@ -90,7 +90,6 @@ async function buildCommunityCapabilityContextForActor(args: {
       about: args.community.about,
       visibility: args.community.visibility,
       entryPolicy: args.community.entryPolicy,
-      updatedAt: args.community.updatedAt,
     },
     membership: membership
       ? { communityId: String(membership.communityId), role: membership.role }
@@ -165,7 +164,6 @@ function buildCommunitySemanticSource(args: {
 }): CommunitySemanticSource {
   const community = args.context.membership.communities;
   return {
-    communityId: args.context.communityId,
     slug: args.context.communitySlug,
     name: String(community.name ?? "").trim() || "Community",
     oneLiner: String(community.one_liner ?? "").trim() || null,
@@ -181,7 +179,6 @@ function buildCommunitySemanticSource(args: {
         : String(community.entry_policy ?? "").trim().toLowerCase() === "open"
           ? "open"
           : "approval",
-    updatedAt: args.context.communityUpdatedAt,
     canonicalUrl: `${readCanonicalPublicAppOrigin()}/c/${args.context.communitySlug}`,
   };
 }
@@ -224,9 +221,11 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
         message: "Community not found or not accessible.",
       };
     }
-    const source = buildCommunitySemanticSource({ context: resolved.context });
     return args.operation === "list"
-      ? listCommunitySemanticRoot({ source, path: args.path })
-      : readCommunitySemanticDocument({ source, path: args.path });
+      ? listCommunitySemanticRoot({ path: args.path })
+      : readCommunitySemanticDocument({
+          source: buildCommunitySemanticSource({ context: resolved.context }),
+          path: args.path,
+        });
   },
 });

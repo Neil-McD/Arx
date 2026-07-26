@@ -209,8 +209,10 @@ self-only facts.
 A readable path is a current location. A canonical semantic URI or typed
 reference is stable identity. Renaming a community, category, handle, or
 resource may change its path without changing its identity. Opaque IDs,
-revisions, provenance, and authority metadata belong in an envelope when they
-do not improve the readable body.
+raw revisions, authorization evidence, and internal provenance remain
+server-side unless the agent must use a specific value in its next valid
+operation. The model-visible envelope contains only actionable navigation,
+content bounds, and trust context; it is not a dump of execution metadata.
 
 The repository is virtual. Reads resolve current canonical records and render
 permissioned projections. Future writes route to typed domain operations.

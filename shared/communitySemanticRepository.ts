@@ -1,17 +1,13 @@
 export const POLYNET_SEMANTIC_ROOT_PATH = "/";
 export const POLYNET_COMMUNITY_PROFILE_PATH = "/community.md";
-export const POLYNET_SEMANTIC_MARKDOWN_MEDIA_TYPE =
-  "text/markdown; charset=utf-8";
 
 export type CommunitySemanticSource = {
-  communityId: string;
   slug: string;
   name: string;
   oneLiner: string | null;
   about: string | null;
   visibility: "published" | "unlisted";
   entryPolicy: "open" | "approval" | "paid_subscription";
-  updatedAt: number;
   canonicalUrl: string;
 };
 
@@ -27,7 +23,6 @@ function normalizeText(value: unknown, maxChars: number): string | null {
 }
 
 function normalizeSource(source: CommunitySemanticSource) {
-  const communityId = normalizeText(source.communityId, 180);
   const slug = normalizeText(source.slug, 64)?.toLowerCase() ?? null;
   const name = normalizeText(source.name, 180);
   const canonicalUrl = normalizeText(source.canonicalUrl, 2_048);
@@ -38,18 +33,14 @@ function normalizeSource(source: CommunitySemanticSource) {
     throw new Error("community_semantic_source_invalid");
   }
   if (
-    !communityId ||
     !slug ||
     !/^[a-z0-9-]{3,64}$/.test(slug) ||
     !name ||
-    !Number.isFinite(source.updatedAt) ||
-    source.updatedAt < 0 ||
     !["http:", "https:"].includes(url.protocol)
   ) {
     throw new Error("community_semantic_source_invalid");
   }
   return {
-    communityId,
     slug,
     name,
     oneLiner: normalizeText(source.oneLiner, 280),
@@ -60,7 +51,6 @@ function normalizeSource(source: CommunitySemanticSource) {
       source.entryPolicy === "paid_subscription"
         ? source.entryPolicy
         : "approval",
-    updatedAt: Math.floor(source.updatedAt),
     canonicalUrl: url.toString(),
   } as const;
 }
@@ -72,9 +62,6 @@ const quote = (value: string | null): string =>
         .map((line) => `> ${line}`)
         .join("\n")
     : "> _Not provided._";
-
-const baseRef = (communityId: string): string =>
-  `polynet://polynet.ai/communities/${encodeURIComponent(communityId)}`;
 
 export function parsePolynetSemanticPath(value: unknown) {
   if (typeof value !== "string" || value.length < 1 || value.length > 1_024) {
@@ -136,7 +123,6 @@ export function renderCommunityProfileMarkdown(
 }
 
 export function listCommunitySemanticRoot(args: {
-  source: CommunitySemanticSource;
   path: unknown;
 }) {
   const parsed = parsePolynetSemanticPath(args.path);
@@ -147,20 +133,17 @@ export function listCommunitySemanticRoot(args: {
       "Semantic path not found or not accessible.",
     );
   }
-  const community = normalizeSource(args.source);
   return {
     ok: true as const,
-    path: POLYNET_SEMANTIC_ROOT_PATH,
-    ref: `${baseRef(community.communityId)}/`,
-    source_revision: String(community.updatedAt),
-    entries: [
-      {
-        name: "community.md" as const,
-        path: POLYNET_COMMUNITY_PROFILE_PATH,
-        kind: "document" as const,
-        media_type: POLYNET_SEMANTIC_MARKDOWN_MEDIA_TYPE,
-      },
-    ],
+    result: {
+      path: POLYNET_SEMANTIC_ROOT_PATH,
+      entries: [
+        {
+          path: POLYNET_COMMUNITY_PROFILE_PATH,
+          kind: "document" as const,
+        },
+      ],
+    },
   };
 }
 
@@ -176,17 +159,13 @@ export function readCommunitySemanticDocument(args: {
       "Semantic path not found or not accessible.",
     );
   }
-  const community = normalizeSource(args.source);
-  const body = renderCommunityProfileMarkdown(community);
+  const body = renderCommunityProfileMarkdown(args.source);
   return {
     ok: true as const,
-    path: POLYNET_COMMUNITY_PROFILE_PATH,
-    ref: `${baseRef(community.communityId)}/profile`,
-    media_type: POLYNET_SEMANTIC_MARKDOWN_MEDIA_TYPE,
-    source_revision: String(community.updatedAt),
-    body,
-    total_chars: body.length,
-    truncated: false as const,
-    instruction_authority: "none" as const,
+    result: {
+      path: POLYNET_COMMUNITY_PROFILE_PATH,
+      body,
+      truncated: false as const,
+    },
   };
 }

@@ -836,7 +836,7 @@ async function handleToolCall(args: {
       return { ok: false, type: "tool", message: "path is required." };
     }
     try {
-      const semanticResult = (await ctx.runQuery(
+      const semanticResponse = (await ctx.runQuery(
         internal.communityCapabilityContext
           .resolveCommunitySemanticRepositoryInternal as any,
         {
@@ -845,16 +845,21 @@ async function handleToolCall(args: {
           operation: toolName === "polynet_list" ? "list" : "read",
           path,
         },
-      )) as Record<string, unknown>;
-      if (semanticResult.ok !== true) {
+      )) as {
+        ok?: boolean;
+        message?: unknown;
+        result?: Record<string, unknown>;
+      };
+      if (semanticResponse.ok !== true || !semanticResponse.result) {
         return {
           ok: false,
           type: "tool",
           message:
-            normalizeString(semanticResult.message, 500) ??
+            normalizeString(semanticResponse.message, 500) ??
             "Semantic path not found or not accessible.",
         };
       }
+      const semanticResult = semanticResponse.result;
       return {
         ok: true,
         result: {

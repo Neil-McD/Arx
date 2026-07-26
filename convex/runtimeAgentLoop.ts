@@ -411,8 +411,9 @@ export async function executeRetrievalHarnessTool(params: {
         ok?: boolean;
         code?: unknown;
         message?: unknown;
+        result?: unknown;
       };
-      if (!payload?.ok) {
+      if (!payload?.ok || payload.result === undefined) {
         return {
           status: "error",
           exitCode: null,
@@ -426,7 +427,7 @@ export async function executeRetrievalHarnessTool(params: {
       return {
         status: "ok",
         exitCode: 0,
-        outputText: formatJsonToolOutput(payload),
+        outputText: formatJsonToolOutput(payload.result),
         errorCode: null,
         errorMessage: null,
       };

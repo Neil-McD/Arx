@@ -69,7 +69,6 @@ const community: CommunityCapabilityCommunityInput = {
   about: "A community for collective intelligence.",
   visibility: "published",
   entryPolicy: "approval",
-  updatedAt: 1_721_234_567_890,
 };
 
 function membership(
