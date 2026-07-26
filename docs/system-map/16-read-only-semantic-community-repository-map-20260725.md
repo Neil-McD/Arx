@@ -912,10 +912,10 @@ Candidate-only evidence:
 
 ### 18.1 Current answer
 
-C6 is implemented on the staging source path and locally proved through its
-native-tool convergence candidate. It is not yet complete because the
-convergence commit has not been deployed and post-deploy absence evidence has
-not been collected.
+C6 is implemented and `LIVE_PROVED` on the staging source path. The
+native-tool convergence candidate is deployed, authenticated native and
+official-MCP list/read pass, and persisted runtime evidence proves the three
+retired native names absent from the active tool policy.
 
 The accepted current namespace is:
 
@@ -1080,8 +1080,8 @@ them.
 
 ### 18.6 Current score
 
-Scores describe the local C6 source candidate, not the whole platform and not a
-deployment state.
+Scores describe the deployed C6 staging result, not the whole platform or
+production.
 
 | Dimension | Current | Evidence |
 | --- | ---: | --- |
@@ -1094,22 +1094,43 @@ deployment state.
 | robustness | 8/10 | malformed, ambiguous, stale, deleted, and cross-community selectors fail closed |
 | security | 8.5/10 | contextual content has no instruction authority and filesystem/context escape is rejected |
 
-### 18.7 Remaining boundary
+### 18.7 Release receipt and remaining boundary
 
-C6 status is `LOCALLY_PROVED`.
+C6 status is `LIVE_PROVED`; the milestone is `COMPLETE`.
 
-The next action is release evidence, not more architecture:
+Release order and identity:
 
-1. finish and commit this documentation reconciliation;
-2. require a clean worktree and rerun staging release guards;
-3. deploy Convex staging from the exact validated commit;
-4. push `codex/semantic-platform-staging-20260719`;
-5. let the `polynet-staging` Vercel project deploy from Git;
-6. verify `/version.json` equals the pushed commit;
-7. repeat authenticated native and official-MCP semantic list/read;
-8. confirm the three retired native names do not appear in new runtime tool
-   events.
+1. clean HEAD `482d5d2072e281c9be813c11fe940609c1e5b560` passed the
+   local, proof, and remote staging authority guards;
+2. Convex staging `dev:quick-porcupine-949` was deployed first;
+3. `codex/semantic-platform-staging-20260719` was pushed;
+4. the canonical `/version.json` marker reached the exact full SHA above.
 
-Only then may C6 move from `LOCALLY_PROVED` to `LIVE_PROVED` and `COMPLETE`.
-Production comparison, data queries, integration, and release remain out of
-scope.
+Native acceptance used fresh run
+`member_agent_dock:f7151499-05cc-4a8d-837a-ef84fc8434b4`:
+
+- `polynet_list("/")` returned the four real mounts;
+- `polynet_read("/community.md")` returned the deterministic community
+  projection;
+- `polynet_list("/resources/")` returned the expected clean empty directory;
+- every tool call succeeded;
+- the persisted `tool_policy_resolved` receipt contained 17 active tools,
+  retained `community_resources_read` and `community_resources_search`, and
+  contained none of `community_resources_map`, `community_resources_list`, or
+  `community_resource_read`.
+
+Official MCP acceptance against the canonical staging endpoint:
+
+- unauthenticated metadata challenges and OAuth metadata passed;
+- the authenticated tool list exposed `polynet_list` and `polynet_read`;
+- external `polynet_workspace_resources_*` compatibility tools remained;
+- root list, community read, and the clean resource listing matched native
+  semantics;
+- `../etc/passwd` failed with the canonical traversal-free error;
+- the deleted fixture's stable ref remained unavailable with
+  `offset: 0, limit: 80`, proving the window arguments are accepted without
+  resurrecting deleted content.
+
+No new resource fixture was needed. No staging data residue, production
+comparison, production data query, integration, or production release occurred.
+C7 remains `PLANNED` and requires a separately authorized bounded slice.

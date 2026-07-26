@@ -178,7 +178,7 @@ must remain distinct.
 | C3 | Finish canonical resource, interaction, and intelligence migrations | `COMPLETE` | one authority per concern and zero compatibility reads/writes through an observation window |
 | C4 | Guarantee scheduler fairness and bounded operations | `SOURCE_IMPLEMENTED` | implementation landed; formal closure and current evidence reconciliation remain |
 | C5 | Collapse capability, transport, and public-function duplication | `SOURCE_IMPLEMENTED` | substantial cleanup landed; formal closure and current evidence reconciliation remain |
-| C6 | Land the read-only semantic community repository | `LOCALLY_PROVED` | namespace behavior is live through `12b23889`; native duplicate-tool convergence at `90badc0b` still requires staging deployment and post-deploy proof |
+| C6 | Land the read-only semantic community repository | `COMPLETE` | exact staging build `482d5d20` passed authenticated native and official-MCP list/read plus retired-name absence proof |
 | C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `PLANNED` | every retained surface maps to an MVP journey or protected substrate |
 | C8 | Decompose and optimize retained frontend/backend surfaces | `PLANNED` | lower concentration and change fan-out without creating new authority |
 | C9 | Prove backup, restore, RPO/RTO, and operational recovery | `PLANNED` | isolated recovery drills and owned runbooks meet accepted targets |
@@ -1251,9 +1251,28 @@ literal. Focused semantic, traversal, resource, evidence, prompt, policy,
 runtime, native/MCP, typecheck, staging-identity, and staging-proof contracts
 pass, as does the 40-step foundation baseline.
 
-C6 therefore remains `LOCALLY_PROVED`, not complete. `90badc0b` has not been
-deployed. The remaining receipt is: obtain a clean documentation state, rerun
-release guards, deploy Convex staging first, push the staging branch, verify the
-Vercel version marker, repeat authenticated native and official-MCP list/read,
-and confirm the three retired native names do not appear in new runtime tool
-events. Production remains untouched and out of scope.
+C6 reached `LIVE_PROVED` and milestone `COMPLETE` on staging on 2026-07-26:
+
+- all local, proof, and remote staging authority guards passed on clean
+  `482d5d20`;
+- Convex staging `dev:quick-porcupine-949` was deployed first from that exact
+  commit;
+- the staging branch was then pushed and the canonical
+  `polynet-staging.vercel.app/version.json` marker matched full SHA
+  `482d5d2072e281c9be813c11fe940609c1e5b560`;
+- signed-in native run
+  `member_agent_dock:f7151499-05cc-4a8d-837a-ef84fc8434b4` successfully listed
+  `/`, read `/community.md`, and listed the clean empty `/resources/`;
+- the persisted native tool policy exposed `polynet_list`, `polynet_read`,
+  `community_resources_read`, and `community_resources_search`, with none of
+  `community_resources_map`, `community_resources_list`, or
+  `community_resource_read`;
+- official MCP OAuth, metadata, tool discovery, root list, community read, and
+  resource list passed against the canonical staging endpoint;
+- official MCP rejected `../etc/passwd`, and the deleted fixture's stable ref
+  remained unavailable when called with `offset: 0` and `limit: 80`.
+
+No new fixture was created for the release proof. No staging data residue,
+production query, production data, production configuration, or production
+deployment changed. C7 remains the next planned milestone; this receipt does
+not authorize it.

@@ -41,16 +41,18 @@ fixture was returned to draft and deleted through the normal UI; the stable ref
 then failed closed and the two preexisting `Needs sorting` pages remained
 untouched.
 
-C6.4 convergence is locally proved at `90badc0b`. It deletes the duplicate
+C6.4 convergence is live-proved and complete at staging build `482d5d20`. The
+underlying reduction at `90badc0b` deletes the duplicate
 native `community_resources_map`, `community_resources_list`, and
 `community_resource_read` surfaces while preserving resource search, bounded
 batch read, builder tools, external workspace-MCP compatibility, historical
 decoding, and evidence vocabulary. It also exposes the already-supported
 bounded `offset` and `limit` arguments in the native `polynet_read` schema.
-Focused contracts and the 40-step foundation baseline pass. C6 is not complete
-until this candidate is deployed to staging and authenticated native/MCP
-acceptance plus retired-name absence are re-proved. The detailed boundary and
-receipts live in
+Focused contracts and the 40-step foundation baseline pass. Convex staging was
+deployed first, the canonical Vercel marker matched the exact commit, fresh
+authenticated native and official-MCP list/read passed, traversal and deleted
+stable-ref reads failed closed, and the persisted native tool policy contained
+none of the three retired names. The detailed boundary and receipts live in
 [`16-read-only-semantic-community-repository-map-20260725.md`](16-read-only-semantic-community-repository-map-20260725.md).
 
 Production compatibility work is intentionally paused after PC3D. The active

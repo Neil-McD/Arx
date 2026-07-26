@@ -380,8 +380,8 @@ The current C6 implementation instead landed as bounded staging slices from
 convergence commit `90badc0b`. The implementation reuses canonical authority
 and read owners, adds no semantic Markdown store or generic mount registry, and
 keeps external workspace-MCP compatibility separate from the two-tool native
-surface. Deployment and live proof of `90badc0b` remain distinct from its local
-source proof.
+surface. The combined staging release at `482d5d20` passed authenticated native
+and official-MCP list/read plus persisted retired-name absence proof.
 
 ## Cleanup-led implementation sequence
 
