@@ -57,11 +57,6 @@ const backgroundTerminalRailSource = await readFile(
   new URL("../apps/web/src/components/WebBackgroundTerminalRail.tsx", import.meta.url),
   "utf8",
 );
-const workspaceAppPreviewSource = await readFile(
-  new URL("../apps/web/src/components/WebWorkspaceAppPreview.tsx", import.meta.url),
-  "utf8",
-);
-
 assert.match(
   workspaceTerminalsSource,
   /async function probeWorkspaceTerminalPreviewUrl/,
@@ -121,11 +116,6 @@ assert.match(
   backgroundTerminalRailSource,
   /visibleTerminals = props\.terminals\.filter[\s\S]*visibleTerminals\.length === 0\) return null/,
   "terminal rail should render only active terminals plus actionable issues",
-);
-assert.match(
-  workspaceAppPreviewSource,
-  /function isLivePreviewTerminal[\s\S]*isRetryablePreviewStatus\(terminal\.status\)/,
-  "inline app previews should only render live starting or running terminals",
 );
 assert.match(
   workspaceTerminalProcessCoreSource,

@@ -170,7 +170,7 @@ const runtimeTimeline = readText("shared/runtimeTimelineUi.ts");
 const runtimeComputerUseViewer = readText("shared/runtimeComputerUseViewerUi.ts");
 const runtimeLiveTimeline = readText("apps/web/src/components/RuntimeLiveTimeline.tsx");
 const runtimeComputerUseViewerComponent = readText("apps/web/src/components/RuntimeComputerUseViewer.tsx");
-const streamingMessage = readText("apps/web/src/components/WebWorkspaceStreamingMessage.tsx");
+const memberAgentDock = readText("apps/web/src/components/WebMemberAgentDock.tsx");
 const packageJson = readText("package.json");
 
 for (const [source, token, label] of [
@@ -194,8 +194,12 @@ for (const [source, token, label] of [
   [runtimeComputerUseViewer, "buildRuntimeComputerUseViewer", "dedicated computer use viewer projection"],
   [runtimeComputerUseViewerComponent, "runtimeComputerUseViewerUi", "computer use viewer imports dedicated projection"],
   [runtimeLiveTimeline, "showThinkingFooter?: boolean", "timeline footer suppression prop"],
-  [streamingMessage, "hasSequencedAssistantText", "streaming text duplicate guard"],
-  [streamingMessage, "showThinkingFooter={false}", "streaming message owns thinking footer"],
+  [memberAgentDock, "hasSequencedAssistantText", "mounted member-agent streaming text duplicate guard"],
+  [
+    memberAgentDock,
+    "showThinkingFooter={!shouldRenderStreamedText}",
+    "mounted member-agent coordinates the thinking footer with streamed text",
+  ],
   [packageJson, "check:runtime-live-timeline-codex-proof", "Codex proof npm script"],
 ] as const) {
   assertContains(source, token, label);
@@ -211,19 +215,16 @@ assert.doesNotMatch(
   "Codex live timeline should not derive fake reasoning from local activity buckets",
 );
 
-const streamingTimelineIndex = streamingMessage.indexOf("<RuntimeLiveTimeline");
-const streamingComputerIndex = streamingMessage.indexOf("<RuntimeComputerUseViewer");
-const streamingContentIndex = streamingMessage.indexOf("{shouldRenderStreamedContent ? (");
-const streamingThinkingIndex = streamingMessage.indexOf('aria-label="Thinking"');
-assert.ok(streamingTimelineIndex >= 0, "streaming message must render the live timeline");
-assert.ok(streamingComputerIndex >= 0, "streaming message must render computer use after timeline");
-assert.ok(streamingContentIndex >= 0, "streaming message must keep legacy streamed-content fallback");
-assert.ok(streamingThinkingIndex >= 0, "streaming message must render a thinking footer");
+const mountedTimelineIndex = memberAgentDock.indexOf("<RuntimeLiveTimeline");
+const mountedStreamedTextIndex = memberAgentDock.indexOf("{shouldRenderStreamedText ? (");
+const mountedStreamedCaretIndex = memberAgentDock.indexOf('className="member-agent-dock-caret"');
+assert.ok(mountedTimelineIndex >= 0, "mounted member-agent must render the live timeline");
+assert.ok(mountedStreamedTextIndex >= 0, "mounted member-agent must keep the streamed-text fallback");
+assert.ok(mountedStreamedCaretIndex >= 0, "mounted member-agent must identify active fallback streaming");
 assert.ok(
-  streamingTimelineIndex < streamingComputerIndex &&
-    streamingComputerIndex < streamingContentIndex &&
-    streamingContentIndex < streamingThinkingIndex,
-  "Codex streaming message must render Thinking beneath timeline, computer use, and legacy streamed-content fallback",
+  mountedTimelineIndex < mountedStreamedTextIndex &&
+    mountedStreamedTextIndex < mountedStreamedCaretIndex,
+  "mounted member-agent must render the runtime timeline before the fallback streamed answer",
 );
 
 const codexEvents: ProofEvent[] = [

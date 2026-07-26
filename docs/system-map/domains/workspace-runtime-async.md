@@ -22,11 +22,14 @@ C7.1B deleted the remaining outbound browser route controller/builders and
 route-backed App orchestration. Thread/project selection remains as non-navigation
 runtime state. C7.1C deleted the unreachable right-panel/files presentation, its
 browser inspector adapter, dormant App panel/manual-computer state, and exclusive
-styles. Operator, Billing Settings, project UI, and turn-runner proofs now follow
-their mounted owners. Remaining Workspace-named preview, sidebar-state, message,
-project-modal, and deeper App orchestration clusters still require caller-by-caller
-classification before deletion. None of those names alone authorizes removal of
-the protected harness/runtime substrate.
+styles. C7.1D deleted the zero-caller legacy preview, thread-browser, and
+Workspace conversation presentation closure plus exclusive styles and
+projection helpers. Operator, Billing Settings, project UI, member-agent, and
+turn-runner proofs now follow mounted owners. The Daytona app-preview and
+computer-use viewer components remain unmounted protected harness-adjacent
+decision candidates. The project-modal/deeper App orchestration cluster still
+requires caller-by-caller classification. None of those names alone authorizes
+removal of the protected harness/runtime substrate.
 
 ## Scheduled job inventory
 
@@ -71,6 +74,8 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | protected coding/community harness substrate | `KEEP (MVP core)` | `HARDEN` | 1 | explicitly protected and required for external execution |
 | standalone Workspace as primary navigation destination | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1A-B deleted the host and all outbound browser navigation; inbound migration classification remains |
 | Workspace right-panel/files browser authority | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1C deleted the unreachable presentation, browser adapter, dormant App controls, and exclusive styles while retaining backend inspector/runtime owners |
+| Workspace preview/thread-browser/message leaf presentation | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1D deleted the zero-caller UI closure, exclusive styles, and presentation-only projection helpers while re-anchoring proofs on mounted owners |
+| dormant Daytona preview and computer-use viewers | `DECISION REQUIRED` | `MOUNT_OR_DELETE` | 6 | both components are unmounted but harness-adjacent; protected substrate remains live and neither component is counted as a current journey |
 | Workspace host coupling to Builder Partner UI | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1A deleted the unmounted host; retained partner UI remains in Settings/operator owners |
 | workspace route builders/controllers after parser retirement | `DELETE (deferred/dead)` | `COMPLETE` | 8 | outbound owners are deleted; inbound classification remains separate from backend substrate |
 | remaining no-cursor repeating prefix sweeps | `KEEP (MVP core)` | `HARDEN`, `BOUND` | 9 | claims reliable automation while permanently starving eligible work |

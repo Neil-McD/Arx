@@ -1361,14 +1361,56 @@ are retired.
 
 CSS owned exclusively by the deleted right panel, summary/community preview,
 and files/code preview is removed. The similarly named app-preview styles remain
-because `DaytonaRuntimeAppPreview.tsx` actively uses them. The live
+because `DaytonaRuntimeAppPreview.tsx` owns their dormant protected presentation
+contract, although C7.1D later confirmed that component is not mounted. The live
 `workspaceRightPanelOperatorShared.ts` module is also retained despite its stale
 name because the operator views still import it.
 
 This slice changes no Convex function, schema, project/thread data, runtime
 executor, harness policy, provider lease, billing authority, MCP compatibility,
 community resource/memory owner, environment configuration, or production
-state. C7 remains `IN_PROGRESS`: the zero-caller legacy Workspace preview,
-sidebar-state, and message-presentation clusters still need separate lifecycle
-proof before deletion, followed by a distinct project-modal/deeper App
-orchestration audit.
+state. C7 remained `IN_PROGRESS` pending the separately proved legacy preview,
+thread-browser, and message-presentation deletion recorded below, followed by a
+distinct project-modal/deeper App orchestration audit.
+
+### C7.1D current receipt — Workspace leaf presentation deletion
+
+The fourth C7 slice deletes the unmounted Workspace preview, thread-browser,
+and conversation presentation closure. Eleven zero-caller files are removed:
+the legacy terminal preview; sidebar state host, renderer, and contracts;
+stored-message, streaming-message, and error renderers plus their view types;
+the Workspace auto-scroll hook; the runtime web-source wrapper; and the shared
+message footer/actions wrapper. Shared selectors and runtime/message projection
+modules no longer export helpers used only by those deleted leaves.
+
+The browser authority remains the mounted member-agent dock. Its live timeline
+now owns the sequenced-assistant-text duplicate guard, streamed-text fallback,
+and thinking-footer coordination. Structured runtime failures continue through
+the turn runner into the mounted global inference modal and Billing route;
+model-written prose and retired message metadata do not manufacture upgrade UI.
+Project identity remains in the active project selector and project controller,
+not in an abandoned folder browser. Backend terminal preview probing, reuse,
+transport, and observation remain intact without the legacy preview card.
+
+Exclusive CSS for expanded legacy previews, thread search/folders, Workspace
+message wrappers, premium CTA, copy/footer actions, and mobile thread-browser
+overrides is removed. Shared markdown, attachments, community citations,
+runtime timeline, background terminals, and the common app-preview styles
+remain.
+
+`DaytonaRuntimeAppPreview.tsx` and `RuntimeComputerUseViewer.tsx` are explicitly
+retained but are not mounted. They are protected harness-adjacent presentation
+candidates requiring a separate human mount-or-delete decision; neither is
+counted as a live MVP journey or as acceptance evidence for this slice.
+
+The Workspace quarantine contract requires the deleted source and exclusive
+styles to remain absent while requiring both protected dormant viewers to
+remain present until that decision. Mixed UI/runtime/prompt proofs now follow
+mounted or canonical owners rather than deleted components.
+
+This slice changes no Convex function or schema, project/thread/message data,
+runtime executor, harness policy, provider lease, preview transport, billing
+authority, official MCP compatibility, community resource/memory owner,
+environment configuration, or production state. C7 remains `IN_PROGRESS`: the
+next bounded audit is the project-modal/deeper `App.tsx` orchestration cluster,
+with the dormant harness presentation decision kept separate.

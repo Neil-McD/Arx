@@ -294,7 +294,6 @@ import {
   parseMessageMemorySuggestions,
   parseMessageMemoryUsed,
   parseMessageText,
-  parsePremiumUpgradeCta,
   type HistoryUsedItem,
   type MemorySuggestion,
   type MemoryUsedItem,

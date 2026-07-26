@@ -18,8 +18,6 @@ const aiFeedPanel = read("apps/web/src/components/CommunityAiFeedPanel.tsx");
 const threadSidebarSelectors = read("shared/threadSidebarSelectors.ts");
 const workspaceActiveProjectSelector = read("shared/workspaceActiveProjectSelector.ts");
 const workspaceProjectStateController = read("apps/web/src/controllers/useWebWorkspaceProjectStateController.ts");
-const workspaceSidebarStateHost = read("apps/web/src/components/WebWorkspaceSidebarStateHost.tsx");
-const threadSidebarPanel = read("apps/web/src/components/WebThreadSidebarPanel.tsx");
 
 assert.match(
   app,
@@ -128,24 +126,14 @@ assert.doesNotMatch(
   "project state must not treat the first project as ambient active context",
 );
 assert.doesNotMatch(
-  app + workspaceSidebarStateHost,
-  /onProjectToggled|props\.onProjectToggled|setActiveProjectId\}\s*$/m,
-  "expanding or collapsing a computer folder must not mutate the active computer",
-);
-assert.match(
-  workspaceSidebarStateHost,
-  /const generalThreads = useMemo\(\(\) => \{[\s\S]*return visibleThreads\.filter\(\(thread\) => \{[\s\S]*const projectId = props\.resolveThreadProjectId\(thread\);[\s\S]*return !projectId;[\s\S]*\}\);/,
-  "threads with explicit but temporarily unloaded project ids must not be recategorized as General",
+  app,
+  /onProjectToggled|props\.onProjectToggled/,
+  "retained App orchestration must not carry retired thread-browser folder toggles",
 );
 assert.doesNotMatch(
   app,
   /buildWebWorkspaceSurfaceProjection|buildWorkspaceRightPanelUserData|buildWebWorkspaceLandingProjection/,
   "the retired Workspace presentation must not be projected from App",
-);
-assert.match(
-  threadSidebarPanel,
-  /className="project-group-new"[\s\S]*title="New thread in this project"/,
-  "project new-thread affordance must make project scope explicit",
 );
 assert.match(
   baseCss,

@@ -14,6 +14,7 @@ const app = read("apps/web/src/App.tsx");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const workspaceCore = read("apps/web/src/controllers/useWebWorkspaceCoreController.ts");
 const projectUi = read("apps/web/src/controllers/useWebProjectUiController.ts");
+const threadSidebarSelectors = read("shared/threadSidebarSelectors.ts");
 const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
 const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
@@ -308,8 +309,29 @@ for (const retiredPath of [
   "apps/web/src/controllers/buildWebWorkspaceLandingProjection.tsx",
   "apps/web/src/controllers/buildWebWorkspaceSurfaceProjection.tsx",
   "shared/workspaceInspectorGateway.ts",
+  "apps/web/src/components/WebWorkspaceAppPreview.tsx",
+  "apps/web/src/components/WebWorkspaceSidebarStateHost.tsx",
+  "apps/web/src/components/WebThreadSidebarPanel.tsx",
+  "apps/web/src/components/threadSidebarContracts.ts",
+  "apps/web/src/components/WebWorkspaceStreamingMessage.tsx",
+  "apps/web/src/components/WebWorkspaceThreadError.tsx",
+  "apps/web/src/components/WebWorkspaceThreadMessageList.tsx",
+  "apps/web/src/components/webWorkspaceThreadViews.ts",
+  "shared/useWorkspaceAutoScroll.ts",
+  "apps/web/src/components/RuntimeWebSources.tsx",
+  "shared/MessageFooterActions.tsx",
 ]) {
   assert.equal(existsSync(retiredPath), false, `${retiredPath} must remain deleted`);
+}
+for (const protectedDormantPath of [
+  "apps/web/src/components/DaytonaRuntimeAppPreview.tsx",
+  "apps/web/src/components/RuntimeComputerUseViewer.tsx",
+]) {
+  assert.equal(
+    existsSync(protectedDormantPath),
+    true,
+    `${protectedDormantPath} must remain isolated for a separate protected harness presentation decision`,
+  );
 }
 assert.doesNotMatch(
   app,
@@ -320,6 +342,16 @@ assert.doesNotMatch(
   baseCss,
   /\.workspace-right-panel|\.workspace-user-data-panel|\.workspace-summary-|\.workspace-community-preview|\.workspace-files-|\.workspace-file-preview|\.workspace-code-preview/,
   "base CSS must not retain selectors owned only by the deleted Workspace right panel and files browser",
+);
+assert.doesNotMatch(
+  baseCss + webCss,
+  /\.workspace-expanded-preview-shell\b|\.workspace-app-preview-copy\b|\.workspace-app-preview-button\.icon-only\b|\.workspace-app-preview-frame-stage\.fit-active\b|\.workspace-(?:body|composer-shell)\.preview-expanded\b|\.message-item(?:[\s.:{])|\.message-footer\b|\.message-meta\b|\.message-copy-btn\b|\.message-premium-upgrade|\.message-attachments-preview\b|\.streaming-caret\b|\.auth-error-(?:action|link)\b|\.thread-lane-switch\b|\.session-search\b|\.project-toolbar\b|\.project-group\b/,
+  "web CSS must not retain selectors owned only by the deleted preview, thread-browser, and Workspace message presentation",
+);
+assert.doesNotMatch(
+  threadSidebarSelectors,
+  /filterVisibleThreads|groupThreadsByDate|searchThreads|buildProjectThreadGroups/,
+  "shared thread/project selectors must not retain helpers owned only by the deleted thread browser",
 );
 assert.match(
   settingsSurface,

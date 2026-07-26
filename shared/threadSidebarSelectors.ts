@@ -1,38 +1,3 @@
-export function filterVisibleThreads<T extends { last_seq?: number | null }>(threads: T[]): T[] {
-  return threads.filter((thread) => (thread.last_seq ?? 0) > 0);
-}
-
-export function groupThreadsByDate<T extends { updated_at: number }>(
-  threads: T[],
-): { label: string; threads: T[] }[] {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today.getTime() - 86400000);
-  const weekAgo = new Date(today.getTime() - 7 * 86400000);
-
-  const groups: { label: string; threads: T[] }[] = [
-    { label: "Today", threads: [] },
-    { label: "Yesterday", threads: [] },
-    { label: "This Week", threads: [] },
-    { label: "Older", threads: [] },
-  ];
-
-  for (const thread of threads) {
-    const date = new Date(thread.updated_at * 1000);
-    if (date >= today) {
-      groups[0].threads.push(thread);
-    } else if (date >= yesterday) {
-      groups[1].threads.push(thread);
-    } else if (date >= weekAgo) {
-      groups[2].threads.push(thread);
-    } else {
-      groups[3].threads.push(thread);
-    }
-  }
-
-  return groups.filter((group) => group.threads.length > 0);
-}
-
 export function buildProjectByIdMap<TProject extends { id: string }>(
   projects: TProject[],
 ): Map<string, TProject> {
@@ -84,27 +49,4 @@ export function resolveCloudThreadProjectId<
   const direct = String(thread.project_id ?? "").trim();
   if (direct) return direct;
   return null;
-}
-
-export function searchThreads<TThread>(
-  threads: TThread[],
-  normalizedQuery: string,
-  buildHaystack: (thread: TThread) => string,
-): TThread[] {
-  if (!normalizedQuery) return threads;
-  return threads.filter((thread) => buildHaystack(thread).toLowerCase().includes(normalizedQuery));
-}
-
-export function buildProjectThreadGroups<
-  TProject extends { id: string },
-  TThread,
->(
-  projects: TProject[],
-  threads: TThread[],
-  resolveProjectId: (thread: TThread) => string | null,
-): { project: TProject; threads: TThread[] }[] {
-  return projects.map((project) => ({
-    project,
-    threads: threads.filter((thread) => resolveProjectId(thread) === project.id),
-  }));
 }
