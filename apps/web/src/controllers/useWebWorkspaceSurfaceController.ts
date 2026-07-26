@@ -3,7 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { ModelToggle } from "../../../../shared/modelCatalog";
 
 import { resetWorkspaceSurfaceState } from "./workspaceSurfaceLifecycle";
-import type { WebCloudProjectRecord } from "./useWebProjectUiController";
+import type { CloudProjectRecord } from "../../../../shared/cloudProjectsGateway";
 
 type ThreadLike = {
   id: string;
@@ -12,23 +12,23 @@ type ThreadLike = {
 
 type WorkspaceProjectController<SessionT, ThreadT extends ThreadLike> = {
   state: {
-    projects: WebCloudProjectRecord[];
+    projects: CloudProjectRecord[];
     activeProjectId: string | null;
   };
   derived: {
     resolvedActiveProjectId: string | null;
     resolvedActiveProjectName: string;
-    projectById: Map<string, WebCloudProjectRecord>;
+    projectById: Map<string, CloudProjectRecord>;
     defaultProjectId: string | null;
     resolveThreadProjectId: (thread: ThreadT) => string | null;
   };
   actions: {
-    setProjects: Dispatch<SetStateAction<WebCloudProjectRecord[]>>;
+    setProjects: Dispatch<SetStateAction<CloudProjectRecord[]>>;
     setActiveProjectId: Dispatch<SetStateAction<string | null>>;
     loadProjects: (session: SessionT) => Promise<void>;
-    handleProjectCreated: (project: WebCloudProjectRecord) => void;
-    handleProjectUpdated: (project: WebCloudProjectRecord) => void;
-    handleProjectDeleted: (project: WebCloudProjectRecord) => void;
+    handleProjectCreated: (project: CloudProjectRecord) => void;
+    handleProjectUpdated: (project: CloudProjectRecord) => void;
+    handleProjectDeleted: (project: CloudProjectRecord) => void;
   };
 };
 

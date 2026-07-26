@@ -27,7 +27,7 @@ The bounded aggregate audit resolved or narrowed these questions for the isolate
 | U-022 | one of five intelligence nodes is legacy-unversioned |
 | U-024 | current staging is below scheduler caps; the no-cursor defect is latent |
 | U-033 | diagnostics and runtime events each exceed the 2,000-row cap; retention policy remains unknown |
-| U-026 | resolved at doctrine level: standalone Workspace is deferred while protected harness/thread substrate remains; caller inventory still gates route/UI deletion |
+| U-026 | narrowed through C7.1A-E: identified standalone browser presentation is deleted while protected project/thread/runtime/billing/harness substrate remains; the remaining caller graph and three protected-viewer decisions stay open |
 | U-038 | resolved by C0: one repository thesis owns the active destination with explicit implementation states |
 
 Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-staging-shape-audit-20260720.md). “Resolved” here normally means data shape observed in this staging snapshot, not a production claim. U-004 additionally has staging-deployed runtime invariants: pair reads fail closed, activation keeps the indexed read plus insert in one transaction, and every community must persist its derived count.
@@ -71,7 +71,7 @@ Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-stagin
 | --- | --- | --- | --- |
 | U-024 | Are there more than 500 communities or capped recurring events/recipients? | determines current starvation impact | cardinality counts only; defect exists regardless |
 | U-025 | **The ownerless `communityExperience` namespace is deleted and validated on staging; external use remains unknown.** Which external clients depend on that former namespace, source-module callable names, or legacy MCP wire names? | production transport port readiness and later outer-alias consolidation | bounded function-usage/API consumer evidence or explicit unsupported-contract decision |
-| U-026 | **Resolved at doctrine level:** standalone Workspace UI is not an MVP destination; protected harness/thread substrate remains. Which routes/controllers still have real callers is separately open. | route/UI migration and deletion boundary | static/external caller inventory plus navigation telemetry counts |
+| U-026 | **Narrowed through C7.1A-E:** standalone Workspace UI is not an MVP destination; its host, outbound navigation, right-panel/files, preview/thread/message, project-modal, browser mutation/import, and card-setup presentation paths are deleted. Inbound migration routing and protected project/thread/runtime/billing/harness substrate remain. Which remaining Workspace-named browser/controllers have live callers, and whether the three unmounted protected viewers should mount or be deleted, remain open. | final browser/UI deletion boundary | static caller inventory plus explicit protected-viewer decision |
 | U-027 | Which lexical CSS candidates are dynamically generated or visually used? | safe CSS deletion | instrumented class coverage and screenshot matrix |
 | U-028 | Is another branch-protection workflow running web build/typecheck/journeys? | CI gap severity | GitHub required-check configuration/workflow inventory |
 | U-029 | Which of 253 `check:*` commands own unique invariants and when are they invoked? | proof deletion/consolidation | generated owner/invocation matrix |

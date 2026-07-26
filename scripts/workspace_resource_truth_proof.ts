@@ -107,10 +107,10 @@ assert.match(
 );
 
 const threads = read("convex/threads.ts");
-assert.match(
+assert.doesNotMatch(
   threads,
-  /providerVolumeId: undefined[\s\S]*workspaceVolumeRetentionState: DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE/,
-  "thread-created default projects must initialize active volume retention policy",
+  /db\.insert\("cloudProjects"|DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE/,
+  "thread persistence must not create implicit default projects or own project volume-retention initialization",
 );
 
 const gateway = read("shared/cloudProjectsGateway.ts");

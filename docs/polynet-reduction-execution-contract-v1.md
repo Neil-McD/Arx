@@ -1352,9 +1352,10 @@ manual project-computer start/stop callbacks.
 Presentation authority now follows mounted owners. Operator diagnostics are
 proved through `WebOperatorDashboardHost.tsx`,
 `useOperatorDashboardData.ts`, and the four live operator views. Billing is
-proved through global Billing Settings. Retained project-storage failures route
-through `useWebProjectUiController.ts`, while runtime paid-usage failures remain
-owned by `useWebTurnRunnerController.ts`. Backend inspector traversal, cache
+proved through global Billing Settings. At this checkpoint, project-storage
+failures still routed through `useWebProjectUiController.ts`; C7.1E later
+deleted that zero-caller browser path. Runtime paid-usage failures remain owned
+by `useWebTurnRunnerController.ts`. Backend inspector traversal, cache
 invalidation, provider accounting, and failure-detail contracts remain intact;
 only their deleted browser files-panel adapter and UI retry/rendering assertions
 are retired.
@@ -1388,7 +1389,7 @@ now owns the sequenced-assistant-text duplicate guard, streamed-text fallback,
 and thinking-footer coordination. Structured runtime failures continue through
 the turn runner into the mounted global inference modal and Billing route;
 model-written prose and retired message metadata do not manufacture upgrade UI.
-Project identity remains in the active project selector and project controller,
+Project identity remains in retained runtime project/thread selection state,
 not in an abandoned folder browser. Backend terminal preview probing, reuse,
 transport, and observation remain intact without the legacy preview card.
 
@@ -1398,19 +1399,60 @@ overrides is removed. Shared markdown, attachments, community citations,
 runtime timeline, background terminals, and the common app-preview styles
 remain.
 
-`DaytonaRuntimeAppPreview.tsx` and `RuntimeComputerUseViewer.tsx` are explicitly
-retained but are not mounted. They are protected harness-adjacent presentation
-candidates requiring a separate human mount-or-delete decision; neither is
-counted as a live MVP journey or as acceptance evidence for this slice.
+`DaytonaRuntimeAppPreview.tsx`, `RuntimeComputerUseViewer.tsx`, and the later
+identified `WebBackgroundTerminalRail.tsx` are explicitly retained but are not
+mounted. They are protected harness-adjacent presentation candidates requiring
+a separate human mount-or-delete decision; none is counted as a live MVP
+journey or as acceptance evidence for this slice.
 
 The Workspace quarantine contract requires the deleted source and exclusive
-styles to remain absent while requiring both protected dormant viewers to
+styles to remain absent while requiring all three protected dormant viewers to
 remain present until that decision. Mixed UI/runtime/prompt proofs now follow
 mounted or canonical owners rather than deleted components.
 
 This slice changes no Convex function or schema, project/thread/message data,
 runtime executor, harness policy, provider lease, preview transport, billing
 authority, official MCP compatibility, community resource/memory owner,
-environment configuration, or production state. C7 remains `IN_PROGRESS`: the
-next bounded audit is the project-modal/deeper `App.tsx` orchestration cluster,
-with the dormant harness presentation decision kept separate.
+environment configuration, or production state. C7 remained `IN_PROGRESS`
+pending the project-modal/deeper `App.tsx` audit recorded below, with the
+dormant harness presentation decision kept separate.
+
+### C7.1E current receipt — project-modal and browser-adapter deletion
+
+The fifth C7 slice removes the zero-caller project create/edit/delete
+presentation closure. The create and delete modals, their permanently closed
+global modal host, and `useWebProjectUiController.ts` are deleted. `App.tsx`
+and the global overlay boundary no longer initialize, project, or pass this
+state. Modal-only CSS and the UI-only project-link text parser/formatter are
+also deleted.
+
+The browser project gateway is reduced to the one retained read projection:
+authenticated project listing and mapping for runtime selection. Its default
+creation, create, update, delete, and ZIP-import commands are removed. The
+Convex project functions, schema, persistence, context normalization, runtime
+context loading, project/thread selection, provider volumes, and protected
+harness execution remain unchanged. Browser absence is not a claim that the
+backend project substrate is obsolete.
+
+The same caller audit removes the Workspace-only browser card-setup/status
+bridge and its `App.tsx` return-refresh/error state. Canonical Premium checkout
+and Connect onboarding remain in the account gateway. Stripe customer,
+setup-intent, webhook reconciliation, card-truth, resource-admission, usage
+classification, and runtime billing owners remain intact. This is a
+presentation/adapter deletion, not a billing-authority deletion.
+
+Two additional zero-caller shared helpers,
+`threadPanelController.ts` and `workspaceSandboxStatus.ts`, are deleted. The
+quarantine contract now requires all retired project/browser files, commands,
+and styles to remain absent. Project-context and resource-admission contracts
+prove the retained database/runtime/billing boundary rather than requiring a
+deleted browser editor.
+
+No Convex function or schema, staging data, project/thread/message record,
+provider lease, runtime executor, harness policy, official MCP contract,
+community resource/memory owner, environment configuration, or production
+state changes in this slice. C7 remains `IN_PROGRESS`: remaining
+Workspace-named browser/controller state requires a fresh caller-by-caller
+audit, while `DaytonaRuntimeAppPreview.tsx`,
+`RuntimeComputerUseViewer.tsx`, and `WebBackgroundTerminalRail.tsx` remain
+separate protected mount-or-delete decisions.

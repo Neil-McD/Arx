@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import {
-  PROJECT_CONTEXT_LINKS_MAX,
   PROJECT_CONTEXT_RENDER_INSTRUCTIONS_MAX_CHARS,
   PROJECT_CONTEXT_RENDER_LINKS_MAX,
   PROJECT_INSTRUCTIONS_MAX_CHARS,
-  formatProjectContextLinksText,
   normalizeProjectInstructions,
-  parseProjectContextLinksText,
   renderProjectContextForPrompt,
 } from "../shared/projectContext.ts";
 import { composePlatformChatRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
@@ -21,51 +18,6 @@ import {
 function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
 }
-
-function readExportedFunction(source: string, name: string): string {
-  const marker = `export async function ${name}`;
-  const start = source.indexOf(marker);
-  assert.notEqual(start, -1, `missing exported function ${name}`);
-  const next = source.indexOf("\nexport ", start + marker.length);
-  return source.slice(start, next === -1 ? source.length : next);
-}
-
-const parsed = parseProjectContextLinksText(
-  [
-    "https://example.com",
-    "Docs - https://example.com/docs",
-    "Roadmap: https://example.com/roadmap",
-  ].join("\n"),
-);
-assert.deepEqual(parsed.errors, []);
-assert.equal(parsed.links.length, 3);
-assert.deepEqual(parsed.links[0], { url: "https://example.com/" });
-assert.deepEqual(parsed.links[1], {
-  title: "Docs",
-  url: "https://example.com/docs",
-});
-assert.deepEqual(parsed.links[2], {
-  title: "Roadmap",
-  url: "https://example.com/roadmap",
-});
-assert.equal(
-  formatProjectContextLinksText(parsed.links),
-  [
-    "https://example.com/",
-    "Docs - https://example.com/docs",
-    "Roadmap - https://example.com/roadmap",
-  ].join("\n"),
-);
-
-const invalidProtocol = parseProjectContextLinksText("Internal - ftp://example.com/file");
-assert.equal(invalidProtocol.links.length, 0);
-assert.match(invalidProtocol.errors[0] ?? "", /valid URL|http or https/);
-
-const tooMany = parseProjectContextLinksText(
-  Array.from({ length: PROJECT_CONTEXT_LINKS_MAX + 1 }, (_, index) => `https://example.com/${index}`).join("\n"),
-);
-assert.equal(tooMany.links.length, PROJECT_CONTEXT_LINKS_MAX);
-assert.match(tooMany.errors[0] ?? "", /Only 20 links/);
 
 assert.equal(normalizeProjectInstructions("  Keep this concise.  "), "Keep this concise.");
 assert.throws(
@@ -146,17 +98,11 @@ assert.doesNotMatch(looseChatPrompt, /PROJECT_CONTEXT/);
 const schema = read("convex/schema.ts");
 const projects = read("convex/projects.ts");
 const gateway = read("shared/cloudProjectsGateway.ts");
-const modal = read("apps/web/src/components/WebCreateProjectModal.tsx");
-const modalHost = read("apps/web/src/components/WebProjectModalHost.tsx");
-const controller = read("apps/web/src/controllers/useWebProjectUiController.ts");
+const projectContextSource = read("shared/projectContext.ts");
 const runtimeContextLoader = read("convex/runtimeTurnContext.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const runtimeTurnHandlers = read("convex/runtimeTurnHandlers.ts");
 const runtimePrompt = read("shared/runtimePrompt.ts");
-const gatewayUpdateMappedCloudProject = readExportedFunction(
-  gateway,
-  "updateMappedCloudProject",
-);
 
 assert.match(schema, /instructions: v\.optional\(v\.string\(\)\)/);
 assert.match(schema, /contextLinks: v\.optional\(v\.array\(v\.object\(\{/);
@@ -177,33 +123,29 @@ assert.match(
 
 assert.match(gateway, /instructions: string \| null/);
 assert.match(gateway, /context_links: ProjectContextLink\[\]/);
-assert.match(gateway, /contextLinks,/);
 assert.match(gateway, /readProjectContextLinks/);
-assert.match(
-  gatewayUpdateMappedCloudProject,
-  /\.\.\.\(typeof params\.instructions === "string" \? \{ instructions: params\.instructions \} : null\)/,
-  "gateway update should preserve omitted instructions and clear only explicit empty strings",
-);
-assert.match(
-  gatewayUpdateMappedCloudProject,
-  /\.\.\.\(Array\.isArray\(params\.contextLinks\)[\s\S]*\? \{ contextLinks: normalizeProjectContextLinks\(params\.contextLinks\) \}[\s\S]*: null\)/,
-  "gateway update should preserve omitted links and clear only explicit empty arrays",
+assert.doesNotMatch(
+  gateway,
+  /ensureDefaultMappedCloudProject|createMappedCloudProject|updateMappedCloudProject|deleteMappedCloudProject|importCloudProjectZip/,
+  "the browser gateway must remain read-only while project context stays a runtime persistence primitive",
 );
 assert.doesNotMatch(
-  gatewayUpdateMappedCloudProject,
-  /const contextLinks = Array\.isArray\(params\.contextLinks\)[\s\S]*: \[\]/,
-  "gateway update must not coerce omitted contextLinks to an empty array",
+  projectContextSource,
+  /parseProjectContextLinksText|formatProjectContextLinksText/,
+  "runtime project context must not retain text-area parsing helpers owned by the deleted browser editor",
 );
-
-assert.match(modal, /Project instructions/);
-assert.match(modal, /Project links/);
-assert.match(modal, /PROJECT_INSTRUCTIONS_MAX_CHARS/);
-assert.match(modalHost, /projectInstructions=\{createModal\.projectInstructions\}/);
-assert.match(modalHost, /projectLinksText=\{editModal\.projectLinksText\}/);
-assert.match(controller, /parseProjectContextLinksText\(createProjectLinksText\)/);
-assert.match(controller, /parseProjectContextLinksText\(editProjectLinksText\)/);
-assert.match(controller, /instructions: createProjectInstructions\.trim\(\)/);
-assert.match(controller, /contextLinks: parsedProjectLinks\.links/);
+for (const retiredPath of [
+  "apps/web/src/components/WebCreateProjectModal.tsx",
+  "apps/web/src/components/WebDeleteProjectModal.tsx",
+  "apps/web/src/components/WebProjectModalHost.tsx",
+  "apps/web/src/controllers/useWebProjectUiController.ts",
+]) {
+  assert.equal(
+    existsSync(new URL(`../${retiredPath}`, import.meta.url)),
+    false,
+    `${retiredPath} must remain deleted`,
+  );
+}
 
 assert.match(runtimeContextLoader, /loadRuntimeProjectContext/);
 assert.match(runtimeContextLoader, /api\.projects\.getCloudProjectById/);

@@ -5,7 +5,6 @@ import { WebInferenceIssueModal } from "./WebInferenceIssueModal";
 import { WebMemoryImportModal } from "./WebMemoryImportModal";
 import { WebMessageContextModal } from "./WebMessageContextModal";
 import { WebPreviewAccessGateModal } from "./WebPreviewAccessGateModal";
-import { WebProjectModalHost } from "./WebProjectModalHost";
 import { WebProviderConnectionModalHost } from "./WebProviderConnectionModalHost";
 import type { PaidToolKind } from "../../../../shared/workspaceCredits";
 import type { PaidUsageBillingMode } from "../../../../shared/paidUsageBilling";
@@ -65,7 +64,6 @@ type WebPreviewAccessGateModalProps = {
 export type WebGlobalOverlayHostProps = {
   messageContextModalProps: ComponentProps<typeof WebMessageContextModal>;
   memoryImportModalProps: WebMemoryImportModalProps | null;
-  projectModalHostProps: ComponentProps<typeof WebProjectModalHost>;
   providerConnectionModalHostProps: ComponentProps<
     typeof WebProviderConnectionModalHost
   >["modalHostProps"];
@@ -84,8 +82,6 @@ export function WebGlobalOverlayHost(props: WebGlobalOverlayHostProps) {
       {props.memoryImportModalProps ? (
         <WebMemoryImportModal {...props.memoryImportModalProps} />
       ) : null}
-
-      <WebProjectModalHost {...props.projectModalHostProps} />
 
       <WebProviderConnectionModalHost
         modalHostProps={props.providerConnectionModalHostProps}

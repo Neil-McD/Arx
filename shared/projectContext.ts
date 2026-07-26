@@ -17,11 +17,6 @@ export type RuntimeProjectContextPrompt = {
   links?: ProjectContextLink[] | null;
 };
 
-export type ParsedProjectContextLinks = {
-  links: ProjectContextLink[];
-  errors: string[];
-};
-
 export type ProjectContextRenderOptions = {
   maxInstructionsChars?: number | null;
   maxLinks?: number | null;
@@ -80,65 +75,6 @@ export function normalizeProjectContextLinks(raw: unknown): ProjectContextLink[]
     links.push(link);
   }
   return links;
-}
-
-function stripUrlBoundaryPunctuation(value: string): string {
-  return value.replace(/[),.;]+$/g, "");
-}
-
-function parseProjectContextLinkLine(line: string): ProjectContextLink {
-  const urlMatch = line.match(/https?:\/\/\S+/i);
-  if (!urlMatch) throw new Error("project_context_link_url_required");
-  const url = stripUrlBoundaryPunctuation(urlMatch[0] ?? "");
-  const title = line
-    .replace(urlMatch[0] ?? "", "")
-    .replace(/[-:\s]+$/g, "")
-    .trim();
-  return normalizeProjectContextLink({
-    title: title || undefined,
-    url,
-  }) as ProjectContextLink;
-}
-
-export function parseProjectContextLinksText(raw: unknown): ParsedProjectContextLinks {
-  const text = String(raw ?? "");
-  const lines = text
-    .split(/\r?\n/g)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const links: ProjectContextLink[] = [];
-  const errors: string[] = [];
-  const seen = new Set<string>();
-  for (const [index, line] of lines.entries()) {
-    if (links.length >= PROJECT_CONTEXT_LINKS_MAX) {
-      errors.push(`Only ${PROJECT_CONTEXT_LINKS_MAX} links are allowed.`);
-      break;
-    }
-    try {
-      const link = parseProjectContextLinkLine(line);
-      if (seen.has(link.url)) continue;
-      seen.add(link.url);
-      links.push(link);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes("too_long:")) {
-        errors.push(`Line ${index + 1} is too long.`);
-      } else if (message.includes("protocol_invalid")) {
-        errors.push(`Line ${index + 1} must use http or https.`);
-      } else {
-        errors.push(`Line ${index + 1} needs a valid URL.`);
-      }
-    }
-  }
-  return { links, errors };
-}
-
-export function formatProjectContextLinksText(
-  links: readonly ProjectContextLink[] | null | undefined,
-): string {
-  return normalizeProjectContextLinks(links ?? [])
-    .map((link) => (link.title ? `${link.title} - ${link.url}` : link.url))
-    .join("\n");
 }
 
 export function normalizeRuntimeProjectContext(

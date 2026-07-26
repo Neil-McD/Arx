@@ -13,7 +13,6 @@ const navigation = read("shared/appShellNavigation.ts");
 const app = read("apps/web/src/App.tsx");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const workspaceCore = read("apps/web/src/controllers/useWebWorkspaceCoreController.ts");
-const projectUi = read("apps/web/src/controllers/useWebProjectUiController.ts");
 const threadSidebarSelectors = read("shared/threadSidebarSelectors.ts");
 const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
 const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
@@ -29,6 +28,10 @@ const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx
 const communityAgentSection = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
 const communityAgentInstructions = read("apps/web/src/components/WebCommunityAiAgentInstructionsEditor.tsx");
 const communityLaunchSetup = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
+const globalOverlay = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
+const globalOverlayProps = read("apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts");
+const cloudProjectsGateway = read("shared/cloudProjectsGateway.ts");
+const accountCommerceGateway = read("shared/cloudAccountCommerceGateway.ts");
 const mcp = read("convex/httpMcp.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const emailEvents = read("convex/emailEvents.ts");
@@ -121,11 +124,6 @@ assert.match(
   app,
   /adoptWorkspaceThreadSelection[\s\S]*setActiveProjectId[\s\S]*syncWorkspaceSelection/,
   "retained thread adoption must mutate runtime selection without changing page or URL",
-);
-assert.doesNotMatch(
-  projectUi,
-  /onStartDraftInProject/,
-  "project creation must not manufacture an obsolete Workspace destination",
 );
 assert.doesNotMatch(
   shellProjection,
@@ -320,12 +318,19 @@ for (const retiredPath of [
   "shared/useWorkspaceAutoScroll.ts",
   "apps/web/src/components/RuntimeWebSources.tsx",
   "shared/MessageFooterActions.tsx",
+  "apps/web/src/components/WebCreateProjectModal.tsx",
+  "apps/web/src/components/WebDeleteProjectModal.tsx",
+  "apps/web/src/components/WebProjectModalHost.tsx",
+  "apps/web/src/controllers/useWebProjectUiController.ts",
+  "shared/threadPanelController.ts",
+  "shared/workspaceSandboxStatus.ts",
 ]) {
   assert.equal(existsSync(retiredPath), false, `${retiredPath} must remain deleted`);
 }
 for (const protectedDormantPath of [
   "apps/web/src/components/DaytonaRuntimeAppPreview.tsx",
   "apps/web/src/components/RuntimeComputerUseViewer.tsx",
+  "apps/web/src/components/WebBackgroundTerminalRail.tsx",
 ]) {
   assert.equal(
     existsSync(protectedDormantPath),
@@ -335,13 +340,33 @@ for (const protectedDormantPath of [
 }
 assert.doesNotMatch(
   app,
-  /useWorkspaceRightPanelController|turnOnWorkspaceComputer|turnOffWorkspaceComputer|startProjectWorkspaceComputer|stopProjectWorkspaceComputer/,
-  "App must not retain right-panel state or manual computer controls for the deleted Workspace presentation",
+  /useWorkspaceRightPanelController|turnOnWorkspaceComputer|turnOffWorkspaceComputer|startProjectWorkspaceComputer|stopProjectWorkspaceComputer|useWebProjectUiController|projectUiController|projectModalHostProps|openWorkspaceStorageBillingModal|startWorkspaceCardSetupCheckout/,
+  "App must not retain right-panel, project-modal, or card-setup state for the deleted Workspace presentation",
+);
+assert.doesNotMatch(
+  globalOverlay + globalOverlayProps,
+  /WebProjectModalHost|projectModalHostProps/,
+  "the global overlay boundary must not retain a permanently closed project modal host",
+);
+assert.doesNotMatch(
+  cloudProjectsGateway,
+  /ensureDefaultMappedCloudProject|createMappedCloudProject|updateMappedCloudProject|deleteMappedCloudProject|importCloudProjectZip/,
+  "the browser project gateway must expose read projection only",
+);
+assert.doesNotMatch(
+  accountCommerceGateway,
+  /startCloudWorkspaceCardSetupCheckout|refreshCloudWorkspaceCardOnFileStatus|loadCloudWorkspaceCardOnFileStatus/,
+  "the browser account gateway must not expose Workspace card-setup adapters",
+);
+assert.match(
+  accountCommerceGateway,
+  /startCloudPremiumSubscriptionCheckout|startCloudConnectOnboarding/,
+  "Premium checkout and provider onboarding must remain available",
 );
 assert.doesNotMatch(
   baseCss,
-  /\.workspace-right-panel|\.workspace-user-data-panel|\.workspace-summary-|\.workspace-community-preview|\.workspace-files-|\.workspace-file-preview|\.workspace-code-preview/,
-  "base CSS must not retain selectors owned only by the deleted Workspace right panel and files browser",
+  /\.workspace-right-panel|\.workspace-user-data-panel|\.workspace-summary-|\.workspace-community-preview|\.workspace-files-|\.workspace-file-preview|\.workspace-code-preview|\.create-project-|\.delete-project-/,
+  "base CSS must not retain selectors owned only by deleted Workspace, project-modal, or files-browser presentation",
 );
 assert.doesNotMatch(
   baseCss + webCss,

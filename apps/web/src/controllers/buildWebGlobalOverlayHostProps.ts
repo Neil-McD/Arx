@@ -32,7 +32,6 @@ export function buildWebGlobalOverlayHostProps(params: {
     closeMemoryImportModal: () => void;
   };
   handleImportExternalMemory: () => void | Promise<void>;
-  projectModalHostProps: WebGlobalOverlayHostProps["projectModalHostProps"];
   providerConnectionModalHostProps: WebGlobalOverlayHostProps["providerConnectionModalHostProps"];
   previewAccessGateModal: NonNullable<
     WebGlobalOverlayHostProps["previewAccessGateModalProps"]
@@ -90,7 +89,6 @@ export function buildWebGlobalOverlayHostProps(params: {
           onImport: () => void params.handleImportExternalMemory(),
         }
       : null,
-    projectModalHostProps: params.projectModalHostProps,
     providerConnectionModalHostProps: params.providerConnectionModalHostProps,
     previewAccessGateModalProps: params.previewAccessGateModal
       ? {

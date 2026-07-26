@@ -55,10 +55,8 @@ import {
 import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 import {
-  useWebProjectUiController,
-  type WebCloudProjectRecord as CloudProjectRecord,
-} from "./controllers/useWebProjectUiController";
-import { useWebWorkspaceCoreController } from "./controllers/useWebWorkspaceCoreController";
+  useWebWorkspaceCoreController,
+} from "./controllers/useWebWorkspaceCoreController";
 import { useWebCommunityUiController } from "./controllers/useWebCommunityUiController";
 import { useWebCommunityAgentConfigUiController } from "./controllers/useWebCommunityAgentConfigUiController";
 import { useWebCommunityAppsController } from "./controllers/useWebCommunityAppsController";
@@ -412,11 +410,7 @@ import {
   type BuilderPartnerProgramSnapshot,
 } from "../../../shared/builderPartnerProgramGateway";
 import {
-  loadCloudWorkspaceCardOnFileStatus,
-  refreshCloudWorkspaceCardOnFileStatus,
   startCloudPremiumSubscriptionCheckout,
-  startCloudWorkspaceCardSetupCheckout,
-  type CloudWorkspaceCardOnFileStatus,
 } from "../../../shared/cloudAccountCommerceGateway";
 import { loadOptionalOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
 import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
@@ -427,10 +421,7 @@ import {
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
 import type { PaidToolKind } from "../../../shared/workspaceCredits";
 import {
-  paidUsageBillingModeForPaidToolFailure,
-  paidUsageBillingModeForWorkspaceStorageAction,
   type PaidUsageBillingMode,
-  type WorkspaceStorageBillingAction,
 } from "../../../shared/paidUsageBilling";
 import {
   deriveCommunityFunnelAction,
@@ -917,8 +908,6 @@ const LEGACY_APP_THEME_STORAGE_KEY = "arx-theme";
 const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
 const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
-const WORKSPACE_CARD_SETUP_RETURN_STORAGE_KEY = "polynet-workspace-card-setup-return";
-const WORKSPACE_CARD_SETUP_RETURN_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
 
 type GuestStoredMessageV1 = {
@@ -962,40 +951,6 @@ function storeGuestModelId(modelId: string): void {
   } catch {
     // ignore
   }
-}
-
-function markPendingWorkspaceCardSetupReturn(): void {
-  try {
-    window.sessionStorage.setItem(WORKSPACE_CARD_SETUP_RETURN_STORAGE_KEY, String(Date.now()));
-  } catch {
-    // Checkout return refresh is best-effort; Stripe remains the provider truth.
-  }
-}
-
-function hasPendingWorkspaceCardSetupReturn(): boolean {
-  try {
-    const markedAt = Number(window.sessionStorage.getItem(WORKSPACE_CARD_SETUP_RETURN_STORAGE_KEY) ?? "");
-    if (!Number.isFinite(markedAt) || markedAt <= 0) return false;
-    if (Date.now() - markedAt > WORKSPACE_CARD_SETUP_RETURN_MAX_AGE_MS) {
-      window.sessionStorage.removeItem(WORKSPACE_CARD_SETUP_RETURN_STORAGE_KEY);
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function clearPendingWorkspaceCardSetupReturn(): void {
-  try {
-    window.sessionStorage.removeItem(WORKSPACE_CARD_SETUP_RETURN_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
-}
-
-function buildWorkspaceCardSetupReturnUrl(): string {
-  return `${window.location.origin}/settings/billing`;
 }
 
 function buildPremiumSubscriptionReturnUrl(): string {
@@ -2064,8 +2019,6 @@ export default function App() {
     useState(false);
   const builderPartnerProgramLoadRequestIdRef = useRef(0);
   const workspaceCreditLoadRequestIdRef = useRef(0);
-  const workspaceCardOnFileLoadRequestIdRef = useRef(0);
-  const workspaceCardSetupReturnRefreshInFlightRef = useRef(false);
   const lastTrackedAuthSessionUserIdRef = useRef<string | null>(null);
   const [isFreeAccountInfoOpen, setIsFreeAccountInfoOpen] = useState(false);
   const [stripeConnectReturn, setStripeConnectReturn] = useState<StripeConnectReturn | null>(null);
@@ -4467,7 +4420,6 @@ export default function App() {
   const effectiveBackTargetLabel = backTargetLabel;
 
   const threadsHydratedRef = useRef(false);
-  const lastCloudStatusRefreshAtRef = useRef(0);
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
   const [loadingThreadMessagesThreadId, setLoadingThreadMessagesThreadId] = useState<string | null>(null);
   const [guestModelId, setGuestModelId] = useState<string>(() => loadGuestModelId());
@@ -4512,11 +4464,6 @@ export default function App() {
     paidUsageBillingMode?: PaidUsageBillingMode | null;
   } | null>(null);
   const [isInferenceIssueModalRunning] = useState(false);
-  const [isStartingWorkspaceCardSetupCheckout, setIsStartingWorkspaceCardSetupCheckout] = useState(false);
-  const [workspaceCardSetupError, setWorkspaceCardSetupError] = useState<string | null>(null);
-  const [workspaceCardOnFileStatus, setWorkspaceCardOnFileStatus] =
-    useState<CloudWorkspaceCardOnFileStatus | null>(null);
-  const [workspaceCardOnFileError, setWorkspaceCardOnFileError] = useState<string | null>(null);
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
     memory_mode: "auto",
     remember_intent_enabled: true,
@@ -5551,14 +5498,6 @@ export default function App() {
     showMemoryToastMessage,
   ]);
 
-  const refreshCloudProjectStatuses = useCallback(() => {
-    if (!session) return;
-    const now = Date.now();
-    if (now - lastCloudStatusRefreshAtRef.current < 1000) return;
-    lastCloudStatusRefreshAtRef.current = now;
-    void workspaceCore.project.actions.loadProjects(session);
-  }, [session, workspaceCore.project.actions]);
-
   const isThreadRunActive = useCallback(
     (threadId: string | null): boolean => {
       const trimmedThreadId = String(threadId ?? "").trim();
@@ -5685,78 +5624,6 @@ export default function App() {
     },
     [ensureUsableAuthSession],
   );
-
-  const loadWorkspaceCardOnFileStatus = useCallback(
-    async (session: AuthSession): Promise<CloudWorkspaceCardOnFileStatus | null> => {
-      const requestId = ++workspaceCardOnFileLoadRequestIdRef.current;
-      setWorkspaceCardOnFileError(null);
-      try {
-        const usableSession = await ensureUsableAuthSession(session);
-        if (!usableSession) {
-          if (requestId === workspaceCardOnFileLoadRequestIdRef.current) {
-            setWorkspaceCardOnFileStatus(null);
-          }
-          return null;
-        }
-        const status = await loadCloudWorkspaceCardOnFileStatus({
-          session: usableSession,
-        });
-        if (requestId === workspaceCardOnFileLoadRequestIdRef.current) {
-          setWorkspaceCardOnFileStatus(status);
-          setWorkspaceCardOnFileError(null);
-        }
-        return status;
-      } catch (error) {
-        const message = formatWorkspaceBillingCheckoutError(error, { kind: "card_setup" });
-        console.warn("Workspace card status refresh failed:", error);
-        if (requestId === workspaceCardOnFileLoadRequestIdRef.current) {
-          setWorkspaceCardOnFileStatus(null);
-          setWorkspaceCardOnFileError(message);
-        }
-        return null;
-      }
-    },
-    [ensureUsableAuthSession],
-  );
-
-  useEffect(() => {
-    if (!session) return;
-
-    const refreshPendingWorkspaceCardSetup = () => {
-      if (!hasPendingWorkspaceCardSetupReturn()) return;
-      if (workspaceCardSetupReturnRefreshInFlightRef.current) return;
-      workspaceCardSetupReturnRefreshInFlightRef.current = true;
-      const activeSession = sessionRef.current ?? session;
-      void refreshCloudWorkspaceCardOnFileStatus({
-        session: activeSession,
-      }).then((result) => {
-        clearPendingWorkspaceCardSetupReturn();
-        setWorkspaceCardSetupError(null);
-        setWorkspaceCardOnFileStatus(result);
-        setWorkspaceCardOnFileError(null);
-        refreshCloudProjectStatuses();
-        const hasCardOnFile = Boolean(result?.has_card_on_file);
-        captureProductAnalyticsEvent("workspace card setup refreshed", {
-          status: hasCardOnFile ? "active" : String(result?.payment_method_status ?? "missing"),
-        });
-        if (hasCardOnFile) {
-          showAppToastMessage("Card saved.");
-        }
-      }).catch((error) => {
-        const message = formatWorkspaceBillingCheckoutError(error, { kind: "card_setup" });
-        setWorkspaceCardSetupError(message);
-        setWorkspaceCardOnFileError(message);
-      }).finally(() => {
-        workspaceCardSetupReturnRefreshInFlightRef.current = false;
-      });
-    };
-
-    refreshPendingWorkspaceCardSetup();
-    window.addEventListener("pageshow", refreshPendingWorkspaceCardSetup);
-    return () => {
-      window.removeEventListener("pageshow", refreshPendingWorkspaceCardSetup);
-    };
-  }, [refreshCloudProjectStatuses, session, sessionRef, showAppToastMessage]);
 
   useEffect(() => {
     activeCommunityIdRef.current = activeCommunityId;
@@ -7020,40 +6887,6 @@ export default function App() {
     }
   }
 
-  const startWorkspaceCardSetupCheckout = useCallback(async (): Promise<void> => {
-    const session = await ensureUsableAuthSession();
-    if (!session) {
-      requireSignIn();
-      return;
-    }
-    setWorkspaceCardSetupError(null);
-    setIsStartingWorkspaceCardSetupCheckout(true);
-    try {
-      const returnUrl = buildWorkspaceCardSetupReturnUrl();
-      const data = await startCloudWorkspaceCardSetupCheckout({
-        session,
-        successUrl: returnUrl,
-        cancelUrl: returnUrl,
-      });
-      const checkoutUrl =
-        data && typeof data === "object" && typeof (data as { checkout_url?: unknown }).checkout_url === "string"
-          ? String((data as { checkout_url?: unknown }).checkout_url).trim()
-          : "";
-      if (!checkoutUrl) throw new Error("Missing checkout_url.");
-      markPendingWorkspaceCardSetupReturn();
-      captureProductAnalyticsEvent("workspace card setup started", {
-        surface: "workspace_billing_modal",
-      });
-      window.location.assign(checkoutUrl);
-    } catch (error) {
-      setWorkspaceCardSetupError(
-        formatWorkspaceBillingCheckoutError(error, { kind: "card_setup" }),
-      );
-    } finally {
-      setIsStartingWorkspaceCardSetupCheckout(false);
-    }
-  }, [ensureUsableAuthSession, requireSignIn]);
-
   const startPremiumSubscriptionCheckout = useCallback(async (): Promise<void> => {
     const session = await ensureUsableAuthSession();
     if (!session) {
@@ -7080,39 +6913,6 @@ export default function App() {
       throw new Error(formatWorkspaceBillingCheckoutError(error, { kind: "premium_subscription" }));
     }
   }, [ensureUsableAuthSession, requireSignIn]);
-
-  const openWorkspacePaidToolBillingModal = useCallback((params?: {
-    toolKind?: PaidToolKind | null;
-    message?: string | null;
-    requiredCredits?: number | null;
-    paidUsageBillingMode?: PaidUsageBillingMode | null;
-  }) => {
-    const toolKind = params?.toolKind ?? "workspace_tools";
-    setInferenceIssueModal({
-      reason: "workspace_credits",
-      threadId: activeThreadId ?? GUEST_THREAD_ID,
-      mode: "respond",
-      message: params?.message?.trim() || null,
-      toolKind,
-      requiredCredits: params?.requiredCredits ?? null,
-      paidUsageBillingMode:
-        params?.paidUsageBillingMode ??
-        paidUsageBillingModeForPaidToolFailure(toolKind),
-    });
-  }, [activeThreadId]);
-
-  const openWorkspaceStorageBillingModal = useCallback((params: {
-    action: WorkspaceStorageBillingAction;
-    message?: string | null;
-    requiredCredits?: number | null;
-  }) => {
-    openWorkspacePaidToolBillingModal({
-      toolKind: "workspace_tools",
-      message: params.message ?? null,
-      requiredCredits: params.requiredCredits ?? null,
-      paidUsageBillingMode: paidUsageBillingModeForWorkspaceStorageAction(params.action),
-    });
-  }, [openWorkspacePaidToolBillingModal]);
 
   const effectiveAccountSetupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
   const isProfileSetupCompleteForPublicActions =
@@ -8296,26 +8096,6 @@ export default function App() {
     resolveThreadProjectId: workspace.derived.resolveThreadProjectId,
   });
   const currentWorkspaceProjectId = currentWorkspaceProjectSelection.currentProjectId;
-  const projectUiController = useWebProjectUiController<AuthSession>({
-    session: session,
-    cloudProjects: workspace.state.projects,
-    hasWorkspaceCardOnFile:
-      workspaceCardOnFileStatus === null
-        ? null
-        : workspaceCardOnFileStatus.has_card_on_file === true,
-    ensureSession: ensureUsableAuthSession,
-    requireSignIn,
-    showAppToastMessage,
-    onWorkspaceBillingRequired: ({ action, message }) => {
-      openWorkspaceStorageBillingModal({
-        action,
-        message: message ?? null,
-      });
-    },
-    onProjectCreated: workspace.actions.handleProjectCreated,
-    onProjectUpdated: workspace.actions.handleProjectUpdated,
-    onProjectDeleted: workspace.actions.handleProjectDeleted,
-  });
 
   const showEmptyThreadLandingSkeleton = Boolean(
     !activeThreadId &&
@@ -10371,7 +10151,6 @@ export default function App() {
     setIsFreeAccountInfoOpen,
     personalMemoryUi,
     handleImportExternalMemory,
-    projectModalHostProps: projectUiController.modalHostProps,
     providerConnectionModalHostProps: providerConnectionUi.modalHostProps,
     previewAccessGateModal,
     previewAccessGateAuthError: authError,
