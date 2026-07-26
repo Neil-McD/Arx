@@ -16,7 +16,13 @@ The UI route state is contradictory:
 
 This is a split client state machine: in-memory navigation can enter Workspace while refresh/deep link resolves elsewhere. It is evidence that the destination was partially retired without closing callers and types.
 
-`WebWorkspaceHost.tsx` remains a large product host and even embeds the Builder Partner panel. Builder Partner is retained, but as a secondary Settings/operator capability; coupling it to the protected Workspace host has nothing to do with harness capability.
+The unmounted 2,625-line `WebWorkspaceHost.tsx` product host was deleted in
+C7.1A. Builder Partner remains retained through its secondary Settings and
+operator owners; mixed contracts no longer use the dead host as authority.
+The remaining Workspace-named controllers, route builders, App orchestration,
+and child presentation components still require caller-by-caller
+classification before deletion. None of those names alone authorizes removal
+of the protected harness/runtime substrate.
 
 ## Scheduled job inventory
 
@@ -50,7 +56,7 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | Surface | Scaling variable | Risk |
 | --- | --- | --- |
 | compiler digest recovery | unfinished digest versions | `O(1)` exact-row checkpoint per active recovery chain |
-| Workspace UI orchestration | app state/callback surfaces | large coupling and refresh-state drift, not merely line count |
+| remaining Workspace UI orchestration | app state/callback surfaces | legacy controller coupling and refresh-state drift after host-root deletion |
 | runtime events/receipts | runs × events | storage retention and operator query cost unclear |
 | provider workers/previews | sessions × time/cost | needs cleanup, lease finalization, and accounting convergence |
 
@@ -60,7 +66,7 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | --- | --- | --- | ---: | --- |
 | protected coding/community harness substrate | `KEEP (MVP core)` | `HARDEN` | 1 | explicitly protected and required for external execution |
 | standalone Workspace as primary navigation destination | `DELETE (deferred/dead)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 9 | current MVP selects communities; callers/compatibility must be enumerated |
-| Workspace host coupling to Builder Partner UI | `DELETE (deferred/dead)` | `MIGRATE_THEN_DELETE` | 9 | retained secondary economy is misplaced inside a protected execution surface |
+| Workspace host coupling to Builder Partner UI | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1A deleted the unmounted host; retained partner UI remains in Settings/operator owners |
 | workspace route builders/controllers after parser retirement | `DECISION REQUIRED (user confirmation)` | `MIGRATE_THEN_DELETE` | 8 | split state machine; backend substrate is not the same as destination routing |
 | remaining no-cursor repeating prefix sweeps | `KEEP (MVP core)` | `HARDEN`, `BOUND` | 9 | claims reliable automation while permanently starving eligible work |
 | durable runtime receipts | `KEEP (MVP core)` | `RETENTION`, `BOUND` | 2 | necessary for audit/recovery, but not forever at full fidelity |

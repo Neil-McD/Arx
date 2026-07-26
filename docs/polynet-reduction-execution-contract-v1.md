@@ -179,7 +179,7 @@ must remain distinct.
 | C4 | Guarantee scheduler fairness and bounded operations | `SOURCE_IMPLEMENTED` | implementation landed; formal closure and current evidence reconciliation remain |
 | C5 | Collapse capability, transport, and public-function duplication | `SOURCE_IMPLEMENTED` | substantial cleanup landed; formal closure and current evidence reconciliation remain |
 | C6 | Land the read-only semantic community repository | `COMPLETE` | exact staging build `482d5d20` passed authenticated native and official-MCP list/read plus retired-name absence proof |
-| C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `PLANNED` | every retained surface maps to an MVP journey or protected substrate |
+| C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `IN_PROGRESS` | every retained surface maps to an MVP journey or protected substrate |
 | C8 | Decompose and optimize retained frontend/backend surfaces | `PLANNED` | lower concentration and change fan-out without creating new authority |
 | C9 | Prove backup, restore, RPO/RTO, and operational recovery | `PLANNED` | isolated recovery drills and owned runbooks meet accepted targets |
 | C10 | Reconcile historical Builder Partner obligations | `PLANNED_LAST` | historical legal lineage, retention, and mixed-policy payout state reconcile without rewriting history |
@@ -1274,5 +1274,37 @@ C6 reached `LIVE_PROVED` and milestone `COMPLETE` on staging on 2026-07-26:
 
 No new fixture was created for the release proof. No staging data residue,
 production query, production data, production configuration, or production
-deployment changed. C7 remains the next planned milestone; this receipt does
-not authorize it.
+deployment changed. That receipt did not itself authorize C7; the first
+bounded C7 slice was authorized separately and is recorded below.
+
+### C7.1A current receipt — unreachable Workspace host deletion
+
+The first C7 slice deletes the 2,625-line `WebWorkspaceHost.tsx` product host.
+It had no mounted first-party presentation path: ordinary legacy Workspace
+URLs already enter the auth-aware redirect/holding flow, and
+`WebAppMainSurfaceHost.tsx` neither imports nor mounts a Workspace branch.
+`App.tsx` retained only a type-only edge, which now uses a local structural
+type while the remaining legacy controller caller graph is audited in a later
+slice.
+
+Two proofs that existed only for the deleted presentation are retired:
+Workspace composer focus policy and Daytona preview-card deduplication. Mixed
+runtime, prompt, preview, and Builder Partner proofs no longer treat the dead
+host as an authority. The Workspace quarantine contract now asserts that the
+host itself remains absent.
+
+This slice deliberately preserves all Workspace/runtime schemas, data,
+projects, threads/messages, harness policies, workers, terminals, previews,
+provider isolation, billing/entitlement owners, official MCP compatibility,
+community resources/memory, route compatibility, and child presentation
+components. It changes no Convex code or schema, staging data, environment
+configuration, production state, or release workflow.
+
+Source evidence: focused Workspace quarantine, member destination, global
+Settings, account-lifecycle retirement, harness isolation, Builder Partner,
+platform prompt, runtime-preview, and Daytona preview-security contracts;
+web/Convex typechecks; production web build and bundle budget; the canonical
+foundation baseline; and staging authority guards. Live evidence is limited to
+the exact Git-driven staging marker and anonymous non-mutating canary because
+the deleted host was already unreachable and the slice has no cloud-data or
+schema effect.

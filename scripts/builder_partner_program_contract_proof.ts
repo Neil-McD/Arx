@@ -2462,10 +2462,9 @@ function main() {
     new URL("../apps/web/src/controllers/useWebPathRouteLifecycle.ts", import.meta.url),
   );
   const operatorGatewaySource = readText(new URL("../shared/cloudOperatorDashboardGateway.ts", import.meta.url));
-  const rightPanelSource = [
-    readText(new URL("../apps/web/src/components/WebWorkspaceHost.tsx", import.meta.url)),
-    readText(new URL("../apps/web/src/components/WebWorkspaceRightPanel.tsx", import.meta.url)),
-  ].join("\n");
+  const rightPanelSource = readText(
+    new URL("../apps/web/src/components/WebWorkspaceRightPanel.tsx", import.meta.url),
+  );
   const rightPanelModelSource = readText(
     new URL("../apps/web/src/components/workspaceRightPanelModel.ts", import.meta.url),
   );

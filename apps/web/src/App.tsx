@@ -495,7 +495,6 @@ import {
   type RuntimeEngine,
 } from "../../../shared/runtimeEngine";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
-import type { WorkspaceComposerApi, WorkspaceComposerDraft } from "./components/WebWorkspaceHost";
 import { useWorkspaceRightPanelController } from "./components/useWorkspaceRightPanelController";
 import {
   WebGlobalOverlayHost,
@@ -894,6 +893,17 @@ function mergeCommunityInteractionRootWindows(
 type ChatLightboxImage = SharedChatLightboxImage;
 type CommunityAgentConfig = SharedCommunityAgentConfig<CommunityAgentLanding>;
 type CommunityFunnelConfig = SharedCommunityFunnelConfig;
+type WorkspaceComposerDraft = {
+  text: string;
+  attachments: unknown[];
+};
+type WorkspaceComposerApi = {
+  focus: () => void;
+  clear: () => void;
+  reset: () => void;
+  appendTranscript: (transcript: string) => void;
+  pinToBottom: () => void;
+};
 
 const GUEST_THREAD_ID = "__guest__";
 const WORKSPACE_DRAFT_THREAD_ERROR_KEY = "__workspace_draft__";

@@ -388,7 +388,6 @@ async function proveSourceContract() {
   const messageMetadataUiSource = await readRepoFile("shared/messageMetadataUi.ts");
   const workspaceThreadViewsSource = await readRepoFile("apps/web/src/components/webWorkspaceThreadViews.ts");
   const workspaceThreadMessageListSource = await readRepoFile("apps/web/src/components/WebWorkspaceThreadMessageList.tsx");
-  const workspaceHostSource = await readRepoFile("apps/web/src/components/WebWorkspaceHost.tsx");
   const directMessagesHostSource = await readRepoFile("apps/web/src/components/WebDirectMessagesHost.tsx");
   const directMessagePanelSource = await readRepoFile("apps/web/src/components/WebDirectMessagePanel.tsx");
   const freeAccountModalSource = await readRepoFile("shared/FreeAccountIncludedModal.tsx");
@@ -510,16 +509,6 @@ async function proveSourceContract() {
     workspaceThreadMessageListSource,
     /message\.premiumUpgradeCta[\s\S]*message-premium-upgrade-cta[\s\S]*onOpenPremiumBilling/,
     "workspace message list should render premium upgrade CTA with the Billing action",
-  );
-  assert.match(
-    workspaceHostSource,
-    /onOpenPremiumBilling[\s\S]*<WebWorkspaceThreadMessageList[\s\S]*onOpenPremiumBilling=\{props\.onOpenPremiumBilling\}/,
-    "workspace host should thread the premium Billing action into assistant messages",
-  );
-  assert.match(
-    workspaceHostSource,
-    /WorkspaceRuntimeEngineSelector[\s\S]*getRuntimeEngineAccessLevel[\s\S]*Included[\s\S]*Premium[\s\S]*onOpenPremiumBilling/,
-    "workspace runtime picker should show included/premium runtime labels and route premium selection to Billing",
   );
   assert.match(
     appSource,

@@ -170,7 +170,7 @@ Exit proof: adapter parity is generated/tested and every operation reaches one a
 
 ## Step 8 — Delete deferred product surfaces and configuration drift
 
-1. **Destination decision complete in C0:** inventory and migrate callers, then remove route builders/controllers/host paths that are not protected substrate.
+1. **Destination decision complete in C0; C7.1A host-root deletion complete:** the unmounted `WebWorkspaceHost.tsx` and its presentation-only proofs are deleted. Continue caller inventory and migration before removing remaining route builders, controllers, App orchestration, or child components that are not protected substrate.
 2. Remove Builder Partner Workspace/onboarding/headline UI after Step 2; retain the minimum coherent Settings/operator enrollment, terms, status, and payout controls.
 3. Remove Discover Apps/Skills marketplace CSS and unused projections after build/screenshot proof.
 4. Correct product docs and status indexes.
