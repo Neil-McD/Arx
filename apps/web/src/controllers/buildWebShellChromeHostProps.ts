@@ -18,7 +18,6 @@ type CommunityLike = {
 };
 
 export function buildWebShellChromeHostProps(params: {
-  showHeaderIslands: boolean;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
   showMobilePublicFunnel: boolean;
@@ -97,7 +96,6 @@ export function buildWebShellChromeHostProps(params: {
   globalOverlays: ReactNode;
 }): WebShellChromeHostProps {
   return {
-    showHeaderIslands: params.showHeaderIslands,
     showMobileAppShell: params.showMobileAppShell,
     showMobileSettingsShell: params.showMobileSettingsShell,
     showMobilePublicFunnel: params.showMobilePublicFunnel,

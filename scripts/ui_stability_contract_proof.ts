@@ -26,13 +26,13 @@ const threadSidebarPanel = read("apps/web/src/components/WebThreadSidebarPanel.t
 
 assert.match(
   app,
-  /const initialWorkspaceWantsNewChat = !\([\s\S]*initialAppRoute\.page === "workspace"[\s\S]*initialAppRoute\.threadId[\s\S]*\);/,
-  "workspace should default to draft mode unless the initial route explicitly names a thread",
+  /const initialWorkspaceWantsNewChat = true;/,
+  "retained thread runtime state must begin without an implicit route-selected thread",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /if \(nextAppRoute\.page === "workspace" && nextAppRoute\.view === "home"\) \{[\s\S]*setActiveThreadId\(nextThreadId\);[\s\S]*setWorkspaceWantsNewChatMode\(nextThreadId === null\);[\s\S]*\}/,
-  "route reconciliation must only overwrite workspace thread/draft selection on workspace home routes",
+  /nextAppRoute\.threadId|nextAppRoute\.projectId|nextAppRoute\.page === "workspace"/,
+  "browser route reconciliation must remain independent from retained thread and project state",
 );
 assert.doesNotMatch(
   threadDataController,

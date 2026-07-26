@@ -30,8 +30,6 @@ assert.deepEqual(readAppRouteFromLocation(), {
   communityResourceModuleId: null,
   communitySettingsPane: null,
   docsSlug: null,
-  threadId: null,
-  projectId: null,
 });
 
 assert.equal(
@@ -41,7 +39,6 @@ assert.equal(
     settingsPage: "integrations",
     communitySlug: null,
     communityTab: "chat",
-    threadId: null,
   }),
   "/settings/integrations",
 );
@@ -59,25 +56,18 @@ const desktopProjection = buildWebShellProjection({
   publicRouteKind: "app",
   shellVariant: "standard",
   activePage: "settings",
-  activeView: "home",
   mobileSettingsView: "detail",
-  userWantsSessions: true,
-  hasSelectedCommunity: true,
   isPublicCommunityFunnel: false,
 });
 assert.equal(desktopProjection.isGlobalSettings, true);
 assert.equal(desktopProjection.showDesktopCommunityRail, true);
 assert.equal(desktopProjection.hasLeftPanel, true);
-assert.equal(desktopProjection.sessionsDrawerEnabled, false);
 
 const mobileProjection = buildWebShellProjection({
   publicRouteKind: "app",
   shellVariant: "mobile",
   activePage: "settings",
-  activeView: "home",
   mobileSettingsView: "index",
-  userWantsSessions: false,
-  hasSelectedCommunity: true,
   isPublicCommunityFunnel: false,
 });
 assert.equal(mobileProjection.isGlobalSettings, true);

@@ -57,7 +57,6 @@ export function useWebPathRouteLifecycle(params: {
   communitySettingsPane: CommunitySettingsPane;
   docsSlug: string | null;
   operatorTab: OperatorTab | null;
-  activeThreadId: string | null;
   applyLocationToState: () => void;
   setStripeConnectReturn: Dispatch<SetStateAction<StripeConnectReturn | null>>;
   buildAppRoutePath: (state: {
@@ -71,7 +70,6 @@ export function useWebPathRouteLifecycle(params: {
     communitySettingsPane?: CommunitySettingsPane | null;
     docsSlug: string | null;
     operatorTab?: OperatorTab | null;
-    threadId: string | null;
   }) => string | null;
 }) {
   const paramsRef = useRef(params);
@@ -119,7 +117,6 @@ export function useWebPathRouteLifecycle(params: {
           : null,
       docsSlug: params.docsSlug,
       operatorTab: params.activePage === "operator" ? params.operatorTab : null,
-      threadId: params.activePage === "workspace" && params.activeView === "home" ? params.activeThreadId : null,
     });
     if (!nextPath) return;
 
@@ -138,6 +135,5 @@ export function useWebPathRouteLifecycle(params: {
     params.communitySettingsPane,
     params.docsSlug,
     params.operatorTab,
-    params.activeThreadId,
   ]);
 }

@@ -9,8 +9,12 @@ function read(path: string): string {
 }
 
 const routes = read("shared/webAppRouteState.ts");
+const navigation = read("shared/appShellNavigation.ts");
 const app = read("apps/web/src/App.tsx");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
+const workspaceCore = read("apps/web/src/controllers/useWebWorkspaceCoreController.ts");
+const projectUi = read("apps/web/src/controllers/useWebProjectUiController.ts");
+const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
 const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
 const mobileTopBar = read("apps/web/src/components/WebMobileTopBar.tsx");
@@ -87,6 +91,46 @@ assert.doesNotMatch(
   "first-party App navigation must not directly enter Workspace",
 );
 assert.doesNotMatch(
+  navigation,
+  /\| "workspace"/,
+  "AppPage must not be able to represent Workspace",
+);
+assert.doesNotMatch(
+  routes,
+  /buildWorkspaceDraftPath|buildWorkspaceCommunityDraftPath|buildWorkspaceThreadPath|WORKSPACE_DRAFT_PROJECT_SEARCH_PARAM/,
+  "shared routing must not expose any Workspace route producer",
+);
+assert.equal(
+  existsSync("apps/web/src/controllers/useWebWorkspaceRouteController.ts"),
+  false,
+  "the outbound Workspace route controller must remain deleted",
+);
+assert.doesNotMatch(
+  app,
+  /setActivePage\("workspace"\)|page: "workspace"|activePage === "workspace"|activePage !== "workspace"/,
+  "App orchestration must not represent or branch on Workspace navigation state",
+);
+assert.doesNotMatch(
+  workspaceCore,
+  /useWebWorkspaceRouteController|route:/,
+  "the retained runtime core must not own browser navigation",
+);
+assert.match(
+  app,
+  /adoptWorkspaceThreadSelection[\s\S]*setActiveProjectId[\s\S]*syncWorkspaceSelection/,
+  "retained thread adoption must mutate runtime selection without changing page or URL",
+);
+assert.doesNotMatch(
+  projectUi,
+  /onStartDraftInProject/,
+  "project creation must not manufacture an obsolete Workspace destination",
+);
+assert.doesNotMatch(
+  shellProjection,
+  /activePage === "workspace"|sessionsDrawerEnabled|isSessionsDrawerOpen|showHeaderIslands/,
+  "shell projection must not retain impossible Workspace-only chrome",
+);
+assert.doesNotMatch(
   operatorGateway,
   /path: "\/workspace"/,
   "operator deploy probes must not advertise Workspace as a product route",
@@ -128,7 +172,7 @@ assert.doesNotMatch(
   /mobile-topbar-mode|onSelectRootPage|onStartNewThread/,
   "the obsolete Workspace-era Agent selector and thread action must remain deleted",
 );
-for (const page of ["community", "discover", "docs", "workspace"] as const) {
+for (const page of ["community", "discover", "docs"] as const) {
   assert.equal(
     isDesktopShellContextualBackPage(page),
     false,
@@ -148,17 +192,15 @@ const baseSnapshot: NavSnapshotBase = {
   settingsPage: "profile",
   communitySlug: "polynet",
   communityTab: "chat",
-  threadId: null,
 };
 const noOpStack = [
   { ...baseSnapshot, page: "discover" as const, routePath: "/discover" },
-  { ...baseSnapshot, page: "workspace" as const, routePath: "/workspace" },
   { ...baseSnapshot, routePath: "/c/polynet/preview" },
 ];
 assert.equal(
   popDistinctNavSnapshot(noOpStack, "/c/polynet/preview")?.routePath,
   "/discover",
-  "back navigation must skip same-route and quarantined Workspace snapshots",
+  "back navigation must skip a same-route snapshot",
 );
 assert.equal(noOpStack.length, 0, "skipped snapshots must be consumed deterministically");
 assert.match(

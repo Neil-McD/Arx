@@ -19,7 +19,6 @@ export type SettingsGroup =
 export type AppPage =
   | "landing"
   | "onboarding"
-  | "workspace"
   | "settings"
   | "operator"
   | "community"

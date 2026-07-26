@@ -8,7 +8,6 @@ import {
   Suspense,
   type ChangeEvent,
   type Dispatch,
-  type ReactNode,
   type SetStateAction,
 } from "react";
 import { MessageCircle } from "lucide-react";
@@ -273,7 +272,6 @@ import {
   buildCommunityTabPath,
   buildSettingsPath,
   buildCommunityFunnelPreviewPath,
-  buildWorkspaceDraftPath,
   isLegacyWorkspaceRoutePath,
   isRootAppRoutePath,
   readLegacyWorkspaceRouteContext,
@@ -491,10 +489,7 @@ import {
 } from "../../../shared/useCommunityEventsController";
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/communityUnsavedGuard";
-import {
-  markCloudThreadAgentAttentionSeen,
-  uploadCloudThreadAttachmentFile,
-} from "../../../shared/cloudThreadsGateway";
+import { uploadCloudThreadAttachmentFile } from "../../../shared/cloudThreadsGateway";
 import {
   DEFAULT_ACTIVE_RUNTIME_ENGINE,
   RUNTIME_ENGINE_CODEX,
@@ -1282,7 +1277,6 @@ type CommunityAiFeedPost = SharedCommunityAiFeedPost;
 type CommunityAiFeedReactionType = SharedCommunityAiFeedReactionType;
 
 type NavSnapshot = NavSnapshotBase & {
-  workspaceWantsNewChat: boolean;
   routePath: string;
 };
 
@@ -1323,9 +1317,6 @@ const MAX_WEB_MEDIA_UPLOAD_BYTES = 50 * 1024 * 1024; // 50MB (video/audio; strea
 const MAX_WEB_FILE_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
 const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024; // 200KB
 const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
-const WEB_RAIL_WIDTH = 72;
-const WEB_SESSIONS_DRAWER_WIDTH = 240;
-const MIN_DOCKED_WORKSPACE_CENTER_WIDTH = 400;
 
 const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;
 
@@ -1961,29 +1952,12 @@ export default function App() {
     () => initialAppRoute?.operatorTab ?? "platform",
   );
   const settingsGroup = settingsGroupForPage(settingsPage);
-  const [userWantsSessions, setUserWantsSessions] = useState(false);
-  const [workspaceViewportWidth, setWorkspaceViewportWidth] = useState(() =>
-    typeof window === "undefined" ? 0 : window.innerWidth,
-  );
   const {
     workspaceRightPanelLayout,
     isWorkspaceRightPanelOpen,
     handleWorkspaceRightPanelLayoutChange,
     handleToggleWorkspaceRightPanel,
   } = useWorkspaceRightPanelController();
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const updateWorkspaceViewportWidth = () => {
-      setWorkspaceViewportWidth(window.innerWidth);
-    };
-
-    updateWorkspaceViewportWidth();
-    window.addEventListener("resize", updateWorkspaceViewportWidth);
-    return () => {
-      window.removeEventListener("resize", updateWorkspaceViewportWidth);
-    };
-  }, []);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
     try {
       const stored = parseAppTheme(
@@ -2386,7 +2360,7 @@ export default function App() {
   });
   const [threadErrorById, setThreadErrorById] = useState<Record<string, string | null>>({});
   const [guestInferenceIssueById, setGuestInferenceIssueById] = useState<Record<string, GuestInferenceIssue | null>>({});
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(() => initialAppRoute?.threadId ?? null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const resolveThreadErrorKey = useCallback(
     (threadId: string | null): string => {
       const trimmedThreadId = String(threadId ?? "").trim();
@@ -3066,9 +3040,8 @@ export default function App() {
     },
   });
 
-  // Keep the interaction projection loaded whenever a community is active — NOT only on the chat
-  // page. The workspace right panel renders the same feed (compact) on the workspace page, so the
-  // roots must persist across page navigation. Only reset when there's no active community/session.
+  // Keep the interaction projection loaded whenever a community is active, not only on the chat
+  // tab, so its roots persist across community navigation. Reset only when the community/session ends.
   useEffect(() => {
     const sessionUserId = String(canonicalSessionUserId ?? "").trim();
     if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !session || !sessionUserId) {
@@ -3768,12 +3741,7 @@ export default function App() {
   } = communityAdminUi;
 
   const [threads, setThreads] = useState<ThreadRecord[]>([]);
-  const initialWorkspaceWantsNewChat = !(
-    initialAppRoute &&
-    initialAppRoute.page === "workspace" &&
-    initialAppRoute.view === "home" &&
-    initialAppRoute.threadId
-  );
+  const initialWorkspaceWantsNewChat = true;
   const [workspaceWantsNewChat, setWorkspaceWantsNewChat] = useState<boolean>(initialWorkspaceWantsNewChat);
   const workspaceWantsNewChatRef = useRef<boolean>(initialWorkspaceWantsNewChat);
   const setWorkspaceWantsNewChatMode = (next: SetStateAction<boolean>) => {
@@ -3790,7 +3758,6 @@ export default function App() {
     setThreads,
     setActiveThreadId,
     setWorkspaceWantsNewChatMode,
-    initialActiveProjectId: initialAppRoute?.projectId ?? null,
   });
 
   const isLikelyMobileDevice = useMemo(() => {
@@ -4238,10 +4205,8 @@ export default function App() {
 
   const applyAppRouteState = useCallback((nextAppRoute: AppRouteState) => {
     const normalizedCommunitySlug = String(nextAppRoute.communitySlug ?? "").trim() || null;
-    const nextThreadId =
-      nextAppRoute.page === "workspace" && nextAppRoute.view === "home" ? nextAppRoute.threadId : null;
     setActivePage(nextAppRoute.page);
-    setActiveView(nextAppRoute.page === "workspace" ? nextAppRoute.view : "home");
+    setActiveView("home");
     setSettingsPage(nextAppRoute.settingsPage);
     if (nextAppRoute.page === "docs") {
       setSelectedProductDocSlug(nextAppRoute.docsSlug ?? null);
@@ -4261,28 +4226,12 @@ export default function App() {
       setCommunitySettingsPane(
         nextAppRoute.communityTab === "settings" ? nextAppRoute.communitySettingsPane ?? "community" : "community",
       );
-    } else if (nextAppRoute.page === "workspace" && nextAppRoute.view === "home") {
-      setCommunityExperienceMode("standard");
-      applyCommunityShellState({
-        communitySlug: nextThreadId ? undefined : normalizedCommunitySlug,
-      });
-      setCommunityResourceModuleId(null);
-      setCommunitySettingsPane("community");
     } else {
       setCommunityExperienceMode("standard");
       setCommunityResourceModuleId(null);
       setCommunitySettingsPane("community");
     }
-    if (nextAppRoute.page === "workspace" && nextAppRoute.view === "home") {
-      setActiveThreadId(nextThreadId);
-      setWorkspaceWantsNewChatMode(nextThreadId === null);
-      if (nextThreadId === null) {
-        workspaceProject.actions.setActiveProjectId(nextAppRoute.projectId ?? null);
-      }
-    }
-    if (nextAppRoute.page !== "workspace") {
-      workspaceProject.actions.setActiveProjectId(null);
-    }
+    workspaceProject.actions.setActiveProjectId(null);
   }, [applyCommunityShellState, workspaceProject.actions]);
 
   const applyLocationToState = useCallback(() => {
@@ -4568,7 +4517,6 @@ export default function App() {
   /* Load the viewer's profile + setup status wherever setup state matters. */
   useEffect(() => {
     const needsOnboardingProfile =
-      activePage === "workspace" ||
       activePage === "settings" ||
       activePage === "community" ||
       activePage === "onboarding" ||
@@ -4614,11 +4562,6 @@ export default function App() {
           activePage === "community" && communityTab === "settings" ? communitySettingsPane : null,
         docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
         operatorTab: activePage === "operator" ? activeOperatorTab : null,
-        threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
-        projectId:
-          activePage === "workspace" && activeView === "home" && !activeThreadId
-            ? workspaceProject.state.activeProjectId
-            : null,
       }) ?? "",
       shellVariant,
     ) || null;
@@ -4628,15 +4571,11 @@ export default function App() {
     settingsPage,
     communitySlug: selectedActiveCommunitySlug,
     communityTab,
-    threadId: activeThreadId,
-    workspaceWantsNewChat,
     routePath: buildCurrentAppRoutePath() ?? readCurrentRoutePath(),
   });
   const pushNavSnapshot = () => {
     const snapshot = takeNavSnapshot();
-    pushUniqueNavSnapshot(navStackRef.current, snapshot, {
-      includeWorkspaceWantsNewChat: true,
-    });
+    pushUniqueNavSnapshot(navStackRef.current, snapshot);
   };
   const openGlobalSettings = (page: SettingsPage): void => {
     if (activePage === "settings" && settingsPage === page) return;
@@ -4668,19 +4607,51 @@ export default function App() {
     applyCommunityShellState,
     setUnreadCount,
   });
+  const syncWorkspaceSelection = useCallback(
+    (opts: { threadId: string | null; wantsNewChat: boolean }): void => {
+      setWorkspaceWantsNewChatMode(opts.wantsNewChat);
+      setActiveThreadId(opts.threadId);
+    },
+    [],
+  );
+  const applyGuestWorkspaceState = useCallback(
+    (opts: { guestThreadId: string; hasMessages: boolean }): void => {
+      syncWorkspaceSelection({
+        threadId: opts.hasMessages ? opts.guestThreadId : null,
+        wantsNewChat: !opts.hasMessages,
+      });
+    },
+    [syncWorkspaceSelection],
+  );
+  const adoptWorkspaceThreadSelection = useCallback(
+    (thread: ThreadRecord): void => {
+      const communityId = String(thread.community_id ?? "").trim() || null;
+      if (communityId) {
+        syncCommunitySelection({
+          communityId,
+          communitySlug: resolveKnownCommunitySlugById(communityId),
+        });
+      }
+      workspaceProject.actions.setActiveProjectId(
+        String(thread.project_id ?? "").trim() || null,
+      );
+      syncWorkspaceSelection({
+        threadId: thread.id,
+        wantsNewChat: false,
+      });
+    },
+    [
+      resolveKnownCommunitySlugById,
+      syncCommunitySelection,
+      syncWorkspaceSelection,
+      workspaceProject.actions,
+    ],
+  );
   const workspaceCore = useWebWorkspaceCoreController<AuthSession, ThreadRecord>({
     project: workspaceProject,
     ensureSession: ensureUsableAuthSession,
-    activePage,
-    activeView,
-    activeThreadId,
-    activeCommunitySlug: selectedActiveCommunitySlug,
-    navigateTo,
-    setActivePage,
-    setActiveView,
     setActiveThreadId,
     setWorkspaceWantsNewChatMode,
-    syncCommunitySelection,
     threads,
     setThreads,
     deriveThreadTitleFromUserText,
@@ -4689,41 +4660,9 @@ export default function App() {
     activeCommunityId,
     activeModelId: DEFAULT_ACTIVE_MODEL_ID,
     activeRuntimeEngine,
-    resetDraftRuntimeEngine,
     modelToggles: platformModelToggles,
     defaultActiveModelId: DEFAULT_ACTIVE_MODEL_ID,
   });
-  const {
-    syncWorkspaceSelection,
-    applyWorkspaceRouteState,
-    applyGuestWorkspaceState,
-    openWorkspaceDraft,
-    enterWorkspaceThread,
-    handleNewWorkspaceThread,
-  } = workspaceCore.route;
-  useEffect(() => {
-    if (activePage !== "workspace" || activeView !== "home" || workspaceWantsNewChat || !activeThreadId) return;
-    const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null;
-    if (!activeThread) return;
-    const nextCommunityId = String(activeThread.community_id ?? "").trim() || null;
-    const nextCommunitySlug = nextCommunityId ? resolveKnownCommunitySlugById(nextCommunityId) : null;
-    if (nextCommunitySlug === selectedActiveCommunitySlug) {
-      return;
-    }
-    syncCommunitySelection({
-      communitySlug: nextCommunitySlug,
-      communityId: nextCommunityId,
-    });
-  }, [
-    activePage,
-    activeThreadId,
-    activeView,
-    resolveKnownCommunitySlugById,
-    selectedActiveCommunitySlug,
-    syncCommunitySelection,
-    threads,
-    workspaceWantsNewChat,
-  ]);
   const restoreNavSnapshot = (snapshot: NavSnapshot) => {
     const nextRoutePath = snapshot.routePath?.trim() || "/";
     navigateTo(nextRoutePath, { replace: true });
@@ -4735,21 +4674,14 @@ export default function App() {
     return true;
   };
 
-  const backTargetSnapshot =
-    [...navStackRef.current]
-      .reverse()
-      .find((snapshot) => snapshot.page !== "workspace" || snapshot.view !== "home") ??
-    null;
+  const backTargetSnapshot = [...navStackRef.current].reverse()[0] ?? null;
   const backTargetLabel = backTargetSnapshot ? formatBackTargetLabelShared(backTargetSnapshot) : null;
   const effectiveBackTargetLabel = backTargetLabel;
 
   const threadsHydratedRef = useRef(false);
   const lastCloudStatusRefreshAtRef = useRef(0);
   const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
-  const [loadingThreadMessagesThreadId, setLoadingThreadMessagesThreadId] = useState<string | null>(() => {
-    const initialThreadId = initialAppRoute?.threadId ?? null;
-    return initialThreadId && initialThreadId !== GUEST_THREAD_ID ? initialThreadId : null;
-  });
+  const [loadingThreadMessagesThreadId, setLoadingThreadMessagesThreadId] = useState<string | null>(null);
   const [guestModelId, setGuestModelId] = useState<string>(() => loadGuestModelId());
   const [activeCommunityAgentLanding, setActiveCommunityAgentLanding] = useState<unknown | null>(null);
   const activeCommunityAgentLandingCommunityIdRef = useRef<string | null>(null);
@@ -4761,7 +4693,6 @@ export default function App() {
     Record<string, ThreadStreamingState<MemoryUsedItem, HistoryUsedItem, CommunityEvidenceUsedV1>>
   >({});
   const [runtimeEventsByRunId, setRuntimeEventsByRunId] = useState<Record<string, ThreadStreamingRuntimeEvent[]>>({});
-  const threadAgentAttentionSeenInFlightRef = useRef<Set<string>>(new Set());
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [memoryToast, setMemoryToast] = useState<string | null>(null);
   const memoryToastTimeoutRef = useRef<number | null>(null);
@@ -4906,29 +4837,6 @@ export default function App() {
     setHasResolvedCommunities(false);
   }, [canonicalSessionUserId]);
 
-  useEffect(() => {
-    if (activePage !== "workspace" || activeView !== "home" || activeThreadId) return;
-    const slug = String(selectedActiveCommunitySlug ?? "").trim();
-    if (!slug || !hasResolvedCommunities || isLoadingCommunities) return;
-    const matchedCommunity = communities.find((community) => String(community.slug ?? "").trim() === slug) ?? null;
-    if (matchedCommunity) return;
-    applyCommunityShellState({
-      communityId: null,
-      communitySlug: null,
-    });
-    navigateTo(buildWorkspaceDraftPath(), { replace: true });
-  }, [
-    activePage,
-    activeThreadId,
-    activeView,
-    applyCommunityShellState,
-    communities,
-    hasResolvedCommunities,
-    isLoadingCommunities,
-    navigateTo,
-    selectedActiveCommunitySlug,
-  ]);
-
   const enterJoinedCommunity = useCallback(
     (opts: { communityId: string; communitySlug?: string | null }) => {
       const communityId = String(opts.communityId ?? "").trim();
@@ -4948,7 +4856,6 @@ export default function App() {
         settingsPage: "agent",
         communitySlug: resolvedSlug || null,
         communityTab: "chat",
-        threadId: null,
       });
 
       const currentSession = sessionRef.current ?? session;
@@ -5679,12 +5586,11 @@ export default function App() {
 
   const refreshCloudProjectStatuses = useCallback(() => {
     if (!session) return;
-    if (activePage !== "workspace") return;
     const now = Date.now();
     if (now - lastCloudStatusRefreshAtRef.current < 1000) return;
     lastCloudStatusRefreshAtRef.current = now;
     void workspaceCore.project.actions.loadProjects(session);
-  }, [activePage, session, workspaceCore.project.actions]);
+  }, [session, workspaceCore.project.actions]);
 
   const isThreadRunActive = useCallback(
     (threadId: string | null): boolean => {
@@ -5848,20 +5754,6 @@ export default function App() {
 
   useEffect(() => {
     if (!session) return;
-    const shouldLoadWorkspaceCredits = activePage === "workspace";
-    if (shouldLoadWorkspaceCredits) {
-      void loadWorkspaceCreditBalance(session);
-      void loadWorkspaceCardOnFileStatus(session);
-    }
-  }, [
-    activePage,
-    session,
-    loadWorkspaceCardOnFileStatus,
-    loadWorkspaceCreditBalance,
-  ]);
-
-  useEffect(() => {
-    if (!session) return;
 
     const refreshPendingWorkspaceCardSetup = () => {
       if (!hasPendingWorkspaceCardSetupReturn()) return;
@@ -5898,23 +5790,6 @@ export default function App() {
       window.removeEventListener("pageshow", refreshPendingWorkspaceCardSetup);
     };
   }, [refreshCloudProjectStatuses, session, sessionRef, showAppToastMessage]);
-
-  useEffect(() => {
-    if (!session || activePage !== "workspace") return;
-    let cancelled = false;
-    const refresh = async () => {
-      if (cancelled) return;
-      refreshCloudProjectStatuses();
-    };
-    void refresh();
-    const intervalId = window.setInterval(() => {
-      void refresh();
-    }, 15000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [activePage, refreshCloudProjectStatuses, session]);
 
   useEffect(() => {
     activeCommunityIdRef.current = activeCommunityId;
@@ -6015,7 +5890,6 @@ export default function App() {
     communitySettingsPane,
     docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
     operatorTab: activePage === "operator" ? activeOperatorTab : null,
-    activeThreadId,
     applyLocationToState,
     setStripeConnectReturn,
     buildAppRoutePath: (state) => applyShellVariantToAppPath(buildAppRoutePath(state) ?? "", shellVariant) || null,
@@ -6312,24 +6186,6 @@ export default function App() {
   });
 
   const workspaceThreadKey = isSignedOutAppPresentation ? GUEST_THREAD_ID : activeThreadId;
-
-  useEffect(() => {
-    if (!session || activePage !== "workspace") return;
-    const refreshThreads = () => {
-      void loadThreads(session).catch(() => null);
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        refreshThreads();
-      }
-    };
-    window.addEventListener("focus", refreshThreads);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.removeEventListener("focus", refreshThreads);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [activePage, loadThreads, session]);
 
   useEffect(() => {
     if (activeView !== "settings" || settingsGroup !== "agent") return;
@@ -7706,12 +7562,7 @@ export default function App() {
       return syncWorkspaceThreadCommunityLens(thread.id, desiredCommunityId, session);
     },
     onSelectThread: (thread: ThreadRecord) => {
-      const projectId = (thread.project_id ?? "").trim();
-      enterWorkspaceThread({
-        threadId: thread.id,
-        projectId: projectId || null,
-        communityId: thread.community_id ?? null,
-      });
+      adoptWorkspaceThreadSelection(thread);
     },
     trace: traceThreadContext,
     buildThreadSelectedTrace: (thread: ThreadRecord) => ({
@@ -7730,17 +7581,6 @@ export default function App() {
       await pendingLensSync;
     }
     return webThreadContextController.ensureLensBeforeSend(threadId);
-  };
-
-  const handleStartDraftInCloudProject = useCallback((projectId: string): void => {
-    openWorkspaceDraft({
-      projectId,
-      focusComposer: focusWorkspaceComposer,
-    });
-  }, [focusWorkspaceComposer, openWorkspaceDraft]);
-
-  const selectWorkspaceThread = (thread: ThreadRecord): void => {
-    webThreadContextController.selectThread(thread);
   };
 
   function getLastThreadMessageId(messages: ThreadMessage[], role: "user" | "assistant" | "system"): string | null {
@@ -8118,11 +7958,7 @@ export default function App() {
     },
     createThread,
     onThreadCreated: (thread) => {
-      enterWorkspaceThread({
-        threadId: thread.id,
-        projectId: (thread.project_id ?? "").trim() || null,
-        communityId: thread.community_id ?? null,
-      });
+      adoptWorkspaceThreadSelection(thread);
     },
     updateThreadModel,
     updateThreadRuntimeEngine,
@@ -8412,42 +8248,6 @@ export default function App() {
   });
   const currentWorkspaceProjectId = currentWorkspaceProjectSelection.currentProjectId;
   const currentWorkspaceProjectName = currentWorkspaceProjectSelection.currentProjectName;
-  useEffect(() => {
-    /* Public routes (/c/:slug etc.) own their URL — the workspace draft
-       canonicalizer must never rewrite them out from under the funnel. */
-    if (publicRoute.kind !== "app") return;
-    if (activePage !== "workspace" || activeView !== "home" || activeThreadId) return;
-    const draftProjectId = workspaceProject.state.activeProjectId;
-    const routePath = buildAppRoutePath({
-      page: "workspace",
-      view: "home",
-      settingsPage: "agent",
-      communitySlug: selectedActiveCommunitySlug,
-      communityTab: "chat",
-      threadId: null,
-      projectId: draftProjectId,
-    }) ?? buildWorkspaceDraftPath(draftProjectId);
-    const nextPath = applyShellVariantToKnownPath(routePath, shellVariant);
-    const currentUrl = new URL(window.location.href);
-    const nextUrl = new URL(nextPath, window.location.origin);
-    const currentPathWithoutHash = `${currentUrl.pathname}${currentUrl.search}`;
-    const nextPathWithoutHash = `${nextUrl.pathname}${nextUrl.search}`;
-    if (currentPathWithoutHash === nextPathWithoutHash) return;
-    window.history.replaceState(
-      window.history.state ?? {},
-      document.title,
-      `${nextPathWithoutHash}${currentUrl.hash}`,
-    );
-  }, [
-    activePage,
-    activeThreadId,
-    activeView,
-    currentWorkspaceProjectId,
-    publicRoute.kind,
-    selectedActiveCommunitySlug,
-    shellVariant,
-    workspaceProject.state.activeProjectId,
-  ]);
   const turnOnWorkspaceComputer = useCallback(async (): Promise<WorkspaceComputerStartResult> => {
     const session = await ensureUsableAuthSession();
     if (!session) {
@@ -8600,31 +8400,7 @@ export default function App() {
     onProjectCreated: workspace.actions.handleProjectCreated,
     onProjectUpdated: workspace.actions.handleProjectUpdated,
     onProjectDeleted: workspace.actions.handleProjectDeleted,
-    onStartDraftInProject: handleStartDraftInCloudProject,
   });
-
-  const renderCloudProjectCreateAction = (): ReactNode =>
-    projectUiController.canCreateAdditionalCloudProjects ? (
-      <button
-        type="button"
-        className="project-toolbar-add"
-        onClick={projectUiController.openCreateProjectModal}
-        disabled={projectUiController.isCreatingProject || projectUiController.projectQuotaReached}
-        title={
-          projectUiController.projectQuotaReached
-            ? `Projects are capped at ${projectUiController.maxProjects}.`
-            : projectUiController.isCreatingProject
-              ? "Creating project…"
-              : "Create a new project"
-        }
-        aria-label="Create a new project"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 5v14" />
-          <path d="M5 12h14" />
-        </svg>
-      </button>
-    ) : null;
 
   const showEmptyThreadLandingSkeleton = Boolean(
     !activeThreadId &&
@@ -8683,55 +8459,12 @@ export default function App() {
     },
     [activeThreadId, communities, threadMessages],
   );
-  const resolveWorkspaceSidebarThreadProjectId = useCallback(
-    (thread: ThreadRecord): string | null =>
-      workspace.derived.resolveThreadProjectId(thread),
-    [workspace.derived],
-  );
-  const getWorkspaceSidebarThreadSearchText = useCallback(
-    (thread: ThreadRecord): string => {
-      const title = getThreadDisplayTitle(thread);
-      const communityName = thread.community_id
-        ? (communities.find((community) => community.id === thread.community_id)?.name ?? "")
-        : "";
-      const projectId = resolveWorkspaceSidebarThreadProjectId(thread);
-      const projectName = projectId
-        ? (workspace.derived.projectById.get(projectId)?.name ?? "")
-        : "";
-      return `${title} ${communityName} ${projectName}`.trim();
-    },
-    [
-      communities,
-      getThreadDisplayTitle,
-      resolveWorkspaceSidebarThreadProjectId,
-      workspace.derived.projectById,
-    ],
-  );
-	  const isAnonymousWorkspace = isSignedOutAppPresentation;
-	  const guestThreadMessages = useMemo(() => {
-	    if (!isAnonymousWorkspace) return [] as ThreadMessage[];
-	    return threadMessages.filter((message) => message.thread_id === GUEST_THREAD_ID);
-	  }, [isAnonymousWorkspace, threadMessages]);
-	  const guestThreadHasMessages = guestThreadMessages.length > 0;
-	  const guestThreadPreview = useMemo(() => {
-	    if (!guestThreadHasMessages) return "No messages yet.";
-	    for (let i = guestThreadMessages.length - 1; i >= 0; i--) {
-	      const message = guestThreadMessages[i];
-	      if (!message) continue;
-	      const text = extractTextFromContentJson(message.content_json).trim();
-	      if (text) return text;
-	    }
-	    return "Open your preview chat.";
-	  }, [guestThreadHasMessages, guestThreadMessages]);
-
   const hasSelectedCommunity = Boolean(String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim());
   const shellProjection = buildWebShellProjection({
     publicRouteKind: shellPublicRoute.kind,
     shellVariant,
     activePage,
-    activeView,
     mobileSettingsView,
-    userWantsSessions,
     isPublicCommunityFunnel,
   });
   const {
@@ -8741,13 +8474,10 @@ export default function App() {
     showMobileShell,
     showMobileSettingsIndex,
     showMobilePublicFunnel,
-    sessionsDrawerEnabled,
-    isSessionsDrawerOpen,
     showDesktopCommunityRail,
     showDesktopCommunityNav,
     hasLeftPanel,
     mobileShellMode,
-    showHeaderIslands,
   } = shellProjection;
   const mobileThreadPageOpen = Boolean(
     showMobileShell
@@ -8774,16 +8504,6 @@ export default function App() {
     mobileChromeScrollTrackingEnabled
     && mobileChromeReadingMode
   );
-  const dockedWorkspaceCenterWidth =
-    workspaceViewportWidth -
-    WEB_RAIL_WIDTH -
-    WEB_SESSIONS_DRAWER_WIDTH -
-    (workspaceRightPanelLayout.open
-      ? workspaceRightPanelLayout.width
-      : 0);
-  const shouldOverlaySessionsDrawer =
-    isSessionsDrawerOpen &&
-    dockedWorkspaceCenterWidth < MIN_DOCKED_WORKSPACE_CENTER_WIDTH;
   const canReorderCommunities = railCommunities.length > 1;
   const hasCommunityRailMiddleContent = railCommunities.length > 0;
   const communityRailIds = useMemo(() => railCommunities.map((community) => community.id), [railCommunities]);
@@ -8812,16 +8532,6 @@ export default function App() {
     pushNavSnapshot();
     navigateTo(previewPath);
   }, [activeCommunity?.slug, shellVariant, pushNavSnapshot, navigateTo]);
-
-  useEffect(() => {
-    if (!isSessionsDrawerOpen) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setUserWantsSessions(false);
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSessionsDrawerOpen]);
 
 	  let lastThreadMessage: ThreadMessage | null = null;
 	  for (let i = threadMessages.length - 1; i >= 0; i--) {
@@ -8953,40 +8663,6 @@ export default function App() {
   const inlineThreadError = guestInferenceIssue ? null : threadError;
   const displayedThreadError = guestInferenceIssue?.shortMessage ?? threadError;
 
-  useEffect(() => {
-    if (!session || activePage !== "workspace" || !activeThreadId) return;
-    if (!activeThread?.agent_attention) return;
-    if (isHydratingActiveWorkspaceThread || isActiveWorkspaceThreadBusy) return;
-    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-    if (threadAgentAttentionSeenInFlightRef.current.has(activeThreadId)) return;
-
-    threadAgentAttentionSeenInFlightRef.current.add(activeThreadId);
-    setThreads((prev) =>
-      prev.map((thread) =>
-        thread.id === activeThreadId ? { ...thread, agent_attention: false } : thread,
-      ),
-    );
-
-    void markCloudThreadAgentAttentionSeen({
-      session,
-      threadId: activeThreadId,
-    })
-      .catch(() => {
-        void loadThreads(session).catch(() => null);
-      })
-      .finally(() => {
-        threadAgentAttentionSeenInFlightRef.current.delete(activeThreadId);
-      });
-  }, [
-    activePage,
-    activeThread?.agent_attention,
-    activeThreadId,
-    isActiveWorkspaceThreadBusy,
-    isHydratingActiveWorkspaceThread,
-    loadThreads,
-    session,
-  ]);
-
   const pendingToken =
     (checkoutClaimToken ?? (publicRoute.kind === "claim" ? publicRoute.token : "")).trim() ||
     readPendingPurchaseClaimToken();
@@ -9085,10 +8761,6 @@ export default function App() {
 		    const communitySlug = String(activeCommunity?.slug ?? "").trim();
 		    if (!communitySlug) return;
 		    openCommunityChat(communitySlug, { clearUnread: true });
-		  };
-		  const handleOpenLandingProject = () => {
-		    if (!currentWorkspaceProjectId) return;
-		    handleStartDraftInCloudProject(currentWorkspaceProjectId);
 		  };
 		  const handleOpenDiscover = () => {
 		    const transition = deriveOpenDiscoverTransition({ activePage });
@@ -9872,31 +9544,10 @@ export default function App() {
       communitySlug: (community.slug ?? "").trim() || null,
       communityId: community.id,
     });
-    if (activePage === "workspace") {
-      const currentLens = activeThreadId
-        ? (threads.find((t) => t.id === activeThreadId)?.community_id ?? null)
-        : null;
-      const isWorkspaceRunActive = isActiveWorkspaceThreadBusy;
-      if (isWorkspaceRunActive && currentLens !== community.id) {
-        showAppToastMessage(
-          `Switched to ${community.name}. Active run keeps prior context; new context applies next turn.`,
-        );
-      }
-      if (session && activeThreadId) {
-        void syncWorkspaceThreadCommunityLens(activeThreadId, community.id, session);
-      }
-    }
     return true;
   }, [
-    activePage,
-    activeThreadId,
-    session,
-    isActiveWorkspaceThreadBusy,
     selectedActiveCommunityId,
-    showAppToastMessage,
     syncCommunitySelection,
-    syncWorkspaceThreadCommunityLens,
-    threads,
   ]);
 
   const handleSelectCommunitySettingsPane = useCallback((pane: CommunitySettingsPane, opts?: { replace?: boolean }) => {
@@ -10835,18 +10486,6 @@ export default function App() {
     );
   }
 
-  const handleStartNewWorkspaceThreadFromShell = () => {
-    handleNewWorkspaceThread({
-      allowMultipleThreads: userAccessPolicy.allowMultipleThreads,
-      onBlocked: () => {
-        setThreadError(null);
-        setAuthError(null);
-        setPreviewAccessGateModal({ reason: "new_thread" });
-        setIsPreviewAccessGateRunning(false);
-      },
-      focusComposer: focusWorkspaceComposer,
-    });
-  };
   const shouldSuppressPreviewSidebarAuthError =
     Boolean(previewAccessGateModal) ||
     readAuthResumeState()?.intent?.reason === "open_workspace_draft";
@@ -11156,7 +10795,6 @@ export default function App() {
           communitySlug: null,
           communityTab: "chat",
           docsSlug: nextSlug,
-          threadId: null,
         }) ?? "/docs");
       },
       renderMarkdown,
@@ -11186,8 +10824,7 @@ export default function App() {
         ? { version: 1, kind: "discover", section: "communities" }
         : activePage === "settings" ||
             activePage === "docs" ||
-            activePage === "operator" ||
-            activePage === "workspace"
+            activePage === "operator"
           ? {
               version: 1,
               kind: "platform",
@@ -11364,14 +11001,7 @@ export default function App() {
     </>
   );
   const mainSurfaceFallback = (
-    <main
-      className={`workspace${
-        mainSurfaceHostProps.showPublicCommunityFunnel ||
-        mainSurfaceHostProps.activePage !== "workspace"
-          ? " community-mode"
-          : ""
-      }`}
-    >
+    <main className="workspace community-mode">
       <div className="landing-auth-hold" aria-hidden="true" />
     </main>
   );
@@ -11423,7 +11053,6 @@ export default function App() {
         }
       : null;
   const shellChromeHostProps = buildWebShellChromeHostProps({
-    showHeaderIslands,
     showMobileAppShell,
     showMobileSettingsShell,
     showMobilePublicFunnel,

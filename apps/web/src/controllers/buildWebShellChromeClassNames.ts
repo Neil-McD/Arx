@@ -1,5 +1,4 @@
 type BuildWebShellChromeClassNamesParams = {
-  showHeaderIslands: boolean;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
   showMobilePublicFunnel: boolean;
@@ -17,8 +16,6 @@ export function buildWebShellChromeClassNames(
   params: BuildWebShellChromeClassNamesParams,
 ): { rootClassName: string; shellClassName: string } {
   const rootClassName = `app-root${
-    params.showHeaderIslands ? " web-header-islands" : ""
-  }${
     params.reserveCommunityNavTopbarSpace ? " community-nav-topbar-space" : ""
   }${
     params.showMobileAppShell ? " mobile-shell" : ""

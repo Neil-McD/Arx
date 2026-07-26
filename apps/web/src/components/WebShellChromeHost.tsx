@@ -17,7 +17,6 @@ import type {
 } from "./webShellChromeShared";
 
 export type WebShellChromeHostProps = {
-  showHeaderIslands: boolean;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
   showMobilePublicFunnel: boolean;
@@ -77,7 +76,6 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   );
 
   const { rootClassName, shellClassName } = buildWebShellChromeClassNames({
-    showHeaderIslands: props.showHeaderIslands,
     showMobileAppShell: props.showMobileAppShell,
     showMobileSettingsShell: props.showMobileSettingsShell,
     showMobilePublicFunnel: props.showMobilePublicFunnel,

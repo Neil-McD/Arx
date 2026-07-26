@@ -121,10 +121,6 @@
   pointer-events: none;
 }
 
-.app-root.web-header-islands .app-topbar {
-  z-index: 40;
-}
-
 /* Make the header container click-through; only the controls are interactive. */
 .app-topbar .topbar-left,
 .app-topbar .topbar-center,
@@ -146,8 +142,6 @@
 }
 
 /* Web: float header controls as small glass "islands". */
-.app-root.web-header-islands .app-topbar .topbar-left,
-.app-root.web-header-islands .app-topbar .topbar-center,
 .app-topbar .topbar-right.topbar-right-island {
   padding: 6px 8px;
   border-radius: 12px;

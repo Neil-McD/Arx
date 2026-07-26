@@ -1,4 +1,4 @@
-import { isUuid } from "./appIdentity";
+import { normalizeCommunitySlugIdentity } from "./communitySlug";
 import {
   parseCommunitySettingsPane,
   parseCommunityTab,
@@ -33,8 +33,6 @@ export type AppRouteState = {
   communitySettingsPane?: CommunitySettingsPane | null;
   docsSlug?: string | null;
   operatorTab?: OperatorTab | null;
-  threadId: string | null;
-  projectId?: string | null;
 };
 
 export type AppRoutePathState = {
@@ -48,15 +46,12 @@ export type AppRoutePathState = {
   communitySettingsPane?: CommunitySettingsPane | null;
   docsSlug?: string | null;
   operatorTab?: OperatorTab | null;
-  threadId: string | null;
-  projectId?: string | null;
 };
 
 export const DEFAULT_POST_SIGN_IN_PATH = "/";
 export const MOBILE_SHELL_PATH_PREFIX = "/m";
 export const STANDALONE_APP_LAUNCH_SEARCH_PARAM = "launch";
 export const STANDALONE_APP_LAUNCH_SEARCH_VALUE = "app";
-export const WORKSPACE_DRAFT_PROJECT_SEARCH_PARAM = "project";
 
 export type LegacyWorkspaceRouteContext = {
   kind: "root" | "thread" | "community";
@@ -82,21 +77,6 @@ export function isReservedWorkspaceRouteSegment(value: string | null | undefined
 
 function joinPathWithQueryAndHash(pathname: string, search: string, hash: string): string {
   return `${pathname || "/"}${search || ""}${hash || ""}` || "/";
-}
-
-export function normalizeWorkspaceDraftProjectId(value: string | null | undefined): string | null {
-  const normalized = String(value ?? "").trim();
-  if (!normalized) return null;
-  if (!/^[A-Za-z0-9_-]{1,160}$/.test(normalized)) return null;
-  return normalized;
-}
-
-function appendWorkspaceDraftProjectSearch(path: string, projectId?: string | null): string {
-  const normalizedProjectId = normalizeWorkspaceDraftProjectId(projectId);
-  if (!normalizedProjectId) return path;
-  const parsed = new URL(path, "http://local.arx");
-  parsed.searchParams.set(WORKSPACE_DRAFT_PROJECT_SEARCH_PARAM, normalizedProjectId);
-  return joinPathWithQueryAndHash(parsed.pathname, parsed.search, parsed.hash);
 }
 
 function isPublicRoutePath(pathname: string): boolean {
@@ -173,29 +153,6 @@ export function applyShellVariantToKnownPath(path: string, shellVariant: AppShel
   const appPath = applyShellVariantToAppPath(raw, shellVariant);
   if (appPath !== raw) return appPath;
   return applyShellVariantToPublicPath(raw, shellVariant);
-}
-
-export function buildWorkspaceDraftPath(projectId?: string | null): string {
-  return appendWorkspaceDraftProjectSearch("/workspace", projectId);
-}
-
-export function buildWorkspaceCommunityDraftPath(
-  communitySlug: string | null | undefined,
-  projectId?: string | null,
-): string | null {
-  const slug = String(communitySlug ?? "").trim();
-  if (!slug) return null;
-  const encodedSlug = encodeURIComponent(slug);
-  const path = isReservedWorkspaceRouteSegment(slug)
-    ? `/workspace/community/${encodedSlug}`
-    : `/workspace/${encodedSlug}`;
-  return appendWorkspaceDraftProjectSearch(path, projectId);
-}
-
-export function buildWorkspaceThreadPath(threadId: string | null | undefined): string {
-  const normalized = String(threadId ?? "").trim();
-  if (!isUuid(normalized)) return buildWorkspaceDraftPath();
-  return `/workspace/thread/${encodeURIComponent(normalized)}`;
 }
 
 export function buildSettingsPath(settingsPage: SettingsPage): string {
@@ -344,7 +301,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       settingsPage: "agent",
       communitySlug: null,
       communityTab: "chat",
-      threadId: null,
     };
   }
 
@@ -355,7 +311,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       settingsPage: "agent",
       communitySlug: null,
       communityTab: "chat",
-      threadId: null,
     };
   }
 
@@ -366,7 +321,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       settingsPage: "agent",
       communitySlug: null,
       communityTab: "chat",
-      threadId: null,
     };
   }
 
@@ -378,7 +332,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       communitySlug: null,
       communityTab: "chat",
       docsSlug: normalizeDocsSlug(segments.slice(1).join("/")),
-      threadId: null,
     };
   }
 
@@ -390,7 +343,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       communitySlug: null,
       communityTab: "chat",
       operatorTab: parseOperatorTab(segments[1] ?? null),
-      threadId: null,
     };
   }
 
@@ -405,7 +357,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
         communitySlug: slug,
         communityTab: "settings",
         communitySettingsPane: "community",
-        threadId: null,
       };
     }
     if (
@@ -422,7 +373,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
         communitySlug: slug,
         communityTab: "settings",
         communitySettingsPane: "community",
-        threadId: null,
       };
     }
     return {
@@ -431,7 +381,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       settingsPage: "agent",
       communitySlug: null,
       communityTab: "chat",
-      threadId: null,
     };
   }
 
@@ -442,7 +391,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       settingsPage: parseSettingsPage(segments[1] ?? null),
       communitySlug: null,
       communityTab: "chat",
-      threadId: null,
     };
   }
 
@@ -461,7 +409,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       communitySlug: slug,
       communityTab: "chat",
       communityExperienceMode: "onboarding_preview",
-      threadId: null,
     };
   }
 
@@ -482,7 +429,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       communityExperienceMode: "standard",
       communityResourceModuleId,
       communitySettingsPane,
-      threadId: null,
     };
   }
 
@@ -518,12 +464,6 @@ export function readPublicRouteFromLocation(): PublicRoute {
 export function readAppRouteFromLocation(): AppRouteState {
   const fromPath = parseAppRouteFromPathname(stripShellVariantFromPathname(window.location.pathname || "/"));
   if (fromPath) {
-    const projectId =
-      fromPath.page === "workspace" && fromPath.view === "home" && !fromPath.threadId
-        ? normalizeWorkspaceDraftProjectId(
-            new URLSearchParams(window.location.search).get(WORKSPACE_DRAFT_PROJECT_SEARCH_PARAM),
-          )
-        : null;
     return {
       page: fromPath.page,
       view: fromPath.view,
@@ -537,8 +477,6 @@ export function readAppRouteFromLocation(): AppRouteState {
       communitySettingsPane: fromPath.communitySettingsPane ?? null,
       docsSlug: fromPath.docsSlug ?? null,
       ...(fromPath.operatorTab ? { operatorTab: fromPath.operatorTab } : {}),
-      threadId: fromPath.threadId,
-      projectId,
     };
   }
 
@@ -549,8 +487,6 @@ export function readAppRouteFromLocation(): AppRouteState {
     communitySlug: null,
     communityTab: "chat",
     docsSlug: null,
-    threadId: null,
-    projectId: null,
   };
 }
 
@@ -591,10 +527,6 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
     return "/onboarding";
   }
 
-  if (state.threadId) {
-    return buildWorkspaceThreadPath(state.threadId);
-  }
-
-  return buildWorkspaceCommunityDraftPath(state.communitySlug, state.projectId) ??
-    buildWorkspaceDraftPath(state.projectId);
+  const exhaustivePage: never = state.page;
+  return exhaustivePage;
 }
