@@ -246,9 +246,8 @@ function provePromptEntrypoints() {
   assert.match(platformHarnessPrompt, /Use web_research for current external facts/);
   assert.match(platformHarnessPrompt, /Use web_crawl when the user provides a site, wiki, docs, course, or multi-page URL/);
   assert.match(platformHarnessPrompt, /Use polynet_read with path \/community\.md when the answer depends on the active community's full identity/);
-  assert.match(platformHarnessPrompt, /Use community_resources_map first/);
-  assert.match(platformHarnessPrompt, /Use community_resources_read to batch-read/);
-  assert.match(platformHarnessPrompt, /Use community_resources_list to inspect/);
+  assert.match(platformHarnessPrompt, /use the semantic polynet_list\/polynet_read path before product documentation tools/);
+  assert.match(platformHarnessPrompt, /community_resources_read only when a justified batch read/);
   assert.doesNotMatch(
     platformHarnessPrompt,
     /community_resource_builder_read with target_type and an exact id copied from list output/,

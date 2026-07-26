@@ -1,10 +1,13 @@
 import { normalizeSocialProfileLinks } from "./socialProfileLinks.ts";
 import { validateProfileHandle } from "./profileHandle.ts";
+import { parseCommunityResourceDirectoryUri } from "./communityResourceDirectory.ts";
+import { parseCommunityResourceEvidenceRef } from "./communityEvidenceContract.ts";
 
 export const POLYNET_SEMANTIC_ROOT_PATH = "/";
 export const POLYNET_COMMUNITY_PROFILE_PATH = "/community.md";
 export const POLYNET_SELF_PROFILE_PATH = "/self.md";
 export const POLYNET_MEMBERS_DIRECTORY_PATH = "/members/";
+export const POLYNET_RESOURCES_DIRECTORY_PATH = "/resources/";
 
 export type CommunitySemanticSource = {
   slug: string;
@@ -62,6 +65,43 @@ export type MemberSemanticDirectorySource = {
   }>;
   nextCursor: string | null;
   skippedIncomplete: number;
+};
+
+export type CommunityResourceSemanticDirectorySource =
+  | {
+      scope: "modules";
+      entries: Array<{
+        name: string;
+        directoryPath: string;
+        directoryUri: string;
+      }>;
+      nextCursor: string | null;
+    }
+  | {
+      scope: "resources";
+      module: {
+        name: string;
+        directoryPath: string;
+        directoryUri: string;
+      };
+      entries: Array<{
+        title: string;
+        ref: string;
+        directoryPath: string;
+        directoryUri: string;
+      }>;
+      nextCursor: string | null;
+    };
+
+export type CommunityResourceSemanticReadSource = {
+  title: string;
+  ref: string;
+  directoryPath: string;
+  bodyMd: string | null;
+  url: string | null;
+  offset: number;
+  totalChars: number;
+  truncated: boolean;
 };
 
 const semanticError = (
@@ -178,13 +218,42 @@ export function parsePolynetSemanticPath(value: unknown) {
     );
   }
   if (
-    !value.startsWith("/") ||
     value.includes("\\") ||
-    /[\u0000-\u001f\u007f]/.test(value) ||
+    /[\u0000-\u001f\u007f]/.test(value)
+  ) {
+    return semanticError(
+      "invalid_selector",
+      "path must be canonical and traversal-free.",
+    );
+  }
+  const resourceRef = parseCommunityResourceEvidenceRef(value);
+  if (resourceRef) {
+    return {
+      ok: true as const,
+      path: value,
+      resourceRef: value,
+    };
+  }
+  const resourceDirectory = parseCommunityResourceDirectoryUri(value);
+  if (resourceDirectory) {
+    return resourceDirectory.sourceInbox
+      ? semanticError(
+          "semantic_not_found",
+          "Semantic path not found or not accessible.",
+        )
+      : {
+          ok: true as const,
+          path: value,
+          resourceDirectory,
+        };
+  }
+  if (
+    !value.startsWith("/") ||
     value.includes("//") ||
     (value.length > 1 &&
       value.endsWith("/") &&
-      value !== POLYNET_MEMBERS_DIRECTORY_PATH) ||
+      value !== POLYNET_MEMBERS_DIRECTORY_PATH &&
+      value !== POLYNET_RESOURCES_DIRECTORY_PATH) ||
     value.split("/").some((part) => part === "." || part === "..")
   ) {
     return semanticError(
@@ -203,7 +272,8 @@ export function parsePolynetSemanticPath(value: unknown) {
   return value === POLYNET_SEMANTIC_ROOT_PATH ||
     value === POLYNET_COMMUNITY_PROFILE_PATH ||
     value === POLYNET_SELF_PROFILE_PATH ||
-    value === POLYNET_MEMBERS_DIRECTORY_PATH
+    value === POLYNET_MEMBERS_DIRECTORY_PATH ||
+    value === POLYNET_RESOURCES_DIRECTORY_PATH
     ? ({ ok: true as const, path: value })
     : semanticError(
         "semantic_not_found",
@@ -422,6 +492,10 @@ export function listCommunitySemanticRoot(args: {
           path: POLYNET_MEMBERS_DIRECTORY_PATH,
           kind: "directory" as const,
         },
+        {
+          path: POLYNET_RESOURCES_DIRECTORY_PATH,
+          kind: "directory" as const,
+        },
       ],
       next_cursor: null,
       truncated: false as const,
@@ -486,6 +560,165 @@ export function listCommunitySemanticMembers(args: {
       next_cursor: nextCursor,
       truncated: Boolean(nextCursor),
       skipped_incomplete: skippedIncomplete,
+    },
+  };
+}
+
+function mountCommunityResourceSemanticPath(
+  directoryPath: unknown,
+  kind: "directory" | "document",
+): string {
+  const path = normalizeText(directoryPath, 900);
+  if (
+    !path ||
+    !path.startsWith("/") ||
+    path.includes("\\") ||
+    path.includes("//") ||
+    path.endsWith("/") ||
+    path.split("/").some((part) => part === "." || part === "..")
+  ) {
+    throw new Error("community_resource_semantic_path_invalid");
+  }
+  const mounted = `${POLYNET_RESOURCES_DIRECTORY_PATH.slice(0, -1)}${path}`;
+  return kind === "directory" ? `${mounted}/` : `${mounted}.md`;
+}
+
+function normalizeCommunityResourceSemanticRef(
+  value: unknown,
+  kind: "directory" | "document",
+): string {
+  const ref = normalizeText(value, 1_024);
+  const directory = ref ? parseCommunityResourceDirectoryUri(ref) : null;
+  const valid =
+    kind === "directory"
+      ? Boolean(directory && !directory.sourceInbox && directory.resourceId === null)
+      : Boolean(ref && parseCommunityResourceEvidenceRef(ref));
+  if (!ref || !valid) {
+    throw new Error("community_resource_semantic_ref_invalid");
+  }
+  return ref;
+}
+
+export function listCommunitySemanticResources(args: {
+  selector: unknown;
+  source: CommunityResourceSemanticDirectorySource;
+}) {
+  const parsed = parsePolynetSemanticPath(args.selector);
+  if (!parsed.ok) return parsed;
+  const isResourceRoot = parsed.path === POLYNET_RESOURCES_DIRECTORY_PATH;
+  const resourceDirectory =
+    "resourceDirectory" in parsed ? parsed.resourceDirectory : null;
+  if (
+    (isResourceRoot && args.source.scope !== "modules") ||
+    (!isResourceRoot &&
+      (!resourceDirectory ||
+        resourceDirectory.resourceId ||
+        args.source.scope !== "resources"))
+  ) {
+    return semanticError(
+      "semantic_not_found",
+      "Semantic path not found or not accessible.",
+    );
+  }
+
+  const refs = new Set<string>();
+  const entries =
+    args.source.scope === "modules"
+      ? args.source.entries.map((entry) => {
+          const ref = normalizeCommunityResourceSemanticRef(
+            entry.directoryUri,
+            "directory",
+          );
+          if (refs.has(ref)) {
+            throw new Error("community_resource_semantic_directory_ambiguous");
+          }
+          refs.add(ref);
+          return {
+            path: mountCommunityResourceSemanticPath(
+              entry.directoryPath,
+              "directory",
+            ),
+            kind: "directory" as const,
+            name: normalizeInlineText(entry.name, 120) ?? "Resources",
+            ref,
+          };
+        })
+      : args.source.entries.map((entry) => {
+          const ref = normalizeCommunityResourceSemanticRef(
+            entry.ref,
+            "document",
+          );
+          if (refs.has(ref)) {
+            throw new Error("community_resource_semantic_directory_ambiguous");
+          }
+          refs.add(ref);
+          return {
+            path: mountCommunityResourceSemanticPath(
+              entry.directoryPath,
+              "document",
+            ),
+            kind: "document" as const,
+            name: normalizeInlineText(entry.title, 180) ?? "Resource",
+            ref,
+          };
+        });
+  const nextCursor = normalizeText(args.source.nextCursor, 2_048);
+  const path =
+    args.source.scope === "modules"
+      ? POLYNET_RESOURCES_DIRECTORY_PATH
+      : mountCommunityResourceSemanticPath(
+          args.source.module.directoryPath,
+          "directory",
+        );
+  return {
+    ok: true as const,
+    result: {
+      path,
+      entries,
+      next_cursor: nextCursor,
+      truncated: Boolean(nextCursor),
+      skipped_incomplete: 0,
+    },
+  };
+}
+
+export function readCommunitySemanticResourceDocument(args: {
+  source: CommunityResourceSemanticReadSource;
+}) {
+  const ref = normalizeCommunityResourceSemanticRef(
+    args.source.ref,
+    "document",
+  );
+  const title = normalizeInlineText(args.source.title, 180) ?? "Resource";
+  const url = normalizeText(args.source.url, 2_048);
+  const body =
+    typeof args.source.bodyMd === "string" && args.source.bodyMd.length > 0
+      ? args.source.bodyMd
+      : [
+          `# ${title}`,
+          "",
+          url
+            ? `External resource: ${url}`
+            : "_No parsed Markdown content is available._",
+        ].join("\n");
+  const offset = Math.max(0, Math.floor(Number(args.source.offset) || 0));
+  const totalChars = Math.max(
+    0,
+    Math.floor(Number(args.source.totalChars) || 0),
+  );
+  const truncated = Boolean(args.source.truncated);
+  return {
+    ok: true as const,
+    result: {
+      path: mountCommunityResourceSemanticPath(
+        args.source.directoryPath,
+        "document",
+      ),
+      body,
+      truncated,
+      ref,
+      total_chars: totalChars,
+      next_offset: truncated ? offset + body.length : null,
     },
   };
 }

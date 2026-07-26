@@ -260,11 +260,15 @@ assert.match(
 );
 
 assert.match(runtimePrompt, /When available, use community resource tools when canonical resource navigation/);
-assert.match(runtimePrompt, /Use community_resources_map first/);
-assert.match(runtimePrompt, /Use community_resources_read to batch-read/);
-assert.match(runtimePrompt, /Use community_resources_list to inspect/);
-assert.match(runtimePrompt, /Use community_resource_read to inspect one member-visible resource/);
-assert.match(runtimePrompt, /Use community_resources_search for targeted lookup/);
+assert.match(
+  runtimePrompt,
+  /use the semantic polynet_list\/polynet_read path before product documentation tools/,
+);
+assert.match(runtimePrompt, /community_resources_search only for targeted lookup/);
+assert.match(
+  runtimePrompt,
+  /community_resources_read only when a justified batch read/,
+);
 assert.match(timelineUi, /community_resources_map/);
 assert.match(timelineUi, /community_resources_read/);
 assert.match(timelineUi, /community_resources_list/);

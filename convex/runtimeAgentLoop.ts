@@ -397,24 +397,46 @@ export async function executeRetrievalHarnessTool(params: {
       };
     }
     try {
-      const payload = (await params.ctx.runQuery(
-        internal.communityCapabilityContext
-          .resolveCommunitySemanticRepositoryInternal as any,
-        {
-          userId: params.userId,
-          authSubject,
-          communityId: params.communityId,
-          operation: params.toolName === "polynet_list" ? "list" : "read",
-          path: String(normalizedArgs.path ?? ""),
-          cursor:
-            typeof normalizedArgs.cursor === "string"
-              ? normalizedArgs.cursor
-              : null,
-          limit:
-            typeof normalizedArgs.limit === "number"
-              ? normalizedArgs.limit
-              : undefined,
-        },
+      const payload = (await (
+        params.toolName === "polynet_list"
+          ? params.ctx.runQuery(
+              internal.communityCapabilityContext
+                .resolveCommunitySemanticRepositoryInternal as any,
+              {
+                userId: params.userId,
+                authSubject,
+                communityId: params.communityId,
+                operation: "list",
+                path: String(normalizedArgs.path ?? ""),
+                cursor:
+                  typeof normalizedArgs.cursor === "string"
+                    ? normalizedArgs.cursor
+                    : null,
+                limit:
+                  typeof normalizedArgs.limit === "number"
+                    ? normalizedArgs.limit
+                    : undefined,
+              },
+            )
+          : params.ctx.runAction(
+              internal.communityCapabilityContext
+                .readCommunitySemanticRepositoryInternal as any,
+              {
+                userId: params.userId,
+                authSubject,
+                communityId: params.communityId,
+                path: String(normalizedArgs.path ?? ""),
+                offset:
+                  typeof normalizedArgs.offset === "number"
+                    ? normalizedArgs.offset
+                    : undefined,
+                limit:
+                  typeof normalizedArgs.limit === "number"
+                    ? normalizedArgs.limit
+                    : undefined,
+                surface: params.evidenceSurface ?? "member_agent_dock",
+              },
+            )
       )) as {
         ok?: boolean;
         code?: unknown;

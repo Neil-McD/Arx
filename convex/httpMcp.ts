@@ -844,18 +844,43 @@ async function handleToolCall(args: {
       toolName === "polynet_list" && Number.isFinite(requestedLimit)
         ? Math.max(2, Math.min(50, Math.floor(requestedLimit)))
         : undefined;
+    const requestedOffset = Number(toolArgs.offset);
+    const offset =
+      toolName === "polynet_read" && Number.isFinite(requestedOffset)
+        ? Math.max(0, Math.min(1_000_000, Math.floor(requestedOffset)))
+        : undefined;
+    const requestedReadLimit = Number(toolArgs.limit);
+    const readLimit =
+      toolName === "polynet_read" && Number.isFinite(requestedReadLimit)
+        ? Math.max(1, Math.min(20_000, Math.floor(requestedReadLimit)))
+        : undefined;
     try {
-      const semanticResponse = (await ctx.runQuery(
-        internal.communityCapabilityContext
-          .resolveCommunitySemanticRepositoryInternal as any,
-        {
-          authSubject,
-          communitySlug,
-          operation: toolName === "polynet_list" ? "list" : "read",
-          path,
-          cursor,
-          limit,
-        },
+      const semanticResponse = (await (
+        toolName === "polynet_list"
+          ? ctx.runQuery(
+              internal.communityCapabilityContext
+                .resolveCommunitySemanticRepositoryInternal as any,
+              {
+                authSubject,
+                communitySlug,
+                operation: "list",
+                path,
+                cursor,
+                limit,
+              },
+            )
+          : ctx.runAction(
+              internal.communityCapabilityContext
+                .readCommunitySemanticRepositoryInternal as any,
+              {
+                authSubject,
+                communitySlug,
+                path,
+                offset,
+                limit: readLimit,
+                surface: "external_mcp",
+              },
+            )
       )) as {
         ok?: boolean;
         message?: unknown;

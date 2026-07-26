@@ -3,6 +3,7 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
+import { internal } from "./_generated/api";
 import {
   listCommunityResourceSemanticDirectoryCore,
 } from "./communityResources";
@@ -10,6 +11,9 @@ import schema from "./schema";
 
 const modules = import.meta.glob([
   "./communityResources.ts",
+  "./communityCapabilityContext.ts",
+  "./communityResourceEvidence.ts",
+  "./communityEvidenceAudit.ts",
   "./_generated/**/*.*s",
 ]);
 
@@ -109,7 +113,16 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       title: "Operating Model",
       role: "page",
       sortOrder: 1,
-      bodyChars: 100,
+      bodyChars: 23,
+    });
+    await ctx.db.insert("communityResourceContents", {
+      communityId,
+      resourceId: firstPageId,
+      bodyMd: "Canonical resource body",
+      bodyChars: 23,
+      bodyHash: "canonical-resource-body-hash",
+      createdAt: nowMs,
+      updatedAt: nowMs,
     });
     await insertResource({
       moduleId: firstModuleId,
@@ -147,6 +160,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       firstModuleId,
       firstPageId,
       collisionPageId,
+      memberSubject: "resource-semantic-member",
     };
   });
 }
@@ -222,6 +236,66 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
     new Set(["/start-here/operating-model"]),
   );
 
+  const asMember = t.withIdentity({ subject: fixture.memberSubject });
+  const semanticReadPlan = await asMember.query(
+    internal.communityCapabilityContext
+      .resolveCommunitySemanticRepositoryInternal,
+    {
+      authSubject: fixture.memberSubject,
+      userId: fixture.memberId,
+      communityId: fixture.communityId,
+      operation: "read",
+      path: `resource:${fixture.firstPageId}`,
+    },
+  );
+  expect(semanticReadPlan).toMatchObject({
+    ok: true,
+    resource_read: {
+      userId: fixture.memberId,
+      communityId: fixture.communityId,
+      ref: `resource:${fixture.firstPageId}`,
+    },
+  });
+  const semanticRead = await asMember.action(
+    internal.communityCapabilityContext
+      .readCommunitySemanticRepositoryInternal,
+    {
+      authSubject: fixture.memberSubject,
+      userId: fixture.memberId,
+      communityId: fixture.communityId,
+      path: `resource:${fixture.firstPageId}`,
+      offset: 0,
+      limit: 9,
+      surface: "member_agent_dock",
+    },
+  );
+  expect(semanticRead).toEqual({
+    ok: true,
+    result: {
+      path: "/resources/start-here/operating-model.md",
+      body: "Canonical",
+      truncated: true,
+      ref: `resource:${fixture.firstPageId}`,
+      total_chars: 23,
+      next_offset: 9,
+    },
+  });
+  const receipts = await t.run(async (ctx) =>
+    await ctx.db
+      .query("communityEvidenceRetrievalLogs")
+      .withIndex("by_community_createdAt", (q) =>
+        q.eq("communityId", fixture.communityId),
+      )
+      .collect(),
+  );
+  expect(receipts).toHaveLength(1);
+  expect(receipts[0]).toMatchObject({
+    userId: fixture.memberId,
+    surface: "member_agent_dock",
+    capability: "community_resource_read",
+    resultRefs: [`resource:${fixture.firstPageId}`],
+  });
+
   await expect(
     t.run(async (ctx) =>
       await listCommunityResourceSemanticDirectoryCore({
@@ -249,4 +323,19 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
       }),
     ),
   ).rejects.toThrow("community_entitlement_required");
+  await expect(
+    asMember.action(
+      internal.communityCapabilityContext
+        .readCommunitySemanticRepositoryInternal,
+      {
+        authSubject: fixture.memberSubject,
+        userId: fixture.memberId,
+        communityId: fixture.communityId,
+        path: `resource:${fixture.firstPageId}`,
+        surface: "member_agent_dock",
+      },
+    ),
+  ).resolves.toMatchObject({
+    ok: false,
+  });
 });

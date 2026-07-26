@@ -1,6 +1,6 @@
 import { v } from "convex/values";
-import { api } from "./_generated/api";
-import { internalQuery } from "./_generated/server";
+import { api, internal } from "./_generated/api";
+import { internalAction, internalQuery } from "./_generated/server";
 import {
   buildResolvedCommunityCapabilityContext,
   normalizeCommunityCapabilitySlug,
@@ -15,15 +15,19 @@ import {
   mapCommunityAccessRow,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
+import { resolveAuthenticatedActorByTrustedSubject } from "./authActor";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import {
   listCommunitySemanticMembers,
+  listCommunitySemanticResources,
   listCommunitySemanticRoot,
   parsePolynetSemanticPath,
   POLYNET_MEMBERS_DIRECTORY_PATH,
+  POLYNET_RESOURCES_DIRECTORY_PATH,
   POLYNET_SEMANTIC_ROOT_PATH,
   POLYNET_SELF_PROFILE_PATH,
   readCommunitySemanticDocument,
+  readCommunitySemanticResourceDocument,
   type CommunitySemanticSource,
   type MemberProfileSemanticSource,
   type SelfProfileCommunitySummary,
@@ -36,6 +40,7 @@ import {
   listMemberSemanticDirectory,
   resolveMemberSemanticProfile,
 } from "./communitySemanticMembers";
+import { communityEvidenceSurfaceValidator } from "./communityEvidenceAudit";
 
 export type {
   CommunityCapabilityContextErrorCode,
@@ -84,16 +89,28 @@ async function buildCommunityCapabilityContextForActor(args: {
     userId: args.userId,
     authSubject: args.authSubject,
   });
+  return await buildCommunityCapabilityContextForUser({
+    ctx: args.ctx,
+    userId,
+    community: args.community,
+  });
+}
+
+async function buildCommunityCapabilityContextForUser(args: {
+  ctx: any;
+  userId: any;
+  community: CommunityLike;
+}) {
   const membership = await getUniqueCommunityMembershipByPair({
     ctx: args.ctx,
     communityId: args.community._id,
-    userId,
+    userId: args.userId,
   });
   const access = (await mapCommunityAccessRow({
     ctx: args.ctx,
     community: args.community,
     membership,
-    userId,
+    userId: args.userId,
   })) as CommunityAccess;
   return buildResolvedCommunityCapabilityContext({
     communitySlug: args.community.slug,
@@ -284,6 +301,9 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
   handler: async (ctx, args) => {
     const usesCommunityId = Boolean(args.communityId);
     const usesCommunitySlug = Boolean(String(args.communitySlug ?? "").trim());
+    const communitySlug = normalizeCommunityCapabilitySlug(
+      args.communitySlug ?? "",
+    );
     if (usesCommunityId === usesCommunitySlug) {
       return {
         ok: false as const,
@@ -291,18 +311,53 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
         message: "Exactly one verified community selector is required.",
       };
     }
-    const resolved = usesCommunityId
-      ? await resolveCommunityCapabilityContextById({
+    if (usesCommunitySlug && !communitySlug) {
+      return {
+        ok: false as const,
+        code: "invalid_community_slug" as const,
+        message: "Community not found or not accessible.",
+      };
+    }
+    let actorUserId: any;
+    try {
+      actorUserId = (
+        await resolveAuthenticatedActorByTrustedSubject({
           ctx,
           authSubject: args.authSubject,
           userId: args.userId,
-          communityId: args.communityId,
         })
-      : await resolveCommunityCapabilityContextBySlug({
-          ctx,
-          authSubject: args.authSubject,
-          communitySlug: args.communitySlug ?? "",
-        });
+      ).dbUserId;
+    } catch {
+      return {
+        ok: false as const,
+        code: "community_not_accessible" as const,
+        message: "Community not found or not accessible.",
+      };
+    }
+    const communityRows = usesCommunityId
+      ? [((await ctx.db.get(args.communityId!)) as CommunityLike | null)].filter(
+          (row): row is CommunityLike => Boolean(row),
+        )
+      : ((await ctx.db
+          .query("communities")
+          .withIndex("by_slug", (q: any) =>
+            q.eq("slug", communitySlug),
+          )
+          .take(2)) as CommunityLike[]);
+    const resolved =
+      communityRows.length === 1
+        ? await buildCommunityCapabilityContextForUser({
+            ctx,
+            userId: actorUserId,
+            community: communityRows[0],
+          })
+        : {
+            ok: false as const,
+            code:
+              communityRows.length > 1
+                ? ("community_access_unavailable" as const)
+                : ("community_not_accessible" as const),
+          };
     if (!resolved.ok) {
       return {
         ok: false as const,
@@ -316,15 +371,96 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
       if (parsedPath.path === POLYNET_SEMANTIC_ROOT_PATH) {
         return listCommunitySemanticRoot({ path: parsedPath.path });
       }
+      const resourceDirectory =
+        "resourceDirectory" in parsedPath
+          ? parsedPath.resourceDirectory
+          : null;
+      if (
+        parsedPath.path === POLYNET_RESOURCES_DIRECTORY_PATH ||
+        resourceDirectory
+      ) {
+        if (resourceDirectory?.resourceId) {
+          return {
+            ok: false as const,
+            code: "semantic_not_found" as const,
+            message: "Semantic path not found or not accessible.",
+          };
+        }
+        if (
+          resourceDirectory &&
+          resourceDirectory.communityId !== resolved.context.communityId
+        ) {
+          return {
+            ok: false as const,
+            code: "semantic_not_found" as const,
+            message: "Semantic path not found or not accessible.",
+          };
+        }
+        try {
+          const moduleId = resourceDirectory
+            ? ctx.db.normalizeId(
+                "communityResourceModules",
+                resourceDirectory.moduleId,
+              )
+            : null;
+          if (resourceDirectory && !moduleId) {
+            throw new Error("community_resource_semantic_module_not_found");
+          }
+          const directory = (await ctx.runQuery(
+            internal.communityResources
+              .listCommunityResourceSemanticDirectoryInternal as any,
+            {
+              userId: actorUserId,
+              communityId: ctx.db.normalizeId(
+                "communities",
+                resolved.context.communityId,
+              ),
+              ...(moduleId ? { moduleId } : null),
+              cursor: args.cursor ?? undefined,
+              limit: args.limit ?? undefined,
+            },
+          )) as any;
+          return listCommunitySemanticResources({
+            selector: parsedPath.path,
+            source:
+              directory.scope === "modules"
+                ? {
+                    scope: "modules",
+                    entries: directory.entries.map((entry: any) => ({
+                      name: entry.name,
+                      directoryPath: entry.directory_path,
+                      directoryUri: entry.directory_uri,
+                    })),
+                    nextCursor: directory.next_cursor,
+                  }
+                : {
+                    scope: "resources",
+                    module: {
+                      name: directory.module.name,
+                      directoryPath: directory.module.directory_path,
+                      directoryUri: directory.module.directory_uri,
+                    },
+                    entries: directory.entries.map((entry: any) => ({
+                      title: entry.title,
+                      ref: entry.ref,
+                      directoryPath: entry.directory_path,
+                      directoryUri: entry.directory_uri,
+                    })),
+                    nextCursor: directory.next_cursor,
+                  },
+          });
+        } catch {
+          return {
+            ok: false as const,
+            code: "semantic_context_unavailable" as const,
+            message: "Semantic resource directory not available.",
+          };
+        }
+      }
       if (parsedPath.path !== POLYNET_MEMBERS_DIRECTORY_PATH) {
         return listCommunitySemanticRoot({ path: parsedPath.path });
       }
       try {
-        const actorUserId = await resolveUserIdForAuthenticatedRequest({
-          ctx,
-          userId: args.userId,
-          authSubject: args.authSubject,
-        });
         const memberDirectory = await listMemberSemanticDirectory({
           ctx,
           actorUserId,
@@ -346,6 +482,43 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
     }
     let selfProfile: SelfProfileSemanticSource | null = null;
     let memberProfile: MemberProfileSemanticSource | null = null;
+    const resourceRef =
+      "resourceRef" in parsedPath ? parsedPath.resourceRef : null;
+    const resourceDirectory =
+      "resourceDirectory" in parsedPath
+        ? parsedPath.resourceDirectory
+        : null;
+    if (resourceRef || resourceDirectory?.resourceId) {
+      if (
+        resourceDirectory &&
+        resourceDirectory.communityId !== resolved.context.communityId
+      ) {
+        return {
+          ok: false as const,
+          code: "semantic_not_found" as const,
+          message: "Semantic path not found or not accessible.",
+        };
+      }
+      try {
+        return {
+          ok: true as const,
+          resource_read: {
+            userId: actorUserId,
+            communityId: ctx.db.normalizeId(
+              "communities",
+              resolved.context.communityId,
+            ),
+            ref: parsedPath.path,
+          },
+        };
+      } catch {
+        return {
+          ok: false as const,
+          code: "semantic_context_unavailable" as const,
+          message: "Semantic resource not available.",
+        };
+      }
+    }
     const memberHandle =
       "memberHandle" in parsedPath ? parsedPath.memberHandle : null;
     if (
@@ -353,11 +526,6 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
       memberHandle
     ) {
       try {
-        const actorUserId = await resolveUserIdForAuthenticatedRequest({
-          ctx,
-          userId: args.userId,
-          authSubject: args.authSubject,
-        });
         if (parsedPath.path === POLYNET_SELF_PROFILE_PATH) {
           selfProfile = await buildSelfProfileSemanticSource({
             ctx,
@@ -386,5 +554,90 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
       memberProfile,
       path: parsedPath.path,
     });
+  },
+});
+
+export const readCommunitySemanticRepositoryInternal = internalAction({
+  args: {
+    authSubject: v.string(),
+    userId: v.optional(v.id("users")),
+    communityId: v.optional(v.id("communities")),
+    communitySlug: v.optional(v.string()),
+    path: v.string(),
+    offset: v.optional(v.number()),
+    limit: v.optional(v.number()),
+    surface: communityEvidenceSurfaceValidator,
+  },
+  handler: async (ctx, args): Promise<any> => {
+    const planned = (await ctx.runQuery(
+      internal.communityCapabilityContext
+        .resolveCommunitySemanticRepositoryInternal as any,
+      {
+        authSubject: args.authSubject,
+        ...(args.userId ? { userId: args.userId } : null),
+        ...(args.communityId ? { communityId: args.communityId } : null),
+        ...(args.communitySlug ? { communitySlug: args.communitySlug } : null),
+        operation: "read",
+        path: args.path,
+      },
+    )) as any;
+    if (planned?.ok !== true || !planned.resource_read) {
+      if (
+        planned?.ok === true &&
+        (args.offset !== undefined || args.limit !== undefined)
+      ) {
+        return {
+          ok: false as const,
+          code: "invalid_selector" as const,
+          message: "offset and limit are valid only for resource reads.",
+        };
+      }
+      return planned;
+    }
+    try {
+      const payload = (await ctx.runAction(
+        internal.communityResourceEvidence
+          .readCommunityResourceEvidenceForToolInternal as any,
+        {
+          userId: planned.resource_read.userId,
+          communityId: planned.resource_read.communityId,
+          ref: planned.resource_read.ref,
+          offset: args.offset,
+          limit: args.limit,
+          surface: args.surface,
+        },
+      )) as any;
+      if (payload?.ok !== true) {
+        return {
+          ok: false as const,
+          code: "semantic_not_found" as const,
+          message: "Semantic path not found or not accessible.",
+        };
+      }
+      return readCommunitySemanticResourceDocument({
+        source: {
+          title: payload.resource?.title,
+          ref: payload.resource?.ref,
+          directoryPath: payload.resource?.directory_path,
+          bodyMd:
+            typeof payload.content?.body_md === "string"
+              ? payload.content.body_md
+              : null,
+          url:
+            typeof payload.resource?.url === "string"
+              ? payload.resource.url
+              : null,
+          offset: payload.content?.offset,
+          totalChars: payload.content?.total_chars,
+          truncated: payload.content?.truncated,
+        },
+      });
+    } catch {
+      return {
+        ok: false as const,
+        code: "semantic_context_unavailable" as const,
+        message: "Semantic resource not available.",
+      };
+    }
   },
 });

@@ -4,9 +4,11 @@ import { join } from "node:path";
 
 import {
   listCommunitySemanticMembers,
+  listCommunitySemanticResources,
   listCommunitySemanticRoot,
   parsePolynetSemanticPath,
   readCommunitySemanticDocument,
+  readCommunitySemanticResourceDocument,
   renderCommunityProfileMarkdown,
   renderMemberProfileMarkdown,
   renderSelfProfileMarkdown,
@@ -105,6 +107,27 @@ assert.deepEqual(parsePolynetSemanticPath("/members/emma.md"), {
   path: "/members/emma.md",
   memberHandle: "emma",
 });
+assert.deepEqual(parsePolynetSemanticPath("/resources/"), {
+  ok: true,
+  path: "/resources/",
+});
+const resourceDirectoryRef =
+  "resources://community/community-1/modules/module-1";
+assert.deepEqual(parsePolynetSemanticPath(resourceDirectoryRef), {
+  ok: true,
+  path: resourceDirectoryRef,
+  resourceDirectory: {
+    communityId: "community-1",
+    moduleId: "module-1",
+    sourceInbox: false,
+    resourceId: null,
+  },
+});
+assert.deepEqual(parsePolynetSemanticPath("resource:resource-1"), {
+  ok: true,
+  path: "resource:resource-1",
+  resourceRef: "resource:resource-1",
+});
 for (const invalidPath of [
   "",
   "community.md",
@@ -119,6 +142,10 @@ for (const invalidPath of [
   "/members/emma",
   "/members/admin.md",
   "/members/emma.md/",
+  "/resources",
+  "/resources/start-here/",
+  "resources://community/community-1/modules/module-1/source-inbox",
+  "resource:resource:1",
   "//community.md",
   "/./community.md",
   "/../community.md",
@@ -148,6 +175,10 @@ assert.deepEqual(listed.result, {
     },
     {
       path: "/members/",
+      kind: "directory",
+    },
+    {
+      path: "/resources/",
       kind: "directory",
     },
   ],
@@ -204,6 +235,110 @@ assert.deepEqual(listedMembers.result, {
   next_cursor: "opaque-cursor",
   truncated: true,
   skipped_incomplete: 1,
+});
+
+const listedResourceModules = listCommunitySemanticResources({
+  selector: "/resources/",
+  source: {
+    scope: "modules",
+    entries: [
+      {
+        name: "Start Here",
+        directoryPath: "/start-here",
+        directoryUri: resourceDirectoryRef,
+      },
+      {
+        name: "Start Here",
+        directoryPath: "/start-here",
+        directoryUri:
+          "resources://community/community-1/modules/module-2",
+      },
+    ],
+    nextCursor: "resource-module-cursor",
+  },
+});
+assert.equal(listedResourceModules.ok, true);
+if (!listedResourceModules.ok) {
+  throw new Error(listedResourceModules.code);
+}
+assert.deepEqual(listedResourceModules.result, {
+  path: "/resources/",
+  entries: [
+    {
+      path: "/resources/start-here/",
+      kind: "directory",
+      name: "Start Here",
+      ref: resourceDirectoryRef,
+    },
+    {
+      path: "/resources/start-here/",
+      kind: "directory",
+      name: "Start Here",
+      ref: "resources://community/community-1/modules/module-2",
+    },
+  ],
+  next_cursor: "resource-module-cursor",
+  truncated: true,
+  skipped_incomplete: 0,
+});
+
+const listedResourcePages = listCommunitySemanticResources({
+  selector: resourceDirectoryRef,
+  source: {
+    scope: "resources",
+    module: {
+      name: "Start Here",
+      directoryPath: "/start-here",
+      directoryUri: resourceDirectoryRef,
+    },
+    entries: [
+      {
+        title: "Operating Model",
+        ref: "resource:resource-1",
+        directoryPath: "/start-here/operating-model",
+        directoryUri:
+          "resources://community/community-1/modules/module-1/resources/resource-1",
+      },
+    ],
+    nextCursor: null,
+  },
+});
+assert.equal(listedResourcePages.ok, true);
+if (!listedResourcePages.ok) throw new Error(listedResourcePages.code);
+assert.deepEqual(listedResourcePages.result, {
+  path: "/resources/start-here/",
+  entries: [
+    {
+      path: "/resources/start-here/operating-model.md",
+      kind: "document",
+      name: "Operating Model",
+      ref: "resource:resource-1",
+    },
+  ],
+  next_cursor: null,
+  truncated: false,
+  skipped_incomplete: 0,
+});
+
+const readResource = readCommunitySemanticResourceDocument({
+  source: {
+    title: "Operating Model",
+    ref: "resource:resource-1",
+    directoryPath: "/start-here/operating-model",
+    bodyMd: "Canonical resource body",
+    url: null,
+    offset: 10,
+    totalChars: 100,
+    truncated: true,
+  },
+});
+assert.deepEqual(readResource.result, {
+  path: "/resources/start-here/operating-model.md",
+  body: "Canonical resource body",
+  truncated: true,
+  ref: "resource:resource-1",
+  total_chars: 100,
+  next_offset: 33,
 });
 
 const rendered = renderCommunityProfileMarkdown(source);
@@ -465,12 +600,45 @@ assert.deepEqual(
   }),
   { path: "/members/emma.md" },
 );
+assert.deepEqual(
+  normalizeToolArguments("polynet_list", {
+    path: "/resources/",
+    cursor: "resource-cursor",
+    limit: 24,
+  }),
+  { path: "/resources/", cursor: "resource-cursor", limit: 24 },
+);
+assert.deepEqual(
+  normalizeToolArguments("polynet_list", {
+    path: resourceDirectoryRef,
+  }),
+  { path: resourceDirectoryRef },
+);
+assert.deepEqual(
+  normalizeToolArguments("polynet_read", {
+    path: "resource:resource-1",
+    offset: 20,
+    limit: 2000,
+  }),
+  { path: "resource:resource-1", offset: 20, limit: 2000 },
+);
 assert.throws(() => normalizeToolArguments("polynet_list", { path: "/self.md" }));
 assert.throws(() =>
   normalizeToolArguments("polynet_list", { path: "/", limit: 24 }),
 );
 assert.throws(() =>
   normalizeToolArguments("polynet_read", { path: "/members/Emma.md" }),
+);
+assert.throws(() =>
+  normalizeToolArguments("polynet_read", {
+    path: "/community.md",
+    offset: 10,
+  }),
+);
+assert.throws(() =>
+  normalizeToolArguments("polynet_read", {
+    path: resourceDirectoryRef,
+  }),
 );
 assert.throws(() => normalizeToolArguments("polynet_read", { path: "/" }));
 
@@ -500,20 +668,20 @@ for (const toolName of ["polynet_list", "polynet_read"] as const) {
       "community_slug" in definition.inputSchema.properties,
   );
 }
-assert.deepEqual(
+assert.equal(
   getPolynetMcpToolDefinition("polynet_list")?.inputSchema?.properties?.path
-    ?.enum,
-  ["/", "/members/"],
+    ?.pattern,
+  "^(?:/|/members/|/resources/|resources://community/[^/\\s]+/modules/[^/\\s]+)$",
 );
 assert.equal(
   getPolynetMcpToolDefinition("polynet_read")?.inputSchema?.properties?.path
     ?.pattern,
-  "^(?:/(?:community|self)\\.md|/members/[a-z0-9][a-z0-9_-]{1,30}[a-z0-9]\\.md)$",
+  "^(?:/(?:community|self)\\.md|/members/[a-z0-9][a-z0-9_-]{1,30}[a-z0-9]\\.md|resource:[^\\s:]+|resources://community/[^/\\s]+/modules/[^/\\s]+/resources/[^/\\s]+)$",
 );
 assert.equal(
   getPolynetMcpToolDefinition("polynet_read")?.outputSchema?.properties?.path
-    ?.pattern,
-  "^(?:/(?:community|self)\\.md|/members/[a-z0-9][a-z0-9_-]{1,30}[a-z0-9]\\.md)$",
+    ?.maxLength,
+  1024,
 );
 assert.deepEqual(
   getPolynetMcpToolDefinition("polynet_list")?.outputSchema?.required,
@@ -625,8 +793,16 @@ assert.match(
   /communityCapabilityContext[\s\S]*resolveCommunitySemanticRepositoryInternal/,
 );
 assert.match(
+  runtimeAgentLoop,
+  /communityCapabilityContext[\s\S]*readCommunitySemanticRepositoryInternal/,
+);
+assert.match(
   httpMcp,
   /communityCapabilityContext[\s\S]*resolveCommunitySemanticRepositoryInternal/,
+);
+assert.match(
+  httpMcp,
+  /communityCapabilityContext[\s\S]*readCommunitySemanticRepositoryInternal/,
 );
 assert.match(runtimeAgentLoop, /formatJsonToolOutput\(payload\.result\)/);
 assert.match(
@@ -649,6 +825,10 @@ assert.match(
 assert.match(
   capabilityContext,
   /listMemberSemanticDirectory[\s\S]*resolveMemberSemanticProfile/,
+);
+assert.match(
+  capabilityContext,
+  /listCommunityResourceSemanticDirectoryInternal[\s\S]*readCommunityResourceEvidenceForToolInternal/,
 );
 assert.match(
   semanticMembers,
