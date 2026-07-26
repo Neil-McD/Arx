@@ -243,12 +243,6 @@
   background: var(--surface-workspace, var(--surface-app));
 }
 
-/* Web UX: center the chat feed + composer like chat.openai.com */
-.message-copy-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 /* Web: keep scrollable panels flush to the viewport edges so scrollbars hug the window. */
 .workspace:not(.scroll-to-bottom) {
   padding: 0;
@@ -274,7 +268,7 @@
 @media (min-width: 921px) {
   .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .message-list-inner,
   .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .web-empty-thread,
-  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .workspace-composer-shell:not(.preview-expanded),
+  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .workspace-composer-shell,
   .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-hero,
   .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-grid,
   .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .public-funnel-shell {
@@ -1115,28 +1109,6 @@
   stroke-linejoin: round;
 }
 
-.streaming-caret {
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  margin-left: 2px;
-  background: var(--text-primary);
-  opacity: 0.85;
-  animation: arxCaretBlink 1s steps(1, end) infinite;
-  vertical-align: -0.1em;
-}
-
-@keyframes arxCaretBlink {
-  0%,
-  50% {
-    opacity: 0.85;
-  }
-  50.01%,
-  100% {
-    opacity: 0;
-  }
-}
-
 .ask-bar {
   width: calc(100% - 2 * var(--web-chat-gutter));
   /* Web: match the full chat column width (a bit wider than the message text). */
@@ -1962,7 +1934,6 @@
   border: 1px solid var(--border-default);
 }
 
-.message-attachments-preview,
 .chat-attachments-preview {
   margin-top: 6px;
   padding-bottom: 0;
@@ -3089,55 +3060,12 @@
   padding: 8px 2px calc(env(safe-area-inset-bottom, 0px) + 2px);
 }
 
-.mobile-drawer .session-list,
-.mobile-drawer .thread-sidebar-panel {
-  min-height: 0;
-}
-
-.mobile-drawer.mobile-agent-drawer .mobile-drawer-body {
-  overflow: hidden;
-}
-
 .mobile-drawer.mobile-members-drawer .mobile-drawer-body {
   overflow: hidden;
 }
 
-.mobile-drawer.mobile-agent-drawer .thread-sidebar-panel {
-  flex: 1;
-  border: none;
-  background: transparent;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.mobile-drawer .session-search-row {
-  margin-bottom: 10px;
-}
-
-.mobile-drawer .session-search,
-.mobile-drawer .thread-sidebar-group,
-.mobile-drawer .thread-sidebar-empty,
-.mobile-drawer .session-list,
 .mobile-drawer .community-nav {
   background: transparent;
-}
-
-.mobile-drawer .session-search {
-  margin-bottom: 10px;
-  padding: 8px 10px;
-  gap: 10px;
-  border-radius: 999px;
-  background: var(--hover-overlay);
-}
-
-.mobile-drawer .session-search input {
-  font-size: 14px;
-}
-
-.mobile-drawer .session-search-clear {
-  width: 20px;
-  height: 20px;
 }
 
 .mobile-agent-drawer-settings-link {
@@ -3222,78 +3150,6 @@
 .mobile-drawer .community-nav .nav-icon svg {
   width: 18px;
   height: 18px;
-}
-
-.mobile-drawer .project-group {
-  margin-bottom: 12px;
-}
-
-.mobile-drawer .project-group-header {
-  padding: 0;
-}
-
-.mobile-drawer .project-group-label {
-  padding: 8px 6px;
-  font-size: 14px;
-}
-
-.mobile-drawer .project-group-new {
-  width: 28px;
-  height: 28px;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.mobile-drawer .project-group-new:hover {
-  background: transparent;
-  color: var(--text-primary);
-}
-
-.mobile-drawer .project-group-menu-trigger {
-  width: 28px;
-  height: 28px;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.mobile-drawer .project-group-menu-trigger:hover,
-.mobile-drawer .project-group-menu-trigger[aria-expanded="true"] {
-  background: transparent;
-  color: var(--text-primary);
-}
-
-.mobile-drawer .project-toolbar {
-  margin: 6px 0 8px;
-}
-
-.mobile-drawer .project-group-threads {
-  margin-left: 10px;
-  padding-left: 10px;
-}
-
-.mobile-drawer.mobile-agent-drawer .session-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  touch-action: pan-y;
-  gap: 6px;
-  margin-bottom: 0;
-  padding-bottom: 0;
-  margin-right: 0;
-  padding-right: 0;
-}
-
-.mobile-drawer .session-item {
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
 }
 
 .mobile-drawer .session-title {

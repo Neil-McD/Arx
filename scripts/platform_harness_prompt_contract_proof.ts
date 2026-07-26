@@ -387,9 +387,15 @@ async function proveSourceContract() {
   const httpVoiceSource = await readRepoFile("convex/httpVoice.ts");
   const paidToolCreditReservationSource = await readRepoFile("convex/paidToolCreditReservation.ts");
   const voiceControllerSource = await readRepoFile("shared/useWebVoiceInputController.ts");
-  const messageMetadataUiSource = await readRepoFile("shared/messageMetadataUi.ts");
-  const workspaceThreadViewsSource = await readRepoFile("apps/web/src/components/webWorkspaceThreadViews.ts");
-  const workspaceThreadMessageListSource = await readRepoFile("apps/web/src/components/WebWorkspaceThreadMessageList.tsx");
+  const globalOverlayProjectionSource = await readRepoFile(
+    "apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts",
+  );
+  const globalOverlayHostSource = await readRepoFile(
+    "apps/web/src/components/WebGlobalOverlayHost.tsx",
+  );
+  const inferenceIssueModalSource = await readRepoFile(
+    "apps/web/src/components/WebInferenceIssueModal.tsx",
+  );
   const directMessagesHostSource = await readRepoFile("apps/web/src/components/WebDirectMessagesHost.tsx");
   const directMessagePanelSource = await readRepoFile("apps/web/src/components/WebDirectMessagePanel.tsx");
   const freeAccountModalSource = await readRepoFile("shared/FreeAccountIncludedModal.tsx");
@@ -498,19 +504,19 @@ async function proveSourceContract() {
     "billing UI must come from structured runtime error evidence",
   );
   assert.match(
-    messageMetadataUiSource,
-    /export type PremiumUpgradeCta[\s\S]*parsePremiumUpgradeCta[\s\S]*premium_upgrade_cta[\s\S]*premium_tools_required[\s\S]*open_billing/,
-    "web metadata parser should accept the durable premium upgrade CTA shape",
+    globalOverlayProjectionSource,
+    /inferenceIssueModalProps: params\.inferenceIssueModal[\s\S]*onOpenSettings: \(reason\)[\s\S]*reason === "workspace_credits" \? "billing" : "account"/,
+    "structured runtime billing failures must project into the mounted global Billing route",
   );
   assert.match(
-    workspaceThreadViewsSource,
-    /PremiumUpgradeCta[\s\S]*premiumUpgradeCta: PremiumUpgradeCta \| null/,
-    "workspace message view model should include premium upgrade CTA metadata",
+    globalOverlayHostSource,
+    /props\.inferenceIssueModalProps[\s\S]*<WebInferenceIssueModal \{\.\.\.props\.inferenceIssueModalProps\} \/>/,
+    "the mounted global overlay host must render structured inference issues",
   );
   assert.match(
-    workspaceThreadMessageListSource,
-    /message\.premiumUpgradeCta[\s\S]*message-premium-upgrade-cta[\s\S]*onOpenPremiumBilling/,
-    "workspace message list should render premium upgrade CTA with the Billing action",
+    inferenceIssueModalSource,
+    /inferenceIssueModal\.reason === "workspace_credits"[\s\S]*"Open Billing"/,
+    "the mounted inference issue modal must label paid-usage credit failures with the Billing action",
   );
   assert.match(
     appSource,
