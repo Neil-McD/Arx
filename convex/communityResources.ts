@@ -52,6 +52,7 @@ import {
   normalizeCommunityResourceBodyMd,
   writeCommunityResourceBodyContent,
 } from "./communityResourceContent";
+import { resolveExactCommunityResourceEvidenceSelector } from "./communityResourceEvidenceCore";
 import {
   requireSafeCommunitySourceFetcherEndpoint,
   requireSafeCommunitySourceUrl,
@@ -3978,6 +3979,34 @@ async function resolveResourceByRef(args: {
   return { ok: true, resource: match };
 }
 
+async function buildCommunityResourceDirectoryReadPayload(args: {
+  ctx: any;
+  resource: CommunityResourceLike;
+  moduleNameMap: Map<string, string>;
+  offset: unknown;
+  limit: unknown;
+}) {
+  const row = await hydrateCommunityResourceBody(args.ctx, args.resource) ?? args.resource;
+  const body = String(row.bodyMd ?? "");
+  const offset = boundedReadOffset(args.offset);
+  const limit = boundedReadLimit(args.limit);
+  const bodySlice = body ? body.slice(offset, offset + limit) : null;
+  return {
+    ok: true,
+    kind: "community_resource_read",
+    resource: buildResourceDirectoryEntry(row, args.moduleNameMap),
+    source: null,
+    content: {
+      body_md: bodySlice,
+      offset,
+      limit,
+      total_chars: body.length,
+      truncated: Boolean(body && offset + (bodySlice?.length ?? 0) < body.length),
+      unavailable_reason: readContentUnavailableReason(row),
+    },
+  };
+}
+
 async function buildSourceResourceMetadata(args: {
   ctx: any;
   communityId: any;
@@ -4245,6 +4274,21 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
       authSubject: args.authSubject ?? null,
       communityId: args.communityId,
     });
+    const exact = await resolveExactCommunityResourceEvidenceSelector({
+      ctx,
+      communityId: args.communityId,
+      ref: args.ref,
+    });
+    if (exact) {
+      return await buildCommunityResourceDirectoryReadPayload({
+        ctx,
+        resource: exact.resource,
+        moduleNameMap: buildModuleNameMap([exact.module]),
+        offset: args.offset,
+        limit: args.limit,
+      });
+    }
+
     const modules = await listResourceDirectoryLiveModules(ctx, args.communityId);
     const liveModuleIds = new Set(modules.map((module) => normalizeIdValue(module._id)));
     const resources = await listResourceDirectoryLivePageResources(ctx, args.communityId, liveModuleIds);
@@ -4262,26 +4306,13 @@ export const readCommunityResourceDirectoryInternal = internalQuery({
         ...resolved,
       };
     }
-
-    const row = await hydrateCommunityResourceBody(ctx, resolved.resource) ?? resolved.resource;
-    const body = String(row.bodyMd ?? "");
-    const offset = boundedReadOffset(args.offset);
-    const limit = boundedReadLimit(args.limit);
-    const bodySlice = body ? body.slice(offset, offset + limit) : null;
-    return {
-      ok: true,
-      kind: "community_resource_read",
-      resource: buildResourceDirectoryEntry(row, moduleNameMap),
-      source: null,
-      content: {
-        body_md: bodySlice,
-        offset,
-        limit,
-        total_chars: body.length,
-        truncated: Boolean(body && offset + (bodySlice?.length ?? 0) < body.length),
-        unavailable_reason: readContentUnavailableReason(row),
-      },
-    };
+    return await buildCommunityResourceDirectoryReadPayload({
+      ctx,
+      resource: resolved.resource,
+      moduleNameMap,
+      offset: args.offset,
+      limit: args.limit,
+    });
   },
 });
 

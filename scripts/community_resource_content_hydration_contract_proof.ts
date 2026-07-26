@@ -131,8 +131,13 @@ assert.doesNotMatch(
 );
 assert.match(
   resources,
-  /export const readCommunityResourceDirectoryInternal = internalQuery\([\s\S]*const row = await hydrateCommunityResourceBody\(ctx, resolved\.resource\) \?\? resolved\.resource[\s\S]*const body = String\(row\.bodyMd \?\? ""\)[\s\S]*body_md: bodySlice/,
-  "single member-visible resource reads must hydrate split body content before slicing response text",
+  /async function buildCommunityResourceDirectoryReadPayload[\s\S]*hydrateCommunityResourceBody\(args\.ctx, args\.resource\)[\s\S]*const body = String\(row\.bodyMd \?\? ""\)[\s\S]*body_md: bodySlice/,
+  "the shared single-resource payload must hydrate split body content before slicing response text",
+);
+assert.match(
+  resources,
+  /export const readCommunityResourceDirectoryInternal = internalQuery\([\s\S]*buildCommunityResourceDirectoryReadPayload\(\{[\s\S]*resource: exact\.resource[\s\S]*listResourceDirectoryLiveModules[\s\S]*buildCommunityResourceDirectoryReadPayload\(\{[\s\S]*resource: resolved\.resource/,
+  "exact and compatibility member reads must use the same hydrated response builder",
 );
 assert.match(
   resources,

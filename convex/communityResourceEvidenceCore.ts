@@ -6,6 +6,8 @@ import {
   communityResourceIsMemberVisiblePage,
   communityResourceModuleIsMemberLive,
 } from "../shared/communityResourceVisibility.ts";
+import { parseCommunityResourceDirectoryUri } from "../shared/communityResourceDirectory.ts";
+import { parseCommunityResourceEvidenceRef } from "../shared/communityEvidenceContract.ts";
 
 function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
@@ -58,4 +60,58 @@ export async function resolveCommunityResourceEvidenceSource(args: {
     return null;
   }
   return { resource, module };
+}
+
+/**
+ * Resolve only canonical, exact member-resource selectors. Readable paths and
+ * legacy raw ids deliberately return null so their compatibility lookup can
+ * remain separate.
+ */
+export async function resolveExactCommunityResourceEvidenceSelector(args: {
+  ctx: { db: any };
+  communityId: any;
+  ref: unknown;
+}): Promise<ResolvedCommunityResourceEvidence | null> {
+  const ref = String(args.ref ?? "").trim();
+  const typedResourceId = parseCommunityResourceEvidenceRef(ref);
+  let resourceId = typedResourceId;
+  let expectedModuleId: string | null = null;
+
+  if (!typedResourceId) {
+    if (ref.startsWith("resource:")) {
+      throw new Error("community_resource_evidence_ref_invalid");
+    }
+    const parsed = parseCommunityResourceDirectoryUri(ref);
+    if (!parsed) {
+      if (ref.startsWith("resources://")) {
+        throw new Error("community_resource_directory_uri_invalid");
+      }
+      return null;
+    }
+    if (parsed.communityId !== normalizeIdValue(args.communityId)) {
+      throw new Error("community_resource_directory_community_mismatch");
+    }
+    if (!parsed.resourceId) {
+      throw new Error("community_resource_directory_path_not_readable");
+    }
+    if (parsed.sourceInbox) {
+      throw new Error("community_resource_directory_scope_mismatch");
+    }
+    resourceId = parsed.resourceId;
+    expectedModuleId = parsed.moduleId;
+  }
+
+  const resolved = await resolveCommunityResourceEvidenceSource({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    resourceId,
+  });
+  if (!resolved) throw new Error("community_resource_not_found");
+  if (
+    expectedModuleId &&
+    expectedModuleId !== normalizeIdValue(resolved.module._id)
+  ) {
+    throw new Error("community_resource_directory_module_mismatch");
+  }
+  return resolved;
 }
