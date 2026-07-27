@@ -2380,3 +2380,45 @@ launcher is no longer a retained surface to decompose. Any redesign of founder
 setup or any deletion of now-unread launch-status backend code must be planned
 as a separate slice. Production, `origin/main`, production configuration,
 production data, and Convex remain untouched.
+
+### C8.4D source receipt — Community-launch backend contract retirement
+
+The final C8 slice removes the launcher as a backend contract after first
+separating its one surviving product responsibility. Funnel About was the only
+first-party caller of `saveCommunityLaunchProfile`; it supplied only `about`
+through a launcher-named shared gateway even though Funnel is now the canonical
+owner of that field. Additive source commit
+`e449014897501f37e57225ad3f53cce5279fae00` introduces one narrow,
+manager-authorized `saveCommunityAbout` mutation, places its browser gateway
+with the retained Funnel contract, and projects only `community_id`, `about`,
+and `updated_at` back into web state. The old mutation remains in that commit
+only as a compatibility bridge while staging Convex deploys before the web.
+
+Once the exact additive web build proved the new write and restored the original
+About value, the subtractive phase deletes `saveCommunityLaunchProfile`, the
+unread `getCommunityLaunchSetupStatus` query, their facade exports, generated API
+residue, and the three dedicated launcher backend/shared files. The six-step
+status had no stored launcher record: it was derived at request time from
+communities, resources, agent configuration, and price points. Its removal
+therefore requires no schema or data migration.
+
+This deletion does not reach through the retired launcher into protected
+community-resource infrastructure. Source ingestion, source rows, Google Drive
+and GitHub credential/OAuth handling, crawler jobs, wiki architect actions,
+resource-builder tools, and their existing cloud gateways remain intact. Their
+remaining launcher-shaped vocabulary is a separately authorized Resources
+compatibility/redesign decision and does not keep C8 open.
+
+The retirement proof now locks absence of both frontend and backend launcher
+runtime files and RPCs while preserving the canonical Create Community,
+Settings, AI Agent, Resources, Funnel, authorization, quota, readiness, and
+post-create destination boundaries. The Funnel proof locks the required,
+bounded, manager-authorized About write and also corrects a stale assertion so
+preview must suppress visit recording and carry explicit preview mode.
+
+No production function, production data, provider credential, source row,
+schema, environment configuration, Vercel project, `origin/main`, or protected
+resource/memory system belongs to this slice. Exact clean staging Convex
+deployment, Git-driven web deployment, full source gates, legacy-route
+normalization, canonical destination availability, and unchanged production
+markers remain required before C8.4D and C8 can be called complete.

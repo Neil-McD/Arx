@@ -143,13 +143,9 @@ import {
   generateCommunityBrandingUploadUrl as generateCommunityBrandingUploadUrlImpl,
   saveCommunityAbout as saveCommunityAboutImpl,
   saveCommunityPublicPresentation as saveCommunityPublicPresentationImpl,
-  saveCommunityLaunchProfile as saveCommunityLaunchProfileImpl,
   saveCommunityOneLiner as saveCommunityOneLinerImpl,
   saveCommunitySettings as saveCommunitySettingsImpl,
 } from "./communityLifecycle";
-import {
-  getCommunityLaunchSetupStatus as getCommunityLaunchSetupStatusImpl,
-} from "./communityLaunchSetup";
 import {
   applyCommunityWikiArchitectProposal as applyCommunityWikiArchitectProposalImpl,
   draftCommunityResourceContentFromSources as draftCommunityResourceContentFromSourcesImpl,
@@ -251,9 +247,7 @@ export const listCommunityAiFeedPosts = listCommunityAiFeedPostsImpl;
 export const hideCommunityAiFeedPost = hideCommunityAiFeedPostImpl;
 export const saveCommunityAbout = saveCommunityAboutImpl;
 export const saveCommunitySettings = saveCommunitySettingsImpl;
-export const saveCommunityLaunchProfile = saveCommunityLaunchProfileImpl;
 export const saveCommunityOneLiner = saveCommunityOneLinerImpl;
-export const getCommunityLaunchSetupStatus = getCommunityLaunchSetupStatusImpl;
 export const beginGoogleDriveSourceOAuth: any = beginGoogleDriveSourceOAuthImpl;
 export const beginGitHubSourceOAuth: any = beginGitHubSourceOAuthImpl;
 export const disconnectGitHubSourceConnection = disconnectGitHubSourceConnectionImpl;
