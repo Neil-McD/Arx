@@ -4,7 +4,6 @@ import type { AppTheme } from "../../../../shared/theme";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import type { BuilderPartnerProgramSnapshot } from "../../../../shared/builderPartnerProgramGateway";
 import type { SocialProfileLinks } from "../../../../shared/socialProfileLinks";
-import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
 import type { EffectiveSkill } from "../../../../shared/effectiveSkills";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
@@ -91,7 +90,6 @@ export type WebSettingsPanelsProps = {
 	    providerConnectionUi: UseWebProviderConnectionUiControllerResult;
 	    billingUi: UseWebBillingUiControllerResult<
 	      AccountCommerceStatus,
-	      WorkspaceCreditBalance,
 	      PendingPurchaseClaim
 	    >;
 	  };
@@ -135,7 +133,6 @@ export type WebSettingsPanelsProps = {
 	    startPremiumSubscriptionCheckout: () => Promise<void> | void;
 	    billingUi: UseWebBillingUiControllerResult<
 	      AccountCommerceStatus,
-	      WorkspaceCreditBalance,
 	      PendingPurchaseClaim
 	    >;
 	  };

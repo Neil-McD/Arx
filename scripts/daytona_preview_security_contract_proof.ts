@@ -24,7 +24,6 @@ const daytonaCodexConfig = read("services/polynet-codex-worker/src/daytonaCodexC
 const workerServer = read("services/polynet-codex-worker/src/server.ts");
 const workerToolSpecs = read("services/polynet-codex-worker/src/workerToolSpecs.ts");
 const daytonaRuntimeAppPreview = read("apps/web/src/components/DaytonaRuntimeAppPreview.tsx");
-const runtimeRunLifecycle = read("apps/web/src/controllers/useWebRuntimeRunLifecycle.ts");
 const previewProxy = read("apps/preview-proxy/server.js");
 const previewProxySessionToken = read("apps/preview-proxy/previewProxySessionToken.js");
 const convexPreviewProxySessionToken = read("convex/previewProxySessionToken.ts");
@@ -155,12 +154,6 @@ assertMatch(
   daytonaRuntimeAppPreview,
   /buildWorkspacePreviewProxyUrl/,
   "Daytona preview UI must retain the gateway path that can send Daytona skip-warning headers",
-);
-
-assertMatch(
-  runtimeRunLifecycle,
-  /const RUNTIME_EVENT_PAGE_LIMIT = 500;[\s\S]*const COMPLETED_RUNTIME_EVENT_MAX_ROWS = 2000;[\s\S]*async function listCompletedRuntimeRunEvents[\s\S]*while \(rows\.length < COMPLETED_RUNTIME_EVENT_MAX_ROWS\)[\s\S]*afterSeq[\s\S]*runtimeEventsIncludeFinished\(page\)/,
-  "completed workspace runs must page runtime events so preview anchors are not dropped by a short hydration window",
 );
 
 assertNotMatch(

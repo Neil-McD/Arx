@@ -12,7 +12,9 @@ const routes = read("shared/webAppRouteState.ts");
 const navigation = read("shared/appShellNavigation.ts");
 const app = read("apps/web/src/App.tsx");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
-const workspaceCore = read("apps/web/src/controllers/useWebWorkspaceCoreController.ts");
+const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
+const voiceController = read("shared/useWebVoiceInputController.ts");
+const exportController = read("shared/useWebAgentDataExportController.ts");
 const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
 const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
@@ -114,29 +116,24 @@ assert.doesNotMatch(
   "App orchestration must not represent or branch on Workspace navigation state",
 );
 assert.doesNotMatch(
-  workspaceCore,
-  /useWebWorkspaceRouteController|route:/,
-  "the retained runtime core must not own browser navigation",
+  app,
+  /activeThreadId|activeThreadProjectId|workspaceWantsNewChat|threadMessages|threadStreamingStateById|runtimeEventsByRunId|useWebSendFlowController|useWebRuntimeRunLifecycle|useWebWorkspaceCoreController/,
+  "App must not retain a second browser conversation, project, send, or runtime authority",
 );
 assert.match(
-  app,
-  /const activeThreadProjectId = useMemo\(\(\) => \{[\s\S]*if \(!activeThreadId \|\| workspaceWantsNewChat\) return null;[\s\S]*threads\.find\(\(thread\) => thread\.id === activeThreadId\)\?\.project_id[\s\S]*String\(projectId \?\? ""\)\.trim\(\) \|\| null/,
-  "retained browser project identity must come directly from the canonical active thread while new drafts remain standalone",
+  memberAgentDock,
+  /useWebTurnRunnerController[\s\S]*ensureCloudMemberAgentGlobalChannel[\s\S]*syncThreadCommunityLensCloud/,
+  "the mounted member-agent dock must remain the browser conversation owner",
 );
 assert.doesNotMatch(
-  app,
-  /workspaceProject|resolveWorkspaceActiveProject|loadProjects|setActiveProjectId/,
-  "App must not retain browser project-list, draft-selection, or default-project authority",
+  voiceController,
+  /"workspace"|appendWorkspaceTranscript|focusWorkspaceInput|workspaceVoice/,
+  "the shared voice controller must expose only mounted community, direct-message, and member-agent surfaces",
 );
 assert.match(
-  workspaceCore,
-  /projectId: string \| null/,
-  "the transitional thread mutation wrapper may receive only direct thread project identity",
-);
-assert.doesNotMatch(
-  workspaceCore,
-  /CloudProjectRecord|project: WorkspaceProjectController|loadProjects|setActiveProjectId/,
-  "the retained thread mutation wrapper must not own the deleted browser project controller",
+  exportController,
+  /exportThreadsCsv[\s\S]*exportMessagesCsv[\s\S]*exportMemoryCsv/,
+  "Settings data exports must remain independently owned after Workspace orchestration deletion",
 );
 assert.doesNotMatch(
   shellProjection,
@@ -344,6 +341,25 @@ for (const retiredPath of [
   "shared/cloudProjectsGateway.ts",
   "shared/workspaceActiveProjectSelector.ts",
   "shared/threadSidebarSelectors.ts",
+  "apps/web/src/controllers/useWebWorkspaceCoreController.ts",
+  "apps/web/src/controllers/useWebRuntimeRunLifecycle.ts",
+  "apps/web/src/controllers/useWebGuestThreadLifecycle.ts",
+  "apps/web/src/controllers/useWebThreadMessagesLifecycle.ts",
+  "shared/useWebSendFlowController.ts",
+  "shared/webSendFlowCore.ts",
+  "shared/useWebThreadDataController.ts",
+  "shared/useWebThreadMutationController.ts",
+  "shared/threadContextController.ts",
+  "shared/threadTitleUi.ts",
+  "shared/useCommunityAgentLandingLifecycle.ts",
+  "shared/messageContextUi.ts",
+  "shared/cloudModelRegistryGateway.ts",
+  "shared/modelRegistry.ts",
+  "apps/web/src/components/WebMessageContextModal.tsx",
+  "apps/web/src/components/WebPreviewAccessGateModal.tsx",
+  "apps/web/src/components/WebInferenceIssueModal.tsx",
+  "shared/useWebWorkspaceActionsController.ts",
+  "shared/useWebWorkspaceUiActionsController.ts",
 ]) {
   assert.equal(existsSync(retiredPath), false, `${retiredPath} must remain deleted`);
 }
@@ -365,8 +381,8 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   globalOverlay + globalOverlayProps,
-  /WebProjectModalHost|projectModalHostProps/,
-  "the global overlay boundary must not retain a permanently closed project modal host",
+  /WebProjectModalHost|projectModalHostProps|WebMessageContextModal|WebPreviewAccessGateModal|WebInferenceIssueModal|messageContextModalProps|previewAccessGateModalProps|inferenceIssueModalProps/,
+  "the global overlay boundary must not retain zero-producer Workspace-era modal hosts",
 );
 assert.doesNotMatch(
   accountCommerceGateway,

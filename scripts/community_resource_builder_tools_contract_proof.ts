@@ -15,7 +15,7 @@ const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const launchModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const app = read("apps/web/src/App.tsx");
 const turnRunner = read("shared/useWebTurnRunnerController.ts");
-const runtimeLifecycle = read("apps/web/src/controllers/useWebRuntimeRunLifecycle.ts");
+const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const runtimeTimeline = read("apps/web/src/components/RuntimeLiveTimeline.tsx");
 const changesetApprovalCards = read("apps/web/src/components/RuntimeResourceChangesetApprovalCards.tsx");
 const mutationEvents = read("shared/communityResourceMutationEvents.ts");
@@ -421,9 +421,9 @@ assert.match(
   "runtime timeline should delegate resource approval cards to the dedicated component",
 );
 assert.match(
-  app,
+  memberAgentDock,
   /useWebTurnRunnerController[\s\S]*setRuntimeEventsByRunId/,
-  "workspace turn runner should receive the durable runtime event cache setter",
+  "mounted member-agent dock should receive the live runtime event cache setter",
 );
 assert.match(
   turnRunner,
@@ -431,19 +431,9 @@ assert.match(
   "live runtime events should be copied into the per-run cache before the streaming message is cleared",
 );
 assert.match(
-  runtimeLifecycle,
-  /function runtimeEventsIncludeFinished[\s\S]*event_type === "run_finished"/,
-  "persisted runtime event hydration should recognize terminal run events",
-);
-assert.match(
-  runtimeLifecycle,
-  /runtimeEventsHydratedByRunIdRef = useRef<Record<string, boolean>>\(\{\}\)/,
-  "persisted runtime event hydration should track runs already backfilled",
-);
-assert.match(
-  runtimeLifecycle,
-  /if \(runtimeEventsIncludeFinished\(params\.runtimeEventsByRunId\[runId\]\)\) continue;[\s\S]*if \(runtimeEventsHydratedByRunIdRef\.current\[runId\]\) continue;[\s\S]*runtimeEventsLoadingByRunIdRef\.current\[runId\] = true;[\s\S]*runtimeEventsHydratedByRunIdRef\.current\[runId\] = true/,
-  "persisted runtime event hydration should skip completed runs and backfill unfinished runs once",
+  memberAgentDock,
+  /runtimeEvents\.length > 0[\s\S]*<RuntimeLiveTimeline[\s\S]*events=\{runtimeEvents\}/,
+  "mounted member-agent dock should render live resource changeset events through the retained timeline",
 );
 assert.match(
   app,

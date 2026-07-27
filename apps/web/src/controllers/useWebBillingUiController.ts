@@ -2,7 +2,6 @@ import { useRef, useState, type Dispatch, type MutableRefObject, type SetStateAc
 
 export type UseWebBillingUiControllerResult<
   BillingStatusT,
-  WorkspaceCreditBalanceT,
   PendingPurchaseClaimT,
 > = {
   pendingPurchaseClaims: PendingPurchaseClaimT[];
@@ -21,12 +20,6 @@ export type UseWebBillingUiControllerResult<
   setIsLoadingAccountCommerce: Dispatch<SetStateAction<boolean>>;
   accountCommerceError: string | null;
   setAccountCommerceError: Dispatch<SetStateAction<string | null>>;
-  workspaceCreditBalance: WorkspaceCreditBalanceT | null;
-  setWorkspaceCreditBalance: Dispatch<SetStateAction<WorkspaceCreditBalanceT | null>>;
-  isLoadingWorkspaceCreditBalance: boolean;
-  setIsLoadingWorkspaceCreditBalance: Dispatch<SetStateAction<boolean>>;
-  workspaceCreditBalanceError: string | null;
-  setWorkspaceCreditBalanceError: Dispatch<SetStateAction<string | null>>;
   isSettingDevAccountTier: boolean;
   setIsSettingDevAccountTier: Dispatch<SetStateAction<boolean>>;
   devAccountTierError: string | null;
@@ -50,21 +43,16 @@ export type UseWebBillingUiControllerResult<
 
 export function useWebBillingUiController<
   BillingStatusT,
-  WorkspaceCreditBalanceT,
   PendingPurchaseClaimT,
->(): UseWebBillingUiControllerResult<BillingStatusT, WorkspaceCreditBalanceT, PendingPurchaseClaimT> {
+>(): UseWebBillingUiControllerResult<BillingStatusT, PendingPurchaseClaimT> {
   const [pendingPurchaseClaims, setPendingPurchaseClaims] = useState<PendingPurchaseClaimT[]>([]);
   const [isLoadingPendingPurchases, setIsLoadingPendingPurchases] = useState(false);
   const [pendingPurchasesError, setPendingPurchasesError] = useState<string | null>(null);
   const [isRedeemingPendingPurchases, setIsRedeemingPendingPurchases] = useState(false);
   const [pendingPurchasesSuccess, setPendingPurchasesSuccess] = useState<string | null>(null);
-
   const [accountCommerceStatus, setAccountCommerceStatus] = useState<BillingStatusT | null>(null);
   const [isLoadingAccountCommerce, setIsLoadingAccountCommerce] = useState(false);
   const [accountCommerceError, setAccountCommerceError] = useState<string | null>(null);
-  const [workspaceCreditBalance, setWorkspaceCreditBalance] = useState<WorkspaceCreditBalanceT | null>(null);
-  const [isLoadingWorkspaceCreditBalance, setIsLoadingWorkspaceCreditBalance] = useState(false);
-  const [workspaceCreditBalanceError, setWorkspaceCreditBalanceError] = useState<string | null>(null);
   const [isSettingDevAccountTier, setIsSettingDevAccountTier] = useState(false);
   const [devAccountTierError, setDevAccountTierError] = useState<string | null>(null);
   const [isStartingStripeConnectOnboarding, setIsStartingStripeConnectOnboarding] = useState(false);
@@ -97,12 +85,6 @@ export function useWebBillingUiController<
     setIsLoadingAccountCommerce,
     accountCommerceError,
     setAccountCommerceError,
-    workspaceCreditBalance,
-    setWorkspaceCreditBalance,
-    isLoadingWorkspaceCreditBalance,
-    setIsLoadingWorkspaceCreditBalance,
-    workspaceCreditBalanceError,
-    setWorkspaceCreditBalanceError,
     isSettingDevAccountTier,
     setIsSettingDevAccountTier,
     devAccountTierError,

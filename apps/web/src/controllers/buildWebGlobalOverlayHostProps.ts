@@ -2,22 +2,8 @@ import { EXTERNAL_MEMORY_IMPORT_PROMPT } from "../../../../shared/externalMemory
 import type { SettingsPage } from "../../../../shared/appShellNavigation";
 import type { WebGlobalOverlayHostProps } from "../components/WebGlobalOverlayHost";
 
-type InferenceIssueModalState = NonNullable<
-  WebGlobalOverlayHostProps["inferenceIssueModalProps"]
->["inferenceIssueModal"];
-
 export function buildWebGlobalOverlayHostProps(params: {
-  contextModal: WebGlobalOverlayHostProps["messageContextModalProps"]["contextModal"];
-  setContextModal: (
-    value: WebGlobalOverlayHostProps["messageContextModalProps"]["contextModal"],
-  ) => void;
   session: unknown | null;
-  createPersonalMemoryItemDirect: (args: {
-    content: string;
-    pinned: boolean;
-  }) => Promise<unknown>;
-  showMemoryToastMessage: (message: string) => void;
-  requireSignIn: (intentInput?: unknown) => void;
   accountCommerceStatus: { account_tier?: string | null } | null;
   setAccountCommerceError: (value: string | null) => void;
   setIsFreeAccountInfoOpen: (value: boolean) => void;
@@ -33,17 +19,6 @@ export function buildWebGlobalOverlayHostProps(params: {
   };
   handleImportExternalMemory: () => void | Promise<void>;
   providerConnectionModalHostProps: WebGlobalOverlayHostProps["providerConnectionModalHostProps"];
-  previewAccessGateModal: NonNullable<
-    WebGlobalOverlayHostProps["previewAccessGateModalProps"]
-  >["previewAccessGateModal"];
-  previewAccessGateAuthError: string | null;
-  isPreviewAccessGateRunning: boolean;
-  closePreviewAccessGateModal: () => void;
-  continuePreviewAccessGateAuth: () => void;
-  inferenceIssueModal: InferenceIssueModalState;
-  isInferenceIssueModalRunning: boolean;
-  setInferenceIssueModal: (value: InferenceIssueModalState) => void;
-  onOpenSettings: (page: SettingsPage) => void;
   onOpenPremiumBilling: () => void;
   isFreeAccountInfoOpen: boolean;
   accountCommerceError: string | null;
@@ -51,25 +26,6 @@ export function buildWebGlobalOverlayHostProps(params: {
   appToast: string | null;
 }): WebGlobalOverlayHostProps {
   return {
-    messageContextModalProps: {
-      contextModal: params.contextModal,
-      hasSession: Boolean(params.session),
-      onClose: () => params.setContextModal(null),
-      onSaveSuggestion: (item) => {
-        if (!params.session) {
-          params.requireSignIn();
-          return;
-        }
-        void params.createPersonalMemoryItemDirect({
-          content: item.content,
-          pinned: item.pinned,
-        })
-          .then(() => params.showMemoryToastMessage("Memory updated"))
-          .catch((error) =>
-            console.warn("Failed to save suggested memory:", error),
-          );
-      },
-    },
     memoryImportModalProps: params.personalMemoryUi.isMemoryImportModalOpen
       ? {
           isOpen: params.personalMemoryUi.isMemoryImportModalOpen,
@@ -90,29 +46,6 @@ export function buildWebGlobalOverlayHostProps(params: {
         }
       : null,
     providerConnectionModalHostProps: params.providerConnectionModalHostProps,
-    previewAccessGateModalProps: params.previewAccessGateModal
-      ? {
-          previewAccessGateModal: params.previewAccessGateModal,
-          authError: params.previewAccessGateAuthError,
-          isRunning: params.isPreviewAccessGateRunning,
-          onClose: params.closePreviewAccessGateModal,
-          onContinueToSignIn: params.continuePreviewAccessGateAuth,
-        }
-      : null,
-    inferenceIssueModalProps: params.inferenceIssueModal
-      ? {
-          hasSession: Boolean(params.session),
-          inferenceIssueModal: params.inferenceIssueModal,
-          isInferenceIssueModalRunning: params.isInferenceIssueModalRunning,
-          onClose: () => params.setInferenceIssueModal(null),
-          onOpenSettings: (reason) => {
-            params.setInferenceIssueModal(null);
-            params.onOpenSettings(
-              reason === "workspace_credits" ? "billing" : "account",
-            );
-          },
-        }
-      : null,
     freeAccountIncludedModalProps: {
       isOpen: params.isFreeAccountInfoOpen,
       accountAccessError: params.accountCommerceError,

@@ -12,7 +12,6 @@ const gatewayFiles = [
 ] as const;
 const resourceController = readFileSync(join(root, "shared/useCommunityResourceController.ts"), "utf8");
 const accessController = readFileSync(join(root, "shared/useWebCommunityAccessController.ts"), "utf8");
-const landingLifecycle = readFileSync(join(root, "shared/useCommunityAgentLandingLifecycle.ts"), "utf8");
 const eventsController = readFileSync(join(root, "shared/useCommunityEventsController.ts"), "utf8");
 
 assert.match(
@@ -29,7 +28,6 @@ for (const file of gatewayFiles) {
 for (const [label, source] of [
   ["resource controller", resourceController],
   ["access controller", accessController],
-  ["agent landing lifecycle", landingLifecycle],
   ["events controller", eventsController],
 ] as const) {
   assert.doesNotMatch(source, /communityFetchAbortScope|beginScopedAbortRequest|finishScopedAbortRequest|abortAllScopedRequests|isAbortError/, `${label} should not keep fake Convex abort plumbing`);
@@ -38,23 +36,18 @@ for (const [label, source] of [
 
 assert.match(
   resourceController,
-  /const generation = \(moduleLoadGenerationRef\.current \+= 1\)[\s\S]*if \(moduleLoadGenerationRef\.current !== generation\) return;[\s\S]*current\.setCommunityResourceModules\(rows\)/,
-  "resource module loads should guard stale results before setting module state",
+  /const generation = \(resourceLoadGenerationRef\.current \+= 1\)[\s\S]*resourceLoadGenerationRef\.current !== generation[\s\S]*current\.setCommunityResourceModules\(directory\.modules\)/,
+  "combined resource-directory loads should guard stale results before setting module state",
 );
 assert.match(
   resourceController,
-  /const generation = \(resourceLoadGenerationRef\.current \+= 1\)[\s\S]*if \(resourceLoadGenerationRef\.current !== generation\) return;[\s\S]*current\.setCommunityResources\(rows\)/,
-  "resource loads should guard stale results before setting resource state",
+  /const generation = \(resourceLoadGenerationRef\.current \+= 1\)[\s\S]*resourceLoadGenerationRef\.current !== generation[\s\S]*current\.setCommunityResources\(\(previousRows\)/,
+  "combined resource-directory loads should guard stale results before setting resource state",
 );
 assert.match(
   accessController,
   /const seq = \(loadCommunitiesSeqRef\.current \+= 1\)[\s\S]*if \(loadCommunitiesSeqRef\.current !== seq\) return;[\s\S]*current\.setCommunities\(list\)/,
   "community access loads should guard stale results before setting communities",
-);
-assert.doesNotMatch(
-  landingLifecycle,
-  /AbortController|COMMUNITY_AGENT_LANDING_RPC_TIMEOUT_MS|globalThis\.setTimeout\(\(\) => \{\s*abortController\.abort/,
-  "agent landing lifecycle should not keep fake abort timeout logic for Convex queries",
 );
 assert.equal(
   existsSync(join(root, "shared/communityFetchAbortScope.ts")),

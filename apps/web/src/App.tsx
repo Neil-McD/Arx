@@ -14,7 +14,6 @@ import { MessageCircle } from "lucide-react";
 import "highlight.js/styles/github-dark.css";
 import {
   beginBrowserSignedOutState,
-  getAuthUid,
   getAuthPublicKey,
   getAuthUrl,
   hasRecentAuthFlowPending,
@@ -35,8 +34,6 @@ import {
 import {
   identifyCloudBusinessVisitor,
 } from "../../../shared/cloudBusinessAnalyticsGateway";
-import {
-  buildContextFallbackThreadTitle, deriveThreadTitleFromUserText, isMissingThreadTitleValue, traceThreadContext, } from "../../../shared/threadTitleUi";
 import { CommunityAvatar } from "../../../shared/CommunityAvatar";
 import {
   formatProviderConnectionErrorMessage,
@@ -56,9 +53,6 @@ import {
   formatAccountTierLabel, isAccountTierFree, formatPlanPrice, formatSubscriptionPrice, type StripeConnectReturn, } from "../../../shared/accountCommerce";
 import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
-import {
-  useWebWorkspaceCoreController,
-} from "./controllers/useWebWorkspaceCoreController";
 import { useWebCommunityUiController } from "./controllers/useWebCommunityUiController";
 import { useWebCommunityAgentConfigUiController } from "./controllers/useWebCommunityAgentConfigUiController";
 import { useWebCommunitySkillAttachmentsController } from "./controllers/useWebCommunitySkillAttachmentsController";
@@ -202,7 +196,6 @@ import {
   readCurrentCommunityLaunchSetupRouteContext,
   type CommunityLaunchSetupRouteContext,
 } from "./communityLaunchSetupRoute";
-import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelRegistryGateway";
 import {
   loadCloudProviderConnections,
   type CloudChatgptConnectionStatus,
@@ -282,7 +275,6 @@ import {
 } from "../../../shared/navSnapshot";
 import {
   communityInitials,
-  extractRememberIntent,
   parseHistoryUsedArray,
   parseMessageHistoryUsed,
   parseMemoryUsedArray,
@@ -316,17 +308,6 @@ import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
 import { resolveUserAccessPolicy } from "../../../shared/capabilities";
 import { isStandaloneWebApp } from "../../../shared/browserRuntimeMode";
 import {
-  DEFAULT_ACTIVE_MODEL_ID,
-  DEFAULT_ACTIVE_MODEL_LABEL,
-  DEFAULT_GUEST_MODEL_ID,
-  FREE_MODEL_ALLOWLIST as SHARED_FREE_MODEL_ALLOWLIST,
-  FREE_MODEL_LABELS as SHARED_FREE_MODEL_LABELS,
-  getDefaultModelToggles,
-  isFreeModelId,
-  isModelAvailableOnSurface,
-  type ModelToggle,
-} from "../../../shared/modelCatalog";
-import {
   APP_THEME_STORAGE_KEY,
   DEFAULT_APP_THEME,
   LEGACY_APP_THEME_STORAGE_KEY,
@@ -334,7 +315,6 @@ import {
   parseAppTheme,
   type AppTheme,
 } from "../../../shared/theme";
-import { useLastClickWinsController } from "../../../shared/useLastClickWinsController";
 import { useCommunityChatRealtime } from "../../../shared/useCommunityChatRealtime";
 import { useCommunityTypingPresence } from "../../../shared/useCommunityTypingPresence";
 import { useCommunityChatViewport } from "../../../shared/useCommunityChatViewport";
@@ -348,17 +328,9 @@ import { useWebCommunityAccessController } from "../../../shared/useWebCommunity
 import { useWebDiscoverController } from "../../../shared/useWebDiscoverController";
 import { useWebMemorySettingsDataController } from "../../../shared/useWebMemorySettingsDataController";
 import { useWebMemoryMutationController } from "../../../shared/useWebMemoryMutationController";
-import { useWebSendFlowController } from "../../../shared/useWebSendFlowController";
-import { useWebTurnRunnerController } from "../../../shared/useWebTurnRunnerController";
-import type {
-  GuestInferenceIssue,
-  ThreadStreamingRuntimeEvent,
-  ThreadStreamingState,
-} from "../../../shared/webTurnRunnerCore";
-import { useWebWorkspaceActionsController } from "../../../shared/useWebWorkspaceActionsController";
-import { useWebWorkspaceUiActionsController } from "../../../shared/useWebWorkspaceUiActionsController";
+import { useWebAgentDataExportController } from "../../../shared/useWebAgentDataExportController";
+import { useWebToastController } from "../../../shared/useWebToastController";
 import { useWebSettingsImageUploadController } from "../../../shared/useWebSettingsImageUploadController";
-import { useWebThreadDataController } from "../../../shared/useWebThreadDataController";
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
 import { useCommunityDirectoryController } from "../../../shared/useCommunityDirectoryController";
 import { useCommunityDirectoryLifecycle } from "../../../shared/useCommunityDirectoryLifecycle";
@@ -371,12 +343,6 @@ import { useCommunitySettingsFormController } from "../../../shared/useCommunity
 import { useCommunityMembersReviewController } from "../../../shared/useCommunityMembersReviewController";
 import { useCommunityAdminAnalyticsLifecycle } from "../../../shared/useCommunityAdminAnalyticsLifecycle";
 import { useCommunityMembersReviewLifecycle } from "../../../shared/useCommunityMembersReviewLifecycle";
-import { createThreadContextController } from "../../../shared/threadContextController";
-import { syncThreadCommunityLensCloud } from "../../../shared/threadContextCloudSync";
-import {
-  extractCommunityEvidenceUsedV1,
-  type CommunityEvidenceUsedV1,
-} from "../../../shared/communityEvidence";
 import {
   buildReplyPrefix,
   extractTextFromContentJson,
@@ -390,18 +356,6 @@ import {
   formatCommunityVisibilityLabel,
   toCanonicalCommunityVisibility,
 } from "../../../shared/communityVisibility";
-import {
-  buildMessageContextModalPayload,
-  hasContextPayload,
-  openMessageContextModal,
-  type MessageContextModalPayload,
-} from "../../../shared/messageContextUi";
-import {
-  extractInferenceSourceFromMessageContent,
-  extractModelIdFromMessageContent,
-  extractRuntimeEngineIdFromMessageContent,
-  formatModelAttributionLabel,
-} from "../../../shared/modelAttributionUi";
 import {
   loadAccountCommerceStatusCanonical,
   setDevAccountTierCanonical,
@@ -419,15 +373,7 @@ import {
 } from "../../../shared/cloudAccountCommerceGateway";
 import { loadOptionalOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
 import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
-import {
-  loadWorkspaceCreditBalanceCanonical,
-  type WorkspaceCreditBalance,
-} from "../../../shared/workspaceCreditsGateway";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
-import type { PaidToolKind } from "../../../shared/workspaceCredits";
-import {
-  type PaidUsageBillingMode,
-} from "../../../shared/paidUsageBilling";
 import {
   deriveCommunityFunnelAction,
   deriveCommunityMembersJoinReviewMode,
@@ -440,7 +386,6 @@ import { useWebPublicFunnelActions } from "./controllers/useWebPublicFunnelActio
 import { useWebCommunityChatPreloadLifecycle } from "./controllers/useWebCommunityChatPreloadLifecycle";
 import { useWebDiscoverPreloadLifecycle } from "./controllers/useWebDiscoverPreloadLifecycle";
 import { useWebBillingUiController } from "./controllers/useWebBillingUiController";
-import { useWebGuestThreadLifecycle } from "./controllers/useWebGuestThreadLifecycle";
 import { useWebMobileShellController } from "./controllers/useWebMobileShellController";
 import { useWebCommunityPolynetController } from "./controllers/useWebCommunityPolynetController";
 import { useWebPostAuthBillingLifecycle } from "./controllers/useWebPostAuthBillingLifecycle";
@@ -451,12 +396,10 @@ import { useWebActiveCommunityShellController } from "./controllers/useWebActive
 import { useWebJoinedCommunityRouteResolution } from "./controllers/useWebJoinedCommunityRouteResolution";
 import { useWebSelectedCommunityController } from "./controllers/useWebSelectedCommunityController";
 import { useWebPublicCommunityRouteController } from "./controllers/useWebPublicCommunityRouteController";
-import { useWebRuntimeRunLifecycle } from "./controllers/useWebRuntimeRunLifecycle";
 import { useWebUiPersistenceLifecycle } from "./controllers/useWebUiPersistenceLifecycle";
 import { buildWebShellProjection } from "./controllers/buildWebShellProjection";
 import { buildWebCommunitySurfaceProjection } from "./controllers/buildWebCommunitySurfaceProjection";
 import { useWebVoiceInputController } from "../../../shared/useWebVoiceInputController";
-import { useCommunityAgentLandingLifecycle } from "../../../shared/useCommunityAgentLandingLifecycle";
 import { useCommunityAgentConfigLifecycle } from "../../../shared/useCommunityAgentConfigLifecycle";
 import { useCommunityResourcesTabLifecycle } from "../../../shared/useCommunityResourcesTabLifecycle";
 import {
@@ -470,20 +413,8 @@ import {
 } from "../../../shared/useCommunityEventsController";
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/communityUnsavedGuard";
-import { uploadCloudThreadAttachmentFile } from "../../../shared/cloudThreadsGateway";
-import {
-  DEFAULT_ACTIVE_RUNTIME_ENGINE,
-  RUNTIME_ENGINE_CODEX,
-  RUNTIME_ENGINE_POLYNET,
-  canUseRuntimeEngineForTier,
-  normalizeActiveWorkspaceRuntimeEngine,
-  type RuntimeEngine,
-} from "../../../shared/runtimeEngine";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
-import {
-  WebGlobalOverlayHost,
-  type WebGlobalOverlayHostProps,
-} from "./components/WebGlobalOverlayHost";
+import { WebGlobalOverlayHost } from "./components/WebGlobalOverlayHost";
 import {
   WebCommunityLaunchSetupModal,
   type CommunityLaunchKnowledgeImportedSource,
@@ -658,32 +589,6 @@ type PublicCommunityRecord = {
     avatar_focus_y?: number | null;
     avatar_zoom?: number | null;
   }> | null;
-};
-
-type ThreadRecord = {
-  id: string;
-  title: string | null;
-  model_id: string | null;
-  runtime_engine: RuntimeEngine | null;
-  project_id: string | null;
-  community_id: string | null;
-  context_version: number;
-  agent_attention: boolean;
-  last_seq: number;
-  created_at: number; // epoch seconds
-  updated_at: number; // epoch seconds
-};
-
-type ThreadMessage = {
-  id: string;
-  thread_id: string;
-  seq: number;
-  role: "user" | "assistant" | "system";
-  content_json: unknown;
-  created_at: string;
-  engine_id: string | null;
-  model_id: string | null;
-  run_id: string | null;
 };
 
 type UserMemorySettings = {
@@ -887,57 +792,10 @@ function mergeCommunityInteractionRootWindows(
 type ChatLightboxImage = SharedChatLightboxImage;
 type CommunityAgentConfig = SharedCommunityAgentConfig<CommunityAgentLanding>;
 type CommunityFunnelConfig = SharedCommunityFunnelConfig;
-type WorkspaceComposerDraft = {
-  text: string;
-  attachments: unknown[];
-};
-type WorkspaceComposerApi = {
-  focus: () => void;
-  clear: () => void;
-  reset: () => void;
-  appendTranscript: (transcript: string) => void;
-  pinToBottom: () => void;
-};
-
-const GUEST_THREAD_ID = "__guest__";
-const WORKSPACE_DRAFT_THREAD_ERROR_KEY = "__workspace_draft__";
-const WORKSPACE_PLATFORM_STARTER_PROMPT =
-  "Tell me what Polynet is, what I can build here, and how I should get started.";
-const GUEST_THREAD_STORAGE_KEY = "polynet_guest_thread_v1";
-const LEGACY_GUEST_THREAD_STORAGE_KEY = "arx_guest_thread_v1";
-const GUEST_THREAD_STORAGE_TTL_MS = 24 * 60 * 60 * 1000;
-const GUEST_MODEL_STORAGE_KEY = "polynet_guest_model_id_v1";
-const LEGACY_GUEST_MODEL_STORAGE_KEY = "arx_guest_model_id_v1";
-const GUEST_MODEL_ALLOWLIST = SHARED_FREE_MODEL_ALLOWLIST;
-const GUEST_MODEL_LABELS = SHARED_FREE_MODEL_LABELS;
-const MODEL_TOGGLES_STORAGE_KEY = "polynet_model_toggles";
-const ACTIVE_MODEL_STORAGE_KEY = "polynet_active_model_id";
-const LEGACY_ACTIVE_MODEL_STORAGE_KEY = "arx_active_model_id";
-const ACTIVE_RUNTIME_ENGINE_STORAGE_KEY = "polynet_active_runtime_engine";
-const ACTIVE_RUNTIME_ENGINE_CODEX_DEFAULT_MIGRATION_KEY =
-  "polynet_active_runtime_engine_codex_default_v1";
-const ACTIVE_RUNTIME_ENGINE_POLYNET_DEFAULT_RESTORE_KEY =
-  "polynet_active_runtime_engine_polynet_default_restore_v1";
 const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
 const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
 const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
-
-type GuestStoredMessageV1 = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  created_at: string;
-  run_id?: string | null;
-};
-
-type GuestThreadStorageV1 = {
-  v: 1;
-  model_id: string;
-  messages: GuestStoredMessageV1[];
-  stored_at?: number;
-  expires_at?: number;
-};
 
 function readFirstLocalStorageValue(keys: readonly string[]): string | null {
   for (const key of keys) {
@@ -947,163 +805,11 @@ function readFirstLocalStorageValue(keys: readonly string[]): string | null {
   return null;
 }
 
-function loadGuestModelId(): string {
-  try {
-    const raw = (
-      readFirstLocalStorageValue([GUEST_MODEL_STORAGE_KEY, LEGACY_GUEST_MODEL_STORAGE_KEY]) ?? ""
-    ).trim();
-    return raw && isFreeModelId(raw, GUEST_MODEL_ALLOWLIST) ? raw : DEFAULT_GUEST_MODEL_ID;
-  } catch {
-    return DEFAULT_GUEST_MODEL_ID;
-  }
-}
-
-function storeGuestModelId(modelId: string): void {
-  try {
-    localStorage.setItem(GUEST_MODEL_STORAGE_KEY, modelId);
-  } catch {
-    // ignore
-  }
-}
-
 function buildPremiumSubscriptionReturnUrl(): string {
   return `${window.location.origin}/settings/billing`;
 }
 
-function buildEmptyWorkspaceCreditBalance(session: AuthSession): WorkspaceCreditBalance {
-  const nowMs = Date.now();
-  return {
-    userId: String(getAuthUid(session) ?? session.user?.id ?? "").trim(),
-    includedCreditsBalance: 0,
-    purchasedCreditsBalance: 0,
-    uncollectedCreditsBalance: 0,
-    pendingCardCollectionCreditsBalance: 0,
-    outstandingUsageCreditsBalance: 0,
-    includedCycleCredits: 0,
-    includedCycleStartedAt: nowMs,
-    includedCycleEndsAt: nowMs,
-    createdAt: nowMs,
-    updatedAt: nowMs,
-    spendableCreditsBalance: 0,
-    displayBalanceUsd: "$0",
-    blocked: false,
-    blockedReason: null,
-    lowBalance: true,
-  };
-}
-
-function clearGuestThreadStorage(): void {
-  try {
-    localStorage.removeItem(GUEST_THREAD_STORAGE_KEY);
-    localStorage.removeItem(LEGACY_GUEST_THREAD_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
-}
-
-function emptyGuestThreadStorage(modelId = loadGuestModelId()): GuestThreadStorageV1 {
-  const nowMs = Date.now();
-  return {
-    v: 1,
-    model_id: modelId,
-    messages: [],
-    stored_at: nowMs,
-    expires_at: nowMs + GUEST_THREAD_STORAGE_TTL_MS,
-  };
-}
-
-function isExpiredGuestThreadStorage(record: Record<string, unknown>, nowMs: number): boolean {
-  const expiresAt = Number(record.expires_at ?? 0);
-  return Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt <= nowMs;
-}
-
-function loadGuestThreadStorage(): GuestThreadStorageV1 {
-  try {
-    const raw = readFirstLocalStorageValue([GUEST_THREAD_STORAGE_KEY, LEGACY_GUEST_THREAD_STORAGE_KEY]);
-    if (!raw) return emptyGuestThreadStorage();
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return emptyGuestThreadStorage();
-    const asAny = parsed as any;
-    const nowMs = Date.now();
-    if (isExpiredGuestThreadStorage(asAny, nowMs)) {
-      clearGuestThreadStorage();
-      return emptyGuestThreadStorage();
-    }
-    const model_id_raw = typeof asAny.model_id === "string" ? asAny.model_id.trim() : "";
-    const model_id = model_id_raw && isFreeModelId(model_id_raw, GUEST_MODEL_ALLOWLIST) ? model_id_raw : loadGuestModelId();
-    const messages_raw = Array.isArray(asAny.messages) ? (asAny.messages as unknown[]) : [];
-    const messages: GuestStoredMessageV1[] = [];
-    for (const item of messages_raw) {
-      if (!item || typeof item !== "object") continue;
-      const id = typeof (item as any).id === "string" ? (item as any).id.trim() : "";
-      const role = typeof (item as any).role === "string" ? (item as any).role.trim() : "";
-      const content = typeof (item as any).content === "string" ? (item as any).content : "";
-      const created_at = typeof (item as any).created_at === "string" ? (item as any).created_at : "";
-      const run_id = typeof (item as any).run_id === "string" ? (item as any).run_id : null;
-      if (!id || !created_at) continue;
-      if (role !== "user" && role !== "assistant") continue;
-      const trimmed = content.trim();
-      if (!trimmed) continue;
-      messages.push({ id, role: role as any, content: trimmed, created_at, run_id });
-    }
-    const storedAt = Number(asAny.stored_at ?? nowMs);
-    const expiresAt = Number(asAny.expires_at ?? 0);
-    const storage: GuestThreadStorageV1 = {
-      v: 1,
-      model_id,
-      messages,
-      stored_at: Number.isFinite(storedAt) && storedAt > 0 ? storedAt : nowMs,
-      expires_at:
-        Number.isFinite(expiresAt) && expiresAt > nowMs
-          ? expiresAt
-          : nowMs + GUEST_THREAD_STORAGE_TTL_MS,
-    };
-    if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
-      storeGuestThreadStorage(storage);
-    }
-    return storage;
-  } catch {
-    return emptyGuestThreadStorage();
-  }
-}
-
-function storeGuestThreadStorage(storage: GuestThreadStorageV1): void {
-  try {
-    const nowMs = Date.now();
-    localStorage.setItem(
-      GUEST_THREAD_STORAGE_KEY,
-      JSON.stringify({
-        ...storage,
-        stored_at: Number.isFinite(storage.stored_at) && Number(storage.stored_at) > 0 ? storage.stored_at : nowMs,
-        expires_at: nowMs + GUEST_THREAD_STORAGE_TTL_MS,
-      }),
-    );
-  } catch {
-    // ignore
-  }
-}
-
-function guestStoredToThreadMessages(storage: GuestThreadStorageV1): ThreadMessage[] {
-  const out: ThreadMessage[] = [];
-  for (let i = 0; i < storage.messages.length; i++) {
-    const msg = storage.messages[i]!;
-    out.push({
-      id: msg.id,
-      thread_id: GUEST_THREAD_ID,
-      seq: i + 1,
-      role: msg.role,
-      content_json: { text: msg.content },
-      created_at: msg.created_at,
-      engine_id: msg.role === "assistant" ? "public_openrouter" : null,
-      model_id: msg.role === "assistant" ? storage.model_id : null,
-      run_id: msg.run_id ?? null,
-    });
-  }
-  return out;
-}
-
 type MessageReaction = SharedMessageReaction;
-
 type CommunityResource = {
   id: string;
   community_id?: string | null;
@@ -1253,13 +959,11 @@ function writeStoredInteractionSelectedRoot(communityId: string | null, rootId: 
     // localStorage unavailable; non-fatal.
   }
 }
-const DEFAULT_MODEL_TOGGLES: ModelToggle[] = getDefaultModelToggles("web");
-
 const MAX_WEB_ATTACHMENTS_PER_MESSAGE = 8;
-const MAX_WEB_IMAGE_UPLOAD_BYTES = 25 * 1024 * 1024; // 25MB (client-side; still compressed before sending)
-const MAX_WEB_MEDIA_UPLOAD_BYTES = 50 * 1024 * 1024; // 50MB (video/audio; streamed from storage, not inlined)
-const MAX_WEB_FILE_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
-const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024; // 200KB
+const MAX_WEB_IMAGE_UPLOAD_BYTES = 25 * 1024 * 1024;
+const MAX_WEB_MEDIA_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_WEB_FILE_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024;
 const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
 
 const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;
@@ -1337,22 +1041,6 @@ function clearSourceIntegrationOAuthFinalizeSessionGuard(key: string): void {
   } catch {
     // Ignore storage failures; the backend finalizer is still idempotent.
   }
-}
-
-function formatModelSignature(
-  modelId: string | null | undefined,
-  inferenceSource: string | null | undefined,
-  engineId: string | null | undefined,
-  modelToggles: ModelToggle[],
-): string | null {
-  return formatModelAttributionLabel({
-    modelId,
-    inferenceSource,
-    engineId,
-    modelToggles,
-    freeModelAllowlist: GUEST_MODEL_ALLOWLIST,
-    freeModelLabels: GUEST_MODEL_LABELS,
-  });
 }
 
 export default function App() {
@@ -1491,23 +1179,6 @@ export default function App() {
     }
   }
 
-  function resetAgentThreadStateAfterSignOut(): void {
-    workspaceComposerDraftRef.current = { text: "", attachments: [] };
-    workspaceComposerApiRef.current?.clear();
-    threadsHydratedRef.current = false;
-    setThreads([]);
-    setThreadError(null);
-    setThreadErrorById({});
-    setWorkspaceWantsNewChatMode(false);
-    setActiveThreadId(null);
-    setThreadMessages([]);
-    setIsSendingMessage(false);
-    setThreadSendingStateById({});
-    setThreadStreamingStateById({});
-    setRuntimeEventsByRunId({});
-    setLoadingThreadMessagesThreadId(null);
-  }
-
   const {
     session,
     setAuthError,
@@ -1535,7 +1206,6 @@ export default function App() {
         },
       });
       await resetWebSessionStateAfterSignOut({
-        resetAgentThreadState: resetAgentThreadStateAfterSignOut,
         beginBrowserSignedOutState,
         setCommunities,
         setIsLoadingCommunities,
@@ -1609,7 +1279,6 @@ export default function App() {
         },
       });
       await resetWebSessionStateAfterSignOut({
-        resetAgentThreadState: resetAgentThreadStateAfterSignOut,
         beginBrowserSignedOutState,
         setCommunities,
         setIsLoadingCommunities,
@@ -1671,8 +1340,6 @@ export default function App() {
       setIsLoadingAccountSetupStatus(false);
       setHasLoadedOnboardingProfile(false);
       setIsOnboardingModalOpen(false);
-      setWorkspaceCreditBalance(null);
-      setWorkspaceCreditBalanceError(null);
       profileUi.setProfileSaveError(null);
       profileUi.setProfileSaveSuccess(false);
       emitWorkspaceEvent({
@@ -1812,9 +1479,6 @@ export default function App() {
     },
     onDidJustSignIn: () => {
       resumePendingAuthIntent();
-    },
-    onBeforeSignOut: async () => {
-      stopAllStreamingTurns();
     },
     onAfterSignOut: () => {
       if (window.location.pathname === "/") return;
@@ -2056,7 +1720,6 @@ export default function App() {
   >();
   const billingUi = useWebBillingUiController<
     AccountCommerceStatus,
-    WorkspaceCreditBalance,
     PendingPurchaseClaim
   >();
   const {
@@ -2076,12 +1739,6 @@ export default function App() {
     setIsLoadingAccountCommerce,
     accountCommerceError,
     setAccountCommerceError,
-    workspaceCreditBalance,
-    setWorkspaceCreditBalance,
-    isLoadingWorkspaceCreditBalance,
-    setIsLoadingWorkspaceCreditBalance,
-    workspaceCreditBalanceError,
-    setWorkspaceCreditBalanceError,
     isSettingDevAccountTier,
     setIsSettingDevAccountTier,
     devAccountTierError,
@@ -2113,7 +1770,6 @@ export default function App() {
   const [isAcceptingBuilderPartnerTerms, setIsAcceptingBuilderPartnerTerms] =
     useState(false);
   const builderPartnerProgramLoadRequestIdRef = useRef(0);
-  const workspaceCreditLoadRequestIdRef = useRef(0);
   const lastTrackedAuthSessionUserIdRef = useRef<string | null>(null);
   const [isFreeAccountInfoOpen, setIsFreeAccountInfoOpen] = useState(false);
   const [stripeConnectReturn, setStripeConnectReturn] = useState<StripeConnectReturn | null>(null);
@@ -2121,72 +1777,6 @@ export default function App() {
   const autoRedeemPendingPurchasesAttemptRef = useRef(0);
   const autoRedeemPendingPurchasesTimeoutRef = useRef<number | null>(null);
 
-  const [modelToggles, setModelToggles] = useState<ModelToggle[]>(DEFAULT_MODEL_TOGGLES);
-  const [modelProviderById, setModelProviderById] = useState<Record<string, string>>({});
-  const platformModelToggles = useMemo<ModelToggle[]>(() => {
-    const defaultOpenAiModel = modelToggles.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID);
-    return [
-      {
-        id: DEFAULT_ACTIVE_MODEL_ID,
-        label: defaultOpenAiModel?.label ?? DEFAULT_ACTIVE_MODEL_LABEL,
-        enabled: true,
-      },
-    ];
-  }, [modelToggles]);
-  const [activeModelId, setActiveModelId] = useState<string | null>(() => {
-    try {
-      const stored = (
-        readFirstLocalStorageValue([ACTIVE_MODEL_STORAGE_KEY, LEGACY_ACTIVE_MODEL_STORAGE_KEY]) ?? ""
-      ).trim();
-      return stored || null;
-    } catch {
-      return null;
-    }
-  });
-  const [activeRuntimeEngine, setActiveRuntimeEngineState] = useState<RuntimeEngine>(() => {
-    try {
-      const stored = localStorage.getItem(ACTIVE_RUNTIME_ENGINE_STORAGE_KEY);
-      const shouldRestorePolynetDefault =
-        localStorage.getItem(ACTIVE_RUNTIME_ENGINE_CODEX_DEFAULT_MIGRATION_KEY) === "1" &&
-        localStorage.getItem(ACTIVE_RUNTIME_ENGINE_POLYNET_DEFAULT_RESTORE_KEY) !== "1" &&
-        normalizeActiveWorkspaceRuntimeEngine(stored) === RUNTIME_ENGINE_CODEX;
-      const normalized = shouldRestorePolynetDefault
-        ? RUNTIME_ENGINE_POLYNET
-        : normalizeActiveWorkspaceRuntimeEngine(stored);
-      if (shouldRestorePolynetDefault) {
-        localStorage.setItem(ACTIVE_RUNTIME_ENGINE_POLYNET_DEFAULT_RESTORE_KEY, "1");
-      }
-      if (stored !== normalized) {
-        localStorage.setItem(ACTIVE_RUNTIME_ENGINE_STORAGE_KEY, normalized);
-      }
-      return normalized;
-    } catch {
-      return RUNTIME_ENGINE_POLYNET;
-    }
-  });
-  const setActiveRuntimeEngine = useCallback((next: RuntimeEngine): void => {
-    const normalized = normalizeActiveWorkspaceRuntimeEngine(next);
-    setActiveRuntimeEngineState(normalized);
-    try {
-      localStorage.setItem(ACTIVE_RUNTIME_ENGINE_STORAGE_KEY, normalized);
-    } catch {
-      // Local storage is best-effort; the cloud thread value remains canonical for saved threads.
-    }
-  }, []);
-  const resetDraftRuntimeEngine = useCallback((): void => {
-    setActiveRuntimeEngine(DEFAULT_ACTIVE_RUNTIME_ENGINE);
-  }, [setActiveRuntimeEngine]);
-  const formatModelLabel = useCallback(
-    (modelId: string | null | undefined): string | null => {
-      const normalized = (modelId ?? "").trim();
-      if (!normalized) return null;
-      if (isFreeModelId(normalized, GUEST_MODEL_ALLOWLIST)) {
-        return GUEST_MODEL_LABELS[normalized] ?? normalized;
-      }
-      return modelToggles.find((toggle) => toggle.id === normalized)?.label ?? normalized;
-    },
-    [modelToggles],
-  );
   const newPersonalMemoryScope: "global" = "global";
   const personalMemoryUi = useWebPersonalMemoryUiController();
   const [isLoadingCommunities, setIsLoadingCommunities] = useState<boolean>(() => Boolean(session));
@@ -2301,78 +1891,7 @@ export default function App() {
   useEffect(() => {
     if (!communityMessageInput) setCommunityMessageMentions([]);
   }, [communityMessageInput]);
-  const workspaceComposerApiRef = useRef<WorkspaceComposerApi | null>(null);
   const memberAgentComposerApiRef = useRef<WebMemberAgentDockHandle | null>(null);
-  const workspaceStarterPromptConsumedRef = useRef(false);
-  const workspaceComposerDraftRef = useRef<WorkspaceComposerDraft>({
-    text: "",
-    attachments: [],
-  });
-  const [threadErrorById, setThreadErrorById] = useState<Record<string, string | null>>({});
-  const [guestInferenceIssueById, setGuestInferenceIssueById] = useState<Record<string, GuestInferenceIssue | null>>({});
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
-  const resolveThreadErrorKey = useCallback(
-    (threadId: string | null): string => {
-      const trimmedThreadId = String(threadId ?? "").trim();
-      if (trimmedThreadId) return trimmedThreadId;
-      return session ? WORKSPACE_DRAFT_THREAD_ERROR_KEY : GUEST_THREAD_ID;
-    },
-    [session],
-  );
-  const setThreadErrorForThread = useCallback(
-    (threadId: string | null, value: string | null | ((prev: string | null) => string | null)): void => {
-      const key = resolveThreadErrorKey(threadId);
-      setThreadErrorById((prev) => {
-        const previousValue = prev[key] ?? null;
-        const nextValue = typeof value === "function" ? value(previousValue) : value;
-        if (nextValue === null) {
-          if (!(key in prev)) return prev;
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        }
-        if (previousValue === nextValue) return prev;
-        return {
-          ...prev,
-          [key]: nextValue,
-        };
-      });
-    },
-    [resolveThreadErrorKey],
-  );
-  const setThreadError = useCallback(
-    (value: string | null | ((prev: string | null) => string | null)): void => {
-      setThreadErrorForThread(activeThreadId, value);
-    },
-    [activeThreadId, setThreadErrorForThread],
-  );
-  const setGuestInferenceIssueForThread = useCallback(
-    (
-      threadId: string | null,
-      value:
-        | GuestInferenceIssue
-        | null
-        | ((prev: GuestInferenceIssue | null) => GuestInferenceIssue | null),
-    ): void => {
-      const key = resolveThreadErrorKey(threadId);
-      setGuestInferenceIssueById((prev) => {
-        const previousValue = prev[key] ?? null;
-        const nextValue = typeof value === "function" ? value(previousValue) : value;
-        if (nextValue === null) {
-          if (!(key in prev)) return prev;
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        }
-        if (previousValue === nextValue) return prev;
-        return {
-          ...prev,
-          [key]: nextValue,
-        };
-      });
-    },
-    [resolveThreadErrorKey],
-  );
   const [communityAttachments, setCommunityAttachments] = useState<MessageAttachment[]>([]);
   const communityAttachmentsRef = useRef<MessageAttachment[]>([]);
   const [communityChatError, setCommunityChatError] = useState<string | null>(null);
@@ -3690,23 +3209,6 @@ export default function App() {
     setIsLeavingCommunity,
   } = communityAdminUi;
 
-  const [threads, setThreads] = useState<ThreadRecord[]>([]);
-  const initialWorkspaceWantsNewChat = true;
-  const [workspaceWantsNewChat, setWorkspaceWantsNewChat] = useState<boolean>(initialWorkspaceWantsNewChat);
-  const workspaceWantsNewChatRef = useRef<boolean>(initialWorkspaceWantsNewChat);
-  const setWorkspaceWantsNewChatMode = (next: SetStateAction<boolean>) => {
-    setWorkspaceWantsNewChat((prev) => {
-      const resolved = typeof next === "function" ? (next as (prevState: boolean) => boolean)(prev) : next;
-      workspaceWantsNewChatRef.current = resolved;
-      return resolved;
-    });
-  };
-  const activeThreadProjectId = useMemo(() => {
-    if (!activeThreadId || workspaceWantsNewChat) return null;
-    const projectId = threads.find((thread) => thread.id === activeThreadId)?.project_id;
-    return String(projectId ?? "").trim() || null;
-  }, [activeThreadId, threads, workspaceWantsNewChat]);
-
   const isLikelyMobileDevice = useMemo(() => {
     if (typeof navigator === "undefined") return false;
     const userAgent = navigator.userAgent || "";
@@ -4488,8 +3990,6 @@ export default function App() {
   ]);
 
   const shellPublicRoute: PublicRoute = publicRoute;
-  const isSignedOutAppPresentation =
-    shellPublicRoute.kind === "app" && authPresentationState === "signed_out";
 
   const navStackRef = useRef<NavSnapshot[]>([]);
   const readCurrentRoutePath = () =>
@@ -4553,58 +4053,6 @@ export default function App() {
     applyCommunityShellState,
     setUnreadCount,
   });
-  const syncWorkspaceSelection = useCallback(
-    (opts: { threadId: string | null; wantsNewChat: boolean }): void => {
-      setWorkspaceWantsNewChatMode(opts.wantsNewChat);
-      setActiveThreadId(opts.threadId);
-    },
-    [],
-  );
-  const applyGuestWorkspaceState = useCallback(
-    (opts: { guestThreadId: string; hasMessages: boolean }): void => {
-      syncWorkspaceSelection({
-        threadId: opts.hasMessages ? opts.guestThreadId : null,
-        wantsNewChat: !opts.hasMessages,
-      });
-    },
-    [syncWorkspaceSelection],
-  );
-  const adoptWorkspaceThreadSelection = useCallback(
-    (thread: ThreadRecord): void => {
-      const communityId = String(thread.community_id ?? "").trim() || null;
-      if (communityId) {
-        syncCommunitySelection({
-          communityId,
-          communitySlug: resolveKnownCommunitySlugById(communityId),
-        });
-      }
-      syncWorkspaceSelection({
-        threadId: thread.id,
-        wantsNewChat: false,
-      });
-    },
-    [
-      resolveKnownCommunitySlugById,
-      syncCommunitySelection,
-      syncWorkspaceSelection,
-    ],
-  );
-  const workspaceCore = useWebWorkspaceCoreController<AuthSession, ThreadRecord>({
-    projectId: activeThreadProjectId,
-    ensureSession: ensureUsableAuthSession,
-    setActiveThreadId,
-    setWorkspaceWantsNewChatMode,
-    threads,
-    setThreads,
-    deriveThreadTitleFromUserText,
-    isMissingThreadTitleValue,
-    toEpochSeconds,
-    activeCommunityId,
-    activeModelId: DEFAULT_ACTIVE_MODEL_ID,
-    activeRuntimeEngine,
-    modelToggles: platformModelToggles,
-    defaultActiveModelId: DEFAULT_ACTIVE_MODEL_ID,
-  });
   const restoreNavSnapshot = (snapshot: NavSnapshot) => {
     const nextRoutePath = snapshot.routePath?.trim() || "/";
     navigateTo(nextRoutePath, { replace: true });
@@ -4620,50 +4068,11 @@ export default function App() {
   const backTargetLabel = backTargetSnapshot ? formatBackTargetLabelShared(backTargetSnapshot) : null;
   const effectiveBackTargetLabel = backTargetLabel;
 
-  const threadsHydratedRef = useRef(false);
-  const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
-  const [loadingThreadMessagesThreadId, setLoadingThreadMessagesThreadId] = useState<string | null>(null);
-  const [guestModelId, setGuestModelId] = useState<string>(() => loadGuestModelId());
-  const [activeCommunityAgentLanding, setActiveCommunityAgentLanding] = useState<unknown | null>(null);
-  const activeCommunityAgentLandingCommunityIdRef = useRef<string | null>(null);
   const activeCommunityIdRef = useRef<string | null>(null);
-  const communityAgentLandingFetchSeqRef = useRef(0);
-  const [isSendingMessage, setIsSendingMessage] = useState(false);
-  const [threadSendingStateById, setThreadSendingStateById] = useState<Record<string, boolean>>({});
-  const [threadStreamingStateById, setThreadStreamingStateById] = useState<
-    Record<string, ThreadStreamingState<MemoryUsedItem, HistoryUsedItem, CommunityEvidenceUsedV1>>
-  >({});
-  const [runtimeEventsByRunId, setRuntimeEventsByRunId] = useState<Record<string, ThreadStreamingRuntimeEvent[]>>({});
-  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-  const [memoryToast, setMemoryToast] = useState<string | null>(null);
-  const memoryToastTimeoutRef = useRef<number | null>(null);
-  const [inferenceToast] = useState<string | null>(null);
   const [appToast, setAppToast] = useState<string | null>(null);
   const appToastTimeoutRef = useRef<number | null>(null);
   const sourceIntegrationOAuthFinalizeInFlightRef = useRef<string | null>(null);
   const lastShownAuthErrorRef = useRef<string | null>(null);
-  const [previewAccessGateModal, setPreviewAccessGateModal] = useState<
-    NonNullable<WebGlobalOverlayHostProps["previewAccessGateModalProps"]>["previewAccessGateModal"]
-  >(null);
-  const [isPreviewAccessGateRunning, setIsPreviewAccessGateRunning] = useState(false);
-  const lastShownGuestPreviewIssueModalRef = useRef<string | null>(null);
-  const [inferenceIssueModal, setInferenceIssueModal] = useState<{
-    reason:
-      | "quota"
-      | "workspace_credits"
-      | "plan"
-      | "provider_connection_required"
-      | "misconfigured"
-      | "disabled"
-      | "unavailable";
-    threadId: string;
-    mode: "respond" | "regenerate";
-    message: string | null;
-    toolKind?: PaidToolKind | null;
-    requiredCredits?: number | null;
-    paidUsageBillingMode?: PaidUsageBillingMode | null;
-  } | null>(null);
-  const [isInferenceIssueModalRunning] = useState(false);
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
     memory_mode: "auto",
     remember_intent_enabled: true,
@@ -4693,65 +4102,11 @@ export default function App() {
     updated_at: null,
   });
   const [isLoadingChatgptConnection, setIsLoadingChatgptConnection] = useState(false);
-  const [contextModal, setContextModal] = useState<
-    MessageContextModalPayload<MemoryUsedItem, HistoryUsedItem, MemorySuggestion> | null
-  >(null);
-  const focusWorkspaceComposer = useCallback(() => {
-    workspaceComposerApiRef.current?.focus();
-  }, []);
-  const handleWorkspaceComposerDraftChange = useCallback((draft: WorkspaceComposerDraft) => {
-    workspaceComposerDraftRef.current = draft;
-  }, []);
-  const handleRegisterWorkspaceComposerApi = useCallback((api: WorkspaceComposerApi | null) => {
-    workspaceComposerApiRef.current = api;
-    if (!api || workspaceStarterPromptConsumedRef.current) return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("starter") !== "platform") return;
-    workspaceStarterPromptConsumedRef.current = true;
-    api.appendTranscript(WORKSPACE_PLATFORM_STARTER_PROMPT);
-    api.focus();
-    params.delete("starter");
-    const nextSearch = params.toString();
-    const nextPath = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
-    window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
-  }, []);
-
   const persistCreateCommunityIntent = useCallback((draft: CreateCommunityIntentDraft): void => {
     storeAuthResumeState({
       intent: { reason: "create_community", payload: { draft } },
     });
   }, []);
-  const closePreviewAccessGateModal = useCallback(() => {
-    setPreviewAccessGateModal(null);
-    setIsPreviewAccessGateRunning(false);
-    if (readAuthResumeState()?.intent?.reason === "open_workspace_draft") {
-      clearAuthResumeState();
-    }
-    setAuthError(null);
-  }, [setAuthError]);
-  const continuePreviewAccessGateAuth = useCallback(() => {
-    setAuthError(null);
-    setIsPreviewAccessGateRunning(true);
-    requireSignIn({
-      reason: "open_workspace_draft",
-      payload: { project_id: null },
-    });
-  }, [requireSignIn, setAuthError]);
-
-  useEffect(() => {
-    if (!session) return;
-    if (!previewAccessGateModal && !isPreviewAccessGateRunning) return;
-    setPreviewAccessGateModal(null);
-    setIsPreviewAccessGateRunning(false);
-  }, [isPreviewAccessGateRunning, previewAccessGateModal, session]);
-
-  useEffect(() => {
-    if (session || !authError) return;
-    if (readAuthResumeState()?.intent?.reason !== "open_workspace_draft") return;
-    setPreviewAccessGateModal({ reason: "new_thread" });
-    setIsPreviewAccessGateRunning(false);
-  }, [authError, session]);
-
   const { loadCommunities, loadUserProfiles } = useWebCommunityAccessController<
     AuthSession,
     CommunityRecord,
@@ -5307,39 +4662,6 @@ export default function App() {
   const [discoverError, setDiscoverError] = useState<string | null>(null);
   const [lastDiscoverLoadAttemptedAt, setLastDiscoverLoadAttemptedAt] = useState(0);
 
-  const { loadThreads, loadThreadMessages } = useWebThreadDataController<
-    AuthSession,
-    ThreadMessage
-  >({
-    fetchModelRegistryRows: async (session) => {
-      const url = getAuthUrl();
-      if (!url) return null;
-      try {
-        return await listEnabledCloudModelRegistryRows({
-          session,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.warn("[model-registry] failed to load:", message);
-        return null;
-      }
-    },
-    toEpochSeconds,
-    formatModelLabel,
-    ensureSession: ensureUsableAuthSession,
-    activeThreadId,
-    threadsHydratedRef,
-    workspaceWantsNewChatRef,
-    setActiveThreadId,
-    setWorkspaceWantsNewChatMode,
-    setThreadError,
-    setThreads,
-    setThreadMessages,
-    setModelToggles,
-    setModelProviderById,
-    isModelAllowed: (modelId) => isModelAvailableOnSurface(modelId, "web"),
-  });
-
   const {
     loadUserMemorySettings,
     loadPersonalMemoryItems,
@@ -5379,54 +4701,7 @@ export default function App() {
     return await refreshAccountSetupStatus();
   }, [refreshAccountSetupStatus, saveUserMemorySettings]);
 
-  const {
-    createThread,
-    updateThreadModel,
-    updateThreadRuntimeEngine,
-    maybeSetThreadTitleFromText,
-    setThreadCommunityLens,
-  } = workspaceCore.threadMutation;
   const openPremiumBilling = () => openGlobalSettings("billing");
-  const handleWorkspaceRuntimeEngineChange = useCallback(
-    (next: RuntimeEngine): void => {
-      const runtimeEngine = normalizeActiveWorkspaceRuntimeEngine(next);
-      const hasResolvedRuntimeAccessTier =
-        !sessionRef.current || accountCommerceStatus !== null || !isLoadingAccountCommerce;
-      if (
-        hasResolvedRuntimeAccessTier &&
-        !canUseRuntimeEngineForTier({
-          engine: runtimeEngine,
-          accountTier: accountCommerceStatus?.account_tier ?? null,
-        })
-      ) {
-        openPremiumBilling();
-        return;
-      }
-      setActiveRuntimeEngine(runtimeEngine);
-      if (workspaceWantsNewChat || !activeThreadId) return;
-      const session = sessionRef.current;
-      setThreads((prev) =>
-        prev.map((thread) =>
-          thread.id === activeThreadId
-            ? { ...thread, runtime_engine: runtimeEngine }
-            : thread,
-        ),
-      );
-      if (!session) return;
-      void updateThreadRuntimeEngine(activeThreadId, runtimeEngine, session as AuthSession);
-    },
-    [
-      activeThreadId,
-      accountCommerceStatus?.account_tier,
-      accountCommerceStatus,
-      isLoadingAccountCommerce,
-      openPremiumBilling,
-      setActiveRuntimeEngine,
-      setThreads,
-      updateThreadRuntimeEngine,
-      workspaceWantsNewChat,
-    ],
-  );
 
   const { loadDiscoverCommunities } = useWebDiscoverController({
     toCanonicalCommunityVisibility,
@@ -5436,35 +4711,29 @@ export default function App() {
     setLastDiscoverLoadAttemptedAt,
   });
 
-  const {
-    handleCopyMessage,
-    showMemoryToastMessage,
-    showAppToastMessage,
-    scrollToCommunityMessage,
-  } = useWebWorkspaceUiActionsController({
-    copyTextToClipboard,
-    setCopiedMessageId,
-    memoryToastTimeoutRef,
-    setMemoryToast,
+  const { showAppToastMessage } = useWebToastController({
     appToastTimeoutRef,
     setAppToast,
   });
+  const scrollToCommunityMessage = useCallback((messageId: string) => {
+    document.getElementById(`msg-${messageId}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, []);
 
   useEffect(() => {
     if (!authError) {
       lastShownAuthErrorRef.current = null;
       return;
     }
-    if (
-      previewAccessGateModal ||
-      readAuthResumeState()?.intent?.reason === "open_workspace_draft"
-    ) {
+    if (readAuthResumeState()?.intent?.reason === "open_workspace_draft") {
       return;
     }
     if (lastShownAuthErrorRef.current === authError) return;
     lastShownAuthErrorRef.current = authError;
     showAppToastMessage(authError);
-  }, [authError, previewAccessGateModal, showAppToastMessage]);
+  }, [authError, showAppToastMessage]);
 
   const handleImportExternalMemory = useCallback(async (): Promise<void> => {
     if (!session) {
@@ -5499,7 +4768,7 @@ export default function App() {
       const importedLabel = `${importedCount} memory item${importedCount === 1 ? "" : "s"}`;
       const duplicateLabel =
         duplicateCount > 0 ? ` · skipped ${duplicateCount} duplicate${duplicateCount === 1 ? "" : "s"}` : "";
-      showMemoryToastMessage(`Imported ${importedLabel}${duplicateLabel}`);
+      showAppToastMessage(`Imported ${importedLabel}${duplicateLabel}`);
     } catch (error) {
       const message =
         typeof error === "string"
@@ -5517,135 +4786,8 @@ export default function App() {
     loadPersonalMemoryItems,
     requireSignIn,
     personalMemoryUi,
-    showMemoryToastMessage,
+    showAppToastMessage,
   ]);
-
-  const isThreadRunActive = useCallback(
-    (threadId: string | null): boolean => {
-      const trimmedThreadId = String(threadId ?? "").trim();
-      if (!trimmedThreadId) return false;
-      return Boolean(
-        threadSendingStateById[trimmedThreadId] ||
-          threadStreamingStateById[trimmedThreadId],
-      );
-    },
-    [threadSendingStateById, threadStreamingStateById],
-  );
-
-  const setThreadRunSending = useCallback((threadId: string, sending: boolean): void => {
-    const trimmedThreadId = threadId.trim();
-    if (!trimmedThreadId) return;
-    setThreadSendingStateById((prev) => {
-      if (sending) {
-        if (prev[trimmedThreadId]) return prev;
-        return {
-          ...prev,
-          [trimmedThreadId]: true,
-        };
-      }
-      if (!(trimmedThreadId in prev)) return prev;
-      const next = { ...prev };
-      delete next[trimmedThreadId];
-      return next;
-    });
-  }, []);
-
-  const {
-    stopStreamingTurn,
-    stopAllStreamingTurns,
-    runPublicTurn,
-    runAgentTurn,
-    createThreadMessage,
-    deleteThreadMessagesByIds,
-  } = useWebTurnRunnerController<
-    AuthSession,
-    ThreadMessage,
-    MemoryUsedItem,
-    HistoryUsedItem,
-    CommunityEvidenceUsedV1
-  >({
-    activeThreadId,
-    session,
-    threadStreamingStateById,
-    getCloudRuntimeBaseUrl: getAuthUrl,
-    getThreadById: (threadId) => threads.find((thread) => thread.id === threadId) ?? null,
-    fetchCloudPublic: fetchWithPublic,
-    fetchAuth: fetchWithAuth,
-    extractTextFromContentJson,
-    parseMemoryUsedArray,
-    parseHistoryUsedArray,
-    extractCommunityEvidenceUsedV1,
-    loadThreadMessages,
-    loadThreads,
-    showMemoryToastMessage,
-    setThreadErrorForThread,
-    setInferenceIssueModal,
-    setThreadSendingStateById,
-    setThreadStreamingStateById,
-    setRuntimeEventsByRunId,
-  });
-  useWebRuntimeRunLifecycle<
-    AuthSession,
-    ThreadMessage,
-    MemoryUsedItem,
-    HistoryUsedItem,
-    CommunityEvidenceUsedV1
-  >({
-    session: session,
-    activeThreadId,
-    threadSendingStateById,
-    threadStreamingStateById,
-    setThreadStreamingStateById,
-    runtimeEventsByRunId,
-    setRuntimeEventsByRunId,
-    threadMessages,
-    setThreadErrorForThread: (threadId, value) => setThreadErrorForThread(threadId, value),
-    loadThreads,
-    loadThreadMessages,
-  });
-
-  const loadWorkspaceCreditBalance = useCallback(
-    async (session: AuthSession): Promise<WorkspaceCreditBalance | null> => {
-      const requestId = ++workspaceCreditLoadRequestIdRef.current;
-      setIsLoadingWorkspaceCreditBalance(true);
-      setWorkspaceCreditBalanceError(null);
-      try {
-        const usableSession = await ensureUsableAuthSession(session);
-        if (!usableSession) {
-          if (requestId === workspaceCreditLoadRequestIdRef.current) {
-            setWorkspaceCreditBalance(null);
-          }
-          return null;
-        }
-        const balance =
-          (await loadWorkspaceCreditBalanceCanonical({
-            session: usableSession,
-          })) ?? buildEmptyWorkspaceCreditBalance(usableSession);
-        if (requestId === workspaceCreditLoadRequestIdRef.current) {
-          setWorkspaceCreditBalance(balance);
-          setWorkspaceCreditBalanceError(null);
-        }
-        return balance;
-      } catch (error) {
-        const message =
-          typeof error === "string"
-            ? error
-            : error instanceof Error
-              ? error.message
-              : "Failed to load tool balance.";
-        console.warn("Tool balance refresh failed:", error);
-        if (requestId === workspaceCreditLoadRequestIdRef.current) {
-          setWorkspaceCreditBalanceError(message);
-        }
-        return null;
-      } finally {
-        if (requestId === workspaceCreditLoadRequestIdRef.current) {
-          setIsLoadingWorkspaceCreditBalance(false);
-        }
-      }
-    },
-    [ensureUsableAuthSession],
-  );
 
   useEffect(() => {
     activeCommunityIdRef.current = activeCommunityId;
@@ -5681,16 +4823,6 @@ export default function App() {
     session,
     sessionRef,
   ]);
-
-  useCommunityAgentLandingLifecycle<AuthSession>({
-    ...authenticatedSessionArg,
-    activeCommunityId,
-    canViewCommunity: communityActionGuards.canViewCommunity,
-    activeCommunityIdRef,
-    activeCommunityAgentLandingCommunityIdRef,
-    communityAgentLandingFetchSeqRef,
-    setActiveCommunityAgentLanding,
-  });
 
   useEffect(() => {
     if (activePage !== "community" || communityTab !== "funnel") return;
@@ -5905,14 +5037,8 @@ export default function App() {
     profileName: profileUi.profileName,
     profileHandle: profileUi.profileHandle,
     profileBio: profileUi.profileBio,
-    modelToggles,
-    activeModelId,
-    guestModelId,
-    modelTogglesStorageKey: MODEL_TOGGLES_STORAGE_KEY,
-    activeModelStorageKey: ACTIVE_MODEL_STORAGE_KEY,
     readProfileDraftForUser,
     writeProfileDraftForUser,
-    storeGuestModelId,
     setProfileName: profileUi.setProfileName,
     setProfileHandle: profileUi.setProfileHandle,
     setProfileBio: profileUi.setProfileBio,
@@ -6025,23 +5151,6 @@ export default function App() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [session, loadSelfProfile, loadUserProfiles, visibleCommunityProfileIds]);
-
-  useWebGuestThreadLifecycle<AuthSession, GuestThreadStorageV1, ThreadMessage>({
-    enableGuestThreadLifecycle: isSignedOutAppPresentation,
-    ...sessionArg,
-    publicRouteKind: shellPublicRoute.kind,
-    activeThreadId,
-    workspaceWantsNewChat,
-    guestThreadId: GUEST_THREAD_ID,
-    loadGuestThreadStorage,
-    guestStoredToThreadMessages,
-    applyGuestWorkspaceState,
-    syncWorkspaceSelection,
-    setGuestModelId,
-    setThreadMessages,
-  });
-
-  const workspaceThreadKey = isSignedOutAppPresentation ? GUEST_THREAD_ID : activeThreadId;
 
   useEffect(() => {
     if (activeView !== "settings" || settingsGroup !== "agent") return;
@@ -7192,194 +6301,6 @@ export default function App() {
     if (checkoutSuccessSessionId) scrubCurrentRouteSearchParams(["session_id"]);
   }, [checkoutSuccessSessionId, claimTokenParam]);
 
-  type WorkspaceLensTarget = {
-    threadId: string;
-    communityId: string | null;
-    communityName: string;
-    session: AuthSession;
-  };
-
-  const [, setWorkspaceLensStatus] = useState<{ inFlight: boolean; targetName: string | null }>({
-    inFlight: false,
-    targetName: null,
-  });
-  const workspaceLensPendingByThreadIdRef = useRef<Record<string, Promise<void> | undefined>>({});
-
-  const workspaceLensController = useLastClickWinsController<WorkspaceLensTarget>({
-    applyTarget: async (desired) => {
-      const result = await setThreadCommunityLens(desired.threadId, desired.communityId, desired.session);
-      if (!result || (result.community_id ?? null) !== desired.communityId) {
-        throw new Error("Community context was not confirmed.");
-      }
-    },
-    onWorkerStateChange: ({ inFlight, target }) => {
-      if (!inFlight) {
-        setWorkspaceLensStatus({ inFlight: false, targetName: null });
-        return;
-      }
-      setWorkspaceLensStatus((prev) => ({
-        inFlight: true,
-        targetName: target ? target.communityName : prev.targetName,
-      }));
-    },
-    onTargetSettled: ({ target, isLatest, error }) => {
-      if (!isLatest) return;
-      traceThreadContext("lens_set_settled", {
-        surface: "web",
-        thread_id: target.threadId,
-        to_community_id: target.communityId,
-        is_latest: isLatest,
-        status: error ? "error" : "ok",
-        error:
-          typeof error === "string"
-            ? error
-            : error instanceof Error
-              ? error.message
-              : null,
-      });
-      if (error) {
-        const message =
-          typeof error === "string"
-            ? error
-            : error instanceof Error
-              ? error.message
-              : "Failed to switch community context.";
-        showAppToastMessage(message);
-        return;
-      }
-      showAppToastMessage(
-        target.communityId ? `Now using ${target.communityName}.` : "Cleared community context.",
-      );
-    },
-  });
-
-  const requestWorkspaceThreadLens = (target: WorkspaceLensTarget): Promise<void> => {
-    const currentThread = threads.find((t) => t.id === target.threadId) ?? null;
-    const currentLens = currentThread?.community_id ?? null;
-    const existingPending = workspaceLensPendingByThreadIdRef.current[target.threadId] ?? null;
-    if (currentLens === target.communityId && existingPending) {
-      return existingPending;
-    }
-    if (currentLens === target.communityId && !workspaceLensController.isInFlight()) {
-      return Promise.resolve();
-    }
-    const previousContext = currentThread
-      ? {
-          communityId: currentThread.community_id ?? null,
-          contextVersion: currentThread.context_version,
-          updatedAt: currentThread.updated_at,
-        }
-      : null;
-    if (currentThread && currentLens !== target.communityId) {
-      setThreads((prev) =>
-        prev.map((thread) =>
-          thread.id === target.threadId
-            ? {
-                ...thread,
-                community_id: target.communityId,
-                updated_at: Math.floor(Date.now() / 1000),
-              }
-            : thread,
-        ),
-      );
-    }
-    const requestPromise = workspaceLensController.requestTarget(target).then(
-      () => undefined,
-      (error) => {
-        if (previousContext) {
-          setThreads((prev) =>
-            prev.map((thread) =>
-              thread.id === target.threadId && (thread.community_id ?? null) === target.communityId
-                ? {
-                    ...thread,
-                    community_id: previousContext.communityId,
-                    context_version: previousContext.contextVersion,
-                    updated_at: previousContext.updatedAt,
-                  }
-                : thread,
-            ),
-          );
-        }
-        throw error;
-      },
-    );
-    workspaceLensPendingByThreadIdRef.current[target.threadId] = requestPromise;
-    void requestPromise.finally(() => {
-      if (workspaceLensPendingByThreadIdRef.current[target.threadId] === requestPromise) {
-        delete workspaceLensPendingByThreadIdRef.current[target.threadId];
-      }
-    });
-    return requestPromise;
-  };
-
-  const syncWorkspaceThreadCommunityLens = (
-    threadId: string,
-    desiredCommunityId: string | null,
-    session: AuthSession,
-  ): Promise<void> => {
-    const desiredName = desiredCommunityId
-      ? (communities.find((community) => community.id === desiredCommunityId)?.name ?? desiredCommunityId)
-      : "none";
-    const currentThread = threads.find((thread) => thread.id === threadId) ?? null;
-    traceThreadContext("lens_set_requested", {
-      surface: "web",
-      thread_id: threadId,
-      from_community_id: currentThread?.community_id ?? null,
-      to_community_id: desiredCommunityId,
-      context_version:
-        typeof currentThread?.context_version === "number" ? currentThread.context_version : null,
-    });
-    return requestWorkspaceThreadLens({
-      threadId,
-      communityId: desiredCommunityId,
-      communityName: desiredName,
-      session,
-    });
-  };
-
-  const webThreadContextController = createThreadContextController<ThreadRecord>({
-    surface: "web",
-    getActivePage: () => activePage,
-    getDesiredCommunityId: () => activeCommunityId ?? null,
-    getActiveThreadId: () => activeThreadId,
-    getActiveCommunityId: () => activeCommunityId ?? null,
-    findThreadById: (threadId: string) => threads.find((thread) => thread.id === threadId) ?? null,
-    getLatestThreadRecord: async (threadId: string) =>
-      threads.find((thread) => thread.id === threadId) ?? null,
-    syncThreadCommunityLens: (thread: ThreadRecord, desiredCommunityId: string | null) => {
-      if (!session) return Promise.resolve();
-      return syncWorkspaceThreadCommunityLens(thread.id, desiredCommunityId, session);
-    },
-    onSelectThread: (thread: ThreadRecord) => {
-      adoptWorkspaceThreadSelection(thread);
-    },
-    trace: traceThreadContext,
-    buildThreadSelectedTrace: (thread: ThreadRecord) => ({
-      to_context_version:
-        typeof thread.context_version === "number" ? thread.context_version : null,
-    }),
-  });
-
-  const ensureWorkspaceThreadLensBeforeSend = async (
-    threadId: string,
-    session: AuthSession,
-  ): Promise<void> => {
-    void session;
-    const pendingLensSync = workspaceLensPendingByThreadIdRef.current[threadId] ?? null;
-    if (pendingLensSync) {
-      await pendingLensSync;
-    }
-    return webThreadContextController.ensureLensBeforeSend(threadId);
-  };
-
-  function getLastThreadMessageId(messages: ThreadMessage[], role: "user" | "assistant" | "system"): string | null {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i];
-      if (msg?.role === role) return msg.id;
-    }
-    return null;
-  }
-
   function displayNameForAttachmentFile(file: File, fallbackIndex: number): string {
     const existingName = (file.name ?? "").trim();
     if (existingName) return existingName;
@@ -7397,75 +6318,6 @@ export default function App() {
                 ? "pdf"
                 : "bin";
     return `${mime.startsWith("image/") ? "Pasted image" : "Attachment"} ${fallbackIndex + 1}.${extension}`;
-  }
-
-  async function ingestWorkspaceAttachmentsFromFileList(
-    files: FileList | readonly File[],
-    existing: MessageAttachment[],
-    onError: (message: string) => void,
-  ): Promise<MessageAttachment[]> {
-    if (files.length === 0) return existing;
-    const remaining = Math.max(0, MAX_WEB_ATTACHMENTS_PER_MESSAGE - existing.length);
-    if (remaining === 0) {
-      onError(`You can attach up to ${MAX_WEB_ATTACHMENTS_PER_MESSAGE} files per message.`);
-      return existing;
-    }
-
-    const picked = Array.from(files).slice(0, remaining);
-    const next: MessageAttachment[] = [];
-    for (const [index, file] of picked.entries()) {
-      if (!file) continue;
-      const name = displayNameForAttachmentFile(file, index);
-      const isImage = isLikelyImageFile(file);
-      const isMedia = !isImage && isLikelyMediaFile(file);
-      const maxBytes = isImage
-        ? MAX_WEB_IMAGE_UPLOAD_BYTES
-        : isMedia
-          ? MAX_WEB_MEDIA_UPLOAD_BYTES
-          : MAX_WEB_FILE_UPLOAD_BYTES;
-      if (file.size > maxBytes) {
-        onError(`${name} is too large (max ${(maxBytes / (1024 * 1024)).toFixed(0)}MB).`);
-        continue;
-      }
-      const base: MessageAttachment = {
-        id: crypto.randomUUID(),
-        name,
-        type: "file",
-        mime: (file.type ?? "").trim() || null,
-        size: file.size,
-        file,
-      };
-      try {
-        if (isImage) {
-          if (!isSupportedChatRasterImage(file)) {
-            onError(`${name}: unsupported image format. Please use PNG, JPG, GIF, WEBP, or AVIF.`);
-            continue;
-          }
-          base.type = "image";
-          base.data_url = await readChatImageAsDataUrl(file, MAX_WEB_IMAGE_DATA_URL_CHARS);
-          next.push(base);
-          continue;
-        } else if (isLikelyTextFile(file)) {
-          const { text, truncated } = await readTextAttachmentPreview(file, MAX_WEB_TEXT_ATTACHMENT_BYTES);
-          base.text = text;
-          base.truncated = truncated;
-          next.push(base);
-          continue;
-        }
-      } catch (error) {
-        const message =
-          typeof error === "string"
-            ? error
-            : error instanceof Error
-              ? error.message
-              : "Failed to read file.";
-        onError(`${name}: ${message}`);
-        continue;
-      }
-      next.push(base);
-    }
-
-    return [...existing, ...next];
   }
 
   async function ingestCommunityAttachmentsFromFileList(
@@ -7563,31 +6415,6 @@ export default function App() {
     return prepared;
   }
 
-  async function prepareWorkspaceAttachmentsForSend(
-    attachments: MessageAttachment[],
-    session: AuthSession,
-    threadId: string,
-  ): Promise<MessageAttachment[]> {
-    const prepared: MessageAttachment[] = [];
-    for (const attachment of attachments) {
-      const currentStorageId = String(attachment.storage_id ?? "").trim();
-      let nextStorageId = currentStorageId || null;
-      if (!nextStorageId && attachment.file instanceof File) {
-        nextStorageId = await uploadCloudThreadAttachmentFile({
-          session,
-          threadId,
-          file: attachment.file,
-        });
-      }
-      prepared.push({
-        ...attachment,
-        storage_id: nextStorageId,
-        file: null,
-      });
-    }
-    return prepared;
-  }
-
   function serializeCommunityAttachmentsForWrite(attachments: MessageAttachment[]): unknown[] {
     const out: unknown[] = [];
     for (const attachment of attachments) {
@@ -7612,219 +6439,16 @@ export default function App() {
     return out;
   }
 
-  const hasUserKeyConnection = Boolean(session) && openAiConnection.connected;
-  const hasUserChatgptConnection = Boolean(session) && chatgptConnection.connected;
   const hasPendingChatgptAuth = providerConnectionUi.hasPendingChatgptAuth;
-  const requestedActiveRuntimeEngineForWorkspace =
-    !workspaceWantsNewChat && activeThreadId
-      ? normalizeActiveWorkspaceRuntimeEngine(
-          threads.find((thread) => thread.id === activeThreadId)?.runtime_engine ??
-            activeRuntimeEngine,
-        )
-      : activeRuntimeEngine;
-  const hasResolvedRuntimeAccessTier =
-    !session || accountCommerceStatus !== null || !isLoadingAccountCommerce;
-  const runtimePickerAccountTier = hasResolvedRuntimeAccessTier
-    ? accountCommerceStatus?.account_tier ?? null
-    : "architect";
-  const activeRuntimeEngineForWorkspace = !hasResolvedRuntimeAccessTier || canUseRuntimeEngineForTier({
-    engine: requestedActiveRuntimeEngineForWorkspace,
-    accountTier: runtimePickerAccountTier,
-  })
-    ? requestedActiveRuntimeEngineForWorkspace
-    : RUNTIME_ENGINE_POLYNET;
-  useEffect(() => {
-    if (workspaceWantsNewChat || !activeThreadId) return;
-    if (!hasResolvedRuntimeAccessTier) return;
-    const normalizedThreadRuntimeEngine = normalizeActiveWorkspaceRuntimeEngine(
-      threads.find((thread) => thread.id === activeThreadId)?.runtime_engine ??
-        activeRuntimeEngine,
-    );
-    const threadRuntimeEngine = canUseRuntimeEngineForTier({
-      engine: normalizedThreadRuntimeEngine,
-      accountTier: accountCommerceStatus?.account_tier ?? null,
-    })
-      ? normalizedThreadRuntimeEngine
-      : RUNTIME_ENGINE_POLYNET;
-    if (threadRuntimeEngine !== normalizedThreadRuntimeEngine) {
-      setThreads((prev) =>
-        prev.map((thread) =>
-          thread.id === activeThreadId
-            ? { ...thread, runtime_engine: threadRuntimeEngine }
-            : thread,
-        ),
-      );
-      const session = sessionRef.current;
-      if (session) {
-        void updateThreadRuntimeEngine(activeThreadId, threadRuntimeEngine, session as AuthSession);
-      }
-    }
-    if (!threadRuntimeEngine || threadRuntimeEngine === activeRuntimeEngine) return;
-    setActiveRuntimeEngine(threadRuntimeEngine);
-  }, [
-    activeRuntimeEngine,
-    activeThreadId,
-    accountCommerceStatus?.account_tier,
-    hasResolvedRuntimeAccessTier,
-    setActiveRuntimeEngine,
-    setThreads,
-    threads,
-    updateThreadRuntimeEngine,
-    workspaceWantsNewChat,
-  ]);
-  const shouldShowAccountSetupCard =
-    Boolean(session) &&
-    Boolean(effectiveAccountSetupStatus) &&
-    !effectiveAccountSetupStatus?.completed &&
-    !isLoadingAccountSetupStatus;
-  const shouldShowCommunityLaunchSetupCard =
-    Boolean(session) &&
-    Boolean(activeCommunity) &&
-    Boolean(canManageCommunitySettings) &&
-    Boolean(effectiveAccountSetupStatus?.completed) &&
-    Boolean(communityLaunchSetupStatus) &&
-    !communityLaunchSetupStatus?.completed &&
-    !isLoadingCommunityLaunchSetupStatus &&
-    !communityLaunchSetupError;
-
-  const { sendUserMessage, retryLastTurn } = useWebSendFlowController<
-    AuthSession,
-    MessageAttachment,
-    ThreadRecord,
-    ThreadMessage
-  >({
-    getSession: () => sessionRef.current,
-    ensureSession: ensureUsableAuthSession,
-    requireSignIn,
-    ensureWorkspaceThreadLensBeforeSend,
-    onWorkspaceRunStarted: ({
-      threadId,
-      projectId,
-      communityId,
-      modelId,
-      runtimeEngine,
-      requestedFundingSource,
-      inferenceSource,
-      startedInDraft,
-      hasAttachments,
-    }) => {
-      captureProductAnalyticsEvent("workspace run started", {
-        thread_id: threadId,
-        project_id: projectId,
-        community_id: communityId,
-        model_id: modelId,
-        runtime_engine: runtimeEngine,
-        requested_funding_source: requestedFundingSource,
-        inference_source: inferenceSource,
-        started_in_draft: startedInDraft,
-        has_attachments: hasAttachments,
-        surface: "workspace",
-      });
-    },
-    onWorkspaceRunSucceeded: ({
-      threadId,
-      projectId,
-      communityId,
-      modelId,
-      runtimeEngine,
-      requestedFundingSource,
-      inferenceSource,
-      startedInDraft,
-      hasAttachments,
-    }) => {
-      captureProductAnalyticsEvent("workspace run succeeded", {
-        thread_id: threadId,
-        project_id: projectId,
-        community_id: communityId,
-        model_id: modelId,
-        runtime_engine: runtimeEngine,
-        requested_funding_source: requestedFundingSource,
-        inference_source: inferenceSource,
-        started_in_draft: startedInDraft,
-        has_attachments: hasAttachments,
-        surface: "workspace",
-      });
-    },
-    createThread,
-    onThreadCreated: (thread) => {
-      adoptWorkspaceThreadSelection(thread);
-    },
-    updateThreadModel,
-    updateThreadRuntimeEngine,
-    maybeSetThreadTitleFromText,
-    createPersonalMemoryItemDirect,
-    showMemoryToastMessage,
-    loadThreadMessages,
-    runPublicTurn,
-    runAgentTurn,
-    createThreadMessage,
-    deleteThreadMessagesByIds,
-    prepareAttachmentsForSend: prepareWorkspaceAttachmentsForSend,
-    serializeAttachmentsForWrite: serializeCommunityAttachmentsForWrite,
-    extractRememberIntent,
-    extractTextFromContentJson,
-    storeGuestThreadStorage,
-    workspaceWantsNewChat,
-    isSendingMessage,
-    isThreadRunActive,
-    activeThreadId,
-    threadMessages,
-    threads,
-    activeModelId: DEFAULT_ACTIVE_MODEL_ID,
-    activeRuntimeEngine: activeRuntimeEngineForWorkspace,
-    modelToggles: platformModelToggles,
-    userMemoryRememberEnabled:
-      userMemorySettings.memory_mode !== "off" && userMemorySettings.remember_intent_enabled !== false,
-    accountTier: runtimePickerAccountTier,
-    loadAccountCommerceStatus,
-    hasUserKeyConnection,
-    hasUserChatgptConnection,
-    guestThreadId: GUEST_THREAD_ID,
-    guestModelId,
-    guestModelAllowlist: GUEST_MODEL_ALLOWLIST,
-    defaultActiveModelId: DEFAULT_ACTIVE_MODEL_ID,
-    defaultGuestModelId: DEFAULT_GUEST_MODEL_ID,
-    clearWorkspaceComposer: () => workspaceComposerApiRef.current?.clear(),
-    pinWorkspaceToBottom: () => workspaceComposerApiRef.current?.pinToBottom(),
-    setThreadError,
-    setThreadErrorForThread,
-    setGuestInferenceIssueForThread,
-    setIsSendingMessage,
-    setThreadRunSending,
-    setWorkspaceWantsNewChatMode,
-    setActiveThreadId,
-    setThreadMessages,
-    setThreads,
-    setActiveModelId,
-    setAccountCommerceError,
-    setIsFreeAccountInfoOpen,
-  });
-
-  const { resetGuestThread: resetGuestThreadBase, exportThreadsCsv, exportMessagesCsv, exportMemoryCsv } =
-    useWebWorkspaceActionsController<AuthSession, MessageAttachment, ThreadMessage>({
+  const { exportThreadsCsv, exportMessagesCsv, exportMemoryCsv } =
+    useWebAgentDataExportController<AuthSession>({
       getSession: () => sessionRef.current,
       buildCsv,
       downloadTextFile,
       parseMessageText,
-      storeGuestThreadStorage,
-      resetWorkspaceComposer: () => {
-        workspaceComposerDraftRef.current = { text: "", attachments: [] };
-        workspaceComposerApiRef.current?.reset();
-      },
-      focusWorkspaceInput: focusWorkspaceComposer,
-      activeThreadId,
-      guestModelId,
-      setThreadError,
-      setActiveThreadId,
-      setWorkspaceWantsNewChatMode,
-      setThreadMessages,
       setExportError,
       setIsExporting,
     });
-  const resetGuestThread = useCallback(() => {
-    setGuestInferenceIssueForThread(GUEST_THREAD_ID, null);
-    resetGuestThreadBase();
-  }, [resetGuestThreadBase, setGuestInferenceIssueForThread]);
 
   const {
     handleSettingsBannerDrop,
@@ -7890,9 +6514,7 @@ export default function App() {
   }, [activeCommunity]);
 
   const {
-    workspaceVoiceIntent,
     communityVoiceIntent,
-    workspaceVoiceUiState,
     communityVoiceUiState,
     memberAgentVoiceIntent,
     memberAgentVoiceUiState,
@@ -7907,8 +6529,6 @@ export default function App() {
     canPostMessagesActiveCommunity,
     requireSignIn: () => requireSignIn(),
     showAppToastMessage,
-    appendWorkspaceTranscript: (transcript) => workspaceComposerApiRef.current?.appendTranscript(transcript),
-    focusWorkspaceInput: focusWorkspaceComposer,
     resolveCommunityTranscriptTarget: () => communityVoiceTranscriptTargetRef.current,
     setCommunityMessageInput,
     chatInputRef,
@@ -7991,63 +6611,6 @@ export default function App() {
 	    [canonicalSessionUserId, session?.user?.displayName, session?.user?.email, savedProfilesByUserId]
 	  );
 
-  const showEmptyThreadLandingSkeleton = Boolean(
-    !activeThreadId &&
-      session &&
-      activeCommunityId &&
-      activeCommunityAgentLandingCommunityIdRef.current !== activeCommunityId,
-  );
-  const isHydratingActiveWorkspaceThread = Boolean(
-    session &&
-      activeThreadId &&
-      activeThreadId !== GUEST_THREAD_ID &&
-      loadingThreadMessagesThreadId === activeThreadId,
-  );
-  const emptyThreadLanding = useMemo(() => {
-    const landingMatchesCommunity = Boolean(
-      activeCommunityId && activeCommunityAgentLandingCommunityIdRef.current === activeCommunityId,
-    );
-    const communityLanding = landingMatchesCommunity ? normalizeCommunityAgentLanding(activeCommunityAgentLanding) : null;
-    return communityLanding ?? DEFAULT_EMPTY_THREAD_LANDING;
-  }, [activeCommunityAgentLanding, activeCommunityId]);
-
-  const landingActionButtons = useMemo(() => {
-    const toButtons = (landing: CommunityAgentLanding) =>
-      landing.tabs
-        .map((tab) => ({
-          id: tab.id,
-          label: tab.label.trim(),
-          prompt: (tab.prompts[0] ?? "").trim(),
-        }))
-        .filter((button) => button.label && button.prompt)
-        .slice(0, 3);
-    const buttons = toButtons(emptyThreadLanding);
-    return buttons.length > 0 ? buttons : toButtons(DEFAULT_EMPTY_THREAD_LANDING);
-  }, [emptyThreadLanding]);
-
-  const getThreadDisplayTitle = useCallback(
-    (thread: ThreadRecord): string => {
-      const explicit = (thread.title ?? "").trim();
-      if (!isMissingThreadTitleValue(explicit)) return explicit;
-      if (thread.id === activeThreadId) {
-        const firstUser = threadMessages.find((message) => message.thread_id === thread.id && message.role === "user");
-        if (firstUser) {
-          const preview = extractTextFromContentJson(firstUser.content_json).trim();
-          if (preview) return deriveThreadTitleFromUserText(preview) || preview;
-        }
-      }
-      const hints: Array<string> = [];
-      if (thread.community_id) {
-        const communityName = (communities.find((community) => community.id === thread.community_id)?.name ?? "").trim();
-        if (communityName) hints.push(communityName);
-      }
-      return buildContextFallbackThreadTitle({
-        threadId: thread.id,
-        hints,
-      });
-    },
-    [activeThreadId, communities, threadMessages],
-  );
   const hasSelectedCommunity = Boolean(String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim());
   const shellProjection = buildWebShellProjection({
     publicRouteKind: shellPublicRoute.kind,
@@ -8122,63 +6685,6 @@ export default function App() {
     navigateTo(previewPath);
   }, [activeCommunity?.slug, shellVariant, pushNavSnapshot, navigateTo]);
 
-	  let lastThreadMessage: ThreadMessage | null = null;
-	  for (let i = threadMessages.length - 1; i >= 0; i--) {
-	    const candidate = threadMessages[i] ?? null;
-	    if (!candidate) continue;
-	    if (candidate.role === "system") continue;
-	    lastThreadMessage = candidate;
-	    break;
-	  }
-	  const lastThreadMessageRole = lastThreadMessage?.role ?? null;
-	  const lastThreadUserMessageId = getLastThreadMessageId(threadMessages, "user");
-  const activeThreadStreamingState = workspaceThreadKey ? threadStreamingStateById[workspaceThreadKey] ?? null : null;
-  const activeThreadStreamingContent = activeThreadStreamingState?.content ?? null;
-  const activeThreadStreamingRunId = activeThreadStreamingState?.runId ?? null;
-  const isStreamingWorkspaceTurn = Boolean(
-    workspaceThreadKey && activeThreadStreamingContent !== null,
-  );
-  const hasPersistedWorkspaceMessages = threadMessages.some((message) => message.role !== "system");
-  const hasStreamingWorkspaceActivity = Boolean(
-    isStreamingWorkspaceTurn ||
-      (typeof activeThreadStreamingContent === "string" && activeThreadStreamingContent.trim().length > 0) ||
-      (typeof activeThreadStreamingRunId === "string" && activeThreadStreamingRunId.trim().length > 0) ||
-      ((activeThreadStreamingState?.runtimeEvents?.length ?? 0) > 0),
-  );
-  const isEmptyWorkspaceThread = !hasPersistedWorkspaceMessages && !hasStreamingWorkspaceActivity;
-  const threadError = threadErrorById[resolveThreadErrorKey(activeThreadId)] ?? null;
-  const guestInferenceIssue = isSignedOutAppPresentation
-    ? guestInferenceIssueById[resolveThreadErrorKey(activeThreadId)] ?? null
-    : null;
-
-  useEffect(() => {
-    if (session || !guestInferenceIssue) {
-      lastShownGuestPreviewIssueModalRef.current = null;
-      return;
-    }
-
-    const issueKey = [
-      resolveThreadErrorKey(activeThreadId),
-      guestInferenceIssue.reason,
-      guestInferenceIssue.shortMessage,
-    ].join(":");
-    if (lastShownGuestPreviewIssueModalRef.current === issueKey) return;
-
-    lastShownGuestPreviewIssueModalRef.current = issueKey;
-    setPreviewAccessGateModal({
-      reason: "preview_issue",
-      issueReason: guestInferenceIssue.reason,
-      message: guestInferenceIssue.fullMessage,
-    });
-    setIsPreviewAccessGateRunning(false);
-  }, [activeThreadId, guestInferenceIssue, resolveThreadErrorKey, session]);
-
-  useEffect(() => {
-    if (!session) return;
-    setGuestInferenceIssueById({});
-    clearGuestThreadStorage();
-  }, [session]);
-
   useEffect(() => {
     const telemetryPathname = buildCurrentTelemetryPathname();
     updateSentryUiContext({
@@ -8191,9 +6697,6 @@ export default function App() {
       activeView,
       communityId: activeCommunityId,
       communitySlug: activeCommunitySlug,
-      projectId: activeThreadProjectId,
-      threadId: activeThreadId,
-      runId: activeThreadStreamingRunId,
     });
     updatePosthogUiContext({
       authState: session ? "authenticated" : "anonymous",
@@ -8205,22 +6708,16 @@ export default function App() {
       activeView,
       communityId: activeCommunityId,
       communitySlug: activeCommunitySlug,
-      projectId: activeThreadProjectId,
-      threadId: activeThreadId,
-      runId: activeThreadStreamingRunId,
     });
   }, [
     activeCommunityId,
     activeCommunitySlug,
     activePage,
-    activeThreadId,
-    activeThreadStreamingRunId,
     activeView,
     accountCommerceStatus?.account_tier,
     canonicalSessionUserId,
     publicRoute.kind,
     session,
-    activeThreadProjectId,
   ]);
 
   useEffect(() => {
@@ -8234,23 +6731,6 @@ export default function App() {
       surface: publicRoute.kind === "app" ? activePage : publicRoute.kind,
     });
   }, [activePage, canonicalSessionUserId, publicRoute.kind]);
-
-  const isActiveWorkspaceThreadBusy = session
-    ? activeThreadId
-      ? isThreadRunActive(activeThreadId)
-      : isSendingMessage
-    : isSendingMessage;
-  const canRetryLastThreadTurn = Boolean(
-    threadError &&
-      session &&
-      activeThreadId &&
-      !isActiveWorkspaceThreadBusy &&
-      lastThreadMessageRole === "user" &&
-      lastThreadUserMessageId,
-  );
-  const showGuestSignInAction = !session && guestInferenceIssue?.cta === "sign_in";
-  const inlineThreadError = guestInferenceIssue ? null : threadError;
-  const displayedThreadError = guestInferenceIssue?.shortMessage ?? threadError;
 
   const pendingToken =
     (checkoutClaimToken ?? (publicRoute.kind === "claim" ? publicRoute.token : "")).trim() ||
@@ -8883,8 +7363,6 @@ export default function App() {
       });
       communityAgentConfigLoadedCommunityIdRef.current = community.id;
       communityAgentConfigDirtyRef.current = false;
-      activeCommunityAgentLandingCommunityIdRef.current = community.id;
-      setActiveCommunityAgentLanding(normalizedLanding);
       await refreshActiveCommunityLaunchSetupStatus();
     };
     const handleSaveCommunityLaunchAccess = async (draft: {
@@ -10076,32 +8554,17 @@ export default function App() {
   }
 
   const shouldSuppressPreviewSidebarAuthError =
-    Boolean(previewAccessGateModal) ||
     readAuthResumeState()?.intent?.reason === "open_workspace_draft";
   const previewSidebarAuthError = shouldSuppressPreviewSidebarAuthError ? null : authError;
 
   const globalOverlayHostProps = buildWebGlobalOverlayHostProps({
-    contextModal,
-    setContextModal,
     session: session,
-    createPersonalMemoryItemDirect,
-    showMemoryToastMessage,
-    requireSignIn,
     accountCommerceStatus,
     setAccountCommerceError,
     setIsFreeAccountInfoOpen,
     personalMemoryUi,
     handleImportExternalMemory,
     providerConnectionModalHostProps: providerConnectionUi.modalHostProps,
-    previewAccessGateModal,
-    previewAccessGateAuthError: authError,
-    isPreviewAccessGateRunning,
-    closePreviewAccessGateModal,
-    continuePreviewAccessGateAuth,
-    inferenceIssueModal,
-    isInferenceIssueModalRunning,
-    setInferenceIssueModal,
-    onOpenSettings: openGlobalSettings,
     onOpenPremiumBilling: openPremiumBilling,
     isFreeAccountInfoOpen,
     accountCommerceError,

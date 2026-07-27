@@ -947,21 +947,21 @@ assert.doesNotMatch(
   "checkout error formatting must not preserve deleted manual-balance or browser card-setup product copy",
 );
 
-const inferenceIssueModal = read("apps/web/src/components/WebInferenceIssueModal.tsx");
+const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 assert.match(
-  inferenceIssueModal,
-  /Access to \$\{paidToolLabel\} requires Polynet Premium\.[\s\S]*Open Billing/,
-  "premium-tool billing modal must route users to the canonical Premium Billing path",
+  memberAgentDock,
+  /setInferenceIssueModal: \(value\) => \{[\s\S]*setInferenceIssueForActiveThread\(value\)/,
+  "mounted member-agent dock must retain structured inference issue ownership",
 );
 assert.match(
-  inferenceIssueModal,
-  /onOpenSettings\(inferenceIssueModal\.reason\)[\s\S]*workspace_credits[\s\S]*Open Billing/,
-  "workspace credit failures must use the modal settings route instead of starting checkout directly",
+  memberAgentDock,
+  /const dockError = localError \?\? formatInferenceIssue\(inferenceIssue\)/,
+  "mounted member-agent dock must surface structured inference failures inline",
 );
 assert.doesNotMatch(
-  inferenceIssueModal,
+  memberAgentDock,
   /Add card|Prefer prepaid balance\? Add balance manually\.|No charge today|Usage is billed only when premium tools run|onStartWorkspaceCardSetupCheckout|onStartWorkspaceCreditTopupCheckout|WORKSPACE_TOOL_BALANCE_TOPUP_PACKS/,
-  "premium-tool billing modal must not reintroduce the legacy card/prepaid upgrade path",
+  "member-agent error presentation must not reintroduce the legacy card/prepaid upgrade path",
 );
 const turnRunner = read("shared/useWebTurnRunnerController.ts");
 assert.match(

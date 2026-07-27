@@ -387,14 +387,8 @@ async function proveSourceContract() {
   const httpVoiceSource = await readRepoFile("convex/httpVoice.ts");
   const paidToolCreditReservationSource = await readRepoFile("convex/paidToolCreditReservation.ts");
   const voiceControllerSource = await readRepoFile("shared/useWebVoiceInputController.ts");
-  const globalOverlayProjectionSource = await readRepoFile(
-    "apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts",
-  );
-  const globalOverlayHostSource = await readRepoFile(
-    "apps/web/src/components/WebGlobalOverlayHost.tsx",
-  );
-  const inferenceIssueModalSource = await readRepoFile(
-    "apps/web/src/components/WebInferenceIssueModal.tsx",
+  const memberAgentDockSource = await readRepoFile(
+    "apps/web/src/components/WebMemberAgentDock.tsx",
   );
   const directMessagesHostSource = await readRepoFile("apps/web/src/components/WebDirectMessagesHost.tsx");
   const directMessagePanelSource = await readRepoFile("apps/web/src/components/WebDirectMessagePanel.tsx");
@@ -504,24 +498,19 @@ async function proveSourceContract() {
     "billing UI must come from structured runtime error evidence",
   );
   assert.match(
-    globalOverlayProjectionSource,
-    /inferenceIssueModalProps: params\.inferenceIssueModal[\s\S]*onOpenSettings: \(reason\)[\s\S]*reason === "workspace_credits" \? "billing" : "account"/,
-    "structured runtime billing failures must project into the mounted global Billing route",
+    memberAgentDockSource,
+    /setInferenceIssueModal: \(value\) => \{[\s\S]*setInferenceIssueForActiveThread\(value\)/,
+    "mounted member-agent dock must own structured runtime inference failures",
   );
   assert.match(
-    globalOverlayHostSource,
-    /props\.inferenceIssueModalProps[\s\S]*<WebInferenceIssueModal \{\.\.\.props\.inferenceIssueModalProps\} \/>/,
-    "the mounted global overlay host must render structured inference issues",
+    memberAgentDockSource,
+    /const dockError = localError \?\? formatInferenceIssue\(inferenceIssue\)/,
+    "mounted member-agent dock must render structured runtime failures inline",
   );
   assert.match(
-    inferenceIssueModalSource,
-    /inferenceIssueModal\.reason === "workspace_credits"[\s\S]*"Open Billing"/,
-    "the mounted inference issue modal must label paid-usage credit failures with the Billing action",
-  );
-  assert.match(
-    appSource,
-    /handleWorkspaceRuntimeEngineChange[\s\S]*canUseRuntimeEngineForTier[\s\S]*openPremiumBilling[\s\S]*updateThreadRuntimeEngine/,
-    "app shell must not commit premium runtime selection for accounts without runtime access",
+    memberAgentDockSource,
+    /runtime_engine: "polynet"[\s\S]*runtimeEngine: "polynet"/,
+    "mounted member-agent turns must remain on the included Polynet runtime",
   );
   assert.match(
     appSource,
@@ -585,13 +574,13 @@ async function proveSourceContract() {
   );
   assert.match(
     voiceControllerSource,
-    /export type VoiceSurface = "workspace" \| "community" \| "direct_message"/,
-    "voice input should share one surface contract across workspace, community chat, and DMs",
+    /export type VoiceSurface = "community" \| "direct_message" \| "member_agent"/,
+    "voice input should share one surface contract across community chat, DMs, and the member agent",
   );
   assert.match(
     voiceControllerSource,
-    /directMessageVoiceIntent[\s\S]*directMessageVoiceUiState[\s\S]*cancelVoiceInput/,
-    "voice controller should expose DM intent/state and cleanup without duplicating recorder logic",
+    /directMessageVoiceIntent[\s\S]*memberAgentVoiceIntent[\s\S]*directMessageVoiceUiState[\s\S]*memberAgentVoiceUiState[\s\S]*cancelVoiceInput/,
+    "voice controller should expose DM and member-agent intent/state plus shared cleanup",
   );
   assert.match(
     voiceControllerSource,

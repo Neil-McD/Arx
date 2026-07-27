@@ -6,20 +6,14 @@ type ProfileDraftLike = {
   bio: string;
 };
 
-export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
+export function useWebUiPersistenceLifecycle(params: {
   communityAnalyticsRange: string;
   profileStorageUserId: string | null;
   profileName: string;
   profileHandle: string;
   profileBio: string;
-  modelToggles: TModelToggles;
-  activeModelId: string | null;
-  guestModelId: string;
-  modelTogglesStorageKey: string;
-  activeModelStorageKey: string;
   readProfileDraftForUser: (userId: string | null) => ProfileDraftLike;
   writeProfileDraftForUser: (userId: string | null, draft: ProfileDraftLike) => void;
-  storeGuestModelId: (modelId: string) => void;
   setProfileName: Dispatch<SetStateAction<string>>;
   setProfileHandle: Dispatch<SetStateAction<string>>;
   setProfileBio: Dispatch<SetStateAction<string>>;
@@ -52,27 +46,4 @@ export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
     params.profileBio,
   ]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(params.modelTogglesStorageKey, JSON.stringify(params.modelToggles));
-    } catch {
-      return;
-    }
-  }, [params.modelToggles, params.modelTogglesStorageKey]);
-
-  useEffect(() => {
-    try {
-      if (params.activeModelId) {
-        localStorage.setItem(params.activeModelStorageKey, params.activeModelId);
-      } else {
-        localStorage.removeItem(params.activeModelStorageKey);
-      }
-    } catch {
-      return;
-    }
-  }, [params.activeModelId, params.activeModelStorageKey]);
-
-  useEffect(() => {
-    params.storeGuestModelId(params.guestModelId);
-  }, [params.guestModelId]);
 }

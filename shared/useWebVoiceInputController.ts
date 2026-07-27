@@ -12,7 +12,7 @@ import {
   mergeVoiceTranscript,
 } from "./voiceCapture";
 
-export type VoiceSurface = "workspace" | "community" | "direct_message" | "member_agent";
+export type VoiceSurface = "community" | "direct_message" | "member_agent";
 export type VoiceUiState = "idle" | "recording" | "transcribing";
 
 type VoiceInputIntent = {
@@ -75,8 +75,6 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   canPostMessagesActiveCommunity?: boolean;
   requireSignIn: () => void;
   showAppToastMessage: (message: string) => void;
-  appendWorkspaceTranscript?: (transcript: string) => void;
-  focusWorkspaceInput?: () => void;
   resolveCommunityTranscriptTarget?: () => {
     appendTranscript: (transcript: string) => void;
     focusInput?: () => void;
@@ -241,13 +239,6 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
 
   function applyVoiceTranscript(surface: VoiceSurface, transcript: string) {
     if (!transcript) return;
-    if (surface === "workspace") {
-      args.appendWorkspaceTranscript?.(transcript);
-      window.setTimeout(() => {
-        args.focusWorkspaceInput?.();
-      }, 0);
-      return;
-    }
     if (surface === "direct_message") {
       args.appendDirectMessageTranscript?.(transcript);
       window.setTimeout(() => {
@@ -453,21 +444,17 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     await startVoiceCapture(surface);
   }
 
-  const workspaceVoiceIntent = resolveVoiceInputIntent("workspace");
   const communityVoiceIntent = resolveVoiceInputIntent("community");
   const directMessageVoiceIntent = resolveVoiceInputIntent("direct_message");
   const memberAgentVoiceIntent = resolveVoiceInputIntent("member_agent");
-  const workspaceVoiceUiState = resolveVoiceUiState("workspace");
   const communityVoiceUiState = resolveVoiceUiState("community");
   const directMessageVoiceUiState = resolveVoiceUiState("direct_message");
   const memberAgentVoiceUiState = resolveVoiceUiState("member_agent");
 
   return {
-    workspaceVoiceIntent,
     communityVoiceIntent,
     directMessageVoiceIntent,
     memberAgentVoiceIntent,
-    workspaceVoiceUiState,
     communityVoiceUiState,
     directMessageVoiceUiState,
     memberAgentVoiceUiState,

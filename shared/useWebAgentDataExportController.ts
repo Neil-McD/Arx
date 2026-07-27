@@ -1,4 +1,4 @@
-import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 
 import { listCloudPersonalMemoryRows } from "./cloudPersonalMemoryGateway";
 import {
@@ -20,36 +20,11 @@ type ThreadMessage = {
   run_id: string | null;
 };
 
-type GuestStoredMessageV1 = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  created_at: string;
-  run_id?: string | null;
-};
-
-type GuestThreadStorageV1 = {
-  v: 1;
-  model_id: string;
-  messages: GuestStoredMessageV1[];
-};
-
-type UseWebWorkspaceActionsControllerArgs<SessionT, AttachmentT, ThreadMessageT extends ThreadMessage> = {
+type UseWebAgentDataExportControllerArgs<SessionT> = {
   getSession: () => SessionT | null;
   buildCsv: (headers: string[], rows: Array<Record<string, unknown>>) => string;
   downloadTextFile: (filename: string, content: string, mime?: string) => void;
   parseMessageText: (content: unknown) => string;
-  storeGuestThreadStorage: (storage: GuestThreadStorageV1) => void;
-  resetWorkspaceComposer: () => void;
-  focusWorkspaceInput: () => void;
-
-  activeThreadId: string | null;
-  guestModelId: string;
-
-  setThreadError: Dispatch<SetStateAction<string | null>>;
-  setActiveThreadId: Dispatch<SetStateAction<string | null>>;
-  setWorkspaceWantsNewChatMode: Dispatch<SetStateAction<boolean>>;
-  setThreadMessages: Dispatch<SetStateAction<ThreadMessageT[]>>;
   setExportError: Dispatch<SetStateAction<string | null>>;
   setIsExporting: Dispatch<SetStateAction<boolean>>;
 };
@@ -58,22 +33,11 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMessageT extends ThreadMessage>(
-  args: UseWebWorkspaceActionsControllerArgs<SessionT, AttachmentT, ThreadMessageT>,
+export function useWebAgentDataExportController<SessionT>(
+  args: UseWebAgentDataExportControllerArgs<SessionT>,
 ) {
   const argsRef = useRef(args);
   argsRef.current = args;
-
-  const resetGuestThread = useCallback(() => {
-    const current = argsRef.current;
-    current.setThreadError(null);
-    current.resetWorkspaceComposer();
-    if (current.activeThreadId !== null) current.setActiveThreadId(null);
-    current.setWorkspaceWantsNewChatMode(true);
-    current.storeGuestThreadStorage({ v: 1, model_id: current.guestModelId, messages: [] });
-    current.setThreadMessages([]);
-    current.focusWorkspaceInput();
-  }, []);
 
   const exportThreadsCsv = useCallback(async () => {
     const current = argsRef.current;
@@ -128,7 +92,7 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
         throw new Error("Failed to load cloud threads from Convex.");
       }
       const maxRows = 10_000;
-      const rawRows: ThreadMessageT[] = [];
+      const rawRows: ThreadMessage[] = [];
       for (const thread of threads) {
         const remaining = maxRows - rawRows.length;
         if (remaining <= 0) break;
@@ -140,7 +104,7 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
         if (!threadRows) {
           throw new Error("Failed to load cloud thread messages from Convex.");
         }
-        rawRows.push(...(threadRows as unknown as ThreadMessageT[]));
+        rawRows.push(...(threadRows as unknown as ThreadMessage[]));
       }
       rawRows.sort((a, b) => {
         const threadA = String(a.thread_id ?? "");
@@ -195,7 +159,6 @@ export function useWebWorkspaceActionsController<SessionT, AttachmentT, ThreadMe
   }, []);
 
   return {
-    resetGuestThread,
     exportThreadsCsv,
     exportMessagesCsv,
     exportMemoryCsv,

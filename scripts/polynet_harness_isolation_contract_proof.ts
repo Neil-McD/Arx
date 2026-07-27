@@ -35,10 +35,9 @@ function read(relativePath: string): string {
 
 const packageJson = read("package.json");
 const app = read("apps/web/src/App.tsx");
+const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const handlers = read("convex/runtimeTurnHandlers.ts");
 const runtimeEngine = read("shared/runtimeEngine.ts");
-const webSendFlowCore = read("shared/webSendFlowCore.ts");
-const webThreadMutationController = read("shared/useWebThreadMutationController.ts");
 const threads = read("convex/threads.ts");
 const codexWorkerBridge = read("convex/polynetCodexWorkerBridge.ts");
 const harnessToolPolicy = read("shared/harnessToolPolicy.ts");
@@ -50,20 +49,15 @@ assert.match(
   /"check:polynet-harness-isolation-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/polynet_harness_isolation_contract_proof\.ts"/,
   "package.json must expose the PolyNet harness isolation proof",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /ACTIVE_RUNTIME_ENGINE_POLYNET_DEFAULT_RESTORE_KEY[\s\S]*shouldRestorePolynetDefault[\s\S]*RUNTIME_ENGINE_POLYNET/,
-  "web startup must restore the workspace runtime default back to PolyNet after the Codex-only migration",
+  /activeRuntimeEngine|normalizeActiveWorkspaceRuntimeEngine|RUNTIME_ENGINE_CODEX/,
+  "the browser App must not retain the deleted standalone Workspace runtime selector",
 );
 assert.match(
-  app,
-  /const normalized = normalizeActiveWorkspaceRuntimeEngine\(next\)/,
-  "runtime engine state updates must normalize explicit PolyNet or Codex selections",
-);
-assert.match(
-  app,
-  /normalizeActiveWorkspaceRuntimeEngine\([\s\S]*runtime_engine[\s\S]*activeRuntimeEngine/,
-  "thread runtime metadata must normalize through the active runtime allowlist",
+  memberAgentDock,
+  /runtime_engine: "polynet"[\s\S]*runtimeEngine: "polynet"/,
+  "the mounted member-agent surface must bind its native turns to the PolyNet runtime",
 );
 assert.deepEqual(
   [...ACTIVE_WORKSPACE_RUNTIME_ENGINES],
@@ -109,16 +103,6 @@ assert.match(
   runtimeEngine,
   /DEFAULT_ACTIVE_RUNTIME_ENGINE = RUNTIME_ENGINE_POLYNET[\s\S]*ACTIVE_WORKSPACE_RUNTIME_ENGINES = \[\s*RUNTIME_ENGINE_POLYNET,\s*RUNTIME_ENGINE_CODEX,\s*\][\s\S]*getRuntimeEngineAccessLevel[\s\S]*"included"[\s\S]*"premium"/,
   "shared runtime-engine state must default to PolyNet, expose Codex, and classify runtime access",
-);
-assert.match(
-  webSendFlowCore,
-  /resolvePreferredRuntimeEngineFromArgs[\s\S]*normalizeActiveWorkspaceRuntimeEngine\(threadEngine \?\? args\.activeRuntimeEngine\)/,
-  "send flow must honor normalized thread or active runtime-engine selection",
-);
-assert.match(
-  webThreadMutationController,
-  /preferredRuntimeEngine = normalizeActiveWorkspaceRuntimeEngine[\s\S]*runtimeEngine: preferredRuntimeEngine/,
-  "new thread creation must persist the active runtime engine, defaulting to PolyNet",
 );
 assert.match(
   threads,
