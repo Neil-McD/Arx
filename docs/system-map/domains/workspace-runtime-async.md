@@ -28,12 +28,15 @@ projection helpers. C7.1E deleted the zero-caller project modals/controller,
 their global-overlay and App state, browser project mutation/import commands,
 the browser Workspace card-setup/status bridge, two zero-caller shared helpers,
 and exclusive styles. Operator, Billing Settings, member-agent, and turn-runner
-proofs now follow mounted owners; the browser project gateway is read-only
-projection for retained runtime selection. The Daytona app preview,
-computer-use viewer, and background terminal rail remain unmounted protected
-harness-adjacent decision candidates. Remaining Workspace-named browser and
-controller state still requires caller-by-caller classification. None of those
-names alone authorizes removal of the protected harness/runtime substrate.
+proofs now follow mounted owners. C7.1F deleted the zero-caller browser project
+listing/draft-selection closure, model/surface wrappers, and reset-only
+lifecycle module. Browser project identity now comes directly from the active
+canonical thread, while sign-out clearing lives in the canonical session reset.
+The Daytona app preview, computer-use viewer, and background terminal rail
+remain unmounted protected harness-adjacent decision candidates. The
+presentationless legacy App conversation/runtime orchestration and residual
+styles still require separate caller-led slices. None of those names alone
+authorizes removal of the protected harness/runtime substrate.
 
 ## Scheduled job inventory
 
@@ -67,7 +70,7 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | Surface | Scaling variable | Risk |
 | --- | --- | --- |
 | compiler digest recovery | unfinished digest versions | `O(1)` exact-row checkpoint per active recovery chain |
-| remaining Workspace browser/controller state | retained runtime-selection caller graph | dead orchestration may remain, but names can also describe protected execution substrate |
+| remaining Workspace browser/controller state | legacy conversation/runtime caller graph | presentationless orchestration may remain, but names can also describe protected execution substrate |
 | runtime events/receipts | runs × events | storage retention and operator query cost unclear |
 | provider workers/previews | sessions × time/cost | needs cleanup, lease finalization, and accounting convergence |
 
@@ -80,6 +83,7 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | Workspace right-panel/files browser authority | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1C deleted the unreachable presentation, browser adapter, dormant App controls, and exclusive styles while retaining backend inspector/runtime owners |
 | Workspace preview/thread-browser/message leaf presentation | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1D deleted the zero-caller UI closure, exclusive styles, and presentation-only projection helpers while re-anchoring proofs on mounted owners |
 | Workspace project-modal/browser mutation and card-setup presentation | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1E deleted zero-caller modal/controller/overlay state and browser commands while retaining project/runtime and Stripe/resource authority |
+| Workspace browser project-list/draft-selection projection | `DELETE (deferred/dead)` | `COMPLETE` | 10 | C7.1F deleted the unfetched project array, duplicate selector/model/surface wrappers, browser gateway, and obsolete proof while retaining direct thread project identity |
 | dormant Daytona preview, computer-use viewer, and background terminal rail | `DECISION REQUIRED` | `MOUNT_OR_DELETE` | 6 | all three components are unmounted but harness-adjacent; protected substrate remains live and none is counted as a current journey |
 | Workspace host coupling to Builder Partner UI | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1A deleted the unmounted host; retained partner UI remains in Settings/operator owners |
 | workspace route builders/controllers after parser retirement | `DELETE (deferred/dead)` | `COMPLETE` | 8 | outbound owners are deleted; inbound classification remains separate from backend substrate |

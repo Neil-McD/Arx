@@ -6,12 +6,7 @@ function read(path: string): string {
 }
 
 const app = read("apps/web/src/App.tsx");
-const workspaceController = read(
-  "apps/web/src/controllers/useWebWorkspaceSurfaceController.ts",
-);
-const workspaceLifecycle = read(
-  "apps/web/src/controllers/workspaceSurfaceLifecycle.ts",
-);
+const resetSessionState = read("apps/web/src/auth/resetSessionState.ts");
 const memberDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const mcp = read("convex/httpMcp.ts");
 
@@ -60,24 +55,28 @@ assert.doesNotMatch(
 
 assert.match(
   signedOutResetBlock,
-  /workspace\.actions\.resetWorkspaceSurfaceState\(\)/,
-  "sign-out must still clear dormant user-scoped Workspace state until that state is deleted",
+  /resetAgentThreadState: resetAgentThreadStateAfterSignOut/,
+  "session loss must clear retained user-scoped agent thread state through the canonical reset owner",
 );
-
-assert.doesNotMatch(
-  workspaceController,
-  /hydrateWorkspaceSurfaceState|resumeWorkspaceSurfaceState|loadThreads:|loadModelRegistry:/,
-  "the Workspace controller must not expose dead automatic hydration APIs",
-);
-assert.doesNotMatch(
-  workspaceLifecycle,
-  /hydrateWorkspaceSurfaceState|resumeWorkspaceSurfaceState|loadWorkspaceProjects|loadThreads|loadModelRegistry/,
-  "the Workspace lifecycle module must retain reset only",
+assert.equal(
+  app.match(/resetAgentThreadState: resetAgentThreadStateAfterSignOut/g)?.length,
+  2,
+  "both session-loss paths must use the same agent thread reset",
 );
 assert.match(
-  workspaceLifecycle,
-  /export function resetWorkspaceSurfaceState/,
-  "the security reset must remain until dormant state is removed",
+  resetSessionState,
+  /deps\.resetAgentThreadState\(\);\s*await deps\.beginBrowserSignedOutState\(\);/,
+  "the canonical session reset must clear agent thread state before awaiting browser sign-out work",
+);
+assert.match(
+  app,
+  /function resetAgentThreadStateAfterSignOut\(\): void \{[\s\S]*workspaceComposerDraftRef\.current = \{ text: "", attachments: \[\] \};[\s\S]*threadsHydratedRef\.current = false;[\s\S]*setThreads\(\[\]\);[\s\S]*setThreadErrorById\(\{\}\);[\s\S]*setActiveThreadId\(null\);[\s\S]*setThreadMessages\(\[\]\);[\s\S]*setThreadSendingStateById\(\{\}\);[\s\S]*setThreadStreamingStateById\(\{\}\);[\s\S]*setRuntimeEventsByRunId\(\{\}\);/,
+  "the relocated reset must clear persisted, error, sending, streaming, and runtime-event projections",
+);
+assert.doesNotMatch(
+  app,
+  /useWebWorkspaceSurfaceController|workspaceSurfaceLifecycle|resetWorkspaceSurfaceState/,
+  "App must not retain the deleted Workspace surface lifecycle wrapper",
 );
 
 assert.doesNotMatch(

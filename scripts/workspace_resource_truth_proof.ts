@@ -103,7 +103,7 @@ assert.match(
 assert.match(
   projects,
   /return rows[\s\S]*\.filter\(isWorkspaceProjectDisplayable\)[\s\S]*\.sort/,
-  "browser-facing project lists must hide inactive archived/deleted project rows",
+  "canonical owner project lists must hide inactive archived/deleted project rows",
 );
 
 const threads = read("convex/threads.ts");
@@ -111,18 +111,6 @@ assert.doesNotMatch(
   threads,
   /db\.insert\("cloudProjects"|DEFAULT_WORKSPACE_VOLUME_RETENTION_STATE/,
   "thread persistence must not create implicit default projects or own project volume-retention initialization",
-);
-
-const gateway = read("shared/cloudProjectsGateway.ts");
-assert.match(
-  gateway,
-  /resolveWorkspaceProjectResourceTruth\(row\)/,
-  "web project gateway must project normalized resource truth",
-);
-assert.match(
-  gateway,
-  /volume_retention_state: normalizeWorkspaceVolumeRetentionState/,
-  "web project gateway must expose normalized retention state",
 );
 
 const docs = read("docs/workspace-computer-provider-contract.md");

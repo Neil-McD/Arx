@@ -13,7 +13,6 @@ const navigation = read("shared/appShellNavigation.ts");
 const app = read("apps/web/src/App.tsx");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const workspaceCore = read("apps/web/src/controllers/useWebWorkspaceCoreController.ts");
-const threadSidebarSelectors = read("shared/threadSidebarSelectors.ts");
 const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
 const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
@@ -30,7 +29,6 @@ const communityAgentInstructions = read("apps/web/src/components/WebCommunityAiA
 const communityLaunchSetup = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const globalOverlay = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
 const globalOverlayProps = read("apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts");
-const cloudProjectsGateway = read("shared/cloudProjectsGateway.ts");
 const accountCommerceGateway = read("shared/cloudAccountCommerceGateway.ts");
 const mcp = read("convex/httpMcp.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
@@ -122,8 +120,23 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /adoptWorkspaceThreadSelection[\s\S]*setActiveProjectId[\s\S]*syncWorkspaceSelection/,
-  "retained thread adoption must mutate runtime selection without changing page or URL",
+  /const activeThreadProjectId = useMemo\(\(\) => \{[\s\S]*if \(!activeThreadId \|\| workspaceWantsNewChat\) return null;[\s\S]*threads\.find\(\(thread\) => thread\.id === activeThreadId\)\?\.project_id[\s\S]*String\(projectId \?\? ""\)\.trim\(\) \|\| null/,
+  "retained browser project identity must come directly from the canonical active thread while new drafts remain standalone",
+);
+assert.doesNotMatch(
+  app,
+  /workspaceProject|resolveWorkspaceActiveProject|loadProjects|setActiveProjectId/,
+  "App must not retain browser project-list, draft-selection, or default-project authority",
+);
+assert.match(
+  workspaceCore,
+  /projectId: string \| null/,
+  "the transitional thread mutation wrapper may receive only direct thread project identity",
+);
+assert.doesNotMatch(
+  workspaceCore,
+  /CloudProjectRecord|project: WorkspaceProjectController|loadProjects|setActiveProjectId/,
+  "the retained thread mutation wrapper must not own the deleted browser project controller",
 );
 assert.doesNotMatch(
   shellProjection,
@@ -324,6 +337,13 @@ for (const retiredPath of [
   "apps/web/src/controllers/useWebProjectUiController.ts",
   "shared/threadPanelController.ts",
   "shared/workspaceSandboxStatus.ts",
+  "apps/web/src/controllers/useWebWorkspaceProjectStateController.ts",
+  "apps/web/src/controllers/useWebWorkspaceModelStateController.ts",
+  "apps/web/src/controllers/useWebWorkspaceSurfaceController.ts",
+  "apps/web/src/controllers/workspaceSurfaceLifecycle.ts",
+  "shared/cloudProjectsGateway.ts",
+  "shared/workspaceActiveProjectSelector.ts",
+  "shared/threadSidebarSelectors.ts",
 ]) {
   assert.equal(existsSync(retiredPath), false, `${retiredPath} must remain deleted`);
 }
@@ -349,11 +369,6 @@ assert.doesNotMatch(
   "the global overlay boundary must not retain a permanently closed project modal host",
 );
 assert.doesNotMatch(
-  cloudProjectsGateway,
-  /ensureDefaultMappedCloudProject|createMappedCloudProject|updateMappedCloudProject|deleteMappedCloudProject|importCloudProjectZip/,
-  "the browser project gateway must expose read projection only",
-);
-assert.doesNotMatch(
   accountCommerceGateway,
   /startCloudWorkspaceCardSetupCheckout|refreshCloudWorkspaceCardOnFileStatus|loadCloudWorkspaceCardOnFileStatus/,
   "the browser account gateway must not expose Workspace card-setup adapters",
@@ -372,11 +387,6 @@ assert.doesNotMatch(
   baseCss + webCss,
   /\.workspace-expanded-preview-shell\b|\.workspace-app-preview-copy\b|\.workspace-app-preview-button\.icon-only\b|\.workspace-app-preview-frame-stage\.fit-active\b|\.workspace-(?:body|composer-shell)\.preview-expanded\b|\.message-item(?:[\s.:{])|\.message-footer\b|\.message-meta\b|\.message-copy-btn\b|\.message-premium-upgrade|\.message-attachments-preview\b|\.streaming-caret\b|\.auth-error-(?:action|link)\b|\.thread-lane-switch\b|\.session-search\b|\.project-toolbar\b|\.project-group\b/,
   "web CSS must not retain selectors owned only by the deleted preview, thread-browser, and Workspace message presentation",
-);
-assert.doesNotMatch(
-  threadSidebarSelectors,
-  /filterVisibleThreads|groupThreadsByDate|searchThreads|buildProjectThreadGroups/,
-  "shared thread/project selectors must not retain helpers owned only by the deleted thread browser",
 );
 assert.match(
   settingsSurface,

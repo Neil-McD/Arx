@@ -97,7 +97,6 @@ assert.doesNotMatch(looseChatPrompt, /PROJECT_CONTEXT/);
 
 const schema = read("convex/schema.ts");
 const projects = read("convex/projects.ts");
-const gateway = read("shared/cloudProjectsGateway.ts");
 const projectContextSource = read("shared/projectContext.ts");
 const runtimeContextLoader = read("convex/runtimeTurnContext.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
@@ -121,14 +120,6 @@ assert.match(
   "project update should preserve omitted links and clear only explicit empty arrays",
 );
 
-assert.match(gateway, /instructions: string \| null/);
-assert.match(gateway, /context_links: ProjectContextLink\[\]/);
-assert.match(gateway, /readProjectContextLinks/);
-assert.doesNotMatch(
-  gateway,
-  /ensureDefaultMappedCloudProject|createMappedCloudProject|updateMappedCloudProject|deleteMappedCloudProject|importCloudProjectZip/,
-  "the browser gateway must remain read-only while project context stays a runtime persistence primitive",
-);
 assert.doesNotMatch(
   projectContextSource,
   /parseProjectContextLinksText|formatProjectContextLinksText/,
@@ -139,6 +130,7 @@ for (const retiredPath of [
   "apps/web/src/components/WebDeleteProjectModal.tsx",
   "apps/web/src/components/WebProjectModalHost.tsx",
   "apps/web/src/controllers/useWebProjectUiController.ts",
+  "shared/cloudProjectsGateway.ts",
 ]) {
   assert.equal(
     existsSync(new URL(`../${retiredPath}`, import.meta.url)),

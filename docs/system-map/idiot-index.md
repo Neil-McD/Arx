@@ -75,7 +75,10 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 - inline resource body fields and compactor;
 - remaining `legacy_unversioned` evidence state;
 - duplicate public Convex aliases and legacy MCP wire names;
-- remaining dead Workspace-named browser/controller state after host, navigation, right-panel/files, preview/sidebar/message, project-modal, browser project-mutation, and card-setup presentation deletion.
+- remaining presentationless Workspace-named App conversation/runtime state and
+  residual styles after host, navigation, right-panel/files,
+  preview/sidebar/message, project-modal, browser project-mutation/list/
+  draft-selection, model/surface-wrapper, and card-setup deletion.
 
 ### C — decision and liability/retention plan first
 

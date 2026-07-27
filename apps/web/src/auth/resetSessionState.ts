@@ -1,4 +1,5 @@
 type WebSessionResetDeps = {
+  resetAgentThreadState: () => void;
   beginBrowserSignedOutState: () => void | Promise<void>;
   setCommunities: (value: any[]) => void;
   setIsLoadingCommunities: (value: boolean) => void;
@@ -36,6 +37,7 @@ type WebSessionResetDeps = {
 };
 
 export async function resetWebSessionStateAfterSignOut(deps: WebSessionResetDeps): Promise<void> {
+  deps.resetAgentThreadState();
   await deps.beginBrowserSignedOutState();
   deps.setCommunities([]);
   deps.setIsLoadingCommunities(false);

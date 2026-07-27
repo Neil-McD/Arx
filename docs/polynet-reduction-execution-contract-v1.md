@@ -1456,3 +1456,43 @@ Workspace-named browser/controller state requires a fresh caller-by-caller
 audit, while `DaytonaRuntimeAppPreview.tsx`,
 `RuntimeComputerUseViewer.tsx`, and `WebBackgroundTerminalRail.tsx` remain
 separate protected mount-or-delete decisions.
+
+### C7.1F current receipt — browser project-selection projection deletion
+
+The sixth C7 slice removes the browser project-list and draft-selection
+projection left behind by the deleted Workspace destination. The zero-caller
+project-state controller, its read-only browser gateway, the project/thread
+selectors, the model/surface wrappers, and their reset-only lifecycle module
+are deleted. The obsolete active-project coherence proof is retired rather
+than forcing presentation-only state to survive for its test.
+
+Browser project identity now comes directly from the active canonical thread's
+stored `project_id`. That value feeds retained thread-mutation instrumentation
+and Sentry/PostHog context without a second project array, default-project
+fallback, project-name map, route-driven project reset, or thread-adoption
+copy. The transitional Workspace-named thread-mutation wrapper accepts only
+that nullable identity; it no longer owns or returns a browser project
+controller.
+
+Sign-out safety is relocated rather than deleted. Both session-loss paths pass
+the same agent-thread reset into `resetWebSessionStateAfterSignOut`, which
+clears composer, hydration, thread/message, error, sending, streaming, and
+runtime-event projections before awaiting browser sign-out work. The account
+lifecycle contract proves that boundary while the member-agent dock remains
+independent and owns its live turn state.
+
+Project-context and resource-truth proofs now follow the retained Convex
+schema/functions and runtime context loader instead of a deleted browser
+listing adapter. The quarantine contract requires all seven retired projection
+modules to remain absent while continuing to require
+`DaytonaRuntimeAppPreview.tsx`, `RuntimeComputerUseViewer.tsx`, and
+`WebBackgroundTerminalRail.tsx` to remain present for their separate protected
+mount-or-delete decision.
+
+No Convex function or schema, staging data, project/thread/message record,
+provider lease, runtime executor, harness policy, official MCP contract,
+community resource/memory owner, environment configuration, or production
+state changes in this slice. C7 remains `IN_PROGRESS`: the presentationless
+legacy App conversation/runtime orchestration and residual styles require
+separate slices, and the three protected dormant viewers remain a human
+decision.
