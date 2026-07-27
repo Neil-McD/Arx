@@ -1619,3 +1619,40 @@ resource/memory owner, environment configuration, production state, or
 `origin/main`. C7 remains `IN_PROGRESS`: additional ownerless stylesheet
 cohorts, repository docs/configuration alignment, and the three protected
 viewer decisions remain.
+
+### C7.2B current receipt — auxiliary ownerless stylesheet deletion
+
+The second caller-led ownerless-style slice removes four presentation families
+with no current source renderer: the reverted auth-bootstrap
+`.web-thread-loading-*` shell; the deleted empty-thread `.web-starter-*` and
+`.web-download-*` surfaces; and the orphaned `.session-resume*` block. Exact
+source-corpus search finds none of the four stems outside the two stylesheets,
+and all 80 removed rules are pure owner rules with no live selector arm or
+exclusive keyframe.
+
+The rewrite deletes 212 lines from `base.css` and 330 lines from `index.css`.
+The download-only mobile media wrapper is removed with its final two rules; the
+mixed 720-pixel media block loses only the retired loading arms and preserves
+the live guest-signup and auth-bootstrap composer rules. Shared
+`.web-skeleton-block`, `.web-skeleton-pill`, `.web-skeleton-row`, and
+`webShimmer` definitions remain in both stylesheets because mounted funnels,
+community chat, resources, feeds, and auth bootstrap still emit those generic
+primitives. Protected viewer style roots remain unchanged.
+
+The Workspace quarantine contract now rejects both CSS and source emitters for
+all four retired stems while positively requiring the generic skeleton
+primitives, shared animation, a mounted source emitter, and the protected
+viewer roots. Focused auth-bootstrap, avatar, UI-stability, community
+interaction, mobile-root, member-agent, quarantine, and CSS-parse proofs pass.
+Web typecheck, production build, bundle budget, and the 40-step foundation
+baseline also pass locally. Exact-build staging visual regression remains the
+release proof for this source state.
+
+This slice changes no TSX renderer, route, Convex function or schema, cloud
+record, runtime worker, protected harness viewer, provider lease,
+billing/entitlement authority, official MCP contract, community
+resource/memory owner, environment configuration, production state, or
+`origin/main`. C7 remains `IN_PROGRESS`: any further lexical CSS candidate
+requires fresh caller-led ownership proof, repository docs/configuration still
+need final alignment, and the three protected viewer presentations remain an
+explicit human mount-or-delete decision.

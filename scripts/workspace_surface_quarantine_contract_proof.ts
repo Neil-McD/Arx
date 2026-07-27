@@ -1,11 +1,26 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { isDesktopShellContextualBackPage } from "../shared/appShellNavigation.ts";
 import { popDistinctNavSnapshot, type NavSnapshotBase } from "../shared/navSnapshot.ts";
 import { readLegacyWorkspaceRouteContext } from "../shared/webAppRouteState.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
+}
+
+function readSourceCorpus(path: string): string {
+  const chunks: string[] = [];
+  for (const entry of readdirSync(path, { withFileTypes: true })) {
+    const entryPath = `${path}/${entry.name}`;
+    if (entry.isDirectory()) {
+      chunks.push(readSourceCorpus(entryPath));
+      continue;
+    }
+    if (/\.(?:html|js|jsx|ts|tsx)$/.test(entry.name)) {
+      chunks.push(read(entryPath));
+    }
+  }
+  return chunks.join("\n");
 }
 
 const routes = read("shared/webAppRouteState.ts");
@@ -40,6 +55,7 @@ const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const emailEvents = read("convex/emailEvents.ts");
 const emailDigests = read("convex/emailDigests.ts");
 const eventReminders = read("convex/eventReminders.ts");
+const webSourceCorpus = readSourceCorpus("apps/web/src");
 
 assert.deepEqual(readLegacyWorkspaceRouteContext("/workspace"), {
   kind: "root",
@@ -484,6 +500,38 @@ assert.match(
   webCss,
   /\.workspace\s*\{[\s\S]*padding:\s*0;/,
   "the mounted main surface must retain the web Workspace layout rule after its obsolete scroll-button exclusion is removed",
+);
+const retiredAuxiliarySurfacePattern =
+  /\b(?:web-thread-loading|web-starter|web-download|session-resume)(?:[\w-]*)\b/;
+assert.doesNotMatch(
+  baseCss + webCss,
+  retiredAuxiliarySurfacePattern,
+  "web CSS must not retain loading, starter, download, or session-resume presentation with no source renderer",
+);
+assert.doesNotMatch(
+  webSourceCorpus,
+  retiredAuxiliarySurfacePattern,
+  "web source must not resurrect loading, starter, download, or session-resume emitters after their presentation is retired",
+);
+for (const [stylesheetName, stylesheet] of [
+  ["base.css", baseCss],
+  ["index.css", webCss],
+] as const) {
+  assert.match(
+    stylesheet,
+    /\.web-skeleton-(?:block|pill|row)\b/,
+    `${stylesheetName} must retain the generic skeleton primitives used by mounted MVP surfaces`,
+  );
+  assert.match(
+    stylesheet,
+    /@keyframes\s+webShimmer\b/,
+    `${stylesheetName} must retain the shared skeleton animation`,
+  );
+}
+assert.match(
+  webSourceCorpus,
+  /\bweb-skeleton-(?:block|pill|row)\b/,
+  "mounted web source must retain an emitter for the shared skeleton primitives",
 );
 for (const protectedDormantStyleRoot of [
   ".runtime-computer-viewer",
