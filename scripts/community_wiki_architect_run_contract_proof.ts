@@ -11,25 +11,12 @@ function read(path: string): string {
 const packageJson = read("package.json");
 const architect = read("convex/communityWikiArchitect.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
-const app = read("apps/web/src/App.tsx");
-const launchKnowledgeController = read(
-  "apps/web/src/controllers/useWebCommunityLaunchKnowledgeController.ts",
-);
-const launchKnowledgeModel = read(
-  "apps/web/src/components/webCommunityLaunchKnowledgeModel.ts",
-);
-const modal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const applyStart = architect.indexOf("export const applyCommunityWikiArchitectProposal");
 assert.notEqual(applyStart, -1, "architect apply mutation should exist");
 const runStart = architect.indexOf("export const runCommunityWikiArchitectProposal");
 assert.notEqual(runStart, -1, "architect proposal action should exist");
 const runBody = architect.slice(runStart, applyStart);
 const applyBody = architect.slice(applyStart);
-const prepareStart = modal.indexOf("const handlePrepareKnowledgeResources");
-assert.notEqual(prepareStart, -1, "knowledge prepare handler should exist");
-const prepareEnd = modal.indexOf("const handleSaveAgent", prepareStart);
-assert.notEqual(prepareEnd, -1, "knowledge prepare handler boundary should exist");
-const prepareBody = modal.slice(prepareStart, prepareEnd);
 
 assert.match(
   packageJson,
@@ -288,75 +275,6 @@ assert.doesNotMatch(
   gateway,
   /writeCommunityResourceBuilderResource|editCommunityResourceBuilderResource/,
   "web gateway should not expose raw architect write/edit tools in this slice",
-);
-
-assert.match(
-  launchKnowledgeController,
-  /runCloudCommunityWikiArchitectProposal/,
-  "the launch Knowledge controller should import the cloud architect gateway",
-);
-assert.match(
-  launchKnowledgeController,
-  /const generatePlan[\s\S]*runCloudCommunityWikiArchitectProposal[\s\S]*builderIntent: draft\.builderIntent/,
-  "the launch Knowledge controller should pass builder intent into the architect action",
-);
-assert.match(
-  launchKnowledgeController + launchKnowledgeModel + modal,
-  /assembly: \{[\s\S]*generatePlan[\s\S]*generatePlan: \(draft:[\s\S]*generatePlan: onGenerateKnowledgePlan/,
-  "the launch modal should receive the architect run operation through the typed Knowledge model",
-);
-assert.match(
-  launchKnowledgeController + launchKnowledgeModel + modal,
-  /applyPlan[\s\S]*applyPlan: \(draft:[\s\S]*applyPlan: onApplyKnowledgePlan/,
-  "the launch modal should receive the reviewed architect apply operation through the typed Knowledge model",
-);
-assert.match(
-  launchKnowledgeController + launchKnowledgeModel + modal,
-  /draftCloudCommunityResourceContentFromSources[\s\S]*draftResources[\s\S]*draftResources: \(\)[\s\S]*draftResources: onDraftKnowledgeResources/,
-  "the Knowledge controller should draft resource content after applying the architect plan and expose it through the model",
-);
-assert.match(
-  app,
-  /useWebCommunityLaunchKnowledgeController<AuthSession>[\s\S]*knowledge=\{communityLaunchKnowledgeModel\}/,
-  "App should compose and pass one launch Knowledge model instead of individual architect handlers",
-);
-
-assert.match(
-  modal,
-  /onGenerateKnowledgePlan/,
-  "modal should expose a generate-plan callback",
-);
-assert.match(
-  modal,
-  /handlePrepareKnowledgeResources[\s\S]*onGenerateKnowledgePlan[\s\S]*onApplyKnowledgePlan[\s\S]*onDraftKnowledgeResources[\s\S]*getNextLaunchStep\("knowledge"\)[\s\S]*setActiveStep\(nextStep\)/,
-  "modal should run ingest, architect, content writer, then continue launch setup from Knowledge Next",
-);
-assert.doesNotMatch(
-  modal,
-  /handlePrepareKnowledgeResources[\s\S]*onOpenStep\("knowledge"\)/,
-  "Knowledge Next should not redirect directly to Resources review",
-);
-const ingestIndex = prepareBody.indexOf("await onIngestKnowledgeSources()");
-const planIndex = prepareBody.indexOf("await onGenerateKnowledgePlan");
-const applyIndex = prepareBody.indexOf("await onApplyKnowledgePlan");
-const draftIndex = prepareBody.indexOf("await onDraftKnowledgeResources()");
-assert.ok(
-  ingestIndex !== -1 && planIndex !== -1 && applyIndex !== -1 && draftIndex !== -1,
-  "Knowledge Next should call ingest, architect, apply, and drafter",
-);
-assert.ok(
-  ingestIndex < planIndex && planIndex < applyIndex && applyIndex < draftIndex,
-  "Knowledge Next should run source ingestion, source-driven architect, apply, then drafter in order",
-);
-assert.equal(
-  prepareBody.includes("onEnsureKnowledgeScaffold"),
-  false,
-  "Knowledge Next must not run generic scaffold fallback",
-);
-assert.doesNotMatch(
-  modal,
-  /Build wiki plan|review-only structure plan|Apply draft plan/,
-  "modal should not expose architect review controls in the Knowledge UI",
 );
 
 console.log("community_wiki_architect_run_contract_proof: ok");

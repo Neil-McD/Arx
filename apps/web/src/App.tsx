@@ -66,8 +66,6 @@ import { useWebPersonalMemoryUiController } from "./controllers/useWebPersonalMe
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
-import { useWebCommunityLaunchSetupLifecycleController } from "./controllers/useWebCommunityLaunchSetupLifecycleController";
-import { useWebCommunityLaunchKnowledgeController } from "./controllers/useWebCommunityLaunchKnowledgeController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
 import { useWebEffectiveSkillsController } from "./controllers/useWebEffectiveSkillsController";
 import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlatformSkillsController";
@@ -137,39 +135,13 @@ import {
   saveCloudCommunityAgentConfig as saveCloudCommunityAgentConfigDirect,
 } from "../../../shared/cloudCommunityAgentGateway";
 import {
-  createCloudCommunity,
   fetchCloudCommunityMemberBillingHistory,
-  finalizeCloudCommunityGoogleDriveSourceOAuth,
-  finalizeCloudCommunityGitHubSourceOAuth,
-  prepareCloudCommunityBrandingField,
   setCloudCommunityFreeAccessMode,
 } from "../../../shared/cloudCommunityAdminGateway";
 import {
   saveCloudCommunityLaunchProfile,
-  type CloudCommunityLaunchProfileSaveInput,
   type CloudCommunityLaunchProfileSaveResult,
 } from "../../../shared/cloudCommunityLaunchSetupGateway";
-import type {
-  CommunityLaunchSetupStep,
-} from "../../../shared/communityLaunchSetup";
-import {
-  SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES,
-  clearCommunityLaunchKnowledgeSourceOAuthIntent,
-  mergeCommunityLaunchKnowledgeOAuthContext,
-  normalizeLaunchOAuthContextParam,
-  normalizeSourceIntegrationOAuthProvider,
-  readCommunityLaunchKnowledgeOAuthContext,
-  readCommunityLaunchKnowledgeSourceOAuthIntent,
-  readSourceIntegrationOAuthStateFromAuthorizeUrl,
-  writeCommunityLaunchKnowledgeSourceOAuthIntent,
-  type CommunityLaunchKnowledgeOAuthContext,
-} from "./communityLaunchKnowledgeSourceOAuth";
-import {
-  COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES,
-  buildCommunityLaunchSetupRoutePath,
-  isCommunityLaunchSetupRoutePath,
-  readCommunityLaunchSetupRouteContext,
-} from "./communityLaunchSetupRoute";
 import {
   loadCloudProviderConnections,
   type CloudChatgptConnectionStatus,
@@ -389,11 +361,6 @@ import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunit
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/communityUnsavedGuard";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import { WebGlobalOverlayHost } from "./components/WebGlobalOverlayHost";
-import {
-  WebCommunityLaunchSetupModal,
-  type CommunityLaunchProfileSaveDraft,
-} from "./components/WebCommunityLaunchSetupModal";
-import type { CommunityLaunchKnowledgeOAuthRedirectRequest } from "./components/webCommunityLaunchKnowledgeModel";
 import { WebShellChromeHost } from "./components/WebShellChromeHost";
 import {
   WebDirectMessagesHost,
@@ -451,31 +418,6 @@ type CommunityRecord = {
   created_at: string;
   updated_at: string;
 };
-
-function mapLaunchCommunityCreateError(error: unknown): string {
-  const message =
-    typeof error === "string"
-      ? error
-      : error instanceof Error
-        ? error.message
-        : "Failed to create community.";
-  if (message === "community_builder_required") {
-    return "Your account cannot create a community yet.";
-  }
-  if (message.includes("account_setup_required") || message.includes("profile_setup_required")) {
-    return "Finish account setup before creating a community.";
-  }
-  if (message.includes("community_publish_ready_required")) {
-    return "Published communities need a name, one-liner, avatar, and banner.";
-  }
-  if (message === "community_owner_limit_reached") {
-    return "You've reached your community limit.";
-  }
-  if (message === "community_slug_taken") {
-    return "That community slug is already taken.";
-  }
-  return message;
-}
 
 function isTransportRefreshError(error: unknown): boolean {
   const message =
@@ -2661,41 +2603,6 @@ export default function App() {
     session: session,
     ensureSession: ensureUsableAuthSession,
   });
-  const requestCommunityLaunchTarget = useCallback((target: {
-    communityId: string | null;
-    communitySlug: string | null;
-  }) => {
-    applyCommunityShellState({
-      communityId: target.communityId,
-      communitySlug: target.communitySlug,
-      communityTab: "settings",
-    });
-  }, [applyCommunityShellState]);
-  const communityLaunchSetupLifecycle =
-    useWebCommunityLaunchSetupLifecycleController<AuthSession>({
-      session,
-      sessionKey: canonicalSessionUserId,
-      activePage,
-      activeCommunity: activeCommunity
-        ? {
-            id: activeCommunity.id,
-            slug: activeCommunity.slug,
-            updatedAt: activeCommunity.updated_at,
-          }
-        : null,
-      selectedCommunitySlug: selectedActiveCommunitySlug,
-      canManageCommunitySettings,
-      isAccountSetupComplete: Boolean(effectiveAccountSetupStatus?.completed),
-      onRequestCommunityTarget: requestCommunityLaunchTarget,
-    });
-  const communityLaunchSetupLifecycleModel =
-    communityLaunchSetupLifecycle.model;
-  const isCommunityLaunchSetupModalOpen =
-    communityLaunchSetupLifecycleModel.isOpen;
-  const isCommunityLaunchCreateMode =
-    communityLaunchSetupLifecycleModel.mode === "create";
-  const refreshActiveCommunityLaunchSetupStatus =
-    communityLaunchSetupLifecycle.refreshActiveStatus;
   canMentionEverybodyRef.current = canManageMembersActiveCommunity;
 
   useEffect(() => {
@@ -2712,13 +2619,6 @@ export default function App() {
     if (normalizedTab === communityTab) return;
     setCommunityResourceModuleId(null);
     applyCommunityShellState({ communityTab: normalizedTab });
-    if (isCommunityLaunchSetupRoutePath(window.location.pathname)) {
-      const normalizedPath = buildCommunityTabPath(
-        selectedActiveCommunitySlug,
-        normalizedTab,
-      );
-      if (normalizedPath) navigateTo(normalizedPath, { replace: true });
-    }
   }, [
     activeCommunityAccess,
     activeCommunityId,
@@ -2730,7 +2630,6 @@ export default function App() {
     canViewActiveCommunitySettings,
     communityTab,
     isLoadingCommunityAccess,
-    selectedActiveCommunitySlug,
   ]);
 
   const communityTypingUsers = useCommunityTypingPresence({
@@ -2876,37 +2775,6 @@ export default function App() {
     setIsLoadingResources,
     setIsLoadingResourceModules,
   });
-  const authorizeCommunityLaunchKnowledgeSourceIntegration = useCallback((
-    request: CommunityLaunchKnowledgeOAuthRedirectRequest,
-  ) => {
-    writeCommunityLaunchKnowledgeSourceOAuthIntent({
-      provider: request.provider,
-      state: readSourceIntegrationOAuthStateFromAuthorizeUrl(
-        request.authorizeUrl,
-      ),
-      communityId: request.communityId,
-      communitySlug: request.communitySlug,
-    });
-    window.location.assign(request.authorizeUrl);
-  }, []);
-  const communityLaunchKnowledgeModel =
-    useWebCommunityLaunchKnowledgeController<AuthSession>({
-      session,
-      sessionKey: canonicalSessionUserId,
-      activeCommunity: activeCommunity
-        ? {
-            id: activeCommunity.id,
-            slug: activeCommunity.slug,
-          }
-        : null,
-      canManageCommunitySettings,
-      loadCommunityResources,
-      refreshLaunchSetupStatus: refreshActiveCommunityLaunchSetupStatus,
-      reloadKnowledgeIntegrations:
-        communityLaunchSetupLifecycle.reloadKnowledgeIntegrations,
-      onAuthorizeSourceIntegration:
-        authorizeCommunityLaunchKnowledgeSourceIntegration,
-    });
   const {
     loadCommunityEvents,
     handleSaveCommunityEvent,
@@ -3599,133 +3467,6 @@ export default function App() {
     return nextPublicRoute;
   }, [applyAppRouteState]);
 
-  const queueCommunityLaunchKnowledgeOAuthRestore = useCallback((context?: {
-    shouldRestore?: boolean;
-    communityId?: string | null;
-    communitySlug?: string | null;
-    provider?: "google_drive" | "github" | null;
-    state?: string | null;
-    createdAt?: number | null;
-  }) => {
-    const restoredCommunityId =
-      normalizeLaunchOAuthContextParam(context?.communityId) ??
-      normalizeLaunchOAuthContextParam(activeCommunityId);
-    const restoredCommunitySlug =
-      normalizeLaunchOAuthContextParam(context?.communitySlug) ??
-      normalizeLaunchOAuthContextParam(selectedActiveCommunitySlug ?? activeCommunity?.slug);
-    const restoreContext: CommunityLaunchKnowledgeOAuthContext = {
-      shouldRestore: context?.shouldRestore !== false,
-      provider: context?.provider ?? null,
-      state: normalizeLaunchOAuthContextParam(context?.state, 500),
-      communityId: restoredCommunityId,
-      communitySlug: restoredCommunitySlug,
-      createdAt: context?.createdAt ?? Date.now(),
-    };
-    if (!restoreContext.shouldRestore) return;
-    if (restoredCommunitySlug) {
-      const routePath = buildCommunityLaunchSetupRoutePath({
-        step: "knowledge",
-        communityId: restoredCommunityId,
-        communitySlug: restoredCommunitySlug,
-      });
-      const nextPath = applyShellVariantToKnownPath(routePath, shellVariant);
-      const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      if (nextPath !== currentPath && !window.location.search.includes("source_integration_oauth=")) {
-        window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
-        applyLocationToState();
-      }
-      applyCommunityShellState({
-        communityId: restoredCommunityId,
-        communitySlug: restoredCommunitySlug,
-        communityTab: "settings",
-      });
-    } else if (restoredCommunityId) {
-      applyCommunityShellState({
-        communityId: restoredCommunityId,
-        communityTab: "chat",
-      });
-    }
-    communityLaunchSetupLifecycle.queueKnowledgeOAuthRestore(restoreContext);
-  }, [
-    activeCommunity?.slug,
-    activeCommunityId,
-    applyCommunityShellState,
-    applyLocationToState,
-    communityLaunchSetupLifecycle.queueKnowledgeOAuthRestore,
-    selectedActiveCommunitySlug,
-    shellVariant,
-  ]);
-
-  const resolveCommunityLaunchSetupRouteStep =
-    communityLaunchSetupLifecycle.resolveStep;
-
-  const replaceCommunityLaunchSetupRouteState = useCallback((
-    step?: CommunityLaunchSetupStep | string | null,
-    target?: { communityId?: string | null; communitySlug?: string | null },
-  ) => {
-    const nextStep = resolveCommunityLaunchSetupRouteStep(step);
-    const communityId = normalizeLaunchOAuthContextParam(target?.communityId) ??
-      normalizeLaunchOAuthContextParam(activeCommunityId);
-    const communitySlug = normalizeLaunchOAuthContextParam(
-      target?.communitySlug ?? selectedActiveCommunitySlug ?? activeCommunity?.slug,
-    );
-    if (!communityId && !communitySlug) return;
-    const routePath = buildCommunityLaunchSetupRoutePath({
-      step: nextStep,
-      communityId,
-      communitySlug,
-    });
-    const nextPath = applyShellVariantToKnownPath(routePath, shellVariant);
-    const currentPath = `${window.location.pathname}${window.location.search}`;
-    if (nextPath !== currentPath) {
-      window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
-      applyLocationToState();
-    }
-  }, [
-    activeCommunity?.slug,
-    activeCommunityId,
-    applyLocationToState,
-    resolveCommunityLaunchSetupRouteStep,
-    selectedActiveCommunitySlug,
-    shellVariant,
-  ]);
-
-  const clearCommunityLaunchSetupRouteState = useCallback(() => {
-    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const currentUrl = new URL(window.location.href);
-    const setupContext = readCommunityLaunchSetupRouteContext(
-      currentUrl.searchParams,
-      currentUrl.pathname,
-    );
-    const pathWithoutLaunchParams = buildPathWithSearchParamsRemoved({
-      pathname: currentUrl.pathname,
-      search: currentUrl.search,
-      hash: currentUrl.hash,
-      paramNames: COMMUNITY_LAUNCH_SETUP_ROUTE_PARAM_NAMES,
-      dropHash: true,
-    });
-    if (setupContext.shouldRestore) {
-      const communitySlug = normalizeLaunchOAuthContextParam(
-        selectedActiveCommunitySlug ?? activeCommunity?.slug ?? setupContext.communitySlug,
-      );
-      const routePath =
-        buildCommunityTabPath(communitySlug, "settings", null, "community") ??
-        "/discover";
-      const nextPath = applyShellVariantToKnownPath(routePath, shellVariant);
-      if (nextPath !== currentPath) {
-        window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
-      }
-    } else if (pathWithoutLaunchParams !== currentPath) {
-      window.history.replaceState(window.history.state ?? {}, document.title, pathWithoutLaunchParams);
-    }
-    applyLocationToState();
-  }, [
-    activeCommunity?.slug,
-    applyLocationToState,
-    selectedActiveCommunitySlug,
-    shellVariant,
-  ]);
-
   useEffect(() => {
     if (!isAuthBootstrapComplete) return;
     if (!session) return;
@@ -3740,7 +3481,6 @@ export default function App() {
     if (!isAuthBootstrapComplete) return;
     if (publicRoute.kind !== "app") return;
     const pathname = window.location.pathname || "/";
-    if (session && isCommunityLaunchSetupRoutePath(pathname)) return;
     const legacyContext = readLegacyWorkspaceRouteContext(pathname);
     if (!legacyContext) return;
 
@@ -3974,7 +3714,6 @@ export default function App() {
   const activeCommunityIdRef = useRef<string | null>(null);
   const [appToast, setAppToast] = useState<string | null>(null);
   const appToastTimeoutRef = useRef<number | null>(null);
-  const sourceIntegrationOAuthFinalizeInFlightRef = useRef<string | null>(null);
   const lastShownAuthErrorRef = useRef<string | null>(null);
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
     memory_mode: "auto",
@@ -4745,20 +4484,6 @@ export default function App() {
     resetCommunityFunnelState,
   ]);
 
-  useEffect(() => {
-    if (!isCommunityLaunchSetupModalOpen) return;
-    if (!session || !activeCommunityId || !canManageMembersActiveCommunity) return;
-    if (communityAgentConfigLoadedCommunityIdRef.current === activeCommunityId) return;
-    void loadCommunityAgentConfig(activeCommunityId, session);
-  }, [
-    isCommunityLaunchSetupModalOpen,
-    session,
-    activeCommunityId,
-    canManageMembersActiveCommunity,
-    communityAgentConfigLoadedCommunityIdRef,
-    loadCommunityAgentConfig,
-  ]);
-
   const communityPolynetController = useWebCommunityPolynetController<AuthSession>({
     activePage,
     communityTab,
@@ -4786,141 +4511,6 @@ export default function App() {
     buildAppRoutePath: (state) => applyShellVariantToAppPath(buildAppRoutePath(state) ?? "", shellVariant) || null,
   });
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const status = params.get("source_integration_oauth");
-    if (!status) return;
-    const urlLaunchKnowledgeContext = readCommunityLaunchKnowledgeOAuthContext(
-      params,
-      window.location.pathname,
-    );
-    const provider = normalizeSourceIntegrationOAuthProvider(params.get("source_integration_provider"));
-    const state = normalizeLaunchOAuthContextParam(params.get("source_integration_state"), 500);
-    const storedLaunchKnowledgeContext = readCommunityLaunchKnowledgeSourceOAuthIntent({
-      provider,
-      state,
-    });
-    const restoreLaunchKnowledgeContext = (server?: {
-      community_id?: unknown;
-      community_slug?: unknown;
-      return_context_kind?: unknown;
-    } | null): boolean => {
-      const context = mergeCommunityLaunchKnowledgeOAuthContext(
-        {
-          ...urlLaunchKnowledgeContext,
-          provider,
-          state,
-        },
-        storedLaunchKnowledgeContext,
-        server,
-      );
-      if (context.shouldRestore) {
-        queueCommunityLaunchKnowledgeOAuthRestore(context);
-        return true;
-      }
-      return false;
-    };
-    if (!provider) {
-      scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
-      applyLocationToState();
-      restoreLaunchKnowledgeContext();
-      return;
-    }
-    const providerLabel = provider === "github" ? "GitHub" : "Google Drive";
-
-    if (status === "error") {
-      showAppToastMessage(
-        params.get("source_integration_message")?.trim() ||
-          `${providerLabel} connection was not completed.`,
-      );
-      scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
-      applyLocationToState();
-      restoreLaunchKnowledgeContext();
-      return;
-    }
-
-    if (status !== "pending") {
-      scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
-      applyLocationToState();
-      restoreLaunchKnowledgeContext();
-      return;
-    }
-    const finalizeToken = params.get("source_integration_finalize_token")?.trim() ?? "";
-    if (!state || !finalizeToken) {
-      showAppToastMessage(`${providerLabel} connection could not be finalized.`);
-      scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
-      applyLocationToState();
-      restoreLaunchKnowledgeContext();
-      return;
-    }
-    restoreLaunchKnowledgeContext();
-    if (!session) return;
-    const inFlightKey = `${state}:${finalizeToken}`;
-    if (sourceIntegrationOAuthFinalizeInFlightRef.current === inFlightKey) return;
-    const sessionGuardKey = buildSourceIntegrationOAuthFinalizeSessionGuardKey(
-      `source:${state}`,
-      finalizeToken,
-    );
-    if (!claimSourceIntegrationOAuthFinalizeSessionGuard(sessionGuardKey)) return;
-    sourceIntegrationOAuthFinalizeInFlightRef.current = inFlightKey;
-
-    void (async () => {
-      try {
-        let result:
-          | Awaited<ReturnType<typeof finalizeCloudCommunityGitHubSourceOAuth>>
-          | Awaited<ReturnType<typeof finalizeCloudCommunityGoogleDriveSourceOAuth>>;
-        try {
-          result = provider === "github"
-            ? await finalizeCloudCommunityGitHubSourceOAuth({
-                session,
-                state,
-                finalizeToken,
-              })
-            : await finalizeCloudCommunityGoogleDriveSourceOAuth({
-                session,
-                state,
-                finalizeToken,
-              });
-        } catch {
-          result = {
-            ok: false,
-            provider,
-            community_id: null,
-            return_context_kind: null,
-            email: null,
-            error_message: `${providerLabel} connection could not be finalized. Try again.`,
-          } as Awaited<ReturnType<typeof finalizeCloudCommunityGoogleDriveSourceOAuth>>;
-        }
-        showAppToastMessage(
-          result.ok
-            ? `${providerLabel} connected.`
-            : result.error_message || `${providerLabel} connection could not be finalized.`,
-        );
-        scrubCurrentRouteSearchParams(SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES);
-        applyLocationToState();
-        const didRestoreLaunchKnowledge = restoreLaunchKnowledgeContext(result);
-        clearCommunityLaunchKnowledgeSourceOAuthIntent({ provider, state });
-        if (result.ok && didRestoreLaunchKnowledge) {
-          if (provider === "google_drive" || provider === "github") {
-            communityLaunchSetupLifecycle.noteKnowledgeIntegrationConnected(
-              provider,
-            );
-          }
-        }
-      } finally {
-        clearSourceIntegrationOAuthFinalizeSessionGuard(sessionGuardKey);
-        if (sourceIntegrationOAuthFinalizeInFlightRef.current === inFlightKey) {
-          sourceIntegrationOAuthFinalizeInFlightRef.current = null;
-        }
-      }
-    })();
-  }, [
-    applyLocationToState,
-    communityLaunchSetupLifecycle.noteKnowledgeIntegrationConnected,
-    queueCommunityLaunchKnowledgeOAuthRestore,
-    session,
-    showAppToastMessage,
-  ]);
 
   useEffect(() => {
     if (shellVariant !== "standard" || !isLikelyMobileDevice) return;
@@ -5504,13 +5094,9 @@ export default function App() {
         }
         showAppToastMessage("Provider connection is not available.");
 	      },
-	      create_community: (payload) => {
-	        if (payload.draft) {
-	          openCreateCommunityModal(payload.draft);
-	          return;
-	        }
-	        openCommunityLaunchCreateFlow();
-	      },
+      create_community: (payload) => {
+        openCreateCommunityModal(payload.draft);
+      },
       redeem_purchase_claim: (payload) => {
         void redeemPurchaseClaim(payload.token);
       },
@@ -6545,26 +6131,7 @@ export default function App() {
 		    setActiveView(transition.nextView);
 		    setActivePage(transition.nextPage);
 		  };
-    const handleOpenCommunityLaunchSetupStep = (step: CommunityLaunchSetupStep) => {
-      const nextCommunitySlug = String(
-        selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "",
-      ).trim();
-      if (!nextCommunitySlug) return;
-      communityLaunchSetupLifecycle.close();
-      clearCommunityLaunchSetupRouteState();
-      pushNavSnapshot();
-      if (step === "knowledge") {
-        openCommunityTab(nextCommunitySlug, "resources", { pushSnapshot: false });
-        return;
-      }
-      if (step === "agent") {
-        setCommunityAiAgentPreferredTab("instructions");
-        openCommunityTab(nextCommunitySlug, "ai_agent", { pushSnapshot: false });
-        return;
-      }
-      openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
-    };
-    const applyCommunityLaunchProfileResult = (result: CloudCommunityLaunchProfileSaveResult) => {
+    const applyCommunityProfileResult = (result: CloudCommunityLaunchProfileSaveResult) => {
       setCommunities((prev) =>
         prev.map((community) =>
           community.id === result.id
@@ -6596,286 +6163,6 @@ export default function App() {
           communityId: result.id,
           communitySlug: result.slug,
         });
-      }
-    };
-    const requireCommunityLaunchSaveContext = () => {
-      if (!session) throw new Error("Sign in before updating community launch setup.");
-      if (!activeCommunity) throw new Error("Select a community before updating launch setup.");
-      return {
-        session,
-        community: activeCommunity,
-      };
-    };
-    const handleSaveCommunityLaunchProfile = async (draft: {
-      name: string;
-      slug: string;
-      oneLiner: string;
-      avatarUrl: string;
-      bannerUrl: string;
-    }) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const nextAvatarUrl = String(draft.avatarUrl ?? "").trim();
-      const nextBannerUrl = String(draft.bannerUrl ?? "").trim();
-      const currentAvatarUrl = String(community.avatar_url ?? "").trim();
-      const currentBannerUrl = String(community.banner_url ?? "").trim();
-      const input: CloudCommunityLaunchProfileSaveInput = {
-        name: draft.name,
-        slug: slugifyCommunityName(draft.slug) || draft.slug,
-        oneLiner: draft.oneLiner.trim() || null,
-      };
-      if (nextAvatarUrl !== currentAvatarUrl) {
-        const avatarField = await prepareCloudCommunityBrandingField({
-          session,
-          kind: "avatar",
-          nextValue: nextAvatarUrl || null,
-          currentStorageId: community.avatar_storage_id ?? null,
-          currentResolvedUrl: currentAvatarUrl || null,
-        });
-        const isNewAvatarUpload = nextAvatarUrl.toLowerCase().startsWith("data:image/");
-        input.avatarUrl = avatarField.url ?? null;
-        input.avatarStorageId = avatarField.storageId ?? null;
-        input.avatarFocusX = isNewAvatarUpload ? 0.5 : community.avatar_focus_x ?? 0.5;
-        input.avatarFocusY = isNewAvatarUpload ? 0.5 : community.avatar_focus_y ?? 0.5;
-        input.avatarZoom = isNewAvatarUpload ? 1 : community.avatar_zoom ?? 1;
-      }
-      if (nextBannerUrl !== currentBannerUrl) {
-        const bannerField = await prepareCloudCommunityBrandingField({
-          session,
-          kind: "banner",
-          nextValue: nextBannerUrl || null,
-          currentStorageId: community.banner_storage_id ?? null,
-          currentResolvedUrl: currentBannerUrl || null,
-        });
-        const isNewBannerUpload = nextBannerUrl.toLowerCase().startsWith("data:image/");
-        input.bannerUrl = bannerField.url ?? null;
-        input.bannerStorageId = bannerField.storageId ?? null;
-        input.bannerFocusX = isNewBannerUpload ? 0.5 : community.banner_focus_x ?? 0.5;
-        input.bannerFocusY = isNewBannerUpload ? 0.5 : community.banner_focus_y ?? 0.5;
-        input.bannerZoom = isNewBannerUpload ? 1 : community.banner_zoom ?? 1;
-      }
-      const result = await saveCloudCommunityLaunchProfile({
-        session,
-        communityId: community.id,
-        input,
-      });
-      if (!result) throw new Error("Failed to save community profile.");
-      applyCommunityLaunchProfileResult(result);
-      await refreshActiveCommunityLaunchSetupStatus();
-    };
-    const handleSaveCommunityLaunchAbout = async (draft: { about: string }) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await saveCloudCommunityLaunchProfile({
-        session,
-        communityId: community.id,
-        input: {
-          about: draft.about.trim() || null,
-        },
-      });
-      if (!result) throw new Error("Failed to save community about.");
-      applyCommunityLaunchProfileResult(result);
-      await refreshActiveCommunityLaunchSetupStatus();
-    };
-    const handleSaveCommunityLaunchAgent = async (draft: {
-      systemPrompt: string;
-    }) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const loadedForCommunity =
-        communityAgentConfigLoadedCommunityIdRef.current === community.id;
-      const landing = loadedForCommunity
-        ? normalizeCommunityAgentLanding(communityAgentConfigLanding) ??
-          DEFAULT_EMPTY_THREAD_LANDING
-        : DEFAULT_EMPTY_THREAD_LANDING;
-      const normalizedLanding = normalizeCommunityAgentDraftForSave(landing);
-      if (!normalizedLanding) throw new Error("Community agent configuration unavailable.");
-      const row = await saveCloudCommunityAgentConfigDirect({
-        session,
-        communityId: community.id,
-        landingJson: normalizedLanding,
-        communitySystemPrompt: draft.systemPrompt,
-      });
-      if (!row) throw new Error("Failed to save community agent.");
-      hydrateCommunityAgentEditor({
-        landing_json: normalizedLanding,
-        community_system_prompt: draft.systemPrompt,
-        system_prompt: draft.systemPrompt,
-      });
-      communityAgentConfigLoadedCommunityIdRef.current = community.id;
-      communityAgentConfigDirtyRef.current = false;
-      await refreshActiveCommunityLaunchSetupStatus();
-    };
-    const handleSaveCommunityLaunchAccess = async (draft: {
-      entryPolicy: "open" | "approval";
-    }) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await setCloudCommunityFreeAccessMode({
-        session,
-        communityId: community.id,
-        mode: draft.entryPolicy,
-      });
-      setCommunities((prev) =>
-        prev.map((candidate) =>
-          candidate.id === community.id
-            ? {
-                ...candidate,
-                entry_policy: result?.entry_policy ?? draft.entryPolicy,
-                updated_at: result?.updated_at ?? candidate.updated_at,
-              }
-            : candidate,
-        ),
-      );
-      await refreshActiveCommunityLaunchSetupStatus();
-    };
-    const handleSaveCommunityLaunchPublish = async (draft: {
-      visibility: "published" | "unlisted";
-    }) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await saveCloudCommunityLaunchProfile({
-        session,
-        communityId: community.id,
-        input: {
-          visibility: draft.visibility,
-        },
-      });
-      if (!result) throw new Error("Failed to update publishing.");
-      applyCommunityLaunchProfileResult(result);
-      await refreshActiveCommunityLaunchSetupStatus();
-    };
-    const getOwnedCommunityCount = () =>
-      communities.reduce(
-        (count, community) =>
-          count + (communityRoleById[community.id] === "owner" ? 1 : 0),
-        0,
-      );
-    const openCommunityLaunchCreateFlow = () => {
-      void (async () => {
-        const activeSession = await ensureUsableAuthSession();
-        if (!activeSession) {
-          requireSignIn({ reason: "create_community", payload: { draft: null } });
-          return;
-        }
-        if (!isAccountSetupCompleteForBuilderActions) {
-          openProfileSetup();
-          return;
-        }
-        let status = accountCommerceStatus;
-        if (!status) {
-          try {
-            status = await loadAccountCommerceStatus(activeSession);
-          } catch (error) {
-            const message =
-              typeof error === "string"
-                ? error
-                : error instanceof Error
-                  ? error.message
-                  : "Couldn't check your account status. Try again.";
-            setAccountCommerceError(message);
-            showAppToastMessage(message);
-            return;
-          }
-        }
-        const maxCommunities = Math.max(
-          0,
-          Math.floor(Number(status?.max_communities ?? 0)),
-        );
-        if (maxCommunities <= 0) {
-          setIsFreeAccountInfoOpen(true);
-          return;
-        }
-        if (getOwnedCommunityCount() >= maxCommunities) {
-          setIsFreeAccountInfoOpen(true);
-          return;
-        }
-        communityLaunchSetupLifecycle.openCreate();
-      })();
-    };
-    const handleCreateCommunityFromLaunch = async (
-      draft: CommunityLaunchProfileSaveDraft,
-    ) => {
-      const activeSession = await ensureUsableAuthSession();
-      if (!activeSession) {
-        requireSignIn({ reason: "create_community", payload: { draft: null } });
-        throw new Error("Sign in to create a community.");
-      }
-      if (!isAccountSetupCompleteForBuilderActions) {
-        openProfileSetup();
-        throw new Error("Finish account setup before creating a community.");
-      }
-      const name = draft.name.trim();
-      const slug = (draft.slug.trim() || slugifyCommunityName(name)).toLowerCase();
-      if (!name || !slug) {
-        throw new Error("Name and slug are required.");
-      }
-      if (!isValidCommunitySlug(slug)) {
-        throw new Error("Slug must be 3-32 chars, lowercase, and may include dashes.");
-      }
-      const status = accountCommerceStatus ?? await loadAccountCommerceStatus(activeSession);
-      const maxCommunities = Math.max(
-        0,
-        Math.floor(Number(status?.max_communities ?? 0)),
-      );
-      if (maxCommunities <= 0) {
-        setIsFreeAccountInfoOpen(true);
-        throw new Error("Your account cannot create a community yet.");
-      }
-      if (getOwnedCommunityCount() >= maxCommunities) {
-        setIsFreeAccountInfoOpen(true);
-        throw new Error("You've reached your community limit.");
-      }
-
-      try {
-        const [avatarField, bannerField] = await Promise.all([
-          prepareCloudCommunityBrandingField({
-            session: activeSession,
-            kind: "avatar",
-            nextValue: draft.avatarUrl || null,
-          }),
-          prepareCloudCommunityBrandingField({
-            session: activeSession,
-            kind: "banner",
-            nextValue: draft.bannerUrl || null,
-          }),
-        ]);
-        const community = await createCloudCommunity<AuthSession, CommunityRecord>({
-          session: activeSession,
-          name,
-          slug,
-          visibility: "unlisted",
-          avatarStorageId: avatarField.storageId ?? null,
-          avatarUrl: avatarField.url ?? null,
-          oneLiner: draft.oneLiner.trim() || null,
-          bannerStorageId: bannerField.storageId ?? null,
-          bannerUrl: bannerField.url ?? null,
-        });
-        if (!community?.id) {
-          throw new Error("Failed to create community.");
-        }
-        setCommunities((prev) => [
-          community,
-          ...prev.filter((candidate) => candidate.id !== community.id),
-        ]);
-        setCommunityRoleById((prev) => ({ ...prev, [community.id]: "owner" }));
-        applyCommunityShellState({
-          communityId: community.id,
-          communitySlug: community.slug,
-          communityTab: "settings",
-        });
-        setPublicRoute({ kind: "app" });
-        setActivePage("community");
-        setActiveView("home");
-        const launchStep =
-          await communityLaunchSetupLifecycle.loadAndOpenCommunity({
-            session: activeSession,
-            communityId: community.id,
-          });
-        if (!launchStep) {
-          throw new Error("Failed to load community launch setup.");
-        }
-        replaceCommunityLaunchSetupRouteState(launchStep, {
-          communityId: community.id,
-          communitySlug: community.slug,
-        });
-      } catch (error) {
-        throw new Error(mapLaunchCommunityCreateError(error));
       }
     };
     const {
@@ -6914,7 +6201,7 @@ export default function App() {
       closeDirectMessages: handleCloseDirectMessages,
       closeThreadPage: handleCloseCommunityInteractionDrawer,
       hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
-      openCommunityCreateFlow: openCommunityLaunchCreateFlow,
+      openCommunityCreateFlow: openCreateCommunityModal,
       setIsFreeAccountInfoOpen,
     });
     useEffect(() => {
@@ -7035,7 +6322,7 @@ export default function App() {
         },
       });
       if (!result) throw new Error("Failed to save funnel text.");
-      applyCommunityLaunchProfileResult(result);
+      applyCommunityProfileResult(result);
       communitySettingsDirtyRef.current = hasCommunitySettingsDirtyOutsideFunnelAbout();
       return true;
     } catch (error) {
@@ -7052,7 +6339,7 @@ export default function App() {
     }
   }, [
     activeCommunity,
-    applyCommunityLaunchProfileResult,
+    applyCommunityProfileResult,
     communitySettingsAbout,
     ensureUsableAuthSession,
     hasCommunitySettingsDirtyOutsideFunnelAbout,
@@ -8128,7 +7415,6 @@ export default function App() {
     activePage !== "onboarding" &&
     hasResolvedCommunities &&
     Boolean(memberAgentSurfaceContext) &&
-    !isCommunityLaunchSetupModalOpen &&
     !isDirectMessagesOpen &&
     !isOnboardingModalOpen;
   const memberAgentVoiceScopeKey = `${activePage}:${communityTab}:${memberAgentDockCommunity?.id ?? "platform"}`;
@@ -8197,53 +7483,6 @@ export default function App() {
         notificationsState={directMessageWebNotifications.notificationsState}
         onToggleNotifications={directMessageWebNotifications.toggleNotifications}
         onClose={handleCloseDirectMessages}
-      />
-      <WebCommunityLaunchSetupModal
-        lifecycle={communityLaunchSetupLifecycleModel}
-        knowledge={communityLaunchKnowledgeModel}
-        community={
-          !isCommunityLaunchCreateMode && activeCommunity
-            ? {
-                id: activeCommunity.id,
-                slug: activeCommunity.slug,
-                name: activeCommunity.name,
-                one_liner: activeCommunity.one_liner,
-                about: activeCommunity.about,
-                avatar_url: activeCommunity.avatar_url,
-                avatar_storage_id: activeCommunity.avatar_storage_id ?? null,
-                avatar_focus_x: activeCommunity.avatar_focus_x,
-                avatar_focus_y: activeCommunity.avatar_focus_y,
-                avatar_zoom: activeCommunity.avatar_zoom,
-                banner_url: activeCommunity.banner_url,
-                banner_storage_id: activeCommunity.banner_storage_id ?? null,
-                banner_focus_x: activeCommunity.banner_focus_x,
-                banner_focus_y: activeCommunity.banner_focus_y,
-                banner_zoom: activeCommunity.banner_zoom,
-                visibility: activeCommunity.visibility,
-                entry_policy: activeCommunity.entry_policy ?? null,
-                agent_system_prompt: communityAgentConfigCommunitySystemPrompt,
-              }
-            : null
-        }
-        onClose={() => {
-          communityLaunchSetupLifecycle.close();
-          clearCommunityLaunchSetupRouteState();
-        }}
-        onKnowledgeAutoOpenHandled={(provider) => {
-          communityLaunchSetupLifecycle.markKnowledgeAutoOpenHandled(provider);
-        }}
-        onStepChange={(step) => {
-          replaceCommunityLaunchSetupRouteState(step);
-        }}
-        onOpenStep={handleOpenCommunityLaunchSetupStep}
-        onCreateCommunity={handleCreateCommunityFromLaunch}
-        onSaveProfile={handleSaveCommunityLaunchProfile}
-        onSaveAbout={handleSaveCommunityLaunchAbout}
-        accountTier={accountCommerceStatus?.account_tier ?? null}
-        onOpenPremiumBilling={openPremiumBilling}
-        onSaveAgent={handleSaveCommunityLaunchAgent}
-        onSaveAccess={handleSaveCommunityLaunchAccess}
-        onSavePublish={handleSaveCommunityLaunchPublish}
       />
     </>
   );
@@ -8388,7 +7627,7 @@ export default function App() {
       : handleOpenDiscover,
     openMobileCreateCommunity,
     hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
-    openCommunityCreateFlow: openCommunityLaunchCreateFlow,
+    openCommunityCreateFlow: openCreateCommunityModal,
     communities,
     railCommunities,
     communityRailAttentionById,

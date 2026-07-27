@@ -12,11 +12,7 @@ const packageJson = read("package.json");
 const resources = read("convex/communityResources.ts");
 const schema = read("convex/schema.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
-const launchModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const app = read("apps/web/src/App.tsx");
-const launchKnowledgeController = read(
-  "apps/web/src/controllers/useWebCommunityLaunchKnowledgeController.ts",
-);
 const turnRunner = read("shared/useWebTurnRunnerController.ts");
 const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const runtimeTimeline = read("apps/web/src/components/RuntimeLiveTimeline.tsx");
@@ -227,32 +223,6 @@ assert.doesNotMatch(
   /writeCommunityResourceBuilderResource|editCommunityResourceBuilderResource/,
   "raw builder write/edit tools should not be exposed through the frontend gateway yet",
 );
-assert.match(
-  launchKnowledgeController,
-  /resource_role: "source"[\s\S]*resource_status: "review"[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "url"/,
-  "launch knowledge links should enter as reviewed URL sources queued for ingestion rather than published pages",
-);
-assert.doesNotMatch(
-  launchModal,
-  /Create drafts/,
-  "knowledge modal should not expose a raw scaffold action on the collection screen",
-);
-assert.doesNotMatch(
-  launchModal,
-  /onEnsureKnowledgeScaffold|sourceBackedPlan|proposalHasSourceBackedWrites/,
-  "knowledge modal should not run hidden scaffold fallback logic",
-);
-assert.doesNotMatch(
-  launchModal,
-  /missing_default_modules|missing_scaffold_pages/,
-  "knowledge modal should not use fixed scaffold requirements to decide fallback creation",
-);
-assert.match(
-  launchModal,
-  /await onAddKnowledgeLink[\s\S]*await onIngestKnowledgeSources\(\)[\s\S]*await onGenerateKnowledgePlan/,
-  "knowledge modal should ingest source links before source-driven planning",
-);
-
 const builderListBody = resources.slice(
   resources.indexOf("async function listCommunityResourceBuilderDirectoryCore"),
   resources.indexOf("export const listCommunityResourceBuilderDirectoryInternal"),
