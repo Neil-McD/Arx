@@ -48,7 +48,7 @@ The provider SDK versions remain unchanged. Root overrides now resolve the affec
 - `@modelcontextprotocol/sdk@1.29.0`
 - `@hono/node-server@2.0.11`
 - `body-parser@2.3.0`
-- `brace-expansion@2.1.2`
+- `brace-expansion@5.0.8`
 - `fast-uri@4.1.1`
 - `js-yaml@5.2.1`
 - `protobufjs@8.7.1`
@@ -59,6 +59,35 @@ The provider SDK versions remain unchanged. Root overrides now resolve the affec
 The web lock resolves `dompurify@3.4.12`.
 
 One structural Daytona proof had encoded a formatter-sensitive single-space expression. Its matcher now accepts equivalent whitespace; the protected runtime invariant and runtime code did not change.
+
+## 2026-07-27 advisory refresh
+
+Canonical CI correctly reopened this boundary when the registry published
+`GHSA-mh99-v99m-4gvg` against `brace-expansion<=5.0.7`. The root graph exposed
+the advisory through the retained
+`@blaxel/core@0.2.94 -> archiver@7.0.1 -> minimatch` lineage. The independent
+web graph exposed it through
+`@sentry/vite-plugin@5.3.0 -> glob@13.0.6 -> minimatch@10.2.5`.
+
+The smallest compatible correction changes the existing root override from
+`brace-expansion@2.1.2` to patched `5.0.8`, adds the same exact override to the
+web graph, and refreshes only those two locks. Blaxel, Archiver, Sentry, and
+Glob remain unchanged. An `archiver@8.0.0` override was tested and rejected
+before commit: Archiver 8 exports ESM classes rather than the callable default
+consumed by both the CommonJS and ESM Blaxel builds.
+
+A fresh install and low-threshold audit report zero vulnerabilities for root
+and web; the unchanged preview-proxy graph remains clean. The root tree resolves
+both Blaxel archive-path matchers,
+`minimatch@9.0.9` and `minimatch@5.1.9`, to `brace-expansion@5.0.8`.
+A separate web tree resolves `minimatch@10.2.5` to the same patched release.
+A direct behavior proof creates a directory fixture and successfully streams
+the ZIP through the same `archive.directory(buildDir, false)` operation used by
+Blaxel. The Blaxel lifecycle and three-graph package-boundary proofs, web
+typecheck, production build, bundle budget, and complete 40-step foundation
+baseline also pass. The exact lock-and-behavior proof now runs in the canonical
+Dependency Audit job after the root clean install. Exact staging CI and provider
+acceptance remain required before this refresh is marked deployed.
 
 ## Verification receipt
 

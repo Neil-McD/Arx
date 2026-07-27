@@ -1883,8 +1883,32 @@ budget, Workspace quarantine, product-doc index, package/deployment boundary,
 preview-proxy package/security, Daytona runtime, computer screenshot bridge,
 runtime timeline, runtime diagnostics, staging-identity, staging-guard proof,
 remote staging-authority, and `git diff --check` gates pass on the candidate.
-The three protected package graphs and all lockfiles retain their pre-slice
-hashes; no dependency declaration or resolution changes.
+The initial release candidate retained all three protected package graphs and
+lockfiles. After exact commit `90d4d295899790aa5853858249772d8e1de75549`
+reached canonical staging, the low-threshold root audit correctly failed on the
+newly published `GHSA-mh99-v99m-4gvg` advisory through
+`@blaxel/core -> archiver -> minimatch -> brace-expansion`; the independent
+web audit found the same advisory through
+`@sentry/vite-plugin -> glob -> minimatch -> brace-expansion`. The smallest
+compatible source follow-up keeps `@blaxel/core@0.2.94` and its expected
+`archiver@7.0.1` API, updates the root `brace-expansion` override from `2.1.2`
+to patched `5.0.8`, adds the same exact override to the independently installed
+web graph, and refreshes only those two locks. A rejected `archiver@8.0.0`
+candidate was not retained because its ESM-only class export shape breaks
+Blaxel's callable default import.
+
+The revised root and web graphs pass fresh clean installs and low-threshold
+registry audits with zero vulnerabilities; the unchanged preview-proxy audit
+also remains clean. The installed root lineage resolves
+`@blaxel/core@0.2.94 -> archiver@7.0.1`, both
+`minimatch@9.0.9` and `minimatch@5.1.9` to
+`brace-expansion@5.0.8`, and preserves `zip-stream@6.0.1`; the web lineage
+resolves `minimatch@10.2.5` to the same patched release. A direct behavioral
+smoke exercises the exact directory-to-ZIP operation used by Blaxel; the
+Blaxel lifecycle proof, package/deployment-boundary proof, 40-step foundation
+baseline, web typecheck, production build, and bundle budget also pass. This
+exact lock-and-behavior proof is now part of the canonical Dependency Audit
+job. The security interlock remains release-pending at this checkpoint.
 
 No deployed environment name, Convex code, web build, staging data, provider
 resource, production configuration, production deployment, or `origin/main`

@@ -82,6 +82,9 @@ jobs:
       - name: Audit root dependencies
         run: npm audit --audit-level=low
 
+      - name: Verify dependency security compatibility
+        run: npm run check:dependency-security-interlock
+
       - name: Install web dependencies
         run: npm --prefix apps/web ci
 
