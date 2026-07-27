@@ -42,6 +42,7 @@ import {
   readCommunityAvatarFileAsDataUrlWithinLimit,
 } from "../../../../shared/imageTransforms";
 import { StripeWordmark } from "./StripeWordmark";
+import type { WebCommunityLaunchSetupLifecycleModel } from "./webCommunityLaunchSetupLifecycleModel";
 
 const COMMUNITY_LAUNCH_IMAGE_DATA_URL_MAX_CHARS = 600_000;
 const COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5;
@@ -472,17 +473,12 @@ export type CommunityLaunchPublishSaveDraft = {
 };
 
 type WebCommunityLaunchSetupModalProps = {
-  isOpen: boolean;
-  mode?: "setup" | "create";
-  initialStep?: CommunityLaunchSetupStep | null;
-  knowledgeIntegrationReloadKey?: string | number | null;
-  knowledgeAutoOpenProvider?: "google_drive" | "github" | null;
+  lifecycle: WebCommunityLaunchSetupLifecycleModel;
   knowledgeLinkSources?: CommunityLaunchKnowledgeImportedSource[];
   knowledgeFileSources?: CommunityLaunchKnowledgeImportedSource[];
   knowledgeGoogleDriveSources?: CommunityLaunchKnowledgeImportedSource[];
   knowledgeGitHubSources?: CommunityLaunchKnowledgeImportedSource[];
   community: CommunityLaunchSetupCommunity | null;
-  status: CommunityLaunchSetupStatus | null;
   onClose: () => void;
   onStepChange?: (step: CommunityLaunchSetupStep) => void;
   onOpenStep: (step: CommunityLaunchSetupStep) => void;
@@ -802,17 +798,12 @@ export function WebCommunityLaunchSetupModal(
   props: WebCommunityLaunchSetupModalProps,
 ) {
   const {
-    isOpen,
-    mode = "setup",
-    initialStep = null,
-    knowledgeIntegrationReloadKey = null,
-    knowledgeAutoOpenProvider = null,
+    lifecycle,
     knowledgeLinkSources = [],
     knowledgeFileSources = [],
     knowledgeGoogleDriveSources = [],
     knowledgeGitHubSources = [],
     community,
-    status,
     onClose,
     onStepChange,
     onOpenStep,
@@ -848,6 +839,14 @@ export function WebCommunityLaunchSetupModal(
     onSaveAccess,
     onSavePublish,
   } = props;
+  const {
+    isOpen,
+    mode,
+    initialStep,
+    knowledgeIntegrationReloadKey,
+    knowledgeAutoOpenProvider,
+    status,
+  } = lifecycle;
   const isCreateMode = mode === "create";
   const requestedInitialStep = initialStep && STEP_ORDER.includes(initialStep)
     ? initialStep
