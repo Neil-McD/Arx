@@ -2259,3 +2259,31 @@ route vocabulary, copy, style, provider protocol, production action, or
 `origin/main` change belongs to this slice. Canonical staging release,
 exact-build acceptance, and a reversible saved-link round trip remain required
 before C8.4B can be called complete.
+
+### C8.4B staging closure receipt
+
+Source commit `2e9f0d5c61c4fbfd435c1a60c90f9431764d4dd8` reached the
+canonical Git-driven `polynet-staging` deployment without a Convex deployment.
+The canonical staging `version.json` served that exact commit as both
+`buildId` and `sentryRelease`. Exact-SHA GitHub runs `30288187935` (MVP Guards)
+and `30288187363` (Staging UI Canary) completed successfully.
+
+Reversible signed-in acceptance on that exact build used the existing
+manager-owned, incomplete `distribution-engineering` launch surface. The
+Knowledge projection began with zero saved links. Adding the nonce
+`https://example.com/c8-4b-proof-2e9f0d5c` produced exactly one saved link,
+advanced Knowledge progress from `0/2` to `1/2`, and exposed the canonical
+saved-source row. Removing that exact row returned the projection to zero links
+and progress to `0/2`. The acceptance tab reported no browser warnings or
+errors.
+
+The same manager-only setup URL in an anonymous staging session failed closed
+to the public community surface without exposing the launch modal. No source
+ingestion, file upload, wiki assembly, provider OAuth connect or disconnect,
+community creation, schema change, Convex deployment, production action, or
+`origin/main` change was performed.
+
+C8.4B is complete on canonical staging. C8 remains `IN_PROGRESS`; the new
+controller is an explicit retained concentration, and any further Knowledge UI
+decomposition must be planned as a separate slice. Production, `origin/main`,
+production configuration, production data, and Convex remain untouched.
