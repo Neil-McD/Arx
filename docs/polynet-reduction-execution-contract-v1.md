@@ -2019,3 +2019,36 @@ C8.1 is complete on canonical staging. C8 remains `IN_PROGRESS`; any further
 `App.tsx`, retained CSS, backend, or runtime decomposition is a separately
 planned C8 slice. Production, `origin/main`, production configuration, and
 production data remain untouched.
+
+### C8.2 source receipt — Personal Account orchestration boundary
+
+The second C8 slice removes Account-local state-machine ownership from
+`App.tsx`. One `useWebPersonalAccountSettingsController` now composes the
+existing authenticated personal-agent settings, personal-memory read/search
+and mutation, and account-data export use cases. It owns their UI state,
+sign-out reset, eager agent-settings hydration, Account-route 150-millisecond
+memory search, and the account-setup refresh that follows an agent-settings
+save. Session-bound setters prevent late read, mutation, or export responses
+from repopulating personal state after sign-out.
+
+The cloud authority is unchanged. User memory settings still use the
+authenticated `settings` query and mutation, personal-memory reads and writes
+still resolve the authenticated user and enforce item ownership, new memory
+remains global, legacy workspace-scoped rows remain readable, and exports keep
+their existing cloud sources, limits, filenames, and columns. The export
+controller is renamed from stale Agent vocabulary to Account vocabulary
+without changing its behavior.
+
+`WebSettingsPanels` consumes one typed `personalAccount` boundary instead of a
+wide `agent` prop bucket. `App.tsx` no longer imports the personal-memory data
+or mutation hooks, the export controller, or the deleted state-only
+`useWebPersonalMemoryUiController`. Profile, provider, billing, partner,
+onboarding, route, MCP, community, and operator ownership remain outside this
+boundary because those concerns are shared across retained MVP journeys.
+
+The source candidate removes 84 net lines from `App.tsx`, 38 net lines from
+`WebSettingsPanels.tsx`, and the redundant 32-line state-only controller. A
+focused architecture proof locks the new ownership boundary and the retained
+auth, global-memory, export, search, reset, and account-setup-refresh
+invariants. No Convex file, schema, migration, data write, environment change,
+route, copy, style, or production action belongs to this slice.

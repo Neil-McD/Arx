@@ -6,7 +6,7 @@ import type { BuilderPartnerProgramSnapshot } from "../../../../shared/builderPa
 import type { SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import type { UseWebProviderConnectionUiControllerResult } from "../controllers/useWebProviderConnectionUiController";
 import type { useWebProfileSettingsUiController } from "../controllers/useWebProfileSettingsUiController";
-import type { useWebPersonalMemoryUiController } from "../controllers/useWebPersonalMemoryUiController";
+import type { useWebPersonalAccountSettingsController } from "../controllers/useWebPersonalAccountSettingsController";
 import type { UseWebBillingUiControllerResult } from "../controllers/useWebBillingUiController";
 import { WebAccountDataExportSection } from "./WebAccountDataExportSection";
 import { WebAccountSettingsSection } from "./WebAccountSettingsSection";
@@ -85,40 +85,10 @@ export type WebSettingsPanelsProps = {
     providerConnectionUi: UseWebProviderConnectionUiControllerResult;
     billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus>;
   };
-  agent: {
+  personalAccount: {
     session: SessionLike;
-    exportError: string | null;
-    exportThreadsCsv: () => Promise<void> | void;
-    exportMessagesCsv: () => Promise<void> | void;
-    exportMemoryCsv: () => Promise<void> | void;
-    isExporting: boolean;
-    userMemorySettings: {
-      memory_mode: "off" | "suggest" | "auto";
-      remember_intent_enabled: boolean;
-      agent_name: string;
-      agent_soul: string;
-    };
-    isLoadingUserMemorySettings: boolean;
-    saveUserMemorySettings: (next: {
-      memory_mode: "off" | "suggest" | "auto";
-      remember_intent_enabled: boolean;
-      agent_name: string;
-      agent_soul: string;
-    }) => Promise<void> | void;
     formatRelativeTime: (value: string) => string;
-    handleTogglePersonalMemoryPinned: (item: {
-      id: string;
-      content: string;
-      scope: "global" | "workspace";
-      scope_id: string | null;
-      pinned: boolean;
-      created_at: string;
-      updated_at: string;
-    }) => Promise<void> | void;
-    handleDeletePersonalMemoryItem: (id: string) => Promise<void> | void;
-    handleCreatePersonalMemoryItem: () => Promise<void> | void;
-    loadPersonalMemoryItems: () => Promise<void> | void;
-    personalMemoryUi: ReturnType<typeof useWebPersonalMemoryUiController>;
+    controller: ReturnType<typeof useWebPersonalAccountSettingsController>;
   };
   billing: {
     session: SessionLike;
@@ -132,8 +102,14 @@ export type WebSettingsPanelsProps = {
 };
 
 export function WebSettingsPanels(props: WebSettingsPanelsProps) {
-  const { settingsGroup, profile, account, agent, billing, appearance } =
-    props;
+  const {
+    settingsGroup,
+    profile,
+    account,
+    personalAccount,
+    billing,
+    appearance,
+  } = props;
 
   const profileSectionProps = {
     session: profile.session,
@@ -224,35 +200,21 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
   };
 
   const personalAgentSectionProps = {
-    session: agent.session,
-    settings: agent.userMemorySettings,
-    isLoading: agent.isLoadingUserMemorySettings,
-    onSave: agent.saveUserMemorySettings,
+    session: personalAccount.session,
+    settings: personalAccount.controller.personalAgent.settings,
+    isLoading: personalAccount.controller.personalAgent.isLoading,
+    onSave: personalAccount.controller.personalAgent.saveSettings,
   };
 
   const personalMemorySectionProps = {
-    session: agent.session,
-    error: agent.personalMemoryUi.personalMemoryError,
-    isLoading: agent.personalMemoryUi.isLoadingPersonalMemory,
-    items: agent.personalMemoryUi.personalMemoryItems,
-    query: agent.personalMemoryUi.personalMemoryQuery,
-    setQuery: agent.personalMemoryUi.setPersonalMemoryQuery,
-    loadItems: agent.loadPersonalMemoryItems,
-    formatRelativeTime: agent.formatRelativeTime,
-    togglePinned: agent.handleTogglePersonalMemoryPinned,
-    deleteItem: agent.handleDeletePersonalMemoryItem,
-    newContent: agent.personalMemoryUi.newPersonalMemoryContent,
-    setNewContent: agent.personalMemoryUi.setNewPersonalMemoryContent,
-    createItem: agent.handleCreatePersonalMemoryItem,
+    session: personalAccount.session,
+    ...personalAccount.controller.personalMemory,
+    formatRelativeTime: personalAccount.formatRelativeTime,
   };
 
   const dataExportSectionProps = {
-    session: agent.session,
-    error: agent.exportError,
-    isExporting: agent.isExporting,
-    exportThreadsCsv: agent.exportThreadsCsv,
-    exportMessagesCsv: agent.exportMessagesCsv,
-    exportMemoryCsv: agent.exportMemoryCsv,
+    session: personalAccount.session,
+    ...personalAccount.controller.dataExport,
   };
 
   const billingSectionProps = {

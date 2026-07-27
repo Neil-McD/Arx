@@ -45,7 +45,7 @@ import {
   DEFAULT_EMPTY_THREAD_LANDING, normalizeCommunityAgentDraftForSave, normalizeCommunityAgentLanding, type CommunityAgentLanding, } from "../../../shared/communityAgentLanding";
 import { normalizeCommunityFunnelConfig } from "../../../shared/communityFunnel";
 import {
-  buildCsv, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, } from "../../../shared/contentFormatting";
+  formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, } from "../../../shared/contentFormatting";
 import {
   formatAccountTierLabel, isAccountTierFree, formatPlanPrice, formatSubscriptionPrice, type StripeConnectReturn, } from "../../../shared/accountCommerce";
 import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
@@ -59,7 +59,7 @@ import { useWebCommunitySettingsUiController } from "./controllers/useWebCommuni
 import { useWebCommunityResourceUiController } from "./controllers/useWebCommunityResourceUiController";
 import { useWebCommunityJoinRequestsController } from "./controllers/useWebCommunityJoinRequestsController";
 import type { CommittedMention } from "./components/communityMentionAutocomplete";
-import { useWebPersonalMemoryUiController } from "./controllers/useWebPersonalMemoryUiController";
+import { useWebPersonalAccountSettingsController } from "./controllers/useWebPersonalAccountSettingsController";
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
@@ -201,7 +201,6 @@ import {
 import { AnalyticsLineChart } from "../../../shared/AnalyticsLineChart";
 import {
   copyTextToClipboard,
-  downloadTextFile,
   getAvatarColor,
   getInitials,
   shortId,
@@ -273,7 +272,6 @@ import {
   parseMessageMemoryAdded,
   parseMessageMemorySuggestions,
   parseMessageMemoryUsed,
-  parseMessageText,
   type HistoryUsedItem,
   type MemorySuggestion,
   type MemoryUsedItem,
@@ -312,9 +310,6 @@ import { useCommunityRailOrder } from "../../../shared/useCommunityRailOrder";
 import { useRailPointerReorder } from "../../../shared/useRailPointerReorder";
 import { useWebCommunityAccessController } from "../../../shared/useWebCommunityAccessController";
 import { useWebDiscoverController } from "../../../shared/useWebDiscoverController";
-import { useWebMemorySettingsDataController } from "../../../shared/useWebMemorySettingsDataController";
-import { useWebMemoryMutationController } from "../../../shared/useWebMemoryMutationController";
-import { useWebAgentDataExportController } from "../../../shared/useWebAgentDataExportController";
 import { useWebToastController } from "../../../shared/useWebToastController";
 import { useWebSettingsImageUploadController } from "../../../shared/useWebSettingsImageUploadController";
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
@@ -574,13 +569,6 @@ type PublicCommunityRecord = {
     avatar_focus_y?: number | null;
     avatar_zoom?: number | null;
   }> | null;
-};
-
-type UserMemorySettings = {
-  memory_mode: "off" | "suggest" | "auto";
-  remember_intent_enabled: boolean;
-  agent_name: string;
-  agent_soul: string;
 };
 
 type MessageAttachment = CommunityMessageAttachment & {
@@ -1270,7 +1258,6 @@ export default function App() {
         communitySlug: null,
         communityTab: "chat",
       });
-      personalMemoryUi.setPersonalMemoryItems([]);
       setCloudProfile(null);
       setAccountSetupStatus(null);
       setIsLoadingAccountSetupStatus(false);
@@ -1685,7 +1672,16 @@ export default function App() {
   const [isFreeAccountInfoOpen, setIsFreeAccountInfoOpen] = useState(false);
   const [stripeConnectReturn, setStripeConnectReturn] = useState<StripeConnectReturn | null>(null);
 
-  const personalMemoryUi = useWebPersonalMemoryUiController();
+  const personalAccountSettings =
+    useWebPersonalAccountSettingsController<AuthSession>({
+      session,
+      isAccountSettingsActive:
+        activeView === "settings" && settingsGroup === "account",
+      getSession: () => sessionRef.current,
+      ensureSession: ensureUsableAuthSession,
+      requireSignIn,
+      onUserMemorySettingsSaved: refreshAccountSetupStatus,
+    });
   const [isLoadingCommunities, setIsLoadingCommunities] = useState<boolean>(() => Boolean(session));
   const [hasResolvedCommunities, setHasResolvedCommunities] = useState(false);
   const [communities, setCommunities] = useState<CommunityRecord[]>([]);
@@ -3830,16 +3826,9 @@ export default function App() {
   const appOAuthFinalizeInFlightRef = useRef<string | null>(null);
   const sourceIntegrationOAuthFinalizeInFlightRef = useRef<string | null>(null);
   const lastShownAuthErrorRef = useRef<string | null>(null);
-  const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
-    memory_mode: "auto",
-    remember_intent_enabled: true,
-    agent_name: "",
-    agent_soul: "",
-  });
   const [communityAiAgentPreferredTab, setCommunityAiAgentPreferredTab] = useState<
     "instructions" | "apps" | "skills"
   >("instructions");
-  const [isLoadingUserMemorySettings, setIsLoadingUserMemorySettings] = useState(false);
   const [chatgptConnection, setChatgptConnection] = useState<CloudChatgptConnectionStatus>({
     provider: "chatgpt",
     auth_kind: "oauth_tokens",
@@ -4471,48 +4460,10 @@ export default function App() {
     setDecidingCommunityJoinRequestId,
   });
 
-  const [exportError, setExportError] = useState<string | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
-
   const [discoverCommunities, setDiscoverCommunities] = useState<DiscoverCommunity[]>([]);
   const [isLoadingDiscover, setIsLoadingDiscover] = useState(false);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
   const [lastDiscoverLoadAttemptedAt, setLastDiscoverLoadAttemptedAt] = useState(0);
-
-  const {
-    loadUserMemorySettings,
-    loadPersonalMemoryItems,
-    searchPersonalMemoryItems,
-  } = useWebMemorySettingsDataController<AuthSession>({
-    getSession: () => sessionRef.current,
-    ensureSession: ensureUsableAuthSession,
-    setIsLoadingUserMemorySettings,
-    setUserMemorySettings,
-    setIsLoadingPersonalMemory: personalMemoryUi.setIsLoadingPersonalMemory,
-    setPersonalMemoryError: personalMemoryUi.setPersonalMemoryError,
-    setPersonalMemoryItems: personalMemoryUi.setPersonalMemoryItems,
-  });
-
-  const {
-    saveUserMemorySettings,
-    handleCreatePersonalMemoryItem,
-    handleTogglePersonalMemoryPinned,
-    handleDeletePersonalMemoryItem,
-  } = useWebMemoryMutationController<AuthSession>({
-    getSession: () => sessionRef.current,
-    ensureSession: ensureUsableAuthSession,
-    requireSignIn,
-    loadPersonalMemoryItems,
-    newPersonalMemoryContent: personalMemoryUi.newPersonalMemoryContent,
-    setIsLoadingUserMemorySettings,
-    setUserMemorySettings,
-    setPersonalMemoryError: personalMemoryUi.setPersonalMemoryError,
-    setNewPersonalMemoryContent: personalMemoryUi.setNewPersonalMemoryContent,
-  });
-  const saveUserMemorySettingsAndRefreshSetup = useCallback(async (next: UserMemorySettings): Promise<AccountSetupStatus | null> => {
-    await saveUserMemorySettings(next);
-    return await refreshAccountSetupStatus();
-  }, [refreshAccountSetupStatus, saveUserMemorySettings]);
 
   const openPremiumBilling = () => openGlobalSettings("billing");
 
@@ -4976,15 +4927,6 @@ export default function App() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [session, loadSelfProfile, loadUserProfiles, visibleCommunityProfileIds]);
-
-  useEffect(() => {
-    if (activeView !== "settings" || settingsGroup !== "account") return;
-    const q = personalMemoryUi.personalMemoryQuery.trim();
-    const handle = window.setTimeout(() => {
-      void searchPersonalMemoryItems(q);
-    }, 150);
-    return () => window.clearTimeout(handle);
-  }, [activeView, settingsGroup, personalMemoryUi.personalMemoryQuery, session, searchPersonalMemoryItems]);
 
   useEffect(() => {
     setCommunityChatError(null);
@@ -5497,7 +5439,6 @@ export default function App() {
   useEffect(() => {
     if (!session) {
       navStackRef.current = [];
-      setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true, agent_name: "", agent_soul: "" });
       setChatgptConnection({
         provider: "chatgpt",
         auth_kind: "oauth_tokens",
@@ -5525,7 +5466,6 @@ export default function App() {
       const usableSession = await ensureUsableAuthSession(session);
       if (!usableSession) return;
       await Promise.all([
-        loadUserMemorySettings(usableSession),
         loadProviderConnections(usableSession),
         refreshAccountSetupStatus(usableSession),
       ]);
@@ -6237,16 +6177,6 @@ export default function App() {
   }
 
   const hasPendingChatgptAuth = providerConnectionUi.hasPendingChatgptAuth;
-  const { exportThreadsCsv, exportMessagesCsv, exportMemoryCsv } =
-    useWebAgentDataExportController<AuthSession>({
-      getSession: () => sessionRef.current,
-      buildCsv,
-      downloadTextFile,
-      parseMessageText,
-      setExportError,
-      setIsExporting,
-    });
-
   const {
     handleSettingsBannerDrop,
     handleSettingsAvatarDrop,
@@ -8127,24 +8057,10 @@ export default function App() {
       providerConnectionUi,
       billingUi,
     },
-    agent: {
-      session: session,
-      exportError,
-      exportThreadsCsv,
-      exportMessagesCsv,
-      exportMemoryCsv,
-      isExporting,
-      userMemorySettings,
-      isLoadingUserMemorySettings,
-      saveUserMemorySettings: async (next) => {
-        await saveUserMemorySettingsAndRefreshSetup(next);
-      },
-      loadPersonalMemoryItems,
+    personalAccount: {
+      session,
       formatRelativeTime,
-      handleTogglePersonalMemoryPinned,
-      handleDeletePersonalMemoryItem,
-      handleCreatePersonalMemoryItem,
-      personalMemoryUi,
+      controller: personalAccountSettings,
     },
     billing: {
       session: session,

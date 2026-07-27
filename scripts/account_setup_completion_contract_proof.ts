@@ -16,9 +16,13 @@ const settingsGateway = read("shared/cloudUserSettingsGateway.ts");
 const communityTypes = read("shared/communityTypes.ts");
 const accountSetup = read("shared/accountSetup.ts");
 const profileHandle = read("shared/profileHandle.ts");
+const profileCore = read("convex/profileCore.ts");
 const app = read("apps/web/src/App.tsx");
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const legalReaderModal = read("apps/web/src/components/WebPlatformLegalReaderModal.tsx");
+const personalAccountSettingsController = read(
+  "apps/web/src/controllers/useWebPersonalAccountSettingsController.ts",
+);
 
 assert.match(schema, /handle: v\.optional\(v\.string\(\)\)/, "users table must store a public profile handle");
 assert.match(schema, /normalizedHandle: v\.optional\(v\.string\(\)\)/, "users table must store normalized handle");
@@ -62,7 +66,8 @@ assert.doesNotMatch(accountSetup, /directionMissing/, "path selection must not g
 assert.match(profiles, /validateProfileHandle/, "profile mutations must validate handles");
 assert.match(profiles, /assertHandleAvailable/, "profile mutations must enforce handle availability");
 assert.match(profiles, /export const checkHandleAvailability = query/, "profile handle availability must be queryable before save");
-assert.match(profiles, /withIndex\("by_normalizedHandle"/, "handle uniqueness check must use normalized handle index");
+assert.match(profiles, /getUniqueUserByNormalizedHandle/, "profile mutations must use the canonical unique-handle resolver");
+assert.match(profileCore, /withIndex\("by_normalizedHandle"/, "handle uniqueness check must use normalized handle index");
 assert.match(profiles, /export const getMyAccountSetupStatus = query/, "profiles must expose authenticated setup status");
 assert.match(profiles, /loadAccountSetupStatusForUser/, "profiles must use the shared Convex setup derivation helper");
 assert.match(profiles, /assertProfileAvatarStorageResolvable/, "profile avatar storage must be validated before save");
@@ -135,7 +140,11 @@ assert.match(app, /async function finishOnboarding/, "app shell must finish acco
 assert.match(app, /completeOnboarding: true/, "finish flow must mark onboarding complete explicitly");
 assert.match(app, /formatAccountSetupMissingGuidance\(latestSetup\)/, "finish flow must use precise canonical missing-setup guidance");
 assert.doesNotMatch(app, /Finish profile, inference, and agent setup to continue\./, "finish flow must not use stale generic missing-setup copy");
-assert.match(app, /saveUserMemorySettingsAndRefreshSetup[\s\S]*Promise<AccountSetupStatus \| null>[\s\S]*return await refreshAccountSetupStatus\(\)/, "agent save must return refreshed account setup status");
+assert.match(
+  personalAccountSettingsController,
+  /saveUserMemorySettingsAndRefreshSetup[\s\S]*await saveUserMemorySettings\(next\);[\s\S]*await params\.onUserMemorySettingsSaved\(\);/,
+  "agent save must refresh canonical account setup status",
+);
 assert.doesNotMatch(app, /onboardingDirection: destination|completeOnboarding\("build_community"|completeOnboarding\("discover_community"/, "finish flow must not store a direction choice");
 assert.doesNotMatch(app, /WebAccountSetupCard|buildWebWorkspaceLandingProjection/);
 
