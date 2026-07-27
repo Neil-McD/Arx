@@ -2106,5 +2106,29 @@ completion and destination boundaries.
 
 No Convex file, schema, migration, cloud data, environment configuration,
 route, copy, style, provider protocol, production action, or `origin/main`
-change belongs to this slice. Canonical staging release and exact-build
-acceptance remain required before C8.3 can be called complete.
+change belongs to this slice.
+
+The source candidate committed as
+`d94480ce4b949733c7ea4bec803974f9bf4786c1` and reached the canonical
+Git-driven staging web origin without a Convex deployment. Exact-SHA GitHub
+run `30282034227` passed the Convex cut guard, three-graph dependency audit,
+40-step foundation baseline, web typecheck, production build, and bundle
+budget. Exact-SHA run `30282034290` passed the controlled-mismatch check and
+anonymous public-funnel canary. Canonical staging then served the source
+commit as both build ID and Sentry release.
+
+Read-only live acceptance proved that signed-out `/onboarding` fails closed
+into authentication, while the completed signed-in operator account resolves
+the same route to canonical member destination `/c/polynet/chat`. The retained
+Account surface still rendered the inference-provider controls and connected
+ChatGPT state after the deployment. Browser warning/error logs were empty. No
+disposable incomplete staging account was available, so live bridge-form
+mutation was deliberately not fabricated; the compiler, focused
+single-controller/three-consumer proof, and adjacent account-completion,
+member-destination, social-profile, settings, Workspace-quarantine, and
+profile/DM contracts cover that source boundary.
+
+C8.3 is complete on canonical staging. C8 remains `IN_PROGRESS`; the next
+retained-surface decomposition must be planned as a separate slice.
+Production, `origin/main`, production configuration, production data, and
+Convex remain untouched.
