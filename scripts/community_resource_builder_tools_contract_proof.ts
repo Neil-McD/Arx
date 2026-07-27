@@ -14,6 +14,9 @@ const schema = read("convex/schema.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const launchModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const app = read("apps/web/src/App.tsx");
+const launchKnowledgeController = read(
+  "apps/web/src/controllers/useWebCommunityLaunchKnowledgeController.ts",
+);
 const turnRunner = read("shared/useWebTurnRunnerController.ts");
 const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const runtimeTimeline = read("apps/web/src/components/RuntimeLiveTimeline.tsx");
@@ -225,7 +228,7 @@ assert.doesNotMatch(
   "raw builder write/edit tools should not be exposed through the frontend gateway yet",
 );
 assert.match(
-  app,
+  launchKnowledgeController,
   /resource_role: "source"[\s\S]*resource_status: "review"[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "url"/,
   "launch knowledge links should enter as reviewed URL sources queued for ingestion rather than published pages",
 );

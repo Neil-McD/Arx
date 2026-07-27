@@ -67,6 +67,7 @@ import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCom
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
 import { useWebCommunityLaunchSetupLifecycleController } from "./controllers/useWebCommunityLaunchSetupLifecycleController";
+import { useWebCommunityLaunchKnowledgeController } from "./controllers/useWebCommunityLaunchKnowledgeController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
 import { useWebEffectiveSkillsController } from "./controllers/useWebEffectiveSkillsController";
 import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlatformSkillsController";
@@ -136,34 +137,12 @@ import {
   saveCloudCommunityAgentConfig as saveCloudCommunityAgentConfigDirect,
 } from "../../../shared/cloudCommunityAgentGateway";
 import {
-  applyCloudCommunityWikiArchitectProposal,
-  beginCloudCommunityGoogleDriveSourceOAuth,
-  beginCloudCommunityGitHubSourceOAuth,
-  crawlCloudCommunitySourceRoot,
   createCloudCommunity,
-  deleteCloudCommunityResource,
-  disconnectCloudCommunityGitHubSourceConnection,
-  disconnectCloudCommunityGoogleDriveSourceConnection,
-  draftCloudCommunityResourceContentFromSources,
   fetchCloudCommunityMemberBillingHistory,
   finalizeCloudCommunityGoogleDriveSourceOAuth,
   finalizeCloudCommunityGitHubSourceOAuth,
-  getCloudCommunitySourceCrawlJob,
-  importCloudCommunityGitHubSourceFiles,
-  importCloudCommunityGoogleDriveSourceFiles,
-  ingestCloudCommunitySources,
-  listCloudCommunityLaunchKnowledgeSources,
-  listCloudCommunityGitHubSourceFiles,
-  listCloudCommunityGitHubSourceRepositories,
-  listCloudCommunityGoogleDriveSourceFiles,
-  loadCloudCommunityGitHubSourceConnection,
-  loadCloudCommunityGoogleDriveSourceConnection,
   prepareCloudCommunityBrandingField,
-  runCloudCommunityWikiArchitectProposal,
-  saveCloudCommunityResource,
   setCloudCommunityFreeAccessMode,
-  uploadCloudCommunityResourceSourceFile,
-  type CloudCommunitySourceCrawlJob,
 } from "../../../shared/cloudCommunityAdminGateway";
 import {
   saveCloudCommunityLaunchProfile,
@@ -175,7 +154,6 @@ import type {
 } from "../../../shared/communityLaunchSetup";
 import {
   SOURCE_INTEGRATION_OAUTH_RETURN_PARAM_NAMES,
-  buildCommunityLaunchKnowledgeSourceOAuthReturnToPath,
   clearCommunityLaunchKnowledgeSourceOAuthIntent,
   mergeCommunityLaunchKnowledgeOAuthContext,
   normalizeLaunchOAuthContextParam,
@@ -413,9 +391,9 @@ import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import { WebGlobalOverlayHost } from "./components/WebGlobalOverlayHost";
 import {
   WebCommunityLaunchSetupModal,
-  type CommunityLaunchKnowledgeImportedSource,
   type CommunityLaunchProfileSaveDraft,
 } from "./components/WebCommunityLaunchSetupModal";
+import type { CommunityLaunchKnowledgeOAuthRedirectRequest } from "./components/webCommunityLaunchKnowledgeModel";
 import { WebShellChromeHost } from "./components/WebShellChromeHost";
 import {
   WebDirectMessagesHost,
@@ -515,45 +493,6 @@ function isTransportRefreshError(error: unknown): boolean {
     normalized.includes("load failed") ||
     normalized.includes("fetch failed")
   );
-}
-
-const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_PAGES = 75;
-const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_DEPTH = 3;
-const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_ROOTS = 5;
-const COMMUNITY_LAUNCH_SOURCE_CRAWL_POLL_INTERVAL_MS = 1000;
-const COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_POLLS = 45;
-
-function waitForCommunityLaunchDelay(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function getCommunityLaunchSourceCrawlUrl(source: CommunityLaunchKnowledgeImportedSource): string | null {
-  if (source.source_ingestion_kind !== "url") return null;
-  if (source.source_external_provider) return null;
-  if (source.source_ingestion_status === "ready") return null;
-  const url = String(source.source_external_url ?? "").trim();
-  if (!url) return null;
-  return url;
-}
-
-async function waitForCommunityLaunchSourceCrawlJob(args: {
-  session: AuthSession;
-  communityId: string;
-  crawlJobId: string;
-}): Promise<CloudCommunitySourceCrawlJob> {
-  let latestJob: CloudCommunitySourceCrawlJob | null = null;
-  for (let attempt = 0; attempt < COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_POLLS; attempt += 1) {
-    const result = await getCloudCommunitySourceCrawlJob({
-      session: args.session,
-      communityId: args.communityId,
-      crawlJobId: args.crawlJobId,
-    });
-    latestJob = result?.job ?? latestJob;
-    if (latestJob?.status === "ready" || latestJob?.status === "failed") return latestJob;
-    await waitForCommunityLaunchDelay(COMMUNITY_LAUNCH_SOURCE_CRAWL_POLL_INTERVAL_MS);
-  }
-  if (latestJob) return latestJob;
-  throw new Error("community_source_crawl_status_unavailable");
 }
 
 type PublicCommunityRecord = {
@@ -2597,18 +2536,6 @@ export default function App() {
   }, []);
 
   const [communityResources, setCommunityResources] = useState<CommunityResource[]>([]);
-  const [communityLaunchLinkSources, setCommunityLaunchLinkSources] = useState<
-    CommunityLaunchKnowledgeImportedSource[]
-  >([]);
-  const [communityLaunchFileSources, setCommunityLaunchFileSources] = useState<
-    CommunityLaunchKnowledgeImportedSource[]
-  >([]);
-  const [communityLaunchGoogleDriveSources, setCommunityLaunchGoogleDriveSources] = useState<
-    CommunityLaunchKnowledgeImportedSource[]
-  >([]);
-  const [communityLaunchGitHubSources, setCommunityLaunchGitHubSources] = useState<
-    CommunityLaunchKnowledgeImportedSource[]
-  >([]);
   const [communityResourceModules, setCommunityResourceModules] = useState<CommunityResourceModule[]>([]);
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [isLoadingResourceModules, setIsLoadingResourceModules] = useState(false);
@@ -2949,29 +2876,37 @@ export default function App() {
     setIsLoadingResources,
     setIsLoadingResourceModules,
   });
-  const loadCommunityLaunchKnowledgeSources = useCallback(async (
-    communityId: string,
-    currentSession: AuthSession,
-  ): Promise<void> => {
-    const result = await listCloudCommunityLaunchKnowledgeSources({
-      session: currentSession,
-      communityId,
-      limit: 100,
+  const authorizeCommunityLaunchKnowledgeSourceIntegration = useCallback((
+    request: CommunityLaunchKnowledgeOAuthRedirectRequest,
+  ) => {
+    writeCommunityLaunchKnowledgeSourceOAuthIntent({
+      provider: request.provider,
+      state: readSourceIntegrationOAuthStateFromAuthorizeUrl(
+        request.authorizeUrl,
+      ),
+      communityId: request.communityId,
+      communitySlug: request.communitySlug,
     });
-    const sources = result.sources ?? [];
-    setCommunityLaunchLinkSources(
-      sources.filter((source) => source.source_ingestion_kind === "url"),
-    );
-    setCommunityLaunchFileSources(
-      sources.filter((source) => source.source_ingestion_kind === "file"),
-    );
-    setCommunityLaunchGoogleDriveSources(
-      sources.filter((source) => source.source_external_provider === "google_drive"),
-    );
-    setCommunityLaunchGitHubSources(
-      sources.filter((source) => source.source_external_provider === "github"),
-    );
+    window.location.assign(request.authorizeUrl);
   }, []);
+  const communityLaunchKnowledgeModel =
+    useWebCommunityLaunchKnowledgeController<AuthSession>({
+      session,
+      sessionKey: canonicalSessionUserId,
+      activeCommunity: activeCommunity
+        ? {
+            id: activeCommunity.id,
+            slug: activeCommunity.slug,
+          }
+        : null,
+      canManageCommunitySettings,
+      loadCommunityResources,
+      refreshLaunchSetupStatus: refreshActiveCommunityLaunchSetupStatus,
+      reloadKnowledgeIntegrations:
+        communityLaunchSetupLifecycle.reloadKnowledgeIntegrations,
+      onAuthorizeSourceIntegration:
+        authorizeCommunityLaunchKnowledgeSourceIntegration,
+    });
   const {
     loadCommunityEvents,
     handleSaveCommunityEvent,
@@ -5137,10 +5072,6 @@ export default function App() {
     setCommunityActivityEvents([]);
     setMessageReactions([]);
     setCommunityResources([]);
-    setCommunityLaunchLinkSources([]);
-    setCommunityLaunchFileSources([]);
-    setCommunityLaunchGoogleDriveSources([]);
-    setCommunityLaunchGitHubSources([]);
     setCommunityResourceModules([]);
     setIsLoadingCommunityEvents(false);
     setCommunityEventsError(null);
@@ -6675,23 +6606,6 @@ export default function App() {
         community: activeCommunity,
       };
     };
-    const refreshCommunityLaunchKnowledgeProjectionBestEffort = async ({
-      communityId,
-      session: activeSession,
-      includeResources = false,
-    }: {
-      communityId: string;
-      session: AuthSession;
-      includeResources?: boolean;
-    }) => {
-      try {
-        if (includeResources) await loadCommunityResources(communityId, activeSession);
-        await loadCommunityLaunchKnowledgeSources(communityId, activeSession);
-        await refreshActiveCommunityLaunchSetupStatus();
-      } catch (error) {
-        console.warn("[community-launch] failed to refresh knowledge projection after source write:", error);
-      }
-    };
     const handleSaveCommunityLaunchProfile = async (draft: {
       name: string;
       slug: string;
@@ -6760,358 +6674,6 @@ export default function App() {
       if (!result) throw new Error("Failed to save community about.");
       applyCommunityLaunchProfileResult(result);
       await refreshActiveCommunityLaunchSetupStatus();
-    };
-    const handleAddCommunityLaunchKnowledgeLink = async (draft: { urls: string[] }) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const rawUrls = draft.urls.map((url) => url.trim()).filter(Boolean);
-      if (rawUrls.length === 0) throw new Error("Add a source link.");
-      if (rawUrls.length > 5) throw new Error("Add up to five source links at a time.");
-      const normalizedUrls = rawUrls.map((rawUrl) => {
-        const normalizedUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
-        let parsedUrl: URL;
-        try {
-          parsedUrl = new URL(normalizedUrl);
-        } catch {
-          throw new Error("Add valid source links.");
-        }
-        if (parsedUrl.protocol !== "https:") {
-          throw new Error("Add https source links.");
-        }
-        return parsedUrl;
-      });
-      for (const parsedUrl of normalizedUrls) {
-        const titlePath = parsedUrl.pathname && parsedUrl.pathname !== "/" ? parsedUrl.pathname : "";
-        const title = `${parsedUrl.hostname.replace(/^www\./, "")}${titlePath}`.slice(0, 120);
-        await saveCloudCommunityResource({
-          session,
-          resourceId: null,
-          isPatch: false,
-          payload: {
-            community_id: community.id,
-            title: title || "Source link",
-            body_md: null,
-            url: parsedUrl.toString(),
-            type: "link",
-            resource_role: "source",
-            resource_status: "review",
-            source_ingestion_status: "queued",
-            source_ingestion_kind: "url",
-            pinned: false,
-          },
-        });
-      }
-      await refreshCommunityLaunchKnowledgeProjectionBestEffort({
-        communityId: community.id,
-        session,
-        includeResources: true,
-      });
-    };
-    const handleAddCommunityLaunchKnowledgeFile = async (draft: { files: File[] }) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const files = draft.files.filter((file) => file.size > 0).slice(0, 5);
-      if (files.length === 0) throw new Error("Add a source file.");
-      for (const file of files) {
-        const storageId = await uploadCloudCommunityResourceSourceFile({
-          session,
-          communityId: community.id,
-          file,
-        });
-        await saveCloudCommunityResource({
-          session,
-          resourceId: null,
-          isPatch: false,
-          payload: {
-            community_id: community.id,
-            title: file.name || "Source file",
-            body_md: null,
-            url: null,
-            file_key: storageId,
-            type: "file",
-            resource_role: "source",
-            resource_status: "review",
-            source_ingestion_status: "queued",
-            source_ingestion_kind: "file",
-            source_original_filename: file.name || null,
-            source_original_mime_type: file.type || null,
-            source_original_bytes: file.size,
-            pinned: false,
-          },
-        });
-      }
-      await refreshCommunityLaunchKnowledgeProjectionBestEffort({
-        communityId: community.id,
-        session,
-        includeResources: true,
-      });
-    };
-    const handleIngestCommunityLaunchKnowledgeSources = async () => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const latestSources = await listCloudCommunityLaunchKnowledgeSources({
-        session,
-        communityId: community.id,
-        limit: 100,
-      });
-      const crawlTargets = new Map<string, CommunityLaunchKnowledgeImportedSource>();
-      for (const source of latestSources.sources ?? []) {
-        const crawlUrl = getCommunityLaunchSourceCrawlUrl(source);
-        if (crawlUrl && !crawlTargets.has(crawlUrl)) crawlTargets.set(crawlUrl, source);
-      }
-      const crawlFailures: Array<{ title: string; url: string | null; message: string }> = [];
-      if (crawlTargets.size > 0) {
-        await Promise.all(
-          Array.from(crawlTargets.entries())
-            .slice(0, COMMUNITY_LAUNCH_SOURCE_CRAWL_MAX_ROOTS)
-            .map(async ([rootUrl, source]) => {
-              try {
-                const started = await crawlCloudCommunitySourceRoot({
-                  session,
-                  communityId: community.id,
-                  rootUrl,
-                  maxPages: 1,
-                  maxDepth: 0,
-                });
-                const crawlJobId = started?.job?.id ?? "";
-                if (!crawlJobId) {
-                  throw new Error("community_source_crawl_job_create_failed");
-                }
-                const job = await waitForCommunityLaunchSourceCrawlJob({
-                  session,
-                  communityId: community.id,
-                  crawlJobId,
-                });
-                if (job.status === "failed") {
-                  throw new Error(job.error || "community_source_crawl_failed");
-                }
-                return { source, rootUrl, job };
-              } catch (error) {
-                crawlFailures.push({
-                  title: source.title || "Source link",
-                  url: rootUrl,
-                  message: error instanceof Error ? error.message : "community_source_crawl_failed",
-                });
-                return null;
-              }
-            }),
-        );
-      }
-      const result = await ingestCloudCommunitySources({
-        session,
-        communityId: community.id,
-      });
-      await refreshCommunityLaunchKnowledgeProjectionBestEffort({
-        communityId: community.id,
-        session,
-        includeResources: true,
-      });
-      if (crawlFailures.length === 0) return result as any;
-      return {
-        ...(result ?? {}),
-        ok: false,
-        failed: Number(result?.failed ?? 0) + crawlFailures.length,
-        failures: [
-          ...(Array.isArray(result?.failures) ? result.failures : []),
-          ...crawlFailures.map((failure) => ({
-            resource_id: "",
-            title: failure.title,
-            url: failure.url,
-            message: failure.message,
-          })),
-        ],
-        ready_sources: Number(result?.ready_sources ?? 0),
-        total_sources: Number(result?.total_sources ?? latestSources.sources?.length ?? 0),
-        pending_sources: Number(result?.pending_sources ?? 0),
-        pending_url_sources: Number(result?.pending_url_sources ?? 0),
-        pending_file_sources: Number(result?.pending_file_sources ?? 0),
-        pending_google_drive_sources: Number(result?.pending_google_drive_sources ?? 0),
-        pending_github_sources: Number(result?.pending_github_sources ?? 0),
-        code: result?.code ?? "source_crawl_partial_failure",
-        message: "Some source links could not be fully crawled.",
-      } as any;
-    };
-    const handleLoadCommunityLaunchKnowledgeSources = async () => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      await loadCommunityLaunchKnowledgeSources(community.id, session);
-    };
-    const handleLoadCommunityLaunchGoogleDriveConnection = async () => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      return await loadCloudCommunityGoogleDriveSourceConnection({
-        session,
-        communityId: community.id,
-      });
-    };
-    const handleConnectCommunityLaunchGoogleDrive = async () => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await beginCloudCommunityGoogleDriveSourceOAuth({
-        session,
-        communityId: community.id,
-        returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath({
-          communityId: community.id,
-          communitySlug: community.slug,
-        }),
-      });
-      if (result.ok && result.authorize_url) {
-        writeCommunityLaunchKnowledgeSourceOAuthIntent({
-          provider: "google_drive",
-          state: readSourceIntegrationOAuthStateFromAuthorizeUrl(result.authorize_url),
-          communityId: community.id,
-          communitySlug: community.slug,
-        });
-        window.location.assign(result.authorize_url);
-      }
-      return result;
-    };
-    const handleListCommunityLaunchGoogleDriveFiles = async (request?: {
-      folderId?: string | null;
-      pageToken?: string | null;
-      query?: string | null;
-    } | null) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      return await listCloudCommunityGoogleDriveSourceFiles({
-        session,
-        communityId: community.id,
-        folderId: request?.folderId,
-        pageToken: request?.pageToken,
-        query: request?.query,
-      });
-    };
-    const handleImportCommunityLaunchGoogleDriveFiles = async (fileIds: string[]) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await importCloudCommunityGoogleDriveSourceFiles({
-        session,
-        communityId: community.id,
-        fileIds,
-      });
-      await refreshCommunityLaunchKnowledgeProjectionBestEffort({
-        communityId: community.id,
-        session,
-      });
-      return result;
-    };
-    const handleRemoveCommunityLaunchKnowledgeSource = async (resourceId: string) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      await deleteCloudCommunityResource({
-        session,
-        resourceId,
-      });
-      await loadCommunityLaunchKnowledgeSources(community.id, session);
-      await refreshActiveCommunityLaunchSetupStatus();
-      return true;
-    };
-    const handleDisconnectCommunityLaunchGoogleDrive = async () => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const connection = await disconnectCloudCommunityGoogleDriveSourceConnection({
-        session,
-        communityId: community.id,
-      });
-      await loadCommunityLaunchKnowledgeSources(community.id, session);
-      await refreshActiveCommunityLaunchSetupStatus();
-      communityLaunchSetupLifecycle.reloadKnowledgeIntegrations();
-      return connection;
-    };
-    const handleLoadCommunityLaunchGitHubConnection = async () => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      return await loadCloudCommunityGitHubSourceConnection({
-        session,
-        communityId: community.id,
-      });
-    };
-    const handleConnectCommunityLaunchGitHub = async () => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await beginCloudCommunityGitHubSourceOAuth({
-        session,
-        communityId: community.id,
-        returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath({
-          communityId: community.id,
-          communitySlug: community.slug,
-        }),
-      });
-      if (result.ok && result.authorize_url) {
-        writeCommunityLaunchKnowledgeSourceOAuthIntent({
-          provider: "github",
-          state: readSourceIntegrationOAuthStateFromAuthorizeUrl(result.authorize_url),
-          communityId: community.id,
-          communitySlug: community.slug,
-        });
-        window.location.assign(result.authorize_url);
-      }
-      return result;
-    };
-    const handleListCommunityLaunchGitHubRepositories = async (query?: string | null) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      return await listCloudCommunityGitHubSourceRepositories({
-        session,
-        communityId: community.id,
-        query,
-      });
-    };
-    const handleListCommunityLaunchGitHubFiles = async (
-      repoFullName: string,
-      ref?: string | null,
-      query?: string | null,
-    ) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      return await listCloudCommunityGitHubSourceFiles({
-        session,
-        communityId: community.id,
-        repoFullName,
-        ref,
-        query,
-      });
-    };
-    const handleImportCommunityLaunchGitHubFiles = async (fileIds: string[]) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await importCloudCommunityGitHubSourceFiles({
-        session,
-        communityId: community.id,
-        fileIds,
-      });
-      await refreshCommunityLaunchKnowledgeProjectionBestEffort({
-        communityId: community.id,
-        session,
-      });
-      return result;
-    };
-    const handleDisconnectCommunityLaunchGitHub = async () => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const connection = await disconnectCloudCommunityGitHubSourceConnection({
-        session,
-        communityId: community.id,
-      });
-      await loadCommunityLaunchKnowledgeSources(community.id, session);
-      await refreshActiveCommunityLaunchSetupStatus();
-      communityLaunchSetupLifecycle.reloadKnowledgeIntegrations();
-      return connection;
-    };
-    const handleGenerateCommunityLaunchKnowledgePlan = async (draft: { builderIntent: string }) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await runCloudCommunityWikiArchitectProposal({
-        session,
-        communityId: community.id,
-        builderIntent: draft.builderIntent,
-      });
-      return result as any;
-    };
-    const handleApplyCommunityLaunchKnowledgePlan = async (draft: { proposal: unknown }) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await applyCloudCommunityWikiArchitectProposal({
-        session,
-        communityId: community.id,
-        proposal: draft.proposal,
-      });
-      await loadCommunityResources(community.id, session);
-      await refreshActiveCommunityLaunchSetupStatus();
-      return result as any;
-    };
-    const handleDraftCommunityLaunchKnowledgeResources = async () => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await draftCloudCommunityResourceContentFromSources({
-        session,
-        communityId: community.id,
-        limit: 8,
-      });
-      await loadCommunityResources(community.id, session);
-      await refreshActiveCommunityLaunchSetupStatus();
-      return result as any;
     };
     const handleSaveCommunityLaunchAgent = async (draft: {
       systemPrompt: string;
@@ -8638,6 +8200,7 @@ export default function App() {
       />
       <WebCommunityLaunchSetupModal
         lifecycle={communityLaunchSetupLifecycleModel}
+        knowledge={communityLaunchKnowledgeModel}
         community={
           !isCommunityLaunchCreateMode && activeCommunity
             ? {
@@ -8662,10 +8225,6 @@ export default function App() {
               }
             : null
         }
-        knowledgeLinkSources={communityLaunchLinkSources}
-        knowledgeFileSources={communityLaunchFileSources}
-        knowledgeGoogleDriveSources={communityLaunchGoogleDriveSources}
-        knowledgeGitHubSources={communityLaunchGitHubSources}
         onClose={() => {
           communityLaunchSetupLifecycle.close();
           clearCommunityLaunchSetupRouteState();
@@ -8680,30 +8239,8 @@ export default function App() {
         onCreateCommunity={handleCreateCommunityFromLaunch}
         onSaveProfile={handleSaveCommunityLaunchProfile}
         onSaveAbout={handleSaveCommunityLaunchAbout}
-        onAddKnowledgeLink={handleAddCommunityLaunchKnowledgeLink}
         accountTier={accountCommerceStatus?.account_tier ?? null}
         onOpenPremiumBilling={openPremiumBilling}
-        onAddKnowledgeFile={handleAddCommunityLaunchKnowledgeFile}
-        onLoadKnowledgeSources={handleLoadCommunityLaunchKnowledgeSources}
-        onRemoveKnowledgeLinkSource={handleRemoveCommunityLaunchKnowledgeSource}
-        onRemoveKnowledgeFileSource={handleRemoveCommunityLaunchKnowledgeSource}
-        onIngestKnowledgeSources={handleIngestCommunityLaunchKnowledgeSources}
-        onLoadKnowledgeGoogleDriveConnection={handleLoadCommunityLaunchGoogleDriveConnection}
-        onConnectKnowledgeGoogleDrive={handleConnectCommunityLaunchGoogleDrive}
-        onListKnowledgeGoogleDriveFiles={handleListCommunityLaunchGoogleDriveFiles}
-        onImportKnowledgeGoogleDriveFiles={handleImportCommunityLaunchGoogleDriveFiles}
-        onRemoveKnowledgeGoogleDriveSource={handleRemoveCommunityLaunchKnowledgeSource}
-        onDisconnectKnowledgeGoogleDrive={handleDisconnectCommunityLaunchGoogleDrive}
-        onLoadKnowledgeGitHubConnection={handleLoadCommunityLaunchGitHubConnection}
-        onConnectKnowledgeGitHub={handleConnectCommunityLaunchGitHub}
-        onListKnowledgeGitHubRepositories={handleListCommunityLaunchGitHubRepositories}
-        onListKnowledgeGitHubFiles={handleListCommunityLaunchGitHubFiles}
-        onImportKnowledgeGitHubFiles={handleImportCommunityLaunchGitHubFiles}
-        onRemoveKnowledgeGitHubSource={handleRemoveCommunityLaunchKnowledgeSource}
-        onDisconnectKnowledgeGitHub={handleDisconnectCommunityLaunchGitHub}
-        onGenerateKnowledgePlan={handleGenerateCommunityLaunchKnowledgePlan}
-        onApplyKnowledgePlan={handleApplyCommunityLaunchKnowledgePlan}
-        onDraftKnowledgeResources={handleDraftCommunityLaunchKnowledgeResources}
         onSaveAgent={handleSaveCommunityLaunchAgent}
         onSaveAccess={handleSaveCommunityLaunchAccess}
         onSavePublish={handleSaveCommunityLaunchPublish}

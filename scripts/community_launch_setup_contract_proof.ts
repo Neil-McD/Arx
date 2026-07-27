@@ -22,6 +22,12 @@ const launchLifecycleModel = read(
 const launchLifecycleController = read(
   "apps/web/src/controllers/useWebCommunityLaunchSetupLifecycleController.ts",
 );
+const launchKnowledgeModel = read(
+  "apps/web/src/components/webCommunityLaunchKnowledgeModel.ts",
+);
+const launchKnowledgeController = read(
+  "apps/web/src/controllers/useWebCommunityLaunchKnowledgeController.ts",
+);
 const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
 const sourceOAuth = read("apps/web/src/communityLaunchKnowledgeSourceOAuth.ts");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
@@ -441,18 +447,18 @@ assert.match(
   "launch knowledge step must separate file sources, link sources, and connected source integrations",
 );
 assert.match(
-  setupModal,
-  /CommunityLaunchGoogleDriveConnection[\s\S]*CommunityLaunchGoogleDriveFile[\s\S]*onLoadKnowledgeGoogleDriveConnection[\s\S]*onConnectKnowledgeGoogleDrive[\s\S]*onListKnowledgeGoogleDriveFiles[\s\S]*onImportKnowledgeGoogleDriveFiles/,
+  launchKnowledgeModel + setupModal,
+  /CommunityLaunchGoogleDriveConnection[\s\S]*CommunityLaunchGoogleDriveFile[\s\S]*loadConnection:[\s\S]*connect:[\s\S]*listFiles:[\s\S]*importFiles:[\s\S]*loadConnection: onLoadKnowledgeGoogleDriveConnection[\s\S]*connect: onConnectKnowledgeGoogleDrive[\s\S]*listFiles: onListKnowledgeGoogleDriveFiles[\s\S]*importFiles: onImportKnowledgeGoogleDriveFiles/,
   "launch knowledge integrations must expose a concrete Google Drive lifecycle contract",
 );
 assert.match(
-  setupModal,
-  /CommunityLaunchKnowledgeImportedSource[\s\S]*knowledgeLinkSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*knowledgeFileSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*knowledgeGoogleDriveSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*onLoadKnowledgeSources\?:[\s\S]*onRemoveKnowledgeLinkSource\?:[\s\S]*onRemoveKnowledgeFileSource\?:[\s\S]*onRemoveKnowledgeGoogleDriveSource\?:[\s\S]*onDisconnectKnowledgeGoogleDrive\?:/,
+  launchKnowledgeModel + setupModal,
+  /CommunityLaunchKnowledgeImportedSource[\s\S]*links: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*files: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*googleDrive: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*load: \(\) => Promise<void>[\s\S]*remove: \(resourceId: string\)[\s\S]*disconnect: \(\)[\s\S]*links: knowledgeLinkSources[\s\S]*files: knowledgeFileSources[\s\S]*googleDrive: knowledgeGoogleDriveSources/,
   "launch knowledge contract must expose saved link/file/Google Drive source rows, explicit source loading, per-source removal, and disconnect",
 );
 assert.match(
-  setupModal,
-  /knowledgeGitHubSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*onLoadKnowledgeGitHubConnection[\s\S]*onConnectKnowledgeGitHub[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*onListKnowledgeGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles[\s\S]*onRemoveKnowledgeGitHubSource\?:[\s\S]*onDisconnectKnowledgeGitHub/,
+  launchKnowledgeModel + setupModal,
+  /github: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*github: \{[\s\S]*loadConnection:[\s\S]*connect:[\s\S]*listRepositories:[\s\S]*listFiles:[\s\S]*importFiles:[\s\S]*disconnect:[\s\S]*github: knowledgeGitHubSources[\s\S]*loadConnection: onLoadKnowledgeGitHubConnection[\s\S]*connect: onConnectKnowledgeGitHub[\s\S]*listRepositories: onListKnowledgeGitHubRepositories[\s\S]*listFiles: onListKnowledgeGitHubFiles[\s\S]*importFiles: onImportKnowledgeGitHubFiles/,
   "launch knowledge integrations must expose a concrete GitHub lifecycle contract with imported rows and per-source removal",
 );
 assert.match(
@@ -461,7 +467,7 @@ assert.match(
   "launch knowledge Google Drive UI must track connection, file selections, and local import action",
 );
 assert.match(
-  setupModal,
+  launchKnowledgeModel,
   /CommunityLaunchGoogleDriveFileListRequest[\s\S]*folderId\?: string \| null[\s\S]*pageToken\?: string \| null[\s\S]*next_page_token\?: string \| null/,
   "launch knowledge Google Drive list contract must support folder navigation and cursor pagination",
 );
@@ -646,36 +652,38 @@ assert.match(
   );
 }
 assert.match(
-  appShell,
-  /setCommunityLaunchLinkSources[\s\S]*setCommunityLaunchFileSources[\s\S]*setCommunityLaunchGoogleDriveSources[\s\S]*setCommunityLaunchGitHubSources[\s\S]*loadCommunityLaunchKnowledgeSources[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*source_ingestion_kind === "url"[\s\S]*source_ingestion_kind === "file"[\s\S]*source_external_provider === "google_drive"[\s\S]*source_external_provider === "github"[\s\S]*handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*loadCloudCommunityGoogleDriveSourceConnection[\s\S]*handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*handleRemoveCommunityLaunchKnowledgeSource[\s\S]*deleteCloudCommunityResource[\s\S]*handleDisconnectCommunityLaunchGoogleDrive[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection/,
-  "app shell must wire focused launch Knowledge link/file rows plus Google Drive connection, listing, import, remove, and disconnect handlers",
+  launchKnowledgeController,
+  /partitionCommunityLaunchKnowledgeSources[\s\S]*source_external_provider === "google_drive"[\s\S]*source_external_provider === "github"[\s\S]*source_ingestion_kind === "url"[\s\S]*source_ingestion_kind === "file"[\s\S]*loadGoogleDriveConnection[\s\S]*loadCloudCommunityGoogleDriveSourceConnection[\s\S]*connectGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*listGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*importGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*removeSource[\s\S]*deleteCloudCommunityResource[\s\S]*disconnectGoogleDrive[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection/,
+  "the Knowledge controller must wire focused link/file rows plus Google Drive connection, listing, import, remove, and disconnect operations",
 );
 assert.match(
-  appShell,
-  /handleLoadCommunityLaunchKnowledgeSources[\s\S]*loadCommunityLaunchKnowledgeSources\(community\.id, session\)[\s\S]*onLoadKnowledgeSources=\{handleLoadCommunityLaunchKnowledgeSources\}/,
-  "app shell must explicitly hydrate saved launch Knowledge sources through the focused source-row query when the Knowledge step opens",
+  launchKnowledgeController + setupModal,
+  /loadSourcesForContext[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*load: loadSources[\s\S]*load: onLoadKnowledgeSources/,
+  "the controller must explicitly hydrate saved launch Knowledge sources through the focused source-row query when the Knowledge step opens",
 );
+const focusedSourceLoadSection =
+  launchKnowledgeController.match(/const loadSourcesForContext[\s\S]*?const loadSources/)?.[0] ?? "";
 assert.doesNotMatch(
-  appShell.match(/const handleLoadCommunityLaunchKnowledgeSources[\s\S]*?const handleLoadCommunityLaunchGoogleDriveConnection/)?.[0] ?? "",
+  focusedSourceLoadSection,
   /loadCommunityResources/,
   "launch Knowledge saved source hydration must not depend on broad community resource hydration",
 );
 const googleDriveConnectionLoadSection =
-  appShell.match(/const handleLoadCommunityLaunchGoogleDriveConnection[\s\S]*?const handleConnectCommunityLaunchGoogleDrive/)?.[0] ?? "";
+  launchKnowledgeController.match(/const loadGoogleDriveConnection[\s\S]*?const connectGoogleDrive/)?.[0] ?? "";
 assert.doesNotMatch(
   googleDriveConnectionLoadSection,
   /loadCommunityResources/,
   "passive Google Drive connection status loading should not refresh community resources",
 );
 assert.match(
-  appShell,
-  /handleLoadCommunityLaunchGitHubConnection[\s\S]*loadCloudCommunityGitHubSourceConnection[\s\S]*handleConnectCommunityLaunchGitHub[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "github"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGitHubRepositories[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*handleListCommunityLaunchGitHubFiles[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*handleImportCommunityLaunchGitHubFiles[\s\S]*importCloudCommunityGitHubSourceFiles[\s\S]*handleDisconnectCommunityLaunchGitHub[\s\S]*disconnectCloudCommunityGitHubSourceConnection/,
-  "app shell must wire launch Knowledge GitHub connection, listing, import, and disconnect handlers",
+  launchKnowledgeController,
+  /loadGitHubConnection[\s\S]*loadCloudCommunityGitHubSourceConnection[\s\S]*connectGitHub[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*listGitHubRepositories[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*listGitHubFiles[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*importGitHubFiles[\s\S]*importCloudCommunityGitHubSourceFiles[\s\S]*disconnectGitHub[\s\S]*disconnectCloudCommunityGitHubSourceConnection/,
+  "the Knowledge controller must wire launch Knowledge GitHub connection, listing, import, and disconnect operations",
 );
 assert.match(
   appShell,
-  /knowledgeLinkSources=\{communityLaunchLinkSources\}[\s\S]*knowledgeFileSources=\{communityLaunchFileSources\}[\s\S]*knowledgeGitHubSources=\{communityLaunchGitHubSources\}[\s\S]*onRemoveKnowledgeLinkSource=\{handleRemoveCommunityLaunchKnowledgeSource\}[\s\S]*onRemoveKnowledgeFileSource=\{handleRemoveCommunityLaunchKnowledgeSource\}[\s\S]*onRemoveKnowledgeGitHubSource=\{handleRemoveCommunityLaunchKnowledgeSource\}/,
-  "app shell must pass saved link/file/GitHub source rows and provider-agnostic source removal into launch Knowledge",
+  /const communityLaunchKnowledgeModel =[\s\S]*useWebCommunityLaunchKnowledgeController<AuthSession>[\s\S]*knowledge=\{communityLaunchKnowledgeModel\}/,
+  "app shell must pass one controller-owned Knowledge projection into the launch modal",
 );
 assert.match(
   appShell,
@@ -703,7 +711,7 @@ assert.doesNotMatch(
   "launch knowledge Next must not redirect directly to Resources review",
 );
 assert.match(
-  setupModal,
+  launchKnowledgeModel + setupModal,
   /architecture_quality\?:[\s\S]*formatKnowledgeArchitectureQualityWarning[\s\S]*Resources drafted, but organization needs review\.[\s\S]*applyResult\.architecture_quality[\s\S]*setStepSuccess/,
   "launch knowledge Next must surface architecture quality warnings compactly",
 );
@@ -783,13 +791,13 @@ assert.match(
   "launch knowledge file uploads must write immediately and show saved files under Sources",
 );
 assert.match(
-  appShell,
-  /handleAddCommunityLaunchKnowledgeFile[\s\S]*uploadCloudCommunityResourceSourceFile[\s\S]*type: "file"[\s\S]*resource_role: "source"[\s\S]*resource_status: "review"[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "file"/,
+  launchKnowledgeController,
+  /const addFiles[\s\S]*uploadCloudCommunityResourceSourceFile[\s\S]*type: "file"[\s\S]*resource_role: "source"[\s\S]*resource_status: "review"[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "file"/,
   "launch knowledge files must create canonical reviewed source resources queued for file ingestion",
 );
 assert.match(
-  appShell,
-  /handleAddCommunityLaunchKnowledgeLink[\s\S]*urls: string\[\][\s\S]*rawUrls\.length > 5[\s\S]*saveCloudCommunityResource[\s\S]*type: "link"[\s\S]*resource_role: "source"[\s\S]*resource_status: "review"[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "url"[\s\S]*loadCommunityLaunchKnowledgeSources\(community\.id, session\)/,
+  launchKnowledgeController,
+  /normalizeCommunityLaunchKnowledgeUrls[\s\S]*trimmedUrls\.length > 5[\s\S]*const addLinks[\s\S]*saveCloudCommunityResource[\s\S]*type: "link"[\s\S]*resource_role: "source"[\s\S]*resource_status: "review"[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "url"[\s\S]*refreshProjectionBestEffort/,
   "launch knowledge links must create canonical reviewed source resources queued for ingestion and refresh focused saved link rows",
 );
 assert.doesNotMatch(
