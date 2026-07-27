@@ -31,12 +31,16 @@ and exclusive styles. Operator, Billing Settings, member-agent, and turn-runner
 proofs now follow mounted owners. C7.1F deleted the zero-caller browser project
 listing/draft-selection closure, model/surface wrappers, and reset-only
 lifecycle module. Browser project identity now comes directly from the active
-canonical thread, while sign-out clearing lives in the canonical session reset.
+canonical thread. C7.1G deleted the presentationless App conversation/runtime
+closure, guest cache, model registry, message/inference overlays, duplicate
+landing lifecycle, and their zero-caller helpers. The mounted member-agent dock
+now owns its channel, messages, turn state, live runtime timeline, structured
+errors, and session-scoped clearing; canonical account/community clearing
+remains in the session reset. Settings owns authenticated agent-data export.
 The Daytona app preview, computer-use viewer, and background terminal rail
 remain unmounted protected harness-adjacent decision candidates. The
-presentationless legacy App conversation/runtime orchestration and residual
-styles still require separate caller-led slices. None of those names alone
-authorizes removal of the protected harness/runtime substrate.
+residual styles still require a separate owner-led slice. None of those names
+alone authorizes removal of the protected harness/runtime substrate.
 
 ## Scheduled job inventory
 
@@ -70,7 +74,7 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | Surface | Scaling variable | Risk |
 | --- | --- | --- |
 | compiler digest recovery | unfinished digest versions | `O(1)` exact-row checkpoint per active recovery chain |
-| remaining Workspace browser/controller state | legacy conversation/runtime caller graph | presentationless orchestration may remain, but names can also describe protected execution substrate |
+| remaining Workspace browser/style state | residual CSS selectors and protected viewer decision | deletion requires exclusive ownership proof; names can also describe protected execution substrate |
 | runtime events/receipts | runs × events | storage retention and operator query cost unclear |
 | provider workers/previews | sessions × time/cost | needs cleanup, lease finalization, and accounting convergence |
 
@@ -84,6 +88,7 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | Workspace preview/thread-browser/message leaf presentation | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1D deleted the zero-caller UI closure, exclusive styles, and presentation-only projection helpers while re-anchoring proofs on mounted owners |
 | Workspace project-modal/browser mutation and card-setup presentation | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1E deleted zero-caller modal/controller/overlay state and browser commands while retaining project/runtime and Stripe/resource authority |
 | Workspace browser project-list/draft-selection projection | `DELETE (deferred/dead)` | `COMPLETE` | 10 | C7.1F deleted the unfetched project array, duplicate selector/model/surface wrappers, browser gateway, and obsolete proof while retaining direct thread project identity |
+| presentationless App conversation/runtime authority | `DELETE (deferred/dead)` | `COMPLETE` | 10 | C7.1G deleted the second browser conversation owner and zero-caller helpers while the mounted member-agent dock and shared runner retain the live path |
 | dormant Daytona preview, computer-use viewer, and background terminal rail | `DECISION REQUIRED` | `MOUNT_OR_DELETE` | 6 | all three components are unmounted but harness-adjacent; protected substrate remains live and none is counted as a current journey |
 | Workspace host coupling to Builder Partner UI | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1A deleted the unmounted host; retained partner UI remains in Settings/operator owners |
 | workspace route builders/controllers after parser retirement | `DELETE (deferred/dead)` | `COMPLETE` | 8 | outbound owners are deleted; inbound classification remains separate from backend substrate |

@@ -105,6 +105,10 @@ assert.doesNotMatch(app, /setActiveView\("settings"\)/);
 assert.doesNotMatch(transitions, /ToggleWorkspaceSettings|deriveToggleWorkspaceSettingsTransition/);
 assert.match(mobileController, /params\.openGlobalSettings\("agent"\)/);
 assert.doesNotMatch(mobileController, /setActivePage\("workspace"\)/);
-assert.match(globalOverlays, /params\.onOpenSettings\(/);
+assert.match(
+  globalOverlays,
+  /onOpenBilling: params\.onOpenPremiumBilling/,
+  "retained global premium action should route through the canonical billing callback",
+);
 
 console.log("global_settings_surface_contract_proof: ok");

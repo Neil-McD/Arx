@@ -1496,3 +1496,51 @@ state changes in this slice. C7 remains `IN_PROGRESS`: the presentationless
 legacy App conversation/runtime orchestration and residual styles require
 separate slices, and the three protected dormant viewers remain a human
 decision.
+
+### C7.1G current receipt — presentationless App conversation authority deletion
+
+The seventh C7 slice removes the legacy conversation/runtime authority that
+remained initialized in `App.tsx` after its Workspace presentation was gone.
+The app shell no longer owns an active thread, thread/message hydration,
+composer, guest conversation cache, send flow, runtime-run hydration, model
+registry, inference/message-context overlays, project selection, or duplicate
+community-agent landing fetch. Nineteen legacy source paths are retired,
+including the zero-caller browser send/core/thread closure, four App
+controllers, three global overlays, model/thread projection helpers, and the
+obsolete landing lifecycle; two mixed live controllers are narrowed and
+renamed around agent-data export and app-toast ownership. `App.tsx` falls from
+roughly 10.8k to 9,267 lines.
+
+Live authority is explicit. `WebMemberAgentDock.tsx` owns the member's channel,
+messages, send/stop/retry state, live runtime events, inline structured
+inference errors, and session/surface-scoped reset. The shared turn runner
+remains the runtime transport/persistence boundary. Settings owns authenticated
+thread/message/memory export through the renamed agent-data export controller;
+the app toast has one small controller; voice accepts only community, direct
+message, and member-agent surfaces. Canonical account/community sign-out reset
+remains centralized while the mounted dock clears its own conversation state
+when session identity changes.
+
+Proof authority moves with the code instead of preserving the deleted island.
+Runtime, resource-builder, paid-usage, privacy, account-lifecycle, platform
+prompt, harness-isolation, community-gateway, UI-stability, global Settings,
+and quarantine contracts now follow the mounted dock, shared turn runner,
+Settings controllers, or backend owners. The quarantine proof requires every
+retired path and overlay branch to remain absent while continuing to require
+`DaytonaRuntimeAppPreview.tsx`, `RuntimeComputerUseViewer.tsx`, and
+`WebBackgroundTerminalRail.tsx`.
+
+The focused C7 quarantine, account-lifecycle, member-agent, UI-stability,
+resource-admission, resource-builder, platform-prompt, runtime, harness,
+privacy, community-gateway, Daytona-preview, personal-memory, and global
+Settings proofs pass. Web and Convex typechecks, strict unused-symbol
+typechecking, the production web build, `git diff --check`, and the 40-step
+foundation baseline also pass.
+
+This slice changes no Convex function or schema, cloud record, runtime worker,
+provider lease, billing/entitlement authority, official MCP contract, community
+resource/memory owner, environment configuration, or production state. C7
+remains `IN_PROGRESS`: residual Workspace-exclusive CSS requires a separate
+owner audit, repository docs/configuration still need final alignment, and the
+three protected dormant viewers remain an explicit human mount-or-delete
+decision.

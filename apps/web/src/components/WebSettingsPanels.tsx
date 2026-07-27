@@ -4,7 +4,6 @@ import type { AppTheme } from "../../../../shared/theme";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import type { BuilderPartnerProgramSnapshot } from "../../../../shared/builderPartnerProgramGateway";
 import type { SocialProfileLinks } from "../../../../shared/socialProfileLinks";
-import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type { EffectiveSkill } from "../../../../shared/effectiveSkills";
 import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
@@ -93,10 +92,7 @@ export type WebSettingsPanelsProps = {
     canUseDevTierOverride: boolean;
     setDevAccountTier: (tier: "free" | "architect") => Promise<void> | void;
 	    providerConnectionUi: UseWebProviderConnectionUiControllerResult;
-	    billingUi: UseWebBillingUiControllerResult<
-	      AccountCommerceStatus,
-	      WorkspaceCreditBalance
-	    >;
+	    billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus>;
 	  };
   agent: {
     session: SessionLike;
@@ -136,10 +132,7 @@ export type WebSettingsPanelsProps = {
 	  billing: {
 	    session: SessionLike;
 	    startPremiumSubscriptionCheckout: () => Promise<void> | void;
-	    billingUi: UseWebBillingUiControllerResult<
-	      AccountCommerceStatus,
-	      WorkspaceCreditBalance
-	    >;
+	    billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus>;
 	  };
   integrations: {
     session: SessionLike;

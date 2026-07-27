@@ -6,8 +6,7 @@ function read(relativePath: string): string {
 }
 
 const app = read("apps/web/src/App.tsx");
-const threadDataController = read("shared/useWebThreadDataController.ts");
-const baseCss = read("apps/web/src/base.css");
+const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const operatorDashboardDataHook = read("apps/web/src/components/useOperatorDashboardData.ts");
 const operatorPlatformPanelView = read("apps/web/src/components/OperatorPlatformPanelView.tsx");
 const operatorBusinessPanelView = read("apps/web/src/components/OperatorBusinessPanelView.tsx");
@@ -16,25 +15,15 @@ const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx
 const eventsPanel = read("apps/web/src/components/WebCommunityEventsSection.tsx");
 const aiFeedPanel = read("apps/web/src/components/CommunityAiFeedPanel.tsx");
 
-assert.match(
-  app,
-  /const initialWorkspaceWantsNewChat = true;/,
-  "retained thread runtime state must begin without an implicit route-selected thread",
-);
 assert.doesNotMatch(
   app,
-  /nextAppRoute\.threadId|nextAppRoute\.projectId|nextAppRoute\.page === "workspace"/,
-  "browser route reconciliation must remain independent from retained thread and project state",
-);
-assert.doesNotMatch(
-  threadDataController,
-  /visible\[0\]/,
-  "thread hydration must not auto-select the most recent visible thread",
+  /nextAppRoute\.threadId|nextAppRoute\.projectId|activeThreadId|workspaceWantsNewChat|threadMessages/,
+  "browser route reconciliation and App state must remain independent from deleted Workspace conversation state",
 );
 assert.match(
-  threadDataController,
-  /if \(!current\.activeThreadId\) \{[\s\S]*current\.setWorkspaceWantsNewChatMode\(true\);[\s\S]*return;[\s\S]*\}/,
-  "empty active-thread hydration must preserve draft workspace mode",
+  memberAgentDock,
+  /activeThreadKeyRef[\s\S]*if \(activeThreadKeyRef\.current\) return;[\s\S]*ensureCloudMemberAgentGlobalChannel/,
+  "the mounted member-agent surface must own one explicit active channel without App-level auto-selection",
 );
 
 assert.match(
@@ -87,11 +76,6 @@ assert.doesNotMatch(
   /buildWorkspaceRightPanelUserData/,
   "App must not assemble data for the retired Workspace right panel",
 );
-assert.match(
-  app,
-  /const activeThreadProjectId = useMemo\(\(\) => \{[\s\S]*if \(!activeThreadId \|\| workspaceWantsNewChat\) return null;[\s\S]*threads\.find\(\(thread\) => thread\.id === activeThreadId\)\?\.project_id[\s\S]*String\(projectId \?\? ""\)\.trim\(\) \|\| null/,
-  "browser telemetry and retained thread mutation must derive project identity directly from the active thread and keep new drafts standalone",
-);
 assert.doesNotMatch(
   app,
   /workspaceProject|resolveWorkspaceActiveProject|loadProjects|setActiveProjectId/,
@@ -106,11 +90,6 @@ assert.doesNotMatch(
   app,
   /buildWebWorkspaceSurfaceProjection|buildWorkspaceRightPanelUserData|buildWebWorkspaceLandingProjection/,
   "the retired Workspace presentation must not be projected from App",
-);
-assert.match(
-  baseCss,
-  /\.workspace-composer-lane \{[\s\S]*?max-width: var\(--web-chat-max-width\);[\s\S]*?margin: 0 auto;[\s\S]*?padding-inline: var\(--web-chat-gutter\);[\s\S]*?\}/,
-  "workspace composer lane must be the canonical centered max-width contract in both right-panel states",
 );
 assert.match(
   resourcesPanel,

@@ -15,7 +15,8 @@ RESOLUTION_FILE="convex/runtimeTurnResolution.ts"
 PERSISTENCE_FILE="convex/runtimeTurnPersistence.ts"
 THREADS_FILE="convex/threads.ts"
 EXECUTION_SESSION_FILE="convex/runtimeExecutionSession.ts"
-SEND_FLOW_FILE="shared/useWebSendFlowController.ts"
+MEMBER_AGENT_DOCK_FILE="apps/web/src/components/WebMemberAgentDock.tsx"
+TURN_RUNNER_FILE="shared/useWebTurnRunnerController.ts"
 SCHEMA_FILE="convex/schema.ts"
 
 if [[ ! -f "$HTTP_FILE" ]]; then
@@ -46,8 +47,12 @@ if [[ ! -f "$EXECUTION_SESSION_FILE" ]]; then
   echo "FAIL: missing $EXECUTION_SESSION_FILE"
   exit 1
 fi
-if [[ ! -f "$SEND_FLOW_FILE" ]]; then
-  echo "FAIL: missing $SEND_FLOW_FILE"
+if [[ ! -f "$MEMBER_AGENT_DOCK_FILE" ]]; then
+  echo "FAIL: missing $MEMBER_AGENT_DOCK_FILE"
+  exit 1
+fi
+if [[ ! -f "$TURN_RUNNER_FILE" ]]; then
+  echo "FAIL: missing $TURN_RUNNER_FILE"
   exit 1
 fi
 if [[ ! -f "$SCHEMA_FILE" ]]; then
@@ -169,18 +174,16 @@ require_match_in_file "$THREADS_FILE" 'return existingByMessageKey;' \
 
 echo "[10/10] Guard passed."
 echo "[11/11] Ensuring browser tool routing is structural, not heuristic..."
-require_match_in_file "$SEND_FLOW_FILE" 'function resolveAuthenticatedTurnRuntimeFlags\(' \
-  "browser send flow derives structural runtime flags"
-require_match_in_file "$SEND_FLOW_FILE" 'requestedAgenticTools: true' \
-  "authenticated turns stay tool-capable by default"
-forbid_match_in_file "$SEND_FLOW_FILE" 'requiresWorkspaceTools' \
-  "browser send flow no longer carries a workspace-mode flag"
-forbid_match_in_file "$SEND_FLOW_FILE" 'resolveAuthenticatedTurnToolMode' \
-  "browser send flow no longer uses heuristic tool mode classification"
-forbid_match_in_file "$SEND_FLOW_FILE" 'TRIVIAL_CHAT_MESSAGE_RE|CHAT_TOOLS_ACTION_RE|WORKSPACE_ACTION_RE' \
-  "browser send flow no longer uses regex intent heuristics"
-forbid_match_in_file "$SEND_FLOW_FILE" 'return argsRef\.current\.hasPaidAccess \? "workspace_compute" : "chat";' \
-  "browser send flow no longer routes paid turns to workspace by default"
+require_match_in_file "$MEMBER_AGENT_DOCK_FILE" 'requestedAgenticTools: true' \
+  "mounted member-agent turns stay tool-capable by default"
+forbid_match_in_file "$MEMBER_AGENT_DOCK_FILE" 'requiresWorkspaceTools' \
+  "member-agent dock does not carry a workspace-mode flag"
+forbid_match_in_file "$TURN_RUNNER_FILE" 'resolveAuthenticatedTurnToolMode' \
+  "turn runner does not use heuristic tool mode classification"
+forbid_match_in_file "$TURN_RUNNER_FILE" 'TRIVIAL_CHAT_MESSAGE_RE|CHAT_TOOLS_ACTION_RE|WORKSPACE_ACTION_RE' \
+  "turn runner does not use regex intent heuristics"
+forbid_match_in_file "$TURN_RUNNER_FILE" 'return argsRef\.current\.hasPaidAccess \? "workspace_compute" : "chat";' \
+  "turn runner does not route paid turns to workspace by default"
 forbid_match_in_file "$HANDLERS_FILE" 'executeWorkspaceAgentLoop\(' \
   "runtime no longer uses a separate eager workspace executor"
 forbid_match_in_file "$SCHEMA_FILE" 'requestedExecutionTarget' \
