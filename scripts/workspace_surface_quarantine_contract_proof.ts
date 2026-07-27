@@ -31,7 +31,6 @@ const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const voiceController = read("shared/useWebVoiceInputController.ts");
 const exportController = read("shared/useWebAccountDataExportController.ts");
 const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
-const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
 const mobileTopBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
@@ -46,7 +45,6 @@ const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx");
 const communityAgentSection = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
 const communityAgentInstructions = read("apps/web/src/components/WebCommunityAiAgentInstructionsEditor.tsx");
-const communityLaunchSetup = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const globalOverlay = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
 const globalOverlayProps = read("apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts");
 const accountCommerceGateway = read("shared/cloudAccountCommerceGateway.ts");
@@ -83,7 +81,7 @@ const workspaceRouteBranch =
 assert.match(
   workspaceRouteBranch,
   /page: "community"[\s\S]*communityTab: "settings"/,
-  "legacy launch setup URLs must restore on the community settings surface",
+  "legacy community-scoped Workspace URLs must restore on the community settings surface",
 );
 assert.match(
   workspaceRouteBranch,
@@ -104,11 +102,6 @@ assert.match(
   app,
   /legacyWorkspaceRedirectRef[\s\S]*readLegacyWorkspaceRouteContext[\s\S]*resolveAndEnterMemberDestination[\s\S]*buildCommunityFunnelPath/,
   "App must route legacy URLs through authoritative member destination resolution",
-);
-assert.match(
-  app,
-  /session && isCommunityLaunchSetupRoutePath\(pathname\)\) return/,
-  "only authenticated legacy setup routes may remain in place for restoration",
 );
 assert.match(
   app,
@@ -284,16 +277,6 @@ assert.match(
   "preview exit must target the owning community's funnel editor",
 );
 assert.match(
-  launchSetupRoute,
-  /buildCommunityTabPath\(communitySlug, "settings", null, "community"\)[\s\S]*community_launch_setup/,
-  "new launch setup URLs must live under community settings",
-);
-assert.doesNotMatch(
-  launchSetupRoute,
-  /buildWorkspace(?:Community)?DraftPath/,
-  "new launch setup URLs must not be generated under Workspace",
-);
-assert.match(
   communityAgentSection,
   /\{ id: "instructions", label: "Instructions" \}/,
   "community agent settings must expose instructions as the canonical configuration surface",
@@ -310,19 +293,6 @@ for (const legacyLandingCopy of ["Preview workspace", "Starter prompts", "DEFAUL
     `community agent instructions must not expose legacy landing control: ${legacyLandingCopy}`,
   );
 }
-for (const legacyLaunchField of ["starterPrompts", "community-launch-starter-panel", "agent_starter_prompts"]) {
-  assert.doesNotMatch(
-    communityLaunchSetup,
-    new RegExp(legacyLaunchField),
-    `community launch setup must not expose legacy Workspace starter state: ${legacyLaunchField}`,
-  );
-}
-assert.match(
-  app,
-  /communityAgentConfigLoadedCommunityIdRef\.current === community\.id[\s\S]*DEFAULT_EMPTY_THREAD_LANDING/,
-  "launch setup must never copy hidden landing state across community boundaries",
-);
-
 assert.match(mainSurface, /activePage === "settings"[\s\S]*WebSettingsSurfaceHost/);
 assert.doesNotMatch(
   mainSurface,
@@ -476,17 +446,17 @@ for (const retiredLandingKeyframe of [
 assert.match(
   baseCss,
   /\.setup-section-kicker\s*\{[\s\S]*?letter-spacing:\s*0\.08em;/,
-  "account and community setup must retain their neutral shared kicker presentation",
+  "account setup must retain its neutral kicker presentation",
 );
 assert.equal(
-  (accountOnboarding + communityLaunchSetup).match(/className="setup-section-kicker"/g)?.length,
-  2,
-  "the neutral setup kicker must have exactly the two audited setup emitters",
+  accountOnboarding.match(/className="setup-section-kicker"/g)?.length,
+  1,
+  "account onboarding must remain the sole setup-kicker emitter",
 );
 assert.doesNotMatch(
-  accountOnboarding + communityLaunchSetup,
+  accountOnboarding,
   /polynet-landing-kicker/,
-  "setup surfaces must not retain the retired landing ownership name",
+  "account setup must not retain the retired landing ownership name",
 );
 assert.match(
   baseCss,

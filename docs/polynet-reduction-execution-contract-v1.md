@@ -180,7 +180,7 @@ must remain distinct.
 | C5 | Collapse capability, transport, and public-function duplication | `SOURCE_IMPLEMENTED` | substantial cleanup landed; formal closure and current evidence reconciliation remain |
 | C6 | Land the read-only semantic community repository | `COMPLETE` | exact staging build `482d5d20` passed authenticated native and official-MCP list/read plus retired-name absence proof |
 | C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `COMPLETE` | exact staging build `3449fb98` passed source, CI, anonymous and signed-in acceptance; the two confirmed stale staging names are absent |
-| C8 | Decompose and optimize retained frontend/backend surfaces | `IN_PROGRESS` | C8.1 converges Global Settings, C8.2 extracts Personal Account orchestration, C8.3 converges account-setup surface projection, C8.4A establishes one community-launch lifecycle owner, and C8.4B establishes one launch-Knowledge orchestration owner; further retained-surface decomposition remains separately bounded |
+| C8 | Decompose and optimize retained frontend/backend surfaces | `IN_PROGRESS` | C8.1 converges Global Settings, C8.2 extracts Personal Account orchestration, C8.3 converges account-setup surface projection, C8.4A and C8.4B establish explicit launcher boundaries, and C8.4C retires that duplicate frontend in favor of canonical creation and destination-owned configuration; further retained-surface decomposition remains separately bounded |
 | C9 | Prove backup, restore, RPO/RTO, and operational recovery | `PLANNED` | isolated recovery drills and owned runbooks meet accepted targets |
 | C10 | Reconcile historical Builder Partner obligations | `PLANNED_LAST` | historical legal lineage, retention, and mixed-policy payout state reconcile without rewriting history |
 
@@ -2287,3 +2287,49 @@ C8.4B is complete on canonical staging. C8 remains `IN_PROGRESS`; the new
 controller is an explicit retained concentration, and any further Knowledge UI
 decomposition must be planned as a separate slice. Production, `origin/main`,
 production configuration, production data, and Convex remain untouched.
+
+### C8.4C source receipt — Community-launcher frontend retirement
+
+The third community-launch slice questions the launcher requirement itself.
+The six-step launcher duplicated jobs that already have canonical product
+owners: the existing create-community modal owns identity and initial
+visibility; Community Settings owns profile, branding, access, and pricing; AI
+Agent owns instructions; Resources owns community knowledge; and Funnel owns
+preview and sharing. C8.4C therefore deletes the duplicate frontend instead of
+optimizing it again.
+
+Desktop, mobile, and post-auth community-creation intents now converge on the
+existing `useWebCommunityUiController` and `WebCreateCommunityModal` path.
+`useCommunityCreateController` remains the single creation authority for
+session recovery, account setup, owner quota, published-community readiness,
+branding preparation, `createCloudCommunity`, and the post-create callback.
+`App.tsx` still projects the returned community into owner state and enters its
+canonical member destination.
+
+The retired surface includes the 3,186-line launcher modal, its two typed
+models, its 915-line Knowledge controller, its 467-line lifecycle controller,
+its dedicated setup-route and provider-OAuth return helpers, and 1,444 lines
+of launcher-only CSS. `App.tsx` falls from 8,067 to 7,305 lines and no longer
+mounts the launcher, preserves launcher query state, finalizes
+launcher-specific provider callbacks, or hides the member-agent dock behind
+launcher state. The three launcher-only proofs are deleted; source-ingestion,
+resource-builder, wiki-architect, and Workspace-quarantine proofs now test
+their surviving authorities without treating the retired UI as required.
+
+This is a frontend retirement, not a source-data or backend deletion.
+`communityResources`, community source ingestion, Google Drive and GitHub
+credential handling, wiki architect actions, resource-builder tools, and their
+cloud gateways remain protected for canonical Resources and future deliberate
+product work. Historical C8.4A and C8.4B receipts remain as truthful records of
+the staging builds that preceded this requirement deletion.
+
+A focused retirement proof locks the absence of launcher runtime files, route
+state, callback state, and CSS; the single desktop/mobile/auth-resume creation
+path; the retained create-account/quota/readiness boundaries; the post-create
+owner transition; the destination-owned settings, AI Agent, Resources, and
+Funnel surfaces; and the protected backend resource/source capabilities.
+
+No Convex file, schema, migration, cloud data, provider credential, production
+configuration, production action, or `origin/main` change belongs to this
+slice. Canonical Git-driven staging release and exact-build acceptance remain
+required before C8.4C can be called complete.
