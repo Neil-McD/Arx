@@ -1,9 +1,12 @@
 # C9 Operational Recovery Contract v1
 
-Status: `C9.0 SOURCE CONTRACT`
+Status: `C9.0B SEMANTICALLY HARDENED SOURCE CONTRACT`
 
 Baseline: canonical semantic-platform staging commit
 `a9d75eece959139cd194c66bca5045b950bff448`
+
+Hardening parent: exact canonical staging commit
+`ce8c9ec676c45ce1ac6d389221504e5023e07f7c`
 
 This contract defines what recovery must mean before Polynet creates, imports,
 or restores any product-data backup. It authorizes no backup, import, restore,
@@ -40,7 +43,8 @@ The canonical C9 staging lane remains:
 
 The schema currently declares 123 application tables and seven fields that
 reference Convex file storage. Source declares 24 recurring cron registrations
-and 46 direct scheduler call sites across 27 modules. The repository contains
+and 46 direct scheduler call sites across 38 exact module-target pairs in 27
+modules. The repository contains
 no product-data backup workflow, restore executor, periodic-backup
 configuration contract, accepted restore receipt, or timed recovery runbook.
 
@@ -69,15 +73,23 @@ once:
 
 | Post-restore disposition | Tables | Meaning |
 | --- | ---: | --- |
-| `restore_and_validate` | 57 | irreplaceable product/governance state remains unavailable until domain invariants pass |
+| `restore_and_validate` | 60 | irreplaceable product/governance state remains unavailable until domain invariants pass |
 | `restore_then_reconcile_external` | 38 | provider/effect state stays quarantined until current external truth and idempotency reconcile |
 | `restore_then_revoke_or_expire` | 12 | sessions, presence, leases, OAuth state, upload claims, and terminal sessions cannot become active from snapshot age alone |
-| `rebuild_or_validate_projection` | 12 | derived projections cannot outrank their canonical source |
-| `retain_quarantined_evidence` | 4 | audit/lifecycle evidence may explain the incident but cannot grant authority or trigger an effect |
+| `rebuild_or_validate_projection` | 7 | derived projections cannot outrank their canonical source |
+| `retain_quarantined_evidence` | 6 | audit/lifecycle evidence may explain the incident but cannot grant authority or trigger an effect |
 
 This is a conservative table-level default. A later drill may prove that a
 specific field needs a stricter override. It may never weaken a disposition
 merely to make a restore pass.
+
+Raw funnel visits in `communityAnalyticsEvents`, canonical business attribution
+in `platformBusinessVisits`, and intelligence-injection lineage in
+`communityIntelligenceRetrievalLogs` are not rebuildable projections. They are
+restored and validated as irreplaceable historical truth.
+`communityEvidenceRetrievalLogs` and `communityMemoryMetabolizerRuns` are
+retained as quarantined evidence: they can support privacy, audit, and
+incident reconstruction but cannot grant authority or replay work.
 
 All seven `_storage` references are separately named at table/field granularity.
 Six require the referenced blob and ownership lineage to validate together.
@@ -91,15 +103,18 @@ Pending Convex scheduled functions are not assumed to survive a backup. C9
 therefore treats the row or source event—not the pending scheduler record—as
 recovery authority.
 
-Every current cron and scheduler-calling module has one of four dispositions:
+Every current cron signature and exact scheduler module-target pair has one of
+four dispositions:
 
 - `maintenance_restarts_from_source`;
 - `reconcile_before_external_effect`;
 - `reconstruct_from_durable_rows`; or
 - `expire_or_finalize_stale_work`.
 
-The contract proof fails when a cron is added, removed, or renamed; a scheduler
-call site or owner module changes; or any registered family lacks recovery
+The contract proof fails when a cron name, method, schedule, or target changes;
+when a scheduler call uses a dynamic target; when any of the 46 call sites or
+38 exact module-target keys drift; or when any registered family lacks
+recovery ownership. File names and call counts alone are not semantic
 ownership.
 
 Recovery must not manufacture a generic replay queue. A retained domain may
@@ -178,14 +193,27 @@ behavior. C9 records that dependency and does not duplicate C2.
 
 ## 9. Slice sequence
 
-### C9.0 — Contract and configuration truth
+### C9.0A — Initial source inventory
 
 - complete table/storage/scheduled-work/provider coverage;
 - accept staging measurement targets;
-- record provider backup configuration through a separately authorized
-  metadata-only audit;
 - own freeze/reopen phases and forbidden actions; and
 - add one non-mutating proof to the canonical baseline.
+
+### C9.0B — Semantic source hardening
+
+- classify raw historical truth separately from rebuildable projections;
+- own each cron's name, method, schedule, and target;
+- own each exact scheduler module-target key rather than only module counts;
+- reject unsupported storage shapes and executable policy capabilities; and
+- preserve the no-action staging and production boundary.
+
+### C9.0C — Configuration truth
+
+- record provider backup configuration through a separately authorized
+  metadata-only audit;
+- record no secret or product-data values; and
+- create, download, restore, change, and delete nothing.
 
 ### C9.1 — Staging backup integrity
 
@@ -218,10 +246,10 @@ deployment truth, and record any failure honestly.
 
 ## 10. C9.0 exit and non-goals
 
-C9.0 is source-complete only when:
+C9.0B is source-complete only when:
 
-- current schema, storage references, crons, and scheduler call sites have
-  complete exact coverage;
+- current schema, storage references, cron signatures, and exact scheduler
+  targets have complete semantic coverage;
 - the proof is owned by the canonical foundation gate;
 - staging targets and recovery order are explicit;
 - U-035 is narrowed to external configuration plus behavioral proof; and

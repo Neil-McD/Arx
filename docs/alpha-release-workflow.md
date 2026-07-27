@@ -104,9 +104,12 @@ never grants permission to change production.
 C9 recovery work begins from the semantic-platform staging lane and follows
 [`docs/system-map/17-operational-recovery-contract-v1.md`](system-map/17-operational-recovery-contract-v1.md).
 
-C9.0 is source/metadata-only. It must not create, download, import, restore, or
-delete a backup; change periodic-backup configuration or provider plan; copy
-production data; deploy Convex; or implement a runtime recovery executor.
+C9.0A/B is source-only and C9.0C is metadata-only. None may create, download,
+import, restore, or delete a backup; change periodic-backup configuration or
+provider plan; copy production data; deploy Convex; or implement a runtime
+recovery executor. The operational-recovery proof must own every current table,
+storage reference, exact cron signature, and exact scheduler target before the
+metadata audit begins.
 
 Before any C9.1 backup action:
 

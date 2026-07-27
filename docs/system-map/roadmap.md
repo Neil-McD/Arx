@@ -218,9 +218,10 @@ Exit proof: smaller retained surface, lower change fan-out, bounded costs, and n
 
 ## Step 10 — Recovery, acceleration, and automation
 
-1. **C9.0 current source boundary:** one declarative contract classifies all 123
-   tables, seven file-storage reference fields, 24 recurring crons, and 46
-   scheduler call sites; separates product data, control plane, external
+1. **C9.0B current source boundary:** one declarative contract classifies all
+   123 tables, seven file-storage reference fields, 24 exact cron signatures,
+   and 46 scheduler call sites across 38 exact module-target keys; separates
+   product data, control plane, external
    provider truth, and replay-sensitive state; accepts 24-hour database/file
    RPO, four-hour authenticated-read RTO, and eight-hour full-effect RTO as
    staging measurement targets; and locks freeze-first/read-write-effect reopen

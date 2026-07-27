@@ -2540,6 +2540,11 @@ authorized future work rather than C8 blockers.
 
 ### C9.0 source receipt — Recovery contract and complete ownership
 
+This initial receipt is retained as historical source truth. Its table-count
+coverage was complete, but its scheduler ownership was module/count-level and
+therefore not semantically complete. C9.0B below supersedes that completeness
+claim without rewriting the original receipt.
+
 C9 starts by deleting the false requirement that a backup alone is recovery.
 The new declarative contract separates irreplaceable product data,
 reconstructible code/configuration, external-provider truth, and
@@ -2613,3 +2618,36 @@ At receipt time, the remote staging ref was exactly `9537865e...`, while
 The next boundary is still the separately authorized metadata-only audit of
 backup configuration; this receipt grants no authority to create, download,
 restore, import, configure, or delete a backup.
+
+### C9.0B source correction — Exact recovery semantics
+
+A hostile review proved that count coverage was not sufficient recovery
+ownership. The initial policy grouped all scheduler calls in one source module
+under one disposition. That mislabeled email delivery, provider-backed source
+crawling, model-provider heartbeat execution, privacy cleanup, and app-grant
+reconstruction when semantically different targets happened to share or
+inherit a file-level policy.
+
+`operational-recovery-v2` replaces the 27 module-level scheduler policies with
+38 exact module-target policies covering all 46 call sites. It also locks every
+cron's static name, scheduling method, schedule expression, and internal target.
+Dynamic scheduled targets fail the proof.
+
+The table contract now distinguishes raw historical truth from projections:
+60 tables restore and validate, 38 restore then reconcile external truth, 12
+restore then revoke or expire, seven rebuild or validate as projections, and
+six remain quarantined evidence. Raw funnel visits, canonical business
+attribution, and intelligence-injection lineage cannot be rebuilt and now
+restore as product truth. Evidence-retrieval and metabolizer-run receipts
+remain quarantined rather than masquerading as projections.
+
+The proof additionally fails when a `_storage` occurrence uses an unsupported
+shape; when the declarative policy imports execution capability; when it
+registers any query, mutation, action, internal function, or HTTP action; or
+when it accesses database, storage, scheduler, network, environment,
+filesystem, or subprocess capability.
+
+C9.0B remains source-only. It changes no runtime function, schema, generated
+API, data, storage, deployment, provider configuration, production ref, or
+`origin/main`. C9 remains `IN_PROGRESS`; the next separately authorized slice
+is C9.0C, the metadata-only backup-configuration audit.
