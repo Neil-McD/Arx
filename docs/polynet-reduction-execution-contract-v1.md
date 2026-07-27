@@ -180,7 +180,7 @@ must remain distinct.
 | C5 | Collapse capability, transport, and public-function duplication | `SOURCE_IMPLEMENTED` | substantial cleanup landed; formal closure and current evidence reconciliation remain |
 | C6 | Land the read-only semantic community repository | `COMPLETE` | exact staging build `482d5d20` passed authenticated native and official-MCP list/read plus retired-name absence proof |
 | C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `COMPLETE` | exact staging build `3449fb98` passed source, CI, anonymous and signed-in acceptance; the two confirmed stale staging names are absent |
-| C8 | Decompose and optimize retained frontend/backend surfaces | `IN_PROGRESS` | C8.1 converges Global Settings; further retained-surface decomposition remains separately bounded |
+| C8 | Decompose and optimize retained frontend/backend surfaces | `IN_PROGRESS` | C8.1 converges Global Settings and C8.2 extracts the Personal Account orchestration boundary; further retained-surface decomposition remains separately bounded |
 | C9 | Prove backup, restore, RPO/RTO, and operational recovery | `PLANNED` | isolated recovery drills and owned runbooks meet accepted targets |
 | C10 | Reconcile historical Builder Partner obligations | `PLANNED_LAST` | historical legal lineage, retention, and mixed-policy payout state reconcile without rewriting history |
 
@@ -2052,3 +2052,26 @@ focused architecture proof locks the new ownership boundary and the retained
 auth, global-memory, export, search, reset, and account-setup-refresh
 invariants. No Convex file, schema, migration, data write, environment change,
 route, copy, style, or production action belongs to this slice.
+
+The source candidate committed as
+`27f80a20fdef15e204b0eca7fc34b22ee0be1060` and reached the canonical
+Git-driven staging web origin without a Convex deployment. Exact-SHA GitHub
+run `30279566351` passed the foundation baseline, dependency audits, Convex cut
+guard, web typecheck, production build, and bundle budget. Exact-SHA run
+`30279567347` passed the controlled-mismatch check and anonymous public-funnel
+canary. The canonical staging `version.json` then served the source commit as
+both build ID and Sentry release.
+
+Signed-out staging acceptance proved that Account keeps all four responsibilities
+visible while failing closed: provider connection, agent preferences, personal
+memory, and exports are disabled until authentication. Signed-in Chrome
+acceptance then proved the live Account composition, including a reversible
+agent-name save and restoration; a temporary personal-memory
+create/search/pin/unpin/delete round trip with zero remaining items; and
+Threads, Messages, and Memory CSV export actions returning to ready state.
+Browser warning/error logs were empty, and the original agent name was restored.
+
+C8.2 is complete on canonical staging. C8 remains `IN_PROGRESS`; the next
+retained-surface decomposition must be planned as a separate slice.
+Production, `origin/main`, production configuration, production data, and
+Convex remain untouched.
