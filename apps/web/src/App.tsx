@@ -108,7 +108,9 @@ import {
   type CommunityInteractionRootBundle,
 } from "../../../shared/cloudCommunityInteractionsGateway";
 import {
+  saveCloudCommunityAbout,
   saveCloudCommunityPublicPresentation,
+  type CloudCommunityAboutSaveResult,
 } from "../../../shared/cloudCommunityFunnelGateway";
 import {
   resolveCloudMemberEntryDestination,
@@ -134,10 +136,6 @@ import {
   fetchCloudCommunityMemberBillingHistory,
   setCloudCommunityFreeAccessMode,
 } from "../../../shared/cloudCommunityAdminGateway";
-import {
-  saveCloudCommunityLaunchProfile,
-  type CloudCommunityLaunchProfileSaveResult,
-} from "../../../shared/cloudCommunityLaunchSetupGateway";
 import {
   loadCloudProviderConnections,
   type CloudChatgptConnectionStatus,
@@ -5827,39 +5825,18 @@ export default function App() {
 		    setActiveView(transition.nextView);
 		    setActivePage(transition.nextPage);
 		  };
-    const applyCommunityProfileResult = (result: CloudCommunityLaunchProfileSaveResult) => {
+    const applyCommunityAboutResult = (result: CloudCommunityAboutSaveResult) => {
       setCommunities((prev) =>
         prev.map((community) =>
-          community.id === result.id
+          community.id === result.community_id
             ? {
                 ...community,
-                slug: result.slug,
-                name: result.name,
-                one_liner: result.one_liner,
                 about: result.about,
-                avatar_url: result.avatar_url,
-                avatar_storage_id: result.avatar_storage_id ?? null,
-                avatar_focus_x: result.avatar_focus_x ?? 0.5,
-                avatar_focus_y: result.avatar_focus_y ?? 0.5,
-                avatar_zoom: result.avatar_zoom ?? 1,
-                banner_url: result.banner_url,
-                banner_storage_id: result.banner_storage_id ?? null,
-                banner_focus_x: result.banner_focus_x ?? 0.5,
-                banner_focus_y: result.banner_focus_y ?? 0.5,
-                banner_zoom: result.banner_zoom ?? 1,
-                visibility: toCanonicalCommunityVisibility(result.visibility, "unlisted"),
-                entry_policy: result.entry_policy ?? community.entry_policy ?? null,
                 updated_at: result.updated_at,
               }
             : community,
         ),
       );
-      if (activeCommunityId === result.id) {
-        applyCommunityShellState({
-          communityId: result.id,
-          communitySlug: result.slug,
-        });
-      }
     };
     const {
       handleSelectMobileRootPage,
@@ -6010,15 +5987,13 @@ export default function App() {
     setCommunitySettingsError(null);
     setIsSavingCommunitySettings(true);
     try {
-      const result = await saveCloudCommunityLaunchProfile({
+      const result = await saveCloudCommunityAbout({
         session: activeSession,
         communityId: activeCommunity.id,
-        input: {
-          about: communitySettingsAbout.trim() || null,
-        },
+        about: communitySettingsAbout.trim() || null,
       });
       if (!result) throw new Error("Failed to save funnel text.");
-      applyCommunityProfileResult(result);
+      applyCommunityAboutResult(result);
       communitySettingsDirtyRef.current = hasCommunitySettingsDirtyOutsideFunnelAbout();
       return true;
     } catch (error) {
@@ -6035,7 +6010,7 @@ export default function App() {
     }
   }, [
     activeCommunity,
-    applyCommunityProfileResult,
+    applyCommunityAboutResult,
     communitySettingsAbout,
     ensureUsableAuthSession,
     hasCommunitySettingsDirtyOutsideFunnelAbout,

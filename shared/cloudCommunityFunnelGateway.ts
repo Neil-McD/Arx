@@ -10,6 +10,12 @@ export type CloudCommunityPublicPresentationSaveResult<TConfig = unknown> = {
   funnel: TConfig | null;
 };
 
+export type CloudCommunityAboutSaveResult = {
+  community_id: string;
+  about: string | null;
+  updated_at: string;
+};
+
 function firstObjectRow(payload: unknown): Record<string, unknown> | null {
   if (Array.isArray(payload)) {
     const row = payload[0];
@@ -56,5 +62,26 @@ export async function saveCloudCommunityPublicPresentation<SessionT, TConfig = u
     community_id: String(row.community_id ?? params.communityId).trim() || params.communityId,
     updated_at: String(row.updated_at ?? "").trim(),
     funnel: (row.funnel as TConfig | null | undefined) ?? null,
+  };
+}
+
+export async function saveCloudCommunityAbout<SessionT>(
+  params: CloudCommunityFunnelGatewayParams<SessionT> & {
+    communityId: string;
+    about: string | null;
+  },
+): Promise<CloudCommunityAboutSaveResult | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("community:saveCommunityAbout" as any, {
+    authSubject,
+    communityId: params.communityId,
+    about: params.about,
+  });
+  const row = firstObjectRow(payload);
+  if (!row) return null;
+  return {
+    community_id: String(row.community_id ?? params.communityId).trim() || params.communityId,
+    about: typeof row.about === "string" ? row.about : null,
+    updated_at: String(row.updated_at ?? "").trim(),
   };
 }

@@ -141,6 +141,7 @@ import {
   createCommunity as createCommunityImpl,
   deleteCommunity as deleteCommunityImpl,
   generateCommunityBrandingUploadUrl as generateCommunityBrandingUploadUrlImpl,
+  saveCommunityAbout as saveCommunityAboutImpl,
   saveCommunityPublicPresentation as saveCommunityPublicPresentationImpl,
   saveCommunityLaunchProfile as saveCommunityLaunchProfileImpl,
   saveCommunityOneLiner as saveCommunityOneLinerImpl,
@@ -248,6 +249,7 @@ export const editCommunityInteractionMessage = editCommunityInteractionMessageIm
 export const deleteCommunityInteractionMessage = deleteCommunityInteractionMessageImpl;
 export const listCommunityAiFeedPosts = listCommunityAiFeedPostsImpl;
 export const hideCommunityAiFeedPost = hideCommunityAiFeedPostImpl;
+export const saveCommunityAbout = saveCommunityAboutImpl;
 export const saveCommunitySettings = saveCommunitySettingsImpl;
 export const saveCommunityLaunchProfile = saveCommunityLaunchProfileImpl;
 export const saveCommunityOneLiner = saveCommunityOneLinerImpl;
