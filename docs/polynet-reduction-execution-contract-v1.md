@@ -180,7 +180,7 @@ must remain distinct.
 | C5 | Collapse capability, transport, and public-function duplication | `SOURCE_IMPLEMENTED` | substantial cleanup landed; formal closure and current evidence reconciliation remain |
 | C6 | Land the read-only semantic community repository | `COMPLETE` | exact staging build `482d5d20` passed authenticated native and official-MCP list/read plus retired-name absence proof |
 | C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `COMPLETE` | exact staging build `3449fb98` passed source, CI, anonymous and signed-in acceptance; the two confirmed stale staging names are absent |
-| C8 | Decompose and optimize retained frontend/backend surfaces | `IN_PROGRESS` | C8.1 converges Global Settings, C8.2 extracts Personal Account orchestration, and C8.3 converges account-setup surface projection; further retained-surface decomposition remains separately bounded |
+| C8 | Decompose and optimize retained frontend/backend surfaces | `IN_PROGRESS` | C8.1 converges Global Settings, C8.2 extracts Personal Account orchestration, C8.3 converges account-setup surface projection, and C8.4A establishes one community-launch lifecycle owner; further retained-surface decomposition remains separately bounded |
 | C9 | Prove backup, restore, RPO/RTO, and operational recovery | `PLANNED` | isolated recovery drills and owned runbooks meet accepted targets |
 | C10 | Reconcile historical Builder Partner obligations | `PLANNED_LAST` | historical legal lineage, retention, and mixed-policy payout state reconcile without rewriting history |
 
@@ -2132,3 +2132,45 @@ C8.3 is complete on canonical staging. C8 remains `IN_PROGRESS`; the next
 retained-surface decomposition must be planned as a separate slice.
 Production, `origin/main`, production configuration, production data, and
 Convex remain untouched.
+
+### C8.4A source receipt — Community-launch lifecycle boundary
+
+The first community-launch decomposition slice removes launch lifecycle and
+status-hydration ownership from `App.tsx`. One
+`useWebCommunityLaunchSetupLifecycleController` now owns the selected
+community's derived setup status, loading/error state, modal open/create mode,
+initial step, integration reload/auto-open signals, and one discriminated
+restore intent for either a durable setup route or a Knowledge OAuth return.
+The two former pending restore states can no longer race to reopen the same
+surface.
+
+The boundary does not become a new product or data authority. Convex remains
+canonical and manager-gated for the six-step derived status. `App.tsx` retains
+browser-history mutation, global OAuth finalization, authentication and
+entitlement gates, active-community navigation, community creation, and every
+canonical profile, resource, agent, access, and publication write. The
+controller imports only the existing status-read gateway and contains no
+browser navigation, OAuth provider finalization, or cloud mutation path.
+
+Status application is now bound to one request generation, authenticated
+subject, and active community. Superseded requests, sign-out, community
+switches, permission loss, and leaving the community surface invalidate late
+results. The explicit post-create handoff is the only transition allowed to
+adopt a newly created target. Direct routes preserve their exact requested
+step; OAuth returns converge on Knowledge only after the requested community
+is active and its status is loaded.
+
+`App.tsx` falls from 8,753 to 8,530 lines. It no longer declares launch
+status/loading/error state, modal/create/initial-step state, provider
+reload/auto-open state, pending route/OAuth restore state, the loaded-community
+ref, direct status-gateway calls, or the three related hydration/restore
+effects. `WebCommunityLaunchSetupModal` consumes one typed
+`WebCommunityLaunchSetupLifecycleModel` instead of six flat lifecycle props.
+A focused executable proof covers step precedence plus current, superseded,
+cross-subject, cross-community, and post-create request outcomes; the existing
+launch and source-ingestion contracts are updated to follow the new owner.
+
+No Convex file, schema, migration, cloud data, environment configuration,
+route vocabulary, copy, style, provider protocol, production action, or
+`origin/main` change belongs to this slice. Canonical staging release and
+exact-build acceptance remain required before C8.4A can be called complete.

@@ -24,6 +24,12 @@ const sourceCrawlerServicePath = join(root, "services/community-source-crawler/a
 const app = read("apps/web/src/App.tsx");
 const sourceOAuth = read("apps/web/src/communityLaunchKnowledgeSourceOAuth.ts");
 const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
+const launchLifecycle = read(
+  "apps/web/src/controllers/useWebCommunityLaunchSetupLifecycleController.ts",
+);
+const launchLifecycleModel = read(
+  "apps/web/src/components/webCommunityLaunchSetupLifecycleModel.ts",
+);
 const modal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const architect = read("convex/communityWikiArchitect.ts");
 const prompt = read("shared/communityWikiArchitectPrompt.ts");
@@ -748,12 +754,19 @@ for (const snippet of [
   "readCommunityLaunchKnowledgeOAuthContext",
   "mergeCommunityLaunchKnowledgeOAuthContext",
   "queueCommunityLaunchKnowledgeOAuthRestore(context)",
-  "pendingCommunityLaunchKnowledgeOAuthContext",
-  'setCommunityLaunchSetupInitialStep("knowledge")',
-  "initialStep={communityLaunchSetupInitialStep}",
+  "queueKnowledgeOAuthRestore",
+  'kind: "knowledge_oauth"',
+  'restoreIntent.kind === "knowledge_oauth"',
+  'lifecycle={communityLaunchSetupLifecycleModel}',
 ]) {
   assert.ok(
-    (app + sourceOAuth + launchSetupRoute).includes(snippet),
+    (
+      app +
+      sourceOAuth +
+      launchSetupRoute +
+      launchLifecycle +
+      launchLifecycleModel
+    ).includes(snippet),
     "source integration OAuth returns from launch should preserve URL/storage/server community context and reopen the launch modal on Knowledge",
   );
 }
@@ -769,27 +782,27 @@ assert.match(
 );
 assert.match(
   app,
-  /sourceIntegrationOAuthFinalizeInFlightRef[\s\S]*readCommunityLaunchKnowledgeSourceOAuthIntent[\s\S]*restoreLaunchKnowledgeContext\(\);[\s\S]*if \(!session\) return[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*restoreLaunchKnowledgeContext\(result\)[\s\S]*clearCommunityLaunchKnowledgeSourceOAuthIntent[\s\S]*setCommunityLaunchKnowledgeIntegrationReloadKey\(\(key\) => key \+ 1\)/,
+  /sourceIntegrationOAuthFinalizeInFlightRef[\s\S]*readCommunityLaunchKnowledgeSourceOAuthIntent[\s\S]*restoreLaunchKnowledgeContext\(\);[\s\S]*if \(!session\) return[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*restoreLaunchKnowledgeContext\(result\)[\s\S]*clearCommunityLaunchKnowledgeSourceOAuthIntent[\s\S]*communityLaunchSetupLifecycle\.noteKnowledgeIntegrationConnected/,
   "source integration OAuth finalize should restore launch context before session readiness, merge server identity, clear stored intent, and reload provider connection after success",
 );
 assert.match(
   app,
-  /provider === "google_drive" \|\| provider === "github"[\s\S]*setCommunityLaunchKnowledgeAutoOpenProvider\(provider\)/,
+  /provider === "google_drive" \|\| provider === "github"[\s\S]*communityLaunchSetupLifecycle\.noteKnowledgeIntegrationConnected\([\s\S]*provider/,
   "source integration OAuth finalize should auto-open the just-connected launch Knowledge provider",
 );
 assert.match(
-  app,
-  /pendingCommunityLaunchKnowledgeOAuthContext[\s\S]*!pendingCommunityLaunchKnowledgeOAuthContext[\s\S]*setIsCommunityLaunchSetupModalOpen\(false\)[\s\S]*const context = pendingCommunityLaunchKnowledgeOAuthContext[\s\S]*!activeCommunity[\s\S]*!communityLaunchSetupStatus[\s\S]*setCommunityLaunchSetupInitialStep\("knowledge"\)[\s\S]*setIsCommunityLaunchSetupModalOpen\(true\)/,
+  launchLifecycle,
+  /queueKnowledgeOAuthRestore[\s\S]*setRestoreIntent\(\{[\s\S]*kind: "knowledge_oauth"[\s\S]*Boolean\(isOpen \|\| restoreIntent\)[\s\S]*!params\.activeCommunity[\s\S]*!status[\s\S]*restoreIntent\.kind === "knowledge_oauth"[\s\S]*"knowledge"[\s\S]*setIsOpen\(true\)/,
   "launch Knowledge OAuth restore should not be erased by status hydration and should open only after community/status readiness",
 );
 assert.match(
-  modal,
-  /initialStep\?: CommunityLaunchSetupStep \| null[\s\S]*requestedInitialStep[\s\S]*setStepOverride\(requestedInitialStep\)[\s\S]*setActiveStep\(requestedInitialStep \?\?/,
+  launchLifecycleModel + modal,
+  /initialStep: CommunityLaunchSetupStep \| null[\s\S]*requestedInitialStep[\s\S]*setStepOverride\(requestedInitialStep\)[\s\S]*setActiveStep\(requestedInitialStep \?\?/,
   "launch setup modal should accept a one-shot initial step for OAuth return continuity",
 );
 assert.match(
-  modal,
-  /knowledgeIntegrationReloadKey\?: string \| number \| null[\s\S]*onLoadKnowledgeGoogleDriveConnectionRef[\s\S]*onLoadKnowledgeGitHubConnectionRef[\s\S]*const loadConnection = onLoadKnowledgeGitHubConnectionRef\.current[\s\S]*knowledgeIntegrationReloadKey/,
+  launchLifecycleModel + modal,
+  /knowledgeIntegrationReloadKey: number[\s\S]*onLoadKnowledgeGoogleDriveConnectionRef[\s\S]*onLoadKnowledgeGitHubConnectionRef[\s\S]*const loadConnection = onLoadKnowledgeGitHubConnectionRef\.current[\s\S]*knowledgeIntegrationReloadKey/,
   "launch setup modal should reload source integration connection state after OAuth finalize without restarting on recreated callback props",
 );
 assert.match(

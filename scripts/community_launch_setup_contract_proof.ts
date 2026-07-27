@@ -17,6 +17,12 @@ const communityBarrel = read("convex/community.ts");
 const setupModal = read(
   "apps/web/src/components/WebCommunityLaunchSetupModal.tsx",
 );
+const launchLifecycleModel = read(
+  "apps/web/src/components/webCommunityLaunchSetupLifecycleModel.ts",
+);
+const launchLifecycleController = read(
+  "apps/web/src/controllers/useWebCommunityLaunchSetupLifecycleController.ts",
+);
 const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
 const sourceOAuth = read("apps/web/src/communityLaunchKnowledgeSourceOAuth.ts");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
@@ -341,8 +347,8 @@ assert.match(
   "launch access setup must reuse the Stripe wordmark for the paid setup path",
 );
 assert.match(
-  setupModal,
-  /mode\?: "setup" \| "create"[\s\S]*onCreateCommunity/,
+  launchLifecycleModel + setupModal,
+  /mode: "setup" \| "create"[\s\S]*lifecycle: WebCommunityLaunchSetupLifecycleModel[\s\S]*onCreateCommunity/,
   "launch modal must support create mode before a community exists",
 );
 assert.match(
@@ -397,7 +403,7 @@ assert.match(
 );
 assert.match(
   appShell,
-  /openCommunityLaunchCreateFlow[\s\S]*setIsCommunityLaunchCreateMode\(true\)[\s\S]*setIsCommunityLaunchSetupModalOpen\(true\)/,
+  /openCommunityLaunchCreateFlow[\s\S]*communityLaunchSetupLifecycle\.openCreate\(\)/,
   "app shell must open the launch onboarding modal for new community creation",
 );
 assert.match(
@@ -407,7 +413,7 @@ assert.match(
 );
 assert.match(
   appShell,
-  /handleCreateCommunityFromLaunch[\s\S]*createCloudCommunity[\s\S]*loadCloudCommunityLaunchSetupStatus/,
+  /handleCreateCommunityFromLaunch[\s\S]*createCloudCommunity[\s\S]*communityLaunchSetupLifecycle\.loadAndOpenCommunity/,
   "launch create flow must create the community then continue into setup status",
 );
 assert.match(
@@ -591,13 +597,18 @@ assert.match(
   "route lifecycle must preserve source OAuth and launch setup route state instead of canonicalizing it away",
 );
 assert.match(
-  appShell,
-  /pendingCommunityLaunchSetupRouteContext[\s\S]*readCurrentCommunityLaunchSetupRouteContext[\s\S]*replaceCommunityLaunchSetupRouteState[\s\S]*buildCommunityLaunchSetupRoutePath[\s\S]*clearCommunityLaunchSetupRouteState[\s\S]*readCommunityLaunchSetupRouteContext/,
-  "app shell must persist launch setup modal state to the URL and clear setup path/query state on close",
+  launchLifecycleController + appShell,
+  /readCurrentCommunityLaunchSetupRouteContext[\s\S]*kind: "route"[\s\S]*replaceCommunityLaunchSetupRouteState[\s\S]*buildCommunityLaunchSetupRoutePath[\s\S]*clearCommunityLaunchSetupRouteState[\s\S]*readCommunityLaunchSetupRouteContext/,
+  "launch lifecycle must restore durable route state while the app shell persists and clears browser history",
 );
 assert.match(
-  appShell,
-  /communityLaunchKnowledgeAutoOpenProvider[\s\S]*"google_drive" \| "github" \| null[\s\S]*provider === "google_drive" \|\| provider === "github"[\s\S]*setCommunityLaunchKnowledgeAutoOpenProvider\(provider\)[\s\S]*knowledgeAutoOpenProvider=\{communityLaunchKnowledgeAutoOpenProvider\}[\s\S]*onKnowledgeAutoOpenHandled/,
+  launchLifecycleModel,
+  /CommunityLaunchKnowledgeProvider = "google_drive" \| "github"[\s\S]*knowledgeAutoOpenProvider: CommunityLaunchKnowledgeProvider \| null/,
+  "launch lifecycle model must carry one typed knowledge auto-open provider",
+);
+assert.match(
+  launchLifecycleController + appShell + setupModal,
+  /noteKnowledgeIntegrationConnected[\s\S]*setKnowledgeAutoOpenProvider\(provider\)[\s\S]*lifecycle=\{communityLaunchSetupLifecycleModel\}[\s\S]*onKnowledgeAutoOpenHandled/,
   "Drive and GitHub OAuth restore should pass an auto-open intent into the launch Knowledge modal",
 );
 {
@@ -617,9 +628,9 @@ assert.match(
   );
 }
 assert.match(
-  appShell,
-  /const context = pendingCommunityLaunchSetupRouteContext[\s\S]*context\.step[\s\S]*applyCommunityShellState[\s\S]*setCommunityLaunchSetupInitialStep\(context\.step\)[\s\S]*setIsCommunityLaunchSetupModalOpen\(true\)/,
-  "app shell must restore launch setup modal and exact step from durable route state after refresh",
+  launchLifecycleController,
+  /restoreIntent[\s\S]*onRequestCommunityTarget[\s\S]*setInitialStep\([\s\S]*restoreIntent\.kind === "knowledge_oauth"[\s\S]*: restoreIntent\.step[\s\S]*setIsOpen\(true\)/,
+  "launch lifecycle must restore the modal and exact step from durable route state after refresh",
 );
 assert.match(
   setupModal,
