@@ -80,7 +80,7 @@ Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-stagin
 | U-032 | What request-rate and payload bounds apply to every public HTTP/API/MCP route? | abuse/cost posture | route contract matrix and boundary fixtures |
 | U-033 | What are audit/diagnostic/runtime retention and privacy rules? | unbounded growth and deletion conflict | policy plus age/cardinality histograms |
 | U-034 | What is the actual operator dashboard read/query cost at realistic scale? | N+1 risk | isolated fixture with read/query budget |
-| U-035 | What are product-data backup provider, cadence, retention, RPO/RTO, and tested restore steps? | disaster recovery | configuration evidence and isolated restore drill |
+| U-035 | **Narrowed by C9.0 source contract:** all 123 tables, seven storage-reference fields, 24 crons, 46 scheduler call sites, provider/control-plane boundaries, recovery order, and staging measurement targets now have declarative ownership. Still unknown: actual staging/production backup configuration, last successful backup, file-storage inclusion, measured artifact integrity, isolated restore behavior, achieved RPO/RTO, and operator runbook execution. | disaster recovery | metadata-only provider configuration evidence, then staging backup integrity and an isolated disposable restore drill |
 | U-036 | Which browser security headers are required by the threat model? | avoid cargo-cult header changes | documented baseline and automated response assertions |
 | U-037 | Does the signed-in staging product complete all eleven journeys at the frozen commit? | static map is not runtime truth | bounded scripted/manual smoke with receipts |
 | U-038 | **Resolved by C0:** the semantic-platform destination is adopted in one repository thesis, with implementation states preventing a second normative plane. | prevents direction from masquerading as current code | canonical thesis plus doctrine/finding reconciliation |
@@ -89,6 +89,6 @@ Evidence and limitations are in [`04-staging-shape-audit-20260720.md`](04-stagin
 
 1. Convert the resolved U-011 ownership model into the smallest two-user shared-DM/community-content deletion fixture and fail-closed safety boundary.
 2. Design the U-015/U-016 Builder Partner v3 terms, policy-version, and mixed-ledger migration proof; do not rewrite historical rows.
-3. Inventory external consumers/configuration for U-025, U-028, and U-035.
+3. Inventory external consumers/configuration for U-025 and U-028; for U-035, perform only the C9.0 metadata-only backup-configuration audit before any backup or restore action.
 4. Use isolated behavioral fixtures for U-009, U-014, U-017, U-023, scheduler fairness, and U-037.
 5. Instrument legacy/auth compatibility reads before deleting paths whose row prevalence is now known.

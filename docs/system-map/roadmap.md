@@ -218,9 +218,23 @@ Exit proof: smaller retained surface, lower change fan-out, bounded costs, and n
 
 ## Step 10 — Recovery, acceleration, and automation
 
-1. Define product-data RPO/RTO and perform isolated backup/restore and provider-outage drills.
-2. Automate release evidence, migration zero-observation, fairness SLOs, orphan audits, dependency policy, and privacy lifecycle receipts.
-3. Accelerate only after deletion and invariant closure; automation must not perpetuate compatibility or deferred obligations.
+1. **C9.0 current source boundary:** one declarative contract classifies all 123
+   tables, seven file-storage reference fields, 24 recurring crons, and 46
+   scheduler call sites; separates product data, control plane, external
+   provider truth, and replay-sensitive state; accepts 24-hour database/file
+   RPO, four-hour authenticated-read RTO, and eight-hour full-effect RTO as
+   staging measurement targets; and locks freeze-first/read-write-effect reopen
+   order. Actual backup configuration and behavioral restore proof remain
+   unknown. No backup, restore, runtime mode, provider configuration, or
+   production change belongs to C9.0.
+2. Complete a metadata-only provider backup-configuration audit, then prove one
+   staging backup including file storage and one isolated disposable restore
+   with no outbound provider secrets.
+3. Add only drill-proved recovery-mode, reconciliation, stale-work, and
+   privacy-replay mechanisms.
+4. Execute a timed game day and owned runbook before calling C9 complete.
+5. Automate release evidence, migration zero-observation, fairness SLOs, orphan audits, dependency policy, and privacy lifecycle receipts.
+6. Accelerate only after deletion and invariant closure; automation must not perpetuate compatibility or deferred obligations.
 
 ## Historical first implementation recommendation
 

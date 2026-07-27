@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=46
+TOTAL_STEPS=47
 CURRENT_STEP=1
 
 run_step() {
@@ -58,6 +58,7 @@ run_step "Public checkout-start behavior" npm run test:public-community-checkout
 run_step "Public checkout-start contract" npm run check:public-community-checkout-start-contract
 run_step "Community subscription event convergence" npm run test:community-subscription-event-convergence
 run_step "Account lifecycle policy contract" npm run check:account-lifecycle-policy-contract
+run_step "Operational recovery contract" npm run check:operational-recovery-contract
 run_step "Community admin contract guard" bash scripts/community_admin_contract_guard.sh
 run_step "Community public identity guard" bash scripts/community_public_identity_guard.sh
 run_step "Community access role policy proof" npm run check:community-access-role-policy-proof

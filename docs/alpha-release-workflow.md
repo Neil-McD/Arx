@@ -99,6 +99,38 @@ staging build marker and signed-in behavior before considering any separate
 production release. Recheck the production build marker afterward; staging work
 never grants permission to change production.
 
+## C9 Operational Recovery Boundary
+
+C9 recovery work begins from the semantic-platform staging lane and follows
+[`docs/system-map/17-operational-recovery-contract-v1.md`](system-map/17-operational-recovery-contract-v1.md).
+
+C9.0 is source/metadata-only. It must not create, download, import, restore, or
+delete a backup; change periodic-backup configuration or provider plan; copy
+production data; deploy Convex; or implement a runtime recovery executor.
+
+Before any C9.1 backup action:
+
+1. run all three semantic-platform staging guards;
+2. verify the exact clean staging commit and canonical deployment identities;
+3. record backup configuration as metadata only: provider, deployment, plan,
+   cadence, retention, last-success time, and file-storage inclusion;
+4. confirm the target is staging and production remains unchanged; and
+5. obtain explicit authorization for the backup action.
+
+Before any C9.2 restore action:
+
+1. use a disposable, access-controlled non-production deployment, never
+   canonical staging or production;
+2. omit all outbound provider secrets;
+3. preserve no backup archive in Git or durable local storage;
+4. fail closed before authenticated reads, writes, and external effects; and
+5. obtain separate explicit authorization before deleting the disposable
+   deployment or temporary backup artifact.
+
+`npx convex import --prod`, production dashboard restore, and restoration over
+canonical staging are forbidden C9 staging paths. Provider capability is not
+configuration evidence, and Git/Vercel rollback is not product-data recovery.
+
 ## Release Types
 
 ### Community-first transition release

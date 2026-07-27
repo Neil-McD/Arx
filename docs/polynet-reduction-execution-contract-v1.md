@@ -181,7 +181,7 @@ must remain distinct.
 | C6 | Land the read-only semantic community repository | `COMPLETE` | exact staging build `482d5d20` passed authenticated native and official-MCP list/read plus retired-name absence proof |
 | C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `COMPLETE` | exact staging build `3449fb98` passed source, CI, anonymous and signed-in acceptance; the two confirmed stale staging names are absent |
 | C8 | Decompose and optimize retained frontend/backend surfaces | `COMPLETE` | C8.1 converges Global Settings, C8.2 extracts Personal Account orchestration, C8.3 converges account-setup surface projection, C8.4A and C8.4B establish explicit launcher boundaries, C8.4C retires the duplicate frontend, and C8.4D retires its backend contract after moving Funnel About to a narrow canonical seam; any future retained-surface redesign is separately bounded |
-| C9 | Prove backup, restore, RPO/RTO, and operational recovery | `PLANNED` | isolated recovery drills and owned runbooks meet accepted targets |
+| C9 | Prove backup, restore, RPO/RTO, and operational recovery | `IN_PROGRESS` | isolated recovery drills and owned runbooks meet accepted targets |
 | C10 | Reconcile historical Builder Partner obligations | `PLANNED_LAST` | historical legal lineage, retention, and mixed-policy payout state reconcile without rewriting history |
 
 The ledger is dependency-ordered but not permission to execute the next row.
@@ -2537,3 +2537,44 @@ canonical staging, C8 remains `COMPLETE`, and the next contracted milestone is
 C9 recovery proof. Operator-read N+1 removal, broad CSS splitting, protected
 Resources/OAuth redesign, and measured runtime optimizations remain separately
 authorized future work rather than C8 blockers.
+
+### C9.0 source receipt — Recovery contract and complete ownership
+
+C9 starts by deleting the false requirement that a backup alone is recovery.
+The new declarative contract separates irreplaceable product data,
+reconstructible code/configuration, external-provider truth, and
+replay-sensitive operational state. It locks a freeze-first recovery state
+machine whose reopen order is authenticated reads, then writes, then external
+effects.
+
+`operationalRecoveryPolicy.ts` classifies all 123 current schema tables exactly
+once: 57 restore-and-validate tables, 38 restore-then-provider-reconcile tables,
+12 restore-then-revoke/expire tables, 12 rebuild-or-validate projections, and
+four quarantined-evidence tables. It also owns all seven schema file-storage
+references, all 24 registered crons, and all 46 scheduler call sites across 27
+modules. The policy registers no query, mutation, action, scheduler, provider,
+backup, restore, or deployment executor.
+
+The accepted staging measurement targets are a 24-hour database/file-storage
+RPO, four-hour authenticated-core-read RTO, and eight-hour full-write/effect
+RTO. They are measurement hypotheses, not a production SLA. Current provider
+backup configuration, last successful backup, file-storage inclusion, artifact
+integrity, isolated restore behavior, achieved RPO/RTO, and operator execution
+remain explicitly unknown under narrowed U-035.
+
+The new operational-recovery proof compares recovery coverage with both the
+current schema and the independent account-lifecycle table inventory; locks
+storage, cron, scheduler-module, callsite-count, provider-boundary, objective,
+and recovery-phase drift; and fails if executable Convex operations enter the
+declarative policy. The canonical foundation baseline grows from 46 to 47
+steps so recovery coverage cannot become an ownerless optional proof.
+
+C9.0 changes no product runtime, schema, generated API, data, file storage,
+environment value, provider configuration, deployment, production ref, or
+`origin/main`. It creates, downloads, imports, restores, and deletes no backup.
+It does not deploy Convex, implement recovery mode, exercise provider effects,
+or reopen C2 destructive lifecycles.
+
+C9 remains `IN_PROGRESS`. The next separately authorized action is a
+metadata-only audit of actual backup configuration. Only after that evidence
+may C9.1 create one staging backup including file storage.
