@@ -53,10 +53,6 @@ const previewProxySource = await readFile(
   new URL("../apps/preview-proxy/server.js", import.meta.url),
   "utf8",
 );
-const backgroundTerminalRailSource = await readFile(
-  new URL("../apps/web/src/components/WebBackgroundTerminalRail.tsx", import.meta.url),
-  "utf8",
-);
 assert.match(
   workspaceTerminalsSource,
   /async function probeWorkspaceTerminalPreviewUrl/,
@@ -106,16 +102,6 @@ assert.doesNotMatch(
   workspaceTerminalsSource,
   /row\.status === "failed"\s*\|\|\s*row\.status === "exited"\s*\|\|\s*row\.status === "stopped"/,
   "backend recent terminal issue filter must not count every stopped terminal as an issue",
-);
-assert.match(
-  backgroundTerminalRailSource,
-  /function isTerminalIssue[\s\S]*terminal\.status === "stopped"\) return false/,
-  "terminal rail should defensively ignore stopped terminals",
-);
-assert.match(
-  backgroundTerminalRailSource,
-  /visibleTerminals = props\.terminals\.filter[\s\S]*visibleTerminals\.length === 0\) return null/,
-  "terminal rail should render only active terminals plus actionable issues",
 );
 assert.match(
   workspaceTerminalProcessCoreSource,

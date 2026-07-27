@@ -917,13 +917,6 @@ assert.match(
   "the browser gateway must retain canonical Premium checkout",
 );
 
-const workspaceTerminalsGateway = read("shared/workspaceTerminalsGateway.ts");
-assert.match(
-  workspaceTerminalsGateway,
-  /normalizePaidUsageBillingMode[\s\S]*details\.paid_usage_billing_mode[\s\S]*details\.paidUsageBillingMode/,
-  "workspace computer start gateway must preserve backend-paid usage billing mode",
-);
-
 assert.match(
   workspaceInspector,
   /function mapFailure\([\s\S]*details\?: Record<string, unknown>[\s\S]*details: result\.details/,

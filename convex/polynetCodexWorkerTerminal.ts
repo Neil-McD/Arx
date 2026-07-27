@@ -43,10 +43,9 @@ export function buildPolynetCodexWorkerTerminalTarget(): string | null {
 }
 
 // Lets the headless Codex worker start a long-running served process (dev
-// server) through the SAME terminal-process system the native runtime uses:
-// the persisted terminal row lights up the background-terminal rail and the
-// workspace app preview, and the preview URL is the access-gated proxy URL,
-// never a raw provider URL.
+// server) through the SAME terminal-process system the native runtime uses.
+// The persisted row records lifecycle and preview evidence, and the preview
+// URL is the access-gated proxy URL, never a raw provider URL.
 export async function handlePolynetCodexWorkerTerminal(
   ctx: any,
   req: Request,
