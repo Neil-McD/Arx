@@ -20,7 +20,7 @@ type ThreadMessage = {
   run_id: string | null;
 };
 
-type UseWebAgentDataExportControllerArgs<SessionT> = {
+type UseWebAccountDataExportControllerArgs<SessionT> = {
   getSession: () => SessionT | null;
   buildCsv: (headers: string[], rows: Array<Record<string, unknown>>) => string;
   downloadTextFile: (filename: string, content: string, mime?: string) => void;
@@ -33,8 +33,8 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-export function useWebAgentDataExportController<SessionT>(
-  args: UseWebAgentDataExportControllerArgs<SessionT>,
+export function useWebAccountDataExportController<SessionT>(
+  args: UseWebAccountDataExportControllerArgs<SessionT>,
 ) {
   const argsRef = useRef(args);
   argsRef.current = args;

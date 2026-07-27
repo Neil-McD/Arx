@@ -10,7 +10,7 @@ import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTyp
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import type { UseWebProviderConnectionUiControllerResult } from "../controllers/useWebProviderConnectionUiController";
 import type { useWebProfileSettingsUiController } from "../controllers/useWebProfileSettingsUiController";
-import type { useWebPersonalMemoryUiController } from "../controllers/useWebPersonalMemoryUiController";
+import type { useWebPersonalAccountSettingsController } from "../controllers/useWebPersonalAccountSettingsController";
 import type { UseWebBillingUiControllerResult } from "../controllers/useWebBillingUiController";
 import { WebAccountSettingsSection } from "./WebAccountSettingsSection";
 import { WebAgentSettingsSection } from "./WebAgentSettingsSection";
@@ -87,46 +87,16 @@ export type WebSettingsPanelsProps = {
     redeemPendingPurchases: () => Promise<void> | void;
     ensureSession: () => Promise<SessionLike>;
     loadPendingPurchaseClaims: (session: NonNullable<SessionLike>) => Promise<void>;
-	    providerConnectionUi: UseWebProviderConnectionUiControllerResult;
-	    billingUi: UseWebBillingUiControllerResult<
-	      AccountCommerceStatus,
-	      PendingPurchaseClaim
-	    >;
-	  };
-  agent: {
+    providerConnectionUi: UseWebProviderConnectionUiControllerResult;
+    billingUi: UseWebBillingUiControllerResult<
+      AccountCommerceStatus,
+      PendingPurchaseClaim
+    >;
+  };
+  personalAccount: {
     session: SessionLike;
-    exportError: string | null;
-    exportThreadsCsv: () => Promise<void> | void;
-    exportMessagesCsv: () => Promise<void> | void;
-    exportMemoryCsv: () => Promise<void> | void;
-    isExporting: boolean;
-    userMemorySettings: {
-      memory_mode: "off" | "suggest" | "auto";
-      remember_intent_enabled: boolean;
-      agent_name: string;
-      agent_soul: string;
-    };
-    isLoadingUserMemorySettings: boolean;
-    saveUserMemorySettings: (next: {
-      memory_mode: "off" | "suggest" | "auto";
-      remember_intent_enabled: boolean;
-      agent_name: string;
-      agent_soul: string;
-    }) => Promise<void> | void;
     formatRelativeTime: (value: string) => string;
-    handleTogglePersonalMemoryPinned: (item: {
-      id: string;
-      content: string;
-      scope: "global" | "workspace";
-      scope_id: string | null;
-      pinned: boolean;
-      created_at: string;
-      updated_at: string;
-    }) => Promise<void> | void;
-    handleDeletePersonalMemoryItem: (id: string) => Promise<void> | void;
-    handleCreatePersonalMemoryItem: () => Promise<void> | void;
-    loadPersonalMemoryItems: () => Promise<void> | void;
-    personalMemoryUi: ReturnType<typeof useWebPersonalMemoryUiController>;
+    controller: ReturnType<typeof useWebPersonalAccountSettingsController>;
   };
 	  billing: {
 	    session: SessionLike;
@@ -173,8 +143,15 @@ export type WebSettingsPanelsProps = {
 };
 
 export function WebSettingsPanels(props: WebSettingsPanelsProps) {
-  const { settingsGroup, profile, account, agent, billing, skills, appearance } =
-    props;
+  const {
+    settingsGroup,
+    profile,
+    account,
+    personalAccount,
+    billing,
+    skills,
+    appearance,
+  } = props;
 
   const profileSectionProps = {
     session: profile.session,
@@ -276,30 +253,43 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
   };
 
   const agentSectionProps = {
-    session: agent.session,
-    exportError: agent.exportError,
-    exportThreadsCsv: agent.exportThreadsCsv,
-    exportMessagesCsv: agent.exportMessagesCsv,
-    exportMemoryCsv: agent.exportMemoryCsv,
-    isExporting: agent.isExporting,
-    userMemorySettings: agent.userMemorySettings,
-    isLoadingUserMemorySettings: agent.isLoadingUserMemorySettings,
-    saveUserMemorySettings: agent.saveUserMemorySettings,
-    personalMemoryError: agent.personalMemoryUi.personalMemoryError,
-    isLoadingPersonalMemory: agent.personalMemoryUi.isLoadingPersonalMemory,
-    personalMemoryItems: agent.personalMemoryUi.personalMemoryItems,
-    personalMemoryQuery: agent.personalMemoryUi.personalMemoryQuery,
-    setPersonalMemoryQuery: agent.personalMemoryUi.setPersonalMemoryQuery,
-    loadPersonalMemoryItems: agent.loadPersonalMemoryItems,
-    formatRelativeTime: agent.formatRelativeTime,
-    handleTogglePersonalMemoryPinned: agent.handleTogglePersonalMemoryPinned,
-    handleDeletePersonalMemoryItem: agent.handleDeletePersonalMemoryItem,
-    setMemoryImportError: agent.personalMemoryUi.setMemoryImportError,
-    setIsMemoryImportModalOpen: agent.personalMemoryUi.setIsMemoryImportModalOpen,
-    newPersonalMemoryContent: agent.personalMemoryUi.newPersonalMemoryContent,
-    setNewPersonalMemoryContent: agent.personalMemoryUi.setNewPersonalMemoryContent,
-    setNewPersonalMemoryPinned: agent.personalMemoryUi.setNewPersonalMemoryPinned,
-    handleCreatePersonalMemoryItem: agent.handleCreatePersonalMemoryItem,
+    session: personalAccount.session,
+    exportError: personalAccount.controller.dataExport.error,
+    exportThreadsCsv: personalAccount.controller.dataExport.exportThreadsCsv,
+    exportMessagesCsv: personalAccount.controller.dataExport.exportMessagesCsv,
+    exportMemoryCsv: personalAccount.controller.dataExport.exportMemoryCsv,
+    isExporting: personalAccount.controller.dataExport.isExporting,
+    userMemorySettings: personalAccount.controller.personalAgent.settings,
+    isLoadingUserMemorySettings:
+      personalAccount.controller.personalAgent.isLoading,
+    saveUserMemorySettings:
+      personalAccount.controller.personalAgent.saveSettings,
+    personalMemoryError: personalAccount.controller.personalMemory.error,
+    isLoadingPersonalMemory:
+      personalAccount.controller.personalMemory.isLoading,
+    personalMemoryItems: personalAccount.controller.personalMemory.items,
+    personalMemoryQuery: personalAccount.controller.personalMemory.query,
+    setPersonalMemoryQuery:
+      personalAccount.controller.personalMemory.setQuery,
+    loadPersonalMemoryItems:
+      personalAccount.controller.personalMemory.loadItems,
+    formatRelativeTime: personalAccount.formatRelativeTime,
+    handleTogglePersonalMemoryPinned:
+      personalAccount.controller.personalMemory.togglePinned,
+    handleDeletePersonalMemoryItem:
+      personalAccount.controller.personalMemory.deleteItem,
+    setMemoryImportError:
+      personalAccount.controller.personalMemoryUi.setMemoryImportError,
+    setIsMemoryImportModalOpen:
+      personalAccount.controller.personalMemoryUi.setIsMemoryImportModalOpen,
+    newPersonalMemoryContent:
+      personalAccount.controller.personalMemory.newContent,
+    setNewPersonalMemoryContent:
+      personalAccount.controller.personalMemory.setNewContent,
+    setNewPersonalMemoryPinned:
+      personalAccount.controller.personalMemory.setNewPinned,
+    handleCreatePersonalMemoryItem:
+      personalAccount.controller.personalMemory.createItem,
   };
 
 	  const billingSectionProps = {

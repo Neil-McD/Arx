@@ -26,7 +26,7 @@ function main() {
     new URL("../shared/useWebMemoryMutationController.ts", import.meta.url),
   );
   const dataExport = readText(
-    new URL("../shared/useWebAgentDataExportController.ts", import.meta.url),
+    new URL("../shared/useWebAccountDataExportController.ts", import.meta.url),
   );
 
   assertIncludes(
