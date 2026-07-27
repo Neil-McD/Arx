@@ -2498,3 +2498,42 @@ code, production ref, or `origin/main`. Focused contracts, the expanded
 foundation baseline, web typecheck/build/bundle gates, all staging guards,
 exact Git-driven staging deployment, and read-only acceptance remain required
 before the C8.5 closure-integrity receipt is complete.
+
+### C8.5 staging closure receipt
+
+Source commit `64553b51c174195c6ae08805ef05ced8f72fc77a`
+repaired the stale member-agent assertion, expanded the canonical foundation
+baseline from 41 to 46 steps, and reconciled the roadmap and execution
+contract. It reached canonical staging through the Git-driven path and was
+served exactly as both `buildId` and `sentryRelease`.
+
+The candidate passed the six focused C8 contracts, including Global Settings,
+Personal Account, account setup, Funnel, launcher retirement, and the
+member-agent dock; the complete 46-step foundation baseline; web typecheck;
+production build; bundle budget; all three semantic-platform staging guards;
+and `git diff --check` locally. No Convex deployment was required because the
+slice changed no backend function, schema, generated API, or data contract.
+
+Read-only signed-in acceptance on the exact live build proved that:
+
+- `/settings/agent` normalized to `/settings/account`, rendered the canonical
+  Account surface, and retained the contextual personal-agent dock;
+- `/settings/integrations` normalized to `/settings/mcp`, rendered the canonical
+  Polynet MCP surface, and retained the contextual personal-agent dock;
+- `/c/polynet/funnel` rendered the canonical Funnel editor with the persisted
+  About value and retained the contextual personal-agent dock; and
+- a legacy launcher query URL normalized to canonical Community Settings,
+  removed both launcher parameters, rendered no launcher surface, and retained
+  the contextual personal-agent dock.
+
+GitHub runs `30308306274` (MVP Guards) and `30308306433` (Staging UI Canary)
+were created for the exact source commit, but their four jobs all failed before
+executing any steps. This remains an external-runner availability exception,
+not a passing CI result or a source-test failure.
+
+Production and `origin/main` were not changed. The production build marker
+remained `456ebb9cfb95defc316c046e57d17a001eea5025`. C8.5 is complete on
+canonical staging, C8 remains `COMPLETE`, and the next contracted milestone is
+C9 recovery proof. Operator-read N+1 removal, broad CSS splitting, protected
+Resources/OAuth redesign, and measured runtime optimizations remain separately
+authorized future work rather than C8 blockers.
