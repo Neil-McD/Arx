@@ -62,7 +62,7 @@ assert.match(
 );
 assert.match(
   app,
-  /if \(!COMMUNITY_INTERACTION_PROJECTION_ENABLED \|\| !activeCommunityId\) return;[\s\S]*if \(shellVariant === "mobile"\) return;[\s\S]*readStoredInteractionSelectedRoot/,
+  /if \(!activeCommunityId\) return;[\s\S]*if \(shellVariant === "mobile"\) return;[\s\S]*readStoredInteractionSelectedRoot/,
   "mobile Community should not reopen a stale thread selection from storage",
 );
 assert.match(

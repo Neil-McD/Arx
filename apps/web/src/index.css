@@ -244,30 +244,28 @@
 }
 
 /* Web: keep scrollable panels flush to the viewport edges so scrollbars hug the window. */
-.workspace:not(.scroll-to-bottom) {
+.workspace {
   padding: 0;
   transition: padding-left 200ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-.app-root.sessions-drawer-open .workspace:not(.scroll-to-bottom) {
+.app-root.sessions-drawer-open .workspace {
   padding-left: var(--web-sessions-drawer-width);
 }
 
-.app-root.sessions-drawer-overlay .workspace:not(.scroll-to-bottom) {
+.app-root.sessions-drawer-overlay .workspace {
   padding-left: 0;
 }
 
 @media (max-width: 760px) {
   /* On narrow windows, keep the drawer overlayed instead of shrinking the chat column. */
-  .app-root.sessions-drawer-open .workspace:not(.scroll-to-bottom) {
+  .app-root.sessions-drawer-open .workspace {
     padding-left: 0;
   }
 }
 
-/* Web AI + Discover: center against the rail control edge (not the rail column edge). */
+/* Web retained surfaces: center against the rail control edge (not the rail column edge). */
 @media (min-width: 921px) {
-  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .message-list-inner,
-  .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .web-empty-thread,
   .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .workspace-composer-shell,
   .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-hero,
   .app-root:not(.sessions-drawer-open) .app-shell.with-community-rail.no-left.no-right:not(.community-layout) .discover-grid,
@@ -383,50 +381,7 @@
   }
 }
 
-.workspace-body > .message-list {
-  width: 100%;
-  padding-block: 20px 28px;
-  padding-inline: 0;
-}
-
-.message-list-inner {
-  width: 100%;
-  max-width: var(--web-chat-max-width);
-  margin: 0 auto;
-  padding-inline: var(--web-chat-gutter);
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-}
-
 /* Web: inherit DT typography for LLM output (font-size/line-height/markdown rhythm). */
-
-.web-empty-thread {
-  width: 100%;
-  max-width: var(--web-chat-max-width);
-  margin: clamp(72px, 16vh, 230px) auto 0;
-  display: grid;
-  gap: 14px;
-  justify-items: center;
-  text-align: center;
-}
-
-.web-empty-thread-title {
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
-}
-
-.web-empty-thread-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  max-width: 56ch;
-}
-
-.web-empty-thread-skeleton {
-  pointer-events: none;
-}
 
 .web-skeleton-block,
 .web-skeleton-pill,
@@ -473,19 +428,6 @@
   .web-skeleton-row::after {
     animation: none;
   }
-}
-
-.web-skeleton-title {
-  width: min(320px, 70%);
-  height: 34px;
-  border-radius: 14px;
-}
-
-.web-skeleton-subtitle {
-  width: min(520px, 90%);
-  height: 18px;
-  border-radius: 999px;
-  opacity: 0.85;
 }
 
 .web-starter-tabs-skeleton .web-skeleton-pill {
@@ -588,12 +530,6 @@
   height: 14px;
   border-radius: 4px;
   opacity: 0.65;
-}
-
-@media (max-width: 820px) {
-  .web-empty-thread {
-    margin-top: clamp(72px, 16vh, 230px);
-  }
 }
 
 .web-starter-tabs {
@@ -964,19 +900,6 @@
   color: var(--text-faint);
 }
 
-.agent-preview-shell .web-empty-thread-title {
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
-}
-
-.agent-preview-shell .web-empty-thread-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  max-width: 56ch;
-}
-
 .web-starter-tab {
   position: relative;
 }
@@ -1099,16 +1022,6 @@
   100% { background-position: -200% 0; }
 }
 
-.scroll-to-bottom.workspace svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .ask-bar {
   width: calc(100% - 2 * var(--web-chat-gutter));
   /* Web: match the full chat column width (a bit wider than the message text). */
@@ -1161,14 +1074,6 @@
 }
 
 @media (max-width: 720px) {
-  .workspace-body > .message-list {
-    padding-block: 14px 18px;
-  }
-
-  .message-list-inner {
-    gap: 20px;
-  }
-
   .ask-bar.ask-bar-v2 {
     padding: 8px 12px 6px;
     border-radius: 16px;
@@ -1180,10 +1085,6 @@
 }
 
 @media (max-width: 520px) {
-  .message-list-inner {
-    gap: 18px;
-  }
-
   .ask-model-label {
     max-width: 7ch;
   }
@@ -1913,27 +1814,6 @@
   cursor: default;
 }
 
-.scroll-to-bottom.workspace {
-  position: absolute;
-}
-
-.scroll-to-bottom.workspace .scroll-badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--bg-button);
-  color: var(--bg-button-text);
-  font-size: 11px;
-  line-height: 18px;
-  font-weight: 600;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--border-default);
-}
-
 .chat-attachments-preview {
   margin-top: 6px;
   padding-bottom: 0;
@@ -2233,7 +2113,6 @@
   border-style: dashed;
 }
 
-.workspace-attachment-drop-surface.drag-over,
 .community-attachment-drop-surface.drag-over {
   outline: 1px dashed color-mix(in srgb, var(--accent) 72%, transparent);
   outline-offset: -8px;
@@ -2277,41 +2156,6 @@
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
-}
-
-/* Auth gate (web): keep it minimal + on-brand. */
-.modal.modal-auth-gate {
-  width: min(420px, calc(100vw - 32px));
-  border-radius: 18px;
-}
-
-.modal.modal-auth-gate .modal-header {
-  border-bottom: none;
-  padding: 18px 18px 8px;
-}
-
-.modal.modal-auth-gate .modal-title {
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--text-primary);
-}
-
-.modal.modal-auth-gate .modal-close {
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  border: none;
-  background: transparent;
-}
-
-.modal.modal-auth-gate .modal-close:hover {
-  background: var(--hover-overlay);
-}
-
-.modal.modal-auth-gate .modal-body {
-  padding: 0 18px 14px;
 }
 
 .auth-gate-bullets {
