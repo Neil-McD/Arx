@@ -1585,3 +1585,37 @@ clusters require a separate caller-led audit, repository docs/configuration
 still need final alignment, and `DaytonaRuntimeAppPreview.tsx`,
 `RuntimeComputerUseViewer.tsx`, and `WebBackgroundTerminalRail.tsx` remain an
 explicit protected mount-or-delete decision.
+
+### C7.2A current receipt — pre-ConversionLanding stylesheet deletion
+
+The first caller-led ownerless-style slice removes the superseded public
+landing family from `base.css`. `WebLandingPage.tsx` has one mounted owner:
+`ConversionLanding` and its dedicated `ConversionLanding.css`. No TSX renderer
+emits a `.polynet-landing-*` class. The audited residue contained 126 distinct
+legacy selectors across 345 rules plus 20 exclusively referenced keyframes.
+The rewrite deletes 343 pure legacy rules and all 20 keyframes, removes only the
+three legacy arms from the one mixed mobile rule, and preserves its two live
+`.polynet-onboarding-*` arms.
+
+One visual declaration block was not dead: account setup and community launch
+both used `.polynet-landing-kicker`. Those two emitters and the shared rule now
+use the neutral `.setup-section-kicker` owner. The quarantine proof positively
+requires the mounted ConversionLanding import/root, the two setup emitters, the
+mobile onboarding arms, and the protected viewer style roots; it rejects the
+entire retired selector family and its 20 keyframes.
+
+`base.css` falls from 31,273 to 28,497 lines, a net deletion of 2,776 lines.
+The anonymous desktop and canonical 390-by-844 `/m` staging baselines render
+the mounted ConversionLanding without console warnings/errors, and the mobile
+document has no horizontal overflow. Focused contracts, CSS parsing, web
+typecheck/build/bundle gates, and the 40-step foundation baseline pass locally;
+exact-build staging visual regression is the final release proof for this
+slice.
+
+This slice changes no landing renderer, route, Convex function or schema, cloud
+record, runtime worker, protected harness viewer, provider lease,
+billing/entitlement authority, official MCP contract, community
+resource/memory owner, environment configuration, production state, or
+`origin/main`. C7 remains `IN_PROGRESS`: additional ownerless stylesheet
+cohorts, repository docs/configuration alignment, and the three protected
+viewer decisions remain.

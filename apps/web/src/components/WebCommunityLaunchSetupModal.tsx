@@ -3348,7 +3348,7 @@ export function WebCommunityLaunchSetupModal(
               <span>{progress}%</span>
             </div>
             <div>
-              <p className="polynet-landing-kicker">Community launch</p>
+              <p className="setup-section-kicker">Community launch</p>
               <h1 id="community-launch-title">
                 {isCreateMode
                   ? "Create community"
