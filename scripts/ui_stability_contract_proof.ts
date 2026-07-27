@@ -15,9 +15,6 @@ const operatorCommunitiesPanelView = read("apps/web/src/components/OperatorCommu
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const eventsPanel = read("apps/web/src/components/WebCommunityEventsSection.tsx");
 const aiFeedPanel = read("apps/web/src/components/CommunityAiFeedPanel.tsx");
-const threadSidebarSelectors = read("shared/threadSidebarSelectors.ts");
-const workspaceActiveProjectSelector = read("shared/workspaceActiveProjectSelector.ts");
-const workspaceProjectStateController = read("apps/web/src/controllers/useWebWorkspaceProjectStateController.ts");
 
 assert.match(
   app,
@@ -92,38 +89,13 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /const currentWorkspaceProjectSelection = resolveWorkspaceActiveProject\(\{[\s\S]*activeThread,[\s\S]*activeThreadId,[\s\S]*workspaceWantsNewChat,[\s\S]*resolvedActiveProjectId: workspaceProject\.state\.activeProjectId,[\s\S]*resolvedActiveProjectName: workspace\.derived\.resolvedActiveProjectName,[\s\S]*projectById: workspace\.derived\.projectById,[\s\S]*resolveThreadProjectId: workspace\.derived\.resolveThreadProjectId/,
-  "workspace current project authority must be centralized in the active project selector",
-);
-assert.match(
-  workspaceActiveProjectSelector,
-  /const hasActiveThread = Boolean\(params\.activeThread\) && !params\.workspaceWantsNewChat;[\s\S]*const activeThreadProjectId =[\s\S]*params\.resolveThreadProjectId\(params\.activeThread\)[\s\S]*const currentProjectId = isPendingThreadProject[\s\S]*hasActiveThread[\s\S]*\? activeThreadProjectId[\s\S]*: params\.resolvedActiveProjectId/,
-  "workspace current project must prefer explicit active thread projects, keep standalone threads standalone, and avoid default-project flash while the thread is loading",
-);
-assert.match(
-  workspaceActiveProjectSelector,
-  /const isFromActiveThread =[\s\S]*currentProjectId === activeThreadProjectId[\s\S]*const currentProjectName =[\s\S]*isFromActiveThread[\s\S]*"Loading project"[\s\S]*params\.resolvedActiveProjectName/,
-  "active project naming must not fall back to the default project while an active thread project row is still loading",
-);
-assert.match(
-  threadSidebarSelectors,
-  /const direct = String\(thread\.project_id \?\? ""\)\.trim\(\);[\s\S]*if \(direct\) return direct;[\s\S]*return null;/,
-  "thread project ids must be authoritative and missing project ids must remain standalone chats",
-);
-assert.match(
-  workspaceProjectStateController,
-  /const requestedActiveProjectId = activeProjectId;[\s\S]*setActiveProjectId\(\(current\) =>[\s\S]*resolveExistingCloudProjectId\(next, current \?\? requestedActiveProjectId\)/,
-  "project reloads must preserve the newest explicit draft project instead of clobbering it or defaulting it from provider rows",
-);
-assert.match(
-  workspaceProjectStateController,
-  /const resolvedActiveProjectId = useMemo\([\s\S]*resolveExistingCloudProjectId\(projects, activeProjectId\)/,
-  "project state must resolve the active project from explicit state only",
+  /const activeThreadProjectId = useMemo\(\(\) => \{[\s\S]*if \(!activeThreadId \|\| workspaceWantsNewChat\) return null;[\s\S]*threads\.find\(\(thread\) => thread\.id === activeThreadId\)\?\.project_id[\s\S]*String\(projectId \?\? ""\)\.trim\(\) \|\| null/,
+  "browser telemetry and retained thread mutation must derive project identity directly from the active thread and keep new drafts standalone",
 );
 assert.doesNotMatch(
-  workspaceProjectStateController,
-  /resolvePreferredCloudProjectId\(projects, activeProjectId\)/,
-  "project state must not treat the first project as ambient active context",
+  app,
+  /workspaceProject|resolveWorkspaceActiveProject|loadProjects|setActiveProjectId/,
+  "App must not retain browser project-list, draft-selection, or default-project authority",
 );
 assert.doesNotMatch(
   app,

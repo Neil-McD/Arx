@@ -37,7 +37,6 @@ import {
 } from "../../../shared/cloudBusinessAnalyticsGateway";
 import {
   buildContextFallbackThreadTitle, deriveThreadTitleFromUserText, isMissingThreadTitleValue, traceThreadContext, } from "../../../shared/threadTitleUi";
-import { resolveWorkspaceActiveProject } from "../../../shared/workspaceActiveProjectSelector";
 import { CommunityAvatar } from "../../../shared/CommunityAvatar";
 import {
   formatProviderConnectionErrorMessage,
@@ -76,9 +75,6 @@ import { useWebEffectiveSkillsController } from "./controllers/useWebEffectiveSk
 import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlatformSkillsController";
 import { buildEffectiveSkills } from "../../../shared/effectiveSkills";
 import { COMMUNITY_MANAGER_PLATFORM_SKILLS } from "../../../shared/platformSkills";
-import { useWebWorkspaceProjectStateController } from "./controllers/useWebWorkspaceProjectStateController";
-import { useWebWorkspaceModelStateController } from "./controllers/useWebWorkspaceModelStateController";
-import { useWebWorkspaceSurfaceController } from "./controllers/useWebWorkspaceSurfaceController";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { updateSentryUiContext } from "./instrument";
 import {
@@ -1495,6 +1491,23 @@ export default function App() {
     }
   }
 
+  function resetAgentThreadStateAfterSignOut(): void {
+    workspaceComposerDraftRef.current = { text: "", attachments: [] };
+    workspaceComposerApiRef.current?.clear();
+    threadsHydratedRef.current = false;
+    setThreads([]);
+    setThreadError(null);
+    setThreadErrorById({});
+    setWorkspaceWantsNewChatMode(false);
+    setActiveThreadId(null);
+    setThreadMessages([]);
+    setIsSendingMessage(false);
+    setThreadSendingStateById({});
+    setThreadStreamingStateById({});
+    setRuntimeEventsByRunId({});
+    setLoadingThreadMessagesThreadId(null);
+  }
+
   const {
     session,
     setAuthError,
@@ -1521,8 +1534,8 @@ export default function App() {
           reason: "session_lost",
         },
       });
-      workspace.actions.resetWorkspaceSurfaceState();
       await resetWebSessionStateAfterSignOut({
+        resetAgentThreadState: resetAgentThreadStateAfterSignOut,
         beginBrowserSignedOutState,
         setCommunities,
         setIsLoadingCommunities,
@@ -1595,8 +1608,8 @@ export default function App() {
           reason: "session_missing_after_bootstrap",
         },
       });
-      workspace.actions.resetWorkspaceSurfaceState();
       await resetWebSessionStateAfterSignOut({
+        resetAgentThreadState: resetAgentThreadStateAfterSignOut,
         beginBrowserSignedOutState,
         setCommunities,
         setIsLoadingCommunities,
@@ -3688,14 +3701,11 @@ export default function App() {
       return resolved;
     });
   };
-  const workspaceProject = useWebWorkspaceProjectStateController<AuthSession, ThreadRecord>({
-    ensureSession: ensureUsableAuthSession,
-    activeThreadId,
-    threads,
-    setThreads,
-    setActiveThreadId,
-    setWorkspaceWantsNewChatMode,
-  });
+  const activeThreadProjectId = useMemo(() => {
+    if (!activeThreadId || workspaceWantsNewChat) return null;
+    const projectId = threads.find((thread) => thread.id === activeThreadId)?.project_id;
+    return String(projectId ?? "").trim() || null;
+  }, [activeThreadId, threads, workspaceWantsNewChat]);
 
   const isLikelyMobileDevice = useMemo(() => {
     if (typeof navigator === "undefined") return false;
@@ -4168,8 +4178,7 @@ export default function App() {
       setCommunityResourceModuleId(null);
       setCommunitySettingsPane("community");
     }
-    workspaceProject.actions.setActiveProjectId(null);
-  }, [applyCommunityShellState, workspaceProject.actions]);
+  }, [applyCommunityShellState]);
 
   const applyLocationToState = useCallback(() => {
     setShellVariant(readShellVariantFromPathname(window.location.pathname || "/"));
@@ -4569,9 +4578,6 @@ export default function App() {
           communitySlug: resolveKnownCommunitySlugById(communityId),
         });
       }
-      workspaceProject.actions.setActiveProjectId(
-        String(thread.project_id ?? "").trim() || null,
-      );
       syncWorkspaceSelection({
         threadId: thread.id,
         wantsNewChat: false,
@@ -4581,11 +4587,10 @@ export default function App() {
       resolveKnownCommunitySlugById,
       syncCommunitySelection,
       syncWorkspaceSelection,
-      workspaceProject.actions,
     ],
   );
   const workspaceCore = useWebWorkspaceCoreController<AuthSession, ThreadRecord>({
-    project: workspaceProject,
+    projectId: activeThreadProjectId,
     ensureSession: ensureUsableAuthSession,
     setActiveThreadId,
     setWorkspaceWantsNewChatMode,
@@ -7986,52 +7991,6 @@ export default function App() {
 	    [canonicalSessionUserId, session?.user?.displayName, session?.user?.email, savedProfilesByUserId]
 	  );
 
-  const activeThread = useMemo(() => {
-    if (!activeThreadId) return null;
-    return threads.find((t) => t.id === activeThreadId) ?? null;
-  }, [activeThreadId, threads]);
-  const workspaceModelState = useWebWorkspaceModelStateController({
-    modelToggles: platformModelToggles,
-  });
-  const workspace = useWebWorkspaceSurfaceController<
-    AuthSession,
-    ThreadRecord,
-    ThreadMessage,
-    ThreadStreamingState<MemoryUsedItem, HistoryUsedItem, CommunityEvidenceUsedV1>,
-    ThreadStreamingRuntimeEvent
-  >({
-    activeThreadId,
-    workspaceWantsNewChat,
-    project: workspaceCore.project,
-    model: workspaceModelState,
-    resetWorkspaceComposer: () => {
-      workspaceComposerDraftRef.current = { text: "", attachments: [] };
-      workspaceComposerApiRef.current?.clear();
-    },
-    threadsHydratedRef,
-    setThreads,
-    setThreadError,
-    setThreadErrorById,
-    setWorkspaceWantsNewChatMode,
-    setActiveThreadId,
-    setThreadMessages,
-    setIsSendingMessage,
-    setThreadSendingStateById,
-    setThreadStreamingStateById,
-    setRuntimeEventsByRunId,
-    setLoadingThreadMessagesThreadId,
-  });
-  const currentWorkspaceProjectSelection = resolveWorkspaceActiveProject({
-    activeThread,
-    activeThreadId,
-    workspaceWantsNewChat,
-    resolvedActiveProjectId: workspaceProject.state.activeProjectId,
-    resolvedActiveProjectName: workspace.derived.resolvedActiveProjectName,
-    projectById: workspace.derived.projectById,
-    resolveThreadProjectId: workspace.derived.resolveThreadProjectId,
-  });
-  const currentWorkspaceProjectId = currentWorkspaceProjectSelection.currentProjectId;
-
   const showEmptyThreadLandingSkeleton = Boolean(
     !activeThreadId &&
       session &&
@@ -8232,7 +8191,7 @@ export default function App() {
       activeView,
       communityId: activeCommunityId,
       communitySlug: activeCommunitySlug,
-      projectId: currentWorkspaceProjectId,
+      projectId: activeThreadProjectId,
       threadId: activeThreadId,
       runId: activeThreadStreamingRunId,
     });
@@ -8246,7 +8205,7 @@ export default function App() {
       activeView,
       communityId: activeCommunityId,
       communitySlug: activeCommunitySlug,
-      projectId: currentWorkspaceProjectId,
+      projectId: activeThreadProjectId,
       threadId: activeThreadId,
       runId: activeThreadStreamingRunId,
     });
@@ -8261,7 +8220,7 @@ export default function App() {
     canonicalSessionUserId,
     publicRoute.kind,
     session,
-    currentWorkspaceProjectId,
+    activeThreadProjectId,
   ]);
 
   useEffect(() => {

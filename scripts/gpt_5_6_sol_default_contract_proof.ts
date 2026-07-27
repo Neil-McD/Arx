@@ -19,7 +19,6 @@ const providerProbes = read("convex/providerConnectionProbes.ts");
 const providerGateway = read("shared/cloudProviderConnectionsGateway.ts");
 const daytonaPolicy = read("shared/daytonaCodexRuntimePolicy.ts");
 const app = read("apps/web/src/App.tsx");
-const workspaceModelState = read("apps/web/src/controllers/useWebWorkspaceModelStateController.ts");
 
 assert.equal(DEFAULT_ACTIVE_MODEL_ID, "gpt-5.6-sol");
 assert.equal(DEFAULT_ACTIVE_MODEL_LABEL, "GPT 5.6 Sol");
@@ -81,10 +80,4 @@ assert.match(
   /DEFAULT_ACTIVE_MODEL_LABEL[\s\S]*defaultOpenAiModel\?\.label \?\? DEFAULT_ACTIVE_MODEL_LABEL/,
   "the primary web shell must render the canonical Sol label without a GPT-5.5 fallback",
 );
-assert.match(
-  workspaceModelState,
-  /label: DEFAULT_ACTIVE_MODEL_LABEL/,
-  "workspace model state must use the canonical Sol label",
-);
-
 console.log("gpt_5_6_sol_default_contract_proof: ok");

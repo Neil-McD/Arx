@@ -6,7 +6,6 @@ import {
   emitWorkspaceEvent,
   formatWorkspaceInstrumentationError,
 } from "../lib/workspaceInstrumentation";
-import type { CloudProjectRecord } from "../../../../shared/cloudProjectsGateway";
 
 type ThreadLike = {
   id: string;
@@ -22,30 +21,8 @@ type ThreadLike = {
   updated_at: number;
 };
 
-type WorkspaceProjectController<SessionT, ThreadT extends ThreadLike> = {
-  state: {
-    projects: CloudProjectRecord[];
-    activeProjectId: string | null;
-  };
-  derived: {
-    resolvedActiveProjectId: string | null;
-    resolvedActiveProjectName: string;
-    projectById: Map<string, CloudProjectRecord>;
-    defaultProjectId: string | null;
-    resolveThreadProjectId: (thread: ThreadT) => string | null;
-  };
-  actions: {
-    setProjects: Dispatch<SetStateAction<CloudProjectRecord[]>>;
-    setActiveProjectId: Dispatch<SetStateAction<string | null>>;
-    loadProjects: (session: SessionT) => Promise<void>;
-    handleProjectCreated: (project: CloudProjectRecord) => void;
-    handleProjectUpdated: (project: CloudProjectRecord) => void;
-    handleProjectDeleted: (project: CloudProjectRecord) => void;
-  };
-};
-
 type UseWebWorkspaceCoreControllerParams<SessionT, ThreadT extends ThreadLike> = {
-  project: WorkspaceProjectController<SessionT, ThreadT>;
+  projectId: string | null;
   ensureSession: (session: SessionT) => Promise<SessionT | null>;
   setActiveThreadId: Dispatch<SetStateAction<string | null>>;
   setWorkspaceWantsNewChatMode: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -69,7 +46,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
     isMissingThreadTitleValue: params.isMissingThreadTitleValue,
     toEpochSeconds: params.toEpochSeconds,
     activeCommunityId: params.activeCommunityId,
-    activeProjectId: params.project.state.activeProjectId,
+    activeProjectId: params.projectId,
     activeModelId: params.activeModelId,
     activeRuntimeEngine: params.activeRuntimeEngine,
     modelToggles: params.modelToggles,
@@ -87,12 +64,12 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
         scope: "thread",
         name: "thread_create",
         status: "start",
-        projectId: params.project.derived.resolvedActiveProjectId,
-          detail: {
-            communityId: params.activeCommunityId,
-            activeModelId: params.activeModelId,
-            runtimeEngine: params.activeRuntimeEngine,
-          },
+        projectId: params.projectId,
+        detail: {
+          communityId: params.activeCommunityId,
+          activeModelId: params.activeModelId,
+          runtimeEngine: params.activeRuntimeEngine,
+        },
       });
       try {
         const thread = await rawThreadMutation.createThread(session);
@@ -101,7 +78,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
             scope: "thread",
             name: "thread_create",
             status: "failure",
-            projectId: params.project.derived.resolvedActiveProjectId,
+            projectId: params.projectId,
             error: "thread_not_created",
           });
           return thread;
@@ -124,7 +101,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
           scope: "thread",
           name: "thread_create",
           status: "failure",
-          projectId: params.project.derived.resolvedActiveProjectId,
+          projectId: params.projectId,
           error: formatWorkspaceInstrumentationError(error),
         });
         throw error;
@@ -134,7 +111,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
       params.activeCommunityId,
       params.activeModelId,
       params.activeRuntimeEngine,
-      params.project.derived.resolvedActiveProjectId,
+      params.projectId,
       rawThreadMutation,
     ],
   );
@@ -145,7 +122,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
         scope: "thread",
         name: "thread_update_runtime_engine",
         status: "start",
-        projectId: params.project.derived.resolvedActiveProjectId,
+        projectId: params.projectId,
         threadId,
         detail: {
           runtimeEngine,
@@ -157,7 +134,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
           scope: "thread",
           name: "thread_update_runtime_engine",
           status: "success",
-          projectId: params.project.derived.resolvedActiveProjectId,
+          projectId: params.projectId,
           threadId,
           detail: {
             runtimeEngine,
@@ -168,7 +145,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
           scope: "thread",
           name: "thread_update_runtime_engine",
           status: "failure",
-          projectId: params.project.derived.resolvedActiveProjectId,
+          projectId: params.projectId,
           threadId,
           detail: {
             runtimeEngine,
@@ -178,7 +155,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
         throw error;
       }
     },
-    [params.project.derived.resolvedActiveProjectId, rawThreadMutation],
+    [params.projectId, rawThreadMutation],
   );
 
   const updateThreadModel = useCallback<typeof rawThreadMutation.updateThreadModel>(
@@ -187,7 +164,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
         scope: "thread",
         name: "thread_update_model",
         status: "start",
-        projectId: params.project.derived.resolvedActiveProjectId,
+        projectId: params.projectId,
         threadId,
         detail: {
           modelId,
@@ -199,7 +176,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
           scope: "thread",
           name: "thread_update_model",
           status: "success",
-          projectId: params.project.derived.resolvedActiveProjectId,
+          projectId: params.projectId,
           threadId,
           detail: {
             modelId,
@@ -210,7 +187,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
           scope: "thread",
           name: "thread_update_model",
           status: "failure",
-          projectId: params.project.derived.resolvedActiveProjectId,
+          projectId: params.projectId,
           threadId,
           detail: {
             modelId,
@@ -220,7 +197,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
         throw error;
       }
     },
-    [params.project.derived.resolvedActiveProjectId, rawThreadMutation],
+    [params.projectId, rawThreadMutation],
   );
 
   const maybeSetThreadTitleFromText = useCallback<typeof rawThreadMutation.maybeSetThreadTitleFromText>(
@@ -229,7 +206,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
         scope: "thread",
         name: "thread_set_title",
         status: "start",
-        projectId: params.project.derived.resolvedActiveProjectId,
+        projectId: params.projectId,
         threadId,
         detail: {
           textLength: userText.length,
@@ -241,7 +218,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
           scope: "thread",
           name: "thread_set_title",
           status: "success",
-          projectId: params.project.derived.resolvedActiveProjectId,
+          projectId: params.projectId,
           threadId,
         });
       } catch (error) {
@@ -249,14 +226,14 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
           scope: "thread",
           name: "thread_set_title",
           status: "failure",
-          projectId: params.project.derived.resolvedActiveProjectId,
+          projectId: params.projectId,
           threadId,
           error: formatWorkspaceInstrumentationError(error),
         });
         throw error;
       }
     },
-    [params.project.derived.resolvedActiveProjectId, rawThreadMutation],
+    [params.projectId, rawThreadMutation],
   );
 
   const setThreadCommunityLens = useCallback<typeof rawThreadMutation.setThreadCommunityLens>(
@@ -265,7 +242,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
         scope: "thread",
         name: "thread_set_lens",
         status: "start",
-        projectId: params.project.derived.resolvedActiveProjectId,
+        projectId: params.projectId,
         threadId,
         detail: {
           communityId,
@@ -278,7 +255,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
             scope: "thread",
             name: "thread_set_lens",
             status: "failure",
-            projectId: params.project.derived.resolvedActiveProjectId,
+            projectId: params.projectId,
             threadId,
             detail: {
               communityId,
@@ -291,7 +268,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
           scope: "thread",
           name: "thread_set_lens",
           status: "success",
-          projectId: params.project.derived.resolvedActiveProjectId,
+          projectId: params.projectId,
           threadId,
           detail: {
             communityId: result.community_id,
@@ -304,7 +281,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
           scope: "thread",
           name: "thread_set_lens",
           status: "failure",
-          projectId: params.project.derived.resolvedActiveProjectId,
+          projectId: params.projectId,
           threadId,
           detail: {
             communityId,
@@ -314,11 +291,10 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
         throw error;
       }
     },
-    [params.project.derived.resolvedActiveProjectId, rawThreadMutation],
+    [params.projectId, rawThreadMutation],
   );
 
   return {
-    project: params.project,
     threadMutation: {
       ...rawThreadMutation,
       createThread,
