@@ -2174,3 +2174,34 @@ No Convex file, schema, migration, cloud data, environment configuration,
 route vocabulary, copy, style, provider protocol, production action, or
 `origin/main` change belongs to this slice. Canonical staging release and
 exact-build acceptance remain required before C8.4A can be called complete.
+
+### C8.4A staging closure receipt
+
+Source commit `6931c29ce1d60afbcbfa61e3953ce3680cfa1d56` reached the
+canonical Git-driven `polynet-staging` deployment without a Convex deployment.
+The canonical staging `version.json` served that exact commit as both
+`buildId` and `sentryRelease`. Exact-SHA GitHub runs `30284551567` (MVP Guards)
+and `30284551588` (Staging UI Canary) completed successfully.
+
+Read-only live acceptance on that exact build proved:
+
+- an authenticated manager route restored the launch modal directly to the
+  requested Profile step;
+- a second authenticated route restored directly to the requested Knowledge
+  step;
+- closing the modal removed the launch query state and left the canonical
+  community-settings route;
+- an unauthenticated direct setup route failed closed by resolving to the
+  public community surface without exposing the manager launch modal; and
+- both acceptance sessions produced no browser warnings or errors.
+
+No provider OAuth mutation or disposable community creation was performed for
+the live acceptance. OAuth-return precedence, post-create transition, stale
+request rejection, cross-subject rejection, and cross-community rejection are
+covered by the focused lifecycle-orchestration proof and the adjacent launch
+and source-ingestion contracts.
+
+C8.4A is complete on canonical staging. C8 remains `IN_PROGRESS`; the next
+retained-surface decomposition must be planned as a separate slice.
+Production, `origin/main`, production configuration, production data, and
+Convex remain untouched.
