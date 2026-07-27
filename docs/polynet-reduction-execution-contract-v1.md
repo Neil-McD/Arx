@@ -2333,3 +2333,50 @@ No Convex file, schema, migration, cloud data, provider credential, production
 configuration, production action, or `origin/main` change belongs to this
 slice. Canonical Git-driven staging release and exact-build acceptance remain
 required before C8.4C can be called complete.
+
+### C8.4C staging closure receipt
+
+Source commit `1495c292d60f7063874320e9d8cc039599c38938` reached the
+canonical Git-driven `polynet-staging` deployment without a Convex deployment.
+The canonical staging `version.json` served that exact commit as both
+`buildId` and `sentryRelease`, and the read-only remote guard confirmed that
+the domain remained owned by the non-production staging project and inherited
+this branch's automatic promotion.
+
+The source candidate passed the focused launcher-retirement,
+source-ingestion, resource-builder, wiki-architect, Workspace-quarantine, and
+staging-identity proofs; web typecheck; production build; bundle budget; and
+the canonical 41-step foundation baseline locally. GitHub runs `30302225530`
+(MVP Guards) and `30302225252` (Staging UI Canary) were created for the exact
+SHA but executed zero steps because the external runner account was
+unavailable. This is recorded as an external CI availability exception, not as
+a passing CI result or a source failure.
+
+Read-only live acceptance on the exact build proved:
+
+- an authenticated legacy launcher URL removed
+  `community_launch_setup` and `community_launch_step`, stayed on canonical
+  Community Settings, and rendered no launcher;
+- an authenticated orphaned `source_integration_oauth` parameter was removed
+  and also rendered no launcher;
+- the desktop Create Community CTA entered the existing account
+  quota/entitlement surface for the current quota-limited account instead of a
+  launcher path;
+- Community Settings, AI Agent instructions, Resources, and Funnel remained
+  independently reachable through their canonical navigation;
+- an anonymous legacy launcher URL failed closed to the public community
+  surface and rendered no manager setup UI; and
+- the authenticated and anonymous acceptance sessions emitted no browser
+  warnings or errors.
+
+No community was created, no form was submitted, and no resource, funnel,
+agent, provider, credential, cloud data, schema, or production state was
+mutated during acceptance. The production build marker remained
+`456ebb9cfb95defc316c046e57d17a001eea5025`, distinct from the staging source
+commit.
+
+C8.4C is complete on canonical staging. C8 remains `IN_PROGRESS`; the duplicate
+launcher is no longer a retained surface to decompose. Any redesign of founder
+setup or any deletion of now-unread launch-status backend code must be planned
+as a separate slice. Production, `origin/main`, production configuration,
+production data, and Convex remain untouched.
