@@ -2651,3 +2651,37 @@ C9.0B remains source-only. It changes no runtime function, schema, generated
 API, data, storage, deployment, provider configuration, production ref, or
 `origin/main`. C9 remains `IN_PROGRESS`; the next separately authorized slice
 is C9.0C, the metadata-only backup-configuration audit.
+
+### C9.0B staging receipt — Exact semantic ownership
+
+The hardening source landed on canonical staging as
+`c5f401e124c97969c811bb62a1d7f5117ceb0fb4`. The exact
+`https://polynet-staging.vercel.app/version.json` marker then reported that SHA
+for both `buildId` and `sentryRelease`. No Convex deployment was performed or
+required.
+
+The committed source passed:
+
+- the operational-recovery proof over 123 tables, seven storage fields, 24
+  exact cron signatures, and 46 scheduler calls across 38 exact targets;
+- the independent 123-table account-lifecycle cross-check;
+- the canonical foundation baseline, 47/47;
+- web typecheck, production build, and the 14-chunk 2788.9 KiB bundle budget;
+- local, source, and remote semantic-platform staging guards; and
+- `git diff --check`.
+
+The first parallel guard attempt raced the guard proof while it temporarily
+removed the ignored `.vercel/project.json` fail-closed fixture. Sequential
+reruns passed; the remote guard required normal network access to read Vercel.
+No tracked file, Vercel configuration, deployment, or provider state changed
+during that correction.
+
+GitHub Actions again provided no repository execution evidence. `MVP Guards`
+run `30311616349` and `Staging UI Canary` run `30311616357` failed at the
+runner boundary; all four jobs contained zero steps and no checkout. These are
+infrastructure failures, not green CI and not code/test failures.
+
+At receipt time `origin/main` and the production marker remained exactly
+`456ebb9cfb95defc316c046e57d17a001eea5025`. C9 remains `IN_PROGRESS`.
+C9.0C is next and remains metadata-only; this receipt authorizes no provider
+inspection, backup, download, restore, configuration change, or deletion.
