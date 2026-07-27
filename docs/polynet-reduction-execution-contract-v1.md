@@ -1992,12 +1992,30 @@ adding a replacement authority.
 Focused route/settings, personal-memory, MCP provider, onboarding, app/skill
 runtime, community app architecture, billing, operator diagnostics, product
 docs, staging-identity, TypeScript, production-build, and bundle-budget proofs
-pass on the source candidate. No Convex file or schema changes, data
-migrations, cloud writes, environment changes, or production actions belong
-to this slice.
+pass on the source candidate. The full 40-step foundation baseline also passes.
+No Convex file or schema changes, data migrations, cloud writes, environment
+changes, or production actions belong to this slice.
 
-C8 remains `IN_PROGRESS`. This source receipt does not claim deployment or
-live acceptance. C8.1 closes only after the exact clean commit reaches the
-canonical Git-driven staging web origin and passes desktop/mobile signed-in
-settings acceptance. Any further `App.tsx`, retained CSS, backend, or runtime
-decomposition is a separately planned C8 slice.
+The source candidate committed as
+`9aaafeb6e19291a4494d80806ada116c19c4b16a` and reached the canonical
+Git-driven staging web origin without a Convex deployment. Exact-SHA GitHub
+run `30276892850` passed the foundation baseline, dependency audits, Convex cut
+guard, web typecheck, production build, and bundle budget. Exact-SHA run
+`30276893218` passed the controlled-mismatch check and anonymous public-funnel
+canary. The canonical staging `version.json` then served the source commit as
+both build ID and Sentry release.
+
+A read-only signed-in Chrome journey proved that desktop Account retains
+provider/account state, personal-agent preferences, personal memory, and data
+exports; legacy `/settings/agent` resolves to Account; legacy
+`/settings/integrations` resolves to the focused Polynet MCP surface; and the
+MCP setup action reports a successful copy. At a 390 by 844 mobile viewport,
+the settings index exposes Profile, Account, Billing, Polynet MCP, Appearance,
+and Partners, plus conditional Platform Analytics for the operator. The mobile
+MCP surface remains legible and community-scoped. Browser warning/error logs
+were empty.
+
+C8.1 is complete on canonical staging. C8 remains `IN_PROGRESS`; any further
+`App.tsx`, retained CSS, backend, or runtime decomposition is a separately
+planned C8 slice. Production, `origin/main`, production configuration, and
+production data remain untouched.
