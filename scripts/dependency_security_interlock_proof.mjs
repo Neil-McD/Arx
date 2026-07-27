@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { createRequire } from "node:module";
 
-const require = createRequire(import.meta.url);
+const requireFromBlaxel = createRequire(
+  new URL("../node_modules/@blaxel/core/package.json", import.meta.url),
+);
 const rootManifest = JSON.parse(
   await readFile(new URL("../package.json", import.meta.url), "utf8"),
 );
@@ -51,7 +53,7 @@ assert.equal(
   "root lock must retain the Blaxel-compatible archiver release",
 );
 
-const archiver = require("archiver");
+const archiver = requireFromBlaxel("archiver");
 assert.equal(
   typeof archiver,
   "function",
