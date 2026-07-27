@@ -29,7 +29,6 @@ import {
 } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
-import type { CommunityWikiArchitectProposal } from "../../../../shared/communityWikiArchitectPrompt";
 import type {
   CommunityLaunchSetupMissing,
   CommunityLaunchSetupStatus,
@@ -43,6 +42,17 @@ import {
 } from "../../../../shared/imageTransforms";
 import { StripeWordmark } from "./StripeWordmark";
 import type { WebCommunityLaunchSetupLifecycleModel } from "./webCommunityLaunchSetupLifecycleModel";
+import type {
+  CommunityLaunchGitHubConnection,
+  CommunityLaunchGitHubFile,
+  CommunityLaunchGitHubRepository,
+  CommunityLaunchGoogleDriveConnection,
+  CommunityLaunchGoogleDriveFile,
+  CommunityLaunchKnowledgeImportedSource,
+  CommunityLaunchKnowledgePlanApplyResult,
+  CommunityLaunchKnowledgeSourceIngestionResult,
+  WebCommunityLaunchKnowledgeModel,
+} from "./webCommunityLaunchKnowledgeModel";
 
 const COMMUNITY_LAUNCH_IMAGE_DATA_URL_MAX_CHARS = 600_000;
 const COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5;
@@ -106,184 +116,6 @@ export type CommunityLaunchProfileSaveDraft = {
 
 export type CommunityLaunchAboutSaveDraft = {
   about: string;
-};
-
-export type CommunityLaunchKnowledgeLinkSaveDraft = {
-  urls: string[];
-};
-
-export type CommunityLaunchKnowledgeFileSaveDraft = {
-  files: File[];
-};
-
-export type CommunityLaunchKnowledgeHealth = {
-  summary?: {
-    modules?: number;
-    pages?: number;
-    sources?: number;
-    draft_pages?: number;
-    source_inbox_items?: number;
-    issue_count?: number;
-  };
-  issues?: {
-    unreferencedSources?: unknown[];
-    staleDrafts?: unknown[];
-    sparsePages?: unknown[];
-  };
-};
-
-export type CommunityLaunchKnowledgePlanResult = {
-  ok?: boolean;
-  proposal?: CommunityWikiArchitectProposal | null;
-  errors?: Array<{
-    path?: string;
-    message?: string;
-  }>;
-  message?: string | null;
-  code?: string | null;
-  output_preview?: string | null;
-  model_id?: string | null;
-  usage?: {
-    prompt_tokens?: number | null;
-    completion_tokens?: number | null;
-  } | null;
-  context_summary?: {
-    modules?: number;
-    pages?: number;
-    sources?: number;
-  } | null;
-};
-
-export type CommunityLaunchKnowledgePlanApplyResult = {
-  ok?: boolean;
-  summary?: {
-    modules_created?: string[];
-    pages_created?: string[];
-    pages_updated?: string[];
-    source_modules_updated?: string[];
-  };
-  architecture_quality?: {
-    ok?: boolean;
-    warnings?: string[];
-    source_backed_pages?: number;
-    unsorted_source_backed_pages?: number;
-    source_backed_pages_missing_module?: number;
-    used_sources?: number;
-    used_sources_in_unsorted?: number;
-    source_module_mismatches?: number;
-    module_distribution?: Array<{
-      module?: string;
-      pages?: number;
-    }>;
-  } | null;
-  health?: CommunityLaunchKnowledgeHealth;
-  errors?: Array<{
-    path?: string;
-    message?: string;
-  }>;
-  message?: string | null;
-  code?: string | null;
-};
-
-export type CommunityLaunchKnowledgeContentDraftResult = {
-  ok?: boolean;
-  candidates?: number;
-  drafted?: number;
-  failed?: number;
-  message?: string | null;
-  code?: string | null;
-  pages?: Array<{
-    id?: string;
-    title?: string;
-    status?: string;
-    source_resource_id?: string | null;
-  }>;
-  failures?: Array<{
-    resource_id?: string;
-    title?: string;
-    message?: string;
-  }>;
-};
-
-export type CommunityLaunchKnowledgeSourceIngestionResult = {
-  ok?: boolean;
-  message?: string | null;
-  code?: string | null;
-  processed?: number;
-  succeeded?: number;
-  failed?: number;
-  ready_sources?: number;
-  total_sources?: number;
-  pending_sources?: number;
-  pending_url_sources?: number;
-  pending_file_sources?: number;
-  pending_google_drive_sources?: number;
-  pending_github_sources?: number;
-  failures?: Array<{
-    title?: string;
-    url?: string;
-    message?: string;
-  }>;
-};
-
-export type CommunityLaunchGoogleDriveConnection = {
-  connected: boolean;
-  email?: string | null;
-  updated_at?: string | null;
-};
-
-export type CommunityLaunchGoogleDriveFile = {
-  id: string;
-  name: string;
-  mime_type: string;
-  kind: "file" | "folder";
-  importable: boolean;
-  web_url?: string | null;
-  modified_time?: string | null;
-  size?: string | null;
-};
-
-export type CommunityLaunchGoogleDriveFileListRequest = {
-  query?: string | null;
-  folderId?: string | null;
-  pageToken?: string | null;
-};
-
-export type CommunityLaunchGoogleDriveFileListResult = {
-  ok?: boolean;
-  connection?: CommunityLaunchGoogleDriveConnection | null;
-  folder_id?: string | null;
-  query?: string | null;
-  next_page_token?: string | null;
-  files?: CommunityLaunchGoogleDriveFile[];
-};
-
-export type CommunityLaunchGoogleDriveImportResult = {
-  ok?: boolean;
-  imported?: number;
-  skipped?: number;
-  failed?: number;
-  failures?: Array<{
-    id?: string;
-    name?: string | null;
-    message?: string | null;
-  }>;
-};
-
-export type CommunityLaunchKnowledgeImportedSource = {
-  id: string;
-  title: string;
-  source_ingestion_status?: "not_required" | "queued" | "processing" | "ready" | "failed";
-  source_ingestion_kind?: "manual" | "url" | "file" | "google_drive" | "github";
-  source_ingestion_error?: string | null;
-  source_external_provider?: "google_drive" | "github" | null;
-  source_external_id?: string | null;
-  source_external_name?: string | null;
-  source_external_url?: string | null;
-  source_external_mime_type?: string | null;
-  source_external_modified_at?: string | null;
-  credential_status?: "available" | "missing";
-  credential_message?: string | null;
 };
 
 const EMPTY_COMMUNITY_LAUNCH_IMPORTED_SOURCES: CommunityLaunchKnowledgeImportedSource[] = [];
@@ -402,64 +234,6 @@ function ImportedKnowledgeSourceRows({
   );
 }
 
-export type CommunityLaunchGitHubConnection = {
-  connected: boolean;
-  login?: string | null;
-  email?: string | null;
-  updated_at?: string | null;
-};
-
-export type CommunityLaunchGitHubRepository = {
-  id: string;
-  name: string;
-  full_name: string;
-  owner: string;
-  private: boolean;
-  web_url?: string | null;
-  default_branch: string;
-  updated_at?: string | null;
-  pushed_at?: string | null;
-};
-
-export type CommunityLaunchGitHubRepositoryListResult = {
-  ok?: boolean;
-  connection?: CommunityLaunchGitHubConnection | null;
-  repositories?: CommunityLaunchGitHubRepository[];
-};
-
-export type CommunityLaunchGitHubFile = {
-  id: string;
-  repo_full_name: string;
-  path: string;
-  name: string;
-  ref: string;
-  sha?: string | null;
-  size?: number | null;
-  web_url?: string | null;
-};
-
-export type CommunityLaunchGitHubFileListResult = {
-  ok?: boolean;
-  connection?: CommunityLaunchGitHubConnection | null;
-  repo_full_name?: string | null;
-  ref?: string | null;
-  truncated?: boolean;
-  file_limit?: number | null;
-  files?: CommunityLaunchGitHubFile[];
-};
-
-export type CommunityLaunchGitHubImportResult = {
-  ok?: boolean;
-  imported?: number;
-  skipped?: number;
-  failed?: number;
-  failures?: Array<{
-    id?: string;
-    name?: string | null;
-    message?: string | null;
-  }>;
-};
-
 export type CommunityLaunchAgentSaveDraft = {
   systemPrompt: string;
 };
@@ -474,10 +248,7 @@ export type CommunityLaunchPublishSaveDraft = {
 
 type WebCommunityLaunchSetupModalProps = {
   lifecycle: WebCommunityLaunchSetupLifecycleModel;
-  knowledgeLinkSources?: CommunityLaunchKnowledgeImportedSource[];
-  knowledgeFileSources?: CommunityLaunchKnowledgeImportedSource[];
-  knowledgeGoogleDriveSources?: CommunityLaunchKnowledgeImportedSource[];
-  knowledgeGitHubSources?: CommunityLaunchKnowledgeImportedSource[];
+  knowledge: WebCommunityLaunchKnowledgeModel;
   community: CommunityLaunchSetupCommunity | null;
   onClose: () => void;
   onStepChange?: (step: CommunityLaunchSetupStep) => void;
@@ -485,45 +256,9 @@ type WebCommunityLaunchSetupModalProps = {
   onCreateCommunity?: (draft: CommunityLaunchProfileSaveDraft) => Promise<void>;
   onSaveProfile: (draft: CommunityLaunchProfileSaveDraft) => Promise<void>;
   onSaveAbout: (draft: CommunityLaunchAboutSaveDraft) => Promise<void>;
-  onAddKnowledgeLink: (
-    draft: CommunityLaunchKnowledgeLinkSaveDraft,
-  ) => Promise<void>;
   accountTier?: string | null;
   onOpenPremiumBilling?: () => void;
-  onAddKnowledgeFile?: (
-    draft: CommunityLaunchKnowledgeFileSaveDraft,
-  ) => Promise<void>;
-  onLoadKnowledgeSources?: () => Promise<void>;
-  onRemoveKnowledgeLinkSource?: (resourceId: string) => Promise<boolean | void>;
-  onRemoveKnowledgeFileSource?: (resourceId: string) => Promise<boolean | void>;
-  onIngestKnowledgeSources?: () => Promise<CommunityLaunchKnowledgeSourceIngestionResult | null>;
-  onLoadKnowledgeGoogleDriveConnection?: () => Promise<CommunityLaunchGoogleDriveConnection | null>;
-  onConnectKnowledgeGoogleDrive?: () => Promise<{ ok?: boolean; error_message?: string | null } | null>;
-  onListKnowledgeGoogleDriveFiles?: (
-    request?: CommunityLaunchGoogleDriveFileListRequest | null,
-  ) => Promise<CommunityLaunchGoogleDriveFileListResult | null>;
-  onImportKnowledgeGoogleDriveFiles?: (fileIds: string[]) => Promise<CommunityLaunchGoogleDriveImportResult | null>;
-  onRemoveKnowledgeGoogleDriveSource?: (resourceId: string) => Promise<boolean | void>;
-  onDisconnectKnowledgeGoogleDrive?: () => Promise<CommunityLaunchGoogleDriveConnection | null>;
   onKnowledgeAutoOpenHandled?: (provider: "google_drive" | "github") => void;
-  onLoadKnowledgeGitHubConnection?: () => Promise<CommunityLaunchGitHubConnection | null>;
-  onConnectKnowledgeGitHub?: () => Promise<{ ok?: boolean; error_message?: string | null } | null>;
-  onListKnowledgeGitHubRepositories?: (query?: string | null) => Promise<CommunityLaunchGitHubRepositoryListResult | null>;
-  onListKnowledgeGitHubFiles?: (
-    repoFullName: string,
-    ref?: string | null,
-    query?: string | null,
-  ) => Promise<CommunityLaunchGitHubFileListResult | null>;
-  onImportKnowledgeGitHubFiles?: (fileIds: string[]) => Promise<CommunityLaunchGitHubImportResult | null>;
-  onRemoveKnowledgeGitHubSource?: (resourceId: string) => Promise<boolean | void>;
-  onDisconnectKnowledgeGitHub?: () => Promise<CommunityLaunchGitHubConnection | null>;
-  onGenerateKnowledgePlan?: (draft: {
-    builderIntent: string;
-  }) => Promise<CommunityLaunchKnowledgePlanResult | null>;
-  onApplyKnowledgePlan?: (draft: {
-    proposal: CommunityWikiArchitectProposal;
-  }) => Promise<CommunityLaunchKnowledgePlanApplyResult | null>;
-  onDraftKnowledgeResources?: () => Promise<CommunityLaunchKnowledgeContentDraftResult | null>;
   onSaveAgent: (draft: CommunityLaunchAgentSaveDraft) => Promise<void>;
   onSaveAccess: (draft: CommunityLaunchAccessSaveDraft) => Promise<void>;
   onSavePublish: (draft: CommunityLaunchPublishSaveDraft) => Promise<void>;
@@ -799,10 +534,7 @@ export function WebCommunityLaunchSetupModal(
 ) {
   const {
     lifecycle,
-    knowledgeLinkSources = [],
-    knowledgeFileSources = [],
-    knowledgeGoogleDriveSources = [],
-    knowledgeGitHubSources = [],
+    knowledge,
     community,
     onClose,
     onStepChange,
@@ -810,31 +542,9 @@ export function WebCommunityLaunchSetupModal(
     onCreateCommunity,
     onSaveProfile,
     onSaveAbout,
-    onAddKnowledgeLink,
     accountTier = null,
     onOpenPremiumBilling,
-    onAddKnowledgeFile,
-    onLoadKnowledgeSources,
-    onRemoveKnowledgeLinkSource,
-    onRemoveKnowledgeFileSource,
-    onIngestKnowledgeSources,
-    onLoadKnowledgeGoogleDriveConnection,
-    onConnectKnowledgeGoogleDrive,
-    onListKnowledgeGoogleDriveFiles,
-    onImportKnowledgeGoogleDriveFiles,
-    onRemoveKnowledgeGoogleDriveSource,
-    onDisconnectKnowledgeGoogleDrive,
     onKnowledgeAutoOpenHandled,
-    onLoadKnowledgeGitHubConnection,
-    onConnectKnowledgeGitHub,
-    onListKnowledgeGitHubRepositories,
-    onListKnowledgeGitHubFiles,
-    onImportKnowledgeGitHubFiles,
-    onRemoveKnowledgeGitHubSource,
-    onDisconnectKnowledgeGitHub,
-    onGenerateKnowledgePlan,
-    onApplyKnowledgePlan,
-    onDraftKnowledgeResources,
     onSaveAgent,
     onSaveAccess,
     onSavePublish,
@@ -847,6 +557,45 @@ export function WebCommunityLaunchSetupModal(
     knowledgeAutoOpenProvider,
     status,
   } = lifecycle;
+  const {
+    sources: {
+      links: knowledgeLinkSources,
+      files: knowledgeFileSources,
+      googleDrive: knowledgeGoogleDriveSources,
+      github: knowledgeGitHubSources,
+    },
+    sourceActions: {
+      addLinks: onAddKnowledgeLink,
+      addFiles: onAddKnowledgeFile,
+      load: onLoadKnowledgeSources,
+      remove: onRemoveKnowledgeSource,
+      ingest: onIngestKnowledgeSources,
+    },
+    googleDrive: {
+      loadConnection: onLoadKnowledgeGoogleDriveConnection,
+      connect: onConnectKnowledgeGoogleDrive,
+      listFiles: onListKnowledgeGoogleDriveFiles,
+      importFiles: onImportKnowledgeGoogleDriveFiles,
+      disconnect: onDisconnectKnowledgeGoogleDrive,
+    },
+    github: {
+      loadConnection: onLoadKnowledgeGitHubConnection,
+      connect: onConnectKnowledgeGitHub,
+      listRepositories: onListKnowledgeGitHubRepositories,
+      listFiles: onListKnowledgeGitHubFiles,
+      importFiles: onImportKnowledgeGitHubFiles,
+      disconnect: onDisconnectKnowledgeGitHub,
+    },
+    assembly: {
+      generatePlan: onGenerateKnowledgePlan,
+      applyPlan: onApplyKnowledgePlan,
+      draftResources: onDraftKnowledgeResources,
+    },
+  } = knowledge;
+  const onRemoveKnowledgeLinkSource = onRemoveKnowledgeSource;
+  const onRemoveKnowledgeFileSource = onRemoveKnowledgeSource;
+  const onRemoveKnowledgeGoogleDriveSource = onRemoveKnowledgeSource;
+  const onRemoveKnowledgeGitHubSource = onRemoveKnowledgeSource;
   const isCreateMode = mode === "create";
   const requestedInitialStep = initialStep && STEP_ORDER.includes(initialStep)
     ? initialStep
@@ -2606,7 +2355,7 @@ export function WebCommunityLaunchSetupModal(
                     type="file"
                     multiple
                     accept=".txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.xml,.html,.htm,.yaml,.yml,.toml,.log,text/*,application/json,text/csv"
-                    disabled={isSavingActiveStep || !onAddKnowledgeFile}
+                    disabled={isSavingActiveStep}
                     onChange={(event) => {
                       handleKnowledgeFileInput(event.currentTarget.files);
                       event.currentTarget.value = "";
@@ -2615,9 +2364,7 @@ export function WebCommunityLaunchSetupModal(
                   <span>
                     {isSavingActiveStep
                       ? "Uploading..."
-                      : onAddKnowledgeFile
-                        ? "Drop files or choose files"
-                        : "File upload unavailable"}
+                      : "Drop files or choose files"}
                   </span>
                 </label>
                 <ImportedKnowledgeSourceRows

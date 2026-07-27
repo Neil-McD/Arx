@@ -22,6 +22,12 @@ const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const sourceCrawler = read("shared/communitySourceCrawler.ts");
 const sourceCrawlerServicePath = join(root, "services/community-source-crawler/app.py");
 const app = read("apps/web/src/App.tsx");
+const launchKnowledgeController = read(
+  "apps/web/src/controllers/useWebCommunityLaunchKnowledgeController.ts",
+);
+const launchKnowledgeModel = read(
+  "apps/web/src/components/webCommunityLaunchKnowledgeModel.ts",
+);
 const sourceOAuth = read("apps/web/src/communityLaunchKnowledgeSourceOAuth.ts");
 const launchSetupRoute = read("apps/web/src/communityLaunchSetupRoute.ts");
 const launchLifecycle = read(
@@ -626,38 +632,38 @@ assert.match(
   "web gateway should preserve Drive/GitHub per-file import failures",
 );
 assert.match(
-  app,
-  /handleAddCommunityLaunchKnowledgeLink[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "url"[\s\S]*refreshCommunityLaunchKnowledgeProjectionBestEffort\(\{[\s\S]*includeResources: true/,
+  launchKnowledgeController,
+  /const addLinks[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "url"[\s\S]*refreshProjectionBestEffort\(context, \{[\s\S]*includeResources: true/,
   "launch links should enter the source inbox as queued URL sources and refresh focused saved link rows",
 );
 assert.match(
-  app,
-  /refreshCommunityLaunchKnowledgeProjectionBestEffort[\s\S]*try \{[\s\S]*loadCommunityLaunchKnowledgeSources\(communityId, activeSession\)[\s\S]*catch \(error\) \{[\s\S]*console\.warn\("\[community-launch\] failed to refresh knowledge projection after source write:", error\);/,
+  launchKnowledgeController,
+  /const refreshProjection[\s\S]*loadSourcesForContext\(context\)[\s\S]*const refreshProjectionBestEffort[\s\S]*try \{[\s\S]*await refreshProjection\(context, options\)[\s\S]*catch \(error\) \{[\s\S]*console\.warn\([\s\S]*"\[community-launch\] failed to refresh knowledge projection after source write:"/,
   "launch source writes should not report successful saves/imports as failed when the follow-up projection refresh fails",
 );
 assert.match(
-  app,
-  /handleImportCommunityLaunchGoogleDriveFiles[\s\S]*const result = await importCloudCommunityGoogleDriveSourceFiles[\s\S]*refreshCommunityLaunchKnowledgeProjectionBestEffort\(\{[\s\S]*communityId: community\.id,[\s\S]*session,[\s\S]*\}\);[\s\S]*return result;/,
+  launchKnowledgeController,
+  /const importGoogleDriveFiles[\s\S]*const result = await importCloudCommunityGoogleDriveSourceFiles[\s\S]*refreshProjectionBestEffort\(context\)[\s\S]*return isContextCurrent\(context\) \? result : null;/,
   "Drive imports should return the import result after a best-effort projection refresh",
 );
 assert.match(
-  app,
-  /handleImportCommunityLaunchGitHubFiles[\s\S]*const result = await importCloudCommunityGitHubSourceFiles[\s\S]*refreshCommunityLaunchKnowledgeProjectionBestEffort\(\{[\s\S]*communityId: community\.id,[\s\S]*session,[\s\S]*\}\);[\s\S]*return result;/,
+  launchKnowledgeController,
+  /const importGitHubFiles[\s\S]*const result = await importCloudCommunityGitHubSourceFiles[\s\S]*refreshProjectionBestEffort\(context\)[\s\S]*return isContextCurrent\(context\) \? result : null;/,
   "GitHub imports should return the import result after a best-effort projection refresh",
 );
 assert.match(
-  app,
-  /handleAddCommunityLaunchKnowledgeLink[\s\S]*parsedUrl\.protocol !== "https:"[\s\S]*Add https source links\./,
+  launchKnowledgeController,
+  /normalizeCommunityLaunchKnowledgeUrls[\s\S]*parsedUrl\.protocol !== "https:"[\s\S]*Add https source links\./,
   "launch links should only accept HTTPS because URL ingestion is HTTPS-only",
 );
 assert.doesNotMatch(
-  app,
+  launchKnowledgeController,
   /Add http or https source links\./,
   "launch links should not advertise HTTP support",
 );
 assert.match(
-  app,
-  /handleAddCommunityLaunchKnowledgeFile[\s\S]*uploadCloudCommunityResourceSourceFile[\s\S]*type: "file"[\s\S]*resource_role: "source"[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "file"/,
+  launchKnowledgeController,
+  /const addFiles[\s\S]*uploadCloudCommunityResourceSourceFile[\s\S]*type: "file"[\s\S]*resource_role: "source"[\s\S]*source_ingestion_status: "queued"[\s\S]*source_ingestion_kind: "file"/,
   "launch files should upload and enter the source inbox as queued file sources",
 );
 const launchKnowledgeSourceSection =
@@ -673,28 +679,28 @@ assert.doesNotMatch(
   "launch Knowledge source upload should not advertise PDF support while PDFs fail closed",
 );
 assert.match(
-  app,
-  /handleIngestCommunityLaunchKnowledgeSources[\s\S]*ingestCloudCommunitySources[\s\S]*loadCommunityResources[\s\S]*refreshActiveCommunityLaunchSetupStatus/,
+  launchKnowledgeController,
+  /const refreshProjection[\s\S]*loadCommunityResources[\s\S]*refreshLaunchSetupStatus[\s\S]*const refreshProjectionBestEffort[\s\S]*const ingest[\s\S]*ingestCloudCommunitySources[\s\S]*refreshProjectionBestEffort\(context, \{[\s\S]*includeResources: true/,
   "launch Knowledge Next should refresh resources after source ingestion",
 );
 assert.match(
-  app,
-  /handleIngestCommunityLaunchKnowledgeSources[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*getCommunityLaunchSourceCrawlUrl[\s\S]*crawlCloudCommunitySourceRoot\(\{[\s\S]*maxPages: 1[\s\S]*maxDepth: 0[\s\S]*waitForCommunityLaunchSourceCrawlJob[\s\S]*ingestCloudCommunitySources/,
+  launchKnowledgeController,
+  /const ingest[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*getCommunityLaunchSourceCrawlUrl[\s\S]*crawlCloudCommunitySourceRoot\(\{[\s\S]*maxPages: 1[\s\S]*maxDepth: 0[\s\S]*waitForCommunityLaunchSourceCrawlJob[\s\S]*ingestCloudCommunitySources/,
   "launch Knowledge Next should ingest saved links through simple one-page crawling without a full-site crawler gate",
 );
 assert.doesNotMatch(
-  app,
+  launchKnowledgeController,
   /getCloudCommunitySourceCrawlerStatus|full_site_crawl_available|community_source_full_site_crawl_not_configured/,
   "launch Knowledge Next must not block saved-link ingestion on deleted full-site crawler availability",
 );
 assert.doesNotMatch(
-  app,
-  /handleIngestCommunityLaunchKnowledgeSources[\s\S]*limit:\s*20/,
+  launchKnowledgeController,
+  /const ingest[\s\S]*limit:\s*20/,
   "launch Knowledge Next should use the backend default ingestion window instead of truncating the provider-local source set",
 );
 assert.match(
-  app,
-  /handleLoadCommunityLaunchKnowledgeSources[\s\S]*loadCommunityLaunchKnowledgeSources\(community\.id, session\)[\s\S]*onLoadKnowledgeSources=\{handleLoadCommunityLaunchKnowledgeSources\}/,
+  launchKnowledgeController + modal,
+  /loadSourcesForContext[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*load: loadSources[\s\S]*load: onLoadKnowledgeSources/,
   "launch Knowledge step should explicitly load saved source selections for onboarding display through the focused source-row query",
 );
 assert.match(
@@ -723,8 +729,8 @@ assert.match(
   "launch Knowledge Next should refuse provider ingestion when queued Drive or GitHub sources are missing credentials",
 );
 assert.match(
-  modal,
-  /credential_message\?: string \| null[\s\S]*is-credential-missing[\s\S]*community-launch-knowledge-reconnect-required/,
+  gateway + modal,
+  /credential_message\??: string \| null[\s\S]*is-credential-missing[\s\S]*community-launch-knowledge-reconnect-required/,
   "launch Knowledge modal should keep missing-credential sources visible and explain reconnect without hiding delete controls",
 );
 assert.match(
@@ -771,14 +777,19 @@ for (const snippet of [
   );
 }
 assert.match(
-  app,
-  /handleConnectCommunityLaunchGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath\(\{[\s\S]*communityId: community\.id,[\s\S]*communitySlug: community\.slug,[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "google_drive"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*handleImportCommunityLaunchGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles/,
+  launchKnowledgeController,
+  /connectGoogleDrive[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath\(\{[\s\S]*communityId: context\.communityId[\s\S]*communitySlug: context\.communitySlug[\s\S]*provider: "google_drive"[\s\S]*listGoogleDriveFiles[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*importGoogleDriveFiles[\s\S]*importCloudCommunityGoogleDriveSourceFiles/,
   "launch Knowledge integration handlers should connect, list, and import Google Drive files",
 );
 assert.match(
-  app,
-  /handleConnectCommunityLaunchGitHub[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath\(\{[\s\S]*communityId: community\.id,[\s\S]*communitySlug: community\.slug,[\s\S]*writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: "github"[\s\S]*window\.location\.assign\(result\.authorize_url\)[\s\S]*handleListCommunityLaunchGitHubRepositories[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*handleListCommunityLaunchGitHubFiles[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*handleImportCommunityLaunchGitHubFiles[\s\S]*importCloudCommunityGitHubSourceFiles/,
+  launchKnowledgeController,
+  /connectGitHub[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*returnToPath: buildCommunityLaunchKnowledgeSourceOAuthReturnToPath\(\{[\s\S]*communityId: context\.communityId[\s\S]*communitySlug: context\.communitySlug[\s\S]*provider: "github"[\s\S]*listGitHubRepositories[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*listGitHubFiles[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*importGitHubFiles[\s\S]*importCloudCommunityGitHubSourceFiles/,
   "launch Knowledge integration handlers should connect, list, and import GitHub files",
+);
+assert.match(
+  app,
+  /writeCommunityLaunchKnowledgeSourceOAuthIntent\(\{[\s\S]*provider: request\.provider[\s\S]*window\.location\.assign\(request\.authorizeUrl\)/,
+  "App must retain durable OAuth intent and the external browser navigation boundary",
 );
 assert.match(
   app,
@@ -816,8 +827,8 @@ assert.match(
   "launch Knowledge modal should hydrate saved source selections when the Knowledge step opens",
 );
 assert.match(
-  modal,
-  /knowledgeLinkSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*knowledgeFileSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*knowledgeGitHubSources\?: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*onRemoveKnowledgeLinkSource[\s\S]*onRemoveKnowledgeFileSource[\s\S]*onLoadKnowledgeGitHubConnection[\s\S]*onConnectKnowledgeGitHub[\s\S]*onListKnowledgeGitHubRepositories[\s\S]*onListKnowledgeGitHubFiles[\s\S]*onImportKnowledgeGitHubFiles[\s\S]*onRemoveKnowledgeGitHubSource[\s\S]*onDisconnectKnowledgeGitHub/,
+  launchKnowledgeModel + modal,
+  /links: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*files: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*github: CommunityLaunchKnowledgeImportedSource\[\][\s\S]*remove: \(resourceId: string\)[\s\S]*github: \{[\s\S]*loadConnection:[\s\S]*connect:[\s\S]*listRepositories:[\s\S]*listFiles:[\s\S]*importFiles:[\s\S]*disconnect:[\s\S]*links: knowledgeLinkSources[\s\S]*files: knowledgeFileSources[\s\S]*github: knowledgeGitHubSources/,
   "launch Knowledge modal props should expose saved link/file/GitHub sources and the GitHub integration lifecycle",
 );
 assert.match(

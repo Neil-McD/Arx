@@ -13,6 +13,12 @@ const architect = read("convex/communityWikiArchitect.ts");
 const community = read("convex/community.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const app = read("apps/web/src/App.tsx");
+const launchKnowledgeController = read(
+  "apps/web/src/controllers/useWebCommunityLaunchKnowledgeController.ts",
+);
+const launchKnowledgeModel = read(
+  "apps/web/src/components/webCommunityLaunchKnowledgeModel.ts",
+);
 const modal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const applyStart = architect.indexOf("export const applyCommunityWikiArchitectProposal");
 assert.notEqual(applyStart, -1, "architect apply mutation should exist");
@@ -316,29 +322,34 @@ assert.doesNotMatch(
 );
 
 assert.match(
-  app,
+  launchKnowledgeController,
   /runCloudCommunityWikiArchitectProposal/,
-  "App should import the cloud architect gateway",
+  "the launch Knowledge controller should import the cloud architect gateway",
+);
+assert.match(
+  launchKnowledgeController,
+  /const generatePlan[\s\S]*runCloudCommunityWikiArchitectProposal[\s\S]*builderIntent: draft\.builderIntent/,
+  "the launch Knowledge controller should pass builder intent into the architect action",
+);
+assert.match(
+  launchKnowledgeController + launchKnowledgeModel + modal,
+  /assembly: \{[\s\S]*generatePlan[\s\S]*generatePlan: \(draft:[\s\S]*generatePlan: onGenerateKnowledgePlan/,
+  "the launch modal should receive the architect run operation through the typed Knowledge model",
+);
+assert.match(
+  launchKnowledgeController + launchKnowledgeModel + modal,
+  /applyPlan[\s\S]*applyPlan: \(draft:[\s\S]*applyPlan: onApplyKnowledgePlan/,
+  "the launch modal should receive the reviewed architect apply operation through the typed Knowledge model",
+);
+assert.match(
+  launchKnowledgeController + launchKnowledgeModel + modal,
+  /draftCloudCommunityResourceContentFromSources[\s\S]*draftResources[\s\S]*draftResources: \(\)[\s\S]*draftResources: onDraftKnowledgeResources/,
+  "the Knowledge controller should draft resource content after applying the architect plan and expose it through the model",
 );
 assert.match(
   app,
-  /handleGenerateCommunityLaunchKnowledgePlan[\s\S]*builderIntent: draft\.builderIntent/,
-  "App should pass builder intent into the architect action",
-);
-assert.match(
-  app,
-  /onGenerateKnowledgePlan=\{handleGenerateCommunityLaunchKnowledgePlan\}/,
-  "launch modal should receive the architect run handler",
-);
-assert.match(
-  app,
-  /onApplyKnowledgePlan=\{handleApplyCommunityLaunchKnowledgePlan\}/,
-  "launch modal should receive the reviewed architect apply handler",
-);
-assert.match(
-  app,
-  /draftCloudCommunityResourceContentFromSources[\s\S]*handleDraftCommunityLaunchKnowledgeResources[\s\S]*onDraftKnowledgeResources=\{handleDraftCommunityLaunchKnowledgeResources\}/,
-  "App should draft resource content after applying the architect plan",
+  /useWebCommunityLaunchKnowledgeController<AuthSession>[\s\S]*knowledge=\{communityLaunchKnowledgeModel\}/,
+  "App should compose and pass one launch Knowledge model instead of individual architect handlers",
 );
 
 assert.match(

@@ -180,7 +180,7 @@ must remain distinct.
 | C5 | Collapse capability, transport, and public-function duplication | `SOURCE_IMPLEMENTED` | substantial cleanup landed; formal closure and current evidence reconciliation remain |
 | C6 | Land the read-only semantic community repository | `COMPLETE` | exact staging build `482d5d20` passed authenticated native and official-MCP list/read plus retired-name absence proof |
 | C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `COMPLETE` | exact staging build `3449fb98` passed source, CI, anonymous and signed-in acceptance; the two confirmed stale staging names are absent |
-| C8 | Decompose and optimize retained frontend/backend surfaces | `IN_PROGRESS` | C8.1 converges Global Settings, C8.2 extracts Personal Account orchestration, C8.3 converges account-setup surface projection, and C8.4A establishes one community-launch lifecycle owner; further retained-surface decomposition remains separately bounded |
+| C8 | Decompose and optimize retained frontend/backend surfaces | `IN_PROGRESS` | C8.1 converges Global Settings, C8.2 extracts Personal Account orchestration, C8.3 converges account-setup surface projection, C8.4A establishes one community-launch lifecycle owner, and C8.4B establishes one launch-Knowledge orchestration owner; further retained-surface decomposition remains separately bounded |
 | C9 | Prove backup, restore, RPO/RTO, and operational recovery | `PLANNED` | isolated recovery drills and owned runbooks meet accepted targets |
 | C10 | Reconcile historical Builder Partner obligations | `PLANNED_LAST` | historical legal lineage, retention, and mixed-policy payout state reconcile without rewriting history |
 
@@ -2205,3 +2205,57 @@ C8.4A is complete on canonical staging. C8 remains `IN_PROGRESS`; the next
 retained-surface decomposition must be planned as a separate slice.
 Production, `origin/main`, production configuration, production data, and
 Convex remain untouched.
+
+### C8.4B source receipt — Community-launch Knowledge orchestration boundary
+
+The second community-launch decomposition slice removes source, provider, and
+wiki-assembly orchestration from `App.tsx`. One
+`useWebCommunityLaunchKnowledgeController` now owns the launch Knowledge
+projection and its existing link, file, Google Drive, GitHub, ingestion,
+architect-plan, plan-apply, and source-backed drafting operations. One typed
+`WebCommunityLaunchKnowledgeModel` groups that surface into four irreducible
+capabilities: saved sources, source actions, provider integrations, and wiki
+assembly. `WebCommunityLaunchSetupModal` consumes that nested model instead of
+four source arrays and more than twenty individual callbacks.
+
+This is a web orchestration boundary, not a new source, credential, or wiki
+authority. `communityResources` remains canonical for community-owned source
+rows. `userSourceIntegrationConnections` remains canonical for user-owned
+Google Drive and GitHub credentials. The focused source projection and every
+provider/write path remain server-authorized, with the projection explicitly
+manager-gated. The existing architect and resource actions remain the only
+wiki mutation paths.
+
+`App.tsx` retains authentication, active-community navigation, browser history,
+durable OAuth intent, external provider redirection, OAuth callback
+finalization, community creation, and the canonical profile, About, agent,
+access, and publish writes. The Knowledge controller contains no browser
+navigation, OAuth callback finalizer, community-creation path, or profile,
+access, or publication mutation.
+
+Knowledge operations are bound to the authenticated subject, active community,
+and current manager authority captured by the initiating render. A superseded
+source request cannot project after a newer request. Sign-out, community
+switch, or permission loss clears the saved-source projection; late provider
+reads return no presentation result; and a multi-step workflow cannot continue
+its later writes against a different community. Source-write follow-up
+hydration remains best effort where it was already best effort, while removal,
+disconnect, plan-apply, and drafting retain their stricter refresh behavior.
+
+`App.tsx` falls from 8,530 to 8,067 lines and
+`WebCommunityLaunchSetupModal.tsx` falls from 3,439 to 3,186 lines. The new
+915-line controller is still a retained domain concentration rather than a
+terminal decomposition; it makes that concentration explicit and separately
+testable instead of leaving it interleaved with the application shell. A
+focused executable proof covers source-family partitioning, current and stale
+request outcomes, single-controller composition, target-bound operation
+callbacks, the retained App/OAuth authority boundary, and the unchanged
+community-source/user-credential database split. Existing launch, source
+ingestion, resource-builder, wiki-architect, and lifecycle proofs follow the
+new owner.
+
+No Convex file, schema, migration, cloud data, environment configuration,
+route vocabulary, copy, style, provider protocol, production action, or
+`origin/main` change belongs to this slice. Canonical staging release,
+exact-build acceptance, and a reversible saved-link round trip remain required
+before C8.4B can be called complete.
