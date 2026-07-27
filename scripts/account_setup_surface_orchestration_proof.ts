@@ -1,0 +1,126 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+function read(path: string): string {
+  return readFileSync(path, "utf8");
+}
+
+function occurrences(source: string, needle: string): number {
+  return source.split(needle).length - 1;
+}
+
+const app = read("apps/web/src/App.tsx");
+const model = read("apps/web/src/components/webAccountSetupSurfaceModel.ts");
+const controller = read(
+  "apps/web/src/controllers/useWebAccountSetupSurfaceController.ts",
+);
+const onboarding = read("apps/web/src/components/WebOnboardingPage.tsx");
+const bridge = read("apps/web/src/components/WebCommunityBridgeCard.tsx");
+
+for (const group of ["identity", "inference", "submission"]) {
+  assert.match(
+    model,
+    new RegExp(`\\b${group}: \\{`),
+    `account-setup surface model must expose the ${group} projection`,
+  );
+}
+for (const field of [
+  "handleAvailability",
+  "isCheckingHandleAvailability",
+  "onSocialLinkChange",
+  "onAvatarUpload",
+  "chatgpt",
+  "openai",
+  "isSaving",
+  "error",
+]) {
+  assert.ok(model.includes(field), `account-setup surface model missing ${field}`);
+}
+
+assert.match(
+  controller,
+  /checkCloudProfileHandleAvailability/,
+  "surface controller must own handle-availability reads",
+);
+assert.match(
+  controller,
+  /window\.setTimeout\([\s\S]*260\)/,
+  "surface controller must debounce handle-availability reads",
+);
+assert.match(
+  controller,
+  /availabilityRequestIdRef[\s\S]*cancelled[\s\S]*availabilityRequestIdRef\.current !== requestId/,
+  "surface controller must reject stale or cancelled handle-availability reads",
+);
+assert.match(
+  controller,
+  /setHandleAvailability\(null\);[\s\S]*setIsCheckingHandleAvailability\(false\);[\s\S]*if \(!session \|\| !handle\) return;/,
+  "surface controller must clear availability state for signed-out or empty-handle projections",
+);
+assert.match(
+  controller,
+  /displayName: profile\.profileName[\s\S]*chatgpt: \{[\s\S]*openai: \{[\s\S]*submission: \{/,
+  "surface controller must project profile, provider, and submission state into one model",
+);
+assert.doesNotMatch(
+  controller,
+  /upsertCloudProfileDetail|loadCloudAccountSetupStatus|resolveCloudMemberEntryDestination/,
+  "surface controller must not absorb canonical completion or destination authority",
+);
+
+assert.equal(
+  occurrences(app, "useWebAccountSetupSurfaceController<AuthSession>({"),
+  1,
+  "App must instantiate exactly one account-setup surface controller",
+);
+assert.equal(
+  occurrences(app, "setup: accountSetupSurface.model"),
+  3,
+  "onboarding, platform bridge, and community bridge must share one surface model",
+);
+assert.doesNotMatch(
+  app,
+  /onboardingHandleAvailability|isCheckingOnboardingHandle|checkCloudProfileHandleAvailability|CloudProfileHandleAvailability/,
+  "App must not retain the extracted handle-availability lifecycle",
+);
+
+for (const surface of [onboarding, bridge]) {
+  assert.match(
+    surface,
+    /setup: WebAccountSetupSurfaceModel/,
+    "each account-setup presentation must consume the typed shared model",
+  );
+  assert.match(
+    surface,
+    /const \{ identity, inference, submission \} = props\.setup;/,
+    "each account-setup presentation must read the model through its three explicit groups",
+  );
+  assert.doesNotMatch(
+    surface,
+    /props\.(?:displayName|handle|socialLinks|avatarUrl|handleAvailability|chatgptConnected|openAiConnected|isSaving|error)\b/,
+    "account-setup presentations must not regress to wide duplicated props",
+  );
+}
+
+for (const authority of [
+  "async function saveOnboardingProfile",
+  "async function finishOnboarding",
+  "async function completePlatformBridge",
+  "async function completeBridgeAndEnter",
+]) {
+  assert.ok(app.includes(authority), `App must retain ${authority}`);
+}
+assert.match(
+  app,
+  /completePlatformBridge[\s\S]*resolveAndEnterMemberDestination\(\{ replace: true \}\)/,
+  "platform bridge must retain canonical platform destination resolution",
+);
+assert.match(
+  app,
+  /completeBridgeAndEnter[\s\S]*resolveMemberEntryDestination\(\{[\s\S]*communityId: entry\.communityId,[\s\S]*communitySlug: entry\.communitySlug,[\s\S]*destination\.page !== "community"/,
+  "community bridge must revalidate the exact requested community before route entry",
+);
+
+console.log(
+  "PASS: account setup has one typed surface projection and keeps completion authority in App.",
+);

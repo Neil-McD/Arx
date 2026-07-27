@@ -180,7 +180,7 @@ must remain distinct.
 | C5 | Collapse capability, transport, and public-function duplication | `SOURCE_IMPLEMENTED` | substantial cleanup landed; formal closure and current evidence reconciliation remain |
 | C6 | Land the read-only semantic community repository | `COMPLETE` | exact staging build `482d5d20` passed authenticated native and official-MCP list/read plus retired-name absence proof |
 | C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `COMPLETE` | exact staging build `3449fb98` passed source, CI, anonymous and signed-in acceptance; the two confirmed stale staging names are absent |
-| C8 | Decompose and optimize retained frontend/backend surfaces | `IN_PROGRESS` | C8.1 converges Global Settings and C8.2 extracts the Personal Account orchestration boundary; further retained-surface decomposition remains separately bounded |
+| C8 | Decompose and optimize retained frontend/backend surfaces | `IN_PROGRESS` | C8.1 converges Global Settings, C8.2 extracts Personal Account orchestration, and C8.3 converges account-setup surface projection; further retained-surface decomposition remains separately bounded |
 | C9 | Prove backup, restore, RPO/RTO, and operational recovery | `PLANNED` | isolated recovery drills and owned runbooks meet accepted targets |
 | C10 | Reconcile historical Builder Partner obligations | `PLANNED_LAST` | historical legal lineage, retention, and mixed-policy payout state reconcile without rewriting history |
 
@@ -2075,3 +2075,36 @@ C8.2 is complete on canonical staging. C8 remains `IN_PROGRESS`; the next
 retained-surface decomposition must be planned as a separate slice.
 Production, `origin/main`, production configuration, production data, and
 Convex remain untouched.
+
+### C8.3 source receipt — Canonical account-setup surface projection
+
+The third C8 slice removes one repeated frontend projection from `App.tsx`.
+The onboarding modal, standalone platform bridge, and community funnel bridge
+now consume one typed `WebAccountSetupSurfaceModel` with three explicit groups:
+identity, inference provider, and submission state. One
+`useWebAccountSetupSurfaceController` maps the existing profile and provider
+controllers into that model and owns the shared 260-millisecond handle
+availability lifecycle, including signed-out reset and stale-response
+rejection.
+
+This is a presentation-orchestration boundary, not a new account-setup
+authority. Canonical completion still derives from the existing cloud account
+setup status. Profile and legal persistence remain in
+`saveOnboardingProfile`; final completion remains in `finishOnboarding`;
+platform entry still resolves the canonical member destination; and community
+entry still revalidates the exact requested community before changing route.
+The platform and community bridges therefore share mutable setup state without
+sharing or weakening entry authority.
+
+`App.tsx` falls from 8,872 to 8,753 lines and no longer owns handle
+availability state, debounce, request cleanup, or three manually repeated
+identity/provider/submission prop fans. The retained onboarding and bridge
+components keep their existing interaction behavior while replacing their
+wide shared prop contracts with one nested model. A focused orchestration
+proof locks the single-controller, three-consumer projection and the retained
+completion and destination boundaries.
+
+No Convex file, schema, migration, cloud data, environment configuration,
+route, copy, style, provider protocol, production action, or `origin/main`
+change belongs to this slice. Canonical staging release and exact-build
+acceptance remain required before C8.3 can be called complete.

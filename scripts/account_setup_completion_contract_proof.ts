@@ -117,15 +117,15 @@ assert.match(communityTypes, /AccountSetupStatus/, "shared profile types must ex
 assert.match(communityTypes, /account_setup\?: AccountSetupStatus \| null/, "profile details must carry setup status");
 
 assert.match(onboardingPage, /accountSetupStatus: AccountSetupStatus \| null/, "onboarding UI must consume canonical setup status");
-assert.match(onboardingPage, /handleAvailability: ProfileHandleAvailability \| null/, "onboarding profile step should show handle availability");
+assert.match(onboardingPage, /identity\.handleAvailability/, "onboarding profile step should show handle availability");
 assert.match(onboardingPage, /<span>Bio<\/span>/, "onboarding profile step should expose bio");
 assert.match(onboardingPage, /handleReady[\s\S]*?profileReady[\s\S]*?handleReady/, "onboarding profile step must require an available handle");
 assert.match(onboardingPage, /Terms of Service[\s\S]*Privacy &amp; AI Data Policy/, "onboarding profile step must link the platform legal documents inline");
 assert.match(onboardingPage, /platformLegalReady[\s\S]*?profileReady[\s\S]*?platformLegalReady/, "onboarding profile step must require platform legal acceptance before Next");
 assert.match(onboardingPage, /WebPlatformLegalReaderModal/, "onboarding legal documents must render through the shared reader modal");
 assert.match(legalReaderModal, /polynet-onboarding-legal-reader message-text/, "the shared legal reader must render documents in the scrollable modal reader");
-assert.match(onboardingPage, /onConnectChatgpt/, "onboarding inference step must reuse ChatGPT provider flow");
-assert.match(onboardingPage, /onConnectOpenAi/, "onboarding inference step must reuse OpenAI provider flow");
+assert.match(onboardingPage, /chatgpt\.onConnect/, "onboarding inference step must reuse ChatGPT provider flow");
+assert.match(onboardingPage, /openai\.onConnect/, "onboarding inference step must reuse OpenAI provider flow");
 assert.match(onboardingPage, /Use your Plus or Pro plan limits/, "onboarding inference choice should clearly name ChatGPT plan limits");
 assert.match(onboardingPage, /Recommended/, "onboarding inference choice should mark ChatGPT as recommended");
 assert.match(onboardingPage, /Use a key from your OpenAI account/, "onboarding inference choice should clearly name the API key path");
