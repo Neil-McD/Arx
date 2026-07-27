@@ -30,8 +30,8 @@ function main() {
   const communitySettings = readText(
     join(root, "apps/web/src/components/WebCommunitySettingsSection.tsx"),
   );
-  const integrationsSettings = readText(
-    join(root, "apps/web/src/components/WebIntegrationsSettingsSection.tsx"),
+  const globalSettings = readText(
+    join(root, "apps/web/src/components/WebSettingsPanels.tsx"),
   );
   const personalAppSetupModal = readText(
     join(root, "apps/web/src/components/PersonalAppSetupModal.tsx"),
@@ -151,8 +151,13 @@ function main() {
   );
   assertIncludes(
     contract,
-    "Personal setup UX in Discover, Integrations, and Community Settings must route through one setup controller",
+    "Personal setup inside Community Settings must route through one setup controller",
     "MCP app architecture contract canonical setup controller rule",
+  );
+  assertIncludes(
+    contract,
+    "Global Settings does not expose connected-app management.",
+    "MCP app architecture contract global settings boundary",
   );
   assertIncludes(
     contract,
@@ -312,15 +317,10 @@ function main() {
     "PersonalAppSetupModal",
     "Community Settings uses canonical personal app setup modal",
   );
-  assertIncludes(
-    integrationsSettings,
-    "usePersonalAppSetupController",
-    "Integrations Settings uses canonical personal app setup controller",
-  );
-  assertIncludes(
-    integrationsSettings,
+  assertNotIncludes(
+    globalSettings,
     "PersonalAppSetupModal",
-    "Integrations Settings uses canonical personal app setup modal",
+    "Global Settings connected-app presentation",
   );
   assertIncludes(
     personalAppSetupController,
@@ -336,11 +336,6 @@ function main() {
     communitySettings,
     "const handleConfirmSetup",
     "Community Settings should not duplicate personal app setup branching",
-  );
-  assertNotIncludes(
-    integrationsSettings,
-    "const handleConfirmSetup",
-    "Integrations Settings should not duplicate personal app setup branching",
   );
   assertIncludes(
     communitySettings,
@@ -362,10 +357,7 @@ function main() {
     "findDiscoverCatalogEntryForAppIdentity",
     "Shared integration surface row mapper uses canonical Discover catalog identity matcher",
   );
-  for (const appSurface of [
-    ["Community Settings", communitySettings],
-    ["Integrations Settings", integrationsSettings],
-  ] as const) {
+  for (const appSurface of [["Community Settings", communitySettings]] as const) {
     assertIncludes(
       appSurface[1],
       "findDiscoverCatalogEntryForAppIdentity",
@@ -387,11 +379,6 @@ function main() {
       "Community Settings local duplicate Discover catalog lookup helper",
     );
     assertNotIncludes(
-      integrationsSettings,
-      duplicatedCatalogLookup,
-      "Integrations Settings local duplicate Discover catalog lookup helper",
-    );
-    assertNotIncludes(
       communityAppsEditor,
       duplicatedCatalogLookup,
       "Community app editor local duplicate Discover catalog lookup helper",
@@ -402,11 +389,6 @@ function main() {
     "function setupTargetsExistingPersonalMount",
     "Community Settings local duplicate personal setup identity helper",
   );
-  assertNotIncludes(
-    integrationsSettings,
-    "function setupTargetsExistingPersonalMount",
-    "Integrations Settings local duplicate personal setup identity helper",
-  );
   for (const legacyCopy of [
     "recommended by this community",
     "Recommended by community",
@@ -415,7 +397,7 @@ function main() {
     "Recommend",
   ]) {
     assertNotIncludes(communitySettings, legacyCopy, "Community Settings legacy recommend copy");
-    assertNotIncludes(integrationsSettings, legacyCopy, "Integrations Settings legacy recommend copy");
+    assertNotIncludes(globalSettings, legacyCopy, "Global Settings legacy app copy");
     assertNotIncludes(communityAppsEditor, legacyCopy, "Community app editor legacy recommend copy");
   }
   for (const catalogDriftCopy of [

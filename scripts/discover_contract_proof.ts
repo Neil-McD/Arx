@@ -46,7 +46,7 @@ function main() {
   );
   const integrationsSettings = readText(
     new URL(
-      "../apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+      "../apps/web/src/components/WebSettingsPanels.tsx",
       import.meta.url,
     ),
   );

@@ -43,7 +43,7 @@ const dock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const dockCss = read("apps/web/src/components/WebMemberAgentDock.css");
 const mcpGuide = read("apps/web/src/components/WebCommunityOnboardingMcpGuide.tsx");
 const mcpCompatibility = read("apps/web/src/components/WebCommunityOnboardingMcpCompatibility.tsx");
-const integrations = read("apps/web/src/components/WebIntegrationsSettingsSection.tsx");
+const mcpSettings = read("apps/web/src/components/WebPolynetMcpSettingsSection.tsx");
 const mcpSetup = read("shared/polynetMcpSetup.ts");
 const baseCss = read("apps/web/src/base.css");
 
@@ -305,7 +305,7 @@ assert.doesNotMatch(dockCss, /member-agent-dock-header::after/);
 assert.doesNotMatch(dockCss, /member-agent-dock-transcript::after/);
 assert.match(dockCss, /member-agent-dock\.is-onboarding \.member-agent-dock-panel/);
 assert.match(mcpGuide, /POLYNET_MCP_SETUP_BUNDLE/);
-assert.match(mcpGuide, /POLYNET_MCP_TOOL_COUNT_LABEL/);
+assert.match(mcpGuide, /Community-scoped · OAuth protected/);
 assert.match(mcpGuide, /DiscoverCatalogLogo/);
 assert.match(mcpGuide, /WebCommunityOnboardingConciergeSurface/);
 assert.doesNotMatch(mcpGuide, /props\.narration|isPreparing/);
@@ -331,7 +331,7 @@ for (const asset of [
 }
 assert.doesNotMatch(mcpGuide, /POLYNET_MCP_ENDPOINT_URL/);
 assert.match(mcpGuide, /props\.onComplete/);
-assert.match(integrations, /POLYNET_MCP_SETUP_BUNDLE/);
+assert.match(mcpSettings, /POLYNET_MCP_SETUP_BUNDLE/);
 assert.match(mcpSetup, /https:\/\/www\.polynet\.ai\/runtime\/mcp/);
 assert.doesNotMatch(mcpGuide, /access token|bearer token/i);
 assert.doesNotMatch(onboardingGateway, /communityOnboardingConcierge:/);

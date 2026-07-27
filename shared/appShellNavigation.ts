@@ -2,18 +2,16 @@ export type SettingsPage =
   | "profile"
   | "account"
   | "billing"
+  | "mcp"
   | "partners"
-  | "agent"
-  | "integrations"
   | "appearance";
 
 export type SettingsGroup =
   | "profile"
   | "account"
   | "billing"
+  | "mcp"
   | "partners"
-  | "agent"
-  | "integrations"
   | "appearance";
 
 export type AppPage =
@@ -166,10 +164,10 @@ export function settingsGroupForPage(page: SettingsPage): SettingsGroup {
   if (page === "profile") return "profile";
   if (page === "account") return "account";
   if (page === "billing") return "billing";
+  if (page === "mcp") return "mcp";
   if (page === "partners") return "partners";
-  if (page === "integrations") return "integrations";
   if (page === "appearance") return "appearance";
-  return "agent";
+  return "account";
 }
 
 export function settingsGroupLabel(group: SettingsGroup): string {
@@ -180,12 +178,10 @@ export function settingsGroupLabel(group: SettingsGroup): string {
       return "Account";
     case "billing":
       return "Billing";
+    case "mcp":
+      return "Polynet MCP";
     case "partners":
       return "Partners";
-    case "agent":
-      return "Agent";
-    case "integrations":
-      return "Integrations";
     case "appearance":
       return "Appearance";
   }

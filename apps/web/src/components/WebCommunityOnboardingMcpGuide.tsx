@@ -5,7 +5,6 @@ import { tryCopyTextToClipboard } from "../../../../shared/chatUi";
 import { buildCommunityOnboardingCopy } from "../../../../shared/communityOnboardingCopy";
 import {
   POLYNET_MCP_SETUP_BUNDLE,
-  POLYNET_MCP_TOOL_COUNT_LABEL,
 } from "../../../../shared/polynetMcpSetup";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { WebCommunityOnboardingConciergeSurface } from "./WebCommunityOnboardingConciergeSurface";
@@ -122,7 +121,7 @@ export function WebCommunityOnboardingMcpGuide(props: {
                 <span>
                   Access your authorized Polynet communities from compatible AI harnesses.
                 </span>
-                <small>{POLYNET_MCP_TOOL_COUNT_LABEL} · OAuth protected</small>
+                <small>Community-scoped · OAuth protected</small>
               </div>
             </div>
             <button

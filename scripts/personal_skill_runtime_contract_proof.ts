@@ -28,8 +28,8 @@ function main() {
   const personalSkillOverlayRuntime = readText(
     "shared/personalSkillOverlayRuntime.ts",
   );
-  const settingsSection = readText(
-    "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+  const settingsPanels = readText(
+    "apps/web/src/components/WebSettingsPanels.tsx",
   );
 
   for (const exportedName of [
@@ -109,20 +109,11 @@ function main() {
     "ambiguous_skill_mention_tokens",
     "cross-scope ambiguity evidence",
   );
-  assertIncludes(
-    settingsSection,
-    "Create personal skill package",
-    "settings personal skill create form",
-  );
-  assertIncludes(
-    settingsSection,
-    "Editing this skill updates the canonical package",
-    "settings personal skill edit form",
-  );
-  assertIncludes(
-    settingsSection,
-    "Personal skills are applied only when you explicitly mention",
-    "settings explicit invocation guidance",
+  assert.ok(
+    !/Create personal skill package|Editing this skill updates the canonical package|Personal skills are applied only when you explicitly mention/.test(
+      settingsPanels,
+    ),
+    "global settings must not present the retained personal-skill migration substrate",
   );
 
   console.log("personal_skill_runtime_contract_proof: ok");

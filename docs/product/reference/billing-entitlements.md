@@ -12,7 +12,7 @@ last_verified: 2026-07-21
 
 Billing is the payment system. Entitlements are the access truth derived from verified payment, grants, membership, or plan state.
 
-Free authenticated users can build one owned community. Polynet Premium is the self-serve account subscription: it unlocks a second community, Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage. Existing owned communities remain active if limits change; the cap only gates creating another community. LLM inference outside Premium tooling may still be supplied through the user's connected ChatGPT account or OpenAI API key.
+Free authenticated users can build one owned community. Polynet Premium is the self-serve account subscription: it unlocks a second community, Codex and future premium runtimes, web research, and premium tool usage. Existing owned communities remain active if limits change; the cap only gates creating another community. LLM inference outside Premium tooling may still be supplied through the user's connected ChatGPT account or OpenAI API key.
 
 ## Builder Revenue Path
 

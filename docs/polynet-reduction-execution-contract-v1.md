@@ -180,7 +180,7 @@ must remain distinct.
 | C5 | Collapse capability, transport, and public-function duplication | `SOURCE_IMPLEMENTED` | substantial cleanup landed; formal closure and current evidence reconciliation remain |
 | C6 | Land the read-only semantic community repository | `COMPLETE` | exact staging build `482d5d20` passed authenticated native and official-MCP list/read plus retired-name absence proof |
 | C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `COMPLETE` | exact staging build `3449fb98` passed source, CI, anonymous and signed-in acceptance; the two confirmed stale staging names are absent |
-| C8 | Decompose and optimize retained frontend/backend surfaces | `PLANNED` | lower concentration and change fan-out without creating new authority |
+| C8 | Decompose and optimize retained frontend/backend surfaces | `IN_PROGRESS` | C8.1 converges Global Settings; further retained-surface decomposition remains separately bounded |
 | C9 | Prove backup, restore, RPO/RTO, and operational recovery | `PLANNED` | isolated recovery drills and owned runbooks meet accepted targets |
 | C10 | Reconcile historical Builder Partner obligations | `PLANNED_LAST` | historical legal lineage, retention, and mixed-policy payout state reconcile without rewriting history |
 
@@ -1953,3 +1953,51 @@ substrates remain. No product row, provider resource, production
 configuration, production deployment, `origin/main`, or production surface was
 queried or changed. C8 may begin only as a new retained-surface decomposition
 plan from this clean staging boundary.
+
+## 11. C8 retained-surface decomposition receipts
+
+### C8.1 source receipt — Global Settings convergence
+
+The first C8 slice reduces Global Settings to six canonical destinations:
+Profile, Account, Billing, Polynet MCP, Appearance, and Partners. Platform
+Analytics remains an operator-only conditional destination. The duplicate
+Agent and Integrations destinations are deleted. Legacy
+`/settings/agent` links resolve to Account, while legacy
+`/settings/integrations` links resolve to Polynet MCP; neither legacy identity
+appears in navigation.
+
+Account now owns the retained personal account concerns: provider and
+subscription state, personal-agent name and instructions, authenticated
+personal-memory review and mutation, and CSV data export. The external
+AI-provider memory importer is deleted rather than rehomed. New personal
+memory is always global; legacy stored `workspace`-scoped rows remain readable
+as `Legacy context` without exposing their old scope identifier.
+
+Polynet MCP is one focused setup surface. It copies the canonical OAuth setup
+packet and describes access as community-scoped. The global connected-app and
+personal/platform-skill presentation is deleted, while community app setup,
+community skill attachment, runtime app/skill resolution, official MCP wire
+compatibility, and protected harness/runtime substrate remain. A stale
+hard-coded MCP tool count and the public Premium promise of hosted Workspace
+tools are also deleted; generated product documentation is rebuilt from the
+corrected source truth.
+
+The staged source candidate removes 2,892 lines and adds 737, including this
+receipt and the new focused components. It deletes the 1,069-line global
+Integrations component, the 300-line Agent component, the 124-line import
+modal, the 130-line importer parser, 311 net lines from `App.tsx`, and 409 net
+owner-proved CSS lines. `App.tsx` is reduced from 9,267 to 8,956 lines without
+adding a replacement authority.
+
+Focused route/settings, personal-memory, MCP provider, onboarding, app/skill
+runtime, community app architecture, billing, operator diagnostics, product
+docs, staging-identity, TypeScript, production-build, and bundle-budget proofs
+pass on the source candidate. No Convex file or schema changes, data
+migrations, cloud writes, environment changes, or production actions belong
+to this slice.
+
+C8 remains `IN_PROGRESS`. This source receipt does not claim deployment or
+live acceptance. C8.1 closes only after the exact clean commit reaches the
+canonical Git-driven staging web origin and passes desktop/mobile signed-in
+settings acceptance. Any further `App.tsx`, retained CSS, backend, or runtime
+decomposition is a separately planned C8 slice.

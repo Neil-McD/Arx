@@ -22,9 +22,8 @@ Polynet capability kernel
       -> Codex harness
       -> external MCP provider adapter
   -> UI projections
-      -> Discover
-      -> Integrations
-      -> Community apps
+      -> Community Settings
+      -> Community agent apps
 ```
 
 ### Community Capability Boundary
@@ -139,7 +138,7 @@ Rules:
 - If a user already has Linear live personally and a community adds Linear, every surface must resolve to that same effective Linear state for that user.
 - If a user lacks required credentials, the app can be present but must show setup needed.
 - If auth is not required and validation succeeds, the app can become live after seeding.
-- Personal setup UX in Discover, Integrations, and Community Settings must route through one setup controller so OAuth, token, no-auth, reconnect, and refresh behavior cannot drift by surface.
+- Personal setup inside Community Settings must route through one setup controller so OAuth, token, no-auth, reconnect, and refresh behavior cannot drift. Global Settings does not expose connected-app management.
 
 ### Runtime Harness
 

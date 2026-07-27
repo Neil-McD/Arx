@@ -42,16 +42,16 @@ const communityReadContract = read("shared/communityReadContract.ts");
 const communityCapabilityContextContract = read("shared/communityCapabilityContextContract.ts");
 const packageJson = read("package.json");
 const externalSmoke = read("scripts/polynet_workspace_mcp_external_smoke.ts");
-const integrationsSettingsUi = read(
-  "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+const mcpSettingsUi = read(
+  "apps/web/src/components/WebPolynetMcpSettingsSection.tsx",
 );
 const mcpSetup = read("shared/polynetMcpSetup.ts");
-const integrationsSettings = `${integrationsSettingsUi}\n${mcpSetup}`;
+const integrationsSettings = `${mcpSettingsUi}\n${mcpSetup}`;
 
 assertIncludes(
-  integrationsSettingsUi,
+  mcpSettingsUi,
   "../../../../shared/polynetMcpSetup",
-  "Integrations Settings canonical MCP setup import",
+  "Polynet MCP Settings canonical setup import",
 );
 
 assertIncludes(
@@ -281,10 +281,10 @@ assertIncludes(
   "POLYNET_MCP_HERMES_LOGIN_COMMAND",
   "Polynet Hermes login command constant",
 );
-assertIncludes(
+assertNotIncludes(
   integrationsSettings,
   "17 workspace + 2 profile tools",
-  "PolyMCP integration tool count",
+  "Polynet MCP UI must not publish a stale hard-coded tool count",
 );
 assertIncludes(
   integrationsSettings,
@@ -368,7 +368,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Connect Polynet so this harness can access the user's Polynet communities, resources, and workspace memory.",
+  "Connect Polynet so this harness can access the user's authorized Polynet communities, resources, and community context.",
   "Polynet setup packet should define the goal",
 );
 assertIncludes(
@@ -617,7 +617,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Polynet is connected. I can now use your Polynet communities, resources, and workspace memory.",
+  "Polynet is connected. I can now use your authorized Polynet communities, resources, and community context.",
   "Polynet setup packet should give a success response",
 );
 assertIncludes(
@@ -637,18 +637,18 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Copy one setup packet",
-  "Polynet integration card should frame the copied text as one packet",
+  "Paste the setup packet into your AI client.",
+  "Polynet MCP settings should frame the copied text as one setup packet",
 );
 assertIncludes(
   integrationsSettings,
-  "Codex, Claude Code",
-  "PolyMCP integration card should name target harnesses",
+  "Codex, Claude Code, Cursor",
+  "Polynet MCP settings should name target clients",
 );
 assertIncludes(
   integrationsSettings,
-  "another AI harness",
-  "Polynet user-facing copy should say AI harness instead of MCP harness",
+  "another compatible client",
+  "Polynet MCP settings should explain broad client compatibility",
 );
 assertIncludes(
   integrationsSettings,
@@ -657,17 +657,17 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "name=\"Polynet\"",
-  "Polynet visible integration logo name",
+  '<div className="panel-title">Polynet MCP</div>',
+  "Polynet MCP must be a focused settings destination",
 );
 assertIncludes(
   integrationsSettings,
-  "<strong>Polynet</strong>",
-  "Polynet visible integration title",
+  "OAuth protected · Community-scoped",
+  "Polynet MCP settings must make authority scope visible",
 );
 assertIncludes(
   integrationsSettings,
-  "aria-label=\"Copy Polynet setup\"",
+  "aria-label=\"Copy Polynet MCP setup\"",
   "Polynet visible setup copy action label",
 );
 assertNotIncludes(

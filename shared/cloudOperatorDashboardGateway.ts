@@ -35,7 +35,7 @@ const OPERATOR_WEB_DEPLOY_ROUTE_PROBES: Array<{
   { label: "Home", path: "/", criticality: "critical" },
   { label: "Polynet community", path: "/c/polynet/chat", criticality: "critical" },
   { label: "Discover communities", path: "/discover", criticality: "important" },
-  { label: "Integrations", path: "/settings/integrations", criticality: "important" },
+  { label: "Polynet MCP", path: "/settings/mcp", criticality: "important" },
 ];
 const OPERATOR_WEB_DEPLOY_PROBE_TIMEOUT_MS = 4000;
 const OPERATOR_WEB_DEPLOY_ASSET_PROBE_LIMIT = 8;

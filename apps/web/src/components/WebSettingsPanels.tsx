@@ -4,27 +4,18 @@ import type { AppTheme } from "../../../../shared/theme";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import type { BuilderPartnerProgramSnapshot } from "../../../../shared/builderPartnerProgramGateway";
 import type { SocialProfileLinks } from "../../../../shared/socialProfileLinks";
-import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
-import type { EffectiveSkill } from "../../../../shared/effectiveSkills";
-import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
-import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
-import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
-import type {
-  BeginUserPlatformAppOAuthOptions,
-  BeginUserPlatformAppOAuthResult,
-  ConnectUserPlatformAppInput,
-  ConnectUserPlatformAppResult,
-} from "../../../../shared/userPlatformAppMountTypes";
 import type { UseWebProviderConnectionUiControllerResult } from "../controllers/useWebProviderConnectionUiController";
 import type { useWebProfileSettingsUiController } from "../controllers/useWebProfileSettingsUiController";
 import type { useWebPersonalMemoryUiController } from "../controllers/useWebPersonalMemoryUiController";
 import type { UseWebBillingUiControllerResult } from "../controllers/useWebBillingUiController";
+import { WebAccountDataExportSection } from "./WebAccountDataExportSection";
 import { WebAccountSettingsSection } from "./WebAccountSettingsSection";
-import { WebAgentSettingsSection } from "./WebAgentSettingsSection";
 import { WebAppearanceSettingsSection } from "./WebAppearanceSettingsSection";
 import { WebBillingSettingsSection } from "./WebBillingSettingsSection";
 import { WebBuilderPartnerSettingsSection } from "./WebBuilderPartnerSettingsSection";
-import { WebIntegrationsSettingsSection } from "./WebIntegrationsSettingsSection";
+import { WebPersonalAgentSettingsSection } from "./WebPersonalAgentSettingsSection";
+import { WebPersonalMemorySettingsSection } from "./WebPersonalMemorySettingsSection";
+import { WebPolynetMcpSettingsSection } from "./WebPolynetMcpSettingsSection";
 import { WebProfileSettingsSection } from "./WebProfileSettingsSection";
 
 type SessionLike = {
@@ -91,9 +82,9 @@ export type WebSettingsPanelsProps = {
     }) => Promise<void> | void;
     canUseDevTierOverride: boolean;
     setDevAccountTier: (tier: "free" | "architect") => Promise<void> | void;
-	    providerConnectionUi: UseWebProviderConnectionUiControllerResult;
-	    billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus>;
-	  };
+    providerConnectionUi: UseWebProviderConnectionUiControllerResult;
+    billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus>;
+  };
   agent: {
     session: SessionLike;
     exportError: string | null;
@@ -129,82 +120,10 @@ export type WebSettingsPanelsProps = {
     loadPersonalMemoryItems: () => Promise<void> | void;
     personalMemoryUi: ReturnType<typeof useWebPersonalMemoryUiController>;
   };
-	  billing: {
-	    session: SessionLike;
-	    startPremiumSubscriptionCheckout: () => Promise<void> | void;
-	    billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus>;
-	  };
-  integrations: {
+  billing: {
     session: SessionLike;
-    requireSignIn: () => void;
-    effectiveMcpApps: EffectiveMcpApp[];
-    isLoadingEffectiveMcpApps: boolean;
-    effectiveMcpAppsError: string | null;
-    effectiveSkills: EffectiveSkill[];
-    isLoadingEffectiveSkills: boolean;
-    effectiveSkillsError: string | null;
-    isLoadingUserPlatformAppMounts: boolean;
-    userPlatformAppMountError: string | null;
-    userPlatformAppMutationError: string | null;
-    isConnectingUserPlatformApp: boolean;
-    updatingUserPlatformAppMountId: string | null;
-    refreshingUserPlatformAppMountId: string | null;
-    refreshingCommunityAppMountId: string | null;
-    reconnectingUserPlatformAppMountId: string | null;
-    removingUserPlatformAppMountId: string | null;
-    userPlatformSkills: UserPlatformInstalledSkill[];
-    isLoadingUserPlatformSkills: boolean;
-    userPlatformSkillError: string | null;
-    userPlatformSkillMutationError: string | null;
-    isCreatingUserPlatformSkill: boolean;
-    updatingUserPlatformSkillInstallId: string | null;
-    removingUserPlatformSkillInstallId: string | null;
-    onConnectUserPlatformApp: (
-      input: ConnectUserPlatformAppInput,
-    ) => Promise<ConnectUserPlatformAppResult>;
-    onBeginUserPlatformAppOAuth: (
-      catalogAppId: string,
-      options?: BeginUserPlatformAppOAuthOptions,
-    ) => Promise<BeginUserPlatformAppOAuthResult>;
-    onUpdateUserPlatformAppMount: (
-      userPlatformAppMountId: string,
-      patch: {
-        enabled?: boolean;
-        enabledTools?: string[];
-      },
-    ) => Promise<void> | Promise<boolean> | boolean | void;
-    onRefreshUserPlatformApp: (
-      userPlatformAppMountId: string,
-    ) => Promise<void> | Promise<boolean> | boolean | void;
-    onReconnectUserPlatformApp: (
-      userPlatformAppMountId: string,
-      secret: string,
-    ) => Promise<void> | Promise<boolean> | boolean | void;
-    onSetupImportedCommunityMcpApp: (input: {
-      community_app_mount_id: string;
-      endpoint_url: string;
-      auth_type: DeveloperAppAuthType;
-      secret?: string;
-    }) => Promise<void> | Promise<boolean> | boolean | void;
-    onUnmountUserPlatformApp: (
-      userPlatformAppMountId: string,
-    ) => Promise<void> | Promise<boolean> | boolean | void;
-    onCreateUserPlatformSkill: (
-      input: CreateSkillPackageInput,
-    ) => Promise<void> | Promise<boolean> | boolean | void;
-    onSaveUserPlatformSkill: (
-      userPlatformSkillInstallId: string,
-      input: CreateSkillPackageInput,
-    ) => Promise<void> | Promise<boolean> | boolean | void;
-    onUpdateUserPlatformSkill: (
-      userPlatformSkillInstallId: string,
-      patch: {
-        enabled?: boolean;
-      },
-    ) => Promise<void> | Promise<boolean> | boolean | void;
-    onDeleteUserPlatformSkill: (
-      userPlatformSkillInstallId: string,
-    ) => Promise<void> | Promise<boolean> | boolean | void;
+    startPremiumSubscriptionCheckout: () => Promise<void> | void;
+    billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus>;
   };
   appearance: {
     appTheme: AppTheme;
@@ -213,7 +132,7 @@ export type WebSettingsPanelsProps = {
 };
 
 export function WebSettingsPanels(props: WebSettingsPanelsProps) {
-  const { settingsGroup, profile, account, agent, billing, integrations, appearance } =
+  const { settingsGroup, profile, account, agent, billing, appearance } =
     props;
 
   const profileSectionProps = {
@@ -304,100 +223,74 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     devAccountTierError: account.billingUi.devAccountTierError,
   };
 
-  const agentSectionProps = {
+  const personalAgentSectionProps = {
     session: agent.session,
-    exportError: agent.exportError,
+    settings: agent.userMemorySettings,
+    isLoading: agent.isLoadingUserMemorySettings,
+    onSave: agent.saveUserMemorySettings,
+  };
+
+  const personalMemorySectionProps = {
+    session: agent.session,
+    error: agent.personalMemoryUi.personalMemoryError,
+    isLoading: agent.personalMemoryUi.isLoadingPersonalMemory,
+    items: agent.personalMemoryUi.personalMemoryItems,
+    query: agent.personalMemoryUi.personalMemoryQuery,
+    setQuery: agent.personalMemoryUi.setPersonalMemoryQuery,
+    loadItems: agent.loadPersonalMemoryItems,
+    formatRelativeTime: agent.formatRelativeTime,
+    togglePinned: agent.handleTogglePersonalMemoryPinned,
+    deleteItem: agent.handleDeletePersonalMemoryItem,
+    newContent: agent.personalMemoryUi.newPersonalMemoryContent,
+    setNewContent: agent.personalMemoryUi.setNewPersonalMemoryContent,
+    createItem: agent.handleCreatePersonalMemoryItem,
+  };
+
+  const dataExportSectionProps = {
+    session: agent.session,
+    error: agent.exportError,
+    isExporting: agent.isExporting,
     exportThreadsCsv: agent.exportThreadsCsv,
     exportMessagesCsv: agent.exportMessagesCsv,
     exportMemoryCsv: agent.exportMemoryCsv,
-    isExporting: agent.isExporting,
-    userMemorySettings: agent.userMemorySettings,
-    isLoadingUserMemorySettings: agent.isLoadingUserMemorySettings,
-    saveUserMemorySettings: agent.saveUserMemorySettings,
-    personalMemoryError: agent.personalMemoryUi.personalMemoryError,
-    isLoadingPersonalMemory: agent.personalMemoryUi.isLoadingPersonalMemory,
-    personalMemoryItems: agent.personalMemoryUi.personalMemoryItems,
-    personalMemoryQuery: agent.personalMemoryUi.personalMemoryQuery,
-    setPersonalMemoryQuery: agent.personalMemoryUi.setPersonalMemoryQuery,
-    loadPersonalMemoryItems: agent.loadPersonalMemoryItems,
-    formatRelativeTime: agent.formatRelativeTime,
-    handleTogglePersonalMemoryPinned: agent.handleTogglePersonalMemoryPinned,
-    handleDeletePersonalMemoryItem: agent.handleDeletePersonalMemoryItem,
-    setMemoryImportError: agent.personalMemoryUi.setMemoryImportError,
-    setIsMemoryImportModalOpen: agent.personalMemoryUi.setIsMemoryImportModalOpen,
-    newPersonalMemoryContent: agent.personalMemoryUi.newPersonalMemoryContent,
-    setNewPersonalMemoryContent: agent.personalMemoryUi.setNewPersonalMemoryContent,
-    setNewPersonalMemoryPinned: agent.personalMemoryUi.setNewPersonalMemoryPinned,
-    handleCreatePersonalMemoryItem: agent.handleCreatePersonalMemoryItem,
   };
 
-	  const billingSectionProps = {
-	    session: billing.session,
-	    accountCommerceStatus: billing.billingUi.accountCommerceStatus,
-	    isLoadingAccountCommerce: billing.billingUi.isLoadingAccountCommerce,
-	    accountCommerceError: billing.billingUi.accountCommerceError,
-	    startPremiumSubscriptionCheckout: billing.startPremiumSubscriptionCheckout,
-	  };
+  const billingSectionProps = {
+    session: billing.session,
+    accountCommerceStatus: billing.billingUi.accountCommerceStatus,
+    isLoadingAccountCommerce: billing.billingUi.isLoadingAccountCommerce,
+    accountCommerceError: billing.billingUi.accountCommerceError,
+    startPremiumSubscriptionCheckout: billing.startPremiumSubscriptionCheckout,
+  };
 
   const appearanceSectionProps = {
     appTheme: appearance.appTheme,
     setAppTheme: appearance.setAppTheme,
   };
 
-  const integrationsSectionProps = {
-    session: integrations.session,
-    requireSignIn: integrations.requireSignIn,
-    effectiveMcpApps: integrations.effectiveMcpApps,
-    isLoadingEffectiveMcpApps: integrations.isLoadingEffectiveMcpApps,
-    effectiveMcpAppsError: integrations.effectiveMcpAppsError,
-    effectiveSkills: integrations.effectiveSkills,
-    isLoadingEffectiveSkills: integrations.isLoadingEffectiveSkills,
-    effectiveSkillsError: integrations.effectiveSkillsError,
-    isLoadingUserPlatformAppMounts: integrations.isLoadingUserPlatformAppMounts,
-    userPlatformAppMountError: integrations.userPlatformAppMountError,
-    userPlatformAppMutationError: integrations.userPlatformAppMutationError,
-    isConnectingUserPlatformApp: integrations.isConnectingUserPlatformApp,
-    updatingUserPlatformAppMountId: integrations.updatingUserPlatformAppMountId,
-    refreshingUserPlatformAppMountId:
-      integrations.refreshingUserPlatformAppMountId,
-    refreshingCommunityAppMountId: integrations.refreshingCommunityAppMountId,
-    reconnectingUserPlatformAppMountId:
-      integrations.reconnectingUserPlatformAppMountId,
-    removingUserPlatformAppMountId: integrations.removingUserPlatformAppMountId,
-    userPlatformSkills: integrations.userPlatformSkills,
-    isLoadingUserPlatformSkills: integrations.isLoadingUserPlatformSkills,
-    userPlatformSkillError: integrations.userPlatformSkillError,
-    userPlatformSkillMutationError: integrations.userPlatformSkillMutationError,
-    isCreatingUserPlatformSkill: integrations.isCreatingUserPlatformSkill,
-    updatingUserPlatformSkillInstallId:
-      integrations.updatingUserPlatformSkillInstallId,
-    removingUserPlatformSkillInstallId:
-      integrations.removingUserPlatformSkillInstallId,
-    onConnectUserPlatformApp: integrations.onConnectUserPlatformApp,
-    onBeginUserPlatformAppOAuth: integrations.onBeginUserPlatformAppOAuth,
-    onUpdateUserPlatformAppMount: integrations.onUpdateUserPlatformAppMount,
-    onRefreshUserPlatformApp: integrations.onRefreshUserPlatformApp,
-    onReconnectUserPlatformApp: integrations.onReconnectUserPlatformApp,
-    onSetupImportedCommunityMcpApp:
-      integrations.onSetupImportedCommunityMcpApp,
-    onUnmountUserPlatformApp: integrations.onUnmountUserPlatformApp,
-    onCreateUserPlatformSkill: integrations.onCreateUserPlatformSkill,
-    onSaveUserPlatformSkill: integrations.onSaveUserPlatformSkill,
-    onUpdateUserPlatformSkill: integrations.onUpdateUserPlatformSkill,
-    onDeleteUserPlatformSkill: integrations.onDeleteUserPlatformSkill,
-  };
-
   return (
     <>
-      {settingsGroup === "profile" ? <WebProfileSettingsSection {...profileSectionProps} /> : null}
-      {settingsGroup === "account" ? <WebAccountSettingsSection {...accountSectionProps} /> : null}
-      {settingsGroup === "billing" ? <WebBillingSettingsSection {...billingSectionProps} /> : null}
-      {settingsGroup === "partners" ? <WebBuilderPartnerSettingsSection {...accountSectionProps} /> : null}
-      {settingsGroup === "agent" ? <WebAgentSettingsSection {...agentSectionProps} /> : null}
-      {settingsGroup === "integrations" ? (
-        <WebIntegrationsSettingsSection {...integrationsSectionProps} />
+      {settingsGroup === "profile" ? (
+        <WebProfileSettingsSection {...profileSectionProps} />
       ) : null}
-      {settingsGroup === "appearance" ? <WebAppearanceSettingsSection {...appearanceSectionProps} /> : null}
+      {settingsGroup === "account" ? (
+        <>
+          <WebAccountSettingsSection {...accountSectionProps} />
+          <WebPersonalAgentSettingsSection {...personalAgentSectionProps} />
+          <WebPersonalMemorySettingsSection {...personalMemorySectionProps} />
+          <WebAccountDataExportSection {...dataExportSectionProps} />
+        </>
+      ) : null}
+      {settingsGroup === "billing" ? (
+        <WebBillingSettingsSection {...billingSectionProps} />
+      ) : null}
+      {settingsGroup === "mcp" ? <WebPolynetMcpSettingsSection /> : null}
+      {settingsGroup === "partners" ? (
+        <WebBuilderPartnerSettingsSection {...accountSectionProps} />
+      ) : null}
+      {settingsGroup === "appearance" ? (
+        <WebAppearanceSettingsSection {...appearanceSectionProps} />
+      ) : null}
     </>
   );
 }

@@ -1,24 +1,9 @@
 import type { ComponentProps } from "react";
 import { FreeAccountIncludedModal } from "../../../../shared/FreeAccountIncludedModal";
 import { WebCommunityModalHost } from "./WebCommunityModalHost";
-import { WebMemoryImportModal } from "./WebMemoryImportModal";
 import { WebProviderConnectionModalHost } from "./WebProviderConnectionModalHost";
 
-type WebMemoryImportModalProps = {
-  isOpen: boolean;
-  importPrompt: string;
-  importText: string;
-  parsedCount: number;
-  duplicateCount: number;
-  error: string | null;
-  isImporting: boolean;
-  onChangeImportText: (value: string) => void;
-  onClose: () => void;
-  onImport: () => void;
-};
-
 export type WebGlobalOverlayHostProps = {
-  memoryImportModalProps: WebMemoryImportModalProps | null;
   providerConnectionModalHostProps: ComponentProps<
     typeof WebProviderConnectionModalHost
   >["modalHostProps"];
@@ -30,10 +15,6 @@ export type WebGlobalOverlayHostProps = {
 export function WebGlobalOverlayHost(props: WebGlobalOverlayHostProps) {
   return (
     <>
-      {props.memoryImportModalProps ? (
-        <WebMemoryImportModal {...props.memoryImportModalProps} />
-      ) : null}
-
       <WebProviderConnectionModalHost
         modalHostProps={props.providerConnectionModalHostProps}
       />

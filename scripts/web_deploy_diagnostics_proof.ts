@@ -119,7 +119,7 @@ assert.doesNotMatch(
 );
 assert.match(
   operatorGateway,
-  /OPERATOR_WEB_DEPLOY_ROUTE_PROBES[\s\S]*"\/"[\s\S]*criticality: "critical"[\s\S]*"\/c\/polynet\/chat"[\s\S]*criticality: "critical"[\s\S]*"\/discover"[\s\S]*criticality: "important"[\s\S]*"\/settings\/integrations"/,
+  /OPERATOR_WEB_DEPLOY_ROUTE_PROBES[\s\S]*"\/"[\s\S]*criticality: "critical"[\s\S]*"\/c\/polynet\/chat"[\s\S]*criticality: "critical"[\s\S]*"\/discover"[\s\S]*criticality: "important"[\s\S]*"\/settings\/mcp"/,
   "web/deploy diagnostics must probe tiered same-origin routes",
 );
 assert.match(

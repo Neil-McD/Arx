@@ -103,7 +103,7 @@ export function useWebMobileShellController(params: {
   const openMobileAgentSettings = useCallback(() => {
     params.closeDirectMessages();
     params.setMobileOverlay(null);
-    params.openGlobalSettings("agent");
+    params.openGlobalSettings("account");
     params.setMobileSettingsView("index");
   }, [
     params.closeDirectMessages,

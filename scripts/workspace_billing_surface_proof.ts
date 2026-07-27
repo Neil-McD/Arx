@@ -61,7 +61,7 @@ assert.match(
 );
 assert.match(
   accountCommerceSource,
-  /POLYNET_PREMIUM_DESCRIPTION =[\s\S]*Grants access to Codex and future premium runtimes, web research, hosted workspace tools, premium tool usage, and a second community\./,
+  /POLYNET_PREMIUM_DESCRIPTION =[\s\S]*Grants access to Codex and future premium runtimes, web research, premium tool usage, and a second community\./,
   "shared account commerce must describe Premium as access, not as an included-dollar usage allowance",
 );
 assert.doesNotMatch(

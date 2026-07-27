@@ -32,15 +32,12 @@ type UseWebMemoryMutationControllerArgs<SessionT> = {
   loadPersonalMemoryItems: () => Promise<void>;
 
   newPersonalMemoryContent: string;
-  newPersonalMemoryScope: "global" | "workspace";
-  newPersonalMemoryPinned: boolean;
 
   setIsLoadingUserMemorySettings: Dispatch<SetStateAction<boolean>>;
   setUserMemorySettings: Dispatch<SetStateAction<UserMemorySettings>>;
 
   setPersonalMemoryError: Dispatch<SetStateAction<string | null>>;
   setNewPersonalMemoryContent: Dispatch<SetStateAction<string>>;
-  setNewPersonalMemoryPinned: Dispatch<SetStateAction<boolean>>;
 };
 
 export function useWebMemoryMutationController<SessionT>(
@@ -75,26 +72,6 @@ export function useWebMemoryMutationController<SessionT>(
     }
   }, []);
 
-  const createPersonalMemoryItemDirect = useCallback(
-    async (params: { content: string; pinned: boolean }): Promise<PersonalMemoryItem | null> => {
-      const current = argsRef.current;
-      const content = params.content.trim();
-      if (!content) return null;
-      const session = await resolveCurrentSession(current.getSession, current.ensureSession);
-      if (!session) return null;
-      const rows = (await createCloudPersonalMemoryItem({
-        session,
-        content,
-        scope: "global",
-        scopeId: null,
-        pinned: Boolean(params.pinned),
-        returnRepresentation: true,
-      })) as PersonalMemoryItem[] | null;
-      return rows?.[0] ?? null;
-    },
-    [],
-  );
-
   const handleCreatePersonalMemoryItem = useCallback(async (): Promise<void> => {
     const current = argsRef.current;
     const content = current.newPersonalMemoryContent.trim();
@@ -109,12 +86,11 @@ export function useWebMemoryMutationController<SessionT>(
       await createCloudPersonalMemoryItem({
         session,
         content,
-        scope: current.newPersonalMemoryScope,
+        scope: "global",
         scopeId: null,
-        pinned: Boolean(current.newPersonalMemoryPinned),
+        pinned: false,
       });
       current.setNewPersonalMemoryContent("");
-      current.setNewPersonalMemoryPinned(false);
       await current.loadPersonalMemoryItems();
     } catch (error) {
       const message =
@@ -168,7 +144,6 @@ export function useWebMemoryMutationController<SessionT>(
 
   return {
     saveUserMemorySettings,
-    createPersonalMemoryItemDirect,
     handleCreatePersonalMemoryItem,
     handleTogglePersonalMemoryPinned,
     handleDeletePersonalMemoryItem,

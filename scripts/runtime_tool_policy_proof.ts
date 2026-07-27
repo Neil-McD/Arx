@@ -410,7 +410,7 @@ async function proveApprovalBlocksAreRemovedFromRuntimeHarness() {
   const personalMountSource = await readRepoFile("convex/userPlatformAppMounts.ts");
   const promptSource = await readRepoFile("convex/runtimeHarnessShaping.ts");
   const integrationSettingsSource = await readRepoFile(
-    "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+    "apps/web/src/components/WebCommunitySettingsSection.tsx",
   );
   const runtimeSources = [
     runtimeAgentLoopSource,

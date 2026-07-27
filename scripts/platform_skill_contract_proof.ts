@@ -147,9 +147,7 @@ function main() {
   const skillsEditor = readText(
     "apps/web/src/components/WebCommunityAiAgentSkillsEditor.tsx",
   );
-  const settingsSection = readText(
-    "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
-  );
+  const settingsPanels = readText("apps/web/src/components/WebSettingsPanels.tsx");
   const app = readText("apps/web/src/App.tsx");
 
   assertIncludes(
@@ -368,25 +366,9 @@ function main() {
     "Locked",
     "community skills editor locked platform state",
   );
-  assertIncludes(
-    settingsSection,
-    "Platform default",
-    "settings effective skills platform scope label",
-  );
-  assertIncludes(
-    settingsSection,
-    "Available by default",
-    "settings effective skills platform invocation label",
-  );
-  assertIncludes(
-    settingsSection,
-    "effectiveSkill.can_edit",
-    "settings effective skills must hide user edit controls for locked platform skills",
-  );
-  assert.match(
-    app,
-    /activeCommunityId && canManageResourcesActiveCommunity[\s\S]*\? COMMUNITY_MANAGER_PLATFORM_SKILLS/,
-    "settings platform skill fallback should use resource-builder authority",
+  assert.ok(
+    !/effectiveSkill|Platform default/.test(settingsPanels),
+    "global settings must not expose the retained platform-skill substrate",
   );
   assert.match(
     app,

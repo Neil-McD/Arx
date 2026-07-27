@@ -9,7 +9,6 @@ import {
 } from "../../../../shared/communityOnboarding";
 import { buildCommunityOnboardingCopy } from "../../../../shared/communityOnboardingCopy";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
-import { POLYNET_MCP_TOOL_COUNT_LABEL } from "../../../../shared/polynetMcpSetup";
 import {
   fetchCloudCommunityOnboardingConfig,
   saveCloudCommunityOnboardingConfig,
@@ -304,7 +303,7 @@ export const WebCommunityOnboardingWorkflowSection = memo(function WebCommunityO
                                   <span>
                                     Access your authorized Polynet communities from compatible AI harnesses.
                                   </span>
-                                  <small>{POLYNET_MCP_TOOL_COUNT_LABEL} · OAuth protected</small>
+                                  <small>Community-scoped · OAuth protected</small>
                                 </div>
                               </div>
                               <button

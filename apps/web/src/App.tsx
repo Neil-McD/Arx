@@ -64,13 +64,7 @@ import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCom
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
 import { useWebEffectiveMcpAppsController } from "./controllers/useWebEffectiveMcpAppsController";
-import { useWebEffectiveSkillsController } from "./controllers/useWebEffectiveSkillsController";
 import { useWebUserPlatformAppMountsController } from "./controllers/useWebUserPlatformAppMountsController";
-import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlatformSkillsController";
-import {
-  removePersonalMountFromEffectiveMcpApps,
-} from "../../../shared/effectiveMcpApps";
-import { buildEffectiveSkills } from "../../../shared/effectiveSkills";
 import { COMMUNITY_MANAGER_PLATFORM_SKILLS } from "../../../shared/platformSkills";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { updateSentryUiContext } from "./instrument";
@@ -1691,7 +1685,6 @@ export default function App() {
   const [isFreeAccountInfoOpen, setIsFreeAccountInfoOpen] = useState(false);
   const [stripeConnectReturn, setStripeConnectReturn] = useState<StripeConnectReturn | null>(null);
 
-  const newPersonalMemoryScope: "global" = "global";
   const personalMemoryUi = useWebPersonalMemoryUiController();
   const [isLoadingCommunities, setIsLoadingCommunities] = useState<boolean>(() => Boolean(session));
   const [hasResolvedCommunities, setHasResolvedCommunities] = useState(false);
@@ -2890,33 +2883,24 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
   });
   const {
-    userPlatformAppMounts,
-    isLoadingUserPlatformAppMounts,
-    userPlatformAppMountError,
     isConnectingUserPlatformApp,
-    userPlatformAppMutationError,
-    updatingUserPlatformAppMountId,
     refreshingUserPlatformAppMountId,
     reconnectingUserPlatformAppMountId,
-    removingUserPlatformAppMountId,
     userPlatformAppMountsLoadedUserIdRef,
     clearUserPlatformAppMounts,
     loadUserPlatformAppMounts,
     connectUserPlatformApp,
     beginUserPlatformAppOAuth,
     finalizeUserPlatformAppOAuth,
-    updateUserPlatformAppMount,
     refreshUserPlatformApp,
     setupImportedCommunityMcpUserHarness,
     reconnectUserPlatformApp,
-    unmountUserPlatformApp,
   } = useWebUserPlatformAppMountsController<AuthSession>({
     session,
     ensureSession: ensureUsableAuthSession,
   });
   const {
     effectiveMcpApps,
-    setEffectiveMcpApps,
     isLoadingEffectiveMcpApps,
     effectiveMcpAppsError,
     effectiveMcpAppsLoadedKeyRef,
@@ -2924,37 +2908,6 @@ export default function App() {
     loadEffectiveMcpApps,
   } = useWebEffectiveMcpAppsController<AuthSession>({
     activeCommunityId,
-    session,
-    ensureSession: ensureUsableAuthSession,
-  });
-  const {
-    effectiveSkills,
-    isLoadingEffectiveSkills,
-    effectiveSkillsError,
-    effectiveSkillsLoadedKeyRef,
-    clearEffectiveSkills,
-    loadEffectiveSkills,
-  } = useWebEffectiveSkillsController<AuthSession>({
-    activeCommunityId,
-    session,
-    ensureSession: ensureUsableAuthSession,
-  });
-  const {
-    userPlatformSkills,
-    isLoadingUserPlatformSkills,
-    userPlatformSkillError,
-    isCreatingUserPlatformSkill,
-    userPlatformSkillMutationError,
-    updatingUserPlatformSkillInstallId,
-    removingUserPlatformSkillInstallId,
-    userPlatformSkillsLoadedUserIdRef,
-    clearUserPlatformSkills,
-    loadUserPlatformSkills,
-    createUserPlatformSkill,
-    saveUserPlatformSkill,
-    updateUserPlatformSkill,
-    deleteUserPlatformSkill,
-  } = useWebUserPlatformSkillsController<AuthSession>({
     session,
     ensureSession: ensureUsableAuthSession,
   });
@@ -3948,7 +3901,7 @@ export default function App() {
       applyAppRouteState({
         page: "community",
         view: "home",
-        settingsPage: "agent",
+        settingsPage: "account",
         communitySlug: resolvedSlug || null,
         communityTab: "chat",
       });
@@ -4150,20 +4103,6 @@ export default function App() {
     session,
   ]);
 
-  const reloadEffectiveSkills = useCallback(async () => {
-    if (!session) {
-      clearEffectiveSkills();
-      return;
-    }
-    effectiveSkillsLoadedKeyRef.current = null;
-    await loadEffectiveSkills(session);
-  }, [
-    clearEffectiveSkills,
-    effectiveSkillsLoadedKeyRef,
-    loadEffectiveSkills,
-    session,
-  ]);
-
   const handleConnectUserPlatformApp = useCallback(
     async (input: {
       catalog_app_id?: string;
@@ -4206,21 +4145,6 @@ export default function App() {
     [activeCommunityId, beginUserPlatformAppOAuth],
   );
 
-  const handleUpdateUserPlatformAppMount = useCallback(
-    async (
-      userPlatformAppMountId: string,
-      patch: {
-        enabled?: boolean;
-        enabledTools?: string[];
-      },
-    ) => {
-      const ok = await updateUserPlatformAppMount(userPlatformAppMountId, patch);
-      if (ok) void reloadEffectiveMcpApps();
-      return ok;
-    },
-    [reloadEffectiveMcpApps, updateUserPlatformAppMount],
-  );
-
   const handleRefreshUserPlatformApp = useCallback(
     async (userPlatformAppMountId: string) => {
       const ok = await refreshUserPlatformApp(userPlatformAppMountId);
@@ -4237,20 +4161,6 @@ export default function App() {
       return ok;
     },
     [reconnectUserPlatformApp, reloadEffectiveMcpApps],
-  );
-
-  const handleUnmountUserPlatformApp = useCallback(
-    async (userPlatformAppMountId: string) => {
-      const ok = await unmountUserPlatformApp(userPlatformAppMountId);
-      if (ok) {
-        setEffectiveMcpApps((prev) =>
-          removePersonalMountFromEffectiveMcpApps(prev, userPlatformAppMountId),
-        );
-        void reloadEffectiveMcpApps();
-      }
-      return ok;
-    },
-    [reloadEffectiveMcpApps, setEffectiveMcpApps, unmountUserPlatformApp],
   );
 
   const handleUpdateCommunityAppMount = useCallback(
@@ -4330,64 +4240,16 @@ export default function App() {
 
   const handleCreateCommunitySkill = useCallback(
     async (input: CreateSkillPackageInput) => {
-      const ok = await createPersonalSkillAndAttach(input);
-      if (ok) void reloadEffectiveSkills();
-      return ok;
+      return await createPersonalSkillAndAttach(input);
     },
-    [createPersonalSkillAndAttach, reloadEffectiveSkills],
-  );
-
-  const handleCreateUserPlatformSkill = useCallback(
-    async (input: CreateSkillPackageInput) => {
-      const ok = await createUserPlatformSkill(input);
-      if (ok) void reloadEffectiveSkills();
-      return ok;
-    },
-    [createUserPlatformSkill, reloadEffectiveSkills],
-  );
-
-  const handleUpdateUserPlatformSkill = useCallback(
-    async (
-      userPlatformSkillInstallId: string,
-      patch: {
-        enabled?: boolean;
-      },
-    ) => {
-      const ok = await updateUserPlatformSkill(userPlatformSkillInstallId, patch);
-      if (ok) void reloadEffectiveSkills();
-      return ok;
-    },
-    [reloadEffectiveSkills, updateUserPlatformSkill],
-  );
-
-  const handleSaveUserPlatformSkill = useCallback(
-    async (
-      userPlatformSkillInstallId: string,
-      input: CreateSkillPackageInput,
-    ) => {
-      const ok = await saveUserPlatformSkill(userPlatformSkillInstallId, input);
-      if (ok) void reloadEffectiveSkills();
-      return ok;
-    },
-    [reloadEffectiveSkills, saveUserPlatformSkill],
-  );
-
-  const handleDeleteUserPlatformSkill = useCallback(
-    async (userPlatformSkillInstallId: string) => {
-      const ok = await deleteUserPlatformSkill(userPlatformSkillInstallId);
-      if (ok) void reloadEffectiveSkills();
-      return ok;
-    },
-    [deleteUserPlatformSkill, reloadEffectiveSkills],
+    [createPersonalSkillAndAttach],
   );
 
   const handleAttachSkillPackageToCommunity = useCallback(
     async (skillPackageId: string) => {
-      const ok = await attachSkillPackageToCommunity(skillPackageId);
-      if (ok) void reloadEffectiveSkills();
-      return ok;
+      return await attachSkillPackageToCommunity(skillPackageId);
     },
-    [attachSkillPackageToCommunity, reloadEffectiveSkills],
+    [attachSkillPackageToCommunity],
   );
 
   const handleUpdateCommunitySkillAttachment = useCallback(
@@ -4397,48 +4259,20 @@ export default function App() {
         enabled?: boolean;
       },
     ) => {
-      const ok = await updateCommunitySkillAttachment(
+      return await updateCommunitySkillAttachment(
         communitySkillAttachmentId,
         patch,
       );
-      if (ok) void reloadEffectiveSkills();
-      return ok;
     },
-    [reloadEffectiveSkills, updateCommunitySkillAttachment],
+    [updateCommunitySkillAttachment],
   );
 
   const handleDetachCommunitySkill = useCallback(
     async (communitySkillAttachmentId: string) => {
-      const ok = await detachCommunitySkill(communitySkillAttachmentId);
-      if (ok) void reloadEffectiveSkills();
-      return ok;
+      return await detachCommunitySkill(communitySkillAttachmentId);
     },
-    [detachCommunitySkill, reloadEffectiveSkills],
+    [detachCommunitySkill],
   );
-
-  const effectiveSkillsForSettings = useMemo(() => {
-    if (!effectiveSkillsError) return effectiveSkills;
-    return buildEffectiveSkills({
-      platformSkills:
-        activeCommunityId && canManageResourcesActiveCommunity
-          ? COMMUNITY_MANAGER_PLATFORM_SKILLS
-          : [],
-      personalSkills: userPlatformSkills,
-      communitySkills: communitySkillAttachments,
-    });
-  }, [
-    activeCommunityId,
-    canManageResourcesActiveCommunity,
-    communitySkillAttachments,
-    effectiveSkills,
-    effectiveSkillsError,
-    userPlatformSkills,
-  ]);
-
-  const effectiveSkillsErrorForSettings =
-    effectiveSkillsError && effectiveSkillsForSettings.length === 0
-      ? effectiveSkillsError
-      : null;
 
   const {
     loadCommunityFunnelConfig,
@@ -4661,7 +4495,6 @@ export default function App() {
 
   const {
     saveUserMemorySettings,
-    createPersonalMemoryItemDirect,
     handleCreatePersonalMemoryItem,
     handleTogglePersonalMemoryPinned,
     handleDeletePersonalMemoryItem,
@@ -4671,13 +4504,10 @@ export default function App() {
     requireSignIn,
     loadPersonalMemoryItems,
     newPersonalMemoryContent: personalMemoryUi.newPersonalMemoryContent,
-    newPersonalMemoryScope,
-    newPersonalMemoryPinned: personalMemoryUi.newPersonalMemoryPinned,
     setIsLoadingUserMemorySettings,
     setUserMemorySettings,
     setPersonalMemoryError: personalMemoryUi.setPersonalMemoryError,
     setNewPersonalMemoryContent: personalMemoryUi.setNewPersonalMemoryContent,
-    setNewPersonalMemoryPinned: personalMemoryUi.setNewPersonalMemoryPinned,
   });
   const saveUserMemorySettingsAndRefreshSetup = useCallback(async (next: UserMemorySettings): Promise<AccountSetupStatus | null> => {
     await saveUserMemorySettings(next);
@@ -4711,60 +4541,6 @@ export default function App() {
     lastShownAuthErrorRef.current = authError;
     showAppToastMessage(authError);
   }, [authError, showAppToastMessage]);
-
-  const handleImportExternalMemory = useCallback(async (): Promise<void> => {
-    if (!session) {
-      requireSignIn();
-      return;
-    }
-
-    const importItems = personalMemoryUi.memoryImportPlan.uniqueItems;
-    if (importItems.length === 0) {
-      personalMemoryUi.setMemoryImportError(
-        personalMemoryUi.memoryImportPlan.parsedItems.length === 0
-          ? "No memory entries found. Paste the provider export, ideally including the code block."
-          : "Everything in this import is already in your personal memory.",
-      );
-      return;
-    }
-
-    personalMemoryUi.setMemoryImportError(null);
-    personalMemoryUi.setIsImportingMemory(true);
-    try {
-      let importedCount = 0;
-      for (const item of importItems) {
-        const created = await createPersonalMemoryItemDirect({
-          content: item.memoryContent,
-          pinned: false,
-        });
-        if (created) importedCount += 1;
-      }
-      await loadPersonalMemoryItems();
-      personalMemoryUi.resetMemoryImportModal();
-      const duplicateCount = personalMemoryUi.memoryImportPlan.duplicateCount;
-      const importedLabel = `${importedCount} memory item${importedCount === 1 ? "" : "s"}`;
-      const duplicateLabel =
-        duplicateCount > 0 ? ` · skipped ${duplicateCount} duplicate${duplicateCount === 1 ? "" : "s"}` : "";
-      showAppToastMessage(`Imported ${importedLabel}${duplicateLabel}`);
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-          ? error.message
-          : "Failed to import memory.";
-      personalMemoryUi.setMemoryImportError(message);
-    } finally {
-      personalMemoryUi.setIsImportingMemory(false);
-    }
-  }, [
-    session,
-    createPersonalMemoryItemDirect,
-    loadPersonalMemoryItems,
-    requireSignIn,
-    personalMemoryUi,
-    showAppToastMessage,
-  ]);
 
   useEffect(() => {
     activeCommunityIdRef.current = activeCommunityId;
@@ -5202,7 +4978,7 @@ export default function App() {
   }, [session, loadSelfProfile, loadUserProfiles, visibleCommunityProfileIds]);
 
   useEffect(() => {
-    if (activeView !== "settings" || settingsGroup !== "agent") return;
+    if (activeView !== "settings" || settingsGroup !== "account") return;
     const q = personalMemoryUi.personalMemoryQuery.trim();
     const handle = window.setTimeout(() => {
       void searchPersonalMemoryItems(q);
@@ -5479,9 +5255,7 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    const shouldLoadUserPlatformApps =
-      activePage === "discover" ||
-      (activePage === "settings" && settingsPage === "integrations");
+    const shouldLoadUserPlatformApps = activePage === "discover";
     if (!shouldLoadUserPlatformApps) return;
     if (!session) {
       clearUserPlatformAppMounts();
@@ -5492,7 +5266,6 @@ export default function App() {
   }, [
     activePage,
     session,
-    settingsPage,
     clearUserPlatformAppMounts,
     loadUserPlatformAppMounts,
     userPlatformAppMountsLoadedUserIdRef,
@@ -5502,8 +5275,7 @@ export default function App() {
     const shouldLoadEffectiveMcpApps =
       activePage === "discover" ||
       (activePage === "community" && communityTab === "settings") ||
-      (activePage === "community" && communityTab === "ai_agent") ||
-      (activePage === "settings" && settingsPage === "integrations");
+      (activePage === "community" && communityTab === "ai_agent");
     if (!shouldLoadEffectiveMcpApps) return;
     if (!session) {
       clearEffectiveMcpApps();
@@ -5517,59 +5289,15 @@ export default function App() {
     activePage,
     communityTab,
     session,
-    settingsPage,
     clearEffectiveMcpApps,
     effectiveMcpAppsLoadedKeyRef,
     loadEffectiveMcpApps,
   ]);
 
   useEffect(() => {
-    const shouldLoadEffectiveSkills =
-      activePage === "settings" &&
-      settingsPage === "integrations";
-    if (!shouldLoadEffectiveSkills) return;
-    if (!session) {
-      clearEffectiveSkills();
-      return;
-    }
-    const loadedKey = `${session.user.id}:${activeCommunityId ?? "personal"}`;
-    if (effectiveSkillsLoadedKeyRef.current === loadedKey) return;
-    void loadEffectiveSkills(session);
-  }, [
-    activeCommunityId,
-    activePage,
-    session,
-    settingsPage,
-    clearEffectiveSkills,
-    effectiveSkillsLoadedKeyRef,
-    loadEffectiveSkills,
-  ]);
-
-  useEffect(() => {
-    const shouldLoadUserPlatformSkills =
-      activePage === "discover" ||
-      (activePage === "settings" && settingsPage === "integrations");
-    if (!shouldLoadUserPlatformSkills) return;
-    if (!session) {
-      clearUserPlatformSkills();
-      return;
-    }
-    if (userPlatformSkillsLoadedUserIdRef.current === session.user.id) return;
-    void loadUserPlatformSkills(session);
-  }, [
-    activePage,
-    session,
-    settingsPage,
-    clearUserPlatformSkills,
-    loadUserPlatformSkills,
-    userPlatformSkillsLoadedUserIdRef,
-  ]);
-
-  useEffect(() => {
     const shouldLoadCommunitySkills =
       (activePage === "community" && communityTab === "ai_agent") ||
-      activePage === "discover" ||
-      (activePage === "settings" && settingsPage === "integrations");
+      activePage === "discover";
     if (!shouldLoadCommunitySkills) return;
     if (!session || !activeCommunityId || !canManageMembersActiveCommunity) {
       clearCommunitySkillAttachments();
@@ -8423,43 +8151,6 @@ export default function App() {
       startPremiumSubscriptionCheckout,
       billingUi,
     },
-    integrations: {
-      session: session,
-      requireSignIn,
-      effectiveMcpApps,
-      isLoadingEffectiveMcpApps,
-      effectiveMcpAppsError,
-      effectiveSkills: effectiveSkillsForSettings,
-      isLoadingEffectiveSkills,
-      effectiveSkillsError: effectiveSkillsErrorForSettings,
-      isLoadingUserPlatformAppMounts,
-      userPlatformAppMountError,
-      userPlatformAppMutationError,
-      isConnectingUserPlatformApp,
-      updatingUserPlatformAppMountId,
-      refreshingUserPlatformAppMountId,
-      refreshingCommunityAppMountId,
-      reconnectingUserPlatformAppMountId,
-      removingUserPlatformAppMountId,
-      userPlatformSkills,
-      isLoadingUserPlatformSkills,
-      userPlatformSkillError,
-      userPlatformSkillMutationError,
-      isCreatingUserPlatformSkill,
-      updatingUserPlatformSkillInstallId,
-      removingUserPlatformSkillInstallId,
-      onConnectUserPlatformApp: handleConnectUserPlatformApp,
-      onBeginUserPlatformAppOAuth: handleBeginUserPlatformAppOAuth,
-      onUpdateUserPlatformAppMount: handleUpdateUserPlatformAppMount,
-      onRefreshUserPlatformApp: handleRefreshUserPlatformApp,
-      onReconnectUserPlatformApp: handleReconnectUserPlatformApp,
-      onSetupImportedCommunityMcpApp: handleSetupImportedCommunityMcpApp,
-      onUnmountUserPlatformApp: handleUnmountUserPlatformApp,
-      onCreateUserPlatformSkill: handleCreateUserPlatformSkill,
-      onSaveUserPlatformSkill: handleSaveUserPlatformSkill,
-      onUpdateUserPlatformSkill: handleUpdateUserPlatformSkill,
-      onDeleteUserPlatformSkill: handleDeleteUserPlatformSkill,
-    },
     appearance: {
       appTheme,
       setAppTheme,
@@ -8574,8 +8265,6 @@ export default function App() {
     accountCommerceStatus,
     setAccountCommerceError,
     setIsFreeAccountInfoOpen,
-    personalMemoryUi,
-    handleImportExternalMemory,
     providerConnectionModalHostProps: providerConnectionUi.modalHostProps,
     onOpenPremiumBilling: openPremiumBilling,
     isFreeAccountInfoOpen,
@@ -9229,8 +8918,8 @@ export default function App() {
     getCommunityRailItemBindings,
     setIsFreeAccountInfoOpen,
     handleOpenGlobalSettings: isVisitorCommunitySurface
-      ? () => navigateTo(buildSettingsPath("agent"))
-      : () => openGlobalSettings("agent"),
+      ? () => navigateTo(buildSettingsPath("account"))
+      : () => openGlobalSettings("account"),
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,
     showOperatorConsole: hasOperatorAccess,

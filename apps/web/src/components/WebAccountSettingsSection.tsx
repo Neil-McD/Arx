@@ -384,8 +384,8 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                   <div className="auth-actions">
                     <span className="auth-status">
                       {isOverIncludedCommunityLimit
-                        ? "Existing communities stay active. Polynet Premium unlocks new community capacity, hosted workspace tools, web research, and premium runtimes."
-                        : "Polynet Premium unlocks hosted workspace tools, web research, and premium runtimes. Connect ChatGPT or add an OpenAI API key here to bring your own inference."}
+                        ? "Existing communities stay active. Polynet Premium unlocks new community capacity, web research, premium runtimes, and premium tool usage."
+                        : "Polynet Premium unlocks web research, premium runtimes, and premium tool usage. Connect ChatGPT or add an OpenAI API key here to bring your own inference."}
                     </span>
                   </div>
                 </div>

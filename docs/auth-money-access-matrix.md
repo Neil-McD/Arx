@@ -20,7 +20,7 @@ Scope: canonical web runtime, community monetization, provider-funded inference,
 3. `architect`
    - internal account-tier value for Polynet Premium
    - can own two communities
-   - unlocks Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage
+   - unlocks Codex and future premium runtimes, web research, and premium tool usage
 
 The product-facing model is Free plus Polynet Premium. The internal account-tier enum remains `free | architect`; `architect` is the Premium entitlement label.
 

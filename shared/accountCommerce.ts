@@ -11,7 +11,7 @@ export const POLYNET_PREMIUM_MONTHLY_PRICE_BASE_UNITS = 2000;
 export const POLYNET_PREMIUM_MONTHLY_PRICE_LABEL = "$20/mo";
 export const POLYNET_PREMIUM_INCLUDED_USAGE_LABEL = "Premium tool usage included";
 export const POLYNET_PREMIUM_DESCRIPTION =
-  "Grants access to Codex and future premium runtimes, web research, hosted workspace tools, premium tool usage, and a second community.";
+  "Grants access to Codex and future premium runtimes, web research, premium tool usage, and a second community.";
 
 export type StripeConnectReturnAction = "refresh" | "return";
 export type StripeConnectContext = "account" | "community";

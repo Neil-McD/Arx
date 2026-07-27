@@ -43,7 +43,7 @@ assert.equal(
   buildAppRoutePath({
     page: "operator",
     view: "home",
-    settingsPage: "agent",
+    settingsPage: "account",
     communitySlug: null,
     communityTab: "chat",
     operatorTab: "communities",

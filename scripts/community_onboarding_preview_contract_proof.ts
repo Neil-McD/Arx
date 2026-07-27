@@ -109,7 +109,7 @@ assert.match(agentGuide, /personal_agent_review/);
 assert.match(agentGuide, /showPrimary=\{props\.isComplete\}/);
 assert.doesNotMatch(conciergeSurface, /community concierge is thinking|isPreparing|allowActionsWhilePreparing/i);
 assert.match(mcpGuide, /POLYNET_MCP_SETUP_BUNDLE/);
-assert.match(mcpGuide, /POLYNET_MCP_TOOL_COUNT_LABEL/);
+assert.match(mcpGuide, /Community-scoped · OAuth protected/);
 assert.match(mcpGuide, /Step 4 of 4/);
 assert.match(mcpGuide, /WebCommunityOnboardingConciergeSurface/);
 assert.doesNotMatch(mcpGuide, /props\.narration|isPreparing/);

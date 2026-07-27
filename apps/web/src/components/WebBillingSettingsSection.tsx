@@ -26,7 +26,6 @@ const BILLING_PLAN_FEATURES: {
   { label: "Polynet runtime", free: true, premium: true },
   { label: "Codex + future premium runtimes", free: false, premium: true },
   { label: "Premium tool usage", free: false, premium: "Included" },
-  { label: "Hosted workspace tools", free: false, premium: true },
 ];
 
 function splitPriceLabel(label: string): { amount: string; period: string } {

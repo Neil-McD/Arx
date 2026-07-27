@@ -47,20 +47,13 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     ),
   },
   {
-    id: "agent",
-    page: "agent",
+    id: "mcp",
+    page: "mcp",
     icon: (
-      <span className="nav-icon nav-icon-emphasis nav-icon-agent">
+      <span className="nav-icon nav-icon-emphasis">
         <svg viewBox="0 0 24 24">
-          <circle cx="6" cy="7" r="2" />
-          <circle cx="6" cy="17" r="2" />
-          <circle cx="12" cy="12" r="2" />
-          <circle cx="18" cy="7" r="2" />
-          <circle cx="18" cy="17" r="2" />
-          <path d="M7.5 8.3L10.5 10.7" />
-          <path d="M7.5 15.7L10.5 13.3" />
-          <path d="M13.5 10.7L16.5 8.3" />
-          <path d="M13.5 13.3L16.5 15.7" />
+          <rect x="7" y="7" width="10" height="10" rx="2" />
+          <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
         </svg>
       </span>
     ),
@@ -82,20 +75,6 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     icon: (
       <span className="nav-icon nav-icon-emphasis">
         <Handshake />
-      </span>
-    ),
-  },
-  {
-    id: "integrations",
-    page: "integrations",
-    icon: (
-      <span className="nav-icon nav-icon-emphasis">
-        <svg viewBox="0 0 24 24">
-          <rect x="4" y="4" width="6" height="6" rx="1.5" />
-          <rect x="14" y="4" width="6" height="6" rx="1.5" />
-          <rect x="4" y="14" width="6" height="6" rx="1.5" />
-          <rect x="14" y="14" width="6" height="6" rx="1.5" />
-        </svg>
       </span>
     ),
   },

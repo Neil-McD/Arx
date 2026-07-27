@@ -146,7 +146,7 @@ function proveSettingsRowPreservesCommunityAttachmentContract() {
   );
   const settingsSource = readFileSync(
     new URL(
-      "../apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+      "../apps/web/src/components/WebSettingsPanels.tsx",
       import.meta.url,
     ),
     "utf8",
@@ -174,28 +174,13 @@ function proveSettingsRowPreservesCommunityAttachmentContract() {
     /!effectiveApp\?\.live_for_current_user/,
     "community settings actions must hide setup once the selected user's effective MCP is live",
   );
-  assert.match(
+  assert.doesNotMatch(
     settingsSource,
-    /const communityScopeLabel = row\.communityMount[\s\S]*Personal \+ community/,
-    "settings rows must label merged personal and selected-community MCPs",
-  );
-  assert.match(
-    settingsSource,
-    /canSetupImportedCommunity/,
-    "personal integration settings must allow setup for imported selected-community MCPs",
-  );
-  assert.match(
-    settingsSource,
-    /onSetupImportedCommunityMcpApp/,
-    "personal integration settings must route imported community MCP setup to the canonical setup action",
-  );
-  assert.match(
-    settingsSource,
-    /attached to selected community/,
-    "connected app summary must report selected-community MCP attachments",
+    /effectiveApp|canSetupImportedCommunity|onSetupImportedCommunityMcpApp/,
+    "global settings must not expose connected-app state or community MCP setup",
   );
 
-  console.log("PASS: settings row preserves imported community MCP attachment");
+  console.log("PASS: effective MCP attachment remains canonical without a duplicate global settings surface");
 }
 
 function proveCommunityAttachmentRequiresMemberSetupWithoutPersonalMount() {

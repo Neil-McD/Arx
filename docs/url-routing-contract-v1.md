@@ -25,8 +25,10 @@ Current canonical/pathname routes include:
 - `/discover`
 - `/settings/profile`
 - `/settings/account`
-- `/settings/agent`
+- `/settings/billing`
+- `/settings/mcp`
 - `/settings/appearance`
+- `/settings/partners`
 - `/c/:slug`
 - `/c/:slug/chat`
 - `/c/:slug/ai-feed`
@@ -53,10 +55,16 @@ These are top-level application destinations:
 - `/discover`
 - `/settings/profile`
 - `/settings/account`
-- `/settings/agent`
+- `/settings/billing`
+- `/settings/mcp`
 - `/settings/appearance`
+- `/settings/partners`
 
 These should represent actual page identity.
+
+Legacy `/settings/agent` links resolve to Account. Legacy
+`/settings/integrations` links resolve to Polynet MCP. Neither is a canonical
+navigation destination.
 
 ## Public Entity Routes
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   buildAppRoutePath,
   readAppRouteFromLocation,
@@ -36,11 +36,26 @@ assert.equal(
   buildAppRoutePath({
     page: "settings",
     view: "home",
-    settingsPage: "integrations",
+    settingsPage: "mcp",
     communitySlug: null,
     communityTab: "chat",
   }),
-  "/settings/integrations",
+  "/settings/mcp",
+);
+
+(globalThis.window as { location: { pathname: string; search: string } }).location.pathname =
+  "/settings/agent";
+assert.equal(
+  readAppRouteFromLocation().settingsPage,
+  "account",
+  "legacy Agent links must resolve to the retained Account destination",
+);
+(globalThis.window as { location: { pathname: string; search: string } }).location.pathname =
+  "/settings/integrations";
+assert.equal(
+  readAppRouteFromLocation().settingsPage,
+  "mcp",
+  "legacy Integrations links must resolve to the focused Polynet MCP destination",
 );
 
 if (originalWindow === undefined) {
@@ -84,6 +99,9 @@ const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx");
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
 const globalOverlays = read("apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts");
+const settingsNav = read("shared/SettingsNavList.tsx");
+const settingsPanels = read("apps/web/src/components/WebSettingsPanels.tsx");
+const mcpSettings = read("apps/web/src/components/WebPolynetMcpSettingsSection.tsx");
 
 assert.match(navigation, /\| "settings"/);
 assert.match(
@@ -100,11 +118,41 @@ assert.match(
   app,
   /const openGlobalSettings = \(page: SettingsPage\)[\s\S]*activePage === "settings" && settingsPage === page[\s\S]*pushNavSnapshot\(\)[\s\S]*navigateTo\(buildSettingsPath\(page\)\)/,
 );
-assert.match(app, /activePage === "settings" && settingsPage === "integrations"/);
+assert.doesNotMatch(app, /activePage === "settings" && settingsPage === "integrations"/);
 assert.doesNotMatch(app, /setActiveView\("settings"\)/);
 assert.doesNotMatch(transitions, /ToggleWorkspaceSettings|deriveToggleWorkspaceSettingsTransition/);
-assert.match(mobileController, /params\.openGlobalSettings\("agent"\)/);
+assert.match(mobileController, /params\.openGlobalSettings\("account"\)/);
 assert.doesNotMatch(mobileController, /setActivePage\("workspace"\)/);
+for (const destination of [
+  '"profile"',
+  '"account"',
+  '"billing"',
+  '"mcp"',
+  '"appearance"',
+  '"partners"',
+]) {
+  assert.match(settingsNav, new RegExp(destination));
+}
+assert.doesNotMatch(settingsNav, /id: "agent"|id: "integrations"/);
+assert.match(settingsPanels, /settingsGroup === "account"[\s\S]*WebPersonalAgentSettingsSection[\s\S]*WebPersonalMemorySettingsSection[\s\S]*WebAccountDataExportSection/);
+assert.match(settingsPanels, /settingsGroup === "mcp"[\s\S]*WebPolynetMcpSettingsSection/);
+assert.match(mcpSettings, /OAuth protected · Community-scoped/);
+assert.match(mcpSettings, /POLYNET_MCP_SETUP_BUNDLE/);
+assert.equal(
+  existsSync("apps/web/src/components/WebAgentSettingsSection.tsx"),
+  false,
+  "the duplicate global Agent page must stay deleted",
+);
+assert.equal(
+  existsSync("apps/web/src/components/WebIntegrationsSettingsSection.tsx"),
+  false,
+  "the duplicate global Integrations page must stay deleted",
+);
+assert.equal(
+  existsSync("apps/web/src/components/WebMemoryImportModal.tsx"),
+  false,
+  "the external memory importer must stay deleted",
+);
 assert.match(
   globalOverlays,
   /onOpenBilling: params\.onOpenPremiumBilling/,

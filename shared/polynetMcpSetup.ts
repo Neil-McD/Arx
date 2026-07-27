@@ -1,5 +1,4 @@
 export const POLYNET_MCP_ENDPOINT_URL = "https://www.polynet.ai/runtime/mcp";
-export const POLYNET_MCP_TOOL_COUNT_LABEL = "17 workspace + 2 profile tools";
 
 export const POLYNET_MCP_CLAUDE_CODE_ADD_COMMAND =
   `claude mcp add --transport http polynet ${POLYNET_MCP_ENDPOINT_URL}`;
@@ -42,7 +41,7 @@ export const POLYNET_MCP_SETUP_BUNDLE = [
   "You are helping the user connect this AI harness to Polynet.",
   "",
   "Goal:",
-  "Connect Polynet so this harness can access the user's Polynet communities, resources, and workspace memory.",
+  "Connect Polynet so this harness can access the user's authorized Polynet communities, resources, and community context.",
   "",
   "Polynet MCP endpoint:",
   POLYNET_MCP_ENDPOINT_URL,
@@ -188,7 +187,7 @@ export const POLYNET_MCP_SETUP_BUNDLE = [
   "If successful, tell the user:",
   "",
   "```text",
-  "Polynet is connected. I can now use your Polynet communities, resources, and workspace memory. Would you like me to build or improve your Polynet profile now? I'll show you exactly what will be saved before writing anything.",
+  "Polynet is connected. I can now use your authorized Polynet communities, resources, and community context. Would you like me to build or improve your Polynet profile now? I'll show you exactly what will be saved before writing anything.",
   "```",
   "",
   "## Optional Profile Setup",
@@ -214,7 +213,7 @@ export const POLYNET_MCP_SETUP_BUNDLE = [
   "",
   "Use Polynet when the user asks about:",
   "- Polynet communities",
-  "- workspace memory",
+  "- community context",
   "- accepted community context",
   "- resources",
   "- prior decisions",
