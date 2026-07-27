@@ -1544,3 +1544,44 @@ remains `IN_PROGRESS`: residual Workspace-exclusive CSS requires a separate
 owner audit, repository docs/configuration still need final alignment, and the
 three protected dormant viewers remain an explicit human mount-or-delete
 decision.
+
+### C7.1H current receipt — deleted-host stylesheet residue
+
+The eighth C7 slice removes presentation whose only renderer was deleted in
+C7.1A-G. The owner audit follows actual TSX emitters rather than Workspace
+wording: legacy message-list and empty-thread landing rules, the Workspace
+scroll control, runtime-engine picker, landing composer variants, inference and
+preview-auth modals, message-context-only memory rules, and Workspace-only
+attachment selector arms are gone from both web stylesheets. Shared community
+attachment/drop styling, generic mounted `.workspace` and `.workspace-body`
+layout, auth bootstrap composition, shared skeleton primitives, Billing error
+presentation, Resources, and member-agent presentation remain.
+
+The selector rewrite preserves negative-selector semantics. The live
+`.workspace:not(.scroll-to-bottom)` rule becomes `.workspace` rather than being
+deleted, and mounted mobile AskBar rules lose only their impossible legacy
+landing exclusions. Mixed attachment/drop rules lose only their Workspace arm.
+The stylesheets shrink by a net 1,180 lines: `base.css` falls from 32,252 to
+31,273 lines and `index.css` from 3,296 to 3,095.
+
+Proof authority is corrected with the deletion. The quarantine contract rejects
+every retired selector family, positively requires the live community
+attachment and main-surface rules, and locks the protected viewer style roots.
+The avatar contract follows the mounted mobile topbar rather than the retired
+trigger name and no longer preserves empty-thread avatar CSS. The mobile-root
+contract follows the current fail-closed mobile restoration guard without
+requiring the already-deleted projection feature flag.
+
+The focused quarantine, avatar, mobile navigation, community interaction,
+member-agent, UI-stability, runtime timeline, and Daytona preview-security
+proofs pass. CSS parsing, web typecheck, the production web build, bundle
+budget, `git diff --check`, and the 40-step foundation baseline also pass.
+
+This slice changes no TSX renderer, Convex function or schema, cloud record,
+runtime worker, provider lease, billing/entitlement authority, official MCP
+contract, community resource/memory owner, environment configuration, or
+production state. C7 remains `IN_PROGRESS`: pre-existing ownerless stylesheet
+clusters require a separate caller-led audit, repository docs/configuration
+still need final alignment, and `DaytonaRuntimeAppPreview.tsx`,
+`RuntimeComputerUseViewer.tsx`, and `WebBackgroundTerminalRail.tsx` remain an
+explicit protected mount-or-delete decision.

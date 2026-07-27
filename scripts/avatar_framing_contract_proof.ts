@@ -170,16 +170,6 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.web-empty-thread-avatar\s*\{[\s\S]*?border-radius:\s*24px;/,
-  "empty-thread community avatars must stay rounded-square",
-);
-assert.match(
-  baseCss,
-  /\.web-empty-thread-avatar-image\s*\{[\s\S]*?border-radius:\s*24px;/,
-  "empty-thread community avatar images must stay rounded-square",
-);
-assert.match(
-  baseCss,
   /\.create-community-avatar\s*\{[\s\S]*?border-radius:\s*22px;/,
   "community create/settings avatar control must stay rounded-square",
 );
@@ -250,12 +240,12 @@ assert.match(
 );
 assert.match(
   indexCss,
-  /\.mobile-community-trigger-avatar\s*\{[\s\S]*?position:\s*relative;/,
+  /\.mobile-topbar-community-avatar\s*\{[\s\S]*?position:\s*relative;/,
 );
 assert.match(
   indexCss,
-  /\.mobile-community-trigger-avatar,\s*\.mobile-community-trigger-initials\s*\{[\s\S]*?border-radius:\s*var\(--radius-sm\);/,
-  "mobile trigger community avatars must stay rounded-square",
+  /\.mobile-topbar-community-avatar,\s*\.mobile-topbar-community-initials\s*\{[\s\S]*?border-radius:\s*var\(--radius-sm\);/,
+  "mobile topbar community avatars must stay rounded-square",
 );
 assert.match(
   indexCss,

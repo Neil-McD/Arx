@@ -404,6 +404,32 @@ assert.doesNotMatch(
   /\.workspace-expanded-preview-shell\b|\.workspace-app-preview-copy\b|\.workspace-app-preview-button\.icon-only\b|\.workspace-app-preview-frame-stage\.fit-active\b|\.workspace-(?:body|composer-shell)\.preview-expanded\b|\.message-item(?:[\s.:{])|\.message-footer\b|\.message-meta\b|\.message-copy-btn\b|\.message-premium-upgrade|\.message-attachments-preview\b|\.streaming-caret\b|\.auth-error-(?:action|link)\b|\.thread-lane-switch\b|\.session-search\b|\.project-toolbar\b|\.project-group\b/,
   "web CSS must not retain selectors owned only by the deleted preview, thread-browser, and Workspace message presentation",
 );
+assert.doesNotMatch(
+  baseCss + webCss,
+  /\.message-list\b|\.web-empty-thread\b|\.scroll-to-bottom\b|\.ask-engine-|\.ask-(?:bar|input|footer|actions)-landing\b|\.success-toast\b|\.memory-toast\b|\.modal-auth-gate\b|\.auth-gate-google-button\b|\.memory-blocks\b|\.memory-block-group-title\b|\.memory-block-desc\b|\.workspace-billing-modal-copy\b|\.inference-issue-modal\b|\.workspace-attachment-drop-surface\b|\.workspace-drop-overlay\b/,
+  "web CSS must not retain presentation whose only renderer was deleted with the Workspace host or its zero-producer overlays",
+);
+assert.match(
+  baseCss,
+  /\.community-attachment-drop-surface\.drag-over[\s\S]*\.community-drop-overlay/,
+  "community attachment drag presentation must survive removal of the shared Workspace selector arms",
+);
+assert.match(
+  webCss,
+  /\.workspace\s*\{[\s\S]*padding:\s*0;/,
+  "the mounted main surface must retain the web Workspace layout rule after its obsolete scroll-button exclusion is removed",
+);
+for (const protectedDormantStyleRoot of [
+  ".runtime-computer-viewer",
+  ".workspace-rail-card",
+  ".background-terminal-rail-card",
+  ".workspace-app-preview-card",
+]) {
+  assert.ok(
+    baseCss.includes(protectedDormantStyleRoot),
+    `${protectedDormantStyleRoot} must remain styled until the protected viewer mount-or-delete decision`,
+  );
+}
 assert.match(
   settingsSurface,
   /WebSettingsPanels[\s\S]*SettingsNavList/,
