@@ -180,7 +180,7 @@ must remain distinct.
 | C5 | Collapse capability, transport, and public-function duplication | `SOURCE_IMPLEMENTED` | substantial cleanup landed; formal closure and current evidence reconciliation remain |
 | C6 | Land the read-only semantic community repository | `COMPLETE` | exact staging build `482d5d20` passed authenticated native and official-MCP list/read plus retired-name absence proof |
 | C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `COMPLETE` | exact staging build `3449fb98` passed source, CI, anonymous and signed-in acceptance; the two confirmed stale staging names are absent |
-| C8 | Decompose and optimize retained frontend/backend surfaces | `IN_PROGRESS` | C8.1 converges Global Settings, C8.2 extracts Personal Account orchestration, C8.3 converges account-setup surface projection, C8.4A and C8.4B establish explicit launcher boundaries, and C8.4C retires that duplicate frontend in favor of canonical creation and destination-owned configuration; further retained-surface decomposition remains separately bounded |
+| C8 | Decompose and optimize retained frontend/backend surfaces | `COMPLETE` | C8.1 converges Global Settings, C8.2 extracts Personal Account orchestration, C8.3 converges account-setup surface projection, C8.4A and C8.4B establish explicit launcher boundaries, C8.4C retires the duplicate frontend, and C8.4D retires its backend contract after moving Funnel About to a narrow canonical seam; any future retained-surface redesign is separately bounded |
 | C9 | Prove backup, restore, RPO/RTO, and operational recovery | `PLANNED` | isolated recovery drills and owned runbooks meet accepted targets |
 | C10 | Reconcile historical Builder Partner obligations | `PLANNED_LAST` | historical legal lineage, retention, and mixed-policy payout state reconcile without rewriting history |
 
@@ -2422,3 +2422,48 @@ resource/memory system belongs to this slice. Exact clean staging Convex
 deployment, Git-driven web deployment, full source gates, legacy-route
 normalization, canonical destination availability, and unchanged production
 markers remain required before C8.4D and C8 can be called complete.
+
+### C8.4D staging closure receipt
+
+The additive commit
+`e449014897501f37e57225ad3f53cce5279fae00` and subtractive commit
+`268a42ceab7a231b8855cfb99826a362508fa07c` both reached canonical staging
+through the guarded Convex-first, Git-driven sequence. After the additive
+Convex deployment and exact web build were live, signed-in acceptance changed
+Funnel About to a unique nonce, saved it, reloaded it from cloud state, restored
+the exact original value, and reloaded again. That proved the retained Funnel
+write had moved to `saveCommunityAbout` before the legacy contract was removed.
+
+After the subtractive Convex deployment, the staging function specification
+contained `community.js:saveCommunityAbout` and contained neither
+`community.js:saveCommunityLaunchProfile`,
+`community.js:getCommunityLaunchSetupStatus`, nor any
+`communityLaunchSetup.js:*` function. The Git-driven staging deployment then
+served the exact subtractive SHA as both `buildId` and `sentryRelease`.
+Signed-in browser acceptance on that build proved that:
+
+- the Funnel still rendered the restored About value and a disabled `Saved`
+  control;
+- the legacy launcher query URL normalized to canonical Community Settings,
+  removed both launcher parameters, and rendered no launcher UI; and
+- the acceptance session emitted no browser warnings or errors.
+
+The source candidate passed the focused Funnel and launcher-retirement proofs;
+Convex and web typechecks; production build; bundle budget; protected
+source-ingestion, resource-builder, and wiki-architect proofs; the complete
+41-step foundation baseline; all three staging guards; and `git diff --check`
+locally. GitHub runs `30306800429` (MVP Guards) and `30306799875` (Staging UI
+Canary) were created for the exact subtractive SHA, but every external-runner
+job failed before executing any steps. This remains an external CI availability
+exception, not a passing CI result or a source-test failure.
+
+The original About value is restored. No schema or data migration was required
+because launcher completion status was derived rather than stored. No
+production function, data, configuration, project, or `origin/main` ref was
+changed, and the production build marker remained
+`456ebb9cfb95defc316c046e57d17a001eea5025`.
+
+C8.4D is complete on canonical staging, so C8 is `COMPLETE`. The protected
+Resources/OAuth substrate remains intentionally intact. Its remaining
+launcher-shaped source vocabulary can be reconsidered only inside a separately
+authorized Resources redesign; it is not unfinished C8 work.
