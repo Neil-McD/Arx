@@ -8,7 +8,7 @@ The aggregate staging shape work in Step 0 is complete for identity/membership c
 
 ## Current implementation checkpoint
 
-**Current authority — 2026-07-26:** C3 is complete through canonical resource,
+**Current authority — 2026-07-27:** C3 is complete through canonical resource,
 interaction, attachment, evidence, retrieval, digest, and intelligence
 reconciliation. C2.3A preservation coverage and C2.3B1 derived-read revocation
 containment are complete on the isolated staging lane.
@@ -55,11 +55,26 @@ stable-ref reads failed closed, and the persisted native tool policy contained
 none of the three retired names. The detailed boundary and receipts live in
 [`16-read-only-semantic-community-repository-map-20260725.md`](16-read-only-semantic-community-repository-map-20260725.md).
 
-Production compatibility work is intentionally paused after PC3D. The active
-lane is staging cleanup only: do not resume PC3E, query production, integrate
-branches, or design a production port until the remaining staging cleanup has
-been closed and the user explicitly reopens reconciliation. No access freeze or
-destructive lifecycle executor is authorized.
+C7 is complete on canonical staging at exact accepted runtime build
+`3449fb98`. The standalone Workspace destination, duplicate frontend
+conversation/project authority, all three unmounted runtime viewers,
+owner-proved style cohorts, public Workspace product truth, tracked stale
+configuration, and the two confirmed stale deployed staging names are gone.
+The mounted personal-agent dock, community surfaces, backend execution and
+evidence, target lifecycle/accounting, generic proxy security, harness,
+project/thread, provider, billing, MCP, and resource/memory substrate remain
+protected. Exact runs `30272659669` and `30272659581` passed the 40-step
+baseline, three clean low-threshold audits, dependency compatibility
+interlock, web gates, and anonymous canary. Signed-in chat, Resources, and
+member-agent context also loaded without browser errors after the environment
+cleanup.
+
+Production compatibility work is intentionally paused after PC3D. The staging
+cleanup boundary is now closed: do not resume PC3E, query production, integrate
+branches, or design a production port until the user explicitly reopens
+reconciliation. The next milestone is C8 retained-surface decomposition
+planning from this clean staging base. No access freeze or destructive
+lifecycle executor is authorized.
 
 The accumulated paragraphs below preserve earlier slice context. Their
 C3.2A attachment observation, 38-step baseline count, and statement that C3
@@ -170,12 +185,12 @@ Exit proof: adapter parity is generated/tested and every operation reaches one a
 
 ## Step 8 — Delete deferred product surfaces and configuration drift
 
-1. **Destination decision complete in C0; C7.1A-H, C7.2A-B, C7.3A-C, C7.4A, and C7.4B1-B2 complete in current staging source:** the unmounted host, outbound browser destination, panels/leaves, project presentation/adapters, duplicate browser state, presentationless App conversation/runtime authority, proved ownerless styles, all three unmounted runtime viewers, public Workspace destination docs, and tracked stale configuration are deleted. `/workspace*` remains inbound-only migration input; browser project identity comes directly from the active thread; the mounted member-agent dock owns live conversation state. Backend app-server/terminal/computer execution and evidence, target lifecycle/accounting, generic proxy security, harness, project/thread, provider, billing, MCP, and memory substrate remain protected. The three retained package graphs have explicit artifact ownership and CI enforcement. Reconcile deployed staging variables next; classify any further lexical CSS candidate only after fresh caller-led proof.
+1. **C7 complete on canonical staging through C7.4C:** the unmounted host, outbound browser destination, panels/leaves, project presentation/adapters, duplicate browser state, presentationless App conversation/runtime authority, proved ownerless styles, all three unmounted runtime viewers, public Workspace destination docs, tracked stale configuration, and the two confirmed stale deployed staging names are deleted. `/workspace*` remains inbound-only migration input; browser project identity comes directly from the active thread; the mounted member-agent dock owns live conversation state. Backend app-server/terminal/computer execution and evidence, target lifecycle/accounting, generic proxy security, harness, project/thread, provider, billing, MCP, and memory substrate remain protected. The three retained package graphs have explicit artifact ownership, clean audits, and CI enforcement. Classify any further lexical CSS candidate only after fresh caller-led proof.
 2. **Complete before C7:** Builder Partner Workspace/onboarding/headline coupling is deleted; the retained program lives only in coherent secondary Settings/operator enrollment, terms, status, and payout controls.
 3. **Complete in the first deletion slice:** Discover Apps/Skills marketplace CSS with no static consumer was deleted after production-build and desktop/mobile staging visual proof.
 4. **Complete in C7.4A current source:** correct product docs and status indexes around the mounted member-agent/community-page-context model; delete the standalone Workspace destination docs and keep thread persistence explicitly internal-only.
-5. **Source complete in C7.4B1; deployment reconciliation active in C7.4C:** delete the stale env quickstart and tracked no-op/browser-preview names. The names-only canonical staging inventory found exactly `VITE_WORKSPACE_PREVIEW_ORIGIN` in the staging Vercel production target and `POLYNET_DAYTONA_APP_PREVIEW_TRANSPORT` in Convex development staging from the C7-dead set; removal and exact-build acceptance remain.
-6. **Complete in C7.4B2 current source:** retain three independently installed package/lock graphs under one Node 22, range-parity, clean-install/audit, and deployment-ownership contract with a CI-owned executable proof.
+5. **Complete in C7.4C:** the stale env quickstart and tracked no-op/browser-preview names are gone. After exact-build acceptance, `VITE_WORKSPACE_PREVIEW_ORIGIN` was removed from only the staging Vercel Production target and `POLYNET_DAYTONA_APP_PREVIEW_TRANSPORT` from only Convex development staging; repeated names-only inventories prove absence while protected signing-secret names remain.
+6. **Complete through the 2026-07-27 advisory refresh:** retain three independently installed package/lock graphs under one Node 22, range-parity, clean-install/audit, and deployment-ownership contract with a CI-owned structural and Blaxel archive-compatibility proof.
 
 Exit proof: every retained UI/config/doc surface maps to a retained MVP journey or protected capability.
 

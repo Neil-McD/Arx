@@ -1,6 +1,10 @@
 # Dependency Security Closure — 2026-07-21
 
-Status: complete on the isolated semantic-platform staging lane at code commit `ef2b0db2537defdd453567f8c063d8d4a3ae1217`. The canonical staging web origin and Convex development deployment were verified from that commit. Production was not changed.
+Status: complete on the isolated semantic-platform staging lane. The original
+closure landed at `ef2b0db2537defdd453567f8c063d8d4a3ae1217`; the
+2026-07-27 advisory refresh is exact-build accepted at
+`3449fb98fa3efd6836bf26153cf92393dd31713b`. The canonical staging web origin
+and Convex development deployment were verified. Production was not changed.
 
 ## Irreducible requirement
 
@@ -86,8 +90,17 @@ the ZIP through the same `archive.directory(buildDir, false)` operation used by
 Blaxel. The Blaxel lifecycle and three-graph package-boundary proofs, web
 typecheck, production build, bundle budget, and complete 40-step foundation
 baseline also pass. The exact lock-and-behavior proof now runs in the canonical
-Dependency Audit job after the root clean install. Exact staging CI and provider
-acceptance remain required before this refresh is marked deployed.
+Dependency Audit job after the root clean install.
+
+The refresh committed through `4f615485c6d56c75fdcf80199b38f088f089d05e`
+and the hoist-independent Blaxel-boundary proof correction
+`3449fb98fa3efd6836bf26153cf92393dd31713b`. Canonical staging serves the
+latter as build ID and Sentry release. Exact-SHA MVP Guards run `30272659669`
+passed all three audits, the compatibility interlock, 40-step baseline, Convex
+cut guard, web typecheck/build, and bundle budget; staging UI canary run
+`30272659581` passed its controlled mismatch and anonymous funnel checks. A
+signed-in chat/resources/member-agent reload produced no browser warnings or
+errors. This refresh is deployed and accepted on canonical staging.
 
 ## Verification receipt
 

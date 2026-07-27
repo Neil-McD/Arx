@@ -179,7 +179,7 @@ must remain distinct.
 | C4 | Guarantee scheduler fairness and bounded operations | `SOURCE_IMPLEMENTED` | implementation landed; formal closure and current evidence reconciliation remain |
 | C5 | Collapse capability, transport, and public-function duplication | `SOURCE_IMPLEMENTED` | substantial cleanup landed; formal closure and current evidence reconciliation remain |
 | C6 | Land the read-only semantic community repository | `COMPLETE` | exact staging build `482d5d20` passed authenticated native and official-MCP list/read plus retired-name absence proof |
-| C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `IN_PROGRESS` | every retained surface maps to an MVP journey or protected substrate |
+| C7 | Delete deferred Workspace/UI/docs/configuration surfaces | `COMPLETE` | exact staging build `3449fb98` passed source, CI, anonymous and signed-in acceptance; the two confirmed stale staging names are absent |
 | C8 | Decompose and optimize retained frontend/backend surfaces | `PLANNED` | lower concentration and change fan-out without creating new authority |
 | C9 | Prove backup, restore, RPO/RTO, and operational recovery | `PLANNED` | isolated recovery drills and owned runbooks meet accepted targets |
 | C10 | Reconcile historical Builder Partner obligations | `PLANNED_LAST` | historical legal lineage, retention, and mixed-policy payout state reconcile without rewriting history |
@@ -1858,7 +1858,7 @@ operational gap that no canonical preview-proxy release runbook was found. C7
 remains `IN_PROGRESS` only for deployed staging-variable reconciliation and
 final exact-build staging acceptance.
 
-### C7.4C release-candidate receipt — source validated, release pending
+### C7.4C closure receipt — complete on canonical staging
 
 The final C7 slice is a closure and exact-staging-acceptance boundary, not
 another deletion or decomposition pass. The accumulated candidate contains
@@ -1908,12 +1908,48 @@ smoke exercises the exact directory-to-ZIP operation used by Blaxel; the
 Blaxel lifecycle proof, package/deployment-boundary proof, 40-step foundation
 baseline, web typecheck, production build, and bundle budget also pass. This
 exact lock-and-behavior proof is now part of the canonical Dependency Audit
-job. The security interlock remains release-pending at this checkpoint.
+job.
 
-No deployed environment name, Convex code, web build, staging data, provider
-resource, production configuration, production deployment, or `origin/main`
-has changed in C7.4C at this checkpoint. C7 remains `IN_PROGRESS` until the
-candidate is committed, deployed Convex-first, served by the exact canonical
-staging web marker, accepted through the bounded anonymous and signed-in
-journeys, and the two confirmed stale staging names are removed and proved
-absent.
+The accumulated cleanup committed as
+`90d4d295899790aa5853858249772d8e1de75549`, deployed Convex-first to
+development staging, and reached the canonical staging web origin. The
+advisory correction committed as
+`4f615485c6d56c75fdcf80199b38f088f089d05e`; the package-boundary portability
+correction committed as
+`3449fb98fa3efd6836bf26153cf92393dd31713b`. The latter changed only the proof's
+module-resolution origin so Linux and macOS both resolve Archiver from the
+Blaxel package boundary.
+
+Canonical staging serves `3449fb98fa3efd6836bf26153cf92393dd31713b` as both
+build ID and Sentry release. Exact-SHA GitHub run `30272659669` passed the
+40-step foundation baseline, Convex cut guard, three clean installs and
+low-threshold audits, package/deployment boundary, dependency compatibility
+interlock, web typecheck, production build, and bundle budget. Exact-SHA run
+`30272659581` passed the controlled-mismatch check and anonymous public-funnel
+browser/runtime canary.
+
+A read-only signed-in Chrome journey loaded `/c/polynet/chat` with the
+authenticated Polynet community, canonical chat history, and the mounted
+`Your Polynet agent` region. It then opened the retained Resources surface,
+which exposed two pages and `Polynet · Resources context` to the same personal
+agent. No sign-in fallback or Workspace control appeared, and browser
+warning/error logs were empty before and after the configuration cleanup.
+
+Only after those exact-build gates passed, the two confirmed zero-reader names
+were removed from canonical non-production staging:
+`VITE_WORKSPACE_PREVIEW_ORIGIN` from the `polynet-staging` Vercel project's
+Production target and `POLYNET_DAYTONA_APP_PREVIEW_TRANSPORT` from Convex
+development deployment `quick-porcupine-949`. Repeated names-only inventories
+proved both absent. `ARX_PREVIEW_PROXY_SIGNING_SECRET` and
+`POLYNET_PREVIEW_PROXY_SIGNING_SECRET` remain present and protected; no value
+was read or recorded.
+
+C7 is complete on canonical staging. The browser destination, duplicate
+frontend authority, dormant viewers, owner-proved styles, public Workspace
+product truth, tracked stale configuration, and deployed staging residue are
+closed while the protected runtime/harness, provider, project/thread,
+billing, MCP, resource/memory, generic proxy-security, and member-agent
+substrates remain. No product row, provider resource, production
+configuration, production deployment, `origin/main`, or production surface was
+queried or changed. C8 may begin only as a new retained-surface decomposition
+plan from this clean staging boundary.
