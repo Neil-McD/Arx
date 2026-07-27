@@ -851,7 +851,7 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /isMemberAgentDockVisible[\s\S]*Boolean\(session\)[\s\S]*publicRoute\.kind === "app"[\s\S]*activePage !== "landing"[\s\S]*activePage !== "onboarding"[\s\S]*hasResolvedCommunities[\s\S]*!isCommunityLaunchSetupModalOpen[\s\S]*!isDirectMessagesOpen[\s\S]*!isOnboardingModalOpen/,
+  /isMemberAgentDockVisible[\s\S]*Boolean\(session\)[\s\S]*publicRoute\.kind === "app"[\s\S]*activePage !== "landing"[\s\S]*activePage !== "onboarding"[\s\S]*hasResolvedCommunities[\s\S]*Boolean\(memberAgentSurfaceContext\)[\s\S]*!isDirectMessagesOpen[\s\S]*!isOnboardingModalOpen/,
   "the operating panel must span authenticated app pages but stay out of acquisition and blocking overlays",
 );
 assert.match(

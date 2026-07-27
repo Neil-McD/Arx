@@ -72,9 +72,12 @@ cleanup.
 Production compatibility work is intentionally paused after PC3D. The staging
 cleanup boundary is now closed: do not resume PC3E, query production, integrate
 branches, or design a production port until the user explicitly reopens
-reconciliation. The next milestone is C8 retained-surface decomposition
-planning from this clean staging base. No access freeze or destructive
-lifecycle executor is authorized.
+reconciliation. C8 retained-surface decomposition is complete on canonical
+staging: Global Settings has six canonical destinations, Personal Account and
+account setup have explicit orchestration boundaries, and the duplicate
+community launcher plus its backend contract are retired. The next milestone
+is C9 recovery proof. No access freeze or destructive lifecycle executor is
+authorized.
 
 The accumulated paragraphs below preserve earlier slice context. Their
 C3.2A attachment observation, 38-step baseline count, and statement that C3
@@ -195,6 +198,15 @@ Exit proof: adapter parity is generated/tested and every operation reaches one a
 Exit proof: every retained UI/config/doc surface maps to a retained MVP journey or protected capability.
 
 ## Step 9 — Decompose and optimize what remains
+
+**C8 current completion boundary:** C8 completed the highest-value retained
+surface convergence without claiming that every large file or measured
+optimization is finished. `App.tsx` fell from 9,267 to 7,280 lines; duplicate
+Global Settings and community-launch authorities were removed; Account and
+account-setup orchestration gained explicit owners; and the net C8 source
+change is materially negative. Remaining operator N+1 work, broad CSS scoping,
+large protected Resources files, and measured runtime optimization are
+separately authorized future hardening slices rather than unfinished C8 work.
 
 1. Re-measure `App.tsx`, CSS, backend hotspots, bundle, query counts, context/token sizes, and storage growth.
 2. Extract domain hosts/controllers around the now-stable route and authority model.

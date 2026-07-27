@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=41
+TOTAL_STEPS=46
 CURRENT_STEP=1
 
 run_step() {
@@ -23,6 +23,11 @@ run_step() {
 run_step "Gate parity contract" bash scripts/gate_parity_contract_check.sh
 run_step "Legacy onboarding retirement contract" npm run check:legacy-onboarding-retirement-contract
 run_step "Community launcher retirement contract" npm run check:community-launcher-retirement-proof
+run_step "Global Settings surface contract" npm run check:global-settings-surface-contract
+run_step "Personal Account orchestration contract" npm run check:personal-account-settings-orchestration-proof
+run_step "Account setup surface contract" npm run check:account-setup-surface-orchestration-proof
+run_step "Community Funnel editor contract" npm run check:community-funnel-editor-contract-proof
+run_step "Member agent dock contract" npm run check:member-agent-dock-proof
 run_step "Cached-client member-entry compatibility contract" npm run check:cached-client-member-entry-compatibility-contract
 run_step "Legacy route surface guard" bash scripts/legacy_route_surface_guard.sh
 run_step "No compat RPC primitive guard" bash scripts/no_compat_rpc_primitive_guard.sh

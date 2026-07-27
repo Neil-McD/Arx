@@ -2467,3 +2467,34 @@ C8.4D is complete on canonical staging, so C8 is `COMPLETE`. The protected
 Resources/OAuth substrate remains intentionally intact. Its remaining
 launcher-shaped source vocabulary can be reconsidered only inside a separately
 authorized Resources redesign; it is not unfinished C8 work.
+
+### C8.5 source receipt — Closure integrity
+
+The post-closure audit found no surviving launcher authority, route, modal,
+status read, profile write, or dedicated runtime file. It did find one stale
+adjacent proof: the member-agent dock contract still required the deleted
+`isCommunityLaunchSetupModalOpen` visibility guard even though the runtime
+correctly shows the personal-agent dock across authenticated contextual
+surfaces and suppresses it only for acquisition and active blocking overlays.
+That proof was not part of the 41-step foundation baseline, so prior baseline
+receipts remain truthful while the adjacent contract itself was red.
+
+C8.5 updates that assertion to the current explicit-context invariant and gives
+the existing Global Settings, Personal Account, account-setup surface, Funnel
+editor, and member-agent dock contracts one canonical CI/release owner beside
+the already-owned launcher-retirement contract. The foundation baseline grows
+from 41 to 46 steps without adding a new proof framework or duplicating an
+existing invariant.
+
+The supporting reduction roadmap now records C8 as complete and C9 recovery
+proof as next. It also reconciles the accepted C8 boundary honestly: the large
+remaining `App.tsx`, CSS, operator-read, and protected Resources concentrations
+are separately measured future hardening work, not evidence that the deleted
+launcher or duplicate Global Settings destinations should return.
+
+This slice changes no product runtime, route, backend function, schema, data,
+provider integration, environment configuration, protected Resources/OAuth
+code, production ref, or `origin/main`. Focused contracts, the expanded
+foundation baseline, web typecheck/build/bundle gates, all staging guards,
+exact Git-driven staging deployment, and read-only acceptance remain required
+before the C8.5 closure-integrity receipt is complete.
