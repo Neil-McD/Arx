@@ -2578,3 +2578,38 @@ or reopen C2 destructive lifecycles.
 C9 remains `IN_PROGRESS`. The next separately authorized action is a
 metadata-only audit of actual backup configuration. Only after that evidence
 may C9.1 create one staging backup including file storage.
+
+### C9.0 staging receipt — Exact source contract, no recovery action
+
+The source contract landed on canonical staging as
+`9537865e58bb19684e160cacdf05f0c8cda622f2`. The exact
+`https://polynet-staging.vercel.app/version.json` marker then reported that SHA
+for both `buildId` and `sentryRelease`. No Convex deployment was performed:
+this slice changes declarative source/proof/docs only and requires no schema,
+generated API, or runtime-function release.
+
+The committed source passed:
+
+- the operational-recovery contract proof: 123 tables, seven named
+  table/field storage references, 24 crons, and 46 scheduler call sites across
+  27 modules, with no recovery executor;
+- the account-lifecycle cross-check over the same 123-table schema;
+- the canonical foundation baseline, now 47/47;
+- web typecheck and production build;
+- the web bundle budget at 14 JavaScript chunks and 2788.9 KiB total;
+- local, source, and remote semantic-platform staging guards; and
+- `git diff --check`.
+
+GitHub Actions did not provide code-execution evidence for this SHA. `MVP
+Guards` run `30310199583` and `Staging UI Canary` run `30310199545` failed at
+the runner boundary: all four reported jobs contain zero steps, including no
+checkout. Those red runs are infrastructure failures, not green CI and not
+repository-test failures; the local canonical evidence above remains the
+accepted proof for this source-only slice.
+
+At receipt time, the remote staging ref was exactly `9537865e...`, while
+`origin/main` and `https://polynet.ai/version.json` remained exactly
+`456ebb9cfb95defc316c046e57d17a001eea5025`. C9 remains `IN_PROGRESS`.
+The next boundary is still the separately authorized metadata-only audit of
+backup configuration; this receipt grants no authority to create, download,
+restore, import, configure, or delete a backup.
