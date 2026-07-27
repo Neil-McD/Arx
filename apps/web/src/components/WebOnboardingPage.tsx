@@ -7,7 +7,6 @@ import {
 } from "../../../../shared/accountSetup";
 import { normalizeProfileHandle } from "../../../../shared/profileHandle";
 import { formatProfileHandleAvailabilityHint } from "./profileHandleAvailabilityHint";
-import type { SocialProfileKind, SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
   PRIVACY_AI_DATA_POLICY_ENTRY,
@@ -21,58 +20,23 @@ import {
   PROFILE_BIO_MAX_CHARS,
   PROFILE_DISPLAY_NAME_MAX_CHARS,
 } from "../../../../shared/profileText";
+import type { WebAccountSetupSurfaceModel } from "./webAccountSetupSurfaceModel";
 
 type OnboardingStep = Exclude<AccountSetupStep, "complete">;
 
-type ProfileHandleAvailability = {
-  available: boolean;
-  status: "empty" | "too_short" | "too_long" | "invalid_format" | "reserved" | "available" | "taken";
-  handle: string | null;
-  normalized_handle: string | null;
-};
-
 type WebOnboardingPageProps = {
   accountSetupStatus: AccountSetupStatus | null;
-  displayName: string;
-  handle: string;
-  bio: string;
-  socialLinks: SocialProfileLinks;
-  avatarUrl: string | null;
-  avatarFocusX: number;
-  avatarFocusY: number;
-  avatarZoom: number;
+  setup: WebAccountSetupSurfaceModel;
   isAvatarFocusModalOpen: boolean;
-  handleAvailability: ProfileHandleAvailability | null;
-  isCheckingHandleAvailability: boolean;
   isAvatarDragOver: boolean;
-  isSaving: boolean;
-  error: string | null;
   setIsAvatarDragOver: (value: boolean) => void;
   setAvatarFocusX: (value: number) => void;
   setAvatarFocusY: (value: number) => void;
   setAvatarZoom: (value: number) => void;
   setIsAvatarFocusModalOpen: (value: boolean) => void;
   onAvatarDrop: (event: DragEvent<HTMLDivElement>) => void;
-  onAvatarUpload: (file: File | null) => Promise<void> | void;
   onRemoveAvatar: () => void;
-  onDisplayNameChange: (value: string) => void;
-  onHandleChange: (value: string) => void;
-  onBioChange: (value: string) => void;
-  onSocialLinkChange: (kind: SocialProfileKind, value: string) => void;
   onNextProfile: (legalAcceptance: PlatformLegalAcceptanceDraft | null) => Promise<boolean> | boolean;
-  chatgptConnected: boolean;
-  chatgptStatus: string;
-  isConnectingChatgpt: boolean;
-  isPollingChatgptConnection: boolean;
-  onConnectChatgpt: () => void;
-  openAiConnected: boolean;
-  openAiStatus: string;
-  openAiApiKeyDraft: string;
-  setOpenAiApiKeyDraft: (value: string) => void;
-  isSavingOpenAiConnection: boolean;
-  openAiConnectionError: string | null;
-  openAiConnectionSuccess: string | null;
-  onConnectOpenAi: () => Promise<void> | void;
   onFinishOnboarding: () => Promise<boolean | void> | boolean | void;
   onClose?: () => void;
 };
@@ -111,7 +75,7 @@ function StepIcon(props: { step: OnboardingStep }) {
 
 function formatHandleAvailability(
   handle: string,
-  availability: ProfileHandleAvailability | null,
+  availability: WebAccountSetupSurfaceModel["identity"]["handleAvailability"],
   isChecking: boolean,
 ): { kind: "idle" | "checking" | "success" | "error"; label: string } {
   return formatProfileHandleAvailabilityHint({
@@ -144,6 +108,8 @@ function formatProviderStatus(
 }
 
 export function WebOnboardingPage(props: WebOnboardingPageProps) {
+  const { identity, inference, submission } = props.setup;
+  const { chatgpt, openai } = inference;
   const [step, setStep] = useState<OnboardingStep>(() =>
     normalizeStep(props.accountSetupStatus?.current_step),
   );
@@ -151,63 +117,65 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
   const [activeLegalDocument, setActiveLegalDocument] = useState<LegalDocumentEntry | null>(null);
   const [setupGuidance, setSetupGuidance] = useState<string | null>(null);
   const [providerChoice, setProviderChoice] = useState<"chatgpt" | "openai" | null>(() =>
-    props.openAiConnected ? "openai" : props.chatgptConnected ? "chatgpt" : null,
+    openai.connected ? "openai" : chatgpt.connected ? "chatgpt" : null,
   );
 
   useEffect(() => {
-    if (props.openAiConnected) setProviderChoice("openai");
-    else if (props.chatgptConnected) setProviderChoice("chatgpt");
-  }, [props.chatgptConnected, props.openAiConnected]);
+    if (openai.connected) setProviderChoice("openai");
+    else if (chatgpt.connected) setProviderChoice("chatgpt");
+  }, [chatgpt.connected, openai.connected]);
 
   const progress = props.accountSetupStatus?.percent ?? 0;
   const progressCircumference = 2 * Math.PI * 17;
   const progressDashOffset = progressCircumference - (progress / 100) * progressCircumference;
-  const hasInferenceProvider = props.chatgptConnected || props.openAiConnected;
+  const hasInferenceProvider = chatgpt.connected || openai.connected;
 
   useEffect(() => {
     if (props.accountSetupStatus?.completed || hasInferenceProvider) {
       setSetupGuidance(null);
     }
   }, [hasInferenceProvider, props.accountSetupStatus?.completed]);
-  const normalizedHandle = normalizeProfileHandle(props.handle);
-  const handleAvailabilityMatches = props.handleAvailability?.normalized_handle === normalizedHandle;
+  const normalizedHandle = normalizeProfileHandle(identity.handle);
+  const handleAvailabilityMatches =
+    identity.handleAvailability?.normalized_handle === normalizedHandle;
   const handleReady =
     Boolean(normalizedHandle) &&
-    !props.isCheckingHandleAvailability &&
-    Boolean(handleAvailabilityMatches && props.handleAvailability?.available);
+    !identity.isCheckingHandleAvailability &&
+    Boolean(handleAvailabilityMatches && identity.handleAvailability?.available);
   const platformLegalMissing = props.accountSetupStatus?.missing.includes("platform_legal") !== false;
   const platformLegalReady = !platformLegalMissing || hasConfirmedPlatformLegal;
   const profileReady =
-    props.displayName.trim().length > 0 &&
-    Boolean(props.avatarUrl?.trim()) &&
+    identity.displayName.trim().length > 0 &&
+    Boolean(identity.avatarUrl?.trim()) &&
     handleReady &&
     platformLegalReady;
   const handleAvailability = formatHandleAvailability(
-    props.handle,
-    props.handleAvailability,
-    props.isCheckingHandleAvailability,
+    identity.handle,
+    identity.handleAvailability,
+    identity.isCheckingHandleAvailability,
   );
-  const showOpenAiKeyEntry = providerChoice === "openai" || props.openAiConnected;
+  const showOpenAiKeyEntry = providerChoice === "openai" || openai.connected;
   const chatgptSelected = providerChoice === "chatgpt";
   const openAiSelected = providerChoice === "openai";
   const chatgptProviderStatus = formatProviderStatus(
-    props.chatgptConnected,
+    chatgpt.connected,
     chatgptSelected,
-    props.isConnectingChatgpt || props.isPollingChatgptConnection,
+    chatgpt.isConnecting || chatgpt.isPolling,
   );
   const openAiProviderStatus = formatProviderStatus(
-    props.openAiConnected,
+    openai.connected,
     openAiSelected,
-    props.isSavingOpenAiConnection,
+    openai.isSaving,
   );
   const stepOrder: OnboardingStep[] = ["identity", "inference"];
   const setupRequirementMessage =
-    props.error && props.accountSetupStatus && !props.accountSetupStatus.completed
+    submission.error && props.accountSetupStatus && !props.accountSetupStatus.completed
       ? formatAccountSetupMissingGuidance(props.accountSetupStatus)
       : null;
-  const displayedStatusMessage = setupGuidance ?? props.error;
+  const displayedStatusMessage = setupGuidance ?? submission.error;
   const displayedStatusMessageIsGuidance =
-    Boolean(setupGuidance) || Boolean(props.error && setupRequirementMessage === props.error);
+    Boolean(setupGuidance) ||
+    Boolean(submission.error && setupRequirementMessage === submission.error);
 
   const goNext = async () => {
     setSetupGuidance(null);
@@ -232,7 +200,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
   };
 
   const nextDisabled =
-    props.isSaving ||
+    submission.isSaving ||
     (step === "identity" && !profileReady) ||
     (step === "inference" && !hasInferenceProvider);
 
@@ -309,13 +277,15 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 <UserAvatar
                   className={`polynet-onboarding-avatar${props.isAvatarDragOver ? " drag-over" : ""}`}
                   readyClassName="has-image"
-                  name={props.displayName || props.handle || "Profile"}
-                  imageUrl={props.avatarUrl}
-                  focusX={props.avatarFocusX}
-                  focusY={props.avatarFocusY}
-                  zoom={props.avatarZoom}
+                  name={identity.displayName || identity.handle || "Profile"}
+                  imageUrl={identity.avatarUrl}
+                  focusX={identity.avatarFocusX}
+                  focusY={identity.avatarFocusY}
+                  zoom={identity.avatarZoom}
                   alt="Profile avatar"
-                  fallback={<span>{props.displayName.trim().charAt(0).toUpperCase() || "P"}</span>}
+                  fallback={
+                    <span>{identity.displayName.trim().charAt(0).toUpperCase() || "P"}</span>
+                  }
                   onDragOver={(event) => {
                     event.preventDefault();
                     props.setIsAvatarDragOver(true);
@@ -329,10 +299,12 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={(event) => void props.onAvatarUpload(event.target.files?.[0] ?? null)}
+                      onChange={(event) =>
+                        void identity.onAvatarUpload(event.target.files?.[0] ?? null)
+                      }
                     />
                   </label>
-                  {props.avatarUrl ? (
+                  {identity.avatarUrl ? (
                     <>
                       <button
                         className="create-avatar-btn"
@@ -348,17 +320,17 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   ) : null}
                 </div>
                 <WebSocialProfileLinksFields
-                  values={props.socialLinks}
-                  disabled={props.isSaving}
+                  values={identity.socialLinks}
+                  disabled={submission.isSaving}
                   variant="onboarding"
-                  onChange={props.onSocialLinkChange}
+                  onChange={identity.onSocialLinkChange}
                 />
               </div>
               <label>
                 Display name
                 <input
-                  value={props.displayName}
-                  onChange={(event) => props.onDisplayNameChange(event.target.value)}
+                  value={identity.displayName}
+                  onChange={(event) => identity.onDisplayNameChange(event.target.value)}
                   placeholder="Your name"
                   maxLength={PROFILE_DISPLAY_NAME_MAX_CHARS}
                 />
@@ -371,8 +343,8 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 <div className="polynet-onboarding-handle-row">
                   <span aria-hidden="true">@</span>
                   <input
-                    value={props.handle}
-                    onChange={(event) => props.onHandleChange(event.target.value)}
+                    value={identity.handle}
+                    onChange={(event) => identity.onHandleChange(event.target.value)}
                     placeholder="yourhandle"
                     autoCapitalize="none"
                     autoCorrect="off"
@@ -389,8 +361,8 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   <em>Optional</em>
                 </span>
                 <textarea
-                  value={props.bio}
-                  onChange={(event) => props.onBioChange(event.target.value)}
+                  value={identity.bio}
+                  onChange={(event) => identity.onBioChange(event.target.value)}
                   placeholder="A short line about who you are or what you build."
                   rows={3}
                   maxLength={PROFILE_BIO_MAX_CHARS}
@@ -403,7 +375,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   type="checkbox"
                   aria-describedby="polynet-onboarding-platform-legal-copy"
                   checked={platformLegalReady}
-                  disabled={!platformLegalMissing || props.isSaving}
+                  disabled={!platformLegalMissing || submission.isSaving}
                   onChange={(event) => setHasConfirmedPlatformLegal(event.currentTarget.checked)}
                 />
                 <span id="polynet-onboarding-platform-legal-copy" className="polynet-onboarding-legal-copy">
@@ -432,7 +404,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
           {step === "inference" ? (
             <div className="polynet-onboarding-provider-grid">
               <div
-                className={`polynet-onboarding-provider-option recommended${chatgptSelected ? " selected" : ""}${props.chatgptConnected ? " connected" : ""}`}
+                className={`polynet-onboarding-provider-option recommended${chatgptSelected ? " selected" : ""}${chatgpt.connected ? " connected" : ""}`}
               >
                 <div className="polynet-onboarding-provider-copy">
                   <div className="polynet-onboarding-provider-topline">
@@ -442,7 +414,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   <strong>Use ChatGPT</strong>
                   <p>Use your Plus or Pro plan limits through your connected ChatGPT account.</p>
                   <small className={`polynet-onboarding-provider-connection ${chatgptProviderStatus.kind}`}>
-                    {props.chatgptConnected ? props.chatgptStatus : chatgptProviderStatus.label}
+                    {chatgpt.connected ? chatgpt.status : chatgptProviderStatus.label}
                   </small>
                 </div>
                 <button
@@ -450,21 +422,21 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   type="button"
                   onClick={() => {
                     setProviderChoice("chatgpt");
-                    props.onConnectChatgpt();
+                    chatgpt.onConnect();
                   }}
-                  disabled={props.isConnectingChatgpt}
+                  disabled={chatgpt.isConnecting}
                 >
-                  {props.isConnectingChatgpt
+                  {chatgpt.isConnecting
                     ? "Starting..."
-                    : props.isPollingChatgptConnection
+                    : chatgpt.isPolling
                       ? "Continue auth"
-                      : props.chatgptConnected
+                      : chatgpt.connected
                         ? "Manage"
                         : "Connect ChatGPT"}
                 </button>
               </div>
               <div
-                className={`polynet-onboarding-provider-option${openAiSelected ? " selected" : ""}${props.openAiConnected ? " connected" : ""}${showOpenAiKeyEntry ? " has-key-entry" : ""}`}
+                className={`polynet-onboarding-provider-option${openAiSelected ? " selected" : ""}${openai.connected ? " connected" : ""}${showOpenAiKeyEntry ? " has-key-entry" : ""}`}
               >
                 <div className="polynet-onboarding-provider-copy">
                   <div className="polynet-onboarding-provider-topline">
@@ -475,7 +447,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   </div>
                   <strong>Use an API key</strong>
                   <p>Use a key from your OpenAI account and bill usage directly through OpenAI.</p>
-                  {props.openAiConnected ? <small>{props.openAiStatus}</small> : null}
+                  {openai.connected ? <small>{openai.status}</small> : null}
                 </div>
                 {!showOpenAiKeyEntry ? (
                   <button
@@ -490,26 +462,26 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                     <input
                       className="provider-connection-input"
                       type="password"
-                      value={props.openAiApiKeyDraft}
-                      onChange={(event) => props.setOpenAiApiKeyDraft(event.target.value)}
+                      value={openai.apiKeyDraft}
+                      onChange={(event) => openai.setApiKeyDraft(event.target.value)}
                       placeholder="Paste OpenAI API key"
                       autoComplete="off"
-                      disabled={props.isSavingOpenAiConnection}
+                      disabled={openai.isSaving}
                     />
                     <button
                       className="platform-save-button platform-save-button--compact"
                       type="button"
                       onClick={() => {
-                        void props.onConnectOpenAi();
+                        void openai.onConnect();
                       }}
-                      disabled={props.isSavingOpenAiConnection || props.openAiApiKeyDraft.trim().length === 0}
+                      disabled={openai.isSaving || openai.apiKeyDraft.trim().length === 0}
                     >
-                      {props.isSavingOpenAiConnection ? "Saving..." : props.openAiConnected ? "Update key" : "Connect key"}
+                      {openai.isSaving ? "Saving..." : openai.connected ? "Update key" : "Connect key"}
                     </button>
                   </div>
                 )}
-                {props.openAiConnectionError ? <p className="polynet-onboarding-error">{props.openAiConnectionError}</p> : null}
-                {props.openAiConnectionSuccess ? <p className="polynet-onboarding-success">{props.openAiConnectionSuccess}</p> : null}
+                {openai.error ? <p className="polynet-onboarding-error">{openai.error}</p> : null}
+                {openai.success ? <p className="polynet-onboarding-success">{openai.success}</p> : null}
               </div>
             </div>
           ) : null}
@@ -532,7 +504,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 <button
                   type="button"
                   className="polynet-onboarding-back"
-                  disabled={props.isSaving}
+                  disabled={submission.isSaving}
                   onClick={() => setStep(stepOrder[Math.max(0, stepIndex(step) - 1)])}
                 >
                   Back
@@ -544,7 +516,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 disabled={nextDisabled}
                 onClick={() => void goNext()}
               >
-                {props.isSaving
+                {submission.isSaving
                   ? "Saving..."
                   : step === "inference"
                     ? "Finish"
@@ -570,10 +542,10 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
 
       <WebUserAvatarEditorModal
         isOpen={props.isAvatarFocusModalOpen}
-        avatarUrl={props.avatarUrl}
-        focusX={props.avatarFocusX}
-        focusY={props.avatarFocusY}
-        zoom={props.avatarZoom}
+        avatarUrl={identity.avatarUrl}
+        focusX={identity.avatarFocusX}
+        focusY={identity.avatarFocusY}
+        zoom={identity.avatarZoom}
         title="Adjust profile photo"
         imageAlt="Profile photo preview"
         hint="Drag the image to frame it inside your profile avatar."

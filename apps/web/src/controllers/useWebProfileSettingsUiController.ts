@@ -214,3 +214,7 @@ export function useWebProfileSettingsUiController(
     applyLoadedProfileToLocal,
   };
 }
+
+export type UseWebProfileSettingsUiControllerResult = ReturnType<
+  typeof useWebProfileSettingsUiController
+>;

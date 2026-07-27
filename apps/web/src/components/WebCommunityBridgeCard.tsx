@@ -6,7 +6,6 @@
 import { useRef, useState } from "react";
 import { Camera, Check } from "lucide-react";
 import { validateProfileHandle } from "../../../../shared/profileHandle";
-import type { SocialProfileKind, SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { WebSocialProfileLinksFields } from "./WebSocialProfileLinksFields";
@@ -21,12 +20,8 @@ import { WebPlatformLegalReaderModal } from "./WebPlatformLegalReaderModal";
    card renders styled wherever it mounts (funnel gate OR standalone page). */
 import "./CommunityVisitorChrome.css";
 
-import {
-  formatProfileHandleAvailabilityHint,
-  type ProfileHandleAvailabilityLike,
-} from "./profileHandleAvailabilityHint";
-
-type BridgeHandleAvailability = ProfileHandleAvailabilityLike;
+import { formatProfileHandleAvailabilityHint } from "./profileHandleAvailabilityHint";
+import type { WebAccountSetupSurfaceModel } from "./webAccountSetupSurfaceModel";
 
 export type WebCommunityBridgeCardProps = {
   /* "community": banner + community identity — for people entering a specific
@@ -40,32 +35,7 @@ export type WebCommunityBridgeCardProps = {
   communityAvatarZoom: number | null;
   paidReceiptLabel: string | null;
   enterLabel: string;
-  displayName: string;
-  handle: string;
-  avatarUrl: string | null;
-  avatarFocusX: number;
-  avatarFocusY: number;
-  avatarZoom: number;
-  socialLinks: SocialProfileLinks;
-  handleAvailability: BridgeHandleAvailability | null;
-  isCheckingHandleAvailability: boolean;
-  onDisplayNameChange: (value: string) => void;
-  onHandleChange: (value: string) => void;
-  onSocialLinkChange: (kind: SocialProfileKind, value: string) => void;
-  onAvatarUpload: (file: File | null) => Promise<void> | void;
-  chatgptConnected: boolean;
-  openAiConnected: boolean;
-  isConnectingChatgpt: boolean;
-  isPollingChatgptConnection: boolean;
-  onConnectChatgpt: () => void;
-  openAiApiKeyDraft: string;
-  setOpenAiApiKeyDraft: (value: string) => void;
-  isSavingOpenAiConnection: boolean;
-  openAiConnectionError: string | null;
-  openAiConnectionSuccess: string | null;
-  onConnectOpenAi: () => Promise<void> | void;
-  isSaving: boolean;
-  error: string | null;
+  setup: WebAccountSetupSurfaceModel;
   onEnter: (legalAcceptance: PlatformLegalAcceptanceDraft | null) => Promise<boolean> | boolean;
 };
 
@@ -73,7 +43,7 @@ type BridgeMissing = "photo" | "name" | "handle" | "AI" | "terms";
 
 function formatBridgeHandleHint(
   handle: string,
-  availability: BridgeHandleAvailability | null,
+  availability: WebAccountSetupSurfaceModel["identity"]["handleAvailability"],
   isChecking: boolean,
 ): { ok: boolean; label: string } {
   const trimmed = handle.trim();
@@ -101,6 +71,8 @@ function formatBridgeHandleHint(
 }
 
 export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
+  const { identity, inference, submission } = props.setup;
+  const { chatgpt, openai } = inference;
   const [attempted, setAttempted] = useState(false);
   const [hasConfirmedLegal, setHasConfirmedLegal] = useState(false);
   const [showKeyEntry, setShowKeyEntry] = useState(false);
@@ -110,16 +82,16 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
   const aiRef = useRef<HTMLDivElement | null>(null);
   const legalRef = useRef<HTMLLabelElement | null>(null);
 
-  const hasInferenceProvider = props.chatgptConnected || props.openAiConnected;
+  const hasInferenceProvider = chatgpt.connected || openai.connected;
   const handleHint = formatBridgeHandleHint(
-    props.handle,
-    props.handleAvailability,
-    props.isCheckingHandleAvailability,
+    identity.handle,
+    identity.handleAvailability,
+    identity.isCheckingHandleAvailability,
   );
 
   const missing: BridgeMissing[] = [];
-  if (!props.avatarUrl?.trim()) missing.push("photo");
-  if (!props.displayName.trim()) missing.push("name");
+  if (!identity.avatarUrl?.trim()) missing.push("photo");
+  if (!identity.displayName.trim()) missing.push("name");
   if (!handleHint.ok) missing.push("handle");
   if (!hasInferenceProvider) missing.push("AI");
   if (!hasConfirmedLegal) missing.push("terms");
@@ -127,7 +99,7 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
   const lit = (field: BridgeMissing) => attempted && missing.includes(field);
 
   const handleEnter = async () => {
-    if (props.isSaving) return;
+    if (submission.isSaving) return;
     if (missing.length > 0) {
       setAttempted(true);
       const target =
@@ -187,13 +159,13 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
             <UserAvatar
               className={`polynet-onboarding-avatar cvs-bridge-avatar${lit("photo") ? " cvs-bridge-miss" : ""}`}
               readyClassName="has-image"
-              name={props.displayName || props.handle || "Profile"}
-              imageUrl={props.avatarUrl}
-              focusX={props.avatarFocusX}
-              focusY={props.avatarFocusY}
-              zoom={props.avatarZoom}
+              name={identity.displayName || identity.handle || "Profile"}
+              imageUrl={identity.avatarUrl}
+              focusX={identity.avatarFocusX}
+              focusY={identity.avatarFocusY}
+              zoom={identity.avatarZoom}
               alt="Profile avatar"
-              title={props.avatarUrl ? "Change photo" : "Add a profile photo"}
+              title={identity.avatarUrl ? "Change photo" : "Add a profile photo"}
               onClick={() => avatarInputRef.current?.click()}
               fallback={<Camera size={22} strokeWidth={1.6} aria-hidden="true" />}
             />
@@ -203,16 +175,16 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
               accept="image/*"
               hidden
               onChange={(event) => {
-                void props.onAvatarUpload(event.target.files?.[0] ?? null);
+                void identity.onAvatarUpload(event.target.files?.[0] ?? null);
                 event.target.value = "";
               }}
             />
             <button
               type="button"
-              className={`cvs-bridge-avcap${props.avatarUrl ? " done" : ""}`}
+              className={`cvs-bridge-avcap${identity.avatarUrl ? " done" : ""}`}
               onClick={() => avatarInputRef.current?.click()}
             >
-              {props.avatarUrl ? "Change photo" : "Add a photo (required)"}
+              {identity.avatarUrl ? "Change photo" : "Add a photo (required)"}
             </button>
           </div>
           <div className="cvs-bridge-fields">
@@ -220,10 +192,10 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
               Display name
               <input
                 className={lit("name") ? "cvs-bridge-miss" : ""}
-                value={props.displayName}
+                value={identity.displayName}
                 placeholder="Your name"
                 autoComplete="off"
-                onChange={(event) => props.onDisplayNameChange(event.target.value)}
+                onChange={(event) => identity.onDisplayNameChange(event.target.value)}
               />
             </label>
             <label className="cvs-bridge-field">
@@ -232,10 +204,10 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
                 <span aria-hidden="true">@</span>
                 <input
                   className={lit("handle") ? "cvs-bridge-miss" : ""}
-                  value={props.handle}
+                  value={identity.handle}
                   placeholder="handle"
                   autoComplete="off"
-                  onChange={(event) => props.onHandleChange(event.target.value)}
+                  onChange={(event) => identity.onHandleChange(event.target.value)}
                 />
               </span>
               <span className={`cvs-bridge-avail${handleHint.ok ? " ok" : ""}`}>{handleHint.label}</span>
@@ -248,10 +220,10 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
         <div className="cvs-bridge-socials">
           <span className="cvs-bridge-socials-label">Social links (optional)</span>
           <WebSocialProfileLinksFields
-            values={props.socialLinks}
-            disabled={props.isSaving}
+            values={identity.socialLinks}
+            disabled={submission.isSaving}
             variant="onboarding"
-            onChange={props.onSocialLinkChange}
+            onChange={identity.onSocialLinkChange}
           />
         </div>
       </div>
@@ -269,19 +241,19 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
         <div className="cvs-bridge-tiles">
           <button
             type="button"
-            className={`cvs-bridge-tile${props.chatgptConnected ? " selected" : ""}${lit("AI") ? " cvs-bridge-miss" : ""}`}
-            onClick={props.onConnectChatgpt}
-            disabled={props.isConnectingChatgpt || props.isPollingChatgptConnection}
+            className={`cvs-bridge-tile${chatgpt.connected ? " selected" : ""}${lit("AI") ? " cvs-bridge-miss" : ""}`}
+            onClick={chatgpt.onConnect}
+            disabled={chatgpt.isConnecting || chatgpt.isPolling}
           >
-            {props.chatgptConnected ? (
+            {chatgpt.connected ? (
               <span className="cvs-bridge-tile-check" aria-hidden="true">
                 <Check size={10} strokeWidth={3.2} />
               </span>
             ) : null}
             <span className="cvs-bridge-tile-name">
-              {props.chatgptConnected
+              {chatgpt.connected
                 ? "ChatGPT connected"
-                : props.isConnectingChatgpt || props.isPollingChatgptConnection
+                : chatgpt.isConnecting || chatgpt.isPolling
                   ? "Connecting..."
                   : "Connect ChatGPT"}
             </span>
@@ -289,41 +261,41 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
           </button>
           <button
             type="button"
-            className={`cvs-bridge-tile${props.openAiConnected ? " selected" : ""}${lit("AI") ? " cvs-bridge-miss" : ""}`}
+            className={`cvs-bridge-tile${openai.connected ? " selected" : ""}${lit("AI") ? " cvs-bridge-miss" : ""}`}
             onClick={() => setShowKeyEntry((value) => !value)}
           >
-            {props.openAiConnected ? (
+            {openai.connected ? (
               <span className="cvs-bridge-tile-check" aria-hidden="true">
                 <Check size={10} strokeWidth={3.2} />
               </span>
             ) : null}
             <span className="cvs-bridge-tile-name">
-              {props.openAiConnected ? "API key saved" : "OpenAI API key"}
+              {openai.connected ? "API key saved" : "OpenAI API key"}
             </span>
             <span className="cvs-bridge-tile-sub">Use a key from your OpenAI account</span>
           </button>
         </div>
-        {showKeyEntry || props.openAiConnected ? (
+        {showKeyEntry || openai.connected ? (
           <div className="cvs-bridge-keyrow">
             <input
-              value={props.openAiApiKeyDraft}
+              value={openai.apiKeyDraft}
               placeholder="sk-..."
               autoComplete="off"
-              onChange={(event) => props.setOpenAiApiKeyDraft(event.target.value)}
+              onChange={(event) => openai.setApiKeyDraft(event.target.value)}
             />
             <button
               type="button"
               onClick={() => {
-                void props.onConnectOpenAi();
+                void openai.onConnect();
               }}
-              disabled={props.isSavingOpenAiConnection || props.openAiApiKeyDraft.trim().length === 0}
+              disabled={openai.isSaving || openai.apiKeyDraft.trim().length === 0}
             >
-              {props.isSavingOpenAiConnection ? "Saving..." : props.openAiConnected ? "Update key" : "Save"}
+              {openai.isSaving ? "Saving..." : openai.connected ? "Update key" : "Save"}
             </button>
           </div>
         ) : null}
-        {props.openAiConnectionError ? <p className="cvs-bridge-error">{props.openAiConnectionError}</p> : null}
-        {props.openAiConnectionSuccess ? <p className="cvs-bridge-success">{props.openAiConnectionSuccess}</p> : null}
+        {openai.error ? <p className="cvs-bridge-error">{openai.error}</p> : null}
+        {openai.success ? <p className="cvs-bridge-success">{openai.success}</p> : null}
       </div>
 
       <label className={`cvs-bridge-legal${lit("terms") ? " cvs-bridge-miss-text" : ""}`} ref={legalRef}>
@@ -359,10 +331,10 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
         </span>
       </label>
 
-      {props.error ? <p className="cvs-bridge-error">{props.error}</p> : null}
+      {submission.error ? <p className="cvs-bridge-error">{submission.error}</p> : null}
 
       <button className="cfg-join" type="button" onClick={() => void handleEnter()}>
-        {props.isSaving ? "Entering..." : props.enterLabel}
+        {submission.isSaving ? "Entering..." : props.enterLabel}
       </button>
       <div className={`cfg-gmicro${attempted && missing.length ? " cvs-bridge-miss-text" : ""}`}>
         {attempted && missing.length

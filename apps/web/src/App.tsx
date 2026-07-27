@@ -65,6 +65,7 @@ import type { CommittedMention } from "./components/communityMentionAutocomplete
 import { useWebPersonalMemoryUiController } from "./controllers/useWebPersonalMemoryUiController";
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
+import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
 import { useWebEffectiveSkillsController } from "./controllers/useWebEffectiveSkillsController";
 import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlatformSkillsController";
@@ -118,12 +119,10 @@ import {
   type CloudMemberEntryDestination,
 } from "../../../shared/cloudMemberEntryDestinationGateway";
 import {
-  checkCloudProfileHandleAvailability,
   loadCloudAccountSetupStatus,
   prepareCloudProfileAvatarField,
   recordMemberTimezoneRpc,
   resolveCloudOnboardingProfileDetail,
-  type CloudProfileHandleAvailability,
   upsertCloudProfileDetail,
 } from "../../../shared/cloudProfilesGateway";
 import { formatProfileMutationError } from "../../../shared/profileMutationErrors";
@@ -1643,9 +1642,6 @@ export default function App() {
   });
   const [isSavingOnboarding, setIsSavingOnboarding] = useState(false);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
-  const [onboardingHandleAvailability, setOnboardingHandleAvailability] =
-    useState<CloudProfileHandleAvailability | null>(null);
-  const [isCheckingOnboardingHandle, setIsCheckingOnboardingHandle] = useState(false);
   const openProfileSetup = useCallback(() => {
     setOnboardingError(null);
     setIsOnboardingModalOpen(true);
@@ -1680,38 +1676,6 @@ export default function App() {
       setIsLoadingAccountSetupStatus(false);
     }
   }, [ensureUsableAuthSession, session, sessionRef]);
-
-  useEffect(() => {
-    const handle = profileUi.profileHandle.trim();
-    if (!session || !handle) {
-      setOnboardingHandleAvailability(null);
-      setIsCheckingOnboardingHandle(false);
-      return;
-    }
-    let cancelled = false;
-    const timeoutId = window.setTimeout(() => {
-      void (async () => {
-        const activeSession = sessionRef.current ?? session;
-        if (!activeSession) return;
-        setIsCheckingOnboardingHandle(true);
-        try {
-          const availability = await checkCloudProfileHandleAvailability<AuthSession>({
-            session: activeSession,
-            handle,
-          });
-          if (!cancelled) setOnboardingHandleAvailability(availability);
-        } catch {
-          if (!cancelled) setOnboardingHandleAvailability(null);
-        } finally {
-          if (!cancelled) setIsCheckingOnboardingHandle(false);
-        }
-      })();
-    }, 260);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
-    };
-  }, [profileUi.profileHandle, session, sessionRef]);
 
   const publicCommunityUi = useWebPublicCommunityUiController<
     PublicCommunityRecord,
@@ -6486,6 +6450,18 @@ export default function App() {
     setAuthError,
     onProfileAvatarUploadSuccess: () => profileUi.setIsProfileAvatarFocusModalOpen(true),
   });
+  const accountSetupSurface = useWebAccountSetupSurfaceController<AuthSession>({
+    session,
+    getSession: () => sessionRef.current ?? session,
+    profile: profileUi,
+    chatgptConnection,
+    openAiConnection,
+    isLoadingProviderConnections: isLoadingChatgptConnection,
+    provider: providerConnectionUi,
+    isSaving: isSavingOnboarding,
+    error: onboardingError,
+    onAvatarUpload: handleProfileAvatarUpload,
+  });
 
   const canUseDevTierOverride = useMemo(
     () =>
@@ -8589,27 +8565,15 @@ export default function App() {
     },
     onboardingPageProps: {
       accountSetupStatus: effectiveAccountSetupStatus,
-      displayName: profileUi.profileName,
-      handle: profileUi.profileHandle,
-      bio: profileUi.profileBio,
-      socialLinks: profileUi.profileSocialLinks,
-      avatarUrl: profileUi.profileAvatarUrl,
-      avatarFocusX: profileUi.profileAvatarFocusX,
-      avatarFocusY: profileUi.profileAvatarFocusY,
-      avatarZoom: profileUi.profileAvatarZoom,
+      setup: accountSetupSurface.model,
       isAvatarFocusModalOpen: profileUi.isProfileAvatarFocusModalOpen,
-      handleAvailability: onboardingHandleAvailability,
-      isCheckingHandleAvailability: isCheckingOnboardingHandle,
       isAvatarDragOver: profileUi.isProfileAvatarDragOver,
-      isSaving: isSavingOnboarding,
-      error: onboardingError,
       setIsAvatarDragOver: profileUi.setIsProfileAvatarDragOver,
       setAvatarFocusX: profileUi.setProfileAvatarFocusX,
       setAvatarFocusY: profileUi.setProfileAvatarFocusY,
       setAvatarZoom: profileUi.setProfileAvatarZoom,
       setIsAvatarFocusModalOpen: profileUi.setIsProfileAvatarFocusModalOpen,
       onAvatarDrop: handleProfileAvatarDrop,
-      onAvatarUpload: handleProfileAvatarUpload,
       onRemoveAvatar: () => {
         profileUi.setProfileAvatarUrl(null);
         profileUi.setProfileAvatarStorageId(null);
@@ -8617,36 +8581,7 @@ export default function App() {
         profileUi.setProfileAvatarFocusY(0.5);
         profileUi.setProfileAvatarZoom(1);
       },
-      onDisplayNameChange: profileUi.setProfileName,
-      onHandleChange: profileUi.setProfileHandle,
-      onBioChange: profileUi.setProfileBio,
-      onSocialLinkChange: profileUi.setProfileSocialLink,
       onNextProfile: saveOnboardingProfile,
-      chatgptConnected: chatgptConnection.connected,
-      chatgptStatus: isLoadingChatgptConnection
-        ? "Checking..."
-        : chatgptConnection.connected
-          ? chatgptConnection.email
-            ? `Connected as ${chatgptConnection.email}`
-            : "Connected"
-          : "Not connected",
-      isConnectingChatgpt: providerConnectionUi.isConnectingChatgpt,
-      isPollingChatgptConnection: providerConnectionUi.isPollingChatgptConnection,
-      onConnectChatgpt: () => {
-        void providerConnectionUi.handleConnectChatgpt();
-      },
-      openAiConnected: openAiConnection.connected,
-      openAiStatus: isLoadingChatgptConnection
-        ? "Checking..."
-        : openAiConnection.connected
-          ? `Connected${openAiConnection.key_last_four ? ` · key ending ${openAiConnection.key_last_four}` : ""}`
-          : "Not connected",
-      openAiApiKeyDraft: providerConnectionUi.openAiApiKeyDraft,
-      setOpenAiApiKeyDraft: providerConnectionUi.setOpenAiApiKeyDraft,
-      isSavingOpenAiConnection: providerConnectionUi.isSavingOpenAiConnection,
-      openAiConnectionError: providerConnectionUi.openAiConnectionError,
-      openAiConnectionSuccess: providerConnectionUi.openAiConnectionSuccess,
-      onConnectOpenAi: providerConnectionUi.handleConnectOpenAi,
       onFinishOnboarding: finishOnboarding,
       onClose: closeProfileSetup,
     },
@@ -8662,34 +8597,7 @@ export default function App() {
               communityAvatarZoom: null,
               paidReceiptLabel: null,
               enterLabel: "Enter Polynet",
-              displayName: profileUi.profileName,
-              handle: profileUi.profileHandle,
-              avatarUrl: profileUi.profileAvatarUrl,
-              avatarFocusX: profileUi.profileAvatarFocusX,
-              avatarFocusY: profileUi.profileAvatarFocusY,
-              avatarZoom: profileUi.profileAvatarZoom,
-              socialLinks: profileUi.profileSocialLinks,
-              handleAvailability: onboardingHandleAvailability,
-              isCheckingHandleAvailability: isCheckingOnboardingHandle,
-              onDisplayNameChange: profileUi.setProfileName,
-              onHandleChange: profileUi.setProfileHandle,
-              onSocialLinkChange: profileUi.setProfileSocialLink,
-              onAvatarUpload: handleProfileAvatarUpload,
-              chatgptConnected: chatgptConnection.connected,
-              openAiConnected: openAiConnection.connected,
-              isConnectingChatgpt: providerConnectionUi.isConnectingChatgpt,
-              isPollingChatgptConnection: providerConnectionUi.isPollingChatgptConnection,
-              onConnectChatgpt: () => {
-                void providerConnectionUi.handleConnectChatgpt();
-              },
-              openAiApiKeyDraft: providerConnectionUi.openAiApiKeyDraft,
-              setOpenAiApiKeyDraft: providerConnectionUi.setOpenAiApiKeyDraft,
-              isSavingOpenAiConnection: providerConnectionUi.isSavingOpenAiConnection,
-              openAiConnectionError: providerConnectionUi.openAiConnectionError,
-              openAiConnectionSuccess: providerConnectionUi.openAiConnectionSuccess,
-              onConnectOpenAi: providerConnectionUi.handleConnectOpenAi,
-              isSaving: isSavingOnboarding,
-              error: onboardingError,
+              setup: accountSetupSurface.model,
               onEnter: completePlatformBridge,
             }
           : null,
@@ -8779,34 +8687,7 @@ export default function App() {
               enterLabel: approvalPending
                 ? "Finish setup"
                 : `Enter ${resolvedPublicCommunity.name}`,
-              displayName: profileUi.profileName,
-              handle: profileUi.profileHandle,
-              avatarUrl: profileUi.profileAvatarUrl,
-              avatarFocusX: profileUi.profileAvatarFocusX,
-              avatarFocusY: profileUi.profileAvatarFocusY,
-              avatarZoom: profileUi.profileAvatarZoom,
-              socialLinks: profileUi.profileSocialLinks,
-              handleAvailability: onboardingHandleAvailability,
-              isCheckingHandleAvailability: isCheckingOnboardingHandle,
-              onDisplayNameChange: profileUi.setProfileName,
-              onHandleChange: profileUi.setProfileHandle,
-              onSocialLinkChange: profileUi.setProfileSocialLink,
-              onAvatarUpload: handleProfileAvatarUpload,
-              chatgptConnected: chatgptConnection.connected,
-              openAiConnected: openAiConnection.connected,
-              isConnectingChatgpt: providerConnectionUi.isConnectingChatgpt,
-              isPollingChatgptConnection: providerConnectionUi.isPollingChatgptConnection,
-              onConnectChatgpt: () => {
-                void providerConnectionUi.handleConnectChatgpt();
-              },
-              openAiApiKeyDraft: providerConnectionUi.openAiApiKeyDraft,
-              setOpenAiApiKeyDraft: providerConnectionUi.setOpenAiApiKeyDraft,
-              isSavingOpenAiConnection: providerConnectionUi.isSavingOpenAiConnection,
-              openAiConnectionError: providerConnectionUi.openAiConnectionError,
-              openAiConnectionSuccess: providerConnectionUi.openAiConnectionSuccess,
-              onConnectOpenAi: providerConnectionUi.handleConnectOpenAi,
-              isSaving: isSavingOnboarding,
-              error: onboardingError,
+              setup: accountSetupSurface.model,
               onEnter: completeBridgeAndEnter,
             }
           : null,
