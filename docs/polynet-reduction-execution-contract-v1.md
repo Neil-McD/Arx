@@ -1656,3 +1656,34 @@ resource/memory owner, environment configuration, production state, or
 requires fresh caller-led ownership proof, repository docs/configuration still
 need final alignment, and the three protected viewer presentations remain an
 explicit human mount-or-delete decision.
+
+### C7.3A current receipt — background-terminal presentation closure
+
+The first protected-viewer decision deletes the unmounted background-terminal
+rail, its zero-caller browser gateway, and their exclusively owned
+`.workspace-rail-card*` and `.background-terminal*` styles. The slice removes
+two source files and 290 stylesheet lines; no mounted renderer or browser
+caller remains.
+
+This is a presentation closure, not a terminal-capability deletion.
+`workspaceTerminals.ts`, `workspaceTerminalProcessCore.ts`, the Codex worker
+terminal bridge, persisted terminal sessions and events, preview probing and
+classification, the access-gated preview proxy, provider lease/accounting
+logic, paid-usage admission, and agent terminal tools remain. Runtime preview
+proofs now follow those backend owners directly. Resource-admission proof
+continues to lock the centralized billable Blaxel wake path without requiring
+a deleted browser normalizer.
+
+The Workspace quarantine contract now requires both deleted files and both
+style stems to remain absent while continuing to protect the unmounted Daytona
+app preview and computer-use viewer for their own decisions. CSS parsing,
+focused runtime/resource/quarantine proofs, typechecks, production build,
+bundle budget, and the foundation baseline are the local release gate; the
+exact-build staging canary is the final release proof for this source state.
+
+This slice changes no Convex function behavior or schema, cloud record, staging
+data, runtime executor, harness policy, provider lease, billing/entitlement
+authority, official MCP contract, community resource/memory owner, environment
+configuration, production state, or `origin/main`. C7 remains `IN_PROGRESS`:
+Daytona preview and computer-use presentation decisions, docs/configuration
+alignment, and the final dependency interlock remain.

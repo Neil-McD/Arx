@@ -379,13 +379,14 @@ for (const retiredPath of [
   "apps/web/src/components/WebInferenceIssueModal.tsx",
   "shared/useWebWorkspaceActionsController.ts",
   "shared/useWebWorkspaceUiActionsController.ts",
+  "apps/web/src/components/WebBackgroundTerminalRail.tsx",
+  "shared/workspaceTerminalsGateway.ts",
 ]) {
   assert.equal(existsSync(retiredPath), false, `${retiredPath} must remain deleted`);
 }
 for (const protectedDormantPath of [
   "apps/web/src/components/DaytonaRuntimeAppPreview.tsx",
   "apps/web/src/components/RuntimeComputerUseViewer.tsx",
-  "apps/web/src/components/WebBackgroundTerminalRail.tsx",
 ]) {
   assert.equal(
     existsSync(protectedDormantPath),
@@ -535,13 +536,24 @@ assert.match(
 );
 for (const protectedDormantStyleRoot of [
   ".runtime-computer-viewer",
-  ".workspace-rail-card",
-  ".background-terminal-rail-card",
   ".workspace-app-preview-card",
 ]) {
   assert.ok(
     baseCss.includes(protectedDormantStyleRoot),
     `${protectedDormantStyleRoot} must remain styled until the protected viewer mount-or-delete decision`,
+  );
+}
+for (const retiredTerminalPresentationStem of [
+  ".workspace-rail-card",
+  ".background-terminal",
+]) {
+  assert.ok(
+    !baseCss.includes(retiredTerminalPresentationStem),
+    `${retiredTerminalPresentationStem} must remain absent after the background-terminal presentation closure`,
+  );
+  assert.ok(
+    !webSourceCorpus.includes(retiredTerminalPresentationStem.slice(1)),
+    `${retiredTerminalPresentationStem} must not regain a web source emitter`,
   );
 }
 assert.match(
