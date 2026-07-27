@@ -20,8 +20,12 @@ const resources = read("apps/web/src/components/WebCommunityResourcesSection.tsx
 const funnel = read("apps/web/src/components/WebCommunityFunnelSection.tsx");
 const protectedResources = read("convex/communityResources.ts");
 const protectedGateway = read("shared/cloudCommunityAdminGateway.ts");
+const communityFacade = read("convex/community.ts");
+const communityLifecycle = read("convex/communityLifecycle.ts");
+const funnelGateway = read("shared/cloudCommunityFunnelGateway.ts");
+const generatedApi = read("convex/_generated/api.d.ts");
 
-const retiredFrontendPaths = [
+const retiredRuntimePaths = [
   "apps/web/src/components/WebCommunityLaunchSetupModal.tsx",
   "apps/web/src/components/webCommunityLaunchKnowledgeModel.ts",
   "apps/web/src/components/webCommunityLaunchSetupLifecycleModel.ts",
@@ -29,6 +33,9 @@ const retiredFrontendPaths = [
   "apps/web/src/controllers/useWebCommunityLaunchSetupLifecycleController.ts",
   "apps/web/src/communityLaunchSetupRoute.ts",
   "apps/web/src/communityLaunchKnowledgeSourceOAuth.ts",
+  "convex/communityLaunchSetup.ts",
+  "shared/cloudCommunityLaunchSetupGateway.ts",
+  "shared/communityLaunchSetup.ts",
 ] as const;
 
 assert.match(
@@ -36,7 +43,7 @@ assert.match(
   /"check:community-launcher-retirement-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_launcher_retirement_contract_proof\.ts"/,
   "launcher retirement proof should remain wired into package scripts",
 );
-for (const path of retiredFrontendPaths) {
+for (const path of retiredRuntimePaths) {
   assert.equal(existsSync(join(root, path)), false, `${path} must remain retired`);
 }
 
@@ -44,6 +51,11 @@ assert.doesNotMatch(
   app + routeLifecycle,
   /WebCommunityLaunchSetupModal|useWebCommunityLaunch|communityLaunchSetupRoute|communityLaunchKnowledgeSourceOAuth|community_launch_setup|community_launch_step|source_integration_oauth/,
   "the web runtime must not retain launcher UI, orchestration, route, or callback state",
+);
+assert.doesNotMatch(
+  communityFacade + communityLifecycle + funnelGateway + generatedApi,
+  /getCommunityLaunchSetupStatus|saveCommunityLaunchProfile|cloudCommunityLaunchSetupGateway|communityLaunchSetup/,
+  "the retained Funnel and Convex runtime must not expose launcher status or profile contracts",
 );
 assert.doesNotMatch(
   read("apps/web/src/base.css"),
