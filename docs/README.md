@@ -17,6 +17,7 @@
 6. `platform-diagnostics-contract-v1.md`
 7. `workspace-context-contract-v1.md`
 8. `community-agent-cognition-contract-v1.md`
+9. `package-deployment-ownership-contract-v1.md`
 
 ## Active operational guides
 1. `auth-runtime-setup-workos-authkit.md`

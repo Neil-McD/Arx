@@ -14,7 +14,6 @@ import {
 import {
   destroyDaytonaLocalWorkspaceBestEffort,
   ensureDaytonaLocalWorkspace,
-  getDaytonaPreviewUrlPattern,
   getDaytonaWorkspaceRoot,
   readDaytonaLocalEnvStatus,
   startDaytonaLocalServer,
@@ -259,8 +258,8 @@ function formatComputerUseFailureText(params: {
   const message = String(params.message ?? "").trim();
   if (isTransientComputerUseFailure(params.failureCode, message)) {
     return [
-      `${params.toolName} could not visually inspect the preview because Daytona Computer Use was not ready after retry.`,
-      "The app preview may still be running in the preview panel; try visual inspection again after a moment.",
+      `${params.toolName} could not visually inspect the app because the workspace computer was not ready after retry.`,
+      "The app server may still be running in the workspace; try runtime-side visual inspection again after a moment.",
     ].join(" ");
   }
   return `${params.toolName} failed (${params.failureCode ?? "unknown"}): ${
@@ -960,7 +959,6 @@ export class PolynetCodexWorkerRuntime {
     const rendered = buildDaytonaCodexConfigToml({
       polynetDeveloperInstructions: params.polynetDeveloperInstructions,
       workspaceRoot: params.workspaceRoot ?? getDaytonaWorkspaceRoot(),
-      previewUrlPattern: getDaytonaPreviewUrlPattern(),
       workspaceServeAvailable: params.workspaceServeAvailable,
       platformToolsAvailable: params.platformToolsAvailable,
       mcpBridgeToolsAvailable: params.mcpBridgeToolsAvailable,
@@ -2393,20 +2391,14 @@ export class PolynetCodexWorkerRuntime {
         provider: "daytona",
         workspace_host_id: activeTurn.workspaceHostId,
         sandbox_id: served.providerSandboxId,
-        url: served.previewUrl,
-        preview_url_hint: served.previewUrlHint,
         port,
         terminal_session_id: served.pid,
       });
       respondTool(true, {
         ok: true,
-        preview_url: served.previewUrl,
-        preview_pending: served.previewUrl ? false : true,
         port,
         process_id: served.pid,
-        note: served.previewUrl
-          ? "The app is running; the user can open it from the preview panel or this URL."
-          : "The app is running; PolyNet is attaching the Daytona preview panel.",
+        note: "The app server is running in the workspace. Use computer_open_url with localhost and computer_screenshot for runtime-side visual verification.",
         ...(served.outputTail ? { server_output: served.outputTail } : {}),
       });
       return;

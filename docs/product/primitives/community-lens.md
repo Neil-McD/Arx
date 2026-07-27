@@ -3,7 +3,7 @@ id: product.community_lens
 title: Community Lens
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-07-13
+last_verified: 2026-07-27
 ---
 
 # Community Lens
@@ -12,23 +12,23 @@ last_verified: 2026-07-13
 
 A community lens is explicit community context attached to a personal-agent conversation for future turns.
 
-It tells the workspace agent which community context should apply next.
+It tells the member's personal agent which community context should apply next.
 
 ## Why It Exists
 
 The lens lets one member-owned agent use a specific community's context, resources, skills, and policy without creating a separate agent or conversation for every community.
 
-The lens is the bridge between the personal workspace and the community intelligence system.
+The lens is the bridge between the member's personal agent and the community intelligence system.
 
 ## User Mental Model
 
-Switching the lens tells the agent, "Use this community as the context for what happens next."
+Opening the member agent from a community page tells the agent, "Use this community as the context for what happens next."
 
 The lens should be visible enough that the user knows which community the agent is using.
 
 ## System Mental Model
 
-The lens is server-validated thread state. It is not just a client-side selection.
+The lens is server-validated conversation state. It is not just a client-side page selection.
 
 The backend validates access before the lens can provide community context. The lens does not grant access by itself.
 
@@ -36,12 +36,12 @@ The backend validates access before the lens can provide community context. The 
 
 The current lens model supports:
 
-- switching the member's active personal-agent episode into a community context
+- applying the current authorized community page as the member agent's context
 - backend validation before applying community context
-- visible community lens state in the workspace shell
+- deterministic surface orientation in the member-agent dock
 - lens changes that apply to subsequent turns only
 - runtime checks that fail closed when the community lens is unavailable
-- temporary read-only inspection of another accessible community without switching the lens
+- temporary read-only inspection of another accessible community without mutating the active lens
 
 ## Rules
 
@@ -51,15 +51,15 @@ The current lens model supports:
 4. If access is missing, lens context must fail closed.
 5. The active lens should be visible and understandable to the user.
 6. Community resources, skills, and apps should only be available through the lens when policy allows.
-7. Lens switching should be deterministic and auditable.
+7. Lens changes should be deterministic and auditable.
 8. Lens context should not be confused with repo/workspace execution context.
 9. The lens is not agent identity or episodic-memory ownership.
 10. Cross-community directory reads are explicit tool targets and never implicit lens mutations.
 
 ## Examples
 
-- A user switches a thread from a general workspace context into a paid community lens.
-- A user switches from one community lens to another before asking a new question.
+- A member opens their personal agent on an authorized paid-community page.
+- A member navigates from one community to another before asking a new question.
 - A removed or blocked user cannot use a community lens for that community.
 
 ## Non-Goals
@@ -78,7 +78,6 @@ The community lens is not a coding workspace, workspace snapshot, or file-system
 ## Related Concepts
 
 - `community`
-- `workspace`
 - `thread`
 - `entitlement`
 - `context-model`

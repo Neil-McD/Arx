@@ -3,7 +3,7 @@ id: product.docs_index
 title: Product Documentation Index
 audience: builder, member, llm, operator
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-07-27
 ---
 
 # Product Documentation Index
@@ -58,21 +58,20 @@ LLMs should read product docs in this order:
 4. `primitives/community.md`
 5. `primitives/funnel.md`
 6. `primitives/agent.md`
-7. `primitives/workspace.md`
-8. `primitives/thread.md`
-9. `primitives/community-lens.md`
-10. `primitives/voice.md`
-11. `primitives/app-mcp.md`
-12. `primitives/skill.md`
-13. `primitives/resource.md`
-14. `primitives/entitlement.md`
-15. `primitives/role.md`
-16. `primitives/memory.md`
-17. `reference/access-model.md`
-18. `reference/context-model.md`
-19. `reference/prompt-context-model.md`
-20. `reference/security-privacy.md`
-21. `reference/glossary.md`
+7. `primitives/community-lens.md`
+8. `primitives/voice.md`
+9. `primitives/app-mcp.md`
+10. `primitives/skill.md`
+11. `primitives/resource.md`
+12. `primitives/entitlement.md`
+13. `primitives/role.md`
+14. `primitives/memory.md`
+15. `primitives/thread.md`
+16. `reference/access-model.md`
+17. `reference/context-model.md`
+18. `reference/prompt-context-model.md`
+19. `reference/security-privacy.md`
+20. `reference/glossary.md`
 
 ## Human Reading Paths
 
@@ -90,6 +89,5 @@ Member path:
 
 1. `guides/member-quickstart.md`
 2. `guides/joining-communities.md`
-3. `guides/workspace.md`
-4. `guides/community-lens.md`
-5. `guides/chat-and-resources.md`
+3. `guides/community-lens.md`
+4. `guides/chat-and-resources.md`

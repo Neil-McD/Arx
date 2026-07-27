@@ -20,7 +20,7 @@ export function buildWorkspaceServeDynamicToolSpec(): Record<string, unknown> {
   return {
     name: "workspace_serve",
     description:
-      "Start a long-running server (dev server, app, API) in the user's workspace and get back a preview URL the user can open. Use this for anything that listens on a port. PolyNet attaches the app to the user's preview panel. Never print raw provider preview URLs. Calling it again with the same port reuses or replaces the existing server, so retry on the SAME port rather than hopping ports. On failure, read server_output before changing approach.",
+      "Start a long-running server (dev server, app, API) in the user's workspace for runtime-side validation. Use this for anything that listens on a port. After it starts, inspect localhost with computer_open_url and computer_screenshot when visual verification is needed. Do not claim the user has an inline preview or print provider URLs. Calling it again with the same port reuses or replaces the existing server, so retry on the SAME port rather than hopping ports. On failure, read server_output before changing approach.",
     inputSchema: {
       type: "object",
       properties: {

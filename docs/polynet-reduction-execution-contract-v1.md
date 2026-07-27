@@ -1687,3 +1687,209 @@ authority, official MCP contract, community resource/memory owner, environment
 configuration, production state, or `origin/main`. C7 remains `IN_PROGRESS`:
 Daytona preview and computer-use presentation decisions, docs/configuration
 alignment, and the final dependency interlock remain.
+
+### C7.3B current receipt — computer-use presentation closure
+
+The second protected-viewer decision deletes the unmounted computer-use viewer,
+its dedicated event projection, browser-only live-session and screenshot
+adapters, live-desktop URL builders, isolated `.runtime-computer-viewer*`
+styles, and the browser environment variable that configured its websocket
+proxy. No mounted renderer or first-party browser caller used this closure.
+
+This is a presentation closure, not a computer-tool deletion. The mounted
+member-agent runtime timeline continues to render sequenced
+`computer_open_url` and `computer_screenshot` activity. The authenticated
+Convex screenshot action, provider-side Daytona screenshot/open-url bridge,
+stored runtime event evidence, model-visible image observation, worker tool
+policy, runtime targets, provider lease/accounting, and protected coding
+harness remain unchanged.
+
+Runtime timeline proofs now cover the mounted trace projection without
+requiring a second screenshot-card projection. The Daytona screenshot bridge
+proof follows the authenticated Convex action and provider/runtime owners
+without manufacturing a zero-caller browser adapter. The Workspace quarantine
+contract requires the viewer, projection, browser adapters, live-desktop URL
+builders, environment variable, and styles to remain absent while continuing
+to protect the unmounted Daytona app preview for its separate decision.
+
+This slice changes no Convex function behavior or schema, cloud record, staging
+data, runtime executor, harness policy, provider lease, billing/entitlement
+authority, official MCP contract, community resource/memory owner, production
+state, or `origin/main`. C7 remains `IN_PROGRESS`: the Daytona app-preview
+presentation decision, docs/configuration alignment, and final dependency
+interlock remain.
+
+### C7.3C current receipt — Daytona app-preview presentation closure
+
+The third protected-viewer decision deletes the dormant human app-preview
+plane end to end. The unmounted Daytona preview card, browser frame-URL
+builder, browser preview-session types and adapters, two public card-only
+Convex actions, the internal UI URL-minting resolver, dedicated CSS, browser
+origin/direct-transport configuration, and worker provider-URL hint chain are
+gone. No mounted renderer or first-party browser caller used this closure.
+
+This is a presentation and transport deletion, not an app-execution deletion.
+`workspace_serve`, `terminal_start`, `terminal_stop`, `computer_open_url`, and
+`computer_screenshot` remain. The runtime still starts an app server, binds its
+port to the target lease, emits `workspace_preview_ready` and
+`workspace_preview_stopped` as operational lifecycle evidence, and stops or
+sweeps the process through `stopDaytonaAppPreviewInternal`. Runtime targets,
+active-port accounting, retention/teardown state, the internal run/port
+evidence query, and stored events remain intact. The coding and community
+harnesses, compiler, resources/memory systems, provider/runtime core, billing,
+entitlements, and official MCP remain outside the deletion boundary.
+
+Runtime guidance now states the truth: the agent may inspect a workspace app
+through bound computer tools, but no human inline preview panel exists and no
+raw provider URL is returned or advertised. The generic access-gated preview
+proxy and signing-token implementation remain because
+`workspaceTerminalProcessCore.ts` still mints proxy sessions for retained
+non-Daytona consumers. Its security proof is renamed around that generic owner
+and now rejects any resurrection of the deleted Daytona browser transport
+while positively locking proxy signing, diagnostic headers, runtime app-server
+lifecycle, target accounting, and agent-side visual inspection.
+
+This slice changes the public Convex surface by deleting two zero-caller
+preview-card actions and changes the worker tool response/guidance by removing
+human-preview URL claims. It changes no Convex schema, cloud record, staging
+data, persisted target row, provider lease semantics, billing/entitlement
+authority, official MCP contract, community resource/memory owner, production
+state, or `origin/main`. C7 remains `IN_PROGRESS`: repository
+docs/configuration alignment and the final dependency/package ownership
+interlock remain before C7 can close.
+
+### C7.4A current receipt — public product-truth correction
+
+The first documentation/configuration slice removes the obsolete standalone
+Workspace destination from the public and LLM-ingestible product truth. The
+`product.workspace` primitive and `product.guide.workspace` member guide,
+their source Markdown files, manifest entries, ingestion paths, related-slug
+edges, and generated search/LLM projections are deleted.
+
+The retained product model now follows the mounted authority. The bottom-right
+member agent remains one member-owned conversation surface across Polynet.
+Authorized community pages provide server-validated context for subsequent
+turns; Discover and generic platform pages carry no community lens. Product
+guides no longer instruct members to open Workspace, navigate thread URLs, or
+manually select a Workspace lens. The retained `thread` primitive is
+`internal-only`: it documents durable conversation persistence, context
+receipts, and audit evidence without representing a user-facing destination.
+Project-bound workspace tools, runtime/project context, threads/messages,
+legacy inbound route migration, coding/community harnesses, compiler, and
+community resources/memory remain protected substrate.
+
+`product_docs_index_proof.ts` now locks the two retired slugs and sources out of
+the generated corpus, rejects related links to them, and rejects the stale
+destination claims. The generated index and both `llms` artifacts were rebuilt
+from 31 retained manifest documents. Product-doc index/search, runtime docs
+tools, member-agent dock, member-entry destination, and Workspace quarantine
+proofs pass; `git diff --check` passes.
+
+This slice changes no frontend/runtime behavior, Convex function or schema,
+cloud record, staging data, dependency graph, lockfile, environment
+configuration, deployment, production state, or `origin/main`. C7 remains
+`IN_PROGRESS`: stale repository quickstart/configuration residue, explicit
+package/deployment ownership, deployed staging-variable reconciliation, and
+the final exact-build staging acceptance remain.
+
+### C7.4B1 current receipt — tracked configuration residue deletion
+
+The first repository-configuration slice deletes the 68-line
+`.env.convex.quickstart.example`. Its only invocation was the copy command
+inside the file itself: no first-party script, workflow, README, operator
+runbook, or current setup guide owned it. The duplicate template mixed a
+Daytona-era quickstart, obsolete magic-link and gate guidance, and a
+development-key posture with current Convex/AuthKit variables already owned by
+the canonical `.env.example` and active auth setup guide.
+
+The tracked `.env.staging.local.example` also no longer advertises
+`VITE_WORKSPACE_PREVIEW_ORIGIN`, whose browser reader and human preview surface
+were deleted in C7.3C. The canonical root template retains
+`ARX_PREVIEW_PROXY_SIGNING_SECRET` under presentation-neutral access-gated
+runtime proxy guidance because the generic proxy and non-Daytona token-minting
+consumer remain protected.
+
+The Workspace quarantine proof now requires the stale quickstart file and
+deleted browser transport names to remain absent across every tracked
+environment template and browser setup guide while positively requiring the
+retained proxy signing-secret template. Workspace quarantine, generic
+preview-proxy security, and auth environment proofs pass; focused repository
+search and `git diff --check` pass.
+
+This slice changes no runtime reader, frontend behavior, Convex function or
+schema, cloud record, staging data, ignored local `.env.staging.local`,
+dependency graph, lockfile, deployed Vercel/Convex/Fly environment,
+deployment, production state, or `origin/main`. C7 remains `IN_PROGRESS`:
+explicit package/deployment ownership, deployed staging-variable
+reconciliation, and final exact-build staging acceptance remain.
+
+### C7.4B2 current receipt — package and deployment ownership closure
+
+The second repository-configuration slice resolves the package-topology
+decision without coupling independently installed artifacts. One active
+contract now assigns the root manifest/lock to Convex, Vercel API functions,
+shared runtime, scripts, tests, and release orchestration; the web
+manifest/lock to the independently installed Vite browser artifact; and the
+preview-proxy manifest/lock to its standalone Node 22 Fly/Docker artifact.
+Root Vercel intentionally installs root and web separately. The proxy
+container intentionally copies and installs only its own package pair.
+
+The contract keeps all three graphs and rejects a workspace conversion absent
+a deployment redesign. It requires Node 22, lockfile v3, one lock per
+manifest, `npm ci` per graph, root/web shared-range parity, low-threshold CI
+audits for every graph, and a distinct installed artifact before a fourth
+graph may exist. The current root and web graphs share 15 declarations with
+identical ranges; the proxy currently overlaps neither graph. The nested web
+Vercel file remains route-only and does not create another dependency owner.
+
+`package_deployment_boundary_contract_proof.ts` enforces those invariants
+without network access. The root package exposes one command for the proof,
+and the canonical dependency-audit job runs it before installing or auditing
+the three graphs. The focused proof and preview-proxy package/security checks
+pass. All four non-root manifest/lock files and the root lockfile remain
+byte-identical to their pre-slice hashes; within C7.4B2, the root manifest
+changes only by adding the proof command. `git diff --check` passes.
+
+This slice changes no dependency declaration or resolution, lockfile, runtime
+code, frontend behavior, Convex function or schema, cloud record, staging
+data, environment configuration, deployment, production state, or
+`origin/main`. The contract records rather than fabricates the separate
+operational gap that no canonical preview-proxy release runbook was found. C7
+remains `IN_PROGRESS` only for deployed staging-variable reconciliation and
+final exact-build staging acceptance.
+
+### C7.4C release-candidate receipt — source validated, release pending
+
+The final C7 slice is a closure and exact-staging-acceptance boundary, not
+another deletion or decomposition pass. The accumulated candidate contains
+C7.1A-H, C7.2A-B, C7.3A-C, and C7.4A-B2 as one self-contained source state.
+Builder Partner primary-flow coupling and Discover Apps/Skills marketplace CSS
+were already deleted and proved; their two unmarked Step 8 bullets are now
+reconciled as complete rather than reopened.
+
+A redacted names-only inventory compared the five C7-dead configuration names
+against current readers and the canonical staging providers. Exactly two stale
+staging names remain: `VITE_WORKSPACE_PREVIEW_ORIGIN` in the
+`polynet-staging` Vercel project's production target, which is the canonical
+non-production staging domain, and
+`POLYNET_DAYTONA_APP_PREVIEW_TRANSPORT` in Convex development staging
+`dev:quick-porcupine-949`. The other three candidates are absent. The matching
+ignored local staging selector was removed. No value was emitted or persisted
+in this receipt. Active `ARX_PREVIEW_PROXY_SIGNING_SECRET` and
+`POLYNET_PREVIEW_PROXY_SIGNING_SECRET` readers remain protected.
+
+The 40-step foundation baseline, web typecheck, production build, bundle
+budget, Workspace quarantine, product-doc index, package/deployment boundary,
+preview-proxy package/security, Daytona runtime, computer screenshot bridge,
+runtime timeline, runtime diagnostics, staging-identity, staging-guard proof,
+remote staging-authority, and `git diff --check` gates pass on the candidate.
+The three protected package graphs and all lockfiles retain their pre-slice
+hashes; no dependency declaration or resolution changes.
+
+No deployed environment name, Convex code, web build, staging data, provider
+resource, production configuration, production deployment, or `origin/main`
+has changed in C7.4C at this checkpoint. C7 remains `IN_PROGRESS` until the
+candidate is committed, deployed Convex-first, served by the exact canonical
+staging web marker, accepted through the bounded anonymous and signed-in
+journeys, and the two confirmed stale staging names are removed and proved
+absent.

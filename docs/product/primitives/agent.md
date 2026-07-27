@@ -3,7 +3,7 @@ id: product.agent
 title: Agent
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-07-13
+last_verified: 2026-07-27
 ---
 
 # Agent
@@ -28,7 +28,7 @@ The bottom-right agent belongs to the signed-in member. It keeps that member's e
 
 ## System Mental Model
 
-Agent behavior is assembled from explicit authority and context layers. The canonical workspace precedence is defined in `reference/context-model.md` and the internal workspace context contract.
+Agent behavior is assembled from explicit authority and context layers. The canonical precedence is defined in `reference/context-model.md` and the internal runtime context contract.
 
 The high-level order is:
 
@@ -36,7 +36,7 @@ The high-level order is:
 2. agent soul
 3. current Polynet surface
 4. community lens, if backend validated
-5. workspace context
+5. platform harness and optional project context
 6. agent operating policy
 7. repo instruction docs, where relevant to the active runtime lane
 8. user message content
@@ -47,11 +47,11 @@ Runtime inputs can include user/session state, thread history, community resourc
 
 The current product model supports:
 
-- personal AI threads
+- persistent personal-agent conversations backed by internal thread records
 - one member-owned personal agent channel across communities
 - on-demand episodic recall across that member's prior conversations
 - read-only recall compatibility for retained legacy per-community episodes
-- community lens switching inside threads
+- community-page context applied to subsequent turns after backend validation
 - deterministic Discover, community-section, and generic platform-page orientation
 - native read-only directory access to joined and public Discover communities
 - community resources and skills as controlled context inputs
@@ -78,15 +78,15 @@ The current product model supports:
 
 ## Examples
 
-- A member asks a general question in a workspace thread with no community lens active.
-- A member switches into a community lens and asks the agent to use the community's resources.
+- A member asks a general question from Discover with no community lens active.
+- A member opens the agent from a community page and asks it to use the community's resources.
 - A member asks for help comparing communities from Discover with no active community lens.
 - A builder configures a community agent to follow a specific methodology.
 - A selected skill shapes the output format for a repeated workflow.
 
 ## Non-Goals
 
-The agent is not a general-purpose replacement for every product surface. It should support the community and workspace loop.
+The agent is not a general-purpose replacement for every product surface. It should support the creator setup and member participation loop.
 
 The agent is not allowed to grant access, invent billing state, expose private community data, or claim tool capability that is not actually mounted and permitted.
 
@@ -100,7 +100,6 @@ The agent is not allowed to grant access, invent billing state, expose private c
 
 ## Related Concepts
 
-- `workspace`
 - `thread`
 - `community-lens`
 - `context-model`

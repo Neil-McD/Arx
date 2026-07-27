@@ -20,10 +20,9 @@ Read only the specific docs needed for the task. Prefer precise slugs over broad
 
 - `primitives/polynet` (Primitives) — Polynet: What Polynet is, why it exists, and the alpha product model.
 - `primitives/community` (Primitives) — Community: The community as the trust, access, and shared intelligence container.
-- `primitives/agent` (Primitives) — Agent: How the workspace agent uses platform, thread, and community context.
-- `primitives/workspace` (Primitives) — Workspace: The member workspace, threads, and context switching model.
-- `primitives/community-lens` (Primitives) — Community Lens: The server-validated community context applied to future thread turns.
-- `primitives/thread` (Primitives) — Thread: The durable workspace conversation record and lens audit boundary.
+- `primitives/agent` (Primitives) — Agent: How the member agent uses platform, conversation, and community context.
+- `primitives/community-lens` (Primitives) — Community Lens: The server-validated community context applied to subsequent member-agent turns.
+- `primitives/thread` (Primitives) — Thread: The internal durable conversation record and context audit boundary.
 - `primitives/memory` (Primitives) — Memory: The current personal memory scope and future memory boundaries.
 - `primitives/funnel` (Primitives) — Funnel: The canonical public entry surface for community joining and access.
 - `primitives/voice` (Primitives) — Voice: Voice input as a core member interaction surface.
@@ -41,8 +40,7 @@ Read only the specific docs needed for the task. Prefer precise slugs over broad
 - `guides/manage-access-billing-and-roles` (Builder Guides) — Manage Access, Billing, And Roles: The builder mental model for entitlements, payments, and roles.
 - `guides/member-quickstart` (Member Guides) — Member Quickstart: How members join, use communities, and work with the agent.
 - `guides/joining-communities` (Member Guides) — Joining Communities: How members should understand funnels, access, and joining.
-- `guides/workspace` (Member Guides) — Workspace: How members use workspace threads and community lenses.
-- `guides/community-lens` (Member Guides) — Community Lens: How a member should understand thread-level community context switching.
+- `guides/community-lens` (Member Guides) — Community Lens: How community pages provide authorized context to the member agent.
 - `guides/chat-and-resources` (Member Guides) — Chat And Resources: The member mental model for live chat and durable community knowledge.
 - `reference/context-model` (Reference) — Context Model: The canonical context precedence and explicit exclusions.
 - `reference/prompt-context-model` (Reference) — Prompt Context Model: How documentation should feed prompt and context design.

@@ -73,6 +73,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Verify package deployment boundaries
+        run: npm run check:package-deployment-boundary-contract
+
       - name: Install root dependencies
         run: npm ci
 

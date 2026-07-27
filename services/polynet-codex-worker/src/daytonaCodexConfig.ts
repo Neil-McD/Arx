@@ -3,7 +3,6 @@ import { DAYTONA_CODEX_WORKSPACE_ROOT } from "../../../shared/daytonaCodexRuntim
 type DaytonaCodexConfigParams = {
   polynetDeveloperInstructions: string | null;
   workspaceRoot: string;
-  previewUrlPattern: string | null;
   platformToolsAvailable: boolean;
   mcpBridgeToolsAvailable: boolean;
   workspaceServeAvailable: boolean;
@@ -40,7 +39,7 @@ export function buildDaytonaCodexDeveloperInstructions(
       "You may create and edit files inside that workspace when the user asks.",
       "Use Codex's native file editing, patching, and shell capabilities for workspace work. Do not look for a PolyNet-provided shell tool.",
       params.workspaceServeAvailable
-        ? "To run a server or app the user can see, call workspace_serve with the start command and port. PolyNet attaches the app to the user's preview panel. Prefer workspace_serve over a long-running shell command for preview servers. For visual inspection after workspace_serve, open http://localhost:<port>/ with computer_open_url, then call computer_screenshot. Never print raw provider preview URLs."
+        ? "To run an app server for runtime-side validation, call workspace_serve with the start command and port. Prefer workspace_serve over a long-running shell command for app servers. For visual inspection after workspace_serve, open http://localhost:<port>/ with computer_open_url, then call computer_screenshot. Treat localhost and provider preview URLs as runtime-internal; never claim the user can open them or print raw provider URLs."
         : null,
       params.platformToolsAvailable
         ? "PolyNet platform tools are available under the polynet namespace for community context, resources, and product docs; discover them with tool search when the answer depends on the user's community or platform."
@@ -62,7 +61,6 @@ export function buildDaytonaCodexConfigToml(params: DaytonaCodexConfigParams): {
   developerInstructions: string;
   receipt: {
     workspaceRoot: string;
-    previewUrlPattern: string | null;
     developerInstructionChars: number;
     polynetDeveloperInstructionsApplied: boolean;
   };
@@ -73,7 +71,6 @@ export function buildDaytonaCodexConfigToml(params: DaytonaCodexConfigParams): {
     developerInstructions,
     receipt: {
       workspaceRoot: normalizeBlock(params.workspaceRoot) ?? DEFAULT_DAYTONA_WORKSPACE_ROOT,
-      previewUrlPattern: normalizeBlock(params.previewUrlPattern),
       developerInstructionChars: developerInstructions.length,
       polynetDeveloperInstructionsApplied: Boolean(
         normalizeBlock(params.polynetDeveloperInstructions),

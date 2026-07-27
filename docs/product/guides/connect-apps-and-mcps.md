@@ -3,14 +3,14 @@ id: product.guide.connect_apps_and_mcps
 title: Connect Apps and MCPs
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-07-10
+last_verified: 2026-07-27
 ---
 
 # Connect Apps and MCPs
 
 ## Goal
 
-Add external capability to a community or workspace in a controlled way.
+Add external capability to a community agent or project-bound runtime in a controlled way.
 
 ## Mental Model
 

@@ -82,6 +82,45 @@ function validateIndex(index: ProductDocsIndex): void {
   assert(slugs.has(index.default_slug), `Default slug is not indexed: ${index.default_slug}`);
 }
 
+function validateRetiredWorkspaceDestination(index: ProductDocsIndex): void {
+  const retiredSlugs = ["primitives/workspace", "guides/workspace"];
+  const retiredSources = [
+    "docs/product/primitives/workspace.md",
+    "docs/product/guides/workspace.md",
+  ];
+  const indexedSlugs = new Set(index.docs.map((doc) => doc.slug));
+
+  for (const slug of retiredSlugs) {
+    assert(!indexedSlugs.has(slug), `Retired Workspace destination must not be indexed: ${slug}`);
+  }
+  for (const source of retiredSources) {
+    assert(!existsSync(repoPath(source)), `Retired Workspace destination source must stay deleted: ${source}`);
+  }
+  for (const doc of index.docs) {
+    for (const relatedSlug of doc.search?.related_slugs ?? []) {
+      assert(
+        !retiredSlugs.includes(relatedSlug),
+        `${doc.slug} must not link to retired Workspace destination: ${relatedSlug}`,
+      );
+    }
+  }
+
+  const productCorpus = index.docs.map((doc) => doc.content).join("\n");
+  for (const staleClaim of [
+    /\bopen the workspace\b/i,
+    /\bworkspace threads?\b/i,
+    /\bworkspace lens\b/i,
+    /\broute-addressable thread\b/i,
+    /\bpersonal workspace\b/i,
+    /\bworkspace agent\b/i,
+  ]) {
+    assert(
+      !staleClaim.test(productCorpus),
+      `Product docs must not teach the retired Workspace destination: ${staleClaim}`,
+    );
+  }
+}
+
 function validateLlmsFiles(index: ProductDocsIndex, llmsTxt: string, llmsFullTxt: string): void {
   for (const doc of index.docs) {
     assert(llmsTxt.includes(`\`${doc.slug}\``), `llms.txt is missing slug: ${doc.slug}`);
@@ -232,6 +271,7 @@ function validateSearch(index: ProductDocsIndex): void {
 
 const artifacts = buildProductDocsArtifacts();
 validateIndex(artifacts.index);
+validateRetiredWorkspaceDestination(artifacts.index);
 validateLlmsFiles(artifacts.index, artifacts.llmsTxt, artifacts.llmsFullTxt);
 validateSearch(artifacts.index);
 assertFileMatches("docs/product/generated/index.json", artifacts.indexJson);

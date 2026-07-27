@@ -3,7 +3,7 @@ id: product.reference.glossary
 title: Glossary
 audience: builder, member, llm, operator
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-07-27
 ---
 
 # Glossary
@@ -26,7 +26,7 @@ The gated product container around members, agent context, resources, access, an
 
 ## Community Lens
 
-Explicit server-validated community context attached to a workspace thread for future turns.
+Explicit server-validated community context applied to subsequent member-agent turns.
 
 ## Entitlement
 
@@ -58,9 +58,4 @@ Reusable instruction or capability package that shapes agent behavior.
 
 ## Thread
 
-Persistent conversation record between a user and the agent.
-
-## Workspace
-
-Personal AI surface where users work in threads and switch community context.
-
+Internal persistent conversation and context-audit record behind the member agent.

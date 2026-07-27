@@ -20,7 +20,7 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 | 9 | operator dashboards may scan/re-query the whole product per view | `KEEP (MVP core)` | operations | diagnostics should not become a scaling incident | indexed windows/materialized bounded projections |
 | 9 | web launch CI need not build/typecheck the web app | `KEEP (MVP core)` | engineering/release | canonical gate does not defend the shipped artifact | add build/typecheck and one vertical journey |
 | 10 | `communityExperience.ts` needs a registered intermediate public facade | `DELETE (deferred/dead)` complete on staging | backend transport | added 57 public identities without owning semantics or a first-party namespace caller | direct-source rewire, generated API proof, and staging validation complete |
-| 9 | stale env templates/flags are useful “just in case” | `DELETE (deferred/dead)` | operations | false configuration contracts cause deployment drift | compare deployed names, remove/update together |
+| 9 | stale env templates/flags are useful “just in case” | `DELETE (deferred/dead)` complete for tracked source | operations | false configuration contracts cause deployment drift | ownerless quickstart and deleted-browser names removed in C7.4B1; reconcile deployed names under U-031 |
 | 9 | Workspace is a primary product destination during community-first MVP | `DELETE (deferred/dead)` | product/frontend | explicit doctrine says substrate, not destination | decide compatibility, migrate callers, retire route/UI |
 | 9 | Workspace/onboarding should contain primary Builder Partner product UI | `DELETE (deferred/dead)` | frontend/product | a retained secondary growth capability should not distort the core community journey | retain minimum Settings/operator controls only |
 | 9 | creator attribution grants account deletion ownership over shared community content | `KEEP (MVP core)` | privacy/community | leaving a community must not silently destroy its knowledge | transfer continuity to community and anonymize the actor |
@@ -45,7 +45,7 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 | 6 | `billing.ts` and source modules both need public registered names forever | `KEEP (MVP core)` | billing API | compatibility may exist but permanent duplication is unowned | inventory external callers and consolidate |
 | 6 | legacy `workspace_*` MCP names are permanent domain vocabulary | `DECISION REQUIRED (user confirmation)` | official MCP | current wire compatibility is real, internal semantic drift is not | version and deprecate externally, normalize internally |
 | 6 | join requests may store arbitrary status strings | `DELETE (deferred/dead)` complete | access | required workflow had an unnecessary invalid-state space | staging enumerated and migrated; schema now permits only `pending \| denied` |
-| 5 | root and web require independent manifests/locks forever | `DECISION REQUIRED (user confirmation)` | build/release | could be deployment isolation, but no policy explains version drift | choose workspace or explicit independent ownership |
+| 1 | one manifest/lock belongs to each independently installed artifact | `KEEP (MVP core)` | build/release | root API/runtime, web bundle, and proxy container have physically separate installs | C7.4B2 contract and CI proof own three graphs, Node 22, and root/web range parity |
 | 5 | an expanded thesis may silently claim proposed work is implemented | `DELETE (deferred/dead)` complete | product architecture | direction and implementation truth are different classes | one reconciled thesis now labels implemented, next, proposed, and deferred elements |
 | 3 | workspace/tool credit accounting exists although Workspace UI is deferred | `KEEP (MVP core)` | harness/economy | protected execution still consumes real provider cost | retain bounded accounting; detach UI assumptions |
 | 2 | Builder Partner exists as a secondary growth capability | `KEEP (MVP core)` | product/finance | current direction retains it and the ledger has real obligations | simplify economics and prominence; harden versioned payout |
@@ -65,7 +65,7 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 ### A — static candidates, nearly ready
 
 - Discover Apps/Skills CSS with zero source references.
-- stale quickstart env template and no-op flags/names after deployment-name confirmation.
+- stale quickstart env template and tracked no-op/browser-preview names are deleted in C7.4B1; deployed-name cleanup remains U-031.
 - stale docs/index wording.
 - intermediate `communityExperience.ts` facade is deleted and validated on staging.
 
@@ -86,7 +86,6 @@ The index rates the **requirement or compatibility burden**, not the value of a 
 - exact financial/legal/audit/backup retention periods;
 - privacy purge, audit retention, and legal evidence preservation;
 - anonymous accounts and cleanup path;
-- package topology.
 
 ### D — protected core; simplify internally, do not delete
 

@@ -3,7 +3,7 @@ id: product.guide.builder_quickstart
 title: Builder Quickstart
 audience: builder, llm
 status: alpha-current
-last_verified: 2026-05-07
+last_verified: 2026-07-27
 ---
 
 # Builder Quickstart
@@ -97,7 +97,7 @@ The cash path is simple: configure the community, define the paid access model, 
 6. Keep access and billing simple enough for members to understand.
 7. Do not use prompts as the only place where important product truth lives.
 8. Do not add integrations before the core community loop works.
-9. Do not invite members before testing join, access, chat, resources, and the workspace lens.
+9. Do not invite members before testing join, access, chat, resources, and member-agent community context.
 
 ## Common Mistakes
 

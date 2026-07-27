@@ -34,34 +34,24 @@
       "slug": "primitives/agent",
       "title": "Agent",
       "section": "Primitives",
-      "summary": "How the workspace agent uses platform, thread, and community context.",
+      "summary": "How the member agent uses platform, conversation, and community context.",
       "audience": ["builder", "llm"],
       "status": "alpha-current",
       "source": "docs/product/primitives/agent.md"
-    },
-    {
-      "id": "product.workspace",
-      "slug": "primitives/workspace",
-      "title": "Workspace",
-      "section": "Primitives",
-      "summary": "The member workspace, threads, and context switching model.",
-      "audience": ["builder", "member", "llm"],
-      "status": "alpha-current",
-      "source": "docs/product/primitives/workspace.md"
     },
     {
       "id": "product.community_lens",
       "slug": "primitives/community-lens",
       "title": "Community Lens",
       "section": "Primitives",
-      "summary": "The server-validated community context applied to future thread turns.",
+      "summary": "The server-validated community context applied to subsequent member-agent turns.",
       "audience": ["builder", "member", "llm"],
       "status": "alpha-current",
       "source": "docs/product/primitives/community-lens.md",
       "search": {
-        "aliases": ["community context", "thread lens", "context switching", "server validated lens"],
-        "keywords": ["lens switch", "validated context", "future turns", "thread context"],
-        "queries": ["community lens context switching", "switch community context", "server validated community lens"],
+        "aliases": ["community context", "member agent lens", "page context", "server validated lens"],
+        "keywords": ["community page", "validated context", "subsequent turns", "member agent context"],
+        "queries": ["community lens context", "community page agent context", "server validated community lens"],
         "relatedSlugs": ["guides/community-lens", "reference/context-model"],
         "boost": 1.2
       }
@@ -71,9 +61,9 @@
       "slug": "primitives/thread",
       "title": "Thread",
       "section": "Primitives",
-      "summary": "The durable workspace conversation record and lens audit boundary.",
-      "audience": ["builder", "member", "llm"],
-      "status": "alpha-current",
+      "summary": "The internal durable conversation record and context audit boundary.",
+      "audience": ["operator", "llm"],
+      "status": "internal-only",
       "source": "docs/product/primitives/thread.md"
     },
     {
@@ -87,9 +77,9 @@
       "source": "docs/product/primitives/memory.md",
       "search": {
         "aliases": ["personal memory", "memory across threads", "agent memory"],
-        "keywords": ["remember", "recall", "workspace memory", "personal scope"],
+        "keywords": ["remember", "recall", "personal memory", "personal scope"],
         "queries": ["memory across threads", "agent memory across sessions", "what does memory remember"],
-        "relatedSlugs": ["primitives/workspace", "reference/context-model"],
+        "relatedSlugs": ["primitives/agent", "reference/context-model"],
         "boost": 1.15
       }
     },
@@ -296,28 +286,18 @@
       }
     },
     {
-      "id": "product.guide.workspace",
-      "slug": "guides/workspace",
-      "title": "Workspace",
-      "section": "Member Guides",
-      "summary": "How members use workspace threads and community lenses.",
-      "audience": ["member", "llm"],
-      "status": "alpha-current",
-      "source": "docs/product/guides/workspace.md"
-    },
-    {
       "id": "product.guide.community_lens",
       "slug": "guides/community-lens",
       "title": "Community Lens",
       "section": "Member Guides",
-      "summary": "How a member should understand thread-level community context switching.",
+      "summary": "How community pages provide authorized context to the member agent.",
       "audience": ["member", "builder", "llm"],
       "status": "alpha-current",
       "source": "docs/product/guides/community-lens.md",
       "search": {
-        "aliases": ["use community lens", "community context switching", "thread community context"],
-        "keywords": ["community lens", "context switching", "thread lens", "active community", "future turns"],
-        "queries": ["how does community lens work", "use a community lens", "switch community context in a thread"],
+        "aliases": ["use community lens", "community page context", "member agent community context"],
+        "keywords": ["community lens", "community page", "member agent", "active community", "subsequent turns"],
+        "queries": ["how does community lens work", "use a community lens", "community page agent context"],
         "relatedSlugs": ["primitives/community-lens", "reference/context-model"],
         "boost": 1.2
       }

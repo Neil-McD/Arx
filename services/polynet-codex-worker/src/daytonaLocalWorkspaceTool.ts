@@ -32,20 +32,11 @@ function resolveDaytonaSandboxId(): string | null {
   );
 }
 
-function previewUrlPatternForPort(port: number): string | null {
-  const explicit = readEnv("POLYNET_DAYTONA_PREVIEW_URL_PATTERN");
-  if (explicit) return explicit.replaceAll("{port}", String(port));
-  const sandboxId = resolveDaytonaSandboxId();
-  if (!sandboxId) return null;
-  return `https://${port}-${sandboxId}.proxy.daytona.works`;
-}
-
 export function readDaytonaLocalEnvStatus(): {
   configured: boolean;
   missing: string[];
   workspaceRoot: string;
   sandboxId: string | null;
-  previewUrlPattern: string | null;
 } {
   const workspaceRoot = resolveDaytonaWorkspaceRoot();
   const missing = existsSync(workspaceRoot) ? [] : ["POLYNET_DAYTONA_WORKSPACE_ROOT"];
@@ -54,19 +45,11 @@ export function readDaytonaLocalEnvStatus(): {
     missing,
     workspaceRoot,
     sandboxId: resolveDaytonaSandboxId(),
-    previewUrlPattern:
-      readEnv("POLYNET_DAYTONA_PREVIEW_URL_PATTERN") ||
-      previewUrlPatternForPort(3000) ||
-      null,
   };
 }
 
 export function getDaytonaWorkspaceRoot(): string {
   return resolveDaytonaWorkspaceRoot();
-}
-
-export function getDaytonaPreviewUrlPattern(): string | null {
-  return readDaytonaLocalEnvStatus().previewUrlPattern;
 }
 
 export async function ensureDaytonaLocalWorkspace(params: {
@@ -105,8 +88,6 @@ export async function startDaytonaLocalServer(params: {
 }): Promise<
   | {
       ok: true;
-      previewUrl: string | null;
-      previewUrlHint: string | null;
       providerSandboxId: string | null;
       pid: number | null;
       outputTail: string;
@@ -157,7 +138,7 @@ export async function startDaytonaLocalServer(params: {
       failureCode: earlyExit.error ? "workspace_serve_spawn_failed" : "workspace_serve_exited",
       failureMessage: earlyExit.error
         ? neutralizeWorkspaceText(earlyExit.error.message)
-        : `Server command exited before preview was ready: code=${earlyExit.code ?? "null"} signal=${earlyExit.signal ?? "null"}`,
+        : `Server command exited before the app server was ready: code=${earlyExit.code ?? "null"} signal=${earlyExit.signal ?? "null"}`,
       outputTail,
     };
   }
@@ -165,8 +146,6 @@ export async function startDaytonaLocalServer(params: {
   child.unref();
   return {
     ok: true,
-    previewUrl: null,
-    previewUrlHint: previewUrlPatternForPort(params.port),
     providerSandboxId: resolveDaytonaSandboxId(),
     pid: child.pid ?? null,
     outputTail,

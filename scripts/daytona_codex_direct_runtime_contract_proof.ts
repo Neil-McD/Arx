@@ -542,12 +542,12 @@ assert.match(
 assert.match(
   actions,
   /appendDaytonaPreviewStoppedEventBestEffort[\s\S]*markDaytonaCodexRuntimeTargetPreviewPortsStoppedInternal[\s\S]*eventType: "workspace_preview_stopped"[\s\S]*target_run_id: params\.runId/,
-  "provider stop/delete cleanup must append workspace_preview_stopped so stale Daytona preview cards leave the UI",
+  "provider stop/delete cleanup must append workspace_preview_stopped so operational app-server lease state stays auditable",
 );
-assert.match(
+assert.doesNotMatch(
   actions,
-  /isDaytonaSandboxUnavailableForPreviewState[\s\S]*state === "archived"[\s\S]*state === "destroyed"[\s\S]*resolveDaytonaCodexRuntimePreviewInternal[\s\S]*isDaytonaNotFoundError\(error\)[\s\S]*preview_resolution_sandbox_missing[\s\S]*providerSandboxState[\s\S]*markDaytonaCodexRuntimeTargetProviderTeardownInternal[\s\S]*appendDaytonaPreviewStoppedEventBestEffort[\s\S]*source: "preview_resolution_provider_state"[\s\S]*code: "daytona_sandbox_not_available"[\s\S]*getSignedPreviewUrl\(port, expiresInSeconds\)/,
-  "Daytona preview resolution must reconcile provider-stopped sandbox state before minting a stale iframe URL",
+  /resolveDaytonaCodexRuntimePreviewInternal|POLYNET_DAYTONA_APP_PREVIEW_TRANSPORT/,
+  "Daytona runtime actions must not retain the deleted human preview resolver or transport switch",
 );
 assert.match(
   actions,

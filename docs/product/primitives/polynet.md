@@ -3,7 +3,7 @@ id: product.polynet
 title: Polynet
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-07-27
 ---
 
 # Polynet
@@ -26,7 +26,7 @@ The core problem is not "add AI to a community." The core problem is helping bui
 
 A builder launches a community intelligence system.
 
-A member joins communities and uses the agent, chat, resources, and workspace to get useful work done.
+A member joins communities and uses chat, resources, voice, and their personal agent to get useful work done.
 
 A community can become more useful as people participate, share resources, ask questions, and turn repeated patterns into reusable knowledge.
 
@@ -38,9 +38,9 @@ Polynet combines:
 - communities as distribution and trust systems
 - entitlements as access authority
 - resources, skills, apps, and memory as reusable context
-- threads and community lenses as the workspace execution model
+- internal conversation records and community-lens receipts as the agent audit model
 
-The product should stay understandable: explicit memory, explicit access, explicit payment state, explicit thread context, and explicit community lens state.
+The product should stay understandable: explicit memory, explicit access, explicit payment state, and explicit community context.
 
 ## Alpha-Current Behavior
 
@@ -53,7 +53,8 @@ The active MVP surface focuses on:
 - public community funnels
 - community chat, resources, members, settings, and voice input
 - billing, provider connections, and builder payouts
-- personal AI threads with explicit community lens switching
+- a member-owned personal agent oriented to the current Polynet surface
+- server-validated community context for subsequent member-agent turns
 - apps/MCPs and skills as controlled capability/context surfaces
 - personal memory as an explicit user-owned context layer
 
@@ -71,7 +72,7 @@ The active MVP surface focuses on:
 
 - A founder creates a paid community around a specialized workflow and gives members an agent that understands the founder's method.
 - A technical community uses resources, chat, skills, and connected apps to help members solve recurring problems faster.
-- A member opens a workspace thread, switches into a community lens, and asks the agent to use that community's context for the next task.
+- A member opens their personal agent from a community page and asks it to use that community's authorized context for the next task.
 
 ## Non-Goals
 
@@ -98,7 +99,6 @@ During MVP, Polynet should avoid expanding into broad referral or commission sys
 - `community`
 - `agent`
 - `funnel`
-- `workspace`
 - `community-lens`
 - `entitlement`
 - `memory`

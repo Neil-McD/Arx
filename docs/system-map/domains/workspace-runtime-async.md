@@ -2,7 +2,12 @@
 
 ## Irreducible boundary
 
-The coding harness, community harness, worker/runtime, terminals, previews, project/thread persistence, and provider isolation are protected. The standalone general-purpose Workspace destination is deferred. The correct simplification is therefore **hide/retire duplicate destination state while preserving bounded capability substrate**.
+The coding harness, community harness, worker/runtime, app-server and computer
+tools, project/thread persistence, lifecycle evidence, and provider isolation
+are protected. The standalone general-purpose Workspace destination and its
+human preview presentation are deferred. The correct simplification is
+therefore **delete the duplicate destination/presentation while preserving the
+bounded capability substrate**.
 
 ## Workspace and thread substrate
 
@@ -45,13 +50,13 @@ deleted by lexical name. C7.2A completed the first caller-led cohort: the
 superseded pre-ConversionLanding selector family and its exclusive keyframes
 are deleted, the two live setup kickers have a neutral shared owner, and the
 mounted ConversionLanding plus mobile onboarding arms are contract-locked.
-The unmounted background-terminal rail, its zero-caller browser gateway, and
-their exclusive styles are deleted in C7.3A while backend terminal execution,
-events, preview evidence, paid admission, and agent tools remain. The Daytona
-app preview and computer-use viewer remain unmounted protected
-harness-adjacent decision candidates. Any remaining ownerless style still
-requires a fresh caller-led slice; lexical names never authorize removal of
-protected harness/runtime substrate.
+The unmounted background-terminal rail, computer-use viewer, and Daytona
+app-preview card are deleted in C7.3A-C with their exclusive browser adapters,
+transport, configuration, and styles. Backend app-server/terminal/computer
+execution, lifecycle events and target accounting, paid admission, agent
+tools, and the generic access-gated proxy security core remain. Any remaining
+ownerless style still requires a fresh caller-led slice; lexical names never
+authorize removal of protected harness/runtime substrate.
 
 ## Scheduled job inventory
 
@@ -85,7 +90,7 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | Surface | Scaling variable | Risk |
 | --- | --- | --- |
 | compiler digest recovery | unfinished digest versions | `O(1)` exact-row checkpoint per active recovery chain |
-| remaining Workspace browser/style state | two protected viewer decisions plus any newly ownership-proved CSS cohort | deletion requires exclusive ownership proof; lexical absence alone is insufficient and names can also describe protected execution substrate |
+| remaining Workspace browser/style state | any newly ownership-proved CSS cohort | deletion requires exclusive ownership proof; lexical absence alone is insufficient and names can also describe protected execution substrate |
 | runtime events/receipts | runs × events | storage retention and operator query cost unclear |
 | provider workers/previews | sessions × time/cost | needs cleanup, lease finalization, and accounting convergence |
 
@@ -100,11 +105,11 @@ The email outbox, mention repair, link previews, credit reservations/settlements
 | Workspace project-modal/browser mutation and card-setup presentation | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1E deleted zero-caller modal/controller/overlay state and browser commands while retaining project/runtime and Stripe/resource authority |
 | Workspace browser project-list/draft-selection projection | `DELETE (deferred/dead)` | `COMPLETE` | 10 | C7.1F deleted the unfetched project array, duplicate selector/model/surface wrappers, browser gateway, and obsolete proof while retaining direct thread project identity |
 | presentationless App conversation/runtime authority | `DELETE (deferred/dead)` | `COMPLETE` | 10 | C7.1G deleted the second browser conversation owner and zero-caller helpers while the mounted member-agent dock and shared runner retain the live path |
-| deleted-host stylesheet residue | `DELETE (deferred/dead)` | `COMPLETE` | 10 | C7.1H removed only selector families owned by the retired host/overlays, preserved live shared arms and negative-selector semantics, and locked protected viewer styles |
+| deleted-host stylesheet residue | `DELETE (deferred/dead)` | `COMPLETE` | 10 | C7.1H removed only selector families owned by the retired host/overlays and preserved live shared arms and negative-selector semantics; C7.3 later removed the separately proved dormant-viewer styles |
 | pre-ConversionLanding stylesheet residue | `DELETE (deferred/dead)` | `COMPLETE` | 10 | C7.2A deleted 343 pure legacy rules and 20 exclusive keyframes, retained two setup emitters under a neutral owner, and preserved the live mobile onboarding arms |
 | auxiliary loading/starter/download/session-resume stylesheet residue | `DELETE (deferred/dead)` | `COMPLETE` | 10 | C7.2B deleted 80 pure zero-emitter rules across both stylesheets, removed one empty media wrapper, and positively preserved the mounted generic skeleton primitives and animation |
 | dormant background-terminal browser presentation | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.3A deleted the unmounted rail, zero-caller browser gateway, and exclusive styles while retaining backend terminal process/evidence, preview, billing, provider, and agent-tool authority |
-| dormant Daytona preview and computer-use viewer | `DECISION REQUIRED` | `MOUNT_OR_DELETE` | 6 | both components are unmounted but harness-adjacent; protected substrate remains live and neither is counted as a current journey |
+| dormant computer-use and Daytona app-preview viewers | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.3B-C deleted both unmounted browser presentations and their exclusive adapters/transport while retaining app-server/computer execution, lifecycle evidence, target accounting, and protected harness substrate |
 | Workspace host coupling to Builder Partner UI | `DELETE (deferred/dead)` | `COMPLETE` | 9 | C7.1A deleted the unmounted host; retained partner UI remains in Settings/operator owners |
 | workspace route builders/controllers after parser retirement | `DELETE (deferred/dead)` | `COMPLETE` | 8 | outbound owners are deleted; inbound classification remains separate from backend substrate |
 | remaining no-cursor repeating prefix sweeps | `KEEP (MVP core)` | `HARDEN`, `BOUND` | 9 | claims reliable automation while permanently starving eligible work |

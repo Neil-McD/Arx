@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildRuntimeComputerUseViewer } from "../shared/runtimeComputerUseViewerUi.ts";
 import { buildRuntimeLiveTimeline } from "../shared/runtimeTimelineUi.ts";
 
 type ProofEvent = {
@@ -167,9 +166,7 @@ function assistantDelta(seq: number, itemId: string, delta: string): ProofEvent 
 
 const workerServer = readText("services/polynet-codex-worker/src/server.ts");
 const runtimeTimeline = readText("shared/runtimeTimelineUi.ts");
-const runtimeComputerUseViewer = readText("shared/runtimeComputerUseViewerUi.ts");
 const runtimeLiveTimeline = readText("apps/web/src/components/RuntimeLiveTimeline.tsx");
-const runtimeComputerUseViewerComponent = readText("apps/web/src/components/RuntimeComputerUseViewer.tsx");
 const memberAgentDock = readText("apps/web/src/components/WebMemberAgentDock.tsx");
 const packageJson = readText("package.json");
 
@@ -191,8 +188,6 @@ for (const [source, token, label] of [
   [runtimeTimeline, 'kind: "assistant_text"', "assistant text timeline entry kind"],
   [runtimeTimeline, 'event.event_type === "assistant_text_delta"', "assistant text event handling"],
   [runtimeTimeline, "workspace_serve", "Codex workspace serve timeline label"],
-  [runtimeComputerUseViewer, "buildRuntimeComputerUseViewer", "dedicated computer use viewer projection"],
-  [runtimeComputerUseViewerComponent, "runtimeComputerUseViewerUi", "computer use viewer imports dedicated projection"],
   [runtimeLiveTimeline, "showThinkingFooter?: boolean", "timeline footer suppression prop"],
   [memberAgentDock, "hasSequencedAssistantText", "mounted member-agent streaming text duplicate guard"],
   [
@@ -309,12 +304,6 @@ assert.deepEqual(
   toolGroups[1]?.calls.map((call) => call.toolName),
   ["computer_open_url", "computer_screenshot"],
 );
-
-const computerViewer = buildRuntimeComputerUseViewer(codexEvents);
-assert.equal(computerViewer?.latestFrameUrl, "https://example.com/codex-frame.jpeg");
-assert.equal(computerViewer?.latestActionTitle, "Capture screenshot");
-assert.equal(computerViewer?.recentSteps[0]?.summary, "Captured Daytona computer screenshot.");
-assert.equal(computerViewer?.status, "active");
 
 const reasoningEntries = buildRuntimeLiveTimeline([
   event({ seq: 1, event_type: "run_started", payload: { status: "running" } }),

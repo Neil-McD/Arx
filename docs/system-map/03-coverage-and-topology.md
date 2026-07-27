@@ -17,8 +17,8 @@ Most debt is an extra authority, compatibility adapter, incomplete lifecycle, or
 
 | # | Required domain | Primary dossier | Mechanical assignment | Blunt state |
 | ---: | --- | --- | --- | --- |
-| 1 | repo, refs, dependencies, supply chain, generated code, CI, release | frontend/public/operations | 72 repository files, 46 release/config files, 249 test/proof files | release boundary is explicit; proof pyramid and package ownership are weak |
-| 2 | env, flags, hosts, backup, restore, rollback | frontend/public/operations | 156 env names, 3 manifests/locks | template names now match source reads; deployed-name inventory and product-data RPO/RTO restore proof remain open |
+| 1 | repo, refs, dependencies, supply chain, generated code, CI, release | frontend/public/operations | 72 repository files, 46 release/config files, 249 test/proof files | release and three-graph package ownership are explicit; proof ownership beyond the canonical gates remains weak |
+| 2 | env, flags, hosts, backup, restore, rollback | frontend/public/operations | 156 env names, 3 manifests/locks | tracked templates are aligned and package graphs are owned; deployed-name inventory and product-data RPO/RTO restore proof remain open |
 | 3 | identity, sessions, account, operator | identity/access + privacy lifecycle | 4 identity tables, 30 identity functions; operator functions separate | actor/session authority is closed on staging; destructive lifecycle execution remains quarantined |
 | 4 | profiles, memory, consent, privacy, export, deletion | privacy lifecycle | 7 profile/privacy tables, 20 functions | shared/private ownership policy is explicit; resumable deletion and privacy execution remain incomplete |
 | 5 | communities, membership, roles, visibility, funnels, onboarding | identity/access | 10 community-core tables, 76 functions | required core; membership compatibility and observed duplicate/residue backlogs are closed on staging |
@@ -40,15 +40,15 @@ The generated assignment reports zero fallback schema tables. Counts overlap onl
 
 | Surface | Size/concentration | Interpretation |
 | --- | ---: | --- |
-| `apps/web/src/App.tsx` | 12,022 lines | state and orchestration monolith; decompose only after deleting deferred flows |
-| `apps/web/src/base.css` | 34,313 lines after current deletion slices | accumulated multi-era UI residue remains; the unreferenced Discover marketplace block is removed |
+| `apps/web/src/App.tsx` | 9,267 lines | retained state and orchestration concentration; decompose only after C7 acceptance |
+| `apps/web/src/base.css` | 27,613 lines after C7.3C | accumulated multi-era UI residue remains after caller-owned deletion |
 | `convex/communityResources.ts` | about 10k lines | protected capability plus ingestion/migration/compatibility concentration |
 | `convex/builderPartners.ts` | 3,525 lines | substantial retained secondary economy; v3 accrual is community-only 4%, while historical obligations remain versioned |
 | `convex/operatorIntelligence.ts` | 2,832 lines | many broad projections; several unbounded full-domain scans/N+1 paths |
 | `shared/toolRegistry.ts` | 2,296 lines | canonical native schema gravity; should project rather than be copied |
 | `shared/polynetMcp.ts` | 1,200 lines | independent external wire schema with compatibility names |
 | `convex/community.ts` | 146 function aliases | de facto web-facing facade; 115 have current first-party runtime references, while source modules remain callable too |
-| root `package.json` | 293 scripts, 253 checks | operational discoverability and proof ownership have collapsed into one manifest |
+| root `package.json` | 288 scripts, 241 checks | operational discoverability and proof ownership remain concentrated despite canonical CI owners |
 
 ## Boundary map
 
@@ -74,7 +74,7 @@ The desired reduction is not one transport. It is one semantic operation and one
 
 ## Main deletion queues
 
-1. **Immediate static candidates:** stale quickstart residue and stale product-doc claims. The no-op runtime flag, false template names, unreferenced Discover Apps/Skills CSS, and intermediate `communityExperience` facade are removed on the staging lane.
+1. **Completed static reductions:** the stale quickstart, stale product-doc destination, no-op/browser-preview template names, unreferenced Discover Apps/Skills CSS, and intermediate `communityExperience` facade are removed on the staging lane.
 2. **Migration candidates:** inline resource bodies, legacy community chat/link/attachment reads, absent-membership-active compatibility, duplicate membership rows, legacy retrieval query fields, and old MCP wire names.
-3. **Decision-required systems:** exact audit/privacy/legal retention periods and package ownership. Builder Partner v3, shared-content account-deletion ownership, the deferred standalone Workspace destination, and semantic-thesis adoption are resolved; safe lifecycle execution and compatibility retirement remain architecture work.
+3. **Decision-required systems:** exact audit/privacy/legal retention periods remain. Package ownership, Builder Partner v3, shared-content account-deletion ownership, the deferred standalone Workspace destination, and semantic-thesis adoption are resolved; safe lifecycle execution and compatibility retirement remain architecture work.
 4. **Never blanket-delete:** coding/community harnesses, compiler, resources/memory, references, canonical interaction/intelligence history, ordinary creator payout, and official MCP capability.

@@ -3,7 +3,7 @@ id: product.guide.manage_access_billing_and_roles
 title: Manage Access, Billing, and Roles
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-07-27
 ---
 
 # Manage Access, Billing, and Roles
@@ -83,7 +83,7 @@ Moderator:
 Member:
 
 - participates in the community
-- uses allowed chat, resources, voice, and workspace lens surfaces
+- uses allowed chat, resources, voice, and member-agent community context
 
 ## Launch Checklist
 

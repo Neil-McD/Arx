@@ -3,7 +3,7 @@ id: product.community
 title: Community
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-07-27
 ---
 
 # Community
@@ -47,7 +47,7 @@ The MVP community surface includes:
 - community members and join request review
 - community settings and branding
 - billing and access configuration
-- community context available through a workspace thread lens
+- community context available to the member agent on authorized community pages
 
 ## Rules
 
@@ -63,14 +63,14 @@ The MVP community surface includes:
 ## Examples
 
 - A paid founder community with an agent trained on the founder's methodology.
-- A free community where members chat, share resources, and use a community lens in workspace threads.
+- A free community where members chat, share resources, and use their personal agent under the community's authorized context.
 - An unlisted, gated community distributed through a direct funnel link.
 
 ## Non-Goals
 
 A community is not just a message board and not just a billing group. It is the product container for a community intelligence system.
 
-A community is not a way to bypass platform access, workspace tool policy, billing verification, or privacy boundaries.
+A community is not a way to bypass platform access, agent tool policy, billing verification, or privacy boundaries.
 
 ## Common Mistakes
 

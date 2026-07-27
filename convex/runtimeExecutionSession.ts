@@ -145,15 +145,15 @@ function formatTerminalStartToolOutput(value: unknown): string {
     typeof record?.status === "string" && record.status.trim()
       ? record.status.trim()
       : "running";
-  const previewAvailable =
+  const inspectionPortAvailable =
     typeof record?.preview_port === "number" &&
     Number.isFinite(record.preview_port);
   return [
-    "Workspace terminal started successfully.",
+    "Workspace app server started successfully.",
     `Current status: ${status}.`,
-    previewAvailable
-      ? "Inline preview is available."
-      : "No inline preview was exposed.",
+    inspectionPortAvailable
+      ? "Runtime-side app inspection is available."
+      : "No runtime-side app inspection port was requested.",
   ].join("\n");
 }
 

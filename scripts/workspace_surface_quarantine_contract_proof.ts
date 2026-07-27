@@ -50,6 +50,12 @@ const communityLaunchSetup = read("apps/web/src/components/WebCommunityLaunchSet
 const globalOverlay = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
 const globalOverlayProps = read("apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts");
 const accountCommerceGateway = read("shared/cloudAccountCommerceGateway.ts");
+const cloudThreadsRead = read("shared/cloudThreadsRead.ts");
+const rootEnvExample = read(".env.example");
+const webEnvExample = read("apps/web/.env.example");
+const stagingEnvExample = read(".env.staging.local.example");
+const blaxelEnvExample = read(".env.blaxel.local.example");
+const webReadme = read("apps/web/README.md");
 const mcp = read("convex/httpMcp.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const emailEvents = read("convex/emailEvents.ts");
@@ -381,19 +387,29 @@ for (const retiredPath of [
   "shared/useWebWorkspaceUiActionsController.ts",
   "apps/web/src/components/WebBackgroundTerminalRail.tsx",
   "shared/workspaceTerminalsGateway.ts",
+  "apps/web/src/components/RuntimeComputerUseViewer.tsx",
+  "shared/runtimeComputerUseViewerUi.ts",
+  "apps/web/src/components/DaytonaRuntimeAppPreview.tsx",
+  "apps/web/src/lib/workspacePreviewProxy.ts",
+  ".env.convex.quickstart.example",
 ]) {
   assert.equal(existsSync(retiredPath), false, `${retiredPath} must remain deleted`);
 }
-for (const protectedDormantPath of [
-  "apps/web/src/components/DaytonaRuntimeAppPreview.tsx",
-  "apps/web/src/components/RuntimeComputerUseViewer.tsx",
-]) {
-  assert.equal(
-    existsSync(protectedDormantPath),
-    true,
-    `${protectedDormantPath} must remain isolated for a separate protected harness presentation decision`,
-  );
-}
+assert.doesNotMatch(
+  cloudThreadsRead,
+  /getConvexCloudRuntimeRunComputerUseLiveSession|captureConvexCloudRuntimeRunComputerUseScreenshot|CloudRuntimeComputerUseLiveSession|CloudRuntimeComputerUseScreenshot|getConvexCloudRuntimeRunDaytonaPreviewSession|stopConvexCloudRuntimeRunDaytonaPreview|CloudRuntimeDaytonaPreview/,
+  "the browser thread gateway must not retain adapters or response types owned only by deleted runtime viewers",
+);
+assert.doesNotMatch(
+  rootEnvExample + webEnvExample + stagingEnvExample + blaxelEnvExample + webReadme,
+  /VITE_WORKSPACE_LIVE_DESKTOP_PROXY_ORIGIN|VITE_WORKSPACE_PREVIEW_ORIGIN|POLYNET_DAYTONA_APP_PREVIEW_TRANSPORT/,
+  "tracked environment templates and browser setup docs must not advertise deleted runtime presentation transports",
+);
+assert.match(
+  rootEnvExample,
+  /ARX_PREVIEW_PROXY_SIGNING_SECRET=/,
+  "the retained access-gated runtime preview proxy must keep its signing-secret template",
+);
 assert.doesNotMatch(
   app,
   /useWorkspaceRightPanelController|turnOnWorkspaceComputer|turnOffWorkspaceComputer|startProjectWorkspaceComputer|stopProjectWorkspaceComputer|useWebProjectUiController|projectUiController|projectModalHostProps|openWorkspaceStorageBillingModal|startWorkspaceCardSetupCheckout/,
@@ -534,15 +550,14 @@ assert.match(
   /\bweb-skeleton-(?:block|pill|row)\b/,
   "mounted web source must retain an emitter for the shared skeleton primitives",
 );
-for (const protectedDormantStyleRoot of [
-  ".runtime-computer-viewer",
-  ".workspace-app-preview-card",
-]) {
-  assert.ok(
-    baseCss.includes(protectedDormantStyleRoot),
-    `${protectedDormantStyleRoot} must remain styled until the protected viewer mount-or-delete decision`,
-  );
-}
+assert.ok(
+  !baseCss.includes(".workspace-app-preview"),
+  ".workspace-app-preview presentation must remain absent with the deleted Daytona preview card",
+);
+assert.ok(
+  !baseCss.includes(".runtime-computer-viewer"),
+  ".runtime-computer-viewer must remain absent with the deleted computer-use presentation",
+);
 for (const retiredTerminalPresentationStem of [
   ".workspace-rail-card",
   ".background-terminal",

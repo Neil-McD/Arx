@@ -13,7 +13,6 @@ import {
   DAYTONA_RUNTIME_POLICY,
   defaultDaytonaProviderEphemeralForLifecycleMode,
 } from "../shared/daytonaCodexRuntimePolicy";
-import { mintPreviewProxySessionToken } from "./previewProxySessionToken";
 import { normalizeWorkspacePreviewPort } from "../shared/workspacePreviewPort";
 
 type JsonRecord = Record<string, unknown>;
@@ -125,10 +124,6 @@ type DaytonaTargetTiming = {
 type DaytonaProviderTeardownTiming = {
   provider_teardown_ms: number;
 };
-
-type DaytonaAppPreviewTransport =
-  | "polynet_preview_gateway"
-  | "daytona_signed_direct";
 
 type DaytonaWorkspaceScanResult = {
   ok: boolean;
@@ -543,22 +538,6 @@ function normalizeDaytonaAppPreviewPort(value: unknown): number {
   return port;
 }
 
-function isDaytonaSandboxUnavailableForPreviewState(value: unknown): boolean {
-  const state = String(value ?? "").trim().toLowerCase();
-  return (
-    state === "stopping" ||
-    state === "stopped" ||
-    state === "archiving" ||
-    state === "archived" ||
-    state === "pausing" ||
-    state === "paused" ||
-    state === "destroying" ||
-    state === "destroyed" ||
-    state === "error" ||
-    state === "build_failed"
-  );
-}
-
 function normalizeDaytonaWorkspaceRelativePath(
   value: unknown,
   fallback = ".",
@@ -678,12 +657,6 @@ function readDaytonaTargetLifecycleMode(): DaytonaTargetLifecycleMode {
   if (explicit === "per_turn_ephemeral") return "per_turn_ephemeral";
   if (explicit === "thread_ephemeral") return "thread_ephemeral";
   return "thread_ephemeral";
-}
-
-function readDaytonaAppPreviewTransport(): DaytonaAppPreviewTransport {
-  const value = readEnv("POLYNET_DAYTONA_APP_PREVIEW_TRANSPORT").toLowerCase();
-  if (value === "daytona_signed_direct") return "daytona_signed_direct";
-  return "polynet_preview_gateway";
 }
 
 function normalizeDaytonaTargetLifecycleMode(
@@ -891,8 +864,6 @@ function buildWorkerEnv(params: {
     CONVEX_DEPLOYMENT: readEnv("CONVEX_DEPLOYMENT") || "dev:quick-porcupine-949",
     DAYTONA_SANDBOX_ID: params.sandboxId,
   };
-  const previewPattern = readEnv("POLYNET_DAYTONA_PREVIEW_URL_PATTERN");
-  if (previewPattern) env.POLYNET_DAYTONA_PREVIEW_URL_PATTERN = previewPattern;
   return env;
 }
 
@@ -1741,220 +1712,6 @@ export const startDaytonaAppPreviewInternal = internalAction({
         preview_inspection_status: "not_attempted",
         preview_render_status: "unknown",
         output_tail: result.output.slice(-4000),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        code: daytonaRuntimeErrorCode(error),
-        message: sanitizeDaytonaRuntimeError(error),
-      };
-    }
-  },
-});
-
-export const resolveDaytonaCodexRuntimePreviewInternal = internalAction({
-  args: {
-    ownerId: v.id("users"),
-    runId: v.string(),
-    port: v.number(),
-    expiresInSeconds: v.optional(v.number()),
-  },
-  handler: async (ctx, args): Promise<{
-    ok: boolean;
-    code?: string;
-    message?: string;
-    preview_url?: string;
-    preview_proxy_token?: string;
-    preview_port?: number;
-    preview_path?: string | null;
-    preview_label?: string | null;
-    expires_at?: number;
-    expires_in_seconds?: number;
-    auth_mode?: "signed_url";
-    preview_transport?: DaytonaAppPreviewTransport;
-  }> => {
-    try {
-      if (!hasDaytonaCredentials()) {
-        return {
-          ok: false,
-          code: "daytona_direct_credentials_missing",
-          message: "Daytona credentials are not configured.",
-        };
-      }
-      const port = normalizeDaytonaAppPreviewPort(args.port);
-      const expiresInSeconds = Math.max(
-        60,
-        Math.min(24 * 60 * 60, readPositiveNumber(args.expiresInSeconds, 2 * 60 * 60)),
-      );
-      const target = (await ctx.runQuery(
-        (internal as any).daytonaCodexRuntimeTargets
-          .getDaytonaCodexRuntimeTargetByRunIdInternal as any,
-        {
-          ownerId: args.ownerId,
-          runId: args.runId,
-        },
-      )) as JsonRecord | null;
-      if (!target) {
-        return {
-          ok: false,
-          code: "daytona_runtime_target_not_found",
-          message: "Daytona runtime target was not found for this run.",
-        };
-      }
-      const sandboxId = String(target.sandboxId ?? "").trim();
-      const sandboxState = String(target.sandboxState ?? "").trim();
-      const providerTeardownState = String(target.providerTeardownState ?? "").trim();
-      if (
-        !sandboxId ||
-        sandboxState === "deleted" ||
-        sandboxState === "stopped" ||
-        providerTeardownState === "deleted" ||
-        providerTeardownState === "stopped"
-      ) {
-        return {
-          ok: false,
-          code: "daytona_sandbox_not_available",
-          message: "Daytona sandbox is no longer available for this run.",
-        };
-      }
-      const previewLeaseExpiresAt = Number(target.previewLeaseExpiresAt ?? 0);
-      const previewLeaseActive =
-        String(target.previewLeaseState ?? "") === "active" &&
-        Number.isFinite(previewLeaseExpiresAt) &&
-        previewLeaseExpiresAt > Date.now();
-      const activePreviewPorts = normalizeActivePreviewPorts(target.activePreviewPorts);
-      if (!previewLeaseActive || !activePreviewPorts.includes(port)) {
-        return {
-          ok: false,
-          code: "daytona_preview_not_authorized",
-          message: "This Daytona app preview is no longer active.",
-        };
-      }
-
-      const { Daytona } = await loadDaytona();
-      const daytona = new Daytona(buildDaytonaConfig());
-      let sandbox: DaytonaSandbox;
-      try {
-        sandbox = await daytona.get(sandboxId);
-      } catch (error) {
-        if (!isDaytonaNotFoundError(error)) throw error;
-        const nowMs = Date.now();
-        await ctx.runMutation(
-          (internal as any).daytonaCodexRuntimeTargets
-            .markDaytonaCodexRuntimeTargetProviderTeardownInternal as any,
-          {
-            ownerId: args.ownerId,
-            runId: args.runId,
-            state: "deleted",
-            reason: "preview_resolution:sandbox_missing",
-            nowMs,
-          },
-        );
-        await appendDaytonaPreviewStoppedEventBestEffort({
-          ctx,
-          ownerId: args.ownerId,
-          runId: args.runId,
-          target,
-          reason: "preview_resolution:sandbox_missing",
-          source: "preview_resolution_sandbox_missing",
-          ports: activePreviewPorts,
-          nowMs,
-        });
-        return {
-          ok: false,
-          code: "daytona_sandbox_not_available",
-          message: "Daytona sandbox is no longer available for this run.",
-        };
-      }
-      const providerSandboxState = String(sandbox.state ?? "").trim();
-      if (isDaytonaSandboxUnavailableForPreviewState(providerSandboxState)) {
-        const providerState =
-          providerSandboxState === "destroyed" || providerSandboxState === "destroying"
-            ? "deleted"
-            : "stopped";
-        const nowMs = Date.now();
-        await ctx.runMutation(
-          (internal as any).daytonaCodexRuntimeTargets
-            .markDaytonaCodexRuntimeTargetProviderTeardownInternal as any,
-          {
-            ownerId: args.ownerId,
-            runId: args.runId,
-            state: providerState,
-            reason: `preview_resolution:${providerSandboxState || "unavailable"}`,
-            nowMs,
-          },
-        );
-        await appendDaytonaPreviewStoppedEventBestEffort({
-          ctx,
-          ownerId: args.ownerId,
-          runId: args.runId,
-          target,
-          reason: `preview_resolution:${providerSandboxState || "unavailable"}`,
-          source: "preview_resolution_provider_state",
-          ports: activePreviewPorts,
-          nowMs,
-        });
-        return {
-          ok: false,
-          code: "daytona_sandbox_not_available",
-          message: "Daytona sandbox is no longer available for this run.",
-        };
-      }
-      const signedPreview =
-        typeof sandbox.getSignedPreviewUrl === "function"
-          ? await sandbox.getSignedPreviewUrl(port, expiresInSeconds)
-          : null;
-      const previewUrl = normalizeUrl(
-        typeof signedPreview === "string" ? signedPreview : signedPreview?.url,
-      );
-      if (!previewUrl) {
-        return {
-          ok: false,
-          code: "daytona_preview_url_missing",
-          message: "Daytona did not return a preview URL for this app.",
-        };
-      }
-
-      const expiresAt = Date.now() + expiresInSeconds * 1000;
-      const previewTransport = readDaytonaAppPreviewTransport();
-      if (previewTransport === "daytona_signed_direct") {
-        return {
-          ok: true,
-          preview_url: previewUrl,
-          preview_port: port,
-          preview_path: null,
-          preview_label: `Daytona app :${port}`,
-          expires_at: expiresAt,
-          expires_in_seconds: expiresInSeconds,
-          auth_mode: "signed_url",
-          preview_transport: previewTransport,
-        };
-      }
-
-      const minted = await mintPreviewProxySessionToken({
-        kind: "workspace_preview",
-        previewUrl,
-        previewToken: null,
-        expiresAtMs: expiresAt,
-      });
-      if (!minted.ok) {
-        return {
-          ok: false,
-          code: minted.code,
-          message: minted.message,
-        };
-      }
-
-      return {
-        ok: true,
-        preview_proxy_token: minted.token,
-        preview_port: port,
-        preview_path: null,
-        preview_label: `Daytona app :${port}`,
-        expires_at: expiresAt,
-        expires_in_seconds: expiresInSeconds,
-        auth_mode: "signed_url",
-        preview_transport: "polynet_preview_gateway",
       };
     } catch (error) {
       return {

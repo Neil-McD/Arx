@@ -49,12 +49,6 @@ Production auth posture:
 - `ARX_AUTH_*` metadata and JWT verifier vars point at your AuthKit / OIDC issuer domain.
 - The browser bundle no longer needs direct WorkOS SDK env.
 
-Workspace preview / live desktop depend on the preview proxy signing secret:
-
-- Set `ARX_PREVIEW_PROXY_SIGNING_SECRET` to the same value in both Convex/runtime and the main `polynet` deployment.
-- `VITE_WORKSPACE_PREVIEW_ORIGIN` should point at the dedicated preview proxy origin for production preview transport.
-- `VITE_WORKSPACE_LIVE_DESKTOP_PROXY_ORIGIN` should point at the WS-capable live desktop proxy when computer-use live desktop is enabled.
-
 Cloud Auth redirect allowlist:
 
 - Add your Vercel Production domain callback, for example `https://www.polynet.ai/api/auth/google/callback`

@@ -11,7 +11,6 @@ function read(path: string): string {
 
 const daytonaActions = read("convex/daytonaCodexRuntimeTargetActions.ts");
 const threads = read("convex/threads.ts");
-const cloudThreadsRead = read("shared/cloudThreadsRead.ts");
 const runtimeExecutionSession = read("convex/runtimeExecutionSession.ts");
 const worker = read("services/polynet-codex-worker/src/server.ts");
 const workerTool = read("convex/polynetCodexWorkerTool.ts");
@@ -180,18 +179,6 @@ assert.match(
 );
 
 assert.match(
-  cloudThreadsRead,
-  /captureConvexCloudRuntimeRunComputerUseScreenshot/,
-  "browser/shared client must expose the screenshot bridge helper",
-);
-
-assert.match(
-  cloudThreadsRead,
-  /threads:captureCloudRuntimeRunComputerUseScreenshot/,
-  "shared helper must call the authenticated Convex action",
-);
-
-assert.match(
   worker,
   /buildComputerScreenshotDynamicToolSpec[\s\S]*name: CODEX_COMPUTER_SCREENSHOT_TOOL_NAME[\s\S]*inputImage/,
   "Daytona Codex worker must advertise computer_screenshot as a model-visible dynamic tool and return an image observation",
@@ -205,7 +192,7 @@ assert.match(
 
 assert.match(
   worker,
-  /formatComputerUseFailureText[\s\S]*not ready after retry[\s\S]*preview panel/,
+  /formatComputerUseFailureText[\s\S]*not ready after retry[\s\S]*app server may still be running[\s\S]*runtime-side visual inspection/,
   "Daytona Codex worker must present transient Computer Use failures as clean visual-inspection unavailability",
 );
 

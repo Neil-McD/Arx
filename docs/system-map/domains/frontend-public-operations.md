@@ -6,7 +6,7 @@ Project canonical state through one coherent communities-first product, expose t
 
 ## Frontend state and surface debt
 
-`App.tsx` is 12,022 lines, `base.css` 34,313, and `index.css` 3,497 after the current deletion slices. Large files are symptoms. The upstream causes are retained deferred surfaces, split route state, global orchestration, duplicated loaders/gate projections, and multi-era CSS.
+`App.tsx` is 9,267 lines, `base.css` 27,613, and `index.css` 2,765 after C7.4B2 current source. Large files are symptoms. The upstream causes are retained domain concentration, global orchestration, duplicated loaders/gate projections, and multi-era CSS.
 
 The earlier lexical scan found 2,649 class selectors in `base.css`; 832 names were not found in TypeScript/TSX/JS source. Dynamic classes make that only a candidate set. The strongest bounded `discover-app-*`/`discover-skill-*` marketplace block has since been deleted with production-build and staging visual proof.
 
@@ -44,13 +44,11 @@ The remaining proof imbalance is narrower: signed-in authority/recovery journeys
 
 ## Packages, environment, docs, and release
 
-- Root, web, and preview proxy each have a manifest/lock; root and web duplicate React/Vite/Convex/markdown dependency ownership without npm workspaces or an explicit version policy.
-- Root, web, preview proxy, and CI now share an explicit Node 22 policy.
-- `.env.convex.quickstart.example` duplicates/stales the primary template and instructs a development-key posture; no first-party owner was found.
-- `.env.example` uses `PLATFORM_MODEL_MAP_JSON`, while code reads `ARX_PLATFORM_MODEL_MAP_JSON`.
-- `apps/web/.env.example` documents `VITE_DAYTONA_*`, while runtime reads `VITE_WORKSPACE_*`.
-- `VITE_ENABLE_RUNTIME_TURN_V2` appears in templates/docs but no active runtime read was found.
-- Product docs still describe Workspace/thread as `alpha-current`; docs index understates implemented cognition status.
+- Root, web, and preview proxy each own one independently installed manifest/lock pair under the active package/deployment ownership contract and CI proof.
+- All three manifests/locks, the proxy container, and CI share Node 22; root/web shared declarations must use one range.
+- The ownerless quickstart, unread runtime-v2 flag, and deleted browser-preview template names are removed from tracked source.
+- Product docs follow the mounted member-agent/community-page-context model; thread persistence is `internal-only`.
+- Names-only deployed-environment reconciliation remains U-031.
 - Release authority is explicit: `origin/main`, GitHub-triggered Vercel project `polynet`, explicit Convex deployment, and version-marker verification. Direct local Vercel production release is forbidden.
 - Git/Vercel and provider rollback are documented, but no concrete product-data backup/restore test, RPO, RTO, or regional recovery runbook was found.
 
@@ -62,10 +60,10 @@ The remaining proof imbalance is narrower: signed-in authority/recovery journeys
 | unreferenced Discover Apps/Skills CSS | `DELETE (deferred/dead)` complete | `DELETE` | 10 | deferred surface had no static consumer and passed build/visual proof after removal |
 | decompose `App.tsx` before deleting surfaces | `DECISION REQUIRED (user confirmation)` | `DELETE_FIRST` | 8 | optimizes obsolete orchestration instead of removing it |
 | operator full-community N+1 aggregation | `KEEP (MVP core)` | `BOUND`, `CONSOLIDATE` | 9 | diagnostic UI must not become an unbounded production load |
-| 253 permanently retained `check:*` commands without owners | `DECISION REQUIRED (user confirmation)` | `OBSERVE_FIRST`, `CONSOLIDATE` | 8 | proof volume is not proof quality; classify by CI/release/dev ownership |
+| 241 permanently retained `check:*` commands without complete owners | `DECISION REQUIRED (user confirmation)` | `OBSERVE_FIRST`, `CONSOLIDATE` | 8 | proof volume is not proof quality; classify by CI/release/dev ownership |
 | web CI with one exact-build anonymous journey | `KEEP (MVP core)` | `KEEP_BOUNDED` | 2 | current gate defends the shipped build and one mutation-free public boundary; additional journeys need distinct risk justification |
-| stale/duplicated env templates and flags | `DELETE (deferred/dead)` | `OBSERVE_FIRST`, `MIGRATE_THEN_DELETE` | 9 | configuration drift creates false operational contracts |
-| independent root/web locks forever | `DECISION REQUIRED (user confirmation)` | `CONSOLIDATE` | 5 | may be intentional deployment isolation, but currently lacks an ownership policy |
+| stale/duplicated tracked env templates and flags | `DELETE (deferred/dead)` complete for source | `DELETE` | 9 | C7.4B1 removes false tracked configuration contracts; deployed-name cleanup remains U-031 |
+| one graph per independently installed root/web/proxy artifact | `KEEP (MVP core)` | `DOCUMENT`, `PROVE` complete | 1 | separate Vercel/Convex, browser, and Fly/Docker installs are now explicit and range-locked |
 | product-data backup/restore as an undocumented provider assumption | `KEEP (MVP core)` | `DOCUMENT`, `PROVE` | 10 | reliability without tested recovery is a claim, not a property |
 
 ## Frontend endpoint

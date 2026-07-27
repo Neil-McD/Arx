@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildRuntimeComputerUseViewer } from "../shared/runtimeComputerUseViewerUi.ts";
 import { buildRuntimeLiveTimeline } from "../shared/runtimeTimelineUi.ts";
 
 type ProofEvent = {
@@ -175,10 +174,5 @@ assert.match(toolGroups[0]?.title ?? "", /1 file/);
 assert.match(toolGroups[0]?.title ?? "", /1 directory/);
 assert.equal(toolGroups[1]?.calls[0]?.toolName, "community_resources_search");
 assert.equal(toolGroups[2]?.calls[0]?.toolName, "computer_screenshot");
-
-const computerViewer = buildRuntimeComputerUseViewer(polynetEvents);
-assert.equal(computerViewer?.latestFrameUrl, "https://example.com/frame.png");
-assert.equal(computerViewer?.latestActionTitle, "Capture screenshot");
-assert.equal(computerViewer?.status, "active");
 
 console.log("runtime_live_timeline_polynet_contract_proof: ok");

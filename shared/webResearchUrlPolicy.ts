@@ -100,7 +100,7 @@ export function classifyWebResearchUrlAccess(rawUrl: string): {
       normalizedUrl,
       code: "web_research_local_url_not_supported",
       message:
-        "web_research only opens public web URLs. For sandbox localhost or app previews, use workspace bash/terminal checks or the workspace preview surface.",
+        "web_research only opens public web URLs. For sandbox localhost or app verification, use workspace terminal checks or bound computer tools.",
     };
   }
   return {

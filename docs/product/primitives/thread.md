@@ -1,34 +1,34 @@
 ---
 id: product.thread
 title: Thread
-audience: builder, member, llm
-status: alpha-current
-last_verified: 2026-07-12
+audience: operator, llm
+status: internal-only
+last_verified: 2026-07-27
 ---
 
 # Thread
 
 ## Definition
 
-A thread is a persistent conversation record between a user and the agent.
+A thread is an internal persistent conversation record between a member and the agent.
 
-It is the durable unit of workspace conversation and context continuity.
+It is a backend persistence and audit primitive, not a user-facing destination.
 
 ## Why It Exists
 
-Threads preserve context, allow work to continue over time, and provide an auditable record of messages, lens state, and runtime evidence.
+Thread records preserve context, allow conversations to continue over time, and provide an auditable record of messages, lens state, and runtime evidence.
 
-Without threads, the workspace would be a stateless prompt box. Threads let the user build up work over time.
+Without durable records, the member agent would be stateless and the context used for a turn could not be reconstructed.
 
 ## User Mental Model
 
-A personal-agent episode is a continuing private conversation even when the member moves between communities.
+A member experiences a continuing private conversation even when they move between communities.
 
-The user can leave and return to the thread. If they change the community lens, that changes what happens next, not what already happened.
+The product may persist or rotate the underlying record without exposing thread navigation. A community-context change affects what happens next, not what already happened.
 
 ## System Mental Model
 
-A thread contains messages and can have an active community lens for future turns. Prior messages are not rewritten when the lens changes.
+A thread record contains messages and can have an active community lens for future turns. Prior messages are not rewritten when the lens changes.
 
 Thread history is one input to context. It must be bounded enough to preserve responsiveness and explicit enough to support auditability.
 
@@ -38,14 +38,13 @@ The current thread model includes:
 
 - persistent cloud thread records
 - durable messages
-- route-addressable thread URLs
 - optional active community lens
 - immutable per-run current-surface provenance
 - immutable per-run lens provenance
 - episodic rotation through `Start fresh conversation`
 - read-only recall of retained legacy per-community episodes
 - runtime evidence and activity metadata
-- thread rendering and runtime evidence
+- internal retrieval and runtime evidence
 
 ## Rules
 
@@ -64,13 +63,13 @@ The current thread model includes:
 
 ## Examples
 
-- A member keeps a strategy thread open for repeated work.
-- A member switches the active lens before asking for help from a different community context.
-- The system stores runtime evidence showing which context and tools were used for a turn.
+- The member agent continues a private conversation across page changes.
+- The system applies a newly validated community context only to subsequent turns.
+- An operator reconstructs which context and tools were used for a turn from stored evidence.
 
 ## Non-Goals
 
-A thread is not a community chat room. A thread is a personal workspace conversation, even when it uses a community lens.
+A thread is not a community chat room and not a member navigation surface.
 
 ## Common Mistakes
 
@@ -80,7 +79,6 @@ A thread is not a community chat room. A thread is a personal workspace conversa
 
 ## Related Concepts
 
-- `workspace`
 - `community-lens`
 - `agent`
 - `memory`

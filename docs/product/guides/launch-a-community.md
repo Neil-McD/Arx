@@ -3,7 +3,7 @@ id: product.guide.launch_community
 title: Launch a Community
 audience: builder, llm
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-07-27
 ---
 
 # Launch a Community
@@ -99,7 +99,7 @@ Before sharing the funnel, test:
 5. member can enter community
 6. member can read/post chat
 7. member can view resources
-8. member can use the community lens in workspace
+8. member can use the personal agent under authorized community context
 9. paid access creates entitlement after provider verification
 10. payout readiness is clear for the builder
 

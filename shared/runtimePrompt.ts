@@ -710,7 +710,7 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
   if (params.allowedToolNames.includes("web_research")) {
     toolGuidance.push(
       "- Use web_research for current external facts, official references, frontier signal, or information unlikely to exist in workspace or product docs.",
-      "- Do not use web_research for localhost, 127.0.0.1, private-network URLs, sandbox preview URLs, or app visual verification. For sandbox-local checks, use workspace bash/terminal evidence and the workspace preview surface.",
+      "- Do not use web_research for localhost, 127.0.0.1, private-network URLs, sandbox preview URLs, or app visual verification. For sandbox-local checks, use workspace bash/terminal evidence and bound computer tools.",
       "- If you start web research, complete the research loop: find relevant sources, open the best sources, extract facts, synthesize the answer, and name or cite the sources used.",
       "- For latest/current/recent queries, anchor on the runtime date, compare dates when available, and state exact dates when they matter.",
       "- Use short, specific search queries. Refine noisy searches instead of overstuffing the first query.",
@@ -774,37 +774,37 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
     if (!hasPreviewCapableTerminalTool) {
       toolGuidance.push(
         "- This run has bash but no preview-capable terminal_start/workspace_serve surface. Do not start persistent app servers or background localhost processes with bash.",
-        "- Do not present localhost, 127.0.0.1, or an internally fetched URL as user-visible or running in the UI. Those addresses are internal to the runtime environment unless a preview card/event is available.",
-        "- If the user asks to build, run, open, preview, or visually inspect an app, site, or UI, explain that visible app previews require a preview-capable Daytona runtime surface. You may plan or create files only when useful, but do not claim the app is visibly running.",
+        "- Do not present localhost, 127.0.0.1, or an internally fetched URL as user-visible or running in the UI. Those addresses are always internal to the runtime environment.",
+        "- If the user asks to build, run, open, preview, or visually inspect an app, site, or UI, explain that this run cannot start a persistent app server or perform runtime-side visual inspection. You may plan or create files only when useful, but do not claim the app is visibly running.",
       );
     }
   }
   if (hasPreviewCapableTerminalTool) {
     toolGuidance.push(
       "- Prefer bash for short-lived commands. Use background terminals for long-running or previewable processes.",
-      "- If the user asks to build and run, open, preview, show, visually inspect, or launch an app/site/UI, you must use terminal_start to start the server and expose an inline preview. Do not satisfy that request by running a persistent server with bash only.",
+      "- If the user asks to build and run, open, preview, show, visually inspect, or launch an app/site/UI, you must use terminal_start to start the server for runtime-side verification. Do not satisfy that request by running a persistent server with bash only.",
       hasTerminalReadTool
         ? "- Do not start the same long-running server command with both terminal_start and bash. After terminal_start, use terminal_read for status and logs instead of rerunning the server command in bash."
-        : "- Do not start the same long-running server command with both terminal_start and bash. After terminal_start, rely on the returned preview status and inline preview card; do not claim terminal log streaming is available.",
-      "- For a user-viewable app run, include preview metadata by default so the app can appear inline for the user while the terminal keeps running in the background. Set preview_port to the server port when you know it.",
-      "- For previewable apps, use one dense app shell that fits inline and expanded preview modes without page-level overflow.",
+        : "- Do not start the same long-running server command with both terminal_start and bash. After terminal_start, rely on the returned server status; do not claim terminal log streaming is available.",
+      "- Include preview_port metadata when the server port is known so runtime lifecycle and computer inspection can bind to the correct port. This metadata does not create a user-visible presentation surface.",
+      "- For apps, use one dense app shell that fits the target viewport without page-level overflow.",
       "- Prefer one active background terminal. Reuse or stop terminals based on fresh terminal state.",
       "- For blank or unknown previews, follow the process evidence loop: terminal health, preview probe, browser/computer observation, then app diagnosis. Do not restart a healthy background terminal before proving the process or command is wrong.",
       hasTerminalReadTool
         ? "- For localhost app checks, use bash or terminal_read inside the workspace. Do not route localhost through web_research or a generic public web tool."
         : "- For localhost app checks, use bash for short one-shot probes only. Do not route localhost through web_research or a generic public web tool.",
-      "- After a successful background terminal start, do not echo the returned preview/session fields back to the user unless they asked for operational detail or you are actively debugging a launch problem.",
+      "- After a successful background terminal start, do not echo the returned server/session fields back to the user unless they asked for operational detail or you are actively debugging a launch problem.",
     );
   }
   if (params.allowedToolNames.includes("terminal_stop")) {
     toolGuidance.push(
-      '- If a Daytona app preview is active and the user asks to stop the app, call terminal_stop with terminal_session_id "active_daytona_preview".',
+      '- If a Daytona app server is active and the user asks to stop the app, call terminal_stop with terminal_session_id "active_daytona_preview".',
     );
   }
   if (params.allowedToolNames.includes("computer_open_url")) {
     toolGuidance.push(
-      "- Use computer tools only when visual interaction is materially necessary after direct tools or preview links are insufficient.",
-      "- Do not open plain localhost or 127.0.0.1 with computer tools unless the computer surface is explicitly bound to the workspace preview session. Prefer the workspace preview surface for sandbox apps.",
+      "- Use computer tools only when visual interaction is materially necessary after direct tools and terminal evidence are insufficient.",
+      "- Open localhost or 127.0.0.1 with computer tools only when the computer surface is explicitly bound to the workspace app-server session.",
       "- Treat screenshots and computer-tool errors as ground truth. Stop after one reasonable retry when the same blocker persists.",
     );
   }
