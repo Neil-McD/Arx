@@ -22,6 +22,8 @@ const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.t
 const funnelActions = read("apps/web/src/controllers/useWebPublicFunnelActions.ts");
 const routeController = read("apps/web/src/controllers/useWebPublicCommunityRouteController.ts");
 const governanceController = read("shared/useCommunitySettingsGovernanceController.ts");
+const funnelGateway = read("shared/cloudCommunityFunnelGateway.ts");
+const communityLifecycle = read("convex/communityLifecycle.ts");
 const saveFunnelAboutSlice = sliceBetween(
   app,
   "const handleSaveCommunityFunnelAbout",
@@ -117,7 +119,7 @@ assert.match(
 );
 assert.match(
   routeController,
-  /loadPublicCommunity\(publicFunnelSlug, \{ recordVisit: !isPublicFunnelPreviewRoute \}\)/,
+  /loadPublicCommunity\(publicFunnelSlug, \{[\s\S]*recordVisit: !isPublicFunnelPreviewRoute,[\s\S]*isPreviewMode: isPublicFunnelPreviewRoute,[\s\S]*\}\)/,
   "the route load effect must suppress the visit record on the /preview route",
 );
 
@@ -134,8 +136,8 @@ assert.match(
 );
 assert.match(
   saveFunnelAboutSlice,
-  /saveCloudCommunityLaunchProfile\(\{[\s\S]*input: \{[\s\S]*about: communitySettingsAbout\.trim\(\) \|\| null,/,
-  "App must save inline Funnel About through the focused optional launch profile mutation",
+  /saveCloudCommunityAbout\(\{[\s\S]*about: communitySettingsAbout\.trim\(\) \|\| null,/,
+  "App must save inline Funnel About through the destination-owned narrow gateway",
 );
 assert.doesNotMatch(
   saveFunnelAboutSlice,
@@ -151,6 +153,16 @@ assert.doesNotMatch(
   governanceController,
   /Promise<boolean>|return false;/,
   "full community settings save must not be repurposed as Funnel About's save result transport",
+);
+assert.match(
+  funnelGateway,
+  /saveCloudCommunityAbout<[\s\S]*client\.mutation\("community:saveCommunityAbout"[\s\S]*about: params\.about/,
+  "the Funnel gateway must own the narrow About RPC",
+);
+assert.match(
+  communityLifecycle,
+  /export const saveCommunityAbout = mutation\(\{[\s\S]*requireCommunityManager[\s\S]*normalizeOptionalText\(args\.about, 8_000\)[\s\S]*ctx\.db\.patch[\s\S]*about,/,
+  "the narrow About mutation must remain manager-authorized and bounded",
 );
 
 // --- CSS: the inline About resting/editing state keeps native styling ---

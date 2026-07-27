@@ -683,6 +683,38 @@ export const saveCommunitySettings = mutation({
   },
 });
 
+export const saveCommunityAbout = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    about: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const { community } = await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const nowMs = Date.now();
+    const about = normalizeOptionalText(args.about, 8_000);
+    await ctx.db.patch(community._id as any, {
+      about,
+      updatedAt: nowMs,
+    });
+    return {
+      community_id: String(community._id),
+      about: about ?? null,
+      updated_at: toIsoString(nowMs),
+    };
+  },
+});
+
 export const saveCommunityLaunchProfile = mutation({
   args: {
     userId: v.optional(v.id("users")),
