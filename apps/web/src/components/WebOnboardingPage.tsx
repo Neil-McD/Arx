@@ -275,7 +275,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
           <span>{progress}%</span>
         </div>
         <div>
-          <p className="polynet-landing-kicker">Account setup</p>
+          <p className="setup-section-kicker">Account setup</p>
           <h1 id="polynet-onboarding-title">Finish account setup</h1>
           <p>{progress}% complete</p>
         </div>

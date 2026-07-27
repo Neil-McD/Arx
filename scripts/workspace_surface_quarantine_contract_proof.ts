@@ -24,6 +24,9 @@ const shellHost = read("apps/web/src/components/WebShellChromeHost.tsx");
 const shellClassNames = read("apps/web/src/controllers/buildWebShellChromeClassNames.ts");
 const webCss = read("apps/web/src/index.css");
 const baseCss = read("apps/web/src/base.css");
+const landingPage = read("apps/web/src/components/WebLandingPage.tsx");
+const landingCss = read("apps/web/src/components/polynetLanding/ConversionLanding.css");
+const accountOnboarding = read("apps/web/src/components/WebOnboardingPage.tsx");
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx");
 const communityAgentSection = read("apps/web/src/components/WebCommunityAiAgentSection.tsx");
@@ -393,6 +396,69 @@ assert.match(
   accountCommerceGateway,
   /startCloudPremiumSubscriptionCheckout|startCloudConnectOnboarding/,
   "Premium checkout and provider onboarding must remain available",
+);
+assert.match(
+  landingPage,
+  /import \{ ConversionLanding \} from "\.\/polynetLanding\/ConversionLanding";[\s\S]*import "\.\/polynetLanding\/ConversionLanding\.css";[\s\S]*return <ConversionLanding onJoin=\{props\.onTryFree\} \/>;/,
+  "the public entry surface must remain owned by ConversionLanding and its dedicated stylesheet",
+);
+assert.match(
+  landingCss,
+  /\.pn-landing\s*\{/,
+  "the mounted ConversionLanding stylesheet must retain its scoped root",
+);
+assert.doesNotMatch(
+  baseCss + webCss,
+  /\.polynet-landing-/,
+  "web CSS must not retain the retired pre-ConversionLanding selector family",
+);
+for (const retiredLandingKeyframe of [
+  "polynet-memory-feedback-orbit",
+  "polynet-memory-flow-in",
+  "polynet-memory-flow-out",
+  "polynet-memory-pulse",
+  "polynet-motif-pulse",
+  "polynet-motif-spin",
+  "polynet-motif-shuttle",
+  "polynet-motif-draw",
+  "polynet-motif-pulse-dot",
+  "polynet-agent-stream-scroll",
+  "polynet-community-thread-scroll",
+  "polynet-directory-scroll",
+  "polynet-directory-digest-dot",
+  "polynet-agent-type",
+  "polynet-agent-event-in",
+  "polynet-agent-caret-show",
+  "polynet-agent-caret-hide",
+  "polynet-agent-caret-blink",
+  "polynet-usage-event-in",
+  "polynet-usage-stream-scroll",
+]) {
+  assert.doesNotMatch(
+    baseCss,
+    new RegExp(`@keyframes\\s+${retiredLandingKeyframe}\\b`),
+    `${retiredLandingKeyframe} must remain deleted with its exclusive landing owner`,
+  );
+}
+assert.match(
+  baseCss,
+  /\.setup-section-kicker\s*\{[\s\S]*?letter-spacing:\s*0\.08em;/,
+  "account and community setup must retain their neutral shared kicker presentation",
+);
+assert.equal(
+  (accountOnboarding + communityLaunchSetup).match(/className="setup-section-kicker"/g)?.length,
+  2,
+  "the neutral setup kicker must have exactly the two audited setup emitters",
+);
+assert.doesNotMatch(
+  accountOnboarding + communityLaunchSetup,
+  /polynet-landing-kicker/,
+  "setup surfaces must not retain the retired landing ownership name",
+);
+assert.match(
+  baseCss,
+  /\.polynet-onboarding-shell,\s*\.polynet-onboarding-provider-grid\s*\{[\s\S]*?grid-template-columns:\s*1fr;/,
+  "the live mobile onboarding selector arms must survive legacy landing cleanup",
 );
 assert.doesNotMatch(
   baseCss,
