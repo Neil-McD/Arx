@@ -1,8 +1,7 @@
-import { useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
+import { useState, type DragEvent } from "react";
 
 import { type CreateCommunityIntentDraft } from "../../../../shared/createCommunityIntent";
 import { useCommunityCreateController } from "../../../../shared/useCommunityCreateController";
-import { useCommunityDeleteController } from "../../../../shared/useCommunityDeleteController";
 
 type SessionLike = {
   user: {
@@ -21,18 +20,10 @@ type AccountCommerceStatusLike = {
 
 type Visibility = "published" | "unlisted";
 
-type ModalCommunityLike = {
-  id: string;
-  name: string;
-};
-
 type UseWebCommunityUiControllerParams<
   SessionT extends SessionLike,
   CommunityT extends CommunityLike,
   BillingStatusT extends AccountCommerceStatusLike,
-  PageT extends string,
-  ViewT extends string,
-  TabT extends string,
 > = {
   session: SessionT | null;
   ensureSession?: (session?: SessionT | null) => Promise<SessionT | null>;
@@ -41,8 +32,6 @@ type UseWebCommunityUiControllerParams<
   accountCommerceStatus: BillingStatusT | null;
   accountCommerceError: string | null;
   isAccountSetupComplete: boolean;
-  activeCommunity: ModalCommunityLike | null;
-  activeCommunityId: string | null;
   communityInitials: (value: string) => string;
   loadAccountCommerceStatus: (session: SessionT) => Promise<BillingStatusT | null>;
   persistCreateCommunityIntent: (draft: CreateCommunityIntentDraft) => void;
@@ -56,14 +45,6 @@ type UseWebCommunityUiControllerParams<
   maxCreateImageDataUrlChars: number;
   createUnauthenticatedErrorMessage: string;
   bannerLoadFailureMessage: string;
-  loadCommunities: (session: SessionT) => Promise<void>;
-  setActiveCommunityId: Dispatch<SetStateAction<string | null>>;
-  setActivePage: Dispatch<SetStateAction<PageT>>;
-  setActiveView: Dispatch<SetStateAction<ViewT>>;
-  setCommunityTab: Dispatch<SetStateAction<TabT>>;
-  setCommunities: Dispatch<SetStateAction<CommunityT[]>>;
-  setCommunityRoleById: Dispatch<SetStateAction<Record<string, string>>>;
-  getCommunityId: (community: CommunityT) => string;
 };
 
 type CommunityCreateModalHostProps<
@@ -104,25 +85,11 @@ type CommunityCreateModalHostProps<
   onChangeVisibility: (value: Visibility) => void;
 };
 
-type CommunityDeleteModalHostProps = {
-  isOpen: boolean;
-  activeCommunity: ModalCommunityLike | null;
-  deleteCommunityNameInput: string;
-  deleteCommunityConfirmInput: string;
-  deleteCommunityError: string | null;
-  isDeletingCommunity: boolean;
-  onClose: () => void;
-  onChangeDeleteCommunityNameInput: (value: string) => void;
-  onChangeDeleteCommunityConfirmInput: (value: string) => void;
-  onConfirmDelete: () => Promise<void>;
-};
-
 export type WebCommunityModalHostPropsShape<
   CommunityT extends CommunityLike,
   BillingStatusT extends AccountCommerceStatusLike,
 > = {
   createModal: CommunityCreateModalHostProps<CommunityT, BillingStatusT>;
-  deleteModal: CommunityDeleteModalHostProps;
 };
 
 export type UseWebCommunityUiControllerResult<
@@ -131,7 +98,6 @@ export type UseWebCommunityUiControllerResult<
 > = {
   openCreateCommunityModal: (draft?: CreateCommunityIntentDraft | null) => void;
   resumeCreateCommunityIntent: (draft?: CreateCommunityIntentDraft | null) => void;
-  openDeleteCommunityModal: () => void;
   modalHostProps: WebCommunityModalHostPropsShape<CommunityT, BillingStatusT>;
 };
 
@@ -139,18 +105,10 @@ export function useWebCommunityUiController<
   SessionT extends SessionLike,
   CommunityT extends CommunityLike,
   BillingStatusT extends AccountCommerceStatusLike,
-  PageT extends string,
-  ViewT extends string,
-  TabT extends string,
 >(
-  params: UseWebCommunityUiControllerParams<SessionT, CommunityT, BillingStatusT, PageT, ViewT, TabT>,
+  params: UseWebCommunityUiControllerParams<SessionT, CommunityT, BillingStatusT>,
 ): UseWebCommunityUiControllerResult<CommunityT, BillingStatusT> {
   const [showCreateCommunityModal, setShowCreateCommunityModal] = useState(false);
-  const [showDeleteCommunityModal, setShowDeleteCommunityModal] = useState(false);
-  const [deleteCommunityNameInput, setDeleteCommunityNameInput] = useState("");
-  const [deleteCommunityConfirmInput, setDeleteCommunityConfirmInput] = useState("");
-  const [deleteCommunityError, setDeleteCommunityError] = useState<string | null>(null);
-  const [isDeletingCommunity, setIsDeletingCommunity] = useState(false);
   const [createCommunityName, setCreateCommunityName] = useState("");
   const [createCommunitySlug, setCreateCommunitySlug] = useState("");
   const [createCommunitySlugEdited, setCreateCommunitySlugEdited] = useState(false);
@@ -212,33 +170,9 @@ export function useWebCommunityUiController<
     bannerLoadFailureMessage: params.bannerLoadFailureMessage,
   });
 
-  const {
-    openDeleteCommunityModal,
-    closeDeleteCommunityModal,
-    handleConfirmDeleteCommunity,
-  } = useCommunityDeleteController<SessionT, CommunityT, PageT, ViewT, TabT>({
-    session: params.session,
-    ensureSession: params.ensureSession,
-    activeCommunityId: params.activeCommunityId,
-    loadCommunities: params.loadCommunities,
-    setDeleteCommunityError,
-    setDeleteCommunityNameInput,
-    setDeleteCommunityConfirmInput,
-    setShowDeleteCommunityModal,
-    setIsDeletingCommunity,
-    setActiveCommunityId: params.setActiveCommunityId,
-    setActivePage: params.setActivePage,
-    setActiveView: params.setActiveView,
-    setCommunityTab: params.setCommunityTab,
-    setCommunities: params.setCommunities,
-    setCommunityRoleById: params.setCommunityRoleById,
-    getCommunityId: params.getCommunityId,
-  });
-
   return {
     openCreateCommunityModal,
     resumeCreateCommunityIntent,
-    openDeleteCommunityModal,
     modalHostProps: {
       createModal: {
         isOpen: showCreateCommunityModal,
@@ -273,18 +207,6 @@ export function useWebCommunityUiController<
         onChangeSlug: setCreateCommunitySlug,
         onChangeSlugEdited: setCreateCommunitySlugEdited,
         onChangeVisibility: setCreateCommunityVisibility,
-      },
-      deleteModal: {
-        isOpen: showDeleteCommunityModal,
-        activeCommunity: params.activeCommunity,
-        deleteCommunityNameInput,
-        deleteCommunityConfirmInput,
-        deleteCommunityError,
-        isDeletingCommunity,
-        onClose: closeDeleteCommunityModal,
-        onChangeDeleteCommunityNameInput: setDeleteCommunityNameInput,
-        onChangeDeleteCommunityConfirmInput: setDeleteCommunityConfirmInput,
-        onConfirmDelete: handleConfirmDeleteCommunity,
       },
     },
   };

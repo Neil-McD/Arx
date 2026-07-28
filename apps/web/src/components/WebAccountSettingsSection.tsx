@@ -49,7 +49,6 @@ type WebAccountSettingsSectionProps = {
   authError: string | null;
   requireSignIn: () => void;
   handleSignOut: () => Promise<void> | void;
-  deleteAccount: () => Promise<void> | void;
   isLoadingChatgptConnection: boolean;
   chatgptConnection: ChatgptConnection;
   isConnectingChatgpt: boolean;
@@ -95,55 +94,15 @@ type WebAccountSettingsSectionProps = {
   pendingPurchasesSuccess: string | null;
 };
 
-const deleteAccountErrorMessages: Record<string, string> = {
-  account_delete_owned_communities_blocked: "Delete or transfer owned communities before deleting your account.",
-  account_delete_active_community_subscription_blocked: "Cancel active community memberships before deleting your account.",
-  account_delete_active_payout_account_blocked: "Resolve active payout setup before deleting your account.",
-  account_delete_partner_finance_pending_blocked: "Resolve pending Builder Partner commissions or payouts before deleting your account.",
-  account_delete_mounted_apps_blocked: "Remove your apps from communities before deleting your account.",
-  account_delete_attached_skills_blocked: "Remove your skills from communities before deleting your account.",
-};
-
-function readDeleteAccountErrorCode(value: unknown): string | null {
-  if (value && typeof value === "object") {
-    const data = (value as { data?: unknown }).data;
-    if (data && typeof data === "object") {
-      const code = (data as { code?: unknown }).code;
-      if (typeof code === "string" && code in deleteAccountErrorMessages) return code;
-      const reason = (data as { reason?: unknown }).reason;
-      if (typeof reason === "string" && reason in deleteAccountErrorMessages) return reason;
-    }
-
-    const code = (value as { code?: unknown }).code;
-    if (typeof code === "string" && code in deleteAccountErrorMessages) return code;
-  }
-
-  const message = value instanceof Error ? value.message : String(value ?? "");
-  for (const code of Object.keys(deleteAccountErrorMessages)) {
-    if (message.includes(code)) return code;
-  }
-  return null;
-}
-
-function formatDeleteAccountError(error: unknown): string {
-  const code = readDeleteAccountErrorCode(error);
-  if (code) return deleteAccountErrorMessages[code];
-  return "Account could not be deleted. Please try again.";
-}
-
 export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps) {
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [isSubmittingSignOut, setIsSubmittingSignOut] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState("");
-  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const [stripeConnectCountry, setStripeConnectCountry] = useState("");
   const {
     session,
     authError,
     requireSignIn,
     handleSignOut,
-    deleteAccount,
     isLoadingChatgptConnection,
     chatgptConnection,
     isConnectingChatgpt,
@@ -196,9 +155,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     if (session) return;
     setIsSignOutConfirmOpen(false);
     setIsSubmittingSignOut(false);
-    setDeleteConfirmation("");
-    setIsDeletingAccount(false);
-    setDeleteAccountError(null);
   }, [session]);
 
   const handleConfirmSignOut = async (): Promise<void> => {
@@ -209,18 +165,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
       setIsSignOutConfirmOpen(false);
     } finally {
       setIsSubmittingSignOut(false);
-    }
-  };
-
-  const handleDeleteAccount = async (): Promise<void> => {
-    if (!session || isDeletingAccount || deleteConfirmation !== "DELETE") return;
-    setIsDeletingAccount(true);
-    setDeleteAccountError(null);
-    try {
-      await deleteAccount();
-    } catch (error) {
-      setDeleteAccountError(formatDeleteAccountError(error));
-      setIsDeletingAccount(false);
     }
   };
 
@@ -650,39 +594,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
           </div>
         )}
 
-      {session && (
-        <div className="settings-section">
-          <div className="settings-section-title">
-            <svg viewBox="0 0 24 24"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5" /><path d="M14 11v5" /></svg>
-            Delete account
-          </div>
-          <div className="settings-section-desc">
-            Delete your Polynet account data, including your profile, sessions, provider connections, personal memory, workspace threads, and personal workspace data. Active subscriptions, payout setup, owned communities, and community app grants or skills must be resolved first.
-          </div>
-          <div className="provider-connection-stack">
-            <input
-              className="provider-connection-input"
-              value={deleteConfirmation}
-              onChange={(event) => setDeleteConfirmation(event.target.value)}
-              placeholder="Type DELETE to confirm"
-              autoComplete="off"
-              spellCheck={false}
-              disabled={isDeletingAccount}
-            />
-            <div className="auth-actions">
-              <button
-                className="danger"
-                type="button"
-                onClick={() => void handleDeleteAccount()}
-                disabled={isDeletingAccount || deleteConfirmation !== "DELETE"}
-              >
-                {isDeletingAccount ? "Deleting…" : "Delete account"}
-              </button>
-            </div>
-          </div>
-          {deleteAccountError ? <div className="auth-error">{deleteAccountError}</div> : null}
-        </div>
-      )}
     </>
   );
 }

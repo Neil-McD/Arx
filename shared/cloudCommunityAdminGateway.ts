@@ -1906,15 +1906,3 @@ export async function saveCloudCommunityMemberSettings<SessionT>(
     mutedUntilIso: params.mutedUntil ?? null,
   });
 }
-
-export async function deleteCloudCommunity<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<void> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:deleteCommunity" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-}

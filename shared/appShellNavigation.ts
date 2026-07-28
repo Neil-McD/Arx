@@ -65,7 +65,6 @@ export const COMMUNITY_SETTINGS_PANES = [
   "community",
   "workflows",
   "integrations",
-  "danger",
 ] as const;
 
 export type CommunitySettingsPane = (typeof COMMUNITY_SETTINGS_PANES)[number];
@@ -155,8 +154,6 @@ export function parseCommunitySettingsPane(value: string | null | undefined): Co
       return "workflows";
     case "integrations":
       return "integrations";
-    case "danger":
-      return "danger";
     case "community":
     default:
       return "community";

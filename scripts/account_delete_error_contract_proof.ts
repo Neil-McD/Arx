@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
 }
 
 const account = read("convex/account.ts");
-const accountGateway = read("shared/cloudAccountGateway.ts");
+const app = read("apps/web/src/App.tsx");
+const accountSettings = read(
+  "apps/web/src/components/WebAccountSettingsSection.tsx",
+);
 const quarantineContract = read(
   "docs/destructive-lifecycle-quarantine-contract-v1.md",
 );
@@ -29,10 +32,20 @@ assert.match(
   /args:\s*\{\s*authSubject: v\.optional\(v\.string\(\)\),?\s*\}/,
   "the cached-client account deletion arguments must remain compatible",
 );
-assert.match(
-  accountGateway,
-  /client\.mutation\("account:deleteOwnAccount" as any,\s*\{\s*authSubject,\s*\}\)/,
-  "the current client must continue using the cached public mutation identity",
+assert.equal(
+  existsSync("shared/cloudAccountGateway.ts"),
+  false,
+  "the first-party account deletion gateway must be deleted while the mutation is quarantined",
+);
+assert.doesNotMatch(
+  app,
+  /deleteCloudOwnAccount|deleteOwnAccountFromSettings|account:deleteOwnAccount/,
+  "App must not retain a first-party account deletion call path",
+);
+assert.doesNotMatch(
+  accountSettings,
+  /Delete account|deleteAccount|deleteConfirmation|handleDeleteAccount/,
+  "Account settings must not advertise or wire quarantined deletion",
 );
 assert.match(
   account,
@@ -67,7 +80,8 @@ assert.doesNotMatch(
 assert.ok(
   quarantineContract.includes(quarantineCode) &&
     quarantineContract.includes(communityQuarantineCode) &&
-    quarantineContract.includes("## Zero-effect invariant"),
+    quarantineContract.includes("## Zero-effect invariant") &&
+    quarantineContract.includes("## Current first-party client contract"),
   "the active documentation must record both stable quarantine codes and the zero-effect invariant",
 );
 assert.equal(
