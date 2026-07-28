@@ -76,13 +76,16 @@ jobs:
         run: npm ci
 
       - name: Audit root dependencies
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=low
+
+      - name: Run dependency security compatibility interlock
+        run: npm run check:dependency-security-interlock
 
       - name: Install web dependencies
         run: npm --prefix apps/web ci
 
       - name: Audit web dependencies
-        run: npm --prefix apps/web audit --audit-level=high
+        run: npm --prefix apps/web audit --audit-level=low
 
       - name: Setup Node.js for preview proxy
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -93,7 +96,7 @@ jobs:
         run: npm --prefix apps/preview-proxy ci
 
       - name: Audit preview proxy dependencies
-        run: npm --prefix apps/preview-proxy audit --audit-level=moderate
+        run: npm --prefix apps/preview-proxy audit --audit-level=low
 
   foundation-baseline:
     name: Foundation Baseline
