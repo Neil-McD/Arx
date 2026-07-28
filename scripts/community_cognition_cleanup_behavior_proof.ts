@@ -377,10 +377,10 @@ assert.match(
   /args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),\s*communityId: v\.id\("communities"\),\s*\}/,
   "the cached-client community deletion arguments must remain compatible",
 );
-assert.match(
+assert.doesNotMatch(
   communityGateway,
   /client\.mutation\("community:deleteCommunity" as any,\s*\{\s*authSubject,\s*communityId: params\.communityId,\s*\}\)/,
-  "the current client must continue using the cached public mutation identity",
+  "the current first-party client must not call the quarantined public mutation",
 );
 assert.match(
   communityFacade,

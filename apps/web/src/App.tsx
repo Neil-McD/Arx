@@ -215,7 +215,6 @@ import {
   readCurrentCommunityLaunchSetupRouteContext,
   type CommunityLaunchSetupRouteContext,
 } from "./communityLaunchSetupRoute";
-import { deleteCloudOwnAccount } from "../../../shared/cloudAccountGateway";
 import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelRegistryGateway";
 import {
   loadCloudProviderConnections,
@@ -3334,7 +3333,6 @@ export default function App() {
     isActiveCommunityAdmin,
     communitySettingsLayer,
     canManageCommunitySettings,
-    canDeleteActiveCommunity,
     canViewActiveCommunityPolynet,
     canViewMemberPlanDetailsActiveCommunity,
     canViewMembersActiveCommunity,
@@ -4295,17 +4293,6 @@ export default function App() {
     } finally {
       setIsSavingOnboarding(false);
     }
-  }
-
-  async function deleteOwnAccountFromSettings(): Promise<void> {
-    const activeSession = await ensureUsableAuthSession();
-    if (!activeSession) {
-      requireSignIn();
-      return;
-    }
-    await deleteCloudOwnAccount<AuthSession>({ session: activeSession });
-    await handleSignOut();
-    navigateTo("/");
   }
 
   const applyAppRouteState = useCallback((nextAppRoute: AppRouteState) => {
@@ -7822,10 +7809,7 @@ export default function App() {
   const communityUi = useWebCommunityUiController<
     AuthSession,
     CommunityRecord,
-    AccountCommerceStatus,
-    AppPage,
-    AppView,
-    CommunityTab
+    AccountCommerceStatus
   >({
     ...authenticatedSessionArg,
     communities,
@@ -7833,8 +7817,6 @@ export default function App() {
     accountCommerceStatus,
     accountCommerceError,
     isAccountSetupComplete: isAccountSetupCompleteForBuilderActions,
-    activeCommunity,
-    activeCommunityId,
     communityInitials,
     loadAccountCommerceStatus,
     persistCreateCommunityIntent,
@@ -7861,19 +7843,8 @@ export default function App() {
     maxCreateImageDataUrlChars: MAX_WEB_IMAGE_DATA_URL_CHARS,
     createUnauthenticatedErrorMessage: "Sign in to create a community.",
     bannerLoadFailureMessage: "Failed to load banner.",
-    loadCommunities,
-    setActiveCommunityId,
-    setActivePage,
-    setActiveView,
-    setCommunityTab,
-    setCommunities,
-    setCommunityRoleById,
-    getCommunityId: (community) => community.id,
   });
-  const {
-    openCreateCommunityModal,
-    openDeleteCommunityModal,
-  } = communityUi;
+  const { openCreateCommunityModal } = communityUi;
 
   const {
     publicFunnelSlug,
@@ -10486,7 +10457,6 @@ export default function App() {
       onSelectCommunitySettingsPane: handleSelectCommunitySettingsPane,
       onPreviewCommunityOnboarding: handlePreviewCommunityOnboarding,
       canManageCommunitySettings,
-      canDeleteActiveCommunity,
       requireSignIn,
       accountCommerceStatus,
       accountCommerceError,
@@ -10572,7 +10542,6 @@ export default function App() {
         setCommunitySettingsPriceUsdAnnual,
         communityPricingDirtyRef,
         handleSaveCommunitySettings,
-        openDeleteCommunityModal,
         handleToggleCommunityMute,
         handleLeaveCommunity,
       },
@@ -11101,7 +11070,6 @@ export default function App() {
       authError,
       requireSignIn,
       handleSignOut,
-      deleteAccount: deleteOwnAccountFromSettings,
       isLoadingChatgptConnection,
       chatgptConnection,
       isLoadingOpenAiConnection: isLoadingChatgptConnection,

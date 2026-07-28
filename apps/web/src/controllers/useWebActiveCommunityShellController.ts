@@ -192,7 +192,6 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   const communitySettingsLayer = deriveCommunitySettingsLayer(currentActiveCommunityAccess);
   const canManageCommunitySettings =
     communitySettingsLayer === "admin" || communitySettingsLayer === "owner";
-  const canDeleteActiveCommunity = communitySettingsLayer === "owner";
   const canViewMemberPlanDetailsActiveCommunity = isActiveCommunityOwner || isActiveCommunityAdmin;
   const canViewMembersActiveCommunity = communityNavVisibility.canViewMembers;
   const canViewActiveCommunitySettings = communityNavVisibility.canViewSettings;
@@ -255,7 +254,6 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     isActiveCommunityAdmin,
     communitySettingsLayer,
     canManageCommunitySettings,
-    canDeleteActiveCommunity,
     canViewActiveCommunityPolynet,
     canViewMemberPlanDetailsActiveCommunity,
     canViewMembersActiveCommunity,

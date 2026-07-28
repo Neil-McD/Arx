@@ -26,6 +26,21 @@ cached clients do not fail with an unknown-function transport error:
 The retained functions are compatibility boundaries, not deletion
 implementations.
 
+## Current first-party client contract
+
+Current first-party web clients do not advertise or invoke either quarantined
+deletion mutation:
+
+- global Account settings expose no account deletion control;
+- community settings expose no Danger pane or community deletion control;
+- no first-party browser gateway calls either retained public mutation;
+- legacy `/c/:slug/settings/danger` paths normalize to the canonical Community
+  settings pane.
+
+This client contraction does not remove or weaken the retained public mutation
+identities. Deployed or cached clients still receive the authority-checked,
+deterministic lifecycle-blocked results below.
+
 ## Authority and result contract
 
 Account deletion:
@@ -61,7 +76,6 @@ while this quarantine is active.
 
 ## Explicitly outside this slice
 
-- frontend deletion-control removal or replacement;
 - production data changes;
 - Stripe, WorkOS, storage, or other provider cleanup;
 - Convex production deployment;

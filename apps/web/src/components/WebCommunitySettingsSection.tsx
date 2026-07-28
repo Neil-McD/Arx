@@ -58,7 +58,6 @@ type WebCommunitySettingsSectionProps = {
   onSelectPane: (pane: CommunitySettingsPane, opts?: { replace?: boolean }) => void;
   onPreviewCommunityOnboarding: () => void;
   canManageCommunitySettings: boolean;
-  canDeleteCommunity: boolean;
   requireSignIn: () => void;
   accountCommerceStatus: AccountCommerceStatus | null;
   accountCommerceError: string | null;
@@ -170,7 +169,6 @@ type WebCommunitySettingsSectionProps = {
     setCommunitySettingsPriceUsdAnnual: (value: string) => void;
     setCommunityPricingDirty: () => void;
     handleSaveCommunitySettings: () => Promise<void> | void;
-    openDeleteCommunityModal: () => void;
     handleToggleCommunityMute: (value: boolean) => Promise<void> | void;
     handleLeaveCommunity: () => Promise<void> | void;
   };
@@ -210,7 +208,6 @@ const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
   community: "Community",
   workflows: "Workflows",
   integrations: "Integrations",
-  danger: "Danger",
 };
 
 function CommunitySettingsPaneSwitcher({
@@ -896,28 +893,6 @@ function CommunityMonetizationConfigSection({
   );
 }
 
-function CommunityDangerZoneSection({
-  state,
-  actions,
-}: Pick<WebCommunitySettingsSectionProps, "state"> & Pick<WebCommunitySettingsSectionProps, "actions">) {
-  return (
-    <div className="settings-section" style={{ marginTop: 18 }}>
-      <div className="settings-section-title">Danger zone</div>
-      <div className="settings-section-desc">
-        Permanently delete this community and all associated data.
-      </div>
-      <button
-        type="button"
-        className="danger delete-community-btn"
-        onClick={actions.openDeleteCommunityModal}
-        disabled={state.isSavingCommunitySettings || state.isProcessingCommunitySettingsBanner}
-      >
-        Delete community
-      </button>
-    </div>
-  );
-}
-
 function CommunityMemberSettingsSection({
   activeCommunity,
   state,
@@ -982,7 +957,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     activePane,
     onSelectPane,
     canManageCommunitySettings,
-    canDeleteCommunity,
     requireSignIn,
     accountCommerceStatus,
     accountCommerceError,
@@ -993,9 +967,11 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     actions,
   } = props;
   const isOwnerSettingsLayer = communitySettingsLayer === "owner";
-  const ownerSettingsPanes: CommunitySettingsPane[] = canDeleteCommunity
-    ? ["community", "workflows", "integrations", "danger"]
-    : ["community", "workflows", "integrations"];
+  const ownerSettingsPanes: CommunitySettingsPane[] = [
+    "community",
+    "workflows",
+    "integrations",
+  ];
   const availableSettingsPanes = canManageCommunitySettings ? ownerSettingsPanes : [];
   const selectedSettingsPane = availableSettingsPanes.includes(activePane)
     ? activePane
@@ -1117,9 +1093,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 communityAvatarZoom={activeCommunity.avatar_zoom}
                 onPreview={props.onPreviewCommunityOnboarding}
               />
-            ) : null}
-            {selectedSettingsPane === "danger" && canDeleteCommunity ? (
-              <CommunityDangerZoneSection state={state} actions={actions} />
             ) : null}
           </div>
         </>
