@@ -98,4 +98,7 @@ The screenshot-bridge proof's source matcher was widened to accept formatter
 whitespace around `||`; its protected runtime assertion and runtime code are
 unchanged.
 
-Remote GitHub and Vercel acceptance remains pending until this commit is pushed.
+Remote GitHub and Vercel acceptance is recorded on the pull request for the
+exact final head SHA immediately before merge. Keeping that mutable receipt on
+the PR prevents this static document from becoming stale after every
+documentation-only follow-up commit.
