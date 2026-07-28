@@ -71,3 +71,18 @@ while this quarantine is active.
 Re-enabling deletion requires a separately reviewed lifecycle contract with
 retention rules, provider ordering, idempotency, recovery behavior, complete
 effect inventory, and isolated acceptance evidence.
+
+## Isolated staging acceptance
+
+The exact release candidate at
+`e7a209b788b8459acd1c952e64b06a7e5c5bf622` passed isolated backend staging
+acceptance on 2026-07-28. The proof covered unauthenticated, mismatched,
+unprovisioned, non-owner, legacy-user-ID-spoof, and authorized replay paths for
+both retained public mutation identities. The complete fixture graph was
+unchanged after the matrix, cleanup left zero residue, and the temporary
+internal acceptance harness was removed from the deployed surface.
+
+The human-readable certificate is
+[`destructive-lifecycle-quarantine-staging-acceptance-20260728.md`](./destructive-lifecycle-quarantine-staging-acceptance-20260728.md).
+Machine-checked evidence is stored in
+[`destructive_lifecycle_quarantine_staging_acceptance_20260728.json`](../scripts/fixtures/destructive_lifecycle_quarantine_staging_acceptance_20260728.json).
