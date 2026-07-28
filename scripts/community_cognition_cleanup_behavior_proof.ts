@@ -356,22 +356,61 @@ assert.deepEqual(
   COMMUNITY_COGNITION_CLEANUP_PHASES.map((definition) => definition.phase),
   "the Convex validator and fixed cleanup allowlist must stay in lockstep",
 );
-const canonicalCommunityDeleteIndex = lifecycle.indexOf(
-  "await ctx.db.delete(community._id as any);",
+const deleteCommunityStart = lifecycle.indexOf(
+  "export const deleteCommunity = mutation({",
 );
-const cleanupScheduleIndex = lifecycle.indexOf(
-  "drainDeletedCommunityCognitionInternal",
-  canonicalCommunityDeleteIndex,
-);
-assert.ok(canonicalCommunityDeleteIndex >= 0, "canonical community deletion must remain present");
 assert.ok(
-  cleanupScheduleIndex > canonicalCommunityDeleteIndex,
-  "canonical deletion must atomically schedule cleanup after deleting the community row",
+  deleteCommunityStart >= 0,
+  "the cached-client community deletion identity must remain present",
+);
+const deleteCommunityBlock = lifecycle.slice(deleteCommunityStart);
+const communityGateway = readFileSync(
+  new URL("../shared/cloudCommunityAdminGateway.ts", import.meta.url),
+  "utf8",
+);
+const communityFacade = readFileSync(
+  new URL("../convex/community.ts", import.meta.url),
+  "utf8",
+);
+assert.match(
+  deleteCommunityBlock,
+  /args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),\s*communityId: v\.id\("communities"\),\s*\}/,
+  "the cached-client community deletion arguments must remain compatible",
+);
+assert.match(
+  communityGateway,
+  /client\.mutation\("community:deleteCommunity" as any,\s*\{\s*authSubject,\s*communityId: params\.communityId,\s*\}\)/,
+  "the current client must continue using the cached public mutation identity",
+);
+assert.match(
+  communityFacade,
+  /deleteCommunity as deleteCommunityImpl,[\s\S]*export const deleteCommunity = deleteCommunityImpl;/,
+  "the canonical community facade must retain the public deletion identity",
+);
+assert.match(
+  deleteCommunityBlock,
+  /await resolveUserIdForAuthenticatedRequest\(\{[\s\S]*?\}\);[\s\S]*?await requireCommunityOwner\(\{[\s\S]*?userId,[\s\S]*?\}\);[\s\S]*?throw new ConvexError\(\{/,
+  "community deletion must authenticate the actor and prove ownership before returning the quarantine error",
 );
 assert.equal(
-  lifecycle.match(/drainDeletedCommunityCognitionInternal/g)?.length,
+  lifecycle.match(/community_delete_lifecycle_migration_blocked/g)?.length,
   1,
-  "canonical deletion must have exactly one cleanup entry point",
+  "community deletion must use one stable quarantine code",
+);
+assert.match(
+  deleteCommunityBlock,
+  /code: COMMUNITY_DELETION_QUARANTINE_CODE,\s*reason: COMMUNITY_DELETION_QUARANTINE_CODE,/,
+  "the quarantine must expose structured client-visible code and reason fields",
+);
+assert.doesNotMatch(
+  deleteCommunityBlock,
+  /ctx\.(?:db|storage|scheduler)|\.(?:insert|patch|replace|delete)\(|runMutation|runAction|drainDeletedCommunityCognitionInternal|fetch\(|Date\.now|Math\.random/,
+  "quarantined community deletion must have no database, storage, scheduler, provider, cleanup, or nondeterministic effects",
+);
+assert.equal(
+  lifecycle.match(/drainDeletedCommunityCognitionInternal/g)?.length ?? 0,
+  0,
+  "the public lifecycle must not remain an active cognition cleanup entry point",
 );
 
 for (const [file, expectedCount] of [
