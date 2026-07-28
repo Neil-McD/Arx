@@ -6,61 +6,64 @@ function read(path: string): string {
 }
 
 const account = read("convex/account.ts");
-const accountSettings = read("apps/web/src/components/WebAccountSettingsSection.tsx");
+const accountGateway = read("shared/cloudAccountGateway.ts");
+const quarantineContract = read(
+  "docs/destructive-lifecycle-quarantine-contract-v1.md",
+);
+const quarantineCode = "account_delete_lifecycle_migration_blocked";
 
-const blockerCodes = [
-  "account_delete_owned_communities_blocked",
-  "account_delete_active_community_subscription_blocked",
-  "account_delete_active_payout_account_blocked",
-  "account_delete_partner_finance_pending_blocked",
-  "account_delete_mounted_apps_blocked",
-  "account_delete_attached_skills_blocked",
-];
+assert.match(
+  account,
+  /export const deleteOwnAccount = mutation\(\{/,
+  "the cached-client account deletion identity must remain present",
+);
+assert.match(
+  account,
+  /args:\s*\{\s*authSubject: v\.optional\(v\.string\(\)\),?\s*\}/,
+  "the cached-client account deletion arguments must remain compatible",
+);
+assert.match(
+  accountGateway,
+  /client\.mutation\("account:deleteOwnAccount" as any,\s*\{\s*authSubject,\s*\}\)/,
+  "the current client must continue using the cached public mutation identity",
+);
+assert.match(
+  account,
+  /await resolveAuthenticatedActor\(\{[\s\S]*?authSubject: args\.authSubject \?\? null,[\s\S]*?\}\);[\s\S]*?throw new ConvexError\(\{/,
+  "account deletion must authenticate an existing actor before returning the quarantine error",
+);
+assert.doesNotMatch(
+  account,
+  /ensureAuthenticatedActor/,
+  "a deletion attempt must never create or relink an account as an authentication side effect",
+);
+assert.equal(
+  account.match(new RegExp(quarantineCode, "g"))?.length,
+  1,
+  "account deletion must use one stable quarantine code",
+);
+assert.match(
+  account,
+  /code: ACCOUNT_DELETION_QUARANTINE_CODE,\s*reason: ACCOUNT_DELETION_QUARANTINE_CODE,/,
+  "the quarantine must expose structured client-visible code and reason fields",
+);
+assert.equal(
+  account.match(/export const /g)?.length,
+  1,
+  "the account module must expose only the retained cached-client mutation",
+);
+assert.doesNotMatch(
+  account,
+  /ctx\.(?:db|storage|scheduler)|\.(?:insert|patch|replace|delete)\(|runMutation|runAction|recordCriticalAudit|fetch\(|Date\.now|Math\.random/,
+  "quarantined account deletion must have no database, storage, scheduler, provider, audit, or nondeterministic effects",
+);
+assert.ok(
+  quarantineContract.includes(quarantineCode) &&
+    quarantineContract.includes("community_delete_lifecycle_migration_blocked") &&
+    quarantineContract.includes("## Zero-effect invariant"),
+  "the active documentation must record both stable quarantine codes and the zero-effect invariant",
+);
 
-assert.match(account, /import \{ ConvexError, v \} from "convex\/values"/, "account delete blockers must use ConvexError");
-assert.match(account, /function throwAccountDeleteBlocker/, "account delete blockers must go through one stable helper");
-assert.match(account, /throw new ConvexError\(\{ code, reason: code \}\)/, "blocker helper must expose structured client-visible code data");
-assert.doesNotMatch(account, /throw new Error\("account_delete_/, "expected delete blockers must not be plain Error strings");
-assert.match(account, /readAccountDeleteBlockerReason/, "blocked audit events must preserve structured blocker reason");
-assert.match(account, /eventKey: `account_delete_blocked:\$\{userId\}:\$\{blockerReason\}:\$\{nowMs\}`/, "blocked audit event key must include stable blocker code");
-assert.match(account, /reason: blockerReason/, "blocked audit metadata must include stable blocker code");
-assert.match(account, /function hasBlockingPayoutAccountState/, "payout setup blocker must distinguish active setup from abandoned onboarding rows");
-assert.doesNotMatch(account, /function hasPayoutAccountState[\s\S]*return Boolean\(row\)/, "payout setup blocker must not reject every Stripe Connect row");
-assert.match(account, /row\.status === "ready"/, "ready Stripe Connect accounts must still block deletion");
-assert.match(account, /row\.detailsSubmitted === true/, "submitted Stripe Connect setup must still block deletion");
-assert.match(account, /row\.chargesEnabled === true/, "charge-enabled Stripe Connect accounts must still block deletion");
-assert.match(account, /row\.payoutsEnabled === true/, "payout-enabled Stripe Connect accounts must still block deletion");
-assert.match(account, /Number\.isFinite\(row\.onboardingCompleteAt\)/, "completed Stripe onboarding timestamp must still block deletion");
-assert.match(account, /listLiveCommunityAppMountRowsForApp/, "app deletion blocker must ignore stale community app mounts");
-assert.match(account, /deleteOrphanCommunityAppMountRowsForApp/, "account deletion must clean stale community app mounts");
-assert.match(account, /listLiveCommunitySkillAttachmentRowsForSkill/, "skill deletion blocker must ignore stale community skill attachments");
-assert.match(account, /deleteOrphanCommunitySkillAttachmentRowsForSkill/, "account deletion must clean stale community skill attachments");
-assert.match(account, /readBuilderPartnerFinanceDeletionState/, "account deletion must inspect Builder Partner finance before deleting");
-assert.match(account, /hasUnresolvedFinance/, "account deletion must block unresolved Builder Partner balances, debt, or payouts");
-assert.match(account, /account_delete_partner_finance_pending_blocked/, "account deletion must expose a stable Builder Partner finance blocker");
-assert.match(account, /scrubFinanceLinkedPartnerAttribution/, "account deletion must scrub attribution privacy fields while preserving finance-linked rows");
-assert.match(account, /tombstoneBuilderPartnerCode/, "account deletion must tombstone settled partner accounts instead of leaving referral links active");
-assert.match(account, /preserve\("partnerCommissionLedger", referredPartnerCommissions\.length\)/, "account deletion must preserve referred-user commission history");
-assert.doesNotMatch(account, /financeLinkedCreditLedgerEntryIds|sourceCreditLedgerEntryId/, "account deletion must not preserve deleted paid-tool partner commission evidence");
-assert.match(account, /await record\("creditLedgerEntries", 1\)/, "account deletion must delete ordinary user credit ledger rows");
-assert.doesNotMatch(account, /deleteRowsByIndex\(ctx, "partnerCommissionLedger", "by_referredUser"/, "account deletion must not erase referred-user partner commission history");
-assert.doesNotMatch(account, /deleteRowsByIndex\(ctx, "partnerCommissionAdjustments", "by_partner_createdAt"/, "account deletion must not erase partner adjustment audit history");
-assert.match(account, /await record\("userPlatformAppMountSources", await deleteRowsByIndex\(ctx, "userPlatformAppMountSources", "by_user_mount", "userId", userId\)\)/, "account deletion must remove user app mount source rows before user mounts");
-assert.match(account, /"by_community_mount"[\s\S]*"communityAppMountId"/, "stale community app mount cleanup must remove dependent source rows");
-assert.match(account, /await record\("userPlatformAppMountSources", staleCommunityMountDeletes\.userPlatformAppMountSources\)/, "account deletion must count stale app mount source cleanup");
-assert.match(account, /await record\("communityAppMounts", staleCommunityMountDeletes\.communityAppMounts\)/, "account deletion must count stale app mount cleanup");
-assert.match(account, /await record\("communitySkillAttachments", await deleteOrphanCommunitySkillAttachmentRowsForSkill\(ctx, skill\._id\)\)/, "account deletion must count stale skill attachment cleanup");
-
-assert.match(accountSettings, /function readDeleteAccountErrorCode\(value: unknown\)/, "settings UI must extract structured delete error codes");
-assert.match(accountSettings, /\.data/, "settings UI must inspect ConvexError data");
-assert.match(accountSettings, /\.code/, "settings UI must inspect structured code");
-assert.match(accountSettings, /\.reason/, "settings UI must inspect structured reason fallback");
-assert.match(accountSettings, /message\.includes\(code\)/, "settings UI must preserve legacy message fallback");
-assert.match(accountSettings, /formatDeleteAccountError\(error\)/, "delete handler must pass the raw caught error to the formatter");
-
-for (const code of blockerCodes) {
-  assert.ok(account.includes(code), `backend missing blocker code ${code}`);
-  assert.ok(accountSettings.includes(code), `settings UI missing blocker message for ${code}`);
-}
-
-console.log("PASS: account delete error contract preserves client-visible blocker reasons.");
+console.log(
+  "PASS: account deletion preserves the cached ABI and fails closed with zero effects.",
+);
