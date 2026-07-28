@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { parseCommunitySettingsPane } from "../shared/appShellNavigation.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -11,17 +12,67 @@ const app = read("apps/web/src/App.tsx");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const settingsSection = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
+const modalHost = read("apps/web/src/components/WebCommunityModalHost.tsx");
+const communityUiController = read(
+  "apps/web/src/controllers/useWebCommunityUiController.ts",
+);
+const communityGateway = read("shared/cloudCommunityAdminGateway.ts");
 const accessViewModel = read("shared/communityAccessViewModel.ts");
 
-for (const pane of ["community", "workflows", "integrations", "danger"] as const) {
+for (const pane of ["community", "workflows", "integrations"] as const) {
   assert.match(navigation, new RegExp(`"${pane}"`), `navigation contract missing ${pane} pane slug`);
   assert.match(settingsSection, new RegExp(`${pane}`), `settings UI missing ${pane} pane`);
 }
 
 assert.match(
   navigation,
-  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*"integrations"[\s\S]*"danger"[\s\S]*\] as const/,
+  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*"integrations"[\s\S]*\] as const/,
   "community settings panes must be a shared slug union",
+);
+assert.doesNotMatch(
+  navigation,
+  /"danger"/,
+  "Danger must not remain a community settings pane or parser result",
+);
+assert.equal(
+  parseCommunitySettingsPane("danger"),
+  "community",
+  "legacy Danger URLs must fail safely into the canonical Community pane",
+);
+assert.doesNotMatch(
+  settingsSection,
+  /CommunityDangerZoneSection|Delete community|openDeleteCommunityModal|canDeleteCommunity/,
+  "community settings must not advertise or wire quarantined deletion",
+);
+assert.doesNotMatch(
+  modalHost,
+  /WebDeleteCommunityModal|deleteModal/,
+  "the community modal host must not retain deletion presentation",
+);
+assert.doesNotMatch(
+  communityUiController,
+  /useCommunityDeleteController|deleteCommunity|deleteModal|openDeleteCommunityModal/,
+  "the community UI controller must not retain deletion state or actions",
+);
+assert.doesNotMatch(
+  app,
+  /openDeleteCommunityModal|canDeleteActiveCommunity/,
+  "App must not retain community deletion capability plumbing",
+);
+assert.doesNotMatch(
+  communityGateway,
+  /client\.mutation\("community:deleteCommunity"/,
+  "the current community browser gateway must not call the quarantined mutation",
+);
+assert.equal(
+  existsSync("apps/web/src/components/WebDeleteCommunityModal.tsx"),
+  false,
+  "the orphaned community deletion modal must be deleted",
+);
+assert.equal(
+  existsSync("shared/useCommunityDeleteController.ts"),
+  false,
+  "the orphaned community deletion controller must be deleted",
 );
 assert.doesNotMatch(
   settingsSection,

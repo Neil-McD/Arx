@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, type Dispatch, type SetStateAction } from "react";
-import { applyAppThemeAttributes, type AppTheme } from "../../../../shared/theme";
 
 type ProfileDraftLike = {
   name: string;
@@ -9,7 +8,6 @@ type ProfileDraftLike = {
 
 export function useWebUiPersistenceLifecycle(params: {
   communityAnalyticsRange: string;
-  appTheme: AppTheme;
   profileStorageUserId: string | null;
   profileName: string;
   profileHandle: string;
@@ -27,15 +25,6 @@ export function useWebUiPersistenceLifecycle(params: {
       // ignore
     }
   }, [params.communityAnalyticsRange]);
-
-  useEffect(() => {
-    try {
-      applyAppThemeAttributes(params.appTheme, document.documentElement);
-      localStorage.setItem("polynet-theme", params.appTheme);
-    } catch {
-      return;
-    }
-  }, [params.appTheme]);
 
   useLayoutEffect(() => {
     const nextDraft = params.readProfileDraftForUser(params.profileStorageUserId);

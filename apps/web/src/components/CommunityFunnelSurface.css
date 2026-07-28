@@ -4,6 +4,25 @@
    via their own global classes; everything cfg-* is funnel-only conversion chrome. */
 
 .cfg-page {
+  --cfg-selection-text: #17070c;
+  --cfg-alert-border: rgba(226, 75, 74, 0.4);
+  --cfg-alert-surface: rgba(226, 75, 74, 0.08);
+  --cfg-alert-text: #f0a2a2;
+  --cfg-primary-surface: #efeff2;
+  --cfg-primary-surface-hover: #fff;
+  --cfg-primary-text: #101114;
+  --cfg-error-border: rgba(226, 75, 74, 0.4);
+  --cfg-error-surface: rgba(226, 75, 74, 0.07);
+  --cfg-gate-surface: #161619;
+  --cfg-gate-banner:
+    radial-gradient(
+      130% 200% at 50% 125%,
+      rgba(214, 106, 138, 0.5),
+      rgba(214, 106, 138, 0.12) 55%,
+      transparent 78%
+    ),
+    #17121a;
+  --cfg-gate-avatar-stroke: #161619;
   position: relative;
   min-height: 100vh;
   background: var(--bg-app, #121214);
@@ -11,7 +30,28 @@
   display: flex;
   flex-direction: column;
 }
-.cfg-page ::selection { background: var(--accent-gold, #d66a8a); color: #17070c; }
+:root[data-theme-family="light"] .cfg-page {
+  --cfg-selection-text: var(--bg-button-text);
+  --cfg-alert-border: color-mix(in srgb, var(--accent-error) 40%, transparent);
+  --cfg-alert-surface: color-mix(in srgb, var(--accent-error) 8%, transparent);
+  --cfg-alert-text: var(--accent-error);
+  --cfg-primary-surface: var(--bg-button);
+  --cfg-primary-surface-hover: var(--bg-button-hover);
+  --cfg-primary-text: var(--bg-button-text);
+  --cfg-error-border: color-mix(in srgb, var(--accent-error) 40%, transparent);
+  --cfg-error-surface: color-mix(in srgb, var(--accent-error) 7%, transparent);
+  --cfg-gate-surface: var(--bg-modal);
+  --cfg-gate-banner:
+    radial-gradient(
+      130% 200% at 50% 125%,
+      color-mix(in srgb, var(--accent-gold) 50%, transparent),
+      color-mix(in srgb, var(--accent-gold) 12%, transparent) 55%,
+      transparent 78%
+    ),
+    var(--surface-selected, var(--bg-card-alt));
+  --cfg-gate-avatar-stroke: var(--bg-modal);
+}
+.cfg-page ::selection { background: var(--accent-gold, #d66a8a); color: var(--cfg-selection-text); }
 .cfg-fill, .cfg-fill img { width: 100%; height: 100%; object-fit: cover; display: block; }
 @keyframes cfg-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
@@ -46,7 +86,7 @@
 .cfg-feed { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 18px 8px; }
 .cfg-daysep { margin: 4px 0 12px; }
 .cfg-alerts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
-.cfg-alert { border: 1px solid rgba(226, 75, 74, 0.4); background: rgba(226, 75, 74, 0.08); color: #f0a2a2; border-radius: 10px; padding: 10px 13px; font-size: 13px; }
+.cfg-alert { border: 1px solid var(--cfg-alert-border); background: var(--cfg-alert-surface); color: var(--cfg-alert-text); border-radius: 10px; padding: 10px 13px; font-size: 13px; }
 .cfg-media { margin: 14px 0 8px 44px; max-width: 560px; }
 .cfg-media .public-funnel-media-shell, .cfg-media .public-funnel-media-deferred { border-radius: 10px; overflow: hidden; border: 1px solid var(--border-default, #26262b); width: 100%; }
 
@@ -66,15 +106,15 @@
 .cfg-terms b { color: var(--text-secondary, #a1a1aa); font-weight: 500; }
 
 /* action button — white = action (matches the product's primary CTA register) */
-.cfg-join { padding: 9px 18px; border-radius: 8px; border: none; background: #efeff2; color: #101114; font-family: inherit; font-weight: 600; font-size: 13.5px; cursor: pointer; white-space: nowrap; transition: background 0.15s, box-shadow 0.2s; }
-.cfg-join:hover:not(:disabled) { background: #fff; box-shadow: 0 4px 22px -6px var(--accent-gold-glow, rgba(214, 106, 138, 0.18)); }
+.cfg-join { padding: 9px 18px; border-radius: 8px; border: none; background: var(--cfg-primary-surface); color: var(--cfg-primary-text); font-family: inherit; font-weight: 600; font-size: 13.5px; cursor: pointer; white-space: nowrap; transition: background 0.15s, box-shadow 0.2s; }
+.cfg-join:hover:not(:disabled) { background: var(--cfg-primary-surface-hover); box-shadow: 0 4px 22px -6px var(--accent-gold-glow, rgba(214, 106, 138, 0.18)); }
 .cfg-join:disabled { opacity: 0.55; cursor: default; }
 .cfg-join.cfg-wide { width: 100%; padding: 10px; }
 
 /* status cards (approval flows) */
 .cfg-rope .cfg-status-card { max-width: 520px; margin-left: auto; margin-right: auto; }
 .cfg-status-card { margin-top: 12px; border: 1px solid var(--border-default, #26262b); border-radius: 9px; background: var(--bg-card, rgba(23, 23, 26, 0.9)); padding: 11px 13px; text-align: left; position: relative; }
-.cfg-status-card.is-error { border-color: rgba(226, 75, 74, 0.4); background: rgba(226, 75, 74, 0.07); }
+.cfg-status-card.is-error { border-color: var(--cfg-error-border); background: var(--cfg-error-surface); }
 .cfg-sc-title { font-size: 12.5px; font-weight: 600; }
 .cfg-sc-body { font-size: 12px; color: var(--text-secondary, #a1a1aa); margin-top: 3px; }
 .cfg-sc-dismiss { position: absolute; top: 9px; right: 10px; border: none; background: none; color: var(--text-faint, #52525b); font-size: 11.5px; cursor: pointer; font-family: inherit; }
@@ -84,10 +124,10 @@
 /* the gate */
 .cfg-gate { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(10, 10, 12, 0.55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); transition: opacity 0.4s; padding: 20px; }
 .cfg-gate.off { opacity: 0; pointer-events: none; }
-.cfg-gatecard { width: min(400px, 94vw); border: 1px solid var(--border-default, #26262b); border-radius: 14px; background: #161619; box-shadow: 0 50px 140px -40px #000, 0 0 70px -40px var(--accent-gold-glow, rgba(214, 106, 138, 0.18)); padding: 0 26px 22px; text-align: center; overflow: hidden; }
-.cfg-gbanner { height: 78px; margin: 0 -26px; position: relative; background: radial-gradient(130% 200% at 50% 125%, rgba(214, 106, 138, 0.5), rgba(214, 106, 138, 0.12) 55%, transparent 78%), #17121a; }
+.cfg-gatecard { width: min(400px, 94vw); border: 1px solid var(--border-default, #26262b); border-radius: 14px; background: var(--cfg-gate-surface); box-shadow: 0 50px 140px -40px #000, 0 0 70px -40px var(--accent-gold-glow, rgba(214, 106, 138, 0.18)); padding: 0 26px 22px; text-align: center; overflow: hidden; }
+.cfg-gbanner { height: 78px; margin: 0 -26px; position: relative; background: var(--cfg-gate-banner); }
 .cfg-gbanner img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.cfg-gav { width: 54px; height: 54px; border-radius: 13px; overflow: hidden; border: 3px solid #161619; margin: -27px auto 0; background: var(--bg-card, rgba(23, 23, 26, 0.9)); position: relative; }
+.cfg-gav { width: 54px; height: 54px; border-radius: 13px; overflow: hidden; border: 3px solid var(--cfg-gate-avatar-stroke); margin: -27px auto 0; background: var(--bg-card, rgba(23, 23, 26, 0.9)); position: relative; }
 .cfg-gname { font-size: 19px; font-weight: 600; margin-top: 9px; letter-spacing: -0.01em; }
 .cfg-ghandle { font-size: 11.5px; color: var(--text-faint, #52525b); margin-top: 2px; }
 .cfg-gpromise { font-size: 13px; color: var(--text-secondary, #a1a1aa); margin: 10px 0 0; line-height: 1.55; }

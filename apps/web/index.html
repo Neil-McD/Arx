@@ -6,6 +6,35 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Polynet" />
     <meta name="theme-color" content="#121214" />
+    <script data-theme-bootstrap>
+      (() => {
+        const themes = {
+          dark: { family: "dark", browserColor: "#1A1A1A" },
+          polynet: { family: "dark", browserColor: "#121214" },
+          cris: { family: "light", browserColor: "#F8F8F4" },
+        };
+        const fallbackTheme = "polynet";
+        let theme = fallbackTheme;
+        try {
+          const storedTheme = (
+            localStorage.getItem("polynet-theme") ??
+            localStorage.getItem("arx-theme") ??
+            ""
+          ).trim();
+          if (Object.prototype.hasOwnProperty.call(themes, storedTheme)) {
+            theme = storedTheme;
+          }
+        } catch {
+          // Storage can be unavailable in hardened browser contexts.
+        }
+        const definition = themes[theme];
+        document.documentElement.setAttribute("data-theme", theme);
+        document.documentElement.setAttribute("data-theme-family", definition.family);
+        document
+          .querySelector('meta[name="theme-color"]')
+          ?.setAttribute("content", definition.browserColor);
+      })();
+    </script>
     <link rel="manifest" href="%BASE_URL%manifest.webmanifest?v=20260425a" />
     <link rel="icon" href="%BASE_URL%favicon.ico?v=20260425a" sizes="any" />
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg?v=20260425a" />

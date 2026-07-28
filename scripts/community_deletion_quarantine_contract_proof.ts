@@ -59,8 +59,11 @@ assert.doesNotMatch(controller, /useCommunityDeleteController|openDeleteCommunit
 assert.doesNotMatch(modalHost, /WebDeleteCommunityModal|deleteModal/);
 assert.doesNotMatch(app, /openDeleteCommunityModal/);
 assert.doesNotMatch(settings, /openDeleteCommunityModal|Permanently delete this community|>\s*Delete community\s*</);
-assert.match(settings, /Community deletion is temporarily paused/);
-assert.match(settings, /No community data will be changed from this screen/);
+assert.doesNotMatch(
+  settings,
+  /Community deletion is temporarily paused|No community data will be changed from this screen|CommunityDangerZoneSection|canDeleteCommunity/,
+  "settings must not advertise or route to the quarantined deletion capability",
+);
 assert.doesNotMatch(baseCss, /delete-community-(?:btn|modal)/);
 assert.equal(
   existsSync("shared/useCommunityDeleteController.ts"),

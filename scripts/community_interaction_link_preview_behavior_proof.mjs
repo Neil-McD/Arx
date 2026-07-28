@@ -384,8 +384,13 @@ assert.match(
 );
 assert.match(
   previewCss,
-  /\.community-interaction-embed\.is-social-post\s*\{[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*padding:\s*12px 14px 14px;[\s\S]*background:\s*#000;[\s\S]*\.community-interaction-embed-social-avatar\s*\{[\s\S]*width:\s*32px;[\s\S]*\.community-interaction-embed-social-body\s*\{[\s\S]*font-size:\s*14px;[\s\S]*-webkit-line-clamp:\s*5;/,
-  "X previews should use a compact black identity-and-text card",
+  /\.community-interaction-embed\.is-social-post\s*\{[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*padding:\s*12px 14px 14px;[\s\S]*border-color:\s*var\(--community-social-embed-stroke\);[\s\S]*background:\s*var\(--community-social-embed-surface\);[\s\S]*\.community-interaction-embed-social-avatar\s*\{[\s\S]*width:\s*32px;[\s\S]*background:\s*var\(--community-social-embed-avatar-surface\);[\s\S]*\.community-interaction-embed-social-body\s*\{[\s\S]*color:\s*var\(--community-social-embed-text\);[\s\S]*font-size:\s*14px;[\s\S]*-webkit-line-clamp:\s*5;/,
+  "X previews should use a compact identity-and-text card whose first-party shell is theme-aware",
+);
+assert.match(
+  previewCss,
+  /:root\s*\{[\s\S]*--community-social-embed-surface:\s*#000;[\s\S]*--community-social-embed-surface-hover:\s*#080808;[\s\S]*--community-social-embed-stroke:\s*#2f3336;[\s\S]*--community-social-embed-text:\s*#e7e9ea;[\s\S]*:root\[data-theme="cris"\]\s*\{[\s\S]*--community-social-embed-surface:\s*var\(--surface-card\);[\s\S]*--community-social-embed-surface-hover:\s*var\(--surface-card-hover\);[\s\S]*--community-social-embed-stroke:\s*var\(--stroke-default\);[\s\S]*--community-social-embed-text:\s*var\(--text-ink-primary\);/,
+  "dark themes should preserve the existing X shell while CRIS remaps it onto canonical light-theme tokens",
 );
 assert.match(
   socialPreviewComponent,

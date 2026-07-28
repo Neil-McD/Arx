@@ -5,7 +5,6 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
-import { applyAppThemeAttributes, parseAppTheme } from "../../../shared/theme";
 import { bootConvexProbe } from "../../../shared/convexRuntime";
 import { buildTelemetryRouteLabel } from "../../../shared/routePrivacy";
 
@@ -308,13 +307,6 @@ function CrashRecoveryScreen(props: { title: string; copy: string; buttonLabel: 
       </div>
     </div>
   );
-}
-
-try {
-  const savedTheme = parseAppTheme(localStorage.getItem("polynet-theme") ?? localStorage.getItem("arx-theme"));
-  applyAppThemeAttributes(savedTheme ?? "polynet", document.documentElement);
-} catch {
-  applyAppThemeAttributes("polynet", document.documentElement);
 }
 
 const isLoginTrampoline = isLoginTrampolinePathname(window.location.pathname || "/");

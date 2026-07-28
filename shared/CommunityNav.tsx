@@ -139,8 +139,6 @@ export function CommunityNav({
               })}
             />
           ) : null}
-          <div className="community-nav-banner-overlay" />
-          <div className="community-nav-name">{activeCommunity?.name ?? "Community"}</div>
         </div>
         {subtitle ? <div className="community-nav-subtitle">{subtitle}</div> : null}
       </div>

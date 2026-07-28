@@ -275,7 +275,7 @@ assert.match(
 assert.match(
   socialLinkPreview,
   /function SocialPostLinkPreview[\s\S]*author_name[\s\S]*author_handle[\s\S]*author_avatar_url[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*href=\{props\.href\}[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-avatar[\s\S]*community-interaction-embed-social-identity[\s\S]*published_at[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>/,
-  "social previews should render one compact black X-style provenance-and-text link with a same-origin avatar",
+  "social previews should render one compact theme-aware X-style provenance-and-text link with a same-origin avatar",
 );
 assert.match(
   linkPreview,
@@ -1075,8 +1075,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-interaction-embed\.is-social-post[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*background:\s*#000;[\s\S]*\.community-interaction-embed-social-identity[\s\S]*unicode-bidi:\s*plaintext;[\s\S]*\.community-interaction-embed-social-meta[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*5;/,
-  "social previews should use compact isolated provenance-and-text cards",
+  /\.community-interaction-embed\.is-social-post[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*background:\s*var\(--community-social-embed-surface\);[\s\S]*\.community-interaction-embed-social-identity[\s\S]*unicode-bidi:\s*plaintext;[\s\S]*\.community-interaction-embed-social-meta[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*5;/,
+  "social previews should use compact theme-aware provenance-and-text cards",
 );
 assert.match(
   read("shared/linkEmbedUi.tsx"),

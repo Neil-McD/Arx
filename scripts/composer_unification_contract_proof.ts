@@ -19,7 +19,7 @@ assert.match(
 assert.match(
   baseCss,
   /\.community-dm-panel-composer \{[\s\S]*background: var\(--composer-surface\);/,
-  "DMs should use the canonical opaque surface",
+  "DMs should preserve their canonical composer surface",
 );
 assert.match(
   baseCss,
@@ -109,8 +109,8 @@ assert.doesNotMatch(
 );
 assert.match(
   baseCss,
-  /\.community-dm-composer-float::before \{[\s\S]*z-index: -1;[\s\S]*height: calc\(100% \+ 32px\);[\s\S]*linear-gradient\([\s\S]*var\(--bg-workspace\) 76%/,
-  "DM content should fade behind a static composer layer",
+  /\.community-dm-composer-float::before \{[\s\S]*z-index: -1;[\s\S]*height: calc\(100% \+ 32px\);[\s\S]*linear-gradient\([\s\S]*var\(--web-context-panel-surface\) 100%/,
+  "DM content should fade into the context-panel surface behind a static composer layer",
 );
 
 assert.match(

@@ -72,7 +72,6 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
-
       - name: Verify package deployment boundaries
         run: npm run check:package-deployment-boundary-contract
 
@@ -82,7 +81,7 @@ jobs:
       - name: Audit root dependencies
         run: npm audit --audit-level=low
 
-      - name: Verify dependency security compatibility
+      - name: Run dependency security compatibility interlock
         run: npm run check:dependency-security-interlock
 
       - name: Install web dependencies
@@ -116,6 +115,9 @@ jobs:
 
       - name: Install web dependencies
         run: npm --prefix apps/web ci
+
+      - name: Run CRIS theme contract proof
+        run: npm run check:cris-theme-contract-proof
 
       - name: Run foundation baseline gate (canonical)
         run: bash scripts/foundation_baseline_gate.sh

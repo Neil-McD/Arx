@@ -757,8 +757,8 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-panel \{[\s\S]*width: min\(460px, calc\(100vw - 40px\)\);[\s\S]*height: min\(680px, calc\(100svh - 40px\)\);/,
-  "the desktop operating panel must provide more room without overflowing the viewport",
+  /\.member-agent-dock-panel \{[\s\S]*width: min\(460px, calc\(100vw - 40px\)\);[\s\S]*height: min\(680px, calc\(100svh - 40px\)\);[\s\S]*background: var\(--web-context-panel-surface\);[\s\S]*border: 1px solid var\(--web-context-panel-border\);[\s\S]*box-shadow: var\(--web-context-panel-shadow\);/,
+  "the desktop operating panel must stay bounded and consume the canonical context-panel material",
 );
 assert.match(
   styles,
@@ -767,18 +767,43 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher \{[\s\S]*?width: 60px;[\s\S]*?height: 60px;[\s\S]*?color: var\(--member-agent-accent\);[\s\S]*?background: color-mix\(in srgb, var\(--member-agent-accent\) 18%, #111115\);[\s\S]*?border: 1px solid var\(--member-agent-accent-border\);[\s\S]*?border-radius: 16px;/,
+  /\.member-agent-dock-launcher \{[\s\S]*?width: 60px;[\s\S]*?height: 60px;[\s\S]*?color: var\(--member-agent-accent\);[\s\S]*?background: var\(--member-agent-launcher-background\);[\s\S]*?border: 1px solid var\(--member-agent-launcher-border\);[\s\S]*?border-radius: 16px;[\s\S]*?box-shadow: var\(--member-agent-launcher-shadow\);/,
   "the agent launcher must keep its theme-derived identity inside a compact, high-contrast control",
 );
 assert.match(
   styles,
-  /box-shadow:\s*0 8px 24px rgba\(0, 0, 0, 0\.46\),\s*0 2px 8px rgba\(0, 0, 0, 0\.34\),\s*inset 0 1px 0 color-mix\(in srgb, var\(--member-agent-accent-strong\) 10%, transparent\);/,
-  "the launcher must remain visually separated from busy community content",
+  /\.member-agent-dock \{[\s\S]*?--member-agent-launcher-background: color-mix\(\s*in srgb,\s*var\(--member-agent-accent\) 18%,\s*#111115 82%\s*\);[\s\S]*?--member-agent-launcher-background-hover: color-mix\(\s*in srgb,\s*var\(--member-agent-accent\) 24%,\s*#111115 76%\s*\);[\s\S]*?--member-agent-launcher-border: var\(--member-agent-accent-border\);/,
+  "the two existing dark themes must retain the launcher's exact legacy surface and border",
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher svg \{[\s\S]*width: 28px;[\s\S]*height: 28px;[\s\S]*opacity: 1;[\s\S]*drop-shadow\(0 1px 2px rgba\(0, 0, 0, 0\.55\)\);/,
-  "the launcher glyph must remain crisp and subordinate to the control surface",
+  /:root\[data-theme-family="light"\] \.member-agent-dock \{[\s\S]*?--member-agent-launcher-background: var\(--surface-selected\);[\s\S]*?--member-agent-launcher-background-hover: var\(--surface-selected\);[\s\S]*?--member-agent-launcher-border: var\(--stroke-default\);[\s\S]*?--member-agent-launcher-shadow: 0 4px 12px rgba\(23, 23, 25, 0\.14\);[\s\S]*?--member-agent-launcher-shadow-hover: 0 4px 12px rgba\(23, 23, 25, 0\.16\);[\s\S]*?--member-agent-launcher-state-elevation: 0 4px 12px rgba\(23, 23, 25, 0\.14\);[\s\S]*?--member-agent-launcher-state-highlight: 0 0 0 0 transparent;[\s\S]*?--member-agent-launcher-glyph-filter: none;/,
+  "the light family must use a flat raised surface with restrained elevation and no dark glyph effects",
+);
+assert.doesNotMatch(
+  styles,
+  /backdrop-filter/,
+  "the opaque launcher surface must not pay for a visually inert backdrop filter",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock-error \{[\s\S]*?color: #e8b4c4;[\s\S]*?background: rgba\(214, 106, 138, 0\.1\);[\s\S]*?border-left: 2px solid var\(--accent-gold\);/,
+  "the two existing dark themes must retain the dock error's exact legacy treatment",
+);
+assert.match(
+  styles,
+  /:root\[data-theme-family="light"\] \.member-agent-dock-error \{[\s\S]*?color: var\(--accent-error\);[\s\S]*?background: color-mix\(in srgb, var\(--accent-error\) 10%, transparent\);[\s\S]*?border-left-color: var\(--accent-error\);/,
+  "light-family dock errors must use the functional error role",
+);
+assert.match(
+  styles,
+  /--member-agent-launcher-shadow:\s*0 8px 24px rgba\(0, 0, 0, 0\.46\),\s*0 2px 8px rgba\(0, 0, 0, 0\.34\),\s*inset 0 1px 0 color-mix\(in srgb, var\(--member-agent-accent-strong\) 10%, transparent\);/,
+  "the dark-family launcher must retain its legacy separation from busy community content",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock-launcher svg \{[\s\S]*width: 28px;[\s\S]*height: 28px;[\s\S]*opacity: 1;[\s\S]*filter: var\(--member-agent-launcher-glyph-filter\);/,
+  "the launcher glyph treatment must adapt through the component theme contract",
 );
 assert.match(
   component,
@@ -792,8 +817,18 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher:hover \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*background: color-mix\(in srgb, var\(--member-agent-accent\) 24%, #111115\);[\s\S]*border-color: color-mix\(in srgb, var\(--member-agent-accent\) 48%, transparent\);/,
+  /\.member-agent-dock-launcher:hover \{[\s\S]*color: var\(--member-agent-accent-strong\);[\s\S]*background: var\(--member-agent-launcher-background-hover\);[\s\S]*border-color: color-mix\(in srgb, var\(--member-agent-accent\) 48%, transparent\);[\s\S]*box-shadow: var\(--member-agent-launcher-shadow-hover\);/,
   "hover must clarify the floating control without moving it",
+);
+assert.match(
+  styles,
+  /@keyframes member-agent-dock-working-pulse \{[\s\S]*?var\(--member-agent-launcher-state-elevation\),[\s\S]*?var\(--member-agent-launcher-state-highlight\);/,
+  "working presence must consume the theme-adapted elevation and highlight roles",
+);
+assert.match(
+  styles,
+  /:root\[data-theme-family="light"\] \.member-agent-dock \.member-agent-dock-launcher:focus-visible \{\s*outline-color: var\(--member-agent-accent\);\s*\}/,
+  "the light-family launcher must keep an explicit intelligence-blue keyboard focus ring",
 );
 assert.doesNotMatch(
   styles,

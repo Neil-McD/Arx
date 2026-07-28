@@ -26,6 +26,9 @@
   --bg-button: #efeff2;
   --bg-button-hover: #ffffff;
   --bg-button-text: #101114;
+  --conversation-primary-action-surface: #ffffff;
+  --conversation-primary-action-hover-surface: #ffffff;
+  --conversation-primary-action-foreground: #111111;
   --bg-terminal: #0d0d10;
 
   /* Accent color */
@@ -122,6 +125,16 @@
   --text-ink-muted: var(--text-muted);
   --text-ink-faint: var(--text-faint);
   --text-selected: var(--text-primary);
+  /* Social-post previews own a first-party shell around provider content.
+     Dark-family defaults preserve the existing X treatment; light themes can
+     remap the shell without forking renderer markup or provider behavior. */
+  --community-social-embed-surface: #000;
+  --community-social-embed-surface-hover: #080808;
+  --community-social-embed-stroke: #2f3336;
+  --community-social-embed-stroke-hover: #536471;
+  --community-social-embed-text: #e7e9ea;
+  --community-social-embed-muted: #71767b;
+  --community-social-embed-avatar-surface: #202327;
   --rail-width: 72px;
   --rail-control-size: 44px;
   --rail-control-anchor-inset: calc((var(--rail-width) - var(--rail-control-size)) / 2);
@@ -269,6 +282,116 @@
   --status-proposed: #372730;
   --status-approved: #223229;
   --status-executed: #202d3f;
+}
+
+/* CRIS theme - "Paper Intelligence" */
+:root[data-theme="cris"] {
+  color-scheme: light;
+
+  /*
+   * CRIS Signature Palette
+   * Philosophy: paper is the dominant work surface, lavender identifies
+   * operating context, and intelligence blue marks live agency and selection.
+   */
+
+  /* === FOUNDATION: Paper canvas + lavender context === */
+  --bg-app: #F8F8F4;
+  --bg-header: rgba(248, 248, 244, 0.94);
+  --bg-panel: #EBE9FB;
+  --bg-modal: #FFFFFF;
+  --bg-workspace: #F8F8F4;
+  --bg-card: #FFFFFF;
+  --bg-card-solid: #FFFFFF;
+  --bg-card-alt: #F8F8F4;
+  --bg-card-hover: color-mix(in srgb, #EBE9FB 58%, #F8F8F4 42%);
+  --bg-input: #FFFFFF;
+  --bg-terminal: #171719;
+  --surface-rail: #F8F8F4;
+  --surface-nav: #EBE9FB;
+  --workspace-composer-bg: #FFFFFF;
+  --workspace-landing-action-bg: #FFFFFF;
+  --workspace-landing-action-hover-bg: color-mix(in srgb, #EBE9FB 58%, #F8F8F4 42%);
+
+  /* === CONTROLS: Ink on paper === */
+  --bg-button: #171719;
+  --bg-button-hover: color-mix(in srgb, #171719 88%, #FFFFFF 12%);
+  --bg-button-text: #FFFFFF;
+
+  /* === INTELLIGENCE: One active blue === */
+  --accent-gold: #2F55FF;
+  --accent-gold-subtle: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+  --accent-gold-glow: rgba(47, 85, 255, 0.18);
+  --accent-brand: #2F55FF;
+  --accent-selection: #2F55FF;
+  --accent-agent: #2F55FF;
+  --accent-agent-strong: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+  --accent-agent-foreground: #2F55FF;
+  --accent-agent-surface: rgba(47, 85, 255, 0.1);
+  --accent-attention: #2F55FF;
+  --focus-ring: rgba(47, 85, 255, 0.52);
+  --text-link: #2F55FF;
+  --text-link-hover: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+  --accent-cyan: #2F55FF;
+  --accent-cyan-subtle: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+  --accent-cyan-glow: rgba(47, 85, 255, 0.16);
+  --chat-link: #2F55FF;
+  --chat-link-hover: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+
+  /* Functional feedback stays semantically distinct from the brand palette. */
+  --accent-success: #147A4B;
+  --accent-error: #B42318;
+
+  /* === TYPOGRAPHY: Accessible ink === */
+  --text-primary: #171719;
+  --text-secondary: #6B6974;
+  --text-muted: #6B6974;
+  --text-faint: #6B6974;
+  --text-terminal: #FFFFFF;
+
+  /* === STRUCTURE: Ink-derived lines === */
+  --border-default: rgba(23, 23, 25, 0.1);
+  --border-strong: rgba(23, 23, 25, 0.22);
+  --border-muted: rgba(23, 23, 25, 0.1);
+  --border-active: #2F55FF;
+  --divider-accent: rgba(23, 23, 25, 0.22);
+  --header-border: none;
+
+  /* === ICONS + INTERACTION === */
+  --icon-default: #6B6974;
+  --icon-hover: #171719;
+  --icon-active: #2F55FF;
+  --hover-overlay: rgba(23, 23, 25, 0.04);
+  --active-overlay: rgba(23, 23, 25, 0.08);
+  --panel-shadow: none;
+
+  /* === SELECTED STATE: Lavender field + blue structure === */
+  --surface-selected: #DCD8F7;
+  --stroke-selected: #2F55FF;
+  --text-selected: #171719;
+
+  /* === COMPOSER: Raised white work surface === */
+  --composer-surface: #FFFFFF;
+  --composer-border: rgba(23, 23, 25, 0.1);
+  --composer-focus-ring: rgba(47, 85, 255, 0.42);
+
+  /* === SOCIAL EMBEDS: Theme the Polynet-owned shell, not provider media === */
+  --community-social-embed-surface: var(--surface-card);
+  --community-social-embed-surface-hover: var(--surface-card-hover);
+  --community-social-embed-stroke: var(--stroke-default);
+  --community-social-embed-stroke-hover: var(--stroke-strong);
+  --community-social-embed-text: var(--text-ink-primary);
+  --community-social-embed-muted: var(--text-ink-secondary);
+  --community-social-embed-avatar-surface: var(--surface-card-alt);
+
+  /* === STATUS: Light semantic surfaces === */
+  --status-default: #FFFFFF;
+  --status-proposed: #DCD8F7;
+  --status-approved: color-mix(in srgb, #147A4B 12%, #FFFFFF 88%);
+  --status-executed: rgba(47, 85, 255, 0.1);
+
+  --community-rail-button-border: 1px solid rgba(23, 23, 25, 0.1);
+  --scrollbar-thumb: rgba(23, 23, 25, 0.22);
+  --scrollbar-thumb-hover: #6B6974;
 }
 
 * {
@@ -651,8 +774,7 @@ body {
 }
 
 /* Theme-level rail surface assignment (component rule stays generic). */
-:root[data-theme="dark"],
-:root[data-theme="polynet"] {
+:root[data-theme-family="dark"] {
   --surface-rail: var(--bg-workspace, var(--bg-app));
 }
 
@@ -869,18 +991,6 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.community-nav-banner-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.55));
-}
-
-.community-nav-name {
-  position: relative;
-  z-index: 1;
-  font-size: 14px;
 }
 
 .rail-main,
@@ -5208,9 +5318,9 @@ body {
   text-underline-offset: 2px;
 }
 
-/* Mention chips: a tagged name renders as a pill, not inert text. Quiet tint
-   for others, filled accent when YOU are the one tagged, violet family for
-   agent mentions (never mistakable for a human). */
+/* Mention chips: human mentions share one quiet, readable treatment. The
+   message-level edge and wash carry self-mention attention; agent mentions
+   keep a distinct violet family so they cannot be mistaken for a human. */
 .community-mention-trigger {
   display: inline;
   padding: 0;
@@ -5233,12 +5343,6 @@ body {
 
 .community-mention-trigger:hover .community-mention-chip {
   background: color-mix(in srgb, var(--accent) 24%, transparent);
-}
-
-.community-mention-chip.is-self {
-  background: var(--accent);
-  color: #fff;
-  padding: 1px 6px;
 }
 
 .community-mention-chip.is-agent {
@@ -5702,7 +5806,7 @@ body {
   content: "";
   flex: 1;
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--stroke-divider-accent);
 }
 
 .community-interaction-day span {
@@ -6019,10 +6123,10 @@ body {
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--web-popover-border);
   border-radius: 999px;
-  background: var(--web-floating-chrome-bg);
-  box-shadow: var(--web-floating-chrome-shadow), inset 0 1px 0 var(--web-floating-chrome-highlight);
+  background: var(--web-popover-surface);
+  box-shadow: var(--web-popover-shadow);
   backdrop-filter: blur(14px) saturate(120%);
   -webkit-backdrop-filter: blur(14px) saturate(120%);
   color: var(--text-primary);
@@ -6034,7 +6138,7 @@ body {
 }
 
 .community-interaction-jump-latest:hover {
-  background: color-mix(in srgb, var(--web-floating-chrome-bg) 80%, var(--accent) 20%);
+  background: color-mix(in srgb, var(--web-popover-surface) 80%, var(--accent) 20%);
 }
 
 .community-interaction-jump-latest:active {
@@ -6485,15 +6589,15 @@ body {
   width: min(100%, var(--community-interaction-social-max-width));
   max-width: var(--community-interaction-social-max-width);
   padding: 12px 14px 14px;
-  border-color: #2f3336;
+  border-color: var(--community-social-embed-stroke);
   border-radius: 12px;
-  background: #000;
-  color: #e7e9ea;
+  background: var(--community-social-embed-surface);
+  color: var(--community-social-embed-text);
 }
 
 .community-interaction-embed.is-social-post:hover {
-  border-color: #536471;
-  background: #080808;
+  border-color: var(--community-social-embed-stroke-hover);
+  background: var(--community-social-embed-surface-hover);
 }
 
 .community-interaction-embed-social-header {
@@ -6511,8 +6615,8 @@ body {
   place-items: center;
   overflow: hidden;
   border-radius: 999px;
-  background: #202327;
-  color: #e7e9ea;
+  background: var(--community-social-embed-avatar-surface);
+  color: var(--community-social-embed-text);
   font-size: 13px;
   font-weight: 700;
 }
@@ -6535,7 +6639,7 @@ body {
 
 .community-interaction-embed-social-author {
   overflow: hidden;
-  color: #e7e9ea;
+  color: var(--community-social-embed-text);
   font-size: 13px;
   font-weight: 700;
   line-height: 1.25;
@@ -6549,7 +6653,7 @@ body {
   min-width: 0;
   align-items: center;
   gap: 4px;
-  color: #71767b;
+  color: var(--community-social-embed-muted);
   font-size: 12px;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -6560,7 +6664,7 @@ body {
   display: -webkit-box;
   overflow: hidden;
   padding-top: 10px;
-  color: #e7e9ea;
+  color: var(--community-social-embed-text);
   font-size: 14px;
   line-height: 1.42;
   white-space: pre-line;
@@ -6771,12 +6875,10 @@ body {
   flex-direction: column;
   gap: 8px;
   overflow: hidden;
-  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 74%, transparent));
+  border: 1px solid var(--web-popover-border);
   border-radius: 16px;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 82%, transparent));
-  box-shadow:
-    var(--web-floating-chrome-shadow, 0 22px 60px rgba(0, 0, 0, 0.34)),
-    inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.08));
+  background: var(--web-popover-surface);
+  box-shadow: var(--web-popover-shadow);
   color: var(--text-primary);
   opacity: 0;
   pointer-events: none;
@@ -6928,7 +7030,7 @@ body {
   width: auto;
   min-height: 32px;
   padding: 0 13px;
-  border: 1px solid color-mix(in srgb, var(--accent-pink) 34%, var(--web-floating-chrome-border, transparent) 66%);
+  border: 1px solid color-mix(in srgb, var(--accent-pink) 34%, var(--web-popover-border) 66%);
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent-pink) 14%, transparent);
   color: color-mix(in srgb, var(--accent-pink) 50%, var(--text-primary) 50%);
@@ -6984,15 +7086,11 @@ body {
   flex-direction: column;
   gap: 12px;
   overflow: auto;
-  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 74%, transparent));
+  border: 1px solid var(--web-context-panel-border);
   border-radius: 18px;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 82%, transparent));
-  box-shadow:
-    var(--web-floating-chrome-shadow, 0 24px 70px rgba(0, 0, 0, 0.38)),
-    inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.08));
+  background: var(--web-context-panel-surface);
+  box-shadow: var(--web-context-panel-shadow);
   color: var(--text-primary);
-  backdrop-filter: blur(16px) saturate(130%);
-  -webkit-backdrop-filter: blur(16px) saturate(130%);
 }
 
 .community-profile-panel-top {
@@ -7097,7 +7195,7 @@ body {
   gap: 7px;
   min-height: 30px;
   padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 82%, transparent);
   border-radius: 999px;
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--bg-card) 38%, transparent);
@@ -7145,7 +7243,7 @@ body {
   gap: 12px;
   min-height: 34px;
   padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 74%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 74%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-card) 32%, transparent);
   color: var(--text-secondary);
@@ -7191,7 +7289,7 @@ body {
   width: 38px;
   height: 38px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 78%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-card) 42%, transparent);
   box-shadow:
@@ -7226,15 +7324,11 @@ body {
   flex-direction: column;
   gap: 8px;
   overflow: hidden;
-  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 74%, transparent));
+  border: 1px solid var(--web-context-panel-border);
   border-radius: 18px;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 82%, transparent));
-  box-shadow:
-    var(--web-floating-chrome-shadow, 0 24px 70px rgba(0, 0, 0, 0.38)),
-    inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.08));
+  background: var(--web-context-panel-surface);
+  box-shadow: var(--web-context-panel-shadow);
   color: var(--text-primary);
-  backdrop-filter: blur(16px) saturate(130%);
-  -webkit-backdrop-filter: blur(16px) saturate(130%);
 }
 
 .community-dm-attachment-drop-surface.drag-over {
@@ -7261,9 +7355,7 @@ body {
   position: relative;
   z-index: 2;
   border-radius: 14px;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 82%, transparent));
-  backdrop-filter: blur(16px) saturate(130%);
-  -webkit-backdrop-filter: blur(16px) saturate(130%);
+  background: transparent;
 }
 
 .community-dm-panel-header {
@@ -7300,7 +7392,7 @@ body {
   background: linear-gradient(
     to bottom,
     transparent 0,
-    color-mix(in srgb, var(--bg-workspace) 76%, transparent) 100%
+    var(--web-context-panel-surface) 100%
   );
 }
 
@@ -7526,7 +7618,7 @@ body {
 .community-dm-panel-message-bubble {
   max-width: min(348px, 76%);
   padding: 9px 12px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 70%, transparent);
   border-radius: 15px;
   background: color-mix(in srgb, var(--bg-card) 50%, transparent);
   color: var(--text-primary);
@@ -7810,7 +7902,7 @@ body {
 .community-dm-composer-attachments .community-dm-attachment-item {
   max-width: 100%;
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 64%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 64%, transparent);
   border-radius: 10px;
   background: color-mix(in srgb, var(--bg-card) 34%, transparent);
 }
@@ -7872,7 +7964,7 @@ body {
   width: 22px;
   height: 22px;
   flex: 0 0 22px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 70%, transparent);
   border-radius: 999px;
   display: grid;
   place-items: center;
@@ -8015,7 +8107,7 @@ body {
   width: 30px;
   height: 30px;
   flex: 0 0 30px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 70%, transparent);
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
@@ -8090,7 +8182,7 @@ body {
 .community-dm-recipient-search input {
   width: 100%;
   height: 38px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 70%, transparent);
   border-radius: 14px;
   padding: 0 12px;
   color: var(--text-primary);
@@ -8177,7 +8269,7 @@ body {
 .community-dm-discovery-card {
   margin: 4px 0 8px;
   padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 70%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-card) 50%, transparent);
   display: flex;
@@ -8250,7 +8342,7 @@ body {
 .community-dm-inbox-row:focus-visible,
 .community-dm-recipient-row:hover,
 .community-dm-recipient-row:focus-visible {
-  border-color: color-mix(in srgb, var(--web-floating-chrome-border, var(--border-default)) 70%, transparent);
+  border-color: color-mix(in srgb, var(--web-context-panel-border) 70%, transparent);
   background: color-mix(in srgb, var(--bg-card) 42%, transparent);
 }
 
@@ -9201,7 +9293,7 @@ button.chat-reply-quote:hover {
   content: "";
   flex: 1;
   height: 1px;
-  background: var(--border-default);
+  background: var(--stroke-divider-accent);
 }
 
 .chat-date-separator span {
@@ -10685,12 +10777,10 @@ button.chat-reply-quote:hover {
   position: absolute;
   z-index: 70;
   min-width: 164px;
-  border: 1px solid var(--web-floating-chrome-border, color-mix(in srgb, var(--border-default) 74%, transparent));
+  border: 1px solid var(--web-popover-border);
   border-radius: 12px;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 86%, transparent));
-  box-shadow:
-    var(--web-floating-chrome-shadow, 0 22px 60px rgba(0, 0, 0, 0.34)),
-    inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.08));
+  background: var(--web-popover-surface);
+  box-shadow: var(--web-popover-shadow);
   color: var(--text-primary);
   padding: 6px;
   display: grid;
@@ -14455,8 +14545,7 @@ button.chat-reply-quote:hover {
   display: block;
 }
 
-:root[data-theme="dark"] .model-picker-nav-logo-img.monochrome,
-:root[data-theme="polynet"] .model-picker-nav-logo-img.monochrome {
+:root[data-theme-family="dark"] .model-picker-nav-logo-img.monochrome {
   filter: invert(1);
 }
 
@@ -15214,6 +15303,49 @@ button.message-citation-chip:hover {
   color: var(--text-muted);
   line-height: 1.2;
   margin-top: 3px;
+}
+
+.modal.modal-auth-gate .modal-footer {
+  border-top: none;
+  background: transparent;
+  padding: 0 18px 18px;
+}
+
+.modal.modal-auth-gate .auth-actions {
+  width: 100%;
+}
+
+.auth-gate-google-button {
+  width: 100%;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  background: #ffffff;
+  color: #111111;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:root[data-theme-family="dark"] .auth-gate-google-button {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.auth-gate-google-button:hover:not(:disabled) {
+  filter: brightness(0.98);
+}
+
+.auth-gate-google-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.auth-gate-google-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--border-active) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .modal-header {
@@ -18274,7 +18406,7 @@ button.message-citation-chip:hover {
 }
 
 /* Settings panel buttons - consistent styling */
-.settings-panel button:not(.funnel-editor-about-trigger):not(.platform-save-button):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back) {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back) {
   padding: 10px 16px;
   font-size: 12px;
   font-weight: 500;
@@ -18286,12 +18418,12 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
-.settings-panel button:not(.funnel-editor-about-trigger):not(.platform-save-button):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back):hover:not(:disabled) {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back):hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--bg-card-hover);
 }
 
-.settings-panel button:not(.funnel-editor-about-trigger):not(.platform-save-button):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back):disabled {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back):disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -21807,7 +21939,7 @@ button.message-citation-chip:hover {
 
 .appearance-options {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 16px;
 }
 
@@ -21832,9 +21964,14 @@ button.message-citation-chip:hover {
   background: var(--bg-card-hover);
 }
 
-.appearance-option.active {
+.settings-panel .appearance-option.active {
   border-color: var(--border-active);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-active) 52%, transparent);
+}
+
+.settings-panel .appearance-option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .appearance-option.disabled {
@@ -21923,6 +22060,43 @@ button.message-citation-chip:hover {
 .appearance-option-preview[data-preview-theme="polynet"] .preview-line.short {
   width: 60%;
   background: #d66a8a;
+}
+
+.appearance-option-preview[data-preview-theme="cris"] {
+  background: #F8F8F4;
+  box-shadow: inset 0 0 0 1px rgba(23, 23, 25, 0.1);
+}
+
+.appearance-option-preview[data-preview-theme="cris"] .preview-header {
+  background: #FFFFFF;
+  grid-column: 1 / -1;
+  border-radius: 3px;
+  box-shadow: inset 0 -1px 0 rgba(23, 23, 25, 0.1);
+}
+
+.appearance-option-preview[data-preview-theme="cris"] .preview-sidebar {
+  background: #EBE9FB;
+  border-radius: 3px;
+}
+
+.appearance-option-preview[data-preview-theme="cris"] .preview-content {
+  background: #F8F8F4;
+  border-radius: 3px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.appearance-option-preview[data-preview-theme="cris"] .preview-line {
+  background: rgba(23, 23, 25, 0.22);
+  height: 4px;
+  border-radius: 2px;
+}
+
+.appearance-option-preview[data-preview-theme="cris"] .preview-line.short {
+  width: 60%;
+  background: #2F55FF;
 }
 
 .appearance-option-label {
@@ -24124,8 +24298,8 @@ button.message-citation-chip:hover {
 }
 
 .community-events-panel {
-  gap: 12px;
-  width: min(calc(100% - 96px), 980px);
+  gap: 0;
+  width: min(calc(100% - 96px), 840px);
   margin: 0 auto;
   padding-top: clamp(56px, 9dvh, 92px);
   min-width: 0;
@@ -24133,280 +24307,288 @@ button.message-citation-chip:hover {
   container: community-events / inline-size;
 }
 
-.community-events-month-btn,
-.community-events-calendar-header button,
-.community-events-agenda-header button,
-.community-events-agenda-item-top button {
-  border: 1px solid var(--border-subtle);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
-  border-radius: 999px;
-  padding: 8px 12px;
+.community-events-panel .feed-header-row {
+  align-items: flex-start;
+}
+
+.community-events-new-btn,
+.community-events-state button,
+.community-event-error button {
+  min-height: 36px;
+  border: 1px solid var(--bg-button);
+  border-radius: 10px;
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+  padding: 0 13px;
   font-size: 13px;
-  font-weight: 650;
-}
-
-.community-events-month-btn:hover,
-.community-events-calendar-header button:hover,
-.community-events-agenda-header button:hover,
-.community-events-agenda-item-top button:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.community-events-shell {
-  display: grid;
-  grid-template-columns: minmax(500px, 1fr) minmax(180px, 0.36fr);
-  gap: 14px;
-  margin-top: 22px;
-}
-
-.community-events-calendar,
-.community-events-agenda {
-  border: 1px solid var(--border-subtle);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.community-events-calendar {
-  padding: 14px;
-}
-
-.community-events-calendar-header,
-.community-events-agenda-header,
-.community-events-agenda-item-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.community-events-agenda-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  max-width: 100%;
-}
-
-.community-events-calendar-header h3 {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 18px;
-  letter-spacing: 0;
-}
-
-.community-events-weekdays,
-.community-events-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.community-events-weekdays {
-  margin-top: 12px;
-  margin-bottom: 7px;
-  color: var(--text-tertiary);
-  font-size: 12px;
   font-weight: 700;
 }
 
-.community-events-weekdays div {
-  padding: 0 4px;
+.community-events-new-btn:hover,
+.community-events-state button:hover,
+.community-event-error button:hover {
+  background: var(--bg-button-hover, var(--bg-button));
+  border-color: var(--bg-button-hover, var(--bg-button));
 }
 
-.community-events-day {
-  min-height: clamp(58px, calc((100dvh - 390px) / 6), 86px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
+.community-events-new-btn:focus-visible,
+.community-events-state button:focus-visible,
+.community-event-error button:focus-visible,
+.community-events-month-btn:focus-visible,
+.community-events-actions a:focus-visible,
+.community-events-actions button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.community-events-month-nav {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 28px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-muted);
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.community-events-month-btn {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
   color: var(--text-primary);
-  padding: 8px;
-  text-align: left;
+  padding: 0;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.community-events-month-btn:hover {
+  background: var(--hover-overlay);
+}
+
+.community-events-month-copy {
+  min-width: 0;
+  text-align: center;
+}
+
+.community-events-month-copy h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.community-events-refreshing {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.community-events-content {
+  min-width: 0;
+}
+
+.community-events-state {
+  min-height: 180px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-}
-
-.community-events-day:hover {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.055);
-}
-
-.community-events-day.is-muted {
-  color: var(--text-tertiary);
-  background: rgba(255, 255, 255, 0.018);
-}
-
-.community-events-day.is-selected {
-  border-color: color-mix(in srgb, var(--border-active) 72%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-active) 16%, transparent);
-}
-
-.community-events-day-number {
-  font-size: 13px;
-  font-weight: 750;
-}
-
-.community-events-day-marker {
-  display: none;
   align-items: center;
-  gap: 5px;
-  min-height: 16px;
-  color: rgba(255, 220, 238, 0.95);
-  font-size: 11px;
-  font-weight: 750;
+  justify-content: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--border-muted);
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
 }
 
-.community-events-day-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(255, 105, 170, 0.86);
-  box-shadow: 0 0 0 3px rgba(255, 105, 170, 0.12);
-}
-
-.community-events-day-pill,
-.community-events-day-more {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border-radius: 999px;
-  padding: 3px 7px;
-  background: rgba(255, 105, 170, 0.14);
-  color: rgba(255, 220, 238, 0.95);
-  font-size: 11px;
+.community-event-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-error) 34%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-error) 9%, transparent);
+  color: var(--accent-error);
+  padding: 10px 12px;
+  font-size: 13px;
   font-weight: 650;
 }
 
-.community-events-day-more {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-secondary);
+.community-event-error button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  border-color: var(--accent-error);
+  background: transparent;
+  color: var(--accent-error);
+  padding: 0 10px;
 }
 
-.community-events-agenda {
-  padding: 14px;
-  min-height: 0;
-  min-width: 0;
+.community-event-error button:hover {
+  border-color: var(--accent-error);
+  background: color-mix(in srgb, var(--accent-error) 12%, transparent);
 }
 
-.community-events-agenda-title {
-  color: rgba(255, 255, 255, 0.84);
-  font-size: 16px;
-  font-weight: 800;
+.community-events-list {
+  border-bottom: 1px solid var(--border-muted);
 }
 
-.community-events-agenda-date,
-.community-events-muted,
-.community-events-empty,
-.community-events-agenda-meta {
-  color: rgba(255, 255, 255, 0.56);
-  font-size: 13px;
+.community-events-day-group {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  border-bottom: 1px solid var(--border-muted);
 }
 
-.community-events-empty,
-.community-events-muted {
-  margin-top: 22px;
+.community-events-day-group:last-child {
+  border-bottom: 0;
 }
 
-.community-events-agenda-list {
-  margin-top: 16px;
+.community-events-date {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.community-events-agenda-item {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 13px;
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.community-events-agenda-item-top {
   align-items: flex-start;
-  flex-wrap: wrap;
+  gap: 3px;
+  padding: 24px 14px 24px 0;
+  color: var(--text-primary);
 }
 
-.community-events-agenda-item h4 {
-  flex: 1 1 96px;
+.community-events-date span {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+}
+
+.community-events-date strong {
+  font-size: 24px;
+  font-weight: 720;
+  line-height: 1;
+}
+
+.community-events-day-list {
   min-width: 0;
+}
+
+.community-events-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.community-events-day-list .community-events-item:last-child {
+  border-bottom: 0;
+}
+
+.community-events-item-copy {
+  min-width: 0;
+}
+
+.community-events-item h3 {
   margin: 0;
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 15px;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
-.community-events-agenda-meta {
-  margin-top: 6px;
-}
-
-.community-events-agenda-time {
+.community-events-time {
   display: grid;
   gap: 3px;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
-.community-events-agenda-time span + span {
+.community-events-time span + span {
   color: var(--text-faint);
   font-size: 12px;
 }
 
-.community-events-agenda-location-row {
+.community-events-meta {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+  gap: 6px 10px;
+  margin-top: 7px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
-.community-events-agenda-meta a {
-  color: var(--text-link);
-  text-decoration: none;
+.community-events-meta span + span::before {
+  content: "·";
+  margin-right: 10px;
+  color: var(--text-faint);
 }
 
-.community-events-agenda-meta .community-events-open-link {
-  color: var(--accent-gold);
-  font-weight: 700;
-}
-
-.community-events-agenda-meta .community-events-open-link:hover {
-  color: color-mix(in srgb, var(--accent-gold) 84%, white);
-}
-
-.community-events-agenda-description {
+.community-events-description {
+  max-width: 62ch;
   margin: 10px 0 0;
-  color: rgba(255, 255, 255, 0.68);
-  line-height: 1.45;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
-.community-events-google-calendar-link {
-  width: fit-content;
+.community-events-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  max-width: 290px;
+}
+
+.community-events-actions a,
+.community-events-actions button {
+  min-height: 32px;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  margin-top: 12px;
-  color: var(--text-primary);
-  font-size: 13px;
+  gap: 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 5px;
+  font-size: 12px;
   font-weight: 700;
+  line-height: 1;
   text-decoration: none;
 }
 
-.community-events-google-calendar-link:hover {
-  color: #fff;
+.community-events-actions a:hover,
+.community-events-actions button:hover {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+.community-events-actions .community-events-primary-link {
+  color: var(--text-link);
+}
+
+.community-events-actions .is-danger {
+  color: var(--accent-error);
+}
+
+.community-events-actions .is-danger:hover {
+  background: color-mix(in srgb, var(--accent-error) 10%, transparent);
+  color: var(--accent-error);
 }
 
 .community-events-google-calendar-icon {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   display: block;
   flex: 0 0 auto;
-}
-
-.community-event-error {
-  color: #ff8585;
-  font-size: 13px;
-  font-weight: 650;
 }
 
 .community-event-modal {
@@ -24432,13 +24614,12 @@ button.message-citation-chip:hover {
 .community-event-form textarea,
 .community-event-form select {
   width: 100%;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-default);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 76%, transparent);
+  background: var(--bg-input);
   color: var(--text-primary);
   padding: 11px 12px;
   font: inherit;
-  color-scheme: dark;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -24451,39 +24632,20 @@ button.message-citation-chip:hover {
 .community-event-form input:hover,
 .community-event-form textarea:hover,
 .community-event-form select:hover {
-  border-color: var(--border-default);
-  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 66%, transparent);
+  border-color: var(--border-strong);
+  background: var(--bg-card-hover);
 }
 
 .community-event-form input:focus,
 .community-event-form textarea:focus,
 .community-event-form select:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--accent-gold) 72%, var(--border-default));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-gold) 42%, transparent);
-}
-
-.community-event-form select {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  padding-right: 36px;
-  background-image:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239c9488' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
-  background-position: calc(100% - 13px) 50%;
-  background-size: 16px 16px;
-  background-repeat: no-repeat;
+  border-color: var(--border-active);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 .community-event-form input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-  opacity: 0.65;
-  filter: invert(1);
-}
-
-.community-event-form input:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 86%, transparent);
+  opacity: 0.72;
 }
 
 .community-event-form textarea {
@@ -24517,67 +24679,74 @@ button.message-citation-chip:hover {
 }
 
 .community-event-modal .modal-footer .primary {
-  border: 1px solid rgba(255, 255, 255, 0.92);
-  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--bg-button);
+  background: var(--bg-button);
   color: var(--bg-button-text);
 }
 
-.community-event-modal .modal-footer button:hover:not(:disabled) {
-  filter: brightness(1.06);
+.community-event-modal .modal-footer .primary:hover:not(:disabled) {
+  border-color: var(--bg-button-hover, var(--bg-button));
+  background: var(--bg-button-hover, var(--bg-button));
 }
 
 @media (max-width: 900px) {
   .community-events-panel {
-    width: min(calc(100% - 28px), 980px);
-  }
-
-  .community-events-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .community-events-day {
-    min-height: 76px;
+    width: min(calc(100% - 28px), 840px);
   }
 }
 
-@container community-events (max-width: 760px) {
-  .community-events-shell {
+@container community-events (max-width: 680px) {
+  .community-events-day-group {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .community-events-date {
+    padding-right: 10px;
+  }
+
+  .community-events-item {
     grid-template-columns: minmax(0, 1fr);
+    gap: 13px;
   }
 
-  .community-events-calendar,
-  .community-events-agenda {
-    width: 100%;
-  }
-}
-
-@media (max-height: 820px) and (min-width: 901px) {
-  .community-events-day-marker {
-    display: inline-flex;
-  }
-
-  .community-events-day-pill {
-    display: none;
+  .community-events-actions {
+    justify-content: flex-start;
+    max-width: none;
   }
 }
 
 @media (max-width: 640px) {
-  .community-events-weekdays,
-  .community-events-grid {
-    gap: 5px;
+  .community-events-panel {
+    padding-top: 34px;
   }
 
-  .community-events-day {
-    min-height: 60px;
-    padding: 6px;
+  .community-events-panel .feed-header-row {
+    gap: 14px;
   }
 
-  .community-events-day-pill {
-    display: none;
+  .community-events-month-nav {
+    margin-top: 22px;
   }
 
-  .community-events-day-marker {
-    display: inline-flex;
+  .community-events-day-group {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .community-events-date {
+    padding-top: 21px;
+  }
+
+  .community-events-date strong {
+    font-size: 21px;
+  }
+
+  .community-events-item {
+    padding: 19px 0;
+  }
+
+  .community-events-actions a,
+  .community-events-actions button {
+    padding-inline: 4px;
   }
 
   .community-event-form-grid {
@@ -25757,4 +25926,109 @@ button.message-citation-chip:hover {
   .community-chat .community-interaction-main-composer .chat-input-bar.is-onboarding-first-post {
     animation: none;
   }
+}
+
+/*
+ * Light-family component adapters.
+ *
+ * These selectors intentionally leave the legacy dark component values intact.
+ * They adapt only controls whose old white/pink literals do not remain legible
+ * on light surfaces. Shared component rules stay frozen for Polynet Dark and Dark.
+ */
+:root[data-theme-family="light"] .plan-badge {
+  background: var(--hover-overlay);
+}
+
+:root[data-theme-family="light"] .plan-feature-icon.x {
+  background: var(--hover-overlay);
+  color: var(--text-muted);
+}
+
+:root[data-theme-family="light"] .plan-feature-icon.check {
+  background: color-mix(in srgb, var(--accent-success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-success) 34%, transparent);
+  color: var(--accent-success);
+}
+
+:root[data-theme-family="light"] .plan-cta,
+:root[data-theme-family="light"] .modal.modal-account-info .plan-cta {
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+}
+
+:root[data-theme-family="light"] .plan-cta:hover,
+:root[data-theme-family="light"] .modal.modal-account-info .plan-cta:hover {
+  background: var(--bg-button-hover);
+}
+
+:root[data-theme-family="light"] .status.canceled,
+:root[data-theme-family="light"] .status.failed {
+  background: color-mix(in srgb, var(--accent-error) 14%, transparent);
+  color: var(--accent-error);
+}
+
+:root[data-theme-family="light"] .action-buttons .danger {
+  border-color: color-mix(in srgb, var(--accent-error) 54%, transparent);
+  color: var(--accent-error);
+}
+
+:root[data-theme-family="light"] .action-buttons .danger:hover {
+  background: color-mix(in srgb, var(--accent-error) 10%, transparent);
+}
+
+:root[data-theme-family="light"] .action-error {
+  border-color: color-mix(in srgb, var(--accent-error) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-error) 10%, transparent);
+  color: var(--accent-error);
+}
+
+:root[data-theme-family="light"] .settings-section {
+  border-bottom-color: var(--border-default);
+}
+
+:root[data-theme-family="light"] .settings-panel button.danger,
+:root[data-theme-family="light"] .create-community-actions .danger {
+  border-color: color-mix(in srgb, var(--accent-error) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-error) 10%, transparent);
+  color: var(--accent-error);
+}
+
+:root[data-theme-family="light"] .settings-panel button.danger:hover:not(:disabled),
+:root[data-theme-family="light"] .create-community-actions .danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent-error) 54%, transparent);
+  background: color-mix(in srgb, var(--accent-error) 14%, transparent);
+}
+
+/* Core conversation controls used by community chat, direct messages, and the member-agent dock. */
+:root[data-theme-family="light"] {
+  --conversation-primary-action-surface: var(--bg-button);
+  --conversation-primary-action-hover-surface: var(--bg-button-hover);
+  --conversation-primary-action-foreground: var(--bg-button-text);
+}
+
+:root[data-theme-family="light"] .ask-icon-btn.ask-mic.recording {
+  background: color-mix(in srgb, var(--accent-error) 12%, transparent);
+  color: var(--accent-error);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent-error) 32%, transparent),
+    0 6px 18px color-mix(in srgb, var(--accent-error) 16%, transparent);
+}
+
+:root[data-theme-family="light"] .ask-icon-btn.ask-mic.recording .ask-mic-ripple {
+  border-color: color-mix(in srgb, var(--accent-error) 42%, transparent);
+}
+
+:root[data-theme-family="light"] .ask-icon-btn.ask-mic.transcribing {
+  background: color-mix(
+    in srgb,
+    var(--accent, var(--accent-selection)) 12%,
+    transparent
+  );
+  color: var(--accent, var(--accent-selection));
+  box-shadow: inset 0 0 0 1px
+    color-mix(
+      in srgb,
+      var(--accent, var(--accent-selection)) 32%,
+      transparent
+    );
 }

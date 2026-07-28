@@ -10,11 +10,7 @@
   --mobile-topbar-side-inset: 12px;
   --mobile-topbar-top-offset: 8px;
   --mobile-topbar-clearance: calc(env(safe-area-inset-top, 0px) + 54px);
-  --mobile-floating-chrome-bg: color-mix(
-    in srgb,
-    var(--surface-workspace, var(--bg-workspace)) 90%,
-    transparent
-  );
+  --mobile-floating-chrome-bg: var(--web-floating-chrome-surface);
   --mobile-bottom-rail-height: 62px;
   --mobile-left-panel-width: min(74vw, 304px);
   --web-rail-width: 72px;
@@ -23,11 +19,21 @@
   --web-rail-balance-shift: calc((var(--web-rail-control-size) - var(--web-rail-width)) / 4);
   --web-sessions-drawer-width: 240px;
 
-  /* Minimal glassmorphism controls (web only). */
-  --web-floating-chrome-bg: rgba(255, 255, 255, 0.5);
-  --web-floating-chrome-border: rgba(0, 0, 0, 0.06);
+  /*
+   * Three web materials, each with one job:
+   * - floating chrome camouflages itself against the workspace until content passes beneath it;
+   * - context panels use the stable navigation/panel surface;
+   * - popovers are raised, readable cards.
+   */
+  --web-floating-chrome-surface: var(--surface-workspace, var(--bg-workspace));
   --web-floating-chrome-shadow: none;
-  --web-floating-chrome-highlight: rgba(255, 255, 255, 0.22);
+  --web-floating-chrome-highlight: transparent;
+  --web-context-panel-surface: var(--surface-panel, var(--bg-panel));
+  --web-context-panel-border: var(--stroke-strong, var(--border-default));
+  --web-context-panel-shadow: none;
+  --web-popover-surface: var(--surface-card, var(--bg-card));
+  --web-popover-border: var(--stroke-default, var(--border-default));
+  --web-popover-shadow: 0 14px 40px rgba(0, 0, 0, 0.22);
 
   --snippet-code-bg: color-mix(in srgb, var(--bg-card) 82%, var(--bg-workspace) 18%);
   --snippet-code-header-bg: color-mix(in srgb, var(--bg-card-alt) 78%, var(--bg-workspace) 22%);
@@ -61,29 +67,31 @@
 /* Web-only: remove the "bar" treatment so the header blends into the page.
    Note: theme variables in src/index.css use :root[data-theme=...] (higher specificity),
    so we override per-theme here too. */
-:root,
-:root[data-theme="dark"],
-:root[data-theme="polynet"] {
+:root {
   --header-border: none;
 }
 
-:root[data-theme="dark"],
-:root[data-theme="polynet"] {
-  --web-floating-chrome-bg: rgba(20, 20, 23, 0.97);
-  --web-floating-chrome-border: rgba(255, 255, 255, 0.06);
-  --web-floating-chrome-shadow: none;
-  --web-floating-chrome-highlight: transparent;
+/* Preserve exact theme color at rest while allowing content beneath to reveal the blur. */
+@supports (background: color-mix(in srgb, #000 50%, transparent)) {
+  :root {
+    --web-floating-chrome-surface: color-mix(
+      in srgb,
+      var(--surface-workspace, var(--bg-workspace)) 88%,
+      transparent
+    );
+  }
 }
 
-/* Prefer deriving the "glass" tint from the current theme's background so it matches. */
-@supports (background: color-mix(in srgb, #000 50%, transparent)) {
-  :root,
-  :root[data-theme="dark"],
-  :root[data-theme="polynet"] {
-    --web-floating-chrome-bg: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 55%, var(--bg-app, #121214));
-    --web-floating-chrome-border: color-mix(in srgb, var(--text-primary) 6%, transparent);
-    --web-floating-chrome-shadow: none;
-    --web-floating-chrome-highlight: transparent;
+/* Utility panels must not reveal unrelated content through translucent theme tokens. */
+@supports (color: rgb(from #000 r g b)) {
+  :root {
+    --web-context-panel-surface: rgb(
+      from var(--surface-panel, var(--bg-panel))
+      r
+      g
+      b
+      / 1
+    );
   }
 }
 
@@ -138,7 +146,7 @@
   padding: 6px 8px;
   border-radius: 12px;
   border: 1px solid transparent;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 78%, transparent));
+  background: var(--web-floating-chrome-surface);
   box-shadow:
     var(--web-floating-chrome-shadow, 0 16px 42px rgba(0, 0, 0, 0.28)),
     inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.06));
@@ -172,7 +180,7 @@
   padding: 6px 8px;
   border-radius: 12px;
   border: 1px solid transparent;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 78%, transparent));
+  background: var(--web-floating-chrome-surface);
   box-shadow:
     var(--web-floating-chrome-shadow, 0 16px 42px rgba(0, 0, 0, 0.28)),
     inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.06));
@@ -185,7 +193,7 @@
   padding: 2px;
   border: 1px solid transparent;
   border-radius: 13px;
-  background: var(--web-floating-chrome-bg, color-mix(in srgb, var(--bg-card) 78%, transparent));
+  background: var(--web-floating-chrome-surface);
   box-shadow:
     var(--web-floating-chrome-shadow, 0 16px 42px rgba(0, 0, 0, 0.28)),
     inset 0 1px 0 var(--web-floating-chrome-highlight, rgba(255, 255, 255, 0.06));
@@ -487,6 +495,278 @@
   opacity: 0.65;
 }
 
+@media (max-width: 820px) {
+  .web-empty-thread {
+    margin-top: clamp(72px, 16vh, 230px);
+  }
+}
+
+.web-starter-tabs {
+  margin-top: 4px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.web-starter-tab {
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 88%, transparent);
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.web-starter-tab:hover {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.web-starter-tab.active {
+  border-color: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+  color: var(--text-primary);
+}
+
+.web-starter-list {
+  width: min(100%, 640px);
+  margin-top: 4px;
+  border: 1px solid var(--border-muted);
+  border-radius: 14px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 88%, transparent);
+  text-align: left;
+}
+
+.web-starter-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.web-starter-row + .web-starter-row {
+  border-top: 1px solid color-mix(in srgb, var(--border-muted) 70%, transparent);
+}
+
+.web-starter-row:hover {
+  background: color-mix(in srgb, var(--bg-card) 40%, transparent);
+}
+
+.web-starter-row:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.web-starter-row-text {
+  flex: 1;
+}
+
+.web-starter-row-arrow {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  color: var(--icon-default);
+  opacity: 0.8;
+}
+
+.web-starter-row:hover .web-starter-row-arrow {
+  color: var(--icon-hover);
+  opacity: 1;
+}
+
+.web-starter-row-arrow svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.web-download-card {
+  margin-top: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-card);
+  padding: 14px 16px;
+  padding-right: 48px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+  width: min(100%, 680px);
+}
+
+.web-download-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.web-download-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  border: 1px solid var(--border-muted);
+  background: var(--bg-card-alt);
+  display: grid;
+  place-items: center;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.web-download-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.web-download-logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  display: block;
+}
+
+:root[data-theme-family="dark"] .web-download-logo.monochrome {
+  filter: invert(1);
+}
+
+.web-download-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.web-download-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--icon-default);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.web-download-close:hover {
+  background: var(--hover-overlay);
+  color: var(--icon-hover);
+}
+
+.web-download-close svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.web-download-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.web-download-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.web-download-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.web-download-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+  cursor: pointer;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.web-download-button:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.web-download-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.web-download-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.web-download-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.web-download-button-logo {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: block;
+  filter: invert(1);
+}
+
+@media (max-width: 540px) {
+  .web-download-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .web-download-actions {
+    justify-content: flex-start;
+  }
+}
+
 .agent-editor-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -587,6 +867,94 @@
 
 .system-prompt-input::placeholder {
   color: var(--text-faint);
+}
+
+.agent-preview-shell .web-empty-thread-title {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.agent-preview-shell .web-empty-thread-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 56ch;
+}
+
+.web-starter-tab {
+  position: relative;
+}
+
+.settings-panel .web-starter-tabs .web-starter-tab {
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 88%, transparent);
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.settings-panel .web-starter-tabs .web-starter-tab:hover:not(:disabled) {
+  border-color: var(--border-default);
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 88%, transparent);
+  color: var(--text-primary);
+}
+
+.settings-panel .web-starter-tabs .web-starter-tab.active {
+  border-color: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+  color: var(--text-primary);
+}
+
+.message-item.user {
+  margin-bottom: 0;
+}
+
+/* Web readability pass: increase assistant output size versus the old shell default. */
+.message-item.assistant .message-text {
+  font-size: 16px;
+  line-height: 1.62;
+}
+
+/* Dark web themes: push assistant text a little brighter for readability. */
+:root[data-theme-family="dark"] .message-item.assistant .message-text {
+  color: #f3f5f7;
+}
+
+@supports (color: color-mix(in srgb, #fff 50%, #000 50%)) {
+  :root[data-theme-family="dark"] .message-item.assistant .message-text {
+    color: color-mix(in srgb, var(--text-primary) 78%, #ffffff 22%);
+  }
+}
+
+@media (max-width: 900px) {
+  .message-item.assistant .message-text {
+    font-size: 15px;
+    line-height: 1.56;
+  }
+}
+
+.auth-error-action {
+  margin-left: 10px;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.auth-error-action:hover {
+  color: var(--text-primary);
+}
+
+.app-root.mobile-shell .message-item.assistant .message-text {
+  font-size: 15px;
+  line-height: 1.54;
 }
 
 .streaming-live-trace {
@@ -1195,8 +1563,7 @@
   display: block;
 }
 
-:root[data-theme="dark"] .model-picker-nav-logo-img.monochrome,
-:root[data-theme="polynet"] .model-picker-nav-logo-img.monochrome {
+:root[data-theme-family="dark"] .model-picker-nav-logo-img.monochrome {
   filter: invert(1);
 }
 
@@ -1671,8 +2038,8 @@
   height: 34px;
   border-radius: 999px;
   border: none;
-  background: #fff !important;
-  color: #111 !important;
+  background: var(--conversation-primary-action-surface) !important;
+  color: var(--conversation-primary-action-foreground) !important;
   box-shadow: none;
 }
 
@@ -1682,14 +2049,14 @@
 }
 
 .ask-send-btn.ask-send-btn-v2:hover:not(:disabled) {
-  background: #fff !important;
-  color: #111 !important;
+  background: var(--conversation-primary-action-hover-surface) !important;
+  color: var(--conversation-primary-action-foreground) !important;
   opacity: 0.95;
 }
 
 .ask-send-btn.ask-send-btn-v2:disabled {
-  background: #fff !important;
-  color: #111 !important;
+  background: var(--conversation-primary-action-surface) !important;
+  color: var(--conversation-primary-action-foreground) !important;
   opacity: 0.35;
   box-shadow: none;
 }
@@ -1740,8 +2107,8 @@
 }
 
 .community-chat .chat-send.ask-send-btn {
-  background: #fff;
-  color: #111;
+  background: var(--conversation-primary-action-surface);
+  color: var(--conversation-primary-action-foreground);
 }
 
 .community-chat .chat-send.ask-send-btn:hover:not(:disabled) {
@@ -1754,8 +2121,8 @@
 
 /* AI workspace composer: match the community chat send button style. */
 .ask-bar.ask-bar-v2 .chat-send.ask-send-btn {
-  background: #fff;
-  color: #111;
+  background: var(--conversation-primary-action-surface);
+  color: var(--conversation-primary-action-foreground);
 }
 
 .ask-bar.ask-bar-v2 .chat-send.ask-send-btn:hover:not(:disabled) {
@@ -1795,6 +2162,50 @@
   color: var(--text-muted);
   line-height: 1.2;
   margin-top: 3px;
+}
+
+.modal.modal-auth-gate .modal-footer {
+  border-top: none;
+  background: transparent;
+  padding: 0 18px 18px;
+}
+
+.modal.modal-auth-gate .auth-actions {
+  width: 100%;
+}
+
+.auth-gate-google-button {
+  width: 100%;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  background: #ffffff;
+  color: #111111;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+:root[data-theme-family="dark"] .auth-gate-google-button {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.auth-gate-google-button:hover:not(:disabled) {
+  filter: brightness(0.98);
+}
+
+.auth-gate-google-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.auth-gate-google-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--border-active) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .mobile-topbar {
@@ -2550,11 +2961,6 @@
   height: 96px;
   border-radius: 12px;
   padding: 12px 14px;
-}
-
-.mobile-drawer.mobile-community-drawer .community-nav-name {
-  font-size: 15px;
-  font-weight: 700;
 }
 
 .mobile-drawer .community-nav .nav-item {

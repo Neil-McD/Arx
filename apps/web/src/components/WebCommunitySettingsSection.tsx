@@ -60,7 +60,6 @@ type WebCommunitySettingsSectionProps = {
   onSelectPane: (pane: CommunitySettingsPane, opts?: { replace?: boolean }) => void;
   onPreviewCommunityOnboarding: () => void;
   canManageCommunitySettings: boolean;
-  canDeleteCommunity: boolean;
   requireSignIn: () => void;
   accountCommerceStatus: AccountCommerceStatus | null;
   accountCommerceError: string | null;
@@ -211,7 +210,6 @@ const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
   community: "Community",
   workflows: "Workflows",
   integrations: "Integrations",
-  danger: "Danger",
 };
 
 function CommunitySettingsPaneSwitcher({
@@ -897,17 +895,6 @@ function CommunityMonetizationConfigSection({
   );
 }
 
-function CommunityDangerZoneSection() {
-  return (
-    <div className="settings-section" style={{ marginTop: 18 }}>
-      <div className="settings-section-title">Danger zone</div>
-      <div className="settings-section-desc">
-        Community deletion is temporarily paused while resumable cleanup and data-retention safeguards are completed. No community data will be changed from this screen.
-      </div>
-    </div>
-  );
-}
-
 function CommunityMemberSettingsSection({
   activeCommunity,
   activeCommunityAccess,
@@ -1010,7 +997,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     activePane,
     onSelectPane,
     canManageCommunitySettings,
-    canDeleteCommunity,
     requireSignIn,
     accountCommerceStatus,
     accountCommerceError,
@@ -1021,9 +1007,11 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     actions,
   } = props;
   const isOwnerSettingsLayer = communitySettingsLayer === "owner";
-  const ownerSettingsPanes: CommunitySettingsPane[] = canDeleteCommunity
-    ? ["community", "workflows", "integrations", "danger"]
-    : ["community", "workflows", "integrations"];
+  const ownerSettingsPanes: CommunitySettingsPane[] = [
+    "community",
+    "workflows",
+    "integrations",
+  ];
   const availableSettingsPanes = canManageCommunitySettings ? ownerSettingsPanes : [];
   const selectedSettingsPane = availableSettingsPanes.includes(activePane)
     ? activePane
@@ -1146,9 +1134,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 communityAvatarZoom={activeCommunity.avatar_zoom}
                 onPreview={props.onPreviewCommunityOnboarding}
               />
-            ) : null}
-            {selectedSettingsPane === "danger" && canDeleteCommunity ? (
-              <CommunityDangerZoneSection />
             ) : null}
           </div>
         </>
