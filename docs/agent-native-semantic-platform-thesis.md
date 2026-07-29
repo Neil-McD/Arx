@@ -1,215 +1,446 @@
 # Agent-Native Semantic Platform Thesis
 
-Status: long-term architecture thesis; not an active implementation contract
+Status: active destination architecture; implementation remains cleanup-led and milestone-gated
 
-## Purpose
+This contract owns architectural direction. It does not make a proposed
+component implemented, authorize a slice, or override canonical schema,
+authorization code, runtime evidence, `AGENTS.md`, or the MVP boundary. Current
+execution status lives in `docs/polynet-reduction-execution-contract-v1.md`.
 
-Polynet should be designed as an agent-native context and capability network.
-The model supplies general intelligence. Polynet supplies the environment that
-lets that intelligence orient, retrieve context, collaborate, act, and learn
-inside explicit authority boundaries.
+## Product definition
 
-The long-term objective is:
+Polynet is the community runtime for the agentic internet. It gives humans,
+personal agents, community agents, workflows, and connected applications one
+shared environment in which to understand a community and act inside explicit
+authority boundaries.
 
-> Any sufficiently capable model can enter a Polynet community, understand
-> where it is, know whom it serves, discover what it may access, use community
-> intelligence, act through governed tools, and leave auditable evidence
-> without requiring a custom workflow for every task.
+An agent harness is one execution engine inside this runtime. Polynet does not
+need to host every application's database, backend, model, or compute. External
+software may retain its infrastructure while Polynet exposes its authorized
+resources, capabilities, events, and human surfaces through the community
+runtime.
 
-## Core Thesis
+The objective is:
 
-Every meaningful platform object should have a stable, permissioned,
-agent-readable Markdown representation:
+> Any sufficiently capable model can enter an authorized Polynet community,
+> understand where it is and whom it serves, discover what exists and what it
+> may do, retrieve only the context it needs, take authorized action, and leave
+> auditable evidence without a bespoke workflow or tool family for every task.
 
-- people and member profiles
-- communities and their constitutions
-- posts, replies, messages, and events
-- resources and content
-- agents, skills, and procedures
-- evidence, decisions, and outcomes
-- accepted community intelligence
-- goals, questions, and active plans
+## Core thesis
 
-Markdown is the universal semantic interface, not necessarily the physical
-transactional database. Cloud records remain canonical for identity, access,
-money, membership, concurrency, and other state that must be exact. Markdown
-representations may be rendered deterministically or materialized where that
-improves portability, inspection, and retrieval.
+Everything important to agent understanding or action should be
+text-addressable. Not everything authoritative should be text-stored.
 
-## Four Planes
+Every semantically important, independently addressable object should have a
+stable, permissioned, agent-readable representation, normally deterministic
+Markdown. This means one projection per agent-relevant semantic object, not one
+file per database row.
 
-### Semantic Plane
+Cloud records remain canonical for identity, membership, entitlement, money,
+credentials, revocation, versions, concurrency, and other exact transactional
+state. Markdown is the universal semantic interface, not a second database. A
+projection may be rendered on demand or materialized as disposable derived data
+when indexing, portability, or latency justifies it. Binary artifacts remain
+binary; their identity, metadata, relationships, transcripts, and access rules
+remain text-addressable.
 
-Text describes identity, meaning, relationships, culture, knowledge,
-procedures, goals, resources, and memory. Each object has a stable reference
-and enough typed metadata to preserve ownership, visibility, provenance,
-freshness, and status.
+The human UI, native agent runtime, official MCP, APIs, notifications,
+workflows, and future community-specific surfaces are projections of the same
+canonical world. They may use different wire shapes, but they must not grow
+independent truth or authority models.
 
-### Control Plane
+Cleanup blocks architectural progress only when competing implementations
+claim truth for the same object, authority decision, operation, or receipt in
+the path being built. Whole-repository perfection is not a prerequisite. A new
+semantic layer must never be used to hide unresolved duplicate authority.
 
-Deterministic code owns:
+## Irreducible runtime model
 
-- authentication and identity
-- membership and entitlements
-- permissions and visibility
-- payments and canonical transaction state
-- provenance and versions
-- idempotency and concurrency
-- bounded tool execution
-
-The model may infer meaning. It must never infer authority.
-
-### Execution Plane
-
-Agents act through a small set of typed, permission-checked capabilities. MCP
-is the primary bridge between Polynet and external agent harnesses. The
-platform exposes capabilities; the model decides how to combine them.
-
-The preferred semantic operations are:
+The runtime reduces to three canonical concerns. Experience is derived:
 
 ```text
-list
-search
-read
-write
-call
+State       = entities + relationships + current policies
+Operations  = permissioned attempts to transition state or cause an effect
+History     = durable events and receipts describing what happened
+
+Experience  = permissioned projection(
+                current state
+                + relevant history
+                + available operations
+                + invocation context
+              )
 ```
 
-`write` expresses a requested state change; deterministic policy decides whether
-it may apply directly or must become a proposal. `call` invokes only an admitted
-typed capability. Canonical writes and calls pass through deterministic
-validation before changing shared state.
+### State
 
-### Learning Plane
+State answers what exists and what is true now.
 
-Community activity produces evidence. The compiler creates candidate
-knowledge. Community cognition evaluates those candidates. Validated patterns
-enter the community directory. Retrieval and outcomes then produce new
-evidence.
+Current principal identities are:
+
+- `user`: a human Polynet account;
+- `personal_agent`: an agent owned by and serving one user;
+- `community_agent`: the persistent agent identity owned by one community;
+- `community`: the institution and authority boundary for shared context and
+  collective intelligence;
+- `system`: trusted Polynet infrastructure.
+
+An independently enrolled agent or service principal is proposed future state,
+not current membership behavior. Current membership is user-based. A personal
+agent acting under a user does not silently become an independently enrolled
+member; an invocation preserves both identities:
+
+```text
+actor = personal agent
+authority = user's current membership and entitlements
+```
+
+Authority derives from concrete current relationships and target state:
+
+```text
+actor or principal
+  + active community membership or explicit service authority
+  + community role or explicit entitlement
+  + platform entitlement where relevant
+  + requested operation and current target state
+  = effective capability
+```
+
+Community ownership is separate from membership role. Builder authority is an
+explicit capability such as resource management, not a global rank. A platform
+plan may grant capacity but never invent a community role.
+
+### Operations
+
+An operation is an attempt to change canonical state or produce a meaningful
+external effect. A capability is the versioned definition of an operation: its
+identity, inputs, valid targets, authority, preconditions, effects,
+idempotency/retry behavior, executor, output, and receipt.
+
+Deterministic code resolves authority, validates inputs and preconditions,
+executes the operation, and records the result. The model may infer meaning; it
+must never infer membership, entitlement, delegation, consent, authorship, or
+authority. Approval is operation-specific, not a universal platform state.
+
+Presentation-only actions such as opening a modal, selecting a local tab, or
+scrolling are not platform capabilities.
+
+### History
+
+History is durable evidence that an observation, attempt, transition, or effect
+occurred. It includes messages, joins, publications, payments, workflow runs,
+agent tool calls, failures, and other canonical events or receipts.
+
+An episode groups related history inside a bounded occurrence, such as a
+conversation, interaction thread, agent run, workflow run, event occurrence,
+or compiler/cognition cycle. Persistent definitions remain state; executions
+are history.
+
+### Context and experience
+
+Context is a computed lens for one invocation. It selects the actor, whom the
+actor serves, active community, surface, episode, current authority, available
+operations, relevant state/history, constraints, and provenance. It is not an
+arbitrary text bag and does not grant authority.
+
+Two actors may share canonical state while receiving different experiences
+because visibility, authority, relevance, and context limits differ. Every
+operation is reauthorized against current state.
+
+## Four required control responsibilities
+
+The runtime needs four logical responsibilities:
+
+```text
+Context and authority resolution
+  -> who is acting, where, and with which current authority
+
+Semantic namespace resolution
+  -> which authorized semantic objects may be listed, read, or searched
+
+Capability definition and execution
+  -> which versioned operations exist and how they execute
+
+Event and receipt history
+  -> what happened, under which authority, against which state
+```
+
+These are responsibilities, not a requirement to create four new services,
+tables, registries, or abstraction layers immediately. Existing bounded domain
+owners may satisfy them until multiple real adapters require a shared registry.
+The first implementation must reuse current authority and execution seams.
+
+When generalized, the semantic namespace owns stable object references,
+current paths, mount adapters, renderers, bounds, and authorization hooks. The
+capability surface owns operation identity/version, schemas, authority,
+preconditions, effects, retry/idempotency behavior, executor, and receipt
+shape. Runtime manifests, tool lists, MCP definitions, and UI actions are
+projections; they never grant authority.
+
+There is no universal risk tier, approval kernel, or manually maintained
+lifecycle spreadsheet for every operation. Executable contracts and canonical
+records own lifecycle truth.
+
+## Community as a virtual repository
+
+An active community should feel to an agent like a checked-out code repository:
+one explicit community context, one deterministic directory, progressive
+inspection, and no path that can escape into another community.
+
+The current staging namespace is deliberately small:
+
+```text
+/
+|- community.md
+|- self.md
+|- members/
+`- resources/
+   `- <category>/<resource>.md
+```
+
+This namespace is `IMPLEMENTED`. A mount exists only after its canonical data,
+semantic representation, authorization, bounds, and proof are real. Empty
+placeholder directories must not imply capabilities that do not exist.
+
+The self profile remains user-owned even when projected inside a community.
+Other-member projections under `/members/` are community-scoped and must not
+expose self-only facts.
+
+A readable path is a current location. A canonical semantic URI or typed
+reference is stable identity. Renaming a community, category, handle, or
+resource may change its path without changing its identity. Opaque IDs,
+raw revisions, authorization evidence, and internal provenance remain
+server-side unless the agent must use a specific value in its next valid
+operation. The model-visible envelope contains only actionable navigation,
+content bounds, and trust context; it is not a dump of execution metadata.
+
+The repository is virtual. Reads resolve current canonical records and render
+permissioned projections. Future writes route to typed domain operations.
+Polynet must never synchronize a second mutable folder tree with canonical
+product state.
+
+An object deserves a standalone document only when it has stable identity and
+lifecycle, agents must reason about it independently, its meaning exceeds a
+directory entry, and its visibility is explicit. Presence heartbeats,
+reactions, counters, tokens, cursors, deduplication rows, and compiler
+bookkeeping do not deserve files merely because they are stored.
+
+## Irreducible model-facing harness
+
+The destination protocol has a small observation plane and action plane:
+
+```text
+Observe
+|- polynet_list
+|- polynet_read
+`- polynet_search
+
+Act
+|- polynet_write
+`- polynet_call
+```
+
+Bounded `polynet_list` and `polynet_read` are `IMPLEMENTED` on the staging
+source path. They serve only real community, self, member-directory, and
+resource mounts. The later `/members/` addition followed explicit user
+direction and remains a bounded profile projection, not a generic row browser.
+
+`polynet_search` is `PROPOSED` after list/read. It returns bounded authorized
+references/snippets and revalidates canonical truth; an index is a locator, not
+authority.
+
+`polynet_write` is `PROPOSED` only for naturally writable semantic documents.
+Each adapter owns schema validation, expected revisions, attribution,
+idempotency, effects, confirmation policy, and receipts. A successful write is
+read back from committed canonical state.
+
+`polynet_call` is `PROPOSED` for non-document operations. It must never become a
+hidden mega-tool: every callable operation remains separately named,
+versioned, discoverable, schema-bound, authority-bound, and receipt-bearing.
+
+Current domain-specific native and MCP tools may remain as compatibility
+adapters for identified consumers. They must delegate to canonical domain
+owners, must not define new architecture, and require a bounded retirement or
+support policy before deletion. Semantic parity matters; identical wire
+messages do not.
+
+Real shell/filesystem access belongs to a separate private coding trust domain.
+The web runtime and virtual community repository must never expose canonical
+community state through shell, path traversal, symlink, or local-filesystem
+escape hatches.
+
+## Learning and epistemic boundaries
+
+Community activity produces evidence. The compiler creates bounded candidate
+knowledge. Community cognition evaluates candidates. Accepted intelligence
+enters the community-owned directory. Retrieval and outcomes create new
+evidence:
 
 ```text
 activity
   -> structured evidence
   -> compiler
   -> community cognition
-  -> validated intelligence
+  -> accepted intelligence
   -> retrieval and action
   -> outcomes and feedback
 ```
 
-Raw posts and messages are evidence. They do not automatically become accepted
-community intelligence.
+Raw activity, canonical resources, and accepted intelligence are distinct
+epistemic lanes. Searchability is not acceptance. Community/member-authored
+content is contextual data unless a separate trusted contract grants it
+instruction authority. Permission filtering occurs before retrieval or
+mutation, and canonical authority is checked again at the operation boundary.
 
-## Token Efficiency Constraint
+## Ownership and extension boundary
 
-The primary optimization target is:
+The user owns their identity, profile ontology, and personal agent. The
+community owns its namespace, community agent, shared resources, accepted
+intelligence, and future community-scoped workflows, app mounts, and surfaces.
+Polynet owns the deterministic authority, semantic, capability, and receipt
+contracts through which runtimes interact with that community.
+
+The proposed extension vocabulary is:
+
+| Primitive | Canonical concern | Destination |
+| --- | --- | --- |
+| Resources | State | Semantic namespace |
+| Capabilities | Operations | Capability definition/execution |
+| Events | History | Event and receipt history |
+| Surfaces | Experience | Permissioned human projection |
+
+This vocabulary is `PROPOSED`; it is not permission to create a universal app
+platform during MVP. Declarative composition may precede embedded code.
+Arbitrary hosted community code is `DEFERRED` until isolation, permissions,
+versioning, rollback, accessibility, and billing are proven.
+
+## Token and context efficiency
+
+The optimization target is:
 
 > Maximize decision-relevant understanding per token.
 
-Potential context richness should not require loading the full platform into a
-model context window. Polynet needs a memory hierarchy:
+Potential context richness must not require loading the platform into a model
+window. Important objects use progressive disclosure:
 
 ```text
 canonical records and raw evidence
-  -> agent-readable object documents
-  -> search indexes and relationship maps
-  -> compiled entity and topic summaries
+  -> bounded agent-readable projections
+  -> directories, indexes, and relationship maps
+  -> compiled entity/topic summaries
   -> task-specific context packets
   -> model working context
 ```
 
-Every important object should support progressive disclosure:
+Summaries preserve source references, visibility, freshness, uncertainty,
+minority views, and contradictions. A compiler helps synthesis; it is not
+required for deterministic navigation or authorization.
 
-1. A compact reference identifies the object and its relevance.
-2. An entity card provides a bounded summary and important relationships.
-3. A dossier provides a richer mental model with contradictions and history.
-4. Source excerpts preserve exact supporting evidence.
-5. Full source content is loaded only when required.
+## Implementation classification
 
-Search returns bounded references and snippets by default. Agents selectively
-expand only the objects needed to resolve uncertainty or complete an action.
+The labels mean:
 
-The context compiler should maintain multi-resolution projections such as:
+- `IMPLEMENTED`: present on the current staging source path, though named
+  residual debt may remain;
+- `NEXT`: accepted near-term destination after its causal cleanup prerequisites;
+- `PROPOSED`: directionally compatible but requires a separate requirement and
+  implementation decision;
+- `DEFERRED`: explicitly outside the current program.
 
-- community orientation
-- person and expertise summaries
-- topic and relationship maps
-- activity digests
-- disagreements and unresolved questions
-- validated patterns and representative evidence
+| Architecture element | Status | Current boundary |
+| --- | --- | --- |
+| Communities as primary authenticated context | `IMPLEMENTED` | browser Workspace destination is deleted; inbound legacy classification and protected execution substrate remain |
+| Separate personal-agent and community-agent identities | `IMPLEMENTED` | delegated personal authority does not create agent membership |
+| Fail-closed community context and authority resolution | `IMPLEMENTED` | current bounded community read/capability seams are the reuse point |
+| Canonical cloud authority for identity, access, money, and history | `IMPLEMENTED` | remaining domain migrations are tracked separately |
+| Stable resource references and permissioned resource reads | `IMPLEMENTED` | exact stable-reference reads hydrate the sole canonical resource-content owner |
+| Domain/runtime events and receipts | `IMPLEMENTED` | a generalized cross-surface receipt projection is not implemented |
+| One read-only semantic namespace for community/self/members/resources | `IMPLEMENTED` | hard-coded mounts reuse canonical owners; wider mounts remain separately gated |
+| Deterministic `community.md` and `self.md` resources | `IMPLEMENTED` | current actor and community authority are revalidated on every read |
+| Bounded `polynet_list` and `polynet_read` | `IMPLEMENTED` | native and official MCP adapters share semantic owners and fail closed |
+| One generalized capability definition/projection seam | `NEXT` | first collapse duplicated native/MCP declarations |
+| Bounded `polynet_search` | `PROPOSED` | only after list/read and canonical truth revalidation exist |
+| Naturally scoped `polynet_write` | `PROPOSED` | typed domain mutations remain canonical |
+| Discoverable `polynet_call` | `PROPOSED` | no undiscoverable mega-tool behavior |
+| Memory, activity, capability, app, workflow, event, and UI mounts | `PROPOSED` | each requires a real semantic and authority contract |
+| External apps integrating once through resources/capabilities/events/surfaces | `PROPOSED` | prove one real integration before generalizing |
+| Independently enrolled agent/service community members | `DEFERRED` | current membership remains user-based |
+| Arbitrary hosted community code or an unrestricted component platform | `DEFERRED` | not required for MVP |
+| Standalone general-purpose Workspace destination | `DEFERRED` | protected harness/thread substrate and bounded compatibility remain |
 
-Each projection should preserve source references, visibility, confidence,
-freshness, and approximate token cost. Summaries must not erase uncertainty,
-minority viewpoints, or conflicting evidence.
+### Implementation-lineage caveat
 
-## Entity Model
+At reconciliation baseline `3bcbbf63ee00943803fc1efb68a5ea6de9193144`,
+the staging branch did not contain the isolated community/self profile and
+runtime-orientation commits `3d5286a6`, `618c249f`, `9783f548`, `bb45ee9c`, or
+`424f9d4b`. Those commits were never merged blindly.
 
-The member owns their identity, profile ontology, and external personal agents.
-The community owns its shared context namespace, collective intelligence, and
-community agent. Polynet owns the protocol, deterministic authority kernel,
-compiler infrastructure, and discovery surface.
+The current C6 implementation instead landed as bounded staging slices from
+`b12736e7` through `12b23889`, followed by the locally proved native-tool
+convergence commit `90badc0b`. The implementation reuses canonical authority
+and read owners, adds no semantic Markdown store or generic mount registry, and
+keeps external workspace-MCP compatibility separate from the two-tool native
+surface. The combined staging release at `482d5d20` passed authenticated native
+and official-MCP list/read plus persisted retired-name absence proof.
 
-The platform should not own every agent runtime. External agents mount Polynet
-community context through MCP. Community agents maintain and serve the
-community's own intelligence.
+## Cleanup-led implementation sequence
 
-## Design Laws
+The active destination does not justify building every proposed abstraction
+now. Execution follows `docs/polynet-reduction-execution-contract-v1.md`:
 
-1. Context over orchestration.
-2. Capabilities over bespoke features.
-3. Compiled intelligence over undifferentiated retrieval.
-4. Stable references over duplicated content.
-5. Progressive disclosure over giant prompts.
-6. Model autonomy inside deterministic authority boundaries.
-7. Proposals before canonical model-authored writes.
-8. Permission filtering before retrieval, not after generation.
-9. The UI is a human projection of the same world available to agents.
-10. The architecture remains model- and harness-agnostic.
+1. finish payment/provider recovery and ordinary creator settlement;
+2. complete resumable account/community deletion and privacy propagation;
+3. remove competing resource, interaction, and intelligence authorities;
+4. make scheduled/operational work eventually fair and bounded;
+5. collapse duplicated capability, transport, and public-function surfaces;
+6. maintain bounded list/read for only the four currently accepted mounts;
+7. expand search, writes, calls, mounts, and adapters only from demonstrated
+   need;
+8. delete deferred Workspace/UI/docs/configuration surface before decomposing
+   and optimizing what remains;
+9. prove backup, restore, and operational recovery;
+10. reconcile historical Builder Partner obligations last.
 
-## Failure Modes To Prevent
+Each slice receives its own authority, non-goals, proof, and approval. Cleanup
+and substrate work may interleave only when the cleanup establishes the single
+canonical owner required by the next mount or operation.
 
-- prompt injection crossing from evidence into control instructions
-- unauthorized objects entering retrieval results
-- stale or contradictory summaries presented as facts
-- summaries becoming detached from source evidence
-- unbounded context assembly
-- duplicated semantic content drifting across files
-- model-generated interpretations becoming canonical without validation
-- autonomous feedback loops reinforcing low-quality conclusions
-- deterministic workflows replacing general model capability
+## Design laws
 
-## Current Sequencing
+1. State, operations, and history are canonical; experience is a projection.
+2. Text-addressable does not mean text-authoritative.
+3. One document represents one agent-relevant semantic object, not one row.
+4. A community is the repository context and authority boundary.
+5. Stable identity is separate from mutable path.
+6. Context and capabilities replace bespoke orchestration.
+7. Progressive disclosure replaces giant prompts.
+8. The model may infer meaning but never authority.
+9. Permission filtering happens before retrieval; authority is rechecked at
+   execution.
+10. Raw evidence, canonical resources, and accepted intelligence remain
+    distinct.
+11. Native, MCP, workflows, APIs, and UI reuse the same canonical owners.
+12. Semantic parity matters more than identical transport shape.
+13. Community customization never penetrates the invariant security kernel.
+14. The architecture remains model-, harness-, transport-, and renderer-agnostic.
+15. Delete competing truth before optimizing or automating it.
 
-This thesis does not change the immediate implementation priority.
+## Failure modes to prevent
 
-The current architecture work must first complete the community-scoped pivot:
-
-1. Remove the workspace as a primary product destination and interaction model.
-2. Make communities the canonical authenticated destination and navigation
-   unit.
-3. Isolate or remove user-scoped workspace runtime assumptions.
-4. Canonicalize the capable runtime around community authority, context,
-   memory, and tools.
-5. Preserve the external MCP capability while projecting legacy workspace wire
-   vocabulary only where compatibility still requires it.
-
-Only after that foundation is simple and stable should this broader semantic
-filesystem and context-compiler thesis become the active implementation
-program.
-
-### Work 3 staging checkpoint (2026-07-11)
-
-- Authenticated root entry resolves to an authorized community, normally the
-  Polynet home community; Discover is the fallback and lists communities only.
-- The left rail is the community selector. First-party navigation and
-  notification links do not generate Workspace URLs.
-- The protected Workspace harness remains isolated as compatibility substrate;
-  it is not a product destination and has not been destructively deleted.
-- The bottom-right dock uses the member's personal Polynet runtime under the
-  active community lens. It is not the community agent.
-- Direct community-agent mentions use the requester-funded, read-only Concierge
-  serve worker.
-- Autonomous community cognition remains a separate owner-funded authority mode
-  of the same canonical community-agent identity.
-- External MCP remains permissioned by community. Legacy `workspace` names in
-  its v0 wire contract do not represent a Workspace product or separate runtime.
+- a bespoke tool family for every entity or feature;
+- a generic registry or mega-tool containing hidden domain behavior;
+- forcing non-document operations into artificial file writes;
+- one file per database row or a second mutable Markdown store;
+- paths, manifests, projections, model output, or indexes treated as authority;
+- shell, traversal, symlink, or cross-community escape;
+- prompt injection crossing from evidence into trusted instructions;
+- unauthorized or self-only facts entering retrieval or member projections;
+- stale summaries or indexes becoming canonical truth;
+- accepted intelligence losing its evidence and cognition boundary;
+- independent permission implementations for native, MCP, workflow, and UI;
+- every capability being dumped into every model context;
+- a progress document becoming a parallel authority or lifecycle registry;
+- whole-repository cleanup blocking a ready, authority-clean semantic slice;
+- substrate expansion hiding unresolved duplicate authority;
+- arbitrary custom UI/code arriving before isolation and rollback;
+- deterministic workflows replacing general model capability.

@@ -39,7 +39,7 @@ This file is the execution contract for agents working in this repository.
 - Community-scoped AI agent interactions embedded in community surfaces.
 - Official Polynet MCP access for external agent harnesses.
 - Tiered access and quota enforcement for AI usage.
-- Existing thread and workspace infrastructure retained as migration substrate, not as the primary MVP destination.
+- Existing thread and execution substrate retained only where current Polynet capabilities depend on it; it is not a standalone MVP destination.
 - Ongoing `App.tsx` decomposition and cleanup required for launch stability.
 
 ---
@@ -65,11 +65,16 @@ This file is the execution contract for agents working in this repository.
 
 These are protected and must not be removed in MVP simplification passes:
 
-- Coding harness.
-- Community harness.
-- Community compiler.
+- Member-facing personal-agent harness under explicit community context.
+- Separate community-owned agent and cognition runtime.
+- Community compiler and cognition.
 - Community resources/memory systems.
-- References folders (research context).
+- Official Polynet MCP.
+- Required references and research context.
+
+Coding, thread, project, workspace, and execution components are protected only
+when a demonstrated first-party Polynet dependency makes them load-bearing.
+Their existence does not restore the standalone Workspace product.
 
 If a cleanup touches any of the above, require explicit human confirmation.
 

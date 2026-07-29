@@ -191,11 +191,11 @@ required status is the canonical pre-release decision.
 The release gate is validation only. It must never push Git, deploy Convex,
 deploy or promote Vercel, mutate production, or roll back a release.
 
-### Workspace Credit Accounting Gate
+### Runtime Credit Accounting Gate
 
-Before a production release that touches runtime execution, workspace billing, provider-cost
+Before a production release that touches runtime execution, provider-cost
 tracking, credits, checkout, or accounting diagnostics, run the read-only production accounting
-smoke:
+smoke. The command retains its legacy internal name:
 
 ```bash
 cd /Users/neilmcdevitt/code/arx
@@ -221,16 +221,17 @@ debit users.
 After every production release, verify the changed surface and at least these core flows:
 
 1. Auth/session bootstrap
-2. Workspace send/run
-3. Preview open/load
-4. Community join/request/cancel if touched
-5. Member admin actions if touched
-6. Billing checkout if touched
+2. Founder community create/manage and funnel link
+3. Member Discover/funnel/gate/join
+4. Community navigation, post/chat, voice, and resources
+5. Personal-agent explicit community context and separate community-agent behavior when touched
+6. Official Polynet MCP authenticated community context when touched
+7. Billing checkout, entitlement convergence, and builder payout readiness when touched
 
 If the release touched billing, check both:
 
 - Community checkout and Stripe Connect payout readiness
-- Workspace credit top-up
+- Runtime credit top-up when runtime accounting is touched
 
 ## Decision Rules
 
