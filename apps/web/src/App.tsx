@@ -36,8 +36,7 @@ import {
   type CreateCommunityIntentDraft,
 } from "../../../shared/createCommunityIntent";
 import {
-  DEFAULT_EMPTY_THREAD_LANDING, normalizeCommunityAgentDraftForSave, normalizeCommunityAgentLanding, type CommunityAgentLanding, } from "../../../shared/communityAgentLanding";
-import { normalizeCommunityFunnelConfig } from "../../../shared/communityFunnel";
+  DEFAULT_EMPTY_THREAD_LANDING, normalizeCommunityAgentLanding, } from "../../../shared/communityAgentLanding";
 import {
   formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, } from "../../../shared/contentFormatting";
 import {
@@ -72,6 +71,7 @@ import { useWebSkillsModel } from "./controllers/useWebSkillsModel";
 import { useWebAccountGraphLifecycle } from "./controllers/useWebAccountGraphLifecycle";
 import { useWebAuthenticatedIdentityController } from "./controllers/useWebAuthenticatedIdentityController";
 import { useWebCommunityMemberManagementController } from "./controllers/useWebCommunityMemberManagementController";
+import { useWebCommunityAgentAndFunnelController } from "./controllers/useWebCommunityAgentAndFunnelController";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { updateSentryUiContext } from "./instrument";
 import {
@@ -84,7 +84,6 @@ import {
 } from "../../../shared/useCommunityAiFeedController";
 import {
   saveCloudCommunityAbout,
-  saveCloudCommunityPublicPresentation,
   type CloudCommunityAboutSaveResult,
 } from "../../../shared/cloudCommunityFunnelGateway";
 import {
@@ -104,9 +103,6 @@ import {
   isAccountSetupStatusIdentityComplete,
   type AccountSetupStatus,
 } from "../../../shared/accountSetup";
-import {
-  saveCloudCommunityAgentConfig as saveCloudCommunityAgentConfigDirect,
-} from "../../../shared/cloudCommunityAgentGateway";
 import {
   loadCloudProviderConnections,
   type CloudChatgptConnectionStatus,
@@ -137,8 +133,6 @@ import type {
   CommunityAiFeedPost as SharedCommunityAiFeedPost,
   CommunityAiFeedReactionType as SharedCommunityAiFeedReactionType,
   CommunityAccess as SharedCommunityAccess,
-  CommunityAgentConfig as SharedCommunityAgentConfig,
-  CommunityFunnelConfig as SharedCommunityFunnelConfig,
   DiscoverCommunitySnapshot as SharedDiscoverCommunitySnapshot,
   PublicPlanSummary as SharedPublicPlanSummary,
   UserProfile as SharedUserProfile,
@@ -220,8 +214,6 @@ import { useWebToastController } from "../../../shared/useWebToastController";
 import { useWebSettingsImageUploadController } from "../../../shared/useWebSettingsImageUploadController";
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
 import { useCommunityDirectoryLifecycle } from "../../../shared/useCommunityDirectoryLifecycle";
-import { useCommunityAgentConfigController } from "../../../shared/useCommunityAgentDraftController";
-import { useCommunityFunnelController } from "../../../shared/useCommunityFunnelController";
 import { useCommunitySettingsGovernanceController } from "../../../shared/useCommunitySettingsGovernanceController";
 import { useCommunitySettingsDataController } from "../../../shared/useCommunitySettingsDataController";
 import { useCommunitySettingsFormController } from "../../../shared/useCommunitySettingsFormController";
@@ -278,7 +270,6 @@ import { useWebUiPersistenceLifecycle } from "./controllers/useWebUiPersistenceL
 import { buildWebShellProjection } from "./controllers/buildWebShellProjection";
 import { buildWebCommunitySurfaceProjection } from "./controllers/buildWebCommunitySurfaceProjection";
 import { useWebVoiceInputController } from "../../../shared/useWebVoiceInputController";
-import { useCommunityAgentConfigLifecycle } from "../../../shared/useCommunityAgentConfigLifecycle";
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/communityUnsavedGuard";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
@@ -342,8 +333,6 @@ type PublicCommunityRecord = WebPublicCommunityRecord;
 type MessageAttachment = WebCommunityMessageAttachment;
 type CommunityVoiceTranscriptTarget = WebCommunityVoiceTranscriptTarget;
 type CommunityVoiceButtonOwner = WebCommunityVoiceButtonOwner;
-type CommunityAgentConfig = SharedCommunityAgentConfig<CommunityAgentLanding>;
-type CommunityFunnelConfig = SharedCommunityFunnelConfig;
 type CommunityAccess = SharedCommunityAccess;
 type UserProfile = SharedUserProfile;
 type UserProfileDetail = SharedUserProfileDetail;
@@ -1947,30 +1936,22 @@ export default function App() {
     setFreeAccessMode: handleSetCommunityContextFreeAccessMode,
   } = communityMemberManagement;
 
-  const {
-    loadCommunityAgentConfig,
-    handleSaveCommunityAgentConfig,
-  } = useCommunityAgentConfigController<AuthSession, CommunityAgentLanding, CommunityAgentConfig>({
+  const communityAgentAndFunnel =
+    useWebCommunityAgentAndFunnelController({
     activeCommunityId,
-    ...authenticatedSessionArg,
-    communityAgentConfigLanding,
-    communityAgentConfigCommunitySystemPrompt,
-    normalizeConfigForSave: normalizeCommunityAgentDraftForSave,
-    hydrateConfigEditor: hydrateCommunityAgentEditor,
-    setLoadedCommunityId: (communityId) => {
-      communityAgentConfigLoadedCommunityIdRef.current = communityId;
-    },
-    markConfigClean: () => {
-      communityAgentConfigDirtyRef.current = false;
-    },
-    setIsLoadingCommunityAgentConfig,
-    setCommunityAgentConfigError,
-    setIsSavingCommunityAgentConfig,
-    setCommunityAgentConfigSaveError,
-    saveValidationErrorMessage: "Add at least one onboarding prompt.",
-    loadFailureMessage: "Failed to load AI agent config.",
-    saveFailureMessage: "Failed to save AI agent changes.",
+    activePage,
+    adminUi: communityAdminUi,
+    agentUi: communityAgentConfigUi,
+    canManageMembers: canManageMembersActiveCommunity,
+    communityTab,
+    ensureSession: ensureUsableAuthSession,
+    session,
+    setCommunities,
   });
+  const {
+    handleSaveCommunityAgentConfig,
+    handleSaveCommunityFunnel,
+  } = communityAgentAndFunnel;
   const {
     createCommunitySkill: handleCreateCommunitySkill,
     createUserPlatformSkill: handleCreateUserPlatformSkill,
@@ -1983,47 +1964,6 @@ export default function App() {
   } = skillsModel.actions;
   const effectiveSkillsForSettings = skillsModel.settingsEffectiveSkills;
   const effectiveSkillsErrorForSettings = skillsModel.settingsEffectiveSkillsError;
-
-  const {
-    loadCommunityFunnelConfig,
-    handleSaveCommunityFunnel,
-  } = useCommunityFunnelController<AuthSession, CommunityFunnelConfig>({
-    activeCommunityId,
-    ...authenticatedSessionArg,
-    communityFunnelConfig,
-    normalizeConfigForSave: normalizeCommunityFunnelConfig,
-    saveConfig: async ({ session, communityId, normalizedConfig }) => {
-      const saved = await saveCloudCommunityPublicPresentation<AuthSession, CommunityFunnelConfig>({
-        session,
-        communityId,
-        config: normalizedConfig,
-      });
-      setCommunities((prev) =>
-        prev.map((community) =>
-          community.id === communityId
-            ? {
-                ...community,
-                updated_at: saved?.updated_at || community.updated_at,
-              }
-            : community,
-        ),
-      );
-      return saved?.funnel ?? normalizedConfig;
-    },
-    hydrateEditor: hydrateCommunityFunnelEditor,
-    setLoadedCommunityId: (communityId) => {
-      communityFunnelLoadedCommunityIdRef.current = communityId;
-    },
-    markDraftClean: () => {
-      communityFunnelDirtyRef.current = false;
-    },
-    setIsLoadingCommunityFunnel,
-    setCommunityFunnelError,
-    setCommunityFunnelSaveError,
-    setIsSavingCommunityFunnel,
-    loadFailureMessage: "Failed to load funnel settings.",
-    saveFailureMessage: "Failed to save funnel settings.",
-  });
 
   const {
     syncCommunitySettingsSelection,
@@ -2244,24 +2184,6 @@ export default function App() {
   }, [
     personalAccountSettings,
     showAppToastMessage,
-  ]);
-
-  useEffect(() => {
-    if (activePage !== "community" || communityTab !== "funnel") return;
-    if (!session || !activeCommunityId || !canManageMembersActiveCommunity) {
-      resetCommunityFunnelState();
-      return;
-    }
-    if (communityFunnelLoadedCommunityIdRef.current === activeCommunityId) return;
-    void loadCommunityFunnelConfig(activeCommunityId, session);
-  }, [
-    activePage,
-    communityTab,
-    session,
-    activeCommunityId,
-    canManageMembersActiveCommunity,
-    loadCommunityFunnelConfig,
-    resetCommunityFunnelState,
   ]);
 
   const communityPolynetController = useWebCommunityPolynetController<AuthSession>({
@@ -2514,17 +2436,6 @@ export default function App() {
       rows: communityEvents,
     },
   });
-  useCommunityAgentConfigLifecycle<AuthSession>({
-    activePage,
-    communityTab,
-    ...sessionArg,
-    activeCommunityId,
-    canManageMembersActiveCommunity,
-    loadCommunityAgentConfig,
-    communityAgentConfigLoadedCommunityIdRef,
-    setCommunityAgentConfigError,
-  });
-
   useCommunityDirectoryLifecycle<AuthSession>({
     activePage,
     communityTab,
