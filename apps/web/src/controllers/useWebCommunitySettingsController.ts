@@ -1,0 +1,184 @@
+import type { AuthSession } from "../auth";
+import { isValidCommunitySlug, slugifyCommunityName } from "../../../../shared/communitySlug";
+import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisibility";
+import { useCommunitySettingsDataController } from "../../../../shared/useCommunitySettingsDataController";
+import { useCommunitySettingsFormController } from "../../../../shared/useCommunitySettingsFormController";
+import { useCommunitySettingsGovernanceController } from "../../../../shared/useCommunitySettingsGovernanceController";
+import type { WebCommunityRecord } from "../webAppContracts";
+import type { useWebCommunityAdminUiController } from "./useWebCommunityAdminUiController";
+import type { useWebCommunitySettingsUiController } from "./useWebCommunitySettingsUiController";
+
+type EnsureAuthSession = (
+  session?: AuthSession | null,
+  source?: string,
+  options?: { forceRefresh?: boolean },
+) => Promise<AuthSession | null>;
+
+export function useWebCommunitySettingsController(params: {
+  activeCommunity: WebCommunityRecord | null;
+  activeCommunityId: string | null;
+  adminUi: ReturnType<typeof useWebCommunityAdminUiController>;
+  ensureSession: EnsureAuthSession;
+  loadCommunities: (session: AuthSession) => Promise<void>;
+  onCommunityIdentityChanged: (
+    communityId: string,
+    communitySlug: string,
+  ) => void;
+  onLeaveCommunity: (communityId: string) => void;
+  session: AuthSession | null;
+  settingsUi: ReturnType<typeof useWebCommunitySettingsUiController>;
+  setCommunities: (
+    updater: (current: WebCommunityRecord[]) => WebCommunityRecord[],
+  ) => void;
+}) {
+  const { adminUi, settingsUi } = params;
+  const { syncCommunitySettingsSelection } =
+    useCommunitySettingsFormController<WebCommunityRecord>({
+      slugifyCommunityName,
+      communitySettingsLoadedCommunityIdRef:
+        settingsUi.communitySettingsLoadedCommunityIdRef,
+      communitySettingsDirtyRef: settingsUi.communitySettingsDirtyRef,
+      communityPricingDirtyRef: settingsUi.communityPricingDirtyRef,
+      setCommunitySettingsError: settingsUi.setCommunitySettingsError,
+      setCommunityMemberSettingsError:
+        adminUi.setCommunityMemberSettingsError,
+      setCommunitySettingsName: settingsUi.setCommunitySettingsName,
+      setCommunitySettingsSlug: settingsUi.setCommunitySettingsSlug,
+      setCommunitySettingsOneLiner: settingsUi.setCommunitySettingsOneLiner,
+      setCommunitySettingsAbout: settingsUi.setCommunitySettingsAbout,
+      setCommunitySettingsVisibility:
+        settingsUi.setCommunitySettingsVisibility,
+      setCommunitySettingsAvatarUrl: settingsUi.setCommunitySettingsAvatarUrl,
+      setCommunitySettingsAvatarFocusX:
+        settingsUi.setCommunitySettingsAvatarFocusX,
+      setCommunitySettingsAvatarFocusY:
+        settingsUi.setCommunitySettingsAvatarFocusY,
+      setCommunitySettingsAvatarZoom:
+        settingsUi.setCommunitySettingsAvatarZoom,
+      setCommunitySettingsBannerUrl: settingsUi.setCommunitySettingsBannerUrl,
+      setCommunitySettingsBannerFocusX:
+        settingsUi.setCommunitySettingsBannerFocusX,
+      setCommunitySettingsBannerFocusY:
+        settingsUi.setCommunitySettingsBannerFocusY,
+      setCommunitySettingsBannerZoom:
+        settingsUi.setCommunitySettingsBannerZoom,
+      setCommunitySettingsPricingMode:
+        settingsUi.setCommunitySettingsPricingMode,
+      setCommunitySettingsPriceUsdMonthly:
+        settingsUi.setCommunitySettingsPriceUsdMonthly,
+      setCommunitySettingsPriceUsdAnnual:
+        settingsUi.setCommunitySettingsPriceUsdAnnual,
+      setCommunityMemberMuted: adminUi.setCommunityMemberMuted,
+      setCommunitySettingsBannerUploadError:
+        settingsUi.setCommunitySettingsBannerUploadError,
+      setIsProcessingCommunitySettingsBanner:
+        settingsUi.setIsProcessingCommunitySettingsBanner,
+    });
+
+  const {
+    loadCommunityMemberSettings,
+    loadCommunityPricing,
+  } = useCommunitySettingsDataController<AuthSession>({
+    ensureSession: params.ensureSession,
+    communitySettingsLoadedCommunityIdRef:
+      settingsUi.communitySettingsLoadedCommunityIdRef,
+    communityPricingDirtyRef: settingsUi.communityPricingDirtyRef,
+    setCommunityMemberMuted: adminUi.setCommunityMemberMuted,
+    setIsLoadingCommunityMemberSettings:
+      adminUi.setIsLoadingCommunityMemberSettings,
+    setCommunityMemberSettingsError:
+      adminUi.setCommunityMemberSettingsError,
+    setCommunitySettingsPricingMode:
+      settingsUi.setCommunitySettingsPricingMode,
+    setCommunitySettingsPriceUsdMonthly:
+      settingsUi.setCommunitySettingsPriceUsdMonthly,
+    setCommunitySettingsPriceUsdAnnual:
+      settingsUi.setCommunitySettingsPriceUsdAnnual,
+  });
+
+  const governance = useCommunitySettingsGovernanceController<AuthSession>({
+    activeCommunityAvatarStorageId:
+      params.activeCommunity?.avatar_storage_id ?? null,
+    activeCommunityBannerStorageId:
+      params.activeCommunity?.banner_storage_id ?? null,
+    activeCommunityAvatarUrl: params.activeCommunity?.avatar_url ?? null,
+    activeCommunityBannerUrl: params.activeCommunity?.banner_url ?? null,
+    activeCommunityId: params.activeCommunityId,
+    session: params.session,
+    ensureSession: params.ensureSession,
+    confirmAction: (message) => confirm(message),
+    loadCommunities: params.loadCommunities,
+    onLeaveCommunityLocalState: params.onLeaveCommunity,
+    setCommunityMemberSettingsError:
+      adminUi.setCommunityMemberSettingsError,
+    setIsLoadingCommunityMemberSettings:
+      adminUi.setIsLoadingCommunityMemberSettings,
+    setCommunityMemberMuted: adminUi.setCommunityMemberMuted,
+    setIsLeavingCommunity: adminUi.setIsLeavingCommunity,
+    communitySettingsName: settingsUi.communitySettingsName,
+    communitySettingsSlug: settingsUi.communitySettingsSlug,
+    communitySettingsOneLiner: settingsUi.communitySettingsOneLiner,
+    communitySettingsAbout: settingsUi.communitySettingsAbout,
+    communitySettingsVisibility: settingsUi.communitySettingsVisibility,
+    communitySettingsAvatarUrl: settingsUi.communitySettingsAvatarUrl,
+    communitySettingsAvatarFocusX: settingsUi.communitySettingsAvatarFocusX,
+    communitySettingsAvatarFocusY: settingsUi.communitySettingsAvatarFocusY,
+    communitySettingsAvatarZoom: settingsUi.communitySettingsAvatarZoom,
+    communitySettingsBannerUrl: settingsUi.communitySettingsBannerUrl,
+    communitySettingsBannerFocusX: settingsUi.communitySettingsBannerFocusX,
+    communitySettingsBannerFocusY: settingsUi.communitySettingsBannerFocusY,
+    communitySettingsBannerZoom: settingsUi.communitySettingsBannerZoom,
+    communitySettingsPricingMode: settingsUi.communitySettingsPricingMode,
+    communitySettingsPriceUsdMonthly:
+      settingsUi.communitySettingsPriceUsdMonthly,
+    communitySettingsPriceUsdAnnual:
+      settingsUi.communitySettingsPriceUsdAnnual,
+    isValidCommunitySlug,
+    setCommunitySettingsError: settingsUi.setCommunitySettingsError,
+    setIsSavingCommunitySettings: settingsUi.setIsSavingCommunitySettings,
+    onSaveCommunitySettingsSuccess: (result) => {
+      params.setCommunities((current) =>
+        current.map((community) =>
+          community.id === result.community_id
+            ? {
+                ...community,
+                name: result.name,
+                slug: result.slug,
+                one_liner: result.one_liner,
+                about: result.about ?? null,
+                avatar_url: result.avatar_url,
+                avatar_storage_id: result.avatar_storage_id ?? null,
+                avatar_focus_x: result.avatar_focus_x ?? 0.5,
+                avatar_focus_y: result.avatar_focus_y ?? 0.5,
+                avatar_zoom: result.avatar_zoom ?? 1,
+                banner_url: result.banner_url,
+                banner_storage_id: result.banner_storage_id ?? null,
+                banner_focus_x: result.banner_focus_x ?? 0.5,
+                banner_focus_y: result.banner_focus_y ?? 0.5,
+                banner_zoom: result.banner_zoom ?? 1,
+                visibility: toCanonicalCommunityVisibility(
+                  result.visibility,
+                  "unlisted",
+                ),
+                updated_at: result.updated_at,
+              }
+            : community,
+        ),
+      );
+      if (params.activeCommunityId === result.community_id) {
+        params.onCommunityIdentityChanged(result.community_id, result.slug);
+      }
+      settingsUi.communitySettingsDirtyRef.current = false;
+      settingsUi.communityPricingDirtyRef.current = false;
+    },
+  });
+
+  return {
+    syncCommunitySettingsSelection,
+    loadCommunityMemberSettings,
+    loadCommunityPricing,
+    handleToggleCommunityMute: governance.handleToggleCommunityMute,
+    handleLeaveCommunity: governance.handleLeaveCommunity,
+    handleSaveCommunitySettings: governance.handleSaveCommunitySettings,
+  };
+}

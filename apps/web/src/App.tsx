@@ -72,6 +72,7 @@ import { useWebAccountGraphLifecycle } from "./controllers/useWebAccountGraphLif
 import { useWebAuthenticatedIdentityController } from "./controllers/useWebAuthenticatedIdentityController";
 import { useWebCommunityMemberManagementController } from "./controllers/useWebCommunityMemberManagementController";
 import { useWebCommunityAgentAndFunnelController } from "./controllers/useWebCommunityAgentAndFunnelController";
+import { useWebCommunitySettingsController } from "./controllers/useWebCommunitySettingsController";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { updateSentryUiContext } from "./instrument";
 import {
@@ -214,9 +215,6 @@ import { useWebToastController } from "../../../shared/useWebToastController";
 import { useWebSettingsImageUploadController } from "../../../shared/useWebSettingsImageUploadController";
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
 import { useCommunityDirectoryLifecycle } from "../../../shared/useCommunityDirectoryLifecycle";
-import { useCommunitySettingsGovernanceController } from "../../../shared/useCommunitySettingsGovernanceController";
-import { useCommunitySettingsDataController } from "../../../shared/useCommunitySettingsDataController";
-import { useCommunitySettingsFormController } from "../../../shared/useCommunitySettingsFormController";
 import { useCommunityMembersReviewController } from "../../../shared/useCommunityMembersReviewController";
 import { useCommunityAdminAnalyticsLifecycle } from "../../../shared/useCommunityAdminAnalyticsLifecycle";
 import { useCommunityMembersReviewLifecycle } from "../../../shared/useCommunityMembersReviewLifecycle";
@@ -224,7 +222,7 @@ import {
   parseReplyPrefix,
   truncateReplyPreview,
 } from "../../../shared/communityMessageParsing";
-import { isValidCommunitySlug, slugifyCommunityName } from "../../../shared/communitySlug";
+import { slugifyCommunityName } from "../../../shared/communitySlug";
 import {
   formatCommunityVisibilityLabel,
   toCanonicalCommunityVisibility,
@@ -1965,67 +1963,16 @@ export default function App() {
   const effectiveSkillsForSettings = skillsModel.settingsEffectiveSkills;
   const effectiveSkillsErrorForSettings = skillsModel.settingsEffectiveSkillsError;
 
-  const {
-    syncCommunitySettingsSelection,
-  } = useCommunitySettingsFormController<CommunityRecord>({
-    slugifyCommunityName,
-    communitySettingsLoadedCommunityIdRef,
-    communitySettingsDirtyRef,
-    communityPricingDirtyRef,
-    setCommunitySettingsError,
-    setCommunityMemberSettingsError,
-    setCommunitySettingsName,
-    setCommunitySettingsSlug,
-    setCommunitySettingsOneLiner,
-    setCommunitySettingsAbout,
-    setCommunitySettingsVisibility,
-    setCommunitySettingsAvatarUrl,
-    setCommunitySettingsAvatarFocusX,
-    setCommunitySettingsAvatarFocusY,
-    setCommunitySettingsAvatarZoom,
-    setCommunitySettingsBannerUrl,
-    setCommunitySettingsBannerFocusX,
-    setCommunitySettingsBannerFocusY,
-    setCommunitySettingsBannerZoom,
-    setCommunitySettingsPricingMode,
-    setCommunitySettingsPriceUsdMonthly,
-    setCommunitySettingsPriceUsdAnnual,
-    setCommunityMemberMuted,
-    setCommunitySettingsBannerUploadError,
-    setIsProcessingCommunitySettingsBanner,
-  });
-
-  const {
-    loadCommunityMemberSettings,
-    loadCommunityPricing,
-  } = useCommunitySettingsDataController<AuthSession>({
-    ensureSession: ensureUsableAuthSession,
-    communitySettingsLoadedCommunityIdRef,
-    communityPricingDirtyRef,
-    setCommunityMemberMuted,
-    setIsLoadingCommunityMemberSettings,
-    setCommunityMemberSettingsError,
-    setCommunitySettingsPricingMode,
-    setCommunitySettingsPriceUsdMonthly,
-    setCommunitySettingsPriceUsdAnnual,
-  });
-
-  const activeCommunitySettingsSource = activeCommunity;
-
-  const {
-    handleToggleCommunityMute,
-    handleLeaveCommunity,
-    handleSaveCommunitySettings,
-  } = useCommunitySettingsGovernanceController<AuthSession>({
-    activeCommunityAvatarStorageId: activeCommunitySettingsSource?.avatar_storage_id ?? null,
-    activeCommunityBannerStorageId: activeCommunitySettingsSource?.banner_storage_id ?? null,
-    activeCommunityAvatarUrl: activeCommunitySettingsSource?.avatar_url ?? null,
-    activeCommunityBannerUrl: activeCommunitySettingsSource?.banner_url ?? null,
+  const communitySettingsController = useWebCommunitySettingsController({
+    activeCommunity,
     activeCommunityId,
-    ...authenticatedSessionArg,
-    confirmAction: (message) => confirm(message),
+    adminUi: communityAdminUi,
+    ensureSession: ensureUsableAuthSession,
     loadCommunities,
-    onLeaveCommunityLocalState: (leavingId) => {
+    onCommunityIdentityChanged: (communityId, communitySlug) => {
+      applyCommunityShellState({ communityId, communitySlug });
+    },
+    onLeaveCommunity: (leavingId) => {
       applyCommunityShellState({
         communityId: null,
         communitySlug: null,
@@ -2033,67 +1980,21 @@ export default function App() {
       });
       setActivePage("discover");
       setActiveView("home");
-      setCommunities((prev) => prev.filter((community) => community.id !== leavingId));
+      setCommunities((current) =>
+        current.filter((community) => community.id !== leavingId));
     },
-    setCommunityMemberSettingsError,
-    setIsLoadingCommunityMemberSettings,
-    setCommunityMemberMuted,
-    setIsLeavingCommunity,
-    communitySettingsName,
-    communitySettingsSlug,
-    communitySettingsOneLiner,
-    communitySettingsAbout,
-    communitySettingsVisibility,
-    communitySettingsAvatarUrl,
-    communitySettingsAvatarFocusX,
-    communitySettingsAvatarFocusY,
-    communitySettingsAvatarZoom,
-    communitySettingsBannerUrl,
-    communitySettingsBannerFocusX,
-    communitySettingsBannerFocusY,
-    communitySettingsBannerZoom,
-    communitySettingsPricingMode,
-    communitySettingsPriceUsdMonthly,
-    communitySettingsPriceUsdAnnual,
-    isValidCommunitySlug,
-    setCommunitySettingsError,
-    setIsSavingCommunitySettings,
-    onSaveCommunitySettingsSuccess: (result) => {
-      setCommunities((prev) =>
-        prev.map((community) =>
-          community.id === result.community_id
-            ? {
-                ...community,
-                name: result.name,
-                slug: result.slug,
-                one_liner: result.one_liner,
-                about: result.about ?? null,
-                avatar_url: result.avatar_url,
-                avatar_storage_id: result.avatar_storage_id ?? null,
-                avatar_focus_x: result.avatar_focus_x ?? 0.5,
-                avatar_focus_y: result.avatar_focus_y ?? 0.5,
-                avatar_zoom: result.avatar_zoom ?? 1,
-                banner_url: result.banner_url,
-                banner_storage_id: result.banner_storage_id ?? null,
-                banner_focus_x: result.banner_focus_x ?? 0.5,
-                banner_focus_y: result.banner_focus_y ?? 0.5,
-                banner_zoom: result.banner_zoom ?? 1,
-                visibility: toCanonicalCommunityVisibility(result.visibility, "unlisted"),
-                updated_at: result.updated_at,
-              }
-            : community,
-        ),
-      );
-      if (activeCommunityId === result.community_id) {
-        applyCommunityShellState({
-          communityId: result.community_id,
-          communitySlug: result.slug,
-        });
-      }
-      communitySettingsDirtyRef.current = false;
-      communityPricingDirtyRef.current = false;
-    },
+    session,
+    settingsUi: communitySettingsUi,
+    setCommunities,
   });
+  const {
+    syncCommunitySettingsSelection,
+    loadCommunityMemberSettings,
+    loadCommunityPricing,
+    handleToggleCommunityMute,
+    handleLeaveCommunity,
+    handleSaveCommunitySettings,
+  } = communitySettingsController;
   const {
     loadCommunityJoinRequests,
     handleApproveCommunityJoinRequest,
