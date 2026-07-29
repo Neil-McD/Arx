@@ -63,6 +63,10 @@ import { useWebCommunityResourceUiController } from "./controllers/useWebCommuni
 import { useWebCommunityJoinRequestsController } from "./controllers/useWebCommunityJoinRequestsController";
 import type { CommittedMention } from "./components/communityMentionAutocomplete";
 import { useWebPersonalAccountSettingsController } from "./controllers/useWebPersonalAccountSettingsController";
+import {
+  COMMUNITY_INTERACTION_PROJECTION_ENABLED,
+  useWebCommunityInteractionProjection,
+} from "./controllers/useWebCommunityInteractionProjection";
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
@@ -88,28 +92,11 @@ import {
 import { useCommunityAttentionController } from "../../../shared/useCommunityAttentionController";
 import { markCloudCommunityChatReadAt } from "../../../shared/cloudCommunityAttentionGateway";
 import {
-  createCloudCommunityChatLiveClient,
   setCloudCommunityTyping,
   uploadCloudCommunityChatAttachmentFile,
-  type CloudCommunityChatLiveClient,
 } from "../../../shared/cloudCommunityChatGateway";
 import {
-  subscribeCloudCommunityAgentServeIssue,
-  type CloudCommunityAgentServeIssue,
-} from "../../../shared/cloudCommunityAgentConciergeGateway";
-import {
   createCloudCommunityInteractionComposerMessageRows,
-  deleteCloudCommunityInteractionMessage,
-  editCloudCommunityInteractionMessage,
-  listCloudCommunityInteractionRootsPage,
-  listCloudCommunityInteractionReplies,
-  subscribeCloudCommunityInteractionReplies,
-  subscribeCloudCommunityInteractionRoots,
-  toggleCloudCommunityInteractionReaction,
-  type CommunityInteractionAttachment,
-  type CommunityInteractionPendingStatus,
-  type CommunityInteractionReplyBundle,
-  type CommunityInteractionRootBundle,
 } from "../../../shared/cloudCommunityInteractionsGateway";
 import {
   saveCloudCommunityAbout,
@@ -471,188 +458,12 @@ type CommunityReplyTarget = Pick<CommunityChatMessage, "id" | "sender_id" | "bod
   legacy_message_id?: string | null;
 };
 type CommunityActivityEvent = SharedCommunityActivityEvent;
-type CommunityInteractionRoot = CommunityInteractionRootBundle;
-type CommunityInteractionReply = CommunityInteractionReplyBundle;
-type CommunityInteractionRootChangeReason = "initial" | "newer" | "older" | "reset";
-
+type ChatLightboxImage = SharedChatLightboxImage;
 type CommunityVoiceTranscriptTarget = {
   appendTranscript: (transcript: string) => void;
   focusInput?: () => void;
 };
-
 type CommunityVoiceButtonOwner = "main" | "drawer";
-
-type PendingCanonicalInteraction = {
-  idempotencyKey: string;
-  communityId: string;
-  kind: "root" | "reply";
-  rootId: string | null;
-  replyToMessageId: string | null;
-  text: string;
-  attachments: MessageAttachment[];
-  serializedAttachments: unknown[];
-  createdAt: string;
-  senderId: string;
-  status: CommunityInteractionPendingStatus;
-};
-
-// Mirrors the server's composerIdempotencyKey (convex/communityInteractions.ts): the client key
-// is wrapped + truncated before storage, so optimistic reconciliation must match the wrapped form.
-const MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS = 160;
-function composerStoredIdempotencyKey(rawKey: string, kind: "root" | "reply"): string {
-  return `community_composer:${kind}:${rawKey}`.slice(0, MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS);
-}
-
-function optimisticInteractionAttachment(attachment: MessageAttachment): CommunityInteractionAttachment {
-  const storageId = String(attachment.storage_id ?? "").trim();
-  const dataUrl =
-    typeof attachment.data_url === "string" && attachment.data_url.trim()
-      ? attachment.data_url.trim()
-      : null;
-  const url =
-    typeof attachment.url === "string" && attachment.url.trim()
-      ? attachment.url.trim()
-      : null;
-  return {
-    id: attachment.id,
-    name: attachment.name,
-    type: attachment.type,
-    mime: attachment.mime ?? null,
-    size: Math.max(0, Math.floor(Number(attachment.size) || 0)),
-    ...(storageId ? { storage_id: storageId } : null),
-    ...(url ? { url } : null),
-    ...(dataUrl ? { data_url: dataUrl } : null),
-  };
-}
-
-function buildOptimisticRootBundle(p: PendingCanonicalInteraction): CommunityInteractionRootBundle {
-  return {
-    deduped: false,
-    pending: p.status,
-    content_blocks: [],
-    embeds: [],
-    mentions: [],
-    attachments: p.attachments.map(optimisticInteractionAttachment),
-    root: {
-      id: `pending:${p.idempotencyKey}`,
-      community_id: p.communityId,
-      actor_type: "human",
-      actor_user_id: p.senderId,
-      actor_agent_key: null,
-      kind: "discussion",
-      status: "active",
-      visibility_scope: "community",
-      title: null,
-      content_summary: p.text,
-      reply_count: 0,
-      reaction_summary: [],
-      viewer_emojis: [],
-      idempotency_key: composerStoredIdempotencyKey(p.idempotencyKey, p.kind),
-      last_reply_at: null,
-      last_reply_actor_user_id: null,
-      pinned_at: null,
-      locked_at: null,
-      legacy_thread_id: null,
-      legacy_message_id: null,
-      created_at: p.createdAt,
-      updated_at: p.createdAt,
-      edited_at: null,
-    },
-  };
-}
-
-function buildOptimisticReplyBundle(p: PendingCanonicalInteraction): CommunityInteractionReplyBundle {
-  return {
-    deduped: false,
-    pending: p.status,
-    content_blocks: [],
-    embeds: [],
-    mentions: [],
-    attachments: p.attachments.map(optimisticInteractionAttachment),
-    reply: {
-      id: `pending:${p.idempotencyKey}`,
-      community_id: p.communityId,
-      root_id: p.rootId ?? "",
-      seq: Number.MAX_SAFE_INTEGER,
-      actor_type: "human",
-      actor_user_id: p.senderId,
-      actor_agent_key: null,
-      target_reply_id: p.replyToMessageId,
-      status: "active",
-      visibility_scope: "community",
-      content_summary: p.text,
-      reaction_summary: [],
-      viewer_emojis: [],
-      idempotency_key: composerStoredIdempotencyKey(p.idempotencyKey, p.kind),
-      legacy_thread_id: null,
-      legacy_message_id: null,
-      legacy_target_message_id: null,
-      created_at: p.createdAt,
-      updated_at: p.createdAt,
-      edited_at: null,
-    },
-  };
-}
-
-function appendPendingRoots(
-  roots: CommunityInteractionRootBundle[],
-  pending: PendingCanonicalInteraction[],
-  communityId: string | null,
-): CommunityInteractionRootBundle[] {
-  if (!communityId) return roots;
-  const visibleStoredKeys = new Set(roots.map((bundle) => bundle.root.idempotency_key));
-  const extra = pending
-    .filter(
-      (p) =>
-        p.kind === "root" &&
-        p.communityId === communityId &&
-        !visibleStoredKeys.has(composerStoredIdempotencyKey(p.idempotencyKey, "root")),
-    )
-    .map(buildOptimisticRootBundle);
-  return extra.length ? [...roots, ...extra] : roots;
-}
-
-function appendPendingReplies(
-  replies: CommunityInteractionReplyBundle[],
-  pending: PendingCanonicalInteraction[],
-  rootId: string | null,
-): CommunityInteractionReplyBundle[] {
-  if (!rootId) return replies;
-  const visibleStoredKeys = new Set(replies.map((bundle) => bundle.reply.idempotency_key));
-  const extra = pending
-    .filter(
-      (p) =>
-        p.kind === "reply" &&
-        p.rootId === rootId &&
-        !visibleStoredKeys.has(composerStoredIdempotencyKey(p.idempotencyKey, "reply")),
-    )
-    .map(buildOptimisticReplyBundle);
-  return extra.length ? [...replies, ...extra] : replies;
-}
-
-function communityInteractionRootCreatedAtMs(bundle: CommunityInteractionRootBundle): number {
-  const ms = Date.parse(bundle.root.created_at);
-  return Number.isFinite(ms) ? ms : 0;
-}
-
-function mergeCommunityInteractionRootWindows(
-  current: CommunityInteractionRootBundle[],
-  incoming: CommunityInteractionRootBundle[],
-): CommunityInteractionRootBundle[] {
-  if (current.length === 0) {
-    return [...incoming].sort(
-      (left, right) => communityInteractionRootCreatedAtMs(right) - communityInteractionRootCreatedAtMs(left),
-    );
-  }
-  if (incoming.length === 0) return current;
-  const byId = new Map<string, CommunityInteractionRootBundle>();
-  for (const bundle of current) byId.set(bundle.root.id, bundle);
-  for (const bundle of incoming) byId.set(bundle.root.id, bundle);
-  return Array.from(byId.values()).sort(
-    (left, right) => communityInteractionRootCreatedAtMs(right) - communityInteractionRootCreatedAtMs(left),
-  );
-}
-type ChatLightboxImage = SharedChatLightboxImage;
 type CommunityAgentConfig = SharedCommunityAgentConfig<CommunityAgentLanding>;
 type CommunityFunnelConfig = SharedCommunityFunnelConfig;
 const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
@@ -798,53 +609,12 @@ type AccountGraphHydrationPhase = "idle" | "critical" | "secondary" | "ready";
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
-const COMMUNITY_INTERACTION_ROOT_LIMIT = 50;
-const COMMUNITY_INTERACTION_REPLY_LIMIT = 80;
-const INTERACTION_SELECTED_ROOT_STORAGE_PREFIX = "polynet:interaction:selectedRoot:";
-
-function readStoredInteractionSelectedRoot(communityId: string | null): string | null {
-  if (!communityId) return null;
-  try {
-    const value = window.localStorage.getItem(`${INTERACTION_SELECTED_ROOT_STORAGE_PREFIX}${communityId}`);
-    return value && value.trim() ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredInteractionSelectedRoot(communityId: string | null, rootId: string | null): void {
-  if (!communityId) return;
-  try {
-    const key = `${INTERACTION_SELECTED_ROOT_STORAGE_PREFIX}${communityId}`;
-    if (rootId) window.localStorage.setItem(key, rootId);
-    else window.localStorage.removeItem(key);
-  } catch {
-    // localStorage unavailable; non-fatal.
-  }
-}
 const MAX_WEB_ATTACHMENTS_PER_MESSAGE = 8;
 const MAX_WEB_IMAGE_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_WEB_MEDIA_UPLOAD_BYTES = 50 * 1024 * 1024;
 const MAX_WEB_FILE_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024;
 const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
-
-const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;
-
-function formatCommunityInteractionProjectionError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  const normalized = message.trim().toLowerCase();
-  if (normalized.includes("community_entitlement_required")) {
-    return "Join this community to view threads.";
-  }
-  if (normalized.includes("verified_identity_required") || normalized.includes("convex_auth")) {
-    return "Sign in to view community threads.";
-  }
-  if (normalized.includes("profile_setup_required")) {
-    return "Finish your profile to view community threads.";
-  }
-  return message.trim() || "Failed to load community threads.";
-}
 
 function buildCurrentTelemetryPathname(): string | null {
   if (typeof window === "undefined") return null;
@@ -1644,60 +1414,40 @@ export default function App() {
 
   const [communityMessages, setCommunityMessages] = useState<CommunityChatMessage[]>([]);
   const [communityActivityEvents, setCommunityActivityEvents] = useState<CommunityActivityEvent[]>([]);
-  const [communityInteractionRoots, setCommunityInteractionRoots] = useState<CommunityInteractionRoot[]>([]);
-  const [communityInteractionNextBeforeCreatedAt, setCommunityInteractionNextBeforeCreatedAt] =
-    useState<number | null>(null);
-  const [isLoadingOlderCommunityInteractionRoots, setIsLoadingOlderCommunityInteractionRoots] = useState(false);
-  const [communityInteractionRootChangeReason, setCommunityInteractionRootChangeReason] =
-    useState<CommunityInteractionRootChangeReason>("reset");
-  const [communityAgentServeIssue, setCommunityAgentServeIssue] =
-    useState<CloudCommunityAgentServeIssue | null>(null);
-  const communityInteractionRootsRef = useRef<CommunityInteractionRoot[]>([]);
-  const dismissedCommunityAgentServeIssueIdsRef = useRef<Set<string>>(new Set());
-  const communityInteractionNextBeforeCreatedAtRef = useRef<number | null>(null);
-  const isLoadingOlderCommunityInteractionRootsRef = useRef(false);
-  communityInteractionRootsRef.current = communityInteractionRoots;
-  communityInteractionNextBeforeCreatedAtRef.current = communityInteractionNextBeforeCreatedAt;
-  isLoadingOlderCommunityInteractionRootsRef.current = isLoadingOlderCommunityInteractionRoots;
-  const [pendingCanonicalInteractions, setPendingCanonicalInteractions] = useState<PendingCanonicalInteraction[]>([]);
-  const pendingCanonicalInteractionsRef = useRef<PendingCanonicalInteraction[]>([]);
-  pendingCanonicalInteractionsRef.current = pendingCanonicalInteractions;
-  const [isLoadingCommunityInteractions, setIsLoadingCommunityInteractions] = useState(false);
-  const [communityInteractionError, setCommunityInteractionError] = useState<string | null>(null);
-  const [selectedCommunityInteractionRootId, setSelectedCommunityInteractionRootId] = useState<string | null>(null);
-  const [communityInteractionRepliesByRootId, setCommunityInteractionRepliesByRootId] = useState<
-    Record<string, CommunityInteractionReply[]>
-  >({});
-  const [communityInteractionRepliesErrorByRootId, setCommunityInteractionRepliesErrorByRootId] = useState<
-    Record<string, string | null>
-  >({});
-  const [loadingCommunityInteractionRepliesRootId, setLoadingCommunityInteractionRepliesRootId] =
-    useState<string | null>(null);
-  // Drop optimistic placeholders once the real (confirmed) message lands; failed ones stay for retry.
-  useEffect(() => {
-    setPendingCanonicalInteractions((prev) => {
-      if (prev.length === 0) return prev;
-      const rootKeys = new Set(
-        communityInteractionRoots.map((bundle) => bundle.root.idempotency_key).filter(Boolean),
-      );
-      const replyKeys = new Set<string>();
-      for (const list of Object.values(communityInteractionRepliesByRootId)) {
-        for (const bundle of list) {
-          if (bundle.reply.idempotency_key) replyKeys.add(bundle.reply.idempotency_key);
-        }
-      }
-      const next = prev.filter((item) => {
-        const stored = composerStoredIdempotencyKey(item.idempotencyKey, item.kind);
-        return item.kind === "root" ? !rootKeys.has(stored) : !replyKeys.has(stored);
-      });
-      return next.length === prev.length ? prev : next;
-    });
-  }, [communityInteractionRoots, communityInteractionRepliesByRootId]);
-  const activeCommunityInteractionCommunityIdRef = useRef<string | null>(null);
-  const communityInteractionProjectionBoundaryRef = useRef<string | null>(null);
-  const communityInteractionRootsRequestIdRef = useRef(0);
-  const communityInteractionRepliesRequestIdRef = useRef<Record<string, number>>({});
-  activeCommunityInteractionCommunityIdRef.current = activeCommunityId;
+  const communityInteractionProjection = useWebCommunityInteractionProjection<MessageAttachment>({
+    activeCommunityId,
+    canonicalSessionUserId,
+    ensureSession: ensureUsableAuthSession,
+    isCommunityChatActive: activePage === "community" && communityTab === "chat",
+    session,
+    shellVariant,
+  });
+  const {
+    roots: communityInteractionRoots,
+    repliesByRootId: communityInteractionRepliesByRootId,
+    visibleRoots: visibleCommunityInteractionRoots,
+    selectedReplies: selectedCommunityInteractionReplies,
+    selectedRootId: selectedCommunityInteractionRootId,
+    isLoadingRoots: isLoadingCommunityInteractions,
+    isLoadingSelectedReplies: isLoadingCommunityInteractionReplies,
+    error: communityInteractionError,
+    selectedRepliesError: communityInteractionRepliesError,
+    rootChangeReason: communityInteractionRootChangeReason,
+    canLoadOlderRoots: canLoadOlderCommunityInteractionRoots,
+    isLoadingOlderRoots: isLoadingOlderCommunityInteractionRoots,
+    serveIssue: communityAgentServeIssue,
+    loadRoots: loadCommunityInteractionRoots,
+    loadReplies: loadCommunityInteractionReplies,
+    loadOlderRoots: loadOlderCommunityInteractionRoots,
+    selectRoot: handleSelectCommunityInteractionRoot,
+    closeDrawer: handleCloseCommunityInteractionDrawer,
+    toggleReaction: handleToggleCommunityInteractionReaction,
+    editMessage: handleEditCommunityInteractionMessage,
+    deleteMessage: handleDeleteCommunityInteractionMessage,
+    retryPending: handleRetryPendingCanonicalInteraction,
+    discardPending: handleDiscardPendingCanonicalInteraction,
+    dismissServeIssue: handleDismissCommunityAgentServeIssue,
+  } = communityInteractionProjection;
   const [communityMessageInput, setCommunityMessageInput] = useState("");
   const [communityMessageMentions, setCommunityMessageMentions] = useState<CommittedMention[]>([]);
   useEffect(() => {
@@ -1849,458 +1599,6 @@ export default function App() {
     void loadOlderCommunityChat(activeCommunityId, session);
   };
 
-  const resetCommunityInteractionProjection = useCallback(() => {
-    communityInteractionRootsRequestIdRef.current += 1;
-    communityInteractionRepliesRequestIdRef.current = {};
-    setCommunityInteractionRoots([]);
-    setCommunityInteractionNextBeforeCreatedAt(null);
-    setIsLoadingOlderCommunityInteractionRoots(false);
-    setCommunityInteractionRootChangeReason("reset");
-    setCommunityInteractionError(null);
-    setIsLoadingCommunityInteractions(false);
-    setSelectedCommunityInteractionRootId(null);
-    setCommunityInteractionRepliesByRootId({});
-    setCommunityInteractionRepliesErrorByRootId({});
-    setLoadingCommunityInteractionRepliesRootId(null);
-  }, []);
-
-  const loadCommunityInteractionReplies = useCallback(async (
-    rootIdRaw: string,
-    activeSessionRaw: AuthSession | null = session,
-  ) => {
-    const rootId = String(rootIdRaw ?? "").trim();
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !rootId) return;
-    const usableSession = await ensureUsableAuthSession(activeSessionRaw ?? undefined);
-    if (!usableSession) return;
-    const requestId = (communityInteractionRepliesRequestIdRef.current[rootId] ?? 0) + 1;
-    communityInteractionRepliesRequestIdRef.current = {
-      ...communityInteractionRepliesRequestIdRef.current,
-      [rootId]: requestId,
-    };
-    setLoadingCommunityInteractionRepliesRootId(rootId);
-    setCommunityInteractionRepliesErrorByRootId((previous) => ({ ...previous, [rootId]: null }));
-    try {
-      const replies = await listCloudCommunityInteractionReplies<AuthSession>({
-        session: usableSession,
-        rootId,
-        limit: COMMUNITY_INTERACTION_REPLY_LIMIT,
-      });
-      if (communityInteractionRepliesRequestIdRef.current[rootId] !== requestId) return;
-      setCommunityInteractionRepliesByRootId((previous) => ({ ...previous, [rootId]: replies }));
-    } catch (error) {
-      if (communityInteractionRepliesRequestIdRef.current[rootId] !== requestId) return;
-      setCommunityInteractionRepliesErrorByRootId((previous) => ({
-        ...previous,
-        [rootId]: formatCommunityInteractionProjectionError(error),
-      }));
-    } finally {
-      if (communityInteractionRepliesRequestIdRef.current[rootId] === requestId) {
-        setLoadingCommunityInteractionRepliesRootId((current) => (current === rootId ? null : current));
-      }
-    }
-  }, [ensureUsableAuthSession, session]);
-
-  const loadCommunityInteractionRoots = useCallback(async (
-    communityIdRaw: string | null = activeCommunityId,
-    activeSessionRaw: AuthSession | null = session,
-  ) => {
-    const communityId = String(communityIdRaw ?? "").trim();
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !communityId) {
-      resetCommunityInteractionProjection();
-      return;
-    }
-    const usableSession = await ensureUsableAuthSession(activeSessionRaw ?? undefined);
-    if (!usableSession) return;
-    const requestId = communityInteractionRootsRequestIdRef.current + 1;
-    communityInteractionRootsRequestIdRef.current = requestId;
-    setIsLoadingCommunityInteractions(true);
-    setCommunityInteractionError(null);
-    try {
-      const page = await listCloudCommunityInteractionRootsPage<AuthSession>({
-        session: usableSession,
-        communityId,
-        limit: COMMUNITY_INTERACTION_ROOT_LIMIT,
-      });
-      if (
-        communityInteractionRootsRequestIdRef.current !== requestId
-        || activeCommunityInteractionCommunityIdRef.current !== communityId
-      ) {
-        return;
-      }
-      setCommunityInteractionRootChangeReason("initial");
-      setCommunityInteractionRoots(page.roots);
-      setCommunityInteractionNextBeforeCreatedAt(page.nextBeforeCreatedAt);
-      setSelectedCommunityInteractionRootId((current) =>
-        current && page.roots.some((bundle) => bundle.root.id === current) ? current : null,
-      );
-    } catch (error) {
-      if (
-        communityInteractionRootsRequestIdRef.current !== requestId
-        || activeCommunityInteractionCommunityIdRef.current !== communityId
-      ) {
-        return;
-      }
-      setCommunityInteractionError(formatCommunityInteractionProjectionError(error));
-    } finally {
-      if (
-        communityInteractionRootsRequestIdRef.current === requestId
-        && activeCommunityInteractionCommunityIdRef.current === communityId
-      ) {
-        setIsLoadingCommunityInteractions(false);
-      }
-    }
-  }, [activeCommunityId, ensureUsableAuthSession, resetCommunityInteractionProjection, session]);
-
-  const loadOlderCommunityInteractionRoots = useCallback(async (
-    communityIdRaw: string | null = activeCommunityId,
-    activeSessionRaw: AuthSession | null = session,
-  ) => {
-    const communityId = String(communityIdRaw ?? "").trim();
-    const beforeCreatedAt = communityInteractionNextBeforeCreatedAtRef.current;
-    if (
-      !COMMUNITY_INTERACTION_PROJECTION_ENABLED
-      || !communityId
-      || beforeCreatedAt === null
-      || isLoadingOlderCommunityInteractionRootsRef.current
-    ) {
-      return;
-    }
-    const usableSession = await ensureUsableAuthSession(activeSessionRaw ?? undefined);
-    if (!usableSession) return;
-    setIsLoadingOlderCommunityInteractionRoots(true);
-    try {
-      const page = await listCloudCommunityInteractionRootsPage<AuthSession>({
-        session: usableSession,
-        communityId,
-        beforeCreatedAt,
-        limit: COMMUNITY_INTERACTION_ROOT_LIMIT,
-      });
-      if (activeCommunityInteractionCommunityIdRef.current !== communityId) return;
-      setCommunityInteractionRootChangeReason("older");
-      setCommunityInteractionRoots((current) =>
-        mergeCommunityInteractionRootWindows(
-          current.filter((bundle) => bundle.root.community_id === communityId),
-          page.roots,
-        ),
-      );
-      setCommunityInteractionNextBeforeCreatedAt(page.nextBeforeCreatedAt);
-    } catch {
-      // Keep the already loaded window usable; the next upward scroll can retry.
-    } finally {
-      if (activeCommunityInteractionCommunityIdRef.current === communityId) {
-        setIsLoadingOlderCommunityInteractionRoots(false);
-      }
-    }
-  }, [activeCommunityId, ensureUsableAuthSession, session]);
-
-  useEffect(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !session) return;
-    let cancelled = false;
-    let liveClient: CloudCommunityChatLiveClient | null = null;
-    let unsubscribe: (() => void) | null = null;
-    void (async () => {
-      const usableSession = await ensureUsableAuthSession(session ?? undefined);
-      if (!usableSession || cancelled) return;
-      try {
-        liveClient = createCloudCommunityChatLiveClient({
-          session: usableSession,
-          ensureSession: ensureUsableAuthSession,
-        });
-        unsubscribe = subscribeCloudCommunityInteractionRoots({
-          liveClient,
-          communityId: activeCommunityId,
-          limit: COMMUNITY_INTERACTION_ROOT_LIMIT,
-          onUpdate: (roots) => {
-            if (cancelled) return;
-            const hadLoadedRoots = communityInteractionRootsRef.current.some(
-              (bundle) => bundle.root.community_id === activeCommunityId,
-            );
-            setCommunityInteractionRootChangeReason(hadLoadedRoots ? "newer" : "initial");
-            setCommunityInteractionRoots((current) =>
-              mergeCommunityInteractionRootWindows(
-                current.filter((bundle) => bundle.root.community_id === activeCommunityId),
-                roots,
-              ),
-            );
-            setIsLoadingCommunityInteractions(false);
-            setCommunityInteractionError(null);
-          },
-          onError: (error) => {
-            if (cancelled) return;
-            setCommunityInteractionError(formatCommunityInteractionProjectionError(error));
-            setIsLoadingCommunityInteractions(false);
-          },
-        });
-      } catch (error) {
-        if (!cancelled) {
-          setCommunityInteractionError(formatCommunityInteractionProjectionError(error));
-          setIsLoadingCommunityInteractions(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-      liveClient?.close();
-    };
-  }, [activeCommunityId, ensureUsableAuthSession, session]);
-
-  useEffect(() => {
-    if (
-      !COMMUNITY_INTERACTION_PROJECTION_ENABLED ||
-      activePage !== "community" ||
-      communityTab !== "chat" ||
-      !activeCommunityId ||
-      !session
-    ) {
-      setCommunityAgentServeIssue(null);
-      return;
-    }
-    let cancelled = false;
-    let liveClient: CloudCommunityChatLiveClient | null = null;
-    let unsubscribe: (() => void) | null = null;
-    void (async () => {
-      const usableSession = await ensureUsableAuthSession(session ?? undefined);
-      if (!usableSession || cancelled) return;
-      try {
-        liveClient = createCloudCommunityChatLiveClient({
-          session: usableSession,
-          ensureSession: ensureUsableAuthSession,
-        });
-        unsubscribe = subscribeCloudCommunityAgentServeIssue({
-          liveClient,
-          communityId: activeCommunityId,
-          onUpdate: (issue) => {
-            if (cancelled) return;
-            if (issue && !dismissedCommunityAgentServeIssueIdsRef.current.has(issue.id)) {
-              setCommunityAgentServeIssue(issue);
-              return;
-            }
-            setCommunityAgentServeIssue(null);
-          },
-          onError: (error) => {
-            if (!cancelled) {
-              console.warn("community_agent_serve_issue_subscription_failed", error);
-              setCommunityAgentServeIssue(null);
-            }
-          },
-        });
-      } catch (error) {
-        if (!cancelled) {
-          console.warn("community_agent_serve_issue_subscription_failed", error);
-          setCommunityAgentServeIssue(null);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-      liveClient?.close();
-    };
-  }, [activeCommunityId, activePage, communityTab, ensureUsableAuthSession, session]);
-
-  useEffect(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !selectedCommunityInteractionRootId || !session) return;
-    const rootId = selectedCommunityInteractionRootId;
-    let cancelled = false;
-    let liveClient: CloudCommunityChatLiveClient | null = null;
-    let unsubscribe: (() => void) | null = null;
-    void (async () => {
-      const usableSession = await ensureUsableAuthSession(session ?? undefined);
-      if (!usableSession || cancelled) return;
-      try {
-        liveClient = createCloudCommunityChatLiveClient({
-          session: usableSession,
-          ensureSession: ensureUsableAuthSession,
-        });
-        unsubscribe = subscribeCloudCommunityInteractionReplies({
-          liveClient,
-          rootId,
-          limit: COMMUNITY_INTERACTION_REPLY_LIMIT,
-          onUpdate: (replies) => {
-            if (cancelled) return;
-            setCommunityInteractionRepliesByRootId((previous) => ({ ...previous, [rootId]: replies }));
-            setLoadingCommunityInteractionRepliesRootId((current) => (current === rootId ? null : current));
-            setCommunityInteractionRepliesErrorByRootId((previous) => ({ ...previous, [rootId]: null }));
-          },
-          onError: (error) => {
-            if (cancelled) return;
-            setCommunityInteractionRepliesErrorByRootId((previous) => ({
-              ...previous,
-              [rootId]: formatCommunityInteractionProjectionError(error),
-            }));
-            setLoadingCommunityInteractionRepliesRootId((current) => (current === rootId ? null : current));
-          },
-        });
-      } catch (error) {
-        if (!cancelled) {
-          setCommunityInteractionRepliesErrorByRootId((previous) => ({
-            ...previous,
-            [rootId]: formatCommunityInteractionProjectionError(error),
-          }));
-          setLoadingCommunityInteractionRepliesRootId((current) => (current === rootId ? null : current));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-      liveClient?.close();
-    };
-  }, [ensureUsableAuthSession, selectedCommunityInteractionRootId, session]);
-
-  const handleRetryPendingCanonicalInteraction = useCallback((idempotencyKey: string) => {
-    const pending = pendingCanonicalInteractionsRef.current.find(
-      (item) => item.idempotencyKey === idempotencyKey,
-    );
-    if (!pending) return;
-    setPendingCanonicalInteractions((prev) =>
-      prev.map((item) => (item.idempotencyKey === idempotencyKey ? { ...item, status: "sending" } : item)),
-    );
-    const markFailed = () =>
-      setPendingCanonicalInteractions((prev) =>
-        prev.map((item) =>
-          item.idempotencyKey === idempotencyKey ? { ...item, status: "failed" } : item,
-        ),
-      );
-    void (async () => {
-      const activeSession = session;
-      if (!activeSession) {
-        markFailed();
-        return;
-      }
-      try {
-        await createCloudCommunityInteractionComposerMessageRows<AuthSession>({
-          session: activeSession,
-          communityId: pending.communityId,
-          idempotencyKey: pending.idempotencyKey,
-          text: pending.text,
-          rootId: pending.rootId,
-          replyToMessageId: pending.replyToMessageId,
-          attachments: pending.serializedAttachments,
-        });
-        void loadCommunityInteractionRoots(pending.communityId, activeSession);
-        if (pending.kind === "reply" && pending.rootId) {
-          void loadCommunityInteractionReplies(pending.rootId, activeSession);
-        }
-      } catch {
-        markFailed();
-      }
-    })();
-  }, [session, loadCommunityInteractionRoots, loadCommunityInteractionReplies]);
-
-  const handleDiscardPendingCanonicalInteraction = useCallback((idempotencyKey: string) => {
-    setPendingCanonicalInteractions((prev) => prev.filter((item) => item.idempotencyKey !== idempotencyKey));
-  }, []);
-
-  const handleSelectCommunityInteractionRoot = useCallback((rootIdRaw: string) => {
-    const rootId = String(rootIdRaw ?? "").trim();
-    if (!rootId) return;
-    setSelectedCommunityInteractionRootId((current) => {
-      const next = current === rootId ? null : rootId;
-      writeStoredInteractionSelectedRoot(activeCommunityId, next);
-      if (next && !communityInteractionRepliesByRootId[next]) {
-        void loadCommunityInteractionReplies(next);
-      }
-      return next;
-    });
-  }, [activeCommunityId, communityInteractionRepliesByRootId, loadCommunityInteractionReplies]);
-
-  const handleCloseCommunityInteractionDrawer = useCallback(() => {
-    setSelectedCommunityInteractionRootId(null);
-    writeStoredInteractionSelectedRoot(activeCommunityId, null);
-  }, [activeCommunityId]);
-
-  const restoredInteractionSelectionForCommunityRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId) return;
-    if (shellVariant === "mobile") return;
-    if (restoredInteractionSelectionForCommunityRef.current === activeCommunityId) return;
-    // Restore only once the feed's roots are actually loaded FOR THIS community,
-    // i.e. after the boot-time resets have settled — otherwise the master reset
-    // effect clobbers the restored selection.
-    const rootsLoadedForCommunity =
-      communityInteractionRoots.length > 0
-      && communityInteractionRoots[0]?.root.community_id === activeCommunityId;
-    if (!rootsLoadedForCommunity) return;
-    restoredInteractionSelectionForCommunityRef.current = activeCommunityId;
-    const stored = readStoredInteractionSelectedRoot(activeCommunityId);
-    if (stored && communityInteractionRoots.some((bundle) => bundle.root.id === stored)) {
-      setSelectedCommunityInteractionRootId((current) => current ?? stored);
-    }
-  }, [activeCommunityId, communityInteractionRoots, shellVariant]);
-
-  const handleToggleCommunityInteractionReaction = useCallback(async (
-    targetType: "root" | "reply",
-    targetId: string,
-    emoji: string,
-  ) => {
-    const usableSession = await ensureUsableAuthSession(session ?? undefined);
-    if (!usableSession) return;
-    try {
-      await toggleCloudCommunityInteractionReaction<AuthSession>({
-        session: usableSession,
-        targetType,
-        targetId,
-        emoji,
-      });
-    } catch {
-      // Live subscription reflects authoritative server state.
-    }
-  }, [
-    activeCommunityId,
-    ensureUsableAuthSession,
-    loadCommunityInteractionReplies,
-    loadCommunityInteractionRoots,
-    selectedCommunityInteractionRootId,
-    session,
-  ]);
-
-  const handleEditCommunityInteractionMessage = useCallback(async (
-    targetType: "root" | "reply",
-    targetId: string,
-    text: string,
-  ) => {
-    const usableSession = await ensureUsableAuthSession(session ?? undefined);
-    if (!usableSession) return;
-    try {
-      await editCloudCommunityInteractionMessage<AuthSession>({ session: usableSession, targetType, targetId, text });
-    } catch {
-      // Live subscription reflects authoritative server state.
-    }
-  }, [
-    activeCommunityId,
-    ensureUsableAuthSession,
-    loadCommunityInteractionReplies,
-    loadCommunityInteractionRoots,
-    selectedCommunityInteractionRootId,
-    session,
-  ]);
-
-  const handleDeleteCommunityInteractionMessage = useCallback(async (
-    targetType: "root" | "reply",
-    targetId: string,
-  ) => {
-    const usableSession = await ensureUsableAuthSession(session ?? undefined);
-    if (!usableSession) return;
-    if (targetType === "root" && selectedCommunityInteractionRootId === targetId) {
-      setSelectedCommunityInteractionRootId(null);
-      writeStoredInteractionSelectedRoot(activeCommunityId, null);
-    }
-    try {
-      await deleteCloudCommunityInteractionMessage<AuthSession>({ session: usableSession, targetType, targetId });
-    } catch {
-      // Live subscription reflects authoritative server state.
-    }
-  }, [
-    activeCommunityId,
-    ensureUsableAuthSession,
-    loadCommunityInteractionReplies,
-    loadCommunityInteractionRoots,
-    selectedCommunityInteractionRootId,
-    session,
-  ]);
-
   useCommunityChatRealtime({
     // The normal web UI uses canonical interaction roots/replies; keep legacy chat
     // realtime disabled here so it cannot pull production back to the old timeline.
@@ -2320,29 +1618,6 @@ export default function App() {
       return loadUserProfiles(userIds, session);
     },
   });
-
-  // Keep the interaction projection loaded whenever a community is active, not only on the chat
-  // tab, so its roots persist across community navigation. Reset only when the community/session ends.
-  useEffect(() => {
-    const sessionUserId = String(canonicalSessionUserId ?? "").trim();
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !session || !sessionUserId) {
-      communityInteractionProjectionBoundaryRef.current = null;
-      resetCommunityInteractionProjection();
-      return;
-    }
-    const nextBoundary = `${sessionUserId}:${activeCommunityId}`;
-    if (communityInteractionProjectionBoundaryRef.current !== nextBoundary) {
-      communityInteractionProjectionBoundaryRef.current = nextBoundary;
-      resetCommunityInteractionProjection();
-    }
-    void loadCommunityInteractionRoots(activeCommunityId, session);
-  }, [
-    activeCommunityId,
-    canonicalSessionUserId,
-    loadCommunityInteractionRoots,
-    resetCommunityInteractionProjection,
-    session,
-  ]);
 
   useEffect(() => {
     if (activePage !== "community" || !activeCommunityId || !hasResolvedCommunityChat) return;
@@ -2375,17 +1650,8 @@ export default function App() {
       hasResolvedCommunityChat &&
       !isLoadingChat
     ),
-    onCanonicalOptimisticInsert: (pending) => {
-      setPendingCanonicalInteractions((prev) => [
-        ...prev.filter((item) => item.idempotencyKey !== pending.idempotencyKey),
-        { ...pending, status: "sending" },
-      ]);
-    },
-    onCanonicalOptimisticSettle: ({ idempotencyKey, status }) => {
-      setPendingCanonicalInteractions((prev) =>
-        prev.map((item) => (item.idempotencyKey === idempotencyKey ? { ...item, status } : item)),
-      );
-    },
+    onCanonicalOptimisticInsert: communityInteractionProjection.insertOptimistic,
+    onCanonicalOptimisticSettle: communityInteractionProjection.settleOptimistic,
     createCommunityInteractionMessageRows: (params) =>
       createCloudCommunityInteractionComposerMessageRows<AuthSession, Parameters<typeof toCommunityChatMessage>[0]>({
         session: params.session,
@@ -5026,16 +4292,6 @@ export default function App() {
   });
   const { applyProviderConnectionLoadError } = providerConnectionUi;
 
-  const handleDismissCommunityAgentServeIssue = useCallback((issueId: string): void => {
-    const normalizedIssueId = String(issueId ?? "").trim();
-    if (normalizedIssueId) {
-      dismissedCommunityAgentServeIssueIdsRef.current.add(normalizedIssueId);
-    }
-    setCommunityAgentServeIssue((current) =>
-      current && current.id === normalizedIssueId ? null : current,
-    );
-  }, []);
-
   const handleConnectCommunityAgentServeProvider = useCallback((): void => {
     void providerConnectionUi.handleConnectChatgpt();
   }, [providerConnectionUi]);
@@ -6606,23 +5862,13 @@ export default function App() {
         onMobileReadingModeChange: mobileChromeScrollTrackingEnabled
           ? setMobileChromeReadingMode
           : undefined,
-        roots: appendPendingRoots(communityInteractionRoots, pendingCanonicalInteractions, activeCommunityId),
+        roots: visibleCommunityInteractionRoots,
         selectedRootId: selectedCommunityInteractionRootId,
-        replies: appendPendingReplies(
-          selectedCommunityInteractionRootId
-            ? communityInteractionRepliesByRootId[selectedCommunityInteractionRootId] ?? []
-            : [],
-          pendingCanonicalInteractions,
-          selectedCommunityInteractionRootId,
-        ),
+        replies: selectedCommunityInteractionReplies,
         isLoadingRoots: isLoadingCommunityInteractions,
-        isLoadingReplies:
-          selectedCommunityInteractionRootId !== null
-          && loadingCommunityInteractionRepliesRootId === selectedCommunityInteractionRootId,
+        isLoadingReplies: isLoadingCommunityInteractionReplies,
         error: communityInteractionError,
-        repliesError: selectedCommunityInteractionRootId
-          ? communityInteractionRepliesErrorByRootId[selectedCommunityInteractionRootId] ?? null
-          : null,
+        repliesError: communityInteractionRepliesError,
         onSelectRoot: handleSelectCommunityInteractionRoot,
         onCloseDrawer: handleCloseCommunityInteractionDrawer,
         onToggleReaction: handleToggleCommunityInteractionReaction,
@@ -6631,7 +5877,7 @@ export default function App() {
         currentUserId: canonicalSessionUserId,
         chatLastSeenAt: chatDividerBoundary,
         rootChangeReason: communityInteractionRootChangeReason,
-        canLoadOlderRoots: Boolean(communityInteractionNextBeforeCreatedAt),
+        canLoadOlderRoots: canLoadOlderCommunityInteractionRoots,
         isLoadingOlderRoots: isLoadingOlderCommunityInteractionRoots,
         onLoadOlderRoots: () => {
           if (!activeCommunityId) return;

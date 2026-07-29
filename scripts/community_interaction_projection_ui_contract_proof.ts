@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   interactionPresentationForEmbeds,
@@ -22,6 +22,9 @@ function sectionBetween(source: string, start: string, end: string): string {
 
 const packageJson = read("package.json");
 const app = read("apps/web/src/App.tsx");
+const interactionController = read(
+  "apps/web/src/controllers/useWebCommunityInteractionProjection.ts",
+);
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
@@ -97,29 +100,34 @@ assert.match(
 );
 
 assert.doesNotMatch(
-  app,
+  `${app}\n${interactionController}`,
   /VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION/,
-  "App should not gate the production canonical projection behind a Vite env flag",
+  "the web projection should not be gated behind a Vite env flag",
 );
 assert.match(
-  app,
-  /const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;/,
-  "App should make canonical interaction projection the normal web chat surface",
+  interactionController,
+  /export const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;/,
+  "the projection owner should make canonical interactions the normal web chat surface",
 );
 assert.match(
-  app,
+  interactionController,
   /listCloudCommunityInteractionRoots[\s\S]*listCloudCommunityInteractionReplies/,
-  "App should read canonical interaction roots and drawer replies",
+  "the projection owner should read canonical interaction roots and drawer replies",
 );
 assert.match(
   app,
-  /interactionProjection:\s*\{[\s\S]*enabled:\s*COMMUNITY_INTERACTION_PROJECTION_ENABLED[\s\S]*roots:\s*appendPendingRoots\(communityInteractionRoots, pendingCanonicalInteractions, activeCommunityId\)[\s\S]*selectedRootId:\s*selectedCommunityInteractionRootId/,
+  /useWebCommunityInteractionProjection<MessageAttachment>\([\s\S]*interactionProjection:\s*\{[\s\S]*enabled:\s*COMMUNITY_INTERACTION_PROJECTION_ENABLED[\s\S]*roots:\s*visibleCommunityInteractionRoots[\s\S]*selectedRootId:\s*selectedCommunityInteractionRootId/,
   "App should pass the canonical projection with optimistic roots into the chat panel",
 );
 assert.match(
-  app,
+  interactionController,
   /subscribeCloudCommunityInteractionRoots[\s\S]*subscribeCloudCommunityInteractionReplies/,
-  "App should subscribe to canonical interaction roots and replies directly",
+  "the projection owner should subscribe to canonical interaction roots and replies",
+);
+assert.doesNotMatch(
+  app,
+  /listCloudCommunityInteractionRootsPage|listCloudCommunityInteractionReplies|subscribeCloudCommunityInteractionRoots|subscribeCloudCommunityInteractionReplies|toggleCloudCommunityInteractionReaction|editCloudCommunityInteractionMessage|deleteCloudCommunityInteractionMessage/,
+  "App should compose the projection controller without owning its gateway lifecycle",
 );
 assert.match(
   app,
@@ -132,9 +140,9 @@ assert.match(
   "send completion should request canonical projection refresh through canonical reads",
 );
 assert.match(
-  app,
-  /communityInteractionRootsRequestIdRef[\s\S]*activeCommunityInteractionCommunityIdRef[\s\S]*activeCommunityInteractionCommunityIdRef\.current !== communityId/,
-  "App should guard the projection against stale roots after community switches",
+  interactionController,
+  /rootsRequestIdRef[\s\S]*activeCommunityIdRef[\s\S]*activeCommunityIdRef\.current !== communityId/,
+  "the projection owner should guard against stale roots after community switches",
 );
 assert.match(
   app,
@@ -671,8 +679,8 @@ assert.match(
 );
 assert.match(
   communityAdmin,
-  /approveCommunityJoinRequestForFreeAccess[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition[\s\S]*enqueueCommunityAccessGrantedEmailInternal[\s\S]*approveCommunityJoinRequest = mutation\(\{[\s\S]*approveCommunityJoinRequestForFreeAccess\(\{[\s\S]*grantReason: "join_request_approved"/,
-  "manual join-request approval should use the shared free-access approval helper so membership, counts, app grants, and emails stay canonical",
+  /approveCommunityJoinRequestForFreeAccess[\s\S]*activateCommunityMembershipCore\(\{[\s\S]*activationReason: args\.grantReason[\s\S]*enqueueCommunityAccessGrantedEmailInternal[\s\S]*approveCommunityJoinRequest = mutation\(\{[\s\S]*approveCommunityJoinRequestForFreeAccess\(\{[\s\S]*grantReason: "join_request_approved"/,
+  "manual join-request approval should use the canonical membership lifecycle so membership, counts, grants, and emails stay canonical",
 );
 assert.match(
   communityAdmin,
@@ -871,13 +879,13 @@ assert.match(
   "canonical optimistic projection rows should use the route idempotency key and prepared attachments",
 );
 assert.match(
-  app,
-  /function appendPendingRoots[\s\S]*new Set\(roots\.map\(\(bundle\) => bundle\.root\.idempotency_key\)\)[\s\S]*composerStoredIdempotencyKey\(p\.idempotencyKey, "root"\)/,
+  interactionController,
+  /function appendPendingRoots[\s\S]*new Set\(roots\.map\(\(bundle\) => bundle\.root\.idempotency_key\)\)[\s\S]*storedIdempotencyKey\(item\.idempotencyKey, "root"\)/,
   "pending root overlays should dedupe against visible canonical roots by stored idempotency key",
 );
 assert.match(
-  app,
-  /function appendPendingReplies[\s\S]*new Set\(replies\.map\(\(bundle\) => bundle\.reply\.idempotency_key\)\)[\s\S]*composerStoredIdempotencyKey\(p\.idempotencyKey, "reply"\)/,
+  interactionController,
+  /function appendPendingReplies[\s\S]*new Set\(replies\.map\(\(bundle\) => bundle\.reply\.idempotency_key\)\)[\s\S]*storedIdempotencyKey\(item\.idempotencyKey, "reply"\)/,
   "pending reply overlays should dedupe against visible canonical replies by stored idempotency key",
 );
 assert.match(
@@ -996,7 +1004,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-interaction-embed-play:focus-visible[\s\S]*\.community-interaction-embed-video-link:focus-visible[\s\S]*\.community-interaction-embed-summary[\s\S]*grid-template-columns:[\s\S]*\.community-interaction-embed-player[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-embed\.is-social-post[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*background:\s*var\(--community-social-embed-surface\);[\s\S]*\.community-interaction-embed-social-identity[\s\S]*unicode-bidi:\s*plaintext;[\s\S]*\.community-interaction-embed-social-meta[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*5;/,
+  /\.community-interaction-embed-summary[\s\S]*grid-template-columns:[\s\S]*\.community-interaction-embed-play:focus-visible[\s\S]*\.community-interaction-embed-video-link:focus-visible[\s\S]*\.community-interaction-embed-player[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-embed\.is-social-post[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*background:\s*var\(--community-social-embed-surface\);[\s\S]*\.community-interaction-embed-social-identity[\s\S]*unicode-bidi:\s*plaintext;[\s\S]*\.community-interaction-embed-social-meta[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*5;/,
   "video previews should retain horizontal play rows while social previews use compact theme-aware provenance-and-text cards",
 );
 assert.match(

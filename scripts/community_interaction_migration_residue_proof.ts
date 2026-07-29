@@ -12,6 +12,9 @@ const packageJson = read("package.json");
 const residueMap = read("docs/community-interaction-migration-residue-map.md");
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
 const app = read("apps/web/src/App.tsx");
+const interactionController = read(
+  "apps/web/src/controllers/useWebCommunityInteractionProjection.ts",
+);
 const interactions = read("convex/communityInteractions.ts");
 const attachmentBridge = read("convex/communityInteractionAttachmentBridge.ts");
 const legacyBridge = read("convex/communityInteractionLegacyBridge.ts");
@@ -183,12 +186,12 @@ assert.doesNotMatch(
 );
 assert.match(
   sendController,
-  /const legacyReplyToId[\s\S]*replySnapshot\?\.legacy_message_id[\s\S]*return replyRootId \? null : replyToId/,
+  /const legacyReplyToMessageId[\s\S]*replySnapshot\?\.legacy_message_id[\s\S]*return replyRootId \? null : replyToId/,
   "shared send controller should separate legacy reply ids from canonical reply target ids",
 );
 assert.match(
   sendController,
-  /createCloudThreadUserMessageRows[\s\S]*attachments: serializedAttachments[\s\S]*replyToId: legacyReplyToId/,
+  /createCloudThreadUserMessageRows[\s\S]*attachments: serializedAttachments[\s\S]*replyToId: legacyReplyToMessageId/,
   "shared send controller should keep the legacy fallback explicit and payload-bounded",
 );
 assert.match(
@@ -223,17 +226,17 @@ assert.match(
   "legacy chat realtime should be disabled for the normal web chat UI",
 );
 assert.doesNotMatch(
-  app,
+  `${app}\n${interactionController}`,
   /VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION/,
   "production projection should not depend on a Vite env flag",
 );
 assert.match(
-  app,
-  /const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;/,
+  interactionController,
+  /export const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;/,
   "canonical projection should be the normal app-level chat surface",
 );
 assert.match(
-  app,
+  interactionController,
   /subscribeCloudCommunityInteractionRoots[\s\S]*subscribeCloudCommunityInteractionReplies/,
   "canonical projection should refresh through canonical interaction subscriptions",
 );
