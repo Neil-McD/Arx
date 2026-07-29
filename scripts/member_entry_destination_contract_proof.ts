@@ -12,11 +12,17 @@ const routes = read("shared/webAppRouteState.ts");
 const authCookies = read("api/auth/_cookies.js");
 const authCallback = read("api/auth/google/callback.js");
 const app = read("apps/web/src/App.tsx");
+const memberEntryController = read(
+  "apps/web/src/controllers/useWebMemberEntryController.ts",
+);
+const onboardingProfileController = read(
+  "apps/web/src/controllers/useWebOnboardingProfileController.ts",
+);
 
 const platformBridgeBody =
   app.match(/async function completePlatformBridge[\s\S]*?\n  \/\* Community bridge Enter/)?.[0] ?? "";
 const communityBridgeBody =
-  app.match(/async function completeBridgeAndEnter[\s\S]*?\n  \/\* Client-side bridge validation/)?.[0] ?? "";
+  app.match(/async function completeBridgeAndEnter[\s\S]*?\n  const applyAppRouteState/)?.[0] ?? "";
 
 assert.match(
   backend,
@@ -79,13 +85,13 @@ assert.match(
   "Google callback fallback must return through canonical root member entry",
 );
 assert.match(
-  app,
-  /routeTryPolynetFree[\s\S]*account_setup\?\.completed[\s\S]*resolveAndEnterMemberDestination/,
+  onboardingProfileController,
+  /routeTryPolynetFree[\s\S]*account_setup\?\.completed[\s\S]*enterDefaultDestination/,
   "completed generic accounts must resolve the canonical community destination",
 );
 assert.match(
-  app,
-  /defaultMemberEntryResolutionRef[\s\S]*authSubject[\s\S]*current\?\.authSubject === authSubject/,
+  memberEntryController,
+  /defaultResolutionRef[\s\S]*authSubject[\s\S]*current\?\.authSubject === authSubject/,
   "default-entry request deduplication must remain bound to the authenticated subject",
 );
 assert.match(

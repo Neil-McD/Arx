@@ -73,6 +73,7 @@ import { useWebCommunityAgentAndFunnelController } from "./controllers/useWebCom
 import { useWebCommunitySettingsController } from "./controllers/useWebCommunitySettingsController";
 import { useWebShellState } from "./controllers/useWebShellState";
 import { useWebOnboardingProfileController } from "./controllers/useWebOnboardingProfileController";
+import { useWebMemberEntryController } from "./controllers/useWebMemberEntryController";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { updateSentryUiContext } from "./instrument";
 import {
@@ -87,10 +88,6 @@ import {
   saveCloudCommunityAbout,
   type CloudCommunityAboutSaveResult,
 } from "../../../shared/cloudCommunityFunnelGateway";
-import {
-  resolveCloudMemberEntryDestination,
-  type CloudMemberEntryDestination,
-} from "../../../shared/cloudMemberEntryDestinationGateway";
 import {
   loadCloudProviderConnections,
   type CloudChatgptConnectionStatus,
@@ -544,11 +541,6 @@ export default function App() {
   const [hasResolvedCommunities, setHasResolvedCommunities] = useState(false);
   const [communities, setCommunities] = useState<CommunityRecord[]>([]);
   const [communityRoleById, setCommunityRoleById] = useState<Record<string, string>>({});
-  const defaultMemberEntryResolutionRef =
-    useRef<{
-      authSubject: string;
-      promise: Promise<CloudMemberEntryDestination | null>;
-    } | null>(null);
   const communityRailOrderStorageKey = useMemo(
     () => `${COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX}:${session?.user?.id ?? "local"}`,
     [session?.user?.id],
@@ -573,6 +565,22 @@ export default function App() {
     initialCommunitySlug: initialAppRoute?.communitySlug ?? null,
     communities,
     setCommunityTab,
+  });
+  const { loadCommunities, loadUserProfiles } = useWebCommunityAccessController<
+    AuthSession,
+    CommunityRecord,
+    UserProfile
+  >({
+    toCanonicalCommunityVisibility,
+    activeCommunitySlug: selectedActiveCommunitySlug,
+    loadingResetKey: canonicalSessionUserId,
+    ensureSession: ensureUsableAuthSession,
+    setIsLoadingCommunities,
+    setHasResolvedCommunities,
+    setCommunityRoleById,
+    setCommunities,
+    applyCommunityShellState,
+    setProfilesByUserId,
   });
 
   const communityInteractionProjection = useWebCommunityInteractionProjection<MessageAttachment>({
@@ -1012,87 +1020,19 @@ export default function App() {
     applyLocationToState();
   }
 
-  async function resolveMemberEntryDestination(options?: {
-    session?: AuthSession | null;
-    communityId?: string | null;
-    communitySlug?: string | null;
-  }): Promise<CloudMemberEntryDestination | null> {
-    const activeSession = options?.session ?? sessionRef.current ?? session;
-    if (!activeSession) return null;
-    const authSubject = resolveAuthSubject(activeSession);
-    if (!authSubject) return null;
-    const isDefaultDestination = !options?.communityId && !options?.communitySlug;
-    if (
-      isDefaultDestination &&
-      defaultMemberEntryResolutionRef.current?.authSubject === authSubject
-    ) {
-      return await defaultMemberEntryResolutionRef.current.promise;
-    }
-    const request = resolveCloudMemberEntryDestination<AuthSession>({
-      session: activeSession,
-      communityId: options?.communityId ?? null,
-      communitySlug: options?.communitySlug ?? null,
-    });
-    if (isDefaultDestination) {
-      defaultMemberEntryResolutionRef.current = { authSubject, promise: request };
-    }
-    try {
-      return await request;
-    } catch (error) {
-      console.warn("[member-entry] destination resolution failed:", error);
-      return null;
-    } finally {
-      if (
-        isDefaultDestination &&
-        defaultMemberEntryResolutionRef.current?.promise === request
-      ) {
-        defaultMemberEntryResolutionRef.current = null;
-      }
-    }
-  }
-
-  function applyMemberEntryDestination(
-    destination: CloudMemberEntryDestination,
-    options?: { replace?: boolean },
-  ): void {
-    if (destination.page === "discover") {
-      applyCommunityShellState({
-        communityId: null,
-        communitySlug: null,
-        communityTab: "chat",
-      });
-      navigateTo("/discover", { replace: options?.replace !== false });
-      return;
-    }
-
-    const path = buildCommunityTabPath(destination.community_slug, "chat");
-    if (!path) throw new Error("community_destination_path_required");
-    syncCommunitySelection({
-      communityId: destination.community_id,
-      communitySlug: destination.community_slug,
-    });
-    setPublicRoute({ kind: "app" });
-    navigateTo(path, { replace: options?.replace !== false });
-
-    const activeSession = sessionRef.current ?? session;
-    if (activeSession) {
-      void loadCommunities(activeSession).catch(() => {
-        // Destination access is already authoritative; this refresh is best effort.
-      });
-    }
-  }
-
-  async function resolveAndEnterMemberDestination(options?: {
-    session?: AuthSession | null;
-    communityId?: string | null;
-    communitySlug?: string | null;
-    replace?: boolean;
-  }): Promise<boolean> {
-    const destination = await resolveMemberEntryDestination(options);
-    if (!destination) return false;
-    applyMemberEntryDestination(destination, { replace: options?.replace });
-    return true;
-  }
+  const memberEntry = useWebMemberEntryController({
+    session,
+    getSession: () => sessionRef.current ?? session,
+    navigateTo,
+    applyCommunityShellState,
+    setAppPublicRoute: () => setPublicRoute({ kind: "app" }),
+    reloadCommunities: loadCommunities,
+  });
+  const {
+    resolveDestination: resolveMemberEntryDestination,
+    applyDestination: applyMemberEntryDestination,
+    resolveAndEnter: resolveAndEnterMemberDestination,
+  } = memberEntry;
   onboardingProfile.actionsRef.current = {
     navigateTo,
     enterDefaultDestination: resolveAndEnterMemberDestination,
@@ -1434,23 +1374,6 @@ export default function App() {
       intent: { reason: "create_community", payload: { draft } },
     });
   }, []);
-  const { loadCommunities, loadUserProfiles } = useWebCommunityAccessController<
-    AuthSession,
-    CommunityRecord,
-    UserProfile
-  >({
-    toCanonicalCommunityVisibility,
-    activeCommunitySlug: selectedActiveCommunitySlug,
-    loadingResetKey: canonicalSessionUserId,
-    ensureSession: ensureUsableAuthSession,
-    setIsLoadingCommunities,
-    setHasResolvedCommunities,
-    setCommunityRoleById,
-    setCommunities,
-    applyCommunityShellState,
-    setProfilesByUserId,
-  });
-
   useEffect(() => {
     setHasResolvedCommunities(false);
   }, [canonicalSessionUserId]);
