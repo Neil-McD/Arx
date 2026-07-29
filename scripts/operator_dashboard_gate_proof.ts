@@ -21,6 +21,9 @@ const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const schema = read("convex/schema.ts");
 const webRouteState = read("shared/webAppRouteState.ts");
 const app = read("apps/web/src/App.tsx");
+const shellNavigation = read(
+  "apps/web/src/controllers/useWebShellNavigationController.ts",
+);
 const appMainSurfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const operatorHost = read("apps/web/src/components/WebOperatorDashboardHost.tsx");
 const analyticsScopeSwitcher = read("apps/web/src/components/WebAnalyticsScopeSwitcher.tsx");
@@ -238,8 +241,8 @@ assert.match(
   "the optional access probe must record a resolved denial instead of leaving the route pending",
 );
 assert.match(
-  app,
-  /activePage !== "operator"[\s\S]*!isOperatorAccessResolved[\s\S]*if \(operatorAccess\) return;[\s\S]*resolveAndEnterMemberDestination/,
+  shellNavigation,
+  /current\.activePage !== "operator"[\s\S]*!current\.isOperatorAccessResolved \|\| current\.operatorAccess[\s\S]*resolveAndEnter/,
   "unauthorized operator routes must wait for access resolution and then fail closed to a member destination",
 );
 assert.match(

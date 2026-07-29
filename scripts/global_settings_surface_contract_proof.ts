@@ -80,6 +80,10 @@ const navigation = read("shared/appShellNavigation.ts");
 const routes = read("shared/webAppRouteState.ts");
 const transitions = read("shared/appNavTransitions.ts");
 const app = read("apps/web/src/App.tsx");
+const shellNavigation = read(
+  "apps/web/src/controllers/useWebShellNavigationController.ts",
+);
+const skillsModel = read("apps/web/src/controllers/useWebSkillsModel.ts");
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx");
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
@@ -97,10 +101,13 @@ assert.match(
 assert.match(settingsSurface, /SettingsNavList[\s\S]*WebSettingsPanels/);
 assert.doesNotMatch(mainSurface, /WebWorkspaceSurfaceHost|workspaceSurfaceHostProps/);
 assert.match(
-  app,
-  /const openGlobalSettings = \(page: SettingsPage\)[\s\S]*activePage === "settings" && settingsPage === page[\s\S]*pushNavSnapshot\(\)[\s\S]*navigateTo\(buildSettingsPath\(page\)\)/,
+  shellNavigation,
+  /const openGlobalSettings = useCallback[\s\S]*current\.activePage === "settings" && current\.settingsPage === page[\s\S]*pushNavSnapshot\(\)[\s\S]*navigateTo\(buildSettingsPath\(page\)\)/,
 );
-assert.match(app, /activePage === "settings" && settingsPage === "integrations"/);
+assert.match(
+  skillsModel,
+  /activePage === "settings" && settingsPage === "integrations"/,
+);
 assert.doesNotMatch(app, /setActiveView\("settings"\)/);
 assert.doesNotMatch(transitions, /ToggleWorkspaceSettings|deriveToggleWorkspaceSettingsTransition/);
 assert.match(mobileController, /params\.openGlobalSettings\("agent"\)/);

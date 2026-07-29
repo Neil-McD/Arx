@@ -75,6 +75,7 @@ import { useWebShellState } from "./controllers/useWebShellState";
 import { useWebOnboardingProfileController } from "./controllers/useWebOnboardingProfileController";
 import { useWebMemberEntryController } from "./controllers/useWebMemberEntryController";
 import { useWebCommunityEntryBridgeController } from "./controllers/useWebCommunityEntryBridgeController";
+import { useWebShellNavigationController } from "./controllers/useWebShellNavigationController";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { updateSentryUiContext } from "./instrument";
 import {
@@ -126,14 +127,9 @@ import type {
 import { deriveOpenDiscoverTransition } from "../../../shared/appNavTransitions";
 import {
   type AppShellVariant,
-  type AppRouteState,
-  type CommunityExperienceMode,
   type PublicRoute,
-  STANDALONE_APP_LAUNCH_SEARCH_PARAM,
-  STANDALONE_APP_LAUNCH_SEARCH_VALUE,
   applyShellVariantToPublicPath,
   applyShellVariantToAppPath,
-  applyShellVariantToKnownPath,
   buildAppRoutePath,
   buildCommunityFunnelPath,
   buildCommunityOnboardingPreviewPath,
@@ -142,17 +138,11 @@ import {
   buildCommunityFunnelPreviewPath,
   isLegacyWorkspaceRoutePath,
   isRootAppRoutePath,
-  readLegacyWorkspaceRouteContext,
   readAppRouteFromLocation,
   readPublicRouteFromLocation,
   readShellVariantFromPathname,
 } from "../../../shared/webAppRouteState";
 import { PRODUCT_DOCS_DEFAULT_SLUG } from "./docs/productDocsMeta";
-import {
-  formatBackTargetLabel as formatBackTargetLabelShared,
-  popDistinctNavSnapshot,
-  pushUniqueNavSnapshot,
-} from "../../../shared/navSnapshot";
 import {
   communityInitials,
   parseHistoryUsedArray,
@@ -175,14 +165,10 @@ import {
   readAuthResumeState,
   storeAuthResumeState,
 } from "../../../shared/authResumeState";
-import {
-  hasOAuthCallbackParamsInLocation,
-  readOAuthCallbackShellVariantFromLocation,
-} from "../../../shared/cloudPkce";
+import { readOAuthCallbackShellVariantFromLocation } from "../../../shared/cloudPkce";
 import { routePendingAuthIntent } from "../../../shared/authResumeRouter";
 import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
 import { resolveUserAccessPolicy } from "../../../shared/capabilities";
-import { isStandaloneWebApp } from "../../../shared/browserRuntimeMode";
 import { useCommunityRailOrder } from "../../../shared/useCommunityRailOrder";
 import { useRailPointerReorder } from "../../../shared/useRailPointerReorder";
 import { useWebCommunityAccessController } from "../../../shared/useWebCommunityAccessController";
@@ -235,7 +221,6 @@ import { useWebMobileShellController } from "./controllers/useWebMobileShellCont
 import { useWebCommunityPolynetController } from "./controllers/useWebCommunityPolynetController";
 import { useWebPostAuthBillingLifecycle } from "./controllers/useWebPostAuthBillingLifecycle";
 import { useWebPostAuthStripeConnectLifecycle } from "./controllers/useWebPostAuthStripeConnectLifecycle";
-import { useWebPathRouteLifecycle } from "./controllers/useWebPathRouteLifecycle";
 import { useWebCommunityRouteController } from "./controllers/useWebCommunityRouteController";
 import { useWebJoinedCommunityRouteResolution } from "./controllers/useWebJoinedCommunityRouteResolution";
 import { useWebSelectedCommunityController } from "./controllers/useWebSelectedCommunityController";
@@ -265,7 +250,6 @@ import type {
   WebCommunityVoiceButtonOwner,
   WebCommunityVoiceTranscriptTarget,
   WebMyCommunityJoinRequest,
-  WebNavSnapshot,
   WebPersonalMemoryItem,
   WebPublicCommunityRecord,
 } from "./webAppContracts";
@@ -316,7 +300,6 @@ type PublicPlanSummary = SharedPublicPlanSummary;
 type DiscoverCommunity = SharedDiscoverCommunitySnapshot;
 type CommunityAiFeedPost = SharedCommunityAiFeedPost;
 type CommunityAiFeedReactionType = SharedCommunityAiFeedReactionType;
-type NavSnapshot = WebNavSnapshot;
 export default function App() {
   const initialShellVariant: AppShellVariant =
     typeof window === "undefined"
@@ -573,6 +556,68 @@ export default function App() {
     applyCommunityShellState,
     setProfilesByUserId,
   });
+  const shellNavigation = useWebShellNavigationController({
+    session,
+    isAuthBootstrapComplete,
+    canonicalSessionUserId,
+    isOperatorAccessResolved,
+    operatorAccess,
+    hasOperatorAccess,
+    publicRoute,
+    setPublicRoute,
+    shellVariant,
+    setShellVariant,
+    activePage,
+    setActivePage,
+    activeView,
+    setActiveView,
+    settingsPage,
+    setSettingsPage,
+    selectedProductDocSlug,
+    setSelectedProductDocSlug,
+    activeOperatorTab,
+    setActiveOperatorTab,
+    selectedActiveCommunitySlug,
+    communityTab,
+    communityExperienceMode,
+    setCommunityExperienceMode,
+    communityResourceModuleId,
+    setCommunityResourceModuleId,
+    communitySettingsPane,
+    setCommunitySettingsPane,
+    applyCommunityShellState,
+    setStripeConnectReturn,
+  });
+  const {
+    navigateTo,
+    applyAppRouteState,
+    pushNavSnapshot,
+    openGlobalSettings,
+    openOperatorConsole,
+    goBack,
+    backTargetSnapshot,
+    backTargetLabel: effectiveBackTargetLabel,
+  } = shellNavigation;
+  const memberEntry = useWebMemberEntryController({
+    session,
+    getSession: () => sessionRef.current ?? session,
+    navigateTo,
+    applyCommunityShellState,
+    setAppPublicRoute: () => setPublicRoute({ kind: "app" }),
+    reloadCommunities: loadCommunities,
+  });
+  const {
+    resolveDestination: resolveMemberEntryDestination,
+    applyDestination: applyMemberEntryDestination,
+    resolveAndEnter: resolveAndEnterMemberDestination,
+  } = memberEntry;
+  shellNavigation.memberEntryActionsRef.current = {
+    resolveAndEnter: resolveAndEnterMemberDestination,
+  };
+  onboardingProfile.actionsRef.current = {
+    navigateTo,
+    enterDefaultDestination: resolveAndEnterMemberDestination,
+  };
 
   const communityInteractionProjection = useWebCommunityInteractionProjection<MessageAttachment>({
     activeCommunityId,
@@ -990,219 +1035,8 @@ export default function App() {
     setIsLeavingCommunity,
   } = communityAdminUi;
 
-  const isLikelyMobileDevice = useMemo(() => {
-    if (typeof navigator === "undefined") return false;
-    const userAgent = navigator.userAgent || "";
-    const platform = navigator.platform || "";
-    return (
-      /Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(userAgent) ||
-      (/iPad|Macintosh/i.test(platform) && navigator.maxTouchPoints > 1)
-    );
-  }, []);
-
-  function navigateTo(path: string, opts: { replace?: boolean; state?: unknown } = {}) {
-    const nextPath = applyShellVariantToKnownPath(path, shellVariant);
-    const historyState = opts.state ?? {};
-    if (opts.replace) {
-      window.history.replaceState(historyState, document.title, nextPath);
-    } else {
-      window.history.pushState(historyState, document.title, nextPath);
-    }
-    applyLocationToState();
-  }
-
-  const memberEntry = useWebMemberEntryController({
-    session,
-    getSession: () => sessionRef.current ?? session,
-    navigateTo,
-    applyCommunityShellState,
-    setAppPublicRoute: () => setPublicRoute({ kind: "app" }),
-    reloadCommunities: loadCommunities,
-  });
-  const {
-    resolveDestination: resolveMemberEntryDestination,
-    applyDestination: applyMemberEntryDestination,
-    resolveAndEnter: resolveAndEnterMemberDestination,
-  } = memberEntry;
-  onboardingProfile.actionsRef.current = {
-    navigateTo,
-    enterDefaultDestination: resolveAndEnterMemberDestination,
-  };
-
-  const applyAppRouteState = useCallback((nextAppRoute: AppRouteState) => {
-    const normalizedCommunitySlug = String(nextAppRoute.communitySlug ?? "").trim() || null;
-    setActivePage(nextAppRoute.page);
-    setActiveView("home");
-    setSettingsPage(nextAppRoute.settingsPage);
-    if (nextAppRoute.page === "docs") {
-      setSelectedProductDocSlug(nextAppRoute.docsSlug ?? null);
-    }
-    if (nextAppRoute.page === "operator") {
-      setActiveOperatorTab(nextAppRoute.operatorTab ?? "platform");
-    }
-    if (nextAppRoute.page === "community") {
-      setCommunityExperienceMode(nextAppRoute.communityExperienceMode ?? "standard");
-      applyCommunityShellState({
-        communitySlug: normalizedCommunitySlug,
-        communityTab: nextAppRoute.communityTab,
-      });
-      setCommunityResourceModuleId(
-        nextAppRoute.communityTab === "resources" ? nextAppRoute.communityResourceModuleId ?? null : null,
-      );
-      setCommunitySettingsPane(
-        nextAppRoute.communityTab === "settings" ? nextAppRoute.communitySettingsPane ?? "community" : "community",
-      );
-    } else {
-      setCommunityExperienceMode("standard");
-      setCommunityResourceModuleId(null);
-      setCommunitySettingsPane("community");
-    }
-  }, [applyCommunityShellState]);
-
-  const applyLocationToState = useCallback(() => {
-    setShellVariant(readShellVariantFromPathname(window.location.pathname || "/"));
-    const nextPublicRoute = readPublicRouteFromLocation();
-    setPublicRoute(nextPublicRoute);
-    if (nextPublicRoute.kind !== "app") return nextPublicRoute;
-    applyAppRouteState(readAppRouteFromLocation());
-    return nextPublicRoute;
-  }, [applyAppRouteState]);
-
-  useEffect(() => {
-    if (!isAuthBootstrapComplete) return;
-    if (!session) return;
-    if (publicRoute.kind !== "app") return;
-    if (activePage !== "landing") return;
-    if (!isRootAppRoutePath(window.location.pathname || "/")) return;
-    void routeTryPolynetFree(session);
-  }, [activePage, isAuthBootstrapComplete, publicRoute.kind, session]);
-
-  const legacyWorkspaceRedirectRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!isAuthBootstrapComplete) return;
-    if (publicRoute.kind !== "app") return;
-    const pathname = window.location.pathname || "/";
-    const legacyContext = readLegacyWorkspaceRouteContext(pathname);
-    if (!legacyContext) return;
-
-    const redirectKey = `${resolveAuthSubject(session) ?? "signed-out"}:${pathname}`;
-    if (legacyWorkspaceRedirectRef.current === redirectKey) return;
-    legacyWorkspaceRedirectRef.current = redirectKey;
-
-    if (!session) {
-      navigateTo(
-        legacyContext.communitySlug
-          ? buildCommunityFunnelPath(legacyContext.communitySlug) ?? "/"
-          : "/",
-        { replace: true },
-      );
-      return;
-    }
-
-    void resolveAndEnterMemberDestination({
-      session,
-      communitySlug: legacyContext.communitySlug,
-      replace: true,
-    }).then((entered) => {
-      if (entered) return;
-      navigateTo(
-        legacyContext.communitySlug
-          ? buildCommunityFunnelPath(legacyContext.communitySlug) ?? "/discover"
-          : "/discover",
-        { replace: true },
-      );
-    });
-  }, [isAuthBootstrapComplete, publicRoute.kind, session]);
-
-  useEffect(() => {
-    if (!isStandaloneWebApp()) return;
-    const currentUrl = new URL(window.location.href);
-    if (currentUrl.searchParams.get(STANDALONE_APP_LAUNCH_SEARCH_PARAM) !== STANDALONE_APP_LAUNCH_SEARCH_VALUE) {
-      return;
-    }
-
-    currentUrl.searchParams.delete(STANDALONE_APP_LAUNCH_SEARCH_PARAM);
-    const nextPath = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}` || "/";
-    window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
-  }, []);
-
-  /* (Deleted 2026-07-02: the standalone signed-out funnel deferral used to
-     bounce /c/:slug to a workspace launch. The visitor lens made that
-     backwards — a signed-out /c/ visit IS the community page now.) */
-
-  const operatorRouteRedirectRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (activePage !== "operator") {
-      operatorRouteRedirectRef.current = null;
-      return;
-    }
-    if (!isAuthBootstrapComplete) return;
-    if (!session) {
-      navigateTo("/", { replace: true });
-      return;
-    }
-    if (!isOperatorAccessResolved) return;
-    if (operatorAccess) return;
-
-    const redirectKey = String(canonicalSessionUserId ?? "operator-denied");
-    if (operatorRouteRedirectRef.current === redirectKey) return;
-    operatorRouteRedirectRef.current = redirectKey;
-    void resolveAndEnterMemberDestination({ session, replace: true }).then((entered) => {
-      if (!entered) navigateTo("/discover", { replace: true });
-    });
-  }, [
-    activePage,
-    canonicalSessionUserId,
-    isAuthBootstrapComplete,
-    isOperatorAccessResolved,
-    operatorAccess,
-    session,
-  ]);
-
   const shellPublicRoute: PublicRoute = publicRoute;
 
-  const navStackRef = useRef<NavSnapshot[]>([]);
-  const readCurrentRoutePath = () =>
-    `${window.location.pathname}${window.location.search}` || "/";
-  const buildCurrentAppRoutePath = (): string | null =>
-    applyShellVariantToAppPath(
-      buildAppRoutePath({
-        page: activePage,
-        view: activeView,
-        settingsPage,
-        communitySlug: selectedActiveCommunitySlug,
-        communityTab,
-        communityResourceModuleId:
-          activePage === "community" && communityTab === "resources" ? communityResourceModuleId : null,
-        communitySettingsPane:
-          activePage === "community" && communityTab === "settings" ? communitySettingsPane : null,
-        docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
-        operatorTab: activePage === "operator" ? activeOperatorTab : null,
-      }) ?? "",
-      shellVariant,
-    ) || null;
-  const takeNavSnapshot = (): NavSnapshot => ({
-    page: activePage,
-    view: activeView,
-    settingsPage,
-    communitySlug: selectedActiveCommunitySlug,
-    communityTab,
-    routePath: buildCurrentAppRoutePath() ?? readCurrentRoutePath(),
-  });
-  const pushNavSnapshot = () => {
-    const snapshot = takeNavSnapshot();
-    pushUniqueNavSnapshot(navStackRef.current, snapshot);
-  };
-  const openGlobalSettings = (page: SettingsPage): void => {
-    if (activePage === "settings" && settingsPage === page) return;
-    if (activePage !== "settings") pushNavSnapshot();
-    navigateTo(buildSettingsPath(page));
-  };
-  const openOperatorConsole = (tab: OperatorTab = "platform"): void => {
-    if (!hasOperatorAccess) return;
-    if (activePage !== "operator") pushNavSnapshot();
-    navigateTo(`/operator/${tab}`);
-  };
   const {
     syncCommunitySelection,
     openPublicCommunityFunnel,
@@ -1223,21 +1057,6 @@ export default function App() {
     applyCommunityShellState,
     setUnreadCount,
   });
-  const restoreNavSnapshot = (snapshot: NavSnapshot) => {
-    const nextRoutePath = snapshot.routePath?.trim() || "/";
-    navigateTo(nextRoutePath, { replace: true });
-  };
-  const goBack = (): boolean => {
-    const snapshot = popDistinctNavSnapshot(navStackRef.current, readCurrentRoutePath());
-    if (!snapshot) return false;
-    restoreNavSnapshot(snapshot);
-    return true;
-  };
-
-  const backTargetSnapshot = [...navStackRef.current].reverse()[0] ?? null;
-  const backTargetLabel = backTargetSnapshot ? formatBackTargetLabelShared(backTargetSnapshot) : null;
-  const effectiveBackTargetLabel = backTargetLabel;
-
   const [appToast, setAppToast] = useState<string | null>(null);
   const appToastTimeoutRef = useRef<number | null>(null);
   const lastShownAuthErrorRef = useRef<string | null>(null);
@@ -1549,34 +1368,6 @@ export default function App() {
     requireSignIn: () => requireSignIn(),
     canViewPolynet: canViewActiveCommunityPolynet,
   });
-
-  useWebPathRouteLifecycle({
-    publicRouteKind: publicRoute.kind,
-    activePage,
-    activeView,
-    settingsPage,
-    activeCommunitySlug: selectedActiveCommunitySlug,
-    communityTab,
-    communityExperienceMode,
-    communityResourceModuleId,
-    communitySettingsPane,
-    docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
-    operatorTab: activePage === "operator" ? activeOperatorTab : null,
-    applyLocationToState,
-    setStripeConnectReturn,
-    buildAppRoutePath: (state) => applyShellVariantToAppPath(buildAppRoutePath(state) ?? "", shellVariant) || null,
-  });
-
-
-  useEffect(() => {
-    if (shellVariant !== "standard" || !isLikelyMobileDevice) return;
-    if (hasOAuthCallbackParamsInLocation()) return;
-    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const nextPath = applyShellVariantToKnownPath(currentPath, "mobile");
-    if (!nextPath || nextPath === currentPath) return;
-    window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
-    applyLocationToState();
-  }, [applyLocationToState, isLikelyMobileDevice, shellVariant]);
 
   useWebUiPersistenceLifecycle({
     communityAnalyticsRange,
@@ -1915,7 +1706,6 @@ export default function App() {
 
   useEffect(() => {
     if (!session) {
-      navStackRef.current = [];
       setChatgptConnection({
         provider: "chatgpt",
         auth_kind: "oauth_tokens",

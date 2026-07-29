@@ -21,6 +21,9 @@ const onboardingProfileController = read(
 const communityEntryBridgeController = read(
   "apps/web/src/controllers/useWebCommunityEntryBridgeController.ts",
 );
+const shellNavigation = read(
+  "apps/web/src/controllers/useWebShellNavigationController.ts",
+);
 
 const platformBridgeBody =
   communityEntryBridgeController.match(
@@ -102,8 +105,8 @@ assert.match(
   "default-entry request deduplication must remain bound to the authenticated subject",
 );
 assert.match(
-  app,
-  /isRootAppRoutePath[\s\S]*routeTryPolynetFree\(session\)/,
+  onboardingProfileController,
+  /isRootAppRoutePath[\s\S]*routeTryPolynetFree\(params\.session\)/,
   "authenticated root entry must preserve the incomplete-account bridge check",
 );
 assert.match(
@@ -142,8 +145,8 @@ assert.match(
   "legacy Workspace URLs must be classified before auth-aware destination resolution",
 );
 assert.match(
-  app,
-  /readLegacyWorkspaceRouteContext[\s\S]*resolveAndEnterMemberDestination[\s\S]*buildCommunityFunnelPath/,
+  shellNavigation,
+  /readLegacyWorkspaceRouteContext[\s\S]*resolveAndEnter[\s\S]*buildCommunityFunnelPath/,
   "legacy Workspace entry must resolve to an authorized community or a public funnel instead of rendering Workspace",
 );
 

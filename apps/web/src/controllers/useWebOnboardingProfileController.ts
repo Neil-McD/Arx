@@ -17,6 +17,7 @@ import { resolveAuthSubject } from "../../../../shared/authSession";
 import type { UserProfileDetail } from "../../../../shared/communityTypes";
 import { formatProfileMutationError } from "../../../../shared/profileMutationErrors";
 import type { AppPage } from "../../../../shared/appShellNavigation";
+import { isRootAppRoutePath } from "../../../../shared/webAppRouteState";
 import { useWebProfileSettingsUiController } from "./useWebProfileSettingsUiController";
 
 type LegalAcceptance = {
@@ -402,6 +403,25 @@ export function useWebOnboardingProfileController(params: {
   useEffect(() => {
     resetSignedOutState();
   }, [params.profileStorageUserId, resetSignedOutState]);
+
+  useEffect(() => {
+    if (
+      !params.isAuthBootstrapComplete ||
+      !params.session ||
+      params.publicRouteKind !== "app" ||
+      params.activePage !== "landing" ||
+      !isRootAppRoutePath(window.location.pathname || "/")
+    ) {
+      return;
+    }
+    void routeTryPolynetFree(params.session);
+  }, [
+    params.activePage,
+    params.isAuthBootstrapComplete,
+    params.publicRouteKind,
+    params.session,
+    routeTryPolynetFree,
+  ]);
 
   useEffect(() => {
     if (params.activePage !== "onboarding") return;

@@ -26,6 +26,10 @@ function readSourceCorpus(path: string): string {
 const routes = read("shared/webAppRouteState.ts");
 const navigation = read("shared/appShellNavigation.ts");
 const app = read("apps/web/src/App.tsx");
+const shellNavigation = read(
+  "apps/web/src/controllers/useWebShellNavigationController.ts",
+);
+const shellState = read("apps/web/src/controllers/useWebShellState.ts");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const voiceController = read("shared/useWebVoiceInputController.ts");
@@ -93,9 +97,9 @@ assert.match(
   "path canonicalization must wait for the auth-aware legacy redirect",
 );
 assert.match(
-  app,
-  /legacyWorkspaceRedirectRef[\s\S]*readLegacyWorkspaceRouteContext[\s\S]*resolveAndEnterMemberDestination[\s\S]*buildCommunityFunnelPath/,
-  "App must route legacy URLs through authoritative member destination resolution",
+  shellNavigation,
+  /legacyWorkspaceRedirectRef[\s\S]*readLegacyWorkspaceRouteContext[\s\S]*resolveAndEnter[\s\S]*buildCommunityFunnelPath/,
+  "the shell navigation controller must route legacy URLs through authoritative member destination resolution",
 );
 assert.match(
   app,
@@ -165,8 +169,13 @@ for (const [label, source] of [
   assert.doesNotMatch(source, /["'`]\/workspace(?:[\/"'`]|$)/, `${label} links must not enter Workspace`);
 }
 assert.match(
+  shellState,
+  /useState<MobileRootPage>\("community"\)/,
+  "the shell state owner must retain the mobile community root default",
+);
+assert.match(
   app,
-  /useState<MobileRootPage>\("community"\)[\s\S]*mobileRoot=\{showMobileShell && mobileRootPage === "agent"\}/,
+  /mobileRoot=\{showMobileShell && mobileRootPage === "agent"\}/,
   "mobile navigation may open the global member agent without restoring Workspace",
 );
 assert.doesNotMatch(
