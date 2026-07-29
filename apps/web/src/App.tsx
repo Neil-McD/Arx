@@ -31,6 +31,7 @@ import {
 import {
   resolveAuthSubject,
 } from "../../../shared/authSession";
+import { getAuthUid } from "../../../shared/authCore";
 import {
   identifyCloudBusinessVisitor,
 } from "../../../shared/cloudBusinessAnalyticsGateway";
