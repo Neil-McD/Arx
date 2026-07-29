@@ -12,9 +12,6 @@ import { useWebCommunityAdminUiController } from "./useWebCommunityAdminUiContro
 import { useWebCommunityAgentConfigUiController } from "./useWebCommunityAgentConfigUiController";
 import { useWebCommunityJoinRequestsController } from "./useWebCommunityJoinRequestsController";
 import { useWebCommunitySettingsUiController } from "./useWebCommunitySettingsUiController";
-import { useWebCommunitySkillAttachmentsController } from "./useWebCommunitySkillAttachmentsController";
-import { useWebEffectiveSkillsController } from "./useWebEffectiveSkillsController";
-import { useWebUserPlatformSkillsController } from "./useWebUserPlatformSkillsController";
 
 const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
 const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
@@ -112,21 +109,6 @@ export function useWebCommunityAdministrationState(params: {
 
   const settingsUi = useWebCommunitySettingsUiController();
   const agentConfigUi = useWebCommunityAgentConfigUiController();
-  const effectiveSkills = useWebEffectiveSkillsController<AuthSession>({
-    activeCommunityId,
-    session,
-    ensureSession,
-  });
-  const userPlatformSkills = useWebUserPlatformSkillsController<AuthSession>({
-    session,
-    ensureSession,
-  });
-  const communitySkillAttachments =
-    useWebCommunitySkillAttachmentsController<AuthSession>({
-      activeCommunityId,
-      session,
-      ensureSession,
-    });
   const adminUi = useWebCommunityAdminUiController();
 
   return {
@@ -153,9 +135,6 @@ export function useWebCommunityAdministrationState(params: {
     },
     settingsUi,
     agentConfigUi,
-    effectiveSkills,
-    userPlatformSkills,
-    communitySkillAttachments,
     adminUi,
   };
 }
