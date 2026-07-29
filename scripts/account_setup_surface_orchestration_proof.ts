@@ -17,6 +17,9 @@ const controller = read(
 const onboardingProfileController = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
+const communityEntryBridgeController = read(
+  "apps/web/src/controllers/useWebCommunityEntryBridgeController.ts",
+);
 const onboarding = read("apps/web/src/components/WebOnboardingPage.tsx");
 const bridge = read("apps/web/src/components/WebCommunityBridgeCard.tsx");
 
@@ -115,10 +118,13 @@ for (const authority of [
   );
 }
 for (const authority of [
-  "async function completePlatformBridge",
-  "async function completeBridgeAndEnter",
+  "const completePlatformBridge = useCallback",
+  "const completeCommunityBridge = useCallback",
 ]) {
-  assert.ok(app.includes(authority), `App must retain the route bridge ${authority}`);
+  assert.ok(
+    communityEntryBridgeController.includes(authority),
+    `the community entry bridge must own ${authority}`,
+  );
 }
 assert.match(
   app,
@@ -126,13 +132,13 @@ assert.match(
   "App must compose the onboarding profile controller",
 );
 assert.match(
-  app,
-  /completePlatformBridge[\s\S]*resolveAndEnterMemberDestination\(\{ replace: true \}\)/,
+  communityEntryBridgeController,
+  /completePlatformBridge[\s\S]*resolveAndEnter\(\{ replace: true \}\)/,
   "platform bridge must retain canonical platform destination resolution",
 );
 assert.match(
-  app,
-  /completeBridgeAndEnter[\s\S]*resolveMemberEntryDestination\(\{[\s\S]*communityId: entry\.communityId,[\s\S]*communitySlug: entry\.communitySlug,[\s\S]*destination\.page !== "community"/,
+  communityEntryBridgeController,
+  /completeCommunityBridge[\s\S]*resolveDestination\(\{[\s\S]*communityId: entry\.communityId,[\s\S]*communitySlug: entry\.communitySlug,[\s\S]*destination\.page !== "community"/,
   "community bridge must revalidate the exact requested community before route entry",
 );
 

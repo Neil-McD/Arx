@@ -18,11 +18,18 @@ const memberEntryController = read(
 const onboardingProfileController = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
+const communityEntryBridgeController = read(
+  "apps/web/src/controllers/useWebCommunityEntryBridgeController.ts",
+);
 
 const platformBridgeBody =
-  app.match(/async function completePlatformBridge[\s\S]*?\n  \/\* Community bridge Enter/)?.[0] ?? "";
+  communityEntryBridgeController.match(
+    /const completePlatformBridge = useCallback[\s\S]*?\n  const completeCommunityBridge/,
+  )?.[0] ?? "";
 const communityBridgeBody =
-  app.match(/async function completeBridgeAndEnter[\s\S]*?\n  const applyAppRouteState/)?.[0] ?? "";
+  communityEntryBridgeController.match(
+    /const completeCommunityBridge = useCallback[\s\S]*?\n  return \{/,
+  )?.[0] ?? "";
 
 assert.match(
   backend,
@@ -101,7 +108,7 @@ assert.match(
 );
 assert.match(
   platformBridgeBody,
-  /saveOnboardingProfile[\s\S]*finishOnboarding\(\{ navigate: false \}\)[\s\S]*resolveAndEnterMemberDestination/,
+  /saveOnboardingProfile[\s\S]*finishOnboarding\(\{ navigate: false \}\)[\s\S]*resolveAndEnter/,
   "platform bridge completion must save setup before resolving Polynet entry",
 );
 assert.doesNotMatch(
@@ -111,7 +118,7 @@ assert.doesNotMatch(
 );
 assert.match(
   communityBridgeBody,
-  /resolveMemberEntryDestination\(\{[\s\S]*communityId: entry\.communityId[\s\S]*communitySlug: entry\.communitySlug/,
+  /resolveDestination\(\{[\s\S]*communityId: entry\.communityId[\s\S]*communitySlug: entry\.communitySlug/,
   "specific community bridge completion must revalidate its exact destination",
 );
 assert.match(

@@ -74,6 +74,7 @@ import { useWebCommunitySettingsController } from "./controllers/useWebCommunity
 import { useWebShellState } from "./controllers/useWebShellState";
 import { useWebOnboardingProfileController } from "./controllers/useWebOnboardingProfileController";
 import { useWebMemberEntryController } from "./controllers/useWebMemberEntryController";
+import { useWebCommunityEntryBridgeController } from "./controllers/useWebCommunityEntryBridgeController";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { updateSentryUiContext } from "./instrument";
 import {
@@ -452,16 +453,6 @@ export default function App() {
     routeTryPolynetFree,
     resetSignedOutState: resetOnboardingProfileState,
   } = onboardingProfile;
-  /* The bridge (gate card's second state) opens on an entry ATTEMPT — the
-     pitch always converts first. Platform-generic joiners never come here:
-     they onboard on the standalone /onboarding page. */
-  const [isBridgeGateOpen, setIsBridgeGateOpen] = useState(false);
-  const [bridgePendingEntry, setBridgePendingEntry] = useState<{
-    communityId: string;
-    communitySlug: string | null;
-    communityName?: string | null;
-  } | null>(null);
-
   const publicCommunityUi = useWebPublicCommunityUiController<
     PublicCommunityRecord,
     PublicPlanSummary,
@@ -1037,103 +1028,6 @@ export default function App() {
     navigateTo,
     enterDefaultDestination: resolveAndEnterMemberDestination,
   };
-
-  /* One gatekeeper for every entry path (free join, claim redemption, enter
-     click): incomplete setup on the funnel route opens the bridge instead of
-     entering; everything else passes straight through. */
-  function enterCommunityThroughBridge(entry: {
-    communityId: string;
-    communitySlug: string | null;
-    communityName?: string | null;
-  }): void {
-    const setupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
-    if (publicRoute.kind === "community_funnel" && setupStatus && !setupStatus.completed) {
-      const communityName =
-        String(entry.communityName ?? "").trim() ||
-        (activeCommunity?.id === entry.communityId ? activeCommunity.name : "") ||
-        (publicCommunityUi.publicCommunityAccess?.community_id === entry.communityId
-          ? publicCommunityUi.publicCommunity?.name ?? ""
-          : "");
-      setBridgePendingEntry({
-        ...entry,
-        communityName: communityName || null,
-      });
-      setIsBridgeGateOpen(true);
-      return;
-    }
-    void resolveAndEnterMemberDestination({
-      communityId: entry.communityId,
-      communitySlug: entry.communitySlug,
-      replace: true,
-    });
-  }
-
-  /* Platform bridge Enter: save the deterministic account profile, then let
-     the server resolve the canonical Polynet community destination. */
-  async function completePlatformBridge(legalAcceptance: {
-    termsOfServiceVersion: string;
-    privacyPolicyVersion: string;
-  } | null): Promise<boolean> {
-    if (!validateOnboardingProfileInputs(legalAcceptance)) return false;
-    const savedProfile = await saveOnboardingProfile(legalAcceptance);
-    if (!savedProfile) return false;
-    const finished = await finishOnboarding({ navigate: false });
-    if (!finished) return false;
-    const entered = await resolveAndEnterMemberDestination({ replace: true });
-    if (!entered) {
-      setOnboardingError("We could not open Polynet. Try again.");
-      return false;
-    }
-    return true;
-  }
-
-  /* Community bridge Enter: save identity + legal, then revalidate the exact
-     requested community before changing the route. */
-  async function completeBridgeAndEnter(legalAcceptance: {
-    termsOfServiceVersion: string;
-    privacyPolicyVersion: string;
-  } | null): Promise<boolean> {
-    /* Approval applicants have nothing to run — the request is already in;
-       the gate's "Request pending" state takes over once the bridge clears. */
-    if (approvalPending) {
-      const savedProfile = await saveOnboardingProfile(legalAcceptance);
-      if (!savedProfile) return false;
-      const finished = await finishOnboarding({ navigate: false });
-      if (!finished) return false;
-      setIsBridgeGateOpen(false);
-      setBridgePendingEntry(null);
-      return true;
-    }
-    if (!validateOnboardingProfileInputs(legalAcceptance)) return false;
-    const entry = bridgePendingEntry ?? (
-      activeCommunityId
-        ? {
-            communityId: activeCommunityId,
-            communitySlug: selectedActiveCommunitySlug,
-          }
-        : null
-    );
-    if (!entry?.communityId) {
-      setOnboardingError("We could not verify this community. Try again.");
-      return false;
-    }
-    const savedProfile = await saveOnboardingProfile(legalAcceptance);
-    if (!savedProfile) return false;
-    const finished = await finishOnboarding({ navigate: false });
-    if (!finished) return false;
-    const destination = await resolveMemberEntryDestination({
-      communityId: entry.communityId,
-      communitySlug: entry.communitySlug,
-    });
-    if (!destination || destination.page !== "community") {
-      setOnboardingError("We could not open this community. Try again.");
-      return false;
-    }
-    setIsBridgeGateOpen(false);
-    setBridgePendingEntry(null);
-    applyMemberEntryDestination(destination, { replace: true });
-    return true;
-  }
 
   const applyAppRouteState = useCallback((nextAppRoute: AppRouteState) => {
     const normalizedCommunitySlug = String(nextAppRoute.communitySlug ?? "").trim() || null;
@@ -2394,6 +2288,30 @@ export default function App() {
     sessionDependency: Boolean(session),
     loadPublicCommunity,
   });
+  const communityEntryBridge = useWebCommunityEntryBridgeController({
+    publicRouteKind: shellPublicRoute.kind,
+    accountSetupStatus: effectiveAccountSetupStatus,
+    activeCommunity,
+    activeCommunityId,
+    selectedActiveCommunitySlug,
+    publicCommunity: publicCommunityUi.publicCommunity,
+    publicCommunityAccessId:
+      publicCommunityUi.publicCommunityAccess?.community_id ?? null,
+    approvalPending,
+    validateProfileInputs: validateOnboardingProfileInputs,
+    saveOnboardingProfile,
+    finishOnboarding,
+    setOnboardingError,
+    resolveDestination: resolveMemberEntryDestination,
+    applyDestination: applyMemberEntryDestination,
+    resolveAndEnter: resolveAndEnterMemberDestination,
+  });
+  const {
+    isBridgeGateOpen,
+    enterCommunity: enterCommunityThroughBridge,
+    completePlatformBridge,
+    completeCommunityBridge: completeBridgeAndEnter,
+  } = communityEntryBridge;
   /* Visitor lens: locked shell-nav tabs reopen the join gate on the funnel
      surface (nonce bump crosses the shell/surface boundary). */
   const [visitorGateNonce, setVisitorGateNonce] = useState(0);
