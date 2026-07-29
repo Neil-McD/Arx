@@ -6,6 +6,7 @@ const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
 const attachmentBridge = readFileSync(join(root, "convex/communityInteractionAttachmentBridge.ts"), "utf8");
 const legacyAttachments = readFileSync(join(root, "convex/communityInteractionLegacyAttachments.ts"), "utf8");
+const gateway = readFileSync(join(root, "shared/cloudCommunityInteractionsGateway.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 
@@ -33,6 +34,31 @@ assert.match(
   packageJson,
   /"check:community-interactions-read-model-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_interactions_read_model_contract_proof\.ts"/,
   "package scripts should expose the community interactions read-model proof",
+);
+assert.match(
+  gateway,
+  /\(api as any\)\.communityInteractions\.listCommunityInteractionRoots/,
+  "gateway should subscribe to roots through the canonical communityInteractions module",
+);
+assert.match(
+  gateway,
+  /\(api as any\)\.communityInteractions\.listCommunityInteractionReplies/,
+  "gateway should subscribe to replies through the canonical communityInteractions module",
+);
+assert.match(
+  gateway,
+  /\(api as any\)\.communityInteractions\.getMyCommunityAgentDockTranscript/,
+  "gateway should subscribe to the agent transcript through the canonical communityInteractions module",
+);
+assert.match(
+  gateway,
+  /\(api as any\)\.communityInteractions\.getMyCommunityAgentDockTurn/,
+  "gateway should subscribe to the agent turn through the canonical communityInteractions module",
+);
+assert.doesNotMatch(
+  gateway,
+  /\(api as any\)\.community\.(?:listCommunityInteractionRoots|listCommunityInteractionReplies|getMyCommunityAgentDockTranscript|getMyCommunityAgentDockTurn)/,
+  "gateway should not retain live subscriptions to the deleted community module surface",
 );
 
 assert.match(

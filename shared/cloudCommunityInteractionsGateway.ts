@@ -367,7 +367,7 @@ export function subscribeCloudCommunityInteractionRoots(params: {
   onError?: (error: unknown) => void;
 }): () => void {
   const watch = params.liveClient.client.watchQuery(
-    (api as any).community.listCommunityInteractionRoots,
+    (api as any).communityInteractions.listCommunityInteractionRoots,
     {
       authSubject: params.liveClient.authSubject,
       communityId: params.communityId as any,
@@ -397,7 +397,7 @@ export function subscribeCloudCommunityInteractionReplies(params: {
   onError?: (error: unknown) => void;
 }): () => void {
   const watch = params.liveClient.client.watchQuery(
-    (api as any).community.listCommunityInteractionReplies,
+    (api as any).communityInteractions.listCommunityInteractionReplies,
     {
       authSubject: params.liveClient.authSubject,
       rootId: params.rootId as any,
@@ -425,7 +425,7 @@ export function subscribeCloudCommunityAgentDockTranscript(params: {
   onError?: (error: unknown) => void;
 }): () => void {
   const watch = params.liveClient.client.watchQuery(
-    (api as any).community.getMyCommunityAgentDockTranscript,
+    (api as any).communityInteractions.getMyCommunityAgentDockTranscript,
     {
       authSubject: params.liveClient.authSubject,
       communityId: params.communityId as any,
@@ -454,7 +454,7 @@ export function subscribeCloudCommunityAgentDockTurn(params: {
   onError?: (error: unknown) => void;
 }): () => void {
   const watch = params.liveClient.client.watchQuery(
-    (api as any).community.getMyCommunityAgentDockTurn,
+    (api as any).communityInteractions.getMyCommunityAgentDockTurn,
     {
       authSubject: params.liveClient.authSubject,
       communityId: params.communityId as any,
