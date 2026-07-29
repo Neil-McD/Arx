@@ -9,6 +9,7 @@ function read(path: string): string {
 const navigation = read("shared/appShellNavigation.ts");
 const routeState = read("shared/webAppRouteState.ts");
 const app = read("apps/web/src/App.tsx");
+const shellState = read("apps/web/src/controllers/useWebShellState.ts");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const settingsSection = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
@@ -121,9 +122,14 @@ assert.match(
 );
 
 assert.match(
+  shellState,
+  /const \[communitySettingsPane, setCommunitySettingsPane\] =\s*useState<CommunitySettingsPane>/,
+  "the shell state controller must own the route-level settings pane",
+);
+assert.match(
   app,
-  /const \[communitySettingsPane, setCommunitySettingsPane\] = useState<CommunitySettingsPane>/,
-  "App must keep the settings pane in route-level state",
+  /useWebShellState\(\{[\s\S]*initialAppRoute,[\s\S]*initialPublicRoute,[\s\S]*initialShellVariant,[\s\S]*\}\)/,
+  "App must compose the shell state controller",
 );
 assert.match(
   app,

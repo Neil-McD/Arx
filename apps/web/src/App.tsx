@@ -73,6 +73,7 @@ import { useWebAuthenticatedIdentityController } from "./controllers/useWebAuthe
 import { useWebCommunityMemberManagementController } from "./controllers/useWebCommunityMemberManagementController";
 import { useWebCommunityAgentAndFunnelController } from "./controllers/useWebCommunityAgentAndFunnelController";
 import { useWebCommunitySettingsController } from "./controllers/useWebCommunitySettingsController";
+import { useWebShellState } from "./controllers/useWebShellState";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { updateSentryUiContext } from "./instrument";
 import {
@@ -128,7 +129,6 @@ import {
   type SettingsGroup,
   type SettingsPage,
   settingsGroupLabel,
-  settingsGroupForPage,
 } from "../../../shared/appShellNavigation";
 import type {
   CommunityAiFeedPost as SharedCommunityAiFeedPost,
@@ -199,14 +199,6 @@ import { routePendingAuthIntent } from "../../../shared/authResumeRouter";
 import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
 import { resolveUserAccessPolicy } from "../../../shared/capabilities";
 import { isStandaloneWebApp } from "../../../shared/browserRuntimeMode";
-import {
-  APP_THEME_STORAGE_KEY,
-  DEFAULT_APP_THEME,
-  LEGACY_APP_THEME_STORAGE_KEY,
-  applyAppThemeAttributes,
-  parseAppTheme,
-  type AppTheme,
-} from "../../../shared/theme";
 import { useCommunityRailOrder } from "../../../shared/useCommunityRailOrder";
 import { useRailPointerReorder } from "../../../shared/useRailPointerReorder";
 import { useWebCommunityAccessController } from "../../../shared/useWebCommunityAccessController";
@@ -277,7 +269,6 @@ import { WebDirectMessagesHost } from "./components/WebDirectMessagesHost";
 import { useDirectMessageWebNotifications } from "./controllers/useDirectMessageWebNotifications";
 import { useWebDirectMessagesController } from "./controllers/useWebDirectMessagesController";
 import { mergeUserProfileEntry } from "../../../shared/userProfileMerge";
-import type { MobileOverlay, MobileRootPage } from "./components/webShellChromeShared";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
@@ -404,45 +395,48 @@ export default function App() {
     [profileStorageUserId],
   );
 
-  const [publicRoute, setPublicRoute] = useState<PublicRoute>(() => initialPublicRoute);
-  const [shellVariant, setShellVariant] = useState<AppShellVariant>(() => initialShellVariant);
-  const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay>(null);
-  const [mobileRootPage, setMobileRootPage] = useState<MobileRootPage>("community");
-  const [communityOnboardingFirstPostFocusRequest, setCommunityOnboardingFirstPostFocusRequest] =
-    useState(0);
-  const [mobileSettingsView, setMobileSettingsView] = useState<"index" | "detail">("detail");
-  const [mobileChromeReadingMode, setMobileChromeReadingMode] = useState(false);
-
-  const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "landing");
-  const [activeView, setActiveView] = useState<AppView>(() => initialAppRoute?.view ?? "home");
-  const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => initialAppRoute?.settingsPage ?? "account");
-  const [selectedProductDocSlug, setSelectedProductDocSlug] = useState<string | null>(
-    () => initialAppRoute?.docsSlug ?? null,
-  );
-  const [activeOperatorTab, setActiveOperatorTab] = useState<OperatorTab>(
-    () => initialAppRoute?.operatorTab ?? "platform",
-  );
-  const settingsGroup = settingsGroupForPage(settingsPage);
-  const [appTheme, setAppTheme] = useState<AppTheme>(() => {
-    try {
-      const stored = parseAppTheme(
-        readFirstLocalStorageValue([APP_THEME_STORAGE_KEY, LEGACY_APP_THEME_STORAGE_KEY]),
-      );
-      if (stored) return stored;
-      return DEFAULT_APP_THEME;
-    } catch {
-      return DEFAULT_APP_THEME;
-    }
+  const shellState = useWebShellState({
+    initialAppRoute,
+    initialPublicRoute,
+    initialShellVariant,
   });
-  useEffect(() => {
-    applyAppThemeAttributes(appTheme, document.documentElement);
-    try {
-      localStorage.setItem(APP_THEME_STORAGE_KEY, appTheme);
-      localStorage.removeItem(LEGACY_APP_THEME_STORAGE_KEY);
-    } catch {
-      // Theme persistence is a preference only; the active document theme is already applied.
-    }
-  }, [appTheme]);
+  const {
+    publicRoute,
+    setPublicRoute,
+    shellVariant,
+    setShellVariant,
+    mobileOverlay,
+    setMobileOverlay,
+    mobileRootPage,
+    setMobileRootPage,
+    communityOnboardingFirstPostFocusRequest,
+    setCommunityOnboardingFirstPostFocusRequest,
+    mobileSettingsView,
+    setMobileSettingsView,
+    mobileChromeReadingMode,
+    setMobileChromeReadingMode,
+    activePage,
+    setActivePage,
+    activeView,
+    setActiveView,
+    settingsPage,
+    setSettingsPage,
+    settingsGroup,
+    selectedProductDocSlug,
+    setSelectedProductDocSlug,
+    activeOperatorTab,
+    setActiveOperatorTab,
+    communityTab,
+    setCommunityTab,
+    communityExperienceMode,
+    setCommunityExperienceMode,
+    communityResourceModuleId,
+    setCommunityResourceModuleId,
+    communitySettingsPane,
+    setCommunitySettingsPane,
+    appTheme,
+    setAppTheme,
+  } = shellState;
   const [cloudProfile, setCloudProfile] = useState<UserProfileDetail | null>(null);
   const [accountSetupStatus, setAccountSetupStatus] = useState<AccountSetupStatus | null>(null);
   const [isLoadingAccountSetupStatus, setIsLoadingAccountSetupStatus] = useState(false);
@@ -594,22 +588,6 @@ export default function App() {
       storageKey: communityRailOrderStorageKey,
     });
   const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
-  const [communityTab, setCommunityTab] = useState<CommunityTab>(() => initialAppRoute?.communityTab ?? "chat");
-  const [communityExperienceMode, setCommunityExperienceMode] = useState<CommunityExperienceMode>(() =>
-    initialAppRoute?.page === "community"
-      ? initialAppRoute.communityExperienceMode ?? "standard"
-      : "standard",
-  );
-  const [communityResourceModuleId, setCommunityResourceModuleId] = useState<string | null>(() =>
-    initialAppRoute?.page === "community" && initialAppRoute.communityTab === "resources"
-      ? initialAppRoute.communityResourceModuleId ?? null
-      : null,
-  );
-  const [communitySettingsPane, setCommunitySettingsPane] = useState<CommunitySettingsPane>(() =>
-    initialAppRoute?.page === "community" && initialAppRoute.communityTab === "settings"
-      ? initialAppRoute.communitySettingsPane ?? "community"
-      : "community",
-  );
   const {
     activeCommunity,
     activeCommunityId,
