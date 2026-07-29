@@ -54,11 +54,6 @@ import {
 import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 import { useWebCommunityUiController } from "./controllers/useWebCommunityUiController";
-import { useWebCommunityAgentConfigUiController } from "./controllers/useWebCommunityAgentConfigUiController";
-import { useWebCommunitySkillAttachmentsController } from "./controllers/useWebCommunitySkillAttachmentsController";
-import { useWebCommunityAdminUiController } from "./controllers/useWebCommunityAdminUiController";
-import { useWebCommunitySettingsUiController } from "./controllers/useWebCommunitySettingsUiController";
-import { useWebCommunityJoinRequestsController } from "./controllers/useWebCommunityJoinRequestsController";
 import { useWebPersonalAccountSettingsController } from "./controllers/useWebPersonalAccountSettingsController";
 import {
   COMMUNITY_INTERACTION_PROJECTION_ENABLED,
@@ -73,12 +68,14 @@ import {
   useWebCommunityContentController,
 } from "./controllers/useWebCommunityContentController";
 import { useWebCommunityAttentionModel } from "./controllers/useWebCommunityAttentionController";
+import {
+  useWebCommunityAdministrationState,
+  type WebCommunityJoinRequest,
+} from "./controllers/useWebCommunityAdministrationState";
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
-import { useWebEffectiveSkillsController } from "./controllers/useWebEffectiveSkillsController";
-import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlatformSkillsController";
 import { buildEffectiveSkills } from "../../../shared/effectiveSkills";
 import { COMMUNITY_MANAGER_PLATFORM_SKILLS } from "../../../shared/platformSkills";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
@@ -153,11 +150,8 @@ import {
 import type {
   CommunityAiFeedPost as SharedCommunityAiFeedPost,
   CommunityAiFeedReactionType as SharedCommunityAiFeedReactionType,
-  AnalyticsRange as SharedAnalyticsRange,
   CommunityAccess as SharedCommunityAccess,
-  CommunityAnalyticsSeries as SharedCommunityAnalyticsSeries,
   CommunityAgentConfig as SharedCommunityAgentConfig,
-  CommunityAnalyticsSummary as SharedCommunityAnalyticsSummary,
   CommunityFunnelConfig as SharedCommunityFunnelConfig,
   DiscoverCommunitySnapshot as SharedDiscoverCommunitySnapshot,
   PublicPlanSummary as SharedPublicPlanSummary,
@@ -241,7 +235,6 @@ import { useWebDiscoverController } from "../../../shared/useWebDiscoverControll
 import { useWebToastController } from "../../../shared/useWebToastController";
 import { useWebSettingsImageUploadController } from "../../../shared/useWebSettingsImageUploadController";
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
-import { useCommunityDirectoryController } from "../../../shared/useCommunityDirectoryController";
 import { useCommunityDirectoryLifecycle } from "../../../shared/useCommunityDirectoryLifecycle";
 import { useCommunityAgentConfigController } from "../../../shared/useCommunityAgentDraftController";
 import { useCommunityFunnelController } from "../../../shared/useCommunityFunnelController";
@@ -296,7 +289,6 @@ import { useWebPostAuthBillingLifecycle } from "./controllers/useWebPostAuthBill
 import { useWebPostAuthStripeConnectLifecycle } from "./controllers/useWebPostAuthStripeConnectLifecycle";
 import { useWebPathRouteLifecycle } from "./controllers/useWebPathRouteLifecycle";
 import { useWebCommunityRouteController } from "./controllers/useWebCommunityRouteController";
-import { useWebActiveCommunityShellController } from "./controllers/useWebActiveCommunityShellController";
 import { useWebJoinedCommunityRouteResolution } from "./controllers/useWebJoinedCommunityRouteResolution";
 import { useWebSelectedCommunityController } from "./controllers/useWebSelectedCommunityController";
 import { useWebPublicCommunityRouteController } from "./controllers/useWebPublicCommunityRouteController";
@@ -421,8 +413,6 @@ type CommunityVoiceTranscriptTarget = {
 type CommunityVoiceButtonOwner = "main" | "drawer";
 type CommunityAgentConfig = SharedCommunityAgentConfig<CommunityAgentLanding>;
 type CommunityFunnelConfig = SharedCommunityFunnelConfig;
-const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
-const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
 const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
 
@@ -439,23 +429,9 @@ function buildPremiumSubscriptionReturnUrl(): string {
 }
 
 type CommunityAccess = SharedCommunityAccess;
-type CommunityAnalyticsSummary = SharedCommunityAnalyticsSummary;
-type CommunityAnalyticsSeries = SharedCommunityAnalyticsSeries;
-type AnalyticsRange = SharedAnalyticsRange;
 type UserProfile = SharedUserProfile;
 type UserProfileDetail = SharedUserProfileDetail;
-type CommunityJoinRequest = {
-  id: string;
-  community_id: string;
-  user_id: string;
-  status: string;
-  message: string | null;
-  created_at: string;
-  updated_at: string;
-  decided_at: string | null;
-  decided_by: string | null;
-  denied_until: string | null;
-};
+type CommunityJoinRequest = WebCommunityJoinRequest;
 
 type MyCommunityJoinRequest = {
   community_id: string;
@@ -1349,6 +1325,11 @@ export default function App() {
     handleSaveCommunityEvent,
     handleCancelCommunityEvent,
   } = communityContent;
+  const communityAdministration = useWebCommunityAdministrationState({
+    activeCommunityId,
+    ensureSession: ensureUsableAuthSession,
+    session,
+  });
   const {
     communityJoinRequests,
     setCommunityJoinRequests,
@@ -1358,15 +1339,13 @@ export default function App() {
     setCommunityJoinRequestsError,
     decidingCommunityJoinRequestId,
     setDecidingCommunityJoinRequestId,
-  } = useWebCommunityJoinRequestsController<CommunityJoinRequest>({
-    activeCommunityId,
-  });
-  const [isSettingCommunityFreeAccessMode, setIsSettingCommunityFreeAccessMode] = useState(false);
-  const [communityFreeAccessModeError, setCommunityFreeAccessModeError] = useState<string | null>(null);
-  useEffect(() => {
-    setIsSettingCommunityFreeAccessMode(false);
-    setCommunityFreeAccessModeError(null);
-  }, [activeCommunityId]);
+  } = communityAdministration.joinRequests;
+  const {
+    isSetting: isSettingCommunityFreeAccessMode,
+    setIsSetting: setIsSettingCommunityFreeAccessMode,
+    error: communityFreeAccessModeError,
+    setError: setCommunityFreeAccessModeError,
+  } = communityAdministration.freeAccess;
   const {
     communityDirectoryMembers,
     communityDirectoryMemberCount,
@@ -1376,10 +1355,7 @@ export default function App() {
     communityDirectoryMembersLoadError,
     loadCommunityDirectoryMembers,
     loadMoreCommunityDirectoryMembers,
-  } = useCommunityDirectoryController<AuthSession>({
-    activeCommunityId,
-    ...authenticatedSessionArg,
-  });
+  } = communityAdministration.directory;
   const {
     activeCommunityAccess,
     isLoadingCommunityAccess,
@@ -1407,11 +1383,7 @@ export default function App() {
     activeCommunityOnlineUserIds,
     activeCommunityPresenceSummary,
     reloadActiveCommunityAccess,
-  } = useWebActiveCommunityShellController<AuthSession>({
-    activeCommunityId,
-    session: session,
-    ensureSession: ensureUsableAuthSession,
-  });
+  } = communityAdministration.access;
   canMentionEverybodyRef.current = canManageMembersActiveCommunity;
 
   useEffect(() => {
@@ -1441,42 +1413,20 @@ export default function App() {
     isLoadingCommunityAccess,
   ]);
 
-  const [communityAnalyticsSummary, setCommunityAnalyticsSummary] = useState<CommunityAnalyticsSummary>({
-    total_members: null,
-    page_visits_window: null,
-    new_members_window: null,
-    conversion_rate_window: null,
-    mrr_base_units: null,
-    currency: null,
-    currency_decimals: null,
-    active_members_window: null,
-    retention_window: null,
-    total_resources: null,
-    resources_added_window: null,
-  });
-  const [communityAnalyticsSeries, setCommunityAnalyticsSeries] = useState<CommunityAnalyticsSeries>({
-    visits: [],
-    members: [],
-    revenue: [],
-  });
-  const [communityAnalyticsRange, setCommunityAnalyticsRange] = useState<AnalyticsRange>(() => {
-    try {
-      const stored = readFirstLocalStorageValue([
-        COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY,
-        LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY,
-      ]);
-      if (stored && ["7d", "30d", "90d", "1y", "all"].includes(stored)) {
-        return stored as AnalyticsRange;
-      }
-    } catch {
-      // ignore
-    }
-    return "30d";
-  });
-  const [isLoadingCommunityAnalytics, setIsLoadingCommunityAnalytics] = useState(false);
-  const [communityAnalyticsError, setCommunityAnalyticsError] = useState<string | null>(null);
+  const {
+    summary: communityAnalyticsSummary,
+    setSummary: setCommunityAnalyticsSummary,
+    series: communityAnalyticsSeries,
+    setSeries: setCommunityAnalyticsSeries,
+    range: communityAnalyticsRange,
+    setRange: setCommunityAnalyticsRange,
+    isLoading: isLoadingCommunityAnalytics,
+    setIsLoading: setIsLoadingCommunityAnalytics,
+    error: communityAnalyticsError,
+    setError: setCommunityAnalyticsError,
+  } = communityAdministration.analytics;
 
-  const communitySettingsUi = useWebCommunitySettingsUiController();
+  const communitySettingsUi = communityAdministration.settingsUi;
   const {
     communitySettingsName,
     setCommunitySettingsName,
@@ -1531,7 +1481,7 @@ export default function App() {
     communityPricingDirtyRef,
     markCommunitySettingsDirty,
   } = communitySettingsUi;
-  const communityAgentConfigUi = useWebCommunityAgentConfigUiController();
+  const communityAgentConfigUi = communityAdministration.agentConfigUi;
   const {
     isLoadingCommunityAgentConfig,
     setIsLoadingCommunityAgentConfig,
@@ -1558,11 +1508,7 @@ export default function App() {
     effectiveSkillsLoadedKeyRef,
     clearEffectiveSkills,
     loadEffectiveSkills,
-  } = useWebEffectiveSkillsController<AuthSession>({
-    activeCommunityId,
-    session,
-    ensureSession: ensureUsableAuthSession,
-  });
+  } = communityAdministration.effectiveSkills;
   const {
     userPlatformSkills,
     isLoadingUserPlatformSkills,
@@ -1578,10 +1524,7 @@ export default function App() {
     saveUserPlatformSkill,
     updateUserPlatformSkill,
     deleteUserPlatformSkill,
-  } = useWebUserPlatformSkillsController<AuthSession>({
-    session,
-    ensureSession: ensureUsableAuthSession,
-  });
+  } = communityAdministration.userPlatformSkills;
   const {
     communitySkillAttachments,
     ownedSkillPackages,
@@ -1603,13 +1546,9 @@ export default function App() {
     attachSkillPackageToCommunity,
     updateCommunitySkillAttachment,
     detachCommunitySkill,
-  } = useWebCommunitySkillAttachmentsController<AuthSession>({
-    activeCommunityId,
-    session,
-    ensureSession: ensureUsableAuthSession,
-  });
+  } = communityAdministration.communitySkillAttachments;
 
-  const communityAdminUi = useWebCommunityAdminUiController();
+  const communityAdminUi = communityAdministration.adminUi;
   const {
     communityFunnelConfig,
     setCommunityFunnelConfig,

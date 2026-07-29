@@ -18,16 +18,25 @@ const communityUiController = read(
 );
 const communityGateway = read("shared/cloudCommunityAdminGateway.ts");
 const accessViewModel = read("shared/communityAccessViewModel.ts");
+const communitySettingsPaneContract = navigation.slice(
+  navigation.indexOf("export const COMMUNITY_SETTINGS_PANES"),
+  navigation.indexOf("export type CommunitySettingsPane"),
+);
 
-for (const pane of ["community", "workflows", "integrations"] as const) {
+for (const pane of ["community", "workflows"] as const) {
   assert.match(navigation, new RegExp(`"${pane}"`), `navigation contract missing ${pane} pane slug`);
   assert.match(settingsSection, new RegExp(`${pane}`), `settings UI missing ${pane} pane`);
 }
 
 assert.match(
   navigation,
-  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*"integrations"[\s\S]*\] as const/,
+  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*\] as const/,
   "community settings panes must be a shared slug union",
+);
+assert.doesNotMatch(
+  communitySettingsPaneContract,
+  /"integrations"/,
+  "third-party integrations must not remain a community settings pane",
 );
 assert.doesNotMatch(
   navigation,
