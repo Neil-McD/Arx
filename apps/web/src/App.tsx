@@ -72,6 +72,7 @@ import {
   getWebCommunityEventsMonthRange,
   useWebCommunityContentController,
 } from "./controllers/useWebCommunityContentController";
+import { useWebCommunityAttentionModel } from "./controllers/useWebCommunityAttentionController";
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
@@ -94,9 +95,6 @@ import {
 import {
   useCommunityAiFeedController,
 } from "../../../shared/useCommunityAiFeedController";
-import { useCommunityAttentionController } from "../../../shared/useCommunityAttentionController";
-import { markCloudCommunityChatReadAt } from "../../../shared/cloudCommunityAttentionGateway";
-import { setCloudCommunityTyping } from "../../../shared/cloudCommunityChatGateway";
 import {
   saveCloudCommunityAbout,
   saveCloudCommunityPublicPresentation,
@@ -236,7 +234,6 @@ import {
   parseAppTheme,
   type AppTheme,
 } from "../../../shared/theme";
-import { useCommunityTypingPresence } from "../../../shared/useCommunityTypingPresence";
 import { useCommunityRailOrder } from "../../../shared/useCommunityRailOrder";
 import { useRailPointerReorder } from "../../../shared/useRailPointerReorder";
 import { useWebCommunityAccessController } from "../../../shared/useWebCommunityAccessController";
@@ -1475,111 +1472,6 @@ export default function App() {
     communityTab,
     isLoadingCommunityAccess,
   ]);
-
-  const communityTypingUsers = useCommunityTypingPresence({
-    isEnabled: activePage === "community" && communityTab === "chat" && hasResolvedCommunityChat,
-    session,
-    ensureSession: ensureUsableAuthSession,
-    activeCommunityId,
-    canPostMessages: canPostMessagesActiveCommunity,
-    inputValue: communityMessageInput,
-  });
-  // Thread-scoped typing signal (the thread reply composer lives in the panel, so it
-  // pings this throttled callback with the open thread's rootId).
-  const threadTypingLastSentRef = useRef(0);
-  const signalThreadTyping = useCallback((rootId: string) => {
-    const communityId = activeCommunityId;
-    if (!session || !communityId || !rootId || !canPostMessagesActiveCommunity) return;
-    const now = Date.now();
-    if (now - threadTypingLastSentRef.current < 600) return;
-    threadTypingLastSentRef.current = now;
-    void (async () => {
-      try {
-        const usable = await ensureUsableAuthSession(session);
-        if (!usable) return;
-        await setCloudCommunityTyping({ session: usable, communityId, rootId });
-      } catch {
-        // Soft failure: the reply still sends through the mutation path.
-      }
-    })();
-  }, [session, activeCommunityId, canPostMessagesActiveCommunity, ensureUsableAuthSession]);
-  const communityAttentionCommunityIds = useMemo(
-    () => communities.map((community) => community.id),
-    [communities],
-  );
-  const { attentionByCommunityId, markCommunitySurfaceSeen } = useCommunityAttentionController<AuthSession>({
-    session,
-    ensureSession: ensureUsableAuthSession,
-    communityIds: communityAttentionCommunityIds,
-  });
-  const communitySeenAcknowledgeKeyBySurfaceRef = useRef<Record<string, string>>({});
-  // Canonical-chat "new messages" divider boundary: frozen on open, advanced on leave.
-  const [chatDividerBoundary, setChatDividerBoundary] = useState<number | null>(null);
-  const chatDividerCapturedForRef = useRef<string | null>(null);
-  const activeChatCommunityRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!(activePage === "community" && communityTab === "chat" && activeCommunityId)) return;
-    if (chatDividerCapturedForRef.current === activeCommunityId) return;
-    const indicators = attentionByCommunityId[activeCommunityId];
-    if (!indicators) return;
-    chatDividerCapturedForRef.current = activeCommunityId;
-    setChatDividerBoundary(
-      typeof indicators.chat_last_seen_at === "number" ? indicators.chat_last_seen_at : null,
-    );
-  }, [activePage, communityTab, activeCommunityId, attentionByCommunityId]);
-  useEffect(() => {
-    const onChatCommunity =
-      activePage === "community" && communityTab === "chat" && activeCommunityId ? activeCommunityId : null;
-    const previous = activeChatCommunityRef.current;
-    if (previous && previous !== onChatCommunity) {
-      if (session) {
-        void markCloudCommunityChatReadAt({
-          session,
-          communityId: previous,
-          seenAtMs: Date.now(),
-        }).catch(() => {});
-      }
-      chatDividerCapturedForRef.current = null;
-      setChatDividerBoundary(null);
-    }
-    activeChatCommunityRef.current = onChatCommunity;
-  }, [activePage, communityTab, activeCommunityId, session]);
-  // Advance the read boundary while actively viewing + caught up (so a refresh can't
-  // re-show already-read messages). The on-screen divider stays frozen for the session.
-  const chatReadAdvanceTimerRef = useRef<number | null>(null);
-  const handleChatCaughtUp = useCallback(() => {
-    if (!activeCommunityId || !session) return;
-    if (chatReadAdvanceTimerRef.current !== null) return;
-    const communityId = activeCommunityId;
-    const currentSession = session;
-    chatReadAdvanceTimerRef.current = window.setTimeout(() => {
-      chatReadAdvanceTimerRef.current = null;
-      void markCloudCommunityChatReadAt({
-        session: currentSession,
-        communityId,
-        seenAtMs: Date.now(),
-      }).catch(() => {});
-    }, 2000);
-  }, [activeCommunityId, session]);
-  useEffect(() => {
-    const advanceOnHide = () => {
-      if (document.visibilityState !== "hidden") return;
-      const communityId = activeChatCommunityRef.current;
-      if (communityId && session) {
-        void markCloudCommunityChatReadAt({
-          session,
-          communityId,
-          seenAtMs: Date.now(),
-        }).catch(() => {});
-      }
-    };
-    document.addEventListener("visibilitychange", advanceOnHide);
-    window.addEventListener("pagehide", advanceOnHide);
-    return () => {
-      document.removeEventListener("visibilitychange", advanceOnHide);
-      window.removeEventListener("pagehide", advanceOnHide);
-    };
-  }, [session]);
 
   const [communityAnalyticsSummary, setCommunityAnalyticsSummary] = useState<CommunityAnalyticsSummary>({
     total_members: null,
@@ -3377,180 +3269,49 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
   });
 
-  const latestActiveCommunityChatActivityAt = useMemo(() => {
-    const timestamps: number[] = [];
-    const pushIsoTimestamp = (raw: string | null | undefined) => {
-      const ms = Date.parse(String(raw ?? ""));
-      if (Number.isFinite(ms) && ms > 0) timestamps.push(ms);
-    };
-    for (const bundle of communityInteractionRoots) {
-      if (String(bundle.root.id ?? "").startsWith("pending:")) continue;
-      pushIsoTimestamp(bundle.root.created_at);
-      pushIsoTimestamp(bundle.root.last_reply_at);
-    }
-    for (const replies of Object.values(communityInteractionRepliesByRootId)) {
-      for (const bundle of replies) {
-        if (String(bundle.reply.id ?? "").startsWith("pending:")) continue;
-        pushIsoTimestamp(bundle.reply.created_at);
-      }
-    }
-    for (const message of communityMessages) {
-      if (String(message.id ?? "").startsWith("pending-")) continue;
-      pushIsoTimestamp(message.created_at);
-    }
-    return timestamps.length > 0 ? Math.max(...timestamps) : null;
-  }, [communityInteractionRepliesByRootId, communityInteractionRoots, communityMessages]);
-
-  const latestActiveCommunityAiFeedCreatedAt = useMemo(() => {
-    const timestamps = activeCommunityFeedState.live
-      .map((post) => Date.parse(post.created_at))
-      .filter((value) => Number.isFinite(value));
-    if (timestamps.length === 0) return null;
-    return Math.max(...timestamps);
-  }, [activeCommunityFeedState.live]);
-
-  const latestActiveCommunityResourcesCreatedAt = useMemo(() => {
-    const timestamps = communityResources
-      .map((resource) => Date.parse(resource.created_at))
-      .filter((value) => Number.isFinite(value));
-    if (timestamps.length === 0) return null;
-    return Math.max(...timestamps);
-  }, [communityResources]);
-  const latestActiveCommunityEventsUpdatedAt = useMemo(() => {
-    const timestamps = communityEvents
-      .map((event) => Date.parse(event.updated_at))
-      .filter((value) => Number.isFinite(value));
-    if (timestamps.length === 0) return null;
-    return Math.max(...timestamps);
-  }, [communityEvents]);
-  useEffect(() => {
-    communitySeenAcknowledgeKeyBySurfaceRef.current = {};
-  }, [session?.user?.id]);
-
-  useEffect(() => {
-    if (
-      activePage !== "community"
-      || communityTab !== "chat"
-      || !activeCommunityId
-      || !hasResolvedCommunityChat
-      || !isUserAtBottom
-      || latestActiveCommunityChatActivityAt === null
-    ) {
-      return;
-    }
-    const requestKey = `${activeCommunityId}:chat`;
-    const markerKey = String(latestActiveCommunityChatActivityAt);
-    if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) return;
-    communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] = markerKey;
-    void markCommunitySurfaceSeen(activeCommunityId, "chat", {
-      seenAtMs: latestActiveCommunityChatActivityAt,
-    }).catch(() => {
-      if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) {
-        delete communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey];
-      }
-    });
-  }, [
+  const communityAttentionCommunityIds = useMemo(
+    () => communities.map((community) => community.id),
+    [communities],
+  );
+  const {
+    typingPresence: communityTypingUsers,
+    signalThreadTyping,
+    attentionByCommunityId,
+    chatDividerBoundary,
+    handleChatCaughtUp,
+  } = useWebCommunityAttentionModel({
     activeCommunityId,
     activePage,
+    canPostMessages: canPostMessagesActiveCommunity,
+    communityIds: communityAttentionCommunityIds,
     communityTab,
-    hasResolvedCommunityChat,
-    isUserAtBottom,
-    latestActiveCommunityChatActivityAt,
-    markCommunitySurfaceSeen,
-  ]);
-
-  useEffect(() => {
-    if (
-      activePage !== "community"
-      || communityTab !== "ai_feed"
-      || !activeCommunityId
-      || activeCommunityFeedState.isLoading
-      || latestActiveCommunityAiFeedCreatedAt === null
-    ) {
-      return;
-    }
-    const requestKey = `${activeCommunityId}:ai_feed`;
-    const markerKey = String(latestActiveCommunityAiFeedCreatedAt);
-    if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) return;
-    communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] = markerKey;
-    void markCommunitySurfaceSeen(activeCommunityId, "ai_feed").catch(() => {
-      if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) {
-        delete communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey];
-      }
-    });
-  }, [
-    activeCommunityId,
-    activePage,
-    communityTab,
-    activeCommunityFeedState.isLoading,
-    latestActiveCommunityAiFeedCreatedAt,
-    markCommunitySurfaceSeen,
-  ]);
-
-  useEffect(() => {
-    if (
-      activePage !== "community"
-      || communityTab !== "resources"
-      || !activeCommunityId
-      || isLoadingResources
-      || latestActiveCommunityResourcesCreatedAt === null
-    ) {
-      return;
-    }
-    const requestKey = `${activeCommunityId}:resources`;
-    const markerKey = String(latestActiveCommunityResourcesCreatedAt);
-    if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) return;
-    communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] = markerKey;
-    void markCommunitySurfaceSeen(activeCommunityId, "resources").catch(() => {
-      if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) {
-        delete communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey];
-      }
-    });
-  }, [
-    activeCommunityId,
-    activePage,
-    communityTab,
-    isLoadingResources,
-    latestActiveCommunityResourcesCreatedAt,
-    markCommunitySurfaceSeen,
-  ]);
-
-  useEffect(() => {
-    if (
-      activePage !== "community"
-      || communityTab !== "events"
-      || !activeCommunityId
-      || isLoadingCommunityEvents
-      || !hasLoadedActiveCommunityEventsRange
-      || !communityEventsCacheKey
-      || latestActiveCommunityEventsUpdatedAt === null
-    ) {
-      return;
-    }
-    const requestKey = `${activeCommunityId}:events`;
-    const markerKey = `${communityEventsCacheKey}:${latestActiveCommunityEventsUpdatedAt}`;
-    if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) return;
-    communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] = markerKey;
-    void markCommunitySurfaceSeen(activeCommunityId, "events", {
-      seenAtMs: latestActiveCommunityEventsUpdatedAt,
-      optimistic: false,
-      refreshAfter: true,
-    }).catch(() => {
-      if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) {
-        delete communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey];
-      }
-    });
-  }, [
-    activeCommunityId,
-    activePage,
-    communityTab,
-    communityEventsCacheKey,
-    hasLoadedActiveCommunityEventsRange,
-    isLoadingCommunityEvents,
-    latestActiveCommunityEventsUpdatedAt,
-    markCommunitySurfaceSeen,
-  ]);
-
+    ensureSession: ensureUsableAuthSession,
+    session,
+    chat: {
+      hasResolved: hasResolvedCommunityChat,
+      inputValue: communityMessageInput,
+      isUserAtBottom,
+      messages: communityMessages,
+    },
+    interactions: {
+      roots: communityInteractionRoots,
+      repliesByRootId: communityInteractionRepliesByRootId,
+    },
+    aiFeed: {
+      isLoading: activeCommunityFeedState.isLoading,
+      live: activeCommunityFeedState.live,
+    },
+    resources: {
+      isLoading: isLoadingResources,
+      rows: communityResources,
+    },
+    events: {
+      cacheKey: communityEventsCacheKey,
+      hasLoadedVisibleRange: hasLoadedActiveCommunityEventsRange,
+      isLoading: isLoadingCommunityEvents,
+      rows: communityEvents,
+    },
+  });
   useCommunityAgentConfigLifecycle<AuthSession>({
     activePage,
     communityTab,

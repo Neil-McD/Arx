@@ -10,6 +10,9 @@ const backend = read("convex/communityAttention.ts");
 const gateway = read("shared/cloudCommunityAttentionGateway.ts");
 const controller = read("shared/useCommunityAttentionController.ts");
 const app = read("apps/web/src/App.tsx");
+const webAttentionController = read(
+  "apps/web/src/controllers/useWebCommunityAttentionController.ts",
+);
 const nav = read("shared/CommunityNav.tsx");
 const mentionEmails = read("convex/communityMentionEmails.ts");
 const emailCore = read("convex/emailCore.ts");
@@ -73,9 +76,21 @@ assert.match(
 );
 
 assert.match(
-  app,
-  /latestActiveCommunityEventsUpdatedAt[\s\S]*hasLoadedActiveCommunityEventsRange[\s\S]*communityTab !== "events"[\s\S]*latestActiveCommunityEventsUpdatedAt === null[\s\S]*markCommunitySurfaceSeen\(activeCommunityId, "events", \{[\s\S]*seenAtMs: latestActiveCommunityEventsUpdatedAt[\s\S]*optimistic: false[\s\S]*refreshAfter: true/,
+  webAttentionController,
+  /latestEventsUpdatedAt[\s\S]*communityTab !== "events"[\s\S]*events\.hasLoadedVisibleRange[\s\S]*latestEventsUpdatedAt === null[\s\S]*acknowledgeSurface\([\s\S]*"events"[\s\S]*seenAtMs: latestEventsUpdatedAt[\s\S]*optimistic: false[\s\S]*refreshAfter: true/,
   "Events tab must mark only loaded visible event activity seen and then refresh attention",
+);
+
+assert.match(
+  app,
+  /useWebCommunityAttentionModel\(\{[\s\S]*hasLoadedVisibleRange: hasLoadedActiveCommunityEventsRange[\s\S]*rows: communityEvents/,
+  "App must compose the community attention owner with the visible events projection",
+);
+
+assert.doesNotMatch(
+  app,
+  /markCommunitySurfaceSeen|markCloudCommunityChatReadAt|useCommunityTypingPresence/,
+  "App must not own low-level community attention, read receipt, or typing lifecycles",
 );
 
 assert.match(
