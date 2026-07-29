@@ -11,8 +11,10 @@ import {
 import type { CommunityAccess } from "../shared/communityTypes";
 import {
   type CommunityLike,
+  type CommunityMembershipLike,
   getUniqueCommunityMembershipByPair,
   mapCommunityAccessRow,
+  pickMostRelevantCommunityMembership,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 import { resolveAuthenticatedActorByTrustedSubject } from "./authActor";
@@ -30,18 +32,32 @@ import {
   readCommunitySemanticResourceDocument,
   type CommunitySemanticSource,
   type MemberProfileSemanticSource,
+  type PlatformUserProfileSemanticSource,
   type SelfProfileCommunitySummary,
   type SelfProfileSemanticSource,
   validateCommunitySemanticOperationInput,
 } from "../shared/communitySemanticRepository";
 import { normalizeSocialProfileLinks } from "../shared/socialProfileLinks";
-import { getUniqueUserProfileDetailByUserId } from "./profileCore";
+import {
+  getUniqueUserByNormalizedHandle,
+  getUniqueUserProfileDetailByUserId,
+} from "./profileCore";
 import { resolveViewerProfileRelationship } from "./profileRelationshipCore";
 import {
   listMemberSemanticDirectory,
   resolveMemberSemanticProfile,
 } from "./communitySemanticMembers";
 import { communityEvidenceSurfaceValidator } from "./communityEvidenceAudit";
+import { validateProfileHandle } from "../shared/profileHandle";
+import {
+  buildCommunityResourceEvidenceRef,
+  parseCommunityResourceEvidenceRef,
+} from "../shared/communityEvidenceContract";
+import { parseCommunityResourceDirectoryUri } from "../shared/communityResourceDirectory";
+import {
+  projectCommunityMembershipReadSummary,
+  type CommunityReadSummary,
+} from "../shared/communityReadContract";
 
 export type {
   CommunityCapabilityContextErrorCode,
@@ -59,12 +75,265 @@ export async function listAccessibleCommunityMemberships(
   ctx: any,
   authSubject: string,
 ): Promise<CommunityMembershipProjection[]> {
-  const rows = (await ctx.runQuery(api.communityAdmin.listCommunityMemberships as any, {
-    authSubject,
-    selectMode: "full",
-  })) as CommunityMembershipProjection[];
+  const rows = (await ctx.runQuery(
+    api.communityAdmin.listCommunityMemberships as any,
+    {
+      authSubject,
+      selectMode: "full",
+    },
+  )) as CommunityMembershipProjection[];
   return rows.filter((row) => boundedString(row.communities?.slug, 160));
 }
+
+const COMMUNITY_SEMANTIC_DIRECTORY_DEFAULT_LIMIT = 24;
+const COMMUNITY_SEMANTIC_DIRECTORY_MAX_LIMIT = 50;
+const COMMUNITY_MEMBERSHIP_PAIR_SCAN_LIMIT = 51;
+
+type CommunitySemanticDirectoryCursor = {
+  version: 1;
+  phase: "owned" | "memberships";
+  cursor: string | null;
+};
+
+function parseCommunitySemanticDirectoryCursor(
+  raw: unknown,
+): CommunitySemanticDirectoryCursor | null {
+  if (raw === undefined || raw === null || raw === "") {
+    return {
+      version: 1,
+      phase: "owned",
+      cursor: null,
+    };
+  }
+  if (typeof raw !== "string" || raw.length > 2_048) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<CommunitySemanticDirectoryCursor>;
+    if (
+      parsed.version !== 1 ||
+      (parsed.phase !== "owned" && parsed.phase !== "memberships") ||
+      (parsed.cursor !== null && typeof parsed.cursor !== "string")
+    ) {
+      return null;
+    }
+    return {
+      version: 1,
+      phase: parsed.phase,
+      cursor: parsed.cursor,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function encodeCommunitySemanticDirectoryCursor(
+  phase: CommunitySemanticDirectoryCursor["phase"],
+  cursor: string | null,
+): string {
+  return JSON.stringify({
+    version: 1,
+    phase,
+    cursor,
+  } satisfies CommunitySemanticDirectoryCursor);
+}
+
+async function projectAccessibleCommunityDirectorySummary(args: {
+  ctx: any;
+  userId: any;
+  community: CommunityLike;
+  membership: CommunityMembershipLike | null;
+}): Promise<CommunityReadSummary | null> {
+  const access = (await mapCommunityAccessRow({
+    ctx: args.ctx,
+    community: args.community,
+    membership: args.membership,
+    userId: args.userId,
+  })) as CommunityAccess;
+  const resolved = buildResolvedCommunityCapabilityContext({
+    communitySlug: args.community.slug,
+    community: {
+      id: String(args.community._id),
+      slug: args.community.slug,
+      name: args.community.name,
+      oneLiner: args.community.oneLiner,
+      about: args.community.about,
+      visibility: args.community.visibility,
+      entryPolicy: args.community.entryPolicy,
+    },
+    membership: args.membership
+      ? {
+          communityId: String(args.membership.communityId),
+          role: args.membership.role,
+        }
+      : null,
+    access,
+  });
+  return resolved.ok
+    ? projectCommunityMembershipReadSummary(resolved.context.membership)
+    : null;
+}
+
+async function resolveCanonicalMembershipRow(args: {
+  ctx: any;
+  row: CommunityMembershipLike;
+}): Promise<CommunityMembershipLike | null> {
+  const rows = (await args.ctx.db
+    .query("communityMemberships")
+    .withIndex("by_community_user", (q: any) =>
+      q
+        .eq("communityId", args.row.communityId)
+        .eq("userId", args.row.userId),
+    )
+    .take(COMMUNITY_MEMBERSHIP_PAIR_SCAN_LIMIT)) as CommunityMembershipLike[];
+  if (rows.length >= COMMUNITY_MEMBERSHIP_PAIR_SCAN_LIMIT) return null;
+  return pickMostRelevantCommunityMembership(rows);
+}
+
+export async function listAccessibleCommunityDirectoryPage(args: {
+  ctx: any;
+  authSubject: string;
+  userId?: any;
+  cursor?: string | null;
+  limit?: number | null;
+}): Promise<
+  | {
+      ok: true;
+      communities: CommunityReadSummary[];
+      nextCursor: string | null;
+      skippedIncomplete: number;
+    }
+  | { ok: false; code: "invalid_cursor" | "invalid_limit" }
+> {
+  const parsedCursor = parseCommunitySemanticDirectoryCursor(args.cursor);
+  if (!parsedCursor) return { ok: false, code: "invalid_cursor" };
+  if (
+    args.limit !== undefined &&
+    args.limit !== null &&
+    (!Number.isInteger(args.limit) ||
+      args.limit < 2 ||
+      args.limit > COMMUNITY_SEMANTIC_DIRECTORY_MAX_LIMIT)
+  ) {
+    return { ok: false, code: "invalid_limit" };
+  }
+  const limit = args.limit ?? COMMUNITY_SEMANTIC_DIRECTORY_DEFAULT_LIMIT;
+  const userId = await resolveUserIdForAuthenticatedRequest({
+    ctx: args.ctx,
+    userId: args.userId,
+    authSubject: args.authSubject,
+  });
+  const communities: CommunityReadSummary[] = [];
+  let skippedIncomplete = 0;
+  const phase = parsedCursor.phase;
+  const cursor = parsedCursor.cursor;
+
+  if (phase === "owned") {
+    const ownedPage = await args.ctx.db
+      .query("communities")
+      .withIndex("by_owner_createdAt", (q: any) => q.eq("ownerId", userId))
+      .order("asc")
+      .paginate({
+        cursor,
+        numItems: limit,
+      });
+    for (const community of ownedPage.page as CommunityLike[]) {
+      const projected = await projectAccessibleCommunityDirectorySummary({
+        ctx: args.ctx,
+        userId,
+        community,
+        membership: null,
+      });
+      if (projected) communities.push(projected);
+      else skippedIncomplete += 1;
+    }
+    if (!ownedPage.isDone) {
+      return {
+        ok: true,
+        communities,
+        nextCursor: encodeCommunitySemanticDirectoryCursor(
+          "owned",
+          ownedPage.continueCursor,
+        ),
+        skippedIncomplete,
+      };
+    }
+    const hasMembershipRows = Boolean(
+      await args.ctx.db
+        .query("communityMemberships")
+        .withIndex("by_user_createdAt", (q: any) => q.eq("userId", userId))
+        .order("asc")
+        .first(),
+    );
+    return {
+      ok: true,
+      communities,
+      nextCursor: hasMembershipRows
+        ? encodeCommunitySemanticDirectoryCursor("memberships", null)
+        : null,
+      skippedIncomplete,
+    };
+  }
+
+  const membershipPage = await args.ctx.db
+    .query("communityMemberships")
+    .withIndex("by_user_createdAt", (q: any) => q.eq("userId", userId))
+    .order("asc")
+    .paginate({
+      cursor,
+      numItems: limit,
+    });
+  for (const row of membershipPage.page as CommunityMembershipLike[]) {
+    const canonical = await resolveCanonicalMembershipRow({
+      ctx: args.ctx,
+      row,
+    });
+    if (!canonical || String(canonical._id) !== String(row._id)) {
+      skippedIncomplete += 1;
+      continue;
+    }
+    const community = (await args.ctx.db.get(
+      row.communityId,
+    )) as CommunityLike | null;
+    if (!community || String(community.ownerId) === String(userId)) {
+      skippedIncomplete += 1;
+      continue;
+    }
+    const projected = await projectAccessibleCommunityDirectorySummary({
+      ctx: args.ctx,
+      userId,
+      community,
+      membership: canonical,
+    });
+    if (projected) communities.push(projected);
+    else skippedIncomplete += 1;
+  }
+  return {
+    ok: true,
+    communities,
+    nextCursor: membershipPage.isDone
+      ? null
+      : encodeCommunitySemanticDirectoryCursor(
+          "memberships",
+          membershipPage.continueCursor,
+        ),
+    skippedIncomplete,
+  };
+}
+
+export const listAccessibleCommunityDirectoryPageInternal = internalQuery({
+  args: {
+    authSubject: v.string(),
+    userId: v.optional(v.id("users")),
+    cursor: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) =>
+    await listAccessibleCommunityDirectoryPage({
+      ctx,
+      authSubject: args.authSubject,
+      userId: args.userId,
+      cursor: args.cursor,
+      limit: args.limit,
+    }),
+});
 
 export function findCommunityMembershipBySlug(
   rows: CommunityMembershipProjection[],
@@ -74,7 +343,8 @@ export function findCommunityMembershipBySlug(
   if (!normalized) return null;
   return (
     rows.find(
-      (row) => normalizeCommunityCapabilitySlug(row.communities?.slug) === normalized,
+      (row) =>
+        normalizeCommunityCapabilitySlug(row.communities?.slug) === normalized,
     ) ?? null
   );
 }
@@ -145,7 +415,10 @@ export async function resolveCommunityCapabilityContextBySlug(args: {
     .withIndex("by_slug", (q: any) => q.eq("slug", communitySlug))
     .take(2)) as CommunityLike[];
   if (rows.length > 1) {
-    return { ok: false as const, code: "community_access_unavailable" as const };
+    return {
+      ok: false as const,
+      code: "community_access_unavailable" as const,
+    };
   }
   const community = rows[0] ?? null;
   if (!community) {
@@ -202,14 +475,19 @@ function buildCommunitySemanticSource(args: {
     oneLiner: String(community.one_liner ?? "").trim() || null,
     about: String(community.about ?? "").trim() || null,
     visibility:
-      String(community.visibility ?? "").trim().toLowerCase() === "published"
+      String(community.visibility ?? "")
+        .trim()
+        .toLowerCase() === "published"
         ? "published"
         : "unlisted",
     entryPolicy:
-      String(community.entry_policy ?? "").trim().toLowerCase() ===
-      "paid_subscription"
+      String(community.entry_policy ?? "")
+        .trim()
+        .toLowerCase() === "paid_subscription"
         ? "paid_subscription"
-        : String(community.entry_policy ?? "").trim().toLowerCase() === "open"
+        : String(community.entry_policy ?? "")
+              .trim()
+              .toLowerCase() === "open"
           ? "open"
           : "approval",
     canonicalUrl: `${readCanonicalPublicAppOrigin()}/c/${args.context.communitySlug}`,
@@ -220,6 +498,7 @@ type SelfProfileUserRow = {
   _id: any;
   displayName?: string;
   handle?: string;
+  normalizedHandle?: string;
 };
 
 type SelfProfileDetailRow = {
@@ -228,10 +507,13 @@ type SelfProfileDetailRow = {
   socialLinks?: Record<string, unknown>;
 };
 
-function mapSelfProfileCommunitySummary(
-  row: { slug?: string | null; name?: string | null },
-): SelfProfileCommunitySummary | null {
-  const slug = String(row.slug ?? "").trim().toLowerCase();
+function mapSelfProfileCommunitySummary(row: {
+  slug?: string | null;
+  name?: string | null;
+}): SelfProfileCommunitySummary | null {
+  const slug = String(row.slug ?? "")
+    .trim()
+    .toLowerCase();
   const name = String(row.name ?? "").trim();
   return slug && name ? { slug, name } : null;
 }
@@ -239,9 +521,7 @@ function mapSelfProfileCommunitySummary(
 function normalizeSelfProfileRole(
   value: unknown,
 ): SelfProfileSemanticSource["currentCommunity"]["role"] {
-  return value === "owner" ||
-    value === "admin" ||
-    value === "moderator"
+  return value === "owner" || value === "admin" || value === "moderator"
     ? value
     : "member";
 }
@@ -287,6 +567,173 @@ async function buildSelfProfileSemanticSource(args: {
     accessibleCommunities,
   };
 }
+
+export const resolvePlatformUserSemanticProfileInternal = internalQuery({
+  args: {
+    authSubject: v.string(),
+    userId: v.optional(v.id("users")),
+    userSelector: v.string(),
+  },
+  handler: async (ctx, args) => {
+    let actorUserId: any;
+    try {
+      actorUserId = (
+        await resolveAuthenticatedActorByTrustedSubject({
+          ctx,
+          authSubject: args.authSubject,
+          userId: args.userId,
+        })
+      ).dbUserId;
+    } catch {
+      return {
+        ok: false as const,
+        code: "semantic_not_found" as const,
+        message: "Semantic path not found or not accessible.",
+      };
+    }
+
+    const selector = String(args.userSelector ?? "")
+      .trim()
+      .toLowerCase();
+    let targetUser = (await ctx.db.get(
+      actorUserId,
+    )) as SelfProfileUserRow | null;
+    const isSelf = selector === "me";
+    if (!isSelf) {
+      const validated = validateProfileHandle(selector);
+      if (!validated.ok) {
+        return {
+          ok: false as const,
+          code: "semantic_not_found" as const,
+          message: "Semantic path not found or not accessible.",
+        };
+      }
+      targetUser = await getUniqueUserByNormalizedHandle<SelfProfileUserRow>(
+        ctx,
+        validated.normalizedHandle,
+      );
+    }
+    if (!targetUser) {
+      return {
+        ok: false as const,
+        code: "semantic_not_found" as const,
+        message: "Semantic path not found or not accessible.",
+      };
+    }
+
+    const [detail, relationship] = await Promise.all([
+      getUniqueUserProfileDetailByUserId<SelfProfileDetailRow>(
+        ctx,
+        targetUser._id,
+      ),
+      resolveViewerProfileRelationship({
+        ctx,
+        viewerUserId: actorUserId,
+        targetUserId: targetUser._id,
+      }),
+    ]);
+    if (
+      String(targetUser._id) !== String(actorUserId) &&
+      relationship.mutual_communities.length === 0
+    ) {
+      return {
+        ok: false as const,
+        code: "semantic_not_found" as const,
+        message: "Semantic path not found or not accessible.",
+      };
+    }
+    const validatedHandle = validateProfileHandle(
+      targetUser.normalizedHandle ?? targetUser.handle,
+    );
+    if (!isSelf && !validatedHandle.ok) {
+      return {
+        ok: false as const,
+        code: "semantic_not_found" as const,
+        message: "Semantic path not found or not accessible.",
+      };
+    }
+    const source: PlatformUserProfileSemanticSource = {
+      userRef: `user:${String(targetUser._id)}`,
+      profilePath: isSelf
+        ? "/users/me/profile.md"
+        : `/users/${validatedHandle.ok ? validatedHandle.normalizedHandle : selector}/profile.md`,
+      displayName: detail?.displayName ?? targetUser.displayName ?? null,
+      handle: validatedHandle.ok ? validatedHandle.normalizedHandle : null,
+      bio: detail?.bio ?? null,
+      socialLinks: normalizeSocialProfileLinks(detail?.socialLinks ?? {}),
+      ownedCommunities: relationship.owned_communities
+        .map(mapSelfProfileCommunitySummary)
+        .filter((row): row is SelfProfileCommunitySummary => Boolean(row)),
+      mutualCommunities: relationship.mutual_communities
+        .map(mapSelfProfileCommunitySummary)
+        .filter((row): row is SelfProfileCommunitySummary => Boolean(row)),
+    };
+    return {
+      ok: true as const,
+      source,
+    };
+  },
+});
+
+export const resolvePlatformSemanticResourceMountInternal = internalQuery({
+  args: {
+    authSubject: v.string(),
+    userId: v.optional(v.id("users")),
+    selector: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const inaccessible = () => ({
+      ok: false as const,
+      code: "semantic_not_found" as const,
+      message: "Semantic path not found or not accessible.",
+    });
+    let actorUserId: any;
+    try {
+      actorUserId = (
+        await resolveAuthenticatedActorByTrustedSubject({
+          ctx,
+          authSubject: args.authSubject,
+          userId: args.userId,
+        })
+      ).dbUserId;
+    } catch {
+      return inaccessible();
+    }
+
+    const directory = parseCommunityResourceDirectoryUri(args.selector);
+    const resourceId = parseCommunityResourceEvidenceRef(args.selector);
+    let communityId: any = null;
+    if (directory) {
+      communityId = ctx.db.normalizeId("communities", directory.communityId);
+    } else if (resourceId) {
+      const normalizedResourceId = ctx.db.normalizeId(
+        "communityResources",
+        resourceId,
+      );
+      if (!normalizedResourceId) return inaccessible();
+      const resource = (await ctx.db.get(normalizedResourceId)) as {
+        communityId?: any;
+      } | null;
+      communityId = resource?.communityId ?? null;
+    }
+    if (!communityId) return inaccessible();
+
+    const community = (await ctx.db.get(communityId)) as CommunityLike | null;
+    if (!community) return inaccessible();
+    const resolved = await buildCommunityCapabilityContextForUser({
+      ctx,
+      userId: actorUserId,
+      community,
+    });
+    if (!resolved.ok) return inaccessible();
+
+    return {
+      ok: true as const,
+      communityId: resolved.context.communityId,
+      communitySlug: resolved.context.communitySlug,
+    };
+  },
+});
 
 export const resolveCommunitySemanticRepositoryInternal = internalQuery({
   args: {
@@ -343,14 +790,12 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
       };
     }
     const communityRows = usesCommunityId
-      ? [((await ctx.db.get(args.communityId!)) as CommunityLike | null)].filter(
+      ? [(await ctx.db.get(args.communityId!)) as CommunityLike | null].filter(
           (row): row is CommunityLike => Boolean(row),
         )
       : ((await ctx.db
           .query("communities")
-          .withIndex("by_slug", (q: any) =>
-            q.eq("slug", communitySlug),
-          )
+          .withIndex("by_slug", (q: any) => q.eq("slug", communitySlug))
           .take(2)) as CommunityLike[]);
     const resolved =
       communityRows.length === 1
@@ -380,12 +825,13 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
         return listCommunitySemanticRoot({ path: parsedPath.path });
       }
       const resourceDirectory =
-        "resourceDirectory" in parsedPath
-          ? parsedPath.resourceDirectory
-          : null;
+        "resourceDirectory" in parsedPath ? parsedPath.resourceDirectory : null;
+      const resourceAlias =
+        "resourceAlias" in parsedPath ? parsedPath.resourceAlias : null;
       if (
         parsedPath.path === POLYNET_RESOURCES_DIRECTORY_PATH ||
-        resourceDirectory
+        resourceDirectory ||
+        resourceAlias?.kind === "module"
       ) {
         if (resourceDirectory?.resourceId) {
           return {
@@ -405,13 +851,18 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
           };
         }
         try {
-          const moduleId = resourceDirectory
+          const moduleSelector =
+            resourceDirectory?.moduleId ??
+            (resourceAlias?.kind === "module"
+              ? resourceAlias.moduleId
+              : null);
+          const moduleId = moduleSelector
             ? ctx.db.normalizeId(
                 "communityResourceModules",
-                resourceDirectory.moduleId,
+                moduleSelector,
               )
             : null;
-          if (resourceDirectory && !moduleId) {
+          if ((resourceDirectory || resourceAlias?.kind === "module") && !moduleId) {
             throw new Error("community_resource_semantic_module_not_found");
           }
           const directory = (await ctx.runQuery(
@@ -426,11 +877,11 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
               ...(moduleId ? { moduleId } : null),
               cursor:
                 validatedInput.operation === "list"
-                  ? validatedInput.cursor ?? undefined
+                  ? (validatedInput.cursor ?? undefined)
                   : undefined,
               limit:
                 validatedInput.operation === "list"
-                  ? validatedInput.limit ?? undefined
+                  ? (validatedInput.limit ?? undefined)
                   : undefined,
             },
           )) as any;
@@ -480,13 +931,9 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
           actorUserId,
           context: resolved.context,
           cursor:
-            validatedInput.operation === "list"
-              ? validatedInput.cursor
-              : null,
+            validatedInput.operation === "list" ? validatedInput.cursor : null,
           limit:
-            validatedInput.operation === "list"
-              ? validatedInput.limit
-              : null,
+            validatedInput.operation === "list" ? validatedInput.limit : null,
         });
         return listCommunitySemanticMembers({
           path: parsedPath.path,
@@ -505,10 +952,14 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
     const resourceRef =
       "resourceRef" in parsedPath ? parsedPath.resourceRef : null;
     const resourceDirectory =
-      "resourceDirectory" in parsedPath
-        ? parsedPath.resourceDirectory
-        : null;
-    if (resourceRef || resourceDirectory?.resourceId) {
+      "resourceDirectory" in parsedPath ? parsedPath.resourceDirectory : null;
+    const resourceAlias =
+      "resourceAlias" in parsedPath ? parsedPath.resourceAlias : null;
+    if (
+      resourceRef ||
+      resourceDirectory?.resourceId ||
+      resourceAlias?.kind === "resource"
+    ) {
       if (
         resourceDirectory &&
         resourceDirectory.communityId !== resolved.context.communityId
@@ -520,6 +971,26 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
         };
       }
       try {
+        if (resourceAlias?.kind === "resource") {
+          const resourceId = ctx.db.normalizeId(
+            "communityResources",
+            resourceAlias.resourceId,
+          );
+          const resource = resourceId
+            ? await ctx.db.get(resourceId)
+            : null;
+          if (
+            !resource ||
+            String(resource.communityId) !== resolved.context.communityId ||
+            String(resource.moduleId ?? "") !== resourceAlias.moduleId
+          ) {
+            return {
+              ok: false as const,
+              code: "semantic_not_found" as const,
+              message: "Semantic path not found or not accessible.",
+            };
+          }
+        }
         return {
           ok: true as const,
           resource_read: {
@@ -528,7 +999,13 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
               "communities",
               resolved.context.communityId,
             ),
-            ref: parsedPath.path,
+            ref:
+              resourceAlias?.kind === "resource"
+                ? buildCommunityResourceEvidenceRef(resourceAlias.resourceId)
+                : parsedPath.path,
+            ...(resourceAlias?.kind === "resource"
+              ? { expectedModuleId: resourceAlias.moduleId }
+              : null),
           },
         };
       } catch {
@@ -541,10 +1018,7 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
     }
     const memberHandle =
       "memberHandle" in parsedPath ? parsedPath.memberHandle : null;
-    if (
-      parsedPath.path === POLYNET_SELF_PROFILE_PATH ||
-      memberHandle
-    ) {
+    if (parsedPath.path === POLYNET_SELF_PROFILE_PATH || memberHandle) {
       try {
         if (parsedPath.path === POLYNET_SELF_PROFILE_PATH) {
           selfProfile = await buildSelfProfileSemanticSource({
@@ -555,7 +1029,6 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
         } else if (memberHandle) {
           memberProfile = await resolveMemberSemanticProfile({
             ctx,
-            actorUserId,
             context: resolved.context,
             handle: memberHandle,
           });
@@ -631,11 +1104,28 @@ export const readCommunitySemanticRepositoryInternal = internalAction({
           message: "Semantic path not found or not accessible.",
         };
       }
+      const expectedModuleId = String(
+        planned.resource_read.expectedModuleId ?? "",
+      ).trim();
+      const actualResourceDirectory = parseCommunityResourceDirectoryUri(
+        payload.resource?.directory_uri,
+      );
+      if (
+        expectedModuleId &&
+        actualResourceDirectory?.moduleId !== expectedModuleId
+      ) {
+        return {
+          ok: false as const,
+          code: "semantic_not_found" as const,
+          message: "Semantic path not found or not accessible.",
+        };
+      }
       return readCommunitySemanticResourceDocument({
         source: {
           title: payload.resource?.title,
           ref: payload.resource?.ref,
           directoryPath: payload.resource?.directory_path,
+          directoryUri: payload.resource?.directory_uri,
           bodyMd:
             typeof payload.content?.body_md === "string"
               ? payload.content.body_md

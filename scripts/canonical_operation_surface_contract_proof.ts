@@ -197,8 +197,8 @@ assert.match(runtimeSource, /executePlatformOperation\(/);
 assert.match(httpMcpSource, /executePlatformOperation\(/);
 assert.match(
   httpMcpSource,
-  /cursor: toolName === "polynet_list" \? toolArgs\.cursor : undefined/,
-  "the MCP adapter must forward semantic cursors without transport-specific normalization",
+  /cursor: toolArgs\.cursor/,
+  "the MCP adapter must forward semantic cursors to canonical validation",
 );
 assert.match(
   httpMcpSource,
@@ -207,7 +207,7 @@ assert.match(
 );
 assert.match(
   httpMcpSource,
-  /offset: toolName === "polynet_read" \? toolArgs\.offset : undefined/,
+  /offset: toolArgs\.offset/,
   "the MCP adapter must forward semantic offsets to canonical validation",
 );
 

@@ -103,8 +103,8 @@ assert.match(
 );
 assert.match(
   worker,
-  /executeConciergeTool[\s\S]*executeRetrievalHarnessTool\(\{[\s\S]*userId: normalizeIdValue\(args\.context\.request\.sponsorUserId\)[\s\S]*communityId: normalizeIdValue\(args\.context\.request\.communityId\)[\s\S]*toolName: args\.toolName/,
-  "serve worker tools should execute as the requester and within the single serve-request community",
+  /executeConciergeTool[\s\S]*executeRetrievalHarnessTool\(\{[\s\S]*userId: normalizeIdValue\(args\.context\.request\.sponsorUserId\)[\s\S]*authSubject: normalizeIdValue\(args\.context\.request\.authSubject\)[\s\S]*communityId: normalizeIdValue\(args\.context\.request\.communityId\)[\s\S]*toolName: args\.toolName/,
+  "serve worker tools should execute as the server-resolved requester and within the single serve-request community",
 );
 assert.match(
   worker,
@@ -113,13 +113,13 @@ assert.match(
 );
 assert.match(
   conciergeTools,
-  /COMMUNITY_AGENT_CONCIERGE_TOOL_NAMES = \[[\s\S]*"search_product_docs"[\s\S]*"get_product_doc"[\s\S]*"community_resources_search"[\s\S]*"community_resources_read"[\s\S]*"community_memory_search"[\s\S]*"community_memory_read"[\s\S]*"community_chat_search"[\s\S]*"community_chat_read"[\s\S]*"community_ai_feed_search"[\s\S]*"community_ai_feed_read"[\s\S]*\] as const satisfies readonly RetrievalToolName\[\]/,
-  "Concierge tool allowlist should contain only product docs, community resources, accepted memory, and exact evidence read tools",
+  /COMMUNITY_AGENT_CONCIERGE_TOOL_NAMES = \[[\s\S]*"search_product_docs"[\s\S]*"get_product_doc"[\s\S]*"polynet_list"[\s\S]*"polynet_read"[\s\S]*"community_resources_search"[\s\S]*"community_memory_search"[\s\S]*"community_memory_read"[\s\S]*"community_chat_search"[\s\S]*"community_chat_read"[\s\S]*"community_ai_feed_search"[\s\S]*"community_ai_feed_read"[\s\S]*\] as const satisfies readonly RetrievalToolName\[\]/,
+  "Concierge tool allowlist should use canonical semantic list/read plus targeted search, accepted memory, and exact evidence reads",
 );
 assert.doesNotMatch(
   conciergeTools,
-  /community_write|"community_search"|web_research|web_crawl|community_resources_map|community_resources_list|community_resource_read|community_resource_builder|write|edit|bash|terminal_|computer_|mcp/i,
-  "Concierge v0 allowlist must exclude write, web, broad community search, builder, workspace, and MCP tools",
+  /community_write|"community_search"|community_resources_read|web_research|web_crawl|community_resources_map|community_resources_list|community_resource_read|community_resource_builder|write|edit|bash|terminal_|computer_|mcp/i,
+  "Concierge v0 allowlist must exclude duplicate batch resource reads, write, web, broad community search, builder, workspace, and MCP tools",
 );
 assert.match(
   worker,
@@ -128,7 +128,7 @@ assert.match(
 );
 assert.match(
   worker,
-  /Use tools only when the answer depends on Polynet product docs, this community's Resources, accepted community memory, or exact canonical chat and AI Feed evidence[\s\S]*search accepted memory first[\s\S]*cite its title and status[\s\S]*Accepted memory is distinct from raw community evidence[\s\S]*If the tools return nothing useful/,
+  /Use tools only when the answer depends on Polynet product docs, this community's Resources, accepted community memory, or exact canonical chat and AI Feed evidence[\s\S]*Use polynet_list to inspect this community's mounted directory and polynet_read for exact profiles or Resources[\s\S]*community_resources_search only for targeted discovery[\s\S]*search accepted memory first[\s\S]*cite its title and status[\s\S]*Accepted memory is distinct from raw community evidence[\s\S]*If the tools return nothing useful/,
   "serve prompt should orient the Concierge to use read-only retrieval tools without treating tool output as authority",
 );
 assert.match(
@@ -230,7 +230,7 @@ assert.match(
 );
 assert.match(
   docs,
-  /read-only allowlist[\s\S]*`search_product_docs`[\s\S]*`get_product_doc`[\s\S]*`community_resources_search`[\s\S]*`community_resources_read`[\s\S]*do not grant memory authority/,
+  /read-only allowlist[\s\S]*`search_product_docs`[\s\S]*`get_product_doc`[\s\S]*`polynet_list`[\s\S]*`polynet_read`[\s\S]*`community_resources_search`[\s\S]*do not grant memory authority/,
   "architecture docs should describe the Concierge read-only tool allowlist",
 );
 assert.match(

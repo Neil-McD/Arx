@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { getPlatformOperationContract } from "../shared/platformOperationContract.ts";
 
 const root = process.cwd();
 
@@ -32,17 +33,8 @@ function toolDispatchBlock(source: string, toolName: string): string {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
-function operationContractBlock(source: string, operationId: string): string {
-  const startToken = `readOperationBase("${operationId}"`;
-  const start = source.indexOf(startToken);
-  assert.notEqual(start, -1, `${operationId} operation contract should exist`);
-  const next = source.indexOf("\n  {\n    ...readOperationBase(", start + startToken.length);
-  return source.slice(start, next === -1 ? source.length : next);
-}
-
 const contract = read("docs/polynet-workspace-mcp-contract-v0.md");
 const polynetMcp = read("shared/polynetMcp.ts");
-const platformOperationContract = read("shared/platformOperationContract.ts");
 const platformOperationExecutor = read("convex/platformOperationExecutor.ts");
 const httpMcp = read("convex/httpMcp.ts");
 const communityCapabilityContract = read("shared/communityCapabilityContract.ts");
@@ -775,10 +767,25 @@ for (const [operationId, toolName] of [
 ] as const) {
   assertIncludes(polynetMcp, `| "${toolName}"`, `${toolName} type union`);
   assertIncludes(httpMcp, `toolName === "${toolName}"`, `${toolName} HTTP dispatch`);
-  const definition = operationContractBlock(platformOperationContract, operationId);
-  assertIncludes(definition, `name: "${toolName}"`, `${toolName} canonical projection`);
-  assertIncludes(definition, "readOnlyHint: true", `${toolName} read-only annotation`);
-  assertNotIncludes(definition, "workspace_context_id", `${toolName} platform docs scope`);
+  const operation = getPlatformOperationContract(operationId);
+  assert.equal(
+    operation.projections.mcp.name,
+    toolName,
+    `${toolName} canonical projection`,
+  );
+  assert.equal(
+    operation.projections.mcp.annotations.readOnlyHint,
+    true,
+    `${toolName} read-only annotation`,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      (operation.projections.mcp.inputSchema as any).properties ?? {},
+      "workspace_context_id",
+    ),
+    false,
+    `${toolName} platform docs scope`,
+  );
   const dispatch = toolDispatchBlock(httpMcp, toolName);
   assertNotIncludes(dispatch, "resolveWorkspaceContext", `${toolName} no workspace selector`);
   assertNotIncludes(dispatch, "requireWorkspaceAuthorityToolset", `${toolName} no workspace authority gate`);

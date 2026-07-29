@@ -817,14 +817,15 @@ async function handleToolCall(args: {
   }
 
   if (toolName === "polynet_list" || toolName === "polynet_read") {
-    const communitySlug = normalizeCommunityCapabilitySlug(
-      toolArgs.community_slug,
-    );
-    if (!communitySlug) {
+    const rawCommunitySlug = normalizeString(toolArgs.community_slug, 160);
+    const communitySlug = rawCommunitySlug
+      ? normalizeCommunityCapabilitySlug(rawCommunitySlug)
+      : null;
+    if (rawCommunitySlug && !communitySlug) {
       return {
         ok: false,
         type: "tool",
-        message: "community_slug is required and must be canonical.",
+        message: "community_slug must be canonical when supplied.",
       };
     }
     const path =
@@ -842,13 +843,15 @@ async function handleToolCall(args: {
       ctx,
       authSubject,
       userId: actor.dbUserId,
-      communitySlug,
+      semanticMount: communitySlug
+        ? { kind: "community", communitySlug }
+        : { kind: "platform" },
       evidenceSurface: "external_mcp",
       input: {
         path,
-        cursor: toolName === "polynet_list" ? toolArgs.cursor : undefined,
+        cursor: toolArgs.cursor,
         limit: toolArgs.limit,
-        offset: toolName === "polynet_read" ? toolArgs.offset : undefined,
+        offset: toolArgs.offset,
       },
     });
     if (!execution.ok) {

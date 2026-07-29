@@ -1778,14 +1778,21 @@ Rules:
   read-only allowlist. The Concierge may use only:
   - `search_product_docs`
   - `get_product_doc`
+  - `polynet_list`
+  - `polynet_read`
   - `community_resources_search`
-  - `community_resources_read`
 - Concierge tools are for retrieval only. They do not grant memory authority,
   filesystem authority, workflow authority, community write authority, web
   research, MCP access, or directory mutation.
-- Community resource tools execute under the requester/sponsor user and the
-  single serve-request community. They must preserve the same requester access
-  and resource visibility boundaries as normal active-community resource tools.
+- The serve context resolves the requester/sponsor auth subject from the stored
+  user record. Semantic and resource tools execute under that verified
+  `(authSubject, userId)` pair and the single server-selected serve-request
+  community. The model cannot select or escape the mount. These calls preserve
+  the same requester access and resource visibility boundaries as normal
+  active-community tools.
+- `community_resources_search` is targeted discovery only. Exact profile and
+  resource traversal uses the canonical `polynet_list`/`polynet_read` executor;
+  the duplicate Concierge `community_resources_read` surface is not exposed.
 - The base serve prompt is augmented by
   `communityAgentConfigs.systemPrompt`, which is the Community-wide
   instructions field in the AI Agent settings. These instructions shape the

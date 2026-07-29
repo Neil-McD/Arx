@@ -95,17 +95,16 @@ for (const toolName of [searchName, readName] as const) {
   const policy = getFixedRuntimeToolPolicy(toolName);
   assert.equal(policy.category, "community");
   assert.equal(policy.riskLevel, "read");
-  assert.equal(policy.readOnly, true);
-  assert.equal(policy.mutatesState, false);
+  assert.equal(policy.readOnly, false);
+  assert.equal(
+    policy.mutatesState,
+    true,
+    "memory retrieval persists an auditable retrieval receipt",
+  );
+  assert.equal(policy.parallelSafe, false);
   assert.equal(policy.requiresCommunity, true);
   assert.equal(policy.requiresWorkspace, false);
 }
-assert.equal(getFixedRuntimeToolPolicy(searchName).parallelSafe, true);
-assert.equal(
-  getFixedRuntimeToolPolicy(readName).parallelSafe,
-  false,
-  "memory reads must serialize because they can update the same retrieval log",
-);
 
 assert.deepEqual(
   restrictToolNamesForInvocationSurface({

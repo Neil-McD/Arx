@@ -40,11 +40,19 @@ official MCP, and worker adapters call the same executor instead of implementing
 the operations independently. Tool registries and runtime policy project from the
 same contract.
 
-`community.semantic.list` traverses the selected community's deterministic root,
-member directory, and live resource directory. `community.semantic.read` resolves
-exact community, self, member, and resource documents. Native and worker calls use
-the server-bound community lens; official MCP calls name a canonical community
-slug and revalidate access on every request.
+`community.semantic.list` and `community.semantic.read` now project the
+authenticated member's platform-mounted semantic repository. The root contains
+`communities/` and `users/`; exact community paths traverse the community profile,
+member directory, and live resource directory. Community-owned runtimes can use
+the same executor under a server-bound community mount. The community Concierge
+resolves the requester's subject inside its trusted serve context and exposes
+these two operations instead of a duplicate batch resource-read tool. New
+official MCP calls use canonical platform paths. A legacy `community_slug` plus
+community-relative path is retained only as a thin compatibility mount, with
+access revalidated on every request.
+
+The directory contract is
+[`docs/polynet-semantic-repository-contract-v1.md`](./polynet-semantic-repository-contract-v1.md).
 
 Resource-backed semantic reads append retrieval-audit evidence. The operation is
 therefore a domain read with a receipt write: it is not parallel-safe, and retry
@@ -72,7 +80,8 @@ Convex bindings must not expose these retired modules.
    authority, effects, or execution.
    Actor and community-access requirements belong to the operation contract.
    Worker authority is derived from that requirement rather than redeclared.
-   Canonical semantic arguments are validated again at the shared executor:
+   Canonical semantic arguments use the same shared validator in the tool
+   registry and executor:
    root listing rejects pagination, directory listing uses bounded cursor pagination,
    and offset/limit apply only to resource documents. Adapters must not clamp an
    invalid semantic argument into a valid one.
@@ -86,7 +95,7 @@ Convex bindings must not expose these retired modules.
 ## Deliberate boundary
 
 Context-bound memory, chat, AI Feed, batch resource reads, resource search, and
-builder resource tools remain outside v1. Their
+builder resource tools remain outside v1's canonical operation seam. Their
 native forms use the active server-bound community lens, while the official MCP
 forms accept an explicit opaque community selector and perform different adapter
 work. They already converge on domain kernels in many paths, but they are not to

@@ -1,8 +1,6 @@
 import type { RetrievalToolName } from "./retrievalTools";
 import { findPlatformOperationByNativeToolName } from "./platformOperationContract.ts";
-import {
-  validateCommunitySemanticOperationInput,
-} from "./communitySemanticRepository.ts";
+import { validatePolynetSemanticRepositoryOperationInput } from "./communitySemanticRepository.ts";
 
 type JsonSchema =
   | {
@@ -53,7 +51,8 @@ function getPlatformNativeToolContract(name: RetrievalToolName): {
   inputSchema: JsonSchema;
 } {
   const operation = findPlatformOperationByNativeToolName(name);
-  if (!operation) throw new Error(`platform_operation_native_projection_missing:${name}`);
+  if (!operation)
+    throw new Error(`platform_operation_native_projection_missing:${name}`);
   return {
     description: operation.projections.native.description,
     inputSchema: operation.projections.native.inputSchema as JsonSchema,
@@ -66,18 +65,14 @@ const POLYNET_LIST_COMMUNITIES_TOOL = getPlatformNativeToolContract(
 const POLYNET_GET_COMMUNITY_TOOL = getPlatformNativeToolContract(
   "polynet_get_community",
 );
-const POLYNET_SEMANTIC_LIST_TOOL = getPlatformNativeToolContract(
-  "polynet_list",
-);
-const POLYNET_SEMANTIC_READ_TOOL = getPlatformNativeToolContract(
-  "polynet_read",
-);
+const POLYNET_SEMANTIC_LIST_TOOL =
+  getPlatformNativeToolContract("polynet_list");
+const POLYNET_SEMANTIC_READ_TOOL =
+  getPlatformNativeToolContract("polynet_read");
 const SEARCH_PRODUCT_DOCS_TOOL = getPlatformNativeToolContract(
   "search_product_docs",
 );
-const GET_PRODUCT_DOC_TOOL = getPlatformNativeToolContract(
-  "get_product_doc",
-);
+const GET_PRODUCT_DOC_TOOL = getPlatformNativeToolContract("get_product_doc");
 
 const PATH_ONLY_TOOL_SCHEMA: JsonSchema = {
   type: "object",
@@ -127,12 +122,14 @@ const WEB_CRAWL_TOOL_SCHEMA: JsonSchema = {
     strategy: {
       type: "string",
       enum: ["auto", "simple", "crawl"],
-      description: "auto uses the configured platform crawler, simple reads one page, crawl requires the robust crawler provider.",
+      description:
+        "auto uses the configured platform crawler, simple reads one page, crawl requires the robust crawler provider.",
     },
     destination: {
       type: "string",
       enum: ["context", "active_community_sources"],
-      description: "context returns bounded crawl output; active_community_sources saves crawled pages as source records for the active community.",
+      description:
+        "context returns bounded crawl output; active_community_sources saves crawled pages as source records for the active community.",
     },
     max_pages: {
       type: "integer",
@@ -148,7 +145,8 @@ const WEB_CRAWL_TOOL_SCHEMA: JsonSchema = {
       type: "integer",
       minimum: 1000,
       maximum: 80000,
-      description: "Maximum total crawled text returned to the model when destination is context.",
+      description:
+        "Maximum total crawled text returned to the model when destination is context.",
     },
   },
 };
@@ -246,7 +244,8 @@ const COMMUNITY_CHAT_READ_TOOL_SCHEMA: JsonSchema = {
       type: "string",
       minLength: 1,
       maxLength: 512,
-      description: "A stable interaction:root:<id> or interaction:reply:<id> evidence ref returned by community_chat_search.",
+      description:
+        "A stable interaction:root:<id> or interaction:reply:<id> evidence ref returned by community_chat_search.",
     },
   },
 };
@@ -278,7 +277,8 @@ const COMMUNITY_AI_FEED_READ_TOOL_SCHEMA: JsonSchema = {
       type: "string",
       minLength: 1,
       maxLength: 512,
-      description: "A stable ai_feed:<id> evidence ref returned by community_ai_feed_search.",
+      description:
+        "A stable ai_feed:<id> evidence ref returned by community_ai_feed_search.",
     },
   },
 };
@@ -374,7 +374,8 @@ const COMMUNITY_RESOURCES_READ_TOOL_SCHEMA: JsonSchema = {
       type: "array",
       minItems: 1,
       maxItems: 10,
-      description: "Resource ids, resources:// directory URIs, or readable resource paths.",
+      description:
+        "Resource ids, resources:// directory URIs, or readable resource paths.",
       items: {
         type: "string",
         minLength: 1,
@@ -385,7 +386,8 @@ const COMMUNITY_RESOURCES_READ_TOOL_SCHEMA: JsonSchema = {
       type: "integer",
       minimum: 1,
       maximum: 50000,
-      description: "Maximum total readable content characters returned across all resources.",
+      description:
+        "Maximum total readable content characters returned across all resources.",
     },
     per_resource_chars: {
       type: "integer",
@@ -435,7 +437,8 @@ const COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA: JsonSchema = {
       type: "string",
       minLength: 1,
       maxLength: 1024,
-      description: "Category/module name, page/source title, resource id, module id, resources:// URI, or readable resource path.",
+      description:
+        "Category/module name, page/source title, resource id, module id, resources:// URI, or readable resource path.",
     },
   },
 };
@@ -462,12 +465,14 @@ const COMMUNITY_RESOURCE_BUILDER_CHANGESET_OPERATION_TOOL_SCHEMA: JsonSchema = {
     module_key: {
       type: "string",
       maxLength: 120,
-      description: "Temporary key used to reference a wiki category created earlier in the same changeset. The field name stays module_key for the internal category container.",
+      description:
+        "Temporary key used to reference a wiki category created earlier in the same changeset. The field name stays module_key for the internal category container.",
     },
     module_id: {
       type: "string",
       maxLength: 160,
-      description: "Existing resource category id. The field name stays module_id for the internal category container.",
+      description:
+        "Existing resource category id. The field name stays module_id for the internal category container.",
     },
     resource_id: {
       type: "string",
@@ -541,7 +546,8 @@ const COMMUNITY_RESOURCE_BUILDER_STAGE_CHANGESET_TOOL_SCHEMA: JsonSchema = {
       type: "string",
       minLength: 1,
       maxLength: 2000,
-      description: "Short explanation of the proposed resource refactor or draft work.",
+      description:
+        "Short explanation of the proposed resource refactor or draft work.",
     },
     operations: {
       type: "array",
@@ -934,12 +940,14 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   member_conversations_list: {
     name: "member_conversations_list",
-    description: "List the signed-in member's recent private Polynet agent conversation episodes across community lenses. Returns bounded metadata and lens provenance only; use member_conversation_read for relevant transcript evidence.",
+    description:
+      "List the signed-in member's recent private Polynet agent conversation episodes across community lenses. Returns bounded metadata and lens provenance only; use member_conversation_read for relevant transcript evidence.",
     inputSchema: MEMBER_CONVERSATIONS_LIST_TOOL_SCHEMA,
   },
   member_conversation_read: {
     name: "member_conversation_read",
-    description: "Read a bounded user-and-assistant transcript window with lens provenance from one of the signed-in member's private Polynet agent conversation episodes.",
+    description:
+      "Read a bounded user-and-assistant transcript window with lens provenance from one of the signed-in member's private Polynet agent conversation episodes.",
     inputSchema: MEMBER_CONVERSATION_READ_TOOL_SCHEMA,
   },
   polynet_list_communities: {
@@ -952,87 +960,104 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   member_profile_confirm_facts: {
     name: "member_profile_confirm_facts",
-    description: "Write member-approved onboarding interview facts to the active member profile ontology for the active community lens.",
+    description:
+      "Write member-approved onboarding interview facts to the active member profile ontology for the active community lens.",
     inputSchema: MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA,
   },
   community_resources_read: {
     name: "community_resources_read",
-    description: "Batch-read member-visible active community Resources by stable resource ref, resource id, resources:// URI, or readable path under a bounded character budget.",
+    description:
+      "Batch-read member-visible active community Resources by stable resource ref, resource id, resources:// URI, or readable path under a bounded character budget.",
     inputSchema: COMMUNITY_RESOURCES_READ_TOOL_SCHEMA,
   },
   community_resources_search: {
     name: "community_resources_search",
-    description: "Search the active community's live category pages and return resource paths, directory URIs, snippets, and metadata.",
+    description:
+      "Search the active community's live category pages and return resource paths, directory URIs, snippets, and metadata.",
     inputSchema: COMMUNITY_RESOURCES_SEARCH_TOOL_SCHEMA,
   },
   community_resource_builder_list: {
     name: "community_resource_builder_list",
-    description: "Manager-only Resources Architect tool. List the active community's full Resources wiki builder directory, including live/draft categories, pages, and source inbox items.",
+    description:
+      "Manager-only Resources Architect tool. List the active community's full Resources wiki builder directory, including live/draft categories, pages, and source inbox items.",
     inputSchema: COMMUNITY_RESOURCE_BUILDER_LIST_TOOL_SCHEMA,
   },
   community_resource_builder_read: {
     name: "community_resource_builder_read",
-    description: "Manager-only Resources Architect tool. Read one resource or category by semantic ref: category/module name, page/source title, resource id, module id, resources:// URI, or readable path.",
+    description:
+      "Manager-only Resources Architect tool. Read one resource or category by semantic ref: category/module name, page/source title, resource id, module id, resources:// URI, or readable path.",
     inputSchema: COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA,
   },
   community_resource_builder_stage_changeset: {
     name: "community_resource_builder_stage_changeset",
-    description: "Manager-only Resources Architect tool. Validate and stage a proposed resource changeset without mutating categories or pages.",
+    description:
+      "Manager-only Resources Architect tool. Validate and stage a proposed resource changeset without mutating categories or pages.",
     inputSchema: COMMUNITY_RESOURCE_BUILDER_STAGE_CHANGESET_TOOL_SCHEMA,
   },
   community_resource_builder_apply_changeset: {
     name: "community_resource_builder_apply_changeset",
-    description: "Manager-only Resources Architect tool. Apply a previously staged resource changeset after the builder has explicitly approved it.",
+    description:
+      "Manager-only Resources Architect tool. Apply a previously staged resource changeset after the builder has explicitly approved it.",
     inputSchema: COMMUNITY_RESOURCE_BUILDER_APPLY_CHANGESET_TOOL_SCHEMA,
   },
   community_search: {
     name: "community_search",
-    description: "Search the active community's raw recent activity evidence across chat, AI Feed, and resources.",
+    description:
+      "Search the active community's raw recent activity evidence across chat, AI Feed, and resources.",
     inputSchema: COMMUNITY_SEARCH_TOOL_SCHEMA,
   },
   community_memory_search: {
     name: "community_memory_search",
-    description: "Search accepted community intelligence learned by the active community. Returns only promising, validated, or canonical memory plus a retrieval log id; it does not search raw activity evidence.",
+    description:
+      "Search accepted community intelligence learned by the active community. Returns only promising, validated, or canonical memory plus a retrieval log id; it does not search raw activity evidence.",
     inputSchema: COMMUNITY_MEMORY_SEARCH_TOOL_SCHEMA,
   },
   community_memory_read: {
     name: "community_memory_read",
-    description: "Read one accepted community memory node and a bounded visibility-filtered subgraph. Pass the retrieval log id from community_memory_search when available.",
+    description:
+      "Read one accepted community memory node and a bounded visibility-filtered subgraph. Pass the retrieval log id from community_memory_search when available.",
     inputSchema: COMMUNITY_MEMORY_READ_TOOL_SCHEMA,
   },
   community_chat_search: {
     name: "community_chat_search",
-    description: "Search authorized canonical chat interactions in the active community and return stable evidence refs. This reads raw evidence, not community-endorsed memory.",
+    description:
+      "Search authorized canonical chat interactions in the active community and return stable evidence refs. This reads raw evidence, not community-endorsed memory.",
     inputSchema: COMMUNITY_CHAT_SEARCH_TOOL_SCHEMA,
   },
   community_chat_read: {
     name: "community_chat_read",
-    description: "Read one authorized canonical community chat interaction by a stable evidence ref returned from community_chat_search.",
+    description:
+      "Read one authorized canonical community chat interaction by a stable evidence ref returned from community_chat_search.",
     inputSchema: COMMUNITY_CHAT_READ_TOOL_SCHEMA,
   },
   community_ai_feed_search: {
     name: "community_ai_feed_search",
-    description: "Search authorized canonical live AI Feed posts in the active community and return stable evidence refs. Retrieval relevance and community reaction signal are reported separately.",
+    description:
+      "Search authorized canonical live AI Feed posts in the active community and return stable evidence refs. Retrieval relevance and community reaction signal are reported separately.",
     inputSchema: COMMUNITY_AI_FEED_SEARCH_TOOL_SCHEMA,
   },
   community_ai_feed_read: {
     name: "community_ai_feed_read",
-    description: "Read one authorized canonical live AI Feed post by a stable evidence ref returned from community_ai_feed_search.",
+    description:
+      "Read one authorized canonical live AI Feed post by a stable evidence ref returned from community_ai_feed_search.",
     inputSchema: COMMUNITY_AI_FEED_READ_TOOL_SCHEMA,
   },
   community_write: {
     name: "community_write",
-    description: "Publish a grounded agent post into the active community live feed.",
+    description:
+      "Publish a grounded agent post into the active community live feed.",
     inputSchema: COMMUNITY_WRITE_TOOL_SCHEMA,
   },
   web_research: {
     name: "web_research",
-    description: "Research the live web by searching documentation, opening a page, or finding text within a page.",
+    description:
+      "Research the live web by searching documentation, opening a page, or finding text within a page.",
     inputSchema: WEB_RESEARCH_TOOL_SCHEMA,
   },
   web_crawl: {
     name: "web_crawl",
-    description: "Crawl a provided site, wiki, docs, or course URL with bounded same-origin crawling. Use active_community_sources to save crawled pages as source records for the active community.",
+    description:
+      "Crawl a provided site, wiki, docs, or course URL with bounded same-origin crawling. Use active_community_sources to save crawled pages as source records for the active community.",
     inputSchema: WEB_CRAWL_TOOL_SCHEMA,
   },
   list_dir: {
@@ -1042,7 +1067,8 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   read: {
     name: "read",
-    description: "Read a UTF-8 text file or directory listing from a computer workspace path.",
+    description:
+      "Read a UTF-8 text file or directory listing from a computer workspace path.",
     inputSchema: READ_TOOL_SCHEMA,
   },
   glob: {
@@ -1062,7 +1088,8 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   write: {
     name: "write",
-    description: "Write or overwrite a workspace file with the provided UTF-8 content.",
+    description:
+      "Write or overwrite a workspace file with the provided UTF-8 content.",
     inputSchema: WRITE_TOOL_SCHEMA,
   },
   edit: {
@@ -1077,12 +1104,14 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   terminal_start: {
     name: "terminal_start",
-    description: "Start a persistent background terminal command inside the bound computer workspace.",
+    description:
+      "Start a persistent background terminal command inside the bound computer workspace.",
     inputSchema: TERMINAL_START_TOOL_SCHEMA,
   },
   terminal_read: {
     name: "terminal_read",
-    description: "Check the current status and recent output tail of a background terminal.",
+    description:
+      "Check the current status and recent output tail of a background terminal.",
     inputSchema: TERMINAL_SESSION_ID_TOOL_SCHEMA,
   },
   terminal_write: {
@@ -1098,37 +1127,44 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   computer_open_url: {
     name: "computer_open_url",
-    description: "Open a URL in the sandbox desktop browser and return an updated visual observation.",
+    description:
+      "Open a URL in the sandbox desktop browser and return an updated visual observation.",
     inputSchema: COMPUTER_OPEN_URL_TOOL_SCHEMA,
   },
   computer_screenshot: {
     name: "computer_screenshot",
-    description: "Capture the current sandbox desktop as a visual observation for the next tool decision.",
+    description:
+      "Capture the current sandbox desktop as a visual observation for the next tool decision.",
     inputSchema: COMPUTER_SCREENSHOT_TOOL_SCHEMA,
   },
   computer_click: {
     name: "computer_click",
-    description: "Click inside the sandbox desktop at screen coordinates and return an updated visual observation.",
+    description:
+      "Click inside the sandbox desktop at screen coordinates and return an updated visual observation.",
     inputSchema: COMPUTER_CLICK_TOOL_SCHEMA,
   },
   computer_type: {
     name: "computer_type",
-    description: "Type text into the focused sandbox desktop input and return an updated visual observation.",
+    description:
+      "Type text into the focused sandbox desktop input and return an updated visual observation.",
     inputSchema: COMPUTER_TYPE_TOOL_SCHEMA,
   },
   computer_keypress: {
     name: "computer_keypress",
-    description: "Press a key with optional modifiers in the sandbox desktop and return an updated visual observation.",
+    description:
+      "Press a key with optional modifiers in the sandbox desktop and return an updated visual observation.",
     inputSchema: COMPUTER_KEYPRESS_TOOL_SCHEMA,
   },
   computer_scroll: {
     name: "computer_scroll",
-    description: "Scroll at screen coordinates in the sandbox desktop and return an updated visual observation.",
+    description:
+      "Scroll at screen coordinates in the sandbox desktop and return an updated visual observation.",
     inputSchema: COMPUTER_SCROLL_TOOL_SCHEMA,
   },
   computer_stop: {
     name: "computer_stop",
-    description: "Stop the sandbox desktop computer-use processes when they are no longer needed.",
+    description:
+      "Stop the sandbox desktop computer-use processes when they are no longer needed.",
     inputSchema: COMPUTER_STOP_TOOL_SCHEMA,
   },
 };
@@ -1251,12 +1287,19 @@ export function sanitizeResponsesApiSchema(schema: JsonSchema): JsonSchema {
     ) {
       continue;
     }
-    if (key === "properties" && value && typeof value === "object" && !Array.isArray(value)) {
+    if (
+      key === "properties" &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
       next[key] = Object.fromEntries(
-        Object.entries(value as Record<string, JsonSchema>).map(([childKey, childValue]) => [
-          childKey,
-          sanitizeResponsesApiSchema(childValue),
-        ]),
+        Object.entries(value as Record<string, JsonSchema>).map(
+          ([childKey, childValue]) => [
+            childKey,
+            sanitizeResponsesApiSchema(childValue),
+          ],
+        ),
       );
       continue;
     }
@@ -1270,7 +1313,9 @@ export function sanitizeResponsesApiSchema(schema: JsonSchema): JsonSchema {
       (key === "anyOf" || key === "allOf" || key === "oneOf") &&
       Array.isArray(value)
     ) {
-      next[key] = value.map((entry) => sanitizeResponsesApiSchema(entry as JsonSchema));
+      next[key] = value.map((entry) =>
+        sanitizeResponsesApiSchema(entry as JsonSchema),
+      );
       continue;
     }
     if (
@@ -1367,7 +1412,11 @@ function hasStrictResponsesApiSchemaRisk(schema: JsonSchema): boolean {
   if ("items" in schema) {
     const items = schema.items;
     if (Array.isArray(items)) {
-      if (items.some((entry) => hasStrictResponsesApiSchemaRisk(entry as JsonSchema))) {
+      if (
+        items.some((entry) =>
+          hasStrictResponsesApiSchemaRisk(entry as JsonSchema),
+        )
+      ) {
         return true;
       }
     } else if (hasStrictResponsesApiSchemaRisk(items as JsonSchema)) {
@@ -1416,7 +1465,9 @@ function buildStrictResponsesApiSchema(schema: JsonSchema): JsonSchema {
     return {
       ...record,
       items: Array.isArray(record.items)
-        ? record.items.map((entry) => buildStrictResponsesApiSchema(entry as JsonSchema))
+        ? record.items.map((entry) =>
+            buildStrictResponsesApiSchema(entry as JsonSchema),
+          )
         : buildStrictResponsesApiSchema(record.items as JsonSchema),
     };
   }
@@ -1468,10 +1519,14 @@ function normalizeString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function normalizeBuilderChangesetOperationForTool(raw: unknown): Record<string, unknown> {
+function normalizeBuilderChangesetOperationForTool(
+  raw: unknown,
+): Record<string, unknown> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const record = raw as Record<string, unknown>;
-  const op = String(record.op ?? record.kind ?? "").trim().toLowerCase();
+  const op = String(record.op ?? record.kind ?? "")
+    .trim()
+    .toLowerCase();
   const out: Record<string, unknown> = op ? { op: op.slice(0, 80) } : {};
   const copyString = (from: string, to = from, maxLength = 2000) => {
     const value = normalizeString(record[from]);
@@ -1549,9 +1604,11 @@ function normalizePositiveInteger(
       : typeof value === "string"
         ? Number(value)
         : Number.NaN;
-  if (!Number.isFinite(parsed)) throw new Error(`${fieldName} must be a number.`);
+  if (!Number.isFinite(parsed))
+    throw new Error(`${fieldName} must be a number.`);
   const integer = Math.floor(parsed);
-  if (integer < 1) throw new Error(`${fieldName} must be greater than or equal to 1.`);
+  if (integer < 1)
+    throw new Error(`${fieldName} must be greater than or equal to 1.`);
   return Math.min(integer, maxValue);
 }
 
@@ -1568,10 +1625,13 @@ function normalizeBoundedInteger(
       : typeof value === "string"
         ? Number(value)
         : Number.NaN;
-  if (!Number.isFinite(parsed)) throw new Error(`${fieldName} must be a number.`);
+  if (!Number.isFinite(parsed))
+    throw new Error(`${fieldName} must be a number.`);
   const integer = Math.floor(parsed);
   if (integer < minValue) {
-    throw new Error(`${fieldName} must be greater than or equal to ${minValue}.`);
+    throw new Error(
+      `${fieldName} must be greater than or equal to ${minValue}.`,
+    );
   }
   return Math.min(integer, maxValue);
 }
@@ -1580,7 +1640,10 @@ export function normalizeToolArguments(
   toolName: RetrievalToolName,
   rawArgs: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> {
-  const args = rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs) ? rawArgs : {};
+  const args =
+    rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)
+      ? rawArgs
+      : {};
   if (toolName === "list_dir") {
     const path = normalizeString(args.path);
     if (!path) throw new Error("list_dir requires path.");
@@ -1610,12 +1673,21 @@ export function normalizeToolArguments(
           .map((value) => normalizeString(value))
           .filter((value): value is string => Boolean(value))
       : [];
-    const unsupportedType = requestedTypes.find((value) => !allowedTypes.has(value));
+    const unsupportedType = requestedTypes.find(
+      (value) => !allowedTypes.has(value),
+    );
     if (unsupportedType) {
-      throw new Error(`community_memory_search received unsupported memory type: ${unsupportedType}.`);
+      throw new Error(
+        `community_memory_search received unsupported memory type: ${unsupportedType}.`,
+      );
     }
     const types = [...new Set(requestedTypes)].slice(0, 6);
-    const limit = normalizeBoundedInteger(args.limit, "community_memory_search limit", 1, 12);
+    const limit = normalizeBoundedInteger(
+      args.limit,
+      "community_memory_search limit",
+      1,
+      12,
+    );
     return {
       query: query.slice(0, 512),
       ...(types.length ? { types } : null),
@@ -1625,16 +1697,25 @@ export function normalizeToolArguments(
   if (toolName === "community_memory_read") {
     const nodeId = normalizeString(args.node_id ?? args.nodeId);
     if (!nodeId) throw new Error("community_memory_read requires node_id.");
-    const retrievalLogId = normalizeString(args.retrieval_log_id ?? args.retrievalLogId);
+    const retrievalLogId = normalizeString(
+      args.retrieval_log_id ?? args.retrievalLogId,
+    );
     return {
       nodeId: nodeId.slice(0, 128),
-      ...(retrievalLogId ? { retrievalLogId: retrievalLogId.slice(0, 128) } : null),
+      ...(retrievalLogId
+        ? { retrievalLogId: retrievalLogId.slice(0, 128) }
+        : null),
     };
   }
   if (toolName === "community_chat_search") {
     const query = normalizeString(args.query);
     if (!query) throw new Error("community_chat_search requires query.");
-    const limit = normalizeBoundedInteger(args.limit, "community_chat_search limit", 1, 20);
+    const limit = normalizeBoundedInteger(
+      args.limit,
+      "community_chat_search limit",
+      1,
+      20,
+    );
     return {
       query: query.slice(0, 240),
       ...(limit ? { limit } : null),
@@ -1643,14 +1724,21 @@ export function normalizeToolArguments(
   if (toolName === "community_chat_read") {
     const ref = normalizeString(args.ref);
     if (!ref || !/^interaction:(root|reply):[^\s:]+$/.test(ref)) {
-      throw new Error("community_chat_read requires a valid interaction evidence ref.");
+      throw new Error(
+        "community_chat_read requires a valid interaction evidence ref.",
+      );
     }
     return { ref: ref.slice(0, 512) };
   }
   if (toolName === "community_ai_feed_search") {
     const query = normalizeString(args.query);
     if (!query) throw new Error("community_ai_feed_search requires query.");
-    const limit = normalizeBoundedInteger(args.limit, "community_ai_feed_search limit", 1, 20);
+    const limit = normalizeBoundedInteger(
+      args.limit,
+      "community_ai_feed_search limit",
+      1,
+      20,
+    );
     return {
       query: query.slice(0, 240),
       ...(limit ? { limit } : null),
@@ -1659,28 +1747,40 @@ export function normalizeToolArguments(
   if (toolName === "community_ai_feed_read") {
     const ref = normalizeString(args.ref);
     if (!ref || !/^ai_feed:[^\s:]+$/.test(ref)) {
-      throw new Error("community_ai_feed_read requires a valid AI Feed evidence ref.");
+      throw new Error(
+        "community_ai_feed_read requires a valid AI Feed evidence ref.",
+      );
     }
     return { ref: ref.slice(0, 512) };
   }
   if (toolName === "member_conversations_list") {
-    const limit = normalizeBoundedInteger(args.limit, "member_conversations_list limit", 1, 12);
+    const limit = normalizeBoundedInteger(
+      args.limit,
+      "member_conversations_list limit",
+      1,
+      12,
+    );
     return limit ? { limit } : {};
   }
   if (toolName === "member_conversation_read") {
     const episodeId = normalizeString(args.episode_id ?? args.episodeId);
-    if (!episodeId) throw new Error("member_conversation_read requires episode_id.");
+    if (!episodeId)
+      throw new Error("member_conversation_read requires episode_id.");
     return { episodeId: episodeId.slice(0, 160) };
   }
   if (toolName === "polynet_list_communities") {
     const scope = normalizeString(args.scope)?.toLowerCase() ?? "joined";
     if (scope !== "joined" && scope !== "discover") {
-      throw new Error("polynet_list_communities scope must be joined or discover.");
+      throw new Error(
+        "polynet_list_communities scope must be joined or discover.",
+      );
     }
     return { scope };
   }
   if (toolName === "polynet_get_community") {
-    const communitySlug = normalizeString(args.community_slug ?? args.communitySlug)?.toLowerCase();
+    const communitySlug = normalizeString(
+      args.community_slug ?? args.communitySlug,
+    )?.toLowerCase();
     if (!communitySlug || !/^[a-z0-9-]{3,64}$/.test(communitySlug)) {
       throw new Error("polynet_get_community requires a valid community_slug.");
     }
@@ -1699,7 +1799,12 @@ export function normalizeToolArguments(
     if (refs.length < 1) {
       throw new Error("community_resources_read requires refs.");
     }
-    const maxChars = normalizeBoundedInteger(args.max_chars, "community_resources_read max_chars", 1, 50000);
+    const maxChars = normalizeBoundedInteger(
+      args.max_chars,
+      "community_resources_read max_chars",
+      1,
+      50000,
+    );
     const perResourceChars = normalizeBoundedInteger(
       args.per_resource_chars,
       "community_resources_read per_resource_chars",
@@ -1715,14 +1820,24 @@ export function normalizeToolArguments(
   if (toolName === "community_resources_search") {
     const query = normalizeString(args.query);
     if (!query) throw new Error("community_resources_search requires query.");
-    const limit = normalizeBoundedInteger(args.limit, "community_resources_search limit", 1, 20);
+    const limit = normalizeBoundedInteger(
+      args.limit,
+      "community_resources_search limit",
+      1,
+      20,
+    );
     return {
       query: query.slice(0, 240),
       ...(limit ? { limit } : null),
     };
   }
   if (toolName === "community_resource_builder_list") {
-    const limit = normalizeBoundedInteger(args.limit, "community_resource_builder_list limit", 1, 250);
+    const limit = normalizeBoundedInteger(
+      args.limit,
+      "community_resource_builder_list limit",
+      1,
+      250,
+    );
     return {
       ...(limit ? { limit } : null),
     };
@@ -1736,11 +1851,21 @@ export function normalizeToolArguments(
     const id = normalizeString(args.id);
     if (targetType === "resource" && id) {
       const normalizedId = id.slice(0, 160);
-      return { ref: normalizedId, targetType: "resource", id: normalizedId, resourceId: normalizedId };
+      return {
+        ref: normalizedId,
+        targetType: "resource",
+        id: normalizedId,
+        resourceId: normalizedId,
+      };
     }
     if (targetType === "module" && id) {
       const normalizedId = id.slice(0, 160);
-      return { ref: normalizedId, targetType: "module", id: normalizedId, moduleId: normalizedId };
+      return {
+        ref: normalizedId,
+        targetType: "module",
+        id: normalizedId,
+        moduleId: normalizedId,
+      };
     }
     if (id) {
       return { ref: id.slice(0, 1024), id: id.slice(0, 160) };
@@ -1751,7 +1876,9 @@ export function normalizeToolArguments(
       throw new Error("community_resource_builder_read requires ref.");
     }
     if (resourceId && moduleId) {
-      throw new Error("community_resource_builder_read accepts only one target id.");
+      throw new Error(
+        "community_resource_builder_read accepts only one target id.",
+      );
     }
     return {
       ...(resourceId
@@ -1774,15 +1901,24 @@ export function normalizeToolArguments(
   }
   if (toolName === "community_resource_builder_stage_changeset") {
     const summary = normalizeString(args.summary);
-    if (!summary) throw new Error("community_resource_builder_stage_changeset requires summary.");
+    if (!summary)
+      throw new Error(
+        "community_resource_builder_stage_changeset requires summary.",
+      );
     if (!Array.isArray(args.operations)) {
-      throw new Error("community_resource_builder_stage_changeset requires operations.");
+      throw new Error(
+        "community_resource_builder_stage_changeset requires operations.",
+      );
     }
     if (args.operations.length < 1) {
-      throw new Error("community_resource_builder_stage_changeset operations cannot be empty.");
+      throw new Error(
+        "community_resource_builder_stage_changeset operations cannot be empty.",
+      );
     }
     if (args.operations.length > 25) {
-      throw new Error("community_resource_builder_stage_changeset supports at most 25 operations.");
+      throw new Error(
+        "community_resource_builder_stage_changeset supports at most 25 operations.",
+      );
     }
     return {
       summary: summary.slice(0, 2000),
@@ -1794,43 +1930,54 @@ export function normalizeToolArguments(
   if (toolName === "community_resource_builder_apply_changeset") {
     const changesetId = normalizeString(args.changeset_id);
     if (!changesetId) {
-      throw new Error("community_resource_builder_apply_changeset requires changeset_id.");
+      throw new Error(
+        "community_resource_builder_apply_changeset requires changeset_id.",
+      );
     }
     return {
       changesetId: changesetId.slice(0, 160),
     };
   }
   if (toolName === "polynet_list") {
-    const validated = validateCommunitySemanticOperationInput({
+    const validated = validatePolynetSemanticRepositoryOperationInput({
       operation: "list",
       path: args.path,
       cursor: args.cursor,
       limit: args.limit,
+      offset: args.offset,
     });
     if (!validated.ok) throw new Error(validated.message);
     return {
       path: validated.path,
-      ...(validated.cursor ? { cursor: validated.cursor } : {}),
+      ...("cursor" in validated && validated.cursor
+        ? { cursor: validated.cursor }
+        : {}),
       ...(validated.limit !== null ? { limit: validated.limit } : {}),
     };
   }
   if (toolName === "polynet_read") {
-    const validated = validateCommunitySemanticOperationInput({
+    const validated = validatePolynetSemanticRepositoryOperationInput({
       operation: "read",
       path: args.path,
+      cursor: args.cursor,
       offset: args.offset,
       limit: args.limit,
     });
     if (!validated.ok) throw new Error(validated.message);
     return {
       path: validated.path,
-      ...(validated.offset !== null ? { offset: validated.offset } : {}),
+      ...("offset" in validated && validated.offset !== null
+        ? { offset: validated.offset }
+        : {}),
       ...(validated.limit !== null ? { limit: validated.limit } : {}),
     };
   }
   if (toolName === "member_profile_confirm_facts") {
-    const confirmMarker = normalizeString(args.confirm_marker ?? args.confirmMarker);
-    if (!confirmMarker) throw new Error("member_profile_confirm_facts requires confirm_marker.");
+    const confirmMarker = normalizeString(
+      args.confirm_marker ?? args.confirmMarker,
+    );
+    if (!confirmMarker)
+      throw new Error("member_profile_confirm_facts requires confirm_marker.");
     if (!Array.isArray(args.facts)) {
       throw new Error("member_profile_confirm_facts requires facts.");
     }
@@ -1838,7 +1985,9 @@ export function normalizeToolArguments(
       throw new Error("member_profile_confirm_facts facts cannot be empty.");
     }
     if (args.facts.length > 12) {
-      throw new Error("member_profile_confirm_facts supports at most 12 facts.");
+      throw new Error(
+        "member_profile_confirm_facts supports at most 12 facts.",
+      );
     }
     const validKinds = new Set([
       "situation",
@@ -1851,12 +2000,16 @@ export function normalizeToolArguments(
     ]);
     const facts = args.facts.map((rawFact, index) => {
       if (!rawFact || typeof rawFact !== "object" || Array.isArray(rawFact)) {
-        throw new Error(`member_profile_confirm_facts fact ${index + 1} must be an object.`);
+        throw new Error(
+          `member_profile_confirm_facts fact ${index + 1} must be an object.`,
+        );
       }
       const fact = rawFact as Record<string, unknown>;
       const kind = normalizeString(fact.kind)?.toLowerCase() ?? "";
       if (!validKinds.has(kind)) {
-        throw new Error(`member_profile_confirm_facts fact ${index + 1} has invalid kind.`);
+        throw new Error(
+          `member_profile_confirm_facts fact ${index + 1} has invalid kind.`,
+        );
       }
       const provenance = normalizeString(fact.provenance)?.toLowerCase() ?? "";
       if (provenance !== "stated_interview" && provenance !== "form_answer") {
@@ -1866,14 +2019,18 @@ export function normalizeToolArguments(
       }
       const body = normalizeString(fact.body);
       if (!body) {
-        throw new Error(`member_profile_confirm_facts fact ${index + 1} requires body.`);
+        throw new Error(
+          `member_profile_confirm_facts fact ${index + 1} requires body.`,
+        );
       }
       const confidenceRaw = fact.confidence;
       const confidence =
         typeof confidenceRaw === "number" && Number.isFinite(confidenceRaw)
           ? Math.max(0, Math.min(1, confidenceRaw))
           : null;
-      const evidenceRef = normalizeString(fact.evidence_ref ?? fact.evidenceRef);
+      const evidenceRef = normalizeString(
+        fact.evidence_ref ?? fact.evidenceRef,
+      );
       return {
         kind,
         body: body.slice(0, 500),
@@ -1890,7 +2047,12 @@ export function normalizeToolArguments(
   if (toolName === "search_product_docs") {
     const query = normalizeString(args.query);
     if (!query) throw new Error("search_product_docs requires query.");
-    const limit = normalizeBoundedInteger(args.limit, "search_product_docs limit", 1, 10);
+    const limit = normalizeBoundedInteger(
+      args.limit,
+      "search_product_docs limit",
+      1,
+      10,
+    );
     const section = normalizeString(args.section);
     const audience = normalizeString(args.audience);
     return {
@@ -1920,9 +2082,15 @@ export function normalizeToolArguments(
           .filter((value): value is string => Boolean(value))
           .slice(0, 4)
       : [];
-    if (evidence.length === 0) throw new Error("community_write requires evidence.");
+    if (evidence.length === 0)
+      throw new Error("community_write requires evidence.");
     const postType = normalizeString(args.post_type)?.toLowerCase();
-    if (!postType || (postType !== "observation" && postType !== "recommendation" && postType !== "action")) {
+    if (
+      !postType ||
+      (postType !== "observation" &&
+        postType !== "recommendation" &&
+        postType !== "action")
+    ) {
       throw new Error("community_write requires post_type.");
     }
     return {
@@ -1963,14 +2131,18 @@ export function normalizeToolArguments(
         query: query.slice(0, 512),
       };
     }
-    throw new Error("web_research action must be search, open_page, or find_in_page.");
+    throw new Error(
+      "web_research action must be search, open_page, or find_in_page.",
+    );
   }
   if (toolName === "web_crawl") {
     const url = normalizeString(args.url);
     if (!url) throw new Error("web_crawl requires url.");
     const rawStrategy = normalizeString(args.strategy)?.toLowerCase();
     const strategy =
-      rawStrategy === "simple" || rawStrategy === "crawl" || rawStrategy === "auto"
+      rawStrategy === "simple" ||
+      rawStrategy === "crawl" ||
+      rawStrategy === "auto"
         ? rawStrategy
         : "auto";
     const rawDestination = normalizeString(args.destination)?.toLowerCase();
@@ -1978,9 +2150,24 @@ export function normalizeToolArguments(
       rawDestination === "active_community_sources"
         ? "active_community_sources"
         : "context";
-    const maxPages = normalizeBoundedInteger(args.max_pages, "web_crawl max_pages", 1, 100);
-    const maxDepth = normalizeBoundedInteger(args.max_depth, "web_crawl max_depth", 0, 4);
-    const maxChars = normalizeBoundedInteger(args.max_chars, "web_crawl max_chars", 1000, 80000);
+    const maxPages = normalizeBoundedInteger(
+      args.max_pages,
+      "web_crawl max_pages",
+      1,
+      100,
+    );
+    const maxDepth = normalizeBoundedInteger(
+      args.max_depth,
+      "web_crawl max_depth",
+      0,
+      4,
+    );
+    const maxChars = normalizeBoundedInteger(
+      args.max_chars,
+      "web_crawl max_chars",
+      1000,
+      80000,
+    );
     return {
       url: url.slice(0, 2048),
       strategy,
@@ -1993,7 +2180,11 @@ export function normalizeToolArguments(
   if (toolName === "read") {
     const path = normalizeString(args.path);
     if (!path) throw new Error("read requires path.");
-    const offset = normalizePositiveInteger(args.offset, "read offset", 1_000_000);
+    const offset = normalizePositiveInteger(
+      args.offset,
+      "read offset",
+      1_000_000,
+    );
     const limit = normalizePositiveInteger(args.limit, "read limit", 1_000);
     return {
       path: path.slice(0, 1024),
@@ -2018,7 +2209,8 @@ export function normalizeToolArguments(
   if (toolName === "write") {
     const path = normalizeString(args.path);
     if (!path) throw new Error("write requires path.");
-    if (typeof args.content !== "string") throw new Error("write requires content.");
+    if (typeof args.content !== "string")
+      throw new Error("write requires content.");
     return {
       path: path.slice(0, 1024),
       content: args.content.slice(0, 200000),
@@ -2030,7 +2222,8 @@ export function normalizeToolArguments(
     if (typeof args.old_text !== "string" || args.old_text.length === 0) {
       throw new Error("edit requires old_text.");
     }
-    if (typeof args.new_text !== "string") throw new Error("edit requires new_text.");
+    if (typeof args.new_text !== "string")
+      throw new Error("edit requires new_text.");
     return {
       path: path.slice(0, 1024),
       old_text: args.old_text.slice(0, 100000),
@@ -2051,12 +2244,19 @@ export function normalizeToolArguments(
     const command = normalizeString(args.command);
     if (!command) throw new Error("terminal_start requires command.");
     const cwd = normalizeString(args.cwd);
-    const previewPort = normalizePositiveInteger(args.preview_port, "preview_port", 9999);
+    const previewPort = normalizePositiveInteger(
+      args.preview_port,
+      "preview_port",
+      9999,
+    );
     if (previewPort !== null && previewPort < 3000) {
       throw new Error("preview_port must be between 3000 and 9999.");
     }
     const previewPath = normalizeString(args.preview_path);
-    if (previewPath && (previewPath.includes("://") || previewPath.startsWith("//"))) {
+    if (
+      previewPath &&
+      (previewPath.includes("://") || previewPath.startsWith("//"))
+    ) {
       throw new Error("preview_path must be a path, not a full URL.");
     }
     const previewLabel = normalizeString(args.preview_label);
@@ -2070,7 +2270,8 @@ export function normalizeToolArguments(
   }
   if (toolName === "terminal_read" || toolName === "terminal_stop") {
     const terminalSessionId = normalizeString(args.terminal_session_id);
-    if (!terminalSessionId) throw new Error(`${toolName} requires terminal_session_id.`);
+    if (!terminalSessionId)
+      throw new Error(`${toolName} requires terminal_session_id.`);
     const previewPort =
       toolName === "terminal_stop"
         ? normalizePositiveInteger(args.preview_port, "preview_port", 9999)
@@ -2085,7 +2286,8 @@ export function normalizeToolArguments(
   }
   if (toolName === "terminal_write") {
     const terminalSessionId = normalizeString(args.terminal_session_id);
-    if (!terminalSessionId) throw new Error("terminal_write requires terminal_session_id.");
+    if (!terminalSessionId)
+      throw new Error("terminal_write requires terminal_session_id.");
     if (typeof args.input !== "string" || args.input.length === 0) {
       throw new Error("terminal_write requires input.");
     }
@@ -2111,7 +2313,12 @@ export function normalizeToolArguments(
       throw new Error("computer_click requires x and y.");
     }
     const button = normalizeString(args.button)?.toLowerCase();
-    if (button && button !== "left" && button !== "right" && button !== "middle") {
+    if (
+      button &&
+      button !== "left" &&
+      button !== "right" &&
+      button !== "middle"
+    ) {
       throw new Error("computer_click button must be left, right, or middle.");
     }
     return {
@@ -2124,7 +2331,12 @@ export function normalizeToolArguments(
   if (toolName === "computer_type") {
     const text = normalizeString(args.text);
     if (!text) throw new Error("computer_type requires text.");
-    const delayMs = normalizeBoundedInteger(args.delay_ms, "delay_ms", 0, 1_000);
+    const delayMs = normalizeBoundedInteger(
+      args.delay_ms,
+      "delay_ms",
+      0,
+      1_000,
+    );
     return {
       text: text.slice(0, 4000),
       ...(delayMs !== null ? { delay_ms: delayMs } : null),
@@ -2139,7 +2351,10 @@ export function normalizeToolArguments(
           .filter(
             (value): value is string =>
               Boolean(value) &&
-              (value === "ctrl" || value === "alt" || value === "meta" || value === "shift"),
+              (value === "ctrl" ||
+                value === "alt" ||
+                value === "meta" ||
+                value === "shift"),
           )
           .slice(0, 4)
       : [];

@@ -7,15 +7,12 @@ import {
   type CommunityMembershipLike,
 } from "./communityCore";
 import { getUniqueUserByNormalizedHandle, getUniqueUserProfileDetailByUserId } from "./profileCore";
-import { resolveViewerProfileRelationship } from "./profileRelationshipCore";
 import type { ResolvedCommunityCapabilityContext } from "../shared/communityCapabilityContextContract";
 import type {
   MemberProfileSemanticSource,
   MemberSemanticDirectorySource,
-  SelfProfileCommunitySummary,
 } from "../shared/communitySemanticRepository";
 import { validateProfileHandle } from "../shared/profileHandle";
-import { normalizeSocialProfileLinks } from "../shared/socialProfileLinks";
 
 export const MEMBER_SEMANTIC_DIRECTORY_DEFAULT_LIMIT = 24;
 export const MEMBER_SEMANTIC_DIRECTORY_MAX_LIMIT = 50;
@@ -29,8 +26,6 @@ type SemanticMemberUserRow = {
 
 type SemanticMemberProfileDetailRow = {
   displayName?: string;
-  bio?: string;
-  socialLinks?: Record<string, unknown>;
 };
 
 function normalizeSemanticMemberRole(
@@ -64,14 +59,6 @@ function normalizeCommunityId(ctx: any, context: ResolvedCommunityCapabilityCont
   const communityId = ctx.db.normalizeId("communities", context.communityId);
   if (!communityId) throw new Error("semantic_community_id_invalid");
   return communityId;
-}
-
-function mapCommunitySummary(
-  row: { slug?: string | null; name?: string | null },
-): SelfProfileCommunitySummary | null {
-  const slug = String(row.slug ?? "").trim().toLowerCase();
-  const name = String(row.name ?? "").trim();
-  return slug && name ? { slug, name } : null;
 }
 
 async function buildMemberDirectoryEntry(args: {
@@ -119,6 +106,10 @@ async function buildMemberDirectoryEntry(args: {
     );
   return {
     entry: {
+      userRef: `user:${String(user._id)}`,
+      profilePath: validatedHandle.ok
+        ? `/users/${validatedHandle.normalizedHandle}/profile.md`
+        : "/users/me/profile.md",
       displayName: detail?.displayName ?? user.displayName ?? null,
       handle: validatedHandle.ok ? validatedHandle.normalizedHandle : null,
       role: normalizeSemanticMemberRole(args.role),
@@ -193,7 +184,6 @@ export async function listMemberSemanticDirectory(args: {
 
 export async function resolveMemberSemanticProfile(args: {
   ctx: any;
-  actorUserId: any;
   context: ResolvedCommunityCapabilityContext;
   handle: string;
 }): Promise<MemberProfileSemanticSource | null> {
@@ -203,7 +193,7 @@ export async function resolveMemberSemanticProfile(args: {
     args.ctx,
     validatedHandle.normalizedHandle,
   );
-  if (!user || String(user._id) === String(args.actorUserId)) return null;
+  if (!user) return null;
   const communityId = normalizeCommunityId(args.ctx, args.context);
   const { community } = await requireCommunityChatAccess({
     ctx: args.ctx,
@@ -224,29 +214,16 @@ export async function resolveMemberSemanticProfile(args: {
   ) {
     return null;
   }
-  const [detail, relationship] = await Promise.all([
-    getUniqueUserProfileDetailByUserId<SemanticMemberProfileDetailRow>(
+  const detail =
+    await getUniqueUserProfileDetailByUserId<SemanticMemberProfileDetailRow>(
       args.ctx,
       user._id,
-    ),
-    resolveViewerProfileRelationship({
-      ctx: args.ctx,
-      viewerUserId: args.actorUserId,
-      targetUserId: user._id,
-      preferredCommunityId: communityId,
-    }),
-  ]);
-  const ownedCommunities = relationship.owned_communities
-    .map(mapCommunitySummary)
-    .filter((row): row is SelfProfileCommunitySummary => Boolean(row));
-  const mutualCommunities = relationship.mutual_communities
-    .map(mapCommunitySummary)
-    .filter((row): row is SelfProfileCommunitySummary => Boolean(row));
+    );
   return {
+    userRef: `user:${String(user._id)}`,
+    profilePath: `/users/${validatedHandle.normalizedHandle}/profile.md`,
     displayName: detail?.displayName ?? user.displayName ?? null,
     handle: validatedHandle.normalizedHandle,
-    bio: detail?.bio ?? null,
-    socialLinks: normalizeSocialProfileLinks(detail?.socialLinks ?? {}),
     currentCommunity: {
       slug: args.context.communitySlug,
       name:
@@ -257,7 +234,5 @@ export async function resolveMemberSemanticProfile(args: {
           ? "owner"
           : normalizeSemanticMemberRole(membership?.role),
     },
-    ownedCommunities,
-    mutualCommunities,
   };
 }

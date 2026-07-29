@@ -259,11 +259,11 @@ function proveFixedPolicyBoundaries() {
   );
   assert.equal(
     getFixedRuntimeToolPolicy("polynet_list").requiresCommunity,
-    true,
+    false,
   );
   assert.equal(getFixedRuntimeToolPolicy("polynet_list").readOnly, true);
   assert.equal(getFixedRuntimeToolPolicy("polynet_read").category, "community");
-  assert.equal(getFixedRuntimeToolPolicy("polynet_read").requiresCommunity, true);
+  assert.equal(getFixedRuntimeToolPolicy("polynet_read").requiresCommunity, false);
   assert.equal(getFixedRuntimeToolPolicy("polynet_read").readOnly, false);
   assert.equal(getFixedRuntimeToolPolicy("polynet_read").mutatesState, true);
   assert.equal(getFixedRuntimeToolPolicy("polynet_read").parallelSafe, false);

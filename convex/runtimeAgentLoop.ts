@@ -112,6 +112,7 @@ import {
   buildToolBatchTelemetryPayload,
 } from "./runtimeHarnessTelemetry";
 import { executePlatformOperation } from "./platformOperationExecutor.ts";
+import { selectRuntimePolynetSemanticMount } from "../shared/polynetSemanticRepositoryContract.ts";
 import {
   formatJsonToolOutput,
   normalizeRuntimeSkillResolution,
@@ -326,14 +327,20 @@ export async function executeRetrievalHarnessTool(params: {
     params.toolName === "polynet_list" ||
     params.toolName === "polynet_read"
   ) {
-    if (!params.communityId) {
+    const requestedPath = String(normalizedArgs.path ?? "");
+    const semanticMount = selectRuntimePolynetSemanticMount({
+      path: requestedPath,
+      communityId: params.communityId,
+      evidenceSurface: params.evidenceSurface,
+    });
+    if (semanticMount.kind === "community" && !params.communityId) {
       return {
         status: "error",
         exitCode: null,
         outputText: "",
         errorCode: "community_required",
         errorMessage:
-          `${params.toolName} requires an active community context.`,
+          `${params.toolName} requires a verified community mount for the community concierge.`,
       };
     }
     const authSubject = String(params.authSubject ?? "").trim();
@@ -354,7 +361,7 @@ export async function executeRetrievalHarnessTool(params: {
       ctx: params.ctx,
       authSubject,
       userId: params.userId,
-      communityId: params.communityId,
+      semanticMount,
       evidenceSurface: params.evidenceSurface ?? "member_agent_dock",
       input: normalizedArgs,
     });

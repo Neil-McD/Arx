@@ -7,8 +7,9 @@ import {
 export const COMMUNITY_AGENT_CONCIERGE_TOOL_NAMES = [
   "search_product_docs",
   "get_product_doc",
+  "polynet_list",
+  "polynet_read",
   "community_resources_search",
-  "community_resources_read",
   "community_memory_search",
   "community_memory_read",
   "community_chat_search",

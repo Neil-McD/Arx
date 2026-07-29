@@ -242,7 +242,9 @@ function provePromptEntrypoints() {
   assert.match(platformHarnessPrompt, /Premium tools are still limited to the listed allowed tools/);
   assert.match(platformHarnessPrompt, /Use web_research for current external facts/);
   assert.match(platformHarnessPrompt, /Use web_crawl when the user provides a site, wiki, docs, course, or multi-page URL/);
-  assert.match(platformHarnessPrompt, /Use polynet_read with path \/community\.md when the answer depends on the active community's full identity/);
+  assert.match(platformHarnessPrompt, /Use polynet_list with path \/ to inspect the platform repository root/);
+  assert.match(platformHarnessPrompt, /Use polynet_list with path \/communities\/ to list communities the signed-in member can currently access/);
+  assert.match(platformHarnessPrompt, /Use polynet_read with path \/communities\/unified-community\/community\.md when the answer depends on the active community's full identity/);
   assert.match(platformHarnessPrompt, /use the semantic polynet_list\/polynet_read path before product documentation tools/);
   assert.match(platformHarnessPrompt, /community_resources_read only when a justified batch read/);
   assert.doesNotMatch(

@@ -71,11 +71,14 @@ The preferred semantic operations are:
 list
 search
 read
-propose_write
+write
+call
 ```
 
-Canonical writes pass through deterministic validation before becoming shared
-state.
+`write` expresses a requested state change; deterministic policy decides whether
+it may apply directly or must become a proposal. `call` invokes only an admitted
+typed capability. Canonical writes and calls pass through deterministic
+validation before changing shared state.
 
 ### Learning Plane
 

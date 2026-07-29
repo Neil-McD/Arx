@@ -224,7 +224,9 @@ assert.match(prompt, /When the member asks your name, answer with the configured
 assert.match(prompt, /You are the member's Polynet agent: a sharp little intelligence/);
 assert.match(prompt, /Keep proofs tight/);
 assert.match(prompt, /Use this lens as background context/);
-assert.match(prompt, /Use polynet_read with path \/community\.md when the answer depends on the active community's full identity/);
+assert.match(prompt, /Use polynet_list with path \/ to inspect the platform repository root/);
+assert.match(prompt, /Use polynet_list with path \/communities\/ to list communities the signed-in member can currently access/);
+assert.match(prompt, /Use polynet_read with path \/communities\/prompt-community\/community\.md when the answer depends on the active community's full identity/);
 assert.match(prompt, /When available, use community resource tools when canonical resource navigation/);
 assert.match(prompt, /use the semantic polynet_list\/polynet_read path before product documentation tools/);
 assert.match(prompt, /community_resources_read only when a justified batch read/);

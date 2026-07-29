@@ -618,7 +618,7 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
       retrieval: "tool_available",
       visibility: "member",
       source: "polynet_list/polynet_read",
-      reason: "deterministic active-community semantic profile",
+      reason: "permission-filtered platform semantic repository with exact active-community paths",
     });
   }
   if (hasAnyTool(params.allowedToolNames, COMMUNITY_RESOURCE_TOOL_NAMES)) {
