@@ -6,16 +6,19 @@ function read(path: string): string {
 }
 
 const app = read("apps/web/src/App.tsx");
+const accountGraphLifecycle = read(
+  "apps/web/src/controllers/useWebAccountGraphLifecycle.ts",
+);
 const resetSessionState = read("apps/web/src/auth/resetSessionState.ts");
 const memberDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const mcp = read("convex/httpMcp.ts");
 
 const sessionReadyBlock =
-  app.match(/onSessionReady: async \(session\) => \{[\s\S]*?\n    \},\n    onSessionFocusReady:/)?.[0] ?? "";
+  accountGraphLifecycle.match(/const onSessionReady = useCallback[\s\S]*?\n  \}, \[runInstrumentedLoad\]\);/)?.[0] ?? "";
 const sessionFocusBlock =
-  app.match(/onSessionFocusReady: async \(session\) => \{[\s\S]*?\n    \},\n    onDidJustSignIn:/)?.[0] ?? "";
+  accountGraphLifecycle.match(/const onSessionFocusReady = useCallback[\s\S]*?\n  \}, \[runInstrumentedLoad\]\);/)?.[0] ?? "";
 const signedOutResetBlock =
-  app.match(/onSessionLost: async \(\) => \{[\s\S]*?\n    \},\n    onSessionMissingAfterBootstrap:/)?.[0] ?? "";
+  accountGraphLifecycle.match(/const onSignedOut = useCallback[\s\S]*?\n  \}, \[\]\);/)?.[0] ?? "";
 
 assert.ok(sessionReadyBlock, "session-ready account hydration block must remain discoverable");
 assert.ok(sessionFocusBlock, "session-focus account refresh block must remain discoverable");
@@ -34,17 +37,17 @@ for (const [label, source] of [
 
 assert.match(
   sessionReadyBlock,
-  /const criticalTasks: Array<Promise<void>> = \[\][\s\S]*shouldTreatCommunitiesAsCritical[\s\S]*runCommunitiesHydration\(session, "session_ready_critical"\)/,
+  /const criticalTasks: Array<Promise<void>> = \[\][\s\S]*communitiesAreCritical[\s\S]*"session_ready_critical"[\s\S]*actions\.loadCommunities/,
   "only destination-critical community data may block authenticated readiness",
 );
 assert.match(
   sessionReadyBlock,
-  /runBillingHydration\(session, "session_ready_secondary"\)[\s\S]*runSelfProfileHydration\(session, "session_ready_secondary"\)/,
+  /"session_ready_secondary"[\s\S]*actions\.loadBilling[\s\S]*"session_ready_secondary"[\s\S]*actions\.loadSelfProfile/,
   "billing and self profile must remain in secondary account hydration",
 );
 assert.match(
   sessionFocusBlock,
-  /runBillingHydration\(session, "session_focus_ready_secondary"\)[\s\S]*runCommunitiesHydration\(session, "session_focus_ready_secondary"\)/,
+  /"session_focus_ready_secondary"[\s\S]*actions\.loadBilling[\s\S]*"session_focus_ready_secondary"[\s\S]*actions\.loadCommunities/,
   "focus refresh must retain billing and community freshness",
 );
 assert.doesNotMatch(
@@ -55,13 +58,18 @@ assert.doesNotMatch(
 
 assert.match(
   signedOutResetBlock,
-  /await resetWebSessionStateAfterSignOut\(\{[\s\S]*beginBrowserSignedOutState/,
+  /await actionsRef\.current\.resetSessionState\(\)[\s\S]*await actionsRef\.current\.onSignedOut\(reason\)/,
   "session loss must still use the canonical browser and account reset owner",
 );
 assert.equal(
-  app.match(/await resetWebSessionStateAfterSignOut\(\{/g)?.length,
-  2,
-  "both session-loss paths must use the same canonical account reset",
+  app.match(/resetWebSessionStateRef\.current = \(\) => resetWebSessionStateAfterSignOut\(\{/g)?.length,
+  1,
+  "all session-loss paths must share one canonical account reset binding",
+);
+assert.match(
+  app,
+  /resetSessionState: \(\) => resetWebSessionStateRef\.current\(\)/,
+  "the account graph lifecycle must receive the canonical account reset binding",
 );
 assert.doesNotMatch(
   resetSessionState,
@@ -70,7 +78,7 @@ assert.doesNotMatch(
 );
 assert.match(
   resetSessionState,
-  /await deps\.beginBrowserSignedOutState\(\);[\s\S]*deps\.setCommunities\(\[\]\);[\s\S]*deps\.setCommunityResources\(\[\]\);/,
+  /await deps\.beginBrowserSignedOutState\(\);[\s\S]*deps\.setCommunities\(\[\]\);[\s\S]*deps\.resetCommunityContentState\(\);/,
   "the canonical session reset must retain browser auth, community, and resource cleanup",
 );
 assert.match(

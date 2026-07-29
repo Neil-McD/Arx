@@ -74,12 +74,9 @@ import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSe
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
 import { useWebSkillsModel } from "./controllers/useWebSkillsModel";
+import { useWebAccountGraphLifecycle } from "./controllers/useWebAccountGraphLifecycle";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { updateSentryUiContext } from "./instrument";
-import {
-  emitWorkspaceEvent,
-  formatWorkspaceInstrumentationError,
-} from "./lib/workspaceInstrumentation";
 import {
   captureProductAnalyticsEvent,
   updatePosthogUiContext,
@@ -309,7 +306,6 @@ import type { MemberAgentSurfaceContextV1 } from "../../../shared/memberAgentSur
 import { WebCommunityOnboardingController } from "./components/WebCommunityOnboardingController";
 import type { WebMemberAgentDockHandle } from "./components/WebMemberAgentDock";
 import type {
-  WebAccountGraphHydrationPhase,
   WebCommunityRecord,
   WebCommunityVoiceButtonOwner,
   WebCommunityVoiceTranscriptTarget,
@@ -368,8 +364,6 @@ type DiscoverCommunity = SharedDiscoverCommunitySnapshot;
 type CommunityAiFeedPost = SharedCommunityAiFeedPost;
 type CommunityAiFeedReactionType = SharedCommunityAiFeedReactionType;
 type NavSnapshot = WebNavSnapshot;
-type AccountGraphHydrationPhase = WebAccountGraphHydrationPhase;
-
 export default function App() {
   const initialShellVariant: AppShellVariant =
     typeof window === "undefined"
@@ -379,8 +373,6 @@ export default function App() {
   const initialPublicRoute = readPublicRouteFromLocation();
   const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
   const lastIdentifiedBusinessVisitorSubjectRef = useRef<string | null>(null);
-  const [accountGraphHydrationPhase, setAccountGraphHydrationPhase] =
-    useState<AccountGraphHydrationPhase>("idle");
   const directMessages = useWebDirectMessagesController();
   const {
     isOpen: isDirectMessagesOpen,
@@ -394,92 +386,11 @@ export default function App() {
     close: handleCloseDirectMessages,
     openFromCommunity: handleOpenDirectMessageFromCommunity,
   } = directMessages;
-  const accountGraphHydrationRunIdRef = useRef(0);
-
-  async function runCommunitiesHydration(session: AuthSession, phase: string): Promise<void> {
-    emitWorkspaceEvent({
-      scope: "lifecycle",
-      name: "communities_load",
-      status: "start",
-      detail: { phase },
-    });
-    try {
-      await loadCommunities(session);
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "communities_load",
-        status: "success",
-        detail: { phase },
-      });
-    } catch (error) {
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "communities_load",
-        status: "failure",
-        detail: { phase },
-        error: formatWorkspaceInstrumentationError(error),
-      });
-      throw error;
-    }
-  }
-
-  async function runBillingHydration(session: AuthSession, phase: string): Promise<void> {
-    emitWorkspaceEvent({
-      scope: "lifecycle",
-      name: "billing_status_load",
-      status: "start",
-      detail: { phase },
-    });
-    try {
-      await loadAccountCommerceStatus(session);
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "billing_status_load",
-        status: "success",
-        detail: { phase },
-      });
-    } catch (error) {
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "billing_status_load",
-        status: "failure",
-        detail: { phase },
-        error: formatWorkspaceInstrumentationError(error),
-      });
-      throw error;
-    }
-  }
-
-  async function runSelfProfileHydration(session: AuthSession, phase: string): Promise<void> {
-    emitWorkspaceEvent({
-      scope: "lifecycle",
-      name: "self_profile_load",
-      status: "start",
-      detail: { phase },
-    });
-    try {
-      await loadSelfProfile(session);
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "self_profile_load",
-        status: "success",
-        detail: { phase },
-      });
-    } catch (error) {
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "self_profile_load",
-        status: "failure",
-        detail: { phase },
-        error: formatWorkspaceInstrumentationError(error),
-      });
-      throw error;
-    }
-  }
-
   const resetWebSessionStateRef = useRef<() => Promise<void>>(async () => {
     await beginBrowserSignedOutState();
   });
+  const accountGraphLifecycle = useWebAccountGraphLifecycle();
+  const accountGraphHydrationPhase = accountGraphLifecycle.phase;
   const {
     session,
     setAuthError,
@@ -495,201 +406,13 @@ export default function App() {
     sessionArg,
     authenticatedSessionArg,
   } = useWebAppAuthController({
-    onSessionLost: async () => {
-      accountGraphHydrationRunIdRef.current += 1;
-      setAccountGraphHydrationPhase("idle");
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "auth_full_signed_out_reset",
-        status: "start",
-        detail: {
-          reason: "session_lost",
-        },
-      });
-      await resetWebSessionStateRef.current();
-      setCloudProfile(null);
-      setAccountSetupStatus(null);
-      setIsLoadingAccountSetupStatus(false);
-      setHasLoadedOnboardingProfile(false);
-      setIsOnboardingModalOpen(false);
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "auth_full_signed_out_reset",
-        status: "success",
-        detail: {
-          reason: "session_lost",
-        },
-      });
-    },
-    onSessionMissingAfterBootstrap: async () => {
-      accountGraphHydrationRunIdRef.current += 1;
-      setAccountGraphHydrationPhase("idle");
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "auth_full_signed_out_reset",
-        status: "start",
-        detail: {
-          reason: "session_missing_after_bootstrap",
-        },
-      });
-      await resetWebSessionStateRef.current();
-      applyCommunityShellState({
-        communityId: null,
-        communitySlug: null,
-        communityTab: "chat",
-      });
-      setPendingPurchaseClaims([]);
-      setPendingPurchasesError(null);
-      setPendingPurchasesSuccess(null);
-      setCloudProfile(null);
-      setAccountSetupStatus(null);
-      setIsLoadingAccountSetupStatus(false);
-      setHasLoadedOnboardingProfile(false);
-      setIsOnboardingModalOpen(false);
-      profileUi.setProfileSaveError(null);
-      profileUi.setProfileSaveSuccess(false);
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "auth_full_signed_out_reset",
-        status: "success",
-        detail: {
-          reason: "session_missing_after_bootstrap",
-        },
-      });
-    },
-    onSessionReady: async (session) => {
-      const hydrationRunId = ++accountGraphHydrationRunIdRef.current;
-      const userId = String(session.user?.id ?? "").trim() || null;
-      const shouldTreatCommunitiesAsCritical =
-        activePage === "community" || Boolean(String(selectedActiveCommunitySlug ?? "").trim());
-      const criticalStartedAt = Date.now();
-      setAccountGraphHydrationPhase("critical");
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "account_graph_hydrate",
-        status: "start",
-        detail: {
-          phase: "session_ready",
-          userId,
-        },
-      });
-      const criticalTasks: Array<Promise<void>> = [];
-      if (shouldTreatCommunitiesAsCritical) {
-        criticalTasks.push(runCommunitiesHydration(session, "session_ready_critical"));
-      }
-      const criticalResults = await Promise.allSettled(criticalTasks);
-      const criticalFailureCount = criticalResults.filter((result) => result.status === "rejected").length;
-      if (accountGraphHydrationRunIdRef.current === hydrationRunId) {
-        setAccountGraphHydrationPhase("secondary");
-      }
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "account_graph_hydrate",
-        status: criticalFailureCount > 0 ? "failure" : "success",
-        detail: {
-          phase: "session_ready",
-          stage: "critical_ready",
-          userId,
-          failureCount: criticalFailureCount,
-          durationMs: Date.now() - criticalStartedAt,
-        },
-        error:
-          criticalFailureCount > 0
-            ? formatWorkspaceInstrumentationError(
-                criticalResults
-                  .filter((result): result is PromiseRejectedResult => result.status === "rejected")
-                  .map((result) => result.reason)[0],
-              )
-            : undefined,
-      });
-      const secondaryTasks: Array<Promise<void>> = [
-        runBillingHydration(session, "session_ready_secondary"),
-        runSelfProfileHydration(session, "session_ready_secondary"),
-      ];
-      if (!shouldTreatCommunitiesAsCritical) {
-        secondaryTasks.unshift(runCommunitiesHydration(session, "session_ready_secondary"));
-      }
-      const secondaryStartedAt = Date.now();
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "account_graph_secondary_hydrate",
-        status: "start",
-        detail: {
-          phase: "session_ready",
-          userId,
-        },
-      });
-      void Promise.allSettled(secondaryTasks).then((results) => {
-        const failureCount = results.filter((result) => result.status === "rejected").length;
-        if (accountGraphHydrationRunIdRef.current === hydrationRunId) {
-          setAccountGraphHydrationPhase("ready");
-        }
-        emitWorkspaceEvent({
-          scope: "lifecycle",
-          name: "account_graph_secondary_hydrate",
-          status: failureCount > 0 ? "failure" : "success",
-            detail: {
-              phase: "session_ready",
-              userId,
-              failureCount,
-              durationMs: Date.now() - secondaryStartedAt,
-            },
-          error:
-            failureCount > 0
-              ? formatWorkspaceInstrumentationError(
-                  results
-                    .filter((result): result is PromiseRejectedResult => result.status === "rejected")
-                    .map((result) => result.reason)[0],
-                )
-              : undefined,
-        });
-      });
-    },
-    onSessionFocusReady: async (session) => {
-      const userId = String(session.user?.id ?? "").trim() || null;
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "account_graph_refresh",
-        status: "start",
-        detail: {
-          phase: "session_focus_ready",
-          userId,
-        },
-      });
-      const focusSecondaryStartedAt = Date.now();
-      void Promise.allSettled([
-        runBillingHydration(session, "session_focus_ready_secondary"),
-        runCommunitiesHydration(session, "session_focus_ready_secondary"),
-      ]).then((results) => {
-        const failureCount = results.filter((result) => result.status === "rejected").length;
-        emitWorkspaceEvent({
-          scope: "lifecycle",
-          name: "account_graph_refresh",
-          status: failureCount > 0 ? "failure" : "success",
-            detail: {
-              phase: "session_focus_ready",
-              userId,
-              failureCount,
-              durationMs: Date.now() - focusSecondaryStartedAt,
-            },
-          error:
-            failureCount > 0
-              ? formatWorkspaceInstrumentationError(
-                  results
-                    .filter((result): result is PromiseRejectedResult => result.status === "rejected")
-                    .map((result) => result.reason)[0],
-                )
-              : undefined,
-        });
-      });
-    },
-    onDidJustSignIn: () => {
-      resumePendingAuthIntent();
-    },
-    onAfterSignOut: () => {
-      if (window.location.pathname === "/") return;
-      window.location.assign("/");
-    },
+    onSessionLost: accountGraphLifecycle.onSessionLost,
+    onSessionMissingAfterBootstrap:
+      accountGraphLifecycle.onSessionMissingAfterBootstrap,
+    onSessionReady: accountGraphLifecycle.onSessionReady,
+    onSessionFocusReady: accountGraphLifecycle.onSessionFocusReady,
+    onDidJustSignIn: accountGraphLifecycle.onDidJustSignIn,
+    onAfterSignOut: accountGraphLifecycle.onAfterSignOut,
   });
   const canonicalSessionUserId = useMemo(
     () => resolveAuthSubject(session),
@@ -3199,6 +2922,34 @@ export default function App() {
     setAccountCommerceStatus,
     redeemPendingPurchasesInFlightRef,
   });
+  accountGraphLifecycle.actionsRef.current = {
+    loadBilling: loadAccountCommerceStatus,
+    loadCommunities,
+    loadSelfProfile,
+    resetSessionState: () => resetWebSessionStateRef.current(),
+    resumePendingAuthIntent,
+    shouldTreatCommunitiesAsCritical: () =>
+      activePage === "community"
+      || Boolean(String(selectedActiveCommunitySlug ?? "").trim()),
+    onSignedOut: (reason) => {
+      setCloudProfile(null);
+      setAccountSetupStatus(null);
+      setIsLoadingAccountSetupStatus(false);
+      setHasLoadedOnboardingProfile(false);
+      setIsOnboardingModalOpen(false);
+      if (reason !== "session_missing_after_bootstrap") return;
+      applyCommunityShellState({
+        communityId: null,
+        communitySlug: null,
+        communityTab: "chat",
+      });
+      setPendingPurchaseClaims([]);
+      setPendingPurchasesError(null);
+      setPendingPurchasesSuccess(null);
+      profileUi.setProfileSaveError(null);
+      profileUi.setProfileSaveSuccess(false);
+    },
+  };
 
   const loadBuilderPartnerProgram = useCallback(
     async (nextSession?: AuthSession | null): Promise<BuilderPartnerProgramSnapshot | null> => {
