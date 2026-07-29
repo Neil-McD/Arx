@@ -14,7 +14,6 @@ import {
   beginBrowserSignedOutState,
   getAuthPublicKey,
   getAuthUrl,
-  hasRecentAuthFlowPending,
   type AuthSession,
 } from "./auth";
 import {
@@ -64,7 +63,6 @@ import {
   type WebCommunityJoinRequest,
 } from "./controllers/useWebCommunityAdministrationState";
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
-import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
 import { useWebSkillsModel } from "./controllers/useWebSkillsModel";
@@ -74,6 +72,7 @@ import { useWebCommunityMemberManagementController } from "./controllers/useWebC
 import { useWebCommunityAgentAndFunnelController } from "./controllers/useWebCommunityAgentAndFunnelController";
 import { useWebCommunitySettingsController } from "./controllers/useWebCommunitySettingsController";
 import { useWebShellState } from "./controllers/useWebShellState";
+import { useWebOnboardingProfileController } from "./controllers/useWebOnboardingProfileController";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { updateSentryUiContext } from "./instrument";
 import {
@@ -92,19 +91,6 @@ import {
   resolveCloudMemberEntryDestination,
   type CloudMemberEntryDestination,
 } from "../../../shared/cloudMemberEntryDestinationGateway";
-import {
-  loadCloudAccountSetupStatus,
-  prepareCloudProfileAvatarField,
-  recordMemberTimezoneRpc,
-  resolveCloudOnboardingProfileDetail,
-  upsertCloudProfileDetail,
-} from "../../../shared/cloudProfilesGateway";
-import { formatProfileMutationError } from "../../../shared/profileMutationErrors";
-import {
-  formatAccountSetupMissingGuidance,
-  isAccountSetupStatusIdentityComplete,
-  type AccountSetupStatus,
-} from "../../../shared/accountSetup";
 import {
   loadCloudProviderConnections,
   type CloudChatgptConnectionStatus,
@@ -437,35 +423,38 @@ export default function App() {
     appTheme,
     setAppTheme,
   } = shellState;
-  const [cloudProfile, setCloudProfile] = useState<UserProfileDetail | null>(null);
-  const [accountSetupStatus, setAccountSetupStatus] = useState<AccountSetupStatus | null>(null);
-  const [isLoadingAccountSetupStatus, setIsLoadingAccountSetupStatus] = useState(false);
-  const effectiveAccountSetupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
-  const isProfileSetupCompleteForPublicActions =
-    !session ||
-    Boolean(
-      effectiveAccountSetupStatus &&
-      isAccountSetupStatusIdentityComplete(effectiveAccountSetupStatus),
-    );
-  const isAccountSetupCompleteForBuilderActions =
-    !session || Boolean(effectiveAccountSetupStatus?.completed);
-  const [hasLoadedOnboardingProfile, setHasLoadedOnboardingProfile] = useState(false);
-  const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
-  const profileUi = useWebProfileSettingsUiController({
+  const onboardingProfile = useWebOnboardingProfileController({
+    session,
+    getSession: () => sessionRef.current ?? session,
+    ensureSession: ensureUsableAuthSession,
+    requireSignIn,
     profileStorageUserId,
     initialProfileDraft,
-    session: session,
-    cloudProfile,
+    activePage,
+    publicRouteKind: publicRoute.kind,
+    isAuthBootstrapComplete,
   });
-  const [isSavingOnboarding, setIsSavingOnboarding] = useState(false);
-  const [onboardingError, setOnboardingError] = useState<string | null>(null);
-  const openProfileSetup = useCallback(() => {
-    setOnboardingError(null);
-    setIsOnboardingModalOpen(true);
-  }, []);
-  const closeProfileSetup = useCallback(() => {
-    setIsOnboardingModalOpen(false);
-  }, []);
+  const {
+    profile: profileUi,
+    cloudProfile,
+    setCloudProfile,
+    accountSetupStatus,
+    effectiveAccountSetupStatus,
+    isProfileSetupCompleteForPublicActions,
+    isAccountSetupCompleteForBuilderActions,
+    isOnboardingModalOpen,
+    isSavingOnboarding,
+    onboardingError,
+    setOnboardingError,
+    openProfileSetup,
+    closeProfileSetup,
+    refreshAccountSetupStatus,
+    validateProfileInputs: validateOnboardingProfileInputs,
+    saveOnboardingProfile,
+    finishOnboarding,
+    routeTryPolynetFree,
+    resetSignedOutState: resetOnboardingProfileState,
+  } = onboardingProfile;
   /* The bridge (gate card's second state) opens on an entry ATTEMPT — the
      pitch always converts first. Platform-generic joiners never come here:
      they onboard on the standalone /onboarding page. */
@@ -475,24 +464,6 @@ export default function App() {
     communitySlug: string | null;
     communityName?: string | null;
   } | null>(null);
-  const refreshAccountSetupStatus = useCallback(async (activeSession: AuthSession | null = sessionRef.current ?? session) => {
-    if (!activeSession) {
-      setAccountSetupStatus(null);
-      return null;
-    }
-    const usableSession = await ensureUsableAuthSession(activeSession);
-    if (!usableSession) return null;
-    setIsLoadingAccountSetupStatus(true);
-    try {
-      const status = await loadCloudAccountSetupStatus<AuthSession>({ session: usableSession });
-      setAccountSetupStatus(status);
-      return status;
-    } catch {
-      return null;
-    } finally {
-      setIsLoadingAccountSetupStatus(false);
-    }
-  }, [ensureUsableAuthSession, session, sessionRef]);
 
   const publicCommunityUi = useWebPublicCommunityUiController<
     PublicCommunityRecord,
@@ -1122,153 +1093,10 @@ export default function App() {
     applyMemberEntryDestination(destination, { replace: options?.replace });
     return true;
   }
-
-  async function loadProfileForOnboarding(activeSession: AuthSession): Promise<UserProfileDetail | null> {
-    const userId = resolveAuthSubject(activeSession);
-    if (!userId) return null;
-    const row = await resolveCloudOnboardingProfileDetail<AuthSession, UserProfileDetail>({
-      session: activeSession,
-      userId,
-    });
-    setHasLoadedOnboardingProfile(true);
-    if (row) {
-      setCloudProfile(row);
-      if (row.account_setup) setAccountSetupStatus(row.account_setup);
-      profileUi.applyLoadedProfileToLocal(row);
-    }
-    return row;
-  }
-
-  /* Incomplete accounts with no community context onboard on the standalone
-     platform bridge page — the single seam for platform-generic onboarding.
-     (Membership in the Polynet home community still happens via auto-join;
-     this is presentation only.) */
-  function redirectIncompleteAccountToPlatformBridge(): void {
-    navigateTo("/onboarding");
-  }
-
-  async function routeTryPolynetFree(activeSession: AuthSession | null = sessionRef.current ?? session): Promise<void> {
-    if (!activeSession) {
-      requireSignIn({ reason: "try_polynet_free", payload: {} });
-      return;
-    }
-
-    try {
-      const row = await loadProfileForOnboarding(activeSession);
-      if (row?.account_setup?.completed) {
-        setIsOnboardingModalOpen(false);
-        const entered = await resolveAndEnterMemberDestination({
-          session: activeSession,
-          replace: true,
-        });
-        if (!entered) {
-          setOnboardingError("We could not open your community. Try again.");
-          navigateTo("/discover", { replace: true });
-        }
-        return;
-      }
-    } catch {
-      /* Unknown setup state — the bridge collects everything from scratch. */
-    }
-    redirectIncompleteAccountToPlatformBridge();
-  }
-
-  async function finishOnboarding(options?: { navigate?: boolean }): Promise<boolean> {
-    const shouldNavigate = options?.navigate !== false;
-    const activeSession = await ensureUsableAuthSession();
-    if (!activeSession) {
-      requireSignIn({ reason: "try_polynet_free", payload: {} });
-      return false;
-    }
-
-    const userId = resolveAuthSubject(activeSession);
-    if (!userId) {
-      setOnboardingError("We could not verify your account. Sign in again to continue.");
-      return false;
-    }
-
-    const displayName = profileUi.profileName.trim() || null;
-    const handle = profileUi.profileHandle.trim() || null;
-    const bio = profileUi.profileBio.trim() || null;
-    const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
-    if (!displayName || !handle || !avatarUrl) {
-      setOnboardingError("Add your display name, handle, and profile photo to continue.");
-      return false;
-    }
-    /* Legal acceptance is judged by the server-loaded status below — never by
-       render-closure state, which is stale when a save just landed. */
-
-    setIsSavingOnboarding(true);
-    setOnboardingError(null);
-    try {
-      const latestSetup = await loadCloudAccountSetupStatus<AuthSession>({
-        session: activeSession,
-      });
-      if (latestSetup) setAccountSetupStatus(latestSetup);
-      if (!latestSetup?.completed) {
-        setOnboardingError(formatAccountSetupMissingGuidance(latestSetup));
-        if (shouldNavigate) setIsOnboardingModalOpen(true);
-        return false;
-      }
-      const avatarField = await prepareCloudProfileAvatarField<AuthSession>({
-        session: activeSession,
-        nextValue: profileUi.profileAvatarUrl,
-        currentStorageId: profileUi.profileAvatarStorageId,
-        currentResolvedUrl: profileUi.profileAvatarUrl,
-      });
-      const saved = await upsertCloudProfileDetail<AuthSession, UserProfileDetail>({
-        session: activeSession,
-        userId,
-        displayName,
-        handle,
-        avatarStorageId: avatarField.storageId ?? null,
-        avatarUrl: avatarField.url ?? null,
-        avatarFocusX: profileUi.profileAvatarFocusX,
-        avatarFocusY: profileUi.profileAvatarFocusY,
-        avatarZoom: profileUi.profileAvatarZoom,
-        bio,
-        socialLinks: profileUi.profileSocialLinks,
-        completeOnboarding: true,
-      });
-      if (saved) {
-        setCloudProfile(saved);
-        if (saved.account_setup) setAccountSetupStatus(saved.account_setup);
-        setHasLoadedOnboardingProfile(true);
-        setIsOnboardingModalOpen(false);
-        profileUi.setProfileName(saved.display_name ?? "");
-        profileUi.setProfileHandle(saved.handle ?? "");
-        profileUi.setProfileBio(saved.bio ?? "");
-        profileUi.setProfileSocialLinks(saved.social_links ?? {
-          youtube: "",
-          x: "",
-          instagram: "",
-        });
-        profileUi.setProfileAvatarUrl(saved.avatar_url ?? null);
-        profileUi.setProfileAvatarStorageId(saved.avatar_storage_id ?? null);
-        profileUi.setProfileAvatarFocusX(saved.avatar_focus_x ?? 0.5);
-        profileUi.setProfileAvatarFocusY(saved.avatar_focus_y ?? 0.5);
-        profileUi.setProfileAvatarZoom(saved.avatar_zoom ?? 1);
-      }
-
-      if (shouldNavigate) {
-        const entered = await resolveAndEnterMemberDestination({
-          session: activeSession,
-          replace: true,
-        });
-        if (!entered) {
-          setOnboardingError("We could not open your community. Try again.");
-          return false;
-        }
-      }
-      return true;
-    } catch (error) {
-      const message = formatProfileMutationError(error, "Failed to save onboarding.");
-      setOnboardingError(message);
-      return false;
-    } finally {
-      setIsSavingOnboarding(false);
-    }
-  }
+  onboardingProfile.actionsRef.current = {
+    navigateTo,
+    enterDefaultDestination: resolveAndEnterMemberDestination,
+  };
 
   /* One gatekeeper for every entry path (free join, claim redemption, enter
      click): incomplete setup on the funnel route opens the bridge instead of
@@ -1365,102 +1193,6 @@ export default function App() {
     setBridgePendingEntry(null);
     applyMemberEntryDestination(destination, { replace: true });
     return true;
-  }
-
-  /* Client-side bridge validation, shared with saveOnboardingProfile: failures
-     here keep the user on the bridge with inline errors. */
-  function validateOnboardingProfileInputs(legalAcceptance: {
-    termsOfServiceVersion: string;
-    privacyPolicyVersion: string;
-  } | null): boolean {
-    const displayName = profileUi.profileName.trim();
-    const handle = profileUi.profileHandle.trim() || null;
-    const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
-    if (!displayName || !handle || !avatarUrl) {
-      setOnboardingError("Add your display name, handle, and profile photo to continue.");
-      return false;
-    }
-    const currentSetup = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
-    if (currentSetup?.missing.includes("platform_legal") !== false && !legalAcceptance) {
-      setOnboardingError("Agree to the Terms of Service and acknowledge the Privacy & AI Data Policy to continue.");
-      return false;
-    }
-    return true;
-  }
-
-  async function saveOnboardingProfile(legalAcceptance: {
-    termsOfServiceVersion: string;
-    privacyPolicyVersion: string;
-  } | null): Promise<boolean> {
-    const activeSession = await ensureUsableAuthSession();
-    if (!activeSession) {
-      requireSignIn({ reason: "try_polynet_free", payload: {} });
-      return false;
-    }
-
-    const userId = resolveAuthSubject(activeSession);
-    if (!userId) {
-      setOnboardingError("We could not verify your account. Sign in again to continue.");
-      return false;
-    }
-
-    const displayName = profileUi.profileName.trim();
-    const handle = profileUi.profileHandle.trim() || null;
-    const bio = profileUi.profileBio.trim() || null;
-    const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
-    if (!validateOnboardingProfileInputs(legalAcceptance)) return false;
-
-    setIsSavingOnboarding(true);
-    setOnboardingError(null);
-    try {
-      const avatarField = await prepareCloudProfileAvatarField<AuthSession>({
-        session: activeSession,
-        nextValue: profileUi.profileAvatarUrl,
-        currentStorageId: profileUi.profileAvatarStorageId,
-        currentResolvedUrl: profileUi.profileAvatarUrl,
-      });
-      const saved = await upsertCloudProfileDetail<AuthSession, UserProfileDetail>({
-        session: activeSession,
-        userId,
-        displayName,
-        handle,
-        avatarStorageId: avatarField.storageId ?? null,
-        avatarUrl: avatarField.url ?? null,
-        avatarFocusX: profileUi.profileAvatarFocusX,
-        avatarFocusY: profileUi.profileAvatarFocusY,
-        avatarZoom: profileUi.profileAvatarZoom,
-        bio,
-        socialLinks: profileUi.profileSocialLinks,
-        markOnboardingDismissed: false,
-        termsOfServiceVersion: legalAcceptance?.termsOfServiceVersion ?? null,
-        privacyPolicyVersion: legalAcceptance?.privacyPolicyVersion ?? null,
-      });
-      if (saved) {
-        setCloudProfile(saved);
-        if (saved.account_setup) setAccountSetupStatus(saved.account_setup);
-        setHasLoadedOnboardingProfile(true);
-        profileUi.setProfileName(saved.display_name ?? "");
-        profileUi.setProfileHandle(saved.handle ?? "");
-        profileUi.setProfileBio(saved.bio ?? "");
-        profileUi.setProfileSocialLinks(saved.social_links ?? {
-          youtube: "",
-          x: "",
-          instagram: "",
-        });
-        profileUi.setProfileAvatarUrl(saved.avatar_url ?? null);
-        profileUi.setProfileAvatarStorageId(saved.avatar_storage_id ?? null);
-        profileUi.setProfileAvatarFocusX(saved.avatar_focus_x ?? 0.5);
-        profileUi.setProfileAvatarFocusY(saved.avatar_focus_y ?? 0.5);
-        profileUi.setProfileAvatarZoom(saved.avatar_zoom ?? 1);
-      }
-      return true;
-    } catch (error) {
-      const message = formatProfileMutationError(error, "Failed to save your profile.");
-      setOnboardingError(message);
-      return false;
-    } finally {
-      setIsSavingOnboarding(false);
-    }
   }
 
   const applyAppRouteState = useCallback((nextAppRoute: AppRouteState) => {
@@ -1564,34 +1296,6 @@ export default function App() {
      bounce /c/:slug to a workspace launch. The visitor lens made that
      backwards — a signed-out /c/ visit IS the community page now.) */
 
-  useEffect(() => {
-    if (activePage !== "onboarding") return;
-    if (!isAuthBootstrapComplete) return;
-    if (session) return;
-    if (hasRecentAuthFlowPending()) return;
-    requireSignIn({ reason: "try_polynet_free", payload: {} });
-  }, [activePage, isAuthBootstrapComplete, requireSignIn, session]);
-
-  useEffect(() => {
-    if (activePage !== "onboarding") return;
-    if (!session) return;
-    void (async () => {
-      const row = cloudProfile ?? (await loadProfileForOnboarding(session));
-      if (row?.account_setup?.completed) {
-        setIsOnboardingModalOpen(false);
-        const entered = await resolveAndEnterMemberDestination({
-          session,
-          replace: true,
-        });
-        if (!entered) {
-          setOnboardingError("We could not open your community. Try again.");
-        }
-      }
-      /* Incomplete accounts stay: this route renders the standalone
-         platform bridge page. */
-    })();
-  }, [activePage, cloudProfile, session]);
-
   const operatorRouteRedirectRef = useRef<string | null>(null);
   useEffect(() => {
     if (activePage !== "operator") {
@@ -1618,52 +1322,6 @@ export default function App() {
     isAuthBootstrapComplete,
     isOperatorAccessResolved,
     operatorAccess,
-    session,
-  ]);
-
-  /* Deterministic timezone capture: record the browser's IANA zone silently,
-     refreshed when it drifts from what the profile holds. Never a question. */
-  const timezoneSyncRef = useRef(false);
-  useEffect(() => {
-    if (!session || !cloudProfile) return;
-    if (timezoneSyncRef.current) return;
-    let browserTimezone = "";
-    try {
-      browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
-    } catch {
-      return;
-    }
-    if (!browserTimezone) return;
-    timezoneSyncRef.current = true;
-    const stored = (cloudProfile as { timezone?: string | null }).timezone ?? null;
-    if (stored === browserTimezone) return;
-    void recordMemberTimezoneRpc({ session, timezone: browserTimezone }).catch(() => null);
-  }, [cloudProfile, session]);
-
-  /* Load the viewer's profile + setup status wherever setup state matters. */
-  useEffect(() => {
-    const needsOnboardingProfile =
-      activePage === "settings" ||
-      activePage === "community" ||
-      activePage === "onboarding" ||
-      publicRoute.kind === "community_funnel";
-    if (!needsOnboardingProfile) return;
-    if (!isAuthBootstrapComplete) return;
-    if (!session) return;
-    if (cloudProfile) {
-      setHasLoadedOnboardingProfile(true);
-      return;
-    }
-    if (hasLoadedOnboardingProfile) {
-      return;
-    }
-    void loadProfileForOnboarding(session);
-  }, [
-    activePage,
-    cloudProfile,
-    hasLoadedOnboardingProfile,
-    isAuthBootstrapComplete,
-    publicRoute.kind,
     session,
   ]);
 
@@ -2118,14 +1776,6 @@ export default function App() {
 
   // Cloud session is hydrated from browser auth continuity during lifecycle bootstrap.
 
-  useEffect(() => {
-    setCloudProfile(null);
-    setAccountSetupStatus(null);
-    setIsLoadingAccountSetupStatus(false);
-    setHasLoadedOnboardingProfile(false);
-    setIsOnboardingModalOpen(false);
-  }, [profileStorageUserId]);
-
   const visibleCommunityProfileIds = useMemo(() => {
     const shouldLoadCommunityProfiles = activePage === "community";
     if (!shouldLoadCommunityProfiles) return [] as string[];
@@ -2467,8 +2117,7 @@ export default function App() {
         validated_at: null,
         updated_at: null,
       });
-      setAccountSetupStatus(null);
-      setIsLoadingAccountSetupStatus(false);
+      resetOnboardingProfileState();
       setIsLoadingChatgptConnection(false);
       return;
     }
@@ -2480,7 +2129,12 @@ export default function App() {
         refreshAccountSetupStatus(usableSession),
       ]);
     })();
-  }, [session, loadProviderConnections, refreshAccountSetupStatus]);
+  }, [
+    session,
+    loadProviderConnections,
+    refreshAccountSetupStatus,
+    resetOnboardingProfileState,
+  ]);
 
   const {
     cancelMyPendingJoinRequest,
@@ -2581,11 +2235,7 @@ export default function App() {
       activePage === "community"
       || Boolean(String(selectedActiveCommunitySlug ?? "").trim()),
     onSignedOut: (reason) => {
-      setCloudProfile(null);
-      setAccountSetupStatus(null);
-      setIsLoadingAccountSetupStatus(false);
-      setHasLoadedOnboardingProfile(false);
-      setIsOnboardingModalOpen(false);
+      resetOnboardingProfileState();
       if (reason !== "session_missing_after_bootstrap") return;
       applyCommunityShellState({
         communityId: null,

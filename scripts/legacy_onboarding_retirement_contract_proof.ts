@@ -54,8 +54,11 @@ assert.match(
 assert.doesNotMatch(platformSkillRuntime, /ONBOARDING|onboarding-guide/);
 
 const app = read("apps/web/src/App.tsx");
+const onboardingProfileController = read(
+  "apps/web/src/controllers/useWebOnboardingProfileController.ts",
+);
 assert.doesNotMatch(app, /requestOnboardingGuideKickoff/);
-assert.match(app, /completeOnboarding:\s*true/);
+assert.match(onboardingProfileController, /completeOnboarding:\s*true/);
 
 const profiles = read("convex/profiles.ts");
 assert.match(profiles, /onboardingCompletedAt/);

@@ -14,6 +14,9 @@ const model = read("apps/web/src/components/webAccountSetupSurfaceModel.ts");
 const controller = read(
   "apps/web/src/controllers/useWebAccountSetupSurfaceController.ts",
 );
+const onboardingProfileController = read(
+  "apps/web/src/controllers/useWebOnboardingProfileController.ts",
+);
 const onboarding = read("apps/web/src/components/WebOnboardingPage.tsx");
 const bridge = read("apps/web/src/components/WebCommunityBridgeCard.tsx");
 
@@ -103,13 +106,25 @@ for (const surface of [onboarding, bridge]) {
 }
 
 for (const authority of [
-  "async function saveOnboardingProfile",
-  "async function finishOnboarding",
+  "const saveOnboardingProfile = useCallback",
+  "const finishOnboarding = useCallback",
+]) {
+  assert.ok(
+    onboardingProfileController.includes(authority),
+    `the onboarding profile controller must own ${authority}`,
+  );
+}
+for (const authority of [
   "async function completePlatformBridge",
   "async function completeBridgeAndEnter",
 ]) {
-  assert.ok(app.includes(authority), `App must retain ${authority}`);
+  assert.ok(app.includes(authority), `App must retain the route bridge ${authority}`);
 }
+assert.match(
+  app,
+  /useWebOnboardingProfileController\(\{/,
+  "App must compose the onboarding profile controller",
+);
 assert.match(
   app,
   /completePlatformBridge[\s\S]*resolveAndEnterMemberDestination\(\{ replace: true \}\)/,
@@ -122,5 +137,5 @@ assert.match(
 );
 
 console.log(
-  "PASS: account setup has one typed surface projection and keeps completion authority in App.",
+  "PASS: account setup has one typed surface projection and an explicit profile completion owner.",
 );

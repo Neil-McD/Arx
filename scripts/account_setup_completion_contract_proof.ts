@@ -18,6 +18,9 @@ const accountSetup = read("shared/accountSetup.ts");
 const profileHandle = read("shared/profileHandle.ts");
 const profileCore = read("convex/profileCore.ts");
 const app = read("apps/web/src/App.tsx");
+const onboardingProfileController = read(
+  "apps/web/src/controllers/useWebOnboardingProfileController.ts",
+);
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const legalReaderModal = read("apps/web/src/components/WebPlatformLegalReaderModal.tsx");
 const personalAccountSettingsController = read(
@@ -136,16 +139,20 @@ assert.doesNotMatch(onboardingPage, /WebAgentPersonalityPicker/, "onboarding mus
 assert.match(onboardingPage, /if \(step === "inference"\) \{\s*if \(!hasInferenceProvider\) return;\s*await props\.onFinishOnboarding\(\);/, "inference must be the final step and finish onboarding directly");
 assert.match(onboardingPage, /formatAccountSetupMissingGuidance\(props\.accountSetupStatus\)/, "onboarding must format guidance from the canonical setup status");
 assert.match(onboardingPage, /polynet-onboarding-guidance/, "onboarding setup blockers should render as guidance, not red server errors");
-assert.match(app, /async function finishOnboarding/, "app shell must finish account onboarding without a direction choice");
-assert.match(app, /completeOnboarding: true/, "finish flow must mark onboarding complete explicitly");
-assert.match(app, /formatAccountSetupMissingGuidance\(latestSetup\)/, "finish flow must use precise canonical missing-setup guidance");
-assert.doesNotMatch(app, /Finish profile, inference, and agent setup to continue\./, "finish flow must not use stale generic missing-setup copy");
+assert.match(
+  onboardingProfileController,
+  /const finishOnboarding = useCallback/,
+  "the onboarding profile controller must own account completion without a direction choice",
+);
+assert.match(onboardingProfileController, /completeOnboarding: true/, "finish flow must mark onboarding complete explicitly");
+assert.match(onboardingProfileController, /formatAccountSetupMissingGuidance\(latestSetup\)/, "finish flow must use precise canonical missing-setup guidance");
+assert.doesNotMatch(onboardingProfileController, /Finish profile, inference, and agent setup to continue\./, "finish flow must not use stale generic missing-setup copy");
 assert.match(
   personalAccountSettingsController,
   /saveUserMemorySettingsAndRefreshSetup[\s\S]*await saveUserMemorySettings\(next\);[\s\S]*await params\.onUserMemorySettingsSaved\(\);/,
   "agent save must refresh canonical account setup status",
 );
-assert.doesNotMatch(app, /onboardingDirection: destination|completeOnboarding\("build_community"|completeOnboarding\("discover_community"/, "finish flow must not store a direction choice");
+assert.doesNotMatch(onboardingProfileController, /onboardingDirection: destination|completeOnboarding\("build_community"|completeOnboarding\("discover_community"/, "finish flow must not store a direction choice");
 assert.doesNotMatch(app, /WebAccountSetupCard|buildWebWorkspaceLandingProjection/);
 
 console.log("PASS: account setup completion contract is canonical.");

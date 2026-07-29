@@ -9,6 +9,9 @@ const profiles = read("convex/profiles.ts");
 const legalAcceptances = read("convex/legalAcceptances.ts");
 const profileMutationErrors = read("shared/profileMutationErrors.ts");
 const app = read("apps/web/src/App.tsx");
+const onboardingProfileController = read(
+  "apps/web/src/controllers/useWebOnboardingProfileController.ts",
+);
 const communityAdminController = read("shared/useCommunityAdminController.ts");
 
 const profileCodes = [
@@ -46,7 +49,7 @@ assert.match(profileMutationErrors, /readObjectField\(error, "data"\)/, "web for
 assert.match(profileMutationErrors, /readObjectField\(data, "code"\)/, "web formatter must read structured code");
 assert.match(profileMutationErrors, /readObjectField\(data, "reason"\)/, "web formatter must read structured reason fallback");
 assert.match(profileMutationErrors, /isRedactedServerErrorMessage/, "web formatter must hide opaque server request IDs behind the caller fallback");
-assert.match(app, /import \{ formatProfileMutationError \} from "\.\.\/\.\.\/\.\.\/shared\/profileMutationErrors"/, "onboarding profile saves must use shared formatter");
+assert.match(onboardingProfileController, /import \{ formatProfileMutationError \} from "\.\.\/\.\.\/\.\.\/\.\.\/shared\/profileMutationErrors"/, "onboarding profile saves must use shared formatter");
 assert.doesNotMatch(app, /function formatProfileMutationError/, "App must not keep a duplicate local profile formatter");
 assert.match(communityAdminController, /import \{ formatProfileMutationError \} from "\.\/profileMutationErrors"/, "settings profile saves must use shared formatter");
 assert.doesNotMatch(communityAdminController, /function formatProfileSaveError/, "community admin controller must not keep duplicate profile formatter");
