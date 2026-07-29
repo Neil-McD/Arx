@@ -28,6 +28,12 @@ const interactionController = read(
 const chatController = read(
   "apps/web/src/controllers/useWebCommunityChatController.ts",
 );
+const administrationState = read(
+  "apps/web/src/controllers/useWebCommunityAdministrationState.ts",
+);
+const memberManagementController = read(
+  "apps/web/src/controllers/useWebCommunityMemberManagementController.ts",
+);
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
@@ -441,9 +447,19 @@ assert.match(
   "community nav invite action should be bottom-pinned in the left nav",
 );
 assert.match(
+  administrationState,
+  /const directory = useCommunityDirectoryController<AuthSession>/,
+  "community administration state should own the member-facing directory controller",
+);
+assert.match(
+  directoryController,
+  /loadCommunityDirectoryMembers[\s\S]*loadMoreCommunityDirectoryMembers/,
+  "the canonical directory controller must expose initial and paginated reads",
+);
+assert.match(
   app,
-  /useCommunityDirectoryController<AuthSession>[\s\S]*loadCommunityDirectoryMembers[\s\S]*loadMoreCommunityDirectoryMembers/,
-  "App should own a member-facing directory controller for the chat right rail",
+  /communityAdministration\.directory/,
+  "App should compose the canonical directory owner",
 );
 assert.match(
   app,
@@ -576,13 +592,13 @@ assert.match(
   "interaction projection should route right-panel role changes through the existing mutation callback",
 );
 assert.match(
-  app,
-  /const reloadActiveCommunityDirectoryMembers = useCallback\(async \(\) => \{[\s\S]*await loadCommunityDirectoryMembers\(communityId, usableSession\);/,
-  "App should provide a right-panel directory reload after member-management mutations",
+  memberManagementController,
+  /const reloadDirectory = useCallback[\s\S]*await params\.loadDirectoryMembers\(communityId, session\);/,
+  "member-management controller should provide a right-panel directory reload",
 );
 assert.match(
-  app,
-  /const handleSetCommunityContextMemberRole = useCallback\(async \([\s\S]*await handleSetCommunityMemberRole\(membershipId, role\);[\s\S]*await reloadActiveCommunityDirectoryMembers\(\);/,
+  memberManagementController,
+  /const setMemberRole = useCallback[\s\S]*await params\.setMemberRole\(membershipId, role\);[\s\S]*await reloadDirectory\(\);/,
   "right-panel role changes should reuse the existing member role mutation and then refresh the directory projection",
 );
 assert.match(
@@ -646,14 +662,14 @@ assert.match(
   "interaction projection should pass admission controls through to CommunityContextPanel",
 );
 assert.match(
-  app,
-  /const handleSetCommunityContextFreeAccessMode = useCallback\(async \(mode: "open" \| "approval"\) => \{[\s\S]*setCloudCommunityFreeAccessMode\(\{[\s\S]*mode,[\s\S]*\}\);[\s\S]*entry_policy: result\?\.entry_policy \?\? mode/,
-  "App should use the existing free-access-mode mutation and update the local community entry policy",
+  memberManagementController,
+  /const setFreeAccessMode = useCallback[\s\S]*setCloudCommunityFreeAccessMode\(\{[\s\S]*mode,[\s\S]*\}\);[\s\S]*entry_policy: result\?\.entry_policy \?\? mode/,
+  "member-management controller should use the canonical free-access mutation and update the local entry policy",
 );
 assert.match(
-  app,
-  /const isStillActiveCommunity = \(\) =>[\s\S]*activeCommunityIdRef\.current[\s\S]*=== communityId;[\s\S]*approved_pending_request_count[\s\S]*setCommunityJoinRequests\(\[\]\)[\s\S]*loadCommunityDirectoryMembers\(communityId, usableSession\)[\s\S]*if \(!isStillActiveCommunity\(\)\) return;/,
-  "App should key Auto-join side effects to the community that started the mutation and refresh member counts after backend approvals",
+  memberManagementController,
+  /const isStillActive = \(\) => getActiveCommunity\(\) === communityId;[\s\S]*approved_pending_request_count[\s\S]*params\.clearJoinRequests\(\)[\s\S]*params\.loadDirectoryMembers\(communityId, session\)[\s\S]*if \(!isStillActive\(\)\) return;/,
+  "member-management controller should key Auto-join side effects to the initiating community and refresh after backend approvals",
 );
 assert.match(
   app,

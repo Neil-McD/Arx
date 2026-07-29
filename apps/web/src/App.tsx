@@ -71,6 +71,7 @@ import { useWebProviderConnectionUiController } from "./controllers/useWebProvid
 import { useWebSkillsModel } from "./controllers/useWebSkillsModel";
 import { useWebAccountGraphLifecycle } from "./controllers/useWebAccountGraphLifecycle";
 import { useWebAuthenticatedIdentityController } from "./controllers/useWebAuthenticatedIdentityController";
+import { useWebCommunityMemberManagementController } from "./controllers/useWebCommunityMemberManagementController";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { updateSentryUiContext } from "./instrument";
 import {
@@ -106,10 +107,6 @@ import {
 import {
   saveCloudCommunityAgentConfig as saveCloudCommunityAgentConfigDirect,
 } from "../../../shared/cloudCommunityAgentGateway";
-import {
-  fetchCloudCommunityMemberBillingHistory,
-  setCloudCommunityFreeAccessMode,
-} from "../../../shared/cloudCommunityAdminGateway";
 import {
   loadCloudProviderConnections,
   type CloudChatgptConnectionStatus,
@@ -1784,7 +1781,6 @@ export default function App() {
   const backTargetLabel = backTargetSnapshot ? formatBackTargetLabelShared(backTargetSnapshot) : null;
   const effectiveBackTargetLabel = backTargetLabel;
 
-  const activeCommunityIdRef = useRef<string | null>(null);
   const [appToast, setAppToast] = useState<string | null>(null);
   const appToastTimeoutRef = useRef<number | null>(null);
   const lastShownAuthErrorRef = useRef<string | null>(null);
@@ -1928,94 +1924,28 @@ export default function App() {
     setCommunityAnalyticsSummary,
     setCommunityAnalyticsSeries,
   });
-  const loadCommunityMemberBillingHistory = useCallback(async (membershipId: string) => {
-    const usableSession = await ensureUsableAuthSession();
-    const communityId = activeCommunityIdRef.current ?? activeCommunityId;
-    if (!usableSession || !communityId) return null;
-    return await fetchCloudCommunityMemberBillingHistory({
-      session: usableSession,
-      communityId,
-      membershipId,
-      limit: 20,
-    });
-  }, [activeCommunityId, ensureUsableAuthSession]);
-  const reloadActiveCommunityDirectoryMembers = useCallback(async () => {
-    const usableSession = await ensureUsableAuthSession();
-    const communityId = activeCommunityIdRef.current ?? activeCommunityId;
-    if (!usableSession || !communityId) return;
-    await loadCommunityDirectoryMembers(communityId, usableSession);
-  }, [activeCommunityId, ensureUsableAuthSession, loadCommunityDirectoryMembers]);
-  const handleSetCommunityContextMemberRole = useCallback(async (
-    membershipId: string,
-    role: "admin" | "moderator" | "member",
-  ) => {
-    await handleSetCommunityMemberRole(membershipId, role);
-    await reloadActiveCommunityDirectoryMembers();
-  }, [handleSetCommunityMemberRole, reloadActiveCommunityDirectoryMembers]);
-  const handleRemoveCommunityContextMember = useCallback(async (membershipId: string) => {
-    await handleRemoveCommunityMember(membershipId);
-    await reloadActiveCommunityDirectoryMembers();
-  }, [handleRemoveCommunityMember, reloadActiveCommunityDirectoryMembers]);
-  const handleBanCommunityContextMember = useCallback(async (membershipId: string) => {
-    await handleBanCommunityMember(membershipId);
-    await reloadActiveCommunityDirectoryMembers();
-  }, [handleBanCommunityMember, reloadActiveCommunityDirectoryMembers]);
-  const handleSetCommunityContextFreeAccessMode = useCallback(async (mode: "open" | "approval") => {
-    const usableSession = await ensureUsableAuthSession();
-    const communityId = activeCommunityIdRef.current ?? activeCommunityId;
-    if (!usableSession || !communityId || !canManageMembersActiveCommunity) return;
-    const isStillActiveCommunity = () =>
-      (activeCommunityIdRef.current ?? activeCommunityId) === communityId;
-    setCommunityFreeAccessModeError(null);
-    setIsSettingCommunityFreeAccessMode(true);
-    try {
-      const result = await setCloudCommunityFreeAccessMode({
-        session: usableSession,
-        communityId,
-        mode,
-      });
-      setCommunities((prev) =>
-        prev.map((community) =>
-          community.id === communityId
-            ? {
-                ...community,
-                entry_policy: result?.entry_policy ?? mode,
-                updated_at: result?.updated_at ?? community.updated_at,
-              }
-            : community,
-        ),
-      );
-      const approvedPendingRequestCount = Math.max(
-        0,
-        Number(result?.approved_pending_request_count ?? 0) || 0,
-      );
-      if ((result?.entry_policy ?? mode) !== "approval" && isStillActiveCommunity()) {
-        setCommunityJoinRequests([]);
-      }
-      if (approvedPendingRequestCount > 0 && isStillActiveCommunity()) {
-        await loadCommunityDirectoryMembers(communityId, usableSession);
-      }
-    } catch (error) {
-      if (!isStillActiveCommunity()) return;
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to update auto-join.";
-      setCommunityFreeAccessModeError(message || "Failed to update auto-join.");
-    } finally {
-      if (isStillActiveCommunity()) {
-        setIsSettingCommunityFreeAccessMode(false);
-      }
-    }
-  }, [
+  const communityMemberManagement =
+    useWebCommunityMemberManagementController({
     activeCommunityId,
-    canManageMembersActiveCommunity,
-    ensureUsableAuthSession,
-    loadCommunityDirectoryMembers,
-    setCommunityJoinRequests,
-  ]);
+    canManageMembers: canManageMembersActiveCommunity,
+    ensureSession: ensureUsableAuthSession,
+    loadDirectoryMembers: loadCommunityDirectoryMembers,
+    removeMember: handleRemoveCommunityMember,
+    banMember: handleBanCommunityMember,
+    setMemberRole: handleSetCommunityMemberRole,
+    setCommunities,
+    setFreeAccessError: setCommunityFreeAccessModeError,
+    setIsSettingFreeAccess: setIsSettingCommunityFreeAccessMode,
+    clearJoinRequests: () => setCommunityJoinRequests([]),
+  });
+  const {
+    loadMemberBillingHistory: loadCommunityMemberBillingHistory,
+    reloadDirectory: reloadActiveCommunityDirectoryMembers,
+    setMemberRole: handleSetCommunityContextMemberRole,
+    removeMember: handleRemoveCommunityContextMember,
+    banMember: handleBanCommunityContextMember,
+    setFreeAccessMode: handleSetCommunityContextFreeAccessMode,
+  } = communityMemberManagement;
 
   const {
     loadCommunityAgentConfig,
@@ -2315,10 +2245,6 @@ export default function App() {
     personalAccountSettings,
     showAppToastMessage,
   ]);
-
-  useEffect(() => {
-    activeCommunityIdRef.current = activeCommunityId;
-  }, [activeCommunityId]);
 
   useEffect(() => {
     if (activePage !== "community" || communityTab !== "funnel") return;
