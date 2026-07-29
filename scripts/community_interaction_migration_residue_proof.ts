@@ -15,6 +15,9 @@ const app = read("apps/web/src/App.tsx");
 const interactionController = read(
   "apps/web/src/controllers/useWebCommunityInteractionProjection.ts",
 );
+const webChatController = read(
+  "apps/web/src/controllers/useWebCommunityChatController.ts",
+);
 const interactions = read("convex/communityInteractions.ts");
 const attachmentBridge = read("convex/communityInteractionAttachmentBridge.ts");
 const legacyBridge = read("convex/communityInteractionLegacyBridge.ts");
@@ -221,8 +224,8 @@ assert.match(
   "chat panel should keep canonical projection and legacy fallback in one visible branch",
 );
 assert.match(
-  app,
-  /useCommunityChatRealtime\(\{[\s\S]*isEnabled: activePage === "community" && hasResolvedCommunityChat && !COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
+  webChatController,
+  /useCommunityChatRealtime\(\{[\s\S]*isEnabled:[\s\S]*isCommunityPageActive[\s\S]*hasResolvedCommunityChat[\s\S]*!interaction\.enabled/,
   "legacy chat realtime should be disabled for the normal web chat UI",
 );
 assert.doesNotMatch(

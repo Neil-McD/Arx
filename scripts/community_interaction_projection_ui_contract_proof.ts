@@ -25,6 +25,9 @@ const app = read("apps/web/src/App.tsx");
 const interactionController = read(
   "apps/web/src/controllers/useWebCommunityInteractionProjection.ts",
 );
+const chatController = read(
+  "apps/web/src/controllers/useWebCommunityChatController.ts",
+);
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
@@ -130,13 +133,13 @@ assert.doesNotMatch(
   "App should compose the projection controller without owning its gateway lifecycle",
 );
 assert.match(
-  app,
-  /useCommunityChatRealtime\(\{[\s\S]*isEnabled: activePage === "community" && hasResolvedCommunityChat && !COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
+  chatController,
+  /useCommunityChatRealtime\(\{[\s\S]*isEnabled:[\s\S]*isCommunityPageActive[\s\S]*hasResolvedCommunityChat[\s\S]*!interaction\.enabled/,
   "legacy chat realtime should remain disabled while canonical projection is the normal chat surface",
 );
 assert.match(
-  app,
-  /onCommunityMessageSent:[\s\S]*loadCommunityInteractionRoots\(communityId, session\)/,
+  chatController,
+  /onCommunityMessageSent:[\s\S]*interaction\.loadRoots\(communityId, session\)/,
   "send completion should request canonical projection refresh through canonical reads",
 );
 assert.match(

@@ -1,5 +1,3 @@
-type MutableRef<T> = { current: T };
-
 type WebSessionResetDeps = {
   beginBrowserSignedOutState: () => void | Promise<void>;
   setCommunities: (value: any[]) => void;
@@ -7,21 +5,7 @@ type WebSessionResetDeps = {
   setCommunityRoleById: (value: Record<string, string>) => void;
   setActiveCommunityId: (value: null) => void;
   setCommunityTab: (value: "chat") => void;
-  setCommunityMessages: (value: any[]) => void;
-  setCommunityActivityEvents?: (value: any[]) => void;
-  setCommunityMessageInput: (value: string) => void;
-  setCommunityChatError: (value: string | null) => void;
-  resetCommunityChatDataState: () => void;
-  setUnreadCount: (value: number) => void;
-  setIsUserAtBottom: (value: boolean) => void;
-  isUserAtBottomRef: MutableRef<boolean>;
-  setIsSendingCommunityMessage: (value: boolean) => void;
-  setReplyingToMessage: (value: null) => void;
-  setMessageReactions: (value: any[]) => void;
-  setReactionPickerMessageId: (value: string | null) => void;
-  setEditingMessageId: (value: string | null) => void;
-  setEditingMessageText: (value: string) => void;
-  setEditingMessagePrefix: (value: string | null) => void;
+  resetCommunityChatState: () => void;
   setCommunityResources: (value: any[]) => void;
   setIsLoadingResources: (value: boolean) => void;
   setShowResourceModal: (value: boolean) => void;
@@ -56,21 +40,7 @@ export async function resetWebSessionStateAfterSignOut(deps: WebSessionResetDeps
   deps.setCommunityRoleById({});
   deps.setActiveCommunityId(null);
   deps.setCommunityTab("chat");
-  deps.setCommunityMessages([]);
-  deps.setCommunityActivityEvents?.([]);
-  deps.setCommunityMessageInput("");
-  deps.setCommunityChatError(null);
-  deps.resetCommunityChatDataState();
-  deps.setUnreadCount(0);
-  deps.setIsUserAtBottom(true);
-  deps.isUserAtBottomRef.current = true;
-  deps.setIsSendingCommunityMessage(false);
-  deps.setReplyingToMessage(null);
-  deps.setMessageReactions([]);
-  deps.setReactionPickerMessageId(null);
-  deps.setEditingMessageId(null);
-  deps.setEditingMessageText("");
-  deps.setEditingMessagePrefix(null);
+  deps.resetCommunityChatState();
   deps.setCommunityResources([]);
   deps.setIsLoadingResources(false);
   deps.setShowResourceModal(false);
