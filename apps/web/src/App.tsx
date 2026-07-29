@@ -22,13 +22,8 @@ import {
 } from "../../../shared/pay_first";
 import {
   readProfileDraftForUser, writeProfileDraftForUser, } from "../../../shared/profileDraftStorage";
-import {
-  resolveAuthSubject,
-} from "../../../shared/authSession";
+import { resolveAuthSubject } from "../../../shared/authSession";
 import { getAuthUid } from "../../../shared/authCore";
-import {
-  identifyCloudBusinessVisitor,
-} from "../../../shared/cloudBusinessAnalyticsGateway";
 import { CommunityAvatar } from "../../../shared/CommunityAvatar";
 import {
   formatProviderConnectionErrorMessage,
@@ -75,6 +70,7 @@ import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccount
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
 import { useWebSkillsModel } from "./controllers/useWebSkillsModel";
 import { useWebAccountGraphLifecycle } from "./controllers/useWebAccountGraphLifecycle";
+import { useWebAuthenticatedIdentityController } from "./controllers/useWebAuthenticatedIdentityController";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { updateSentryUiContext } from "./instrument";
 import {
@@ -259,8 +255,6 @@ import type { WebBuilderPartnerProgramPanelProps } from "./components/WebBuilder
 import {
   startCloudPremiumSubscriptionCheckout,
 } from "../../../shared/cloudAccountCommerceGateway";
-import { loadOptionalOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
-import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
 import {
   deriveCommunityFunnelAction,
@@ -372,7 +366,6 @@ export default function App() {
         readShellVariantFromPathname(window.location.pathname || "/");
   const initialPublicRoute = readPublicRouteFromLocation();
   const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
-  const lastIdentifiedBusinessVisitorSubjectRef = useRef<string | null>(null);
   const directMessages = useWebDirectMessagesController();
   const {
     isOpen: isDirectMessagesOpen,
@@ -414,73 +407,13 @@ export default function App() {
     onDidJustSignIn: accountGraphLifecycle.onDidJustSignIn,
     onAfterSignOut: accountGraphLifecycle.onAfterSignOut,
   });
-  const canonicalSessionUserId = useMemo(
-    () => resolveAuthSubject(session),
-    [session?.access_token, session?.id_token, session?.user?.id],
-  );
-
-  useEffect(() => {
-    const subject = String(canonicalSessionUserId ?? "").trim();
-    if (!session || !subject) {
-      lastIdentifiedBusinessVisitorSubjectRef.current = null;
-      return;
-    }
-    if (lastIdentifiedBusinessVisitorSubjectRef.current === subject) return;
-    lastIdentifiedBusinessVisitorSubjectRef.current = subject;
-    void identifyCloudBusinessVisitor({ session }).catch((error) => {
-      if (lastIdentifiedBusinessVisitorSubjectRef.current === subject) {
-        lastIdentifiedBusinessVisitorSubjectRef.current = null;
-      }
-      console.warn("Failed to identify business visitor:", error);
-    });
-  }, [canonicalSessionUserId, session]);
-
-  const [operatorAccessState, setOperatorAccessState] = useState<{
-    subject: string;
-    access: OperatorAccessSnapshot | null;
-  } | null>(null);
-  const isOperatorAccessResolved =
-    Boolean(canonicalSessionUserId) && operatorAccessState?.subject === canonicalSessionUserId;
-  const operatorAccess = isOperatorAccessResolved ? operatorAccessState?.access ?? null : null;
-
-  useEffect(() => {
-    let isAlive = true;
-    const operatorSubject = String(canonicalSessionUserId ?? "").trim();
-
-    if (!session || !operatorSubject) {
-      setOperatorAccessState(null);
-      return;
-    }
-
-    loadOptionalOperatorAccessCanonical({ session }).then(
-      (access) => {
-        if (!isAlive) return;
-        if (!access) {
-          setOperatorAccessState({ subject: operatorSubject, access: null });
-          return;
-        }
-        setOperatorAccessState({ subject: operatorSubject, access });
-      },
-      (error) => {
-        if (!isAlive) return;
-        const message = error instanceof Error ? error.message : String(error);
-        if (
-          message.includes("operator_access_forbidden") ||
-          message.includes("operator_access_identity_mismatch")
-        ) {
-          setOperatorAccessState({ subject: operatorSubject, access: null });
-          return;
-        }
-        console.warn("Failed to resolve operator access:", error);
-        setOperatorAccessState({ subject: operatorSubject, access: null });
-      },
-    );
-
-    return () => {
-      isAlive = false;
-    };
-  }, [canonicalSessionUserId, session]);
-  const hasOperatorAccess = Boolean(session && operatorAccess);
+  const authenticatedIdentity = useWebAuthenticatedIdentityController(session);
+  const {
+    canonicalUserId: canonicalSessionUserId,
+    isOperatorAccessResolved,
+    operatorAccess,
+    hasOperatorAccess,
+  } = authenticatedIdentity;
   const profileStorageUserId = canonicalSessionUserId;
   const initialProfileDraft = useMemo(
     () => readProfileDraftForUser(profileStorageUserId),
