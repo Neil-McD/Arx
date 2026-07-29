@@ -97,6 +97,7 @@ import type * as communityResourceEvidence from "../communityResourceEvidence.js
 import type * as communityResourceEvidenceCore from "../communityResourceEvidenceCore.js";
 import type * as communityResourceMemoryProjection from "../communityResourceMemoryProjection.js";
 import type * as communityResources from "../communityResources.js";
+import type * as communitySemanticMembers from "../communitySemanticMembers.js";
 import type * as communitySkillAttachments from "../communitySkillAttachments.js";
 import type * as communitySourceUrlPolicy from "../communitySourceUrlPolicy.js";
 import type * as communityText from "../communityText.js";
@@ -166,6 +167,7 @@ import type * as premiumBilling from "../premiumBilling.js";
 import type * as premiumMemberBadge from "../premiumMemberBadge.js";
 import type * as previewProxySessionToken from "../previewProxySessionToken.js";
 import type * as probe from "../probe.js";
+import type * as profileCore from "../profileCore.js";
 import type * as profileRelationshipCore from "../profileRelationshipCore.js";
 import type * as profiles from "../profiles.js";
 import type * as projects from "../projects.js";
@@ -190,6 +192,7 @@ import type * as runtimeWorkspaceSessionDisposal from "../runtimeWorkspaceSessio
 import type * as settings from "../settings.js";
 import type * as skillCore from "../skillCore.js";
 import type * as skillPackages from "../skillPackages.js";
+import type * as stagingSchemaCompatibilityMigration from "../stagingSchemaCompatibilityMigration.js";
 import type * as stripeConnectAccountCore from "../stripeConnectAccountCore.js";
 import type * as stripeCore from "../stripeCore.js";
 import type * as stripeCustomers from "../stripeCustomers.js";
@@ -310,6 +313,7 @@ declare const fullApi: ApiFromModules<{
   communityResourceEvidenceCore: typeof communityResourceEvidenceCore;
   communityResourceMemoryProjection: typeof communityResourceMemoryProjection;
   communityResources: typeof communityResources;
+  communitySemanticMembers: typeof communitySemanticMembers;
   communitySkillAttachments: typeof communitySkillAttachments;
   communitySourceUrlPolicy: typeof communitySourceUrlPolicy;
   communityText: typeof communityText;
@@ -379,6 +383,7 @@ declare const fullApi: ApiFromModules<{
   premiumMemberBadge: typeof premiumMemberBadge;
   previewProxySessionToken: typeof previewProxySessionToken;
   probe: typeof probe;
+  profileCore: typeof profileCore;
   profileRelationshipCore: typeof profileRelationshipCore;
   profiles: typeof profiles;
   projects: typeof projects;
@@ -403,6 +408,7 @@ declare const fullApi: ApiFromModules<{
   settings: typeof settings;
   skillCore: typeof skillCore;
   skillPackages: typeof skillPackages;
+  stagingSchemaCompatibilityMigration: typeof stagingSchemaCompatibilityMigration;
   stripeConnectAccountCore: typeof stripeConnectAccountCore;
   stripeCore: typeof stripeCore;
   stripeCustomers: typeof stripeCustomers;

@@ -27,13 +27,20 @@ export default defineSchema({
     .index("by_normalizedHandle", ["normalizedHandle"]),
 
   authSessions: defineTable({
-    sessionId: v.string(),
-    authSubject: v.string(),
+    // Temporary shared-staging compatibility: quick-porcupine still contains
+    // the pre-canonical session-token rows. The strict required fields are
+    // restored immediately after the staging-only retirement pass.
+    sessionId: v.optional(v.string()),
+    authSubject: v.optional(v.string()),
     userId: v.id("users"),
     replacedBySessionId: v.optional(v.string()),
     encryptedSecretHex: v.string(),
     secretIvHex: v.string(),
     secretVersion: v.number(),
+    sessionTokenHash: v.optional(v.string()),
+    secretRevision: v.optional(v.number()),
+    expiresAt: v.optional(v.number()),
+    purgeAfterAt: v.optional(v.number()),
     accessTokenExpiresAt: v.optional(v.number()),
     email: v.optional(v.string()),
     displayName: v.optional(v.string()),
@@ -967,9 +974,12 @@ export default defineSchema({
   emailOutbox: defineTable({
     kind: v.string(),
     recipientUserId: v.optional(v.id("users")),
-    recipientEmail: v.string(),
+    // Temporary compatibility for terminal rows whose recipient content was
+    // already privacy-minimized by the previous staging deployment.
+    recipientEmail: v.optional(v.string()),
     templateKey: v.string(),
-    payload: v.any(),
+    payload: v.optional(v.any()),
+    contentMinimizedAt: v.optional(v.number()),
     dedupeKey: v.optional(v.string()),
     provider: v.optional(v.string()),
     providerMessageId: v.optional(v.string()),
@@ -2433,9 +2443,11 @@ export default defineSchema({
     evidence: v.optional(v.array(v.string())),
     whyNow: v.optional(v.string()),
     status: v.union(v.literal("live"), v.literal("hidden")),
-    score: v.number(),
-    goodCount: v.number(),
-    lowSignalCount: v.number(),
+    // Temporary shared-staging compatibility for three pre-counter posts.
+    // The migration fills deterministic zeroes before strictness is restored.
+    score: v.optional(v.number()),
+    goodCount: v.optional(v.number()),
+    lowSignalCount: v.optional(v.number()),
     noveltyKey: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
