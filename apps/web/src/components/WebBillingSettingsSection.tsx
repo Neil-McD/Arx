@@ -200,8 +200,8 @@ export function WebBillingSettingsSection({
             </div>
           </div>
 
-          {accountCommerceError ? <div className="workspace-billing-error">{accountCommerceError}</div> : null}
-          {premiumCheckoutError ? <div className="workspace-billing-error">{premiumCheckoutError}</div> : null}
+          {accountCommerceError ? <div className="billing-settings-error">{accountCommerceError}</div> : null}
+          {premiumCheckoutError ? <div className="billing-settings-error">{premiumCheckoutError}</div> : null}
         </div>
       </div>
     </>

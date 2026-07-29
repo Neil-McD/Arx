@@ -460,10 +460,6 @@ assert.doesNotMatch(
 );
 
 [
-  /\.plan-badge\s*\{[\s\S]*?background:\s*rgba\(255,\s*255,\s*255,\s*0\.04\);/,
-  /\.plan-feature-icon\.x\s*\{[\s\S]*?background:\s*rgba\(255,\s*255,\s*255,\s*0\.06\);[\s\S]*?color:\s*rgba\(255,\s*255,\s*255,\s*0\.42\);/,
-  /\.plan-feature-icon\.check\s*\{[\s\S]*?background:\s*rgba\(70,\s*210,\s*140,\s*0\.16\);[\s\S]*?border-color:\s*rgba\(70,\s*210,\s*140,\s*0\.35\);[\s\S]*?color:\s*#56d48a;/,
-  /\.plan-cta\s*\{[\s\S]*?background:\s*#fff;[\s\S]*?color:\s*#0a0a0a;/,
   /\.status\.canceled\s*\{[\s\S]*?background:\s*rgba\(210,\s*80,\s*80,\s*0\.25\);[\s\S]*?color:\s*#f1a3a3;/,
   /\.status\.failed\s*\{[\s\S]*?background:\s*rgba\(210,\s*80,\s*80,\s*0\.25\);[\s\S]*?color:\s*#f1a3a3;/,
   /\.action-error\s*\{[\s\S]*?color:\s*#f1a3a3;[\s\S]*?border:\s*1px solid rgba\(210,\s*80,\s*80,\s*0\.35\);[\s\S]*?background:\s*rgba\(210,\s*80,\s*80,\s*0\.12\);/,
@@ -476,9 +472,6 @@ assert.doesNotMatch(
   );
 });
 [
-  /:root\[data-theme-family="light"\]\s*\.plan-badge\s*\{[\s\S]*?background:\s*var\(--hover-overlay\);/,
-  /:root\[data-theme-family="light"\]\s*\.plan-feature-icon\.check\s*\{[\s\S]*?color:\s*var\(--accent-success\);/,
-  /:root\[data-theme-family="light"\]\s*\.plan-cta,[\s\S]*?background:\s*var\(--bg-button\);[\s\S]*?color:\s*var\(--bg-button-text\);/,
   /:root\[data-theme-family="light"\]\s*\.status\.canceled,[\s\S]*?background:\s*color-mix\(in srgb,\s*var\(--accent-error\) 14%,\s*transparent\);[\s\S]*?color:\s*var\(--accent-error\);/,
   /:root\[data-theme-family="light"\]\s*\.action-error\s*\{[\s\S]*?color:\s*var\(--accent-error\);/,
   /:root\[data-theme-family="light"\]\s*\.settings-section\s*\{[\s\S]*?border-bottom-color:\s*var\(--border-default\);/,

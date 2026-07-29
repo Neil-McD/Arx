@@ -35,6 +35,9 @@ const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const voiceController = read("shared/useWebVoiceInputController.ts");
 const exportController = read("shared/useWebAccountDataExportController.ts");
 const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
+const authShellProjection = read(
+  "apps/web/src/controllers/buildWebAuthShellProjection.ts",
+);
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
 const mobileTopBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
@@ -118,8 +121,8 @@ assert.match(
   "the shell navigation controller must route legacy URLs through authoritative member destination resolution",
 );
 assert.match(
-  app,
-  /shouldHoldLandingForAuth[\s\S]*isLegacyWorkspaceRoutePath\(window\.location\.pathname/,
+  authShellProjection,
+  /shouldHoldLandingForAuth:[\s\S]*isLegacyWorkspaceRoutePath\(params\.pathname\)/,
   "legacy redirects must render a neutral hold instead of flashing another product surface",
 );
 assert.doesNotMatch(
@@ -486,6 +489,16 @@ assert.doesNotMatch(
   baseCss + webCss,
   /\.message-list\b|\.web-empty-thread\b|\.scroll-to-bottom\b|\.ask-engine-|\.ask-(?:bar|input|footer|actions)-landing\b|\.success-toast\b|\.memory-toast\b|\.modal-auth-gate\b|\.auth-gate-google-button\b|\.memory-blocks\b|\.memory-block-group-title\b|\.memory-block-desc\b|\.workspace-billing-modal-copy\b|\.inference-issue-modal\b|\.workspace-attachment-drop-surface\b|\.workspace-drop-overlay\b/,
   "web CSS must not retain presentation whose only renderer was deleted with the Workspace host or its zero-producer overlays",
+);
+assert.doesNotMatch(
+  baseCss + webCss,
+  /\.workspace-selector\b|\.project-(?:selector|dropdown)\b|\.workspace-(?:payg|auto-recharge|billing)\b|\.modal-account-info\b|\.plan-grid\b|\.session-item\b/,
+  "web CSS must not retain the deleted Workspace selector, project picker, sessions list, or account-plan presentation",
+);
+assert.match(
+  baseCss,
+  /\.billing-settings-error\b/,
+  "the surviving account-billing error must remain feature-owned after Workspace billing presentation deletion",
 );
 assert.match(
   baseCss,

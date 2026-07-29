@@ -119,17 +119,11 @@ import type {
   UserProfileDetail as SharedUserProfileDetail,
 } from "../../../shared/communityTypes";
 import {
-  type AppShellVariant,
   type PublicRoute,
   applyShellVariantToAppPath,
   buildAppRoutePath,
   buildCommunityTabPath,
   buildSettingsPath,
-  isLegacyWorkspaceRoutePath,
-  isRootAppRoutePath,
-  readAppRouteFromLocation,
-  readPublicRouteFromLocation,
-  readShellVariantFromPathname,
 } from "../../../shared/webAppRouteState";
 import { PRODUCT_DOCS_DEFAULT_SLUG } from "./docs/productDocsMeta";
 import {
@@ -149,10 +143,6 @@ import { renderMarkdown } from "../../../shared/markdownUi";
 import {
   readBannerFileAsWideDataUrlWithinLimit,
 } from "../../../shared/imageTransforms";
-import {
-  readAuthResumeState,
-} from "../../../shared/authResumeState";
-import { readOAuthCallbackShellVariantFromLocation } from "../../../shared/cloudPkce";
 import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
 import { useRailPointerReorder } from "../../../shared/useRailPointerReorder";
 import { useWebCommunityAccessController } from "../../../shared/useWebCommunityAccessController";
@@ -199,6 +189,7 @@ import { useWebSelectedCommunityController } from "./controllers/useWebSelectedC
 import { useWebPublicCommunityRouteController } from "./controllers/useWebPublicCommunityRouteController";
 import { useWebUiPersistenceLifecycle } from "./controllers/useWebUiPersistenceLifecycle";
 import { buildWebShellProjection } from "./controllers/buildWebShellProjection";
+import { buildWebAuthShellProjection } from "./controllers/buildWebAuthShellProjection";
 import { buildWebCommunitySurfaceProjection } from "./controllers/buildWebCommunitySurfaceProjection";
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
@@ -241,13 +232,6 @@ type PublicPlanSummary = SharedPublicPlanSummary;
 type CommunityAiFeedPost = SharedCommunityAiFeedPost;
 type CommunityAiFeedReactionType = SharedCommunityAiFeedReactionType;
 export default function App() {
-  const initialShellVariant: AppShellVariant =
-    typeof window === "undefined"
-      ? "standard"
-      : readOAuthCallbackShellVariantFromLocation() ??
-        readShellVariantFromPathname(window.location.pathname || "/");
-  const initialPublicRoute = readPublicRouteFromLocation();
-  const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
   const directMessages = useWebDirectMessagesController();
   const {
     isOpen: isDirectMessagesOpen,
@@ -299,14 +283,11 @@ export default function App() {
     hasOperatorAccess,
   } = authenticatedIdentity;
   const profileStorageUserId = canonicalSessionUserId;
-  const shellState = useWebShellState({
-    initialAppRoute,
-    initialPublicRoute,
-    initialShellVariant,
-  });
+  const shellState = useWebShellState();
   const {
     publicRoute,
     setPublicRoute,
+    initialCommunitySlug,
     shellVariant,
     setShellVariant,
     mobileOverlay,
@@ -422,10 +403,6 @@ export default function App() {
     redeemPendingPurchasesInFlightRef,
   } = billingUi;
 
-  const lastAutoRedeemPendingPurchasesUserIdRef = useRef<string | null>(null);
-  const autoRedeemPendingPurchasesAttemptRef = useRef(0);
-  const autoRedeemPendingPurchasesTimeoutRef = useRef<number | null>(null);
-
   const personalAccountSettings =
     useWebPersonalAccountSettingsController<AuthSession>({
       session,
@@ -464,7 +441,7 @@ export default function App() {
     resolveKnownCommunitySlugById,
     applyCommunityShellState,
   } = useWebSelectedCommunityController<CommunityRecord>({
-    initialCommunitySlug: initialAppRoute?.communitySlug ?? null,
+    initialCommunitySlug,
     communities,
     setCommunityTab,
   });
@@ -986,7 +963,6 @@ export default function App() {
     requireSignIn,
     refreshAccountSetupStatus,
     resetSignedOutAccountSetup: resetOnboardingProfileState,
-    getReturnToPath: () => `${window.location.pathname}${window.location.search}`,
   });
   const enterJoinedCommunity = useWebJoinedCommunityEntryAction({
     session,
@@ -1177,10 +1153,11 @@ export default function App() {
   });
 
   const { appToast, showAppToastMessage } = useWebToastController();
-  useWebAuthErrorToastLifecycle({
-    authError,
-    showToast: showAppToastMessage,
-  });
+  const { visibleAuthError: previewSidebarAuthError } =
+    useWebAuthErrorToastLifecycle({
+      authError,
+      showToast: showAppToastMessage,
+    });
   resetWebSessionStateRef.current = () => resetWebSessionStateAfterSignOut({
     beginBrowserSignedOutState,
     setCommunities,
@@ -1665,9 +1642,6 @@ export default function App() {
     checkoutSuccessSessionId,
     isRedeemingClaim,
     isJoiningPublicCommunity: publicCommunityUi.isJoiningPublicCommunity,
-    lastAutoRedeemPendingPurchasesUserIdRef,
-    autoRedeemPendingPurchasesAttemptRef,
-    autoRedeemPendingPurchasesTimeoutRef,
     setAccountCommerceStatus,
     setAccountCommerceError,
     setIsLoadingAccountCommerce,
@@ -1889,21 +1863,18 @@ export default function App() {
     requireSignIn,
     cancelPendingJoinRequest: cancelMyPendingJoinRequest,
   });
-  const hasAuthenticatedAppShellPresentation =
-    shellPublicRoute.kind === "app" && authPresentationState !== "signed_out";
-  const isAuthRecoveringSignedInAppShell =
-    shellPublicRoute.kind === "app" && authPresentationState === "recovering_signed_in";
-  const shouldHoldLandingForAuth =
-    shellPublicRoute.kind === "app" &&
-    activePage === "landing" &&
-    typeof window !== "undefined" &&
-    (isLegacyWorkspaceRoutePath(window.location.pathname || "/") ||
-      (authPresentationState !== "signed_out" &&
-        isRootAppRoutePath(window.location.pathname || "/")));
-  const isAccountGraphHydratingCriticalAppShell =
-    shellPublicRoute.kind === "app" &&
-    authPresentationState === "signed_in" &&
-    accountGraphHydrationPhase === "critical";
+  const {
+    hasAuthenticatedAppShellPresentation,
+    isAuthRecoveringSignedInAppShell,
+    shouldHoldLandingForAuth,
+    isAccountGraphHydratingCriticalAppShell,
+  } = buildWebAuthShellProjection({
+    publicRouteKind: shellPublicRoute.kind,
+    activePage,
+    authPresentationState,
+    accountGraphHydrationPhase,
+    pathname: shellNavigation.readCurrentPathname(),
+  });
 
   const {
     handleTopbarBackFromSettings,
@@ -2627,10 +2598,6 @@ export default function App() {
       </Suspense>
     );
   }
-
-  const shouldSuppressPreviewSidebarAuthError =
-    readAuthResumeState()?.intent?.reason === "open_workspace_draft";
-  const previewSidebarAuthError = shouldSuppressPreviewSidebarAuthError ? null : authError;
 
   const globalOverlayHostProps = buildWebGlobalOverlayHostProps({
     session: session,

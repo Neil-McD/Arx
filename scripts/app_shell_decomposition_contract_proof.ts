@@ -12,6 +12,11 @@ const compositionRoot = read(
 );
 const entryStyles = read("apps/web/src/index.css");
 const globalStyles = read("apps/web/src/base.css");
+const featureStyles = [
+  read("apps/web/src/styles/shell-and-onboarding.css"),
+  read("apps/web/src/styles/community-and-content.css"),
+  read("apps/web/src/styles/settings-runtime-and-theme-overrides.css"),
+].join("\n");
 
 assert.match(
   packageJson,
@@ -37,6 +42,16 @@ assert.doesNotMatch(
   app,
   /\b(?:fetch|client\.(?:query|mutation|action))\s*\(/,
   "App.tsx must not call transports directly",
+);
+assert.doesNotMatch(
+  app,
+  /readOAuthCallbackShellVariantFromLocation|read(?:App|Public)RouteFromLocation|readShellVariantFromPathname/,
+  "App.tsx must not bypass the shell-state owner for initial route hydration",
+);
+assert.doesNotMatch(
+  app,
+  /lastAutoRedeemPendingPurchasesUserIdRef|autoRedeemPendingPurchases(?:Attempt|Timeout)Ref/,
+  "App.tsx must not own billing retry state",
 );
 assert.match(
   app,
@@ -75,6 +90,7 @@ assert.match(
 
 const boundedFeatureOwners = [
   "apps/web/src/components/WebAppCompositionRoot.tsx",
+  "apps/web/src/controllers/buildWebAuthShellProjection.ts",
   "apps/web/src/controllers/useWebAccountPlanController.ts",
   "apps/web/src/controllers/useWebAuthErrorToastLifecycle.ts",
   "apps/web/src/controllers/useWebBuilderPartnerProgramController.ts",
@@ -109,7 +125,21 @@ for (const ownerPath of boundedFeatureOwners) {
 for (const [ownerPath, requiredMarkers] of [
   [
     "apps/web/src/controllers/useWebShellState.ts",
-    ["useState", "activePage", "communityTab"],
+    [
+      "useState",
+      "activePage",
+      "communityTab",
+      "readPublicRouteFromLocation",
+      "readAppRouteFromLocation",
+    ],
+  ],
+  [
+    "apps/web/src/controllers/buildWebAuthShellProjection.ts",
+    [
+      "isLegacyWorkspaceRoutePath",
+      "isRootAppRoutePath",
+      "shouldHoldLandingForAuth",
+    ],
   ],
   [
     "apps/web/src/controllers/useWebShellNavigationController.ts",
@@ -153,6 +183,16 @@ assert.doesNotMatch(
   globalStyles,
   /\.app-root|\.app-shell|\.community-|\.settings-|\.modal/,
   "feature and shell presentation must not return to global base.css",
+);
+assert.doesNotMatch(
+  featureStyles,
+  /\.workspace-selector\b|\.project-(?:selector|dropdown)\b|\.workspace-(?:payg|auto-recharge|billing)\b|\.modal-account-info\b|\.plan-grid\b|\.session-item\b/,
+  "unreachable Workspace, project, session, and account-modal presentation must stay deleted",
+);
+assert.match(
+  featureStyles,
+  /\.billing-settings-error\b/,
+  "surviving account-billing errors must use feature-owned presentation",
 );
 assert.match(
   entryStyles,

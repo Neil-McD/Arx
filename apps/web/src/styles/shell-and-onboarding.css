@@ -2,9 +2,7 @@
 button,
 input,
 select,
-.session-item,
-.action-card,
-.rail-item {
+.action-card {
   transition: all 0.2s ease;
 }
 
@@ -83,45 +81,7 @@ body {
   app-region: no-drag;
 }
 
-/* Workspace Selector in Header */
-.workspace-selector {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  background: transparent;
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  cursor: pointer;
-  color: var(--text-primary);
-  font-size: 12px;
-  transition: background 0.15s, border-color 0.15s;
-  max-width: 180px;
-}
-
-.workspace-selector:hover {
-  background: var(--hover-overlay);
-  border-color: var(--border-strong);
-}
-
-.workspace-selector .workspace-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  fill: none;
-  stroke: var(--text-muted);
-  stroke-width: 1.5;
-}
-
-.workspace-selector .workspace-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: left;
-}
-
-/* Back to Workspace Button (on community page) */
+/* Back navigation in community and thread headers. */
 .back-to-workspace {
   display: flex;
   align-items: center;
@@ -1640,4 +1600,3 @@ body {
   color: var(--text-muted);
   font-size: 14px;
 }
-

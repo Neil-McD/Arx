@@ -1,4 +1,10 @@
-import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import {
+  useEffect,
+  useRef,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from "react";
 import {
   readPendingPublicJoinCommunityId,
   readPendingPublicJoinCommunitySlug,
@@ -23,9 +29,6 @@ export function useWebPostAuthBillingLifecycle<
   checkoutSuccessSessionId: string | null;
   isRedeemingClaim: boolean;
   isJoiningPublicCommunity: boolean;
-  lastAutoRedeemPendingPurchasesUserIdRef: MutableRefObject<string | null>;
-  autoRedeemPendingPurchasesAttemptRef: MutableRefObject<number>;
-  autoRedeemPendingPurchasesTimeoutRef: MutableRefObject<number | null>;
   setAccountCommerceStatus: Dispatch<SetStateAction<TBillingStatus | null>>;
   setAccountCommerceError: Dispatch<SetStateAction<string | null>>;
   setIsLoadingAccountCommerce: Dispatch<SetStateAction<boolean>>;
@@ -36,6 +39,10 @@ export function useWebPostAuthBillingLifecycle<
   loadAccountCommerceStatus: (session: TSession) => Promise<TBillingStatus | null>;
   joinPublicCommunity: (args: { communitySlug: string | null; communityId?: string }) => Promise<void>;
 }) {
+  const lastAutoRedeemPendingPurchasesUserIdRef = useRef<string | null>(null);
+  const autoRedeemPendingPurchasesAttemptRef = useRef(0);
+  const autoRedeemPendingPurchasesTimeoutRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (params.claimTokenParam) {
       scrubCurrentRouteSearchParams(["token"]);
@@ -74,43 +81,47 @@ export function useWebPostAuthBillingLifecycle<
   useEffect(() => {
     const session = params.session;
     if (!session) {
-      params.lastAutoRedeemPendingPurchasesUserIdRef.current = null;
-      params.autoRedeemPendingPurchasesAttemptRef.current = 0;
-      if (params.autoRedeemPendingPurchasesTimeoutRef.current) {
-        window.clearTimeout(params.autoRedeemPendingPurchasesTimeoutRef.current);
-        params.autoRedeemPendingPurchasesTimeoutRef.current = null;
+      lastAutoRedeemPendingPurchasesUserIdRef.current = null;
+      autoRedeemPendingPurchasesAttemptRef.current = 0;
+      if (autoRedeemPendingPurchasesTimeoutRef.current) {
+        window.clearTimeout(autoRedeemPendingPurchasesTimeoutRef.current);
+        autoRedeemPendingPurchasesTimeoutRef.current = null;
       }
       return;
     }
 
     const userId = params.getAuthUid(session);
     if (!userId) return;
-    if (params.lastAutoRedeemPendingPurchasesUserIdRef.current === userId) return;
-    params.lastAutoRedeemPendingPurchasesUserIdRef.current = userId;
+    if (lastAutoRedeemPendingPurchasesUserIdRef.current === userId) return;
+    lastAutoRedeemPendingPurchasesUserIdRef.current = userId;
 
-    params.autoRedeemPendingPurchasesAttemptRef.current = 0;
-    if (params.autoRedeemPendingPurchasesTimeoutRef.current) {
-      window.clearTimeout(params.autoRedeemPendingPurchasesTimeoutRef.current);
-      params.autoRedeemPendingPurchasesTimeoutRef.current = null;
+    autoRedeemPendingPurchasesAttemptRef.current = 0;
+    if (autoRedeemPendingPurchasesTimeoutRef.current) {
+      window.clearTimeout(autoRedeemPendingPurchasesTimeoutRef.current);
+      autoRedeemPendingPurchasesTimeoutRef.current = null;
     }
 
     let cancelled = false;
     const run = async () => {
       if (cancelled) return;
-      params.autoRedeemPendingPurchasesAttemptRef.current += 1;
-      const attempt = params.autoRedeemPendingPurchasesAttemptRef.current;
+      autoRedeemPendingPurchasesAttemptRef.current += 1;
+      const attempt = autoRedeemPendingPurchasesAttemptRef.current;
       const count = await params.redeemPendingPurchases({ navigate: false, silentNoop: true });
       if (cancelled) return;
       if (count > 0) return;
       if (attempt >= 6) return;
       const delayMs = Math.min(12000, 1200 + attempt * 1800);
-      params.autoRedeemPendingPurchasesTimeoutRef.current = window.setTimeout(() => {
+      autoRedeemPendingPurchasesTimeoutRef.current = window.setTimeout(() => {
         void run();
       }, delayMs);
     };
     void run();
     return () => {
       cancelled = true;
+      if (autoRedeemPendingPurchasesTimeoutRef.current) {
+        window.clearTimeout(autoRedeemPendingPurchasesTimeoutRef.current);
+        autoRedeemPendingPurchasesTimeoutRef.current = null;
+      }
     };
   }, [params.session]);
 

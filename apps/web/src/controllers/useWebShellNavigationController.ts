@@ -174,6 +174,10 @@ export function useWebShellNavigationController(params: {
     () => `${window.location.pathname}${window.location.search}` || "/",
     [],
   );
+  const readCurrentPathname = useCallback(
+    () => window.location.pathname || "/",
+    [],
+  );
   const buildCurrentAppRoutePath = useCallback((): string | null => {
     const current = paramsRef.current;
     return (
@@ -405,6 +409,7 @@ export function useWebShellNavigationController(params: {
     navigateTo,
     applyAppRouteState,
     applyLocationToState,
+    readCurrentPathname,
     buildCurrentAppRoutePath,
     pushNavSnapshot,
     openGlobalSettings,

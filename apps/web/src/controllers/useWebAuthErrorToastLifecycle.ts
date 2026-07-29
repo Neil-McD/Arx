@@ -7,19 +7,21 @@ export function useWebAuthErrorToastLifecycle(params: {
   showToast: (message: string) => void;
 }) {
   const lastShownErrorRef = useRef<string | null>(null);
+  const suppressAuthError =
+    readAuthResumeState()?.intent?.reason === "open_workspace_draft";
 
   useEffect(() => {
     if (!params.authError) {
       lastShownErrorRef.current = null;
       return;
     }
-    if (
-      readAuthResumeState()?.intent?.reason === "open_workspace_draft"
-    ) {
-      return;
-    }
+    if (suppressAuthError) return;
     if (lastShownErrorRef.current === params.authError) return;
     lastShownErrorRef.current = params.authError;
     params.showToast(params.authError);
-  }, [params.authError, params.showToast]);
+  }, [params.authError, params.showToast, suppressAuthError]);
+
+  return {
+    visibleAuthError: suppressAuthError ? null : params.authError,
+  };
 }

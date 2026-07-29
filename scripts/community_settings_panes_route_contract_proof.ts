@@ -10,6 +10,12 @@ const navigation = read("shared/appShellNavigation.ts");
 const routeState = read("shared/webAppRouteState.ts");
 const app = read("apps/web/src/App.tsx");
 const shellState = read("apps/web/src/controllers/useWebShellState.ts");
+const shellNavigation = read(
+  "apps/web/src/controllers/useWebShellNavigationController.ts",
+);
+const communityNavigation = read(
+  "apps/web/src/controllers/useWebCommunityNavigationActions.ts",
+);
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const settingsSection = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
@@ -128,27 +134,32 @@ assert.match(
 );
 assert.match(
   app,
-  /useWebShellState\(\{[\s\S]*initialAppRoute,[\s\S]*initialPublicRoute,[\s\S]*initialShellVariant,[\s\S]*\}\)/,
+  /const shellState = useWebShellState\(\)/,
   "App must compose the shell state controller",
 );
 assert.match(
-  app,
-  /nextAppRoute\.communityTab === "settings" \? nextAppRoute\.communitySettingsPane \?\? "community" : "community"/,
+  shellState,
+  /readOAuthCallbackShellVariantFromLocation\(\)[\s\S]*readShellVariantFromPathname\(window\.location\.pathname[\s\S]*readPublicRouteFromLocation\(\)[\s\S]*readAppRouteFromLocation\(\)/,
+  "the shell state controller must own initial route and shell-variant hydration",
+);
+assert.match(
+  shellNavigation,
+  /nextAppRoute\.communityTab === "settings"\s*\?\s*nextAppRoute\.communitySettingsPane \?\? "community"\s*:\s*"community"/,
   "refresh and popstate must restore the settings pane from parsed route state",
 );
 assert.match(
-  app,
-  /buildCommunityTabPath\(nextCommunitySlug, "settings", null, pane\)/,
+  communityNavigation,
+  /buildCommunityTabPath\(\s*slug,\s*"settings",\s*null,\s*pane,\s*\)/,
   "pane selection must navigate to the pane-specific settings route",
 );
 assert.match(
-  app,
-  /navigateTo\(settingsPath, opts\?\.replace \? \{ replace: true \} : \{\}\)/,
+  communityNavigation,
+  /params\.navigateTo\(\s*path,\s*options\?\.replace \? \{ replace: true \} : \{\},\s*\)/,
   "unauthorized pane normalization must replace history instead of creating a back-button loop",
 );
 assert.match(
-  app,
-  /communitySettingsPane:[\s\S]*activePage === "community" && communityTab === "settings" \? communitySettingsPane : null/,
+  shellNavigation,
+  /communitySettingsPane:[\s\S]*current\.activePage === "community" &&\s*current\.communityTab === "settings"\s*\?\s*current\.communitySettingsPane\s*:\s*null/,
   "current route snapshots must include the active settings pane",
 );
 

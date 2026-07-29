@@ -24,7 +24,6 @@ type UseWebProviderConnectionsControllerParams = {
     session?: AuthSession | null,
   ) => Promise<unknown> | unknown;
   resetSignedOutAccountSetup: () => void;
-  getReturnToPath: () => string;
 };
 
 const DISCONNECTED_CHATGPT: CloudChatgptConnectionStatus = {
@@ -50,6 +49,13 @@ const DISCONNECTED_OPENAI: CloudOpenAiConnectionStatus = {
 export function useWebProviderConnectionsController(
   params: UseWebProviderConnectionsControllerParams,
 ) {
+  const getReturnToPath = useCallback(
+    () =>
+      typeof window === "undefined"
+        ? "/"
+        : `${window.location.pathname}${window.location.search}`,
+    [],
+  );
   const [chatgptConnection, setChatgptConnection] =
     useState<CloudChatgptConnectionStatus>(DISCONNECTED_CHATGPT);
   const [openAiConnection, setOpenAiConnection] =
@@ -70,7 +76,7 @@ export function useWebProviderConnectionsController(
         void params.refreshAccountSetupStatus();
       },
       chatgptSecuritySettingsUrl: CHATGPT_SECURITY_SETTINGS_URL,
-      getReturnToPath: params.getReturnToPath,
+      getReturnToPath,
     });
 
   const { applyProviderConnectionLoadError } = providerConnectionUi;

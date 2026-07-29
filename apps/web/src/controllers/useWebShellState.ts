@@ -26,23 +26,36 @@ import type {
   CommunityExperienceMode,
   PublicRoute,
 } from "../../../../shared/webAppRouteState";
+import {
+  readAppRouteFromLocation,
+  readPublicRouteFromLocation,
+  readShellVariantFromPathname,
+} from "../../../../shared/webAppRouteState";
+import {
+  readOAuthCallbackShellVariantFromLocation,
+} from "../../../../shared/cloudPkce";
 import type {
   MobileOverlay,
   MobileRootPage,
 } from "../components/webShellChromeShared";
 import { readFirstLocalStorageValue } from "../webAppRuntime";
 
-export function useWebShellState(params: {
-  initialAppRoute: AppRouteState | null;
-  initialPublicRoute: PublicRoute;
-  initialShellVariant: AppShellVariant;
-}) {
-  const { initialAppRoute } = params;
+export function useWebShellState() {
+  const initialShellVariant: AppShellVariant =
+    typeof window === "undefined"
+      ? "standard"
+      : readOAuthCallbackShellVariantFromLocation() ??
+        readShellVariantFromPathname(window.location.pathname || "/");
+  const initialPublicRoute: PublicRoute = readPublicRouteFromLocation();
+  const initialAppRoute: AppRouteState | null =
+    initialPublicRoute.kind === "app"
+      ? readAppRouteFromLocation()
+      : null;
   const [publicRoute, setPublicRoute] = useState<PublicRoute>(
-    params.initialPublicRoute,
+    initialPublicRoute,
   );
   const [shellVariant, setShellVariant] = useState<AppShellVariant>(
-    params.initialShellVariant,
+    initialShellVariant,
   );
   const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay>(null);
   const [mobileRootPage, setMobileRootPage] =
@@ -117,6 +130,7 @@ export function useWebShellState(params: {
   return {
     publicRoute,
     setPublicRoute,
+    initialCommunitySlug: initialAppRoute?.communitySlug ?? null,
     shellVariant,
     setShellVariant,
     mobileOverlay,
