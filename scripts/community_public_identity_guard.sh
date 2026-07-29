@@ -8,16 +8,16 @@ cd "$ROOT_DIR"
 
 echo "== Community public identity guard =="
 
-COMMUNITY_FILE="convex/community.ts"
+RETIRED_COMMUNITY_FACADE_FILE="convex/community.ts"
 COMMUNITY_CHAT_FILE="convex/communityChat.ts"
 COMMUNITY_ADMIN_FILE="convex/communityAdmin.ts"
 COMMUNITY_CORE_FILE="convex/communityCore.ts"
-COMMUNITY_EXPERIENCE_FILE="convex/communityExperience.ts"
+RETIRED_COMMUNITY_EXPERIENCE_FILE="convex/communityExperience.ts"
 COMMUNITY_LIFECYCLE_FILE="convex/communityLifecycle.ts"
 COMMUNITY_PUBLIC_FILE="convex/communityPublic.ts"
 
-if [[ ! -f "$COMMUNITY_FILE" ]]; then
-  echo "FAIL: missing $COMMUNITY_FILE"
+if [[ -f "$RETIRED_COMMUNITY_FACADE_FILE" ]]; then
+  echo "FAIL: retired facade must stay deleted: $RETIRED_COMMUNITY_FACADE_FILE"
   exit 1
 fi
 if [[ ! -f "$COMMUNITY_CHAT_FILE" ]]; then
@@ -32,8 +32,8 @@ if [[ ! -f "$COMMUNITY_CORE_FILE" ]]; then
   echo "FAIL: missing $COMMUNITY_CORE_FILE"
   exit 1
 fi
-if [[ ! -f "$COMMUNITY_EXPERIENCE_FILE" ]]; then
-  echo "FAIL: missing $COMMUNITY_EXPERIENCE_FILE"
+if [[ -f "$RETIRED_COMMUNITY_EXPERIENCE_FILE" ]]; then
+  echo "FAIL: retired facade must stay deleted: $RETIRED_COMMUNITY_EXPERIENCE_FILE"
   exit 1
 fi
 if [[ ! -f "$COMMUNITY_LIFECYCLE_FILE" ]]; then

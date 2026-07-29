@@ -8,7 +8,6 @@ const interactionEmbedRefresh = readFileSync(join(root, "convex/communityInterac
 const interactionPreviewContract = readFileSync(join(root, "shared/interactionEmbedPreviewContract.ts"), "utf8");
 const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const sourceUrlPolicy = readFileSync(join(root, "convex/communitySourceUrlPolicy.ts"), "utf8");
-const communityFacade = readFileSync(join(root, "convex/community.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 
@@ -87,11 +86,6 @@ assert.match(
 
 assertNoExportedConst(interactions, "createCommunityInteractionRoot");
 assertNoExportedConst(interactions, "createCommunityInteractionReply");
-assert.doesNotMatch(
-  communityFacade,
-  /createCommunityInteractionRoot|createCommunityInteractionReply/,
-  "community facade should not expose generic interaction root/reply writes",
-);
 
 assert.doesNotMatch(
   interactions,
@@ -430,15 +424,4 @@ assert.match(
   /communityInteractionMentions" as any[\s\S]*mentionKind: spec\.kind[\s\S]*spec\.kind === "user"[\s\S]*mentionedUserId[\s\S]*spec\.kind === "community_agent"[\s\S]*mentionedAgentKey[\s\S]*notifyState: "pending"/,
   "validated user and canonical community-agent mentions should create pending mention rows",
 );
-assert.match(
-  communityFacade,
-  /createCommunityInteractionComposerMessage as createCommunityInteractionComposerMessageImpl[\s\S]*toggleCommunityInteractionReaction as toggleCommunityInteractionReactionImpl/,
-  "community facade should import the current interaction write functions",
-);
-assert.match(
-  communityFacade,
-  /export const createCommunityInteractionComposerMessage = createCommunityInteractionComposerMessageImpl;[\s\S]*export const toggleCommunityInteractionReaction = toggleCommunityInteractionReactionImpl;[\s\S]*export const editCommunityInteractionMessage = editCommunityInteractionMessageImpl;[\s\S]*export const deleteCommunityInteractionMessage = deleteCommunityInteractionMessageImpl;/,
-  "community facade should export only current interaction write functions",
-);
-
 console.log("community_interactions_write_core_contract_proof: ok");

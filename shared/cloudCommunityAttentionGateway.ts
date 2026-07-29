@@ -27,7 +27,7 @@ export async function listCloudCommunityAttentionRows<SessionT>(
   );
   if (normalizedCommunityIds.length === 0) return [];
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listMyCommunityAttention" as any, {
+  const payload = await client.query("communityAttention:listMyCommunityAttention" as any, {
     authSubject,
     communityIds: normalizedCommunityIds,
   });
@@ -42,7 +42,7 @@ export async function markCloudCommunitySurfaceSeen<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:markCommunitySurfaceSeen" as any, {
+  await client.mutation("communityAttention:markCommunitySurfaceSeen" as any, {
     authSubject,
     communityId: params.communityId,
     surface: params.surface,
@@ -59,7 +59,7 @@ export async function markCloudCommunityChatReadAt<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:markCommunityChatReadAt" as any, {
+  await client.mutation("communityAttention:markCommunityChatReadAt" as any, {
     authSubject,
     communityId: params.communityId,
     ...(typeof params.seenAtMs === "number" && Number.isFinite(params.seenAtMs)

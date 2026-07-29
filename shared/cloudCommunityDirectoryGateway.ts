@@ -47,7 +47,7 @@ export async function listCloudCommunityDirectoryPage<SessionT>(
   },
 ): Promise<CloudCommunityDirectoryPage> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityDirectoryPage" as any, {
+  const payload = await client.query("communityDirectory:listCommunityDirectoryPage" as any, {
     authSubject,
     communityId: params.communityId,
     cursor: params.cursor ?? null,
@@ -76,7 +76,7 @@ export async function countCloudCommunityDirectoryMembers<SessionT>(
   },
 ): Promise<number | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:countCommunityDirectoryMembers" as any, {
+  const payload = await client.query("communityDirectory:countCommunityDirectoryMembers" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -93,7 +93,7 @@ export async function searchCloudCommunityMentionCandidates<SessionT>(
   },
 ): Promise<CloudCommunityMentionCandidateRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:searchCommunityMentionCandidates" as any, {
+  const payload = await client.query("communityDirectory:searchCommunityMentionCandidates" as any, {
     authSubject,
     communityId: params.communityId,
     query: params.query,

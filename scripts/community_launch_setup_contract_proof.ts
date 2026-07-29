@@ -13,7 +13,6 @@ const launchSetup = read("shared/communityLaunchSetup.ts");
 const launchGateway = read("shared/cloudCommunityLaunchSetupGateway.ts");
 const convexSchema = read("convex/schema.ts");
 const launchQuery = read("convex/communityLaunchSetup.ts");
-const communityBarrel = read("convex/community.ts");
 const setupModal = read(
   "apps/web/src/components/WebCommunityLaunchSetupModal.tsx",
 );
@@ -296,24 +295,14 @@ assert.doesNotMatch(
   "launch setup workspace status query must stay bounded",
 );
 assert.match(
-  communityBarrel,
-  /getCommunityLaunchSetupStatus/,
-  "community barrel must expose launch setup status",
-);
-assert.match(
   launchGateway,
-  /community:getCommunityLaunchSetupStatus/,
+  /communityLaunchSetup:getCommunityLaunchSetupStatus/,
   "web gateway must call the canonical launch status query",
 );
 assert.match(
   launchGateway,
-  /community:saveCommunityLaunchProfile/,
+  /communityLifecycle:saveCommunityLaunchProfile/,
   "launch onboarding inline profile/about/publish saves must write through the canonical community mutation",
-);
-assert.match(
-  communityBarrel,
-  /saveCommunityLaunchProfile/,
-  "community barrel must expose the launch profile mutation",
 );
 assert.match(
   setupModal,

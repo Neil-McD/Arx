@@ -33,7 +33,7 @@ export async function listAccessibleCommunityMemberships(
   ctx: any,
   authSubject: string,
 ): Promise<CommunityMembershipProjection[]> {
-  const rows = (await ctx.runQuery(api.community.listCommunityMemberships as any, {
+  const rows = (await ctx.runQuery(api.communityAdmin.listCommunityMemberships as any, {
     authSubject,
     selectMode: "full",
   })) as CommunityMembershipProjection[];

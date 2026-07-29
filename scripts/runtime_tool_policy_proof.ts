@@ -196,7 +196,6 @@ function proveFixedPolicyBoundaries() {
     "community_resource_builder_list",
     "community_resource_builder_read",
     "community_search",
-    "community_memory_search",
     "community_chat_search",
     "community_chat_read",
     "community_ai_feed_search",
@@ -214,10 +213,17 @@ function proveFixedPolicyBoundaries() {
     assert.equal(policy.parallelSafe, true, `${toolName} should be parallel-safe`);
     assert.equal(policy.exclusive, false, `${toolName} should not be exclusive`);
   }
-  const serializedMemoryRead = getFixedRuntimeToolPolicy("community_memory_read");
-  assert.equal(serializedMemoryRead.readOnly, true);
-  assert.equal(serializedMemoryRead.parallelSafe, false);
-  assert.equal(serializedMemoryRead.exclusive, false);
+  for (const toolName of [
+    "community_memory_search",
+    "community_memory_read",
+  ] as const satisfies readonly RetrievalToolName[]) {
+    const receiptWritingRead = getFixedRuntimeToolPolicy(toolName);
+    assert.equal(receiptWritingRead.riskLevel, "read");
+    assert.equal(receiptWritingRead.readOnly, false);
+    assert.equal(receiptWritingRead.mutatesState, true);
+    assert.equal(receiptWritingRead.parallelSafe, false);
+    assert.equal(receiptWritingRead.exclusive, false);
+  }
 
   const exclusiveTools: RetrievalToolName[] = [
     "community_write",

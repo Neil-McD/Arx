@@ -10,7 +10,6 @@ function read(path: string): string {
 
 const packageJson = read("package.json");
 const architect = read("convex/communityWikiArchitect.ts");
-const community = read("convex/community.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const app = read("apps/web/src/App.tsx");
 const modal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
@@ -265,48 +264,18 @@ assert.match(
 );
 
 assert.match(
-  community,
-  /runCommunityWikiArchitectProposal as runCommunityWikiArchitectProposalImpl/,
-  "community API should import the architect action implementation",
-);
-assert.match(
-  community,
-  /draftCommunityResourceContentFromSources as draftCommunityResourceContentFromSourcesImpl/,
-  "community API should import the content writer action implementation",
-);
-assert.match(
-  community,
-  /applyCommunityWikiArchitectProposal as applyCommunityWikiArchitectProposalImpl/,
-  "community API should import the architect apply implementation",
-);
-assert.match(
-  community,
-  /export const runCommunityWikiArchitectProposal(?:: any)? = runCommunityWikiArchitectProposalImpl/,
-  "community API should export the architect action",
-);
-assert.match(
-  community,
-  /export const applyCommunityWikiArchitectProposal(?:: any)? = applyCommunityWikiArchitectProposalImpl/,
-  "community API should export the architect apply mutation",
-);
-assert.match(
-  community,
-  /export const draftCommunityResourceContentFromSources(?:: any)? = draftCommunityResourceContentFromSourcesImpl/,
-  "community API should export the content writer action",
-);
-assert.match(
   gateway,
-  /runCloudCommunityWikiArchitectProposal[\s\S]*client\.action\("community:runCommunityWikiArchitectProposal" as any/,
+  /runCloudCommunityWikiArchitectProposal[\s\S]*client\.action\("communityWikiArchitect:runCommunityWikiArchitectProposal" as any/,
   "web gateway should call the architect action",
 );
 assert.match(
   gateway,
-  /applyCloudCommunityWikiArchitectProposal[\s\S]*client\.mutation\("community:applyCommunityWikiArchitectProposal" as any/,
+  /applyCloudCommunityWikiArchitectProposal[\s\S]*client\.mutation\("communityWikiArchitect:applyCommunityWikiArchitectProposal" as any/,
   "web gateway should expose the reviewed architect apply mutation",
 );
 assert.match(
   gateway,
-  /draftCloudCommunityResourceContentFromSources[\s\S]*client\.action\("community:draftCommunityResourceContentFromSources" as any/,
+  /draftCloudCommunityResourceContentFromSources[\s\S]*client\.action\("communityWikiArchitect:draftCommunityResourceContentFromSources" as any/,
   "web gateway should expose the resource content writer action",
 );
 assert.doesNotMatch(

@@ -61,7 +61,7 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   communityGateway,
-  /client\.mutation\("community:deleteCommunity"/,
+  /client\.mutation\("communityLifecycle:deleteCommunity"/,
   "the current community browser gateway must not call the quarantined mutation",
 );
 assert.equal(

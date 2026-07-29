@@ -48,7 +48,7 @@ The untouched control contained one row in each of the fourteen cognition
 phases and the same four product-source sentinels.
 
 The acceptance flow invoked only the real public
-`community:deleteCommunity` mutation under the seeded owner's verified CLI
+`communityLifecycle:deleteCommunity` mutation under the seeded owner's verified CLI
 identity. It never called a cleanup function directly.
 
 Canonical deletion produced exactly sixteen successful scheduled drain

@@ -61,7 +61,7 @@ export async function listCloudCommunityEvents<SessionT>(
   },
 ): Promise<CloudCommunityEvent[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityEvents" as any, {
+  const payload = await client.query("communityEvents:listCommunityEvents" as any, {
     authSubject,
     communityId: params.communityId,
     startIso: params.startIso,
@@ -82,7 +82,7 @@ export async function saveCloudCommunityEvent<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:saveCommunityEvent" as any, {
+  await client.mutation("communityEvents:saveCommunityEvent" as any, {
     authSubject,
     eventId: params.eventId,
     payload: params.payload,
@@ -95,7 +95,7 @@ export async function cancelCloudCommunityEvent<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:cancelCommunityEvent" as any, {
+  await client.mutation("communityEvents:cancelCommunityEvent" as any, {
     authSubject,
     eventId: params.eventId,
   });

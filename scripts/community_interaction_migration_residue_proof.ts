@@ -17,7 +17,6 @@ const attachmentBridge = read("convex/communityInteractionAttachmentBridge.ts");
 const legacyBridge = read("convex/communityInteractionLegacyBridge.ts");
 const legacyAttachments = read("convex/communityInteractionLegacyAttachments.ts");
 const communityChat = read("convex/communityChat.ts");
-const communityFacade = read("convex/community.ts");
 const backfill = read("convex/communityInteractionBackfill.ts");
 const schema = read("convex/schema.ts");
 const chatGateway = read("shared/cloudCommunityChatGateway.ts");
@@ -56,7 +55,7 @@ assert.match(
 );
 
 [
-  "| R-001 | Legacy chat writer `community:createThreadUserMessage` | `BLOCKED BY PARITY` |",
+  "| R-001 | Legacy chat writer `communityChat:createThreadUserMessage` | `BLOCKED BY PARITY` |",
   "| R-003 | Legacy chat to interaction mapping table | `KEEP TEMPORARILY` |",
   "| R-004 | Legacy attachment hydration fallback in canonical read bundles | `BLOCKED BY PARITY` |",
   "| R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` |",
@@ -126,7 +125,7 @@ assert.doesNotMatch(
 );
 assert.match(
   chatGateway,
-  /createCloudThreadUserMessageRows[\s\S]*community:createThreadUserMessage/,
+  /createCloudThreadUserMessageRows[\s\S]*communityChat:createThreadUserMessage/,
   "legacy chat gateway should own the explicit legacy chat writer call",
 );
 for (const [label, source] of [
@@ -134,7 +133,6 @@ for (const [label, source] of [
   ["chat data controller", dataController],
   ["chat mutation controller", sendController],
   ["community chat backend", communityChat],
-  ["community facade", communityFacade],
 ] as const) {
   assert.doesNotMatch(
     source,

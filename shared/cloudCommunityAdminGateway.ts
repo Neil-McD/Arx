@@ -333,7 +333,7 @@ async function requestCloudCommunityBrandingUploadUrl<SessionT>(
   },
 ): Promise<string> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:generateCommunityBrandingUploadUrl" as any, {
+  const payload = await client.mutation("communityLifecycle:generateCommunityBrandingUploadUrl" as any, {
     authSubject,
     kind: params.kind,
   });
@@ -382,7 +382,7 @@ async function requestCloudCommunityResourceSourceUploadUrl<SessionT>(
   },
 ): Promise<string> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:generateCommunityResourceSourceUploadUrl" as any, {
+  const payload = await client.mutation("communityResources:generateCommunityResourceSourceUploadUrl" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -715,7 +715,7 @@ export async function listCloudCommunityLaunchKnowledgeSources<SessionT>(
   },
 ): Promise<CloudCommunityLaunchKnowledgeSourceListResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.query("community:listCommunityLaunchKnowledgeSources" as any, {
+  const payload = (await client.query("communityResources:listCommunityLaunchKnowledgeSources" as any, {
     authSubject,
     communityId: params.communityId,
     limit: typeof params.limit === "number" && Number.isFinite(params.limit)
@@ -739,7 +739,7 @@ export async function getCloudCommunitySourceCrawlerStatus<SessionT>(
   },
 ): Promise<CloudCommunitySourceCrawlerStatus | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunitySourceCrawlerStatus" as any, {
+  const payload = await client.query("communityResources:getCommunitySourceCrawlerStatus" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -755,7 +755,7 @@ export async function crawlCloudCommunitySourceRoot<SessionT>(
   },
 ): Promise<CloudCommunitySourceCrawlJobResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.action("community:crawlCommunitySourceRoot" as any, {
+  const payload = await client.action("communityResources:crawlCommunitySourceRoot" as any, {
     authSubject,
     communityId: params.communityId,
     rootUrl: params.rootUrl,
@@ -785,7 +785,7 @@ export async function getCloudCommunitySourceCrawlJob<SessionT>(
   },
 ): Promise<CloudCommunitySourceCrawlJobResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunitySourceCrawlJob" as any, {
+  const payload = await client.query("communityResources:getCommunitySourceCrawlJob" as any, {
     authSubject,
     communityId: params.communityId,
     crawlJobId: params.crawlJobId,
@@ -807,7 +807,7 @@ export async function listCloudCommunitySourceCrawlJobs<SessionT>(
   },
 ): Promise<CloudCommunitySourceCrawlJobsResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunitySourceCrawlJobs" as any, {
+  const payload = await client.query("communityResources:listCommunitySourceCrawlJobs" as any, {
     authSubject,
     communityId: params.communityId,
     limit:
@@ -837,7 +837,7 @@ export async function loadCloudCommunityGoogleDriveSourceConnection<SessionT>(
   },
 ): Promise<CloudGoogleDriveSourceConnectionStatus> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getGoogleDriveSourceConnectionStatus" as any, {
+  const payload = await client.query("communityResources:getGoogleDriveSourceConnectionStatus" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -857,7 +857,7 @@ export async function beginCloudCommunityGoogleDriveSourceOAuth<SessionT>(
   error_message: string | null;
 }> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.action("community:beginGoogleDriveSourceOAuth" as any, {
+  const payload = (await client.action("communityResources:beginGoogleDriveSourceOAuth" as any, {
     authSubject,
     communityId: params.communityId,
     returnToPath: String(params.returnToPath ?? "").trim() || "/discover",
@@ -881,7 +881,7 @@ export async function disconnectCloudCommunityGoogleDriveSourceConnection<Sessio
   },
 ): Promise<CloudGoogleDriveSourceConnectionStatus> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.mutation("community:disconnectGoogleDriveSourceConnection" as any, {
+  const payload = (await client.mutation("communityResources:disconnectGoogleDriveSourceConnection" as any, {
     authSubject,
     communityId: params.communityId,
   })) as Record<string, unknown> | null;
@@ -902,7 +902,7 @@ export async function finalizeCloudCommunityGoogleDriveSourceOAuth<SessionT>(
   error_message: string | null;
 }> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.action("community:finalizeGoogleDriveSourceOAuth" as any, {
+  const payload = (await client.action("communityResources:finalizeGoogleDriveSourceOAuth" as any, {
     authSubject,
     state: params.state,
     finalizeToken: params.finalizeToken,
@@ -935,7 +935,7 @@ export async function listCloudCommunityGoogleDriveSourceFiles<SessionT>(
   },
 ): Promise<CloudGoogleDriveSourceFileListResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.action("community:listGoogleDriveSourceFiles" as any, {
+  const payload = (await client.action("communityResources:listGoogleDriveSourceFiles" as any, {
     authSubject,
     communityId: params.communityId,
     folderId: String(params.folderId ?? "").trim() || undefined,
@@ -973,7 +973,7 @@ export async function importCloudCommunityGoogleDriveSourceFiles<SessionT>(
   failures: Array<{ id: string; name: string | null; message: string }>;
 }> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.action("community:importGoogleDriveSourceFiles" as any, {
+  const payload = (await client.action("communityResources:importGoogleDriveSourceFiles" as any, {
     authSubject,
     communityId: params.communityId,
     fileIds: params.fileIds,
@@ -1011,7 +1011,7 @@ export async function loadCloudCommunityGitHubSourceConnection<SessionT>(
   },
 ): Promise<CloudGitHubSourceConnectionStatus> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getGitHubSourceConnectionStatus" as any, {
+  const payload = await client.query("communityResources:getGitHubSourceConnectionStatus" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -1031,7 +1031,7 @@ export async function beginCloudCommunityGitHubSourceOAuth<SessionT>(
   error_message: string | null;
 }> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.action("community:beginGitHubSourceOAuth" as any, {
+  const payload = (await client.action("communityResources:beginGitHubSourceOAuth" as any, {
     authSubject,
     communityId: params.communityId,
     returnToPath: String(params.returnToPath ?? "").trim() || "/discover",
@@ -1055,7 +1055,7 @@ export async function disconnectCloudCommunityGitHubSourceConnection<SessionT>(
   },
 ): Promise<CloudGitHubSourceConnectionStatus> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.mutation("community:disconnectGitHubSourceConnection" as any, {
+  const payload = (await client.mutation("communityResources:disconnectGitHubSourceConnection" as any, {
     authSubject,
     communityId: params.communityId,
   })) as Record<string, unknown> | null;
@@ -1077,7 +1077,7 @@ export async function finalizeCloudCommunityGitHubSourceOAuth<SessionT>(
   error_message: string | null;
 }> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.action("community:finalizeGitHubSourceOAuth" as any, {
+  const payload = (await client.action("communityResources:finalizeGitHubSourceOAuth" as any, {
     authSubject,
     state: params.state,
     finalizeToken: params.finalizeToken,
@@ -1109,7 +1109,7 @@ export async function listCloudCommunityGitHubSourceRepositories<SessionT>(
   },
 ): Promise<CloudGitHubSourceRepositoryListResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.action("community:listGitHubSourceRepositories" as any, {
+  const payload = (await client.action("communityResources:listGitHubSourceRepositories" as any, {
     authSubject,
     communityId: params.communityId,
     query: String(params.query ?? "").trim() || undefined,
@@ -1131,7 +1131,7 @@ export async function listCloudCommunityGitHubSourceFiles<SessionT>(
   },
 ): Promise<CloudGitHubSourceFileListResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.action("community:listGitHubSourceFiles" as any, {
+  const payload = (await client.action("communityResources:listGitHubSourceFiles" as any, {
     authSubject,
     communityId: params.communityId,
     repoFullName: params.repoFullName,
@@ -1170,7 +1170,7 @@ export async function importCloudCommunityGitHubSourceFiles<SessionT>(
   failures: Array<{ id: string; name: string | null; message: string }>;
 }> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.action("community:importGitHubSourceFiles" as any, {
+  const payload = (await client.action("communityResources:importGitHubSourceFiles" as any, {
     authSubject,
     communityId: params.communityId,
     fileIds: params.fileIds,
@@ -1249,7 +1249,7 @@ export async function listCloudCommunityRevenueSeriesRows<SessionT>(
   },
 ): Promise<CloudCommunityRevenueSeriesRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityRevenueSeries" as any, {
+  const payload = await client.query("communityAdmin:listCommunityRevenueSeries" as any, {
     authSubject,
     communityId: params.communityId,
     range: params.range,
@@ -1265,7 +1265,7 @@ export async function listCloudCommunityFunnelVisitCreatedAtRows<SessionT>(
   },
 ): Promise<CloudCommunityCreatedAtRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityFunnelVisitCreatedAtRows" as any, {
+  const payload = await client.query("communityAdmin:listCommunityFunnelVisitCreatedAtRows" as any, {
     authSubject,
     communityId: params.communityId,
     sinceIso: params.sinceIso ?? null,
@@ -1281,7 +1281,7 @@ export async function fetchCloudCommunityAnalyticsSummary<SessionT>(
   },
 ): Promise<CloudCommunityAnalyticsSummaryRow | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunityAnalyticsSummary" as any, {
+  const payload = await client.query("communityAdmin:getCommunityAnalyticsSummary" as any, {
     authSubject,
     communityId: params.communityId,
     range: params.range,
@@ -1296,7 +1296,7 @@ export async function fetchCloudCommunityAnalyticsSnapshot<SessionT>(
   },
 ): Promise<CommunityAnalyticsSnapshot | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunityAnalyticsSnapshot" as any, {
+  const payload = await client.query("communityAdmin:getCommunityAnalyticsSnapshot" as any, {
     authSubject,
     communityId: params.communityId,
     range: params.range,
@@ -1312,7 +1312,7 @@ export async function fetchCloudCommunityMemberBillingHistory<SessionT>(
   },
 ): Promise<CloudCommunityMemberBillingHistory | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunityMemberBillingHistory" as any, {
+  const payload = await client.query("communityAdmin:getCommunityMemberBillingHistory" as any, {
     authSubject,
     communityId: params.communityId,
     targetMembershipId: params.membershipId,
@@ -1329,7 +1329,7 @@ export async function setCloudCommunityMemberRole<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:setCommunityMemberRole" as any, {
+  await client.mutation("communityAdmin:setCommunityMemberRole" as any, {
     authSubject,
     communityId: params.communityId,
     targetMembershipId: params.membershipId,
@@ -1344,7 +1344,7 @@ export async function removeCloudCommunityMember<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.action("community:removeCommunityMember" as any, {
+  await client.action("communityAdmin:removeCommunityMember" as any, {
     authSubject,
     communityId: params.communityId,
     targetMembershipId: params.membershipId,
@@ -1358,7 +1358,7 @@ export async function banCloudCommunityMember<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.action("community:banCommunityMember" as any, {
+  await client.action("communityAdmin:banCommunityMember" as any, {
     authSubject,
     communityId: params.communityId,
     targetMembershipId: params.membershipId,
@@ -1373,7 +1373,7 @@ export async function countCloudCommunityResourceRows<SessionT>(
 ): Promise<number | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   try {
-    const payload = await client.query("community:countCommunityResources" as any, {
+    const payload = await client.query("communityResources:countCommunityResources" as any, {
       authSubject,
       communityId: params.communityId,
       sinceIso: params.sinceIso ?? null,
@@ -1390,7 +1390,7 @@ export async function listCloudCommunityJoinRequestRows<SessionT, TJoinRequest =
   },
 ): Promise<TJoinRequest[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityJoinRequests" as any, {
+  const payload = await client.query("communityAdmin:listCommunityJoinRequests" as any, {
     authSubject,
     communityId: params.communityId,
     limit: 201,
@@ -1405,7 +1405,7 @@ export async function fetchCloudCommunityMemberSettingsRow<SessionT, TRow = unkn
   },
 ): Promise<TRow | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunityMemberSettings" as any, {
+  const payload = await client.query("communityAdmin:getCommunityMemberSettings" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -1418,7 +1418,7 @@ export async function approveCloudCommunityJoinRequest<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:approveCommunityJoinRequest" as any, {
+  await client.mutation("communityAdmin:approveCommunityJoinRequest" as any, {
     authSubject,
     requestId: params.requestId,
   });
@@ -1430,7 +1430,7 @@ export async function denyCloudCommunityJoinRequest<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:denyCommunityJoinRequest" as any, {
+  await client.mutation("communityAdmin:denyCommunityJoinRequest" as any, {
     authSubject,
     requestId: params.requestId,
   });
@@ -1442,7 +1442,7 @@ export async function listCloudCommunityPricePointRows<SessionT, TPricingRow = u
   },
 ): Promise<TPricingRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityPricePoints" as any, {
+  const payload = await client.query("communityAdmin:listCommunityPricePoints" as any, {
     authSubject,
     communityId: params.communityId,
     activeOnly: true,
@@ -1457,7 +1457,7 @@ export async function listCloudCommunityResourceRows<SessionT, TResource = unkno
   },
 ): Promise<TResource[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityResources" as any, {
+  const payload = await client.query("communityResources:listCommunityResources" as any, {
     authSubject,
     communityId: params.communityId,
     limit:
@@ -1475,7 +1475,7 @@ export async function listCloudCommunityResourceModuleRows<SessionT, TModule = u
   },
 ): Promise<TModule[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityResourceModules" as any, {
+  const payload = await client.query("communityResources:listCommunityResourceModules" as any, {
     authSubject,
     communityId: params.communityId,
     limit:
@@ -1494,7 +1494,7 @@ export async function saveCloudCommunityResource<SessionT, TResult = unknown>(
   },
 ): Promise<TResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:saveCommunityResource" as any, {
+  const payload = await client.mutation("communityResources:saveCommunityResource" as any, {
     authSubject,
     resourceId: params.resourceId,
     isPatch: params.isPatch,
@@ -1509,7 +1509,7 @@ export async function createCloudCommunityResourcePageDraftFromSource<SessionT, 
   },
 ): Promise<TResource> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:createCommunityResourcePageDraftFromSource" as any, {
+  const payload = await client.mutation("communityLifecycle:createCommunityResourcePageDraftFromSource" as any, {
     authSubject,
     sourceResourceId: params.sourceResourceId,
   });
@@ -1523,7 +1523,7 @@ export async function approveCloudCommunityResourceBuilderChangeset<SessionT, TR
   },
 ): Promise<TResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:approveCommunityResourceBuilderChangeset" as any, {
+  const payload = await client.mutation("communityResources:approveCommunityResourceBuilderChangeset" as any, {
     authSubject,
     communityId: params.communityId,
     changesetId: params.changesetId,
@@ -1538,7 +1538,7 @@ export async function getCloudCommunityResourceBuilderChangesetStatus<SessionT, 
   },
 ): Promise<TResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunityResourceBuilderChangesetStatus" as any, {
+  const payload = await client.query("communityResources:getCommunityResourceBuilderChangesetStatus" as any, {
     authSubject,
     communityId: params.communityId,
     changesetId: params.changesetId,
@@ -1553,7 +1553,7 @@ export async function applyCloudCommunityResourceBuilderChangeset<SessionT, TRes
   },
 ): Promise<TResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:applyCommunityResourceBuilderChangeset" as any, {
+  const payload = await client.mutation("communityResources:applyCommunityResourceBuilderChangeset" as any, {
     authSubject,
     communityId: params.communityId,
     changesetId: params.changesetId,
@@ -1569,7 +1569,7 @@ export async function rejectCloudCommunityResourceBuilderChangeset<SessionT, TRe
   },
 ): Promise<TResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:rejectCommunityResourceBuilderChangeset" as any, {
+  const payload = await client.mutation("communityResources:rejectCommunityResourceBuilderChangeset" as any, {
     authSubject,
     communityId: params.communityId,
     changesetId: params.changesetId,
@@ -1585,7 +1585,7 @@ export async function ingestCloudCommunitySourceLinks<SessionT>(
   },
 ): Promise<CloudCommunitySourceLinkIngestionResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.action("community:ingestCommunitySourceLinks" as any, {
+  const payload = await client.action("communityResources:ingestCommunitySourceLinks" as any, {
     authSubject,
     communityId: params.communityId,
     limit:
@@ -1607,7 +1607,7 @@ export async function ingestCloudCommunitySources<SessionT>(
   },
 ): Promise<CloudCommunitySourceIngestionResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.action("community:ingestCommunitySources" as any, {
+  const payload = await client.action("communityResources:ingestCommunitySources" as any, {
     authSubject,
     communityId: params.communityId,
     limit:
@@ -1629,7 +1629,7 @@ export async function runCloudCommunityWikiArchitectProposal<SessionT, TResult =
   },
 ): Promise<TResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.action("community:runCommunityWikiArchitectProposal" as any, {
+  const payload = await client.action("communityWikiArchitect:runCommunityWikiArchitectProposal" as any, {
     authSubject,
     communityId: params.communityId,
     builderIntent:
@@ -1647,7 +1647,7 @@ export async function applyCloudCommunityWikiArchitectProposal<SessionT, TResult
   },
 ): Promise<TResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:applyCommunityWikiArchitectProposal" as any, {
+  const payload = await client.mutation("communityWikiArchitect:applyCommunityWikiArchitectProposal" as any, {
     authSubject,
     communityId: params.communityId,
     proposal: params.proposal,
@@ -1662,7 +1662,7 @@ export async function draftCloudCommunityResourceContentFromSources<SessionT, TR
   },
 ): Promise<TResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.action("community:draftCommunityResourceContentFromSources" as any, {
+  const payload = await client.action("communityWikiArchitect:draftCommunityResourceContentFromSources" as any, {
     authSubject,
     communityId: params.communityId,
     limit:
@@ -1681,7 +1681,7 @@ export async function saveCloudCommunityResourceModule<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:saveCommunityResourceModule" as any, {
+  await client.mutation("communityResources:saveCommunityResourceModule" as any, {
     authSubject,
     moduleId: params.moduleId,
     isPatch: params.isPatch,
@@ -1696,7 +1696,7 @@ export async function reorderCloudCommunityResourceModules<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:reorderCommunityResourceModules" as any, {
+  await client.mutation("communityResources:reorderCommunityResourceModules" as any, {
     authSubject,
     communityId: params.communityId,
     moduleIds: params.moduleIds,
@@ -1711,7 +1711,7 @@ export async function reorderCloudCommunityResources<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:reorderCommunityResources" as any, {
+  await client.mutation("communityResources:reorderCommunityResources" as any, {
     authSubject,
     communityId: params.communityId,
     moduleId: params.moduleId,
@@ -1728,7 +1728,7 @@ export async function moveCloudCommunityResourceToModule<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:moveCommunityResourceToModule" as any, {
+  await client.mutation("communityResources:moveCommunityResourceToModule" as any, {
     authSubject,
     communityId: params.communityId,
     resourceId: params.resourceId,
@@ -1743,7 +1743,7 @@ export async function deleteCloudCommunityResource<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:deleteCommunityResource" as any, {
+  await client.mutation("communityResources:deleteCommunityResource" as any, {
     authSubject,
     resourceId: params.resourceId,
   });
@@ -1755,7 +1755,7 @@ export async function deleteCloudCommunityResourceModule<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:deleteCommunityResourceModule" as any, {
+  await client.mutation("communityResources:deleteCommunityResourceModule" as any, {
     authSubject,
     moduleId: params.moduleId,
   });
@@ -1780,7 +1780,7 @@ export async function createCloudCommunity<SessionT, TCommunity = unknown>(
   },
 ): Promise<TCommunity | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:createCommunity" as any, {
+  const payload = await client.mutation("communityLifecycle:createCommunity" as any, {
     authSubject,
     name: params.name,
     slug: params.slug,
@@ -1807,7 +1807,7 @@ export async function setCloudCommunityFreeAccessMode<SessionT>(
   },
 ): Promise<CloudCommunityFreeAccessModeResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:setCommunityFreeAccessMode" as any, {
+  const payload = await client.mutation("communityAdmin:setCommunityFreeAccessMode" as any, {
     authSubject,
     communityId: params.communityId,
     mode: params.mode,
@@ -1821,7 +1821,7 @@ export async function leaveCloudCommunity<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:leaveCommunity" as any, {
+  await client.mutation("communityAdmin:leaveCommunity" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -1850,7 +1850,7 @@ export async function saveCloudCommunitySettings<SessionT>(
   },
 ): Promise<CloudCommunitySettingsSaveResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:saveCommunitySettings" as any, {
+  const payload = await client.mutation("communityLifecycle:saveCommunitySettings" as any, {
     authSubject,
     communityId: params.communityId,
     name: params.name,
@@ -1883,7 +1883,7 @@ export async function saveCloudCommunityOneLiner<SessionT>(
   },
 ): Promise<CloudCommunityOneLinerSaveResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:saveCommunityOneLiner" as any, {
+  const payload = await client.mutation("communityLifecycle:saveCommunityOneLiner" as any, {
     authSubject,
     communityId: params.communityId,
     oneLiner: params.oneLiner,
@@ -1899,7 +1899,7 @@ export async function saveCloudCommunityMemberSettings<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:saveCommunityMemberSettings" as any, {
+  await client.mutation("communityAdmin:saveCommunityMemberSettings" as any, {
     authSubject,
     communityId: params.communityId,
     muted: params.muted,

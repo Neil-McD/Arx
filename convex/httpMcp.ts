@@ -7,12 +7,6 @@ import {
   getPolynetMcpToolDefinitions,
   isSupportedPolynetMcpProtocolVersion,
 } from "../shared/polynetMcp";
-import productDocsIndexJson from "../docs/product/generated/index.json";
-import {
-  executeGetProductDocTool,
-  executeSearchProductDocsTool,
-} from "../shared/productDocsRuntime.ts";
-import type { ProductDocsSearchIndex } from "../shared/productDocsSearch.ts";
 import {
   hasCommunityCapability,
   projectCommunityAccessCapabilities,
@@ -29,6 +23,7 @@ import {
   listCommunityReadSummaries,
   resolveAccessibleCommunityReadDetail,
 } from "./communityReadKernel";
+import { executePlatformOperation } from "./platformOperationExecutor.ts";
 import type { CommunityReadSummary } from "../shared/communityReadContract.ts";
 import { normalizePolynetProfileConfirmInput } from "../shared/polynetProfileMcpContract.ts";
 
@@ -102,8 +97,6 @@ const COMMUNITY_MEMORY_TYPES = new Set([
   "decision_judgment",
   "open_question",
 ]);
-const productDocsIndex = productDocsIndexJson as ProductDocsSearchIndex;
-
 function readEnv(name: string): string {
   try {
     const value = (globalThis as any)?.process?.env?.[name];
@@ -750,20 +743,23 @@ async function handleToolCall(args: {
   const resolveWorkspaceContextForCall = args.resolveWorkspaceContext ?? resolveWorkspaceContext;
 
   if (toolName === "polynet_list_communities") {
-    const listed = await listCommunityReadSummaries({
+    const execution = await executePlatformOperation({
+      operationId: "community.list",
       ctx,
       authSubject,
-      scope: toolArgs.scope,
+      input: {
+        scope: toolArgs.scope,
+      },
     });
-    if (!listed.ok) {
-      return { ok: false, type: "tool", message: "scope must be joined or discover." };
+    if (!execution.ok) {
+      return { ok: false, type: "tool", message: execution.message };
     }
-    const communities = listed.communities;
+    const structuredContent = execution.value as Record<string, unknown>;
     return {
       ok: true,
       result: {
-        content: buildToolTextContent({ communities }),
-        structuredContent: { communities },
+        content: buildToolTextContent(structuredContent),
+        structuredContent,
         isError: false,
       },
     };
@@ -794,24 +790,27 @@ async function handleToolCall(args: {
     if (!communitySlug) {
       return { ok: false, type: "tool", message: "community_slug is required." };
     }
-    const resolved = await resolveAccessibleCommunityReadDetail({
+    const execution = await executePlatformOperation({
+      operationId: "community.read",
       ctx,
       authSubject,
-      communitySlug,
+      input: {
+        communitySlug,
+      },
     });
-    if (!resolved.ok) {
+    if (!execution.ok) {
       return {
         ok: false,
         type: "tool",
-        message: "Community not found or not accessible.",
+        message: execution.message,
       };
     }
-    const community = resolved.community;
+    const structuredContent = execution.value as Record<string, unknown>;
     return {
       ok: true,
       result: {
-        content: buildToolTextContent({ community }),
-        structuredContent: { community },
+        content: buildToolTextContent(structuredContent),
+        structuredContent,
         isError: false,
       },
     };
@@ -876,14 +875,20 @@ async function handleToolCall(args: {
     if (!query) {
       return { ok: false, type: "tool", message: "query is required." };
     }
-    const productDocs = executeSearchProductDocsTool({
-      index: productDocsIndex,
-      query,
-      limit: normalizeBoundedInteger(toolArgs.limit, 1, 10),
-      section: normalizeString(toolArgs.section, 80),
-      audience: normalizeString(toolArgs.audience, 40),
+    const execution = await executePlatformOperation({
+      operationId: "product_docs.search",
+      authSubject,
+      input: {
+        query,
+        limit: normalizeBoundedInteger(toolArgs.limit, 1, 10),
+        section: normalizeString(toolArgs.section, 80),
+        audience: normalizeString(toolArgs.audience, 40),
+      },
     });
-    const structuredContent = { product_docs: productDocs };
+    if (!execution.ok) {
+      return { ok: false, type: "tool", message: execution.message };
+    }
+    const structuredContent = { product_docs: execution.value };
     return {
       ok: true,
       result: {
@@ -899,15 +904,18 @@ async function handleToolCall(args: {
     if (!slug) {
       return { ok: false, type: "tool", message: "slug is required." };
     }
-    const productDoc = executeGetProductDocTool({
-      index: productDocsIndex,
-      slug,
-      heading: normalizeString(toolArgs.heading, 160),
+    const execution = await executePlatformOperation({
+      operationId: "product_docs.read",
+      authSubject,
+      input: {
+        slug,
+        heading: normalizeString(toolArgs.heading, 160),
+      },
     });
-    if (!productDoc.ok) {
-      return { ok: false, type: "tool", message: productDoc.message };
+    if (!execution.ok) {
+      return { ok: false, type: "tool", message: execution.message };
     }
-    const structuredContent = { product_doc: productDoc };
+    const structuredContent = { product_doc: execution.value };
     return {
       ok: true,
       result: {

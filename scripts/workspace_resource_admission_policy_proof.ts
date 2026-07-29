@@ -908,11 +908,15 @@ assert.match(
   "missing or detached card sync must clear active card truth",
 );
 
-const billing = read("convex/billing.ts");
 assert.match(
-  billing,
-  /startWorkspaceCardSetupCheckout[\s\S]*refreshWorkspaceCardOnFileStatus/,
-  "billing surface must export card setup and refresh actions",
+  stripeCustomers,
+  /export const startWorkspaceCardSetupCheckout = action/,
+  "the canonical Stripe customer owner must export card setup checkout",
+);
+assert.match(
+  stripeCustomers,
+  /export const refreshWorkspaceCardOnFileStatus = action/,
+  "the canonical Stripe customer owner must export card-on-file refresh",
 );
 
 const httpBilling = read("convex/httpBilling.ts");
@@ -940,12 +944,12 @@ assert.match(
 const accountCommerceGateway = read("shared/cloudAccountCommerceGateway.ts");
 assert.match(
   accountCommerceGateway,
-  /startCloudWorkspaceCardSetupCheckout[\s\S]*billing:startWorkspaceCardSetupCheckout/,
+  /startCloudWorkspaceCardSetupCheckout[\s\S]*stripeCustomers:startWorkspaceCardSetupCheckout/,
   "web gateway must expose card setup checkout",
 );
 assert.match(
   accountCommerceGateway,
-  /refreshCloudWorkspaceCardOnFileStatus[\s\S]*billing:refreshWorkspaceCardOnFileStatus/,
+  /refreshCloudWorkspaceCardOnFileStatus[\s\S]*stripeCustomers:refreshWorkspaceCardOnFileStatus/,
   "web gateway must expose card-on-file refresh",
 );
 

@@ -7,7 +7,6 @@ const filesystem = readFileSync(join(root, "convex/communityAgentFilesystem.ts")
 const candidates = readFileSync(join(root, "convex/communityCompilerCandidates.ts"), "utf8");
 const protocol = readFileSync(join(root, "shared/communityAgentToolProtocol.ts"), "utf8");
 const decision = readFileSync(join(root, "shared/communityMemoryDecisionContract.ts"), "utf8");
-const communityExports = readFileSync(join(root, "convex/community.ts"), "utf8");
 
 assert.match(protocol, /export const CANONICAL_COMMUNITY_AGENT_KEY = "community_agent" as const/);
 assert.match(
@@ -59,10 +58,4 @@ assert.doesNotMatch(
   /decide_change_request|apply_accepted_change_request|same_run_self_review|itemIndex|digestItemIndex/,
   "the autonomous surface should have no approval choreography or positional identity",
 );
-assert.doesNotMatch(
-  communityExports,
-  /listCommunityAgentFilesystem|readCommunityAgentFilesystem|writeCommunityAgentFilesystem|searchCommunityAgentFilesystem/,
-  "the community agent filesystem must stay internal",
-);
-
 console.log("community_agent_filesystem_contract_proof: ok");

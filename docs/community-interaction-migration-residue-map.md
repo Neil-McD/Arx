@@ -12,7 +12,7 @@ This map is the deletion queue for the community chat substrate migration. It se
 
 | ID | Residue | Classification | Current Owner | Delete Condition |
 |---|---|---|---|---|
-| R-001 | Legacy chat writer `community:createThreadUserMessage` | `BLOCKED BY PARITY` | `convex/communityChat.ts`, `shared/cloudCommunityChatGateway.ts` | Delete after remaining archive, context, digest, cleanup, and migration consumers no longer need legacy chat rows. |
+| R-001 | Legacy chat writer `communityChat:createThreadUserMessage` | `BLOCKED BY PARITY` | `convex/communityChat.ts`, `shared/cloudCommunityChatGateway.ts` | Delete after remaining archive, context, digest, cleanup, and migration consumers no longer need legacy chat rows. |
 | R-003 | Legacy chat to interaction mapping table | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `convex/communityInteractionLegacyBridge.ts` | Delete after historical chat rows are fully backfilled and no UI or adapter needs legacy-to-canonical id mapping. |
 | R-004 | Legacy attachment hydration fallback in canonical read bundles | `BLOCKED BY PARITY` | `convex/communityInteractionAttachmentBridge.ts`, `convex/communityInteractionLegacyAttachments.ts`, `apps/web/src/components/communityInteractionFeed.tsx` | Delete after historical attachment backfill and projection rendering are canonical-only. |
 | R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` | `convex/communityInteractionBackfill.ts` | Delete after historical `communityChatMessages` are migrated and audited. |
@@ -26,7 +26,7 @@ This map is the deletion queue for the community chat substrate migration. It se
 
 ## Remaining Legacy Chat Row Blockers
 
-- Legacy compatibility consumers: `community:createThreadUserMessage`, `community:listThreadMessages`, legacy reactions, archive/context/digest/cleanup paths, and migration tools still use `communityChatMessages`.
+- Legacy compatibility consumers: `communityChat:createThreadUserMessage`, `communityChat:listThreadMessages`, legacy reactions, archive/context/digest/cleanup paths, and migration tools still use `communityChatMessages`.
 - Archive and knowledge compatibility: old legacy rows still feed chat archive documents and archive backfill.
 - Context and digest compatibility: recent context and weekly email digests still read legacy chat rows.
 - Cleanup/account compatibility: account deletion, anonymous cleanup, and community lifecycle cleanup still need legacy chat row reachability.

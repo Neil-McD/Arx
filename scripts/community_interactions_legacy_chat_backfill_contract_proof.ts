@@ -4,7 +4,6 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const backfill = readFileSync(join(root, "convex/communityInteractionBackfill.ts"), "utf8");
-const communityFacade = readFileSync(join(root, "convex/community.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 
@@ -164,17 +163,6 @@ assert.match(
   backfillMutation,
   /scanned:[\s\S]*roots_created:[\s\S]*replies_created:[\s\S]*already_linked:[\s\S]*unresolved_replies:[\s\S]*failed:/,
   "backfill should return the required repair counters",
-);
-
-assert.match(
-  communityFacade,
-  /backfillCommunityInteractionsFromLegacyChatBatch as backfillCommunityInteractionsFromLegacyChatBatchImpl/,
-  "community facade should import the backfill mutation",
-);
-assert.match(
-  communityFacade,
-  /export const backfillCommunityInteractionsFromLegacyChatBatch = backfillCommunityInteractionsFromLegacyChatBatchImpl;/,
-  "community facade should export the backfill mutation",
 );
 
 console.log("community_interactions_legacy_chat_backfill_contract_proof: ok");

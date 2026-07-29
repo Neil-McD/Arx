@@ -6,8 +6,6 @@ function read(path: string): string {
 }
 
 const communityPublic = read("convex/communityPublic.ts");
-const communityExperience = read("convex/communityExperience.ts");
-const communityModule = read("convex/community.ts");
 const communityCore = read("convex/communityCore.ts");
 const appSource = read("apps/web/src/App.tsx");
 const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
@@ -65,21 +63,6 @@ assert.doesNotMatch(
   "the access query must not read chat content — visitor content flows through the public funnel projection only",
 );
 
-assert.match(
-  communityExperience,
-  /resolvePublicCommunityAccessBySlug,[\s\S]*\} from "\.\/communityPublic"/,
-  "communityExperience must re-export the public access query (re-export chain hop 1)",
-);
-assert.match(
-  communityModule,
-  /resolvePublicCommunityAccessBySlug as resolvePublicCommunityAccessBySlugImpl/,
-  "community.ts must import the public access query (re-export chain hop 2)",
-);
-assert.match(
-  communityModule,
-  /export const resolvePublicCommunityAccessBySlug = resolvePublicCommunityAccessBySlugImpl/,
-  "community.ts must expose the public access query — without this the frontend silently gets undefined",
-);
 
 assert.match(
   communityCore,
@@ -216,12 +199,6 @@ assert.match(
   /recent_runs: \[\]/,
   "the public memory overview must not expose run history",
 );
-assert.match(
-  communityModule,
-  /export const resolvePublicCommunityMemoryOverviewBySlug = resolvePublicCommunityMemoryOverviewBySlugImpl/,
-  "community.ts must expose the public memory overview (re-export chain)",
-);
-
 // The ONE legitimate reader of community visibility: the Discover directory.
 const discoverQuery = sliceExport(communityPublic, "listPublicDiscoverCommunities");
 assert.match(

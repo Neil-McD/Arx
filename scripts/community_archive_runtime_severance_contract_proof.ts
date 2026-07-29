@@ -29,7 +29,6 @@ for (const { file, source } of activeConvexSources) {
 }
 
 const communityMaintenance = read("convex/communityMaintenance.ts");
-const communityBarrel = read("convex/community.ts");
 const adminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const emailDigests = read("convex/emailDigests.ts");
 const digestCore = read("shared/weeklyDigestCore.ts");
@@ -40,7 +39,7 @@ const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const httpMcp = read("convex/httpMcp.ts");
 const mcp = read("shared/polynetMcp.ts");
 
-for (const source of [communityMaintenance, communityBarrel, adminGateway]) {
+for (const source of [communityMaintenance, adminGateway]) {
   assert.doesNotMatch(source, /requestCommunityArchiveBackfill|backfillCommunityArchiveInternal/);
 }
 assert.doesNotMatch(emailDigests, /communityArchiveDocuments|archiveDocuments|archiveDocumentCount/);

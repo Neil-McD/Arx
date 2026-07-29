@@ -39,7 +39,7 @@ export async function listCloudCommunityAiFeedBundle<SessionT, TPost = unknown>(
   },
 ): Promise<CommunityAiFeedBundle<TPost>> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityAiFeedBundle" as any, {
+  const payload = await client.query("communityAiFeed:listCommunityAiFeedBundle" as any, {
     authSubject,
     communityId: params.communityId,
     limit: params.limit ?? 100,
@@ -54,7 +54,7 @@ export async function reactToCloudCommunityAiFeedPost<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:reactToCommunityAiFeedPost" as any, {
+  await client.mutation("communityAiFeed:reactToCommunityAiFeedPost" as any, {
     authSubject,
     postId: params.postId,
     reactionType: params.reactionType,
@@ -67,7 +67,7 @@ export async function hideCloudCommunityAiFeedPost<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:hideCommunityAiFeedPost" as any, {
+  await client.mutation("communityAiFeed:hideCommunityAiFeedPost" as any, {
     authSubject,
     postId: params.postId,
   });

@@ -226,7 +226,7 @@ export async function listCloudCommunityInteractionRootsPage<SessionT>(
   },
 ): Promise<CommunityInteractionRootPage> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityInteractionRoots" as any, {
+  const payload = await client.query("communityInteractions:listCommunityInteractionRoots" as any, {
     authSubject,
     communityId: params.communityId,
     beforeCreatedAt: params.beforeCreatedAt ?? null,
@@ -247,7 +247,7 @@ export async function listCloudCommunityInteractionReplies<SessionT>(
   },
 ): Promise<CommunityInteractionReplyBundle[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityInteractionReplies" as any, {
+  const payload = await client.query("communityInteractions:listCommunityInteractionReplies" as any, {
     authSubject,
     rootId: params.rootId,
     beforeSeq: params.beforeSeq ?? null,
@@ -268,7 +268,7 @@ export async function createCloudCommunityInteractionComposerMessageRows<Session
   },
 ): Promise<TRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:createCommunityInteractionComposerMessage" as any, {
+  const payload = await client.mutation("communityLifecycle:createCommunityInteractionComposerMessage" as any, {
     authSubject,
     communityId: params.communityId,
     idempotencyKey: params.idempotencyKey,
@@ -296,7 +296,7 @@ export async function sendCloudCommunityAgentDockMessage<SessionT>(
   deduped: boolean;
 }> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  return await client.mutation("community:sendCommunityAgentDockMessage" as any, {
+  return await client.mutation("communityInteractions:sendCommunityAgentDockMessage" as any, {
     authSubject,
     communityId: params.communityId,
     idempotencyKey: params.idempotencyKey,
@@ -312,7 +312,7 @@ export async function toggleCloudCommunityInteractionReaction<SessionT>(
   },
 ): Promise<{ reacted: boolean; reaction_summary: CommunityInteractionReactionSummary[] }> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:toggleCommunityInteractionReaction" as any, {
+  const payload = await client.mutation("communityInteractions:toggleCommunityInteractionReaction" as any, {
     authSubject,
     targetType: params.targetType,
     targetId: params.targetId,
@@ -336,7 +336,7 @@ export async function editCloudCommunityInteractionMessage<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:editCommunityInteractionMessage" as any, {
+  await client.mutation("communityInteractions:editCommunityInteractionMessage" as any, {
     authSubject,
     targetType: params.targetType,
     targetId: params.targetId,
@@ -351,7 +351,7 @@ export async function deleteCloudCommunityInteractionMessage<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:deleteCommunityInteractionMessage" as any, {
+  await client.mutation("communityInteractions:deleteCommunityInteractionMessage" as any, {
     authSubject,
     targetType: params.targetType,
     targetId: params.targetId,

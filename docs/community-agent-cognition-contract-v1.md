@@ -1632,7 +1632,7 @@ getCommunityPolynetOverview
 
 Rules:
 
-- The tab consumes `community:getCommunityPolynetOverview`; it does not call retired archive APIs.
+- The tab consumes `communityIntelligenceDirectory:getCommunityPolynetOverview`; it does not call retired archive APIs.
 - The tab is read-only in this slice. It must not expose write buttons, prompt boxes, review queues, candidate decisions, or directory mutation controls.
 - The graph renders backend-projected nodes and edges only. It may include the synthetic community root node returned by the overview, but it must not create fake memory nodes.
 - The tab shows the community agent as status/activity derived from the `communityAgentRuns` ledger.

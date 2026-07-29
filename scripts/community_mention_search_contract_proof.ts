@@ -7,7 +7,6 @@ function read(path: string): string {
 
 const packageJson = read("package.json");
 const communityDirectory = read("convex/communityDirectory.ts");
-const communityFacade = read("convex/community.ts");
 const gateway = read("shared/cloudCommunityDirectoryGateway.ts");
 const autocomplete = read("apps/web/src/components/communityMentionAutocomplete.tsx");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
@@ -55,14 +54,8 @@ assert.match(
   "community-agent candidates must use the canonical scoped agent key",
 );
 assert.match(
-  communityFacade,
-  /searchCommunityMentionCandidates as searchCommunityMentionCandidatesImpl[\s\S]*export const searchCommunityMentionCandidates = searchCommunityMentionCandidatesImpl/,
-  "community facade must expose mention search through the community:* RPC namespace",
-);
-
-assert.match(
   gateway,
-  /export async function searchCloudCommunityMentionCandidates[\s\S]*includeRoles\?: boolean[\s\S]*community:searchCommunityMentionCandidates[\s\S]*includeRoles: params\.includeRoles \?\? true/,
+  /export async function searchCloudCommunityMentionCandidates[\s\S]*includeRoles\?: boolean[\s\S]*communityDirectory:searchCommunityMentionCandidates[\s\S]*includeRoles: params\.includeRoles \?\? true/,
   "web gateway must call the scoped backend mention search query with an explicit role-row flag",
 );
 assert.match(

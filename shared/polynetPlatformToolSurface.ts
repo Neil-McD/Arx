@@ -8,6 +8,10 @@ import {
   normalizeCommunityLensAuthority,
   type CommunityLensAuthority,
 } from "./communityLensAuthority.ts";
+import {
+  getPlatformOperationContract,
+  type PlatformOperationId,
+} from "./platformOperationContract.ts";
 
 // Codex receives only PolyNet-native capabilities through the first-party
 // polynet.* bridge. Generic workspace, terminal, browser, and web-search tools
@@ -36,6 +40,28 @@ export type PolynetPlatformToolSurfaceEntry = {
   requiredCommunityResourceLane: PolynetPlatformToolRequiredCommunityResourceLane;
   requiredCommunityAuthority: PolynetPlatformToolRequiredCommunityAuthority;
 };
+
+function buildPlatformOperationWorkerSurfaceEntry(
+  operationId: PlatformOperationId,
+): PolynetPlatformToolSurfaceEntry {
+  const operation = getPlatformOperationContract(operationId);
+  const worker = operation.projections.worker;
+  if (!worker.enabled) {
+    throw new Error(`platform_operation_worker_projection_disabled:${operationId}`);
+  }
+  return {
+    toolName: operation.projections.native.name,
+    billingPolicy: worker.billingPolicy,
+    requiresCommunity: operation.projections.native.requiresCommunity,
+    riskLevel: operation.effects.external !== "none"
+      ? "sensitive"
+      : operation.effects.domainState === "write"
+        ? "write"
+        : "read",
+    requiredCommunityResourceLane: worker.requiredCommunityResourceLane,
+    requiredCommunityAuthority: worker.requiredCommunityAuthority,
+  };
+}
 
 export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceEntry[] = [
   {
@@ -174,22 +200,8 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiredCommunityResourceLane: "member",
     requiredCommunityAuthority: "moderator",
   },
-  {
-    toolName: "search_product_docs",
-    billingPolicy: "free",
-    requiresCommunity: false,
-    riskLevel: "read",
-    requiredCommunityResourceLane: "none",
-    requiredCommunityAuthority: "none",
-  },
-  {
-    toolName: "get_product_doc",
-    billingPolicy: "free",
-    requiresCommunity: false,
-    riskLevel: "read",
-    requiredCommunityResourceLane: "none",
-    requiredCommunityAuthority: "none",
-  },
+  buildPlatformOperationWorkerSurfaceEntry("product_docs.search"),
+  buildPlatformOperationWorkerSurfaceEntry("product_docs.read"),
 ];
 
 export type PolynetPlatformToolSpec = {

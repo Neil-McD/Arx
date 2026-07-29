@@ -1,8 +1,5 @@
 import type { RetrievalToolName } from "./retrievalTools";
-import {
-  getPolynetMcpToolDefinition,
-  type PolynetMcpToolName,
-} from "./polynetMcp.ts";
+import { findPlatformOperationByNativeToolName } from "./platformOperationContract.ts";
 
 type JsonSchema =
   | {
@@ -47,23 +44,29 @@ export type ResponsesApiFunctionTool = {
   strict: boolean;
 };
 
-function getPolynetToolContract(name: PolynetMcpToolName): {
+function getPlatformNativeToolContract(name: RetrievalToolName): {
   description: string;
   inputSchema: JsonSchema;
 } {
-  const definition = getPolynetMcpToolDefinition(name);
-  if (!definition) throw new Error(`polynet_tool_contract_missing:${name}`);
+  const operation = findPlatformOperationByNativeToolName(name);
+  if (!operation) throw new Error(`platform_operation_native_projection_missing:${name}`);
   return {
-    description: definition.description,
-    inputSchema: definition.inputSchema as JsonSchema,
+    description: operation.projections.native.description,
+    inputSchema: operation.projections.native.inputSchema as JsonSchema,
   };
 }
 
-const POLYNET_LIST_COMMUNITIES_TOOL = getPolynetToolContract(
+const POLYNET_LIST_COMMUNITIES_TOOL = getPlatformNativeToolContract(
   "polynet_list_communities",
 );
-const POLYNET_GET_COMMUNITY_TOOL = getPolynetToolContract(
+const POLYNET_GET_COMMUNITY_TOOL = getPlatformNativeToolContract(
   "polynet_get_community",
+);
+const SEARCH_PRODUCT_DOCS_TOOL = getPlatformNativeToolContract(
+  "search_product_docs",
+);
+const GET_PRODUCT_DOC_TOOL = getPlatformNativeToolContract(
+  "get_product_doc",
 );
 
 const PATH_ONLY_TOOL_SCHEMA: JsonSchema = {
@@ -621,52 +624,6 @@ const EMPTY_TOOL_SCHEMA: JsonSchema = {
   properties: {},
 };
 
-const SEARCH_PRODUCT_DOCS_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["query"],
-  properties: {
-    query: {
-      type: "string",
-      minLength: 1,
-      maxLength: 240,
-    },
-    limit: {
-      type: "integer",
-      minimum: 1,
-      maximum: 10,
-    },
-    section: {
-      type: "string",
-      minLength: 1,
-      maxLength: 80,
-    },
-    audience: {
-      type: "string",
-      minLength: 1,
-      maxLength: 40,
-    },
-  },
-};
-
-const GET_PRODUCT_DOC_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["slug"],
-  properties: {
-    slug: {
-      type: "string",
-      minLength: 1,
-      maxLength: 160,
-    },
-    heading: {
-      type: "string",
-      minLength: 1,
-      maxLength: 160,
-    },
-  },
-};
-
 const COMMUNITY_WRITE_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -1011,13 +968,11 @@ const COMPUTER_STOP_TOOL_SCHEMA: JsonSchema = {
 const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   search_product_docs: {
     name: "search_product_docs",
-    description: "Search canonical Polynet product documentation and return small ranked snippets with slugs for follow-up lookup.",
-    inputSchema: SEARCH_PRODUCT_DOCS_TOOL_SCHEMA,
+    ...SEARCH_PRODUCT_DOCS_TOOL,
   },
   get_product_doc: {
     name: "get_product_doc",
-    description: "Read one canonical Polynet product documentation page, or one heading section from that page.",
-    inputSchema: GET_PRODUCT_DOC_TOOL_SCHEMA,
+    ...GET_PRODUCT_DOC_TOOL,
   },
   get_active_community_context: {
     name: "get_active_community_context",

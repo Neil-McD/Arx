@@ -20,7 +20,7 @@ export async function fetchCloudMyCommunityAccessById<SessionT, TAccess = unknow
   },
 ): Promise<TAccess | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getMyCommunityAccess" as any, {
+  const payload = await client.query("communityAccessQueries:getMyCommunityAccess" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -33,7 +33,7 @@ export async function fetchCloudMyCommunityAccessBySlug<SessionT, TAccess = unkn
   },
 ): Promise<TAccess | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getMyCommunityAccessBySlug" as any, {
+  const payload = await client.query("communityAccessQueries:getMyCommunityAccessBySlug" as any, {
     authSubject,
     communitySlug: params.communitySlug,
   });

@@ -735,7 +735,7 @@ assert.doesNotMatch(
 
 assert.match(
   directoryGateway,
-  /client\.query\("community:listCommunityDirectoryPage" as any/,
+  /client\.query\("communityDirectory:listCommunityDirectoryPage" as any/,
   "directory gateway should read chat rail members through the member-facing directory query",
 );
 assert.match(
@@ -745,7 +745,7 @@ assert.match(
 );
 assert.match(
   directoryGateway,
-  /client\.query\("community:countCommunityDirectoryMembers" as any/,
+  /client\.query\("communityDirectory:countCommunityDirectoryMembers" as any/,
   "directory gateway should expose a read-only member-facing count query",
 );
 assert.doesNotMatch(
@@ -842,17 +842,17 @@ assert.match(
 
 assert.match(
   gateway,
-  /client\.query\("community:listCommunityInteractionRoots" as any/,
+  /client\.query\("communityInteractions:listCommunityInteractionRoots" as any/,
   "gateway should read roots through the community interaction query",
 );
 assert.match(
   gateway,
-  /client\.query\("community:listCommunityInteractionReplies" as any/,
+  /client\.query\("communityInteractions:listCommunityInteractionReplies" as any/,
   "gateway should read drawer replies through the community interaction query",
 );
 assert.match(
   gateway,
-  /client\.mutation\("community:createCommunityInteractionComposerMessage" as any/,
+  /client\.mutation\("communityLifecycle:createCommunityInteractionComposerMessage" as any/,
   "gateway should expose the canonical composer bridge mutation",
 );
 assert.match(

@@ -61,7 +61,7 @@ export async function fetchActiveCloudCommunityAgentSystemPrompt<SessionT>(
   },
 ): Promise<CloudCommunityAgentSystemPromptResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.query("community:getActiveCommunityAgentSystemPrompt" as any, {
+  const payload = (await client.query("communityAgent:getActiveCommunityAgentSystemPrompt" as any, {
     authSubject,
     communityId: params.communityId,
   })) as RawCloudCommunityAgentPromptRow | null;
@@ -80,7 +80,7 @@ export async function fetchActiveCloudCommunityAgentLanding<SessionT>(
   },
 ): Promise<unknown | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getActiveCommunityAgentLanding" as any, {
+  const payload = await client.query("communityAgent:getActiveCommunityAgentLanding" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -97,7 +97,7 @@ export async function fetchCloudCommunityAgentConfig<SessionT, TConfig = unknown
   },
 ): Promise<TConfig | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunityAgentConfig" as any, {
+  const payload = await client.query("communityAgent:getCommunityAgentConfig" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -124,7 +124,7 @@ export async function saveCloudCommunityAgentConfig<SessionT>(
   },
 ): Promise<CloudCommunityAgentConfigMutationResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:saveCommunityAgentConfig" as any, {
+  const payload = await client.mutation("communityAgent:saveCommunityAgentConfig" as any, {
     authSubject,
     communityId: params.communityId,
     landingJson: params.landingJson,

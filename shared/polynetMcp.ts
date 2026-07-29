@@ -1,4 +1,8 @@
 import { POLYNET_PROFILE_CONFIRM_INPUT_SCHEMA } from "./polynetProfileMcpContract.ts";
+import {
+  PLATFORM_OPERATION_ACCESS_RELATION_VALUES,
+  PLATFORM_OPERATION_CONTRACTS,
+} from "./platformOperationContract.ts";
 
 type JsonSchema =
   | {
@@ -64,14 +68,7 @@ const EMPTY_OBJECT_SCHEMA: JsonSchema = {
   properties: {},
 };
 
-const MCP_ACCESS_RELATION_VALUES = [
-  "owner",
-  "admin",
-  "moderator",
-  "member",
-  "pending",
-  "no_access",
-];
+const MCP_ACCESS_RELATION_VALUES = [...PLATFORM_OPERATION_ACCESS_RELATION_VALUES];
 
 const MCP_AUTHORITY_LENS_VALUES = [
   "owner_builder",
@@ -186,129 +183,30 @@ const COMMUNITY_MEMORY_TYPE_SCHEMA: JsonSchema = {
   ],
 };
 
-const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
-  polynet_list_communities: {
-    name: "polynet_list_communities",
-    title: "List Polynet Communities",
-    description:
-      "List concise Polynet community identity and access summaries. Defaults to the authenticated user's joined communities; discover returns public Published communities.",
-    annotations: {
-      title: "List Polynet Communities",
-      readOnlyHint: true,
-    },
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        scope: {
-          type: "string",
-          enum: ["joined", "discover"],
-          description: "joined lists accessible member communities; discover lists public Published communities. Defaults to joined.",
-        },
-      },
-    },
-    outputSchema: {
-      type: "object",
-      additionalProperties: false,
-      required: ["communities"],
-      properties: {
-        communities: {
-          type: "array",
-          items: COMMUNITY_SUMMARY_SCHEMA,
-        },
-      },
-    },
-  },
-  polynet_get_community: {
-    name: "polynet_get_community",
-    title: "Get Polynet Community",
-    description:
-      "Read one Polynet community's canonical identity, access relation, and capability summary by slug.",
-    annotations: {
-      title: "Get Polynet Community",
-      readOnlyHint: true,
-    },
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      required: ["community_slug"],
-      properties: {
-        community_slug: {
-          type: "string",
-          minLength: 1,
-          maxLength: 160,
-          description: "The canonical community slug.",
-        },
-      },
-    },
-    outputSchema: {
-      type: "object",
-      additionalProperties: false,
-      required: ["community"],
-      properties: {
-        community: {
-          type: "object",
-          additionalProperties: false,
-          required: [
-            "slug",
-            "name",
-            "relation",
-            "visibility",
-            "entry_policy",
-            "is_entitled",
-            "capabilities",
-          ],
-          properties: {
-            slug: { type: "string", minLength: 1, maxLength: 160 },
-            name: { type: "string", minLength: 1, maxLength: 180 },
-            one_liner: { type: ["string", "null"], maxLength: 280 },
-            about: { type: ["string", "null"], maxLength: 4000 },
-            visibility: { type: "string", enum: ["published", "unlisted"] },
-            entry_policy: { type: "string", enum: ["open", "approval", "paid_subscription"] },
-            relation: {
-              type: "string",
-              enum: MCP_ACCESS_RELATION_VALUES,
-            },
-            is_entitled: { type: "boolean" },
-            capabilities: {
-              type: "object",
-              additionalProperties: false,
-              required: [
-                "can_view",
-                "can_enter_community",
-                "can_read_chat",
-                "can_post_chat",
-                "can_post_message",
-                "can_manage_resources",
-                "can_moderate_content",
-                "can_manage_members",
-                "can_review_join_requests",
-                "can_manage_pricing",
-                "can_manage_branding",
-                "can_manage_publishing",
-                "can_manage_payouts",
-              ],
-              properties: {
-                can_view: { type: "boolean" },
-                can_enter_community: { type: "boolean" },
-                can_read_chat: { type: "boolean" },
-                can_post_chat: { type: "boolean" },
-                can_post_message: { type: "boolean" },
-                can_manage_resources: { type: "boolean" },
-                can_moderate_content: { type: "boolean" },
-                can_manage_members: { type: "boolean" },
-                can_review_join_requests: { type: "boolean" },
-                can_manage_pricing: { type: "boolean" },
-                can_manage_branding: { type: "boolean" },
-                can_manage_publishing: { type: "boolean" },
-                can_manage_payouts: { type: "boolean" },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
+const CANONICAL_OPERATION_MCP_TOOL_DEFINITIONS = Object.fromEntries(
+  PLATFORM_OPERATION_CONTRACTS.map((contract) => [
+    contract.projections.mcp.name,
+    contract.projections.mcp,
+  ]),
+) as Partial<Record<PolynetMcpToolName, PolynetMcpToolDefinition>>;
+
+function canonicalOperationMcpToolDefinition(
+  toolName: PolynetMcpToolName,
+): PolynetMcpToolDefinition {
+  const definition = CANONICAL_OPERATION_MCP_TOOL_DEFINITIONS[toolName];
+  if (!definition) {
+    throw new Error(`canonical_operation_mcp_projection_missing:${toolName}`);
+  }
+  return definition;
+}
+
+const TOOL_DEFINITIONS = {
+  polynet_list_communities: canonicalOperationMcpToolDefinition(
+    "polynet_list_communities",
+  ),
+  polynet_get_community: canonicalOperationMcpToolDefinition(
+    "polynet_get_community",
+  ),
   polynet_get_my_profile: {
     name: "polynet_get_my_profile",
     title: "Get My Polynet Profile",
@@ -489,96 +387,12 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
       },
     },
   },
-  polynet_product_docs_search: {
-    name: "polynet_product_docs_search",
-    title: "Search Polynet Product Docs",
-    description:
-      "Search canonical Polynet product documentation and return small ranked snippets with slugs for follow-up reads.",
-    annotations: {
-      title: "Search Polynet Product Docs",
-      readOnlyHint: true,
-    },
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      required: ["query"],
-      properties: {
-        query: {
-          type: "string",
-          minLength: 1,
-          maxLength: 240,
-          description: "Focused product documentation query.",
-        },
-        limit: {
-          type: "number",
-          description: "Maximum matching snippets to return, clamped by the server.",
-        },
-        section: {
-          type: "string",
-          minLength: 1,
-          maxLength: 80,
-          description: "Optional documentation section filter.",
-        },
-        audience: {
-          type: "string",
-          minLength: 1,
-          maxLength: 40,
-          description: "Optional audience filter.",
-        },
-      },
-    },
-    outputSchema: {
-      type: "object",
-      additionalProperties: true,
-      required: ["product_docs"],
-      properties: {
-        product_docs: {
-          type: "object",
-          additionalProperties: true,
-        },
-      },
-    },
-  },
-  polynet_product_doc_read: {
-    name: "polynet_product_doc_read",
-    title: "Read Polynet Product Doc",
-    description:
-      "Read one canonical Polynet product documentation page, or one heading section from that page.",
-    annotations: {
-      title: "Read Polynet Product Doc",
-      readOnlyHint: true,
-    },
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      required: ["slug"],
-      properties: {
-        slug: {
-          type: "string",
-          minLength: 1,
-          maxLength: 160,
-          description: "Product documentation slug returned by product docs search.",
-        },
-        heading: {
-          type: "string",
-          minLength: 1,
-          maxLength: 160,
-          description: "Optional heading or heading slug to read from the page.",
-        },
-      },
-    },
-    outputSchema: {
-      type: "object",
-      additionalProperties: true,
-      required: ["product_doc"],
-      properties: {
-        product_doc: {
-          type: "object",
-          additionalProperties: true,
-        },
-      },
-    },
-  },
+  polynet_product_docs_search: canonicalOperationMcpToolDefinition(
+    "polynet_product_docs_search",
+  ),
+  polynet_product_doc_read: canonicalOperationMcpToolDefinition(
+    "polynet_product_doc_read",
+  ),
   polynet_list_workspaces: {
     name: "polynet_list_workspaces",
     title: "List Polynet Community Contexts",
@@ -1172,7 +986,7 @@ const TOOL_DEFINITIONS: Record<PolynetMcpToolName, PolynetMcpToolDefinition> = {
       },
     },
   },
-};
+} as Record<PolynetMcpToolName, PolynetMcpToolDefinition>;
 
 export const POLYNET_MCP_PROTOCOL_VERSION = "2025-11-25";
 export const POLYNET_MCP_CODEX_PROTOCOL_VERSION = "2025-06-18";

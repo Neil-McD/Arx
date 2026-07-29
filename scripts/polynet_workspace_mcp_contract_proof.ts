@@ -32,8 +32,18 @@ function toolDispatchBlock(source: string, toolName: string): string {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
+function operationContractBlock(source: string, operationId: string): string {
+  const startToken = `readOperationBase("${operationId}"`;
+  const start = source.indexOf(startToken);
+  assert.notEqual(start, -1, `${operationId} operation contract should exist`);
+  const next = source.indexOf("\n  {\n    ...readOperationBase(", start + startToken.length);
+  return source.slice(start, next === -1 ? source.length : next);
+}
+
 const contract = read("docs/polynet-workspace-mcp-contract-v0.md");
 const polynetMcp = read("shared/polynetMcp.ts");
+const platformOperationContract = read("shared/platformOperationContract.ts");
+const platformOperationExecutor = read("convex/platformOperationExecutor.ts");
 const httpMcp = read("convex/httpMcp.ts");
 const communityCapabilityContract = read("shared/communityCapabilityContract.ts");
 const communityCapabilityContext = read("convex/communityCapabilityContext.ts");
@@ -283,7 +293,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "17 workspace + 2 profile tools",
+  "24 Polynet tools",
   "PolyMCP integration tool count",
 );
 assertIncludes(
@@ -717,8 +727,6 @@ for (const toolName of [
   "polynet_get_workspace_context",
   "polynet_get_my_profile",
   "polynet_confirm_my_profile_facts",
-  "polynet_product_docs_search",
-  "polynet_product_doc_read",
   "polynet_workspace_memory_search",
   "polynet_workspace_memory_read",
   "polynet_workspace_record_outcome",
@@ -761,11 +769,14 @@ for (const toolName of [
   assertIncludes(block, "workspace_context_id", `${toolName} schema`);
 }
 
-for (const toolName of [
-  "polynet_product_docs_search",
-  "polynet_product_doc_read",
-]) {
-  const definition = toolDefinitionBlock(polynetMcp, toolName);
+for (const [operationId, toolName] of [
+  ["product_docs.search", "polynet_product_docs_search"],
+  ["product_docs.read", "polynet_product_doc_read"],
+] as const) {
+  assertIncludes(polynetMcp, `| "${toolName}"`, `${toolName} type union`);
+  assertIncludes(httpMcp, `toolName === "${toolName}"`, `${toolName} HTTP dispatch`);
+  const definition = operationContractBlock(platformOperationContract, operationId);
+  assertIncludes(definition, `name: "${toolName}"`, `${toolName} canonical projection`);
   assertIncludes(definition, "readOnlyHint: true", `${toolName} read-only annotation`);
   assertNotIncludes(definition, "workspace_context_id", `${toolName} platform docs scope`);
   const dispatch = toolDispatchBlock(httpMcp, toolName);
@@ -773,14 +784,14 @@ for (const toolName of [
   assertNotIncludes(dispatch, "requireWorkspaceAuthorityToolset", `${toolName} no workspace authority gate`);
 }
 assertIncludes(
-  httpMcp,
+  platformOperationExecutor,
   "executeSearchProductDocsTool",
-  "product docs search runtime helper",
+  "canonical product docs search executor",
 );
 assertIncludes(
-  httpMcp,
+  platformOperationExecutor,
   "executeGetProductDocTool",
-  "product docs read runtime helper",
+  "canonical product docs read executor",
 );
 
 const openWorkspaceDefinition = toolDefinitionBlock(polynetMcp, "polynet_open_workspace");

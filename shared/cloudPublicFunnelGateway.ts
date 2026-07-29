@@ -23,7 +23,7 @@ export async function fetchCloudMyJoinRequestBySlug<SessionT, TRow = unknown>(
   },
 ): Promise<TRow | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getMyJoinRequestBySlug" as any, {
+  const payload = await client.query("communityPublic:getMyJoinRequestBySlug" as any, {
     authSubject,
     communitySlug: params.communitySlug,
   });
@@ -36,7 +36,7 @@ export async function cancelCloudMyJoinRequestBySlug<SessionT>(
   },
 ): Promise<{ outcome?: "canceled" | "none" | "ignored"; status?: string }> {
   const { client } = await bootstrapConvexAuthenticatedClient(params.session);
-  return (await client.mutation("community:cancelMyJoinRequestBySlug" as any, {
+  return (await client.mutation("communityPublic:cancelMyJoinRequestBySlug" as any, {
     communitySlug: params.communitySlug,
   })) as { outcome?: "canceled" | "none" | "ignored"; status?: string };
 }
@@ -51,7 +51,7 @@ export async function resolveCloudPublicFunnel<SessionT, TPublicCommunity, TPubl
   active_plan?: TPublicPlan | null;
 }> {
   const client = createConvexClient();
-  return (await client.query("community:resolvePublicFunnelBySlug" as any, {
+  return (await client.query("communityPublic:resolvePublicFunnelBySlug" as any, {
     communitySlug: params.communitySlug,
   })) as {
     ok?: boolean;
@@ -69,7 +69,7 @@ export async function fetchCloudPublicFunnelStats<SessionT, TPublicCommunityStat
   community?: TPublicCommunityStats;
 }> {
   const client = createConvexClient();
-  return (await client.query("community:resolvePublicFunnelStatsBySlug" as any, {
+  return (await client.query("communityPublic:resolvePublicFunnelStatsBySlug" as any, {
     communitySlug: params.communitySlug,
   })) as {
     ok?: boolean;
@@ -86,7 +86,7 @@ export async function fetchCloudPublicCommunityMemoryOverview<SessionT, TOvervie
   overview?: TOverview;
 }> {
   const client = createConvexClient();
-  return (await client.query("community:resolvePublicCommunityMemoryOverviewBySlug" as any, {
+  return (await client.query("communityIntelligenceDirectory:resolvePublicCommunityMemoryOverviewBySlug" as any, {
     communitySlug: params.communitySlug,
   })) as {
     ok?: boolean;
@@ -103,7 +103,7 @@ export async function recordCloudPublicFunnelVisit<SessionT>(
   const client = createConvexClient();
   const visitorKey = getBusinessVisitorKey();
   const authSubject = params.session ? resolveAuthSubject(params.session as any) : undefined;
-  await client.mutation("community:recordPublicFunnelVisitBySlug" as any, {
+  await client.mutation("communityPublic:recordPublicFunnelVisitBySlug" as any, {
     communitySlug: params.communitySlug,
     visitorKey: visitorKey ?? undefined,
     authSubject: authSubject ?? undefined,
@@ -121,7 +121,7 @@ export async function heartbeatCloudCommunityPresence<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:heartbeatCommunityPresence" as any, {
+  await client.mutation("communityPublic:heartbeatCommunityPresence" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -133,7 +133,7 @@ export async function fetchCloudCommunityPresenceSummary<SessionT, TSummary = un
   },
 ): Promise<TSummary | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunityPresenceSummary" as any, {
+  const payload = await client.query("communityPublic:getCommunityPresenceSummary" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -156,7 +156,7 @@ export async function startCloudPublicFunnelCheckout<SessionT>(
     client = bootstrapped.client;
     authSubject = bootstrapped.authSubject;
   }
-  return (await client.action("billing:startPublicCommunityCheckout" as any, {
+  return (await client.action("communityCommerce:startPublicCommunityCheckout" as any, {
     communitySlug: params.communitySlug,
     billingPeriod: params.billingPeriod,
     successUrl: params.successUrl,

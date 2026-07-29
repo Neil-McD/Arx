@@ -29,8 +29,6 @@ const resourceController = read("shared/useCommunityResourceController.ts");
 const resourceEditorController = read("shared/useCommunityResourceEditorController.ts");
 const webResourceController = read("apps/web/src/controllers/useWebCommunityResourceUiController.ts");
 const resourceGateway = read("shared/cloudCommunityAdminGateway.ts");
-const communityExperience = read("convex/communityExperience.ts");
-const communityBarrel = read("convex/community.ts");
 
 assert.match(
   schema,
@@ -339,7 +337,7 @@ assert.match(
 );
 assert.match(
   resourceGateway,
-  /community:createCommunityResourcePageDraftFromSource/,
+  /communityLifecycle:createCommunityResourcePageDraftFromSource/,
   "web gateway must call the canonical source-to-page draft mutation",
 );
 assert.match(
@@ -398,26 +396,6 @@ assert.doesNotMatch(
   "resources rail add-page control must not route through the old modal",
 );
 assert.match(
-  communityExperience,
-  /createCommunityResourcePageDraftFromSource/,
-  "community experience barrel must expose source-to-page draft creation",
-);
-assert.match(
-  communityExperience,
-  /moveCommunityResourceToModule/,
-  "community experience barrel must expose cross-category page moves",
-);
-assert.match(
-  communityBarrel,
-  /createCommunityResourcePageDraftFromSource/,
-  "community Convex barrel must expose source-to-page draft creation",
-);
-assert.match(
-  communityBarrel,
-  /moveCommunityResourceToModule/,
-  "community Convex barrel must expose cross-category page moves",
-);
-assert.match(
   resourceContracts,
   /source_resource_id\?: string \| null/,
   "web resource contracts must carry source lineage",
@@ -454,7 +432,7 @@ assert.equal(
   false,
   "embedding-only shared constants must remain deleted",
 );
-for (const surface of [communityMaintenance, communityBarrel, resourceGateway]) {
+for (const surface of [communityMaintenance, resourceGateway]) {
   assert.doesNotMatch(
     surface,
     /getCommunityArchiveHealth|processCommunityArchivePending|retryCommunityArchiveFailures/,
@@ -704,7 +682,7 @@ assert.match(
 );
 assert.match(
   resourceGateway,
-  /moveCloudCommunityResourceToModule[\s\S]*community:moveCommunityResourceToModule[\s\S]*targetModuleId[\s\S]*beforeResourceId/,
+  /moveCloudCommunityResourceToModule[\s\S]*communityResources:moveCommunityResourceToModule[\s\S]*targetModuleId[\s\S]*beforeResourceId/,
   "web gateway must call the canonical cross-category resource move mutation",
 );
 assert.match(

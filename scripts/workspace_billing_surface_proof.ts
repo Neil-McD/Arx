@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -7,7 +7,6 @@ function read(relativePath: string): string {
 
 const packageJson = read("package.json");
 const workspaceCreditsSource = read("convex/workspaceCredits.ts");
-const convexBillingSource = read("convex/billing.ts");
 const gatewaySource = read("shared/workspaceCreditsGateway.ts");
 const accountCommerceSource = read("shared/accountCommerce.ts");
 const premiumBillingSource = read("convex/premiumBilling.ts");
@@ -49,10 +48,10 @@ assert.doesNotMatch(
   /export const startWorkspaceCreditTopupCheckout = action/,
   "backend must not expose a public manual credit top-up checkout starter",
 );
-assert.doesNotMatch(
-  convexBillingSource,
-  /startWorkspaceCreditTopupCheckout/,
-  "canonical billing module must not re-export the deleted manual credit top-up checkout",
+assert.equal(
+  existsSync(new URL("../convex/billing.ts", import.meta.url)),
+  false,
+  "the duplicate billing facade must stay deleted",
 );
 
 assert.match(
@@ -88,7 +87,7 @@ assert.match(
 );
 assert.match(
   cloudAccountCommerceGatewaySource,
-  /startCloudPremiumSubscriptionCheckout[\s\S]*billing:startPremiumSubscriptionCheckout/,
+  /startCloudPremiumSubscriptionCheckout[\s\S]*premiumBilling:startPremiumSubscriptionCheckout/,
   "web gateway must expose the account Premium checkout action",
 );
 assert.match(

@@ -54,7 +54,7 @@ export async function loadCloudCommunityLaunchSetupStatus<SessionT>(
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
-  const payload = await client.query("community:getCommunityLaunchSetupStatus" as any, {
+  const payload = await client.query("communityLaunchSetup:getCommunityLaunchSetupStatus" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -73,7 +73,7 @@ export async function saveCloudCommunityLaunchProfile<SessionT>(
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
-  const payload = await client.mutation("community:saveCommunityLaunchProfile" as any, {
+  const payload = await client.mutation("communityLifecycle:saveCommunityLaunchProfile" as any, {
     authSubject,
     communityId: params.communityId,
     ...params.input,

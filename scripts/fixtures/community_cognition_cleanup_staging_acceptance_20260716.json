@@ -26,7 +26,7 @@
     }
   },
   "automatic_lifecycle": {
-    "canonical_delete_function": "community:deleteCommunity",
+    "canonical_delete_function": "communityLifecycle:deleteCommunity",
     "canonical_delete_ok": true,
     "direct_cleanup_call_count": 0,
     "scheduled_mutation_count": 16,

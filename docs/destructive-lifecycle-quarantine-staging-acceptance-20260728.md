@@ -82,7 +82,7 @@ The exact clean candidate was then redeployed with TypeScript checking enabled.
 Its function manifest retained:
 
 - `account:deleteOwnAccount`
-- `community:deleteCommunity`
+- `communityLifecycle:deleteCommunity`
 
 The manifest contained zero
 `lifecycleQuarantineAcceptance` functions after the clean redeploy.

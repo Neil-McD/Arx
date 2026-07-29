@@ -21,7 +21,7 @@ export async function listCloudCommunityMembershipRows<SessionT, TCommunity = un
 ): Promise<Array<CloudCommunityMembershipRow<TCommunity>>> {
   const selectMode = params.selectMode ?? "full";
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityMemberships" as any, {
+  const payload = await client.query("communityAdmin:listCommunityMemberships" as any, {
     authSubject,
     selectMode,
   });
@@ -58,7 +58,7 @@ export async function listCloudCommunityMembershipAdminPage<SessionT>(
   },
 ): Promise<CloudCommunityMembershipAdminPage> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityMembershipsAdminPage" as any, {
+  const payload = await client.query("communityAdmin:listCommunityMembershipsAdminPage" as any, {
     authSubject,
     communityId: params.communityId,
     paginationOpts: {
@@ -89,13 +89,13 @@ export async function countCloudCommunityMembershipRows<SessionT>(
 ): Promise<number | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   if (!params.sinceIso) {
-    const payload = await client.mutation("community:syncCommunityMembershipCount" as any, {
+    const payload = await client.mutation("communityAdmin:syncCommunityMembershipCount" as any, {
       authSubject,
       communityId: params.communityId,
     });
     return parseGatewayNumberLike(payload);
   }
-  const payload = await client.query("community:countCommunityMemberships" as any, {
+  const payload = await client.query("communityAdmin:countCommunityMemberships" as any, {
     authSubject,
     communityId: params.communityId,
     sinceIso: params.sinceIso ?? null,
@@ -112,7 +112,7 @@ export async function listCloudCommunityMembershipCreatedAtRows<SessionT>(
   },
 ): Promise<Array<{ created_at: string }>> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityMembershipCreatedAtRows" as any, {
+  const payload = await client.query("communityAdmin:listCommunityMembershipCreatedAtRows" as any, {
     authSubject,
     communityId: params.communityId,
     sinceIso: params.sinceIso ?? null,

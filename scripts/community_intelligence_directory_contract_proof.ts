@@ -6,10 +6,8 @@ const root = process.cwd();
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
 const aiFeed = readFileSync(join(root, "convex/communityAiFeed.ts"), "utf8");
-const communityExports = readFileSync(join(root, "convex/community.ts"), "utf8");
 
 assert.doesNotMatch(directory, /communityIntelligenceProposals|reviewCommunityIntelligenceProposal|needs_review/, "directory substrate should not use legacy queue naming");
-assert.doesNotMatch(communityExports, /CommunityIntelligenceProposal|reviewCommunityIntelligenceProposal/, "community exports should expose change request APIs, not legacy queue APIs");
 
 function exportedFunctionBlock(source: string, exportName: string): string {
   const startToken = `export const ${exportName} =`;
@@ -319,20 +317,4 @@ assert.match(
   /export const createCommunityIntelligenceNode = internalMutation[\s\S]*resolveAdminTruthActor/,
   "canonical node creation should be internal repair infrastructure with admin truth resolution",
 );
-assert.doesNotMatch(
-  communityExports,
-  /retrieveCommunityIntelligenceForWorkflow|recordCommunityIntelligenceRetrievalFeedback|recordCommunityOutcomeObservation/,
-  "community module should not re-export deleted receipt or outcome APIs",
-);
-assert.match(
-  communityExports,
-  /createCommunityIntelligenceChangeRequestImpl[\s\S]*applyCommunityIntelligenceChangeRequestImpl/,
-  "community module should still re-export the policy-gated change request airlock",
-);
-assert.doesNotMatch(
-  communityExports,
-  /createCommunityIntelligenceNodeImpl|updateCommunityIntelligenceNodeImpl|createCommunityIntelligenceEdgeImpl/,
-  "community module should not re-export direct canonical directory repair functions",
-);
-
 console.log("community_intelligence_directory_contract_proof: ok");

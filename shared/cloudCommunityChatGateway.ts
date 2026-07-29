@@ -110,7 +110,7 @@ export function subscribeCloudThreadMessages<TRow = unknown>(
   },
 ): () => void {
   const watch = params.liveClient.client.watchQuery(
-    api.community.listThreadMessages,
+    api.communityChat.listThreadMessages,
     {
       authSubject: params.liveClient.authSubject,
       threadId: params.threadId as any,
@@ -141,7 +141,7 @@ export function subscribeCloudMessageReactions<TRow = unknown>(
     return () => {};
   }
   const watch = params.liveClient.client.watchQuery(
-    api.community.listMessageReactions,
+    api.communityChat.listMessageReactions,
     {
       authSubject: params.liveClient.authSubject,
       messageIds,
@@ -163,7 +163,7 @@ export function subscribeCloudCommunityTyping<TResult = unknown>(
   },
 ): () => void {
   const watch = params.liveClient.client.watchQuery(
-    api.community.listCommunityTyping,
+    api.communityChat.listCommunityTyping,
     {
       authSubject: params.liveClient.authSubject,
       communityId: params.communityId as any,
@@ -186,7 +186,7 @@ export function subscribeCloudCommunityActivityEvents<TRow = unknown>(
   },
 ): () => void {
   const watch = params.liveClient.client.watchQuery(
-    "community:listCommunityActivityEvents" as any,
+    "communityActivity:listCommunityActivityEvents" as any,
     {
       authSubject: params.liveClient.authSubject,
       communityId: params.communityId as any,
@@ -208,7 +208,7 @@ export async function setCloudCommunityTyping<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:setCommunityTyping" as any, {
+  await client.mutation("communityChat:setCommunityTyping" as any, {
     authSubject,
     communityId: params.communityId,
     rootId: params.rootId ?? undefined,
@@ -221,7 +221,7 @@ export async function deleteCloudMessageReactionById<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:deleteMessageReactionById" as any, {
+  await client.mutation("communityChat:deleteMessageReactionById" as any, {
     authSubject,
     reactionId: params.reactionId,
   });
@@ -234,7 +234,7 @@ export async function createCloudMessageReaction<SessionT, TReaction = unknown>(
   },
 ): Promise<TReaction[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:createMessageReaction" as any, {
+  const payload = await client.mutation("communityChat:createMessageReaction" as any, {
     authSubject,
     messageId: params.messageId,
     emoji: params.emoji,
@@ -249,7 +249,7 @@ export async function patchCloudOwnMessageContent<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:patchOwnMessageContent" as any, {
+  await client.mutation("communityChat:patchOwnMessageContent" as any, {
     authSubject,
     messageId: params.messageId,
     contentJson: params.contentJson,
@@ -262,7 +262,7 @@ export async function deleteCloudOwnMessage<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:deleteOwnMessage" as any, {
+  await client.mutation("communityChat:deleteOwnMessage" as any, {
     authSubject,
     messageId: params.messageId,
   });
@@ -277,7 +277,7 @@ export async function createCloudThreadUserMessageRows<SessionT, TRow = unknown>
   },
 ): Promise<TRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:createThreadUserMessage" as any, {
+  const payload = await client.mutation("communityChat:createThreadUserMessage" as any, {
     authSubject,
     threadId: params.threadId,
     text: params.text,
@@ -293,7 +293,7 @@ async function requestCloudCommunityChatAttachmentUploadUrl<SessionT>(
   },
 ): Promise<string> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:generateCommunityChatAttachmentUploadUrl" as any, {
+  const payload = await client.mutation("communityChat:generateCommunityChatAttachmentUploadUrl" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -345,7 +345,7 @@ export async function ensureCloudCommunityChatThread<SessionT>(
   },
 ): Promise<string> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.mutation("community:ensureCommunityChatThread" as any, {
+  const payload = (await client.mutation("communityChat:ensureCommunityChatThread" as any, {
     authSubject,
     communityId: params.communityId,
   })) as { thread_id?: string | null };
@@ -362,7 +362,7 @@ export async function listCloudThreadMessages<SessionT, TRow = unknown>(
   },
 ): Promise<TRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listThreadMessages" as any, {
+  const payload = await client.query("communityChat:listThreadMessages" as any, {
     authSubject,
     threadId: params.threadId,
     beforeSeq: params.beforeSeq ?? null,
@@ -379,7 +379,7 @@ export async function listCloudCommunityActivityEvents<SessionT, TRow = unknown>
   },
 ): Promise<TRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityActivityEvents" as any, {
+  const payload = await client.query("communityActivity:listCommunityActivityEvents" as any, {
     authSubject,
     communityId: params.communityId,
     beforeCreatedAt: params.beforeCreatedAt ?? null,
@@ -394,7 +394,7 @@ export async function listCloudMessageReactions<SessionT, TRow = unknown>(
   },
 ): Promise<TRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listMessageReactions" as any, {
+  const payload = await client.query("communityChat:listMessageReactions" as any, {
     authSubject,
     messageIds: params.messageIds,
   });

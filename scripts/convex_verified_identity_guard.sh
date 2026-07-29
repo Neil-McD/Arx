@@ -14,7 +14,6 @@ AUTH_ACTOR_FILE="convex/authActor.ts"
 GATES_FILE="convex/gates.ts"
 THREADS_FILE="convex/threads.ts"
 PROJECTS_FILE="convex/projects.ts"
-COMMUNITY_FILE="convex/community.ts"
 COMMUNITY_LIFECYCLE_FILE="convex/communityLifecycle.ts"
 AUTH_IDENTITY_FILE="convex/authIdentity.ts"
 
@@ -131,12 +130,12 @@ fi
 echo "OK: community create API accepts optional authSubject."
 
 echo "[11/13] Ensuring community APIs avoid hard-required caller userId..."
-if rg -n --fixed-strings 'userId: v.id("users")' "$COMMUNITY_LIFECYCLE_FILE" 'convex/communityAdmin.ts' 'convex/communityAgent.ts' 'convex/communityChat.ts' 'convex/communityExperience.ts'; then
+if rg -n --fixed-strings 'userId: v.id("users")' "$COMMUNITY_LIFECYCLE_FILE" 'convex/communityAdmin.ts' 'convex/communityAgent.ts' 'convex/communityChat.ts'; then
   echo "FAIL: required userId argument reintroduced in community Convex functions."
   exit 1
 fi
 echo "OK: community APIs avoid hard-required caller userId."
-if rg -n --fixed-strings 'user_identity_required' "$COMMUNITY_LIFECYCLE_FILE" 'convex/communityAdmin.ts' 'convex/communityAgent.ts' 'convex/communityChat.ts' 'convex/communityExperience.ts'; then
+if rg -n --fixed-strings 'user_identity_required' "$COMMUNITY_LIFECYCLE_FILE" 'convex/communityAdmin.ts' 'convex/communityAgent.ts' 'convex/communityChat.ts'; then
   echo "FAIL: userId-only fallback path reintroduced in community resolver."
   exit 1
 fi

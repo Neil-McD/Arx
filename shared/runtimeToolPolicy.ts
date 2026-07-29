@@ -1,4 +1,5 @@
 import type { RetrievalToolName } from "./retrievalTools";
+import { findPlatformOperationByNativeToolName } from "./platformOperationContract.ts";
 import {
   classifyShellCommand,
   type ShellCommandAuditSeverity,
@@ -114,31 +115,38 @@ export type RuntimeShellCommandAuditMetadata = {
   shell_command_parsed_commands: string[];
 };
 
+function buildPlatformOperationRuntimePolicy(
+  toolName: RetrievalToolName,
+): RuntimeToolPolicy {
+  const operation = findPlatformOperationByNativeToolName(toolName);
+  if (!operation) {
+    throw new Error(`platform_operation_native_projection_missing:${toolName}`);
+  }
+  const mutatesState =
+    operation.effects.domainState === "write" ||
+    operation.effects.external !== "none" ||
+    operation.effects.receipt === "write";
+  return {
+    toolName,
+    source: "fixed",
+    category: operation.projections.native.category,
+    riskLevel: operation.effects.external !== "none"
+      ? "sensitive"
+      : operation.effects.domainState === "write"
+        ? "write"
+        : "read",
+    readOnly: !mutatesState,
+    mutatesState,
+    parallelSafe: !mutatesState && operation.projections.native.parallelSafe,
+    exclusive: false,
+    requiresWorkspace: operation.projections.native.requiresWorkspace,
+    requiresCommunity: operation.projections.native.requiresCommunity,
+  };
+}
+
 const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
-  search_product_docs: {
-    toolName: "search_product_docs",
-    source: "fixed",
-    category: "docs",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: false,
-    requiresCommunity: false,
-  },
-  get_product_doc: {
-    toolName: "get_product_doc",
-    source: "fixed",
-    category: "docs",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: false,
-    requiresCommunity: false,
-  },
+  search_product_docs: buildPlatformOperationRuntimePolicy("search_product_docs"),
+  get_product_doc: buildPlatformOperationRuntimePolicy("get_product_doc"),
   get_active_community_context: {
     toolName: "get_active_community_context",
     source: "fixed",
@@ -199,30 +207,12 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     requiresWorkspace: false,
     requiresCommunity: false,
   },
-  polynet_list_communities: {
-    toolName: "polynet_list_communities",
-    source: "fixed",
-    category: "community",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: false,
-    requiresCommunity: false,
-  },
-  polynet_get_community: {
-    toolName: "polynet_get_community",
-    source: "fixed",
-    category: "community",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: false,
-    requiresCommunity: false,
-  },
+  polynet_list_communities: buildPlatformOperationRuntimePolicy(
+    "polynet_list_communities",
+  ),
+  polynet_get_community: buildPlatformOperationRuntimePolicy(
+    "polynet_get_community",
+  ),
   community_resources_read: {
     toolName: "community_resources_read",
     source: "fixed",
@@ -336,9 +326,9 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     source: "fixed",
     category: "community",
     riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
+    readOnly: false,
+    mutatesState: true,
+    parallelSafe: false,
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
@@ -348,8 +338,8 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     source: "fixed",
     category: "community",
     riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
+    readOnly: false,
+    mutatesState: true,
     parallelSafe: false,
     exclusive: false,
     requiresWorkspace: false,

@@ -50,15 +50,9 @@ import {
   isComputerUseToolName,
   requiresSandboxSession,
 } from "../shared/retrievalTools";
-import productDocsIndexJson from "../docs/product/generated/index.json";
-import {
-  executeGetProductDocTool,
-  executeSearchProductDocsTool,
-} from "../shared/productDocsRuntime.ts";
 import {
   buildActiveCommunityContextToolPayload,
 } from "../shared/communityContextTool.ts";
-import type { ProductDocsSearchIndex } from "../shared/productDocsSearch.ts";
 import {
   extractTextFromNativeToolMessageContent,
   getNativeToolCompletionToolCalls,
@@ -120,10 +114,7 @@ import {
   type RuntimeToolBatchExecutionMode,
   buildToolBatchTelemetryPayload,
 } from "./runtimeHarnessTelemetry";
-import {
-  listCommunityReadSummaries,
-  resolveAccessibleCommunityReadDetail,
-} from "./communityReadKernel";
+import { executePlatformOperation } from "./platformOperationExecutor.ts";
 import {
   formatJsonToolOutput,
   normalizeRuntimeSkillResolution,
@@ -154,8 +145,6 @@ type OpenAiCompatibleFunctionTool = ReturnType<
   typeof buildOpenAiFunctionTools
 >[number];
 type ChatgptCompatibleFunctionTool = ChatgptFunctionTool;
-const productDocsIndex = productDocsIndexJson as ProductDocsSearchIndex;
-
 type RuntimeInferenceSource = "free" | "platform" | "chatgpt" | "user_key";
 const CHAT_TOOLS_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget =
   DEFAULT_RUNTIME_KERNEL_BUDGET;
@@ -285,50 +274,52 @@ export async function executeRetrievalHarnessTool(params: {
   }
 
   if (params.toolName === "search_product_docs") {
-    const payload = executeSearchProductDocsTool({
-      index: productDocsIndex,
-      query: String(normalizedArgs.query ?? ""),
-      limit: typeof normalizedArgs.limit === "number" ? normalizedArgs.limit : undefined,
-      section:
-        typeof normalizedArgs.section === "string"
-          ? normalizedArgs.section
-          : undefined,
-      audience:
-        typeof normalizedArgs.audience === "string"
-          ? normalizedArgs.audience
-          : undefined,
+    const execution = await executePlatformOperation({
+      operationId: "product_docs.search",
+      authSubject: params.authSubject,
+      input: normalizedArgs,
     });
+    if (!execution.ok) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: execution.value
+          ? formatJsonToolOutput(execution.value)
+          : "",
+        errorCode: execution.code,
+        errorMessage: execution.message,
+      };
+    }
     return {
       status: "ok",
       exitCode: 0,
-      outputText: formatJsonToolOutput(payload),
+      outputText: formatJsonToolOutput(execution.value),
       errorCode: null,
       errorMessage: null,
     };
   }
 
   if (params.toolName === "get_product_doc") {
-    const payload = executeGetProductDocTool({
-      index: productDocsIndex,
-      slug: String(normalizedArgs.slug ?? ""),
-      heading:
-        typeof normalizedArgs.heading === "string"
-          ? normalizedArgs.heading
-          : undefined,
+    const execution = await executePlatformOperation({
+      operationId: "product_docs.read",
+      authSubject: params.authSubject,
+      input: normalizedArgs,
     });
-    if (!payload.ok) {
+    if (!execution.ok) {
       return {
         status: "error",
         exitCode: null,
-        outputText: formatJsonToolOutput(payload),
-        errorCode: payload.code,
-        errorMessage: payload.message,
+        outputText: execution.value
+          ? formatJsonToolOutput(execution.value)
+          : "",
+        errorCode: execution.code,
+        errorMessage: execution.message,
       };
     }
     return {
       status: "ok",
       exitCode: 0,
-      outputText: formatJsonToolOutput(payload),
+      outputText: formatJsonToolOutput(execution.value),
       errorCode: null,
       errorMessage: null,
     };
@@ -454,16 +445,17 @@ export async function executeRetrievalHarnessTool(params: {
       };
     }
     try {
-      const listed = await listCommunityReadSummaries({
+      const execution = await executePlatformOperation({
+        operationId: "community.list",
         ctx: params.ctx,
         authSubject,
-        scope: normalizedArgs.scope,
+        input: normalizedArgs,
       });
-      if (!listed.ok) throw new Error(listed.code);
+      if (!execution.ok) throw new Error(execution.code);
       return {
         status: "ok",
         exitCode: 0,
-        outputText: formatJsonToolOutput({ communities: listed.communities }),
+        outputText: formatJsonToolOutput(execution.value),
         errorCode: null,
         errorMessage: null,
       };
@@ -491,16 +483,17 @@ export async function executeRetrievalHarnessTool(params: {
       };
     }
     try {
-      const resolved = await resolveAccessibleCommunityReadDetail({
+      const execution = await executePlatformOperation({
+        operationId: "community.read",
         ctx: params.ctx,
         authSubject,
-        communitySlug: String(normalizedArgs.communitySlug ?? ""),
+        input: normalizedArgs,
       });
-      if (!resolved.ok) throw new Error(resolved.code);
+      if (!execution.ok) throw new Error(execution.code);
       return {
         status: "ok",
         exitCode: 0,
-        outputText: formatJsonToolOutput({ community: resolved.community }),
+        outputText: formatJsonToolOutput(execution.value),
         errorCode: null,
         errorMessage: null,
       };

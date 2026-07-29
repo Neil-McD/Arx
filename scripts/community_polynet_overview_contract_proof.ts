@@ -4,7 +4,6 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
-const communityExports = readFileSync(join(root, "convex/community.ts"), "utf8");
 const gateway = readFileSync(join(root, "shared/cloudCommunityPolynetGateway.ts"), "utf8");
 
 function exportedFunctionBlock(source: string, exportName: string): string {
@@ -63,9 +62,6 @@ assert.match(overview, /requireCommunityChatAccess/, "overview should require me
 assert.match(overview, /const isManager = await viewerCanManageCommunity\(ctx, args\.communityId, userId\)/, "overview should compute manager status after the member access gate");
 assert.doesNotMatch(overview, /const isManager = true/, "overview should not treat every authorized viewer as a manager");
 assert.doesNotMatch(overview, /await requireCommunityManager\(\{ ctx, communityId: args\.communityId, userId \}\)/, "overview should not require owner/admin access");
-assert.match(communityExports, /getCommunityPolynetOverview as getCommunityPolynetOverviewImpl/, "community module should import the overview query");
-assert.match(communityExports, /export const getCommunityPolynetOverview = getCommunityPolynetOverviewImpl/, "community module should export the overview query");
-
 assert.match(readNodes, /by_community_status_updatedAt/, "overview nodes should use freshness-aware status indexes");
 assert.match(readNodes, /\.take\(args\.limit\)/, "overview node reads should be bounded");
 assert.doesNotMatch(readNodes, /\.collect\(\)/, "overview node reads should not collect all community nodes");

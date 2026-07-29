@@ -102,7 +102,7 @@ export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControlle
           schedulePendingRetry();
           return;
         }
-        const payload = (await client.query("billing:finalizeCheckoutSession" as any, {
+        const payload = (await client.query("communityCommerce:finalizeCheckoutSession" as any, {
           authSubject,
           sessionId,
         })) as {

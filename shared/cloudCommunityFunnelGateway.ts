@@ -30,7 +30,7 @@ export async function fetchCloudCommunityFunnelConfig<SessionT, TConfig = unknow
   },
 ): Promise<TConfig | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunityFunnelConfig" as any, {
+  const payload = await client.query("communityFunnel:getCommunityFunnelConfig" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -45,7 +45,7 @@ export async function saveCloudCommunityPublicPresentation<SessionT, TConfig = u
   },
 ): Promise<CloudCommunityPublicPresentationSaveResult<TConfig> | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:saveCommunityPublicPresentation" as any, {
+  const payload = await client.mutation("communityLifecycle:saveCommunityPublicPresentation" as any, {
     authSubject,
     communityId: params.communityId,
     config: params.config,

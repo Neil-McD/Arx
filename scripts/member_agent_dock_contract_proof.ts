@@ -71,6 +71,8 @@ const profiles = read("convex/profiles.ts");
 const runtimePrompt = read("shared/runtimePrompt.ts");
 const timelineUi = read("shared/runtimeTimelineUi.ts");
 const communityReadKernel = read("convex/communityReadKernel.ts");
+const platformOperationExecutor = read("convex/platformOperationExecutor.ts");
+const platformOperationContract = read("shared/platformOperationContract.ts");
 const httpMcp = read("convex/httpMcp.ts");
 const http = read("convex/http.ts");
 const httpMemberAgentAttachments = read("convex/httpMemberAgentAttachments.ts");
@@ -610,18 +612,23 @@ assert.doesNotMatch(
 );
 assert.match(
   httpMcp,
-  /toolName === "polynet_list_communities"[\s\S]*listCommunityReadSummaries[\s\S]*toolName === "polynet_get_community"[\s\S]*resolveAccessibleCommunityReadDetail/,
-  "the MCP adapter must delegate list and get to the canonical read kernel",
+  /toolName === "polynet_list_communities"[\s\S]*operationId: "community\.list"[\s\S]*toolName === "polynet_get_community"[\s\S]*operationId: "community\.read"/,
+  "the MCP adapter must delegate list and get to canonical operations",
 );
 assert.match(
   runtimeLoop,
-  /toolName === "polynet_list_communities"[\s\S]*listCommunityReadSummaries[\s\S]*toolName === "polynet_get_community"[\s\S]*resolveAccessibleCommunityReadDetail/,
-  "the native runtime adapter must delegate list and get to the same canonical read kernel",
+  /toolName === "polynet_list_communities"[\s\S]*operationId: "community\.list"[\s\S]*toolName === "polynet_get_community"[\s\S]*operationId: "community\.read"/,
+  "the native runtime adapter must delegate list and get to the same canonical operations",
 );
 assert.match(
-  polynetMcp,
-  /polynet_list_communities:[\s\S]*scope:[\s\S]*joined[\s\S]*discover/,
-  "the shared MCP contract must preserve joined default while exposing explicit Discover scope",
+  platformOperationExecutor,
+  /operation\.executor === "communityRead\.list"[\s\S]*listCommunityReadSummaries[\s\S]*operation\.executor === "communityRead\.read"[\s\S]*resolveAccessibleCommunityReadDetail/,
+  "canonical community operations must delegate to the shared read kernel",
+);
+assert.match(
+  platformOperationContract,
+  /const COMMUNITY_LIST_INPUT_SCHEMA[\s\S]*scope:[\s\S]*enum: \["joined", "discover"\][\s\S]*name: "polynet_list_communities"/,
+  "the canonical operation contract must preserve joined default while exposing explicit Discover scope",
 );
 assert.match(
   runtimeLoop,

@@ -148,7 +148,7 @@ export function subscribeCloudCommunityPolynetOverview(params: {
   onError?: (error: unknown) => void;
 }): () => void {
   const watch = params.liveClient.client.watchQuery(
-    api.community.getCommunityPolynetOverview,
+    api.communityIntelligenceDirectory.getCommunityPolynetOverview,
     {
       authSubject: params.liveClient.authSubject,
       communityId: params.communityId as any,
@@ -174,7 +174,7 @@ export async function fetchCloudCommunityPolynetOverview<SessionT>(
   },
 ): Promise<CloudCommunityPolynetOverview | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:getCommunityPolynetOverview" as any, {
+  const payload = await client.query("communityIntelligenceDirectory:getCommunityPolynetOverview" as any, {
     authSubject,
     communityId: params.communityId,
     ...(typeof params.nodeLimit === "number" ? { nodeLimit: params.nodeLimit } : {}),

@@ -6,7 +6,6 @@ const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
 const attachmentBridge = readFileSync(join(root, "convex/communityInteractionAttachmentBridge.ts"), "utf8");
 const legacyAttachments = readFileSync(join(root, "convex/communityInteractionLegacyAttachments.ts"), "utf8");
-const communityFacade = readFileSync(join(root, "convex/community.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 
@@ -261,17 +260,6 @@ assert.doesNotMatch(
   listReplies,
   /ctx\.db\.(insert|patch|delete)|mutation\(/,
   "reply list should not mutate state",
-);
-
-assert.match(
-  communityFacade,
-  /listCommunityInteractionReplies as listCommunityInteractionRepliesImpl[\s\S]*listCommunityInteractionRoots as listCommunityInteractionRootsImpl|listCommunityInteractionRoots as listCommunityInteractionRootsImpl[\s\S]*listCommunityInteractionReplies as listCommunityInteractionRepliesImpl/,
-  "community facade should import interaction read functions",
-);
-assert.match(
-  communityFacade,
-  /export const listCommunityInteractionRoots = listCommunityInteractionRootsImpl;[\s\S]*export const listCommunityInteractionReplies = listCommunityInteractionRepliesImpl;/,
-  "community facade should export interaction read functions",
 );
 
 console.log("community_interactions_read_model_contract_proof: ok");

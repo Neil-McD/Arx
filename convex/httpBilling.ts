@@ -503,7 +503,7 @@ async function syncCommunitySubscriptionFromStripeSubscription(
     cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
   });
   await ctx.runMutation(
-    internal.billing.syncCommunitySubscriptionLifecycleInternal as any,
+    internal.communityCommerce.syncCommunitySubscriptionLifecycleInternal as any,
     {
       communityId: existingCommunitySubscription.communityId,
       userId: existingCommunitySubscription.userId,
@@ -552,7 +552,7 @@ async function syncCommunitySubscriptionRiskStatus(
     return { ok: true, ignored: true, reason: "community_subscription_not_found" };
   }
   await ctx.runMutation(
-    internal.billing.syncCommunitySubscriptionLifecycleInternal as any,
+    internal.communityCommerce.syncCommunitySubscriptionLifecycleInternal as any,
     {
       communityId: existingCommunitySubscription.communityId,
       userId: existingCommunitySubscription.userId,

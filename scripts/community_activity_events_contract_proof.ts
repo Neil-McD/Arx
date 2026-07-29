@@ -8,7 +8,6 @@ const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const activity = readFileSync(join(root, "convex/communityActivity.ts"), "utf8");
 const resources = readFileSync(join(root, "convex/communityResources.ts"), "utf8");
 const aiFeed = readFileSync(join(root, "convex/communityAiFeed.ts"), "utf8");
-const facade = readFileSync(join(root, "convex/community.ts"), "utf8");
 const chatGateway = readFileSync(join(root, "shared/cloudCommunityChatGateway.ts"), "utf8");
 const realtime = readFileSync(join(root, "shared/useCommunityChatRealtime.ts"), "utf8");
 const chatPanel = readFileSync(join(root, "apps/web/src/components/WebCommunityChatPanel.tsx"), "utf8");
@@ -57,14 +56,8 @@ assert.match(
 );
 
 assert.match(
-  facade,
-  /export const listCommunityActivityEvents = listCommunityActivityEventsImpl;/,
-  "community facade should expose the activity-event read path",
-);
-
-assert.match(
   chatGateway,
-  /subscribeCloudCommunityActivityEvents[\s\S]*community:listCommunityActivityEvents/,
+  /subscribeCloudCommunityActivityEvents[\s\S]*communityActivity:listCommunityActivityEvents/,
   "chat gateway should expose a live activity-event subscription",
 );
 

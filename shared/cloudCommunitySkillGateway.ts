@@ -27,7 +27,7 @@ export async function listCloudCommunitySkillAttachments<SessionT>(
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
-  const payload = await client.query("community:listCommunitySkillAttachments" as any, {
+  const payload = await client.query("communitySkillAttachments:listCommunitySkillAttachments" as any, {
     authSubject,
     communityId: params.communityId,
   });
@@ -40,7 +40,7 @@ export async function listCloudOwnedSkillPackages<SessionT>(
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
-  const payload = await client.query("community:listOwnedSkillPackages" as any, {
+  const payload = await client.query("skillPackages:listOwnedSkillPackages" as any, {
     authSubject,
   });
   return coerceObjectRows<SkillPackageSummary>(payload);
@@ -56,7 +56,7 @@ export async function attachCloudSkillPackageToCommunity<SessionT>(
     params.session,
   );
   const payload = (await client.mutation(
-    "community:attachSkillPackageToCommunity" as any,
+    "communitySkillAttachments:attachSkillPackageToCommunity" as any,
     {
       authSubject,
       communityId: params.communityId,
@@ -77,7 +77,7 @@ export async function updateCloudCommunitySkillAttachment<SessionT>(
     params.session,
   );
   const payload = (await client.mutation(
-    "community:updateCommunitySkillAttachment" as any,
+    "communitySkillAttachments:updateCommunitySkillAttachment" as any,
     {
       authSubject,
       communityId: params.communityId,
@@ -97,7 +97,7 @@ export async function detachCloudCommunitySkill<SessionT>(
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
-  const payload = (await client.mutation("community:detachCommunitySkill" as any, {
+  const payload = (await client.mutation("communitySkillAttachments:detachCommunitySkill" as any, {
     authSubject,
     communityId: params.communityId,
     communitySkillAttachmentId: params.communitySkillAttachmentId,

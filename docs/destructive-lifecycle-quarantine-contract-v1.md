@@ -21,7 +21,7 @@ The existing public identities and arguments remain available so deployed or
 cached clients do not fail with an unknown-function transport error:
 
 - `account:deleteOwnAccount({ authSubject? })`
-- `community:deleteCommunity({ userId?, authSubject?, communityId })`
+- `communityLifecycle:deleteCommunity({ userId?, authSubject?, communityId })`
 
 The retained functions are compatibility boundaries, not deletion
 implementations.

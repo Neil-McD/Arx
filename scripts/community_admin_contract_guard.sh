@@ -8,7 +8,7 @@ cd "$ROOT_DIR"
 
 echo "== Community admin contract guard =="
 
-COMMUNITY_FILE="convex/community.ts"
+RETIRED_COMMUNITY_FACADE_FILE="convex/community.ts"
 COMMUNITY_ADMIN_FILE="convex/communityAdmin.ts"
 COMMUNITY_CORE_FILE="convex/communityCore.ts"
 COMMUNITY_LIFECYCLE_FILE="convex/communityLifecycle.ts"
@@ -27,8 +27,8 @@ WEB_INTERACTION_PROJECTION_FILE="apps/web/src/components/WebCommunityInteraction
 WEB_JOIN_REQUESTS_CONTROLLER_FILE="apps/web/src/controllers/useWebCommunityJoinRequestsController.ts"
 ADMIN_CONTROLLER_FILE="shared/useCommunityAdminController.ts"
 
-if [[ ! -f "$COMMUNITY_FILE" ]]; then
-  echo "FAIL: missing $COMMUNITY_FILE"
+if [[ -f "$RETIRED_COMMUNITY_FACADE_FILE" ]]; then
+  echo "FAIL: retired facade must stay deleted: $RETIRED_COMMUNITY_FACADE_FILE"
   exit 1
 fi
 if [[ ! -f "$COMMUNITY_ADMIN_FILE" ]]; then
@@ -145,13 +145,13 @@ require_block_no_match() {
 
 echo "[1/12] Ensuring admin gateway forwards authSubject for member/admin queries..."
 require_multiline_match "$MEMBERSHIP_GATEWAY_FILE" \
-  'export async function listCloudCommunityMembershipAdminPage<[\s\S]*?client\.query\("community:listCommunityMembershipsAdminPage" as any, \{\s*authSubject,\s*communityId:' \
+  'export async function listCloudCommunityMembershipAdminPage<[\s\S]*?client\.query\("communityAdmin:listCommunityMembershipsAdminPage" as any, \{\s*authSubject,\s*communityId:' \
   "paginated members admin gateway forwards authSubject"
 require_multiline_match "$MEMBERSHIP_GATEWAY_FILE" \
-  'export async function countCloudCommunityMembershipRows<[\s\S]*?client\.mutation\("community:syncCommunityMembershipCount" as any, \{\s*authSubject,\s*communityId:' \
+  'export async function countCloudCommunityMembershipRows<[\s\S]*?client\.mutation\("communityAdmin:syncCommunityMembershipCount" as any, \{\s*authSubject,\s*communityId:' \
   "member count gateway forwards authSubject through durable count sync"
 require_multiline_match "$ADMIN_GATEWAY_FILE" \
-  'export async function listCloudCommunityRevenueSeriesRows<[\s\S]*?client\.query\("community:listCommunityRevenueSeries" as any, \{\s*authSubject,\s*communityId:' \
+  'export async function listCloudCommunityRevenueSeriesRows<[\s\S]*?client\.query\("communityAdmin:listCommunityRevenueSeries" as any, \{\s*authSubject,\s*communityId:' \
   "revenue series gateway forwards authSubject"
 
 echo "[2/12] Ensuring admin/member analytics queries accept authSubject..."
@@ -379,12 +379,9 @@ fi
 echo "OK: canonical auth + funding contract doc present."
 
 echo "[9/12] Ensuring member billing history is real, authenticated, and manager-gated..."
-require_multiline_match "$COMMUNITY_FILE" \
-  'getCommunityMemberBillingHistory as getCommunityMemberBillingHistoryImpl[\s\S]*?export const getCommunityMemberBillingHistory = getCommunityMemberBillingHistoryImpl;' \
-  "community public API exports member billing history"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const getCommunityMemberBillingHistory = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),\s*communityId: v\.id\("communities"\),\s*targetMembershipId: v\.id\("communityMemberships"\),' \
-  "member billing history query accepts authenticated subject and target membership"
+  "canonical member billing history query accepts authenticated subject and target membership"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const getCommunityMemberBillingHistory = query\([\s\S]*?resolveCommunityAdminMembersContext\(\{[\s\S]*?if \(!viewerCanManageMembers\) throw new Error\("community_forbidden"\)' \
   "member billing history fails closed to managers only"
@@ -401,7 +398,7 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'listSubscriptionAuditBillingHistoryEvents\([\s\S]*?query\("criticalAuditEvents" as any\)[\s\S]*?withIndex\("by_providerObject"' \
   "member billing history includes persisted subscription audit events"
 require_multiline_match "$ADMIN_GATEWAY_FILE" \
-  'export async function fetchCloudCommunityMemberBillingHistory<[\s\S]*?client\.query\("community:getCommunityMemberBillingHistory" as any, \{\s*authSubject,\s*communityId: params\.communityId,\s*targetMembershipId: params\.membershipId,' \
+  'export async function fetchCloudCommunityMemberBillingHistory<[\s\S]*?client\.query\("communityAdmin:getCommunityMemberBillingHistory" as any, \{\s*authSubject,\s*communityId: params\.communityId,\s*targetMembershipId: params\.membershipId,' \
   "member billing history gateway forwards authSubject and target membership"
 require_multiline_match "$WEB_APP_FILE" \
   'fetchCloudCommunityMemberBillingHistory\(\{[\s\S]*?session: usableSession,\s*communityId,\s*membershipId,' \
@@ -428,7 +425,7 @@ require_no_match "$WEB_INTERACTION_PROJECTION_FILE" \
 
 echo "[10/12] Ensuring paid member removal cancels provider subscriptions and preserves revoked membership state..."
 require_multiline_match "$ADMIN_GATEWAY_FILE" \
-  'export async function removeCloudCommunityMember<[\s\S]*?client\.action\("community:removeCommunityMember" as any, \{\s*authSubject,\s*communityId:' \
+  'export async function removeCloudCommunityMember<[\s\S]*?client\.action\("communityAdmin:removeCommunityMember" as any, \{\s*authSubject,\s*communityId:' \
   "remove member gateway calls action for provider cancellation"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const removeCommunityMember = action\(' \
@@ -451,7 +448,7 @@ echo "OK: revokeCommunityMemberInternal does not delete membership rows"
 
 echo "[11/12] Ensuring ban and unban are distinct from remove..."
 require_multiline_match "$ADMIN_GATEWAY_FILE" \
-  'export async function banCloudCommunityMember<[\s\S]*?client\.action\("community:banCommunityMember" as any, \{\s*authSubject,\s*communityId:' \
+  'export async function banCloudCommunityMember<[\s\S]*?client\.action\("communityAdmin:banCommunityMember" as any, \{\s*authSubject,\s*communityId:' \
   "ban member gateway calls action"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const banCommunityMember = action\(' \

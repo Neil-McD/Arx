@@ -7,7 +7,6 @@ const root = process.cwd();
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const digest = readFileSync(join(root, "convex/communityCompilerDigest.ts"), "utf8");
 const evidenceCore = readFileSync(join(root, "convex/communityCompilerEvidenceCore.ts"), "utf8");
-const communityExports = readFileSync(join(root, "convex/community.ts"), "utf8");
 
 assert.match(
   schema,
@@ -88,11 +87,6 @@ assert.doesNotMatch(
   /sourceRevisions:\s*\[`?trace:\$\{traceId\}:\$\{Number\(row\.updatedAt/,
   "operational timestamp touches must not invalidate otherwise identical evidence",
 );
-assert.match(
-  communityExports,
-  /runCommunityCompilerDigestPassImpl[\s\S]*export const runCommunityCompilerDigestPass = runCommunityCompilerDigestPassImpl/,
-);
-
 const traceMaterial = {
   _id: "trace_1",
   communityId: "community_1",

@@ -188,7 +188,7 @@ export async function redeemPurchaseClaimRpc<S extends SessionLike>(opts: {
 }): Promise<{ community_id: string; community_slug: string | null }> {
   const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
   const rows =
-    ((await client.mutation("billing:redeemPurchaseClaim" as any, {
+    ((await client.mutation("communityCommerce:redeemPurchaseClaim" as any, {
       authSubject,
       token: opts.token,
     })) as Array<{ community_id?: string; community_slug?: string | null }> | null) ?? [];
@@ -205,7 +205,7 @@ export async function listPendingPurchaseClaimsRpc<S extends SessionLike>(opts: 
   session: S;
 }): Promise<PendingPurchaseClaim[]> {
   const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
-  const rows = (await client.query("billing:listPendingPurchaseClaims" as any, {
+  const rows = (await client.query("communityCommerce:listPendingPurchaseClaims" as any, {
     authSubject,
   })) as PendingPurchaseClaim[] | null;
   return Array.isArray(rows) ? rows : [];
@@ -215,7 +215,7 @@ export async function redeemPendingPurchaseClaimsRpc<S extends SessionLike>(opts
   session: S;
 }): Promise<Array<{ community_id: string; community_slug: string | null }>> {
   const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
-  const rows = (await client.mutation("billing:redeemPendingPurchaseClaims" as any, {
+  const rows = (await client.mutation("communityCommerce:redeemPendingPurchaseClaims" as any, {
     authSubject,
   })) as Array<{ community_id: string; community_slug?: string | null }> | null;
   return Array.isArray(rows)
@@ -246,7 +246,7 @@ export async function joinPublicCommunityRpc<S extends SessionLike>(opts: {
       }
     | null = null;
   if (slug) {
-    result = ((await client.mutation("community:joinPublicCommunityBySlug" as any, {
+    result = ((await client.mutation("communityPublic:joinPublicCommunityBySlug" as any, {
       communitySlug: slug,
     })) as {
       outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
@@ -254,7 +254,7 @@ export async function joinPublicCommunityRpc<S extends SessionLike>(opts: {
       reapply_at?: string | null;
     } | null) ?? null;
   } else if (id) {
-    result = ((await client.mutation("community:joinPublicCommunity" as any, {
+    result = ((await client.mutation("communityPublic:joinPublicCommunity" as any, {
       communityId: id,
     })) as {
       outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";

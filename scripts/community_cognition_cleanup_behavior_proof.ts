@@ -368,10 +368,6 @@ const communityGateway = readFileSync(
   new URL("../shared/cloudCommunityAdminGateway.ts", import.meta.url),
   "utf8",
 );
-const communityFacade = readFileSync(
-  new URL("../convex/community.ts", import.meta.url),
-  "utf8",
-);
 assert.match(
   deleteCommunityBlock,
   /args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),\s*communityId: v\.id\("communities"\),\s*\}/,
@@ -379,13 +375,8 @@ assert.match(
 );
 assert.doesNotMatch(
   communityGateway,
-  /client\.mutation\("community:deleteCommunity" as any,\s*\{\s*authSubject,\s*communityId: params\.communityId,\s*\}\)/,
+  /client\.mutation\("communityLifecycle:deleteCommunity" as any,\s*\{\s*authSubject,\s*communityId: params\.communityId,\s*\}\)/,
   "the current first-party client must not call the quarantined public mutation",
-);
-assert.match(
-  communityFacade,
-  /deleteCommunity as deleteCommunityImpl,[\s\S]*export const deleteCommunity = deleteCommunityImpl;/,
-  "the canonical community facade must retain the public deletion identity",
 );
 assert.match(
   deleteCommunityBlock,
@@ -490,7 +481,7 @@ assert.equal(stagingAcceptance.fixture?.target_source_trace_rows, 205);
 assert.equal(stagingAcceptance.fixture?.control_total_cognition_rows, 14);
 assert.equal(
   stagingAcceptance.automatic_lifecycle?.canonical_delete_function,
-  "community:deleteCommunity",
+  "communityLifecycle:deleteCommunity",
 );
 assert.equal(stagingAcceptance.automatic_lifecycle?.direct_cleanup_call_count, 0);
 assert.equal(stagingAcceptance.automatic_lifecycle?.scheduled_mutation_count, 16);

@@ -21,7 +21,7 @@ export async function startCloudWorkspaceCardSetupCheckout<SessionT>(
   },
 ): Promise<{ checkout_url?: unknown }> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
-  return (await client.action("billing:startWorkspaceCardSetupCheckout" as any, {
+  return (await client.action("stripeCustomers:startWorkspaceCardSetupCheckout" as any, {
     authSubject,
     successUrl: params.successUrl,
     cancelUrl: params.cancelUrl,
@@ -37,7 +37,7 @@ export async function startCloudPremiumSubscriptionCheckout<SessionT>(
   },
 ): Promise<{ checkout_url?: unknown }> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
-  return (await client.action("billing:startPremiumSubscriptionCheckout" as any, {
+  return (await client.action("premiumBilling:startPremiumSubscriptionCheckout" as any, {
     authSubject,
     successUrl: params.successUrl,
     cancelUrl: params.cancelUrl,
@@ -50,7 +50,7 @@ export async function refreshCloudWorkspaceCardOnFileStatus<SessionT>(
   params: CloudAccountCommerceGatewayParams<SessionT>,
 ): Promise<CloudWorkspaceCardOnFileStatus> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
-  return (await client.action("billing:refreshWorkspaceCardOnFileStatus" as any, {
+  return (await client.action("stripeCustomers:refreshWorkspaceCardOnFileStatus" as any, {
     authSubject,
   })) as CloudWorkspaceCardOnFileStatus;
 }
@@ -72,7 +72,7 @@ export async function startCloudConnectOnboarding<SessionT>(
   },
 ): Promise<{ url?: unknown }> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
-  return (await client.action("billing:startConnectOnboarding" as any, {
+  return (await client.action("creatorCommerce:startConnectOnboarding" as any, {
     authSubject,
     context: params.context,
     communitySlug: params.communitySlug ?? undefined,
