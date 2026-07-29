@@ -8,7 +8,7 @@ const read = (relativePath: string) => fs.readFileSync(path.join(root, relativeP
 const markdown = read("shared/markdownUi.tsx");
 const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
 const linkEmbedUi = read("shared/linkEmbedUi.tsx");
-const css = read("apps/web/src/base.css");
+const css = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const packageJson = read("package.json");
 
 assert.match(

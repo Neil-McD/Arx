@@ -41,7 +41,8 @@ const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
 const shellHost = read("apps/web/src/components/WebShellChromeHost.tsx");
 const shellClassNames = read("apps/web/src/controllers/buildWebShellChromeClassNames.ts");
 const webCss = read("apps/web/src/index.css");
-const baseCss = read("apps/web/src/base.css");
+const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
+const globalBaseCss = read("apps/web/src/base.css");
 const landingPage = read("apps/web/src/components/WebLandingPage.tsx");
 const landingCss = read("apps/web/src/components/polynetLanding/ConversionLanding.css");
 const accountOnboarding = read("apps/web/src/components/WebOnboardingPage.tsx");
@@ -58,6 +59,21 @@ const emailEvents = read("convex/emailEvents.ts");
 const emailDigests = read("convex/emailDigests.ts");
 const eventReminders = read("convex/eventReminders.ts");
 const webSourceCorpus = readSourceCorpus("apps/web/src");
+
+assert.ok(
+  globalBaseCss.split("\n").length < 500,
+  "base.css must remain a bounded global tokens/reset stylesheet",
+);
+assert.doesNotMatch(
+  globalBaseCss,
+  /\.app-root|\.app-shell|\.community-|\.settings-|\.modal/,
+  "feature and shell presentation must not return to global base.css",
+);
+assert.match(
+  webCss,
+  /@import "\.\/base\.css";[\s\S]*@import "\.\/styles\/shell-and-onboarding\.css";[\s\S]*@import "\.\/styles\/community-and-content\.css";[\s\S]*@import "\.\/styles\/settings-runtime-and-theme-overrides\.css";/,
+  "the web entry stylesheet must preserve explicit feature stylesheet cascade order",
+);
 
 assert.deepEqual(readLegacyWorkspaceRouteContext("/workspace"), {
   kind: "root",

@@ -1,5 +1,8 @@
 /* Web-owned base styling extracted from the retired shell. */
 @import "./base.css";
+@import "./styles/shell-and-onboarding.css";
+@import "./styles/community-and-content.css";
+@import "./styles/settings-runtime-and-theme-overrides.css";
 
 :root {
   --web-chat-max-width: 800px;
@@ -1802,50 +1805,6 @@
   color: var(--text-muted);
   line-height: 1.2;
   margin-top: 3px;
-}
-
-.modal.modal-auth-gate .modal-footer {
-  border-top: none;
-  background: transparent;
-  padding: 0 18px 18px;
-}
-
-.modal.modal-auth-gate .auth-actions {
-  width: 100%;
-}
-
-.auth-gate-google-button {
-  width: 100%;
-  height: 44px;
-  border-radius: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  background: #ffffff;
-  color: #111111;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-
-:root[data-theme-family="dark"] .auth-gate-google-button {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.auth-gate-google-button:hover:not(:disabled) {
-  filter: brightness(0.98);
-}
-
-.auth-gate-google-button:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.auth-gate-google-button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--border-active) 55%, transparent);
-  outline-offset: 2px;
 }
 
 .mobile-topbar {

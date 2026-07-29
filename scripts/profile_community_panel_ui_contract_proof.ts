@@ -10,7 +10,7 @@ const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const messageRow = read("shared/CommunityChatMessageRow.tsx");
 const projection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const app = read("apps/web/src/App.tsx");
-const css = read("apps/web/src/base.css");
+const css = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 
 assert.match(panel, /import \{ CommunityAvatar \}/, "profile panel must render canonical community avatars");
 assert.match(panel, /ProfileCommunityContext/, "profile panel must accept the profile community context contract");

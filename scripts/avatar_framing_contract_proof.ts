@@ -14,7 +14,7 @@ const editor = read("apps/web/src/components/WebCommunityAvatarEditorModal.tsx")
 const userEditor = read("apps/web/src/components/WebUserAvatarEditorModal.tsx");
 const profileSettings = read("apps/web/src/components/WebProfileSettingsSection.tsx");
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
-const baseCss = read("apps/web/src/base.css");
+const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const indexCss = read("apps/web/src/index.css");
 
 assert.match(avatarUi, /export function computeAvatarLayout/, "avatar layout math must be shared");

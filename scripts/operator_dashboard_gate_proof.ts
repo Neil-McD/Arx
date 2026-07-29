@@ -31,7 +31,7 @@ const communityAnalytics = read("apps/web/src/components/CommunityAnalyticsPanel
 const settingsNav = read("shared/SettingsNavList.tsx");
 const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
 const webDesktopShellHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
-const baseCss = read("apps/web/src/base.css");
+const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const packageJson = read("package.json");
 const seedScript = read("scripts/seed_operator_owner.ts");
 

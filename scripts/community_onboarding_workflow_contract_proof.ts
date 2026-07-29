@@ -45,7 +45,7 @@ const mcpGuide = read("apps/web/src/components/WebCommunityOnboardingMcpGuide.ts
 const mcpCompatibility = read("apps/web/src/components/WebCommunityOnboardingMcpCompatibility.tsx");
 const integrations = read("apps/web/src/components/WebIntegrationsSettingsSection.tsx");
 const mcpSetup = read("shared/polynetMcpSetup.ts");
-const baseCss = read("apps/web/src/base.css");
+const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 
 function tableSource(name: string, nextName: string): string {
   const start = schema.indexOf(`${name}: defineTable`);

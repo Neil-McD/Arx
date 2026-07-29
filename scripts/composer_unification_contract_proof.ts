@@ -5,7 +5,7 @@ function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
 }
 
-const baseCss = read("apps/web/src/base.css");
+const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");

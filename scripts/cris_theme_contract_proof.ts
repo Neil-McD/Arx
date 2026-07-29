@@ -206,7 +206,7 @@ applyAppThemeAttributes("dark", root);
 assert.equal(attributes.get("data-theme-family"), "dark");
 assert.equal(browserThemeColor, "#1A1A1A");
 
-const baseCss = read("apps/web/src/base.css");
+const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const indexCss = read("apps/web/src/index.css");
 const appearance = read("apps/web/src/components/WebAppearanceSettingsSection.tsx");
 const main = read("apps/web/src/main.tsx");

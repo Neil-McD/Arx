@@ -58,7 +58,7 @@ assert.doesNotMatch(
   "the retained Funnel and Convex runtime must not expose launcher status or profile contracts",
 );
 assert.doesNotMatch(
-  read("apps/web/src/base.css"),
+  [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n"),
   /\.community-launch-/,
   "launcher-only CSS must remain deleted",
 );

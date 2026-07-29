@@ -30,7 +30,7 @@ const adminController = read("shared/useCommunityAdminController.ts");
 const appTsx = read("apps/web/src/App.tsx");
 const dmInboxPanel = read("apps/web/src/components/WebDirectMessageInboxPanel.tsx");
 const dmPanel = read("apps/web/src/components/WebDirectMessagePanel.tsx");
-const baseCss = read("apps/web/src/base.css");
+const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 
 assert.match(
   badgeProjection,

@@ -32,7 +32,7 @@ const shellChromeShared = read("apps/web/src/components/webShellChromeShared.ts"
 const shellChromeProps = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const app = read("apps/web/src/App.tsx");
 const dmController = read("apps/web/src/controllers/useWebDirectMessagesController.ts");
-const css = read("apps/web/src/base.css");
+const css = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const packageJson = read("package.json");
 const dmCandidateHelper = directMessages.slice(
   directMessages.indexOf("async function listDirectMessageCandidateUserIdsForCommunity"),

@@ -6,6 +6,7 @@ function read(relativePath: string): string {
 }
 
 const app = read("apps/web/src/App.tsx");
+const shellState = read("apps/web/src/controllers/useWebShellState.ts");
 const shared = read("apps/web/src/components/webShellChromeShared.ts");
 const controller = read("apps/web/src/controllers/useWebMobileShellController.ts");
 const shellHost = read("apps/web/src/components/WebShellChromeHost.tsx");
@@ -33,11 +34,14 @@ const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const interactionProjection = read(
   "apps/web/src/components/WebCommunityInteractionProjection.tsx",
 );
+const interactionProjectionController = read(
+  "apps/web/src/controllers/useWebCommunityInteractionProjection.ts",
+);
 const mobileReadingModePolicy = read(
   "apps/web/src/components/mobileReadingModePolicy.ts",
 );
 const indexCss = read("apps/web/src/index.css");
-const baseCss = read("apps/web/src/base.css");
+const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const packageJson = read("package.json");
 
 assert.match(
@@ -51,8 +55,8 @@ assert.match(
   "community navigation, the selector, and Members should remain dismissible overlays",
 );
 assert.match(
-  app,
-  /const \[mobileRootPage, setMobileRootPage\] = useState<MobileRootPage>\("community"\);/,
+  shellState,
+  /useState<MobileRootPage>\("community"\);/,
   "the community-first app should keep Community as the initial mobile root",
 );
 assert.match(
@@ -61,8 +65,8 @@ assert.match(
   "a selected reply thread should become a page only inside the mobile Community root",
 );
 assert.match(
-  app,
-  /if \(!activeCommunityId\) return;[\s\S]*if \(shellVariant === "mobile"\) return;[\s\S]*readStoredInteractionSelectedRoot/,
+  interactionProjectionController,
+  /if \(!COMMUNITY_INTERACTION_PROJECTION_ENABLED \|\| !activeCommunityId\) return;[\s\S]*if \(shellVariant === "mobile"\) return;[\s\S]*readStoredSelectedRoot/,
   "mobile Community should not reopen a stale thread selection from storage",
 );
 assert.match(
@@ -352,8 +356,13 @@ assert.match(
   "AI should fill only through the shared selected-root state",
 );
 assert.match(
+  shellState,
+  /const \[mobileChromeReadingMode, setMobileChromeReadingMode\] = useState\(false\);/,
+  "the shell-state owner should retain the mobile reading-mode lifecycle",
+);
+assert.match(
   app,
-  /const \[mobileChromeReadingMode, setMobileChromeReadingMode\] = useState\(false\);[\s\S]*const mobileChromeAutoHideEnabled = Boolean\([\s\S]*activePage === "community"[\s\S]*communityTab === "chat"[\s\S]*mobileRootPage === "community"[\s\S]*const mobileChromeScrollTrackingEnabled = Boolean\([\s\S]*!mobileOverlay[\s\S]*onMobileReadingModeChange: mobileChromeScrollTrackingEnabled[\s\S]*setMobileChromeReadingMode/,
+  /const mobileChromeAutoHideEnabled = Boolean\([\s\S]*activePage === "community"[\s\S]*communityTab === "chat"[\s\S]*mobileRootPage === "community"[\s\S]*const mobileChromeScrollTrackingEnabled = Boolean\([\s\S]*!mobileOverlay[\s\S]*onMobileReadingModeChange: mobileChromeScrollTrackingEnabled[\s\S]*setMobileChromeReadingMode/,
   "mobile reading mode should be enabled only for the bottom-anchored Community chat root",
 );
 assert.match(

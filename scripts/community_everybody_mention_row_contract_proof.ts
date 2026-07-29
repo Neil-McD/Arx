@@ -7,7 +7,7 @@ function read(path: string): string {
 
 const autocomplete = read("apps/web/src/components/communityMentionAutocomplete.tsx");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
-const css = read("apps/web/src/base.css");
+const css = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 
 // --- The @everybody row must never read as a person ---
 assert.match(

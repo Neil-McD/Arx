@@ -11,7 +11,7 @@ const webContentController = read(
 );
 const controller = read("shared/useCommunityEventsController.ts");
 const eventsPanel = read("apps/web/src/components/WebCommunityEventsSection.tsx");
-const styles = read("apps/web/src/base.css");
+const styles = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 
 assert.match(
   webContentController,

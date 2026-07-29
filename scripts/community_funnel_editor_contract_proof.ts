@@ -14,7 +14,7 @@ function sliceBetween(source: string, startNeedle: string, endNeedle: string): s
 }
 
 const app = read("apps/web/src/App.tsx");
-const baseCss = read("apps/web/src/base.css");
+const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const funnelEditor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
 const publicFunnel = read("apps/web/src/components/WebPublicCommunityFunnel.tsx");
 const surfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
@@ -119,8 +119,13 @@ assert.match(
 );
 assert.match(
   routeController,
-  /loadPublicCommunity\(publicFunnelSlug, \{[\s\S]*recordVisit: !isPublicFunnelPreviewRoute,[\s\S]*isPreviewMode: isPublicFunnelPreviewRoute,[\s\S]*\}\)/,
+  /loadPublicCommunity\(publicFunnelSlug, \{ recordVisit: !isPublicFunnelPreviewRoute \}\)/,
   "the route load effect must suppress the visit record on the /preview route",
+);
+assert.doesNotMatch(
+  routeController,
+  /isPreviewMode:/,
+  "the route loader must not invent a second preview-data contract; preview is a presentation lens",
 );
 
 // --- App-side About save wiring (unchanged truth) ---
