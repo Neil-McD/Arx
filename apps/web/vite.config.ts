@@ -9,6 +9,10 @@ const webRoot = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = resolve(webRoot, "../..");
 
 function deriveAppBuildId(env: Record<string, string>, mode: string): string {
+  const releaseGateBuildId = String(
+    process.env.POLYNET_RELEASE_GATE_BUILD_ID ?? "",
+  ).trim();
+  if (releaseGateBuildId) return releaseGateBuildId;
   const explicit = String(env.VITE_POLYNET_BUILD_ID ?? "").trim();
   if (explicit) return explicit;
   const commit = String(
@@ -77,7 +81,12 @@ export default defineConfig(({ mode }) => {
     env.VITE_SENTRY_ENVIRONMENT ?? process.env.VERCEL_ENV ?? mode,
   ).trim();
   const appBuildId = deriveAppBuildId(env, mode);
-  const sentryBuildEnabled = Boolean(sentryOrg && sentryProject && sentryAuthToken);
+  const isReleaseGateBuild = Boolean(
+    String(process.env.POLYNET_RELEASE_GATE_BUILD_ID ?? "").trim(),
+  );
+  const sentryBuildEnabled = Boolean(
+    !isReleaseGateBuild && sentryOrg && sentryProject && sentryAuthToken,
+  );
 
   return {
     plugins: [

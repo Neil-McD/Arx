@@ -44,7 +44,7 @@ run_step "Community subscription lifecycle policy proof" npm run check:community
 run_step "Runtime turn contract guard" bash scripts/runtime_turn_contract_guard.sh
 run_step "Canonical operation surface proof" npm run check:canonical-operation-surface-proof
 run_step "Community semantic repository proof" npm run check:community-semantic-repository-proof
-run_step "Community semantic behavior" npm run check:community-semantic-behavior
+run_step "Repository behavior tests" npm test
 run_step "No legacy provider repo guard" bash scripts/no_legacy_provider_repo_guard.sh
 run_step "No legacy runtime-lane wording guard" bash scripts/no_platform_fallback_guard.sh
 

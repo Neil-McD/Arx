@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "npm run dev:web",
     "dev:web": "npm --prefix apps/web run dev -- --port 5174 --strictPort",
+    "test": "vitest run",
     "build": "npm --prefix apps/web run build",
+    "release:gate": "node scripts/release_gate.mjs",
     "preview": "npm --prefix apps/web run preview",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy -y",

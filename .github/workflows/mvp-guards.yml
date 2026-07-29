@@ -1,4 +1,4 @@
-name: MVP Guards
+name: Release Gate
 
 on:
   workflow_dispatch:
@@ -12,13 +12,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: mvp-guards-${{ github.ref }}
+  group: release-gate-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  convex-cut-guard:
-    name: Convex Cut Guard
+  release-gate:
+    name: Release Gate
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,91 +33,23 @@ jobs:
 
       - name: Install Node dependencies
         run: npm ci
-
-      - name: Run Convex cut runtime guard
-        run: npm run check:convex-cut-runtime-guard
-
-      - name: Run no legacy provider repo guard
-        run: npm run check:no-legacy-provider-repo-guard
-
-      - name: Run legacy route surface guard
-        run: npm run check:legacy-route-surface-guard
-
-      - name: Run no compat RPC primitive guard
-        run: npm run check:no-compat-rpc-primitive-guard
-
-      - name: Run auth env contract guard
-        run: npm run check:auth-env-contract-guard
-
-      - name: Run no direct legacy-auth imports guard
-        run: npm run check:no-direct-legacy-auth-imports-guard
-
-      - name: Run legacy function transport surface guard
-        run: npm run check:legacy-function-transport-surface-guard
-
-      - name: Run Convex client surface guard
-        run: npm run check:convex-client-surface-guard
-
-      - name: Run Convex verified identity guard
-        run: npm run check:convex-verified-identity-guard
-
-  dependency-audit:
-    name: Dependency Audit
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-
-      - name: Install root dependencies
-        run: npm ci
-
-      - name: Audit root dependencies
-        run: npm audit --audit-level=low
-
-      - name: Run dependency security compatibility interlock
-        run: npm run check:dependency-security-interlock
 
       - name: Install web dependencies
         run: npm --prefix apps/web ci
 
-      - name: Audit web dependencies
-        run: npm --prefix apps/web audit --audit-level=low
-
-      - name: Setup Node.js for preview proxy
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-
       - name: Install preview proxy dependencies
         run: npm --prefix apps/preview-proxy ci
 
-      - name: Audit preview proxy dependencies
-        run: npm --prefix apps/preview-proxy audit --audit-level=low
+      - name: Run canonical release gate
+        env:
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: npm run release:gate -- --mode=ci --sha="$CANDIDATE_SHA" --evidence=artifacts/release-gate.json
 
-  foundation-baseline:
-    name: Foundation Baseline
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Upload release gate evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-
-      - name: Install Node dependencies
-        run: npm ci
-
-      - name: Run CRIS theme contract proof
-        run: npm run check:cris-theme-contract-proof
-
-      - name: Run foundation baseline gate (canonical)
-        run: bash scripts/foundation_baseline_gate.sh
+          name: release-gate-${{ github.sha }}
+          path: artifacts/release-gate.json
+          if-no-files-found: warn
+          retention-days: 30

@@ -222,6 +222,7 @@ const communityChat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
 const voiceInputButton = read("shared/VoiceInputButton.tsx");
 const mvpGuards = read(".github/workflows/mvp-guards.yml");
+const releaseGate = read("scripts/release_gate.mjs");
 
 const crisThemeBlock = baseCss.match(
   /:root\[data-theme="cris"\]\s*\{([\s\S]*?)\n\}/,
@@ -373,8 +374,13 @@ assert.doesNotMatch(
 );
 assert.match(
   mvpGuards,
-  /name:\s*Run CRIS theme contract proof[\s\S]*?run:\s*npm run check:cris-theme-contract-proof/,
-  "the theme lifecycle contract should run in CI",
+  /name:\s*Run canonical release gate[\s\S]*?run:\s*npm run release:gate/,
+  "CI should delegate validation to the canonical release gate",
+);
+assert.match(
+  releaseGate,
+  /"cris_theme_contract"[\s\S]*?"npm run check:cris-theme-contract-proof"/,
+  "the canonical release gate should retain the theme lifecycle contract",
 );
 
 assert.match(

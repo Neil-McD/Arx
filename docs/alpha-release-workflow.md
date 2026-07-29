@@ -157,16 +157,32 @@ Use when production is broken or trust is at risk.
 
 ## Local Verification
 
-Run only the checks relevant to the change. Common commands:
+Run focused checks while iterating, but use the executable release gate as the
+single local decision before proposing a release:
 
 ```bash
 cd /Users/neilmcdevitt/code/arx
-npm run convex:codegen
-npm run check:gate-parity
-npm run check:runtime-turn-contract-guard
-npm run check:web-typecheck
-npm --prefix apps/web run build
+npm ci
+npm --prefix apps/web ci
+npm --prefix apps/preview-proxy ci
+npm run release:gate
 ```
+
+The local gate runs checked-in Convex generated-surface sanity and typechecking,
+web typechecking, a production web build with an unambiguous Git build marker,
+bundle budget, preview-proxy validation, foundation invariants, all conventional
+behavior tests, and dependency security checks. It writes machine-readable
+evidence to `artifacts/release-gate.json`.
+
+Local mode records dirty working-tree state so it is useful during development,
+marks its build identity as `<sha>-dirty`, and is not release-authoritative.
+The GitHub `Release Gate` job runs the same executable in `ci` mode, requires a
+clean checkout whose `HEAD` matches the requested full commit SHA, emits that
+exact SHA as the build identity, and uploads the evidence file. That single
+required status is the canonical pre-release decision.
+
+The release gate is validation only. It must never push Git, deploy Convex,
+deploy or promote Vercel, mutate production, or roll back a release.
 
 ### Workspace Credit Accounting Gate
 
