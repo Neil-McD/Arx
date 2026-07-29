@@ -11,6 +11,9 @@ function read(path: string): string {
 const packageJson = read("package.json");
 const contracts = read("apps/web/src/components/communityResourcesContracts.ts");
 const app = read("apps/web/src/App.tsx");
+const webContentController = read(
+  "apps/web/src/controllers/useWebCommunityContentController.ts",
+);
 const controller = read("shared/useCommunityResourceController.ts");
 const panel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const viewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
@@ -27,7 +30,7 @@ assert.match(
   "resource content hydration proof should be wired into package scripts",
 );
 
-for (const source of [contracts, app, controller] as const) {
+for (const source of [contracts, webContentController, controller] as const) {
   assert.match(
     source,
     /body_chars\?: number \| null/,

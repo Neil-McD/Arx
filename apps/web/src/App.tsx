@@ -7,8 +7,6 @@ import {
   useState,
   Suspense,
   type ChangeEvent,
-  type Dispatch,
-  type SetStateAction,
 } from "react";
 import { MessageCircle } from "lucide-react";
 import "highlight.js/styles/github-dark.css";
@@ -60,7 +58,6 @@ import { useWebCommunityAgentConfigUiController } from "./controllers/useWebComm
 import { useWebCommunitySkillAttachmentsController } from "./controllers/useWebCommunitySkillAttachmentsController";
 import { useWebCommunityAdminUiController } from "./controllers/useWebCommunityAdminUiController";
 import { useWebCommunitySettingsUiController } from "./controllers/useWebCommunitySettingsUiController";
-import { useWebCommunityResourceUiController } from "./controllers/useWebCommunityResourceUiController";
 import { useWebCommunityJoinRequestsController } from "./controllers/useWebCommunityJoinRequestsController";
 import { useWebPersonalAccountSettingsController } from "./controllers/useWebPersonalAccountSettingsController";
 import {
@@ -71,6 +68,10 @@ import {
   useWebCommunityChatController,
   type WebCommunityMessageAttachment,
 } from "./controllers/useWebCommunityChatController";
+import {
+  getWebCommunityEventsMonthRange,
+  useWebCommunityContentController,
+} from "./controllers/useWebCommunityContentController";
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
@@ -209,10 +210,7 @@ import {
   type MemorySuggestion,
   type MemoryUsedItem,
 } from "../../../shared/messageMetadataUi";
-import {
-  parseEmbedUrl,
-  renderTextWithLinks,
-} from "../../../shared/linkEmbedUi";
+import { renderTextWithLinks } from "../../../shared/linkEmbedUi";
 import { renderMarkdown } from "../../../shared/markdownUi";
 import {
   readBannerFileAsWideDataUrlWithinLimit,
@@ -248,7 +246,6 @@ import { useWebSettingsImageUploadController } from "../../../shared/useWebSetti
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
 import { useCommunityDirectoryController } from "../../../shared/useCommunityDirectoryController";
 import { useCommunityDirectoryLifecycle } from "../../../shared/useCommunityDirectoryLifecycle";
-import type { CloudCommunityEvent } from "../../../shared/cloudCommunityEventsGateway";
 import { useCommunityAgentConfigController } from "../../../shared/useCommunityAgentDraftController";
 import { useCommunityFunnelController } from "../../../shared/useCommunityFunnelController";
 import { useCommunitySettingsGovernanceController } from "../../../shared/useCommunitySettingsGovernanceController";
@@ -311,16 +308,6 @@ import { buildWebShellProjection } from "./controllers/buildWebShellProjection";
 import { buildWebCommunitySurfaceProjection } from "./controllers/buildWebCommunitySurfaceProjection";
 import { useWebVoiceInputController } from "../../../shared/useWebVoiceInputController";
 import { useCommunityAgentConfigLifecycle } from "../../../shared/useCommunityAgentConfigLifecycle";
-import { useCommunityResourcesTabLifecycle } from "../../../shared/useCommunityResourcesTabLifecycle";
-import {
-  COMMUNITY_RESOURCES_MUTATED_EVENT,
-  readCommunityResourcesMutatedEventDetail,
-} from "../../../shared/communityResourceMutationEvents";
-import { useCommunityEventsTabLifecycle } from "../../../shared/useCommunityEventsTabLifecycle";
-import {
-  useCommunityEventsController,
-  type CommunityEventsRange,
-} from "../../../shared/useCommunityEventsController";
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/communityUnsavedGuard";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
@@ -457,57 +444,6 @@ function buildPremiumSubscriptionReturnUrl(): string {
   return `${window.location.origin}/settings/billing`;
 }
 
-type CommunityResource = {
-  id: string;
-  community_id?: string | null;
-  module_id: string | null;
-  directory_uri: string;
-  directory_path: string;
-  type: "post" | "link" | "embed" | "file";
-  resource_role: "page" | "source";
-  resource_status: "draft" | "review" | "published" | "processing" | "failed";
-  source_resource_id?: string | null;
-  title: string;
-  body_md: string | null;
-  body_chars?: number | null;
-  url: string | null;
-  file_key?: string | null;
-  source_ingestion_status?: "not_required" | "queued" | "processing" | "ready" | "failed";
-  source_ingestion_kind?: "manual" | "url" | "file" | "google_drive" | "github";
-  source_ingestion_error?: string | null;
-  source_ingestion_attempted_at?: string | null;
-  source_ingested_at?: string | null;
-  source_original_filename?: string | null;
-  source_original_mime_type?: string | null;
-  source_original_bytes?: number | null;
-  source_external_provider?: "google_drive" | "github" | null;
-  source_external_id?: string | null;
-  source_external_name?: string | null;
-  source_external_url?: string | null;
-  source_external_mime_type?: string | null;
-  source_external_modified_at?: string | null;
-  pinned: boolean;
-  sort_order: number | null;
-  created_at: string;
-};
-
-type CommunityResourceModule = {
-  id: string;
-  community_id?: string | null;
-  directory_uri: string;
-  directory_path: string;
-  module_status: "draft" | "live";
-  name: string;
-  description_md: string | null;
-  banner_url: string | null;
-  banner_focus_x: number | null;
-  banner_focus_y: number | null;
-  banner_zoom: number | null;
-  sort_order: number;
-};
-
-type CommunityEvent = CloudCommunityEvent;
-
 type CommunityAccess = SharedCommunityAccess;
 type CommunityAnalyticsSummary = SharedCommunityAnalyticsSummary;
 type CommunityAnalyticsSeries = SharedCommunityAnalyticsSeries;
@@ -535,28 +471,6 @@ type MyCommunityJoinRequest = {
   reapply_at?: string | null;
   denied_until?: string | null;
 };
-
-function normalizeCommunityEventsMonthIso(raw: string | null | undefined): string {
-  const date = raw ? new Date(raw) : new Date();
-  const normalized = Number.isFinite(date.getTime()) ? date : new Date();
-  return new Date(normalized.getFullYear(), normalized.getMonth(), 1).toISOString();
-}
-
-function getCommunityEventsMonthRange(monthIso: string): CommunityEventsRange {
-  const monthStart = new Date(normalizeCommunityEventsMonthIso(monthIso));
-  const start = new Date(monthStart);
-  start.setDate(monthStart.getDate() - monthStart.getDay());
-  const end = new Date(start);
-  end.setDate(start.getDate() + 42);
-  return {
-    startIso: start.toISOString(),
-    endIso: end.toISOString(),
-  };
-}
-
-function buildCommunityEventsCacheKey(communityId: string, range: CommunityEventsRange): string {
-  return `${communityId}:${range.startIso}:${range.endIso}`;
-}
 
 type PersonalMemoryItem = {
   id: string;
@@ -1424,69 +1338,52 @@ export default function App() {
     markChatSelected: markCommunityChatSelected,
     setMessageInputFromTextarea: setCommunityMessageInputFromTextarea,
   } = communityChat;
-  const [communityResources, setCommunityResources] = useState<CommunityResource[]>([]);
-  const [communityResourceModules, setCommunityResourceModules] = useState<CommunityResourceModule[]>([]);
-  const [isLoadingResources, setIsLoadingResources] = useState(false);
-  const [isLoadingResourceModules, setIsLoadingResourceModules] = useState(false);
-  const [openResourceEmbedId, setOpenResourceEmbedId] = useState<string | null>(null);
-  const [communityEventsByCacheKey, setCommunityEventsByCacheKey] = useState<Record<string, CommunityEvent[]>>({});
-  const [isLoadingCommunityEvents, setIsLoadingCommunityEvents] = useState(false);
-  const [communityEventsError, setCommunityEventsError] = useState<string | null>(null);
-  const [communityEventsVisibleMonthIso, setCommunityEventsVisibleMonthIso] = useState(() =>
-    normalizeCommunityEventsMonthIso(null),
-  );
-  const communityEventsVisibleRange = useMemo(
-    () => getCommunityEventsMonthRange(communityEventsVisibleMonthIso),
-    [communityEventsVisibleMonthIso],
-  );
-  const communityEventsCacheKey = useMemo(
-    () =>
-      activeCommunityId
-        ? buildCommunityEventsCacheKey(activeCommunityId, communityEventsVisibleRange)
-        : null,
-    [activeCommunityId, communityEventsVisibleRange],
-  );
-  const communityEvents = useMemo(
-    () => (communityEventsCacheKey ? communityEventsByCacheKey[communityEventsCacheKey] ?? [] : []),
-    [communityEventsByCacheKey, communityEventsCacheKey],
-  );
-  const setCommunityEvents = useCallback<Dispatch<SetStateAction<CommunityEvent[]>>>(
-    (nextEvents) => {
-      setCommunityEventsByCacheKey((prev) => {
-        const previousForKey = communityEventsCacheKey ? prev[communityEventsCacheKey] ?? [] : [];
-        const resolvedEvents =
-          typeof nextEvents === "function"
-            ? nextEvents(previousForKey)
-            : nextEvents;
-        if (!communityEventsCacheKey) {
-          return resolvedEvents.length === 0 ? {} : prev;
-        }
-        return {
-          ...prev,
-          [communityEventsCacheKey]: resolvedEvents,
-        };
-      });
-    },
-    [communityEventsCacheKey],
-  );
-  const resetCommunityEventsCache = useCallback(() => {
-    setCommunityEventsByCacheKey({});
-  }, []);
-  const invalidateCommunityEventsCacheForCommunity = useCallback((communityId: string) => {
-    const cacheKeyPrefix = `${communityId}:`;
-    setCommunityEventsByCacheKey((prev) => {
-      let didRemove = false;
-      const next: Record<string, CommunityEvent[]> = {};
-      for (const [key, events] of Object.entries(prev)) {
-        if (key.startsWith(cacheKeyPrefix)) {
-          didRemove = true;
-          continue;
-        }
-        next[key] = events;
-      }
-      return didRemove ? next : prev;
-    });
-  }, []);
+  const communityContent = useWebCommunityContentController({
+    activeCommunityId,
+    activePage,
+    communityTab,
+    ensureSession: ensureUsableAuthSession,
+    getSession: () => sessionRef.current ?? session,
+    session,
+  });
+  const {
+    resources: communityResources,
+    modules: communityResourceModules,
+    isLoadingResources,
+    isLoadingModules: isLoadingResourceModules,
+    openResourceEmbedId,
+    setOpenResourceEmbedId,
+    events: communityEvents,
+    hasLoadedVisibleEventsRange: hasLoadedActiveCommunityEventsRange,
+    isLoadingEvents: isLoadingCommunityEvents,
+    eventsError: communityEventsError,
+    eventsVisibleMonthIso: communityEventsVisibleMonthIso,
+    setEventsVisibleMonthIso: setCommunityEventsVisibleMonthIso,
+    eventsVisibleRange: communityEventsVisibleRange,
+    eventsCacheKey: communityEventsCacheKey,
+    resetContentState: resetCommunityContentState,
+    loadCommunityResourceModules,
+    loadCommunityResources,
+    openNewModuleModal,
+    handleEditModule,
+    handleSetModuleStatus,
+    handleDeleteModule,
+    handleReorderModules,
+    handleReorderResources,
+    handleMoveResourceToModule,
+    openNewResourceModal,
+    openNewSourceModal,
+    resourceEditor,
+    handleDeleteResource,
+    handleCreatePageDraftFromSource,
+    handleCreateBlankPageDraft,
+    resourceModalProps,
+    resourceModuleModalProps,
+    resourceModuleDeleteModalProps,
+    loadCommunityEvents,
+    handleSaveCommunityEvent,
+    handleCancelCommunityEvent,
+  } = communityContent;
   const {
     communityJoinRequests,
     setCommunityJoinRequests,
@@ -1683,59 +1580,6 @@ export default function App() {
       window.removeEventListener("pagehide", advanceOnHide);
     };
   }, [session]);
-
-  const {
-    loadCommunityResourceModules,
-    loadCommunityResources,
-    openNewModuleModal,
-    handleEditModule,
-    handleSetModuleStatus,
-    handleDeleteModule,
-    handleReorderModules,
-    handleReorderResources,
-    handleMoveResourceToModule,
-    openNewResourceModal,
-    openNewSourceModal,
-    resourceEditor,
-    handleDeleteResource,
-    handleCreatePageDraftFromSource,
-    handleCreateBlankPageDraft,
-    setShowResourceModal,
-    setEditingResourceId,
-    setResourceTitleInput,
-    setResourceUrlInput,
-    setResourceBodyInput,
-    setResourcePinnedInput,
-    setResourceError,
-    setIsSavingResource,
-    resourceModalProps,
-    resourceModuleModalProps,
-    resourceModuleDeleteModalProps,
-  } = useWebCommunityResourceUiController<AuthSession, CommunityResource, CommunityResourceModule>({
-    activeCommunityId,
-    session: session,
-    ensureSession: ensureUsableAuthSession,
-    parseEmbedUrl,
-    communityResources,
-    communityResourceModules,
-    setCommunityResources,
-    setCommunityResourceModules,
-    setIsLoadingResources,
-    setIsLoadingResourceModules,
-  });
-  const {
-    loadCommunityEvents,
-    handleSaveCommunityEvent,
-    handleCancelCommunityEvent,
-  } = useCommunityEventsController<AuthSession>({
-    activeCommunityId,
-    session,
-    ensureSession: ensureUsableAuthSession,
-    setCommunityEvents,
-    setIsLoadingCommunityEvents,
-    setCommunityEventsError,
-    invalidateCommunityEventsCache: invalidateCommunityEventsCacheForCommunity,
-  });
 
   const [communityAnalyticsSummary, setCommunityAnalyticsSummary] = useState<CommunityAnalyticsSummary>({
     total_members: null,
@@ -3264,20 +3108,7 @@ export default function App() {
     setActiveCommunityId,
     setCommunityTab,
     resetCommunityChatState,
-    setCommunityResources,
-    setIsLoadingResources,
-    setShowResourceModal,
-    setEditingResourceId,
-    setResourceTitleInput,
-    setResourceUrlInput,
-    setResourceBodyInput,
-    setResourcePinnedInput,
-    setResourceError,
-    setIsSavingResource,
-    setOpenResourceEmbedId,
-    setCommunityEvents: resetCommunityEventsCache,
-    setIsLoadingCommunityEvents,
-    setCommunityEventsError,
+    resetCommunityContentState,
     setCommunitySettingsName,
     setCommunitySettingsSlug,
     setCommunitySettingsOneLiner,
@@ -3320,37 +3151,6 @@ export default function App() {
   useEffect(() => {
     activeCommunityIdRef.current = activeCommunityId;
   }, [activeCommunityId]);
-
-  useEffect(() => {
-    const handleCommunityResourcesMutated = (event: Event) => {
-      const detail = readCommunityResourcesMutatedEventDetail(event);
-      if (!detail) return;
-      const currentCommunityId = activeCommunityIdRef.current ?? activeCommunityId;
-      if (!currentCommunityId || detail.communityId !== currentCommunityId) return;
-      const activeSession = sessionRef.current ?? session;
-      if (!activeSession) return;
-      void (async () => {
-        try {
-          await Promise.all([
-            loadCommunityResourceModules(detail.communityId, activeSession),
-            loadCommunityResources(detail.communityId, activeSession),
-          ]);
-        } catch (error) {
-          console.warn("[community-resources] failed to refresh after resource mutation:", error);
-        }
-      })();
-    };
-    window.addEventListener(COMMUNITY_RESOURCES_MUTATED_EVENT, handleCommunityResourcesMutated);
-    return () => {
-      window.removeEventListener(COMMUNITY_RESOURCES_MUTATED_EVENT, handleCommunityResourcesMutated);
-    };
-  }, [
-    activeCommunityId,
-    loadCommunityResourceModules,
-    loadCommunityResources,
-    session,
-    sessionRef,
-  ]);
 
   useEffect(() => {
     if (activePage !== "community" || communityTab !== "funnel") return;
@@ -3529,14 +3329,6 @@ export default function App() {
     };
   }, [session, loadSelfProfile, loadUserProfiles, visibleCommunityProfileIds]);
 
-  useEffect(() => {
-    setCommunityResources([]);
-    setCommunityResourceModules([]);
-    setIsLoadingCommunityEvents(false);
-    setCommunityEventsError(null);
-    setOpenResourceEmbedId(null);
-  }, [activeCommunityId]);
-
   useWebDiscoverPreloadLifecycle({
     activePage,
     isLoadingDiscover,
@@ -3631,10 +3423,6 @@ export default function App() {
     if (timestamps.length === 0) return null;
     return Math.max(...timestamps);
   }, [communityEvents]);
-  const hasLoadedActiveCommunityEventsRange = Boolean(
-    communityEventsCacheKey && Object.prototype.hasOwnProperty.call(communityEventsByCacheKey, communityEventsCacheKey),
-  );
-
   useEffect(() => {
     communitySeenAcknowledgeKeyBySurfaceRef.current = {};
   }, [session?.user?.id]);
@@ -3891,24 +3679,6 @@ export default function App() {
     setIsLoadingCommunityJoinRequests,
     setCommunityJoinRequestsError,
     setDecidingCommunityJoinRequestId,
-  });
-
-  useCommunityResourcesTabLifecycle<AuthSession>({
-    activePage,
-    communityTab,
-    ...sessionArg,
-    activeCommunityId,
-    loadCommunityResources,
-    requireCommunityPage: true,
-  });
-  useCommunityEventsTabLifecycle<AuthSession>({
-    activePage,
-    communityTab,
-    ...sessionArg,
-    activeCommunityId,
-    range: communityEventsVisibleRange,
-    loadCommunityEvents,
-    requireCommunityPage: true,
   });
 
   useCommunityAdminAnalyticsLifecycle({
@@ -5283,7 +5053,7 @@ export default function App() {
       },
       eventsActions: {
         setVisibleMonthIso: setCommunityEventsVisibleMonthIso,
-        getVisibleRange: getCommunityEventsMonthRange,
+        getVisibleRange: getWebCommunityEventsMonthRange,
         reloadEvents: async (range) => {
           const usableSession = await ensureUsableAuthSession();
           if (!usableSession || !activeCommunityId) return;

@@ -6,31 +6,34 @@ function read(relativePath: string): string {
 }
 
 const app = read("apps/web/src/App.tsx");
+const webContentController = read(
+  "apps/web/src/controllers/useWebCommunityContentController.ts",
+);
 const controller = read("shared/useCommunityEventsController.ts");
 const eventsPanel = read("apps/web/src/components/WebCommunityEventsSection.tsx");
 const styles = read("apps/web/src/base.css");
 
 assert.match(
-  app,
-  /function getCommunityEventsMonthRange[\s\S]*start\.setDate\(monthStart\.getDate\(\) - monthStart\.getDay\(\)\);[\s\S]*end\.setDate\(start\.getDate\(\) \+ 42\);/,
+  webContentController,
+  /function getWebCommunityEventsMonthRange[\s\S]*start\.setDate\(monthStart\.getDate\(\) - monthStart\.getDay\(\)\);[\s\S]*end\.setDate\(start\.getDate\(\) \+ 42\);/,
   "events fetch range must retain the 42-day buffer used for recurrence expansion and month transitions",
 );
 
 assert.match(
-  app,
-  /const \[communityEventsByCacheKey, setCommunityEventsByCacheKey\] = useState<Record<string, CommunityEvent\[\]>>\(\{\}\);/,
+  webContentController,
+  /const \[eventsByCacheKey, setEventsByCacheKey\][\s\S]*useState<Record<string, CloudCommunityEvent\[\]>>\(\{\}\);/,
   "events rows must be cached by community and visible range instead of one global list",
 );
 
 assert.match(
-  app,
-  /buildCommunityEventsCacheKey\(activeCommunityId, communityEventsVisibleRange\)/,
+  webContentController,
+  /buildEventsCacheKey\(activeCommunityId, eventsVisibleRange\)/,
   "events cache key must include the active community and the active visible range",
 );
 
 assert.match(
-  app,
-  /invalidateCommunityEventsCacheForCommunity[\s\S]*key\.startsWith\(cacheKeyPrefix\)[\s\S]*invalidateCommunityEventsCache: invalidateCommunityEventsCacheForCommunity/,
+  webContentController,
+  /invalidateEventsCacheForCommunity[\s\S]*key\.startsWith\(prefix\)[\s\S]*invalidateCommunityEventsCache: invalidateEventsCacheForCommunity/,
   "event save/cancel must invalidate every cached range for the affected community",
 );
 
