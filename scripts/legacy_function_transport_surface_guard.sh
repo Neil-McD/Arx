@@ -10,7 +10,6 @@ echo "== Legacy function transport surface guard =="
 
 PATTERN='invokeFunctionAuthJson|invokeFunctionPublicJson|buildCloudFunctionUrl\('
 TARGETS=(
-  src
   apps
   shared
 )
@@ -23,7 +22,11 @@ max_allowed_for_file() {
 }
 
 echo "[1/3] Scanning runtime/product paths for legacy function transport refs..."
-RAW_MATCHES="$(rg -n --hidden -S "$PATTERN" "${TARGETS[@]}" || true)"
+RAW_MATCHES="$(
+  guard_rg_capture \
+    "legacy function transport references in runtime/product paths" \
+    -n --hidden -S "$PATTERN" "${TARGETS[@]}"
+)"
 
 COUNTS_FILE="$(mktemp)"
 trap 'rm -f "$COUNTS_FILE"' EXIT

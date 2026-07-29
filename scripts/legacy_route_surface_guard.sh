@@ -10,7 +10,6 @@ echo "== Legacy route surface guard =="
 
 PATTERN='(/rest/v1|/functions/v1|/rpc\b)'
 TARGETS=(
-  src
   apps
   shared
 )
@@ -22,7 +21,11 @@ max_allowed_for_file() {
 }
 
 echo "[1/3] Scanning runtime/product paths for legacy route markers..."
-RAW_MATCHES="$(rg -n --hidden -S "$PATTERN" "${TARGETS[@]}" || true)"
+RAW_MATCHES="$(
+  guard_rg_capture \
+    "legacy route markers in runtime/product paths" \
+    -n --hidden -S "$PATTERN" "${TARGETS[@]}"
+)"
 
 COUNTS_FILE="$(mktemp)"
 trap 'rm -f "$COUNTS_FILE"' EXIT

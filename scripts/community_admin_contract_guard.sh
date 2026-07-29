@@ -119,10 +119,9 @@ require_no_match() {
   local file="$1"
   local pattern="$2"
   local description="$3"
-  if rg -n -U --pcre2 "$pattern" "$file" >/dev/null; then
-    echo "FAIL: forbidden contract marker present: $description"
-    exit 1
-  fi
+  guard_rg_assert_absent \
+    "forbidden contract marker: $description" \
+    -n -U --pcre2 "$pattern" "$file"
   echo "OK: $description"
 }
 
@@ -132,12 +131,13 @@ require_block_no_match() {
   local end_pattern="$3"
   local forbidden_pattern="$4"
   local description="$5"
-  if awk -v start="$start_pattern" -v end="$end_pattern" '
+  if ! awk -v start="$start_pattern" -v end="$end_pattern" '
     $0 ~ start { in_block = 1 }
     in_block { print }
     $0 ~ end && in_block { in_block = 0 }
-  ' "$file" | rg -n -U --pcre2 "$forbidden_pattern" >/dev/null; then
-    echo "FAIL: forbidden contract marker present: $description"
+  ' "$file" | guard_rg_assert_absent \
+    "forbidden contract marker in selected block: $description" \
+    -n -U --pcre2 "$forbidden_pattern"; then
     exit 1
   fi
   echo "OK: $description"
@@ -436,12 +436,13 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'await ctx\.db\.patch\(membership\._id as any, \{\s*active: false,\s*revokedAt: nowMs,\s*revokedReason:' \
   "remove member preserves revoked membership row"
-if awk '
+if ! awk '
   /export const revokeCommunityMemberInternal = internalMutation\(/ { in_block = 1 }
   /async function cancelStripeSubscriptionIfActive/ { in_block = 0 }
   in_block { print }
-' "$COMMUNITY_ADMIN_FILE" | rg 'await ctx\.db\.delete\(membership\._id as any\)' >/dev/null; then
-  echo "FAIL: revokeCommunityMemberInternal must not delete paid membership audit rows"
+' "$COMMUNITY_ADMIN_FILE" | guard_rg_assert_absent \
+  "revokeCommunityMemberInternal deletion of paid membership audit rows" \
+  'await ctx\.db\.delete\(membership\._id as any\)'; then
   exit 1
 fi
 echo "OK: revokeCommunityMemberInternal does not delete membership rows"

@@ -12,7 +12,11 @@ PATTERN='from ".*cloudAuthCore"|from ".*cloudAuthFlow"|from ".*cloudOAuthCallbac
 TARGETS=(apps shared)
 
 echo "[1/2] Scanning runtime/product paths for direct legacy-auth imports..."
-RAW_MATCHES="$(rg -n --hidden -S "$PATTERN" "${TARGETS[@]}" || true)"
+RAW_MATCHES="$(
+  guard_rg_capture \
+    "direct legacy-auth imports in runtime/product paths" \
+    -n --hidden -S "$PATTERN" "${TARGETS[@]}"
+)"
 
 if [[ -z "$RAW_MATCHES" ]]; then
   echo "OK: no direct legacy-auth imports remain."

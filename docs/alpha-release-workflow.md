@@ -174,6 +174,13 @@ bundle budget, preview-proxy validation, foundation invariants, all conventional
 behavior tests, and dependency security checks. It writes machine-readable
 evidence to `artifacts/release-gate.json`.
 
+Release-gated repository absence checks distinguish all three search outcomes:
+matches fail the contract, no matches pass it, and scanner or target failures
+fail the gate as infrastructure errors. Conventional behavior tests exercise
+the real public community access lifecycle—including join policy, manager
+approval, revocation, and subsequent native/MCP authorization—rather than
+accepting source-marker assertions as behavioral proof.
+
 Local mode records dirty working-tree state so it is useful during development,
 marks its build identity as `<sha>-dirty`, and is not release-authoritative.
 The GitHub `Release Gate` job runs the same executable in `ci` mode, requires a

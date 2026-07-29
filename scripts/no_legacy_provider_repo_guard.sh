@@ -27,16 +27,14 @@ CODE_TARGETS=(
 )
 
 echo "[1/3] Scanning repository for forbidden legacy provider references..."
-if rg -n -i --hidden -S "$PATTERN" . "${EXCLUDES[@]}"; then
-  echo "FAIL: legacy provider reference detected."
-  exit 1
-fi
+guard_rg_assert_absent \
+  "legacy provider reference in repository" \
+  -n -i --hidden -S "$PATTERN" . "${EXCLUDES[@]}"
 
 echo "[2/3] Scanning repository for obfuscated legacy-provider key composition..."
-if rg -n -i --hidden -S "$OBFUSCATED_PATTERN" "${CODE_TARGETS[@]}" "${EXCLUDES[@]}"; then
-  echo "FAIL: obfuscated legacy provider key composition detected."
-  exit 1
-fi
+guard_rg_assert_absent \
+  "obfuscated legacy-provider key composition in repository" \
+  -n -i --hidden -S "$OBFUSCATED_PATTERN" "${CODE_TARGETS[@]}" "${EXCLUDES[@]}"
 
 echo "[3/3] Guard passed."
 echo "PASS: repository is legacy-provider free outside approved MCP catalog/proof surfaces."

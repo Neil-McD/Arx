@@ -40,10 +40,9 @@ require_contains "$TARGET_FILE" 'identity = await readAuthenticatedIdentityProfi
 
 echo "[3/13] Ensuring legacy manual JWT-claim trust helpers are absent..."
 LEGACY_PATTERN='function\s+extractBearerToken\s*\(|function\s+decodeJwtClaims\s*\(|decodeJwtClaims\s*\(|extractBearerToken\s*\('
-if rg -n --pcre2 "$LEGACY_PATTERN" "$TARGET_FILE"; then
-  echo "FAIL: manual JWT parsing helpers were reintroduced in $TARGET_FILE."
-  exit 1
-fi
+guard_rg_assert_absent \
+  "manual JWT parsing helpers in $TARGET_FILE" \
+  -n --pcre2 "$LEGACY_PATTERN" "$TARGET_FILE"
 echo "OK: no manual JWT parsing helpers remain in $TARGET_FILE."
 
 echo "[4/13] Ensuring authenticated-subject resolver is fail-closed by default..."
@@ -51,10 +50,9 @@ require_contains "$AUTH_IDENTITY_FILE" 'throw new Error\("verified_identity_requ
   "authIdentity requires verified identity when fallback is disabled"
 require_contains "$AUTH_IDENTITY_FILE" 'ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT' \
   "authIdentity fallback is explicitly env-gated"
-if rg -n --fixed-strings 'const subject = verifiedSubject || explicitSubject;' "$AUTH_IDENTITY_FILE"; then
-  echo "FAIL: unconditional explicit subject fallback reintroduced in $AUTH_IDENTITY_FILE."
-  exit 1
-fi
+guard_rg_assert_absent \
+  "unconditional explicit subject fallback in $AUTH_IDENTITY_FILE" \
+  -n --fixed-strings 'const subject = verifiedSubject || explicitSubject;' "$AUTH_IDENTITY_FILE"
 echo "OK: no unconditional explicit-subject fallback in $AUTH_IDENTITY_FILE."
 
 echo "[5/13] Ensuring auth functions resolve authenticated subject via identity helper..."
@@ -74,17 +72,15 @@ require_contains "$PROJECTS_FILE" 'resolveOwnerIdForAuthenticatedRequest\(' \
 echo "[7/13] Ensuring community create path resolves actor identity via authenticated subject..."
 require_contains "$COMMUNITY_LIFECYCLE_FILE" 'resolveUserIdForAuthenticatedRequest\(' \
   "convex/communityLifecycle.ts must resolve user identity through authenticated subject helper"
-if rg -n --fixed-strings 'ownerId: v.id("users")' "$COMMUNITY_LIFECYCLE_FILE"; then
-  echo "FAIL: createCommunity reintroduced hard-required ownerId."
-  exit 1
-fi
+guard_rg_assert_absent \
+  "hard-required ownerId in createCommunity" \
+  -n --fixed-strings 'ownerId: v.id("users")' "$COMMUNITY_LIFECYCLE_FILE"
 echo "OK: createCommunity allows authenticated-subject-first identity resolution."
 
 echo "[8/13] Ensuring direct authSubject-required guards are not reintroduced in gates..."
-if rg -n --fixed-strings 'if (!authSubject) throw new Error("auth_subject_required")' "$GATES_FILE"; then
-  echo "FAIL: direct authSubject-required guard reintroduced in $GATES_FILE."
-  exit 1
-fi
+guard_rg_assert_absent \
+  "direct authSubject-required guard in $GATES_FILE" \
+  -n --fixed-strings 'if (!authSubject) throw new Error("auth_subject_required")' "$GATES_FILE"
 echo "OK: gates relies on authenticated subject helper."
 
 echo "[9/13] Ensuring thread/project APIs are no longer hard-required to caller ownerId..."
@@ -116,10 +112,9 @@ then
   exit 1
 fi
 echo "OK: public thread/project APIs allow authenticated-subject-first identity resolution."
-if rg -n --fixed-strings 'owner_identity_required' "$THREADS_FILE" "$PROJECTS_FILE"; then
-  echo "FAIL: ownerId-only fallback path reintroduced in thread/project resolvers."
-  exit 1
-fi
+guard_rg_assert_absent \
+  "ownerId-only fallback in thread/project resolvers" \
+  -n --fixed-strings 'owner_identity_required' "$THREADS_FILE" "$PROJECTS_FILE"
 echo "OK: thread/project resolvers do not allow ownerId-only fallback."
 
 echo "[10/13] Ensuring community create API accepts authSubject..."
@@ -130,15 +125,13 @@ fi
 echo "OK: community create API accepts optional authSubject."
 
 echo "[11/13] Ensuring community APIs avoid hard-required caller userId..."
-if rg -n --fixed-strings 'userId: v.id("users")' "$COMMUNITY_LIFECYCLE_FILE" 'convex/communityAdmin.ts' 'convex/communityAgent.ts' 'convex/communityChat.ts'; then
-  echo "FAIL: required userId argument reintroduced in community Convex functions."
-  exit 1
-fi
+guard_rg_assert_absent \
+  "required userId argument in community Convex functions" \
+  -n --fixed-strings 'userId: v.id("users")' "$COMMUNITY_LIFECYCLE_FILE" 'convex/communityAdmin.ts' 'convex/communityAgent.ts' 'convex/communityChat.ts'
 echo "OK: community APIs avoid hard-required caller userId."
-if rg -n --fixed-strings 'user_identity_required' "$COMMUNITY_LIFECYCLE_FILE" 'convex/communityAdmin.ts' 'convex/communityAgent.ts' 'convex/communityChat.ts'; then
-  echo "FAIL: userId-only fallback path reintroduced in community resolver."
-  exit 1
-fi
+guard_rg_assert_absent \
+  "userId-only fallback in community resolver" \
+  -n --fixed-strings 'user_identity_required' "$COMMUNITY_LIFECYCLE_FILE" 'convex/communityAdmin.ts' 'convex/communityAgent.ts' 'convex/communityChat.ts'
 echo "OK: community resolver does not allow userId-only fallback."
 
 echo "[12/13] Ensuring env templates include verified-identity fallback toggle..."

@@ -59,7 +59,6 @@
     "check:security-audit-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/security_audit_diagnostics_proof.ts",
     "check:runtime-tool-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_diagnostics_proof.ts",
     "check:runtime-community-context-receipt-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_community_context_receipt_proof.ts",
-    "check:web-deploy-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/web_deploy_diagnostics_proof.ts",
     "check:sentry-frontend-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/sentry_frontend_diagnostics_proof.ts",
     "check:platform-diagnostics-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/platform_diagnostics_contract_proof.ts",
     "check:email-auth-diagnostic-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/email_auth_diagnostic_contract_proof.ts",

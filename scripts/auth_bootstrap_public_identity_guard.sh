@@ -34,10 +34,9 @@ reject_multiline_match() {
   local file="$1"
   local pattern="$2"
   local description="$3"
-  if rg -n -U --pcre2 "$pattern" "$file" >/dev/null; then
-    echo "FAIL: unexpected contract marker: $description"
-    exit 1
-  fi
+  guard_rg_assert_absent \
+    "unexpected contract marker: $description" \
+    -n -U --pcre2 "$pattern" "$file"
   echo "OK: $description"
 }
 

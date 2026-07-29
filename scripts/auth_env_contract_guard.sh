@@ -37,11 +37,9 @@ forbid_match_in_file() {
   local file="$1"
   local pattern="$2"
   local description="$3"
-  if rg -n -S "$pattern" "$file" >/dev/null; then
-    echo "FAIL: forbidden pattern detected: $description"
-    rg -n -S "$pattern" "$file" || true
-    exit 1
-  fi
+  guard_rg_assert_absent \
+    "forbidden pattern: $description" \
+    -n -S "$pattern" "$file"
   echo "OK: $description"
 }
 

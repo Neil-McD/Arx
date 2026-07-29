@@ -68,8 +68,9 @@ FORBIDDEN_PATTERNS=(
 
 failed=0
 for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
-  if rg -n -S "$pattern" "${TARGETS[@]}" "${EXCLUDES[@]}"; then
-    echo "Forbidden legacy Builder plan infrastructure pattern found: $pattern" >&2
+  if ! guard_rg_assert_absent \
+    "legacy Builder plan infrastructure pattern: $pattern" \
+    -n -S "$pattern" "${TARGETS[@]}" "${EXCLUDES[@]}"; then
     failed=1
   fi
 done
@@ -100,8 +101,9 @@ ACCOUNT_NAMING_FORBIDDEN_PATTERNS=(
 )
 
 for pattern in "${ACCOUNT_NAMING_FORBIDDEN_PATTERNS[@]}"; do
-  if rg -n -S "$pattern" "${ACCOUNT_NAMING_TARGETS[@]}" "${EXCLUDES[@]}"; then
-    echo "Forbidden legacy Builder account-commerce naming found: $pattern" >&2
+  if ! guard_rg_assert_absent \
+    "legacy Builder account-commerce naming: $pattern" \
+    -n -S "$pattern" "${ACCOUNT_NAMING_TARGETS[@]}" "${EXCLUDES[@]}"; then
     failed=1
   fi
 done
@@ -113,8 +115,9 @@ SCHEMA_FORBIDDEN_PATTERNS=(
 )
 
 for pattern in "${SCHEMA_FORBIDDEN_PATTERNS[@]}"; do
-  if rg -n -S "$pattern" convex/schema.ts; then
-    echo "Forbidden legacy Builder plan schema pattern found: $pattern" >&2
+  if ! guard_rg_assert_absent \
+    "legacy Builder plan schema pattern: $pattern" \
+    -n -S "$pattern" convex/schema.ts; then
     failed=1
   fi
 done
@@ -139,8 +142,9 @@ PROJECT_TIER_GATE_PATTERNS=(
 )
 
 for pattern in "${PROJECT_TIER_GATE_PATTERNS[@]}"; do
-  if rg -n -S "$pattern" convex/projects.ts convex/threads.ts; then
-    echo "Forbidden project/workspace tier gate found: $pattern" >&2
+  if ! guard_rg_assert_absent \
+    "project/workspace tier gate: $pattern" \
+    -n -S "$pattern" convex/projects.ts convex/threads.ts; then
     failed=1
   fi
 done
