@@ -51,9 +51,6 @@ import {
   requiresSandboxSession,
 } from "../shared/retrievalTools";
 import {
-  buildActiveCommunityContextToolPayload,
-} from "../shared/communityContextTool.ts";
-import {
   extractTextFromNativeToolMessageContent,
   getNativeToolCompletionToolCalls,
   type NativeToolAwareCompletionSuccess,
@@ -156,7 +153,7 @@ function buildEffectiveAllowedToolNames(params: {
   selectedPlatformSkills: readonly PlatformSkillSelectionSummary[];
 }): RetrievalToolName[] {
   const allowed = [...params.baseAllowedToolNames];
-  if (!allowed.includes("get_active_community_context")) return allowed;
+  if (!allowed.includes("polynet_read")) return allowed;
   for (const toolName of buildPlatformSkillToolNamesForSelection(
     params.selectedPlatformSkills,
   )) {
@@ -325,7 +322,10 @@ export async function executeRetrievalHarnessTool(params: {
     };
   }
 
-  if (params.toolName === "get_active_community_context") {
+  if (
+    params.toolName === "polynet_list" ||
+    params.toolName === "polynet_read"
+  ) {
     if (!params.communityId) {
       return {
         status: "error",
@@ -333,45 +333,49 @@ export async function executeRetrievalHarnessTool(params: {
         outputText: "",
         errorCode: "community_required",
         errorMessage:
-          "get_active_community_context requires an active community context.",
+          `${params.toolName} requires an active community context.`,
       };
     }
-    try {
-      const resolvedCommunity = await params.ctx.runQuery(
-        internal.communityAgent.resolveRuntimeCommunityPromptContextInternal as any,
-        {
-          userId: params.userId,
-          authSubject: params.authSubject ?? undefined,
-          communityId: params.communityId,
-        },
-      );
-      const resolvedCommunityId = String(
-        (resolvedCommunity as { community_id?: unknown } | null)?.community_id ??
-          "",
-      ).trim();
-      if (!resolvedCommunityId) {
-        throw new Error("community_context_unavailable");
-      }
-      const payload = buildActiveCommunityContextToolPayload(
-        (resolvedCommunity ?? {}) as Record<string, unknown>,
-      );
-      return {
-        status: "ok",
-        exitCode: 0,
-        outputText: formatJsonToolOutput(payload),
-        errorCode: null,
-        errorMessage: null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+    const authSubject = String(params.authSubject ?? "").trim();
+    if (!authSubject) {
       return {
         status: "error",
         exitCode: null,
         outputText: "",
-        errorCode: "community_context_failed",
-        errorMessage: message || "Community context lookup failed.",
+        errorCode: "authenticated_user_required",
+        errorMessage: `${params.toolName} requires an authenticated user.`,
       };
     }
+    const execution = await executePlatformOperation({
+      operationId:
+        params.toolName === "polynet_list"
+          ? "community.semantic.list"
+          : "community.semantic.read",
+      ctx: params.ctx,
+      authSubject,
+      userId: params.userId,
+      communityId: params.communityId,
+      evidenceSurface: params.evidenceSurface ?? "member_agent_dock",
+      input: normalizedArgs,
+    });
+    if (!execution.ok) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: execution.value
+          ? formatJsonToolOutput(execution.value)
+          : "",
+        errorCode: execution.code,
+        errorMessage: execution.message,
+      };
+    }
+    return {
+      status: "ok",
+      exitCode: 0,
+      outputText: formatJsonToolOutput(execution.value),
+      errorCode: null,
+      errorMessage: null,
+    };
   }
 
   if (params.toolName === "member_conversations_list") {
@@ -867,52 +871,6 @@ export async function executeRetrievalHarnessTool(params: {
     }
   }
 
-  if (params.toolName === "community_resources_map") {
-    if (!params.communityId) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_required",
-        errorMessage: "community_resources_map requires an active community context.",
-      };
-    }
-    try {
-      const payload = await params.ctx.runQuery(
-        internal.communityResources.mapCommunityResourcesForToolInternal as any,
-        {
-          userId: params.userId,
-          authSubject: params.authSubject ?? undefined,
-          communityId: params.communityId,
-          limit:
-            typeof normalizedArgs.limit === "number"
-              ? normalizedArgs.limit
-              : undefined,
-          perModuleLimit:
-            typeof normalizedArgs.perModuleLimit === "number"
-              ? normalizedArgs.perModuleLimit
-              : undefined,
-        },
-      );
-      return {
-        status: "ok",
-        exitCode: 0,
-        outputText: formatJsonToolOutput(payload),
-        errorCode: null,
-        errorMessage: null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_resources_map_failed",
-        errorMessage: message || "Community resource map failed.",
-      };
-    }
-  }
-
   if (params.toolName === "community_resources_read") {
     if (!params.communityId) {
       return {
@@ -959,100 +917,6 @@ export async function executeRetrievalHarnessTool(params: {
         outputText: "",
         errorCode: "community_resources_read_failed",
         errorMessage: message || "Community resources read failed.",
-      };
-    }
-  }
-
-  if (params.toolName === "community_resources_list") {
-    if (!params.communityId) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_required",
-        errorMessage: "community_resources_list requires an active community context.",
-      };
-    }
-    try {
-      const payload = await params.ctx.runQuery(
-        internal.communityResources.listCommunityResourceDirectoryInternal as any,
-        {
-          userId: params.userId,
-          authSubject: params.authSubject ?? undefined,
-          communityId: params.communityId,
-          path:
-            typeof normalizedArgs.path === "string"
-              ? normalizedArgs.path
-              : undefined,
-          limit:
-            typeof normalizedArgs.limit === "number"
-              ? normalizedArgs.limit
-              : undefined,
-        },
-      );
-      return {
-        status: "ok",
-        exitCode: 0,
-        outputText: formatJsonToolOutput(payload),
-        errorCode: null,
-        errorMessage: null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_resources_list_failed",
-        errorMessage: message || "Community resource listing failed.",
-      };
-    }
-  }
-
-  if (params.toolName === "community_resource_read") {
-    if (!params.communityId) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_required",
-        errorMessage: "community_resource_read requires an active community context.",
-      };
-    }
-    try {
-      const payload = await params.ctx.runAction(
-        (internal as any).communityResourceEvidence.readCommunityResourceEvidenceForToolInternal,
-        {
-          userId: params.userId,
-          authSubject: params.authSubject ?? undefined,
-          communityId: params.communityId,
-          ref: String(normalizedArgs.ref ?? ""),
-          offset:
-            typeof normalizedArgs.offset === "number"
-              ? normalizedArgs.offset
-              : undefined,
-          limit:
-            typeof normalizedArgs.limit === "number"
-              ? normalizedArgs.limit
-              : undefined,
-          surface: params.evidenceSurface ?? "member_agent_dock",
-        },
-      );
-      return {
-        status: "ok",
-        exitCode: 0,
-        outputText: formatJsonToolOutput(payload),
-        errorCode: null,
-        errorMessage: null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_resource_read_failed",
-        errorMessage: message || "Community resource read failed.",
       };
     }
   }

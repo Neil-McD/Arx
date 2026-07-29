@@ -29,7 +29,8 @@ const runtimeTurnHandlersSource = read("convex/runtimeTurnHandlers.ts");
 
 const productDocTools = ["search_product_docs", "get_product_doc"] as const;
 const communityReadTools = [
-  "get_active_community_context",
+  "polynet_list",
+  "polynet_read",
   "community_search",
   "community_memory_search",
   "community_memory_read",
@@ -37,10 +38,7 @@ const communityReadTools = [
   "community_chat_read",
   "community_ai_feed_search",
   "community_ai_feed_read",
-  "community_resources_map",
   "community_resources_read",
-  "community_resources_list",
-  "community_resource_read",
   "community_resources_search",
 ] as const;
 const builderStageTools = [

@@ -6,7 +6,10 @@ import {
   deriveCommunityResourceLineageEnvelope,
   parseCommunityResourceEvidenceRef,
 } from "../shared/communityEvidenceContract.ts";
-import { resolveCommunityResourceEvidenceSource } from "../convex/communityResourceEvidenceCore.ts";
+import {
+  resolveCommunityResourceEvidenceSource,
+  resolveExactCommunityResourceEvidenceSelector,
+} from "../convex/communityResourceEvidenceCore.ts";
 
 const root = process.cwd();
 
@@ -21,6 +24,7 @@ const [
   evidenceCore,
   audit,
   runtimeLoop,
+  semanticContext,
   concierge,
   mcp,
   httpMcp,
@@ -33,6 +37,7 @@ const [
   read("convex/communityResourceEvidenceCore.ts"),
   read("convex/communityEvidenceAudit.ts"),
   read("convex/runtimeAgentLoop.ts"),
+  read("convex/communityCapabilityContext.ts"),
   read("convex/communityAgentServeWorker.ts"),
   read("shared/polynetMcp.ts"),
   read("convex/httpMcp.ts"),
@@ -51,8 +56,22 @@ assert.match(resources, /recordedByUserId: row\.createdByUserId/);
 assert.match(resources, /const typedResourceId = parseCommunityResourceEvidenceRef\(ref\)/);
 assert.match(resources, /export const mapCommunityResourcesForToolInternal[\s\S]*scope: "member"/);
 assert.match(resources, /export const readCommunityResourcesForToolInternal[\s\S]*builder: false/);
-assert.match(resources, /export const readCommunityResourceDirectoryInternal[\s\S]*source: null/);
+assert.match(resources, /buildCommunityResourceDirectoryReadPayload[\s\S]*source: null/);
 assert.doesNotMatch(resources, /export const searchCommunityResourceDirectoryInternal/);
+assert.match(
+  evidenceCore,
+  /resolveExactCommunityResourceEvidenceSelector[\s\S]*resolveCommunityResourceEvidenceSource/,
+);
+const memberReadBlock =
+  resources.match(
+    /export const readCommunityResourceDirectoryInternal = internalQuery\([\s\S]*?\n\}\);\n\nexport const readCommunityResourcesForToolInternal/,
+  )?.[0] ?? "";
+assert.ok(memberReadBlock, "member resource read implementation should be present");
+assert.ok(
+  memberReadBlock.indexOf("resolveExactCommunityResourceEvidenceSelector") <
+    memberReadBlock.indexOf("listResourceDirectoryLiveModules"),
+  "stable refs and exact resource URIs must resolve before directory scans",
+);
 
 assert.match(evidence, /const RECENT_RESOURCE_SCAN_LIMIT = 80/);
 assert.match(evidence, /\.take\(RECENT_RESOURCE_SCAN_LIMIT\)/);
@@ -74,9 +93,18 @@ assert.doesNotMatch(audit, /query: v\./);
 assert.doesNotMatch(audit, /args\.query/);
 
 assert.match(runtimeLoop, /communityResourceEvidence\.searchCommunityResourceEvidenceInternal/);
-assert.match(runtimeLoop, /communityResourceEvidence\.readCommunityResourceEvidenceForToolInternal/);
+assert.match(
+  runtimeLoop,
+  /operationId:[\s\S]*"community\.semantic\.read"/,
+  "native semantic reads should route through the canonical operation executor",
+);
 assert.match(runtimeLoop, /communityResourceEvidence\.readCommunityResourcesEvidenceForToolInternal/);
 assert.match(runtimeLoop, /surface: params\.evidenceSurface \?\? "member_agent_dock"/);
+assert.match(
+  semanticContext,
+  /readCommunitySemanticRepositoryInternal[\s\S]*communityResourceEvidence[\s\S]*readCommunityResourceEvidenceForToolInternal/,
+  "semantic exact reads should reuse the canonical audited resource action",
+);
 assert.match(concierge, /evidenceSurface: "community_concierge"/);
 assert.match(mcp, /stable resource ref/);
 assert.match(httpMcp, /communityResourceEvidence\.searchCommunityResourceEvidenceInternal/);
@@ -94,9 +122,12 @@ const resourceId = "resource_1";
 const sourceId = "resource_source_1";
 const draftResourceId = "resource_draft_1";
 const foreignResourceId = "resource_foreign_1";
+const orphanResourceId = "resource_orphan_1";
+const missingResourceId = "resource_missing_1";
 const liveModuleId = "module_live_1";
 const draftModuleId = "module_draft_1";
 const foreignModuleId = "module_foreign_1";
+const missingModuleId = "module_missing_1";
 const rows = new Map<string, any>([
   [
     resourceId,
@@ -155,6 +186,20 @@ const rows = new Map<string, any>([
       updatedAt: 1,
     },
   ],
+  [
+    orphanResourceId,
+    {
+      _id: orphanResourceId,
+      communityId: "community_1",
+      moduleId: missingModuleId,
+      role: "page",
+      status: "draft",
+      title: "Orphan page",
+      bodyChars: 12,
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  ],
   [liveModuleId, { _id: liveModuleId, communityId: "community_1", status: "live" }],
   [draftModuleId, { _id: draftModuleId, communityId: "community_1", status: "draft" }],
   [foreignModuleId, { _id: foreignModuleId, communityId: "community_2", status: "live" }],
@@ -167,6 +212,9 @@ const mockCtx = {
     },
     async get(id: string) {
       return rows.get(id) ?? null;
+    },
+    query() {
+      throw new Error("directory_scan_must_not_run_for_exact_selectors");
     },
   },
 };
@@ -198,11 +246,89 @@ for (const hiddenId of [sourceId, draftResourceId, foreignResourceId]) {
     `${hiddenId} must fail the canonical member-evidence boundary`,
   );
 }
+assert.equal(
+  await resolveCommunityResourceEvidenceSource({
+    ctx: mockCtx,
+    communityId: "community_1",
+    resourceId: orphanResourceId,
+  }),
+  null,
+  "resources whose module is missing must fail closed",
+);
 
 const ref = buildCommunityResourceEvidenceRef(resourceId);
 assert.equal(ref, `resource:${resourceId}`);
 assert.equal(parseCommunityResourceEvidenceRef(ref), resourceId);
 assert.equal(parseCommunityResourceEvidenceRef(`resource:${liveModuleId}:extra`), null);
+const exactTyped = await resolveExactCommunityResourceEvidenceSelector({
+  ctx: mockCtx,
+  communityId: "community_1",
+  ref,
+});
+assert.equal(exactTyped?.resource._id, resourceId);
+const exactUri = await resolveExactCommunityResourceEvidenceSelector({
+  ctx: mockCtx,
+  communityId: "community_1",
+  ref: `resources://community/community_1/modules/${liveModuleId}/resources/${resourceId}`,
+});
+assert.equal(exactUri?.resource._id, resourceId);
+assert.equal(
+  await resolveExactCommunityResourceEvidenceSelector({
+    ctx: mockCtx,
+    communityId: "community_1",
+    ref: "/visible-page",
+  }),
+  null,
+  "readable paths must remain on the compatibility lookup",
+);
+for (const [invalidRef, expectedError] of [
+  ["resource:bad:id", "community_resource_evidence_ref_invalid"],
+  ["resources://malformed", "community_resource_directory_uri_invalid"],
+  [
+    `resources://community/community_2/modules/${liveModuleId}/resources/${resourceId}`,
+    "community_resource_directory_community_mismatch",
+  ],
+  [
+    `resources://community/community_1/modules/${draftModuleId}/resources/${resourceId}`,
+    "community_resource_directory_module_mismatch",
+  ],
+  [
+    `resources://community/community_1/modules/${liveModuleId}/source-inbox/resources/${resourceId}`,
+    "community_resource_directory_scope_mismatch",
+  ],
+  [
+    `resources://community/community_1/modules/${liveModuleId}`,
+    "community_resource_directory_path_not_readable",
+  ],
+] as const) {
+  await assert.rejects(
+    () =>
+      resolveExactCommunityResourceEvidenceSelector({
+        ctx: mockCtx,
+        communityId: "community_1",
+        ref: invalidRef,
+      }),
+    new RegExp(expectedError),
+  );
+}
+for (const hiddenId of [
+  sourceId,
+  draftResourceId,
+  foreignResourceId,
+  orphanResourceId,
+  missingResourceId,
+]) {
+  await assert.rejects(
+    () =>
+      resolveExactCommunityResourceEvidenceSelector({
+        ctx: mockCtx,
+        communityId: "community_1",
+        ref: buildCommunityResourceEvidenceRef(hiddenId),
+      }),
+    /community_resource_not_found/,
+    `${hiddenId} must fail exact member-visible resolution`,
+  );
+}
 const lineage = deriveCommunityResourceLineageEnvelope({
   communityId: "community_1",
   resourceId,

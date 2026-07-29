@@ -13,6 +13,7 @@ import {
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { resolveViewerDirectMessageRelationship } from "./profileRelationshipCore";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
+import { getUniqueUserByNormalizedHandle } from "./profileCore";
 import { stripChatInlineMarkdown } from "../shared/chatInlineMarkdown";
 
 type UserRow = {
@@ -478,10 +479,7 @@ async function findUserByPublicId(ctx: any, publicUserId: string): Promise<UserR
 async function findUserByNormalizedHandle(ctx: any, normalizedHandle: string): Promise<UserRow | null> {
   const normalized = normalizeRecipientSearch(normalizedHandle);
   if (!normalized) return null;
-  return (await ctx.db
-    .query("users")
-    .withIndex("by_normalizedHandle", (q: any) => q.eq("normalizedHandle", normalized))
-    .first()) as UserRow | null;
+  return await getUniqueUserByNormalizedHandle<UserRow>(ctx, normalized);
 }
 
 async function findDirectConversationByUsers(

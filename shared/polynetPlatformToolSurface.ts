@@ -59,19 +59,16 @@ function buildPlatformOperationWorkerSurfaceEntry(
         ? "write"
         : "read",
     requiredCommunityResourceLane: worker.requiredCommunityResourceLane,
-    requiredCommunityAuthority: worker.requiredCommunityAuthority,
+    requiredCommunityAuthority:
+      operation.authority.communityAccess === "active_member"
+        ? "member"
+        : "none",
   };
 }
 
 export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceEntry[] = [
-  {
-    toolName: "get_active_community_context",
-    billingPolicy: "free",
-    requiresCommunity: true,
-    riskLevel: "read",
-    requiredCommunityResourceLane: "member",
-    requiredCommunityAuthority: "member",
-  },
+  buildPlatformOperationWorkerSurfaceEntry("community.semantic.list"),
+  buildPlatformOperationWorkerSurfaceEntry("community.semantic.read"),
   {
     toolName: "community_search",
     billingPolicy: "free",
@@ -129,31 +126,7 @@ export const POLYNET_PLATFORM_TOOL_SURFACE: readonly PolynetPlatformToolSurfaceE
     requiredCommunityAuthority: "member",
   },
   {
-    toolName: "community_resources_map",
-    billingPolicy: "free",
-    requiresCommunity: true,
-    riskLevel: "read",
-    requiredCommunityResourceLane: "member",
-    requiredCommunityAuthority: "member",
-  },
-  {
     toolName: "community_resources_read",
-    billingPolicy: "free",
-    requiresCommunity: true,
-    riskLevel: "read",
-    requiredCommunityResourceLane: "member",
-    requiredCommunityAuthority: "member",
-  },
-  {
-    toolName: "community_resources_list",
-    billingPolicy: "free",
-    requiresCommunity: true,
-    riskLevel: "read",
-    requiredCommunityResourceLane: "member",
-    requiredCommunityAuthority: "member",
-  },
-  {
-    toolName: "community_resource_read",
     billingPolicy: "free",
     requiresCommunity: true,
     riskLevel: "read",

@@ -816,6 +816,59 @@ async function handleToolCall(args: {
     };
   }
 
+  if (toolName === "polynet_list" || toolName === "polynet_read") {
+    const communitySlug = normalizeCommunityCapabilitySlug(
+      toolArgs.community_slug,
+    );
+    if (!communitySlug) {
+      return {
+        ok: false,
+        type: "tool",
+        message: "community_slug is required and must be canonical.",
+      };
+    }
+    const path =
+      typeof toolArgs.path === "string" && toolArgs.path.length <= 1_024
+        ? toolArgs.path
+        : "";
+    if (!path) {
+      return { ok: false, type: "tool", message: "path is required." };
+    }
+    const execution = await executePlatformOperation({
+      operationId:
+        toolName === "polynet_list"
+          ? "community.semantic.list"
+          : "community.semantic.read",
+      ctx,
+      authSubject,
+      userId: actor.dbUserId,
+      communitySlug,
+      evidenceSurface: "external_mcp",
+      input: {
+        path,
+        cursor: toolName === "polynet_list" ? toolArgs.cursor : undefined,
+        limit: toolArgs.limit,
+        offset: toolName === "polynet_read" ? toolArgs.offset : undefined,
+      },
+    });
+    if (!execution.ok) {
+      return {
+        ok: false,
+        type: "tool",
+        message: execution.message,
+      };
+    }
+    const structuredContent = execution.value as Record<string, unknown>;
+    return {
+      ok: true,
+      result: {
+        content: buildToolTextContent(structuredContent),
+        structuredContent,
+        isError: false,
+      },
+    };
+  }
+
   if (toolName === "polynet_get_my_profile") {
     try {
       const profile = (await ctx.runQuery(

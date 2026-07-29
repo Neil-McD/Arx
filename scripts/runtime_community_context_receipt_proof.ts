@@ -32,6 +32,8 @@ function project(
 }
 
 const expectedTools = [
+  "polynet_list",
+  "polynet_read",
   "community_search",
   "community_memory_search",
   "community_memory_read",

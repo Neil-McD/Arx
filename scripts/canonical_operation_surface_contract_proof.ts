@@ -40,7 +40,7 @@ for (const retiredModule of ["community", "communityExperience", "billing"]) {
 }
 assert.match(
   contractDoc,
-  /Context-bound memory, chat, AI Feed, and resource tools remain outside v1/,
+  /Context-bound memory, chat, AI Feed, batch resource reads, resource search, and[\s\S]*builder resource tools remain outside v1/,
   "the contract must state its deliberate semantic admission boundary",
 );
 
@@ -88,7 +88,14 @@ for (const path of firstPartySources) {
 
 const operationIds = PLATFORM_OPERATION_CONTRACTS.map((contract) => contract.id);
 assert.equal(new Set(operationIds).size, operationIds.length, "operation ids must be unique");
-assert.equal(operationIds.length, 4, "the first canonical operation seam must stay deliberately small");
+assert.deepEqual(operationIds, [
+  "community.list",
+  "community.read",
+  "community.semantic.list",
+  "community.semantic.read",
+  "product_docs.search",
+  "product_docs.read",
+]);
 
 const nativeNames = PLATFORM_OPERATION_CONTRACTS.map(
   (contract) => contract.projections.native.name,
@@ -100,6 +107,11 @@ assert.equal(new Set(nativeNames).size, nativeNames.length, "native projections 
 assert.equal(new Set(mcpNames).size, mcpNames.length, "MCP projections must be unique");
 
 for (const operation of PLATFORM_OPERATION_CONTRACTS) {
+  assert.equal(
+    operation.authority.communityAccess === "active_member",
+    operation.projections.native.requiresCommunity,
+    `${operation.id} active-community binding must match canonical authority`,
+  );
   const nativeDefinition = getToolDefinition(operation.projections.native.name);
   assert.equal(nativeDefinition.description, operation.projections.native.description);
   assert.deepEqual(nativeDefinition.inputSchema, operation.projections.native.inputSchema);
@@ -119,6 +131,19 @@ for (const operation of PLATFORM_OPERATION_CONTRACTS) {
     policy.requiresCommunity,
     operation.projections.native.requiresCommunity,
   );
+  assert.equal(
+    operation.projections.mcp.annotations.readOnlyHint,
+    operation.effects.domainState === "read" &&
+      operation.effects.external === "none",
+    `${operation.id} MCP read-only hint must describe domain and external effects`,
+  );
+  if (operation.projections.mcp.annotations.idempotentHint !== undefined) {
+    assert.equal(
+      operation.projections.mcp.annotations.idempotentHint,
+      operation.retry === "safe",
+      `${operation.id} MCP idempotency hint must match canonical retry semantics`,
+    );
+  }
 
   const workerEntry = POLYNET_PLATFORM_TOOL_SURFACE.find(
     (entry) => entry.toolName === operation.projections.native.name,
@@ -128,10 +153,19 @@ for (const operation of PLATFORM_OPERATION_CONTRACTS) {
     operation.projections.worker.enabled,
     `${operation.id} worker availability must come from the operation contract`,
   );
+  if (workerEntry) {
+    assert.equal(
+      workerEntry.requiredCommunityAuthority,
+      operation.authority.communityAccess === "active_member"
+        ? "member"
+        : "none",
+      `${operation.id} worker authority must derive from canonical authority`,
+    );
+  }
 }
 
 const mcpDefinitions = getPolynetMcpToolDefinitions();
-assert.equal(mcpDefinitions.length, 24, "official Polynet MCP must retain all 24 tools");
+assert.equal(mcpDefinitions.length, 26, "official Polynet MCP must expose all 26 tools");
 assert.equal(
   POLYNET_MCP_TOOL_COUNT_LABEL,
   `${mcpDefinitions.length} Polynet tools`,
@@ -144,7 +178,7 @@ const runtimeSource = read("convex/runtimeAgentLoop.ts");
 const httpMcpSource = read("convex/httpMcp.ts");
 assert.doesNotMatch(
   mcpSource,
-  /(?:polynet_list_communities|polynet_get_community|polynet_product_docs_search|polynet_product_doc_read): \{/,
+  /(?:polynet_list_communities|polynet_get_community|polynet_list|polynet_read|polynet_product_docs_search|polynet_product_doc_read): \{/,
   "canonical MCP projections must not be redeclared in the MCP adapter",
 );
 assert.doesNotMatch(
@@ -155,9 +189,26 @@ assert.doesNotMatch(
 for (const operationId of operationIds) {
   assert.match(
     `${runtimeSource}\n${httpMcpSource}`,
-    new RegExp(`operationId: "${operationId.replace(".", "\\.")}"`),
+    new RegExp(operationId.replace(/\./g, "\\.")),
     `${operationId} must be invoked through the canonical executor`,
   );
 }
+assert.match(runtimeSource, /executePlatformOperation\(/);
+assert.match(httpMcpSource, /executePlatformOperation\(/);
+assert.match(
+  httpMcpSource,
+  /cursor: toolName === "polynet_list" \? toolArgs\.cursor : undefined/,
+  "the MCP adapter must forward semantic cursors without transport-specific normalization",
+);
+assert.match(
+  httpMcpSource,
+  /limit: toolArgs\.limit/,
+  "the MCP adapter must forward semantic limits to canonical validation",
+);
+assert.match(
+  httpMcpSource,
+  /offset: toolName === "polynet_read" \? toolArgs\.offset : undefined/,
+  "the MCP adapter must forward semantic offsets to canonical validation",
+);
 
 console.log("canonical_operation_surface_contract_proof: ok");

@@ -1,5 +1,8 @@
 import type { RetrievalToolName } from "./retrievalTools";
 import { findPlatformOperationByNativeToolName } from "./platformOperationContract.ts";
+import {
+  validateCommunitySemanticOperationInput,
+} from "./communitySemanticRepository.ts";
 
 type JsonSchema =
   | {
@@ -10,6 +13,7 @@ type JsonSchema =
       maximum?: number;
       minLength?: number;
       maxLength?: number;
+      pattern?: string;
       minItems?: number;
       maxItems?: number;
       items?: JsonSchema;
@@ -61,6 +65,12 @@ const POLYNET_LIST_COMMUNITIES_TOOL = getPlatformNativeToolContract(
 );
 const POLYNET_GET_COMMUNITY_TOOL = getPlatformNativeToolContract(
   "polynet_get_community",
+);
+const POLYNET_SEMANTIC_LIST_TOOL = getPlatformNativeToolContract(
+  "polynet_list",
+);
+const POLYNET_SEMANTIC_READ_TOOL = getPlatformNativeToolContract(
+  "polynet_read",
 );
 const SEARCH_PRODUCT_DOCS_TOOL = getPlatformNativeToolContract(
   "search_product_docs",
@@ -330,23 +340,6 @@ const MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
-const COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    path: {
-      type: "string",
-      minLength: 1,
-      maxLength: 1024,
-    },
-    limit: {
-      type: "integer",
-      minimum: 1,
-      maximum: 20,
-    },
-  },
-};
-
 const MEMBER_CONVERSATIONS_LIST_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -368,49 +361,6 @@ const MEMBER_CONVERSATION_READ_TOOL_SCHEMA: JsonSchema = {
       type: "string",
       minLength: 1,
       maxLength: 160,
-    },
-  },
-};
-
-const COMMUNITY_RESOURCES_MAP_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    limit: {
-      type: "integer",
-      minimum: 1,
-      maximum: 250,
-      description: "Maximum total resources to include in the map.",
-    },
-    per_module_limit: {
-      type: "integer",
-      minimum: 1,
-      maximum: 25,
-      description: "Maximum resources to include per wiki category.",
-    },
-  },
-};
-
-const COMMUNITY_RESOURCE_READ_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["ref"],
-  properties: {
-    ref: {
-      type: "string",
-      minLength: 1,
-      maxLength: 1024,
-      description: "Resource id, resources:// directory URI, or readable resource path.",
-    },
-    offset: {
-      type: "integer",
-      minimum: 0,
-      maximum: 1000000,
-    },
-    limit: {
-      type: "integer",
-      minimum: 1,
-      maximum: 20000,
     },
   },
 };
@@ -974,10 +924,13 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     name: "get_product_doc",
     ...GET_PRODUCT_DOC_TOOL,
   },
-  get_active_community_context: {
-    name: "get_active_community_context",
-    description: "Read bounded profile context for the active community lens. The active community is server-selected from the thread context.",
-    inputSchema: EMPTY_TOOL_SCHEMA,
+  polynet_list: {
+    name: "polynet_list",
+    ...POLYNET_SEMANTIC_LIST_TOOL,
+  },
+  polynet_read: {
+    name: "polynet_read",
+    ...POLYNET_SEMANTIC_READ_TOOL,
   },
   member_conversations_list: {
     name: "member_conversations_list",
@@ -1002,25 +955,10 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     description: "Write member-approved onboarding interview facts to the active member profile ontology for the active community lens.",
     inputSchema: MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA,
   },
-  community_resources_list: {
-    name: "community_resources_list",
-    description: "List the active community's live Resources wiki categories and pages. Use paths or resources:// directory URIs returned by this tool to navigate member-visible categories.",
-    inputSchema: COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA,
-  },
-  community_resources_map: {
-    name: "community_resources_map",
-    description: "Map the active community's member-visible Resources wiki structure in one call. Use the explicit manager-only builder tools for draft, source-inbox, or health state.",
-    inputSchema: COMMUNITY_RESOURCES_MAP_TOOL_SCHEMA,
-  },
   community_resources_read: {
     name: "community_resources_read",
     description: "Batch-read member-visible active community Resources by stable resource ref, resource id, resources:// URI, or readable path under a bounded character budget.",
     inputSchema: COMMUNITY_RESOURCES_READ_TOOL_SCHEMA,
-  },
-  community_resource_read: {
-    name: "community_resource_read",
-    description: "Read one member-visible resource from a live wiki category by stable resource ref, resource id, resources:// directory URI, or readable resource path.",
-    inputSchema: COMMUNITY_RESOURCE_READ_TOOL_SCHEMA,
   },
   community_resources_search: {
     name: "community_resources_search",
@@ -1748,27 +1686,6 @@ export function normalizeToolArguments(
     }
     return { communitySlug };
   }
-  if (toolName === "community_resources_list") {
-    const path = normalizeString(args.path);
-    const limit = normalizeBoundedInteger(args.limit, "community_resources_list limit", 1, 100);
-    return {
-      ...(path ? { path: path.slice(0, 1024) } : null),
-      ...(limit ? { limit } : null),
-    };
-  }
-  if (toolName === "community_resources_map") {
-    const limit = normalizeBoundedInteger(args.limit, "community_resources_map limit", 1, 250);
-    const perModuleLimit = normalizeBoundedInteger(
-      args.per_module_limit,
-      "community_resources_map per_module_limit",
-      1,
-      25,
-    );
-    return {
-      ...(limit ? { limit } : null),
-      ...(perModuleLimit ? { perModuleLimit } : null),
-    };
-  }
   if (toolName === "community_resources_read") {
     if (!Array.isArray(args.refs) || args.refs.length < 1) {
       throw new Error("community_resources_read requires refs.");
@@ -1793,17 +1710,6 @@ export function normalizeToolArguments(
       refs,
       ...(maxChars ? { maxChars } : null),
       ...(perResourceChars ? { perResourceChars } : null),
-    };
-  }
-  if (toolName === "community_resource_read") {
-    const ref = normalizeString(args.ref);
-    if (!ref) throw new Error("community_resource_read requires ref.");
-    const offset = normalizeBoundedInteger(args.offset, "community_resource_read offset", 0, 1000000);
-    const limit = normalizeBoundedInteger(args.limit, "community_resource_read limit", 1, 20000);
-    return {
-      ref: ref.slice(0, 1024),
-      ...(offset !== null ? { offset } : null),
-      ...(limit ? { limit } : null),
     };
   }
   if (toolName === "community_resources_search") {
@@ -1894,8 +1800,33 @@ export function normalizeToolArguments(
       changesetId: changesetId.slice(0, 160),
     };
   }
-  if (toolName === "get_active_community_context") {
-    return {};
+  if (toolName === "polynet_list") {
+    const validated = validateCommunitySemanticOperationInput({
+      operation: "list",
+      path: args.path,
+      cursor: args.cursor,
+      limit: args.limit,
+    });
+    if (!validated.ok) throw new Error(validated.message);
+    return {
+      path: validated.path,
+      ...(validated.cursor ? { cursor: validated.cursor } : {}),
+      ...(validated.limit !== null ? { limit: validated.limit } : {}),
+    };
+  }
+  if (toolName === "polynet_read") {
+    const validated = validateCommunitySemanticOperationInput({
+      operation: "read",
+      path: args.path,
+      offset: args.offset,
+      limit: args.limit,
+    });
+    if (!validated.ok) throw new Error(validated.message);
+    return {
+      path: validated.path,
+      ...(validated.offset !== null ? { offset: validated.offset } : {}),
+      ...(validated.limit !== null ? { limit: validated.limit } : {}),
+    };
   }
   if (toolName === "member_profile_confirm_facts") {
     const confirmMarker = normalizeString(args.confirm_marker ?? args.confirmMarker);

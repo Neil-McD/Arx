@@ -283,7 +283,8 @@ function categoryForTool(toolName: string): RuntimeToolCategory {
   if (toolName === "search_product_docs" || toolName === "get_product_doc") return "docs";
   if (toolName === "web_research" || toolName === "web_crawl") return "web";
   if (
-    toolName === "get_active_community_context" ||
+    toolName === "polynet_list" ||
+    toolName === "polynet_read" ||
     toolName.startsWith("community_") ||
     toolName === "polynet_list_communities" ||
     toolName === "polynet_get_community"
@@ -310,7 +311,12 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   const shortPath = path ? path.split("/").filter(Boolean).pop() || path : null;
   if (toolName === "search_product_docs") return `Docs search${query ? `: ${query}` : ""}`;
   if (toolName === "get_product_doc") return `Read docs${slug ? `: ${slug}` : ""}`;
-  if (toolName === "get_active_community_context") return "Community context";
+  if (toolName === "polynet_list") {
+    return `Community files${path && path !== "/" ? `: ${path}` : ""}`;
+  }
+  if (toolName === "polynet_read") {
+    return `Read community${shortPath ? `: ${shortPath}` : ""}`;
+  }
   if (toolName === "member_conversations_list") return "Past conversations";
   if (toolName === "member_conversation_read") return "Recall conversation";
   if (toolName === "polynet_list_communities") {
@@ -434,6 +440,8 @@ function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineTo
   const communityCalls = calls.filter(
     (call) =>
       call.toolName.startsWith("community_") ||
+      call.toolName === "polynet_list" ||
+      call.toolName === "polynet_read" ||
       call.toolName === "polynet_list_communities" ||
       call.toolName === "polynet_get_community",
   ).length;

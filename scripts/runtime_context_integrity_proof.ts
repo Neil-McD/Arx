@@ -72,7 +72,8 @@ const baseEvents = [
       allowed_tool_names: [
         "search_product_docs",
         "get_product_doc",
-        "get_active_community_context",
+        "polynet_list",
+        "polynet_read",
         "read",
       ],
       capability_families: ["product_docs", "community_tools", "sandbox_tools", "workspace_tools"],
@@ -116,7 +117,8 @@ const baseEvents = [
         tools: [
           { name: "search_product_docs" },
           { name: "get_product_doc" },
-          { name: "get_active_community_context" },
+          { name: "polynet_list" },
+          { name: "polynet_read" },
           { name: "read" },
           { name: "community_resource_builder_read" },
         ],
@@ -125,10 +127,10 @@ const baseEvents = [
         summary: {
           promptCount: 7,
           resourceCount: 1,
-          toolCount: 5,
+          toolCount: 6,
           runtimeStateCount: 1,
           exclusionCount: 0,
-          fixedToolCount: 5,
+          fixedToolCount: 6,
           mountedToolCount: 0,
         },
       },

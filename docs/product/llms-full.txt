@@ -1942,7 +1942,7 @@ These inputs do not outrank the canonical context stack.
 
 - Personal prompts are not part of the canonical context stack.
 - Community intelligence evidence is not the same thing as community doctrine.
-- Long community profile/about content is not always-on doctrine; runtime prompts should carry compact identity and retrieve deeper active-community profile context through `get_active_community_context`, with archive/resource/activity lookup handled by `community_search`.
+- Long community profile/about content is not always-on doctrine; runtime prompts should carry compact identity and retrieve deeper active-community context through `polynet_list("/")` and `polynet_read("/community.md")`, with archive/activity lookup handled by `community_search`.
 - workspace snapshots are not the community lens.
 - Community evidence should be gathered or injected through explicit, bounded runtime paths.
 - There is no free-vs-premium context branch. Account labels normalize before runtime prompt composition.
@@ -2031,7 +2031,7 @@ Prompt injection is contextual, not subscription-tiered:
 4. Resource context should be bounded and relevant.
 5. Community workflow context should prefer active-lens workflows when
    relevant without hiding personal skills.
-6. Deeper active-community profile context should come from `get_active_community_context`; archive, resource, activity, and memory evidence should come from `community_search`.
+6. Deeper active-community profile and resource context should come from `polynet_list` and `polynet_read`; archive, activity, and memory evidence should come from `community_search`.
 7. Prompt changes should be versioned or auditable where practical.
 8. Prompts should prefer references to docs and resources over copying huge blobs.
 9. Prompt code must not branch on Builder, Pro, or product-facing paid-plan labels.

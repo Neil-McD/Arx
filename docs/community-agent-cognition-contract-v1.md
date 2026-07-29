@@ -189,7 +189,7 @@ Dedicated surface tools answer:
 What canonical surface state or evidence should the agent inspect now?
 ```
 
-This layer should arrive surface by surface as each boundary becomes stable. The platform-harness resource surface can map, batch-read, list, read, and search pages inside active-community Resources. Canonical chat and AI Feed evidence now have typed search/read paths for the member agent, community Concierge, and external workspace MCP. Member runs see live modules and pages only; manager runs can additionally inspect builder-visible draft/source/health state. Neither lane exposes raw storage keys. Events and members remain deferred until their source and privacy contracts are equally clear.
+This layer should arrive surface by surface as each boundary becomes stable. The platform-harness resource surface uses canonical semantic list/read for ordinary traversal, plus explicit batch-read and search operations where those capabilities are physically required. Canonical chat and AI Feed evidence now have typed search/read paths for the member agent, community Concierge, and external workspace MCP. Member runs see live modules and pages only; manager runs can additionally inspect builder-visible draft/source/health state. Neither lane exposes raw storage keys. Events and members remain deferred until their source and privacy contracts are equally clear.
 
 | Surface | Future direct read role | Compiler-window role |
 | --- | --- | --- |

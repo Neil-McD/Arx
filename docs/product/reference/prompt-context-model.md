@@ -61,7 +61,7 @@ Prompt injection is contextual, not subscription-tiered:
 4. Resource context should be bounded and relevant.
 5. Community workflow context should prefer active-lens workflows when
    relevant without hiding personal skills.
-6. Deeper active-community profile context should come from `get_active_community_context`; archive, resource, activity, and memory evidence should come from `community_search`.
+6. Deeper active-community profile and resource context should come from `polynet_list` and `polynet_read`; archive, activity, and memory evidence should come from `community_search`.
 7. Prompt changes should be versioned or auditable where practical.
 8. Prompts should prefer references to docs and resources over copying huge blobs.
 9. Prompt code must not branch on Builder, Pro, or product-facing paid-plan labels.

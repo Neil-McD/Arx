@@ -21,6 +21,7 @@ function read(path: string): string {
 
 const retrievalTools = read("shared/retrievalTools.ts");
 const toolRegistry = read("shared/toolRegistry.ts");
+const platformOperationContract = read("shared/platformOperationContract.ts");
 const runtimeToolPolicy = read("shared/runtimeToolPolicy.ts");
 const runtimePrompt = read("shared/runtimePrompt.ts");
 const runtimeTurnResolution = read("convex/runtimeTurnResolution.ts");
@@ -58,28 +59,6 @@ assert.deepEqual(
 );
 
 assert.deepEqual(
-  normalizeToolArguments("community_resources_list", {
-    path: "/module/source-inbox",
-    limit: 500,
-  }),
-  {
-    path: "/module/source-inbox",
-    limit: 100,
-  },
-  "resource listing arguments should be bounded",
-);
-assert.deepEqual(
-  normalizeToolArguments("community_resources_map", {
-    limit: 500,
-    per_module_limit: 50,
-  }),
-  {
-    limit: 250,
-    perModuleLimit: 25,
-  },
-  "resource map arguments should be bounded and normalized",
-);
-assert.deepEqual(
   normalizeToolArguments("community_resources_read", {
     refs: ["resources://community/c/modules/m/resources/r", "/methodology/operating-model"],
     max_chars: 999999,
@@ -92,18 +71,14 @@ assert.deepEqual(
   },
   "batch resource reads should bound refs and context budgets",
 );
-assert.deepEqual(
-  normalizeToolArguments("community_resource_read", {
-    ref: "resources://community/c/modules/m/resources/r",
+assert.throws(
+  () => normalizeToolArguments("polynet_read", {
+    path: "resource:resource_1",
     offset: 0,
     limit: 999999,
   }),
-  {
-    ref: "resources://community/c/modules/m/resources/r",
-    offset: 0,
-    limit: 20000,
-  },
-  "resource reads should support bounded content windows",
+  /limit must be an integer between 1 and 20000/,
+  "native semantic resource reads must reject windows outside the canonical contract",
 );
 assert.deepEqual(
   normalizeToolArguments("community_resources_search", {
@@ -118,13 +93,12 @@ assert.deepEqual(
 );
 
 const responseTools = buildResponsesApiFunctionTools([
-  "community_resources_map",
+  "polynet_list",
+  "polynet_read",
   "community_resources_read",
-  "community_resources_list",
-  "community_resource_read",
   "community_resources_search",
 ]);
-assert.equal(responseTools.length, 5);
+assert.equal(responseTools.length, 4);
 for (const tool of responseTools) {
   assert.equal(tool.strict, true, `${tool.name} should be strict`);
   assert.equal(tool.parameters.type, "object", `${tool.name} should use an object schema`);
@@ -136,10 +110,8 @@ for (const tool of responseTools) {
 }
 
 for (const toolName of [
-  "community_resources_map",
+  "polynet_list",
   "community_resources_read",
-  "community_resources_list",
-  "community_resource_read",
   "community_resources_search",
 ] as const) {
   const policy = getFixedRuntimeToolPolicy(toolName);
@@ -149,24 +121,52 @@ for (const toolName of [
   assert.equal(policy.requiresCommunity, true);
   assert.equal(policy.requiresWorkspace, false);
 }
+const semanticReadPolicy = getFixedRuntimeToolPolicy("polynet_read");
+assert.equal(semanticReadPolicy.category, "community");
+assert.equal(semanticReadPolicy.readOnly, false);
+assert.equal(semanticReadPolicy.mutatesState, true);
+assert.equal(semanticReadPolicy.parallelSafe, false);
+assert.equal(semanticReadPolicy.requiresCommunity, true);
+assert.equal(semanticReadPolicy.requiresWorkspace, false);
 
 assert.match(
   retrievalTools,
-  /"get_active_community_context"[\s\S]*"community_resources_map"[\s\S]*"community_resources_read"[\s\S]*"community_resources_list"[\s\S]*"community_resource_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
-  "resource tools should live in the fixed community tool family before broad community search/write",
+  /"polynet_list"[\s\S]*"polynet_read"[\s\S]*"community_resources_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
+  "the reduced resource surface should live in the fixed community tool family before broad community search/write",
 );
-assert.match(toolRegistry, /COMMUNITY_RESOURCES_MAP_TOOL_SCHEMA/);
+assert.doesNotMatch(
+  retrievalTools,
+  /"community_resources_map"|"community_resources_list"|"community_resource_read"/,
+  "retired native resource tools should not remain active tool names",
+);
+assert.match(
+  platformOperationContract,
+  /COMMUNITY_SEMANTIC_READ_NATIVE_INPUT_SCHEMA[\s\S]*offset:[\s\S]*maximum: 1_000_000[\s\S]*limit:[\s\S]*maximum: 20_000/,
+  "native polynet_read should publish its supported resource window arguments",
+);
 assert.match(toolRegistry, /COMMUNITY_RESOURCES_READ_TOOL_SCHEMA/);
-assert.match(toolRegistry, /COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA/);
-assert.match(toolRegistry, /COMMUNITY_RESOURCE_READ_TOOL_SCHEMA/);
 assert.match(toolRegistry, /COMMUNITY_RESOURCES_SEARCH_TOOL_SCHEMA/);
-assert.match(runtimeToolPolicy, /community_resources_map:[\s\S]*requiresCommunity: true/);
+assert.doesNotMatch(
+  toolRegistry,
+  /COMMUNITY_RESOURCES_MAP_TOOL_SCHEMA|COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA|COMMUNITY_RESOURCE_READ_TOOL_SCHEMA/,
+  "retired native resource schemas should be deleted",
+);
 assert.match(runtimeToolPolicy, /community_resources_read:[\s\S]*requiresCommunity: true/);
-assert.match(runtimeToolPolicy, /community_resources_list:[\s\S]*requiresCommunity: true/);
+assert.match(runtimeToolPolicy, /community_resources_search:[\s\S]*requiresCommunity: true/);
+assert.doesNotMatch(
+  runtimeToolPolicy,
+  /community_resources_map:|community_resources_list:|community_resource_read:/,
+  "retired native resource policies should be deleted",
+);
 assert.match(
   runtimeTurnResolution,
-  /if \(params\.activeCapabilityFamilies\.includes\("community_tools"\)\)[\s\S]*"get_active_community_context"[\s\S]*"community_resources_map"[\s\S]*"community_resources_read"[\s\S]*"community_resources_list"[\s\S]*"community_resource_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
-  "community resource tools should activate only through the backend-validated community_tools family",
+  /if \(params\.activeCapabilityFamilies\.includes\("community_tools"\)\)[\s\S]*"polynet_list"[\s\S]*"polynet_read"[\s\S]*"community_resources_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
+  "the reduced community resource tools should activate only through the backend-validated community_tools family",
+);
+assert.doesNotMatch(
+  runtimeTurnResolution,
+  /"community_resources_map"|"community_resources_list"|"community_resource_read"/,
+  "runtime resolution should not reactivate retired native resource tools",
 );
 
 assert.match(resources, /export const mapCommunityResourcesForToolInternal = internalQuery/);
@@ -178,8 +178,8 @@ assert.doesNotMatch(resources, /export const searchCommunityResourceDirectoryInt
 assert.match(resourceEvidence, /export const searchCommunityResourceEvidenceInternal = internalAction/);
 assert.equal(
   (resources.match(/await requireCommunityResourceDirectoryToolAccess/g) ?? []).length,
-  5,
-  "four member resource queries and the explicit builder map should revalidate community access",
+  6,
+  "the semantic traversal, four member resource queries, and explicit builder map should revalidate community access",
 );
 assert.match(resources, /resolveUserIdForAuthenticatedRequest/);
 assert.match(resources, /requireCommunityChatAccess/);
@@ -221,14 +221,16 @@ assert.doesNotMatch(
   "resource tool payloads should not expose raw storage file keys",
 );
 
-assert.match(runtimeAgentLoop, /toolName === "community_resources_map"/);
-assert.match(runtimeAgentLoop, /toolName === "community_resources_read"/);
-assert.match(runtimeAgentLoop, /toolName === "community_resources_list"/);
-assert.match(runtimeAgentLoop, /toolName === "community_resource_read"/);
-assert.match(runtimeAgentLoop, /toolName === "community_resources_search"/);
 assert.match(
   runtimeAgentLoop,
-  /community_resources_map requires an active community context/,
+  /params\.toolName === "polynet_list" \|\|[\s\S]*params\.toolName === "polynet_read"/,
+);
+assert.match(runtimeAgentLoop, /toolName === "community_resources_read"/);
+assert.match(runtimeAgentLoop, /toolName === "community_resources_search"/);
+assert.doesNotMatch(
+  runtimeAgentLoop,
+  /toolName === "community_resources_map"|toolName === "community_resources_list"|toolName === "community_resource_read"/,
+  "runtime dispatch should not contain retired native resource branches",
 );
 assert.match(
   runtimeAgentLoop,
@@ -236,35 +238,28 @@ assert.match(
 );
 assert.match(
   runtimeAgentLoop,
-  /community_resources_list requires an active community context/,
-);
-assert.match(
-  runtimeAgentLoop,
-  /internal\.communityResources\.mapCommunityResourcesForToolInternal/,
-);
-assert.match(
-  runtimeAgentLoop,
   /communityResourceEvidence\.readCommunityResourcesEvidenceForToolInternal/,
-);
-assert.match(
-  runtimeAgentLoop,
-  /internal\.communityResources\.listCommunityResourceDirectoryInternal/,
-);
-assert.match(
-  runtimeAgentLoop,
-  /communityResourceEvidence\.readCommunityResourceEvidenceForToolInternal/,
 );
 assert.match(
   runtimeAgentLoop,
   /communityResourceEvidence\.searchCommunityResourceEvidenceInternal/,
 );
+assert.match(
+  resourceEvidence,
+  /capability: "community_resource_read"/,
+  "semantic reads should retain the historical evidence capability literal",
+);
 
 assert.match(runtimePrompt, /When available, use community resource tools when canonical resource navigation/);
-assert.match(runtimePrompt, /Use community_resources_map first/);
-assert.match(runtimePrompt, /Use community_resources_read to batch-read/);
-assert.match(runtimePrompt, /Use community_resources_list to inspect/);
-assert.match(runtimePrompt, /Use community_resource_read to inspect one member-visible resource/);
-assert.match(runtimePrompt, /Use community_resources_search for targeted lookup/);
+assert.match(
+  runtimePrompt,
+  /use the semantic polynet_list\/polynet_read path before product documentation tools/,
+);
+assert.match(runtimePrompt, /community_resources_search only for targeted lookup/);
+assert.match(
+  runtimePrompt,
+  /community_resources_read only when a justified batch read/,
+);
 assert.match(timelineUi, /community_resources_map/);
 assert.match(timelineUi, /community_resources_read/);
 assert.match(timelineUi, /community_resources_list/);
@@ -352,8 +347,8 @@ assert.doesNotMatch(
 );
 assert.match(
   cognitionDocs,
-  /platform-harness resource surface[\s\S]*map, batch-read, list, read, and search/i,
-  "community cognition contract should describe the resource direct-read slice",
+  /platform-harness resource surface[\s\S]*semantic list\/read[\s\S]*batch-read[\s\S]*search/i,
+  "community cognition contract should describe the reduced native resource surface",
 );
 
 console.log("community_resource_tools_contract_proof: ok");

@@ -8,10 +8,13 @@ import {
   executeSearchProductDocsTool,
 } from "../shared/productDocsRuntime.ts";
 import type { ProductDocsSearchIndex } from "../shared/productDocsSearch.ts";
+import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContract.ts";
+import { validateCommunitySemanticOperationInput } from "../shared/communitySemanticRepository.ts";
 import {
   listCommunityReadSummaries,
   resolveAccessibleCommunityReadDetail,
 } from "./communityReadKernel.ts";
+import { internal } from "./_generated/api";
 
 const productDocsIndex = productDocsIndexJson as ProductDocsSearchIndex;
 
@@ -28,11 +31,15 @@ export async function executePlatformOperation(args: {
   operationId: PlatformOperationId;
   ctx?: any;
   authSubject?: string | null;
+  userId?: any;
+  communityId?: any;
+  communitySlug?: string | null;
+  evidenceSurface?: CommunityEvidenceSurface;
   input: Record<string, unknown>;
 }): Promise<PlatformOperationExecutionResult> {
   const operation = getPlatformOperationContract(args.operationId);
   if (
-    operation.authority === "authenticated_user" &&
+    operation.authority.actor === "authenticated_user" &&
     !requiredString(args.authSubject)
   ) {
     return {
@@ -90,6 +97,120 @@ export async function executePlatformOperation(args: {
         community: resolved.community,
       },
     };
+  }
+
+  if (
+    operation.executor === "communitySemantic.list" ||
+    operation.executor === "communitySemantic.read"
+  ) {
+    if (!args.ctx) {
+      return {
+        ok: false,
+        code: "platform_operation_context_required",
+        message: "A server execution context is required.",
+      };
+    }
+    const communitySlug = requiredString(args.communitySlug);
+    const hasCommunityId = Boolean(args.communityId);
+    const hasCommunitySlug = Boolean(communitySlug);
+    if (hasCommunityId === hasCommunitySlug) {
+      return {
+        ok: false,
+        code: "community_selector_invalid",
+        message: "Exactly one verified community selector is required.",
+      };
+    }
+    const validated = validateCommunitySemanticOperationInput({
+      operation:
+        operation.executor === "communitySemantic.list" ? "list" : "read",
+      path: args.input.path,
+      cursor: args.input.cursor,
+      limit: args.input.limit,
+      offset: args.input.offset,
+    });
+    if (!validated.ok) {
+      return {
+        ok: false,
+        code: validated.code,
+        message: validated.message,
+      };
+    }
+    try {
+      const payload = (await (
+        operation.executor === "communitySemantic.list"
+          ? args.ctx.runQuery(
+              (internal as any).communityCapabilityContext
+                .resolveCommunitySemanticRepositoryInternal,
+              {
+                authSubject: String(args.authSubject),
+                ...(args.userId ? { userId: args.userId } : null),
+                ...(hasCommunityId ? { communityId: args.communityId } : null),
+                ...(communitySlug ? { communitySlug } : null),
+                operation: "list",
+                path: validated.path,
+                cursor:
+                  validated.operation === "list"
+                    ? validated.cursor
+                    : null,
+                limit:
+                  validated.operation === "list" &&
+                  validated.limit !== null
+                    ? validated.limit
+                    : undefined,
+              },
+            )
+          : args.ctx.runAction(
+              (internal as any).communityCapabilityContext
+                .readCommunitySemanticRepositoryInternal,
+              {
+                authSubject: String(args.authSubject),
+                ...(args.userId ? { userId: args.userId } : null),
+                ...(hasCommunityId ? { communityId: args.communityId } : null),
+                ...(communitySlug ? { communitySlug } : null),
+                path: validated.path,
+                offset:
+                  validated.operation === "read" &&
+                  validated.offset !== null
+                    ? validated.offset
+                    : undefined,
+                limit:
+                  validated.operation === "read" &&
+                  validated.limit !== null
+                    ? validated.limit
+                    : undefined,
+                surface: args.evidenceSurface ?? "member_agent_dock",
+              },
+            )
+      )) as {
+        ok?: boolean;
+        code?: unknown;
+        message?: unknown;
+        result?: unknown;
+      };
+      if (payload?.ok !== true || payload.result === undefined) {
+        return {
+          ok: false,
+          code: String(payload?.code ?? "community_semantic_read_failed"),
+          message:
+            requiredString(payload?.message) ??
+            "Semantic path not found or not accessible.",
+          value: payload,
+        };
+      }
+      return {
+        ok: true,
+        value: payload.result,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        code: "community_semantic_read_failed",
+        message:
+          error instanceof Error && error.message
+            ? error.message
+            : "Community semantic read failed.",
+      };
+    }
   }
 
   if (operation.executor === "productDocs.search") {

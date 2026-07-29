@@ -187,7 +187,8 @@
     "check:runtime-live-timeline-codex-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_live_timeline_codex_contract_proof.ts",
     "check:runtime-live-timeline-polynet-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_live_timeline_polynet_contract_proof.ts",
     "check:runtime-tool-scheduler-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_scheduler_proof.ts",
-    "check:community-context-tool-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_context_tool_proof.ts",
+    "check:community-semantic-repository-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_semantic_repository_contract_proof.ts",
+    "check:community-semantic-behavior": "vitest run convex/communityResourceSemanticTraversal.test.ts",
     "check:native-tool-provider-parser-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/native_tool_provider_parser_proof.ts",
     "check:community-skill-attachment-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_skill_attachment_contract_proof.ts",
     "check:platform-skill-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/platform_skill_contract_proof.ts",
@@ -285,13 +286,16 @@
     "stripe": "^20.4.1"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^6.0.3",
+    "convex-test": "^0.0.54",
     "playwright": "^1.58.2",
     "tsx": "^4.22.4",
     "typescript": "^5.5.4",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vitest": "^4.1.10"
   },
   "overrides": {
     "@hono/node-server": "2.0.11",

@@ -2,6 +2,8 @@ export const RUNTIME_COMMUNITY_CONTEXT_RECEIPT_VERSION =
   "runtime_community_context_receipt:v1" as const;
 
 export const RUNTIME_COMMUNITY_CONTEXT_RECEIPT_TOOL_NAMES = [
+  "polynet_list",
+  "polynet_read",
   "community_search",
   "community_memory_search",
   "community_memory_read",

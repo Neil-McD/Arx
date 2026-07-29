@@ -20,6 +20,7 @@ import {
 import type { MemberAccountContextLike } from "../shared/memberContextMarkdown";
 import { getCanonicalTierByUserIdInternal } from "./auth";
 import { communityMembershipRowIsActive } from "./communityCore";
+import { getUniqueUserProfileDetailByUserId } from "./profileCore";
 
 export type MemberFactRow = MemberFactLike & {
   _id: any;
@@ -292,10 +293,7 @@ export async function loadMemberAccountContext(
   const [user, detail, providerConnections, membershipRows, ownedRows, canonicalTier] =
     await Promise.all([
       ctx.db.get(userId),
-      ctx.db
-        .query("userProfileDetails")
-        .withIndex("by_user", (q: any) => q.eq("userId", userId))
-        .first(),
+      getUniqueUserProfileDetailByUserId(ctx, userId),
       ctx.db
         .query("userProviderConnections")
         .withIndex("by_user", (q: any) => q.eq("userId", userId))

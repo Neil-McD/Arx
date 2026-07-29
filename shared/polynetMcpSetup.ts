@@ -1,5 +1,8 @@
 export const POLYNET_MCP_ENDPOINT_URL = "https://www.polynet.ai/runtime/mcp";
-export const POLYNET_MCP_TOOL_COUNT_LABEL = "24 Polynet tools";
+import { getPolynetMcpToolDefinitions } from "./polynetMcp.ts";
+
+export const POLYNET_MCP_TOOL_COUNT_LABEL =
+  `${getPolynetMcpToolDefinitions().length} Polynet tools`;
 
 export const POLYNET_MCP_CLAUDE_CODE_ADD_COMMAND =
   `claude mcp add --transport http polynet ${POLYNET_MCP_ENDPOINT_URL}`;

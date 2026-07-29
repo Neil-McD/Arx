@@ -292,9 +292,9 @@ assertIncludes(
   "Polynet Hermes login command constant",
 );
 assertIncludes(
-  integrationsSettings,
-  "24 Polynet tools",
-  "PolyMCP integration tool count",
+  mcpSetup,
+  "getPolynetMcpToolDefinitions().length",
+  "derived PolyMCP integration tool count",
 );
 assertIncludes(
   integrationsSettings,
@@ -875,8 +875,8 @@ assertIncludes(
 );
 assertIncludes(
   communityCapabilityContext,
-  'query("communityMemberships")',
-  "canonical context membership lookup",
+  "getUniqueCommunityMembershipByPair",
+  "canonical unique context membership lookup",
 );
 assertIncludes(
   communityCapabilityContextContract,

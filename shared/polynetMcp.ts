@@ -16,6 +16,9 @@ type JsonSchema =
       enum?: string[];
       minLength?: number;
       maxLength?: number;
+      pattern?: string;
+      minimum?: number;
+      maximum?: number;
       minItems?: number;
       maxItems?: number;
     }
@@ -24,6 +27,8 @@ type JsonSchema =
 export type PolynetMcpToolName =
   | "polynet_list_communities"
   | "polynet_get_community"
+  | "polynet_list"
+  | "polynet_read"
   | "polynet_get_my_profile"
   | "polynet_confirm_my_profile_facts"
   | "polynet_community_search"
@@ -207,6 +212,8 @@ const TOOL_DEFINITIONS = {
   polynet_get_community: canonicalOperationMcpToolDefinition(
     "polynet_get_community",
   ),
+  polynet_list: canonicalOperationMcpToolDefinition("polynet_list"),
+  polynet_read: canonicalOperationMcpToolDefinition("polynet_read"),
   polynet_get_my_profile: {
     name: "polynet_get_my_profile",
     title: "Get My Polynet Profile",

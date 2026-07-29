@@ -89,6 +89,7 @@ function access(overrides: Partial<CommunityAccess> = {}): CommunityAccess {
     visibility: "published",
     is_owner: false,
     is_entitled: true,
+    is_blocked: false,
     entitlement_role: "member",
     entitlement_ends_at: null,
     effective_role: "member",
@@ -228,9 +229,9 @@ const contextContractSource = read("shared/communityCapabilityContextContract.ts
 for (const required of [
   "internalQuery",
   'query("communities")',
-  'query("communityMemberships")',
   'withIndex("by_slug"',
-  'withIndex("by_community_user"',
+  ".take(2)",
+  "getUniqueCommunityMembershipByPair",
   "mapCommunityAccessRow",
 ]) {
   assert.ok(contextSource.includes(required), `community capability context should include ${required}`);

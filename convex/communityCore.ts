@@ -790,6 +790,31 @@ export async function adjustCommunityActiveMemberCountForMembershipTransition(ar
   });
 }
 
+export async function getUniqueCommunityMembershipByPair(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+}): Promise<CommunityMembershipLike | null> {
+  try {
+    return (await args.ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_user", (q: any) =>
+        q.eq("communityId", args.communityId).eq("userId", args.userId),
+      )
+      .unique()) as CommunityMembershipLike | null;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.startsWith(
+        "unique() query returned more than one result from table communityMemberships",
+      )
+    ) {
+      throw new Error("community_membership_pair_not_unique");
+    }
+    throw error;
+  }
+}
+
 export function pickMostRelevantCommunityMembership(
   rows: CommunityMembershipLike[] | null | undefined,
 ): CommunityMembershipLike | null {

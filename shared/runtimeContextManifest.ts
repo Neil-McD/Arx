@@ -179,7 +179,8 @@ const PRODUCT_DOC_TOOL_NAMES = new Set<RetrievalToolName>([
 ]);
 
 const COMMUNITY_CONTEXT_TOOL_NAMES = new Set<RetrievalToolName>([
-  "get_active_community_context",
+  "polynet_list",
+  "polynet_read",
 ]);
 
 const MEMBER_CONVERSATION_TOOL_NAMES = new Set<RetrievalToolName>([
@@ -193,10 +194,7 @@ const COMMUNITY_DIRECTORY_TOOL_NAMES = new Set<RetrievalToolName>([
 ]);
 
 const COMMUNITY_RESOURCE_TOOL_NAMES = new Set<RetrievalToolName>([
-  "community_resources_map",
   "community_resources_read",
-  "community_resources_list",
-  "community_resource_read",
   "community_resources_search",
   "community_resource_builder_list",
   "community_resource_builder_read",
@@ -619,8 +617,8 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
       owner: "community",
       retrieval: "tool_available",
       visibility: "member",
-      source: "get_active_community_context",
-      reason: "bounded active-lens community context",
+      source: "polynet_list/polynet_read",
+      reason: "deterministic active-community semantic profile",
     });
   }
   if (hasAnyTool(params.allowedToolNames, COMMUNITY_RESOURCE_TOOL_NAMES)) {
