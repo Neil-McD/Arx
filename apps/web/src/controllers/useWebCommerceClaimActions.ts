@@ -233,10 +233,18 @@ export function useWebCommerceClaimActions(args: UseWebCommerceClaimActionsArgs)
     [args],
   );
 
+  const redeemPendingPurchasesForSettings = useCallback(
+    async (): Promise<void> => {
+      await redeemPendingPurchases();
+    },
+    [redeemPendingPurchases],
+  );
+
   return {
     redeemPurchaseClaim,
     loadPendingPurchaseClaims,
     loadAccountCommerceStatus,
     redeemPendingPurchases,
+    redeemPendingPurchasesForSettings,
   };
 }

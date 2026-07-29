@@ -5,6 +5,7 @@ import {
   readPendingPurchaseClaimToken,
   storePendingPurchaseClaimToken,
 } from "../../../../shared/pay_first";
+import { scrubCurrentRouteSearchParams } from "../webAppRuntime";
 
 type SessionLike = {
   user: {
@@ -19,6 +20,7 @@ export function useWebPostAuthBillingLifecycle<
   session: TSession | null;
   sessionRef: MutableRefObject<TSession | null>;
   claimTokenParam: string | null;
+  checkoutSuccessSessionId: string | null;
   isRedeemingClaim: boolean;
   isJoiningPublicCommunity: boolean;
   lastAutoRedeemPendingPurchasesUserIdRef: MutableRefObject<string | null>;
@@ -34,6 +36,18 @@ export function useWebPostAuthBillingLifecycle<
   loadAccountCommerceStatus: (session: TSession) => Promise<TBillingStatus | null>;
   joinPublicCommunity: (args: { communitySlug: string | null; communityId?: string }) => Promise<void>;
 }) {
+  useEffect(() => {
+    if (params.claimTokenParam) {
+      scrubCurrentRouteSearchParams(["token"]);
+    }
+    if (params.checkoutSuccessSessionId) {
+      scrubCurrentRouteSearchParams(["session_id"]);
+    }
+  }, [
+    params.checkoutSuccessSessionId,
+    params.claimTokenParam,
+  ]);
+
   useEffect(() => {
     const token = (params.claimTokenParam ?? "").trim();
     if (!token) return;

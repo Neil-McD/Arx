@@ -546,10 +546,11 @@ function provePartnerTermsAgreementContract(args: {
 
 function provePartnerSurfaceIsolationContract(
   appSource: string,
+  controllerSource: string,
   operatorHostSource: string,
 ) {
   assertIncludes(
-    appSource,
+    controllerSource,
     "settingsGroup !== \"partners\"",
     "Builder Partner data loading must remain settings-scoped",
   );
@@ -608,7 +609,11 @@ function proveBuilderPartnerRuntimeSmokeContract(runtimeSmokeSource: string) {
   );
 }
 
-function proveAutomaticUnlockContract(convexSource: string, gatewaySource: string, appSource: string) {
+function proveAutomaticUnlockContract(
+  convexSource: string,
+  gatewaySource: string,
+  controllerSource: string,
+) {
   assertIncludes(
     convexSource,
     "getMyBuilderPartnerProgram",
@@ -720,23 +725,28 @@ function proveAutomaticUnlockContract(convexSource: string, gatewaySource: strin
     "Builder Partner gateway should stay on the branded platform-partner contract",
   );
   assertIncludes(
-    appSource,
+    controllerSource,
     "captureBuilderPartnerAttributionFromCurrentUrl({",
-    "App shell",
+    "Builder Partner controller",
   );
   assertIncludes(
-    appSource,
+    controllerSource,
     "settingsGroup !== \"partners\"",
-    "App shell",
+    "Builder Partner controller",
   );
   assertIncludes(
-    appSource,
-    "ensureUsableAuthSession(nextSession ?? undefined, \"builder_partner_program_load\")",
+    controllerSource,
+    "params.ensureSession(",
     "Builder Partner program loads must refresh or verify even when a caller passes a session",
   );
+  assertIncludes(
+    controllerSource,
+    "\"builder_partner_program_load\"",
+    "Builder Partner program loads must name their session refresh boundary",
+  );
   assert.doesNotMatch(
-    appSource,
-    /const usableSession = nextSession \?\? await ensureUsableAuthSession\(\)/,
+    controllerSource,
+    /const usableSession = nextSession \?\? await params\.ensureSession\(\)/,
     "Builder Partner program loads must not bypass usable-session verification for passed sessions",
   );
 }
@@ -884,63 +894,23 @@ function proveEligibilityGateContract(
 function proveReductionAndCleanupContract(accountSource: string, docsSource: string) {
   assertIncludes(
     accountSource,
-    "withIndex(\"by_referredUser\", (q: any) => q.eq(\"referredUserId\", userId))",
-    "account deletion cleanup",
+    "account_delete_lifecycle_migration_blocked",
+    "account deletion quarantine",
   );
   assertIncludes(
     accountSource,
-    "readBuilderPartnerFinanceDeletionState",
-    "account deletion must classify partner finance state before deleting",
+    "resolveAuthenticatedActor",
+    "account deletion quarantine must authenticate before failing closed",
   );
   assertIncludes(
     accountSource,
-    "account_delete_partner_finance_pending_blocked",
-    "account deletion must block unresolved partner finance",
-  );
-  assertIncludes(
-    accountSource,
-    "hasUnresolvedFinance",
-    "account deletion must block unresolved partner finance",
-  );
-  assertIncludes(
-    accountSource,
-    "preserve(\"partnerCommissionLedger\", referredPartnerCommissions.length)",
-    "account deletion must preserve referred-user partner commission history",
+    "throw new ConvexError",
+    "account deletion quarantine must return a stable structured failure",
   );
   assert.doesNotMatch(
     accountSource,
-    /financeLinkedCreditLedgerEntryIds|sourceCreditLedgerEntryId/,
-    "account deletion should not preserve deleted paid-tool partner commission evidence",
-  );
-  assertIncludes(
-    accountSource,
-    "scrubFinanceLinkedPartnerAttribution",
-    "account deletion must scrub attribution privacy fields while preserving finance evidence",
-  );
-  assertIncludes(
-    accountSource,
-    "tombstoneBuilderPartnerCode",
-    "account deletion must disable settled partner links instead of deleting audit history",
-  );
-  assertIncludes(
-    accountSource,
-    "listPartnerAttributions",
-    "account deletion cleanup",
-  );
-  assertIncludes(
-    accountSource,
-    "\"partnerCommissionLedger\", partner._id",
-    "account deletion must inspect partner ledger rows by status",
-  );
-  assert.doesNotMatch(
-    accountSource,
-    /deleteRowsByIndex\(ctx, "partnerCommissionLedger", "by_referredUser"/,
-    "account deletion must not erase referred-user partner commission ledger history",
-  );
-  assert.doesNotMatch(
-    accountSource,
-    /deleteRowsByIndex\(ctx, "partnerCommissionAdjustments", "by_partner_createdAt"/,
-    "account deletion must not erase partner adjustment history",
+    /ctx\.(?:db|storage|scheduler)|\.(?:insert|patch|replace|delete)\(|runMutation|runAction/,
+    "quarantined account deletion must not touch Builder Partner or other persisted state",
   );
   assertIncludes(
     docsSource,
@@ -1175,7 +1145,7 @@ function proveEndToEndPartnerLifecycleBehavior() {
 function proveEndToEndPartnerLifecycleSourceContract(
   builderPartnersSource: string,
   gatewaySource: string,
-  appSource: string,
+  controllerSource: string,
   communityCommerceSource: string,
   httpBillingSource: string,
   operatorGatewaySource: string,
@@ -1200,7 +1170,7 @@ function proveEndToEndPartnerLifecycleSourceContract(
   );
 
   assertIncludes(
-    appSource,
+    controllerSource,
     "captureBuilderPartnerAttributionFromCurrentUrl({",
     "Builder Partner E2E frontend attribution capture",
   );
@@ -2575,6 +2545,12 @@ function main() {
     readText(new URL("../apps/web/src/components/workspaceRightPanelOperatorShared.ts", import.meta.url)),
   ].join("\n");
   const appSource = readText(new URL("../apps/web/src/App.tsx", import.meta.url));
+  const builderPartnerControllerSource = readText(
+    new URL(
+      "../apps/web/src/controllers/useWebBuilderPartnerProgramController.ts",
+      import.meta.url,
+    ),
+  );
   const accountSource = readText(new URL("../convex/account.ts", import.meta.url));
   const docsSource = readText(new URL("../docs/product/primitives/polynet.md", import.meta.url));
   const billingDocsSource = readText(new URL("../docs/product/reference/billing-entitlements.md", import.meta.url));
@@ -2615,13 +2591,21 @@ function main() {
     gatewaySource,
     runtimeSmokeSource,
   });
-  provePartnerSurfaceIsolationContract(appSource, operatorHostSource);
+  provePartnerSurfaceIsolationContract(
+    appSource,
+    builderPartnerControllerSource,
+    operatorHostSource,
+  );
   proveBuilderPartnerRuntimeSmokeContract(runtimeSmokeSource);
-  proveAutomaticUnlockContract(builderPartnersSource, gatewaySource, appSource);
+  proveAutomaticUnlockContract(
+    builderPartnersSource,
+    gatewaySource,
+    builderPartnerControllerSource,
+  );
   proveEndToEndPartnerLifecycleSourceContract(
     builderPartnersSource,
     gatewaySource,
-    appSource,
+    builderPartnerControllerSource,
     communityCommerceSource,
     httpBillingSource,
     operatorGatewaySource,

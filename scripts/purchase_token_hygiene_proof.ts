@@ -37,7 +37,12 @@ assert.equal(
   "/api/auth/google/callback?error=access_denied",
 );
 
-const appSource = readText(new URL("../apps/web/src/App.tsx", import.meta.url));
+const telemetryLifecycleSource = readText(
+  new URL(
+    "../apps/web/src/controllers/useWebTelemetryLifecycle.ts",
+    import.meta.url,
+  ),
+);
 const mainSource = readText(new URL("../apps/web/src/main.tsx", import.meta.url));
 const payFirstSource = readText(new URL("../shared/pay_first.ts", import.meta.url));
 const billingCoreSource = readText(new URL("../convex/billingCore.ts", import.meta.url));
@@ -46,13 +51,13 @@ const workspaceCreditsSource = readText(new URL("../convex/workspaceCredits.ts",
 const publicAppUrlSource = readText(new URL("../convex/publicAppUrl.ts", import.meta.url));
 
 assert.ok(
-  appSource.includes("buildCurrentTelemetryPathname()"),
-  "expected App telemetry context to use sanitized route labels",
+  telemetryLifecycleSource.includes("buildCurrentTelemetryPathname()"),
+  "expected the telemetry lifecycle to use sanitized route labels",
 );
 const appTelemetryContextBlock = sliceBetween(
-  appSource,
-  "useEffect(() => {\n    const telemetryPathname = buildCurrentTelemetryPathname();",
-  "  }, [\n    activeCommunityId,",
+  telemetryLifecycleSource,
+  "useEffect(() => {\n    const pathname = buildCurrentTelemetryPathname();",
+  "  }, [\n    params.accountTier,",
 );
 assert.ok(
   !appTelemetryContextBlock.includes("`${window.location.pathname}${window.location.search}${window.location.hash}`"),

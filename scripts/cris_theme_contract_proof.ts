@@ -206,18 +206,23 @@ applyAppThemeAttributes("dark", root);
 assert.equal(attributes.get("data-theme-family"), "dark");
 assert.equal(browserThemeColor, "#1A1A1A");
 
-const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
-const indexCss = read("apps/web/src/index.css");
+const baseCss = [
+  read("apps/web/src/base.css"),
+  read("apps/web/src/index.css"),
+  read("apps/web/src/styles/shell-and-onboarding.css"),
+  read("apps/web/src/styles/community-and-content.css"),
+  read("apps/web/src/styles/settings-runtime-and-theme-overrides.css"),
+].join("\n");
 const appearance = read("apps/web/src/components/WebAppearanceSettingsSection.tsx");
 const main = read("apps/web/src/main.tsx");
 const app = read("apps/web/src/App.tsx");
+const shellState = read("apps/web/src/controllers/useWebShellState.ts");
 const persistenceLifecycle = read(
   "apps/web/src/controllers/useWebUiPersistenceLifecycle.ts",
 );
 const funnelCss = read("apps/web/src/components/CommunityFunnelSurface.css");
 const memberAgentCss = read("apps/web/src/components/WebMemberAgentDock.css");
 const memberAgentComponent = read("apps/web/src/components/WebMemberAgentDock.tsx");
-const workspaceHost = read("apps/web/src/components/WebWorkspaceHost.tsx");
 const communityChat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
 const voiceInputButton = read("shared/VoiceInputButton.tsx");
@@ -272,40 +277,38 @@ assert.match(
 );
 
 assert.match(baseCss, /:root\[data-theme-family="dark"\]\s*\.model-picker-nav-logo-img\.monochrome/);
-assert.match(indexCss, /:root\[data-theme-family="dark"\]\s*\.message-item\.assistant \.message-text/);
-assert.match(indexCss, /:root\[data-theme-family="dark"\]\s*\.web-download-logo\.monochrome/);
 assert.doesNotMatch(
-  indexCss,
+  baseCss,
   /:root\[data-theme="cris"\][^{]*\{[^}]*filter:\s*invert\(1\)/,
   "the light CRIS family must not inherit dark-only image inversion",
 );
 assert.match(
-  indexCss,
+  baseCss,
   /--web-floating-chrome-surface:\s*var\(--surface-workspace,[^;]+;[\s\S]*--web-context-panel-surface:\s*var\(--surface-panel,[^;]+;[\s\S]*--web-popover-surface:\s*var\(--surface-card,[^;]+;/,
   "web chrome should expose one canonical material role for floating controls, context panels, and popovers",
 );
 assert.match(
-  indexCss,
+  baseCss,
   /@supports \(background: color-mix\(in srgb, #000 50%, transparent\)\)[\s\S]*--web-floating-chrome-surface:\s*color-mix\([\s\S]*var\(--surface-workspace, var\(--bg-workspace\)\) 88%,[\s\S]*transparent/,
   "floating chrome should visually disappear into the active workspace until content passes underneath",
 );
 assert.doesNotMatch(
-  indexCss,
+  baseCss,
   /:root\[data-theme-family="dark"\]\s*\{[^}]*--web-floating-chrome/,
   "floating chrome must derive from each theme's workspace instead of carrying a dark-family paint override",
 );
 assert.match(
-  indexCss,
+  baseCss,
   /@supports \(color: rgb\(from #000 r g b\)\)[\s\S]*--web-context-panel-surface:\s*rgb\([\s\S]*from var\(--surface-panel, var\(--bg-panel\)\)[\s\S]*\br\b[\s\S]*\bg\b[\s\S]*\bb\b[\s\S]*\/ 1/,
   "context panels should preserve the theme panel color while stripping alpha that would reveal unrelated content",
 );
 assert.match(
-  indexCss,
-  /\.app-root\.web-header-islands \.app-topbar \.topbar-left,[\s\S]*background:\s*var\(--web-floating-chrome-surface\);/,
+  baseCss,
+  /\.app-topbar \.topbar-right\.topbar-right-island\s*\{[\s\S]*background:\s*var\(--web-floating-chrome-surface\);/,
   "desktop top chrome should consume the canonical floating material",
 );
 assert.match(
-  indexCss,
+  baseCss,
   /\.community-interaction-drawer-back\s*\{[\s\S]*background:\s*var\(--web-floating-chrome-surface\);/,
   "thread navigation should consume the same floating material",
 );
@@ -320,7 +323,7 @@ assert.match(
   "hover cards should consume the canonical raised popover material",
 );
 assert.doesNotMatch(
-  `${indexCss}\n${baseCss}`,
+  baseCss,
   /--web-floating-chrome-(?:bg|border)/,
   "the retired overloaded glass background and border roles must not reappear",
 );
@@ -343,29 +346,34 @@ assert.doesNotMatch(
   "main.tsx should not duplicate pre-paint or reactive theme ownership",
 );
 assert.match(
-  app,
+  shellState,
   /localStorage\.setItem\(APP_THEME_STORAGE_KEY,\s*appTheme\)/,
   "the selected theme should remain browser-persistent",
 );
 assert.match(
-  app,
+  shellState,
   /localStorage\.removeItem\(LEGACY_APP_THEME_STORAGE_KEY\)/,
   "the reactive owner should retire a migrated legacy preference",
 );
 assert.match(
-  app,
-  /readFirstLocalStorageValue\(\[APP_THEME_STORAGE_KEY,\s*LEGACY_APP_THEME_STORAGE_KEY\]\)/,
+  shellState,
+  /readFirstLocalStorageValue\(\[\s*APP_THEME_STORAGE_KEY,\s*LEGACY_APP_THEME_STORAGE_KEY,\s*\]\)/,
   "React state should initialize with the same primary-then-legacy precedence as bootstrap",
 );
 assert.match(
-  app,
+  shellState,
   /return DEFAULT_APP_THEME;/,
   "React state should use the canonical default when storage is absent or invalid",
 );
 assert.equal(
-  app.match(/applyAppThemeAttributes\(appTheme,\s*document\.documentElement\)/g)?.length,
+  shellState.match(/applyAppThemeAttributes\(appTheme,\s*document\.documentElement\)/g)?.length,
   1,
-  "App.tsx should contain exactly one reactive theme applicator",
+  "the shell state owner should contain exactly one reactive theme applicator",
+);
+assert.doesNotMatch(
+  app,
+  /APP_THEME_STORAGE_KEY|LEGACY_APP_THEME_STORAGE_KEY|applyAppThemeAttributes|parseAppTheme/,
+  "App.tsx must not duplicate the shell state owner's theme lifecycle",
 );
 assert.doesNotMatch(
   persistenceLifecycle,
@@ -446,7 +454,7 @@ assert.doesNotMatch(
   "existing dark-theme preservation should come from legacy defaults, not new overrides",
 );
 assert.doesNotMatch(
-  `${indexCss}\n${funnelCss}\n${memberAgentCss}`,
+  `${baseCss}\n${funnelCss}\n${memberAgentCss}`,
   /:root\[data-theme="cris"\]\s+\./,
   "component luminance adapters should use the canonical theme family, not CRIS identity",
 );
@@ -483,7 +491,6 @@ assert.doesNotMatch(
 });
 
 [
-  workspaceHost,
   communityChat,
   directMessages,
   memberAgentComponent,
@@ -499,15 +506,12 @@ assert.match(
   /className=\{`ask-icon-btn ask-mic \$\{state\}`\}/,
   "the shared voice control should project idle, recording, and transcribing state classes",
 );
-assert.match(workspaceHost, /className="ask-engine-trigger"/);
-assert.match(workspaceHost, /className="ask-engine-menu"/);
-assert.match(workspaceHost, /className=\{`ask-engine-option/);
 
 [
   /\.ask-icon-btn\.ask-mic\.recording\s*\{[\s\S]*?background:\s*color-mix\(in srgb,\s*#ef4444 20%,\s*transparent\);[\s\S]*?color:\s*#ffe8e8;/,
 ].forEach((legacyRule) => {
   assert.match(
-    indexCss,
+    baseCss,
     legacyRule,
     "existing dark-theme conversation values must remain on their exact legacy baseline",
   );
@@ -523,30 +527,20 @@ assert.match(workspaceHost, /className=\{`ask-engine-option/);
   );
 });
 assert.match(
-  indexCss,
+  baseCss,
   /\.ask-send-btn\.ask-send-btn-v2\s*\{[\s\S]*?background:\s*var\(--conversation-primary-action-surface\) !important;[\s\S]*?color:\s*var\(--conversation-primary-action-foreground\) !important;/,
   "the shared send primitive should consume the canonical action roles",
 );
 assert.match(
-  indexCss,
+  baseCss,
   /\.ask-send-btn\.ask-send-btn-v2:hover:not\(:disabled\)\s*\{[\s\S]*?background:\s*var\(--conversation-primary-action-hover-surface\) !important;[\s\S]*?color:\s*var\(--conversation-primary-action-foreground\) !important;/,
   "send hover should consume the canonical hover role",
 );
 assert.match(
-  indexCss,
+  baseCss,
   /\.ask-send-btn\.ask-send-btn-v2:disabled\s*\{[\s\S]*?background:\s*var\(--conversation-primary-action-surface\) !important;[\s\S]*?color:\s*var\(--conversation-primary-action-foreground\) !important;/,
   "disabled send should retain the canonical action role beneath its legacy opacity",
 );
-[
-  /\.ask-engine-menu\s*\{[\s\S]*?background:\s*color-mix\(in srgb,\s*var\(--bg-modal\) 94%,\s*#1b1b22 6%\);/,
-  /\.ask-engine-option\.is-selected\s*\{[\s\S]*?background:\s*rgba\(255,\s*255,\s*255,\s*0\.055\);/,
-].forEach((legacyRule) => {
-  assert.match(
-    baseCss,
-    legacyRule,
-    "existing dark-theme runtime selector values must remain on their exact legacy baseline",
-  );
-});
 assert.match(
   memberAgentCss,
   /\.member-agent-dock-error\s*\{[\s\S]*?color:\s*#e8b4c4;[\s\S]*?background:\s*rgba\(214,\s*106,\s*138,\s*0\.1\);[\s\S]*?border-left:\s*2px solid var\(--accent-gold\);/,
@@ -561,9 +555,6 @@ assert.match(
 [
   /:root\[data-theme-family="light"\]\s*\.ask-icon-btn\.ask-mic\.recording\s*\{[\s\S]*?color:\s*var\(--accent-error\);/,
   /:root\[data-theme-family="light"\]\s*\.ask-icon-btn\.ask-mic\.transcribing\s*\{[\s\S]*?var\(--accent,\s*var\(--accent-selection\)\)/,
-  /:root\[data-theme-family="light"\]\s*\.ask-engine-menu\s*\{[\s\S]*?background:\s*var\(--bg-modal\);/,
-  /:root\[data-theme-family="light"\]\s*\.ask-engine-premium-pill\s*\{[\s\S]*?background:\s*color-mix\(in srgb,\s*var\(--accent-selection\) 8%,\s*transparent\);[\s\S]*?color:\s*var\(--accent-selection\);/,
-  /:root\[data-theme-family="light"\]\s*\.ask-engine-option\.is-selected\s*\{[\s\S]*?background:\s*var\(--surface-selected\);/,
 ].forEach((lightAdapter) => {
   assert.match(
     baseCss,

@@ -72,7 +72,7 @@ export async function saveCloudCommunityAbout<SessionT>(
   },
 ): Promise<CloudCommunityAboutSaveResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("community:saveCommunityAbout" as any, {
+  const payload = await client.mutation("communityLifecycle:saveCommunityAbout" as any, {
     authSubject,
     communityId: params.communityId,
     about: params.about,

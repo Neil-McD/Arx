@@ -19,13 +19,9 @@ import { WebBillingSettingsSection } from "./WebBillingSettingsSection";
 import { WebBuilderPartnerSettingsSection } from "./WebBuilderPartnerSettingsSection";
 import { WebIntegrationsSettingsSection } from "./WebIntegrationsSettingsSection";
 import { WebProfileSettingsSection } from "./WebProfileSettingsSection";
+import type { AuthSession } from "../auth";
 
-type SessionLike = {
-  user: {
-    id: string;
-    email?: string | null;
-  };
-} | null;
+type SessionLike = AuthSession | null;
 
 type OwnedCommunity = {
   id: string;

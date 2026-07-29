@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=31
+TOTAL_STEPS=32
 CURRENT_STEP=1
 
 run_step() {
@@ -48,6 +48,7 @@ run_step "Community semantic repository proof" npm run check:community-semantic-
 run_step "No third-party MCP surface proof" npm run check:no-third-party-mcp-surface-proof
 run_step "Official Polynet MCP contract proof" npm run check:polynet-workspace-mcp-proof
 run_step "Official Polynet MCP authorization proof" npm run check:polynet-workspace-mcp-auth-proof
+run_step "App shell decomposition contract" npm run check:app-shell-decomposition-contract
 run_step "Repository behavior tests" npm test
 run_step "No legacy provider repo guard" bash scripts/no_legacy_provider_repo_guard.sh
 run_step "No legacy runtime-lane wording guard" bash scripts/no_platform_fallback_guard.sh

@@ -24,6 +24,7 @@ WEB_APP_FILE="apps/web/src/App.tsx"
 WEB_CONTEXT_PANEL_FILE="apps/web/src/components/CommunityContextPanel.tsx"
 WEB_MEMBER_DIALOG_FILE="apps/web/src/components/CommunityMemberSettingsDialog.tsx"
 WEB_INTERACTION_PROJECTION_FILE="apps/web/src/components/WebCommunityInteractionProjection.tsx"
+WEB_MEMBER_MANAGEMENT_CONTROLLER_FILE="apps/web/src/controllers/useWebCommunityMemberManagementController.ts"
 WEB_JOIN_REQUESTS_CONTROLLER_FILE="apps/web/src/controllers/useWebCommunityJoinRequestsController.ts"
 ADMIN_CONTROLLER_FILE="shared/useCommunityAdminController.ts"
 
@@ -93,6 +94,10 @@ if [[ ! -f "$WEB_MEMBER_DIALOG_FILE" ]]; then
 fi
 if [[ ! -f "$WEB_INTERACTION_PROJECTION_FILE" ]]; then
   echo "FAIL: missing $WEB_INTERACTION_PROJECTION_FILE"
+  exit 1
+fi
+if [[ ! -f "$WEB_MEMBER_MANAGEMENT_CONTROLLER_FILE" ]]; then
+  echo "FAIL: missing $WEB_MEMBER_MANAGEMENT_CONTROLLER_FILE"
   exit 1
 fi
 if [[ ! -f "$WEB_JOIN_REQUESTS_CONTROLLER_FILE" ]]; then
@@ -400,9 +405,12 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
 require_multiline_match "$ADMIN_GATEWAY_FILE" \
   'export async function fetchCloudCommunityMemberBillingHistory<[\s\S]*?client\.query\("communityAdmin:getCommunityMemberBillingHistory" as any, \{\s*authSubject,\s*communityId: params\.communityId,\s*targetMembershipId: params\.membershipId,' \
   "member billing history gateway forwards authSubject and target membership"
-require_multiline_match "$WEB_APP_FILE" \
-  'fetchCloudCommunityMemberBillingHistory\(\{[\s\S]*?session: usableSession,\s*communityId,\s*membershipId,' \
-  "right-panel member settings surface loads billing history on demand"
+require_multiline_match "$WEB_MEMBER_MANAGEMENT_CONTROLLER_FILE" \
+  'fetchCloudCommunityMemberBillingHistory\(\{[\s\S]*?session,\s*communityId,\s*membershipId,' \
+  "member-management controller loads authenticated billing history"
+require_multiline_match "$WEB_MEMBER_DIALOG_FILE" \
+  'useEffect\(\(\) => \{[\s\S]*?if \(!memberId \|\| !canViewMemberPlanDetails\) return;[\s\S]*?void loadMemberBillingHistory\(memberId\)' \
+  "member settings dialog loads billing history on demand"
 require_no_match "$WEB_MEMBER_DIALOG_FILE" \
   'Payment history|Historical payments unavailable|No payment history' \
   "member settings dialog does not expose unbacked payment-history placeholder text"

@@ -14,6 +14,9 @@ const cloudAccountCommerceGatewaySource = read("shared/cloudAccountCommerceGatew
 const billingSettingsSource = read("apps/web/src/components/WebBillingSettingsSection.tsx");
 const settingsPanelsSource = read("apps/web/src/components/WebSettingsPanels.tsx");
 const appSource = read("apps/web/src/App.tsx");
+const accountPlanControllerSource = read(
+  "apps/web/src/controllers/useWebAccountPlanController.ts",
+);
 const httpBillingSource = read("convex/httpBilling.ts");
 
 assert.match(
@@ -90,9 +93,9 @@ assert.match(
   "web gateway must expose the account Premium checkout action",
 );
 assert.match(
-  appSource,
+  accountPlanControllerSource,
   /startCloudPremiumSubscriptionCheckout[\s\S]*buildPremiumSubscriptionReturnUrl[\s\S]*premium subscription checkout started/,
-  "app shell must route Billing upgrades through the Premium subscription checkout",
+  "the account plan controller must route Billing upgrades through the Premium subscription checkout",
 );
 assert.match(
   httpBillingSource,

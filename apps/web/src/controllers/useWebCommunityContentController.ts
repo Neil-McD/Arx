@@ -292,6 +292,34 @@ export function useWebCommunityContentController(
     setOpenResourceEmbedId(null);
   }, [activeCommunityId]);
 
+  const reloadActiveResources = useCallback(async (): Promise<void> => {
+    if (!activeCommunityId) return;
+    const activeSession = await ensureSession();
+    if (!activeSession) return;
+    await resourceUi.loadCommunityResources(
+      activeCommunityId,
+      activeSession,
+    );
+  }, [
+    activeCommunityId,
+    ensureSession,
+    resourceUi.loadCommunityResources,
+  ]);
+
+  const reloadActiveEvents = useCallback(
+    async (range: CommunityEventsRange): Promise<void> => {
+      if (!activeCommunityId) return;
+      const activeSession = await ensureSession();
+      if (!activeSession) return;
+      await loadCommunityEvents(
+        activeCommunityId,
+        activeSession,
+        range,
+      );
+    },
+    [activeCommunityId, ensureSession, loadCommunityEvents],
+  );
+
   return {
     resources,
     modules,
@@ -310,6 +338,8 @@ export function useWebCommunityContentController(
     resetEventsCache,
     resetContentState,
     loadCommunityEvents,
+    reloadActiveResources,
+    reloadActiveEvents,
     handleSaveCommunityEvent,
     handleCancelCommunityEvent,
     ...resourceUi,

@@ -11,6 +11,7 @@ import type {
 import {
   settingsGroupForPage,
 } from "../../../../shared/appShellNavigation";
+import type { StripeConnectReturn } from "../../../../shared/accountCommerce";
 import {
   APP_THEME_STORAGE_KEY,
   DEFAULT_APP_THEME,
@@ -53,6 +54,8 @@ export function useWebShellState(params: {
   const [mobileSettingsView, setMobileSettingsView] =
     useState<"index" | "detail">("detail");
   const [mobileChromeReadingMode, setMobileChromeReadingMode] = useState(false);
+  const [stripeConnectReturn, setStripeConnectReturn] =
+    useState<StripeConnectReturn | null>(null);
   const [activePage, setActivePage] = useState<AppPage>(
     initialAppRoute?.page ?? "landing",
   );
@@ -126,6 +129,8 @@ export function useWebShellState(params: {
     setMobileSettingsView,
     mobileChromeReadingMode,
     setMobileChromeReadingMode,
+    stripeConnectReturn,
+    setStripeConnectReturn,
     activePage,
     setActivePage,
     activeView,

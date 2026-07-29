@@ -17,7 +17,9 @@ import {
 } from "../shared/webAppRouteState.ts";
 
 const read = (path: string) => readFileSync(path, "utf8");
-const app = read("apps/web/src/App.tsx");
+const communityNavigation = read(
+  "apps/web/src/controllers/useWebCommunityNavigationActions.ts",
+);
 const controller = read("apps/web/src/components/WebCommunityOnboardingController.tsx");
 const gateway = read("shared/cloudCommunityOnboardingGateway.ts");
 const workflow = read("apps/web/src/components/WebCommunityOnboardingWorkflowSection.tsx");
@@ -70,7 +72,7 @@ assert.equal(shouldRecordCommunityOnboardingAgentTurn({ invocationSurface: "work
 
 assert.match(workflow, /Preview full flow/);
 assert.match(workflow, /WebCommunityOnboardingOrientationSurface/);
-assert.match(app, /buildCommunityOnboardingPreviewPath/);
+assert.match(communityNavigation, /buildCommunityOnboardingPreviewPath/);
 assert.match(controller, /createCommunityOnboardingPreviewSession/);
 assert.doesNotMatch(controller, /generateCloudCommunityOnboardingConciergePreview/);
 assert.doesNotMatch(controller, /requestCloudCommunityOnboardingConciergeNarration/);

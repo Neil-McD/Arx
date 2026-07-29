@@ -31,6 +31,12 @@ const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
 const shellChromeShared = read("apps/web/src/components/webShellChromeShared.ts");
 const shellChromeProps = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const app = read("apps/web/src/App.tsx");
+const appCompositionRoot = read(
+  "apps/web/src/components/WebAppCompositionRoot.tsx",
+);
+const dmChromeController = read(
+  "apps/web/src/controllers/useWebDirectMessagesChromeController.tsx",
+);
 const dmController = read("apps/web/src/controllers/useWebDirectMessagesController.ts");
 const css = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const packageJson = read("package.json");
@@ -418,14 +424,14 @@ assert.match(shellChromeProps, /directMessagesButton: params\.directMessagesButt
 assert.match(desktopHeader, /props\.isPublicCommunityFunnel \? null : props\.directMessagesButton/, "desktop header must render the global DM button without Workspace chrome");
 assert.doesNotMatch(desktopHeader, /workspaceRightPanelToggle|hasWorkspaceRightPanelControl/);
 assert.doesNotMatch(desktopHeader, /communityHomeButton/, "desktop header must not retain the redundant community home control");
-assert.match(app, /className=\{`icon-button direct-messages-topbar-button/, "app shell must render a top-right direct messages button");
+assert.match(dmChromeController, /className=\{`icon-button direct-messages-topbar-button/, "the DM chrome controller must render a top-right direct messages button");
 assert.match(dmController, /openFromCommunity[\s\S]*targetUserId[\s\S]*communityId/, "direct-message controller must own profile-to-DM launch requests");
-assert.match(app, /openRequest=\{directMessageOpenRequest\}/, "app shell must pass canonical open requests to the global DM host");
+assert.match(app, /openRequest: directMessageOpenRequest/, "app composition must pass canonical open requests to the global DM host");
 assert.doesNotMatch(app, /activeCommunityId=\{activeCommunity\?\.id \?\? null\}/, "app shell must not scope the global DM picker to the active community");
 assert.doesNotMatch(app, /activeCommunityName=\{activeCommunity\?\.name \?\? null\}/, "app shell must not label the global DM picker as the active community");
 assert.match(dmController, /const \[unreadCount, setUnreadCount\] = useState\(0\)/, "direct-message controller must own top-bar unread count");
-assert.match(app, /onUnreadCountChange=\{setDirectMessagesUnreadCount\}/, "global DM host must feed top-bar unread state");
-assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");
+assert.match(app, /onUnreadCountChange: setDirectMessagesUnreadCount/, "global DM host must feed top-bar unread state");
+assert.match(appCompositionRoot, /<WebDirectMessagesHost \{\.\.\.props\.directMessagesHostProps\} \/>/, "the application composition root must mount the global direct messages host");
 assert.doesNotMatch(dmHost, /onProfileSetupRequired|isProfileSetupComplete|DIRECT_MESSAGE_PROFILE_SETUP_REQUIRED|directMessageSendRequiresProfileSetup|profile_setup_required/, "DM host must not preflight or recover through public-profile setup");
 assert.doesNotMatch(app, /directMessageProfileSetupComplete|openDirectMessageProfileSetup|isIdentityOnlyOnboarding|identityOnly:/, "app shell must not couple DMs to account-setup state");
 assert.match(css, /\.community-dm-panel/, "DM panel must have canonical context-panel styling");

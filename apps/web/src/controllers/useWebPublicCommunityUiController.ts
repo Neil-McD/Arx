@@ -17,6 +17,7 @@ export function useWebPublicCommunityUiController<
   const [myPublicCommunityJoinRequest, setMyPublicCommunityJoinRequest] =
     useState<MyPublicCommunityJoinRequestT | null>(null);
   const [isLoadingMyPublicCommunityJoinRequest, setIsLoadingMyPublicCommunityJoinRequest] = useState(false);
+  const [visitorGateNonce, setVisitorGateNonce] = useState(0);
 
   return {
     publicCommunity,
@@ -39,5 +40,7 @@ export function useWebPublicCommunityUiController<
     setMyPublicCommunityJoinRequest,
     isLoadingMyPublicCommunityJoinRequest,
     setIsLoadingMyPublicCommunityJoinRequest,
+    visitorGateNonce,
+    setVisitorGateNonce,
   };
 }

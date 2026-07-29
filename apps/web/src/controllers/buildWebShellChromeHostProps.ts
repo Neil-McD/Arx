@@ -92,9 +92,7 @@ export function buildWebShellChromeHostProps(params: {
   openOperatorConsole: () => void;
   hasLeftPanel: boolean;
   isGlobalSettings: boolean;
-  mainSurface: ReactNode;
-  globalOverlays: ReactNode;
-}): WebShellChromeHostProps {
+}): Omit<WebShellChromeHostProps, "mainSurface" | "globalOverlays"> {
   return {
     showMobileAppShell: params.showMobileAppShell,
     showMobileSettingsShell: params.showMobileSettingsShell,
@@ -242,7 +240,5 @@ export function buildWebShellChromeHostProps(params: {
     showDesktopCommunityRail: params.showDesktopCommunityRail,
     showDesktopCommunityNav: params.showDesktopCommunityNav,
     isGlobalSettings: params.isGlobalSettings,
-    mainSurface: params.mainSurface,
-    globalOverlays: params.globalOverlays,
   };
 }

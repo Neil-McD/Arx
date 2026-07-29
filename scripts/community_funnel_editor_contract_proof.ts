@@ -21,18 +21,14 @@ const surfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
 const funnelActions = read("apps/web/src/controllers/useWebPublicFunnelActions.ts");
 const routeController = read("apps/web/src/controllers/useWebPublicCommunityRouteController.ts");
+const funnelAboutController = read("apps/web/src/controllers/useWebCommunityFunnelAboutController.ts");
 const governanceController = read("shared/useCommunitySettingsGovernanceController.ts");
 const funnelGateway = read("shared/cloudCommunityFunnelGateway.ts");
 const communityLifecycle = read("convex/communityLifecycle.ts");
 const saveFunnelAboutSlice = sliceBetween(
-  app,
-  "const handleSaveCommunityFunnelAbout",
-  "const { communityChatPanelProps",
-);
-const resetFunnelAboutSlice = sliceBetween(
-  app,
-  "const handleResetCommunityFunnelAbout",
-  "const handleSaveCommunityFunnelAbout",
+  funnelAboutController,
+  "const save = useCallback",
+  "return {\n    isDirty,",
 );
 
 // --- The builder is fields + a Preview button, NOT an inline funnel render ---
@@ -128,21 +124,21 @@ assert.doesNotMatch(
   "the route loader must not invent a second preview-data contract; preview is a presentation lens",
 );
 
-// --- App-side About save wiring (unchanged truth) ---
+// --- Destination-owned About save workflow and App composition wiring ---
 assert.match(
-  app,
-  /const isCommunityFunnelAboutDirty =[\s\S]*Boolean\(activeCommunity\) && communitySettingsAbout !== \(activeCommunity\?\.about \?\? ""\);/,
-  "App must derive Funnel About dirtiness from active community truth",
+  funnelAboutController,
+  /const isDirty =[\s\S]*Boolean\(params\.activeCommunity\) &&[\s\S]*params\.about !== \(params\.activeCommunity\?\.about \?\? ""\);/,
+  "the Funnel About controller must derive dirtiness from active community truth",
 );
 assert.match(
-  resetFunnelAboutSlice,
-  /setCommunitySettingsAbout\(activeCommunity\?\.about \?\? ""\);[\s\S]*communitySettingsDirtyRef\.current = hasCommunitySettingsDirtyOutsideFunnelAbout\(\);/,
-  "App must reset Funnel About back to active community truth",
+  funnelAboutController,
+  /const reset = useCallback\(\(\) => \{[\s\S]*params\.setAbout\(params\.activeCommunity\?\.about \?\? ""\);[\s\S]*params\.settingsDirtyRef\.current = hasOtherSettingsDirty\(\);/,
+  "the Funnel About controller must reset copy back to active community truth",
 );
 assert.match(
-  saveFunnelAboutSlice,
-  /saveCloudCommunityAbout\(\{[\s\S]*about: communitySettingsAbout\.trim\(\) \|\| null,/,
-  "App must save inline Funnel About through the destination-owned narrow gateway",
+  funnelAboutController,
+  /saveCloudCommunityAbout\(\{[\s\S]*about: params\.about\.trim\(\) \|\| null,/,
+  "the Funnel About controller must save inline copy through the narrow gateway",
 );
 assert.doesNotMatch(
   saveFunnelAboutSlice,
@@ -151,8 +147,8 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /funnelOneLiner: communitySettingsOneLiner,[\s\S]*funnelAbout: communitySettingsAbout,[\s\S]*setFunnelAbout: setCommunitySettingsAbout,[\s\S]*isFunnelAboutDirty: isCommunityFunnelAboutDirty,[\s\S]*handleSaveCommunityFunnelAbout,[\s\S]*handleResetCommunityFunnelAbout,/,
-  "App must wire the builder's About controls to canonical community settings state",
+  /useWebCommunityFunnelAboutController\(\{[\s\S]*about: communitySettingsAbout,[\s\S]*setAbout: setCommunitySettingsAbout,[\s\S]*funnelOneLiner: communitySettingsOneLiner,[\s\S]*funnelAbout: communitySettingsAbout,[\s\S]*isFunnelAboutDirty: isCommunityFunnelAboutDirty,[\s\S]*handleSaveCommunityFunnelAbout,[\s\S]*handleResetCommunityFunnelAbout,/,
+  "App must compose the Funnel About controller into the builder's canonical settings state",
 );
 assert.doesNotMatch(
   governanceController,
@@ -161,7 +157,7 @@ assert.doesNotMatch(
 );
 assert.match(
   funnelGateway,
-  /saveCloudCommunityAbout<[\s\S]*client\.mutation\("community:saveCommunityAbout"[\s\S]*about: params\.about/,
+  /saveCloudCommunityAbout<[\s\S]*client\.mutation\("communityLifecycle:saveCommunityAbout"[\s\S]*about: params\.about/,
   "the Funnel gateway must own the narrow About RPC",
 );
 assert.match(

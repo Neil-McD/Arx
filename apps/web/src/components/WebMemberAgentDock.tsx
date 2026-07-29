@@ -103,7 +103,7 @@ type MemberAgentRetryState = {
   attachments: MemberAgentImageDraft[];
 };
 
-type WebMemberAgentDockProps = {
+export type WebMemberAgentDockProps = {
   isVisible: boolean;
   mobileShellActive?: boolean;
   onRequestOpen?: () => void;

@@ -24,13 +24,9 @@ import type {
 import { BUILDER_PARTNER_TERMS_ENTRY } from "../docs/legalDocumentsContent";
 import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import "./WebBuilderPartnerProgramPanel.css";
+import type { AuthSession } from "../auth";
 
-type SessionLike = {
-  user: {
-    id: string;
-    email?: string | null;
-  };
-} | null;
+type SessionLike = AuthSession | null;
 
 export type WebBuilderPartnerProgramPanelProps = {
   showProgramOverview?: boolean;

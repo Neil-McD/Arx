@@ -19,6 +19,7 @@ import { formatProfileMutationError } from "../../../../shared/profileMutationEr
 import type { AppPage } from "../../../../shared/appShellNavigation";
 import { isRootAppRoutePath } from "../../../../shared/webAppRouteState";
 import { useWebProfileSettingsUiController } from "./useWebProfileSettingsUiController";
+import { readProfileDraftForUser } from "../../../../shared/profileDraftStorage";
 
 type LegalAcceptance = {
   termsOfServiceVersion: string;
@@ -51,11 +52,14 @@ export function useWebOnboardingProfileController(params: {
     payload: Record<string, unknown>;
   }) => void;
   profileStorageUserId: string | null;
-  initialProfileDraft: ProfileDraft;
   activePage: AppPage;
   publicRouteKind: string;
   isAuthBootstrapComplete: boolean;
 }) {
+  const initialProfileDraft = useMemo<ProfileDraft>(
+    () => readProfileDraftForUser(params.profileStorageUserId),
+    [params.profileStorageUserId],
+  );
   const [cloudProfile, setCloudProfile] = useState<UserProfileDetail | null>(null);
   const [accountSetupStatus, setAccountSetupStatus] =
     useState<AccountSetupStatus | null>(null);
@@ -75,7 +79,7 @@ export function useWebOnboardingProfileController(params: {
 
   const profile = useWebProfileSettingsUiController({
     profileStorageUserId: params.profileStorageUserId,
-    initialProfileDraft: params.initialProfileDraft,
+    initialProfileDraft,
     session: params.session,
     cloudProfile,
   });

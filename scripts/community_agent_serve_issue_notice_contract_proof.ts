@@ -7,9 +7,22 @@ const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const concierge = readFileSync(join(root, "convex/communityAgentConcierge.ts"), "utf8");
 const gateway = readFileSync(join(root, "shared/cloudCommunityAgentConciergeGateway.ts"), "utf8");
 const app = readFileSync(join(root, "apps/web/src/App.tsx"), "utf8");
+const interactionProjection = readFileSync(
+  join(root, "apps/web/src/controllers/useWebCommunityInteractionProjection.ts"),
+  "utf8",
+);
+const providerConnections = readFileSync(
+  join(root, "apps/web/src/controllers/useWebProviderConnectionsController.ts"),
+  "utf8",
+);
 const projection = readFileSync(join(root, "apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts"), "utf8");
 const chatPanel = readFileSync(join(root, "apps/web/src/components/WebCommunityChatPanel.tsx"), "utf8");
-const css = readFileSync(join(root, "apps/web/src/base.css"), "utf8");
+const css = [
+  "apps/web/src/base.css",
+  "apps/web/src/styles/shell-and-onboarding.css",
+  "apps/web/src/styles/community-and-content.css",
+  "apps/web/src/styles/settings-runtime-and-theme-overrides.css",
+].map((path) => readFileSync(join(root, path), "utf8")).join("\n");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 
 function exportedFunctionBlock(source: string, exportName: string): string {
@@ -124,29 +137,34 @@ assert.match(
 );
 
 assert.match(
-  app,
+  interactionProjection,
   /subscribeCloudCommunityAgentServeIssue[\s\S]*type CloudCommunityAgentServeIssue/,
-  "App should import the community-agent serve issue gateway",
+  "the community interaction projection should import the community-agent serve issue gateway",
+);
+assert.match(
+  interactionProjection,
+  /const \[serveIssue, setServeIssue\] = useState<CloudCommunityAgentServeIssue \| null>\(null\)/,
+  "the community interaction projection should keep the serve issue as local UI state",
+);
+assert.match(
+  interactionProjection,
+  /dismissedServeIssueIdsRef = useRef<Set<string>>\(new Set\(\)\)/,
+  "the community interaction projection should allow per-session dismissals without mutating the serve ledger",
+);
+assert.match(
+  interactionProjection,
+  /!isCommunityChatActive[\s\S]*subscribeCloudCommunityAgentServeIssue\(\{[\s\S]*communityId: activeCommunityId/,
+  "the community interaction projection should subscribe only while the active community chat is mounted",
 );
 assert.match(
   app,
-  /const \[communityAgentServeIssue, setCommunityAgentServeIssue\] =[\s\S]*useState<CloudCommunityAgentServeIssue \| null>\(null\)/,
-  "App should keep the serve issue as local UI state",
+  /isCommunityChatActive: activePage === "community" && communityTab === "chat"/,
+  "App composition must pass an explicit active-community-chat scope into the interaction owner",
 );
 assert.match(
-  app,
-  /dismissedCommunityAgentServeIssueIdsRef = useRef<Set<string>>\(new Set\(\)\)/,
-  "App should allow per-session dismissals without mutating the serve ledger",
-);
-assert.match(
-  app,
-  /activePage !== "community"[\s\S]*communityTab !== "chat"[\s\S]*subscribeCloudCommunityAgentServeIssue\(\{[\s\S]*communityId: activeCommunityId/,
-  "App should subscribe only while the user is inside the active community chat",
-);
-assert.match(
-  app,
+  providerConnections,
   /handleConnectCommunityAgentServeProvider[\s\S]*providerConnectionUi\.handleConnectChatgpt\(\)/,
-  "App notice action should open the existing ChatGPT connection flow",
+  "the provider connections controller notice action should open the existing ChatGPT connection flow",
 );
 
 assert.match(

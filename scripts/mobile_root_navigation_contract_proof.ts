@@ -6,6 +6,9 @@ function read(relativePath: string): string {
 }
 
 const app = read("apps/web/src/App.tsx");
+const appCompositionRoot = read(
+  "apps/web/src/components/WebAppCompositionRoot.tsx",
+);
 const shellState = read("apps/web/src/controllers/useWebShellState.ts");
 const shared = read("apps/web/src/components/webShellChromeShared.ts");
 const controller = read("apps/web/src/controllers/useWebMobileShellController.ts");
@@ -91,8 +94,13 @@ assert.match(
 );
 assert.match(
   app,
-  /mobileShellActive=\{showMobileShell\}[\s\S]*mobileRoot=\{showMobileShell && mobileRootPage === "agent"\}[\s\S]*<WebDirectMessagesHost[\s\S]*mobileRoot=\{showMobileShell && mobileRootPage === "messages"\}/,
+  /memberAgentDockProps=\{\{[\s\S]*mobileShellActive: showMobileShell,[\s\S]*mobileRoot: showMobileShell && mobileRootPage === "agent"[\s\S]*directMessagesHostProps=\{\{[\s\S]*mobileRoot:[\s\S]*showMobileShell && mobileRootPage === "messages"/,
   "AI and Messages should reuse their existing surfaces as persistent mobile roots",
+);
+assert.match(
+  appCompositionRoot,
+  /<WebMemberAgentDock[\s\S]*\{\.\.\.props\.memberAgentDockProps\}[\s\S]*<WebDirectMessagesHost \{\.\.\.props\.directMessagesHostProps\} \/>/,
+  "the composition root should mount both controlled persistent mobile-root surfaces",
 );
 assert.match(
   app,

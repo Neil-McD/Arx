@@ -191,7 +191,7 @@ assert.match(
 );
 assert.match(
   app,
-  /mobileRoot=\{showMobileShell && mobileRootPage === "agent"\}/,
+  /mobileRoot: showMobileShell && mobileRootPage === "agent"/,
   "mobile navigation may open the global member agent without restoring Workspace",
 );
 assert.doesNotMatch(

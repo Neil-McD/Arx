@@ -11,7 +11,9 @@ const communityAdmin = read("convex/communityAdmin.ts");
 const communityChat = read("convex/communityChat.ts");
 const communityPublic = read("convex/communityPublic.ts");
 const accountSetupCore = read("convex/accountSetupCore.ts");
-const app = read("apps/web/src/App.tsx");
+const profileHydration = read(
+  "apps/web/src/controllers/useWebCommunityProfileHydrationController.ts",
+);
 
 assert.match(
   projection,
@@ -59,8 +61,8 @@ assert.match(
   "account setup completion must remain first-party profile-avatar based",
 );
 assert.match(
-  app,
-  /display_name: cloudProfile\.display_name \?\? existingDisplayProfile\?\.display_name \?\? null/,
+  profileHydration,
+  /display_name:[\s\S]*cloudProfile\.display_name \?\? existing\?\.display_name \?\? null/,
   "current-user display map must preserve account display fallback while profile detail is incomplete",
 );
 

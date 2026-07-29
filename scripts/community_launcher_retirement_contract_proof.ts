@@ -10,6 +10,9 @@ function read(path: string): string {
 
 const packageJson = read("package.json");
 const app = read("apps/web/src/App.tsx");
+const pendingAuthIntent = read(
+  "apps/web/src/controllers/useWebPendingAuthIntentController.ts",
+);
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
 const webCreateController = read("apps/web/src/controllers/useWebCommunityUiController.ts");
@@ -20,7 +23,6 @@ const resources = read("apps/web/src/components/WebCommunityResourcesSection.tsx
 const funnel = read("apps/web/src/components/WebCommunityFunnelSection.tsx");
 const protectedResources = read("convex/communityResources.ts");
 const protectedGateway = read("shared/cloudCommunityAdminGateway.ts");
-const communityFacade = read("convex/community.ts");
 const communityLifecycle = read("convex/communityLifecycle.ts");
 const funnelGateway = read("shared/cloudCommunityFunnelGateway.ts");
 const generatedApi = read("convex/_generated/api.d.ts");
@@ -53,9 +55,14 @@ assert.doesNotMatch(
   "the web runtime must not retain launcher UI, orchestration, route, or callback state",
 );
 assert.doesNotMatch(
-  communityFacade + communityLifecycle + funnelGateway + generatedApi,
+  communityLifecycle + funnelGateway + generatedApi,
   /getCommunityLaunchSetupStatus|saveCommunityLaunchProfile|cloudCommunityLaunchSetupGateway|communityLaunchSetup/,
   "the retained Funnel and Convex runtime must not expose launcher status or profile contracts",
+);
+assert.equal(
+  existsSync(join(root, "convex/community.ts")),
+  false,
+  "the retired duplicate community facade must remain deleted",
 );
 assert.doesNotMatch(
   [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n"),
@@ -84,8 +91,8 @@ assert.match(
   "App should project a created community into owner state and enter the canonical destination",
 );
 assert.match(
-  app,
-  /create_community: \(payload\) => \{[\s\S]*openCreateCommunityModal\(payload\.draft\)/,
+  pendingAuthIntent,
+  /create_community: \(payload\) => \{[\s\S]*params\.openCreateCommunity\(payload\.draft\)/,
   "post-auth community creation should resume through the canonical create modal",
 );
 const createFlowBindings = app.match(/openCommunityCreateFlow: openCreateCommunityModal/g) ?? [];

@@ -1,10 +1,8 @@
 import { useEffect, useLayoutEffect, type Dispatch, type SetStateAction } from "react";
-
-type ProfileDraftLike = {
-  name: string;
-  handle: string;
-  bio: string;
-};
+import {
+  readProfileDraftForUser,
+  writeProfileDraftForUser,
+} from "../../../../shared/profileDraftStorage";
 
 export function useWebUiPersistenceLifecycle(params: {
   communityAnalyticsRange: string;
@@ -12,8 +10,6 @@ export function useWebUiPersistenceLifecycle(params: {
   profileName: string;
   profileHandle: string;
   profileBio: string;
-  readProfileDraftForUser: (userId: string | null) => ProfileDraftLike;
-  writeProfileDraftForUser: (userId: string | null, draft: ProfileDraftLike) => void;
   setProfileName: Dispatch<SetStateAction<string>>;
   setProfileHandle: Dispatch<SetStateAction<string>>;
   setProfileBio: Dispatch<SetStateAction<string>>;
@@ -27,14 +23,14 @@ export function useWebUiPersistenceLifecycle(params: {
   }, [params.communityAnalyticsRange]);
 
   useLayoutEffect(() => {
-    const nextDraft = params.readProfileDraftForUser(params.profileStorageUserId);
+    const nextDraft = readProfileDraftForUser(params.profileStorageUserId);
     params.setProfileName(nextDraft.name);
     params.setProfileHandle(nextDraft.handle);
     params.setProfileBio(nextDraft.bio);
   }, [params.profileStorageUserId]);
 
   useEffect(() => {
-    params.writeProfileDraftForUser(params.profileStorageUserId, {
+    writeProfileDraftForUser(params.profileStorageUserId, {
       name: params.profileName,
       handle: params.profileHandle,
       bio: params.profileBio,

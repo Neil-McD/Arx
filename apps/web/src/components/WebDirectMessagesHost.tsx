@@ -91,7 +91,7 @@ export type IncomingDirectMessageEvent = {
 
 export type DirectMessageNotificationsUiState = "hidden" | "on" | "off" | "blocked";
 
-type WebDirectMessagesHostProps<SessionT> = {
+export type WebDirectMessagesHostProps<SessionT> = {
   isOpen: boolean;
   mobileRoot?: boolean;
   openRequest: DirectMessageOpenRequest;

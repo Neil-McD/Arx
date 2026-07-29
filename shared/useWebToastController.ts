@@ -1,28 +1,22 @@
-import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useRef, useState } from "react";
 
-type UseWebToastControllerArgs = {
-  appToastTimeoutRef: MutableRefObject<number | null>;
-  setAppToast: Dispatch<SetStateAction<string | null>>;
-};
-
-export function useWebToastController(args: UseWebToastControllerArgs) {
-  const argsRef = useRef(args);
-  argsRef.current = args;
-
+export function useWebToastController() {
+  const [appToast, setAppToast] = useState<string | null>(null);
+  const appToastTimeoutRef = useRef<number | null>(null);
   const showAppToastMessage = useCallback((message: string) => {
-    const current = argsRef.current;
-    if (current.appToastTimeoutRef.current) {
-      window.clearTimeout(current.appToastTimeoutRef.current);
-      current.appToastTimeoutRef.current = null;
+    if (appToastTimeoutRef.current) {
+      window.clearTimeout(appToastTimeoutRef.current);
+      appToastTimeoutRef.current = null;
     }
-    current.setAppToast(message);
-    current.appToastTimeoutRef.current = window.setTimeout(() => {
-      current.setAppToast(null);
-      current.appToastTimeoutRef.current = null;
+    setAppToast(message);
+    appToastTimeoutRef.current = window.setTimeout(() => {
+      setAppToast(null);
+      appToastTimeoutRef.current = null;
     }, 2400);
   }, []);
 
   return {
+    appToast,
     showAppToastMessage,
   };
 }

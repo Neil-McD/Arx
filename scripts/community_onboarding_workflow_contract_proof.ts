@@ -156,7 +156,12 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(schema, /communityOnboardingConciergeNotes: defineTable/);
 
-for (const file of readdirSync("convex").filter((name) => name.endsWith(".ts"))) {
+for (const file of readdirSync("convex").filter(
+  (name) =>
+    name.endsWith(".ts") &&
+    !name.endsWith(".test.ts") &&
+    !name.endsWith(".spec.ts"),
+)) {
   if (file === "communityMembershipLifecycle.ts") continue;
   assert.doesNotMatch(read(`convex/${file}`), /insert\("communityMemberships"[\s\S]{0,500}active:\s*true/);
 }
