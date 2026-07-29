@@ -21,10 +21,6 @@ import {
   clearPendingPurchaseClaimToken, readPendingPurchaseClaimToken, storePendingPublicJoin, storePendingPurchaseClaimToken, type PendingPurchaseClaim
 } from "../../../shared/pay_first";
 import {
-  buildPathWithSearchParamsRemoved,
-  buildTelemetryRouteLabel,
-} from "../../../shared/routePrivacy";
-import {
   readProfileDraftForUser, writeProfileDraftForUser, } from "../../../shared/profileDraftStorage";
 import {
   resolveAuthSubject,
@@ -61,6 +57,7 @@ import {
 } from "./controllers/useWebCommunityInteractionProjection";
 import {
   useWebCommunityChatController,
+  WEB_COMMUNITY_REACTION_EMOJIS,
   type WebCommunityMessageAttachment,
 } from "./controllers/useWebCommunityChatController";
 import {
@@ -184,7 +181,6 @@ import {
 import { PRODUCT_DOCS_DEFAULT_SLUG } from "./docs/productDocsMeta";
 import {
   formatBackTargetLabel as formatBackTargetLabelShared,
-  type NavSnapshotBase,
   popDistinctNavSnapshot,
   pushUniqueNavSnapshot,
 } from "../../../shared/navSnapshot";
@@ -312,6 +308,29 @@ import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeH
 import type { MemberAgentSurfaceContextV1 } from "../../../shared/memberAgentSurfaceContext";
 import { WebCommunityOnboardingController } from "./components/WebCommunityOnboardingController";
 import type { WebMemberAgentDockHandle } from "./components/WebMemberAgentDock";
+import type {
+  WebAccountGraphHydrationPhase,
+  WebCommunityRecord,
+  WebCommunityVoiceButtonOwner,
+  WebCommunityVoiceTranscriptTarget,
+  WebMyCommunityJoinRequest,
+  WebNavSnapshot,
+  WebPersonalMemoryItem,
+  WebPublicCommunityRecord,
+} from "./webAppContracts";
+import {
+  buildCurrentTelemetryPathname,
+  buildPremiumSubscriptionReturnUrl,
+  buildSourceIntegrationOAuthFinalizeSessionGuardKey,
+  CHATGPT_SECURITY_SETTINGS_URL,
+  claimSourceIntegrationOAuthFinalizeSessionGuard,
+  clearSourceIntegrationOAuthFinalizeSessionGuard,
+  COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX,
+  isTransportRefreshError,
+  readFirstLocalStorageValue,
+  scrubCurrentRouteSearchParams,
+  WEB_IMAGE_DATA_URL_CHAR_LIMIT,
+} from "./webAppRuntime";
 
 const WebAppMainSurfaceHost = lazy(() =>
   import("./components/WebAppMainSurfaceHost").then((module) => ({
@@ -331,205 +350,25 @@ const WebStandalonePublicRouteShell = lazy(() =>
   })),
 );
 
-type CommunityRecord = {
-  id: string;
-  slug: string;
-  name: string;
-  one_liner: string | null;
-  about: string | null;
-  avatar_url: string | null;
-  avatar_storage_id?: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-  banner_url: string | null;
-  banner_storage_id?: string | null;
-  banner_focus_x?: number | null;
-  banner_focus_y?: number | null;
-  banner_zoom?: number | null;
-  visibility: string;
-  entry_policy?: "open" | "approval" | "paid_subscription" | null;
-  owner_id: string;
-  created_at: string;
-  updated_at: string;
-};
-
-function isTransportRefreshError(error: unknown): boolean {
-  const message =
-    typeof error === "string"
-      ? error
-      : error instanceof Error
-        ? error.message
-        : String(error ?? "");
-  const normalized = message.trim().toLowerCase();
-  return (
-    normalized === "failed to fetch" ||
-    normalized.includes("failed to fetch") ||
-    normalized.includes("networkerror") ||
-    normalized.includes("network error") ||
-    normalized.includes("load failed") ||
-    normalized.includes("fetch failed")
-  );
-}
-
-type PublicCommunityRecord = {
-  slug: string;
-  name: string;
-  one_liner: string | null;
-  about: string | null;
-  avatar_url: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-  banner_url: string | null;
-  banner_focus_x?: number | null;
-  banner_focus_y?: number | null;
-  banner_zoom?: number | null;
-  visibility: string;
-  entry_policy?: "open" | "approval" | "paid_subscription" | null;
-  created_at: string;
-  updated_at: string;
-  funnel?: SharedCommunityFunnelConfig | null;
-  member_count?: number | null;
-  admin_count?: number | null;
-  online_count?: number | null;
-  online_faces?: Array<{
-    user_id: string;
-    display_name: string | null;
-    avatar_url: string | null;
-    avatar_focus_x?: number | null;
-    avatar_focus_y?: number | null;
-    avatar_zoom?: number | null;
-  }> | null;
-};
-
+type CommunityRecord = WebCommunityRecord;
+type PublicCommunityRecord = WebPublicCommunityRecord;
 type MessageAttachment = WebCommunityMessageAttachment;
-type CommunityVoiceTranscriptTarget = {
-  appendTranscript: (transcript: string) => void;
-  focusInput?: () => void;
-};
-type CommunityVoiceButtonOwner = "main" | "drawer";
+type CommunityVoiceTranscriptTarget = WebCommunityVoiceTranscriptTarget;
+type CommunityVoiceButtonOwner = WebCommunityVoiceButtonOwner;
 type CommunityAgentConfig = SharedCommunityAgentConfig<CommunityAgentLanding>;
 type CommunityFunnelConfig = SharedCommunityFunnelConfig;
-const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
-const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
-
-function readFirstLocalStorageValue(keys: readonly string[]): string | null {
-  for (const key of keys) {
-    const value = localStorage.getItem(key);
-    if (value !== null) return value;
-  }
-  return null;
-}
-
-function buildPremiumSubscriptionReturnUrl(): string {
-  return `${window.location.origin}/settings/billing`;
-}
-
 type CommunityAccess = SharedCommunityAccess;
 type UserProfile = SharedUserProfile;
 type UserProfileDetail = SharedUserProfileDetail;
 type CommunityJoinRequest = WebCommunityJoinRequest;
-
-type MyCommunityJoinRequest = {
-  community_id: string;
-  status: string;
-  updated_at: string;
-  denied_at?: string | null;
-  reapply_at?: string | null;
-  denied_until?: string | null;
-};
-
-type PersonalMemoryItem = {
-  id: string;
-  content: string;
-  scope: "global" | "workspace";
-  scope_id: string | null;
-  pinned: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
+type MyCommunityJoinRequest = WebMyCommunityJoinRequest;
+type PersonalMemoryItem = WebPersonalMemoryItem;
 type PublicPlanSummary = SharedPublicPlanSummary;
 type DiscoverCommunity = SharedDiscoverCommunitySnapshot;
 type CommunityAiFeedPost = SharedCommunityAiFeedPost;
 type CommunityAiFeedReactionType = SharedCommunityAiFeedReactionType;
-
-type NavSnapshot = NavSnapshotBase & {
-  routePath: string;
-};
-
-type AccountGraphHydrationPhase = "idle" | "critical" | "secondary" | "ready";
-
-const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
-const COMMUNITY_CHAT_PAGE_SIZE = 50;
-const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
-const MAX_WEB_ATTACHMENTS_PER_MESSAGE = 8;
-const MAX_WEB_IMAGE_UPLOAD_BYTES = 25 * 1024 * 1024;
-const MAX_WEB_MEDIA_UPLOAD_BYTES = 50 * 1024 * 1024;
-const MAX_WEB_FILE_UPLOAD_BYTES = 5 * 1024 * 1024;
-const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024;
-const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
-
-function buildCurrentTelemetryPathname(): string | null {
-  if (typeof window === "undefined") return null;
-  return buildTelemetryRouteLabel({
-    pathname: window.location.pathname,
-    search: window.location.search,
-  });
-}
-
-function scrubCurrentRouteSearchParams(paramNames: readonly string[]): void {
-  if (typeof window === "undefined") return;
-  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  const nextPath = buildPathWithSearchParamsRemoved({
-    pathname: window.location.pathname,
-    search: window.location.search,
-    hash: window.location.hash,
-    paramNames,
-    dropHash: true,
-  });
-  if (nextPath === currentPath) return;
-  window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
-}
-
-const SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_PREFIX =
-  "source_integration_oauth_finalize:";
-const SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_TTL_MS = 2 * 60_000;
-
-function buildSourceIntegrationOAuthFinalizeSessionGuardKey(
-  state: string,
-  finalizeToken: string,
-): string {
-  return `${SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_PREFIX}${state}:${finalizeToken}`;
-}
-
-function claimSourceIntegrationOAuthFinalizeSessionGuard(key: string): boolean {
-  try {
-    const existing = Number(window.sessionStorage.getItem(key) ?? "");
-    const now = Date.now();
-    if (
-      Number.isFinite(existing) &&
-      existing >
-        now - SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_TTL_MS
-    ) {
-      return false;
-    }
-    window.sessionStorage.setItem(key, String(now));
-    return true;
-  } catch {
-    return true;
-  }
-}
-
-
-function clearSourceIntegrationOAuthFinalizeSessionGuard(key: string): void {
-  try {
-    window.sessionStorage.removeItem(key);
-  } catch {
-    // Ignore storage failures; the backend finalizer is still idempotent.
-  }
-}
+type NavSnapshot = WebNavSnapshot;
+type AccountGraphHydrationPhase = WebAccountGraphHydrationPhase;
 
 export default function App() {
   const initialShellVariant: AppShellVariant =
@@ -3545,7 +3384,7 @@ export default function App() {
     },
     readBannerFileAsWideDataUrlWithinLimit,
     isLikelyImageFile,
-    maxCreateImageDataUrlChars: MAX_WEB_IMAGE_DATA_URL_CHARS,
+    maxCreateImageDataUrlChars: WEB_IMAGE_DATA_URL_CHAR_LIMIT,
     createUnauthenticatedErrorMessage: "Sign in to create a community.",
     bannerLoadFailureMessage: "Failed to load banner.",
   });
@@ -3679,7 +3518,7 @@ export default function App() {
     onCommunityAvatarUploadSuccess: () => setIsCommunityAvatarFocusModalOpen(true),
     onCommunityBannerUploadSuccess: () => setIsCommunityBannerFocusModalOpen(true),
     isLikelyImageFile,
-    maxWebImageDataUrlChars: MAX_WEB_IMAGE_DATA_URL_CHARS,
+    maxWebImageDataUrlChars: WEB_IMAGE_DATA_URL_CHAR_LIMIT,
     setProfileAvatarUrl: profileUi.setProfileAvatarUrl,
     setProfileAvatarStorageId: profileUi.setProfileAvatarStorageId,
     setProfileAvatarFocusX: profileUi.setProfileAvatarFocusX,
@@ -4551,7 +4390,7 @@ export default function App() {
       copiedCommunityMessageId,
       isUserAtBottom,
       unreadCount,
-      reactionEmojis: REACTION_EMOJIS,
+      reactionEmojis: WEB_COMMUNITY_REACTION_EMOJIS,
       messageListRef: communityChatListRef,
       fileInputRef: communityFileInputRef,
       chatInputRef,

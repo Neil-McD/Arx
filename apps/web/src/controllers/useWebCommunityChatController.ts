@@ -52,6 +52,14 @@ const MAX_WEB_MEDIA_UPLOAD_BYTES = 50 * 1024 * 1024;
 const MAX_WEB_FILE_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024;
 const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000;
+export const WEB_COMMUNITY_REACTION_EMOJIS = [
+  "👍",
+  "❤️",
+  "😂",
+  "🔥",
+  "🫡",
+  "🎉",
+];
 
 export type WebCommunityMessageAttachment = CommunityMessageAttachment & {
   file?: File | null;
