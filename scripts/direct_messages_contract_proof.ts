@@ -7,6 +7,7 @@ function read(path: string): string {
 
 const schema = read("convex/schema.ts");
 const directMessages = read("convex/directMessages.ts");
+const profileCore = read("convex/profileCore.ts");
 const relationshipCore = read("convex/profileRelationshipCore.ts");
 const gateway = read("shared/cloudDirectMessagesGateway.ts");
 const communityChatGateway = read("shared/cloudCommunityChatGateway.ts");
@@ -30,6 +31,7 @@ const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
 const shellChromeShared = read("apps/web/src/components/webShellChromeShared.ts");
 const shellChromeProps = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const app = read("apps/web/src/App.tsx");
+const dmController = read("apps/web/src/controllers/useWebDirectMessagesController.ts");
 const css = read("apps/web/src/base.css");
 const packageJson = read("package.json");
 const dmCandidateHelper = directMessages.slice(
@@ -148,7 +150,8 @@ assert.match(schema, /\.index\("by_user_createdAt", \["userId", "createdAt"\]\)/
 assert.match(schema, /\.index\("by_normalizedHandle", \["normalizedHandle"\]\)/, "users must support exact normalized-handle recipient lookup");
 assert.match(directMessages, /withIndex\("by_owner_createdAt"[\s\S]*ownerId/, "viewer-wide DM recipient lookup must include recent communities the viewer owns");
 assert.match(directMessages, /withIndex\("by_user_createdAt"[\s\S]*userId/, "viewer-wide DM recipient lookup must include recent communities the viewer belongs to");
-assert.match(directMessages, /findUserByNormalizedHandle[\s\S]*withIndex\("by_normalizedHandle"[\s\S]*normalizedHandle/, "viewer-wide DM recipient lookup must use indexed exact-handle search");
+assert.match(directMessages, /findUserByNormalizedHandle[\s\S]*getUniqueUserByNormalizedHandle/, "viewer-wide DM recipient lookup must delegate exact-handle resolution to the canonical helper");
+assert.match(profileCore, /getUniqueUserByNormalizedHandle[\s\S]*withIndex\("by_normalizedHandle"[\s\S]*normalizedHandle/, "canonical exact-handle lookup must use the normalized-handle index");
 assert.match(directMessages, /exactHandleUser[\s\S]*mapEligibleDirectMessageRecipient\(\{[\s\S]*community,[\s\S]*viewerUserId,[\s\S]*userId: exactHandleUser\._id,[\s\S]*search/, "exact-handle DM recipient result must still pass shared-community recipient mapping and access checks");
 assert.match(directMessages, /MAX_DM_GLOBAL_OWNED_COMMUNITY_ROWS/, "viewer-wide DM source discovery must bound owned-community reads");
 assert.match(directMessages, /MAX_DM_GLOBAL_SOURCE_MEMBERSHIP_ROWS/, "viewer-wide DM source discovery must bound viewer-membership reads");
@@ -215,7 +218,11 @@ assert.doesNotMatch(dmListTypingQuery, /requireDirectConversationSendAccess|requ
 assert.match(dmListTypingQuery, /withIndex\("by_conversation_displayUntil"[\s\S]*gt\("displayUntil", nowMs\)/, "typing reads must query only non-expired rows through the displayUntil index");
 assert.match(dmListTypingQuery, /normalizeIdValue\(row\.userId\) !== normalizeIdValue\(viewerUserId\)/, "typing reads must exclude the viewer");
 assert.match(dmListTypingQuery, /MAX_DM_TYPING_PRESENCE_SCAN_ROWS/, "typing reads must stay bounded");
-assert.match(account, /dmTypingPresence/, "account deletion must clean DM typing presence rows");
+assert.match(
+  account,
+  /ACCOUNT_DELETION_QUARANTINE_CODE[\s\S]*account_delete_lifecycle_migration_blocked[\s\S]*throw new ConvexError/,
+  "account deletion must remain quarantined until its full cross-domain cleanup contract is restored",
+);
 assert.match(anonymousCleanup, /dmTypingPresence/, "anonymous cleanup must include DM typing presence rows");
 assert.match(directMessages, /sendDirectMessage = mutation/, "backend must expose direct message sending");
 assert.match(directMessages, /sendDirectMessageToUser = mutation/, "backend must support a first send without eagerly creating an empty conversation");
@@ -412,11 +419,11 @@ assert.match(desktopHeader, /props\.isPublicCommunityFunnel \? null : props\.dir
 assert.doesNotMatch(desktopHeader, /workspaceRightPanelToggle|hasWorkspaceRightPanelControl/);
 assert.doesNotMatch(desktopHeader, /communityHomeButton/, "desktop header must not retain the redundant community home control");
 assert.match(app, /className=\{`icon-button direct-messages-topbar-button/, "app shell must render a top-right direct messages button");
-assert.match(app, /handleOpenDirectMessageFromCommunity/, "app shell must own the profile-to-DM launch handler");
+assert.match(dmController, /openFromCommunity[\s\S]*targetUserId[\s\S]*communityId/, "direct-message controller must own profile-to-DM launch requests");
 assert.match(app, /openRequest=\{directMessageOpenRequest\}/, "app shell must pass canonical open requests to the global DM host");
 assert.doesNotMatch(app, /activeCommunityId=\{activeCommunity\?\.id \?\? null\}/, "app shell must not scope the global DM picker to the active community");
 assert.doesNotMatch(app, /activeCommunityName=\{activeCommunity\?\.name \?\? null\}/, "app shell must not label the global DM picker as the active community");
-assert.match(app, /directMessagesUnreadCount/, "app shell must own top-bar DM unread count");
+assert.match(dmController, /const \[unreadCount, setUnreadCount\] = useState\(0\)/, "direct-message controller must own top-bar unread count");
 assert.match(app, /onUnreadCountChange=\{setDirectMessagesUnreadCount\}/, "global DM host must feed top-bar unread state");
 assert.match(app, /<WebDirectMessagesHost/, "app shell must mount the global direct messages host");
 assert.doesNotMatch(dmHost, /onProfileSetupRequired|isProfileSetupComplete|DIRECT_MESSAGE_PROFILE_SETUP_REQUIRED|directMessageSendRequiresProfileSetup|profile_setup_required/, "DM host must not preflight or recover through public-profile setup");

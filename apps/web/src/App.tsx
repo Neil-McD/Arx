@@ -310,12 +310,9 @@ import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/commu
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import { WebGlobalOverlayHost } from "./components/WebGlobalOverlayHost";
 import { WebShellChromeHost } from "./components/WebShellChromeHost";
-import {
-  WebDirectMessagesHost,
-  type DirectMessageOpenConversationRequest,
-  type DirectMessageOpenRequest,
-} from "./components/WebDirectMessagesHost";
+import { WebDirectMessagesHost } from "./components/WebDirectMessagesHost";
 import { useDirectMessageWebNotifications } from "./controllers/useDirectMessageWebNotifications";
+import { useWebDirectMessagesController } from "./controllers/useWebDirectMessagesController";
 import { mergeUserProfileEntry } from "../../../shared/userProfileMerge";
 import type { MobileOverlay, MobileRootPage } from "./components/webShellChromeShared";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
@@ -571,49 +568,20 @@ export default function App() {
   const lastIdentifiedBusinessVisitorSubjectRef = useRef<string | null>(null);
   const [accountGraphHydrationPhase, setAccountGraphHydrationPhase] =
     useState<AccountGraphHydrationPhase>("idle");
-  const [isDirectMessagesOpen, setIsDirectMessagesOpen] = useState(false);
-  const [directMessageOpenRequest, setDirectMessageOpenRequest] =
-    useState<DirectMessageOpenRequest>(null);
-  const [directMessageOpenConversationRequest, setDirectMessageOpenConversationRequest] =
-    useState<DirectMessageOpenConversationRequest>(null);
-  const [directMessagesUnreadCount, setDirectMessagesUnreadCount] = useState(0);
+  const directMessages = useWebDirectMessagesController();
+  const {
+    isOpen: isDirectMessagesOpen,
+    openRequest: directMessageOpenRequest,
+    openConversationRequest: directMessageOpenConversationRequest,
+    unreadCount: directMessagesUnreadCount,
+    setUnreadCount: setDirectMessagesUnreadCount,
+    openConversationById: handleOpenDirectConversationById,
+    toggle: handleToggleDirectMessages,
+    open: handleOpenDirectMessages,
+    close: handleCloseDirectMessages,
+    openFromCommunity: handleOpenDirectMessageFromCommunity,
+  } = directMessages;
   const accountGraphHydrationRunIdRef = useRef(0);
-  const directMessageOpenRequestIdRef = useRef(0);
-  const handleOpenDirectConversationById = useCallback((conversationId: string) => {
-    const normalizedConversationId = String(conversationId ?? "").trim();
-    if (!normalizedConversationId) return;
-    directMessageOpenRequestIdRef.current += 1;
-    setDirectMessageOpenRequest(null);
-    setDirectMessageOpenConversationRequest({
-      requestId: directMessageOpenRequestIdRef.current,
-      conversationId: normalizedConversationId,
-    });
-    setIsDirectMessagesOpen(true);
-  }, []);
-  const handleToggleDirectMessages = useCallback(() => {
-    setDirectMessageOpenRequest(null);
-    setIsDirectMessagesOpen((current) => !current);
-  }, []);
-  const handleOpenDirectMessages = useCallback(() => {
-    setDirectMessageOpenRequest(null);
-    setIsDirectMessagesOpen(true);
-  }, []);
-  const handleCloseDirectMessages = useCallback(() => {
-    setDirectMessageOpenRequest(null);
-    setIsDirectMessagesOpen(false);
-  }, []);
-  const handleOpenDirectMessageFromCommunity = useCallback((targetUserId: string, communityId: string) => {
-    const normalizedTargetUserId = String(targetUserId ?? "").trim();
-    const normalizedCommunityId = String(communityId ?? "").trim();
-    if (!normalizedTargetUserId || !normalizedCommunityId) return;
-    directMessageOpenRequestIdRef.current += 1;
-    setDirectMessageOpenRequest({
-      requestId: directMessageOpenRequestIdRef.current,
-      targetUserId: normalizedTargetUserId,
-      communityId: normalizedCommunityId,
-    });
-    setIsDirectMessagesOpen(true);
-  }, []);
 
   async function runCommunitiesHydration(session: AuthSession, phase: string): Promise<void> {
     emitWorkspaceEvent({
