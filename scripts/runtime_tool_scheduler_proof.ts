@@ -11,9 +11,6 @@ function fixedToolNames(names: string[]): RetrievalToolName[] {
 
 const readOnlySurface = buildRuntimeToolPolicySurface({
   fixedToolNames: fixedToolNames(["read", "grep", "web_research"]),
-  includeResolver: false,
-  resolverToolName: "resolve_mounted_tools",
-  mountedTools: [],
 });
 const readOnlyBatch = classifyRuntimeToolSchedule({
   toolCalls: [
@@ -53,9 +50,6 @@ assert.equal(parallelReadOnlyBatch.summary.parallelEligible, 3);
 
 const shellSurface = buildRuntimeToolPolicySurface({
   fixedToolNames: fixedToolNames(["bash", "read"]),
-  includeResolver: false,
-  resolverToolName: "resolve_mounted_tools",
-  mountedTools: [],
 });
 assert.equal(
   shellSurface.policies.find((policy) => policy.toolName === "bash")?.parallelSafe,
@@ -156,9 +150,6 @@ const mixedSurface = buildRuntimeToolPolicySurface({
     "terminal_read",
     "computer_screenshot",
   ]),
-  includeResolver: true,
-  resolverToolName: "resolve_mounted_tools",
-  mountedTools: [],
 });
 const mixedBatch = classifyRuntimeToolSchedule({
   toolCalls: [
@@ -196,40 +187,5 @@ assert.deepEqual(
     "not_parallel_safe",
   ],
 );
-
-const mcpSurface = buildRuntimeToolPolicySurface({
-  fixedToolNames: fixedToolNames([]),
-  includeResolver: false,
-  resolverToolName: "resolve_mounted_tools",
-  mountedTools: [
-    {
-      scope: "community",
-      runtime_tool_name: "community__slack_search",
-      risk_level: "read",
-    },
-  ],
-});
-const mcpBatch = classifyRuntimeToolSchedule({
-  toolCalls: [
-    {
-      providerCallId: "call_mcp",
-      toolName: "community__slack_search",
-      index: 7,
-    },
-  ],
-  policies: mcpSurface.policies,
-});
-assert.equal(mcpBatch.reason, "single_tool_call_serialized");
-assert.equal(mcpBatch.executionMode, "serial_batch");
-assert.equal(mcpBatch.summary.parallelEligible, 0);
-assert.equal(mcpBatch.summary.exclusive, 1);
-assert.equal(mcpBatch.summary.requiresCommunity, 1);
-assert.equal(mcpBatch.summary.requiresMcpSession, 1);
-assert.equal(mcpBatch.calls[0]?.index, 7);
-assert.deepEqual(mcpBatch.calls[0]?.reasons, [
-  "exclusive_tool",
-  "not_parallel_safe",
-  "requires_mcp_session",
-]);
 
 console.log("runtime tool scheduler proof passed");

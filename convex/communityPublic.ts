@@ -1,7 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { extractMessageText } from "./communityChat";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
 import {
   communityJoinRequestCanReapply,
   type CommunityJoinRequestLike,
@@ -60,33 +59,6 @@ const COMMUNITY_ONLINE_WINDOW_MS = 90_000;
 
 async function resolvePublicProfileFaceFields(ctx: any, userId: any): Promise<Omit<PublicCommunityFace, "user_id">> {
   return await resolveUserProfileDisplayProjection(ctx, userId);
-}
-
-async function scheduleCommunityAppGrantSeedingBestEffort(args: {
-  ctx: any;
-  communityId: any;
-  userId: any;
-  nowMs: number;
-  reason: string;
-}): Promise<void> {
-  try {
-    await args.ctx.scheduler.runAfter(
-      0,
-      internal.userPlatformAppMounts.seedCommunityAppGrantsForUserInternal,
-      {
-        communityId: args.communityId,
-        userId: args.userId,
-        nowMs: args.nowMs,
-      },
-    );
-  } catch (error) {
-    console.warn("community_app_grant_seed_schedule_failed", {
-      community_id: String(args.communityId),
-      user_id: String(args.userId),
-      reason: args.reason,
-      error: error instanceof Error ? error.message : String(error ?? ""),
-    });
-  }
 }
 
 async function listCurrentCommunitySellablePlans(ctx: any, communityId: any): Promise<PublicPlanSummaryLike[]> {
@@ -760,13 +732,6 @@ async function joinPublicCommunityInternal(args: {
   };
 
   if (existingMembership && communityMembershipRowIsActive(existingMembership)) {
-    await scheduleCommunityAppGrantSeedingBestEffort({
-      ctx: args.ctx,
-      communityId: args.community._id,
-      userId: args.userId,
-      nowMs: args.nowMs,
-      reason: "already_active_public_join",
-    });
     if (isPlatformHomeCommunity({ communitySlug: args.community.slug })) {
       await clearPlatformHomeCommunityAutojoinOptOut({
         ctx: args.ctx,
@@ -908,15 +873,6 @@ async function joinPublicCommunityInternal(args: {
   }
 
   await grantFreeMembership();
-  if (grantedMembershipMarker) {
-    await scheduleCommunityAppGrantSeedingBestEffort({
-      ctx: args.ctx,
-      communityId: args.community._id,
-      userId: args.userId,
-      nowMs: args.nowMs,
-      reason: "public_join_granted",
-    });
-  }
   if (isPlatformHomeCommunity({ communitySlug: args.community.slug })) {
     await clearPlatformHomeCommunityAutojoinOptOut({
       ctx: args.ctx,

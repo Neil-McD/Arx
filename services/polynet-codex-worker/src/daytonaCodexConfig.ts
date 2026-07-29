@@ -5,7 +5,6 @@ type DaytonaCodexConfigParams = {
   workspaceRoot: string;
   previewUrlPattern: string | null;
   platformToolsAvailable: boolean;
-  mcpBridgeToolsAvailable: boolean;
   workspaceServeAvailable: boolean;
 };
 
@@ -44,9 +43,6 @@ export function buildDaytonaCodexDeveloperInstructions(
         : null,
       params.platformToolsAvailable
         ? "PolyNet platform tools are available under the polynet namespace for community context, resources, and product docs; discover them with tool search when the answer depends on the user's community or platform."
-        : null,
-      params.mcpBridgeToolsAvailable
-        ? "Connected PolyNet MCP app tools may be available with names starting with polynet_mcp__; use them when they directly match the user's requested connected app or data source. These are PolyNet-managed bridge tools, not raw Codex MCP servers. If the user asks whether connected PolyNet MCP apps are available, answer from the polynet_mcp__ tool surface, not from Codex's default app/plugin registry. Do not ask the user to configure the same app inside Codex."
         : null,
       "Never mention internal infrastructure, vendor, or hosting names; refer to the environment simply as the workspace.",
       "The host service environment is not separate user context: use only the configured workspace root for file and shell work. Do not inspect sibling or parent directories unless the user explicitly asks.",

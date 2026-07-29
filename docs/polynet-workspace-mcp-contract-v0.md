@@ -10,17 +10,17 @@ Status: active contract
 
 ## First Principle
 
-Polynet Workspace MCP is a provider surface. It lets an external agent harness access a server-authoritative Polynet workspace projection.
-
-It is not the existing Polynet MCP app consumer path.
+Polynet Workspace MCP is a provider surface. It lets an external agent harness
+access a server-authoritative Polynet workspace projection.
 
 ```text
-Polynet consumes MCPs:
-  third-party MCP app -> Polynet runtime harness
-
 Polynet exposes MCP:
   external agent harness -> Polynet workspace MCP -> Polynet community workspace
 ```
+
+Polynet does not consume, connect, mount, proxy, or execute third-party MCP
+servers. The provider is a one-way external access boundary over Polynet-owned
+capabilities, not a gateway to third-party tools.
 
 ## Scope
 
@@ -472,16 +472,12 @@ They must not expose staged changesets, apply changesets, or any resource mutati
 
 ## Non-Goals
 
-This slice does not change or extend:
+This provider must not introduce:
 
-- third-party MCP app ingestion,
-- `runtimeMcpManager`,
-- app validation,
-- app fetch policy,
-- user platform app mounts,
-- community app mounts,
-- runtime harness composition,
-- arbitrary connected-app passthrough,
+- third-party MCP app ingestion or passthrough,
+- third-party MCP connection, validation, or credential state,
+- third-party MCP mounts in user or community harnesses,
+- arbitrary connected-app tool projection,
 - local stdio MCP support,
 - workspace filesystem or shell tools,
 - community writes,

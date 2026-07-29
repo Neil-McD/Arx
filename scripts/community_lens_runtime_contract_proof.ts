@@ -71,11 +71,6 @@ function main() {
   );
   assertIncludes(
     runtimeAgentLoop,
-    "mountedToolDiscoveryCatalog: resolvedHarness.discoveryMountedTools",
-    "community-lens personal mounted tool discovery projection",
-  );
-  assertIncludes(
-    runtimeAgentLoop,
     "community_skills_resolved",
     "runtime evidence for skill overlays",
   );
@@ -171,7 +166,7 @@ function main() {
   );
   assertIncludes(
     communityOverlayRuntime,
-    "personal skills and connected apps remain available",
+    "personal skills remain available",
     "community workflow context is priority, not exclusive",
   );
   assertIncludes(

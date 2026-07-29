@@ -193,7 +193,6 @@ function proveComposedHarnessUsesOneGlobalSkillInventoryBudget() {
   }));
 
   const resolved = composeResolvedRuntimeHarness({
-    personalMountedTools: [],
     skillResolution: {
       requested_mention_tokens: [],
       ambiguous_mention_tokens: [],

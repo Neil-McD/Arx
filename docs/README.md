@@ -12,7 +12,7 @@
 1. `auth-money-access-matrix.md`
 2. `irreducible-core-contract.md`
 3. `bounded-workspace-loop-v2.md`
-4. `mcp-app-architecture-contract.md`
+4. `polynet-workspace-mcp-contract-v0.md`
 5. `url-routing-contract-v1.md`
 6. `platform-diagnostics-contract-v1.md`
 7. `workspace-context-contract-v1.md`

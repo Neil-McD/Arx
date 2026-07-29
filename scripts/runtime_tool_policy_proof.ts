@@ -16,7 +16,6 @@ import {
 import {
   buildRuntimeToolPolicySurface,
   getFixedRuntimeToolPolicy,
-  getMountedRuntimeToolPolicy,
   getUnknownRuntimeToolPolicy,
   isRuntimeToolPolicyParallelEligible,
   type RuntimeToolCategory,
@@ -26,7 +25,7 @@ const rootDir = process.cwd();
 
 type FixedRuntimeToolCategory = Exclude<
   RuntimeToolCategory,
-  "mcp" | "resolver" | "unknown"
+  "unknown"
 >;
 
 const FIXED_TOOL_FAMILIES = {
@@ -317,64 +316,21 @@ function proveFixedPolicyBoundaries() {
   console.log("PASS: fixed tool policies separate parallel reads from stateful exclusives");
 }
 
-function proveMountedPolicyBoundaries() {
-  const readMounted = getMountedRuntimeToolPolicy({
-    scope: "community",
-    runtime_tool_name: "drive__read_file",
-    risk_level: "read",
-  });
-  assert.equal(readMounted.readOnly, true);
-  assert.equal(readMounted.requiresCommunity, true);
-  assert.equal(readMounted.requiresMcpSession, true);
-  assert.equal(readMounted.parallelSafe, false);
-  assert.equal(readMounted.exclusive, true);
-
-  const writeMounted = getMountedRuntimeToolPolicy({
-    scope: "user",
-    runtime_tool_name: "github__create_issue",
-    risk_level: "write",
-  });
-  assert.equal(writeMounted.readOnly, false);
-  assert.equal(writeMounted.mutatesState, true);
-  assert.equal(writeMounted.requiresCommunity, false);
-  assert.equal(writeMounted.requiresMcpSession, true);
-  assert.equal(writeMounted.parallelSafe, false);
-  assert.equal(writeMounted.exclusive, true);
-  console.log("PASS: mounted MCP tools stay session-bound and exclusive");
-}
-
 function provePolicySurfaceSummary() {
   const surface = buildRuntimeToolPolicySurface({
     fixedToolNames: ["community_search", "read", "bash"],
-    includeResolver: true,
-    resolverToolName: "resolve_mounted_tools",
-    mountedTools: [
-      {
-        scope: "community",
-        runtime_tool_name: "drive__read_file",
-        risk_level: "read",
-      },
-      {
-        scope: "user",
-        runtime_tool_name: "github__create_issue",
-        risk_level: "write",
-      },
-    ],
   });
-  assert.equal(surface.policies.length, 6);
-  assert.equal(surface.summary.total, 6);
+  assert.equal(surface.policies.length, 3);
+  assert.equal(surface.summary.total, 3);
   assert.equal(surface.summary.parallelSafe, 2);
-  assert.equal(surface.summary.exclusive, 4);
-  assert.equal(surface.summary.requiresMcpSession, 2);
-  assert.equal(surface.summary.requiresCommunity, 2);
-  assert.equal(surface.summary.byRiskLevel.read, 4);
-  assert.equal(surface.summary.byRiskLevel.write, 1);
+  assert.equal(surface.summary.exclusive, 1);
+  assert.equal(surface.summary.requiresCommunity, 1);
+  assert.equal(surface.summary.byRiskLevel.read, 2);
+  assert.equal(surface.summary.byRiskLevel.write, 0);
   assert.equal(surface.summary.byRiskLevel.sensitive, 1);
   assert.equal(surface.summary.byCategory.community, 1);
   assert.equal(surface.summary.byCategory.workspace_fs, 1);
   assert.equal(surface.summary.byCategory.workspace_shell, 1);
-  assert.equal(surface.summary.byCategory.resolver, 1);
-  assert.equal(surface.summary.byCategory.mcp, 2);
   console.log("PASS: active runtime tool surfaces produce scheduler-ready summaries");
 }
 
@@ -401,51 +357,38 @@ async function provePolicySurfaceIsWiredIntoRuntimeEvidence() {
     /tool_policy_enforcement: "full_access_audit"/,
     "expected provider tool surface events to state that full-access execution is audited",
   );
-  assert.match(
-    runtimeAgentLoopSource,
-    /tool_policy_summary:\s*providerToolSurface\.activeToolPolicySummary/,
-    "expected mounted-tool exposure event to include refreshed policy summary",
-  );
   console.log("PASS: runtime tool policy metadata is wired into run evidence");
 }
 
-async function proveApprovalBlocksAreRemovedFromRuntimeHarness() {
+async function proveThirdPartyMcpRuntimeIsAbsent() {
   const policySource = await readRepoFile("shared/runtimeToolPolicy.ts");
   const runtimeAgentLoopSource = await readRepoFile("convex/runtimeAgentLoop.ts");
-  const personalMountSource = await readRepoFile("convex/userPlatformAppMounts.ts");
   const promptSource = await readRepoFile("convex/runtimeHarnessShaping.ts");
   const integrationSettingsSource = await readRepoFile(
     "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
   );
   const runtimeSources = [
     runtimeAgentLoopSource,
-    personalMountSource,
     promptSource,
     integrationSettingsSource,
   ].join("\n");
   assert.doesNotMatch(
     runtimeSources,
-    /approval|approval_required|user_platform_app_tool_approval_required|blocked until/i,
-    "runtime harness should not contain approval-era mounted tool blockers or copy",
+    /runtimeMcpManager|resolve_mounted_tools|userPlatformAppMount|communityAppMount/,
+    "native runtime and settings must not expose third-party MCP mounts",
   );
   assert.doesNotMatch(
     policySource,
-    /requiresApproval|requires_approval/i,
-    "runtime tool policy should not carry approval metadata",
+    /requiresMcpSession|category: "mcp"|category: "resolver"/,
+    "runtime tool policy should describe only fixed and unknown tools",
   );
-  assert.match(
-    runtimeSources,
-    /full-access mode|full_access_audit/,
-    "runtime harness should describe mounted tool execution as full-access with audit",
-  );
-  console.log("PASS: mounted runtime tools use full-access execution, not approvals");
+  console.log("PASS: runtime tool policy has no third-party MCP surface");
 }
 
 proveFixedToolsHaveSingleCapabilityFamily();
 proveFixedPolicyCoverage();
 proveDefensiveMutationDefaults();
 proveFixedPolicyBoundaries();
-proveMountedPolicyBoundaries();
 provePolicySurfaceSummary();
 await provePolicySurfaceIsWiredIntoRuntimeEvidence();
-await proveApprovalBlocksAreRemovedFromRuntimeHarness();
+await proveThirdPartyMcpRuntimeIsAbsent();

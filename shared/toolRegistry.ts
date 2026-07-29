@@ -1437,18 +1437,6 @@ export function sanitizeLooseToolSchema(schema: JsonSchema): JsonSchema {
   return next;
 }
 
-export function sanitizeMountedMcpToolSchema(schema: JsonSchema): JsonSchema {
-  const sanitized = sanitizeLooseToolSchema(schema);
-  if (!isSchemaRecord(sanitized)) return sanitized;
-  if (!("properties" in sanitized) || sanitized.properties === null) {
-    return {
-      ...sanitized,
-      properties: {},
-    };
-  }
-  return sanitized;
-}
-
 function hasStrictResponsesApiSchemaRisk(schema: JsonSchema): boolean {
   if (typeof schema === "boolean") return true;
   if (!isSchemaRecord(schema)) return false;

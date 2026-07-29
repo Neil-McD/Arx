@@ -19,13 +19,6 @@ EXCLUDES=(
   --glob '!**/.turbo/**'
   --glob '!**/coverage/**'
   --glob '!references/**'
-  --glob '!apps/web/src/lib/discoverCatalog.ts'
-  --glob '!shared/discoverCatalog.ts'
-  --glob '!shared/communityWorkflowImportMcpRegistry.ts'
-  --glob '!scripts/discover_connect_policy_proof.ts'
-  --glob '!scripts/discover_integration_profile_proof.ts'
-  --glob '!scripts/private_community_mcp_ui_contract_proof.ts'
-  --glob '!scripts/runtime_profile_policy_proof.ts'
 )
 CODE_TARGETS=(
   apps
@@ -33,7 +26,7 @@ CODE_TARGETS=(
   convex
 )
 
-echo "[1/3] Scanning repository for forbidden legacy provider references outside approved MCP catalog/proof surfaces..."
+echo "[1/3] Scanning repository for forbidden legacy provider references..."
 if rg -n -i --hidden -S "$PATTERN" . "${EXCLUDES[@]}"; then
   echo "FAIL: legacy provider reference detected."
   exit 1

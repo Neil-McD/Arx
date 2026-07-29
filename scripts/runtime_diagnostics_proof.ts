@@ -96,104 +96,6 @@ assert.notEqual(
   "shell nonzero_exit: read exited with code 0.",
 );
 
-const airtableForbidden = inferRuntimeToolFailureSemantics({
-  toolName: "me__airtable_3__list_bases",
-  errorCode: "user_platform_app_tool_failed",
-  errorMessage: '{"error":"FORBIDDEN","message":"Forbidden"}',
-  outputText: '{"error":"FORBIDDEN","message":"Forbidden"}',
-  details: {
-    user_platform_app: {
-      app_name: "Airtable",
-      tool_name: "list_bases",
-      namespaced_tool_name: "airtable__list_bases",
-      risk_level: "read",
-    },
-  },
-});
-assert.equal(airtableForbidden?.kind, "app_permission_denied");
-assert.equal(
-  airtableForbidden?.summary,
-  "Airtable tool list_bases was rejected by the provider because of permissions or scopes.",
-);
-assert.equal(airtableForbidden?.appName, "Airtable");
-assert.equal(airtableForbidden?.appScope, "user_platform_app");
-assert.equal(airtableForbidden?.appToolName, "list_bases");
-assert.equal(airtableForbidden?.diagnostic.source, "connected_app:Airtable");
-assert.ok(
-  airtableForbidden?.suggestedRecovery.includes("workspace/resource permissions"),
-  "permission recovery should point at app/provider permissions instead of generic runtime failure",
-);
-
-const linearBadCursor = inferRuntimeToolFailureSemantics({
-  toolName: "me__linear_4__list_issue_labels",
-  errorCode: "user_platform_app_tool_failed",
-  errorMessage: "Invalid input: expected cursor to be a string.",
-  outputText: "expected cursor to be a string",
-  details: {
-    user_platform_app: {
-      app_name: "Linear",
-      tool_name: "list_issue_labels",
-      namespaced_tool_name: "linear__list_issue_labels",
-      risk_level: "read",
-    },
-  },
-});
-assert.equal(linearBadCursor?.kind, "app_invalid_arguments");
-assert.equal(
-  linearBadCursor?.summary,
-  "Linear tool list_issue_labels failed because the tool arguments were invalid.",
-);
-assert.ok(
-  linearBadCursor?.suggestedRecovery.includes("tool schema"),
-  "invalid argument recovery should tell the agent to correct arguments, not reconnect the app",
-);
-
-const notionExpiredAuth = inferRuntimeToolFailureSemantics({
-  toolName: "me__notion_1__search",
-  errorCode: "user_platform_app_tool_failed",
-  errorMessage: "401 Unauthorized: access token expired",
-  details: {
-    user_platform_app: {
-      app_name: "Notion",
-      tool_name: "search",
-      namespaced_tool_name: "notion__search",
-      risk_level: "read",
-    },
-  },
-});
-assert.equal(notionExpiredAuth?.kind, "app_auth_required");
-assert.ok(
-  notionExpiredAuth?.suggestedRecovery.includes("reconnect"),
-  "auth failures should point at setup/reconnect",
-);
-
-const githubRateLimited = inferRuntimeToolFailureSemantics({
-  toolName: "me__github_1__search_repos",
-  errorCode: "user_platform_app_tool_failed",
-  errorMessage: "429 Too Many Requests: rate limit exceeded",
-  details: {
-    user_platform_app: {
-      app_name: "GitHub",
-      tool_name: "search_repos",
-      namespaced_tool_name: "github__search_repos",
-      risk_level: "read",
-    },
-  },
-});
-assert.equal(githubRateLimited?.kind, "app_rate_limited");
-assert.ok(
-  githubRateLimited?.suggestedRecovery.includes("Back off"),
-  "rate limits should not encourage tight retry loops",
-);
-
-const unknownMountedAppFailure = inferRuntimeToolFailureSemantics({
-  toolName: "me__unknown_1__read",
-  errorCode: "user_platform_app_tool_failed",
-  errorMessage: "Unexpected provider failure.",
-});
-assert.equal(unknownMountedAppFailure?.kind, "app_tool_failure");
-assert.equal(unknownMountedAppFailure?.appName, "Unknown");
-
 const eventSource = readText("convex/runtimeToolCallEvents.ts");
 assert.ok(
   eventSource.includes('eventType: "runtime_diagnostics_detected"'),
@@ -211,11 +113,6 @@ assert.ok(
   eventSource.includes("failure_semantics"),
   "runtime tool finish event carries failure semantics",
 );
-assert.ok(
-  eventSource.includes("app_name: failureSemantics.appName"),
-  "runtime tool finish event persists connected-app failure identity",
-);
-
 const appendedEvents = [
   {
     eventType: "tool_call_finished",

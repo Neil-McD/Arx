@@ -64,7 +64,6 @@ export type CommunityTab = (typeof COMMUNITY_TABS)[number];
 export const COMMUNITY_SETTINGS_PANES = [
   "community",
   "workflows",
-  "integrations",
 ] as const;
 
 export type CommunitySettingsPane = (typeof COMMUNITY_SETTINGS_PANES)[number];
@@ -152,8 +151,6 @@ export function parseCommunitySettingsPane(value: string | null | undefined): Co
   switch ((value ?? "").trim()) {
     case "workflows":
       return "workflows";
-    case "integrations":
-      return "integrations";
     case "community":
     default:
       return "community";

@@ -266,18 +266,18 @@ assert.ok(
   "MCP adapter should enforce canonical community capabilities",
 );
 
-const architectureContract = read("docs/mcp-app-architecture-contract.md");
+const architectureContract = read("docs/polynet-workspace-mcp-contract-v0.md");
 assert.ok(
-  architectureContract.includes("### Community Capability Boundary"),
-  "MCP architecture contract should define the canonical community boundary",
+  architectureContract.includes("canonical community capability boundary"),
+  "MCP provider contract should define the canonical community boundary",
 );
 assert.ok(
-  architectureContract.includes("Internal architecture uses `community_context`."),
-  "MCP architecture contract should preserve internal community-native vocabulary",
+  architectureContract.includes("internal `community_context` capability"),
+  "MCP provider contract should preserve internal community-native vocabulary",
 );
 assert.ok(
-  architectureContract.includes("projects that capability as `workspace_context`"),
-  "MCP architecture contract should pin the compatibility projection",
+  architectureContract.includes("public `workspace_context` toolset"),
+  "MCP provider contract should pin the compatibility projection",
 );
 
 console.log("community_capability_contract_proof: ok");

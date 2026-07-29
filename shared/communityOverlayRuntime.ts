@@ -34,7 +34,7 @@ function buildBoundedCommunitySkillsPrompt(params: {
     heading: "COMMUNITY_WORKFLOW_CONTEXT",
     introLines: [
       "These workflow skill packages are attached to the active community lens.",
-      "Prefer these community workflows for community-relevant work, but personal skills and connected apps remain available when useful.",
+      "Prefer these community workflows for community-relevant work, but personal skills remain available when useful.",
       "If a community workflow and personal workflow overlap, prefer the community workflow for this lens.",
       "Full community skill instructions are injected only when the user explicitly mentions the skill under the current activation rules, like `$weekly-research`.",
     ],

@@ -287,8 +287,8 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   launchQuery,
-  /communityAppMounts|communitySkillAttachments/,
-  "launch setup status must not depend on workflow app or skill imports",
+  /communitySkillAttachments/,
+  "launch setup status must not depend on skill imports",
 );
 assert.doesNotMatch(
   launchQuery,

@@ -45,8 +45,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
     WebCommunitySecondaryPanelsProps["settings"]["startStripeConnectOnboarding"];
   isStartingStripeConnectOnboarding:
     WebCommunitySecondaryPanelsProps["settings"]["isStartingStripeConnectOnboarding"];
-  communityIntegrations:
-    WebCommunitySecondaryPanelsProps["settings"]["communityIntegrations"];
   settingsState: WebCommunitySecondaryPanelsProps["settings"]["state"];
   settingsActions: WebCommunitySecondaryPanelsProps["settings"]["actions"];
   setIsCommunityAvatarFocusModalOpen:
@@ -75,7 +73,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   isLoadingCommunityAgentConfig: WebCommunitySecondaryPanelsProps["aiAgent"]["isLoadingCommunityAgentConfig"];
   communityAgentConfigError: WebCommunitySecondaryPanelsProps["aiAgent"]["communityAgentConfigError"];
   aiAgentInstructionsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["instructionsEditorProps"];
-  aiAgentAppsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["appsEditorProps"];
   aiAgentSkillsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["skillsEditorProps"];
   isLoadingCommunityFunnel: WebCommunitySecondaryPanelsProps["funnel"]["isLoadingCommunityFunnel"];
   communityFunnelError: WebCommunitySecondaryPanelsProps["funnel"]["communityFunnelError"];
@@ -194,7 +191,6 @@ export function buildWebCommunitySurfaceProjection(
       accountCommerceError: params.accountCommerceError,
       startStripeConnectOnboarding: params.startStripeConnectOnboarding,
       isStartingStripeConnectOnboarding: params.isStartingStripeConnectOnboarding,
-      communityIntegrations: params.communityIntegrations,
       state: params.settingsState,
       actions: params.settingsActions,
       setIsCommunityAvatarFocusModalOpen:
@@ -258,7 +254,6 @@ export function buildWebCommunitySurfaceProjection(
       communityAgentConfigError: params.communityAgentConfigError,
       onRequireSignIn: params.requireSignIn,
       instructionsEditorProps: params.aiAgentInstructionsEditorProps,
-      appsEditorProps: params.aiAgentAppsEditorProps,
       skillsEditorProps: params.aiAgentSkillsEditorProps,
     },
     funnel: {

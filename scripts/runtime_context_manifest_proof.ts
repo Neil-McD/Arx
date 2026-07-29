@@ -104,13 +104,6 @@ const fullManifest = buildRuntimeContextManifest({
     "terminal_start",
     "computer_screenshot",
   ],
-  mountedTools: [
-    {
-      runtime_tool_name: "me__github_create_issue",
-      app_name: "GitHub",
-      risk_level: "write",
-    },
-  ],
   communityResourceLane: {
     lane: "builder",
     can_read_live_resources: true,
@@ -177,8 +170,6 @@ assert.equal(toolByName(fullManifest, "read")?.family, "sandbox_read");
 assert.equal(toolByName(fullManifest, "write")?.family, "sandbox_write");
 assert.equal(toolByName(fullManifest, "terminal_start")?.effect, "process");
 assert.equal(toolByName(fullManifest, "computer_screenshot")?.effect, "ui");
-assert.equal(toolByName(fullManifest, "me__github_create_issue")?.source, "mounted_app_tool");
-assert.equal(toolByName(fullManifest, "me__github_create_issue")?.effect, "write");
 
 assert.ok(ids(fullManifest.runtimeState).includes("runtime_turn_envelope"));
 assert.ok(ids(fullManifest.runtimeState).includes("thread_working_state"));

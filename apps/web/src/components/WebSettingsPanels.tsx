@@ -6,17 +6,9 @@ import type { BuilderPartnerProgramSnapshot } from "../../../../shared/builderPa
 import type { SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
-import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type { EffectiveSkill } from "../../../../shared/effectiveSkills";
-import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
-import type {
-  BeginUserPlatformAppOAuthOptions,
-  BeginUserPlatformAppOAuthResult,
-  ConnectUserPlatformAppInput,
-  ConnectUserPlatformAppResult,
-} from "../../../../shared/userPlatformAppMountTypes";
 import type { UseWebProviderConnectionUiControllerResult } from "../controllers/useWebProviderConnectionUiController";
 import type { useWebProfileSettingsUiController } from "../controllers/useWebProfileSettingsUiController";
 import type { useWebPersonalMemoryUiController } from "../controllers/useWebPersonalMemoryUiController";
@@ -147,24 +139,12 @@ export type WebSettingsPanelsProps = {
 	      PendingPurchaseClaim
 	    >;
 	  };
-  integrations: {
+  skills: {
     session: SessionLike;
     requireSignIn: () => void;
-    effectiveMcpApps: EffectiveMcpApp[];
-    isLoadingEffectiveMcpApps: boolean;
-    effectiveMcpAppsError: string | null;
     effectiveSkills: EffectiveSkill[];
     isLoadingEffectiveSkills: boolean;
     effectiveSkillsError: string | null;
-    isLoadingUserPlatformAppMounts: boolean;
-    userPlatformAppMountError: string | null;
-    userPlatformAppMutationError: string | null;
-    isConnectingUserPlatformApp: boolean;
-    updatingUserPlatformAppMountId: string | null;
-    refreshingUserPlatformAppMountId: string | null;
-    refreshingCommunityAppMountId: string | null;
-    reconnectingUserPlatformAppMountId: string | null;
-    removingUserPlatformAppMountId: string | null;
     userPlatformSkills: UserPlatformInstalledSkill[];
     isLoadingUserPlatformSkills: boolean;
     userPlatformSkillError: string | null;
@@ -172,36 +152,6 @@ export type WebSettingsPanelsProps = {
     isCreatingUserPlatformSkill: boolean;
     updatingUserPlatformSkillInstallId: string | null;
     removingUserPlatformSkillInstallId: string | null;
-    onConnectUserPlatformApp: (
-      input: ConnectUserPlatformAppInput,
-    ) => Promise<ConnectUserPlatformAppResult>;
-    onBeginUserPlatformAppOAuth: (
-      catalogAppId: string,
-      options?: BeginUserPlatformAppOAuthOptions,
-    ) => Promise<BeginUserPlatformAppOAuthResult>;
-    onUpdateUserPlatformAppMount: (
-      userPlatformAppMountId: string,
-      patch: {
-        enabled?: boolean;
-        enabledTools?: string[];
-      },
-    ) => Promise<void> | Promise<boolean> | boolean | void;
-    onRefreshUserPlatformApp: (
-      userPlatformAppMountId: string,
-    ) => Promise<void> | Promise<boolean> | boolean | void;
-    onReconnectUserPlatformApp: (
-      userPlatformAppMountId: string,
-      secret: string,
-    ) => Promise<void> | Promise<boolean> | boolean | void;
-    onSetupImportedCommunityMcpApp: (input: {
-      community_app_mount_id: string;
-      endpoint_url: string;
-      auth_type: DeveloperAppAuthType;
-      secret?: string;
-    }) => Promise<void> | Promise<boolean> | boolean | void;
-    onUnmountUserPlatformApp: (
-      userPlatformAppMountId: string,
-    ) => Promise<void> | Promise<boolean> | boolean | void;
     onCreateUserPlatformSkill: (
       input: CreateSkillPackageInput,
     ) => Promise<void> | Promise<boolean> | boolean | void;
@@ -226,7 +176,7 @@ export type WebSettingsPanelsProps = {
 };
 
 export function WebSettingsPanels(props: WebSettingsPanelsProps) {
-  const { settingsGroup, profile, account, agent, billing, integrations, appearance } =
+  const { settingsGroup, profile, account, agent, billing, skills, appearance } =
     props;
 
   const profileSectionProps = {
@@ -368,47 +318,24 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     setAppTheme: appearance.setAppTheme,
   };
 
-  const integrationsSectionProps = {
-    session: integrations.session,
-    requireSignIn: integrations.requireSignIn,
-    effectiveMcpApps: integrations.effectiveMcpApps,
-    isLoadingEffectiveMcpApps: integrations.isLoadingEffectiveMcpApps,
-    effectiveMcpAppsError: integrations.effectiveMcpAppsError,
-    effectiveSkills: integrations.effectiveSkills,
-    isLoadingEffectiveSkills: integrations.isLoadingEffectiveSkills,
-    effectiveSkillsError: integrations.effectiveSkillsError,
-    isLoadingUserPlatformAppMounts: integrations.isLoadingUserPlatformAppMounts,
-    userPlatformAppMountError: integrations.userPlatformAppMountError,
-    userPlatformAppMutationError: integrations.userPlatformAppMutationError,
-    isConnectingUserPlatformApp: integrations.isConnectingUserPlatformApp,
-    updatingUserPlatformAppMountId: integrations.updatingUserPlatformAppMountId,
-    refreshingUserPlatformAppMountId:
-      integrations.refreshingUserPlatformAppMountId,
-    refreshingCommunityAppMountId: integrations.refreshingCommunityAppMountId,
-    reconnectingUserPlatformAppMountId:
-      integrations.reconnectingUserPlatformAppMountId,
-    removingUserPlatformAppMountId: integrations.removingUserPlatformAppMountId,
-    userPlatformSkills: integrations.userPlatformSkills,
-    isLoadingUserPlatformSkills: integrations.isLoadingUserPlatformSkills,
-    userPlatformSkillError: integrations.userPlatformSkillError,
-    userPlatformSkillMutationError: integrations.userPlatformSkillMutationError,
-    isCreatingUserPlatformSkill: integrations.isCreatingUserPlatformSkill,
+  const skillsSectionProps = {
+    session: skills.session,
+    effectiveSkills: skills.effectiveSkills,
+    isLoadingEffectiveSkills: skills.isLoadingEffectiveSkills,
+    effectiveSkillsError: skills.effectiveSkillsError,
+    userPlatformSkills: skills.userPlatformSkills,
+    isLoadingUserPlatformSkills: skills.isLoadingUserPlatformSkills,
+    userPlatformSkillError: skills.userPlatformSkillError,
+    userPlatformSkillMutationError: skills.userPlatformSkillMutationError,
+    isCreatingUserPlatformSkill: skills.isCreatingUserPlatformSkill,
     updatingUserPlatformSkillInstallId:
-      integrations.updatingUserPlatformSkillInstallId,
+      skills.updatingUserPlatformSkillInstallId,
     removingUserPlatformSkillInstallId:
-      integrations.removingUserPlatformSkillInstallId,
-    onConnectUserPlatformApp: integrations.onConnectUserPlatformApp,
-    onBeginUserPlatformAppOAuth: integrations.onBeginUserPlatformAppOAuth,
-    onUpdateUserPlatformAppMount: integrations.onUpdateUserPlatformAppMount,
-    onRefreshUserPlatformApp: integrations.onRefreshUserPlatformApp,
-    onReconnectUserPlatformApp: integrations.onReconnectUserPlatformApp,
-    onSetupImportedCommunityMcpApp:
-      integrations.onSetupImportedCommunityMcpApp,
-    onUnmountUserPlatformApp: integrations.onUnmountUserPlatformApp,
-    onCreateUserPlatformSkill: integrations.onCreateUserPlatformSkill,
-    onSaveUserPlatformSkill: integrations.onSaveUserPlatformSkill,
-    onUpdateUserPlatformSkill: integrations.onUpdateUserPlatformSkill,
-    onDeleteUserPlatformSkill: integrations.onDeleteUserPlatformSkill,
+      skills.removingUserPlatformSkillInstallId,
+    onCreateUserPlatformSkill: skills.onCreateUserPlatformSkill,
+    onSaveUserPlatformSkill: skills.onSaveUserPlatformSkill,
+    onUpdateUserPlatformSkill: skills.onUpdateUserPlatformSkill,
+    onDeleteUserPlatformSkill: skills.onDeleteUserPlatformSkill,
   };
 
   return (
@@ -419,7 +346,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
       {settingsGroup === "partners" ? <WebBuilderPartnerSettingsSection {...accountSectionProps} /> : null}
       {settingsGroup === "agent" ? <WebAgentSettingsSection {...agentSectionProps} /> : null}
       {settingsGroup === "integrations" ? (
-        <WebIntegrationsSettingsSection {...integrationsSectionProps} />
+        <WebIntegrationsSettingsSection {...skillsSectionProps} />
       ) : null}
       {settingsGroup === "appearance" ? <WebAppearanceSettingsSection {...appearanceSectionProps} /> : null}
     </>

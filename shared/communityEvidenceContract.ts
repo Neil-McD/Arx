@@ -5,13 +5,9 @@ export const COMMUNITY_AI_FEED_EVIDENCE_SEARCH_TOOL_NAME =
 export const COMMUNITY_AI_FEED_EVIDENCE_READ_TOOL_NAME =
   "community_ai_feed_read" as const;
 
-export const COMMUNITY_CHAT_EVIDENCE_MCP_SEARCH_TOOL_NAME =
-  "polynet_community_chat_search" as const;
-export const COMMUNITY_CHAT_EVIDENCE_MCP_READ_TOOL_NAME =
-  "polynet_community_chat_read" as const;
-
 export const COMMUNITY_EVIDENCE_SURFACES = [
   "member_agent_dock",
+  "coding_harness",
   "external_mcp",
   "community_concierge",
 ] as const;

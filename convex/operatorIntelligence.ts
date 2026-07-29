@@ -3,9 +3,6 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { sanitizeCriticalAuditMetadata } from "./criticalAudit";
 import {
-  resolveDiscoverAppCatalogConnectPolicy,
-} from "../shared/discoverCatalog";
-import {
   creditsToUsd,
   getPaidToolLedgerLabel,
   PAID_TOOL_LEDGER_TOOL_NAMES,
@@ -18,7 +15,6 @@ import {
   type AccountSetupMissing,
   type AccountSetupStep,
 } from "../shared/accountSetup";
-import type { DeveloperAppAuthType } from "../shared/communityAppMountTypes";
 import { isAnonymousAuthSubject } from "../shared/authRelinkPolicy";
 import { buildAccountSetupStatusForRows } from "./accountSetupCore";
 
@@ -119,25 +115,6 @@ type DiagnosticSubsystem =
   | "deploy"
   | "diagnostics";
 
-type DeveloperAppPolicyAuditFinding = {
-  developerAppId: string;
-  ownerUserId: string;
-  name: string;
-  catalogAppId: string | null;
-  endpointUrl: string;
-  authType: string;
-  status: string;
-  lastValidatedAt: number | null;
-  lastValidationError: string | null;
-  userMountCount: number;
-  communityMountCount: number;
-  policyStatus: "blocked";
-  policyCode: string;
-  policyMessage: string;
-  recommendedAction: "delete_or_migrate";
-  updatedAt: number;
-};
-
 function normalizeLimit(value: number | undefined, fallback: number, max: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(1, Math.floor(value)));
@@ -152,11 +129,6 @@ function buildOperatorHealthFromScore(score: number | null): "healthy" | "degrad
   if (score < 60) return "incident";
   if (score < 85) return "degraded";
   return "healthy";
-}
-
-function normalizeCatalogAppIdForAudit(value: unknown): string | null {
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
-  return normalized || null;
 }
 
 function normalizeRangeStart(range: string | undefined, nowMs: number): number | null {
@@ -1677,89 +1649,6 @@ export const listOperatorCommunitiesInternal = internalQuery({
       return String(left.community?.name ?? "").localeCompare(String(right.community?.name ?? ""));
     });
     return records.slice(0, limit);
-  },
-});
-
-export const listOperatorDeveloperAppPolicyAuditInternal = internalQuery({
-  args: {
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const limit = normalizeLimit(args.limit, 100, 500);
-    const apps = (await ctx.db.query("developerApps").collect()) as any[];
-    const summary = {
-      totalApps: apps.length,
-      catalogedApps: 0,
-      uncatalogedApps: 0,
-      policyOkApps: 0,
-      policyBlockedApps: 0,
-    };
-    const findings: DeveloperAppPolicyAuditFinding[] = [];
-
-    for (const app of apps) {
-      const catalogAppId = normalizeCatalogAppIdForAudit(app.catalogAppId);
-      if (catalogAppId) {
-        summary.catalogedApps += 1;
-      } else {
-        summary.uncatalogedApps += 1;
-      }
-      const policy = resolveDiscoverAppCatalogConnectPolicy({
-        catalogAppId: catalogAppId ?? undefined,
-        name: app.name,
-        endpointUrl: app.endpointUrl,
-        authType: app.authType as DeveloperAppAuthType,
-      });
-      if (policy.ok) {
-        summary.policyOkApps += 1;
-        continue;
-      }
-
-      summary.policyBlockedApps += 1;
-      const userMountRows = (await ctx.db
-        .query("userPlatformAppMounts")
-        .withIndex("by_app", (q: any) => q.eq("developerAppId", app._id))
-        .collect()) as any[];
-      const communityMountRows = (await ctx.db
-        .query("communityAppMounts")
-        .withIndex("by_app", (q: any) => q.eq("developerAppId", app._id))
-        .collect()) as any[];
-      findings.push({
-        developerAppId: String(app._id),
-        ownerUserId: String(app.ownerUserId),
-        name: String(app.name ?? ""),
-        catalogAppId,
-        endpointUrl: String(app.endpointUrl ?? ""),
-        authType: String(app.authType ?? ""),
-        status: String(app.status ?? ""),
-        lastValidatedAt:
-          typeof app.lastValidatedAt === "number" ? app.lastValidatedAt : null,
-        lastValidationError:
-          typeof app.lastValidationError === "string"
-            ? app.lastValidationError
-            : null,
-        userMountCount: userMountRows.length,
-        communityMountCount: communityMountRows.length,
-        policyStatus: "blocked",
-        policyCode: policy.code,
-        policyMessage: policy.message,
-        recommendedAction: "delete_or_migrate",
-        updatedAt: Number(app.updatedAt ?? 0),
-      });
-    }
-
-    findings.sort(
-      (left, right) =>
-        right.userMountCount +
-          right.communityMountCount -
-          (left.userMountCount + left.communityMountCount) ||
-        right.updatedAt - left.updatedAt,
-    );
-    return {
-      summary,
-      findings: findings.slice(0, limit),
-      truncated: findings.length > limit,
-      computedAt: Date.now(),
-    };
   },
 });
 

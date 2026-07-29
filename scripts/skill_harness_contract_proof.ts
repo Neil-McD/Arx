@@ -163,7 +163,6 @@ const normalized = normalizeRuntimeSkillResolution({
   selected_community_skills: [],
 });
 const harness = composeResolvedRuntimeHarness({
-  personalMountedTools: [],
   skillResolution: normalized,
 });
 assert.match(

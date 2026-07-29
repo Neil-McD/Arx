@@ -698,33 +698,6 @@ async function runLoggedCommunityAdminMutation<T>(params: {
   }
 }
 
-async function scheduleCommunityAppGrantSeedingBestEffort(args: {
-  ctx: any;
-  communityId: any;
-  userId: any;
-  nowMs: number;
-  reason: string;
-}): Promise<void> {
-  try {
-    await args.ctx.scheduler.runAfter(
-      0,
-      internal.userPlatformAppMounts.seedCommunityAppGrantsForUserInternal,
-      {
-        communityId: args.communityId,
-        userId: args.userId,
-        nowMs: args.nowMs,
-      },
-    );
-  } catch (error) {
-    console.warn("community_app_grant_seed_schedule_failed", {
-      community_id: String(args.communityId),
-      user_id: String(args.userId),
-      reason: args.reason,
-      error: error instanceof Error ? error.message : String(error ?? ""),
-    });
-  }
-}
-
 async function approveCommunityJoinRequestForFreeAccess(args: {
   ctx: any;
   community: CommunityLike;
@@ -778,13 +751,6 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
     });
   }
   if (grantedMembershipMarker) {
-    await scheduleCommunityAppGrantSeedingBestEffort({
-      ctx: args.ctx,
-      communityId: args.request.communityId,
-      userId: args.request.userId,
-      nowMs: args.nowMs,
-      reason: args.grantReason,
-    });
     await enqueueCommunityAccessGrantedEmailInternal({
       ctx: args.ctx,
       userId: args.request.userId,

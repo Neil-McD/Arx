@@ -41,7 +41,9 @@ The high-level order is:
 7. repo instruction docs, where relevant to the active runtime lane
 8. user message content
 
-Runtime inputs can include user/session state, thread history, community resources, skills, apps/MCP tools, and runtime policy. Those inputs do not outrank the authority stack.
+Runtime inputs can include user/session state, thread history, community
+resources, skills, native tools, and runtime policy. Those inputs do not
+outrank the authority stack.
 
 ## Alpha-Current Behavior
 
@@ -55,7 +57,6 @@ The current product model supports:
 - deterministic Discover, community-section, and generic platform-page orientation
 - native read-only directory access to joined and public Discover communities
 - community resources and skills as controlled context inputs
-- apps/MCPs as explicit capability surfaces
 - personal memory as an explicit user-owned context layer
 - voice input as an input method
 - backend-gated community context and tool access
@@ -68,7 +69,8 @@ The current product model supports:
 4. Tool access must be explicit and bounded.
 5. Prompts should reference docs; prompts should not become hidden product truth.
 6. Skills should be injected intentionally, not dumped into every turn.
-7. Apps/MCP tools should not be represented as available unless the runtime can actually use them.
+7. Tools should not be represented as available unless the runtime can
+   actually use and authorize them.
 8. The agent should preserve broader user intent when the request is not actually community-scoped.
 9. Community navigation may change the next-turn lens, but it must not replace the member's agent or conversation.
 10. Retained legacy per-community episodes are historical recall sources only; new messages and runtime turns use the active global episode.
@@ -88,13 +90,15 @@ The current product model supports:
 
 The agent is not a general-purpose replacement for every product surface. It should support the community and workspace loop.
 
-The agent is not allowed to grant access, invent billing state, expose private community data, or claim tool capability that is not actually mounted and permitted.
+The agent is not allowed to grant access, invent billing state, expose private
+community data, or claim tool capability that is not actually available and
+permitted.
 
 ## Common Mistakes
 
 - Treating prompts as policy authority.
 - Treating community instructions as higher priority than platform rules.
-- Treating connected apps as automatically usable by every user.
+- Treating external systems as automatically usable by every user.
 - Treating skills as generic prompt blobs.
 - Treating private member usage as community knowledge.
 
@@ -106,5 +110,5 @@ The agent is not allowed to grant access, invent billing state, expose private c
 - `context-model`
 - `prompt-context-model`
 - `skill`
-- `app-mcp`
+- `polynet-mcp`
 - `resource`

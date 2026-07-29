@@ -3,7 +3,6 @@ import { httpAction } from "./_generated/server";
 import { httpRouter } from "convex/server";
 import { registerRuntimeAuthRoutes } from "./httpAuth";
 import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
-import { registerAppOAuthRoutes } from "./httpAppOAuth";
 import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerRuntimeContextRoutes } from "./httpContext";
 import { registerCommunitySourceIntegrationRoutes } from "./httpCommunitySourceIntegrations";
@@ -321,11 +320,6 @@ registerRuntimeAuthBridgeRoutes({
   jsonResponse,
   optionsResponse,
   parseOptionalString,
-});
-
-registerAppOAuthRoutes({
-  http,
-  httpAction,
 });
 
 registerCommunitySourceIntegrationRoutes({

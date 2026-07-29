@@ -35,11 +35,6 @@ function main() {
     attachedSkills: communityASkills,
     selectedSkills: communityASelectedSkills,
   });
-  assertExcludes(
-    communityAState.systemPromptSuffix,
-    "Community-mounted app tools",
-    "Community A prompt must not expose community MCP runtime tools",
-  );
   assertIncludes(
     communityAState.systemPromptSuffix,
     "COMMUNITY_WORKFLOW_CONTEXT",
@@ -52,7 +47,7 @@ function main() {
   );
   assertIncludes(
     communityAState.systemPromptSuffix,
-    "personal skills and connected apps remain available",
+    "personal skills remain available",
     "Community A non-exclusive harness guidance",
   );
   assertIncludes(

@@ -62,7 +62,7 @@ LLMs should read product docs in this order:
 8. `primitives/thread.md`
 9. `primitives/community-lens.md`
 10. `primitives/voice.md`
-11. `primitives/app-mcp.md`
+11. `primitives/polynet-mcp.md`
 12. `primitives/skill.md`
 13. `primitives/resource.md`
 14. `primitives/entitlement.md`
@@ -81,7 +81,7 @@ Builder path:
 1. `guides/builder-quickstart.md`
 2. `guides/launch-a-community.md`
 3. `guides/configure-community-agent.md`
-4. `guides/connect-apps-and-mcps.md`
+4. `guides/connect-polynet-mcp.md`
 5. `guides/create-and-use-skills.md`
 6. `guides/manage-resources.md`
 7. `guides/manage-access-billing-and-roles.md`

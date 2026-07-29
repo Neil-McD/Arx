@@ -19,7 +19,7 @@ In scope:
 - security and audit evidence
 - auth, session, and access health
 - latency and runtime health
-- AI/tool/MCP execution health
+- AI/tool and official Polynet MCP provider health
 - billing, webhook, credit, entitlement, and payout correctness
 - deploy and release evidence
 - diagnostics freshness and observability coverage
@@ -77,8 +77,8 @@ Each diagnostic signal should be classified with one of these statuses:
 | Auth and access | sign-in, auth bootstrap, session refresh, entitlements, community gates, operator gate | Can users get in and only access what they should? | Convex, Sentry, critical audit, PostHog | sign-in/session established, auth bootstrap failures, session refresh failures, entitlement mismatches, denied access, operator access granted/denied | partial |
 | Security and audit | privileged mutations, destructive actions, webhooks, operator access | Are trust boundaries holding? | Convex critical audit, Sentry, Stripe | permission denied events, webhook signature failures, account deletion events, operator role changes, suspicious retries | partial |
 | Runtime and AI | workspace turns, model calls, streaming, provider calls | Can the intelligence layer complete work reliably? | Sentry, Convex runtime events, Vercel/Convex logs | turn success rate, time to first token, p95 turn latency, provider failures, rate limits, cost per successful turn | partial |
-| Tools, MCP, and workspace runtime | MCP validation, tool calls, terminal/computer use, sandbox lifecycle | Can tools actually execute? | Blaxel, Convex runtime events, Sentry spans, MCP diagnostics | tool success rate, tool failures by app/tool, sandbox create failures, timeout rate, MCP live/not-live reasons | partial |
-| Integrations and harness | Settings-managed apps/skills, canonical harness projection | Are apps and skills configured and projected correctly? | Convex, PostHog, Sentry | setup success rate, duplicate/canonicalization conflicts, setup-needed count, validation failures, click-to-live rate | partial |
+| Tools, Polynet MCP, and workspace runtime | fixed tool calls, official MCP requests, terminal/computer use, sandbox lifecycle | Can tools and the official external gateway execute safely? | Blaxel, Convex runtime events, Sentry spans, MCP request diagnostics | tool success rate, tool failures by tool, MCP auth/access failures, sandbox create failures, timeout rate | partial |
+| Skills and harness | Settings-managed personal/community skills and fixed runtime tools | Are skills and fixed tools projected correctly? | Convex, PostHog, Sentry | skill resolution failures, duplicate skill conflicts, runtime tool-policy mismatches | partial |
 | Community core | chat, feed, resources, events, members, settings | Are communities usable once joined? | Convex, PostHog, Sentry | message send failures, resource load failures, event creation failures, member action failures, community route errors | partial |
 | Funnel and join | public funnel, join request, paid join, claim flow | Can visitors become members? | PostHog, Convex, Stripe, Sentry | page visits, join starts, join completions, conversion rate, checkout failures, pending claim age | partial |
 | Billing and entitlements | account commerce, credits, community subscriptions, payouts | Is money state correct? | Stripe, Convex audit, Sentry | checkout completion, webhook failures, subscription sync failures, credit reservation/settlement failures, payout blocked count | partial |
@@ -130,27 +130,25 @@ Each diagnostic signal should be classified with one of these statuses:
 | Rate-limit failures | Provider or platform rate-limit events | Runtime logs/events | Sentry, Convex | now |
 | Cost per successful turn | Credits/cost divided by successful turns | Convex credits/compute records | Convex | later |
 
-### Tools, MCP, and workspace runtime
+### Tools, Polynet MCP, and workspace runtime
 
 | KPI | Definition | Source of Truth | Tool | Panel Priority |
 | --- | --- | --- | --- | --- |
 | Tool success rate | Successful tool calls divided by tool calls | `runtimeRunEvents` | Convex | now |
-| Tool failures by tool | Failed calls grouped by tool/app/MCP | `runtimeRunEvents` and Sentry spans | Convex, Sentry | now |
-| MCP validation failures | App/MCP validation failures by app/reason | MCP validation records | Convex, Sentry | now |
-| MCP not-live reasons | Mounted apps not live by normalized reason | canonical harness projection | Convex | now |
+| Tool failures by tool | Failed calls grouped by fixed tool | `runtimeRunEvents` and Sentry spans | Convex, Sentry | now |
+| Polynet MCP auth failures | Official provider requests rejected by OAuth/authentication reason | MCP HTTP logs and Sentry spans | Convex, Sentry | now |
+| Polynet MCP access failures | Official provider calls rejected by membership, entitlement, or capability reason | community access evidence and MCP HTTP logs | Convex, Sentry | now |
 | Sandbox create failures | Blaxel sandbox create/start failures | Blaxel client logs and structured errors | Blaxel, Convex, Sentry | now |
 | Workspace command failures | Failed terminal/process commands and exit code | workspace command logs and runtime events | Blaxel, Convex | now |
 | Stuck sandbox/process age | Oldest active sandbox/process past expected lifetime | workspace reconciliation state | Blaxel, Convex | later |
 
-### Integrations and Harness
+### Skills and Harness
 
 | KPI | Definition | Source of Truth | Tool | Panel Priority |
 | --- | --- | --- | --- | --- |
-| App setup success rate | Successful settings-based app setup to canonical harness state | Convex app mount state and PostHog events | Convex, PostHog | now |
-| Community app projection success | Community app state resolves to the effective user harness | Convex effective MCP projection | Convex | now |
-| Duplicate app conflicts | Same app appears more than once in effective user harness | Convex diagnostic query | Convex | now |
-| Setup-needed count | Apps mounted but not live | Convex harness projection | Convex | now |
-| Click-to-live rate | Added apps that become live in selected window | Convex and PostHog | Convex, PostHog | later |
+| Skill resolution success | Personal and community skill selection resolves deterministically | runtime skill-resolution evidence | Convex | now |
+| Duplicate skill conflicts | Ambiguous or duplicated skill identities in one lens | runtime skill-resolution evidence | Convex | now |
+| Runtime tool-policy mismatch | Exposed fixed tools without a declared policy, or declared tools not exposed | contract proofs and runtime evidence | Convex, GitHub Actions | now |
 
 ### Community Core
 
@@ -280,7 +278,7 @@ The operator panel should project diagnostics in this order:
 
 1. Health summary: `healthy | degraded | incident | unknown`
 2. Attention queue: the highest-leverage issues to inspect now
-3. Subsystem cards: auth, security, runtime, MCP/tools, billing, deploy
+3. Subsystem cards: auth, security, runtime, Polynet MCP/tools, billing, deploy
 4. Evidence feed: recent critical events with severity, subsystem, actor/context, timestamp, evidence ID
 5. Drill-out links: Sentry issue/trace, Vercel deploy/logs, Stripe object, Convex row/function/log, workspace process/logs
 
@@ -294,7 +292,8 @@ Reason:
 
 - identity and access are the trust root
 - the operator panel itself depends on correct operator gating
-- community access, billing entitlements, MCP harness state, and runtime permissions all depend on it
+- community access, billing entitlements, official MCP authorization, and
+  runtime permissions all depend on it
 
 First implementation should prove:
 

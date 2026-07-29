@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import {
-  buildRuntimeFailureFinalAnswer,
-  hasConnectedAppFailureEvidence,
-} from "../shared/runtimeFailureFinalizer.ts";
+import { buildRuntimeFailureFinalAnswer } from "../shared/runtimeFailureFinalizer.ts";
 import { summarizeRuntimeWorkingStateFromEvents } from "../shared/runtimeWorkingStateLedger.ts";
 
 function readText(path: string): string {
@@ -27,11 +24,6 @@ const runtimeTurnState = readText(
 );
 const finalizer = readText("shared/runtimeFailureFinalizer.ts");
 
-assertContains(
-  handler,
-  'hasConnectedAppFailureEvidence,',
-  "runtime handler imports failure finalizer",
-);
 assertContains(
   handler,
   "buildRuntimeFailureFinalAnswer,",
@@ -131,11 +123,6 @@ assertContains(
   handler,
   "renderRuntimeTurnContextForFailureFinalizer(params.runtimeTurnContext)",
   "adaptive finalizer renders the canonical packet",
-);
-assertContains(
-  handler,
-  "!hasConnectedAppFailureEvidence(failureContextPacket)",
-  "runtime handler skips adaptive finalizer when deterministic app failure evidence exists",
 );
 assertContains(
   handler,
@@ -316,132 +303,6 @@ assertNotContains(
   processAwareOutput.content,
   "What happened:",
   "emergency fallback does not resurrect deterministic ledger sections",
-);
-
-const connectedAppOutput = buildRuntimeFailureFinalAnswer({
-  status: "error",
-  reason: "consecutive_failures_exhausted",
-  errorCode: "consecutive_failures_exhausted",
-  errorMessage: "Tool loop stopped after repeated tool failures without recovery.",
-  runtimeTurnContext: {
-    activeBackgroundTerminals: [],
-    recentBackgroundProcessEvents: [],
-    latestUserText: "Can you call all MCP servers in a loop to test them?",
-    threadWorkingState: null,
-    runtimeStop: {
-      status: "error",
-      reason: "consecutive_failures_exhausted",
-      errorCode: "consecutive_failures_exhausted",
-      errorMessage: "Tool loop stopped after repeated tool failures without recovery.",
-    },
-    recentToolAttempts: [
-      {
-        toolName: "me__airtable_3__list_bases",
-        status: "error",
-        errorCode: "user_platform_app_tool_failed",
-        errorMessage: '{"error":"FORBIDDEN","message":"Forbidden"}',
-        failureKind: "app_permission_denied",
-        connectedAppName: "Airtable",
-        connectedAppScope: "user_platform_app",
-        connectedAppToolName: "list_bases",
-        failureSummary:
-          "Airtable tool list_bases was rejected by the provider because of permissions or scopes.",
-        suggestedRecovery:
-          "Check the connected account, workspace/resource permissions, and OAuth/token scopes. Skip this app and continue testing others when it is not required.",
-      },
-    ],
-  },
-});
-assert.equal(connectedAppOutput.usedFallback, true);
-assert.equal(
-  hasConnectedAppFailureEvidence({
-    activeBackgroundTerminals: [],
-    recentBackgroundProcessEvents: [],
-    recentToolAttempts: [
-      {
-        toolName: "me__airtable_3__list_bases",
-        status: "error",
-        failureKind: "app_permission_denied",
-        connectedAppName: "Airtable",
-        connectedAppToolName: "list_bases",
-      },
-    ],
-    runtimeStop: null,
-  }),
-  true,
-);
-assert.equal(
-  hasConnectedAppFailureEvidence({
-    activeBackgroundTerminals: [],
-    recentBackgroundProcessEvents: [],
-    recentToolAttempts: [
-      {
-        toolName: "bash",
-        status: "error",
-        failureKind: "command_not_found",
-      },
-    ],
-    runtimeStop: null,
-  }),
-  false,
-);
-assertContains(
-  connectedAppOutput.content,
-  "connected-app failure",
-  "app-aware fallback names connected-app failure",
-);
-assertContains(
-  connectedAppOutput.content,
-  "Airtable list_bases: permissions/scope issue.",
-  "app-aware fallback summarizes Airtable permissions issue",
-);
-assertContains(
-  connectedAppOutput.content,
-  "Next step: Check the connected account",
-  "app-aware fallback includes provider setup recovery",
-);
-assertNotContains(
-  connectedAppOutput.content,
-  "Tool loop stopped after repeated tool failures",
-  "app-aware fallback hides generic runtime loop-stop copy",
-);
-
-const connectedAppInvalidArgsOutput = buildRuntimeFailureFinalAnswer({
-  status: "error",
-  reason: "consecutive_failures_exhausted",
-  errorCode: "consecutive_failures_exhausted",
-  errorMessage: "Tool loop stopped after repeated tool failures without recovery.",
-  runtimeTurnContext: {
-    activeBackgroundTerminals: [],
-    recentBackgroundProcessEvents: [],
-    recentToolAttempts: [
-      {
-        toolName: "me__linear_4__list_issue_labels",
-        status: "error",
-        errorCode: "user_platform_app_tool_failed",
-        errorMessage: "Invalid input: expected cursor to be a string.",
-        failureKind: "app_invalid_arguments",
-        connectedAppName: "Linear",
-        connectedAppScope: "user_platform_app",
-        connectedAppToolName: "list_issue_labels",
-        failureSummary:
-          "Linear tool list_issue_labels failed because the tool arguments were invalid.",
-        suggestedRecovery:
-          "Read the tool schema and provider error, correct the arguments, and retry once.",
-      },
-    ],
-    runtimeStop: null,
-  },
-});
-assertContains(
-  connectedAppInvalidArgsOutput.content,
-  "Linear list_issue_labels: invalid tool arguments.",
-  "app-aware fallback summarizes invalid app arguments",
-);
-assertContains(
-  connectedAppInvalidArgsOutput.content,
-  "Read the tool schema",
-  "app-aware fallback includes argument recovery",
 );
 
 const partial = buildRuntimeFailureFinalAnswer({

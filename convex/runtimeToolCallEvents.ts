@@ -163,15 +163,6 @@ export async function appendWorkspaceToolCallFinished(params: {
               ...(failureSemantics.failedExecutable
                 ? { failed_executable: failureSemantics.failedExecutable }
                 : null),
-              ...(failureSemantics.appName
-                ? { app_name: failureSemantics.appName }
-                : null),
-              ...(failureSemantics.appScope
-                ? { app_scope: failureSemantics.appScope }
-                : null),
-              ...(failureSemantics.appToolName
-                ? { app_tool_name: failureSemantics.appToolName }
-                : null),
             },
           }
         : null),
@@ -212,15 +203,6 @@ export async function appendWorkspaceToolCallFinished(params: {
                     : null),
                   ...(failureSemantics.failedExecutable
                     ? { failed_executable: failureSemantics.failedExecutable }
-                    : null),
-                  ...(failureSemantics.appName
-                    ? { app_name: failureSemantics.appName }
-                    : null),
-                  ...(failureSemantics.appScope
-                    ? { app_scope: failureSemantics.appScope }
-                    : null),
-                  ...(failureSemantics.appToolName
-                    ? { app_tool_name: failureSemantics.appToolName }
                     : null),
                 },
               }

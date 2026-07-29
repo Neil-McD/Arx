@@ -5,7 +5,7 @@ import {
   type ShellCommandEffect,
 } from "./shellCommandPolicy.ts";
 
-export type RuntimeToolSource = "fixed" | "mounted_mcp" | "resolver" | "unknown";
+export type RuntimeToolSource = "fixed" | "unknown";
 export type RuntimeToolCategory =
   | "docs"
   | "community"
@@ -14,8 +14,6 @@ export type RuntimeToolCategory =
   | "workspace_shell"
   | "terminal"
   | "computer"
-  | "mcp"
-  | "resolver"
   | "unknown";
 export type RuntimeToolRiskLevel = "read" | "write" | "sensitive";
 
@@ -30,13 +28,6 @@ export type RuntimeToolPolicy = {
   exclusive: boolean;
   requiresWorkspace: boolean;
   requiresCommunity: boolean;
-  requiresMcpSession: boolean;
-};
-
-export type RuntimeMountedToolPolicyInput = {
-  scope: "user" | "community";
-  runtime_tool_name: string;
-  risk_level: RuntimeToolRiskLevel;
 };
 
 export type RuntimeToolPolicySummary = {
@@ -47,7 +38,6 @@ export type RuntimeToolPolicySummary = {
   exclusive: number;
   requiresWorkspace: number;
   requiresCommunity: number;
-  requiresMcpSession: number;
   byRiskLevel: Record<RuntimeToolRiskLevel, number>;
   byCategory: Record<RuntimeToolCategory, number>;
 };
@@ -64,8 +54,7 @@ export type RuntimeToolScheduleReason =
   | "exclusive_tool"
   | "mutates_state"
   | "not_read_only"
-  | "not_parallel_safe"
-  | "requires_mcp_session";
+  | "not_parallel_safe";
 
 export type RuntimeToolScheduleCall = {
   providerCallId: string;
@@ -81,7 +70,6 @@ export type RuntimeToolScheduleCall = {
   exclusive: boolean;
   requiresWorkspace: boolean;
   requiresCommunity: boolean;
-  requiresMcpSession: boolean;
   shellCommandEffect?: ShellCommandEffect;
   shellCommandAuditSeverity?: ShellCommandAuditSeverity;
   shellCommandReasons?: string[];
@@ -98,7 +86,6 @@ export type RuntimeToolScheduleSummary = {
   readOnly: number;
   requiresWorkspace: number;
   requiresCommunity: number;
-  requiresMcpSession: number;
 };
 
 export type RuntimeToolSchedulePlan = {
@@ -139,7 +126,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   get_product_doc: {
     toolName: "get_product_doc",
@@ -152,7 +138,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   get_active_community_context: {
     toolName: "get_active_community_context",
@@ -165,7 +150,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   member_profile_confirm_facts: {
     toolName: "member_profile_confirm_facts",
@@ -178,7 +162,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_resources_map: {
     toolName: "community_resources_map",
@@ -191,7 +174,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   member_conversations_list: {
     toolName: "member_conversations_list",
@@ -204,7 +186,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   member_conversation_read: {
     toolName: "member_conversation_read",
@@ -217,7 +198,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   polynet_list_communities: {
     toolName: "polynet_list_communities",
@@ -230,7 +210,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   polynet_get_community: {
     toolName: "polynet_get_community",
@@ -243,7 +222,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   community_resources_read: {
     toolName: "community_resources_read",
@@ -256,7 +234,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_resources_list: {
     toolName: "community_resources_list",
@@ -269,7 +246,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_resource_read: {
     toolName: "community_resource_read",
@@ -282,7 +258,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_resources_search: {
     toolName: "community_resources_search",
@@ -295,7 +270,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_resource_builder_list: {
     toolName: "community_resource_builder_list",
@@ -308,7 +282,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_resource_builder_read: {
     toolName: "community_resource_builder_read",
@@ -321,7 +294,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_resource_builder_stage_changeset: {
     toolName: "community_resource_builder_stage_changeset",
@@ -334,7 +306,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_resource_builder_apply_changeset: {
     toolName: "community_resource_builder_apply_changeset",
@@ -347,7 +318,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_search: {
     toolName: "community_search",
@@ -360,7 +330,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_memory_search: {
     toolName: "community_memory_search",
@@ -373,7 +342,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_memory_read: {
     toolName: "community_memory_read",
@@ -386,7 +354,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_chat_search: {
     toolName: "community_chat_search",
@@ -399,7 +366,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_chat_read: {
     toolName: "community_chat_read",
@@ -412,7 +378,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_ai_feed_search: {
     toolName: "community_ai_feed_search",
@@ -425,7 +390,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_ai_feed_read: {
     toolName: "community_ai_feed_read",
@@ -438,7 +402,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   community_write: {
     toolName: "community_write",
@@ -451,7 +414,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: false,
     requiresCommunity: true,
-    requiresMcpSession: false,
   },
   web_research: {
     toolName: "web_research",
@@ -464,7 +426,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   web_crawl: {
     toolName: "web_crawl",
@@ -477,7 +438,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: false,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   list_dir: {
     toolName: "list_dir",
@@ -490,7 +450,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   read: {
     toolName: "read",
@@ -503,7 +462,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   glob: {
     toolName: "glob",
@@ -516,7 +474,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   grep: {
     toolName: "grep",
@@ -529,7 +486,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   sha256: {
     toolName: "sha256",
@@ -542,7 +498,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: false,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   write: {
     toolName: "write",
@@ -555,7 +510,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   edit: {
     toolName: "edit",
@@ -568,7 +522,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   bash: {
     toolName: "bash",
@@ -581,7 +534,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   terminal_start: {
     toolName: "terminal_start",
@@ -594,7 +546,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   terminal_read: {
     toolName: "terminal_read",
@@ -607,7 +558,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   terminal_write: {
     toolName: "terminal_write",
@@ -620,7 +570,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   terminal_stop: {
     toolName: "terminal_stop",
@@ -633,7 +582,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   computer_open_url: {
     toolName: "computer_open_url",
@@ -646,7 +594,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   computer_screenshot: {
     toolName: "computer_screenshot",
@@ -659,7 +606,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   computer_click: {
     toolName: "computer_click",
@@ -672,7 +618,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   computer_type: {
     toolName: "computer_type",
@@ -685,7 +630,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   computer_keypress: {
     toolName: "computer_keypress",
@@ -698,7 +642,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   computer_scroll: {
     toolName: "computer_scroll",
@@ -711,7 +654,6 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
   computer_stop: {
     toolName: "computer_stop",
@@ -724,11 +666,9 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     exclusive: true,
     requiresWorkspace: true,
     requiresCommunity: false,
-    requiresMcpSession: false,
   },
 };
 
-const RISK_LEVELS = ["read", "write", "sensitive"] as const;
 function emptyRiskCounts(): Record<RuntimeToolRiskLevel, number> {
   return {
     read: 0,
@@ -746,16 +686,8 @@ function emptyCategoryCounts(): Record<RuntimeToolCategory, number> {
     workspace_shell: 0,
     terminal: 0,
     computer: 0,
-    mcp: 0,
-    resolver: 0,
     unknown: 0,
   };
-}
-
-function normalizeRiskLevel(value: unknown): RuntimeToolRiskLevel {
-  return RISK_LEVELS.includes(value as RuntimeToolRiskLevel)
-    ? (value as RuntimeToolRiskLevel)
-    : "sensitive";
 }
 
 export function getFixedRuntimeToolPolicy(
@@ -776,43 +708,6 @@ export function getUnknownRuntimeToolPolicy(toolName: string): RuntimeToolPolicy
     exclusive: true,
     requiresWorkspace: false,
     requiresCommunity: false,
-    requiresMcpSession: false,
-  };
-}
-
-export function getResolverRuntimeToolPolicy(toolName: string): RuntimeToolPolicy {
-  return {
-    toolName,
-    source: "resolver",
-    category: "resolver",
-    riskLevel: "read",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: false,
-    requiresCommunity: false,
-    requiresMcpSession: false,
-  };
-}
-
-export function getMountedRuntimeToolPolicy(
-  tool: RuntimeMountedToolPolicyInput,
-): RuntimeToolPolicy {
-  const riskLevel = normalizeRiskLevel(tool.risk_level);
-  const readOnly = riskLevel === "read";
-  return {
-    toolName: tool.runtime_tool_name,
-    source: "mounted_mcp",
-    category: "mcp",
-    riskLevel,
-    readOnly,
-    mutatesState: !readOnly,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: false,
-    requiresCommunity: tool.scope === "community",
-    requiresMcpSession: true,
   };
 }
 
@@ -829,7 +724,6 @@ export function summarizeRuntimeToolPolicies(
     exclusive: 0,
     requiresWorkspace: 0,
     requiresCommunity: 0,
-    requiresMcpSession: 0,
     byRiskLevel,
     byCategory,
   };
@@ -841,7 +735,6 @@ export function summarizeRuntimeToolPolicies(
     if (policy.exclusive) summary.exclusive += 1;
     if (policy.requiresWorkspace) summary.requiresWorkspace += 1;
     if (policy.requiresCommunity) summary.requiresCommunity += 1;
-    if (policy.requiresMcpSession) summary.requiresMcpSession += 1;
     byRiskLevel[policy.riskLevel] += 1;
     byCategory[policy.category] += 1;
   }
@@ -851,20 +744,11 @@ export function summarizeRuntimeToolPolicies(
 
 export function buildRuntimeToolPolicySurface(params: {
   fixedToolNames: readonly RetrievalToolName[];
-  includeResolver: boolean;
-  resolverToolName: string;
-  mountedTools: readonly RuntimeMountedToolPolicyInput[];
 }): {
   policies: RuntimeToolPolicy[];
   summary: RuntimeToolPolicySummary;
 } {
-  const policies = [
-    ...params.fixedToolNames.map(getFixedRuntimeToolPolicy),
-    ...(params.includeResolver
-      ? [getResolverRuntimeToolPolicy(params.resolverToolName)]
-      : []),
-    ...params.mountedTools.map(getMountedRuntimeToolPolicy),
-  ];
+  const policies = params.fixedToolNames.map(getFixedRuntimeToolPolicy);
   return {
     policies,
     summary: summarizeRuntimeToolPolicies(policies),
@@ -890,7 +774,6 @@ function getRuntimeToolScheduleReasons(
   if (policy.mutatesState) reasons.push("mutates_state");
   if (!policy.readOnly) reasons.push("not_read_only");
   if (!policy.parallelSafe) reasons.push("not_parallel_safe");
-  if (policy.requiresMcpSession) reasons.push("requires_mcp_session");
   return reasons;
 }
 
@@ -984,7 +867,6 @@ export function classifyRuntimeToolSchedule(params: {
       exclusive: policy.exclusive,
       requiresWorkspace: policy.requiresWorkspace,
       requiresCommunity: policy.requiresCommunity,
-      requiresMcpSession: policy.requiresMcpSession,
       ...(shellClassification
         ? {
             shellCommandEffect: shellClassification.effect,
@@ -1006,7 +888,6 @@ export function classifyRuntimeToolSchedule(params: {
     readOnly: 0,
     requiresWorkspace: 0,
     requiresCommunity: 0,
-    requiresMcpSession: 0,
   };
 
   for (const call of calls) {
@@ -1017,7 +898,6 @@ export function classifyRuntimeToolSchedule(params: {
     if (call.readOnly) summary.readOnly += 1;
     if (call.requiresWorkspace) summary.requiresWorkspace += 1;
     if (call.requiresCommunity) summary.requiresCommunity += 1;
-    if (call.requiresMcpSession) summary.requiresMcpSession += 1;
   }
 
   const allCallsParallelEligible =

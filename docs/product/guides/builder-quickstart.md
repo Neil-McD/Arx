@@ -33,9 +33,9 @@ If those answers are vague, more settings will not fix the product.
 2. Define the community purpose and public profile.
 3. Configure the community agent.
 4. Add resources that represent durable community knowledge.
-5. Connect apps/MCPs where they provide real capability.
-6. Attach skills where repeatable agent behavior is needed.
-7. Configure access, billing, and roles.
+5. Attach skills where repeatable agent behavior is needed.
+6. Configure access, billing, and roles.
+7. Verify the official Polynet MCP handoff for external harness users.
 8. Share the community funnel.
 9. Improve the system based on member participation and useful signal.
 
@@ -43,7 +43,10 @@ If those answers are vague, more settings will not fix the product.
 
 You are not just creating a chat room. You are packaging expertise, workflows, and community context into an AI-native product.
 
-The community is the container. The agent is the active product surface. Resources are durable knowledge. Skills are repeatable behavior. Apps/MCPs are external capability. Entitlements decide access.
+The community is the container. The agent is the active product surface.
+Resources are durable knowledge. Skills are repeatable behavior. The official
+Polynet MCP exposes authorized Polynet context to external harnesses.
+Entitlements decide access.
 
 ## Revenue Mental Model
 
@@ -64,10 +67,10 @@ The cash path is simple: configure the community, define the paid access model, 
 3. Configure the agent for one primary job.
 4. Add a small number of high-signal resources.
 5. Add only the skills needed for repeated workflows.
-6. Connect only apps/MCPs that unlock real capability.
-7. Configure access, billing, and roles.
-8. Verify payout readiness if the community collects money.
-9. Test as a member before inviting people.
+6. Configure access, billing, and roles.
+7. Verify payout readiness if the community collects money.
+8. Test as a member before inviting people.
+9. Verify the Polynet MCP setup packet and OAuth handoff.
 10. Share the funnel link.
 
 ## Current Alpha Boundaries
@@ -84,7 +87,8 @@ The cash path is simple: configure the community, define the paid access model, 
 - Premium unlocks paid tools such as hosted workspace tools, web research, and premium runtimes.
 - Owner/admin manage resources and most operational settings.
 - Moderators help with moderation and join request review, not paid access.
-- Remote MCP apps must be validated before mounted capability should be trusted.
+- Polynet does not mount third-party MCP servers in member or community
+  harnesses.
 - Skills are package attachments and should be injected intentionally.
 
 ## Rules
@@ -93,17 +97,17 @@ The cash path is simple: configure the community, define the paid access model, 
 2. Keep the agent's job concrete.
 3. Use resources for durable knowledge.
 4. Use skills for repeatable behavior.
-5. Use apps/MCPs only when they unlock real capability.
-6. Keep access and billing simple enough for members to understand.
-7. Do not use prompts as the only place where important product truth lives.
-8. Do not add integrations before the core community loop works.
-9. Do not invite members before testing join, access, chat, resources, and the workspace lens.
+5. Keep access and billing simple enough for members to understand.
+6. Do not use prompts as the only place where important product truth lives.
+7. Do not add integrations before the core community loop works.
+8. Do not invite members before testing join, access, chat, resources, and
+   the community lens.
 
 ## Common Mistakes
 
 - Launching with a vague agent job.
 - Adding many resources before curating the first useful few.
-- Connecting apps because they are impressive instead of useful.
+- Expanding integrations before the core community loop is useful.
 - Treating a successful checkout redirect as membership before backend verification.
 - Giving admins or moderators more authority than they need.
 - Letting the public funnel say more than the product can currently do.
@@ -115,5 +119,5 @@ The cash path is simple: configure the community, define the paid access model, 
 - `funnel`
 - `resource`
 - `skill`
-- `app-mcp`
+- `polynet-mcp`
 - `entitlement`

@@ -21,20 +21,57 @@ Use one truth per layer:
 5. Deploy Convex production intentionally when backend/schema/env changes require it.
 6. Run the post-deploy smoke check.
 
-For personal MCP/control-plane changes, treat Convex as required, not optional. If a change touches files like:
+For official Polynet MCP provider changes, treat Convex as required, not
+optional. If a change touches files like:
 
-- `/Users/neilmcdevitt/code/arx/convex/appValidation.ts`
-- `/Users/neilmcdevitt/code/arx/convex/userPlatformAppMounts.ts`
-- `/Users/neilmcdevitt/code/arx/convex/appConnections.ts`
-- `/Users/neilmcdevitt/code/arx/convex/developerApps.ts`
+- `/Users/neilmcdevitt/code/arx/convex/httpMcp.ts`
+- `/Users/neilmcdevitt/code/arx/convex/memberOntology.ts`
+- `/Users/neilmcdevitt/code/arx/shared/polynetMcp.ts`
+- `/Users/neilmcdevitt/code/arx/shared/polynetMcpSetup.ts`
 
 then the release is not complete until:
 
 1. `main` is pushed and `polynet` is deploying from GitHub
 2. `npm run convex:deploy` has been run from the validated code state
-3. one real MCP connect attempt has been re-tested on production
+3. the metadata smoke passes against the canonical production URL
+4. one authenticated official Polynet MCP call has been re-tested on production
 
 This is the canonical path. Do not rely on branch names, preview URLs, or old Vercel projects as release truth.
+
+### Third-party MCP consumer retirement
+
+Removing Polynet's third-party MCP consumer is a two-release data migration:
+
+1. First release the code that severs all catalog, connect, OAuth, mount,
+   runtime, worker, UI, and fanout paths while retaining the seven retired
+   tables and `thirdPartyMcpRetirement.ts`.
+2. Confirm the official `/runtime/mcp` provider proofs still pass.
+3. Inspect production retired state:
+
+```bash
+npx convex run thirdPartyMcpRetirement:inspectRetiredStateInternal \
+  '{"sampleLimit":1000}' --prod
+```
+
+4. Run bounded deletion batches until every count is zero:
+
+```bash
+npx convex run thirdPartyMcpRetirement:deleteRetiredStateBatchInternal \
+  '{"perTableLimit":100}' --prod
+```
+
+5. Re-run the inspection and stop unless all seven retired tables are empty.
+6. In a second release, remove the seven schema tables, their anonymous-user
+   cleanup entries, and the temporary migration module.
+7. Require both:
+
+```bash
+npm run check:no-third-party-mcp-surface-proof
+npm run check:third-party-mcp-retirement-complete-proof
+```
+
+Never delete the production rows before the first release proves ordinary
+product traffic can no longer create or refresh them.
 
 ## Web Production Rule
 

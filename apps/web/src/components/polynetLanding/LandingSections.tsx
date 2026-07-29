@@ -430,7 +430,7 @@ function Pillars() {
     {
       n: '/01', name: 'BUILD', icon: <GlyphCompose />,
       title: 'Build the agent.',
-      body: 'Wire apps, MCP servers, skills, workflows, docs and files into an agent that knows your method and your voice.',
+      body: 'Wire skills, workflows, community resources, docs and files into an agent that knows your method and your voice.',
     },
     {
       n: '/02', name: 'DEPLOY', icon: <GlyphDeploy />,

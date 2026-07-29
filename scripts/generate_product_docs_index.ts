@@ -363,7 +363,7 @@ function buildLlmsTxt(index: ProductDocsIndex): string {
     "## Platform Value Prop",
     "",
     "Polynet lets builders create communities that can think, remember, and act with AI.",
-    "The platform combines community, services, consulting, software, agents, skills, apps, MCPs, resources, access control, and payments into one services-as-software business surface.",
+    "The platform combines community, services, consulting, software, agents, skills, resources, the official Polynet MCP, access control, and payments into one services-as-software business surface.",
     "",
     "## Retrieval Rule",
     "",

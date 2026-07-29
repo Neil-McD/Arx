@@ -2913,6 +2913,7 @@ export default defineSchema({
     userId: v.id("users"),
     surface: v.union(
       v.literal("member_agent_dock"),
+      v.literal("coding_harness"),
       v.literal("external_mcp"),
       v.literal("community_concierge"),
     ),
@@ -3215,6 +3216,7 @@ export default defineSchema({
     surface: v.optional(
       v.union(
         v.literal("member_agent_dock"),
+        v.literal("coding_harness"),
         v.literal("external_mcp"),
         v.literal("community_concierge"),
       ),

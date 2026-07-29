@@ -21,7 +21,6 @@ The best community agent starts with a clear job, a small set of durable resourc
 - audience and member needs
 - resources
 - skills
-- connected apps/MCPs
 - access and safety boundaries
 
 ## Agent Job
@@ -52,7 +51,7 @@ Use the right layer for the right kind of information:
 - community-specific behavior belongs in community agent instructions
 - reusable knowledge belongs in resources
 - repeatable workflows belong in skills
-- external capability belongs in apps/MCPs
+- native tool capability belongs in explicit runtime policy
 - access and safety boundaries belong in backend policy
 
 ## Prompt Boundary
@@ -81,15 +80,16 @@ A good configuration includes:
 4. Put repeatable behavior in skills.
 5. Keep owner instructions below platform safety and access rules.
 6. Do not ask the agent to use community context for users who lack access.
-7. Do not claim an app or MCP tool is available unless it is connected, validated, mounted, and allowed.
-8. Keep skills separate from app login or connection state.
+7. Do not claim a tool is available unless it is exposed and allowed by the
+   runtime.
+8. Keep skills separate from tool authority.
 9. Prefer references to docs/resources over copying large blobs into prompts.
 
 ## Common Mistakes
 
 - Creating one giant prompt instead of using docs, resources, and skills.
 - Asking the agent to make access decisions from text instructions.
-- Treating an app catalog entry as mounted runtime capability.
+- Treating descriptive configuration as runtime capability.
 - Dumping every skill into every turn.
 - Making the agent sound impressive before making it useful.
 

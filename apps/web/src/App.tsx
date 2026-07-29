@@ -65,7 +65,6 @@ import {
 import { useWebWorkspaceCoreController } from "./controllers/useWebWorkspaceCoreController";
 import { useWebCommunityUiController } from "./controllers/useWebCommunityUiController";
 import { useWebCommunityAgentConfigUiController } from "./controllers/useWebCommunityAgentConfigUiController";
-import { useWebCommunityAppsController } from "./controllers/useWebCommunityAppsController";
 import { useWebCommunitySkillAttachmentsController } from "./controllers/useWebCommunitySkillAttachmentsController";
 import { useWebCommunityAdminUiController } from "./controllers/useWebCommunityAdminUiController";
 import { useWebCommunitySettingsUiController } from "./controllers/useWebCommunitySettingsUiController";
@@ -76,13 +75,8 @@ import { useWebPersonalMemoryUiController } from "./controllers/useWebPersonalMe
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
-import { useWebEffectiveMcpAppsController } from "./controllers/useWebEffectiveMcpAppsController";
 import { useWebEffectiveSkillsController } from "./controllers/useWebEffectiveSkillsController";
-import { useWebUserPlatformAppMountsController } from "./controllers/useWebUserPlatformAppMountsController";
 import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlatformSkillsController";
-import {
-  removePersonalMountFromEffectiveMcpApps,
-} from "../../../shared/effectiveMcpApps";
 import { buildEffectiveSkills } from "../../../shared/effectiveSkills";
 import { COMMUNITY_MANAGER_PLATFORM_SKILLS } from "../../../shared/platformSkills";
 import { useWebWorkspaceProjectStateController } from "./controllers/useWebWorkspaceProjectStateController";
@@ -1362,30 +1356,25 @@ function scrubCurrentRouteSearchParams(paramNames: readonly string[]): void {
   window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
 }
 
-const APP_OAUTH_RETURN_PARAM_NAMES = [
-  "app_oauth",
-  "app_oauth_state",
-  "app_oauth_finalize_token",
-  "app_oauth_message",
-  "catalog_app_id",
-] as const;
-const APP_OAUTH_FINALIZE_SESSION_GUARD_PREFIX = "app_oauth_finalize:";
-const APP_OAUTH_FINALIZE_SESSION_GUARD_TTL_MS = 2 * 60_000;
+const SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_PREFIX =
+  "source_integration_oauth_finalize:";
+const SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_TTL_MS = 2 * 60_000;
 
-function buildAppOAuthFinalizeSessionGuardKey(
+function buildSourceIntegrationOAuthFinalizeSessionGuardKey(
   state: string,
   finalizeToken: string,
 ): string {
-  return `${APP_OAUTH_FINALIZE_SESSION_GUARD_PREFIX}${state}:${finalizeToken}`;
+  return `${SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_PREFIX}${state}:${finalizeToken}`;
 }
 
-function claimAppOAuthFinalizeSessionGuard(key: string): boolean {
+function claimSourceIntegrationOAuthFinalizeSessionGuard(key: string): boolean {
   try {
     const existing = Number(window.sessionStorage.getItem(key) ?? "");
     const now = Date.now();
     if (
       Number.isFinite(existing) &&
-      existing > now - APP_OAUTH_FINALIZE_SESSION_GUARD_TTL_MS
+      existing >
+        now - SOURCE_INTEGRATION_OAUTH_FINALIZE_SESSION_GUARD_TTL_MS
     ) {
       return false;
     }
@@ -1397,7 +1386,7 @@ function claimAppOAuthFinalizeSessionGuard(key: string): boolean {
 }
 
 
-function clearAppOAuthFinalizeSessionGuard(key: string): void {
+function clearSourceIntegrationOAuthFinalizeSessionGuard(key: string): void {
   try {
     window.sessionStorage.removeItem(key);
   } catch {
@@ -3683,64 +3672,6 @@ export default function App() {
     handleResetCommunityAgentConfig,
   } = communityAgentConfigUi;
   const {
-    communityAppMounts,
-    isLoadingCommunityAppMounts,
-    communityAppMountError,
-    communityAppMutationError,
-    updatingCommunityAppMountId,
-    refreshingCommunityAppMountId,
-    removingCommunityAppMountId,
-    communityAppMountsLoadedCommunityIdRef,
-    clearCommunityAppMounts,
-    loadCommunityAppMounts,
-    updateCommunityAppMount,
-    refreshCommunityApp,
-    setupImportedCommunityMcpApp,
-    unmountCommunityApp,
-  } = useWebCommunityAppsController<AuthSession>({
-    activeCommunityId,
-    session,
-    ensureSession: ensureUsableAuthSession,
-  });
-  const {
-    userPlatformAppMounts,
-    isLoadingUserPlatformAppMounts,
-    userPlatformAppMountError,
-    isConnectingUserPlatformApp,
-    userPlatformAppMutationError,
-    updatingUserPlatformAppMountId,
-    refreshingUserPlatformAppMountId,
-    reconnectingUserPlatformAppMountId,
-    removingUserPlatformAppMountId,
-    userPlatformAppMountsLoadedUserIdRef,
-    clearUserPlatformAppMounts,
-    loadUserPlatformAppMounts,
-    connectUserPlatformApp,
-    beginUserPlatformAppOAuth,
-    finalizeUserPlatformAppOAuth,
-    updateUserPlatformAppMount,
-    refreshUserPlatformApp,
-    setupImportedCommunityMcpUserHarness,
-    reconnectUserPlatformApp,
-    unmountUserPlatformApp,
-  } = useWebUserPlatformAppMountsController<AuthSession>({
-    session,
-    ensureSession: ensureUsableAuthSession,
-  });
-  const {
-    effectiveMcpApps,
-    setEffectiveMcpApps,
-    isLoadingEffectiveMcpApps,
-    effectiveMcpAppsError,
-    effectiveMcpAppsLoadedKeyRef,
-    clearEffectiveMcpApps,
-    loadEffectiveMcpApps,
-  } = useWebEffectiveMcpAppsController<AuthSession>({
-    activeCommunityId,
-    session,
-    ensureSession: ensureUsableAuthSession,
-  });
-  const {
     effectiveSkills,
     isLoadingEffectiveSkills,
     effectiveSkillsError,
@@ -4827,7 +4758,6 @@ export default function App() {
   const [inferenceToast] = useState<string | null>(null);
   const [appToast, setAppToast] = useState<string | null>(null);
   const appToastTimeoutRef = useRef<number | null>(null);
-  const appOAuthFinalizeInFlightRef = useRef<string | null>(null);
   const sourceIntegrationOAuthFinalizeInFlightRef = useRef<string | null>(null);
   const lastShownAuthErrorRef = useRef<string | null>(null);
   const [previewAccessGateModal, setPreviewAccessGateModal] = useState<
@@ -4864,7 +4794,7 @@ export default function App() {
     agent_soul: "",
   });
   const [communityAiAgentPreferredTab, setCommunityAiAgentPreferredTab] = useState<
-    "instructions" | "apps" | "skills"
+    "instructions" | "skills"
   >("instructions");
   const [isLoadingUserMemorySettings, setIsLoadingUserMemorySettings] = useState(false);
   const [chatgptConnection, setChatgptConnection] = useState<CloudChatgptConnectionStatus>({
@@ -5195,20 +5125,6 @@ export default function App() {
     loadFailureMessage: "Failed to load AI agent config.",
     saveFailureMessage: "Failed to save AI agent changes.",
   });
-  const reloadEffectiveMcpApps = useCallback(async () => {
-    if (!session) {
-      clearEffectiveMcpApps();
-      return;
-    }
-    effectiveMcpAppsLoadedKeyRef.current = null;
-    await loadEffectiveMcpApps(session);
-  }, [
-    clearEffectiveMcpApps,
-    effectiveMcpAppsLoadedKeyRef,
-    loadEffectiveMcpApps,
-    session,
-  ]);
-
   const reloadEffectiveSkills = useCallback(async () => {
     if (!session) {
       clearEffectiveSkills();
@@ -5222,170 +5138,6 @@ export default function App() {
     loadEffectiveSkills,
     session,
   ]);
-
-  const handleConnectUserPlatformApp = useCallback(
-    async (input: {
-      catalog_app_id?: string;
-      name: string;
-      endpoint_url: string;
-      auth_type: "none" | "api_key" | "bearer" | "oauth";
-      description?: string;
-      secret?: string;
-    }) => {
-      const result = await connectUserPlatformApp(input);
-      if (result.ok || result.mount) void reloadEffectiveMcpApps();
-      return result;
-    },
-    [connectUserPlatformApp, reloadEffectiveMcpApps],
-  );
-
-  const handleBeginUserPlatformAppOAuth = useCallback(
-    async (
-      catalogAppId: string,
-      options?: {
-        community_id?: string | null;
-        community_app_mount_id?: string | null;
-        endpoint_url?: string | null;
-      },
-    ) => {
-      const result = await beginUserPlatformAppOAuth({
-        catalogAppId,
-        returnToPath: `${window.location.pathname}${window.location.search}`,
-        community_id:
-          options?.community_id ??
-          (options?.community_app_mount_id ? activeCommunityId : undefined),
-        community_app_mount_id: options?.community_app_mount_id,
-        endpoint_url: options?.endpoint_url,
-      });
-      if (result.ok && result.authorize_url) {
-        window.location.assign(result.authorize_url);
-      }
-      return result;
-    },
-    [activeCommunityId, beginUserPlatformAppOAuth],
-  );
-
-  const handleUpdateUserPlatformAppMount = useCallback(
-    async (
-      userPlatformAppMountId: string,
-      patch: {
-        enabled?: boolean;
-        enabledTools?: string[];
-      },
-    ) => {
-      const ok = await updateUserPlatformAppMount(userPlatformAppMountId, patch);
-      if (ok) void reloadEffectiveMcpApps();
-      return ok;
-    },
-    [reloadEffectiveMcpApps, updateUserPlatformAppMount],
-  );
-
-  const handleRefreshUserPlatformApp = useCallback(
-    async (userPlatformAppMountId: string) => {
-      const ok = await refreshUserPlatformApp(userPlatformAppMountId);
-      if (ok) void reloadEffectiveMcpApps();
-      return ok;
-    },
-    [refreshUserPlatformApp, reloadEffectiveMcpApps],
-  );
-
-  const handleReconnectUserPlatformApp = useCallback(
-    async (userPlatformAppMountId: string, secret: string) => {
-      const ok = await reconnectUserPlatformApp(userPlatformAppMountId, secret);
-      if (ok) void reloadEffectiveMcpApps();
-      return ok;
-    },
-    [reconnectUserPlatformApp, reloadEffectiveMcpApps],
-  );
-
-  const handleUnmountUserPlatformApp = useCallback(
-    async (userPlatformAppMountId: string) => {
-      const ok = await unmountUserPlatformApp(userPlatformAppMountId);
-      if (ok) {
-        setEffectiveMcpApps((prev) =>
-          removePersonalMountFromEffectiveMcpApps(prev, userPlatformAppMountId),
-        );
-        void reloadEffectiveMcpApps();
-      }
-      return ok;
-    },
-    [reloadEffectiveMcpApps, setEffectiveMcpApps, unmountUserPlatformApp],
-  );
-
-  const handleUpdateCommunityAppMount = useCallback(
-    async (
-      communityAppMountId: string,
-      patch: {
-        enabled?: boolean;
-        enabledTools?: string[];
-      },
-    ) => {
-      const ok = await updateCommunityAppMount(communityAppMountId, patch);
-      if (ok) void reloadEffectiveMcpApps();
-      return ok;
-    },
-    [reloadEffectiveMcpApps, updateCommunityAppMount],
-  );
-
-  const handleUnmountCommunityApp = useCallback(
-    async (communityAppMountId: string) => {
-      const ok = await unmountCommunityApp(communityAppMountId);
-      if (ok) void reloadEffectiveMcpApps();
-      return ok;
-    },
-    [reloadEffectiveMcpApps, unmountCommunityApp],
-  );
-
-  const handleRefreshCommunityApp = useCallback(
-    async (communityAppMountId: string) => {
-      const ok = await refreshCommunityApp(communityAppMountId);
-      if (ok) void reloadEffectiveMcpApps();
-      return ok;
-    },
-    [refreshCommunityApp, reloadEffectiveMcpApps],
-  );
-
-  const handleSetupImportedCommunityMcpApp = useCallback(
-    async (input: {
-      community_app_mount_id: string;
-      endpoint_url: string;
-      auth_type: "none" | "api_key" | "bearer" | "oauth";
-      secret?: string;
-    }) => {
-      if (input.auth_type !== "none") {
-        if (!activeCommunityId) return false;
-        const result = await setupImportedCommunityMcpUserHarness({
-          community_id: activeCommunityId,
-          community_app_mount_id: input.community_app_mount_id,
-          endpoint_url: input.endpoint_url,
-          auth_type: input.auth_type,
-          secret: input.secret,
-        });
-        if (!result.ok) return false;
-      }
-      const ok = await setupImportedCommunityMcpApp({
-        community_app_mount_id: input.community_app_mount_id,
-        endpoint_url: input.endpoint_url,
-        auth_type: input.auth_type,
-      });
-      if (!ok) return false;
-      if (session) {
-        userPlatformAppMountsLoadedUserIdRef.current = null;
-        void loadUserPlatformAppMounts(session);
-      }
-      void reloadEffectiveMcpApps();
-      return ok;
-    },
-    [
-      activeCommunityId,
-      loadUserPlatformAppMounts,
-      reloadEffectiveMcpApps,
-      session,
-      setupImportedCommunityMcpUserHarness,
-      setupImportedCommunityMcpApp,
-      userPlatformAppMountsLoadedUserIdRef,
-    ],
-  );
 
   const handleCreateCommunitySkill = useCallback(
     async (input: CreateSkillPackageInput) => {
@@ -6261,91 +6013,6 @@ export default function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const status = params.get("app_oauth");
-    if (!status) return;
-
-    if (status === "error") {
-      showAppToastMessage(
-        params.get("app_oauth_message")?.trim() ||
-          "App connection was not completed.",
-      );
-      scrubCurrentRouteSearchParams(APP_OAUTH_RETURN_PARAM_NAMES);
-      applyLocationToState();
-      return;
-    }
-
-    if (status === "connected") {
-      showAppToastMessage("App connected.");
-      if (session) {
-        userPlatformAppMountsLoadedUserIdRef.current = null;
-        void loadUserPlatformAppMounts(session);
-      }
-      void reloadEffectiveMcpApps();
-      scrubCurrentRouteSearchParams(APP_OAUTH_RETURN_PARAM_NAMES);
-      applyLocationToState();
-      return;
-    }
-
-    if (status !== "pending") return;
-    const state = params.get("app_oauth_state")?.trim() ?? "";
-    const finalizeToken = params.get("app_oauth_finalize_token")?.trim() ?? "";
-    if (!state || !finalizeToken) {
-      showAppToastMessage("App connection could not be finalized.");
-      scrubCurrentRouteSearchParams(APP_OAUTH_RETURN_PARAM_NAMES);
-      applyLocationToState();
-      return;
-    }
-    if (!session) return;
-    const inFlightKey = `${state}:${finalizeToken}`;
-    if (appOAuthFinalizeInFlightRef.current === inFlightKey) return;
-    const sessionGuardKey = buildAppOAuthFinalizeSessionGuardKey(
-      state,
-      finalizeToken,
-    );
-    if (!claimAppOAuthFinalizeSessionGuard(sessionGuardKey)) return;
-    appOAuthFinalizeInFlightRef.current = inFlightKey;
-
-    void (async () => {
-      try {
-        const result = await finalizeUserPlatformAppOAuth({
-          state,
-          finalizeToken,
-        });
-        if (result.ok) {
-          showAppToastMessage("App connected.");
-          userPlatformAppMountsLoadedUserIdRef.current = null;
-          void loadUserPlatformAppMounts(session);
-          void reloadEffectiveMcpApps();
-        } else {
-          showAppToastMessage(
-            result.error_message || "App connection could not be finalized.",
-          );
-        }
-        scrubCurrentRouteSearchParams(APP_OAUTH_RETURN_PARAM_NAMES);
-        applyLocationToState();
-      } finally {
-        clearAppOAuthFinalizeSessionGuard(sessionGuardKey);
-        if (appOAuthFinalizeInFlightRef.current === inFlightKey) {
-          appOAuthFinalizeInFlightRef.current = null;
-        }
-      }
-    })();
-
-    return () => {
-      // Keep the in-flight/session guards while the one-shot finalizer runs.
-    };
-  }, [
-    applyLocationToState,
-    finalizeUserPlatformAppOAuth,
-    loadUserPlatformAppMounts,
-    reloadEffectiveMcpApps,
-    session,
-    showAppToastMessage,
-    userPlatformAppMountsLoadedUserIdRef,
-  ]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
     const status = params.get("source_integration_oauth");
     if (!status) return;
     const urlLaunchKnowledgeContext = readCommunityLaunchKnowledgeOAuthContext(
@@ -6415,11 +6082,11 @@ export default function App() {
     if (!session) return;
     const inFlightKey = `${state}:${finalizeToken}`;
     if (sourceIntegrationOAuthFinalizeInFlightRef.current === inFlightKey) return;
-    const sessionGuardKey = buildAppOAuthFinalizeSessionGuardKey(
+    const sessionGuardKey = buildSourceIntegrationOAuthFinalizeSessionGuardKey(
       `source:${state}`,
       finalizeToken,
     );
-    if (!claimAppOAuthFinalizeSessionGuard(sessionGuardKey)) return;
+    if (!claimSourceIntegrationOAuthFinalizeSessionGuard(sessionGuardKey)) return;
     sourceIntegrationOAuthFinalizeInFlightRef.current = inFlightKey;
 
     void (async () => {
@@ -6465,7 +6132,7 @@ export default function App() {
           }
         }
       } finally {
-        clearAppOAuthFinalizeSessionGuard(sessionGuardKey);
+        clearSourceIntegrationOAuthFinalizeSessionGuard(sessionGuardKey);
         if (sourceIntegrationOAuthFinalizeInFlightRef.current === inFlightKey) {
           sourceIntegrationOAuthFinalizeInFlightRef.current = null;
         }
@@ -6929,83 +6596,6 @@ export default function App() {
     communityAgentConfigLoadedCommunityIdRef,
     setCommunityAgentConfigError,
   });
-
-  useEffect(() => {
-    const shouldLoadCommunityApps =
-      (activePage === "community" && communityTab === "ai_agent") ||
-      (activePage === "community" && communityTab === "settings") ||
-      activePage === "discover";
-    if (!shouldLoadCommunityApps) return;
-    const canViewCommunityApps = Boolean(
-      activeCommunityAccess?.can_enter_community ??
-        activeCommunityAccess?.can_view ??
-        canViewActiveCommunitySettings ??
-        canManageMembersActiveCommunity,
-    );
-    if (!session || !activeCommunityId || !canViewCommunityApps) {
-      clearCommunityAppMounts();
-      return;
-    }
-    if (communityAppMountsLoadedCommunityIdRef.current === activeCommunityId) return;
-    void loadCommunityAppMounts(activeCommunityId, session);
-  }, [
-    activePage,
-    communityTab,
-    session,
-    activeCommunityId,
-    activeCommunityAccess?.can_enter_community,
-    activeCommunityAccess?.can_view,
-    canViewActiveCommunitySettings,
-    canManageMembersActiveCommunity,
-    clearCommunityAppMounts,
-    loadCommunityAppMounts,
-    communityAppMountsLoadedCommunityIdRef,
-  ]);
-
-  useEffect(() => {
-    const shouldLoadUserPlatformApps =
-      activePage === "discover" ||
-      (activePage === "settings" && settingsPage === "integrations");
-    if (!shouldLoadUserPlatformApps) return;
-    if (!session) {
-      clearUserPlatformAppMounts();
-      return;
-    }
-    if (userPlatformAppMountsLoadedUserIdRef.current === session.user.id) return;
-    void loadUserPlatformAppMounts(session);
-  }, [
-    activePage,
-    session,
-    settingsPage,
-    clearUserPlatformAppMounts,
-    loadUserPlatformAppMounts,
-    userPlatformAppMountsLoadedUserIdRef,
-  ]);
-
-  useEffect(() => {
-    const shouldLoadEffectiveMcpApps =
-      activePage === "discover" ||
-      (activePage === "community" && communityTab === "settings") ||
-      (activePage === "community" && communityTab === "ai_agent") ||
-      (activePage === "settings" && settingsPage === "integrations");
-    if (!shouldLoadEffectiveMcpApps) return;
-    if (!session) {
-      clearEffectiveMcpApps();
-      return;
-    }
-    const loadedKey = `${session.user.id}:${activeCommunityId ?? "personal"}`;
-    if (effectiveMcpAppsLoadedKeyRef.current === loadedKey) return;
-    void loadEffectiveMcpApps(session);
-  }, [
-    activeCommunityId,
-    activePage,
-    communityTab,
-    session,
-    settingsPage,
-    clearEffectiveMcpApps,
-    effectiveMcpAppsLoadedKeyRef,
-    loadEffectiveMcpApps,
-  ]);
 
   useEffect(() => {
     const shouldLoadEffectiveSkills =
@@ -10462,28 +10052,6 @@ export default function App() {
       accountCommerceError,
       startStripeConnectOnboarding,
       isStartingStripeConnectOnboarding,
-      communityIntegrations: {
-        mounts: communityAppMounts,
-        effectiveMcpApps,
-        isLoading: isLoadingCommunityAppMounts,
-        isLoadingEffectiveMcpApps,
-        error: communityAppMountError,
-        mutationError: communityAppMutationError,
-        updatingMountId: updatingCommunityAppMountId,
-        refreshingMountId: refreshingCommunityAppMountId,
-        removingMountId: removingCommunityAppMountId,
-        onUpdateMount: handleUpdateCommunityAppMount,
-        onRefreshApp: handleRefreshCommunityApp,
-        onSetupImportedMcpApp: handleSetupImportedCommunityMcpApp,
-        onUnmountApp: handleUnmountCommunityApp,
-        isOptingIntoApp: isConnectingUserPlatformApp,
-        refreshingPersonalMountId: refreshingUserPlatformAppMountId,
-        reconnectingPersonalMountId: reconnectingUserPlatformAppMountId,
-        onOptInApp: handleConnectUserPlatformApp,
-        onBeginPersonalAppOAuth: handleBeginUserPlatformAppOAuth,
-        onRefreshPersonalApp: handleRefreshUserPlatformApp,
-        onReconnectPersonalApp: handleReconnectUserPlatformApp,
-      },
       settingsState: {
         isSettingsBannerDragOver,
         isProcessingCommunitySettingsBanner,
@@ -10592,22 +10160,6 @@ export default function App() {
         communityAgentConfigCommunitySystemPrompt,
         setCommunityAgentConfigCommunitySystemPrompt,
         markCommunityAgentConfigDirty,
-      },
-      aiAgentAppsEditorProps: {
-        intro: "Manage apps attached to this community.",
-        emptyState: "No apps are attached to this community yet.",
-        mounts: communityAppMounts,
-        effectiveMcpApps,
-        isLoading: isLoadingCommunityAppMounts,
-        isLoadingEffectiveMcpApps,
-        error: communityAppMountError,
-        mutationError: communityAppMutationError,
-        updatingMountId: updatingCommunityAppMountId,
-        refreshingMountId: refreshingCommunityAppMountId,
-        removingMountId: removingCommunityAppMountId,
-        onUpdateMount: handleUpdateCommunityAppMount,
-        onRefreshApp: handleRefreshCommunityApp,
-        onUnmountApp: handleUnmountCommunityApp,
       },
       aiAgentSkillsEditorProps: {
         intro: "Attach reusable skill packages here so this community lens can load behavior units on demand without bloating the base prompt.",
@@ -11134,24 +10686,12 @@ export default function App() {
       startPremiumSubscriptionCheckout,
       billingUi,
     },
-    integrations: {
+    skills: {
       session: session,
       requireSignIn,
-      effectiveMcpApps,
-      isLoadingEffectiveMcpApps,
-      effectiveMcpAppsError,
       effectiveSkills: effectiveSkillsForSettings,
       isLoadingEffectiveSkills,
       effectiveSkillsError: effectiveSkillsErrorForSettings,
-      isLoadingUserPlatformAppMounts,
-      userPlatformAppMountError,
-      userPlatformAppMutationError,
-      isConnectingUserPlatformApp,
-      updatingUserPlatformAppMountId,
-      refreshingUserPlatformAppMountId,
-      refreshingCommunityAppMountId,
-      reconnectingUserPlatformAppMountId,
-      removingUserPlatformAppMountId,
       userPlatformSkills,
       isLoadingUserPlatformSkills,
       userPlatformSkillError,
@@ -11159,13 +10699,6 @@ export default function App() {
       isCreatingUserPlatformSkill,
       updatingUserPlatformSkillInstallId,
       removingUserPlatformSkillInstallId,
-      onConnectUserPlatformApp: handleConnectUserPlatformApp,
-      onBeginUserPlatformAppOAuth: handleBeginUserPlatformAppOAuth,
-      onUpdateUserPlatformAppMount: handleUpdateUserPlatformAppMount,
-      onRefreshUserPlatformApp: handleRefreshUserPlatformApp,
-      onReconnectUserPlatformApp: handleReconnectUserPlatformApp,
-      onSetupImportedCommunityMcpApp: handleSetupImportedCommunityMcpApp,
-      onUnmountUserPlatformApp: handleUnmountUserPlatformApp,
       onCreateUserPlatformSkill: handleCreateUserPlatformSkill,
       onSaveUserPlatformSkill: handleSaveUserPlatformSkill,
       onUpdateUserPlatformSkill: handleUpdateUserPlatformSkill,

@@ -81,7 +81,7 @@ export type RuntimeContextManifestTool = {
   family: string;
   grantedBy: string;
   effect: RuntimeContextManifestToolEffect;
-  source: "fixed_runtime_tool" | "mounted_app_tool";
+  source: "fixed_runtime_tool";
 };
 
 export type RuntimeContextManifestRuntimeState = {
@@ -131,7 +131,6 @@ export type RuntimeContextManifestV1 = {
     runtimeStateCount: number;
     exclusionCount: number;
     fixedToolCount: number;
-    mountedToolCount: number;
   };
 };
 
@@ -146,12 +145,6 @@ type ManifestSkillInput = {
   activation_reason?: unknown;
 };
 
-type ManifestMountedToolInput = {
-  runtime_tool_name?: unknown;
-  app_name?: unknown;
-  risk_level?: unknown;
-};
-
 export type BuildRuntimeContextManifestInput = {
   generatedAt?: string | null;
   userId?: string | null;
@@ -164,7 +157,6 @@ export type BuildRuntimeContextManifestInput = {
   latestUserText?: string | null;
   messages?: Array<{ role?: string | null; content?: string | null }> | null;
   allowedToolNames?: readonly RetrievalToolName[] | null;
-  mountedTools?: readonly ManifestMountedToolInput[] | null;
   communityResourceLane?: CommunityResourceRuntimeLaneState | null;
   communitySystemPrompt?: string | null;
   communityAbout?: string | null;
@@ -294,21 +286,6 @@ function uniqueToolNames(values: readonly RetrievalToolName[] | null | undefined
     if (!toolName || seen.has(toolName)) continue;
     seen.add(toolName);
     out.push(toolName);
-  }
-  return out;
-}
-
-function uniqueMountedTools(
-  values: readonly ManifestMountedToolInput[] | null | undefined,
-): ManifestMountedToolInput[] {
-  if (!Array.isArray(values)) return [];
-  const out: ManifestMountedToolInput[] = [];
-  const seen = new Set<string>();
-  for (const value of values) {
-    const runtimeToolName = compactText(value?.runtime_tool_name, 160);
-    if (!runtimeToolName || seen.has(runtimeToolName)) continue;
-    seen.add(runtimeToolName);
-    out.push(value);
   }
   return out;
 }
@@ -720,18 +697,6 @@ function buildToolEntries(params: BuildRuntimeContextManifestInput & {
     source: "fixed_runtime_tool",
     ...classifyFixedTool(toolName),
   }));
-  for (const mountedTool of uniqueMountedTools(params.mountedTools)) {
-    const toolName = compactText(mountedTool.runtime_tool_name, 160);
-    if (!toolName) continue;
-    const riskLevel = compactText(mountedTool.risk_level, 40);
-    tools.push({
-      name: toolName,
-      family: "mounted_app",
-      grantedBy: compactText(mountedTool.app_name, 120) ?? "mounted_user_app",
-      effect: riskLevel === "write" || riskLevel === "sensitive" ? "write" : "read",
-      source: "mounted_app_tool",
-    });
-  }
   return tools;
 }
 
@@ -938,7 +903,6 @@ export function buildRuntimeContextManifest(
       runtimeStateCount: runtimeState.length,
       exclusionCount: exclusions.length,
       fixedToolCount: allowedToolNames.length,
-      mountedToolCount: tools.filter((tool) => tool.source === "mounted_app_tool").length,
     },
   };
 }

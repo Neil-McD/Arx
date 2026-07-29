@@ -8,28 +8,8 @@ import { formatStripeConnectCountry } from "../../../../shared/stripeConnectCoun
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { CommunitySettingsPane } from "../../../../shared/appShellNavigation";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
-import { usePersonalAppSetupController } from "../controllers/usePersonalAppSetupController";
-import {
-  isDiscoverAppPersonallyConnectable,
-  type DiscoverAppCatalogEntry,
-} from "../lib/discoverCatalog";
-import { findDiscoverCatalogEntryForAppIdentity } from "../lib/discoverCatalogMatching";
-import { buildIntegrationSurfaceRowFromCommunityMount } from "../lib/integrationSurfaceRows";
-import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
-import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
-import type {
-  DeveloperAppAuthType,
-  CommunityMountedApp,
-} from "../../../../shared/communityAppMountTypes";
-import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
-import type {
-  BeginUserPlatformAppOAuthOptions,
-  BeginUserPlatformAppOAuthResult,
-  ConnectUserPlatformAppInput,
-  ConnectUserPlatformAppResult,
-} from "../../../../shared/userPlatformAppMountTypes";
 import { WebCommunityOnboardingWorkflowSection } from "./WebCommunityOnboardingWorkflowSection";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
@@ -67,44 +47,6 @@ type WebCommunitySettingsSectionProps = {
     country?: string | null;
   }) => Promise<void> | void;
   isStartingStripeConnectOnboarding: boolean;
-  communityIntegrations: {
-    mounts: CommunityMountedApp[];
-    effectiveMcpApps: EffectiveMcpApp[];
-    isLoading: boolean;
-    isLoadingEffectiveMcpApps: boolean;
-    error: string | null;
-    mutationError: string | null;
-    updatingMountId: string | null;
-    refreshingMountId: string | null;
-    removingMountId: string | null;
-    onUpdateMount: (
-      communityAppMountId: string,
-      patch: {
-        enabled?: boolean;
-        enabledTools?: string[];
-      },
-    ) => Promise<boolean> | boolean;
-    onRefreshApp: (communityAppMountId: string) => Promise<boolean> | boolean;
-    onUnmountApp: (communityAppMountId: string) => Promise<boolean> | boolean;
-    isOptingIntoApp: boolean;
-    refreshingPersonalMountId: string | null;
-    reconnectingPersonalMountId: string | null;
-    onOptInApp: (
-      input: ConnectUserPlatformAppInput,
-    ) => Promise<ConnectUserPlatformAppResult>;
-    onBeginPersonalAppOAuth: (
-      catalogAppId: string,
-      options?: BeginUserPlatformAppOAuthOptions,
-    ) => Promise<BeginUserPlatformAppOAuthResult>;
-    onRefreshPersonalApp: (userPlatformAppMountId: string) => Promise<boolean> | boolean;
-    onReconnectPersonalApp: (
-      userPlatformAppMountId: string,
-      secret: string,
-    ) => Promise<boolean> | boolean;
-    onSetupImportedMcpApp: (
-      input: SetupImportedCommunityMcpFromSettingsInput,
-    ) => Promise<boolean> | boolean;
-  };
   state: {
     isSettingsBannerDragOver: boolean;
     isProcessingCommunitySettingsBanner: boolean;
@@ -176,38 +118,9 @@ type WebCommunitySettingsSectionProps = {
 
 type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "actions">;
 
-type SetupImportedCommunityMcpFromSettingsInput = {
-  community_app_mount_id: string;
-  endpoint_url: string;
-  auth_type: DeveloperAppAuthType;
-  secret?: string;
-};
-
-function buildPersonalOptInInput(args: {
-  mount: CommunityMountedApp;
-  catalogEntry: DiscoverAppCatalogEntry | null;
-}): ConnectUserPlatformAppInput {
-  const authType =
-    args.mount.app.auth_type === "none" ||
-    args.mount.app.auth_type === "api_key" ||
-    args.mount.app.auth_type === "bearer" ||
-    args.mount.app.auth_type === "oauth"
-      ? args.mount.app.auth_type
-      : "bearer";
-  return {
-    catalog_app_id:
-      args.mount.app.catalog_app_id ?? args.catalogEntry?.id ?? undefined,
-    name: args.mount.app.name,
-    endpoint_url: args.mount.app.endpoint_url,
-    auth_type: authType,
-    description: args.catalogEntry?.description,
-  };
-}
-
 const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
   community: "Community",
   workflows: "Workflows",
-  integrations: "Integrations",
 };
 
 function CommunitySettingsPaneSwitcher({
@@ -245,242 +158,6 @@ function CommunitySettingsPaneSwitcher({
           {COMMUNITY_SETTINGS_PANE_LABELS[pane]}
         </button>
       ))}
-    </div>
-  );
-}
-
-function CommunityIntegrationsSettingsSection({
-  canManage,
-  hasSession,
-  requireSignIn,
-  integrations,
-}: {
-  canManage: boolean;
-  hasSession: boolean;
-  requireSignIn: () => void;
-  integrations: WebCommunitySettingsSectionProps["communityIntegrations"];
-}) {
-  const [optingInMountId, setOptingInMountId] = useState<string | null>(null);
-  const [optInError, setOptInError] = useState<string | null>(null);
-  const personalAppSetup = usePersonalAppSetupController({
-    hasSession,
-    requireSignIn,
-    isConnecting: integrations.isOptingIntoApp,
-    refreshingPersonalMountId: integrations.refreshingPersonalMountId,
-    reconnectingPersonalMountId: integrations.reconnectingPersonalMountId,
-    refreshingCommunityMountId: integrations.refreshingMountId,
-    onConnectApp: integrations.onOptInApp,
-    onBeginOAuth: integrations.onBeginPersonalAppOAuth,
-    onRefreshApp: integrations.onRefreshPersonalApp,
-    onReconnectApp: integrations.onReconnectPersonalApp,
-    onSetupImportedCommunityMcpApp: integrations.onSetupImportedMcpApp,
-  });
-
-  const handleOptIn = async (
-    mount: CommunityMountedApp,
-    catalogEntry: DiscoverAppCatalogEntry | null,
-  ) => {
-    setOptInError(null);
-    setOptingInMountId(mount.id);
-    try {
-      const result = await integrations.onOptInApp(
-        buildPersonalOptInInput({ mount, catalogEntry }),
-      );
-      if (!result.mount) {
-        setOptInError(
-          result.error_message ??
-            `Couldn't add ${mount.app.name} to your harness right now.`,
-        );
-      }
-    } catch {
-      setOptInError(`Couldn't add ${mount.app.name} to your harness right now.`);
-    } finally {
-      setOptingInMountId(null);
-    }
-  };
-
-  return (
-    <div className="settings-section">
-      <div className="settings-section-title">Community integrations</div>
-      <div className="settings-section-desc">
-        Members can add community apps to their own harness and use their own
-        credentials when an app requires authentication.
-      </div>
-      {integrations.error ? (
-        <div className="auth-error">Couldn&apos;t load community integrations.</div>
-      ) : null}
-      {integrations.mutationError ? (
-        <div className="auth-error">{integrations.mutationError}</div>
-      ) : null}
-      {optInError ? <div className="auth-error">{optInError}</div> : null}
-      {integrations.isLoading && integrations.mounts.length === 0 ? (
-        <div className="model-note">Loading community integrations…</div>
-      ) : null}
-      {!integrations.isLoading && integrations.mounts.length === 0 ? (
-        <div className="model-note">
-          No apps have been added to this community yet.
-        </div>
-      ) : null}
-      {integrations.mounts.length > 0 ? (
-        <div className="integrations-app-list">
-          {integrations.mounts.map((mount) => {
-            const catalogEntry = findDiscoverCatalogEntryForAppIdentity(
-              mount.app,
-            );
-            const isUpdating = integrations.updatingMountId === mount.id;
-            const isRefreshing = integrations.refreshingMountId === mount.id;
-            const isRemoving = integrations.removingMountId === mount.id;
-            const isOptingIn =
-              integrations.isOptingIntoApp || optingInMountId === mount.id;
-            const isBusy = isUpdating || isRefreshing || isRemoving || isOptingIn;
-            const row = buildIntegrationSurfaceRowFromCommunityMount(
-              mount,
-              integrations.effectiveMcpApps,
-              {
-                canToggle: canManage,
-                isBusy,
-                isResolvingCanonicalState: integrations.isLoadingEffectiveMcpApps,
-              },
-            );
-            const effectiveApp = row.effectiveApp;
-            const hasPersonalMount = effectiveApp?.has_personal_mount === true;
-            const canSetupCatalog = Boolean(
-              catalogEntry &&
-                isDiscoverAppPersonallyConnectable(catalogEntry) &&
-                !effectiveApp?.live_for_current_user &&
-                (row.canSetup ||
-                  (!hasPersonalMount && mount.app.auth_type !== "none")),
-            );
-            const canSetupImported = Boolean(
-              canManage &&
-                mount.app.mcp_registry_id &&
-                !effectiveApp?.live_for_current_user &&
-                (mount.app.setup_status === "needs_auth" ||
-                  mount.app.setup_status === "needs_config"),
-            );
-            const canSetupPersonal = canSetupCatalog || canSetupImported;
-            const canAddToMyHarness = Boolean(
-              !hasPersonalMount &&
-                !canSetupPersonal &&
-                catalogEntry &&
-                isDiscoverAppPersonallyConnectable(catalogEntry),
-            );
-            return (
-              <div key={mount.id} className="integration-mounted-row">
-                <div className="integration-mounted-top">
-                  <div className="integration-mounted-identity">
-                    <DiscoverCatalogLogo
-                      name={row.name}
-                      logoUrl={row.logoUrl}
-                      logoUrlDark={row.logoUrlDark}
-                    />
-                    <div className="integration-mounted-main">
-                      <div className="integration-mounted-title-row">
-                        <strong>{row.name}</strong>
-                        <span
-                          className={`integration-state-indicator is-${row.stateTone}`}
-                        >
-                          <span aria-hidden="true" />
-                          {row.stateLabel}
-                        </span>
-                        <span className="integration-status-pill">
-                          {row.toolCountLabel}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  {canManage || canAddToMyHarness || canSetupPersonal ? (
-                    <div className="integration-mounted-rail">
-                      {canSetupPersonal ? (
-                        <button
-                          type="button"
-                          className="settings-cta integration-mounted-setup-action"
-                          onClick={() => {
-                            setOptInError(null);
-                            personalAppSetup.open({
-                              source: mount,
-                              effectiveSource: effectiveApp,
-                              catalogEntry,
-                            });
-                          }}
-                          disabled={isBusy}
-                        >
-                          Set up
-                        </button>
-                      ) : null}
-                      {canManage ? (
-                        <label
-                          className={`members-switch integration-mounted-switch${
-                            isBusy ? " is-disabled" : ""
-                          }`}
-                          title={mount.enabled ? "Disable app" : "Enable app"}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={mount.enabled}
-                            disabled={isBusy}
-                            aria-label={`${mount.enabled ? "Disable" : "Enable"} ${
-                              mount.app.name
-                            }`}
-                            onChange={() =>
-                              void integrations.onUpdateMount(mount.id, {
-                                enabled: !mount.enabled,
-                              })
-                            }
-                          />
-                          <span className="members-switch-track">
-                            <span className="members-switch-thumb" />
-                          </span>
-                        </label>
-                      ) : null}
-                      <div className="agent-capability-toolbar-actions">
-                        {canAddToMyHarness ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleOptIn(mount, catalogEntry)}
-                            disabled={isBusy}
-                          >
-                            {isOptingIn ? "Adding…" : "Add to my harness"}
-                          </button>
-                        ) : null}
-                        {canManage ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void integrations.onRefreshApp(mount.id)
-                              }
-                              disabled={isBusy}
-                            >
-                              {isRefreshing ? "Refreshing…" : "Refresh"}
-                            </button>
-                            <button
-                              type="button"
-                              className="agent-onboarding-reset"
-                              onClick={() =>
-                                void integrations.onUnmountApp(mount.id)
-                              }
-                              disabled={isBusy}
-                            >
-                              {isRemoving ? "Removing…" : "Remove"}
-                            </button>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-      {personalAppSetup.modalProps ? (
-        <PersonalAppSetupModal
-          modalTitleId="community-integration-setup-modal-title"
-          {...personalAppSetup.modalProps}
-        />
-      ) : null}
     </div>
   );
 }
@@ -962,7 +639,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     accountCommerceError,
     startStripeConnectOnboarding,
     isStartingStripeConnectOnboarding,
-    communityIntegrations,
     state,
     actions,
   } = props;
@@ -970,7 +646,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
   const ownerSettingsPanes: CommunitySettingsPane[] = [
     "community",
     "workflows",
-    "integrations",
   ];
   const availableSettingsPanes = canManageCommunitySettings ? ownerSettingsPanes : [];
   const selectedSettingsPane = availableSettingsPanes.includes(activePane)
@@ -1072,14 +747,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   </button>
                 </div>
               </>
-            ) : null}
-            {selectedSettingsPane === "integrations" ? (
-              <CommunityIntegrationsSettingsSection
-                canManage={canManageCommunitySettings}
-                hasSession={hasSession}
-                requireSignIn={requireSignIn}
-                integrations={communityIntegrations}
-              />
             ) : null}
             {selectedSettingsPane === "workflows" ? (
               <WebCommunityOnboardingWorkflowSection

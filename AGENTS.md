@@ -52,6 +52,9 @@ This file is the execution contract for agents working in this repository.
 - Funnel builder.
 - Standalone general-purpose personal-agent Workspace or multi-agent canvas.
 - Public Apps and Skills catalogs inside Discover.
+- Third-party MCP server catalogs, connections, mounts, credentials, and
+  runtime tool projection inside Polynet. The official Polynet MCP provider
+  remains in scope.
 - Duplicate/legacy UI surfaces not required for MVP journeys.
 - Extra inference-gating complexity beyond minimal tier limits.
 - Nice-to-have platform expansions not directly improving creator setup + member participation.

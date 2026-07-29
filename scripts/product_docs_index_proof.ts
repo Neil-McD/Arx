@@ -192,8 +192,8 @@ function validateSearch(index: ProductDocsIndex): void {
       expectedTopSlugs: ["reference/roles-permissions", "primitives/role"],
     },
     {
-      query: "how do apps and MCPs connect",
-      expectedTopSlugs: ["guides/connect-apps-and-mcps", "primitives/app-mcp"],
+      query: "how do I connect Polynet MCP",
+      expectedTopSlugs: ["guides/connect-polynet-mcp", "primitives/polynet-mcp"],
     },
     {
       query: "where should community instructions go",

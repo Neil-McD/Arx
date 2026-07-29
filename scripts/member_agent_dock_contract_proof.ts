@@ -311,7 +311,6 @@ for (const toolName of [
     exclusive: false,
     requiresWorkspace: false,
     requiresCommunity: false,
-    requiresMcpSession: false,
   });
 }
 
@@ -497,13 +496,13 @@ assert.match(
 );
 assert.match(
   communityLifecycle,
-  /tombstoneLegacyMemberAgentChannelsForDeletedCommunity[\s\S]*\.withIndex\("by_community"[\s\S]*status: "closed"[\s\S]*activeEpisodeId: undefined[\s\S]*communityDeletedAt: args\.nowMs/,
-  "community deletion must disable only legacy community channels without deleting private history",
+  /const COMMUNITY_DELETION_QUARANTINE_CODE =\s*"community_delete_lifecycle_migration_blocked"/,
+  "community deletion must remain quarantined until legacy lifecycle migration is complete",
 );
 assert.match(
   communityLifecycle,
-  /await tombstoneLegacyMemberAgentChannelsForDeletedCommunity\([\s\S]*await ctx\.db\.delete\(community\._id/,
-  "legacy channel tombstones must commit before the community record is removed",
+  /export const deleteCommunity = mutation\([\s\S]*requireCommunityOwner[\s\S]*throw new ConvexError\(\{\s*code: COMMUNITY_DELETION_QUARANTINE_CODE,\s*reason: COMMUNITY_DELETION_QUARANTINE_CODE,[\s\S]*\}\);/,
+  "community deletion must fail closed after authorization without deleting community or member-agent history",
 );
 assert.match(
   threads,
@@ -517,8 +516,8 @@ assert.equal(
 );
 assert.match(
   account,
-  /memberAgentChannels[\s\S]*memberAgentEpisodes[\s\S]*ctx\.db\.delete\(channel\._id\)[\s\S]*const threads/,
-  "account deletion must remove episodes before channels and canonical threads",
+  /const ACCOUNT_DELETION_QUARANTINE_CODE =\s*"account_delete_lifecycle_migration_blocked"[\s\S]*export const deleteOwnAccount = mutation[\s\S]*resolveAuthenticatedActor[\s\S]*throw new ConvexError\(\{\s*code: ACCOUNT_DELETION_QUARANTINE_CODE,\s*reason: ACCOUNT_DELETION_QUARANTINE_CODE,/,
+  "account deletion must remain authenticated and quarantined until lifecycle migration is complete",
 );
 assert.match(
   anonymousUserCleanup,
@@ -594,10 +593,10 @@ assert.match(
   /invocationSurface === "member_agent_dock"[\s\S]*member_conversations_list[\s\S]*member_conversation_read[\s\S]*polynet_list_communities[\s\S]*polynet_get_community/,
   "private recall and community directory tools must be added only after the server resolves the dock invocation surface",
 );
-assert.match(
+assert.doesNotMatch(
   runtimeLoop,
-  /params\.invocationSurface === "member_agent_dock"[\s\S]*\? \[\][\s\S]*mountedUserPlatformAppTools/,
-  "member-agent dock turns must not mount personal MCP tools",
+  /mountedUserPlatformAppTools|mounted_app_tool|resolveMountedMcpToolsForRuntime/,
+  "native runtime surfaces must not mount third-party MCP tools",
 );
 assert.match(
   communityReadKernel,
@@ -996,11 +995,6 @@ assert.match(
   "the generic thread uploader must not bypass server-owned upload preparation on member-agent threads",
 );
 assert.match(
-  account,
-  /cloudThreadAttachments[\s\S]*deleteStorageObjectIfPresent\(ctx, row\.storageId\)[\s\S]*cloudThreadAttachmentUploadTickets[\s\S]*const cloudMessages/,
-  "account deletion must remove attachment blobs and tickets before messages and threads",
-);
-assert.match(
   nativeToolProtocol,
   /extractTextFromNativeToolMessageContent/,
   "runtime metadata must derive bounded text without stringifying multimodal content",
@@ -1018,7 +1012,7 @@ assert.match(
 assert.equal(supportsModelImageInput("gpt-5.6-sol"), true);
 assert.equal(supportsModelImageInput("gpt-oss-120b-free"), false);
 assert.equal(supportsModelImageInput("unknown-future-model"), false);
-assert.match(packageJson, /"@hey-api\/openapi-ts": "0\.97\.3"[\s\S]*"js-yaml": "4\.2\.0"/);
+assert.match(packageJson, /"@hey-api\/openapi-ts": "0\.97\.3"[\s\S]*"js-yaml": "5\.2\.2"/);
 assert.match(
   runtimeTurnResolution,
   /member_agent_image_model_unsupported[\s\S]*member_agent_image_runtime_unsupported[\s\S]*hasMemberAgentImageInput && runtimeExecutionMode !== "agentic"/,

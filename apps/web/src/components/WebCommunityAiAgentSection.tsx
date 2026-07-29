@@ -2,10 +2,6 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import {
-  WebCommunityAiAgentAppsEditor,
-  type WebCommunityAiAgentAppsEditorProps,
-} from "./WebCommunityAiAgentAppsEditor";
-import {
   WebCommunityAiAgentInstructionsEditor,
   type WebCommunityAiAgentInstructionsEditorProps,
 } from "./WebCommunityAiAgentInstructionsEditor";
@@ -14,7 +10,7 @@ import {
   type WebCommunityAiAgentSkillsEditorProps,
 } from "./WebCommunityAiAgentSkillsEditor";
 
-type CommunityAiAgentTab = "instructions" | "apps" | "skills";
+type CommunityAiAgentTab = "instructions" | "skills";
 
 type WebCommunityAiAgentSectionProps = {
   activeCommunity: unknown | null;
@@ -25,7 +21,6 @@ type WebCommunityAiAgentSectionProps = {
   communityAgentConfigError: string | null;
   onRequireSignIn: () => void;
   instructionsEditorProps: WebCommunityAiAgentInstructionsEditorProps;
-  appsEditorProps: WebCommunityAiAgentAppsEditorProps;
   skillsEditorProps: WebCommunityAiAgentSkillsEditorProps;
 };
 
@@ -34,7 +29,6 @@ const COMMUNITY_AI_AGENT_TABS: Array<{
   label: string;
 }> = [
   { id: "instructions", label: "Instructions" },
-  { id: "apps", label: "Apps" },
   { id: "skills", label: "Skills" },
 ];
 
@@ -48,7 +42,6 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     communityAgentConfigError,
     onRequireSignIn,
     instructionsEditorProps,
-    appsEditorProps,
     skillsEditorProps,
   } = props;
   const [activeTab, setActiveTab] = useState<CommunityAiAgentTab>("instructions");
@@ -92,8 +85,6 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     }
   } else if (activeTab === "skills") {
     content = <WebCommunityAiAgentSkillsEditor {...skillsEditorProps} />;
-  } else {
-    content = <WebCommunityAiAgentAppsEditor {...appsEditorProps} />;
   }
 
   return (

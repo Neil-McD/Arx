@@ -3,19 +3,6 @@ import {
   WORKSPACE_PREVIEW_PORT_MIN,
 } from "../../../shared/workspacePreviewPort.ts";
 
-export type WorkerMcpBridgeToolSpec = {
-  bridgeToolName: string;
-  runtimeToolName: string;
-  connectorName: string;
-  appIdentityKey: string;
-  catalogAppId: string | null;
-  toolName: string;
-  namespacedToolName: string;
-  description: string | null;
-  inputSchema: Record<string, unknown>;
-  riskLevel: "read" | "write" | "sensitive";
-};
-
 export function buildWorkspaceServeDynamicToolSpec(): Record<string, unknown> {
   return {
     name: "workspace_serve",
@@ -37,24 +24,5 @@ export function buildWorkspaceServeDynamicToolSpec(): Record<string, unknown> {
       required: ["command", "port"],
       additionalProperties: false,
     },
-  };
-}
-
-export function buildMcpBridgeDynamicToolSpec(
-  tool: WorkerMcpBridgeToolSpec,
-): Record<string, unknown> {
-  const connector = tool.connectorName || "connected MCP app";
-  const description =
-    tool.description ||
-    `Call ${tool.toolName} on ${connector} through the user's PolyNet connection.`;
-  return {
-    name: tool.bridgeToolName,
-    description: [
-      description,
-      `Connector: ${connector}.`,
-      `Risk: ${tool.riskLevel}.`,
-      "This tool is mediated by PolyNet; do not ask the user to configure the same app again inside Codex.",
-    ].join(" "),
-    inputSchema: tool.inputSchema,
   };
 }

@@ -381,8 +381,6 @@ function buildRecentToolAttemptsPrompt(attempts: Array<{
   failureSummary?: string | null;
   failureKind?: string | null;
   suggestedRecovery?: string | null;
-  connectedAppName?: string | null;
-  connectedAppToolName?: string | null;
 }>): string | null {
   const rows = attempts.filter((attempt) => attempt.toolName);
   if (rows.length === 0) return null;
@@ -394,8 +392,6 @@ function buildRecentToolAttemptsPrompt(attempts: Array<{
       typeof attempt.exitCode === "number" ? `exit=${attempt.exitCode}` : null,
       attempt.errorCode ? `error_code=${truncatePromptSnippet(attempt.errorCode, 80)}` : null,
       attempt.failureKind ? `failure_kind=${truncatePromptSnippet(attempt.failureKind, 80)}` : null,
-      attempt.connectedAppName ? `app=${truncatePromptSnippet(attempt.connectedAppName, 80)}` : null,
-      attempt.connectedAppToolName ? `app_tool=${truncatePromptSnippet(attempt.connectedAppToolName, 100)}` : null,
       attempt.errorMessage ? `error=${truncatePromptSnippet(attempt.errorMessage, 140)}` : null,
       attempt.failureSummary ? `failure=${truncatePromptSnippet(attempt.failureSummary, 180)}` : null,
       attempt.suggestedRecovery ? `recovery=${truncatePromptSnippet(attempt.suggestedRecovery, 180)}` : null,
@@ -625,8 +621,6 @@ export function buildRuntimeContextFragmentsFromParts(params: {
     failureSummary?: string | null;
     failureKind?: string | null;
     suggestedRecovery?: string | null;
-    connectedAppName?: string | null;
-    connectedAppToolName?: string | null;
   }> | null;
   runtimeRunEvents?: Array<RuntimeContextRunEvent | null | undefined> | null;
   runtimeStop?: RuntimeContextStopFragmentInput | null;

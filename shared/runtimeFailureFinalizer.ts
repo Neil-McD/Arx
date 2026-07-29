@@ -1,8 +1,5 @@
 import type { RuntimeWorkspaceTerminalPrompt } from "./runtimePrompt";
-import type {
-  RuntimeRecentToolAttemptPrompt,
-  RuntimeTurnContextPacket,
-} from "./runtimeTurnContextPacket";
+import type { RuntimeTurnContextPacket } from "./runtimeTurnContextPacket";
 
 export type RuntimeFailureFinalizerInput = {
   partialContent?: string | null;
@@ -22,96 +19,6 @@ function normalizeLine(value: unknown, maxLen = 260): string | null {
   const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
   if (!normalized) return null;
   return normalized.length > maxLen ? `${normalized.slice(0, maxLen - 1).trimEnd()}...` : normalized;
-}
-
-function isConnectedAppFailure(attempt: RuntimeRecentToolAttemptPrompt): boolean {
-  return (
-    attempt.status === "error" &&
-    String(attempt.failureKind ?? "").startsWith("app_")
-  );
-}
-
-function connectedAppFailureLabel(kind: string | null | undefined): string {
-  switch (kind) {
-    case "app_auth_required":
-      return "connection/auth issue";
-    case "app_permission_denied":
-      return "permissions/scope issue";
-    case "app_invalid_arguments":
-      return "invalid tool arguments";
-    case "app_rate_limited":
-      return "provider rate limit";
-    case "app_provider_unreachable":
-      return "provider/network issue";
-    case "app_provider_error":
-      return "provider server issue";
-    case "app_no_accessible_resources":
-      return "no accessible provider resources";
-    default:
-      return "connected-app tool failure";
-  }
-}
-
-export function hasConnectedAppFailureEvidence(
-  runtimeTurnContext: RuntimeTurnContextPacket | null | undefined,
-): boolean {
-  return selectConnectedAppFailures(runtimeTurnContext).length > 0;
-}
-
-function selectConnectedAppFailures(
-  runtimeTurnContext: RuntimeTurnContextPacket | null | undefined,
-): RuntimeRecentToolAttemptPrompt[] {
-  const attempts = runtimeTurnContext?.recentToolAttempts;
-  if (!Array.isArray(attempts)) return [];
-  const seen = new Set<string>();
-  const out: RuntimeRecentToolAttemptPrompt[] = [];
-  for (const attempt of attempts) {
-    if (!isConnectedAppFailure(attempt)) continue;
-    const key = [
-      attempt.connectedAppName ?? "",
-      attempt.connectedAppToolName ?? "",
-      attempt.failureKind ?? "",
-      attempt.failureSummary ?? "",
-    ].join("\u0000");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(attempt);
-    if (out.length >= 3) break;
-  }
-  return out;
-}
-
-function buildConnectedAppFailureFallback(
-  input: RuntimeFailureFinalizerInput,
-): string | null {
-  if (input.status !== "error") return null;
-  const failures = selectConnectedAppFailures(input.runtimeTurnContext);
-  if (failures.length === 0) return null;
-  const lines = [
-    failures.length > 1
-      ? "I hit repeated connected-app failures before I could finish."
-      : "I hit a connected-app failure before I could finish.",
-  ];
-  for (const failure of failures) {
-    const appName =
-      normalizeLine(failure.connectedAppName, 80) ??
-      normalizeLine(failure.toolName, 80) ??
-      "Connected app";
-    const appTool = normalizeLine(failure.connectedAppToolName, 100);
-    const label = connectedAppFailureLabel(failure.failureKind);
-    const summary = normalizeLine(failure.failureSummary, 220);
-    const recovery = normalizeLine(failure.suggestedRecovery, 260);
-    lines.push(
-      `${appName}${appTool ? ` ${appTool}` : ""}: ${label}.${summary ? ` ${summary}` : ""}`,
-    );
-    if (recovery) {
-      lines.push(`Next step: ${recovery}`);
-    }
-  }
-  lines.push(
-    "I would not keep retrying the same failing app call without changing setup, permissions, or arguments.",
-  );
-  return lines.join("\n");
 }
 
 function buildTinyEmergencyFallback(
@@ -170,14 +77,6 @@ export function buildRuntimeFailureFinalAnswer(
   const partialContent = String(input.partialContent ?? "").trim();
   if (partialContent) {
     return { content: partialContent, usedFallback: false };
-  }
-
-  const connectedAppFallback = buildConnectedAppFailureFallback(input);
-  if (connectedAppFallback) {
-    return {
-      usedFallback: true,
-      content: connectedAppFallback,
-    };
   }
 
   return {

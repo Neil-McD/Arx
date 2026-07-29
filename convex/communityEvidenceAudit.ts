@@ -6,6 +6,7 @@ import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifec
 
 export const communityEvidenceSurfaceValidator = v.union(
   v.literal("member_agent_dock"),
+  v.literal("coding_harness"),
   v.literal("external_mcp"),
   v.literal("community_concierge"),
 );

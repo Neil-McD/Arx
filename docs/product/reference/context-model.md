@@ -19,7 +19,7 @@ The context model defines what information the agent can use when responding.
 3. Explanation and operating policy
 4. Community lens, if backend validated
 5. Platform harness context, including active tool families and optional project/workspace context
-6. Mounted app, personal skill, and community skill prompt suffixes
+6. Personal skill and community skill prompt suffixes
 7. Runtime turn context, including thread working state, terminal/tool evidence, and temporal context
 8. User message content
 
@@ -31,7 +31,7 @@ The stack above defines authority order. The runtime can also use explicit input
 - thread history
 - community resources
 - community skills and community workflow indexes
-- connected apps/MCP tools
+- native runtime tools
 - runtime/tool policy
 - premium entitlement and tool accounting state
 

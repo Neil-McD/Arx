@@ -71,7 +71,7 @@ assertIncludes(
 );
 assertIncludes(
   contract,
-  "It is not the existing Polynet MCP app consumer path.",
+  "Polynet does not consume, connect, mount, proxy, or execute third-party MCP",
   "workspace MCP provider/consumer boundary",
 );
 assertIncludes(

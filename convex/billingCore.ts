@@ -1,6 +1,5 @@
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
-import { internal } from "./_generated/api";
 import {
   communitySubscriptionStatusGrantsAccess,
   normalizeCommunitySubscriptionStatus,
@@ -21,33 +20,6 @@ export type CommunityLike = {
   oneLiner?: string;
   entryPolicy?: "open" | "approval" | "paid_subscription";
 };
-
-async function scheduleCommunityAppGrantSeedingBestEffort(args: {
-  ctx: any;
-  communityId: any;
-  userId: any;
-  nowMs: number;
-  reason: string;
-}): Promise<void> {
-  try {
-    await args.ctx.scheduler.runAfter(
-      0,
-      internal.userPlatformAppMounts.seedCommunityAppGrantsForUserInternal,
-      {
-        communityId: args.communityId,
-        userId: args.userId,
-        nowMs: args.nowMs,
-      },
-    );
-  } catch (error) {
-    console.warn("community_app_grant_seed_schedule_failed", {
-      community_id: String(args.communityId),
-      user_id: String(args.userId),
-      reason: args.reason,
-      error: error instanceof Error ? error.message : String(error ?? ""),
-    });
-  }
-}
 
 export type CommunityPricePointLike = {
   _id: any;
@@ -221,15 +193,6 @@ export async function ensureCommunityMembership(args: {
     pricePointId: args.pricePointId,
     activationReason: "billing_entitlement",
     nowMs: args.nowMs,
-  });
-  await scheduleCommunityAppGrantSeedingBestEffort({
-    ctx: args.ctx,
-    communityId: args.communityId,
-    userId: args.userId,
-    nowMs: args.nowMs,
-    reason: activation.accessGranted
-      ? "community_membership_ensured_activated"
-      : "community_membership_ensured_existing",
   });
   return { membership: activation.membership, accessGranted: activation.accessGranted };
 }

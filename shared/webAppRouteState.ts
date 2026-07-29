@@ -315,6 +315,7 @@ function parseSettingsPage(value: string | null | undefined): SettingsPage {
     case "partners":
       return "partners";
     case "integrations":
+    case "skills":
       return "integrations";
     case "appearance":
       return "appearance";

@@ -6,7 +6,7 @@ Use it to choose the smallest relevant document before reading full context.
 ## Platform Value Prop
 
 Polynet lets builders create communities that can think, remember, and act with AI.
-The platform combines community, services, consulting, software, agents, skills, apps, MCPs, resources, access control, and payments into one services-as-software business surface.
+The platform combines community, services, consulting, software, agents, skills, resources, the official Polynet MCP, access control, and payments into one services-as-software business surface.
 
 ## Retrieval Rule
 
@@ -27,7 +27,7 @@ Read only the specific docs needed for the task. Prefer precise slugs over broad
 - `primitives/memory` (Primitives) — Memory: The current personal memory scope and future memory boundaries.
 - `primitives/funnel` (Primitives) — Funnel: The canonical public entry surface for community joining and access.
 - `primitives/voice` (Primitives) — Voice: Voice input as a core member interaction surface.
-- `primitives/app-mcp` (Primitives) — Apps And MCPs: External capability and context surfaces for agents.
+- `primitives/polynet-mcp` (Primitives) — Polynet MCP: The official external harness gateway into authorized Polynet context.
 - `primitives/skill` (Primitives) — Skill: Reusable instruction or capability packages for repeated behavior.
 - `primitives/resource` (Primitives) — Resource: Community-owned durable knowledge available to members and agents where allowed.
 - `primitives/entitlement` (Primitives) — Entitlement: Durable backend access truth for products, communities, plans, and capabilities.
@@ -36,7 +36,7 @@ Read only the specific docs needed for the task. Prefer precise slugs over broad
 - `guides/launch-a-community` (Builder Guides) — Launch A Community: How to create, configure, gate, and share a community.
 - `guides/manage-resources` (Builder Guides) — Manage Resources: How builders should curate community knowledge without confusing it with private memory.
 - `guides/configure-community-agent` (Builder Guides) — Configure Community Agent: How builders should shape the community agent and its context.
-- `guides/connect-apps-and-mcps` (Builder Guides) — Connect Apps And MCPs: How apps and MCP servers fit into capability and context.
+- `guides/connect-polynet-mcp` (Builder Guides) — Connect Polynet MCP: How to connect an external harness to the official Polynet MCP provider.
 - `guides/create-and-use-skills` (Builder Guides) — Create And Use Skills: How skills package repeatable agent behavior.
 - `guides/manage-access-billing-and-roles` (Builder Guides) — Manage Access, Billing, And Roles: The builder mental model for entitlements, payments, and roles.
 - `guides/member-quickstart` (Member Guides) — Member Quickstart: How members join, use communities, and work with the agent.

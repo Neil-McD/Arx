@@ -37,7 +37,7 @@ Polynet combines:
 - agents as product surfaces
 - communities as distribution and trust systems
 - entitlements as access authority
-- resources, skills, apps, and memory as reusable context
+- resources, skills, and memory as reusable context
 - threads and community lenses as the workspace execution model
 
 The product should stay understandable: explicit memory, explicit access, explicit payment state, explicit thread context, and explicit community lens state.
@@ -54,7 +54,8 @@ The active MVP surface focuses on:
 - community chat, resources, members, settings, and voice input
 - billing, provider connections, and builder payouts
 - personal AI threads with explicit community lens switching
-- apps/MCPs and skills as controlled capability/context surfaces
+- the official Polynet MCP as a permissioned external-harness gateway
+- skills as controlled behavior packages
 - personal memory as an explicit user-owned context layer
 
 ## Rules
@@ -70,7 +71,7 @@ The active MVP surface focuses on:
 ## Examples
 
 - A founder creates a paid community around a specialized workflow and gives members an agent that understands the founder's method.
-- A technical community uses resources, chat, skills, and connected apps to help members solve recurring problems faster.
+- A technical community uses resources, chat, and skills to help members solve recurring problems faster.
 - A member opens a workspace thread, switches into a community lens, and asks the agent to use that community's context for the next task.
 
 ## Non-Goals

@@ -21,7 +21,7 @@ A skill is a behavior package.
 It is different from:
 
 - a resource, which stores durable knowledge
-- an app/MCP, which provides external capability
+- a tool, which provides executable capability
 - a prompt, which composes instructions for a turn
 - an entitlement, which decides access
 
@@ -69,10 +69,10 @@ Do not create a skill for one-off facts. Use resources for durable knowledge.
 
 1. Use skills for repeated workflows.
 2. Use resources for durable knowledge.
-3. Use apps/MCPs for external tools and data.
+3. Use explicit native tools for executable capability.
 4. Avoid making skills vague prompt dumps.
 5. Do not let skills bypass platform or community access rules.
-6. Skills should be separate from app login and connection state.
+6. Skills should be separate from tool authority and credentials.
 7. Skills should be selected intentionally, not implicitly applied to every turn.
 8. Skills should not grant tools by themselves.
 
@@ -89,4 +89,4 @@ Do not create a skill for one-off facts. Use resources for durable knowledge.
 - `skill`
 - `agent`
 - `resource`
-- `app-mcp`
+- `polynet-mcp`

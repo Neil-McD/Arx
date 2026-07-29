@@ -27,7 +27,7 @@ Prompt composition must follow the canonical context stack in `reference/context
 3. Explanation and operating policy
 4. Community lens, if backend validated
 5. Platform harness context, including active tools and optional project/workspace context
-6. Mounted app, personal skill, and community skill prompt suffixes
+6. Personal skill and community skill prompt suffixes
 7. Runtime turn context, including thread working state, terminal/tool evidence, and temporal context
 8. User message content
 
@@ -47,7 +47,8 @@ Prompt injection is contextual, not subscription-tiered:
 
 1. Anonymous chat receives only the public/demo path.
 2. Authenticated users use the same platform harness stack.
-3. A backend-validated community lens adds compact community identity, community prompt, community app grants, and community workflow context.
+3. A backend-validated community lens adds compact community identity,
+   community prompt, community skills, and community workflow context.
 4. A project-bound thread adds workspace/project context and workspace tools.
 5. Web research can be exposed when Premium entitlement allows it.
 6. Premium entitlement is enforced before premium tools are exposed or executed. Free users should receive a clear upgrade path instead of a tool call attempt.
@@ -58,7 +59,8 @@ Prompt injection is contextual, not subscription-tiered:
 2. Owner instructions cannot grant access.
 3. Skills cannot grant tools by themselves.
 4. Resource context should be bounded and relevant.
-5. Community workflow context should prefer active-lens workflows when relevant without hiding personal skills or connected apps.
+5. Community workflow context should prefer active-lens workflows when
+   relevant without hiding personal skills.
 6. Deeper active-community profile context should come from `get_active_community_context`; archive, resource, activity, and memory evidence should come from `community_search`.
 7. Prompt changes should be versioned or auditable where practical.
 8. Prompts should prefer references to docs and resources over copying huge blobs.

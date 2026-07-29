@@ -114,14 +114,14 @@
       "source": "docs/product/primitives/voice.md"
     },
     {
-      "id": "product.app_mcp",
-      "slug": "primitives/app-mcp",
-      "title": "Apps And MCPs",
+      "id": "product.polynet_mcp",
+      "slug": "primitives/polynet-mcp",
+      "title": "Polynet MCP",
       "section": "Primitives",
-      "summary": "External capability and context surfaces for agents.",
+      "summary": "The official external harness gateway into authorized Polynet context.",
       "audience": ["builder", "llm", "operator"],
       "status": "alpha-current",
-      "source": "docs/product/primitives/app-mcp.md"
+      "source": "docs/product/primitives/polynet-mcp.md"
     },
     {
       "id": "product.skill",
@@ -232,14 +232,14 @@
       }
     },
     {
-      "id": "product.guide.connect_apps_and_mcps",
-      "slug": "guides/connect-apps-and-mcps",
-      "title": "Connect Apps And MCPs",
+      "id": "product.guide.connect_polynet_mcp",
+      "slug": "guides/connect-polynet-mcp",
+      "title": "Connect Polynet MCP",
       "section": "Builder Guides",
-      "summary": "How apps and MCP servers fit into capability and context.",
+      "summary": "How to connect an external harness to the official Polynet MCP provider.",
       "audience": ["builder", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/guides/connect-apps-and-mcps.md"
+      "source": "docs/product/guides/connect-polynet-mcp.md"
     },
     {
       "id": "product.guide.create_and_use_skills",

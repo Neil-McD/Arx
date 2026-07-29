@@ -23,16 +23,6 @@ import {
   isWorkspaceCreditBudgetExpired,
 } from "./workspaceCreditBudgetSignal.ts";
 import {
-  createRuntimeMcpManager,
-  type RuntimeMcpConnectionBundle,
-  type RuntimeMountedMcpTool,
-} from "./runtimeMcpManager";
-import {
-  createRuntimeMountedToolExposureState,
-  normalizeResolveMountedToolsArguments,
-  RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
-} from "./runtimeMountedToolExposure";
-import {
   buildToolObservationMessage,
   type NativeToolAwareMessage,
 } from "../shared/nativeToolProtocol";
@@ -262,30 +252,12 @@ export function createPolynetExecutionSession(params: {
   projectId?: string | null;
   threadId?: string | null;
   runId: string;
-  mountedTools: RuntimeMountedMcpTool[];
-  mountedToolDiscoveryCatalog?: RuntimeMountedMcpTool[] | null;
-  mountedPromptSuffix?: string | null;
+  promptSuffix?: string | null;
   initialWorkspaceSession?: RuntimeWorkspaceSession | null;
   activeDaytonaRuntimeSubstrate?: ActiveDaytonaRuntimeSubstrateForTools | null;
   appendRunEvent: (event: RuntimeExecutionSessionRunEvent) => Promise<void>;
   touchRunHeartbeat?: () => Promise<void>;
-  loadConnectionBundle: (params: {
-    developerAppId: string;
-  }) => Promise<RuntimeMcpConnectionBundle>;
 }) {
-  const runtimeMcpManager = createRuntimeMcpManager({
-    runId: params.runId,
-    mountedTools: params.mountedTools,
-    loadConnectionBundle: params.loadConnectionBundle,
-    appendRunEvent: params.appendRunEvent,
-  });
-  const mountedToolExposureState = createRuntimeMountedToolExposureState({
-    mountedTools: params.mountedTools,
-    discoveryCatalog: params.mountedToolDiscoveryCatalog ?? null,
-  });
-  const mountedToolByName = new Map(
-    params.mountedTools.map((tool) => [tool.runtime_tool_name, tool]),
-  );
   let workspaceSession = params.initialWorkspaceSession ?? null;
   let daytonaRuntimeSubstrate = params.activeDaytonaRuntimeSubstrate
     ? { ...params.activeDaytonaRuntimeSubstrate }
@@ -473,7 +445,7 @@ export function createPolynetExecutionSession(params: {
 
   return {
     buildPromptSuffix(): string {
-      return String(params.mountedPromptSuffix ?? "");
+      return String(params.promptSuffix ?? "");
     },
     hasWorkspaceSession(): boolean {
       return workspaceSession !== null && workspaceSessionFailure === null;
@@ -901,14 +873,6 @@ export function createPolynetExecutionSession(params: {
       buildFixedResponsesTools: (
         allowedToolNames: readonly TFixedToolName[],
       ) => TResponsesTool[];
-      buildMountedOpenAiTools: (
-        mountedTools: RuntimeMountedMcpTool[],
-      ) => TOpenAiTool[];
-      buildMountedResponsesTools: (
-        mountedTools: RuntimeMountedMcpTool[],
-      ) => TResponsesTool[];
-      buildResolverOpenAiTool: () => TOpenAiTool;
-      buildResolverResponsesTool: () => TResponsesTool;
     }): {
       openAiTools: TOpenAiTool[];
       responsesTools: TResponsesTool[];
@@ -916,30 +880,15 @@ export function createPolynetExecutionSession(params: {
       activeToolPolicies: RuntimeToolPolicy[];
       activeToolPolicySummary: RuntimeToolPolicySummary;
     } {
-      const exposedMountedTools = mountedToolExposureState.getExposedTools();
-      const includeResolver = mountedToolExposureState.hasMountedTools();
       const policySurface = buildRuntimeToolPolicySurface({
         fixedToolNames: params.allowedToolNames,
-        includeResolver,
-        resolverToolName: RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
-        mountedTools: exposedMountedTools,
       });
       return {
-        openAiTools: [
-          ...params.buildFixedOpenAiTools(params.allowedToolNames),
-          ...(includeResolver ? [params.buildResolverOpenAiTool()] : []),
-          ...params.buildMountedOpenAiTools(exposedMountedTools),
-        ],
-        responsesTools: [
-          ...params.buildFixedResponsesTools(params.allowedToolNames),
-          ...(includeResolver ? [params.buildResolverResponsesTool()] : []),
-          ...params.buildMountedResponsesTools(exposedMountedTools),
-        ],
-        activeToolNames: [
-          ...params.allowedToolNames,
-          ...(includeResolver ? [RESOLVE_MOUNTED_TOOLS_TOOL_NAME] : []),
-          ...exposedMountedTools.map((tool) => tool.runtime_tool_name),
-        ],
+        openAiTools: params.buildFixedOpenAiTools(params.allowedToolNames),
+        responsesTools: params.buildFixedResponsesTools(
+          params.allowedToolNames,
+        ),
+        activeToolNames: [...params.allowedToolNames],
         activeToolPolicies: policySurface.policies,
         activeToolPolicySummary: policySurface.summary,
       };
@@ -953,9 +902,6 @@ export function createPolynetExecutionSession(params: {
         rawArgs: Record<string, unknown>,
       ) => Record<string, unknown>;
     }): Record<string, unknown> {
-      if (params.toolName === RESOLVE_MOUNTED_TOOLS_TOOL_NAME) {
-        return normalizeResolveMountedToolsArguments(params.rawArgs);
-      }
       if (params.allowedToolNames.includes(params.toolName as TFixedToolName)) {
         return params.normalizeFixedToolArguments(
           params.toolName as TFixedToolName,
@@ -969,21 +915,6 @@ export function createPolynetExecutionSession(params: {
         !Array.isArray(params.rawArgs)
         ? params.rawArgs
         : {};
-    },
-    getMountedTool(runtimeToolName: string): RuntimeMountedMcpTool | null {
-      return mountedToolByName.get(runtimeToolName) ?? null;
-    },
-    resolveMountedToolExposure(
-      normalizedArgs: ReturnType<typeof normalizeResolveMountedToolsArguments>,
-    ) {
-      return mountedToolExposureState.resolve(normalizedArgs);
-    },
-    async executeMountedTool(params: {
-      runtimeToolName: string;
-      argumentsObject: Record<string, unknown>;
-      signal?: AbortSignal;
-    }) {
-      return await runtimeMcpManager.execute(params);
     },
     async executeTerminalTool(paramsForTool: {
       toolName: TerminalToolName | string;
