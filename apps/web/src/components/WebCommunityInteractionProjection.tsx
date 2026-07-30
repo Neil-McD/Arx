@@ -112,6 +112,7 @@ export type WebCommunityInteractionProjectionProps = {
     member_count?: number | null;
     admin_count?: number | null;
     online_count?: number | null;
+    online_count_capped?: boolean | null;
     online_faces?: CommunityPresenceFace[] | null;
     online_last_active_at_by_user_id?: Record<string, string> | null;
   } | null;
@@ -222,6 +223,7 @@ export function CommunityInteractionContextPanelSurface(
           communityName={props.activeCommunityName}
           onlineFaces={props.presenceSummary?.online_faces ?? null}
           onlineCount={props.presenceSummary?.online_count ?? null}
+          onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)}
           memberCount={props.communityMemberCount ?? props.presenceSummary?.member_count ?? null}
           members={props.communityMembers ?? null}
           membersHasMore={props.communityMembersHasMore}

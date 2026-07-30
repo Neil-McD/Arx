@@ -47,6 +47,7 @@ type CommunityContextPanelProps = {
   communityName: string;
   onlineFaces?: CommunityPresenceFace[] | null;
   onlineCount?: number | null;
+  onlineCountCapped?: boolean;
   memberCount?: number | null;
   members?: CommunityRailMember[] | null;
   membersHasMore?: boolean;
@@ -156,6 +157,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const onlineTotal = typeof props.onlineCount === "number"
     ? props.onlineCount
     : (props.onlineFaces ?? []).length;
+  const onlineCountLabel = `${onlineTotal}${props.onlineCountCapped ? "+" : ""}`;
   const knownMemberCount = typeof props.memberCount === "number" ? props.memberCount : null;
   const loadedMemberCount = members.length;
   const memberCountLabel = knownMemberCount !== null
@@ -181,9 +183,11 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const offlineTotal = knownMemberCount !== null
     ? Math.max(0, knownMemberCount - onlineTotal)
     : offlineMembers.length;
-  const offlineCountLabel = knownMemberCount !== null
-    ? String(offlineTotal)
-    : `${offlineMembers.length}${props.membersHasMore ? "+" : ""}`;
+  const offlineCountLabel = props.onlineCountCapped
+    ? `${offlineMembers.length}${props.membersHasMore || loadedMemberCount < (knownMemberCount ?? 0) ? "+" : ""}`
+    : knownMemberCount !== null
+      ? String(offlineTotal)
+      : `${offlineMembers.length}${props.membersHasMore ? "+" : ""}`;
   const loadedSummary = knownMemberCount !== null
     ? `Showing ${Math.min(loadedMemberCount, knownMemberCount)} of ${knownMemberCount}`
     : props.membersHasMore
@@ -492,6 +496,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
       <CommunityPresenceFacepile
         faces={props.onlineFaces}
         onlineCount={props.onlineCount}
+        onlineCountCapped={props.onlineCountCapped}
       />
 
       {sectionMode === "all" ? <div className="community-context-memory">
@@ -690,11 +695,13 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         ) : null}
         {!lockedMembers && onlineTotal > 0 ? (
           <>
-            <div className="community-context-section">Online — {onlineTotal}</div>
+            <div className="community-context-section">Online — {onlineCountLabel}</div>
             {onlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
           </>
         ) : null}
-        {!lockedMembers && (offlineTotal > 0 || offlineMembers.length > 0) ? (
+        {!lockedMembers && (
+          offlineMembers.length > 0 || (!props.onlineCountCapped && offlineTotal > 0)
+        ) ? (
           <>
             <div className="community-context-section">Offline — {offlineCountLabel}</div>
             {offlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}

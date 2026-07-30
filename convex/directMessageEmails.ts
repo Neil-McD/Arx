@@ -6,7 +6,6 @@ import { stripChatInlineMarkdown } from "../shared/chatInlineMarkdown";
 
 const DM_EMAIL_SNIPPET_MAX_CHARS = 120;
 const DM_EMAIL_DEDUPE_WINDOW_MS = 4 * 60 * 60 * 1000;
-const MAX_DM_EMAIL_PRESENCE_ROWS = 8;
 
 function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
@@ -68,15 +67,14 @@ export const evaluateDirectMessageEmailInternal = internalQuery({
       return { shouldSend: false as const, skipped: "message_missing" };
     }
 
-    const presenceRows = (await ctx.db
+    const activePresenceLease = await ctx.db
       .query("communityPresence" as any)
-      .withIndex("by_user", (q: any) => q.eq("userId", args.recipientUserId))
-      .take(MAX_DM_EMAIL_PRESENCE_ROWS)) as Array<Record<string, any>>;
-    for (const row of presenceRows) {
-      const lastSeenAt = Number(row.lastSeenAt ?? 0);
-      if (Number.isFinite(lastSeenAt) && lastSeenAt >= Number(message.createdAt ?? 0)) {
-        return { shouldSend: false as const, skipped: "present" };
-      }
+      .withIndex("by_user_activeUntil", (q: any) =>
+        q.eq("userId", args.recipientUserId).gt("activeUntil", Date.now()),
+      )
+      .first();
+    if (activePresenceLease) {
+      return { shouldSend: false as const, skipped: "present" };
     }
 
     const sender = args.senderUserId ? await ctx.db.get(args.senderUserId) : null;

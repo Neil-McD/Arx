@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=33
+TOTAL_STEPS=34
 CURRENT_STEP=1
 
 run_step() {
@@ -42,6 +42,7 @@ run_step "Community admin contract guard" bash scripts/community_admin_contract_
 run_step "Community public identity guard" bash scripts/community_public_identity_guard.sh
 run_step "Community deletion quarantine behavior" npm run check:community-cognition-cleanup-behavior
 run_step "Community access role policy proof" npm run check:community-access-role-policy-proof
+run_step "Community presence lease proof" npm run check:community-presence-lease-proof
 run_step "Community subscription lifecycle policy proof" npm run check:community-subscription-lifecycle-policy-proof
 run_step "Runtime turn contract guard" bash scripts/runtime_turn_contract_guard.sh
 run_step "Canonical operation surface proof" npm run check:canonical-operation-surface-proof

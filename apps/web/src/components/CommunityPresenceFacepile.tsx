@@ -12,6 +12,7 @@ export type CommunityPresenceFace = {
 export function CommunityPresenceFacepile(props: {
   faces?: CommunityPresenceFace[] | null;
   onlineCount?: number | null;
+  onlineCountCapped?: boolean;
   limit?: number;
   compact?: boolean;
   decorative?: boolean;
@@ -40,7 +41,12 @@ export function CommunityPresenceFacepile(props: {
         </span>
       ))}
       {extraFaces > 0 ? (
-        <span className="community-context-face community-context-face-more">+{extraFaces}</span>
+        <span
+          className="community-context-face community-context-face-more"
+          title={props.onlineCountCapped ? `${onlineTotal} or more people online` : undefined}
+        >
+          {props.onlineCountCapped ? `${onlineTotal}+` : `+${extraFaces}`}
+        </span>
       ) : null}
     </div>
   );

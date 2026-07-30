@@ -11,10 +11,10 @@ import {
   scopeCommunityAccessResolution,
 } from "../../../../shared/communityAccessResolution";
 import type { CommunityAccess } from "../../../../shared/communityTypes";
+import { COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS } from "../../../../shared/communityPresenceContract";
 import { fetchCloudMyCommunityAccessById } from "../../../../shared/cloudCommunityAccessGateway";
 import {
-  fetchCloudCommunityPresenceSummary,
-  heartbeatCloudCommunityPresence,
+  refreshCloudCommunityPresence,
 } from "../../../../shared/cloudPublicFunnelGateway";
 
 type PresenceFace = {
@@ -30,6 +30,7 @@ type PresenceSummary = {
   member_count?: number | null;
   admin_count?: number | null;
   online_count?: number | null;
+  online_count_capped?: boolean | null;
   online_faces?: PresenceFace[] | null;
   online_user_ids?: string[] | null;
   online_last_active_at_by_user_id?: Record<string, string> | null;
@@ -106,47 +107,20 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   }, [params.session, params.activeCommunityId, reloadActiveCommunityAccess]);
 
   useEffect(() => {
-    if (!params.session || !params.activeCommunityId) return;
-    let cancelled = false;
-    const communityId = params.activeCommunityId;
-    const tick = async () => {
-      if (cancelled || document.visibilityState !== "visible") return;
-      try {
-        const usableSession = await params.ensureSession(params.session);
-        if (!usableSession) return;
-        await heartbeatCloudCommunityPresence<SessionT>({
-          session: usableSession,
-          communityId,
-        });
-      } catch (error) {
-        if (!cancelled) {
-          console.warn("Failed to heartbeat community presence:", error);
-        }
-      }
-    };
-    void tick();
-    const intervalId = window.setInterval(() => {
-      void tick();
-    }, 30_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [params.activeCommunityId, params.session, params.ensureSession]);
-
-  useEffect(() => {
     if (!params.session || !params.activeCommunityId) {
       setActiveCommunityPresenceSummaryState(null);
       return;
     }
     let cancelled = false;
+    let inFlight = false;
     const communityId = String(params.activeCommunityId ?? "").trim();
-    const refresh = async () => {
-      if (cancelled || document.visibilityState !== "visible") return;
+    const tick = async () => {
+      if (cancelled || inFlight || document.visibilityState !== "visible") return;
+      inFlight = true;
       try {
         const usableSession = await params.ensureSession(params.session);
         if (!usableSession) return;
-        const summary = await fetchCloudCommunityPresenceSummary<SessionT, PresenceSummary>({
+        const summary = await refreshCloudCommunityPresence<SessionT, PresenceSummary>({
           session: usableSession,
           communityId,
         });
@@ -158,17 +132,24 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
         }
       } catch (error) {
         if (!cancelled) {
-          console.warn("Failed to load community presence summary:", error);
+          console.warn("Failed to refresh community presence:", error);
         }
+      } finally {
+        inFlight = false;
       }
     };
-    void refresh();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void tick();
+    };
+    void tick();
     const intervalId = window.setInterval(() => {
-      void refresh();
-    }, 30_000);
+      void tick();
+    }, COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [params.activeCommunityId, params.session, params.ensureSession]);
 

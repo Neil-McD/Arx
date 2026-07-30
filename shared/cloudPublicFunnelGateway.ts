@@ -115,24 +115,16 @@ export async function recordCloudPublicFunnelVisit<SessionT>(
   });
 }
 
-export async function heartbeatCloudCommunityPresence<SessionT>(
-  params: CloudPublicFunnelAuthParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<void> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("communityPublic:heartbeatCommunityPresence" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-}
-
-export async function fetchCloudCommunityPresenceSummary<SessionT, TSummary = unknown>(
+export async function refreshCloudCommunityPresence<SessionT, TSummary = unknown>(
   params: CloudPublicFunnelAuthParams<SessionT> & {
     communityId: string;
   },
 ): Promise<TSummary | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("communityPublic:heartbeatCommunityPresence" as any, {
+    authSubject,
+    communityId: params.communityId,
+  });
   const payload = await client.query("communityPublic:getCommunityPresenceSummary" as any, {
     authSubject,
     communityId: params.communityId,

@@ -1366,12 +1366,17 @@ export default defineSchema({
     communityId: v.id("communities"),
     userId: v.id("users"),
     lastSeenAt: v.number(),
+    // Additive rolling lease: active clients populate this on their next
+    // server-authorized heartbeat; historical lastSeenAt rows remain valid data.
+    activeUntil: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_community_lastSeenAt", ["communityId", "lastSeenAt"])
+    .index("by_community_activeUntil", ["communityId", "activeUntil"])
     .index("by_community_user", ["communityId", "userId"])
-    .index("by_user", ["userId"]),
+    .index("by_user", ["userId"])
+    .index("by_user_activeUntil", ["userId", "activeUntil"]),
 
   communityJoinRequests: defineTable({
     communityId: v.id("communities"),

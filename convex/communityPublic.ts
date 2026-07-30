@@ -42,6 +42,11 @@ import {
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { hashBusinessVisitorKey } from "./businessAnalyticsCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
+import {
+  COMMUNITY_PRESENCE_LEASE_DURATION_MS,
+  renewCommunityPresenceLease,
+  resolveMemberCommunityPresenceSummary,
+} from "./communityPresenceCore";
 
 const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
@@ -54,8 +59,6 @@ type PublicCommunityFace = {
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
 };
-
-const COMMUNITY_ONLINE_WINDOW_MS = 90_000;
 
 async function resolvePublicProfileFaceFields(ctx: any, userId: any): Promise<Omit<PublicCommunityFace, "user_id">> {
   return await resolveUserProfileDisplayProjection(ctx, userId);
@@ -173,7 +176,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
   }
   const memberCount = countCanonicalCommunityMembersFromRows(activeMemberships);
 
-  const cutoff = Date.now() - COMMUNITY_ONLINE_WINDOW_MS;
+  const cutoff = Date.now() - COMMUNITY_PRESENCE_LEASE_DURATION_MS;
   const recentPresenceRows = (await ctx.db
     .query("communityPresence" as any)
     .withIndex("by_community_lastSeenAt", (q: any) => q.eq("communityId", community._id).gte("lastSeenAt", cutoff))
@@ -512,31 +515,20 @@ export const heartbeatCommunityPresence = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = Date.now();
     await requireCommunityChatAccess({
       ctx,
       communityId: args.communityId,
       userId,
     });
-    const existing = await ctx.db
-      .query("communityPresence" as any)
-      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", userId))
-      .first();
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        lastSeenAt: nowMs,
-        updatedAt: nowMs,
-      });
-      return { ok: true };
-    }
-    await ctx.db.insert("communityPresence" as any, {
+    const lease = await renewCommunityPresenceLease({
+      ctx,
       communityId: args.communityId,
       userId,
-      lastSeenAt: nowMs,
-      createdAt: nowMs,
-      updatedAt: nowMs,
     });
-    return { ok: true };
+    return {
+      ok: true,
+      active_until: toIsoString(lease.activeUntil),
+    };
   },
 });
 
@@ -557,10 +549,15 @@ export const getCommunityPresenceSummary = query({
       communityId: args.communityId,
       userId,
     });
-    const stats = await resolvePublicCommunityStats(ctx, community);
+    const summary = await resolveMemberCommunityPresenceSummary(ctx, community);
     return {
-      ...mapPublicCommunityStats(stats),
-      online_last_active_at_by_user_id: stats.onlineLastActiveAtByUserId,
+      member_count: summary.memberCount,
+      admin_count: null,
+      online_count: summary.onlineCount,
+      online_count_capped: summary.onlineCountCapped,
+      online_faces: summary.onlineFaces,
+      online_user_ids: summary.onlineUserIds,
+      online_last_active_at_by_user_id: summary.onlineLastActiveAtByUserId,
     };
   },
 });
