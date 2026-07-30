@@ -19,6 +19,7 @@ const authSessions = read("convex/authSessions.ts");
 const webAuthController = read("apps/web/src/controllers/useWebAppAuthController.ts");
 const communityTypes = read("shared/communityTypes.ts");
 const directTypingHook = read("shared/useDirectMessageTypingPresence.ts");
+const directTypingCoordinator = read("shared/directMessageTypingWriteCoordinator.ts");
 const typingPresenceContract = read("shared/typingPresenceContract.ts");
 const account = read("convex/account.ts");
 const anonymousCleanup = read("convex/anonymousUserCleanup.ts");
@@ -228,10 +229,12 @@ assert.doesNotMatch(dmClearTypingMutation, /requireDirectConversationSendAccess|
 assert.match(dmClearTypingMutation, /query\("dmTypingPresence" as any\)[\s\S]*withIndex\("by_conversation_user"/, "typing clears must target the viewer row by conversation and user");
 assert.match(dmClearTypingMutation, /ctx\.db\.delete\(existing\._id\)/, "typing clears must delete only the viewer's active row");
 assert.match(dmListTypingQuery, /requireActiveUserParticipant/, "typing reads must require active conversation participation");
-assert.doesNotMatch(dmListTypingQuery, /requireDirectConversationSendAccess|requireDirectMessageRelationshipAccess/, "typing reads must not require current send access");
+assert.doesNotMatch(dmListTypingQuery, /requireDirectConversationSendAccess\(\{[\s\S]*viewerUserId/, "typing reads must not require current send access from the viewer");
 assert.match(dmListTypingQuery, /withIndex\("by_conversation_displayUntil"[\s\S]*gt\("displayUntil", nowMs\)/, "typing reads must query only non-expired rows through the displayUntil index");
 assert.match(dmListTypingQuery, /normalizeIdValue\(row\.userId\) !== normalizeIdValue\(viewerUserId\)/, "typing reads must exclude the viewer");
 assert.match(dmListTypingQuery, /DIRECT_MESSAGE_TYPING_PRESENCE_SCAN_LIMIT/, "typing reads must stay bounded");
+assert.match(directMessages, /directTypingCandidateRemainsAuthorized[\s\S]*requireDirectConversationSendAccess/, "typing candidates must retain current relationship and send access before projection");
+assert.match(dmListTypingQuery, /directTypingCandidateRemainsAuthorized[\s\S]*authorizedRows[\s\S]*mapDirectTypingPresence/, "typing reads must project only reauthorized candidates");
 assert.match(
   account,
   /ACCOUNT_DELETION_QUARANTINE_CODE[\s\S]*account_delete_lifecycle_migration_blocked[\s\S]*throw new ConvexError/,
@@ -319,8 +322,13 @@ assert.match(
 assert.match(directTypingHook, /TYPING_PRESENCE_RENEW_INTERVAL_MS/, "DM typing heartbeat must use the canonical throttle");
 assert.match(directTypingHook, /subscribeCloudDirectTyping/, "DM typing hook must subscribe to live backend typing state");
 assert.match(directTypingHook, /setCloudDirectTyping/, "DM typing hook must publish typing heartbeats through the backend");
+assert.match(directTypingHook, /clearCloudDirectTyping/, "DM typing hook must own typing clear writes");
 assert.match(directTypingHook, /row\.display_until_ms > nowMs/, "DM typing hook must drop expired presence locally");
-assert.match(directTypingHook, /lastSentAtRef\.current = 0/, "DM typing hook must reset heartbeat throttle when conversations change");
+assert.match(directTypingHook, /capturedConversationId[\s\S]*writeCoordinatorRef\.current\?\.clearTyping/, "DM typing lifecycle cleanup must capture the conversation it is leaving");
+assert.match(directTypingHook, /\}, \[args\.conversationId, args\.isEnabled\]\);/, "DM typing lifecycle ownership must not reset on auth refresh");
+assert.match(directTypingCoordinator, /let writeQueue: Promise<void> = Promise\.resolve\(\)/, "DM typing writes and clears must share one ordered queue");
+assert.match(directTypingCoordinator, /activeConversationId !== conversationId/, "DM typing renewal must recheck its captured conversation after session resolution");
+assert.match(directTypingCoordinator, /if \(wasActive\) activeConversationId = null;[\s\S]*enqueue\(async \(\) =>/, "DM typing clear must invalidate renewal before entering the write queue");
 
 assert.match(projection, /activeCommunity:[\s\S]*id: params\.activeCommunity\.id/, "chat panel must receive active community id for DM source context");
 assert.match(projection, /onOpenDirectMessageFromCommunity: params\.onOpenDirectMessageFromCommunity/, "community projection must pass profile DM launch requests to the app shell");
@@ -394,8 +402,8 @@ assert.match(dmHost, /ensureCloudDirectConversationFromCommunity/, "global DM ho
 assert.match(dmHost, /openRequest: DirectMessageOpenRequest/, "global DM host must accept canonical open requests from profile actions");
 assert.match(dmHost, /subscribeCloudDirectMessages<DirectMessage>/, "global DM host must own live direct message subscriptions");
 assert.match(dmHost, /useDirectMessageTypingPresence/, "global DM host must own DM typing presence");
-assert.match(dmHost, /clearCloudDirectTyping/, "global DM host must clear stale DM typing presence explicitly");
 assert.match(dmHost, /clearDirectTypingForConversation/, "global DM host must centralize DM typing clear calls");
+assert.doesNotMatch(dmHost, /clearCloudDirectTyping/, "global DM host must delegate ordered typing clears to the dedicated hook");
 assert.match(dmHost, /typingPresence=\{directTypingPresence\}/, "global DM host must pass typing presence into the DM panel");
 assert.match(dmHost, /MAX_DM_ATTACHMENTS_PER_MESSAGE = 8/, "global DM host must keep the same per-message attachment count limit");
 assert.match(dmHost, /MAX_DM_ATTACHMENT_BYTES = 10 \* 1024 \* 1024/, "global DM host must enforce the 10MB per-file attachment limit");
@@ -420,7 +428,7 @@ assert.match(dmHost, /onRemoveAttachment=\{removeDirectAttachment\}/, "global DM
 assert.match(dmHost, /void clearDirectTypingForConversation\(conversationId\)/, "global DM host must clear typing presence immediately after send submission");
 assert.match(dmHost, /onComposerBlur=\{\(\) => \{[\s\S]*clearDirectTypingForConversation\(directMessagePanel\.conversation\.id\)/, "global DM host must clear typing presence on composer blur");
 assert.match(dmHost, /onBackToInbox=\{\(\) => \{[\s\S]*clearDirectTypingForConversation\(directMessagePanel\.conversation\.id\)/, "global DM host must clear typing presence when leaving a conversation");
-assert.match(dmHost, /!nextHasText && typingInputHadTextRef\.current[\s\S]*clearDirectTypingForConversation\(directMessagePanel\.conversation\.id\)/, "global DM host must clear typing presence when the composer becomes empty");
+assert.match(dmHost, /value\.trim\(\)\.length === 0[\s\S]*clearDirectTypingForConversation\(directMessagePanel\.conversation\.id\)/, "global DM host must clear typing presence when the composer becomes empty");
 assert.match(dmHost, /WebDirectMessageInboxPanel/, "global DM host must render the inbox panel");
 assert.match(dmHost, /WebDirectMessagePanel/, "global DM host must open existing conversations into the live DM panel");
 assert.match(dmInboxPanel, /Direct messages/, "DM inbox panel must identify the inbox");

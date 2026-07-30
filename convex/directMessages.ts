@@ -820,6 +820,23 @@ async function mapDirectTypingPresence(ctx: any, row: DirectMessageTypingPresenc
   };
 }
 
+async function directTypingCandidateRemainsAuthorized(args: {
+  ctx: any;
+  conversation: DirectMessageConversationLike;
+  userId: any;
+}): Promise<boolean> {
+  try {
+    await requireDirectConversationSendAccess({
+      ctx: args.ctx,
+      conversation: args.conversation,
+      viewerUserId: args.userId,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function mapEligibleDirectMessageRecipient(args: {
   ctx: any;
   community: CommunityLike;
@@ -1500,7 +1517,7 @@ export const listDirectTyping = query({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    await requireActiveUserParticipant({
+    const { conversation } = await requireActiveUserParticipant({
       ctx,
       conversationId: args.conversationId,
       userId: viewerUserId,
@@ -1517,14 +1534,27 @@ export const listDirectTyping = query({
     const activeRows = rows.filter(
       (row) => normalizeIdValue(row.userId) !== normalizeIdValue(viewerUserId),
     );
+    const authorizationResults = await Promise.all(
+      activeRows.map(async (row) => ({
+        row,
+        authorized: await directTypingCandidateRemainsAuthorized({
+          ctx,
+          conversation,
+          userId: row.userId,
+        }),
+      })),
+    );
+    const authorizedRows = authorizationResults
+      .filter(({ authorized }) => authorized)
+      .map(({ row }) => row);
     const users = await Promise.all(
-      activeRows
+      authorizedRows
         .slice(0, DIRECT_MESSAGE_TYPING_PRESENCE_VISIBLE_LIMIT)
         .map((row) => mapDirectTypingPresence(ctx, row)),
     );
     return {
       users,
-      total_count: activeRows.length,
+      total_count: authorizedRows.length,
     };
   },
 });

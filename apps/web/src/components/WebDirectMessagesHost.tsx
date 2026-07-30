@@ -13,7 +13,6 @@ import {
 } from "../../../../shared/attachmentHelpers";
 import {
   blockCloudDirectMessageUser,
-  clearCloudDirectTyping,
   createCloudDirectMessagesLiveClient,
   ensureCloudDirectConversationFromCommunity,
   listCloudDirectMessagePeerPresence,
@@ -528,7 +527,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const isOpenRef = useRef(isOpen);
   const onIncomingDirectMessageRef = useRef(onIncomingDirectMessage);
   const openConversationRequestHandledRef = useRef(0);
-  const typingInputHadTextRef = useRef(false);
   const sessionRef = useRef<SessionT | null>(session);
   const directMessageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const lastDirectMessageFocusConversationRef = useRef<string | null>(null);
@@ -587,7 +585,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       if (!previous) return previous;
       if (previous.conversation.id !== targetConversationId) return previous;
       const input = mergeVoiceTranscript(previous.input, normalized);
-      typingInputHadTextRef.current = input.trim().length > 0;
       return {
         ...previous,
         input,
@@ -689,7 +686,10 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       ? activeConversationId
       : null;
 
-  const directTypingPresence = useDirectMessageTypingPresence({
+  const {
+    presence: directTypingPresence,
+    clearTyping: clearDirectTypingForConversation,
+  } = useDirectMessageTypingPresence({
     isEnabled: isOpen && Boolean(liveActiveConversationId),
     session: session as any,
     ensureSession: ensureSession as any,
@@ -697,29 +697,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     canSendMessages: Boolean(session && directMessagePanel && !directMessagePanel.isSending),
     inputValue: directMessagePanel?.input ?? "",
   });
-
-  const clearDirectTypingForConversation = useCallback(
-    async (conversationId: string | null | undefined) => {
-      const normalizedConversationId = String(conversationId ?? "").trim();
-      if (!session || !normalizedConversationId) return;
-      if (isVirtualDirectConversationId(normalizedConversationId)) return;
-      try {
-        const usableSession = await resolveDirectMessageSession(
-          session,
-          ensureSession,
-          "direct_messages_clear_typing",
-        );
-        if (!usableSession) return;
-        await clearCloudDirectTyping({
-          session: usableSession,
-          conversationId: normalizedConversationId,
-        });
-      } catch {
-        // Typing presence is opportunistic; message state stays authoritative.
-      }
-    },
-    [ensureSession, session],
-  );
 
   const loadInbox = useCallback(async () => {
     const requestId = inboxLoadRequestRef.current + 1;
@@ -954,18 +931,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   );
 
   useEffect(() => {
-    if (!activeConversationId || !session) {
-      typingInputHadTextRef.current = false;
-      return;
-    }
-    const conversationId = activeConversationId;
-    return () => {
-      typingInputHadTextRef.current = false;
-      void clearDirectTypingForConversation(conversationId);
-    };
-  }, [activeConversationId, clearDirectTypingForConversation, session]);
-
-  useEffect(() => {
     if (!isOpen || activeConversationId) return;
     const timeoutId = window.setTimeout(
       () => {
@@ -1073,7 +1038,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
   const openPanelForConversation = useCallback(
     (conversation: DirectMessageConversation) => {
       const panelState = buildPanelStateForConversation(conversation);
-      typingInputHadTextRef.current = panelState.input.trim().length > 0;
       setDirectMessagePanel(panelState);
       void markConversationRead(conversation.id, conversation.last_seq);
     },
@@ -1788,7 +1752,6 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
     // Still inside the send click/keypress, so a first-send notification
     // permission prompt keeps its user gesture.
     onDirectMessageSent?.();
-    typingInputHadTextRef.current = false;
     void clearDirectTypingForConversation(conversationId);
     window.setTimeout(() => {
       focusDirectMessageInput();
@@ -2072,11 +2035,9 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
             },
           }}
           onInputChange={(value) => {
-            const nextHasText = value.trim().length > 0;
-            if (!nextHasText && typingInputHadTextRef.current) {
+            if (value.trim().length === 0) {
               void clearDirectTypingForConversation(directMessagePanel.conversation.id);
             }
-            typingInputHadTextRef.current = nextHasText;
             setDirectMessagePanel((previous) =>
               previous
                 ? {
@@ -2093,14 +2054,12 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
           onRetryLocalMessage={retryDirectMessageEcho}
           onDiscardLocalMessage={discardDirectMessageEcho}
           onComposerBlur={() => {
-            typingInputHadTextRef.current = false;
             void clearDirectTypingForConversation(directMessagePanel.conversation.id);
           }}
           onReadThroughSeq={(seq) => {
             void markConversationRead(directMessagePanel.conversation.id, seq);
           }}
           onBackToInbox={() => {
-            typingInputHadTextRef.current = false;
             void clearDirectTypingForConversation(directMessagePanel.conversation.id);
             setDirectMessagePanel(null);
           }}

@@ -1,15 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   DirectMessageTypingPresenceBundle,
   DirectMessageTypingPresenceUser,
 } from "./communityTypes";
 import {
+  clearCloudDirectTyping,
   createCloudDirectMessagesLiveClient,
   setCloudDirectTyping,
   subscribeCloudDirectTyping,
   type CloudDirectMessagesLiveClient,
 } from "./cloudDirectMessagesGateway";
+import {
+  createDirectMessageTypingWriteCoordinator,
+  type DirectMessageTypingWriteCoordinator,
+  type DirectMessageTypingWriteScope,
+} from "./directMessageTypingWriteCoordinator";
 import { TYPING_PRESENCE_RENEW_INTERVAL_MS } from "./typingPresenceContract";
 
 type SessionLike = {
@@ -25,6 +31,11 @@ type UseDirectMessageTypingPresenceArgs<SessionT extends SessionLike> = {
   canSendMessages: boolean;
   inputValue: string;
   throttleMs?: number;
+};
+
+type DirectMessageTypingPresenceController = {
+  presence: DirectMessageTypingPresenceBundle;
+  clearTyping: (conversationId?: string | null) => void;
 };
 
 const EMPTY_TYPING_PRESENCE: DirectMessageTypingPresenceBundle = {
@@ -54,11 +65,17 @@ function normalizeTypingPresencePayload(payload: unknown): DirectMessageTypingPr
 
 export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
   args: UseDirectMessageTypingPresenceArgs<SessionT>,
-): DirectMessageTypingPresenceBundle {
+): DirectMessageTypingPresenceController {
   const argsRef = useRef(args);
   argsRef.current = args;
   const liveClientRef = useRef<CloudDirectMessagesLiveClient | null>(null);
-  const lastSentAtRef = useRef(0);
+  const writeCoordinatorRef = useRef<DirectMessageTypingWriteCoordinator<SessionT> | null>(null);
+  if (!writeCoordinatorRef.current) {
+    writeCoordinatorRef.current = createDirectMessageTypingWriteCoordinator<SessionT>({
+      setTyping: setCloudDirectTyping,
+      clearTyping: clearCloudDirectTyping,
+    });
+  }
   const [presence, setPresence] = useState<DirectMessageTypingPresenceBundle>(EMPTY_TYPING_PRESENCE);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -72,16 +89,19 @@ export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
 
     let isDisposed = false;
     let unsubscribe: (() => void) | null = null;
+    const capturedSession = args.session;
+    const capturedEnsureSession = args.ensureSession;
+    const capturedConversationId = args.conversationId;
 
     void (async () => {
       try {
-        const usableSession = args.ensureSession
-          ? await args.ensureSession(args.session, "direct_messages_typing_presence")
-          : args.session;
-        if (isDisposed || !usableSession || !args.conversationId) return;
+        const usableSession = capturedEnsureSession
+          ? await capturedEnsureSession(capturedSession, "direct_messages_typing_presence")
+          : capturedSession;
+        if (isDisposed || !usableSession) return;
         const liveClient = createCloudDirectMessagesLiveClient({
           session: usableSession,
-          ensureSession: args.ensureSession,
+          ensureSession: capturedEnsureSession,
         });
         if (isDisposed) {
           liveClient.close();
@@ -91,7 +111,7 @@ export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
         liveClientRef.current = liveClient;
         unsubscribe = subscribeCloudDirectTyping<DirectMessageTypingPresenceBundle>({
           liveClient,
-          conversationId: args.conversationId,
+          conversationId: capturedConversationId,
           onUpdate: (nextPresence) => {
             if (isDisposed) return;
             setPresence(normalizeTypingPresencePayload(nextPresence));
@@ -113,16 +133,29 @@ export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
   }, [args.conversationId, args.ensureSession, args.isEnabled, args.session]);
 
   useEffect(() => {
+    if (!args.isEnabled || !args.conversationId) return;
+    const capturedConversationId = args.conversationId;
+    const capturedSession = args.session;
+    const capturedEnsureSession = args.ensureSession;
+    return () => {
+      const latestArgs = argsRef.current;
+      const session = latestArgs.session ?? capturedSession;
+      if (!session) return;
+      writeCoordinatorRef.current?.clearTyping({
+        conversationId: capturedConversationId,
+        session,
+        ensureSession: latestArgs.ensureSession ?? capturedEnsureSession,
+      });
+    };
+  }, [args.conversationId, args.isEnabled]);
+
+  useEffect(() => {
     if (presence.users.length === 0) return;
     const intervalId = window.setInterval(() => {
       setNowMs(Date.now());
     }, 1000);
     return () => window.clearInterval(intervalId);
   }, [presence.users.length]);
-
-  useEffect(() => {
-    lastSentAtRef.current = 0;
-  }, [args.conversationId]);
 
   useEffect(() => {
     if (
@@ -132,6 +165,13 @@ export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
       !args.canSendMessages ||
       args.inputValue.trim().length === 0
     ) {
+      if (args.session && args.conversationId) {
+        writeCoordinatorRef.current?.clearTyping({
+          conversationId: args.conversationId,
+          session: args.session,
+          ensureSession: args.ensureSession,
+        });
+      }
       return;
     }
 
@@ -139,26 +179,12 @@ export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
       500,
       args.throttleMs ?? TYPING_PRESENCE_RENEW_INTERVAL_MS,
     );
-    const now = Date.now();
-    if (now - lastSentAtRef.current < throttleMs) return;
-    lastSentAtRef.current = now;
-
-    void (async () => {
-      try {
-        const latestArgs = argsRef.current;
-        if (!latestArgs.session || !latestArgs.conversationId) return;
-        const usableSession = latestArgs.ensureSession
-          ? await latestArgs.ensureSession(latestArgs.session, "direct_messages_typing_write")
-          : latestArgs.session;
-        if (!usableSession) return;
-        await setCloudDirectTyping({
-          session: usableSession,
-          conversationId: latestArgs.conversationId,
-        });
-      } catch {
-        // Soft failure: the typed message itself is still sent through the DM mutation path.
-      }
-    })();
+    const scope: DirectMessageTypingWriteScope<SessionT> = {
+      conversationId: args.conversationId,
+      session: args.session,
+      ensureSession: args.ensureSession,
+    };
+    writeCoordinatorRef.current?.signalTyping(scope, throttleMs);
   }, [
     args.canSendMessages,
     args.conversationId,
@@ -169,7 +195,20 @@ export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
     args.throttleMs,
   ]);
 
-  return useMemo(
+  const clearTyping = useCallback((conversationId?: string | null) => {
+    const latestArgs = argsRef.current;
+    const normalizedConversationId = String(
+      conversationId ?? latestArgs.conversationId ?? "",
+    ).trim();
+    if (!latestArgs.session || !normalizedConversationId) return;
+    writeCoordinatorRef.current?.clearTyping({
+      conversationId: normalizedConversationId,
+      session: latestArgs.session,
+      ensureSession: latestArgs.ensureSession,
+    });
+  }, []);
+
+  const activePresence = useMemo(
     () => {
       const users = presence.users.filter(
         (row) => Number.isFinite(row.display_until_ms) && row.display_until_ms > nowMs,
@@ -181,5 +220,13 @@ export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
       };
     },
     [nowMs, presence],
+  );
+
+  return useMemo(
+    () => ({
+      presence: activePresence,
+      clearTyping,
+    }),
+    [activePresence, clearTyping],
   );
 }

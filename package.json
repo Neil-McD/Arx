@@ -43,6 +43,7 @@
     "check:profile-community-context-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_community_context_contract_proof.ts",
     "check:profile-community-panel-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_community_panel_ui_contract_proof.ts",
     "check:direct-messages-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/direct_messages_contract_proof.ts",
+    "check:direct-message-typing-presence-behavior": "vitest run convex/directMessageTypingWriteCoordinator.test.ts && vitest run convex/directMessageTypingPresence.test.ts",
     "check:profile-dm-relationship-static-smoke": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_dm_relationship_static_smoke_proof.ts",
     "check:profile-legal-error-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_legal_acceptance_error_contract_proof.ts",
     "check:social-profile-links-save-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/social_profile_links_save_contract_proof.ts",
