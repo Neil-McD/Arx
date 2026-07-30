@@ -1,0 +1,224 @@
+/// <reference types="vite/client" />
+
+import { convexTest } from "convex-test";
+import { expect, test } from "vitest";
+
+import { api } from "./_generated/api";
+import schema from "./schema";
+
+const modules = import.meta.glob([
+  "./community.ts",
+  "./communityLifecycle.ts",
+  "./communityLaunchSetup.ts",
+  "./_generated/**/*.*s",
+]);
+
+const OWNER_SUBJECT = "community-launch-owner";
+const ADMIN_SUBJECT = "community-launch-admin";
+const OUTSIDER_SUBJECT = "community-launch-outsider";
+
+async function createFixture(t: ReturnType<typeof convexTest>) {
+  const nowMs = 1_750_000_000_000;
+  return await t.run(async (ctx) => {
+    const ownerId = await ctx.db.insert("users", {
+      authSubject: OWNER_SUBJECT,
+      displayName: "Community launch owner",
+      handle: "community-launch-owner",
+      normalizedHandle: "community-launch-owner",
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const adminId = await ctx.db.insert("users", {
+      authSubject: ADMIN_SUBJECT,
+      displayName: "Community launch admin",
+      handle: "community-launch-admin",
+      normalizedHandle: "community-launch-admin",
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const outsiderId = await ctx.db.insert("users", {
+      authSubject: OUTSIDER_SUBJECT,
+      displayName: "Community launch outsider",
+      handle: "community-launch-outsider",
+      normalizedHandle: "community-launch-outsider",
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const communityId = await ctx.db.insert("communities", {
+      ownerId,
+      slug: "rolling-launch-contract",
+      name: "Rolling launch contract",
+      oneLiner: "Compatibility without restoring the launcher.",
+      about: "Initial about",
+      visibility: "unlisted",
+      entryPolicy: "open",
+      activeMemberCount: 2,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    await ctx.db.insert("communityMemberships", {
+      communityId,
+      userId: adminId,
+      role: "admin",
+      accessSource: "free_grant",
+      active: true,
+      activationSequence: 1,
+      activatedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { ownerId, adminId, outsiderId, communityId };
+  });
+}
+
+test("new About and legacy launch RPCs coexist across a rolling deployment", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+
+  await expect(
+    asOwner.mutation(api.communityLifecycle.saveCommunityAbout, {
+      communityId: fixture.communityId,
+      about: "Updated through the narrow contract.",
+    }),
+  ).resolves.toMatchObject({
+    community_id: String(fixture.communityId),
+    about: "Updated through the narrow contract.",
+  });
+
+  await expect(
+    asOwner.mutation(api.communityLifecycle.saveCommunityLaunchProfile, {
+      communityId: fixture.communityId,
+      name: "Rolling contract preserved",
+      about: "Updated through an already-loaded client.",
+    }),
+  ).resolves.toMatchObject({
+    id: String(fixture.communityId),
+    name: "Rolling contract preserved",
+    about: "Updated through an already-loaded client.",
+  });
+
+  await expect(
+    asOwner.mutation(api.community.saveCommunityLaunchProfile, {
+      communityId: fixture.communityId,
+      about: "Updated through the production compatibility facade.",
+    }),
+  ).resolves.toMatchObject({
+    id: String(fixture.communityId),
+    name: "Rolling contract preserved",
+    about: "Updated through the production compatibility facade.",
+  });
+
+  const stagingStatus = await asOwner.query(
+    api.communityLaunchSetup.getCommunityLaunchSetupStatus,
+    {
+      communityId: fixture.communityId,
+    },
+  );
+  const productionStatus = await asOwner.query(
+    api.community.getCommunityLaunchSetupStatus,
+    {
+      communityId: fixture.communityId,
+    },
+  );
+  expect(productionStatus).toEqual(stagingStatus);
+  expect(stagingStatus).toMatchObject({
+    completed: false,
+    steps: expect.arrayContaining([
+      expect.objectContaining({ step: "profile", completed: true }),
+      expect.objectContaining({ step: "about", completed: true }),
+    ]),
+  });
+});
+
+test("admins can update copy but cannot use compatibility RPCs for owner-only changes", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asAdmin = t.withIdentity({ subject: ADMIN_SUBJECT });
+
+  await expect(
+    asAdmin.mutation(api.communityLifecycle.saveCommunityAbout, {
+      communityId: fixture.communityId,
+      about: "Admin-managed narrow About.",
+    }),
+  ).resolves.toMatchObject({
+    community_id: String(fixture.communityId),
+    about: "Admin-managed narrow About.",
+  });
+  await expect(
+    asAdmin.mutation(api.community.saveCommunityLaunchProfile, {
+      communityId: fixture.communityId,
+      oneLiner: "Admin-managed compatibility copy.",
+      about: "Admin-managed compatibility About.",
+    }),
+  ).resolves.toMatchObject({
+    id: String(fixture.communityId),
+    name: "Rolling launch contract",
+    one_liner: "Admin-managed compatibility copy.",
+    about: "Admin-managed compatibility About.",
+  });
+
+  await expect(
+    asAdmin.mutation(api.communityLifecycle.saveCommunityLaunchProfile, {
+      communityId: fixture.communityId,
+      name: "Unauthorized admin rename",
+    }),
+  ).rejects.toThrow("community_owner_required");
+
+  const community = await t.run(async (ctx) =>
+    ctx.db.get(fixture.communityId),
+  );
+  expect(community).toMatchObject({
+    name: "Rolling launch contract",
+    oneLiner: "Admin-managed compatibility copy.",
+    about: "Admin-managed compatibility About.",
+  });
+});
+
+test("rolling compatibility RPCs remain fail-closed to non-managers", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOutsider = t.withIdentity({ subject: OUTSIDER_SUBJECT });
+
+  await expect(
+    asOutsider.mutation(api.communityLifecycle.saveCommunityAbout, {
+      communityId: fixture.communityId,
+      about: "Unauthorized",
+    }),
+  ).rejects.toThrow();
+  await expect(
+    asOutsider.mutation(api.community.saveCommunityLaunchProfile, {
+      communityId: fixture.communityId,
+      about: "Unauthorized",
+    }),
+  ).rejects.toThrow();
+  await expect(
+    asOutsider.query(api.community.getCommunityLaunchSetupStatus, {
+      communityId: fixture.communityId,
+    }),
+  ).rejects.toThrow();
+
+  await expect(
+    asOutsider.mutation(api.community.saveCommunityLaunchProfile, {
+      userId: fixture.ownerId,
+      communityId: fixture.communityId,
+      about: "Spoofed owner ID",
+    }),
+  ).rejects.toThrow("user_id_mismatch");
+  await expect(
+    asOutsider.mutation(api.communityLifecycle.saveCommunityLaunchProfile, {
+      userId: fixture.ownerId,
+      authSubject: OWNER_SUBJECT,
+      communityId: fixture.communityId,
+      about: "Spoofed owner subject",
+    }),
+  ).rejects.toThrow("auth_subject_mismatch");
+
+  const community = await t.run(async (ctx) =>
+    ctx.db.get(fixture.communityId),
+  );
+  expect(community).toMatchObject({
+    name: "Rolling launch contract",
+    about: "Initial about",
+  });
+});

@@ -8,7 +8,7 @@ cd "$ROOT_DIR"
 
 echo "== Community public identity guard =="
 
-RETIRED_COMMUNITY_FACADE_FILE="convex/community.ts"
+COMMUNITY_COMPATIBILITY_FACADE_FILE="convex/community.ts"
 COMMUNITY_CHAT_FILE="convex/communityChat.ts"
 COMMUNITY_ADMIN_FILE="convex/communityAdmin.ts"
 COMMUNITY_CORE_FILE="convex/communityCore.ts"
@@ -16,10 +16,22 @@ RETIRED_COMMUNITY_EXPERIENCE_FILE="convex/communityExperience.ts"
 COMMUNITY_LIFECYCLE_FILE="convex/communityLifecycle.ts"
 COMMUNITY_PUBLIC_FILE="convex/communityPublic.ts"
 
-if [[ -f "$RETIRED_COMMUNITY_FACADE_FILE" ]]; then
-  echo "FAIL: retired facade must stay deleted: $RETIRED_COMMUNITY_FACADE_FILE"
+if [[ ! -f "$COMMUNITY_COMPATIBILITY_FACADE_FILE" ]]; then
+  echo "FAIL: missing bounded rolling compatibility facade: $COMMUNITY_COMPATIBILITY_FACADE_FILE"
   exit 1
 fi
+community_compatibility_export_count="$(
+  awk '/^export const / { count += 1 } END { print count + 0 }' \
+    "$COMMUNITY_COMPATIBILITY_FACADE_FILE"
+)"
+if [[ "$community_compatibility_export_count" -ne 2 ]]; then
+  echo "FAIL: rolling compatibility facade must expose exactly two aliases"
+  exit 1
+fi
+guard_rg_assert_absent \
+  "rolling compatibility facade must not own behavior" \
+  '\b(query|mutation|action)[[:space:]]*\(|\bctx\.|\bdb\.' \
+  "$COMMUNITY_COMPATIBILITY_FACADE_FILE"
 if [[ ! -f "$COMMUNITY_CHAT_FILE" ]]; then
   echo "FAIL: missing $COMMUNITY_CHAT_FILE"
   exit 1

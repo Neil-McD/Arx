@@ -18,7 +18,6 @@ const read = (relativePath: string): string =>
   readFileSync(join(root, relativePath), "utf8");
 
 for (const retiredFacade of [
-  "convex/community.ts",
   "convex/communityExperience.ts",
   "convex/billing.ts",
 ]) {
@@ -30,14 +29,35 @@ for (const retiredFacade of [
 }
 
 const generatedApi = read("convex/_generated/api.d.ts");
+const productionCompatibilityFacade = read("convex/community.ts");
 const contractDoc = read("docs/canonical-platform-operation-contract-v1.md");
-for (const retiredModule of ["community", "communityExperience", "billing"]) {
+for (const retiredModule of ["communityExperience", "billing"]) {
   assert.doesNotMatch(
     generatedApi,
     new RegExp(`(?:import type \\\\* as|${retiredModule}: typeof) ${retiredModule}`),
     `${retiredModule} must not remain in generated Convex API bindings`,
   );
 }
+assert.match(
+  generatedApi,
+  /import type \* as community from "\.\.\/community\.js";[\s\S]*community: typeof community;/,
+  "the generated API must retain the bounded production compatibility namespace",
+);
+assert.deepEqual(
+  Array.from(
+    productionCompatibilityFacade.matchAll(
+      /export const ([A-Za-z0-9_]+)/g,
+    ),
+    (match) => match[1],
+  ).sort(),
+  ["getCommunityLaunchSetupStatus", "saveCommunityLaunchProfile"],
+  "the production compatibility namespace may expose exactly two legacy aliases",
+);
+assert.doesNotMatch(
+  productionCompatibilityFacade,
+  /\b(?:query|mutation|action)\s*\(|\bctx\.|\bdb\./,
+  "the production compatibility namespace must not own business or data behavior",
+);
 assert.match(
   contractDoc,
   /Context-bound memory, chat, AI Feed, batch resource reads, resource search, and[\s\S]*builder resource tools remain outside v1/,
@@ -69,6 +89,7 @@ const firstPartySources = [
 ].filter(
   (path) =>
     path !== "scripts/canonical_operation_surface_contract_proof.ts" &&
+    path !== "convex/communityLaunchCompatibility.test.ts" &&
     !path.includes("/node_modules/"),
 );
 

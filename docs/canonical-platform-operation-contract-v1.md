@@ -61,16 +61,25 @@ The MCP `readOnlyHint` describes the absence of user-visible domain or external
 mutation; the separate receipt effect still makes runtime scheduling
 write-aware, and the MCP operation is explicitly not idempotent.
 
-## Deleted public façades
+## Canonical owners and rolling compatibility
 
-The following Convex modules were duplicate public aliases and no longer exist:
+The broad duplicate public façades were deleted. These modules remain absent:
 
-- `convex/community.ts`
 - `convex/communityExperience.ts`
 - `convex/billing.ts`
 
 First-party callers now address the canonical domain owner directly. Generated
-Convex bindings must not expose these retired modules.
+Convex bindings must not expose the retired `communityExperience` or `billing`
+modules.
+
+During the web/Convex rolling migration, `convex/community.ts` exists only as a
+two-address compatibility bridge for the production web build at `dbec82f`. It
+may re-export `saveCommunityLaunchProfile` from `communityLifecycle` and
+`getCommunityLaunchSetupStatus` from `communityLaunchSetup`; it must contain no
+business logic, data access, authorization, or additional exports. Current
+first-party code must not call either legacy address. Remove the bridge after
+the replacement production web is live and both legacy function metrics remain
+at zero for the agreed observation window.
 
 ## Invariants
 

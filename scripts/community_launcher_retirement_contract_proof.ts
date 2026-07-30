@@ -1,11 +1,26 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
 
 function read(path: string): string {
   return readFileSync(join(root, path), "utf8");
+}
+
+function sourceFiles(path: string): string[] {
+  const absolute = join(root, path);
+  if (!existsSync(absolute)) return [];
+  const out: string[] = [];
+  for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+    const child = `${path}/${entry.name}`;
+    if (entry.isDirectory()) {
+      out.push(...sourceFiles(child));
+    } else if (/\.(?:[cm]?[jt]sx?)$/.test(entry.name)) {
+      out.push(child);
+    }
+  }
+  return out;
 }
 
 const packageJson = read("package.json");
@@ -23,10 +38,7 @@ const resources = read("apps/web/src/components/WebCommunityResourcesSection.tsx
 const funnel = read("apps/web/src/components/WebCommunityFunnelSection.tsx");
 const protectedResources = read("convex/communityResources.ts");
 const protectedGateway = read("shared/cloudCommunityAdminGateway.ts");
-const communityLifecycle = read("convex/communityLifecycle.ts");
-const funnelGateway = read("shared/cloudCommunityFunnelGateway.ts");
-const generatedApi = read("convex/_generated/api.d.ts");
-
+const productionCompatibilityFacade = read("convex/community.ts");
 const retiredRuntimePaths = [
   "apps/web/src/components/WebCommunityLaunchSetupModal.tsx",
   "apps/web/src/components/webCommunityLaunchKnowledgeModel.ts",
@@ -35,9 +47,7 @@ const retiredRuntimePaths = [
   "apps/web/src/controllers/useWebCommunityLaunchSetupLifecycleController.ts",
   "apps/web/src/communityLaunchSetupRoute.ts",
   "apps/web/src/communityLaunchKnowledgeSourceOAuth.ts",
-  "convex/communityLaunchSetup.ts",
   "shared/cloudCommunityLaunchSetupGateway.ts",
-  "shared/communityLaunchSetup.ts",
 ] as const;
 
 assert.match(
@@ -55,14 +65,38 @@ assert.doesNotMatch(
   "the web runtime must not retain launcher UI, orchestration, route, or callback state",
 );
 assert.doesNotMatch(
-  communityLifecycle + funnelGateway + generatedApi,
-  /getCommunityLaunchSetupStatus|saveCommunityLaunchProfile|cloudCommunityLaunchSetupGateway|communityLaunchSetup/,
-  "the retained Funnel and Convex runtime must not expose launcher status or profile contracts",
+  sourceFiles("apps/web/src")
+    .concat(sourceFiles("shared"))
+    .filter((path) => path !== "shared/communityLaunchSetup.ts")
+    .map(read)
+    .join("\n"),
+  /getCommunityLaunchSetupStatus|saveCommunityLaunchProfile|cloudCommunityLaunchSetupGateway/,
+  "first-party web and shared client code must not call the rolling launcher compatibility RPCs",
 );
 assert.equal(
-  existsSync(join(root, "convex/community.ts")),
-  false,
-  "the retired duplicate community facade must remain deleted",
+  existsSync(join(root, "convex/communityLaunchSetup.ts")),
+  true,
+  "the server-only launch status compatibility query must remain during the rolling transition",
+);
+assert.equal(
+  existsSync(join(root, "shared/communityLaunchSetup.ts")),
+  true,
+  "the server-only launch status compatibility model must remain during the rolling transition",
+);
+assert.deepEqual(
+  Array.from(
+    productionCompatibilityFacade.matchAll(
+      /export const ([A-Za-z0-9_]+)/g,
+    ),
+    (match) => match[1],
+  ).sort(),
+  ["getCommunityLaunchSetupStatus", "saveCommunityLaunchProfile"],
+  "the retired community facade may return only as the two-address production compatibility bridge",
+);
+assert.doesNotMatch(
+  productionCompatibilityFacade,
+  /\b(?:query|mutation|action)\s*\(|\bctx\.|\bdb\./,
+  "the production compatibility bridge must not restore facade-owned behavior",
 );
 assert.doesNotMatch(
   [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n"),
