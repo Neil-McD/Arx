@@ -127,17 +127,28 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
       liveClientRef.current?.close();
       liveClientRef.current = null;
       setPresence(EMPTY_TYPING_PRESENCE);
+    };
+  }, [args.activeCommunityId, args.ensureSession, args.isEnabled, args.session]);
+
+  useEffect(() => {
+    if (!args.isEnabled || !args.activeCommunityId) return;
+    const capturedCommunityId = args.activeCommunityId;
+    return () => {
       const activeScope = activeScopeRef.current;
       activeScopeRef.current = undefined;
       lastSentAtByScopeRef.current.clear();
       if (activeScope === undefined) return;
+      const latestArgs = argsRef.current;
+      const session = latestArgs.session ?? args.session;
+      const ensureSession = latestArgs.ensureSession ?? args.ensureSession;
+      if (!session) return;
       writeQueueRef.current = writeQueueRef.current
         .catch(() => undefined)
         .then(async () => {
           try {
             const usableSession = await resolveUsableSession(
-              capturedSession,
-              capturedEnsureSession,
+              session,
+              ensureSession,
             );
             if (!usableSession) return;
             await clearCloudCommunityTyping({
@@ -150,7 +161,7 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
           }
         });
     };
-  }, [args.activeCommunityId, args.ensureSession, args.isEnabled, args.session]);
+  }, [args.activeCommunityId, args.isEnabled]);
 
   useEffect(() => {
     if (presence.users.length === 0) return;

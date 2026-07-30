@@ -191,7 +191,8 @@ use the `displayUntil` index, and disclose when their bounded count is capped.
 A scope-aware clear may delete only the same scope it observed, so a delayed
 channel clear cannot erase a newer thread signal. Explicit clear handles empty
 inputs, blur, send, navigation, and scope changes; lease expiry remains the
-crash-safe fallback.
+crash-safe fallback. Reauthenticating the live subscription does not own scope
+cleanup and therefore cannot erase an in-progress typing lease.
 
 ### `interactionModerationEvents`
 

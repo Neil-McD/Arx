@@ -53,6 +53,16 @@ const listTyping = sectionBetween(
   "export const listCommunityTyping",
   "export const createThreadUserMessage",
 );
+const subscriptionLifecycle = sectionBetween(
+  hook,
+  "useEffect(() => {\n    if (!args.isEnabled || !args.session || !args.activeCommunityId)",
+  "useEffect(() => {\n    if (!args.isEnabled || !args.activeCommunityId) return;",
+);
+const typingScopeLifecycle = sectionBetween(
+  hook,
+  "useEffect(() => {\n    if (!args.isEnabled || !args.activeCommunityId) return;",
+  "useEffect(() => {\n    if (presence.users.length === 0) return;",
+);
 
 assert.match(
   timingContract,
@@ -156,6 +166,16 @@ assert.match(
   hook,
   /clearCloudCommunityTyping/,
   "the community hook must explicitly clear typing while retaining lease expiry as fallback",
+);
+assert.doesNotMatch(
+  subscriptionLifecycle,
+  /activeScopeRef|clearCloudCommunityTyping/,
+  "auth refresh may reconnect the live subscription but must not clear the active typing scope",
+);
+assert.match(
+  typingScopeLifecycle,
+  /clearCloudCommunityTyping[\s\S]*\}, \[args\.activeCommunityId, args\.isEnabled\]\);/,
+  "only community or surface lifecycle changes may clear the active typing scope",
 );
 assert.doesNotMatch(
   webAttention,
