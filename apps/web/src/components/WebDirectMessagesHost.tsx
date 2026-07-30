@@ -1011,6 +1011,7 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
         const updatedConversation = await markCloudDirectConversationRead({
           session: usableSession,
           conversationId: normalizedConversationId,
+          throughSeq: seq,
         });
         readMarkSeqByConversationRef.current[normalizedConversationId] = Math.max(
           seq,

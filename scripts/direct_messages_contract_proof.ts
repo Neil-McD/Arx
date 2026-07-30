@@ -7,6 +7,7 @@ function read(path: string): string {
 
 const schema = read("convex/schema.ts");
 const directMessages = read("convex/directMessages.ts");
+const directMessageReadCore = read("convex/directMessageReadCore.ts");
 const profileCore = read("convex/profileCore.ts");
 const relationshipCore = read("convex/profileRelationshipCore.ts");
 const gateway = read("shared/cloudDirectMessagesGateway.ts");
@@ -203,7 +204,13 @@ assert.doesNotMatch(dmInboxQuery, /\.collect\(\)/, "inbox query must not collect
 assert.match(directMessages, /async function touchActiveConversationParticipantsActivity/, "DM writes must have a helper for participant inbox activity");
 assert.match(directMessages, /touchActiveConversationParticipantsActivity[\s\S]*lastActivityAt: args\.nowMs/, "participant activity helper must update lastActivityAt");
 assert.match(directMessages, /markDirectConversationRead = mutation/, "backend must expose an authoritative read mutation");
-assert.match(directMessages, /ctx\.db\.patch\(participant\._id,[\s\S]*lastReadSeq: lastSeq/, "read mutation must advance the participant read cursor");
+assert.match(directMessages, /throughSeq: v\.optional\(v\.number\(\)\)/, "read mutation must accept the exact visible sequence while older deployed clients roll forward");
+assert.match(directMessages, /typeof args\.throughSeq === "undefined" \? lastSeq : args\.throughSeq/, "read mutation must reserve mark-current-head behavior for old clients that omit throughSeq");
+assert.match(directMessages, /nextDirectMessageReadSeq\([\s\S]*currentLastReadSeq,[\s\S]*requestedThroughSeq,[\s\S]*lastSeq/, "read mutation must advance from the requested visible sequence against the readable server head");
+assert.match(directMessages, /ctx\.db\.patch\(participant\._id,[\s\S]*lastReadSeq: nextLastReadSeq/, "read mutation must persist only the resolved monotonic cursor");
+assert.match(directMessages, /touchActiveConversationParticipantsActivity[\s\S]*nextDirectMessageReadSeq\([\s\S]*currentLastReadSeq,[\s\S]*senderLastReadSeq,[\s\S]*senderLastReadSeq/, "sender auto-read must use the same monotonic cursor contract");
+assert.match(directMessageReadCore, /return Math\.min\(requested, latest\)/, "DM read cursor requests must clamp to the current readable server head");
+assert.match(directMessageReadCore, /return Math\.max\([\s\S]*normalizeDirectMessageReadSeq\(currentThroughSeq\),[\s\S]*clampDirectMessageReadSeq\(requestedThroughSeq, latestReadableSeq\)/, "DM read cursor settlement must never regress");
 assert.match(directMessages, /Active participants can read existing DM history; current relationship is rechecked before each send\./, "DM read/send policy must be explicit");
 assert.match(dmListMessagesQuery, /requireActiveUserParticipant/, "DM history reads must require active conversation participation");
 assert.doesNotMatch(dmListMessagesQuery, /requireDirectConversationSendAccess|requireDirectMessageRelationshipAccess/, "DM history reads must not require current mutual access once someone is an active participant");
@@ -283,6 +290,8 @@ assert.match(gateway, /directMessages:generateDirectMessageAttachmentUploadUrl/,
 assert.match(gateway, /directMessages:sendDirectMessage[\s\S]*attachments: params\.attachments \?\? \[\]/, "web gateway must pass attachment metadata through the canonical send mutation");
 assert.match(gateway, /markCloudDirectConversationRead/, "web gateway must expose direct conversation read mutation");
 assert.match(gateway, /directMessages:markDirectConversationRead/, "web gateway read mutation must use the canonical backend mutation");
+assert.match(gateway, /markCloudDirectConversationRead[\s\S]*throughSeq: number/, "web gateway read mutation must require an exact visible sequence");
+assert.match(gateway, /directMessages:markDirectConversationRead[\s\S]*throughSeq: Math\.floor\(params\.throughSeq\)/, "web gateway must preserve the exact visible read position");
 assert.match(gateway, /subscribeCloudDirectTyping/, "web gateway must expose live DM typing subscriptions");
 assert.match(gateway, /directMessages:listDirectTyping/, "web gateway typing subscription must watch the canonical backend query");
 assert.match(gateway, /setCloudDirectTyping/, "web gateway must expose a DM typing heartbeat");
@@ -336,6 +345,7 @@ assert.match(dmPanel, /onScroll=\{\(event\) =>/, "DM panel must track whether th
 assert.match(dmPanel, /onBackToInbox\?: \(\) => void/, "DM conversation panel must support returning to the inbox when opened globally");
 assert.match(dmPanel, /onReadThroughSeq\?: \(seq: number\) => void \| Promise<void>/, "DM conversation panel must report read-through sequence");
 assert.match(dmPanel, /props\.onReadThroughSeq\?\.\(lastMessageSeq\)/, "DM conversation panel must mark visible newest messages read");
+assert.match(dmPanel, /const isNearBottom = distanceFromBottom <= DM_AUTO_SCROLL_THRESHOLD_PX;[\s\S]*if \(isNearBottom && lastMessageSeq > 0\) \{[\s\S]*props\.onReadThroughSeq\?\.\(lastMessageSeq\)/, "DM panel must settle read state only when the newest message is within the viewer's followed window");
 assert.match(dmPanel, /typingPresence: DirectMessageTypingPresenceBundle/, "DM panel must receive typing presence as data");
 assert.match(dmPanel, /parseMessageAttachments/, "DM panel must reuse the canonical message attachment parser");
 assert.match(dmPanel, /partitionCommunityAttachments/, "DM panel must reuse the canonical attachment partitioning helper");
@@ -372,6 +382,7 @@ assert.match(dmHost, /VIRTUAL_DM_CONVERSATION_ID_PREFIX/, "global DM host must m
 assert.match(dmHost, /sendCloudDirectMessageToUser\(\{[\s\S]*targetUserId,[\s\S]*communityId,[\s\S]*clientMessageId: echo\.local_id/, "first send must create and append through the idempotent user-targeted mutation");
 assert.match(dmHost, /ensureCloudDirectConversationFromCommunity\(\{[\s\S]*targetUserId,[\s\S]*communityId/, "existing recipient conversations must reopen through the canonical community-origin access check");
 assert.match(dmHost, /markCloudDirectConversationRead/, "global DM host must own read-state mutations");
+assert.match(dmHost, /markCloudDirectConversationRead\(\{[\s\S]*conversationId: normalizedConversationId,[\s\S]*throughSeq: seq/, "global DM host must pass the panel's exact visible sequence to the canonical mutation");
 assert.match(dmHost, /onReadThroughSeq=\{\(seq\) =>/, "global DM host must connect visible messages to read-state mutations");
 assert.match(dmHost, /ensureCloudDirectConversationFromCommunity/, "global DM host must create DMs from profile launch requests");
 assert.match(dmHost, /openRequest: DirectMessageOpenRequest/, "global DM host must accept canonical open requests from profile actions");

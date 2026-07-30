@@ -285,12 +285,14 @@ export async function setCloudDirectConversationMuted<SessionT>(
 export async function markCloudDirectConversationRead<SessionT>(
   params: CloudDirectMessagesGatewayParams<SessionT> & {
     conversationId: string;
+    throughSeq: number;
   },
 ): Promise<DirectMessageConversation> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = (await client.mutation("directMessages:markDirectConversationRead" as any, {
     authSubject,
     conversationId: params.conversationId,
+    throughSeq: Math.floor(params.throughSeq),
   })) as DirectMessageConversation | null;
   if (!payload?.id) throw new Error("Failed to mark direct message as read.");
   return payload;

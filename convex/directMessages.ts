@@ -15,6 +15,7 @@ import { resolveViewerDirectMessageRelationship } from "./profileRelationshipCor
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import { getUniqueUserByNormalizedHandle } from "./profileCore";
 import { stripChatInlineMarkdown } from "../shared/chatInlineMarkdown";
+import { nextDirectMessageReadSeq } from "./directMessageReadCore";
 
 type UserRow = {
   _id: any;
@@ -570,16 +571,26 @@ async function touchActiveConversationParticipantsActivity(args: {
     participants
       .filter((participant) => participant.status === "active")
       .map((participant) => {
+        const currentLastReadSeq = Math.max(
+          0,
+          Math.floor(participant.lastReadSeq ?? 0),
+        );
+        const isSender =
+          Boolean(senderParticipantKey) &&
+          normalizeIdValue(participant._id) === senderParticipantKey;
+        const nextLastReadSeq = isSender
+          ? nextDirectMessageReadSeq(
+              currentLastReadSeq,
+              senderLastReadSeq,
+              senderLastReadSeq,
+            )
+          : currentLastReadSeq;
         const patch: Record<string, unknown> = {
           lastActivityAt: args.nowMs,
           updatedAt: args.nowMs,
         };
-        if (
-          senderParticipantKey &&
-          normalizeIdValue(participant._id) === senderParticipantKey &&
-          senderLastReadSeq > Math.max(0, Math.floor(participant.lastReadSeq ?? 0))
-        ) {
-          patch.lastReadSeq = senderLastReadSeq;
+        if (nextLastReadSeq > currentLastReadSeq) {
+          patch.lastReadSeq = nextLastReadSeq;
         }
         return args.ctx.db.patch(participant._id, patch);
       }),
@@ -1338,6 +1349,9 @@ export const markDirectConversationRead = mutation({
   args: {
     authSubject: v.optional(v.string()),
     conversationId: v.id("dmConversations"),
+    // Rolling-compatibility: older clients omit the exact rendered sequence and
+    // retain the previous mark-current-head behavior during deployment.
+    throughSeq: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const viewerUserId = await resolveUserIdForAuthenticatedRequest({
@@ -1351,9 +1365,16 @@ export const markDirectConversationRead = mutation({
     });
     const lastSeq = Math.max(0, Math.floor(conversation.lastSeq ?? 0));
     const currentLastReadSeq = Math.max(0, Math.floor(participant.lastReadSeq ?? 0));
-    if (lastSeq > currentLastReadSeq) {
+    const requestedThroughSeq =
+      typeof args.throughSeq === "undefined" ? lastSeq : args.throughSeq;
+    const nextLastReadSeq = nextDirectMessageReadSeq(
+      currentLastReadSeq,
+      requestedThroughSeq,
+      lastSeq,
+    );
+    if (nextLastReadSeq > currentLastReadSeq) {
       await ctx.db.patch(participant._id, {
-        lastReadSeq: lastSeq,
+        lastReadSeq: nextLastReadSeq,
         updatedAt: Date.now(),
       });
     }
