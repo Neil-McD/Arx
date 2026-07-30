@@ -733,6 +733,8 @@ export default function App() {
   const {
     activeCommunityAccess,
     isLoadingCommunityAccess,
+    communityAccessLoadError,
+    retryActiveCommunityAccess,
     communityAccessCapabilities,
     communityNavVisibility,
     communityActionGuards,
@@ -2041,6 +2043,9 @@ export default function App() {
       isLoadingCommunities,
       sessionUserId: canonicalSessionUserId,
       communityMemberCount: communityDirectoryMemberCount ?? activeCommunitySocialMemberCount,
+      isResolvingCommunityAccess: isLoadingCommunityAccess,
+      communityAccessLoadError,
+      onRetryCommunityAccess: retryActiveCommunityAccess,
       canViewActiveCommunitySettings,
       communitySettingsLayer,
       communitySettingsPane,

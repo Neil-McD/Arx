@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DragEvent } from "react";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
+import { deriveCommunitySettingsAccessPresentation } from "../../../../shared/communityAccessResolution";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
@@ -32,6 +33,9 @@ type WebCommunitySettingsSectionProps = {
   session: unknown;
   ensureSession: (session: any) => Promise<any | null>;
   hasSession: boolean;
+  isResolvingCommunityAccess: boolean;
+  communityAccessLoadError: string | null;
+  onRetryCommunityAccess: () => void;
   canViewActiveCommunitySettings: boolean;
   communitySettingsLayer: CommunitySettingsLayer;
   activePane: CommunitySettingsPane;
@@ -629,6 +633,9 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
   const {
     activeCommunity,
     hasSession,
+    isResolvingCommunityAccess,
+    communityAccessLoadError,
+    onRetryCommunityAccess,
     canViewActiveCommunitySettings,
     communitySettingsLayer,
     activePane,
@@ -652,6 +659,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     ? activePane
     : availableSettingsPanes[0] ?? "community";
   const availableSettingsPaneKey = availableSettingsPanes.join("|");
+  const accessPresentationState = deriveCommunitySettingsAccessPresentation({
+    hasActiveCommunity: Boolean(activeCommunity),
+    hasAuthenticatedPresentation: hasSession,
+    isResolvingAccess: isResolvingCommunityAccess,
+    accessLoadError: communityAccessLoadError,
+    canView: canViewActiveCommunitySettings,
+  });
+  const resolvedActiveCommunity = activeCommunity as ActiveCommunity;
 
   useEffect(() => {
     if (availableSettingsPanes.length > 0 && !availableSettingsPanes.includes(activePane)) {
@@ -673,9 +688,9 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
 
   return (
     <div className="settings-panel community-settings-panel">
-      {!activeCommunity ? (
+      {accessPresentationState === "select_community" ? (
         <div className="chat-empty">Select a community to view settings.</div>
-      ) : !hasSession ? (
+      ) : accessPresentationState === "sign_in" ? (
         <div className="chat-empty">
           <div>Sign in to view community settings.</div>
           <button
@@ -687,11 +702,25 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
             Sign in
           </button>
         </div>
-      ) : !canViewActiveCommunitySettings ? (
+      ) : accessPresentationState === "resolving" ? (
+        <div className="chat-empty">Loading community settings...</div>
+      ) : accessPresentationState === "failed" ? (
+        <div className="chat-empty">
+          <div>{communityAccessLoadError}</div>
+          <button
+            className="secondary"
+            type="button"
+            onClick={onRetryCommunityAccess}
+            style={{ marginTop: 12 }}
+          >
+            Retry
+          </button>
+        </div>
+      ) : accessPresentationState === "denied" ? (
         <div className="chat-empty">You do not have access to this community's settings.</div>
       ) : !canManageCommunitySettings ? (
         <CommunityMemberSettingsSection
-          activeCommunity={activeCommunity}
+          activeCommunity={resolvedActiveCommunity}
           state={state}
           actions={actions}
         />
@@ -707,14 +736,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               <>
                 {isOwnerSettingsLayer ? (
                   <CommunityBrandingSettingsSection
-                    activeCommunity={activeCommunity}
+                    activeCommunity={resolvedActiveCommunity}
                     state={state}
                     actions={actions}
                   />
                 ) : null}
                 <CommunityProfileSettingsSection state={state} actions={actions} />
                 <CommunityMonetizationConfigSection
-                  activeCommunity={activeCommunity}
+                  activeCommunity={resolvedActiveCommunity}
                   accountCommerceStatus={accountCommerceStatus}
                   accountCommerceError={accountCommerceError}
                   startStripeConnectOnboarding={startStripeConnectOnboarding}
@@ -752,12 +781,12 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               <WebCommunityOnboardingWorkflowSection
                 session={props.session}
                 ensureSession={props.ensureSession}
-                communityId={activeCommunity.id}
-                communityName={activeCommunity.name}
-                communityAvatarUrl={activeCommunity.avatar_url}
-                communityAvatarFocusX={activeCommunity.avatar_focus_x}
-                communityAvatarFocusY={activeCommunity.avatar_focus_y}
-                communityAvatarZoom={activeCommunity.avatar_zoom}
+                communityId={resolvedActiveCommunity.id}
+                communityName={resolvedActiveCommunity.name}
+                communityAvatarUrl={resolvedActiveCommunity.avatar_url}
+                communityAvatarFocusX={resolvedActiveCommunity.avatar_focus_x}
+                communityAvatarFocusY={resolvedActiveCommunity.avatar_focus_y}
+                communityAvatarZoom={resolvedActiveCommunity.avatar_zoom}
                 onPreview={props.onPreviewCommunityOnboarding}
               />
             ) : null}

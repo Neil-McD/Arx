@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   deriveCommunityAccessCapabilities,
   deriveCommunityActionGuards,
   deriveCommunityNavVisibility,
   deriveCommunitySettingsLayer,
 } from "../../../../shared/communityAccessViewModel";
+import {
+  createCommunityAccessResolutionState,
+  reduceCommunityAccessResolution,
+  scopeCommunityAccessResolution,
+} from "../../../../shared/communityAccessResolution";
 import type { CommunityAccess } from "../../../../shared/communityTypes";
 import { fetchCloudMyCommunityAccessById } from "../../../../shared/cloudCommunityAccessGateway";
 import {
@@ -40,49 +45,61 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   session: SessionT | null;
   ensureSession: (session?: SessionT | null) => Promise<SessionT | null>;
 }) {
-  const [activeCommunityAccess, setActiveCommunityAccess] = useState<CommunityAccess | null>(null);
-  const [isLoadingCommunityAccess, setIsLoadingCommunityAccess] = useState(false);
+  const [communityAccessResolution, dispatchCommunityAccessResolution] = useReducer(
+    reduceCommunityAccessResolution<CommunityAccess>,
+    undefined,
+    createCommunityAccessResolutionState<CommunityAccess>,
+  );
   const [activeCommunityPresenceSummaryState, setActiveCommunityPresenceSummaryState] =
     useState<ScopedPresenceSummary | null>(null);
-  const accessSeqRef = useRef(0);
+  const accessRequestIdRef = useRef(0);
   const activeCommunityIdRef = useRef(params.activeCommunityId);
-
-  useEffect(() => {
-    activeCommunityIdRef.current = params.activeCommunityId;
-  }, [params.activeCommunityId]);
+  activeCommunityIdRef.current = params.activeCommunityId;
 
   const reloadActiveCommunityAccess = useCallback(async (communityId: string, session: SessionT): Promise<void> => {
-    const usableSession = await params.ensureSession(session);
-    if (!usableSession) return;
     const requestedCommunityId = String(communityId ?? "").trim();
     if (!requestedCommunityId) return;
-    const seq = (accessSeqRef.current += 1);
-    setIsLoadingCommunityAccess(true);
+    if (String(activeCommunityIdRef.current ?? "").trim() !== requestedCommunityId) return;
+    const requestId = (accessRequestIdRef.current += 1);
+    dispatchCommunityAccessResolution({
+      type: "begin",
+      communityId: requestedCommunityId,
+      requestId,
+    });
     try {
+      const usableSession = await params.ensureSession(session);
+      if (!usableSession) {
+        throw new Error("session_unavailable");
+      }
       const row = await fetchCloudMyCommunityAccessById<SessionT, CommunityAccess>({
         session: usableSession,
         communityId: requestedCommunityId,
       });
-      if (
-        accessSeqRef.current === seq &&
-        activeCommunityIdRef.current === requestedCommunityId
-      ) {
-        setActiveCommunityAccess(row ?? null);
-      }
+      if (activeCommunityIdRef.current !== requestedCommunityId) return;
+      dispatchCommunityAccessResolution({
+        type: "resolve",
+        communityId: requestedCommunityId,
+        requestId,
+        access: row ?? null,
+      });
     } catch {
-      // ignore
-    } finally {
-      if (accessSeqRef.current === seq) {
-        setIsLoadingCommunityAccess(false);
-      }
+      if (activeCommunityIdRef.current !== requestedCommunityId) return;
+      dispatchCommunityAccessResolution({
+        type: "fail",
+        communityId: requestedCommunityId,
+        requestId,
+        error: "We couldn't verify your access to this community. Check your connection and retry.",
+      });
     }
   }, [params.ensureSession]);
 
   useEffect(() => {
     if (!params.session || !params.activeCommunityId) {
-      accessSeqRef.current += 1;
-      setActiveCommunityAccess(null);
-      setIsLoadingCommunityAccess(false);
+      const requestId = (accessRequestIdRef.current += 1);
+      dispatchCommunityAccessResolution({
+        type: "reset",
+        requestId,
+      });
       return;
     }
     void reloadActiveCommunityAccess(params.activeCommunityId, params.session);
@@ -159,12 +176,31 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     setActiveCommunityPresenceSummaryState(null);
   }, [params.activeCommunityId]);
 
-  const currentActiveCommunityAccess = useMemo(() => {
-    const communityId = String(params.activeCommunityId ?? "").trim();
-    if (!communityId) return null;
-    if (activeCommunityAccess?.community_id !== communityId) return null;
-    return activeCommunityAccess;
-  }, [activeCommunityAccess, params.activeCommunityId]);
+  const scopedCommunityAccessResolution = useMemo(
+    () => scopeCommunityAccessResolution(
+      communityAccessResolution,
+      params.activeCommunityId,
+    ),
+    [communityAccessResolution, params.activeCommunityId],
+  );
+  const currentActiveCommunityAccess =
+    scopedCommunityAccessResolution.status === "resolved"
+      ? scopedCommunityAccessResolution.access
+      : null;
+  const isLoadingCommunityAccess =
+    Boolean(params.session) && scopedCommunityAccessResolution.status === "pending";
+  const communityAccessLoadError =
+    scopedCommunityAccessResolution.status === "failed"
+      ? scopedCommunityAccessResolution.error
+      : null;
+  const retryActiveCommunityAccess = useCallback(() => {
+    if (!params.session || !params.activeCommunityId) return;
+    void reloadActiveCommunityAccess(params.activeCommunityId, params.session);
+  }, [
+    params.activeCommunityId,
+    params.session,
+    reloadActiveCommunityAccess,
+  ]);
 
   const activeCommunityPresenceSummary = useMemo(() => {
     const communityId = String(params.activeCommunityId ?? "").trim();
@@ -244,6 +280,8 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   return {
     activeCommunityAccess: currentActiveCommunityAccess,
     isLoadingCommunityAccess,
+    communityAccessLoadError,
+    retryActiveCommunityAccess,
     activeCommunityPresenceSummary,
     communitySocialSummary,
     reloadActiveCommunityAccess,

@@ -32,6 +32,9 @@ type BuildWebCommunitySurfaceProjectionParams = {
   hasResolvedCommunities: boolean;
   isLoadingCommunities: boolean;
   sessionUserId: WebCommunityChatPanelProps["sessionUserId"];
+  isResolvingCommunityAccess: WebCommunitySecondaryPanelsProps["settings"]["isResolvingCommunityAccess"];
+  communityAccessLoadError: WebCommunitySecondaryPanelsProps["settings"]["communityAccessLoadError"];
+  onRetryCommunityAccess: WebCommunitySecondaryPanelsProps["settings"]["onRetryCommunityAccess"];
   canViewActiveCommunitySettings: WebCommunitySecondaryPanelsProps["settings"]["canViewActiveCommunitySettings"];
   communitySettingsLayer: WebCommunitySecondaryPanelsProps["settings"]["communitySettingsLayer"];
   communitySettingsPane: CommunitySettingsPane;
@@ -180,6 +183,10 @@ export function buildWebCommunitySurfaceProjection(
       session: params.session,
       ensureSession: params.ensureSession,
       hasSession: params.hasAuthenticatedPresentation,
+      isResolvingCommunityAccess:
+        params.isAuthRecoveringSignedIn || params.isResolvingCommunityAccess,
+      communityAccessLoadError: params.communityAccessLoadError,
+      onRetryCommunityAccess: params.onRetryCommunityAccess,
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       communitySettingsLayer: params.communitySettingsLayer,
       activePane: params.communitySettingsPane,
