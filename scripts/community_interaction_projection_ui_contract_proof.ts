@@ -25,6 +25,9 @@ const app = read("apps/web/src/App.tsx");
 const interactionController = read(
   "apps/web/src/controllers/useWebCommunityInteractionProjection.ts",
 );
+const profileHydrationController = read(
+  "apps/web/src/controllers/useWebCommunityProfileHydrationController.ts",
+);
 const chatController = read(
   "apps/web/src/controllers/useWebCommunityChatController.ts",
 );
@@ -157,9 +160,14 @@ assert.match(
   "the projection owner should guard against stale roots after community switches",
 );
 assert.match(
+  profileHydrationController,
+  /params\.communityInteractionRoots[\s\S]*bundle\.root\.actor_user_id[\s\S]*params\.communityInteractionRepliesByRootId[\s\S]*bundle\.reply\.actor_user_id/,
+  "the profile-hydration owner should collect canonical root and reply actors",
+);
+assert.match(
   app,
-  /visibleCommunityProfileIds[\s\S]*communityInteractionRoots[\s\S]*bundle\.root\.actor_user_id[\s\S]*communityInteractionRepliesByRootId[\s\S]*bundle\.reply\.actor_user_id/,
-  "App should hydrate profiles for canonical root and reply actors",
+  /useWebCommunityProfileHydrationController\(\{[\s\S]*communityInteractionRoots,[\s\S]*communityInteractionRepliesByRootId,/,
+  "App should compose canonical interaction actors into the profile-hydration owner",
 );
 
 assert.match(
@@ -810,7 +818,7 @@ assert.doesNotMatch(
 );
 assert.match(
   memberPresenceSummaryQuery,
-  /online_last_active_at_by_user_id: stats\.onlineLastActiveAtByUserId/,
+  /online_last_active_at_by_user_id: summary\.onlineLastActiveAtByUserId/,
   "member-gated presence summary should include fresh online last-active timestamps",
 );
 assert.match(
