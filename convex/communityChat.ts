@@ -4,7 +4,6 @@ import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
   type CommunityMessageReactionLike,
-  type CommunityTypingPresenceLike,
   normalizeIdValue,
   requireCommunityChatAccess,
   requireCommunityModerator,
@@ -13,11 +12,15 @@ import {
   toIsoString,
 } from "./communityCore";
 import {
+  clearCommunityTypingLease,
+  renewCommunityTypingLease,
+  resolveCommunityTypingPresence,
+} from "./communityTypingPresenceCore";
+import {
   recordLegacyChatMessageInteractionBestEffort,
   syncLegacyChatMessageDeleteToInteractionCore,
   syncLegacyChatMessageEditToInteractionCore,
 } from "./communityInteractions";
-import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
 
 type StoredCommunityChatAttachment = {
@@ -32,9 +35,6 @@ type StoredCommunityChatAttachment = {
   truncated?: boolean | null;
 };
 
-const COMMUNITY_TYPING_DISPLAY_WINDOW_MS = 5000;
-const MAX_TYPING_PRESENCE_SCAN_ROWS = 25;
-const MAX_TYPING_PRESENCE_VISIBLE_ROWS = 12;
 const MAX_REACTION_MESSAGE_IDS_PER_REQUEST = 100;
 const MAX_REACTIONS_PER_MESSAGE = 100;
 const MAX_REACTION_DELETE_ROWS = 500;
@@ -64,10 +64,6 @@ async function maybeResolveStorageUrl(ctx: any, storageId: unknown): Promise<str
   if (!resolvedStorageId) return null;
   const resolved = await ctx.storage.getUrl(resolvedStorageId as any);
   return typeof resolved === "string" && resolved.trim() ? resolved.trim() : null;
-}
-
-async function resolveTypingProfileFields(ctx: any, userId: any) {
-  return await resolveUserProfileDisplayProjection(ctx, userId);
 }
 
 function normalizeStoredChatAttachment(
@@ -366,35 +362,41 @@ export const setCommunityTyping = mutation({
       userId: args.userId,
     });
 
-    const nowMs = Date.now();
-    const displayUntil = nowMs + COMMUNITY_TYPING_DISPLAY_WINDOW_MS;
-    const existing = (await ctx.db
-      .query("communityTypingPresence" as any)
-      .withIndex("by_community_user", (q: any) =>
-        q.eq("communityId", args.communityId).eq("userId", args.userId),
-      )
-      .unique()) as CommunityTypingPresenceLike | null;
-
-    if (existing) {
-      await ctx.db.patch(existing._id as any, {
-        displayUntil,
-        updatedAt: nowMs,
-        // Always set rootId so switching between channel and a thread updates the scope
-        // (undefined clears it back to channel-level).
-        rootId: args.rootId,
-      });
-      return { ok: true, display_until_ms: displayUntil };
-    }
-
-    await ctx.db.insert("communityTypingPresence" as any, {
+    const lease = await renewCommunityTypingLease({
+      ctx,
       communityId: args.communityId,
       userId: args.userId,
       rootId: args.rootId,
-      displayUntil,
-      createdAt: nowMs,
-      updatedAt: nowMs,
     });
-    return { ok: true, display_until_ms: displayUntil };
+    return { ok: true, display_until_ms: lease.displayUntil };
+  },
+});
+
+export const clearCommunityTyping = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    rootId: v.optional(v.id("communityInteractionRoots")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const result = await clearCommunityTypingLease({
+      ctx,
+      communityId: args.communityId,
+      userId,
+      rootId: args.rootId,
+    });
+    return { ok: true, cleared: result.cleared };
   },
 });
 
@@ -411,41 +413,20 @@ export const listCommunityTyping = query({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    await requireCommunityChatAccess({
+    const { community } = await requireCommunityChatAccess({
       ctx,
       communityId: args.communityId,
       userId: args.userId,
     });
-
-    const nowMs = Date.now();
-    const rows = (await ctx.db
-      .query("communityTypingPresence" as any)
-      .withIndex("by_community_displayUntil", (q: any) =>
-        q.eq("communityId", args.communityId).gt("displayUntil", nowMs),
-      )
-      .order("desc")
-      .take(MAX_TYPING_PRESENCE_SCAN_ROWS)) as CommunityTypingPresenceLike[];
-    const publicUserIdCache = new Map<string, string | null>();
-    const activeRows = rows
-      .filter((row) => normalizeIdValue(row.userId) !== normalizeIdValue(args.userId));
-    const mapped = await Promise.all(
-      activeRows
-        .slice(0, MAX_TYPING_PRESENCE_VISIBLE_ROWS)
-        .map(async (row) => {
-          const publicUserId = await resolvePublicUserId(ctx, row.userId, publicUserIdCache);
-          const profile = await resolveTypingProfileFields(ctx, row.userId);
-          return {
-            user_id: publicUserId ?? normalizeIdValue(row.userId),
-            ...profile,
-            root_id: row.rootId ? normalizeIdValue(row.rootId) : null,
-            display_until_ms: row.displayUntil,
-            updated_at: toIsoString(row.updatedAt),
-          };
-        }),
-    );
+    const presence = await resolveCommunityTypingPresence({
+      ctx,
+      community,
+      viewerUserId: args.userId,
+    });
     return {
-      users: mapped,
-      total_count: activeRows.length,
+      users: presence.users,
+      total_count: presence.totalCount,
+      total_count_capped: presence.totalCountCapped,
     };
   },
 });

@@ -225,6 +225,7 @@ export type CommunityTypingPresenceUser = {
 export type CommunityTypingPresenceBundle = {
   users: CommunityTypingPresenceUser[];
   total_count: number;
+  total_count_capped?: boolean;
 };
 
 export type CommunityAccess = {

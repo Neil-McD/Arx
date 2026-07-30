@@ -19,6 +19,7 @@ const authSessions = read("convex/authSessions.ts");
 const webAuthController = read("apps/web/src/controllers/useWebAppAuthController.ts");
 const communityTypes = read("shared/communityTypes.ts");
 const directTypingHook = read("shared/useDirectMessageTypingPresence.ts");
+const typingPresenceContract = read("shared/typingPresenceContract.ts");
 const account = read("convex/account.ts");
 const anonymousCleanup = read("convex/anonymousUserCleanup.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
@@ -220,7 +221,7 @@ assert.match(directMessages, /listDirectTyping = query/, "backend must expose a 
 assert.match(dmSetTypingMutation, /requireActiveUserParticipant/, "typing writes must require active conversation participation");
 assert.doesNotMatch(dmSetTypingMutation, /requireProfileSetupCompleteForUser|profile_setup_required/, "typing writes must not depend on public-profile completion");
 assert.match(dmSetTypingMutation, /requireDirectConversationSendAccess/, "typing writes must require current DM send access");
-assert.match(dmSetTypingMutation, /DM_TYPING_DISPLAY_WINDOW_MS/, "typing writes must set a bounded display TTL");
+assert.match(dmSetTypingMutation, /TYPING_PRESENCE_LEASE_DURATION_MS/, "typing writes must use the canonical bounded display TTL");
 assert.match(dmSetTypingMutation, /query\("dmTypingPresence" as any\)[\s\S]*withIndex\("by_conversation_user"/, "typing writes must upsert by conversation and user");
 assert.match(dmClearTypingMutation, /requireActiveUserParticipant/, "typing clears must require active conversation participation");
 assert.doesNotMatch(dmClearTypingMutation, /requireDirectConversationSendAccess|requireProfileSetupCompleteForUser|requireDirectMessageRelationshipAccess/, "typing clears must not require current send access");
@@ -230,7 +231,7 @@ assert.match(dmListTypingQuery, /requireActiveUserParticipant/, "typing reads mu
 assert.doesNotMatch(dmListTypingQuery, /requireDirectConversationSendAccess|requireDirectMessageRelationshipAccess/, "typing reads must not require current send access");
 assert.match(dmListTypingQuery, /withIndex\("by_conversation_displayUntil"[\s\S]*gt\("displayUntil", nowMs\)/, "typing reads must query only non-expired rows through the displayUntil index");
 assert.match(dmListTypingQuery, /normalizeIdValue\(row\.userId\) !== normalizeIdValue\(viewerUserId\)/, "typing reads must exclude the viewer");
-assert.match(dmListTypingQuery, /MAX_DM_TYPING_PRESENCE_SCAN_ROWS/, "typing reads must stay bounded");
+assert.match(dmListTypingQuery, /DIRECT_MESSAGE_TYPING_PRESENCE_SCAN_LIMIT/, "typing reads must stay bounded");
 assert.match(
   account,
   /ACCOUNT_DELETION_QUARANTINE_CODE[\s\S]*account_delete_lifecycle_migration_blocked[\s\S]*throw new ConvexError/,
@@ -310,7 +311,12 @@ assert.match(convexRealtimeAuth, /REAUTH_RETRY_DELAYS_MS[\s\S]*applyAuth\(\)/, "
 assert.match(webAuthController, /options\?\.forceRefresh[\s\S]*refreshAuthSessionLockedResult\(\)/, "forced realtime refreshes must reuse the app's central refresh lock");
 assert.doesNotMatch(authSessions, /\["id_token", "idToken"\]\) \?\? options\.fallback\?\.idToken/, "refresh normalization must not preserve a stale ID token when the provider omits it");
 assert.match(directTypingHook, /useDirectMessageTypingPresence/, "web must have a dedicated DM typing hook");
-assert.match(directTypingHook, /DEFAULT_TYPING_THROTTLE_MS = 2000/, "DM typing heartbeat must be throttled");
+assert.match(
+  typingPresenceContract,
+  /TYPING_PRESENCE_RENEW_INTERVAL_MS = 2_000/,
+  "typing renewal timing must have one shared owner",
+);
+assert.match(directTypingHook, /TYPING_PRESENCE_RENEW_INTERVAL_MS/, "DM typing heartbeat must use the canonical throttle");
 assert.match(directTypingHook, /subscribeCloudDirectTyping/, "DM typing hook must subscribe to live backend typing state");
 assert.match(directTypingHook, /setCloudDirectTyping/, "DM typing hook must publish typing heartbeats through the backend");
 assert.match(directTypingHook, /row\.display_until_ms > nowMs/, "DM typing hook must drop expired presence locally");

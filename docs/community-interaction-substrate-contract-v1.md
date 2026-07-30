@@ -177,6 +177,22 @@ clamps that request to the current readable head. Legacy
 lazy-migration fallbacks only. There is no per-root follow, mute, or drawer-read
 state.
 
+### Typing presence
+
+Typing presence is an ephemeral server-issued lease, never durable message or
+read state. Community chat keeps one community-user row whose optional root
+identifies the user's current typing scope. Channel and thread composers share
+one client renewal owner, one renewal interval, and one active scope.
+
+Every renewal is authenticated, reauthorized, server-timed, and bounded by the
+canonical lease duration. Thread roots must be live, member-visible roots owned
+by the selected community. Active read projections reauthorize candidate users,
+use the `displayUntil` index, and disclose when their bounded count is capped.
+A scope-aware clear may delete only the same scope it observed, so a delayed
+channel clear cannot erase a newer thread signal. Explicit clear handles empty
+inputs, blur, send, navigation, and scope changes; lease expiry remains the
+crash-safe fallback.
+
 ### `interactionModerationEvents`
 
 Append-only events for edit, hide, unhide, tombstone, lock, pin, unpin, and privacy purge requests.

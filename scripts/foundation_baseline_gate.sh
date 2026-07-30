@@ -43,6 +43,7 @@ run_step "Community public identity guard" bash scripts/community_public_identit
 run_step "Community deletion quarantine behavior" npm run check:community-cognition-cleanup-behavior
 run_step "Community access role policy proof" npm run check:community-access-role-policy-proof
 run_step "Community presence lease proof" npm run check:community-presence-lease-proof
+run_step "Community typing presence proof" npm run check:community-typing-presence-proof
 run_step "Community subscription lifecycle policy proof" npm run check:community-subscription-lifecycle-policy-proof
 run_step "Runtime turn contract guard" bash scripts/runtime_turn_contract_guard.sh
 run_step "Canonical operation surface proof" npm run check:canonical-operation-surface-proof

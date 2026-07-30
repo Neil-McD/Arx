@@ -15,6 +15,11 @@ import { resolveViewerDirectMessageRelationship } from "./profileRelationshipCor
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import { getUniqueUserByNormalizedHandle } from "./profileCore";
 import { stripChatInlineMarkdown } from "../shared/chatInlineMarkdown";
+import {
+  DIRECT_MESSAGE_TYPING_PRESENCE_SCAN_LIMIT,
+  DIRECT_MESSAGE_TYPING_PRESENCE_VISIBLE_LIMIT,
+  TYPING_PRESENCE_LEASE_DURATION_MS,
+} from "../shared/typingPresenceContract";
 import { nextDirectMessageReadSeq } from "./directMessageReadCore";
 
 type UserRow = {
@@ -91,9 +96,6 @@ const MAX_DM_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_DM_ATTACHMENT_TOTAL_BYTES = 25 * 1024 * 1024;
 const MAX_DM_ATTACHMENT_NAME_CHARS = 256;
 const MAX_DM_ATTACHMENT_MIME_CHARS = 160;
-const DM_TYPING_DISPLAY_WINDOW_MS = 5000;
-const MAX_DM_TYPING_PRESENCE_SCAN_ROWS = 12;
-const MAX_DM_TYPING_PRESENCE_VISIBLE_ROWS = 4;
 const MAX_DM_GLOBAL_SOURCE_COMMUNITIES = 12;
 const MAX_DM_GLOBAL_OWNED_COMMUNITY_ROWS = 12;
 const MAX_DM_GLOBAL_SOURCE_MEMBERSHIP_ROWS = 48;
@@ -1431,7 +1433,7 @@ export const setDirectTyping = mutation({
     });
 
     const nowMs = Date.now();
-    const displayUntil = nowMs + DM_TYPING_DISPLAY_WINDOW_MS;
+    const displayUntil = nowMs + TYPING_PRESENCE_LEASE_DURATION_MS;
     const existing = (await ctx.db
       .query("dmTypingPresence" as any)
       .withIndex("by_conversation_user", (q: any) =>
@@ -1511,13 +1513,13 @@ export const listDirectTyping = query({
         q.eq("conversationId", args.conversationId).gt("displayUntil", nowMs),
       )
       .order("desc")
-      .take(MAX_DM_TYPING_PRESENCE_SCAN_ROWS)) as DirectMessageTypingPresenceLike[];
+      .take(DIRECT_MESSAGE_TYPING_PRESENCE_SCAN_LIMIT)) as DirectMessageTypingPresenceLike[];
     const activeRows = rows.filter(
       (row) => normalizeIdValue(row.userId) !== normalizeIdValue(viewerUserId),
     );
     const users = await Promise.all(
       activeRows
-        .slice(0, MAX_DM_TYPING_PRESENCE_VISIBLE_ROWS)
+        .slice(0, DIRECT_MESSAGE_TYPING_PRESENCE_VISIBLE_LIMIT)
         .map((row) => mapDirectTypingPresence(ctx, row)),
     );
     return {

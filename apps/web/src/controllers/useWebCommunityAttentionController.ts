@@ -9,7 +9,6 @@ import {
 import type { AuthSession } from "../auth";
 import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
 import { acknowledgeCloudCommunityChatRead } from "../../../../shared/cloudCommunityAttentionGateway";
-import { setCloudCommunityTyping } from "../../../../shared/cloudCommunityChatGateway";
 import { useCommunityAttentionController } from "../../../../shared/useCommunityAttentionController";
 import { useCommunityTypingPresence } from "../../../../shared/useCommunityTypingPresence";
 
@@ -52,7 +51,6 @@ type UseWebCommunityAttentionControllerParams = {
   session: AuthSession | null;
   chat: {
     hasResolved: boolean;
-    inputValue: string;
   };
   interactions: {
     roots: InteractionRootLike[];
@@ -103,35 +101,17 @@ export function useWebCommunityAttentionModel(
   } = params;
   const isCommunityChatActive =
     activePage === "community" && communityTab === "chat";
-  const typingPresence = useCommunityTypingPresence({
+  const {
+    presence: typingPresence,
+    signalTyping,
+    clearTyping,
+  } = useCommunityTypingPresence({
     isEnabled: isCommunityChatActive && chat.hasResolved,
     session,
     ensureSession,
     activeCommunityId,
     canPostMessages,
-    inputValue: chat.inputValue,
   });
-
-  const threadTypingLastSentAtRef = useRef(0);
-  const signalThreadTyping = useCallback((rootId: string) => {
-    if (!session || !activeCommunityId || !rootId || !canPostMessages) return;
-    const now = Date.now();
-    if (now - threadTypingLastSentAtRef.current < 600) return;
-    threadTypingLastSentAtRef.current = now;
-    void (async () => {
-      try {
-        const usableSession = await ensureSession(session);
-        if (!usableSession) return;
-        await setCloudCommunityTyping({
-          session: usableSession,
-          communityId: activeCommunityId,
-          rootId,
-        });
-      } catch {
-        // Typing is best-effort; message delivery remains independent.
-      }
-    })();
-  }, [activeCommunityId, canPostMessages, ensureSession, session]);
 
   const {
     attentionByCommunityId,
@@ -339,7 +319,8 @@ export function useWebCommunityAttentionModel(
 
   return {
     typingPresence,
-    signalThreadTyping,
+    signalTyping,
+    clearTyping,
     attentionByCommunityId,
     chatDividerBoundary,
     handleChatCaughtUp,

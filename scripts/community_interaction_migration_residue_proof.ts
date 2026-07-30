@@ -23,6 +23,7 @@ const attachmentBridge = read("convex/communityInteractionAttachmentBridge.ts");
 const legacyBridge = read("convex/communityInteractionLegacyBridge.ts");
 const legacyAttachments = read("convex/communityInteractionLegacyAttachments.ts");
 const communityChat = read("convex/communityChat.ts");
+const communityTypingCore = read("convex/communityTypingPresenceCore.ts");
 const backfill = read("convex/communityInteractionBackfill.ts");
 const schema = read("convex/schema.ts");
 const chatGateway = read("shared/cloudCommunityChatGateway.ts");
@@ -298,15 +299,18 @@ assert.doesNotMatch(
   "canonical chat-thread lookup should not collect and sort all community threads",
 );
 
-const listCommunityTyping = extractExportedConst(communityChat, "listCommunityTyping");
-assert.match(listCommunityTyping, /MAX_TYPING_PRESENCE_SCAN_ROWS/, "typing presence reads should use a named scan cap");
 assert.match(
-  listCommunityTyping,
-  /withIndex\("by_community_displayUntil", \(q: any\) =>[\s\S]*\.gt\("displayUntil", nowMs\)[\s\S]*\.order\("desc"\)[\s\S]*\.take\(MAX_TYPING_PRESENCE_SCAN_ROWS\)/,
+  communityTypingCore,
+  /COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT/,
+  "typing presence reads should use the canonical named scan cap",
+);
+assert.match(
+  communityTypingCore,
+  /withIndex\("by_community_displayUntil", \(q: any\) =>[\s\S]*\.gt\("displayUntil", nowMs\)[\s\S]*\.order\("desc"\)[\s\S]*\.take\(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT \+ 1\)/,
   "typing presence reads should use the active-window index and bounded take",
 );
 assert.doesNotMatch(
-  listCommunityTyping,
+  communityTypingCore,
   /\.collect\(\)|\.sort\(/,
   "typing presence reads should not collect/sort all community typing rows",
 );

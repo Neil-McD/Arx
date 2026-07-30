@@ -649,6 +649,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             users={(props.typingPresence?.users ?? []).filter(
               (user) => user.user_id !== props.currentUserId && !user.root_id,
             )}
+            countCapped={Boolean(props.typingPresence?.total_count_capped)}
             displayName={props.displayName}
             getAvatarColor={props.getAvatarColor}
             getInitials={props.getInitials}
@@ -673,6 +674,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                 users={(props.typingPresence?.users ?? []).filter(
                   (user) => user.user_id !== props.currentUserId && !user.root_id,
                 )}
+                countCapped={Boolean(props.typingPresence?.total_count_capped)}
                 displayName={props.displayName}
                 getAvatarColor={props.getAvatarColor}
                 getInitials={props.getInitials}
@@ -994,6 +996,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               users={(props.typingPresence?.users ?? []).filter(
                 (user) => user.user_id !== props.currentUserId && user.root_id === selectedRoot.root.id,
               )}
+              countCapped={Boolean(props.typingPresence?.total_count_capped)}
               displayName={props.displayName}
               getAvatarColor={props.getAvatarColor}
               getInitials={props.getInitials}
@@ -1006,6 +1009,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   users={(props.typingPresence?.users ?? []).filter(
                     (user) => user.user_id !== props.currentUserId && user.root_id === selectedRoot.root.id,
                   )}
+                  countCapped={Boolean(props.typingPresence?.total_count_capped)}
                   displayName={props.displayName}
                   getAvatarColor={props.getAvatarColor}
                   getInitials={props.getInitials}

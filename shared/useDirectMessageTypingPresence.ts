@@ -10,6 +10,7 @@ import {
   subscribeCloudDirectTyping,
   type CloudDirectMessagesLiveClient,
 } from "./cloudDirectMessagesGateway";
+import { TYPING_PRESENCE_RENEW_INTERVAL_MS } from "./typingPresenceContract";
 
 type SessionLike = {
   access_token?: string;
@@ -26,7 +27,6 @@ type UseDirectMessageTypingPresenceArgs<SessionT extends SessionLike> = {
   throttleMs?: number;
 };
 
-const DEFAULT_TYPING_THROTTLE_MS = 2000;
 const EMPTY_TYPING_PRESENCE: DirectMessageTypingPresenceBundle = {
   users: [],
   total_count: 0,
@@ -135,7 +135,10 @@ export function useDirectMessageTypingPresence<SessionT extends SessionLike>(
       return;
     }
 
-    const throttleMs = Math.max(500, args.throttleMs ?? DEFAULT_TYPING_THROTTLE_MS);
+    const throttleMs = Math.max(
+      500,
+      args.throttleMs ?? TYPING_PRESENCE_RENEW_INTERVAL_MS,
+    );
     const now = Date.now();
     if (now - lastSentAtRef.current < throttleMs) return;
     lastSentAtRef.current = now;

@@ -519,6 +519,7 @@ export function ProfileHoverCard(props: {
 
 export function TypingIndicator(props: {
   users: CommunityTypingPresenceUser[];
+  countCapped?: boolean;
   displayName: (userId: string) => string;
   getAvatarColor: (seed: string) => string;
   getInitials: (value: string) => string;
@@ -531,7 +532,7 @@ export function TypingIndicator(props: {
       ? `${nameOf(props.users[0]!)} is typing`
       : props.users.length === 2
         ? `${nameOf(props.users[0]!)} and ${nameOf(props.users[1]!)} are typing`
-        : `${nameOf(props.users[0]!)} and ${props.users.length - 1} others are typing`;
+        : `${nameOf(props.users[0]!)} and ${props.users.length - 1}${props.countCapped ? "+" : ""} others are typing`;
   return (
     <div className="community-interaction-typing" aria-live="polite">
       <span className="community-interaction-typing-avatars">

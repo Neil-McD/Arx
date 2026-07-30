@@ -1,16 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   CommunityTypingPresenceBundle,
   CommunityTypingPresenceUser,
 } from "./communityTypes";
 import {
+  clearCloudCommunityTyping,
   createCloudCommunityChatLiveClient,
   setCloudCommunityTyping,
   subscribeCloudCommunityTyping,
   type CloudCommunityChatLiveClient,
 } from "./cloudCommunityChatGateway";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
+import { TYPING_PRESENCE_RENEW_INTERVAL_MS } from "./typingPresenceContract";
 
 type SessionLike = {
   access_token: string;
@@ -23,15 +25,24 @@ type UseCommunityTypingPresenceArgs<SessionT extends SessionLike> = {
   ensureSession?: EnsureSessionFn<SessionT>;
   activeCommunityId: string | null;
   canPostMessages: boolean;
-  inputValue: string;
-  throttleMs?: number;
 };
 
-const DEFAULT_TYPING_THROTTLE_MS = 2000;
+type CommunityTypingPresenceController = {
+  presence: CommunityTypingPresenceBundle;
+  signalTyping: (rootId?: string | null) => void;
+  clearTyping: (rootId?: string | null) => void;
+};
+
 const EMPTY_TYPING_PRESENCE: CommunityTypingPresenceBundle = {
   users: [],
   total_count: 0,
+  total_count_capped: false,
 };
+
+function normalizeTypingRootId(value?: string | null): string | null {
+  const normalized = String(value ?? "").trim();
+  return normalized || null;
+}
 
 function normalizeTypingPresencePayload(payload: unknown): CommunityTypingPresenceBundle {
   if (Array.isArray(payload)) {
@@ -39,6 +50,7 @@ function normalizeTypingPresencePayload(payload: unknown): CommunityTypingPresen
     return {
       users,
       total_count: users.length,
+      total_count_capped: false,
     };
   }
   if (payload && typeof payload === "object") {
@@ -48,6 +60,7 @@ function normalizeTypingPresencePayload(payload: unknown): CommunityTypingPresen
     return {
       users,
       total_count: Math.max(users.length, totalCount),
+      total_count_capped: Boolean(record.total_count_capped),
     };
   }
   return EMPTY_TYPING_PRESENCE;
@@ -55,11 +68,13 @@ function normalizeTypingPresencePayload(payload: unknown): CommunityTypingPresen
 
 export function useCommunityTypingPresence<SessionT extends SessionLike>(
   args: UseCommunityTypingPresenceArgs<SessionT>,
-): CommunityTypingPresenceBundle {
+): CommunityTypingPresenceController {
   const argsRef = useRef(args);
   argsRef.current = args;
   const liveClientRef = useRef<CloudCommunityChatLiveClient | null>(null);
-  const lastSentAtRef = useRef(0);
+  const activeScopeRef = useRef<string | null | undefined>(undefined);
+  const lastSentAtByScopeRef = useRef(new Map<string, number>());
+  const writeQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [presence, setPresence] = useState<CommunityTypingPresenceBundle>(EMPTY_TYPING_PRESENCE);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -73,21 +88,26 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
 
     let cancelled = false;
     let dispose: (() => void) | null = null;
+    const capturedSession = args.session;
+    const capturedEnsureSession = args.ensureSession;
+    const capturedCommunityId = args.activeCommunityId;
 
     const subscribe = async () => {
       try {
-        const latestArgs = argsRef.current;
-        const usableSession = await resolveUsableSession(args.session, latestArgs.ensureSession);
+        const usableSession = await resolveUsableSession(
+          capturedSession,
+          capturedEnsureSession,
+        );
         if (!usableSession || cancelled) return;
         const liveClient = createCloudCommunityChatLiveClient({
           session: usableSession,
-          ensureSession: latestArgs.ensureSession,
+          ensureSession: capturedEnsureSession,
         });
         liveClientRef.current?.close();
         liveClientRef.current = liveClient;
         dispose = subscribeCloudCommunityTyping<CommunityTypingPresenceBundle>({
           liveClient,
-          communityId: args.activeCommunityId!,
+          communityId: capturedCommunityId,
           onUpdate: (nextPresence) => {
             if (cancelled) return;
             setPresence(normalizeTypingPresencePayload(nextPresence));
@@ -107,6 +127,28 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
       liveClientRef.current?.close();
       liveClientRef.current = null;
       setPresence(EMPTY_TYPING_PRESENCE);
+      const activeScope = activeScopeRef.current;
+      activeScopeRef.current = undefined;
+      lastSentAtByScopeRef.current.clear();
+      if (activeScope === undefined) return;
+      writeQueueRef.current = writeQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          try {
+            const usableSession = await resolveUsableSession(
+              capturedSession,
+              capturedEnsureSession,
+            );
+            if (!usableSession) return;
+            await clearCloudCommunityTyping({
+              session: usableSession,
+              communityId: capturedCommunityId,
+              rootId: activeScope,
+            });
+          } catch {
+            // Lease expiry remains the crash-safe cleanup path.
+          }
+        });
     };
   }, [args.activeCommunityId, args.ensureSession, args.isEnabled, args.session]);
 
@@ -118,46 +160,84 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
     return () => window.clearInterval(intervalId);
   }, [presence.users.length]);
 
-  useEffect(() => {
+  const signalTyping = useCallback((rootId?: string | null) => {
+    const latestArgs = argsRef.current;
     if (
-      !args.isEnabled ||
-      !args.session ||
-      !args.activeCommunityId ||
-      !args.canPostMessages ||
-      args.inputValue.trim().length === 0
+      !latestArgs.isEnabled
+      || !latestArgs.session
+      || !latestArgs.activeCommunityId
+      || !latestArgs.canPostMessages
     ) {
       return;
     }
-
-    const throttleMs = Math.max(500, args.throttleMs ?? DEFAULT_TYPING_THROTTLE_MS);
+    const scope = normalizeTypingRootId(rootId);
+    const scopeKey = scope ?? "channel";
     const now = Date.now();
-    if (now - lastSentAtRef.current < throttleMs) return;
-    lastSentAtRef.current = now;
+    const lastSentAt = lastSentAtByScopeRef.current.get(scopeKey) ?? 0;
+    if (
+      activeScopeRef.current === scope
+      && now - lastSentAt < TYPING_PRESENCE_RENEW_INTERVAL_MS
+    ) {
+      return;
+    }
+    activeScopeRef.current = scope;
+    lastSentAtByScopeRef.current.set(scopeKey, now);
+    const communityId = latestArgs.activeCommunityId;
+    const session = latestArgs.session;
+    const ensureSession = latestArgs.ensureSession;
+    writeQueueRef.current = writeQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          const usableSession = await resolveUsableSession(session, ensureSession);
+          const currentArgs = argsRef.current;
+          if (
+            !usableSession
+            || !currentArgs.isEnabled
+            || currentArgs.activeCommunityId !== communityId
+            || activeScopeRef.current !== scope
+          ) {
+            return;
+          }
+          await setCloudCommunityTyping({
+            session: usableSession,
+            communityId,
+            rootId: scope,
+          });
+        } catch {
+          // Soft failure: the typed message itself is still sent through the chat mutation path.
+        }
+      });
+  }, []);
 
-    void (async () => {
-      try {
-        const latestArgs = argsRef.current;
-        const usableSession = await resolveUsableSession(args.session, latestArgs.ensureSession);
-        if (!usableSession || !latestArgs.activeCommunityId) return;
-        await setCloudCommunityTyping({
-          session: usableSession,
-          communityId: latestArgs.activeCommunityId,
-        });
-      } catch {
-        // Soft failure: the typed message itself is still sent through the chat mutation path.
-      }
-    })();
-  }, [
-    args.activeCommunityId,
-    args.canPostMessages,
-    args.ensureSession,
-    args.inputValue,
-    args.isEnabled,
-    args.session,
-    args.throttleMs,
-  ]);
+  const clearTyping = useCallback((rootId?: string | null) => {
+    const scope = normalizeTypingRootId(rootId);
+    if (activeScopeRef.current !== scope) return;
+    activeScopeRef.current = undefined;
+    lastSentAtByScopeRef.current.delete(scope ?? "channel");
+    const latestArgs = argsRef.current;
+    if (!latestArgs.session || !latestArgs.activeCommunityId) return;
+    const communityId = latestArgs.activeCommunityId;
+    const session = latestArgs.session;
+    const ensureSession = latestArgs.ensureSession;
+    writeQueueRef.current = writeQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          const usableSession = await resolveUsableSession(session, ensureSession);
+          if (!usableSession) return;
+          await clearCloudCommunityTyping({
+            session: usableSession,
+            communityId,
+            rootId: scope,
+          });
+        } catch {
+          // Lease expiry remains the crash-safe cleanup path.
+        }
+      });
+  }, []);
 
-  return useMemo(
+  const activePresence = useMemo(
     () => {
       const users = presence.users.filter(
         (row) => Number.isFinite(row.display_until_ms) && row.display_until_ms > nowMs,
@@ -166,8 +246,18 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
       return {
         users,
         total_count: Math.max(users.length, presence.total_count),
+        total_count_capped: Boolean(presence.total_count_capped),
       };
     },
     [nowMs, presence],
+  );
+
+  return useMemo(
+    () => ({
+      presence: activePresence,
+      signalTyping,
+      clearTyping,
+    }),
+    [activePresence, clearTyping, signalTyping],
   );
 }

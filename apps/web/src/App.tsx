@@ -1244,7 +1244,8 @@ export default function App() {
   );
   const {
     typingPresence: communityTypingUsers,
-    signalThreadTyping,
+    signalTyping: signalCommunityTyping,
+    clearTyping: clearCommunityTyping,
     attentionByCommunityId,
     chatDividerBoundary,
     handleChatCaughtUp,
@@ -1258,7 +1259,6 @@ export default function App() {
     session,
     chat: {
       hasResolved: hasResolvedCommunityChat,
-      inputValue: communityMessageInput,
     },
     interactions: {
       roots: communityInteractionRoots,
@@ -2257,7 +2257,8 @@ export default function App() {
       communityMessageById,
       messageReactions,
       typingPresence: communityTypingUsers,
-      onThreadTypingSignal: signalThreadTyping,
+      onCommunityTypingSignal: signalCommunityTyping,
+      onCommunityTypingClear: clearCommunityTyping,
       profilesByUserId: savedProfilesByUserId,
       mentionableCommunityMembers: communityDirectoryMembers,
       editingMessageId,

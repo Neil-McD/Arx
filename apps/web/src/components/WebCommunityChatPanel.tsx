@@ -300,7 +300,8 @@ export type WebCommunityChatPanelProps = {
   communityMessageById: Map<string, CommunityChatMessage>;
   messageReactions: MessageReaction[];
   typingPresence: CommunityTypingPresenceBundle;
-  onThreadTypingSignal?: (rootId: string) => void;
+  onCommunityTypingSignal?: (rootId?: string | null) => void;
+  onCommunityTypingClear?: (rootId?: string | null) => void;
   profilesByUserId: Record<string, UserProfile>;
   mentionableCommunityMembers: CommunityMentionMember[];
   editingMessageId: string | null;
@@ -450,7 +451,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     communityMessageById,
     messageReactions,
     typingPresence,
-    onThreadTypingSignal,
+    onCommunityTypingSignal,
+    onCommunityTypingClear,
     profilesByUserId,
     mentionableCommunityMembers,
     editingMessageId,
@@ -755,6 +757,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
         return;
       }
     }
+    onCommunityTypingClear?.(null);
     await onSendCommunityMessage();
   }, [
     activeOnboardingSession?.id,
@@ -764,7 +767,20 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     isOnboardingIntroductionReady,
     isSendingCommunityMessage,
     onSendCommunityMessage,
+    onCommunityTypingClear,
     restorePreviewComposerSnapshot,
+  ]);
+
+  useEffect(() => {
+    if (communityMessageInput.trim()) {
+      onCommunityTypingSignal?.(null);
+      return;
+    }
+    onCommunityTypingClear?.(null);
+  }, [
+    communityMessageInput,
+    onCommunityTypingClear,
+    onCommunityTypingSignal,
   ]);
 
   const mainComposerIdeaPlaceholders = useMemo(
@@ -1013,6 +1029,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   const typingUsers = typingPresence.users;
   const typingTotalCount = Math.max(typingUsers.length, Math.floor(Number(typingPresence.total_count ?? 0)));
+  const typingCountSuffix = typingPresence.total_count_capped ? "+" : "";
   const typingLabel =
     typingTotalCount === 0
       ? null
@@ -1021,8 +1038,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
         : typingTotalCount === 2 && typingUsers[0] && typingUsers[1]
           ? `${typingUsers[0].display_name || displayName(typingUsers[0].user_id)} and ${typingUsers[1].display_name || displayName(typingUsers[1].user_id)} are typing...`
           : typingUsers[0]
-            ? `${typingUsers[0].display_name || displayName(typingUsers[0].user_id)} and ${typingTotalCount - 1} others are typing...`
-            : `${typingTotalCount} people are typing...`;
+            ? `${typingUsers[0].display_name || displayName(typingUsers[0].user_id)} and ${typingTotalCount - 1}${typingCountSuffix} others are typing...`
+            : `${typingTotalCount}${typingCountSuffix} people are typing...`;
 
   const reactionsByMessageId = useMemo(() => {
     const byMessageId = new Map<string, MessageReaction[]>();
@@ -1260,10 +1277,28 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     }
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-    if (value.trim() && selectedInteractionRootId) {
-      onThreadTypingSignal?.(selectedInteractionRootId);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedInteractionRootId) return;
+    if (drawerReplyInput.trim()) {
+      onCommunityTypingSignal?.(selectedInteractionRootId);
+      return;
     }
-  }, [selectedInteractionRootId, onThreadTypingSignal]);
+    onCommunityTypingClear?.(selectedInteractionRootId);
+  }, [
+    drawerReplyInput,
+    onCommunityTypingClear,
+    onCommunityTypingSignal,
+    selectedInteractionRootId,
+  ]);
+
+  useEffect(() => {
+    if (!selectedInteractionRootId) return;
+    return () => {
+      onCommunityTypingClear?.(selectedInteractionRootId);
+    };
+  }, [onCommunityTypingClear, selectedInteractionRootId]);
 
   const drawerMention = useMentionAutocomplete({
     candidates: drawerMentionCandidates,
@@ -1295,10 +1330,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     if (!normalized) return;
     drawerReplyAutoSeedTokenRef.current = null;
     setDrawerReplyInput((previous) => mergeVoiceTranscript(previous, normalized));
-    if (selectedInteractionRootId) {
-      onThreadTypingSignal?.(selectedInteractionRootId);
-    }
-  }, [selectedInteractionRootId, onThreadTypingSignal]);
+  }, []);
 
   const drawerVoiceTranscriptTarget = useMemo<CommunityVoiceTranscriptTarget>(
     () => ({
@@ -1316,6 +1348,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     // Only send mentions whose exact inserted token still survives as a real
     // mention token in the final text.
     const mentions = drawerReplyMentions.filter((mention) => textContainsMentionToken(text, mention.token));
+    if (selectedInteractionRootId) {
+      onCommunityTypingClear?.(selectedInteractionRootId);
+    }
     await onSendCommunityMessage({
       text,
       attachments,
@@ -1341,6 +1376,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     drawerReplyMentions,
     drawerReplyTarget,
     onSendCommunityMessage,
+    onCommunityTypingClear,
+    selectedInteractionRootId,
     setDrawerReplyAttachmentsAndRef,
   ]);
 
@@ -1564,7 +1601,10 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             onClick={(event) => {
               if (!isCommunityOnboardingPreview) mainMention.syncFromTextarea(event.currentTarget);
             }}
-            onBlur={() => mainMention.close()}
+            onBlur={() => {
+              mainMention.close();
+              onCommunityTypingClear?.(null);
+            }}
             onScroll={(event) => syncMentionComposerHighlightScroll(event.currentTarget)}
             onPaste={isCommunityOnboardingPreview ? undefined : onCommunityAttachmentPaste}
             onKeyDown={(event) => {
@@ -1690,7 +1730,12 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               syncMentionComposerHighlightScroll(event.target);
             }}
             onClick={(event) => drawerMention.syncFromTextarea(event.currentTarget)}
-            onBlur={() => drawerMention.close()}
+            onBlur={() => {
+              drawerMention.close();
+              if (selectedInteractionRootId) {
+                onCommunityTypingClear?.(selectedInteractionRootId);
+              }
+            }}
             onScroll={(event) => syncMentionComposerHighlightScroll(event.currentTarget)}
             onPaste={handleDrawerReplyAttachmentPaste}
             onKeyDown={(event) => {

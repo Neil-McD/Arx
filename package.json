@@ -131,6 +131,7 @@
     "check:community-events-ui-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_events_ui_contract_proof.ts",
     "check:community-attention-events-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_attention_events_contract_proof.ts",
     "check:community-presence-lease-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_presence_lease_contract_proof.ts",
+    "check:community-typing-presence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_typing_presence_contract_proof.ts",
     "check:event-reminder-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/event_reminder_contract_proof.ts",
     "check:discover-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/discover_contract_proof.ts",
     "check:community-subscription-lifecycle-policy-proof": "tsx scripts/community_subscription_lifecycle_policy_proof.ts",
