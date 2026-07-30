@@ -765,9 +765,19 @@ for (const forbidden of [
 assert.deepEqual(
   normalizeToolArguments("polynet_list", {
     path: "/",
+    cursor: null,
+    limit: 50,
     community_slug: "attempted-native-override",
   }),
   { path: "/" },
+);
+assert.deepEqual(
+  normalizeToolArguments("polynet_list", {
+    path: "/communities/canonical-community/",
+    cursor: null,
+    limit: 50,
+  }),
+  { path: "/communities/canonical-community/" },
 );
 assert.deepEqual(
   normalizeToolArguments("polynet_read", {
@@ -838,6 +848,8 @@ assert.deepEqual(
 assert.deepEqual(
   normalizeToolArguments("polynet_read", {
     path: "/users/me/profile.md",
+    offset: 0,
+    limit: 2_000,
   }),
   { path: "/users/me/profile.md" },
 );
@@ -886,12 +898,38 @@ assert.deepEqual(
     limit: 2_000,
   },
 );
+assert.deepEqual(
+  validateCommunitySemanticOperationInput({
+    operation: "list",
+    path: "/",
+    cursor: "ignored-on-fixed-root",
+    limit: 24,
+  }),
+  {
+    ok: true,
+    operation: "list",
+    path: "/",
+    cursor: null,
+    limit: null,
+  },
+);
+assert.deepEqual(
+  validateCommunitySemanticOperationInput({
+    operation: "read",
+    path: "/self.md",
+    limit: 100,
+  }),
+  {
+    ok: true,
+    operation: "read",
+    path: "/self.md",
+    offset: null,
+    limit: null,
+  },
+);
 for (const invalidInput of [
-  { operation: "list" as const, path: "/", cursor: "unexpected" },
-  { operation: "list" as const, path: "/", limit: 24 },
   { operation: "list" as const, path: "/resources/", limit: 51 },
   { operation: "list" as const, path: "/resources/", limit: 2.5 },
-  { operation: "read" as const, path: "/self.md", limit: 100 },
   { operation: "read" as const, path: "resource:resource-1", offset: -1 },
   { operation: "read" as const, path: "resource:resource-1", limit: 20_001 },
 ]) {

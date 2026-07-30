@@ -974,22 +974,25 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
       truncated: false,
     },
   });
-  await expect(
-    asMember.query(
-      internal.communityCapabilityContext
-        .resolveCommunitySemanticRepositoryInternal,
-      {
-        authSubject: fixture.memberSubject,
-        userId: fixture.memberId,
-        communitySlug: "resource-semantic",
-        operation: "list",
-        path: "/",
-        limit: 24,
-      },
-    ),
-  ).resolves.toMatchObject({
-    ok: false,
-    code: "invalid_selector",
+  const rootWithIrrelevantPagination = await asMember.query(
+    internal.communityCapabilityContext
+      .resolveCommunitySemanticRepositoryInternal,
+    {
+      authSubject: fixture.memberSubject,
+      userId: fixture.memberId,
+      communitySlug: "resource-semantic",
+      operation: "list",
+      path: "/",
+      limit: 24,
+    },
+  );
+  expect(rootWithIrrelevantPagination).toEqual(rootBySlug);
+  expect(rootWithIrrelevantPagination).toMatchObject({
+    ok: true,
+    result: {
+      path: "/",
+      truncated: false,
+    },
   });
 
   const memberDirectory = await asMember.query(
@@ -1068,22 +1071,24 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
     },
   });
   expect(peerProfile.result.body).toContain("Semantic peer profile");
-  await expect(
-    asMember.action(
-      internal.communityCapabilityContext
-        .readCommunitySemanticRepositoryInternal,
-      {
-        authSubject: fixture.memberSubject,
-        userId: fixture.memberId,
-        communityId: fixture.communityId,
-        path: "/self.md",
-        limit: 100,
-        surface: "member_agent_dock",
-      },
-    ),
-  ).resolves.toMatchObject({
-    ok: false,
-    code: "invalid_selector",
+  const selfProfileWithIrrelevantPagination = await asMember.action(
+    internal.communityCapabilityContext.readCommunitySemanticRepositoryInternal,
+    {
+      authSubject: fixture.memberSubject,
+      userId: fixture.memberId,
+      communityId: fixture.communityId,
+      path: "/self.md",
+      limit: 100,
+      surface: "member_agent_dock",
+    },
+  );
+  expect(selfProfileWithIrrelevantPagination).toMatchObject({
+    ok: true,
+    result: {
+      path: "/self.md",
+      body: expect.stringContaining("Semantic member profile"),
+      truncated: false,
+    },
   });
 
   const moduleEntries = await drainDirectory({

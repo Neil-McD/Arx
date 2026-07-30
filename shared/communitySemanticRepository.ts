@@ -460,21 +460,13 @@ export function validateCommunitySemanticOperationInput(args: {
       maximum: 50,
     });
     if (!limit.ok) return limit;
-    if (
-      parsed.path === POLYNET_SEMANTIC_ROOT_PATH &&
-      (cursor.value || limit.value !== null)
-    ) {
-      return semanticError(
-        "invalid_selector",
-        "polynet_list root does not accept cursor or limit.",
-      );
-    }
+    const isFixedRoot = parsed.path === POLYNET_SEMANTIC_ROOT_PATH;
     return {
       ok: true as const,
       operation: "list" as const,
       path: parsed.path,
-      cursor: cursor.value,
-      limit: limit.value,
+      cursor: isFixedRoot ? null : cursor.value,
+      limit: isFixedRoot ? null : limit.value,
     };
   }
 
@@ -507,16 +499,6 @@ export function validateCommunitySemanticOperationInput(args: {
       "polynet_read path must be an exact returned document path or stable ref.",
     );
   }
-  if (
-    !isResourceRead &&
-    ((args.offset !== undefined && args.offset !== null) ||
-      (args.limit !== undefined && args.limit !== null))
-  ) {
-    return semanticError(
-      "invalid_selector",
-      "polynet_read offset and limit apply only to resource documents.",
-    );
-  }
   const offset = optionalSemanticInteger({
     value: args.offset,
     field: "offset",
@@ -535,8 +517,8 @@ export function validateCommunitySemanticOperationInput(args: {
     ok: true as const,
     operation: "read" as const,
     path: parsed.path,
-    offset: offset.value,
-    limit: limit.value,
+    offset: isResourceRead ? offset.value : null,
+    limit: isResourceRead ? limit.value : null,
   };
 }
 
@@ -565,7 +547,6 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
   }
 
   const hasCursor = args.cursor !== undefined && args.cursor !== null;
-  const hasLimit = args.limit !== undefined && args.limit !== null;
   const hasOffset = args.offset !== undefined && args.offset !== null;
 
   if (repositoryPath.kind === "communities_root") {
@@ -599,19 +580,26 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
     repositoryPath.kind === "user_root";
   const readable = repositoryPath.kind === "user_profile";
   if (
-    (args.operation === "list" &&
-      (!listable || hasCursor || hasLimit || hasOffset)) ||
-    (args.operation === "read" &&
-      (!readable || hasCursor || hasLimit || hasOffset))
+    (args.operation === "list" && (!listable || hasOffset)) ||
+    (args.operation === "read" && (!readable || hasCursor))
   ) {
     return semanticError(
       "invalid_selector",
       args.operation === "list"
-        ? "Repository list requires an exact directory path without pagination at this level."
+        ? "Repository list requires an exact directory path."
         : "Repository read requires one exact user or community document path.",
     );
   }
   if (args.operation === "list") {
+    const cursor = optionalSemanticCursor(args.cursor);
+    if (!cursor.ok) return cursor;
+    const limit = optionalSemanticInteger({
+      value: args.limit,
+      field: "limit",
+      minimum: 2,
+      maximum: 50,
+    });
+    if (!limit.ok) return limit;
     return {
       ok: true as const,
       operation: "list" as const,
@@ -620,6 +608,20 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
       limit: null,
     };
   }
+  const offset = optionalSemanticInteger({
+    value: args.offset,
+    field: "offset",
+    minimum: 0,
+    maximum: 1_000_000,
+  });
+  if (!offset.ok) return offset;
+  const limit = optionalSemanticInteger({
+    value: args.limit,
+    field: "limit",
+    minimum: 1,
+    maximum: 20_000,
+  });
+  if (!limit.ok) return limit;
   return {
     ok: true as const,
     operation: "read" as const,

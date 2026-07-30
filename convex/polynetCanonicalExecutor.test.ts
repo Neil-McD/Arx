@@ -124,6 +124,26 @@ test("canonical five-tool executor derives member, builder, and community-agent 
   const memberCtx = executionContext(asMember);
   const ownerCtx = executionContext(asOwner);
 
+  const platformRoot = await executePolynetCanonicalTool({
+    ctx: memberCtx,
+    authSubject: fixture.memberSubject,
+    userId: fixture.memberId,
+    principalKind: "personal_agent",
+    evidenceSurface: "member_agent_dock",
+    toolName: "polynet_list",
+    input: { path: "/", cursor: null, limit: 50 },
+  });
+  expect(platformRoot).toMatchObject({
+    ok: true,
+    value: {
+      path: "/",
+      entries: [
+        { path: "/communities/", kind: "directory" },
+        { path: "/users/", kind: "directory" },
+      ],
+    },
+  });
+
   const memberList = await executePolynetCanonicalTool({
     ctx: memberCtx,
     authSubject: fixture.memberSubject,
@@ -131,7 +151,11 @@ test("canonical five-tool executor derives member, builder, and community-agent 
     principalKind: "personal_agent",
     evidenceSurface: "member_agent_dock",
     toolName: "polynet_list",
-    input: { path: "/communities/canonical-community/" },
+    input: {
+      path: "/communities/canonical-community/",
+      cursor: null,
+      limit: 50,
+    },
   });
   expect(memberList).toMatchObject({
     ok: true,
@@ -259,7 +283,7 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
     principalKind: "personal_agent",
     evidenceSurface: "member_agent_dock",
     toolName: "polynet_read",
-    input: { path: memberWritePath },
+    input: { path: memberWritePath, offset: 0, limit: 2_000 },
   });
   if (!memberRead.ok) {
     throw new Error(`${memberRead.code}: ${memberRead.message}`);
