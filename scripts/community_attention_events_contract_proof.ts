@@ -7,6 +7,7 @@ function read(relativePath: string): string {
 
 const schema = read("convex/schema.ts");
 const backend = read("convex/communityAttention.ts");
+const readCursorCore = read("convex/communityReadCursorCore.ts");
 const gateway = read("shared/cloudCommunityAttentionGateway.ts");
 const controller = read("shared/useCommunityAttentionController.ts");
 const app = read("apps/web/src/App.tsx");
@@ -25,6 +26,11 @@ assert.match(
   schema,
   /communityMemberSettings:[\s\S]*eventsLastSeenAt: v\.optional\(v\.number\(\)\)/,
   "community member settings must persist per-user Events seen state",
+);
+assert.match(
+  schema,
+  /communityReadCursors: defineTable\(\{[\s\S]*streamKind: v\.literal\("chat"\)[\s\S]*seenThroughAt: v\.number\(\)[\s\S]*by_community_user_stream/,
+  "chat unread state must have one indexed canonical cursor projection",
 );
 
 assert.match(
@@ -130,9 +136,10 @@ assert.doesNotMatch(
 );
 
 // Mentions surface (M2): an unseen mention-of-me is its own attention marker,
-// derived from indexed non-suppressed mention states, cleared by opening the
-// community chat (which also flips the mention ledger rows to "read"), and
-// rendered as the accent variant of the chat nav dot plus the rail OR.
+// derived from indexed non-suppressed mention states and the same canonical
+// chat cursor, then rendered as the accent variant of the chat nav dot plus
+// the rail OR. Ledger settlement is asynchronous and cannot fan out inside the
+// user acknowledgement mutation.
 assert.match(
   backend,
   /for \(const notifyState of \["pending", "sent", "read"\] as const\)[\s\S]*by_mentionedUser_community_notifyState_createdAt/,
@@ -145,23 +152,23 @@ assert.doesNotMatch(
 );
 assert.match(
   backend,
-  /mentions:\s*[\s\S]*latestMentionCreatedAt > Math\.max\(0, Math\.floor\(settingsRow\?\.mentionsLastSeenAt \?\? 0\)\)/,
-  "mention attention compares against the per-user mentionsLastSeenAt marker",
+  /readCommunityChatReadState[\s\S]*mentions:\s*[\s\S]*latestMentionCreatedAt > chatReadState\.mentionSeenThroughAt/,
+  "mention attention must compare against the canonical chat read state",
 );
 assert.match(
   backend,
-  /markCommunityChatReadAt[\s\S]*mentionsLastSeenAt/,
-  "opening chat clears the mention ping and flips seen pending mentions to read",
+  /acknowledgeCommunityChatRead[\s\S]*advanceCommunityChatReadCursor/,
+  "caught-up chat acknowledgement must advance the canonical cursor",
 );
-assert.match(
+assert.doesNotMatch(
   backend,
-  /markCommunityChatReadAt[\s\S]*settleMentionRowInternal\(\{[\s\S]*toState: "read"/,
-  "opening chat must settle seen pending mentions through the guarded lifecycle helper",
+  /settleMentionRowInternal|by_mentionedUser_community_notifyState_createdAt[\s\S]*eq\("notifyState", "pending"\)/,
+  "chat acknowledgement must not synchronously fan out over mention rows",
 );
 assert.match(
-  schema,
-  /mentionsLastSeenAt: v\.optional\(v\.number\(\)\)/,
-  "member settings must carry the mention seen marker",
+  readCursorCore,
+  /clampCommunityReadPosition[\s\S]*Math\.min\(requested, latest\)[\s\S]*nextCommunityReadPosition[\s\S]*Math\.max/,
+  "the canonical cursor must be server-clamped and monotonic",
 );
 assert.match(
   nav,
@@ -191,7 +198,12 @@ assert.match(
 assert.match(
   mentionEmails,
   /settleMentionRowInternal\(\{[\s\S]*toState: update\.notifyState/,
-  "only pending mention rows advance to sent or suppressed",
+  "only pending mention rows advance during asynchronous delivery settlement",
+);
+assert.match(
+  mentionEmails,
+  /readCommunityChatReadState[\s\S]*readOnlyJob\(mention\)[\s\S]*notifyState: "read"/,
+  "the async mention worker must suppress email and settle rows already covered by the cursor",
 );
 assert.match(
   emailModule,

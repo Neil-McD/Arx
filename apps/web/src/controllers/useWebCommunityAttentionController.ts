@@ -8,7 +8,7 @@ import {
 
 import type { AuthSession } from "../auth";
 import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
-import { markCloudCommunityChatReadAt } from "../../../../shared/cloudCommunityAttentionGateway";
+import { acknowledgeCloudCommunityChatRead } from "../../../../shared/cloudCommunityAttentionGateway";
 import { setCloudCommunityTyping } from "../../../../shared/cloudCommunityChatGateway";
 import { useCommunityAttentionController } from "../../../../shared/useCommunityAttentionController";
 import { useCommunityTypingPresence } from "../../../../shared/useCommunityTypingPresence";
@@ -53,8 +53,6 @@ type UseWebCommunityAttentionControllerParams = {
   chat: {
     hasResolved: boolean;
     inputValue: string;
-    isUserAtBottom: boolean;
-    messages: TimestampedRow[];
   };
   interactions: {
     roots: InteractionRootLike[];
@@ -138,6 +136,7 @@ export function useWebCommunityAttentionModel(
   const {
     attentionByCommunityId,
     markCommunitySurfaceSeen,
+    refreshCommunityAttention,
   } = useCommunityAttentionController<AuthSession>({
     session,
     ensureSession,
@@ -146,9 +145,12 @@ export function useWebCommunityAttentionModel(
 
   const [chatDividerBoundary, setChatDividerBoundary] = useState<number | null>(null);
   const capturedDividerCommunityIdRef = useRef<string | null>(null);
-  const activeChatCommunityIdRef = useRef<string | null>(null);
-  const chatReadAdvanceTimerRef = useRef<number | null>(null);
   const seenMarkerBySurfaceRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    capturedDividerCommunityIdRef.current = null;
+    setChatDividerBoundary(null);
+  }, [activeCommunityId]);
 
   useEffect(() => {
     if (!isCommunityChatActive || !activeCommunityId) return;
@@ -162,66 +164,6 @@ export function useWebCommunityAttentionModel(
         : null,
     );
   }, [activeCommunityId, attentionByCommunityId, isCommunityChatActive]);
-
-  useEffect(() => {
-    const nextCommunityId =
-      isCommunityChatActive && activeCommunityId ? activeCommunityId : null;
-    const previousCommunityId = activeChatCommunityIdRef.current;
-    if (previousCommunityId && previousCommunityId !== nextCommunityId) {
-      if (session) {
-        void markCloudCommunityChatReadAt({
-          session,
-          communityId: previousCommunityId,
-          seenAtMs: Date.now(),
-        }).catch(() => {});
-      }
-      capturedDividerCommunityIdRef.current = null;
-      setChatDividerBoundary(null);
-    }
-    activeChatCommunityIdRef.current = nextCommunityId;
-  }, [activeCommunityId, isCommunityChatActive, session]);
-
-  const handleChatCaughtUp = useCallback(() => {
-    if (!activeCommunityId || !session) return;
-    if (chatReadAdvanceTimerRef.current !== null) return;
-    const communityId = activeCommunityId;
-    const currentSession = session;
-    chatReadAdvanceTimerRef.current = window.setTimeout(() => {
-      chatReadAdvanceTimerRef.current = null;
-      void markCloudCommunityChatReadAt({
-        session: currentSession,
-        communityId,
-        seenAtMs: Date.now(),
-      }).catch(() => {});
-    }, 2000);
-  }, [activeCommunityId, session]);
-
-  useEffect(() => {
-    const advanceOnHide = () => {
-      if (document.visibilityState !== "hidden") return;
-      const communityId = activeChatCommunityIdRef.current;
-      if (!communityId || !session) return;
-      void markCloudCommunityChatReadAt({
-        session,
-        communityId,
-        seenAtMs: Date.now(),
-      }).catch(() => {});
-    };
-    document.addEventListener("visibilitychange", advanceOnHide);
-    window.addEventListener("pagehide", advanceOnHide);
-    return () => {
-      document.removeEventListener("visibilitychange", advanceOnHide);
-      window.removeEventListener("pagehide", advanceOnHide);
-    };
-  }, [session]);
-
-  useEffect(() => {
-    return () => {
-      if (chatReadAdvanceTimerRef.current !== null) {
-        window.clearTimeout(chatReadAdvanceTimerRef.current);
-      }
-    };
-  }, []);
 
   const latestChatActivityAt = useMemo(() => {
     const timestamps: Array<{
@@ -241,14 +183,8 @@ export function useWebCommunityAttentionModel(
         });
       }
     }
-    for (const message of chat.messages) {
-      timestamps.push({
-        timestamp: message.created_at,
-        pending: String((message as { id?: string }).id ?? "").startsWith("pending-"),
-      });
-    }
     return latestTimestamp(timestamps);
-  }, [chat.messages, interactions.repliesByRootId, interactions.roots]);
+  }, [interactions.repliesByRootId, interactions.roots]);
 
   const latestAiFeedCreatedAt = useMemo(
     () => latestTimestamp(aiFeed.live.map((row) => ({ timestamp: row.created_at }))),
@@ -267,8 +203,50 @@ export function useWebCommunityAttentionModel(
     seenMarkerBySurfaceRef.current = {};
   }, [session?.user?.id]);
 
+  const handleChatCaughtUp = useCallback(() => {
+    if (
+      !isCommunityChatActive
+      || !chat.hasResolved
+      || !activeCommunityId
+      || !session
+      || latestChatActivityAt === null
+    ) {
+      return;
+    }
+    const communityId = activeCommunityId;
+    const throughAtMs = latestChatActivityAt;
+    const requestKey = `${communityId}:chat`;
+    const marker = String(throughAtMs);
+    if (seenMarkerBySurfaceRef.current[requestKey] === marker) return;
+    seenMarkerBySurfaceRef.current[requestKey] = marker;
+    void (async () => {
+      try {
+        const usableSession = await ensureSession(session);
+        if (!usableSession) throw new Error("auth_session_required");
+        await acknowledgeCloudCommunityChatRead({
+          session: usableSession,
+          communityId,
+          throughAtMs,
+        });
+        await refreshCommunityAttention();
+      } catch {
+        if (seenMarkerBySurfaceRef.current[requestKey] === marker) {
+          delete seenMarkerBySurfaceRef.current[requestKey];
+        }
+      }
+    })();
+  }, [
+    activeCommunityId,
+    chat.hasResolved,
+    ensureSession,
+    isCommunityChatActive,
+    latestChatActivityAt,
+    refreshCommunityAttention,
+    session,
+  ]);
+
   const acknowledgeSurface = useCallback((
-    surface: "chat" | "ai_feed" | "resources" | "events",
+    surface: "ai_feed" | "resources" | "events",
     marker: string,
     options?: {
       seenAtMs?: number;
@@ -286,28 +264,6 @@ export function useWebCommunityAttentionModel(
       }
     });
   }, [activeCommunityId, markCommunitySurfaceSeen]);
-
-  useEffect(() => {
-    if (
-      !isCommunityChatActive
-      || !activeCommunityId
-      || !chat.hasResolved
-      || !chat.isUserAtBottom
-      || latestChatActivityAt === null
-    ) {
-      return;
-    }
-    acknowledgeSurface("chat", String(latestChatActivityAt), {
-      seenAtMs: latestChatActivityAt,
-    });
-  }, [
-    acknowledgeSurface,
-    activeCommunityId,
-    chat.hasResolved,
-    chat.isUserAtBottom,
-    isCommunityChatActive,
-    latestChatActivityAt,
-  ]);
 
   useEffect(() => {
     if (

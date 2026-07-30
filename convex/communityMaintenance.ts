@@ -101,6 +101,17 @@ export const purgeOrphanedCommunityUserArtifactsInternal = internalMutation({
       }
     }
 
+    const readCursors = (await ctx.db
+      .query("communityReadCursors" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", community._id))
+      .collect()) as Array<{ _id: any; userId: any }>;
+    const orphanReadCursors = [];
+    for (const row of readCursors) {
+      if (!(await maintenanceUserExists(ctx, row.userId, userExistenceCache))) {
+        orphanReadCursors.push(row);
+      }
+    }
+
     const resources = (await ctx.db
       .query("communityResources" as any)
       .withIndex("by_community", (q: any) => q.eq("communityId", community._id))
@@ -176,6 +187,7 @@ export const purgeOrphanedCommunityUserArtifactsInternal = internalMutation({
       ...orphanPresenceRows.map((row) => String(row.userId)),
       ...orphanJoinRequests.map((row) => String(row.userId)),
       ...orphanMemberSettings.map((row) => String(row.userId)),
+      ...orphanReadCursors.map((row) => String(row.userId)),
       ...orphanResources.map((row) => String(row.createdByUserId)),
       ...orphanMessages.map((row) => String(row.senderUserId ?? "")),
       ...dedupedOrphanReactions.map((row) => String(row.userId)),
@@ -192,6 +204,7 @@ export const purgeOrphanedCommunityUserArtifactsInternal = internalMutation({
         presence: orphanPresenceRows.length,
         join_requests: orphanJoinRequests.length,
         member_settings: orphanMemberSettings.length,
+        read_cursors: orphanReadCursors.length,
         resources: orphanResources.length,
         messages: orphanMessages.length,
         message_reactions: dedupedOrphanReactions.length,
@@ -205,6 +218,7 @@ export const purgeOrphanedCommunityUserArtifactsInternal = internalMutation({
     for (const row of orphanMessages) await ctx.db.delete(row._id as any);
     for (const row of orphanResources) await ctx.db.delete(row._id as any);
     for (const row of orphanSubscriptions) await ctx.db.delete(row._id as any);
+    for (const row of orphanReadCursors) await ctx.db.delete(row._id as any);
     for (const row of orphanMemberSettings) await ctx.db.delete(row._id as any);
     for (const row of orphanJoinRequests) await ctx.db.delete(row._id as any);
     for (const row of orphanPresenceRows) await ctx.db.delete(row._id as any);

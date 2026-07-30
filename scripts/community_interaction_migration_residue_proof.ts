@@ -31,6 +31,9 @@ const dataController = read("shared/useCommunityChatDataController.ts");
 const sendController = read("shared/useCommunityChatMutationController.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const communityAttention = read("convex/communityAttention.ts");
+const webAttentionController = read(
+  "apps/web/src/controllers/useWebCommunityAttentionController.ts",
+);
 
 function assertIncludes(sourceName: string, source: string, needle: string): void {
   assert.ok(source.includes(needle), `${sourceName} should include: ${needle}`);
@@ -259,9 +262,14 @@ assert.doesNotMatch(
   "community attention should not depend on legacy chat row or seq markers",
 );
 assert.match(
-  app,
-  /latestActiveCommunityChatActivityAt[\s\S]*communityInteractionRoots[\s\S]*communityInteractionRepliesByRootId[\s\S]*markCommunitySurfaceSeen\(activeCommunityId, "chat", \{[\s\S]*seenAtMs: latestActiveCommunityChatActivityAt/,
-  "web chat seen acknowledgement should send canonical interaction activity timestamps",
+  webAttentionController,
+  /latestChatActivityAt[\s\S]*handleChatCaughtUp[\s\S]*acknowledgeCloudCommunityChatRead\(\{[\s\S]*throughAtMs/,
+  "web caught-up acknowledgement should send the newest rendered canonical interaction timestamp",
+);
+assert.doesNotMatch(
+  webAttentionController,
+  /pagehide|advanceOnHide|seenAtMs: Date\.now\(\)|markCommunitySurfaceSeen\(activeCommunityId, "chat"/,
+  "leaving, hiding, or merely opening chat must not create a false read acknowledgement",
 );
 
 assert.match(

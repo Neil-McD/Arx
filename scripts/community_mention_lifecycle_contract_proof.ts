@@ -9,6 +9,7 @@ const schema = read("convex/schema.ts");
 const lifecycle = read("convex/communityMentionLifecycle.ts");
 const attention = read("convex/communityAttention.ts");
 const mentionEmails = read("convex/communityMentionEmails.ts");
+const readCursorCore = read("convex/communityReadCursorCore.ts");
 const interactions = read("convex/communityInteractions.ts");
 const packageJson = read("package.json");
 
@@ -27,7 +28,7 @@ assert.match(
 assert.match(
   schema,
   /\.index\("by_mentionedUser_community_notifyState_createdAt", \["mentionedUserId", "communityId", "notifyState", "createdAt"\]\)/,
-  "chat-read settlement must be able to scan pending mentions for one user/community without touching settled rows",
+  "mention lifecycle reads must be able to scope one user and community without touching unrelated rows",
 );
 
 assert.match(
@@ -91,9 +92,15 @@ assert.match(
 );
 
 assert.match(
-  attention,
-  /by_mentionedUser_community_notifyState_createdAt[\s\S]*eq\("notifyState", "pending"\)[\s\S]*settleMentionRowInternal\(\{[\s\S]*toState: "read"/,
-  "opening chat must settle pending user mentions through the guarded primitive",
+  readCursorCore,
+  /readCommunityChatReadState[\s\S]*mentionSeenThroughAt/,
+  "mention visibility must derive from the canonical chat read cursor",
+);
+
+assert.match(
+  mentionEmails,
+  /readCommunityChatReadState[\s\S]*readOnlyJob\(mention\)[\s\S]*notifyState: "read"/,
+  "pending mentions covered by the cursor must settle asynchronously without email",
 );
 
 assert.match(
@@ -110,8 +117,8 @@ assert.doesNotMatch(
 
 assert.doesNotMatch(
   attention,
-  /if \(Object\.keys\(patch\)\.length === 1\) return \{ ok: true \};/,
-  "opening chat must still settle mentions even when seen timestamps do not advance",
+  /settleMentionRowInternal|eq\("notifyState", "pending"\)/,
+  "chat acknowledgement must remain one bounded cursor write with no mention-row fanout",
 );
 
 assert.match(
@@ -145,8 +152,13 @@ assert.match(
 
 assert.match(
   interactions,
-  /editCommunityInteractionMessage[\s\S]*suppressPendingMentionsMissingFromInteractionText/,
-  "editing an interaction source must suppress only stale pending mention notifications",
+  /editCommunityInteractionTargetCore[\s\S]*suppressPendingMentionsMissingFromInteractionText/,
+  "the canonical edit core must suppress only stale pending mention notifications",
+);
+assert.match(
+  interactions,
+  /editCommunityInteractionMessage[\s\S]*editCommunityInteractionTargetCore/,
+  "the public canonical edit mutation must route through the guarded edit core",
 );
 
 assert.match(

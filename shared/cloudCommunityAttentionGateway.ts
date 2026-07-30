@@ -52,18 +52,16 @@ export async function markCloudCommunitySurfaceSeen<SessionT>(
   });
 }
 
-export async function markCloudCommunityChatReadAt<SessionT>(
+export async function acknowledgeCloudCommunityChatRead<SessionT>(
   params: CloudCommunityAttentionGatewayParams<SessionT> & {
     communityId: string;
-    seenAtMs?: number;
+    throughAtMs: number;
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("communityAttention:markCommunityChatReadAt" as any, {
+  await client.mutation("communityAttention:acknowledgeCommunityChatRead" as any, {
     authSubject,
     communityId: params.communityId,
-    ...(typeof params.seenAtMs === "number" && Number.isFinite(params.seenAtMs)
-      ? { seenAtMs: Math.floor(params.seenAtMs) }
-      : null),
+    throughAtMs: Math.floor(params.throughAtMs),
   });
 }

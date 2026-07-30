@@ -168,10 +168,14 @@ Reaction summaries may be denormalized onto roots/replies for feed speed, but th
 
 ### `interactionReadState`
 
-Unread projection is currently derived from the community-level
-`communityMemberSettings.chatLastSeenAt` boundary. There is no separate
-interaction read-state table until the product requires independently persisted
-per-root follow, mute, or drawer-read state.
+Unread projection is derived from one community-chat stream position in
+`communityReadCursors`. The position is a monotonic server-authorized
+`seenThroughAt` watermark: the client may submit only the newest server-issued
+interaction timestamp it actually rendered while caught up, and the server
+clamps that request to the current readable head. Legacy
+`communityMemberSettings.chatLastSeenAt` and `mentionsLastSeenAt` fields are
+lazy-migration fallbacks only. There is no per-root follow, mute, or drawer-read
+state.
 
 ### `interactionModerationEvents`
 
@@ -229,11 +233,11 @@ The first backend slice adds canonical tables beside legacy chat:
 - `communityInteractionReactions`
 - `communityInteractionModerationEvents`
 - `communityInteractionLegacyChatLinks`
+- `communityReadCursors`
 
-Unread state remains on the existing `communityMemberSettings.chatLastSeenAt`
-boundary rather than a duplicate interaction read-state table. Interaction
-source traces use canonical evidence references directly rather than a
-duplicate link ledger.
+Unread state has one canonical community-chat cursor rather than duplicate
+screen-open events or per-root read rows. Interaction source traces use
+canonical evidence references directly rather than a duplicate link ledger.
 
 The slice also adds `interaction` as a product-owned
 `communitySourceTraces.sourceType`. Public source-trace writes must still be

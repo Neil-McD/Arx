@@ -9,6 +9,7 @@ import {
   type CommunityMembershipLike,
 } from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
+import { readCommunityChatReadState } from "./communityReadCursorCore";
 
 export const EVERYBODY_MENTION_ROLE_KEY = "everybody";
 const EVERYBODY_MENTION_TOKEN_ALIASES = ["everybody", "everyone"] as const;
@@ -330,17 +331,14 @@ async function readRecipientInitialNotifyState(args: {
   emailMode: BroadcastEmailMode;
 }): Promise<"pending" | "sent" | "read"> {
   if (args.emailMode === "in_app_only") return "sent";
-  const settings = (await args.ctx.db
-    .query("communityMemberSettings" as any)
-    .withIndex("by_community_user", (q: any) =>
-      q.eq("communityId", args.communityId).eq("userId", args.userId),
-    )
-    .first()) as Record<string, any> | null;
-  const seenAt = Math.max(
-    Math.floor(Number(settings?.chatLastSeenAt ?? 0)),
-    Math.floor(Number(settings?.mentionsLastSeenAt ?? 0)),
+  const readState = await readCommunityChatReadState(
+    args.ctx,
+    args.communityId,
+    args.userId,
   );
-  return seenAt >= Math.floor(args.sourceCreatedAt) ? "read" : "pending";
+  return readState.mentionSeenThroughAt >= Math.floor(args.sourceCreatedAt)
+    ? "read"
+    : "pending";
 }
 
 async function attachBroadcastToExistingMention(args: {

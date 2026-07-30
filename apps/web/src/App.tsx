@@ -1259,8 +1259,6 @@ export default function App() {
     chat: {
       hasResolved: hasResolvedCommunityChat,
       inputValue: communityMessageInput,
-      isUserAtBottom,
-      messages: communityMessages,
     },
     interactions: {
       roots: communityInteractionRoots,

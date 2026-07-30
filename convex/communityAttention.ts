@@ -9,7 +9,10 @@ import {
   requireCommunityChatAccess,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
-import { settleMentionRowInternal } from "./communityMentionLifecycle";
+import {
+  advanceCommunityChatReadCursor,
+  readCommunityChatReadState,
+} from "./communityReadCursorCore";
 
 type CommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events" | "mentions";
 
@@ -198,12 +201,14 @@ async function getCommunityAttentionRow(
 ): Promise<CommunityAttentionRow> {
   const settingsRow = await getCommunityMemberSettingsRow(ctx, communityId, userId);
   const [
+    chatReadState,
     latestChatActivityAt,
     latestAiFeedCreatedAt,
     latestResourcesCreatedAt,
     latestEventsUpdatedAt,
     latestMentionCreatedAt,
   ] = await Promise.all([
+    readCommunityChatReadState(ctx, communityId, userId),
     getLatestCommunityChatActivityAt(ctx, communityId),
     getLatestCommunityAiFeedCreatedAt(ctx, communityId),
     getLatestCommunityResourcesCreatedAt(ctx, communityId),
@@ -214,7 +219,7 @@ async function getCommunityAttentionRow(
     community_id: String(communityId),
     chat:
       typeof latestChatActivityAt === "number" &&
-      latestChatActivityAt > Math.max(0, Math.floor(settingsRow?.chatLastSeenAt ?? 0)),
+      latestChatActivityAt > chatReadState.chatSeenThroughAt,
     ai_feed:
       typeof latestAiFeedCreatedAt === "number" &&
       latestAiFeedCreatedAt > Math.max(0, Math.floor(settingsRow?.aiFeedLastSeenAt ?? 0)),
@@ -226,9 +231,9 @@ async function getCommunityAttentionRow(
       latestEventsUpdatedAt > Math.max(0, Math.floor(settingsRow?.eventsLastSeenAt ?? 0)),
     mentions:
       typeof latestMentionCreatedAt === "number" &&
-      latestMentionCreatedAt > Math.max(0, Math.floor(settingsRow?.mentionsLastSeenAt ?? 0)),
+      latestMentionCreatedAt > chatReadState.mentionSeenThroughAt,
     chat_last_seen_at:
-      typeof settingsRow?.chatLastSeenAt === "number" ? Math.floor(settingsRow.chatLastSeenAt) : null,
+      chatReadState.chatSeenThroughAt > 0 ? chatReadState.chatSeenThroughAt : null,
   };
 }
 
@@ -241,31 +246,24 @@ async function upsertCommunitySurfaceSeen(args: {
   seenAtMs?: number | null;
 }): Promise<void> {
   const { ctx, communityId, userId, surface, nowMs } = args;
-  const existing = await getCommunityMemberSettingsRow(ctx, communityId, userId);
 
   if (surface === "chat") {
     const latestChatActivityAt = await getLatestCommunityChatActivityAt(ctx, communityId);
     if (latestChatActivityAt === null) return;
-    const requestedChatSeenAt = normalizePositiveMarker(args.seenAtMs) ?? latestChatActivityAt;
-    const nextChatLastSeenAt = Math.min(latestChatActivityAt, requestedChatSeenAt);
-    if ((existing?.chatLastSeenAt ?? 0) >= nextChatLastSeenAt) return;
-    if (existing) {
-      await ctx.db.patch(existing._id as any, {
-        chatLastSeenAt: nextChatLastSeenAt,
-        updatedAt: nowMs,
-      });
-      return;
-    }
-    await ctx.db.insert("communityMemberSettings" as any, {
+    await advanceCommunityChatReadCursor({
+      ctx,
       communityId,
       userId,
-      muted: false,
-      chatLastSeenAt: nextChatLastSeenAt,
-      createdAt: nowMs,
-      updatedAt: nowMs,
+      requestedThroughAt: args.seenAtMs ?? latestChatActivityAt,
+      latestReadableAt: latestChatActivityAt,
+      // Chat acknowledgement metadata is server-authored even when this
+      // rolling-compatibility adapter receives a client-authored nowMs.
+      nowMs: Date.now(),
     });
     return;
   }
+
+  const existing = await getCommunityMemberSettingsRow(ctx, communityId, userId);
 
   if (surface === "ai_feed") {
     const latestAiFeedCreatedAt = await getLatestCommunityAiFeedCreatedAt(ctx, communityId);
@@ -356,6 +354,30 @@ async function upsertCommunitySurfaceSeen(args: {
   });
 }
 
+async function acknowledgeCommunityChatReadForUser(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+  requestedThroughAt?: number | null;
+}): Promise<{ ok: true; advanced: boolean; seenThroughAt: number }> {
+  const latestReadableAt = await getLatestCommunityChatActivityAt(
+    args.ctx,
+    args.communityId,
+  );
+  const result = await advanceCommunityChatReadCursor({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+    requestedThroughAt: args.requestedThroughAt ?? latestReadableAt,
+    latestReadableAt,
+  });
+  return {
+    ok: true,
+    advanced: result.advanced,
+    seenThroughAt: result.seenThroughAt,
+  };
+}
+
 export const listMyCommunityAttention = query({
   args: {
     userId: v.optional(v.id("users")),
@@ -422,9 +444,38 @@ export const markCommunitySurfaceSeen = mutation({
   },
 });
 
-// Advances the canonical-chat "new messages" divider boundary (created_at timestamp).
-// Kept separate so the divider can persist while reading and only move forward
-// when the reader leaves / catches up.
+// Canonical chat acknowledgement: the client supplies the newest server-issued
+// position it actually rendered while caught up. Access is re-authorized and
+// the position is clamped to the current readable head before it can advance.
+export const acknowledgeCommunityChatRead = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    throughAtMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    return await acknowledgeCommunityChatReadForUser({
+      ctx,
+      communityId: args.communityId,
+      userId,
+      requestedThroughAt: args.throughAtMs,
+    });
+  },
+});
+
+// Rolling-deployment adapter for clients deployed before the canonical
+// acknowledgeCommunityChatRead contract. It no longer owns a second data path.
 export const markCommunityChatReadAt = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -439,56 +490,11 @@ export const markCommunityChatReadAt = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const nowMs = Date.now();
-    const seenAt = Math.max(0, Math.floor(args.seenAtMs ?? nowMs));
-    const existing = await getCommunityMemberSettingsRow(ctx, args.communityId, userId);
-    // Opening chat is the mention-clearing gesture: advance the mention marker
-    // alongside the chat marker and flip this user's now-seen pending mention
-    // rows to "read" so the ledger's lifecycle reflects reality.
-    const markMentionsSeen = async () => {
-      for (let pass = 0; pass < 5; pass += 1) {
-        const pending = (await ctx.db
-          .query("communityInteractionMentions" as any)
-          .withIndex("by_mentionedUser_community_notifyState_createdAt", (q: any) =>
-            q.eq("mentionedUserId", userId).eq("communityId", args.communityId).eq("notifyState", "pending"),
-          )
-          .order("asc")
-          .take(100)) as Array<{ _id: any; createdAt?: number }>;
-        if (pending.length === 0) break;
-        let settled = 0;
-        for (const row of pending) {
-          if (Math.floor(row.createdAt ?? 0) > seenAt) return;
-          const result = await settleMentionRowInternal({
-            ctx,
-            mentionId: row._id,
-            toState: "read",
-            nowMs,
-          });
-          if (result.settled) settled += 1;
-        }
-        if (settled === 0 || pending.length < 100) break;
-      }
-    };
-    if (existing) {
-      const patch: Record<string, number> = { updatedAt: nowMs };
-      if ((existing.chatLastSeenAt ?? 0) < seenAt) patch.chatLastSeenAt = seenAt;
-      if ((existing.mentionsLastSeenAt ?? 0) < seenAt) patch.mentionsLastSeenAt = seenAt;
-      if (Object.keys(patch).length > 1) {
-        await ctx.db.patch(existing._id as any, patch);
-      }
-      await markMentionsSeen();
-      return { ok: true };
-    }
-    await ctx.db.insert("communityMemberSettings" as any, {
+    return await acknowledgeCommunityChatReadForUser({
+      ctx,
       communityId: args.communityId,
       userId,
-      muted: false,
-      chatLastSeenAt: seenAt,
-      mentionsLastSeenAt: seenAt,
-      createdAt: nowMs,
-      updatedAt: nowMs,
+      requestedThroughAt: args.seenAtMs,
     });
-    await markMentionsSeen();
-    return { ok: true };
   },
 });

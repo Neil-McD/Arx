@@ -2490,6 +2490,22 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_user", ["communityId", "userId"]),
 
+  // One durable, monotonic position per member and community chat stream.
+  // The requested position is always re-authorized and clamped to the
+  // server-visible chat head before this projection advances.
+  communityReadCursors: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    streamKind: v.literal("chat"),
+    seenThroughAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_community", ["communityId"])
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_community_user_stream", ["communityId", "userId", "streamKind"]),
+
   communityResources: defineTable({
     communityId: v.id("communities"),
     moduleId: v.optional(v.id("communityResourceModules")),
