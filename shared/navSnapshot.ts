@@ -58,6 +58,6 @@ export function formatBackTargetLabel(
   if (snapshot.page === "discover") return "discover";
   if (snapshot.page === "docs") return "docs";
   if (snapshot.page === "community") return "community";
-  if (snapshot.page === "settings" || snapshot.view === "settings") return "settings";
+  if (snapshot.page === "settings") return "settings";
   return "community";
 }

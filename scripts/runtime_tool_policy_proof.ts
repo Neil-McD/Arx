@@ -33,6 +33,9 @@ const FIXED_TOOL_FAMILIES = {
   community: [
     "polynet_list",
     "polynet_read",
+    "polynet_search",
+    "polynet_write",
+    "polynet_call",
     "member_conversations_list",
     "member_conversation_read",
     "polynet_list_communities",
@@ -369,13 +372,13 @@ async function proveThirdPartyMcpRuntimeIsAbsent() {
   const policySource = await readRepoFile("shared/runtimeToolPolicy.ts");
   const runtimeAgentLoopSource = await readRepoFile("convex/runtimeAgentLoop.ts");
   const promptSource = await readRepoFile("convex/runtimeHarnessShaping.ts");
-  const integrationSettingsSource = await readRepoFile(
-    "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+  const mcpAccountSource = await readRepoFile(
+    "apps/web/src/components/WebPolynetMcpAccountSection.tsx",
   );
   const runtimeSources = [
     runtimeAgentLoopSource,
     promptSource,
-    integrationSettingsSource,
+    mcpAccountSource,
   ].join("\n");
   assert.doesNotMatch(
     runtimeSources,

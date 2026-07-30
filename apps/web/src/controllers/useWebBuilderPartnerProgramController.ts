@@ -6,14 +6,17 @@ import {
   loadBuilderPartnerProgramCanonical,
   type BuilderPartnerProgramSnapshot,
 } from "../../../../shared/builderPartnerProgramGateway";
-import type { SettingsGroup } from "../../../../shared/appShellNavigation";
+import type {
+  AppPage,
+  SettingsGroup,
+} from "../../../../shared/appShellNavigation";
 import type { AuthSession } from "../auth";
 import { isTransportRefreshError } from "../webAppRuntime";
 
 type UseWebBuilderPartnerProgramControllerParams = {
   session: AuthSession | null;
   canonicalSessionUserId: string | null;
-  activeView: string;
+  activePage: AppPage;
   settingsGroup: SettingsGroup;
   communitiesCount: number;
   ensureSession: (
@@ -126,7 +129,7 @@ export function useWebBuilderPartnerProgramController(
       return;
     }
     if (
-      params.activeView !== "settings" ||
+      params.activePage !== "settings" ||
       params.settingsGroup !== "partners"
     ) {
       return;
@@ -134,7 +137,7 @@ export function useWebBuilderPartnerProgramController(
     void load(params.session);
   }, [
     load,
-    params.activeView,
+    params.activePage,
     params.canonicalSessionUserId,
     params.communitiesCount,
     params.session,

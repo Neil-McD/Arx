@@ -29,7 +29,7 @@ function main() {
     "shared/personalSkillOverlayRuntime.ts",
   );
   const settingsSection = readText(
-    "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+    "apps/web/src/components/WebPersonalSkillsAccountSection.tsx",
   );
 
   for (const exportedName of [
@@ -116,12 +116,12 @@ function main() {
   );
   assertIncludes(
     settingsSection,
-    "Editing this skill updates the canonical package",
+    "Editing updates the canonical package",
     "settings personal skill edit form",
   );
   assertIncludes(
     settingsSection,
-    "Personal skills are applied only when you explicitly mention",
+    "Personal skills apply only when explicitly mentioned",
     "settings explicit invocation guidance",
   );
 

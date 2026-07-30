@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect } from "react";
 
 import type { AuthSession } from "../auth";
 import type {
@@ -6,11 +6,9 @@ import type {
   CommunityTab,
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
-import { buildEffectiveSkills } from "../../../../shared/effectiveSkills";
 import { COMMUNITY_MANAGER_PLATFORM_SKILLS } from "../../../../shared/platformSkills";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import { useWebCommunitySkillAttachmentsController } from "./useWebCommunitySkillAttachmentsController";
-import { useWebEffectiveSkillsController } from "./useWebEffectiveSkillsController";
 import { useWebUserPlatformSkillsController } from "./useWebUserPlatformSkillsController";
 
 type EnsureAuthSession = (
@@ -40,11 +38,6 @@ export function useWebSkillsModel(params: {
     settingsPage,
   } = params;
 
-  const effectiveController = useWebEffectiveSkillsController<AuthSession>({
-    activeCommunityId,
-    session,
-    ensureSession,
-  });
   const userController = useWebUserPlatformSkillsController<AuthSession>({
     session,
     ensureSession,
@@ -56,103 +49,58 @@ export function useWebSkillsModel(params: {
       ensureSession,
     });
 
-  const reloadEffectiveSkills = useCallback(async () => {
-    if (!session) {
-      effectiveController.clearEffectiveSkills();
-      return;
-    }
-    effectiveController.effectiveSkillsLoadedKeyRef.current = null;
-    await effectiveController.loadEffectiveSkills(session);
-  }, [
-    effectiveController.clearEffectiveSkills,
-    effectiveController.effectiveSkillsLoadedKeyRef,
-    effectiveController.loadEffectiveSkills,
-    session,
-  ]);
-
-  const runThenRefresh = useCallback(async (
-    mutation: () => Promise<boolean>,
-  ) => {
-    const succeeded = await mutation();
-    if (succeeded) void reloadEffectiveSkills();
-    return succeeded;
-  }, [reloadEffectiveSkills]);
-
   const createCommunitySkill = useCallback(
     (input: CreateSkillPackageInput) =>
-      runThenRefresh(() => communityController.createPersonalSkillAndAttach(input)),
-    [communityController.createPersonalSkillAndAttach, runThenRefresh],
+      communityController.createPersonalSkillAndAttach(input),
+    [communityController.createPersonalSkillAndAttach],
   );
   const createUserPlatformSkill = useCallback(
     (input: CreateSkillPackageInput) =>
-      runThenRefresh(() => userController.createUserPlatformSkill(input)),
-    [runThenRefresh, userController.createUserPlatformSkill],
+      userController.createUserPlatformSkill(input),
+    [userController.createUserPlatformSkill],
   );
   const updateUserPlatformSkill = useCallback(
     (installId: string, patch: { enabled?: boolean }) =>
-      runThenRefresh(() => userController.updateUserPlatformSkill(installId, patch)),
-    [runThenRefresh, userController.updateUserPlatformSkill],
+      userController.updateUserPlatformSkill(installId, patch),
+    [userController.updateUserPlatformSkill],
   );
   const saveUserPlatformSkill = useCallback(
     (installId: string, input: CreateSkillPackageInput) =>
-      runThenRefresh(() => userController.saveUserPlatformSkill(installId, input)),
-    [runThenRefresh, userController.saveUserPlatformSkill],
+      userController.saveUserPlatformSkill(installId, input),
+    [userController.saveUserPlatformSkill],
   );
   const deleteUserPlatformSkill = useCallback(
-    (installId: string) =>
-      runThenRefresh(() => userController.deleteUserPlatformSkill(installId)),
-    [runThenRefresh, userController.deleteUserPlatformSkill],
+    (installId: string) => userController.deleteUserPlatformSkill(installId),
+    [userController.deleteUserPlatformSkill],
   );
   const attachSkillPackageToCommunity = useCallback(
     (skillPackageId: string) =>
-      runThenRefresh(() =>
-        communityController.attachSkillPackageToCommunity(skillPackageId)),
-    [communityController.attachSkillPackageToCommunity, runThenRefresh],
+      communityController.attachSkillPackageToCommunity(skillPackageId),
+    [communityController.attachSkillPackageToCommunity],
   );
   const updateCommunitySkillAttachment = useCallback(
     (attachmentId: string, patch: { enabled?: boolean }) =>
-      runThenRefresh(() =>
-        communityController.updateCommunitySkillAttachment(attachmentId, patch)),
-    [communityController.updateCommunitySkillAttachment, runThenRefresh],
+      communityController.updateCommunitySkillAttachment(attachmentId, patch),
+    [communityController.updateCommunitySkillAttachment],
   );
   const detachCommunitySkill = useCallback(
     (attachmentId: string) =>
-      runThenRefresh(() =>
-        communityController.detachCommunitySkill(attachmentId)),
-    [communityController.detachCommunitySkill, runThenRefresh],
+      communityController.detachCommunitySkill(attachmentId),
+    [communityController.detachCommunitySkill],
   );
 
   useEffect(() => {
-    const shouldLoad =
-      activePage === "settings" && settingsPage === "integrations";
-    if (!shouldLoad) return;
-    if (!session) {
-      effectiveController.clearEffectiveSkills();
-      return;
-    }
-    const loadedKey = `${session.user.id}:${activeCommunityId ?? "personal"}`;
-    if (effectiveController.effectiveSkillsLoadedKeyRef.current === loadedKey) return;
-    void effectiveController.loadEffectiveSkills(session);
-  }, [
-    activeCommunityId,
-    activePage,
-    effectiveController.clearEffectiveSkills,
-    effectiveController.effectiveSkillsLoadedKeyRef,
-    effectiveController.loadEffectiveSkills,
-    session,
-    settingsPage,
-  ]);
-
-  useEffect(() => {
-    const shouldLoad =
-      activePage === "discover" ||
-      (activePage === "settings" && settingsPage === "integrations");
+    const shouldLoad = activePage === "settings" && settingsPage === "account";
     if (!shouldLoad) return;
     if (!session) {
       userController.clearUserPlatformSkills();
       return;
     }
-    if (userController.userPlatformSkillsLoadedUserIdRef.current === session.user.id) return;
+    if (
+      userController.userPlatformSkillsLoadedUserIdRef.current ===
+      session.user.id
+    )
+      return;
     void userController.loadUserPlatformSkills(session);
   }, [
     activePage,
@@ -165,21 +113,22 @@ export function useWebSkillsModel(params: {
 
   useEffect(() => {
     const shouldLoad =
-      (activePage === "community" && communityTab === "ai_agent") ||
-      activePage === "discover" ||
-      (activePage === "settings" && settingsPage === "integrations");
+      activePage === "community" && communityTab === "ai_agent";
     if (!shouldLoad) return;
     if (!session || !activeCommunityId || !canManageMembers) {
       communityController.clearCommunitySkillAttachments();
       return;
     }
     if (
-      communityController.communitySkillAttachmentsLoadedCommunityIdRef.current
-      === activeCommunityId
+      communityController.communitySkillAttachmentsLoadedCommunityIdRef
+        .current === activeCommunityId
     ) {
       return;
     }
-    void communityController.loadCommunitySkillAttachments(activeCommunityId, session);
+    void communityController.loadCommunitySkillAttachments(
+      activeCommunityId,
+      session,
+    );
   }, [
     activeCommunityId,
     activePage,
@@ -189,13 +138,11 @@ export function useWebSkillsModel(params: {
     communityController.loadCommunitySkillAttachments,
     communityTab,
     session,
-    settingsPage,
   ]);
 
   useEffect(() => {
     const shouldLoad =
-      (activePage === "community" && communityTab === "ai_agent") ||
-      activePage === "discover";
+      activePage === "community" && communityTab === "ai_agent";
     if (!shouldLoad) return;
     if (!session || !canManageMembers) {
       communityController.clearCommunitySkillAttachments();
@@ -213,40 +160,12 @@ export function useWebSkillsModel(params: {
     session,
   ]);
 
-  const settingsEffectiveSkills = useMemo(() => {
-    if (!effectiveController.effectiveSkillsError) {
-      return effectiveController.effectiveSkills;
-    }
-    return buildEffectiveSkills({
-      platformSkills:
-        activeCommunityId && canManageResources
-          ? COMMUNITY_MANAGER_PLATFORM_SKILLS
-          : [],
-      personalSkills: userController.userPlatformSkills,
-      communitySkills: communityController.communitySkillAttachments,
-    });
-  }, [
-    activeCommunityId,
-    canManageResources,
-    communityController.communitySkillAttachments,
-    effectiveController.effectiveSkills,
-    effectiveController.effectiveSkillsError,
-    userController.userPlatformSkills,
-  ]);
-  const settingsEffectiveSkillsError =
-    effectiveController.effectiveSkillsError && settingsEffectiveSkills.length === 0
-      ? effectiveController.effectiveSkillsError
-      : null;
-
   return {
-    effective: effectiveController,
     user: userController,
     community: communityController,
     communityPlatformSkills: canManageResources
       ? COMMUNITY_MANAGER_PLATFORM_SKILLS
       : [],
-    settingsEffectiveSkills,
-    settingsEffectiveSkillsError,
     actions: {
       createCommunitySkill,
       createUserPlatformSkill,

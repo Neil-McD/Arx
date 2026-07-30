@@ -13,7 +13,11 @@ import type {
 } from "../../../../shared/appShellNavigation";
 import type { CommunityPresenceFace } from "./CommunityPresenceFacepile";
 
-export type MobileOverlay = "community" | "community_selector" | "members" | null;
+export type MobileOverlay =
+  | "community"
+  | "community_selector"
+  | "members"
+  | null;
 export type MobileRootPage = "agent" | "community" | "messages";
 
 export type MobileMemberFace = CommunityPresenceFace;
@@ -105,6 +109,4 @@ export type WebSettingsSidebarProps = {
   isGlobalSettings: boolean;
   settingsGroup: SettingsGroup;
   onSelectPage: (page: SettingsPage) => void;
-  showOperatorConsole: boolean;
-  onOpenOperatorConsole: () => void;
 };

@@ -52,7 +52,7 @@ const activeSources = [
   "apps/web/src/App.tsx",
   "apps/web/src/components/WebCommunitySettingsSection.tsx",
   "apps/web/src/components/WebCommunityAiAgentSection.tsx",
-  "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+  "apps/web/src/components/WebPolynetMcpAccountSection.tsx",
   "convex/http.ts",
   "convex/runtimeAgentLoop.ts",
   "convex/runtimeExecutionSession.ts",
@@ -87,11 +87,11 @@ assert.match(vercel, /"src": "\/runtime\/mcp", "dest": "\/api\/mcp\/runtime"/);
 assert.doesNotMatch(vercel, /"src": "\/runtime\/mcp", "status": 404/);
 
 const settings = read(
-  "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+  "apps/web/src/components/WebPolynetMcpAccountSection.tsx",
 );
 assert.match(settings, /buildPolynetMcpSetupForOrigin/);
 assert.doesNotMatch(settings, /POLYNET_MCP_TOOL_COUNT_LABEL/);
-assert.match(settings, /WebSkillsSettingsSection/);
+assert.doesNotMatch(settings, /SkillsSettingsSection|PersonalSkillsAccountSection/);
 assert.doesNotMatch(
   settings,
   /Connected apps|PersonalAppSetupModal|EffectiveMcpApp/,

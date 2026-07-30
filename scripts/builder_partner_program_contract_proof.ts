@@ -796,7 +796,12 @@ function proveEligibilityGateContract(
   );
   assertIncludes(
     communityLifecycleSource,
-    "if (args.state.nextVisibility === \"published\")",
+    "requireCommunityPublishReadinessTransition({",
+    "community publish readiness authority",
+  );
+  assertIncludes(
+    communityLifecycleSource,
+    "nextVisibility: args.state.nextVisibility",
     "community publish readiness authority",
   );
   assertIncludes(
@@ -935,9 +940,9 @@ function proveAttributionRoutePrivacy() {
   );
   assert.equal(
     buildAttributionRouteLabel({
-      href: "/settings/integrations?app_oauth_finalize_token=secret&state=state&tab=apps",
+      href: "/settings/account?app_oauth_finalize_token=secret&state=state&tab=apps",
     }),
-    "/settings/integrations?tab=apps",
+    "/settings/account?tab=apps",
   );
 }
 

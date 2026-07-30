@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Check, CreditCard, Lock, Minus, Receipt } from "lucide-react";
+import { Check, Lock, Minus } from "lucide-react";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
+import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
 import {
+  isAccountTierFree,
   POLYNET_FREE_MAX_COMMUNITIES,
   POLYNET_PREMIUM_ACCOUNT_TIER,
   POLYNET_PREMIUM_MAX_COMMUNITIES,
@@ -36,10 +38,16 @@ function splitPriceLabel(label: string): { amount: string; period: string } {
 }
 
 function BillingPlanCellValue({ value }: { value: boolean | string }) {
-  if (value === true) return <Check size={16} strokeWidth={2.4} aria-label="Included" />;
+  if (value === true)
+    return <Check size={16} strokeWidth={2.4} aria-label="Included" />;
   if (value === false)
     return (
-      <Minus size={15} strokeWidth={2.2} className="billing-plan-dash" aria-label="Not included" />
+      <Minus
+        size={15}
+        strokeWidth={2.2}
+        className="billing-plan-dash"
+        aria-label="Not included"
+      />
     );
   return <span className="billing-plan-value-note">{value}</span>;
 }
@@ -51,25 +59,36 @@ type SessionLike = {
   };
 } | null;
 
-type WebBillingSettingsSectionProps = {
+export type WebBillingSettingsSectionProps = {
   session: SessionLike;
   accountCommerceStatus: AccountCommerceStatus | null;
   isLoadingAccountCommerce: boolean;
   accountCommerceError: string | null;
   startPremiumSubscriptionCheckout: () => Promise<void> | void;
+  canUseDevTierOverride: boolean;
+  isSettingDevAccountTier: boolean;
+  setDevAccountTier: (tier: "free" | "architect") => Promise<void> | void;
+  devAccountTierError: string | null;
+  pendingPurchaseClaims: PendingPurchaseClaim[];
+  isLoadingPendingPurchases: boolean;
+  isRedeemingPendingPurchases: boolean;
+  redeemPendingPurchases: () => Promise<void> | void;
+  refreshPendingPurchases: () => Promise<void> | void;
+  pendingPurchasesError: string | null;
+  pendingPurchasesSuccess: string | null;
 };
 
-export function WebBillingSettingsSection({
-  session,
-  accountCommerceStatus,
-  isLoadingAccountCommerce,
-  accountCommerceError,
-  startPremiumSubscriptionCheckout,
-}: WebBillingSettingsSectionProps) {
-  const [isStartingPremiumCheckout, setIsStartingPremiumCheckout] = useState(false);
-  const [premiumCheckoutError, setPremiumCheckoutError] = useState<string | null>(null);
-  const isPremium = accountCommerceStatus?.account_tier === POLYNET_PREMIUM_ACCOUNT_TIER;
-  const isSignedIn = Boolean(session);
+export function WebBillingSettingsSection(
+  props: WebBillingSettingsSectionProps,
+) {
+  const [isStartingPremiumCheckout, setIsStartingPremiumCheckout] =
+    useState(false);
+  const [premiumCheckoutError, setPremiumCheckoutError] = useState<
+    string | null
+  >(null);
+  const isPremium =
+    props.accountCommerceStatus?.account_tier === POLYNET_PREMIUM_ACCOUNT_TIER;
+  const isSignedIn = Boolean(props.session);
   const actionLabel = !isSignedIn
     ? "Sign in to upgrade"
     : isPremium
@@ -77,17 +96,20 @@ export function WebBillingSettingsSection({
       : isStartingPremiumCheckout
         ? "Opening checkout..."
         : "Upgrade to Premium";
-  const canStartPremiumCheckout = isSignedIn && !isPremium && !isStartingPremiumCheckout;
+  const canStartPremiumCheckout =
+    isSignedIn && !isPremium && !isStartingPremiumCheckout;
 
   const handleStartPremiumCheckout = async () => {
     if (!canStartPremiumCheckout) return;
     setPremiumCheckoutError(null);
     setIsStartingPremiumCheckout(true);
     try {
-      await startPremiumSubscriptionCheckout();
+      await props.startPremiumSubscriptionCheckout();
     } catch (error) {
       setPremiumCheckoutError(
-        error instanceof Error ? error.message : "Premium checkout is temporarily unavailable.",
+        error instanceof Error
+          ? error.message
+          : "Premium checkout is temporarily unavailable.",
       );
     } finally {
       setIsStartingPremiumCheckout(false);
@@ -103,17 +125,21 @@ export function WebBillingSettingsSection({
       <div className="memory-panel">
         <div className="settings-section billing-page">
           <p className="billing-page-sub">
-            You're on the <strong>{isPremium ? "Premium" : "Free"}</strong> plan — manage your
-            subscription and payment details.
+            You're on the <strong>{isPremium ? "Premium" : "Free"}</strong> plan
+            — manage your subscription and recover completed purchases.
           </p>
 
           <div className="billing-plan-scroll">
-            <div className="billing-plan-table" aria-label="Compare Free and Premium plans">
+            <div
+              className="billing-plan-table"
+              aria-label="Compare Free and Premium plans"
+            >
               <div className="billing-plan-col billing-plan-col--features">
                 <div className="billing-plan-head billing-plan-head--intro">
                   <div className="billing-plan-intro-title">Compare plans</div>
                   <div className="billing-plan-intro-sub">
-                    Free runs on the Polynet runtime. Premium unlocks everything else.
+                    Free runs on the Polynet runtime. Premium unlocks everything
+                    else.
                   </div>
                 </div>
                 {BILLING_PLAN_FEATURES.map((feature) => (
@@ -132,7 +158,9 @@ export function WebBillingSettingsSection({
                   </div>
                   <div className="billing-tier-foot">
                     {isPremium ? (
-                      <span className="billing-tier-note">Downgrade available</span>
+                      <span className="billing-tier-note">
+                        Downgrade available
+                      </span>
                     ) : (
                       <span className="billing-tier-current">Current plan</span>
                     )}
@@ -179,30 +207,128 @@ export function WebBillingSettingsSection({
             </div>
           </div>
 
-          <div className="billing-account-grid">
-            <div className="billing-account-card">
-              <div className="billing-account-card-head">
-                <span>Payment method</span>
+          {props.session && props.canUseDevTierOverride ? (
+            <div className="account-row">
+              <div className="account-identity">
+                <span>Internal tier override (dev)</span>
+                <strong>Creator-only testing control</strong>
               </div>
-              <div className="billing-account-empty">
-                <CreditCard size={17} strokeWidth={1.9} aria-hidden="true" />
-                No card on file — added at checkout.
+              <div className="auth-actions">
+                <button
+                  type="button"
+                  className={
+                    isAccountTierFree(
+                      props.accountCommerceStatus?.account_tier ?? "free",
+                    )
+                      ? ""
+                      : "secondary"
+                  }
+                  onClick={() => void props.setDevAccountTier("free")}
+                  disabled={
+                    props.isSettingDevAccountTier ||
+                    isAccountTierFree(
+                      props.accountCommerceStatus?.account_tier ?? "free",
+                    )
+                  }
+                >
+                  Free
+                </button>
+                <button
+                  type="button"
+                  className={isPremium ? "" : "secondary"}
+                  onClick={() => void props.setDevAccountTier("architect")}
+                  disabled={props.isSettingDevAccountTier || isPremium}
+                >
+                  Premium
+                </button>
               </div>
             </div>
-            <div className="billing-account-card">
-              <div className="billing-account-card-head">
-                <span>Billing history</span>
-              </div>
-              <div className="billing-account-empty">
-                <Receipt size={17} strokeWidth={1.9} aria-hidden="true" />
-                No invoices yet.
-              </div>
-            </div>
-          </div>
+          ) : null}
 
-          {accountCommerceError ? <div className="billing-settings-error">{accountCommerceError}</div> : null}
-          {premiumCheckoutError ? <div className="billing-settings-error">{premiumCheckoutError}</div> : null}
+          {props.accountCommerceError ? (
+            <div className="billing-settings-error">
+              {props.accountCommerceError}
+            </div>
+          ) : null}
+          {props.devAccountTierError ? (
+            <div className="billing-settings-error">
+              {props.devAccountTierError}
+            </div>
+          ) : null}
+          {premiumCheckoutError ? (
+            <div className="billing-settings-error">{premiumCheckoutError}</div>
+          ) : null}
         </div>
+
+        {props.session &&
+        (props.isLoadingPendingPurchases ||
+          props.pendingPurchaseClaims.length > 0 ||
+          props.pendingPurchasesError ||
+          props.pendingPurchasesSuccess) ? (
+          <div className="settings-section">
+            <div className="settings-section-title">Pending purchases</div>
+            <div className="settings-section-desc">
+              Recover access if payment completed before the join flow.
+            </div>
+            {props.isLoadingPendingPurchases ? (
+              <div className="chat-loading">
+                <div className="loading-spinner" />
+                <span>Checking…</span>
+              </div>
+            ) : null}
+            {!props.isLoadingPendingPurchases &&
+            props.pendingPurchaseClaims.length > 0 ? (
+              <div className="model-list">
+                {props.pendingPurchaseClaims.map((claim) => (
+                  <div
+                    key={`${claim.community_id}:${claim.expires_at}`}
+                    className="model-toggle"
+                  >
+                    <span>
+                      {claim.community_name ||
+                        claim.community_slug ||
+                        claim.community_id}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {!props.isLoadingPendingPurchases &&
+            props.pendingPurchaseClaims.length === 0 &&
+            props.pendingPurchasesSuccess ? (
+              <div className="auth-status">{props.pendingPurchasesSuccess}</div>
+            ) : null}
+            <div className="auth-actions">
+              <button
+                type="button"
+                onClick={() => void props.redeemPendingPurchases()}
+                disabled={
+                  props.isRedeemingPendingPurchases ||
+                  props.isLoadingPendingPurchases ||
+                  props.pendingPurchaseClaims.length === 0
+                }
+              >
+                {props.isRedeemingPendingPurchases
+                  ? "Claiming…"
+                  : "Claim access"}
+              </button>
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => void props.refreshPendingPurchases()}
+                disabled={
+                  props.isRedeemingPendingPurchases ||
+                  props.isLoadingPendingPurchases
+                }
+              >
+                Refresh
+              </button>
+            </div>
+            {props.pendingPurchasesError ? (
+              <div className="auth-error">{props.pendingPurchasesError}</div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </>
   );

@@ -76,7 +76,7 @@ export function useWebShellState() {
     initialAppRoute?.view ?? "home",
   );
   const [settingsPage, setSettingsPage] = useState<SettingsPage>(
-    initialAppRoute?.settingsPage ?? "account",
+    initialAppRoute?.settingsPage ?? "profile",
   );
   const [selectedProductDocSlug, setSelectedProductDocSlug] =
     useState<string | null>(initialAppRoute?.docsSlug ?? null);

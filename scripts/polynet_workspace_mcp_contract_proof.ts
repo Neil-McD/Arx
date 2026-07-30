@@ -63,8 +63,8 @@ const mcpSource = read("shared/polynetMcp.ts");
 const httpSource = read("convex/httpMcp.ts");
 const executorSource = read("convex/polynetCanonicalExecutor.ts");
 const setupSource = read("shared/polynetMcpSetup.ts");
-const integrationsSource = read(
-  "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+const mcpAccountSource = read(
+  "apps/web/src/components/WebPolynetMcpAccountSection.tsx",
 );
 
 assert.match(mcpSource, /getPolynetCanonicalToolDefinitions\(\)/);
@@ -96,7 +96,7 @@ assert.doesNotMatch(
   /polynet_workspace_|polynet_get_my_profile|polynet_confirm_my_profile_facts|workspace_context_id/,
   "setup packets must teach only the canonical repository contract",
 );
-assert.match(integrationsSource, /OAuth protected/);
-assert.doesNotMatch(integrationsSource, /\b26\b|Polynet tools/);
+assert.match(mcpAccountSource, /OAuth protected/);
+assert.doesNotMatch(mcpAccountSource, /\b26\b|Polynet tools/);
 
 console.log("polynet_workspace_mcp_contract_proof: ok");

@@ -3,18 +3,9 @@ export type SettingsPage =
   | "account"
   | "billing"
   | "partners"
-  | "agent"
-  | "integrations"
   | "appearance";
 
-export type SettingsGroup =
-  | "profile"
-  | "account"
-  | "billing"
-  | "partners"
-  | "agent"
-  | "integrations"
-  | "appearance";
+export type SettingsGroup = SettingsPage;
 
 export type AppPage =
   | "landing"
@@ -25,7 +16,7 @@ export type AppPage =
   | "discover"
   | "docs";
 
-export type AppView = "home" | "settings";
+export type AppView = "home";
 
 export type DesktopShellContextualBackPage = "settings" | "operator";
 
@@ -35,11 +26,18 @@ export function isDesktopShellContextualBackPage(
   return page === "settings" || page === "operator";
 }
 
-export const OPERATOR_TABS = ["platform", "business", "email", "communities"] as const;
+export const OPERATOR_TABS = [
+  "platform",
+  "business",
+  "email",
+  "communities",
+] as const;
 
 export type OperatorTab = (typeof OPERATOR_TABS)[number];
 
-export function parseOperatorTab(value: string | null | undefined): OperatorTab {
+export function parseOperatorTab(
+  value: string | null | undefined,
+): OperatorTab {
   const normalized = String(value ?? "").trim();
   return OPERATOR_TABS.includes(normalized as OperatorTab)
     ? (normalized as OperatorTab)
@@ -60,10 +58,7 @@ export const COMMUNITY_TABS = [
 
 export type CommunityTab = (typeof COMMUNITY_TABS)[number];
 
-export const COMMUNITY_SETTINGS_PANES = [
-  "community",
-  "workflows",
-] as const;
+export const COMMUNITY_SETTINGS_PANES = ["community", "workflows"] as const;
 
 export type CommunitySettingsPane = (typeof COMMUNITY_SETTINGS_PANES)[number];
 
@@ -115,7 +110,9 @@ export function normalizeCommunityTabForAccess(
   return isCommunityTabAllowedForAccess(tab, access) ? tab : "chat";
 }
 
-export function parseCommunityTab(value: string | null | undefined): CommunityTab {
+export function parseCommunityTab(
+  value: string | null | undefined,
+): CommunityTab {
   switch ((value ?? "").trim()) {
     case "ai-feed":
       return "ai_feed";
@@ -146,7 +143,9 @@ export function parseCommunityTab(value: string | null | undefined): CommunityTa
   }
 }
 
-export function parseCommunitySettingsPane(value: string | null | undefined): CommunitySettingsPane {
+export function parseCommunitySettingsPane(
+  value: string | null | undefined,
+): CommunitySettingsPane {
   switch ((value ?? "").trim()) {
     case "workflows":
       return "workflows";
@@ -157,13 +156,7 @@ export function parseCommunitySettingsPane(value: string | null | undefined): Co
 }
 
 export function settingsGroupForPage(page: SettingsPage): SettingsGroup {
-  if (page === "profile") return "profile";
-  if (page === "account") return "account";
-  if (page === "billing") return "billing";
-  if (page === "partners") return "partners";
-  if (page === "integrations") return "integrations";
-  if (page === "appearance") return "appearance";
-  return "agent";
+  return page;
 }
 
 export function settingsGroupLabel(group: SettingsGroup): string {
@@ -176,10 +169,6 @@ export function settingsGroupLabel(group: SettingsGroup): string {
       return "Billing";
     case "partners":
       return "Partners";
-    case "agent":
-      return "Agent";
-    case "integrations":
-      return "Integrations";
     case "appearance":
       return "Appearance";
   }

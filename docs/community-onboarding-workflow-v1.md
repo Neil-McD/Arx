@@ -55,7 +55,7 @@ Only step three performs inference, through the member's existing personal
 agent with its normal provider, limits, history, permissions, and explicit
 community context.
 
-The MCP step copies the same setup packet used by personal Integrations
+The MCP step copies the same setup packet exposed under global Account
 settings. It records the handoff, not an unverifiable claim that installation
 completed in an external harness.
 

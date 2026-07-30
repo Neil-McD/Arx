@@ -25,8 +25,9 @@ Current canonical/pathname routes include:
 - `/discover`
 - `/settings/profile`
 - `/settings/account`
-- `/settings/agent`
+- `/settings/billing`
 - `/settings/appearance`
+- `/settings/partners`
 - `/c/:slug`
 - `/c/:slug/chat`
 - `/c/:slug/ai-feed`
@@ -54,8 +55,9 @@ These are top-level application destinations:
 - `/discover`
 - `/settings/profile`
 - `/settings/account`
-- `/settings/agent`
+- `/settings/billing`
 - `/settings/appearance`
+- `/settings/partners`
 
 These should represent actual page identity.
 

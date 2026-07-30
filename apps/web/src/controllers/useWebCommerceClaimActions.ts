@@ -240,11 +240,24 @@ export function useWebCommerceClaimActions(args: UseWebCommerceClaimActionsArgs)
     [redeemPendingPurchases],
   );
 
+  const refreshPendingPurchasesForSettings = useCallback(
+    async (): Promise<void> => {
+      const session = await resolveCurrentSession(
+        args.getSession,
+        args.ensureSession,
+      );
+      if (!session) return;
+      await loadPendingPurchaseClaims(session);
+    },
+    [args.ensureSession, args.getSession, loadPendingPurchaseClaims],
+  );
+
   return {
     redeemPurchaseClaim,
     loadPendingPurchaseClaims,
     loadAccountCommerceStatus,
     redeemPendingPurchases,
     redeemPendingPurchasesForSettings,
+    refreshPendingPurchasesForSettings,
   };
 }

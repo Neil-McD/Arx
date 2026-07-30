@@ -21,6 +21,9 @@ const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const schema = read("convex/schema.ts");
 const webRouteState = read("shared/webAppRouteState.ts");
 const app = read("apps/web/src/App.tsx");
+const authenticatedIdentityController = read(
+  "apps/web/src/controllers/useWebAuthenticatedIdentityController.ts",
+);
 const shellNavigation = read(
   "apps/web/src/controllers/useWebShellNavigationController.ts",
 );
@@ -46,7 +49,7 @@ assert.equal(
   buildAppRoutePath({
     page: "operator",
     view: "home",
-    settingsPage: "agent",
+    settingsPage: "profile",
     communitySlug: null,
     communityTab: "chat",
     operatorTab: "communities",
@@ -158,7 +161,7 @@ for (const queryName of operatorQueryNames.filter((queryName) => queryName !== "
 
 assert.doesNotMatch(operatorDashboard, /export const \w+ = action/, "operator dashboard must not expose public actions");
 const operatorMaintenanceMutationNames = [
-  "backfillHarnessAppSourceProvenance",
+  "backfillCommunityMembershipActiveFlags",
 ];
 assert.deepEqual(
   [...operatorDashboard.matchAll(/export const (\w+) = mutation/g)].map((match) => match[1]),
@@ -231,13 +234,13 @@ assert.match(
   "operator routes must serialize to a canonical tab path",
 );
 assert.match(
-  app,
-  /isOperatorAccessResolved =[\s\S]*operatorAccessState\?\.subject === canonicalSessionUserId[\s\S]*operatorAccess = isOperatorAccessResolved/,
+  authenticatedIdentityController,
+  /isOperatorAccessResolved =[\s\S]*operatorAccessState\?\.subject === canonicalUserId[\s\S]*operatorAccess =[\s\S]*isOperatorAccessResolved/,
   "operator rendering must distinguish unresolved access from a resolved denial for the current auth subject",
 );
 assert.match(
-  app,
-  /if \(!access\) \{[\s\S]*setOperatorAccessState\(\{ subject: operatorSubject, access: null \}\)/,
+  authenticatedIdentityController,
+  /setOperatorAccessState\(\{ subject, access: access \?\? null \}\)/,
   "the optional access probe must record a resolved denial instead of leaving the route pending",
 );
 assert.match(
@@ -285,10 +288,10 @@ assert.doesNotMatch(
   /WebWorkspaceRightPanel|workspace-right-panel/,
   "the operator console must not depend on retired Workspace panel presentation",
 );
-assert.match(
+assert.doesNotMatch(
   settingsNav,
-  /showOperatorConsole && onOpenOperatorConsole[\s\S]*Platform Analytics/,
-  "global settings navigation must expose Platform Analytics only after operator access is granted",
+  /showOperatorConsole|onOpenOperatorConsole|Platform Analytics/,
+  "operator navigation must not be coupled to global settings",
 );
 assert.match(
   shellProjection,

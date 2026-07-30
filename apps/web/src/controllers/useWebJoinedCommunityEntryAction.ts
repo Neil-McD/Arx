@@ -19,7 +19,7 @@ export function useWebJoinedCommunityEntryAction(params: {
   applyAppRouteState: (route: {
     page: "community";
     view: "home";
-    settingsPage: "agent";
+    settingsPage: "profile";
     communitySlug: string | null;
     communityTab: "chat";
   }) => void;
@@ -46,7 +46,7 @@ export function useWebJoinedCommunityEntryAction(params: {
       params.applyAppRouteState({
         page: "community",
         view: "home",
-        settingsPage: "agent",
+        settingsPage: "profile",
         communitySlug: slug || null,
         communityTab: "chat",
       });

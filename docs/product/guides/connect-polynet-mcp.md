@@ -16,7 +16,7 @@ copying credentials or weakening community access controls.
 ## Setup
 
 1. Sign in to Polynet.
-2. Open Settings → Integrations or complete the onboarding MCP handoff.
+2. Open Settings → Account or complete the onboarding MCP handoff.
 3. Copy the Polynet MCP setup packet.
 4. Configure it in the external harness.
 5. Complete Polynet OAuth in the browser.

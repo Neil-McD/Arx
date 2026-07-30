@@ -270,13 +270,14 @@ function parseSettingsPage(value: string | null | undefined): SettingsPage {
     case "partner":
     case "partners":
       return "partners";
+    case "agent":
     case "integrations":
     case "skills":
-      return "integrations";
+      return "account";
     case "appearance":
       return "appearance";
     default:
-      return "agent";
+      return "profile";
   }
 }
 
@@ -297,7 +298,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     return {
       page: "landing",
       view: "home",
-      settingsPage: "agent",
+      settingsPage: "profile",
       communitySlug: null,
       communityTab: "chat",
     };
@@ -307,7 +308,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     return {
       page: "onboarding",
       view: "home",
-      settingsPage: "agent",
+      settingsPage: "profile",
       communitySlug: null,
       communityTab: "chat",
     };
@@ -317,7 +318,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     return {
       page: "discover",
       view: "home",
-      settingsPage: "agent",
+      settingsPage: "profile",
       communitySlug: null,
       communityTab: "chat",
     };
@@ -327,7 +328,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     return {
       page: "docs",
       view: "home",
-      settingsPage: "agent",
+      settingsPage: "profile",
       communitySlug: null,
       communityTab: "chat",
       docsSlug: normalizeDocsSlug(segments.slice(1).join("/")),
@@ -338,7 +339,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     return {
       page: "operator",
       view: "home",
-      settingsPage: "agent",
+      settingsPage: "profile",
       communitySlug: null,
       communityTab: "chat",
       operatorTab: parseOperatorTab(segments[1] ?? null),
@@ -352,7 +353,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       return {
         page: "community",
         view: "home",
-        settingsPage: "agent",
+        settingsPage: "profile",
         communitySlug: slug,
         communityTab: "settings",
         communitySettingsPane: "community",
@@ -368,7 +369,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       return {
         page: "community",
         view: "home",
-        settingsPage: "agent",
+        settingsPage: "profile",
         communitySlug: slug,
         communityTab: "settings",
         communitySettingsPane: "community",
@@ -377,7 +378,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     return {
       page: "landing",
       view: "home",
-      settingsPage: "agent",
+      settingsPage: "profile",
       communitySlug: null,
       communityTab: "chat",
     };
@@ -404,7 +405,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     return {
       page: "community",
       view: "home",
-      settingsPage: "agent",
+      settingsPage: "profile",
       communitySlug: slug,
       communityTab: "chat",
       communityExperienceMode: "onboarding_preview",
@@ -422,7 +423,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     return {
       page: "community",
       view: "home",
-      settingsPage: "agent",
+      settingsPage: "profile",
       communitySlug: slug,
       communityTab,
       communityExperienceMode: "standard",
@@ -482,7 +483,7 @@ export function readAppRouteFromLocation(): AppRouteState {
   return {
     page: "landing",
     view: "home",
-    settingsPage: "agent",
+    settingsPage: "profile",
     communitySlug: null,
     communityTab: "chat",
     docsSlug: null,

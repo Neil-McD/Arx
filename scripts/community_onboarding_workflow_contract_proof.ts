@@ -43,7 +43,7 @@ const dock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const dockCss = read("apps/web/src/components/WebMemberAgentDock.css");
 const mcpGuide = read("apps/web/src/components/WebCommunityOnboardingMcpGuide.tsx");
 const mcpCompatibility = read("apps/web/src/components/WebCommunityOnboardingMcpCompatibility.tsx");
-const integrations = read("apps/web/src/components/WebIntegrationsSettingsSection.tsx");
+const mcpAccount = read("apps/web/src/components/WebPolynetMcpAccountSection.tsx");
 const mcpSetup = read("shared/polynetMcpSetup.ts");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 
@@ -336,9 +336,9 @@ for (const asset of [
 }
 assert.doesNotMatch(mcpGuide, /POLYNET_MCP_ENDPOINT_URL/);
 assert.match(mcpGuide, /props\.onComplete/);
-assert.match(integrations, /buildPolynetMcpSetupForOrigin\(window\.location\.origin\)/);
-assert.match(integrations, /setup\.setupBundle/);
-assert.doesNotMatch(integrations, /Polynet tools/);
+assert.match(mcpAccount, /buildPolynetMcpSetupForOrigin\(window\.location\.origin\)/);
+assert.match(mcpAccount, /setup\.setupBundle/);
+assert.doesNotMatch(mcpAccount, /Polynet tools/);
 assert.match(mcpSetup, /POLYNET_PRODUCTION_HOSTS = new Set\(\["polynet\.ai", "www\.polynet\.ai"\]\)/);
 assert.match(mcpSetup, /POLYNET_STAGING_HOST = "polynet-staging\.vercel\.app"/);
 assert.match(mcpSetup, /POLYNET_MCP_PATH = "\/runtime\/mcp"/);

@@ -23,6 +23,12 @@ function main() {
     new URL("../convex/communityPublic.ts", import.meta.url),
   );
   const app = readText(new URL("../apps/web/src/App.tsx", import.meta.url));
+  const discoverActivationController = readText(
+    new URL(
+      "../apps/web/src/controllers/useWebDiscoverActivationController.ts",
+      import.meta.url,
+    ),
+  );
   const discoverPanel = readText(
     new URL("../apps/web/src/components/WebDiscoverPanel.tsx", import.meta.url),
   );
@@ -44,9 +50,9 @@ function main() {
   const navSnapshot = readText(
     new URL("../shared/navSnapshot.ts", import.meta.url),
   );
-  const integrationsSettings = readText(
+  const accountSettings = readText(
     new URL(
-      "../apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+      "../apps/web/src/components/WebPersonalSkillsAccountSection.tsx",
       import.meta.url,
     ),
   );
@@ -85,19 +91,13 @@ function main() {
     "unlisted direct-link funnels must remain reachable",
   );
 
-  const activateDiscoverCard = extractSection(
-    app,
-    "const activateDiscoverCommunityCard = useCallback((opts: {",
-    "const settingsPanelsProps: WebSettingsPanelsProps = {",
-    "Discover card activation",
-  );
   assert.match(
-    activateDiscoverCard,
-    /openPublicCommunityFunnel\(slug, \{ pushSnapshot: true \}\)/,
+    discoverActivationController,
+    /openPublicCommunityFunnel\(slug, \{\s*pushSnapshot: true,\s*\}\)/,
     "Discover cards must enter the canonical community funnel",
   );
   assert.doesNotMatch(
-    activateDiscoverCard,
+    discoverActivationController,
     /joinPublicCommunity\(|setActivePage\("community"\)/,
     "Discover cards must not bypass the gate",
   );
@@ -166,7 +166,7 @@ function main() {
     "App must not retain retired Discover state",
   );
   assert.doesNotMatch(
-    integrationsSettings,
+    accountSettings,
     /openDiscoverApps|openDiscoverSkills|Browse apps|Browse skills/,
     "settings must not route back into retired Discover catalogs",
   );

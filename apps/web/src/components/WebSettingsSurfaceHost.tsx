@@ -4,7 +4,10 @@ import type {
 } from "../../../../shared/appShellNavigation";
 import { SettingsNavList } from "../../../../shared/SettingsNavList";
 import { settingsGroupLabel } from "../../../../shared/appShellNavigation";
-import { WebSettingsPanels, type WebSettingsPanelsProps } from "./WebSettingsPanels";
+import {
+  WebSettingsPanels,
+  type WebSettingsPanelsProps,
+} from "./WebSettingsPanels";
 
 export type WebSettingsSurfaceHostProps = {
   settingsGroup: SettingsGroup;
@@ -12,8 +15,6 @@ export type WebSettingsSurfaceHostProps = {
   showMobileSettingsIndex: boolean;
   onSelectMobileSettingsPage: (page: SettingsPage) => void;
   onShowMobileSettingsIndex: () => void;
-  showOperatorConsole: boolean;
-  onOpenOperatorConsole: () => void;
   settingsPanelsProps: WebSettingsPanelsProps;
 };
 
@@ -33,8 +34,6 @@ export function WebSettingsSurfaceHost(props: WebSettingsSurfaceHostProps) {
               <SettingsNavList
                 settingsGroup={null}
                 onSelectPage={props.onSelectMobileSettingsPage}
-                showOperatorConsole={props.showOperatorConsole}
-                onOpenOperatorConsole={props.onOpenOperatorConsole}
               />
             </div>
           </div>

@@ -16,8 +16,8 @@ function assertNotIncludes(haystack: string, needle: string, label: string) {
 function main() {
   const personalMemory = readText(new URL("../convex/personalMemory.ts", import.meta.url));
   const settings = readText(new URL("../convex/settings.ts", import.meta.url));
-  const agentSettings = readText(
-    new URL("../apps/web/src/components/WebAgentSettingsSection.tsx", import.meta.url),
+  const accountSettings = readText(
+    new URL("../apps/web/src/components/WebPersonalAccountSettingsSection.tsx", import.meta.url),
   );
   const memorySettingsData = readText(
     new URL("../shared/useWebMemorySettingsDataController.ts", import.meta.url),
@@ -45,7 +45,7 @@ function main() {
     "memory settings APIs resolve authenticated user",
   );
   assertNotIncludes(
-    agentSettings,
+    accountSettings,
     "Personal memory is included with Builder.",
     "personal memory UI is not Builder-only",
   );

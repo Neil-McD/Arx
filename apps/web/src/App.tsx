@@ -108,7 +108,6 @@ import {
   type OperatorTab,
   type SettingsGroup,
   type SettingsPage,
-  settingsGroupLabel,
 } from "../../../shared/appShellNavigation";
 import type {
   CommunityAiFeedPost as SharedCommunityAiFeedPost,
@@ -407,7 +406,7 @@ export default function App() {
     useWebPersonalAccountSettingsController<AuthSession>({
       session,
       isAccountSettingsActive:
-        activeView === "settings" && settingsGroup === "agent",
+        activePage === "settings" && settingsGroup === "account",
       getSession: () => sessionRef.current,
       ensureSession: ensureUsableAuthSession,
       requireSignIn,
@@ -876,9 +875,6 @@ export default function App() {
     settingsPage,
   });
   const {
-    isLoadingEffectiveSkills,
-  } = skillsModel.effective;
-  const {
     userPlatformSkills,
     isLoadingUserPlatformSkills,
     userPlatformSkillError,
@@ -1080,8 +1076,6 @@ export default function App() {
     updateCommunitySkillAttachment: handleUpdateCommunitySkillAttachment,
     detachCommunitySkill: handleDetachCommunitySkill,
   } = skillsModel.actions;
-  const effectiveSkillsForSettings = skillsModel.settingsEffectiveSkills;
-  const effectiveSkillsErrorForSettings = skillsModel.settingsEffectiveSkillsError;
 
   const communitySettingsController = useWebCommunitySettingsController({
     activeCommunity,
@@ -1431,6 +1425,7 @@ export default function App() {
     loadAccountCommerceStatus,
     redeemPendingPurchases,
     redeemPendingPurchasesForSettings,
+    refreshPendingPurchasesForSettings,
   } = useWebCommerceClaimActions({
     getSession: () => sessionRef.current,
     ensureSession: ensureUsableAuthSession,
@@ -1465,7 +1460,7 @@ export default function App() {
   } = useWebBuilderPartnerProgramController({
     session,
     canonicalSessionUserId,
-    activeView,
+    activePage,
     settingsGroup,
     communitiesCount: communities.length,
     ensureSession: ensureUsableAuthSession,
@@ -2508,24 +2503,36 @@ export default function App() {
       saveProfileToCloud,
     },
     account: {
-      ...builderPartnerProgramSharedProps,
+      session,
       authError,
+      requireSignIn,
       handleSignOut,
       isLoadingChatgptConnection,
       chatgptConnection,
+      isConnectingChatgpt: providerConnectionUi.isConnectingChatgpt,
+      isPollingChatgptConnection:
+        providerConnectionUi.isPollingChatgptConnection,
       isLoadingOpenAiConnection: isLoadingChatgptConnection,
       openAiConnection,
       hasPendingChatgptAuth,
+      handleConnectChatgpt: providerConnectionUi.handleConnectChatgpt,
+      handleDisconnectChatgpt:
+        providerConnectionUi.handleDisconnectChatgpt,
+      chatgptDeviceUserCode: providerConnectionUi.chatgptDeviceUserCode,
+      chatgptConnectionError:
+        providerConnectionUi.chatgptConnectionError,
+      chatgptConnectionSuccess:
+        providerConnectionUi.chatgptConnectionSuccess,
+      openAiApiKeyDraft: providerConnectionUi.openAiApiKeyDraft,
+      setOpenAiApiKeyDraft: providerConnectionUi.setOpenAiApiKeyDraft,
+      isSavingOpenAiConnection:
+        providerConnectionUi.isSavingOpenAiConnection,
+      openAiConnectionError: providerConnectionUi.openAiConnectionError,
+      openAiConnectionSuccess: providerConnectionUi.openAiConnectionSuccess,
+      handleConnectOpenAi: providerConnectionUi.handleConnectOpenAi,
+      handleDisconnectOpenAi:
+        providerConnectionUi.handleDisconnectOpenAi,
       formatRelativeTime,
-      communityInitials,
-      canUseDevTierOverride,
-      setDevAccountTier,
-      redeemPendingPurchases:
-        redeemPendingPurchasesForSettings,
-      ensureSession: ensureUsableAuthSession,
-      loadPendingPurchaseClaims,
-      providerConnectionUi,
-      billingUi,
     },
     personalAccount: {
       session,
@@ -2533,16 +2540,25 @@ export default function App() {
       controller: personalAccountSettings,
     },
     billing: {
-      session: session,
+      session,
+      accountCommerceStatus,
+      isLoadingAccountCommerce,
+      accountCommerceError,
       startPremiumSubscriptionCheckout,
-      billingUi,
+      canUseDevTierOverride,
+      isSettingDevAccountTier,
+      setDevAccountTier,
+      devAccountTierError,
+      pendingPurchaseClaims,
+      isLoadingPendingPurchases,
+      isRedeemingPendingPurchases,
+      redeemPendingPurchases: redeemPendingPurchasesForSettings,
+      refreshPendingPurchases: refreshPendingPurchasesForSettings,
+      pendingPurchasesError,
+      pendingPurchasesSuccess,
     },
     skills: {
-      session: session,
-      requireSignIn,
-      effectiveSkills: effectiveSkillsForSettings,
-      isLoadingEffectiveSkills,
-      effectiveSkillsError: effectiveSkillsErrorForSettings,
+      session,
       userPlatformSkills,
       isLoadingUserPlatformSkills,
       userPlatformSkillError,
@@ -2555,6 +2571,7 @@ export default function App() {
       onUpdateUserPlatformSkill: handleUpdateUserPlatformSkill,
       onDeleteUserPlatformSkill: handleDeleteUserPlatformSkill,
     },
+    partners: builderPartnerProgramSharedProps,
     appearance: {
       appTheme,
       setAppTheme,
@@ -2682,8 +2699,6 @@ export default function App() {
         setMobileSettingsView("detail");
       },
       onShowMobileSettingsIndex: () => setMobileSettingsView("index"),
-      showOperatorConsole: hasOperatorAccess,
-      onOpenOperatorConsole: () => openOperatorConsole("platform"),
       settingsPanelsProps,
     },
     publicCommunityFunnelProps: {
@@ -2996,12 +3011,10 @@ export default function App() {
     getCommunityRailItemBindings,
     setIsFreeAccountInfoOpen,
     handleOpenGlobalSettings: isVisitorCommunitySurface
-      ? () => navigateTo(buildSettingsPath("agent"))
-      : () => openGlobalSettings("agent"),
+      ? () => navigateTo(buildSettingsPath("profile"))
+      : () => openGlobalSettings("profile"),
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,
-    showOperatorConsole: hasOperatorAccess,
-    openOperatorConsole: () => openOperatorConsole("platform"),
     hasLeftPanel,
     isGlobalSettings,
   });

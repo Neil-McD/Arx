@@ -148,7 +148,10 @@ function main() {
     "apps/web/src/components/WebCommunityAiAgentSkillsEditor.tsx",
   );
   const settingsSection = readText(
-    "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+    "apps/web/src/components/WebPersonalSkillsAccountSection.tsx",
+  );
+  const skillsModel = readText(
+    "apps/web/src/controllers/useWebSkillsModel.ts",
   );
   const app = readText("apps/web/src/App.tsx");
 
@@ -336,8 +339,8 @@ function main() {
   );
   assertIncludes(
     runtimePrompt,
-    "Resources Architect builder tools are builder-lane only",
-    "Resources Architect tool prompt guidance",
+    'if (lane.lane === "builder" && hasBuilderTools)',
+    "Resources Architect tools must require the builder lane",
   );
   assertIncludes(
     platformSkillRuntime,
@@ -368,33 +371,29 @@ function main() {
     "Locked",
     "community skills editor locked platform state",
   );
-  assertIncludes(
-    settingsSection,
-    "Platform default",
-    "settings effective skills platform scope label",
+  assert.ok(
+    !settingsSection.includes("Platform default") &&
+      !settingsSection.includes("effectiveSkill"),
+    "global Account settings must contain personal skills only",
   );
-  assertIncludes(
-    settingsSection,
-    "Available by default",
-    "settings effective skills platform invocation label",
-  );
-  assertIncludes(
-    settingsSection,
-    "effectiveSkill.can_edit",
-    "settings effective skills must hide user edit controls for locked platform skills",
+  assert.ok(
+    !app.includes("settingsEffectiveSkills"),
+    "App must not materialize community-scoped effective skills into global settings",
   );
   assert.match(
     app,
-    /activeCommunityId && canManageResourcesActiveCommunity[\s\S]*\? COMMUNITY_MANAGER_PLATFORM_SKILLS/,
-    "settings platform skill fallback should use resource-builder authority",
+    /useWebSkillsModel\(\{[\s\S]*canManageResources: canManageResourcesActiveCommunity/,
+    "App must pass resource-builder authority into the skills model",
   );
   assert.match(
-    app,
-    /platformSkills: canManageResourcesActiveCommunity[\s\S]*\? COMMUNITY_MANAGER_PLATFORM_SKILLS/,
+    skillsModel,
+    /communityPlatformSkills: canManageResources\s*\?\s*COMMUNITY_MANAGER_PLATFORM_SKILLS/,
     "community AI skills editor should use resource-builder authority",
   );
   assert.ok(
-    !/platformSkills:\s*canManageMembersActiveCommunity[\s\S]*\? COMMUNITY_MANAGER_PLATFORM_SKILLS/.test(app),
+    !/communityPlatformSkills:\s*canManageMembers[\s\S]*\? COMMUNITY_MANAGER_PLATFORM_SKILLS/.test(
+      skillsModel,
+    ),
     "platform Resources Architect visibility must not be tied to member-management authority",
   );
 

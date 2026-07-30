@@ -36,11 +36,26 @@ assert.equal(
   buildAppRoutePath({
     page: "settings",
     view: "home",
-    settingsPage: "integrations",
+    settingsPage: "account",
     communitySlug: null,
     communityTab: "chat",
   }),
-  "/settings/integrations",
+  "/settings/account",
+);
+
+Object.defineProperty(globalThis, "window", {
+  configurable: true,
+  value: {
+    location: {
+      pathname: "/settings/agent",
+      search: "",
+    },
+  },
+});
+assert.equal(
+  readAppRouteFromLocation().settingsPage,
+  "account",
+  "legacy Agent routes must canonicalize to Account",
 );
 
 if (originalWindow === undefined) {
@@ -77,7 +92,9 @@ assert.equal(mobileProjection.showMobileSettingsIndex, true);
 assert.equal(mobileProjection.showMobileShell, false);
 
 const navigation = read("shared/appShellNavigation.ts");
+const settingsNav = read("shared/SettingsNavList.tsx");
 const routes = read("shared/webAppRouteState.ts");
+const navSnapshot = read("shared/navSnapshot.ts");
 const transitions = read("shared/appNavTransitions.ts");
 const app = read("apps/web/src/App.tsx");
 const shellNavigation = read(
@@ -90,6 +107,17 @@ const mobileController = read("apps/web/src/controllers/useWebMobileShellControl
 const globalOverlays = read("apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts");
 
 assert.match(navigation, /\| "settings"/);
+assert.match(
+  navigation,
+  /export type SettingsPage =[\s\S]*"profile"[\s\S]*"account"[\s\S]*"billing"[\s\S]*"partners"[\s\S]*"appearance"/,
+);
+assert.doesNotMatch(navigation, /\| "agent"|\| "integrations"/);
+assert.doesNotMatch(navigation, /AppView = "home" \| "settings"/);
+assert.doesNotMatch(navSnapshot, /snapshot\.view === "settings"/);
+assert.doesNotMatch(
+  settingsNav,
+  /Platform Analytics|showOperatorConsole|onOpenOperatorConsole/,
+);
 assert.match(
   routes,
   /segments\[0\] === "settings"[\s\S]*page: "settings"[\s\S]*view: "home"/,
@@ -106,11 +134,11 @@ assert.match(
 );
 assert.match(
   skillsModel,
-  /activePage === "settings" && settingsPage === "integrations"/,
+  /activePage === "settings" && settingsPage === "account"/,
 );
 assert.doesNotMatch(app, /setActiveView\("settings"\)/);
 assert.doesNotMatch(transitions, /ToggleWorkspaceSettings|deriveToggleWorkspaceSettingsTransition/);
-assert.match(mobileController, /params\.openGlobalSettings\("agent"\)/);
+assert.match(mobileController, /params\.openGlobalSettings\("profile"\)/);
 assert.doesNotMatch(mobileController, /setActivePage\("workspace"\)/);
 assert.match(
   globalOverlays,

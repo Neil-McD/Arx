@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
-import type { AppPage, SettingsGroup } from "../../../../shared/appShellNavigation";
+import type {
+  AppPage,
+  AppView,
+  SettingsGroup,
+} from "../../../../shared/appShellNavigation";
 import type { WebShellChromeHostProps } from "../components/WebShellChromeHost";
 import type { MobileMemberFace, MobileOverlay } from "../components/webShellChromeShared";
 
@@ -45,7 +49,7 @@ export function buildWebShellChromeHostProps(params: {
   isPublicFunnelPreviewRoute: boolean;
   hasBackTargetSnapshot: boolean;
   backTargetLabel: string | null;
-  activeView: "home" | "settings";
+  activeView: AppView;
   directMessagesButton: ReactNode;
   publicFunnelPreviewExitPath: string | null;
   handleTopbarBackFromPublicFunnel: () => void;
@@ -88,8 +92,6 @@ export function buildWebShellChromeHostProps(params: {
   handleOpenGlobalSettings: () => void;
   settingsGroup: SettingsGroup;
   setSettingsPage: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
-  showOperatorConsole: boolean;
-  openOperatorConsole: () => void;
   hasLeftPanel: boolean;
   isGlobalSettings: boolean;
 }): Omit<WebShellChromeHostProps, "mainSurface" | "globalOverlays"> {
@@ -233,8 +235,6 @@ export function buildWebShellChromeHostProps(params: {
       isGlobalSettings: params.isGlobalSettings,
       settingsGroup: params.settingsGroup,
       onSelectPage: params.setSettingsPage,
-      showOperatorConsole: params.showOperatorConsole,
-      onOpenOperatorConsole: params.openOperatorConsole,
     },
     hasLeftPanel: params.hasLeftPanel,
     showDesktopCommunityRail: params.showDesktopCommunityRail,
