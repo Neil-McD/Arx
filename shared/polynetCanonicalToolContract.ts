@@ -145,6 +145,113 @@ const SEARCH_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
   },
 };
 
+const WRITE_MENTION_SCHEMA: PlatformOperationJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    userId: { type: "string", minLength: 1, maxLength: 180 },
+    agentKey: { type: "string", minLength: 1, maxLength: 180 },
+    roleKey: { type: "string", minLength: 1, maxLength: 180 },
+  },
+};
+
+const WRITE_ATTACHMENT_SCHEMA: PlatformOperationJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["name", "type", "size"],
+  properties: {
+    id: { type: "string", minLength: 1, maxLength: 180 },
+    name: { type: "string", minLength: 1, maxLength: 500 },
+    type: { type: "string", minLength: 1, maxLength: 120 },
+    mime: { type: ["string", "null"], maxLength: 180 },
+    size: { type: "number", minimum: 0 },
+    storageId: { type: "string", minLength: 1, maxLength: 180 },
+    data_url: { type: "string", minLength: 1, maxLength: 24_000 },
+    text: { type: "string", maxLength: 24_000 },
+    truncated: { type: "boolean" },
+  },
+};
+
+const RESOURCE_CHANGESET_OPERATION_SCHEMA: PlatformOperationJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["op"],
+  properties: {
+    op: {
+      type: "string",
+      enum: [
+        "create_module",
+        "edit_module",
+        "create_page",
+        "edit_page",
+        "move_resource",
+        "delete_page",
+        "delete_category",
+        "link_source_to_page",
+      ],
+    },
+    module_key: { type: "string", minLength: 1, maxLength: 120 },
+    module_id: { type: ["string", "null"], maxLength: 180 },
+    resource_id: { type: "string", minLength: 1, maxLength: 180 },
+    page_resource_id: { type: "string", minLength: 1, maxLength: 180 },
+    source_resource_id: { type: ["string", "null"], maxLength: 180 },
+    expected_updated_at: { type: "number", minimum: 0 },
+    name: { type: "string", minLength: 1, maxLength: 180 },
+    title: { type: "string", minLength: 1, maxLength: 180 },
+    description_md: { type: ["string", "null"], maxLength: 1_200 },
+    body_md: { type: ["string", "null"], maxLength: 20_000 },
+    module_status: {
+      type: ["string", "null"],
+      enum: ["draft", "live", null],
+    },
+    resource_status: {
+      type: ["string", "null"],
+      enum: ["draft", "review", "processing", "failed", null],
+    },
+    type: { type: "string", minLength: 1, maxLength: 64 },
+    url: { type: ["string", "null"], maxLength: 2_048 },
+    pinned: { type: "boolean" },
+  },
+};
+
+const WRITE_CONTENT_SCHEMA: PlatformOperationJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    text: { type: "string", maxLength: 12_000 },
+    root_id: { type: ["string", "null"], maxLength: 180 },
+    reply_to_message_id: { type: ["string", "null"], maxLength: 180 },
+    mentions: {
+      type: "array",
+      maxItems: 24,
+      items: WRITE_MENTION_SCHEMA,
+    },
+    attachments: {
+      type: "array",
+      maxItems: 24,
+      items: WRITE_ATTACHMENT_SCHEMA,
+    },
+    post_type: {
+      type: ["string", "null"],
+      enum: ["observation", "recommendation", "action", null],
+    },
+    title: { type: ["string", "null"], maxLength: 180 },
+    body: { type: "string", maxLength: 12_000 },
+    evidence: {
+      type: "array",
+      maxItems: 4,
+      items: { type: "string", minLength: 1, maxLength: 180 },
+    },
+    summary: { type: "string", maxLength: 1_000 },
+    operations: {
+      type: "array",
+      minItems: 1,
+      maxItems: 50,
+      items: RESOURCE_CHANGESET_OPERATION_SCHEMA,
+    },
+  },
+};
+
 const WRITE_INPUT_SCHEMA: PlatformOperationJsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -155,10 +262,7 @@ const WRITE_INPUT_SCHEMA: PlatformOperationJsonSchema = {
       type: "string",
       enum: ["create", "append", "update"],
     },
-    content: {
-      type: "object",
-      additionalProperties: true,
-    },
+    content: WRITE_CONTENT_SCHEMA,
     expected_revision: {
       type: ["string", "null"],
       maxLength: 256,
@@ -188,6 +292,22 @@ const WRITE_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
   },
 };
 
+const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    retrieval_log_id: { type: "string", minLength: 1, maxLength: 180 },
+    node_id: { type: "string", minLength: 1, maxLength: 180 },
+    result_status: {
+      type: ["string", "null"],
+      enum: ["worked", "failed", "mixed", null],
+    },
+    notes: { type: "string", maxLength: 4_000 },
+    changeset_id: { type: "string", minLength: 1, maxLength: 180 },
+    reason: { type: "string", maxLength: 1_000 },
+  },
+};
+
 const CALL_INPUT_SCHEMA: PlatformOperationJsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -208,10 +328,7 @@ const CALL_INPUT_SCHEMA: PlatformOperationJsonSchema = {
       type: ["string", "null"],
       maxLength: 1024,
     },
-    input: {
-      type: "object",
-      additionalProperties: true,
-    },
+    input: CALL_OPERATION_INPUT_SCHEMA,
     expected_revision: {
       type: ["string", "null"],
       maxLength: 256,

@@ -136,6 +136,39 @@ function stableRequestValue(value: unknown): unknown {
   );
 }
 
+function omitNullishObjectFields(
+  value: unknown,
+): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).flatMap(
+      ([key, nested]) => {
+        if (nested === null || nested === undefined) return [];
+        if (Array.isArray(nested)) {
+          return [
+            [
+              key,
+              nested.map((entry) =>
+                entry && typeof entry === "object" && !Array.isArray(entry)
+                  ? omitNullishObjectFields(entry)
+                  : entry,
+              ),
+            ],
+          ];
+        }
+        return [
+          [
+            key,
+            nested && typeof nested === "object"
+              ? omitNullishObjectFields(nested)
+              : nested,
+          ],
+        ];
+      },
+    ),
+  );
+}
+
 function operationRequestFingerprint(input: Record<string, unknown>): string {
   return JSON.stringify(stableRequestValue(input));
 }
@@ -1082,7 +1115,7 @@ async function executeCanonicalWrite(args: {
     return canonicalError(resolved.code, resolved.message);
   }
   const { target } = resolved;
-  const content = args.input.content as Record<string, unknown>;
+  const content = omitNullishObjectFields(args.input.content);
   const mode = String(args.input.mode ?? "");
   const idempotencyKey = String(args.input.idempotencyKey ?? "");
 
@@ -1380,7 +1413,7 @@ async function executeCanonicalCall(args: {
   const { target } = resolved;
   const operation = String(args.input.operation ?? "");
   const version = Number(args.input.version ?? 0);
-  const input = args.input.input as Record<string, unknown>;
+  const input = omitNullishObjectFields(args.input.input);
   const idempotencyKey = String(args.input.idempotencyKey ?? "");
   if (version !== 1) {
     return canonicalError(

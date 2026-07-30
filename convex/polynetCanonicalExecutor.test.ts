@@ -209,7 +209,20 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
   const memberWrite = {
     path: "/communities/canonical-community/channels/general/",
     mode: "create",
-    content: { text: "A member-agent field report." },
+    content: {
+      text: "A member-agent field report.",
+      root_id: null,
+      reply_to_message_id: null,
+      mentions: null,
+      attachments: null,
+      post_type: null,
+      title: null,
+      body: null,
+      evidence: null,
+      summary: null,
+      operations: null,
+    },
+    expected_revision: null,
     idempotency_key: "member-chat-1",
   };
 
