@@ -63,7 +63,11 @@ export function CommunityVisitorGate(props: {
         {typeof action.onlineCount === "number" && action.onlineCount > 0 ? (
           <span>
             <span className="cfg-od" aria-hidden="true" />
-            <b>{formatCompactStat(action.onlineCount)}</b> online now
+            <b>
+              {formatCompactStat(action.onlineCount)}
+              {action.onlineCountCapped ? "+" : ""}
+            </b>{" "}
+            online now
           </span>
         ) : null}
         <span>{props.isFreePricing ? "Free to join" : props.pricingLabel}</span>

@@ -48,6 +48,7 @@ export type WebPublicCommunityRecord = {
   member_count?: number | null;
   admin_count?: number | null;
   online_count?: number | null;
+  online_count_capped?: boolean | null;
   online_faces?: Array<{
     user_id: string;
     display_name: string | null;

@@ -58,6 +58,7 @@ export type CommunityFunnelSurfaceAction = {
   cardBlurb: string;
   memberCount: number | null;
   onlineCount: number | null;
+  onlineCountCapped: boolean;
   adminCount: number | null;
   onlineFaces: CommunityFunnelSurfaceFace[];
   primaryActionLabel: string;
@@ -321,4 +322,3 @@ export function ActionStatusCards(props: { action: CommunityFunnelSurfaceAction 
     </>
   );
 }
-

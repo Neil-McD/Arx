@@ -42,6 +42,7 @@ type VisitorPublicFace = {
 
 export type WebCommunityVisitorSurfaceStats = {
   onlineCount: number | null;
+  onlineCountCapped: boolean;
   onlineFaces: VisitorPublicFace[];
   memberCount: number | null;
   memoryNoteCount: number | null;
@@ -296,6 +297,7 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
               presenceSummary={{
                 member_count: stats.memberCount,
                 online_count: stats.onlineCount,
+                online_count_capped: stats.onlineCountCapped,
                 online_faces: presenceFaces,
               }}
               communityMemberCount={stats.memberCount}
@@ -364,6 +366,7 @@ export function WebCommunityVisitorSurface(props: WebCommunityVisitorSurfaceProp
           communityName={title}
           onlineFaces={presenceFaces}
           onlineCount={stats.onlineCount}
+          onlineCountCapped={stats.onlineCountCapped}
           memberCount={stats.memberCount}
           lockedSections={{ members: true }}
           onLockedSectionActivate={closeMembersAndReopenGate}

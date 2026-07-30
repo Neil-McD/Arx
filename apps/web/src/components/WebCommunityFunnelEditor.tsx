@@ -31,6 +31,7 @@ type PreviewCommunityLike = {
   visibility: string;
   admin_count?: number | null;
   online_count?: number | null;
+  online_count_capped?: boolean | null;
   online_faces?: Array<{
     user_id: string;
     display_name: string | null;
@@ -208,6 +209,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     cardBlurb: cardOneLiner,
     memberCount: typeof previewMemberCount === "number" ? previewMemberCount : null,
     onlineCount: previewOnlineCount,
+    onlineCountCapped: Boolean(previewCommunity.online_count_capped),
     adminCount: previewAdminCount,
     onlineFaces: previewFaces,
     primaryActionLabel: "Join now",

@@ -24,6 +24,10 @@ const controller = read(
 );
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const facepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
+const webAppContracts = read("apps/web/src/webAppContracts.ts");
+const publicFunnel = read("apps/web/src/components/WebPublicCommunityFunnel.tsx");
+const funnelSurface = read("apps/web/src/components/CommunityFunnelSurface.tsx");
+const visitorChrome = read("apps/web/src/components/CommunityVisitorChrome.tsx");
 
 const presenceSchema = sectionBetween(
   schema,
@@ -45,6 +49,21 @@ const summaryResolverStart = core.indexOf(
 );
 assert.ok(summaryResolverStart >= 0, "missing member presence summary resolver");
 const summaryResolver = core.slice(summaryResolverStart);
+const authorizedWindowResolver = sectionBetween(
+  core,
+  "export async function resolveAuthorizedCommunityPresenceWindow",
+  "export async function resolveMemberCommunityPresenceSummary",
+);
+const publicStatsResolver = sectionBetween(
+  communityPublic,
+  "async function resolvePublicCommunityStats",
+  "function mapPublicCommunityStats",
+);
+const publicStatsMapper = sectionBetween(
+  communityPublic,
+  "function mapPublicCommunityStats",
+  "const PUBLIC_FEATURED_MESSAGE_LIMIT",
+);
 const presenceEffect = sectionBetween(
   controller,
   "if (!params.session || !params.activeCommunityId) {\n      setActiveCommunityPresenceSummaryState(null);",
@@ -99,9 +118,35 @@ assert.doesNotMatch(
   "the hot member presence path must not materialize the public funnel projection",
 );
 assert.match(
+  authorizedWindowResolver,
+  /by_community_activeUntil[\s\S]*\.take\(COMMUNITY_PRESENCE_SUMMARY_SCAN_LIMIT \+ 1\)[\s\S]*communityPresenceUserRemainsAuthorized[\s\S]*return \{ entries, countCapped \}/,
+  "the canonical presence window must use a bounded active-window read and reauthorize candidates",
+);
+assert.match(
   summaryResolver,
-  /by_community_activeUntil[\s\S]*\.take\(COMMUNITY_PRESENCE_SUMMARY_SCAN_LIMIT \+ 1\)[\s\S]*communityPresenceUserRemainsAuthorized[\s\S]*readCommunityActiveMemberCount/,
-  "member presence must use a bounded active-window read, reauthorize candidates, and use the durable count",
+  /resolveAuthorizedCommunityPresenceWindow[\s\S]*readCommunityActiveMemberCount[\s\S]*onlineCountCapped: presenceWindow\.countCapped/,
+  "member presence must consume the canonical window, durable count, and conservative cap state",
+);
+
+assert.match(
+  publicStatsResolver,
+  /resolveAuthorizedCommunityPresenceWindow[\s\S]*presenceWindow\.entries[\s\S]*COMMUNITY_PRESENCE_FACE_LIMIT/,
+  "public presence must consume the same authorized bounded window and cap its facepile",
+);
+assert.doesNotMatch(
+  publicStatsResolver,
+  /query\("communityPresence"|by_community_lastSeenAt|COMMUNITY_PRESENCE_LEASE_DURATION_MS|\.collect\(\)/,
+  "public presence must not own a second lease interpretation or unbounded presence read",
+);
+assert.match(
+  publicStatsMapper,
+  /online_count: stats\.onlineCount[\s\S]*online_count_capped: stats\.onlineCountCapped[\s\S]*online_faces: stats\.onlineFaces/,
+  "public presence must disclose only a conservative count and bounded facepile",
+);
+assert.doesNotMatch(
+  publicStatsMapper,
+  /online_user_ids|online_last_active|last_active_at/,
+  "the unauthenticated public projection must not disclose online identity lists or activity timestamps",
 );
 
 assert.match(
@@ -145,6 +190,21 @@ assert.match(
   facepile,
   /onlineCountCapped\?: boolean[\s\S]*`\$\{onlineTotal\}\+`/,
   "the facepile must not present a capped count as exact",
+);
+assert.match(
+  webAppContracts + funnelSurface,
+  /online_count_capped\?: boolean \| null[\s\S]*onlineCountCapped: boolean/,
+  "the public frontend types must retain the conservative count state",
+);
+assert.match(
+  publicFunnel,
+  /onlineCountCapped = Boolean\(publicCommunity\?\.online_count_capped\)[\s\S]*onlineCountCapped,[\s\S]*stats=\{\{[\s\S]*onlineCountCapped,/,
+  "the public funnel must carry the conservative count state into its visitor projections",
+);
+assert.match(
+  visitorChrome,
+  /formatCompactStat\(action\.onlineCount\)[\s\S]*action\.onlineCountCapped \? "\+" : ""/,
+  "the public gate must visibly label a capped online count as a lower bound",
 );
 
 console.log("community_presence_lease_contract_proof: ok");

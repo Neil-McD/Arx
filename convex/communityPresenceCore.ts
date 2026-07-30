@@ -38,6 +38,11 @@ type CommunityPresenceFace = {
   avatar_zoom?: number | null;
 };
 
+export type AuthorizedCommunityPresenceEntry = {
+  userId: any;
+  lastSeenAt: number;
+};
+
 export async function renewCommunityPresenceLease(args: {
   ctx: any;
   communityId: any;
@@ -105,18 +110,14 @@ async function communityPresenceUserRemainsAuthorized(args: {
   return entitlement.isEntitled;
 }
 
-export async function resolveMemberCommunityPresenceSummary(
+export async function resolveAuthorizedCommunityPresenceWindow(
   ctx: any,
   community: CommunityLike,
+  nowMs = Date.now(),
 ): Promise<{
-  memberCount: number;
-  onlineCount: number;
-  onlineCountCapped: boolean;
-  onlineFaces: CommunityPresenceFace[];
-  onlineUserIds: string[];
-  onlineLastActiveAtByUserId: Record<string, string>;
+  entries: AuthorizedCommunityPresenceEntry[];
+  countCapped: boolean;
 }> {
-  const nowMs = Date.now();
   const rows = (await ctx.db
     .query("communityPresence" as any)
     .withIndex("by_community_activeUntil", (q: any) =>
@@ -127,7 +128,7 @@ export async function resolveMemberCommunityPresenceSummary(
       userId: any;
       lastSeenAt: number;
     }>;
-  const scanWasTruncated = rows.length > COMMUNITY_PRESENCE_SUMMARY_SCAN_LIMIT;
+  const countCapped = rows.length > COMMUNITY_PRESENCE_SUMMARY_SCAN_LIMIT;
   const candidateRows = rows.slice(0, COMMUNITY_PRESENCE_SUMMARY_SCAN_LIMIT);
   const authorizationResults = await Promise.all(
     candidateRows.map(async (row) => ({
@@ -139,7 +140,7 @@ export async function resolveMemberCommunityPresenceSummary(
       }),
     })),
   );
-  const onlineUserEntries: Array<{ userId: any; lastSeenAt: number }> = [];
+  const entries: AuthorizedCommunityPresenceEntry[] = [];
   const seenUserIds = new Set<string>();
   for (const { row, authorized } of authorizationResults) {
     const normalizedUserId = String(row.userId ?? "").trim();
@@ -153,8 +154,27 @@ export async function resolveMemberCommunityPresenceSummary(
       continue;
     }
     seenUserIds.add(normalizedUserId);
-    onlineUserEntries.push({ userId: row.userId, lastSeenAt });
+    entries.push({ userId: row.userId, lastSeenAt });
   }
+  return { entries, countCapped };
+}
+
+export async function resolveMemberCommunityPresenceSummary(
+  ctx: any,
+  community: CommunityLike,
+): Promise<{
+  memberCount: number;
+  onlineCount: number;
+  onlineCountCapped: boolean;
+  onlineFaces: CommunityPresenceFace[];
+  onlineUserIds: string[];
+  onlineLastActiveAtByUserId: Record<string, string>;
+}> {
+  const presenceWindow = await resolveAuthorizedCommunityPresenceWindow(
+    ctx,
+    community,
+  );
+  const onlineUserEntries = presenceWindow.entries;
 
   const userIdCache = new Map<string, string | null>();
   const onlineFaces = (
@@ -199,9 +219,7 @@ export async function resolveMemberCommunityPresenceSummary(
   return {
     memberCount,
     onlineCount: onlineUserEntries.length,
-    onlineCountCapped:
-      scanWasTruncated
-      && onlineUserEntries.length === COMMUNITY_PRESENCE_SUMMARY_SCAN_LIMIT,
+    onlineCountCapped: presenceWindow.countCapped,
     onlineFaces,
     onlineUserIds,
     onlineLastActiveAtByUserId,

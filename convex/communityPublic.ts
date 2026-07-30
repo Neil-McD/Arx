@@ -43,8 +43,9 @@ import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { hashBusinessVisitorKey } from "./businessAnalyticsCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import {
-  COMMUNITY_PRESENCE_LEASE_DURATION_MS,
+  COMMUNITY_PRESENCE_FACE_LIMIT,
   renewCommunityPresenceLease,
+  resolveAuthorizedCommunityPresenceWindow,
   resolveMemberCommunityPresenceSummary,
 } from "./communityPresenceCore";
 
@@ -153,9 +154,8 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
   memberCount: number;
   adminCount: number;
   onlineCount: number;
+  onlineCountCapped: boolean;
   onlineFaces: PublicCommunityFace[];
-  onlineUserIds: string[];
-  onlineLastActiveAtByUserId: Record<string, string>;
   joinedLast30dCount: number;
   memberFacesPreview: PublicCommunityFace[];
 }> {
@@ -165,59 +165,35 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
     community,
   });
 
-  const eligibleUserIds = new Set<string>([String(community.ownerId)]);
   const adminUserIds = new Set<string>([String(community.ownerId)]);
   for (const membership of activeMemberships) {
-    const normalizedUserId = String(membership.userId);
-    eligibleUserIds.add(normalizedUserId);
     if (String(membership.role ?? "").trim().toLowerCase() === "admin") {
-      adminUserIds.add(normalizedUserId);
+      adminUserIds.add(String(membership.userId));
     }
   }
   const memberCount = countCanonicalCommunityMembersFromRows(activeMemberships);
-
-  const cutoff = Date.now() - COMMUNITY_PRESENCE_LEASE_DURATION_MS;
-  const recentPresenceRows = (await ctx.db
-    .query("communityPresence" as any)
-    .withIndex("by_community_lastSeenAt", (q: any) => q.eq("communityId", community._id).gte("lastSeenAt", cutoff))
-    .collect()) as Array<{
-    userId: any;
-    lastSeenAt: number;
-  }>;
-
-  const onlineUserEntries: Array<{ userId: any; lastSeenAt: number }> = [];
-  const seenOnlineUserIds = new Set<string>();
+  const presenceWindow = await resolveAuthorizedCommunityPresenceWindow(
+    ctx,
+    community,
+  );
   const userIdCache = new Map<string, string | null>();
-  for (const row of recentPresenceRows) {
-    const normalizedUserId = String(row.userId ?? "").trim();
-    if (!normalizedUserId || seenOnlineUserIds.has(normalizedUserId) || !eligibleUserIds.has(normalizedUserId)) {
-      continue;
-    }
-    seenOnlineUserIds.add(normalizedUserId);
-    onlineUserEntries.push({ userId: row.userId, lastSeenAt: row.lastSeenAt });
-  }
 
   const onlineFaces = (
     await Promise.all(
-      onlineUserEntries.slice(0, 8).map(async ({ userId }): Promise<PublicCommunityFace | null> => {
-        const user = await ctx.db.get(userId);
-        if (!user) return null;
-        return {
-          user_id: (await resolvePublicUserId(ctx, user._id, userIdCache)) ?? String(user._id),
-          ...(await resolvePublicProfileFaceFields(ctx, user._id)),
-        };
-      }),
+      presenceWindow.entries
+        .slice(0, COMMUNITY_PRESENCE_FACE_LIMIT)
+        .map(async ({ userId }): Promise<PublicCommunityFace | null> => {
+          const user = await ctx.db.get(userId);
+          if (!user) return null;
+          return {
+            user_id:
+              (await resolvePublicUserId(ctx, user._id, userIdCache))
+              ?? String(user._id),
+            ...(await resolvePublicProfileFaceFields(ctx, user._id)),
+          };
+        }),
     )
   ).filter(Boolean) as PublicCommunityFace[];
-
-  const onlineUserPublicIds: string[] = [];
-  const onlineLastActiveAtByUserId: Record<string, string> = {};
-  for (const entry of onlineUserEntries) {
-    const publicUserId = (await resolvePublicUserId(ctx, entry.userId, userIdCache)) ?? String(entry.userId);
-    if (!publicUserId) continue;
-    onlineUserPublicIds.push(publicUserId);
-    onlineLastActiveAtByUserId[publicUserId] = toIsoString(entry.lastSeenAt);
-  }
 
   const joinedSinceMs = Date.now() - PUBLIC_JOINED_RECENTLY_WINDOW_MS;
   const joinedLast30dCount = activeMemberships.reduce(
@@ -254,10 +230,9 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
   return {
     memberCount,
     adminCount: adminUserIds.size,
-    onlineCount: onlineUserEntries.length,
+    onlineCount: presenceWindow.entries.length,
+    onlineCountCapped: presenceWindow.countCapped,
     onlineFaces,
-    onlineUserIds: onlineUserPublicIds,
-    onlineLastActiveAtByUserId,
     joinedLast30dCount,
     memberFacesPreview,
   };
@@ -267,8 +242,8 @@ function mapPublicCommunityStats(stats: {
   memberCount: number;
   adminCount: number;
   onlineCount: number;
+  onlineCountCapped: boolean;
   onlineFaces: PublicCommunityFace[];
-  onlineUserIds: string[];
   joinedLast30dCount: number;
   memberFacesPreview: PublicCommunityFace[];
 }) {
@@ -276,8 +251,8 @@ function mapPublicCommunityStats(stats: {
     member_count: stats.memberCount,
     admin_count: stats.adminCount,
     online_count: stats.onlineCount,
+    online_count_capped: stats.onlineCountCapped,
     online_faces: stats.onlineFaces,
-    online_user_ids: stats.onlineUserIds,
     joined_last_30d_count: stats.joinedLast30dCount,
     member_faces_preview: stats.memberFacesPreview,
   };

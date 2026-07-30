@@ -9,6 +9,7 @@ import {
   communityPresenceLeaseIsActive,
   issueCommunityPresenceLease,
   renewCommunityPresenceLease,
+  resolveAuthorizedCommunityPresenceWindow,
 } from "./communityPresenceCore";
 
 const modules = import.meta.glob([
@@ -116,5 +117,119 @@ test("repeated and multi-tab heartbeats coalesce into one community-user lease",
     expect(rows[0]?.activeUntil).toBe(
       31_000 + COMMUNITY_PRESENCE_LEASE_DURATION_MS,
     );
+  });
+});
+
+test("bounded presence windows remain conservatively capped after authorization filtering", async () => {
+  const t = convexTest(schema, modules);
+  const scope = await createScope(t);
+  await t.run(async (ctx) => {
+    const nowMs = 100_000;
+    const outsiderId = await ctx.db.insert("users", {
+      authSubject: "presence-outsider",
+      displayName: "Presence outsider",
+      handle: "presence-outsider",
+      normalizedHandle: "presence-outsider",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    await ctx.db.insert("communityPresence", {
+      communityId: scope.communityId,
+      userId: outsiderId,
+      lastSeenAt: nowMs,
+      activeUntil: nowMs + 200_000,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+
+    for (let index = 0; index < 64; index += 1) {
+      const userId = await ctx.db.insert("users", {
+        authSubject: `presence-member-${index}`,
+        displayName: `Presence member ${index}`,
+        handle: `presence-member-${index}`,
+        normalizedHandle: `presence-member-${index}`,
+        createdAt: 1_000 + index,
+        updatedAt: 1_000 + index,
+      });
+      await ctx.db.insert("communityMemberships", {
+        communityId: scope.communityId,
+        userId,
+        role: "member",
+        accessSource: "free_grant",
+        active: true,
+        createdAt: 1_000 + index,
+        updatedAt: 1_000 + index,
+      });
+      await ctx.db.insert("communityPresence", {
+        communityId: scope.communityId,
+        userId,
+        lastSeenAt: nowMs - index,
+        activeUntil: nowMs + 100_000 - index,
+        createdAt: nowMs - index,
+        updatedAt: nowMs - index,
+      });
+    }
+
+    const community = await ctx.db.get(scope.communityId);
+    if (!community) throw new Error("missing_test_community");
+    const window = await resolveAuthorizedCommunityPresenceWindow(
+      ctx,
+      community,
+      nowMs,
+    );
+    expect(window.entries).toHaveLength(63);
+    expect(window.countCapped).toBe(true);
+    expect(
+      window.entries.some((entry) => String(entry.userId) === String(outsiderId)),
+    ).toBe(false);
+  });
+});
+
+test("blocked members disappear from active presence immediately", async () => {
+  const t = convexTest(schema, modules);
+  const scope = await createScope(t);
+  await t.run(async (ctx) => {
+    const nowMs = 200_000;
+    const memberId = await ctx.db.insert("users", {
+      authSubject: "presence-blocked-member",
+      displayName: "Blocked member",
+      handle: "presence-blocked-member",
+      normalizedHandle: "presence-blocked-member",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    await ctx.db.insert("communityMemberships", {
+      communityId: scope.communityId,
+      userId: memberId,
+      role: "member",
+      accessSource: "free_grant",
+      active: true,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    await ctx.db.insert("communityBlocks", {
+      communityId: scope.communityId,
+      userId: memberId,
+      createdByUserId: scope.userId,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    await ctx.db.insert("communityPresence", {
+      communityId: scope.communityId,
+      userId: memberId,
+      lastSeenAt: nowMs,
+      activeUntil: nowMs + COMMUNITY_PRESENCE_LEASE_DURATION_MS,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+
+    const community = await ctx.db.get(scope.communityId);
+    if (!community) throw new Error("missing_test_community");
+    await expect(
+      resolveAuthorizedCommunityPresenceWindow(ctx, community, nowMs),
+    ).resolves.toEqual({
+      entries: [],
+      countCapped: false,
+    });
   });
 });

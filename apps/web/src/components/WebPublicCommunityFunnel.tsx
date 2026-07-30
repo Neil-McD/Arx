@@ -32,6 +32,7 @@ export type PublicCommunityFunnelCommunityLike = {
   member_count?: number | null;
   admin_count?: number | null;
   online_count?: number | null;
+  online_count_capped?: boolean | null;
   joined_last_30d_count?: number | null;
   messages_today_count?: number | null;
   memory_note_count?: number | null;
@@ -194,6 +195,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     typeof publicCommunity?.admin_count === "number" ? publicCommunity.admin_count : null;
   const onlineCount =
     typeof publicCommunity?.online_count === "number" ? publicCommunity.online_count : null;
+  const onlineCountCapped = Boolean(publicCommunity?.online_count_capped);
   const onlineFaces = filterOnlineAvatarFaces(publicCommunity?.online_faces, 4);
   const isPublishedVisibility = publicVisibilityLabel === "Published";
   const isFreePricing = !selectedPublicCommunityPlanLabel || selectedPublicCommunityPlanLabel.trim().toLowerCase() === "free";
@@ -241,6 +243,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     cardBlurb,
     memberCount,
     onlineCount,
+    onlineCountCapped,
     adminCount,
     onlineFaces,
     primaryActionLabel,
@@ -334,6 +337,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       featuredMessages={publicCommunity?.featured_messages ?? null}
       stats={{
         onlineCount,
+        onlineCountCapped,
         onlineFaces,
         memberCount,
         memoryNoteCount: publicCommunity?.memory_note_count ?? null,
