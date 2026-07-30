@@ -34,6 +34,7 @@ import {
 import { getPolynetMcpToolDefinition } from "../shared/polynetMcp.ts";
 import {
   buildResponsesApiFunctionTools,
+  getToolDefinition,
   normalizeToolArguments,
 } from "../shared/toolRegistry.ts";
 
@@ -310,6 +311,22 @@ assert.deepEqual(listed.result, {
     },
     {
       path: "/resources/",
+      kind: "directory",
+    },
+    {
+      path: "/channels/",
+      kind: "directory",
+    },
+    {
+      path: "/ai-feed/",
+      kind: "directory",
+    },
+    {
+      path: "/memory/",
+      kind: "directory",
+    },
+    {
+      path: "/capabilities/",
       kind: "directory",
     },
   ],
@@ -633,6 +650,26 @@ assert.deepEqual(mountedRoot, {
       kind: "directory",
       type: "resources",
     },
+    {
+      path: "/communities/polynet/channels/",
+      kind: "directory",
+      type: "channels",
+    },
+    {
+      path: "/communities/polynet/ai-feed/",
+      kind: "directory",
+      type: "ai_feed",
+    },
+    {
+      path: "/communities/polynet/memory/",
+      kind: "directory",
+      type: "memory",
+    },
+    {
+      path: "/communities/polynet/capabilities/",
+      kind: "directory",
+      type: "capabilities",
+    },
   ],
   next_cursor: null,
   truncated: false,
@@ -910,11 +947,19 @@ assert.equal(
 for (const toolName of ["polynet_list", "polynet_read"] as const) {
   const definition = getPolynetMcpToolDefinition(toolName);
   assert.ok(definition);
-  assert.deepEqual(definition.inputSchema.required, ["path"]);
-  assert.equal(definition.outputSchema?.additionalProperties, false);
-  assert.ok(
+  assert.deepEqual(
+    definition.inputSchema,
+    getToolDefinition(toolName).inputSchema,
+  );
+  assert.equal(
+    definition.outputSchema?.additionalProperties,
+    true,
+    "canonical repository outputs may carry bounded domain metadata while preserving required path/document fields",
+  );
+  assert.equal(
     definition.inputSchema.properties &&
       "community_slug" in definition.inputSchema.properties,
+    false,
   );
 }
 assert.equal(
@@ -1033,6 +1078,7 @@ await assert.rejects(
 
 const runtimeAgentLoop = readSource("convex/runtimeAgentLoop.ts");
 const httpMcp = readSource("convex/httpMcp.ts");
+const canonicalExecutor = readSource("convex/polynetCanonicalExecutor.ts");
 const platformExecutor = readSource("convex/platformOperationExecutor.ts");
 const capabilityContext = readSource("convex/communityCapabilityContext.ts");
 const semanticMembers = readSource("convex/communitySemanticMembers.ts");
@@ -1046,12 +1092,11 @@ assert.match(
   platformExecutor,
   /communityCapabilityContext[\s\S]*readCommunitySemanticRepositoryInternal/,
 );
-assert.match(runtimeAgentLoop, /community\.semantic\.list/);
-assert.match(runtimeAgentLoop, /community\.semantic\.read/);
-assert.match(runtimeAgentLoop, /executePlatformOperation\(/);
-assert.match(httpMcp, /community\.semantic\.list/);
-assert.match(httpMcp, /community\.semantic\.read/);
-assert.match(httpMcp, /executePlatformOperation\(/);
+assert.match(runtimeAgentLoop, /executePolynetCanonicalTool\(/);
+assert.match(httpMcp, /executePolynetCanonicalTool\(/);
+assert.match(canonicalExecutor, /community\.semantic\.list/);
+assert.match(canonicalExecutor, /community\.semantic\.read/);
+assert.match(canonicalExecutor, /executePlatformOperation\(/);
 assert.match(platformExecutor, /mountCommunitySemanticResult/);
 assert.match(capabilityContext, /\.withIndex\("by_slug"[\s\S]*\.take\(2\)/);
 assert.match(

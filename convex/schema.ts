@@ -2426,6 +2426,9 @@ export default defineSchema({
     authorType: v.literal("agent"),
     authorUserId: v.optional(v.id("users")),
     agentKey: v.optional(v.string()),
+    agentKind: v.optional(
+      v.union(v.literal("personal_agent"), v.literal("community_agent")),
+    ),
     authorLabel: v.string(),
     type: v.union(v.literal("observation"), v.literal("recommendation"), v.literal("action")),
     title: v.optional(v.string()),
@@ -2675,6 +2678,7 @@ export default defineSchema({
   communityResourceBuilderChangesets: defineTable({
     communityId: v.id("communities"),
     createdByUserId: v.id("users"),
+    idempotencyKey: v.optional(v.string()),
     status: v.union(
       v.literal("staged"),
       v.literal("approved"),
@@ -2699,7 +2703,35 @@ export default defineSchema({
   })
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_creator_idempotencyKey", [
+      "communityId",
+      "createdByUserId",
+      "idempotencyKey",
+    ])
     .index("by_createdBy", ["createdByUserId"]),
+
+  polynetCanonicalOperationReceipts: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    principalKind: v.union(
+      v.literal("personal_agent"),
+      v.literal("external_mcp"),
+      v.literal("community_agent"),
+    ),
+    toolName: v.union(v.literal("polynet_write"), v.literal("polynet_call")),
+    idempotencyKey: v.string(),
+    requestFingerprint: v.string(),
+    status: v.union(v.literal("executing"), v.literal("completed")),
+    result: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_scope_key", [
+    "communityId",
+    "userId",
+    "principalKind",
+    "toolName",
+    "idempotencyKey",
+  ]),
 
   communityEvents: defineTable({
     communityId: v.id("communities"),

@@ -13,23 +13,11 @@ const MEMBER_AGENT_DOCK_CAPABILITY_FAMILY_SET = new Set<CapabilityFamily>([
 ]);
 
 const MEMBER_AGENT_DOCK_TOOL_NAME_SET = new Set<RetrievalToolName>([
-  "search_product_docs",
-  "get_product_doc",
   "polynet_list",
   "polynet_read",
-  "member_conversations_list",
-  "member_conversation_read",
-  "polynet_list_communities",
-  "polynet_get_community",
-  "community_resources_read",
-  "community_resources_search",
-  "community_search",
-  "community_memory_search",
-  "community_memory_read",
-  "community_chat_search",
-  "community_chat_read",
-  "community_ai_feed_search",
-  "community_ai_feed_read",
+  "polynet_search",
+  "polynet_write",
+  "polynet_call",
 ]);
 
 export function normalizeRuntimeInvocationSurface(raw: unknown): RuntimeInvocationSurface {
@@ -140,11 +128,12 @@ export function buildRuntimeInvocationSurfacePrompt(
       : "You are the member's own Polynet agent. No community lens is active on this surface.",
     "You are not the community's agent. The community has a separate community-owned agent on community surfaces.",
     "Treat this as a normal private conversation with the member. Use community context when relevant without pretending to speak for the community.",
-    "Your conversation episodes belong to this member across Polynet, not to individual communities. Prior episodes are not injected automatically. When the member refers to earlier work and the current episode is insufficient, list their conversations first, then read only the relevant episode before answering.",
-    "Never claim to remember a prior conversation unless the current episode or a successful conversation-read tool call supports the claim.",
-    "The polynet_list_communities and polynet_get_community tools are native, read-only Polynet directory tools. Use joined scope for the member's communities and discover scope for public Published communities.",
+    "Your conversation episodes belong to this member across Polynet, not to individual communities. Prior episodes are not injected automatically.",
+    "Never claim to remember a prior conversation unless the current episode or evidence explicitly available in this turn supports the claim.",
+    "The five Polynet tools expose one server-authorized repository. Start with polynet_list at /, follow returned paths, and never invent paths or operations.",
     "Reading another community is temporary inspection only. It never changes the active community lens, the current page, or the conversation episode.",
-    "Only the listed read tools are available on this surface. Do not propose or attempt workspace, sandbox, web, external MCP, autonomous cognition, or community publishing actions.",
+    "Use polynet_search and polynet_read for evidence. Use polynet_write only for an explicit member request to post to an authorized channel or AI Feed. Use polynet_call only for an operation first discovered under capabilities/.",
+    "Do not propose or attempt workspace, sandbox, external MCP, or autonomous cognition actions from this surface.",
     "Do not mention plans, Premium, upgrades, billing, unavailable tools, or provider limits unless the member directly asks about them.",
   ].join("\n");
 }

@@ -14,6 +14,7 @@ import {
   type CommunityCapabilityCommunityInput,
   type CommunityCapabilityMembershipInput,
 } from "../shared/communityCapabilityContextContract.ts";
+import { derivePolynetHumanAuthority } from "../shared/polynetAuthority.ts";
 
 const root = process.cwd();
 
@@ -249,36 +250,57 @@ for (const forbidden of ["runtimeAgentLoop", "runtimeRuns", "threads", "Daytona"
 }
 
 const mcpSource = read("convex/httpMcp.ts");
+const canonicalExecutorSource = read("convex/polynetCanonicalExecutor.ts");
 assert.ok(
-  mcpSource.includes("resolveAccessibleCommunityReadDetail"),
-  "MCP adapter should use the canonical accessible-community read kernel",
+  canonicalExecutorSource.includes(
+    "resolveCommunityCapabilityContextInternal",
+  ),
+  "the shared executor should revalidate canonical community access per call",
 );
 const communityReadKernelSource = read("convex/communityReadKernel.ts");
 assert.ok(
   communityReadKernelSource.includes("resolveCommunityCapabilityContextInternal"),
   "community read kernel should use the atomic internal community context resolver",
 );
-assert.ok(
-  mcpSource.includes('community_context: "workspace_context"'),
-  "MCP adapter should preserve the legacy workspace_context projection",
+assert.match(mcpSource, /executePolynetCanonicalTool/);
+assert.doesNotMatch(mcpSource, /workspace_context|polynet_workspace_/);
+assert.deepEqual(
+  derivePolynetHumanAuthority({
+    access: access(),
+    principalKind: "external_mcp",
+  }),
+  {
+    principalKind: "external_mcp",
+    lane: "member",
+    relation: "member",
+    canReadMemberProjection: true,
+    canWriteParticipation: true,
+    canUseBuilderProjection: false,
+  },
 );
-assert.ok(
-  mcpSource.includes("hasCommunityCapability(authority, capability)"),
-  "MCP adapter should enforce canonical community capabilities",
+assert.equal(
+  derivePolynetHumanAuthority({
+    access: access({
+      relation: "admin",
+      can_manage_resources: true,
+    }),
+    principalKind: "personal_agent",
+  })?.lane,
+  "builder",
 );
 
 const architectureContract = read("docs/polynet-workspace-mcp-contract-v0.md");
 assert.ok(
-  architectureContract.includes("canonical community capability boundary"),
-  "MCP provider contract should define the canonical community boundary",
+  architectureContract.includes("server revalidates community access"),
+  "MCP provider contract should define per-call canonical authority",
 );
 assert.ok(
-  architectureContract.includes("internal `community_context` capability"),
-  "MCP provider contract should preserve internal community-native vocabulary",
+  architectureContract.includes("owner or admin"),
+  "MCP provider contract should define builder authority",
 );
 assert.ok(
-  architectureContract.includes("public `workspace_context` toolset"),
-  "MCP provider contract should pin the compatibility projection",
+  architectureContract.includes("community-owned agent always uses the member lane"),
+  "MCP provider contract should constrain community-owned authority",
 );
 
 console.log("community_capability_contract_proof: ok");

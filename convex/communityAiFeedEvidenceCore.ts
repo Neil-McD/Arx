@@ -8,6 +8,7 @@ export type CommunityAiFeedEvidenceRow = {
   authorType: "agent";
   authorUserId?: any;
   agentKey?: string;
+  agentKind?: "personal_agent" | "community_agent";
   authorLabel: string;
   type: "observation" | "recommendation" | "action";
   title?: string;

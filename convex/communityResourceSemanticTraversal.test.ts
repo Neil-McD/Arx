@@ -304,10 +304,13 @@ test("canonical executor keeps bound and explicit community selectors behavioral
     },
     requestId: "semantic-concierge-test",
     toolName: "polynet_list",
-    rawArguments: { path: "/" },
+    rawArguments: { path: "/communities/resource-semantic/" },
   });
   expect(conciergeList.status).toBe("ok");
-  expect(JSON.parse(conciergeList.outputText)).toEqual(nativeList.value);
+  expect(JSON.parse(conciergeList.outputText)).toMatchObject({
+    path: "/communities/resource-semantic/",
+    authority: { lane: "member", relation: "member" },
+  });
   await expect(
     executeConciergeTool({
       ctx,
@@ -320,7 +323,7 @@ test("canonical executor keeps bound and explicit community selectors behavioral
       },
       requestId: "semantic-concierge-auth-test",
       toolName: "polynet_list",
-      rawArguments: { path: "/" },
+      rawArguments: { path: "/communities/resource-semantic/" },
     }),
   ).resolves.toMatchObject({
     status: "error",
@@ -339,11 +342,11 @@ test("canonical executor keeps bound and explicit community selectors behavioral
       },
       requestId: "semantic-concierge-escape-test",
       toolName: "polynet_list",
-      rawArguments: { path: "/communities/resource-semantic/" },
+      rawArguments: { path: "/communities/resource-semantic-other/" },
     }),
   ).resolves.toMatchObject({
     status: "error",
-    errorCode: "invalid_selector",
+    errorCode: "semantic_not_found",
   });
 
   const executeRead = async (
@@ -398,13 +401,18 @@ test("canonical executor keeps bound and explicit community selectors behavioral
     requestId: "semantic-concierge-read-test",
     toolName: "polynet_read",
     rawArguments: {
-      path: `resource:${fixture.firstPageId}`,
+      path: `/communities/resource-semantic/resources/start-here~${fixture.firstModuleId}/operating-model~${fixture.firstPageId}.md`,
       offset: 0,
       limit: 9,
     },
   });
   expect(conciergeRead.status).toBe("ok");
-  expect(JSON.parse(conciergeRead.outputText)).toEqual(nativeRead.value);
+  expect(JSON.parse(conciergeRead.outputText)).toMatchObject({
+    path: `/communities/resource-semantic/resources/start-here~${fixture.firstModuleId}/operating-model~${fixture.firstPageId}.md`,
+    ref: `resource:${fixture.firstPageId}`,
+    body: "Canonical",
+    truncated: true,
+  });
   const personalHarnessMount = selectRuntimePolynetSemanticMount({
     path: `resource:${fixture.firstPageId}`,
     communityId: String(fixture.otherCommunityId),
@@ -584,6 +592,22 @@ test("platform mount exposes communities and permissioned users without leaking 
         {
           path: "/communities/resource-semantic/resources/",
           type: "resources",
+        },
+        {
+          path: "/communities/resource-semantic/channels/",
+          type: "channels",
+        },
+        {
+          path: "/communities/resource-semantic/ai-feed/",
+          type: "ai_feed",
+        },
+        {
+          path: "/communities/resource-semantic/memory/",
+          type: "memory",
+        },
+        {
+          path: "/communities/resource-semantic/capabilities/",
+          type: "capabilities",
         },
       ],
     },

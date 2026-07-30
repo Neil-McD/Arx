@@ -12,6 +12,13 @@ export const POLYNET_COMMUNITY_PROFILE_PATH = "/community.md";
 export const POLYNET_SELF_PROFILE_PATH = "/self.md";
 export const POLYNET_MEMBERS_DIRECTORY_PATH = "/members/";
 export const POLYNET_RESOURCES_DIRECTORY_PATH = "/resources/";
+export const POLYNET_CHANNELS_DIRECTORY_PATH = "/channels/";
+export const POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH = "/channels/general/";
+export const POLYNET_AI_FEED_DIRECTORY_PATH = "/ai-feed/";
+export const POLYNET_MEMORY_DIRECTORY_PATH = "/memory/";
+export const POLYNET_CAPABILITIES_DIRECTORY_PATH = "/capabilities/";
+export const POLYNET_BUILDER_DIRECTORY_PATH = "/builder/";
+export const POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH = "/builder/resources/";
 
 export type CommunitySemanticSource = {
   slug: string;
@@ -310,7 +317,14 @@ export function parsePolynetSemanticPath(value: unknown) {
     (value.length > 1 &&
       value.endsWith("/") &&
       value !== POLYNET_MEMBERS_DIRECTORY_PATH &&
-      value !== POLYNET_RESOURCES_DIRECTORY_PATH) ||
+      value !== POLYNET_RESOURCES_DIRECTORY_PATH &&
+      value !== POLYNET_CHANNELS_DIRECTORY_PATH &&
+      value !== POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH &&
+      value !== POLYNET_AI_FEED_DIRECTORY_PATH &&
+      value !== POLYNET_MEMORY_DIRECTORY_PATH &&
+      value !== POLYNET_CAPABILITIES_DIRECTORY_PATH &&
+      value !== POLYNET_BUILDER_DIRECTORY_PATH &&
+      value !== POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH) ||
     value.split("/").some((part) => part === "." || part === "..")
   ) {
     return semanticError(
@@ -330,7 +344,21 @@ export function parsePolynetSemanticPath(value: unknown) {
     value === POLYNET_COMMUNITY_PROFILE_PATH ||
     value === POLYNET_SELF_PROFILE_PATH ||
     value === POLYNET_MEMBERS_DIRECTORY_PATH ||
-    value === POLYNET_RESOURCES_DIRECTORY_PATH
+    value === POLYNET_RESOURCES_DIRECTORY_PATH ||
+    value === POLYNET_CHANNELS_DIRECTORY_PATH ||
+    value === POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH ||
+    value === POLYNET_AI_FEED_DIRECTORY_PATH ||
+    value === POLYNET_MEMORY_DIRECTORY_PATH ||
+    value === POLYNET_CAPABILITIES_DIRECTORY_PATH ||
+    value === POLYNET_BUILDER_DIRECTORY_PATH ||
+    value === POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH ||
+    /^\/channels\/general\/interaction:(root|reply):[A-Za-z0-9_-]+\.md$/.test(
+      value,
+    ) ||
+    /^\/ai-feed\/ai_feed:[A-Za-z0-9_-]+\.md$/.test(value) ||
+    /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(value) ||
+    /^\/capabilities\/[a-z0-9][a-z0-9._-]*\.json$/.test(value) ||
+    /^\/builder\/resources\/[A-Za-z0-9_-]+\.json$/.test(value)
     ? { ok: true as const, path: value }
     : semanticError(
         "semantic_not_found",
@@ -408,12 +436,19 @@ export function validateCommunitySemanticOperationInput(args: {
       parsed.path === POLYNET_SEMANTIC_ROOT_PATH ||
       parsed.path === POLYNET_MEMBERS_DIRECTORY_PATH ||
       parsed.path === POLYNET_RESOURCES_DIRECTORY_PATH ||
+      parsed.path === POLYNET_CHANNELS_DIRECTORY_PATH ||
+      parsed.path === POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH ||
+      parsed.path === POLYNET_AI_FEED_DIRECTORY_PATH ||
+      parsed.path === POLYNET_MEMORY_DIRECTORY_PATH ||
+      parsed.path === POLYNET_CAPABILITIES_DIRECTORY_PATH ||
+      parsed.path === POLYNET_BUILDER_DIRECTORY_PATH ||
+      parsed.path === POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH ||
       Boolean(resourceDirectory && !resourceDirectory.resourceId) ||
       resourceAlias?.kind === "module";
     if (!listable) {
       return semanticError(
         "invalid_selector",
-        "polynet_list path must be /, /members/, /resources/, or a returned resource-directory ref.",
+        "polynet_list path must be an exact returned directory path.",
       );
     }
     const cursor = optionalSemanticCursor(args.cursor);
@@ -458,10 +493,18 @@ export function validateCommunitySemanticOperationInput(args: {
     parsed.path === POLYNET_COMMUNITY_PROFILE_PATH ||
     parsed.path === POLYNET_SELF_PROFILE_PATH ||
     "memberHandle" in parsed;
-  if (!isProfileRead && !isResourceRead) {
+  const isCanonicalVirtualDocumentRead =
+    /^\/channels\/general\/interaction:(?:root|reply):[A-Za-z0-9_-]+\.md$/.test(
+      parsed.path,
+    ) ||
+    /^\/ai-feed\/ai_feed:[A-Za-z0-9_-]+\.md$/.test(parsed.path) ||
+    /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(parsed.path) ||
+    /^\/capabilities\/[a-z0-9][a-z0-9._-]*\.json$/.test(parsed.path) ||
+    /^\/builder\/resources\/[A-Za-z0-9_-]+\.json$/.test(parsed.path);
+  if (!isProfileRead && !isResourceRead && !isCanonicalVirtualDocumentRead) {
     return semanticError(
       "invalid_selector",
-      "polynet_read path must be a semantic profile path or a returned resource ref.",
+      "polynet_read path must be an exact returned document path or stable ref.",
     );
   }
   if (
@@ -838,6 +881,22 @@ export function listCommunitySemanticRoot(args: { path: unknown }) {
         },
         {
           path: POLYNET_RESOURCES_DIRECTORY_PATH,
+          kind: "directory" as const,
+        },
+        {
+          path: POLYNET_CHANNELS_DIRECTORY_PATH,
+          kind: "directory" as const,
+        },
+        {
+          path: POLYNET_AI_FEED_DIRECTORY_PATH,
+          kind: "directory" as const,
+        },
+        {
+          path: POLYNET_MEMORY_DIRECTORY_PATH,
+          kind: "directory" as const,
+        },
+        {
+          path: POLYNET_CAPABILITIES_DIRECTORY_PATH,
           kind: "directory" as const,
         },
       ],

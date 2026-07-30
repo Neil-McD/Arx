@@ -1,6 +1,11 @@
 import type { RetrievalToolName } from "./retrievalTools";
 import { findPlatformOperationByNativeToolName } from "./platformOperationContract.ts";
 import { validatePolynetSemanticRepositoryOperationInput } from "./communitySemanticRepository.ts";
+import {
+  POLYNET_CANONICAL_TOOL_DEFINITIONS,
+  type PolynetCanonicalToolName,
+} from "./polynetCanonicalToolContract.ts";
+import { parsePolynetSemanticRepositoryPath } from "./polynetSemanticRepositoryContract.ts";
 
 type JsonSchema =
   | {
@@ -65,14 +70,29 @@ const POLYNET_LIST_COMMUNITIES_TOOL = getPlatformNativeToolContract(
 const POLYNET_GET_COMMUNITY_TOOL = getPlatformNativeToolContract(
   "polynet_get_community",
 );
-const POLYNET_SEMANTIC_LIST_TOOL =
-  getPlatformNativeToolContract("polynet_list");
-const POLYNET_SEMANTIC_READ_TOOL =
-  getPlatformNativeToolContract("polynet_read");
 const SEARCH_PRODUCT_DOCS_TOOL = getPlatformNativeToolContract(
   "search_product_docs",
 );
 const GET_PRODUCT_DOC_TOOL = getPlatformNativeToolContract("get_product_doc");
+
+function getPolynetCanonicalToolContract(
+  name: PolynetCanonicalToolName,
+): {
+  description: string;
+  inputSchema: JsonSchema;
+} {
+  const definition = POLYNET_CANONICAL_TOOL_DEFINITIONS[name];
+  return {
+    description: definition.description,
+    inputSchema: definition.inputSchema as JsonSchema,
+  };
+}
+
+const POLYNET_LIST_TOOL = getPolynetCanonicalToolContract("polynet_list");
+const POLYNET_READ_TOOL = getPolynetCanonicalToolContract("polynet_read");
+const POLYNET_SEARCH_TOOL = getPolynetCanonicalToolContract("polynet_search");
+const POLYNET_WRITE_TOOL = getPolynetCanonicalToolContract("polynet_write");
+const POLYNET_CALL_TOOL = getPolynetCanonicalToolContract("polynet_call");
 
 const PATH_ONLY_TOOL_SCHEMA: JsonSchema = {
   type: "object",
@@ -932,11 +952,23 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   polynet_list: {
     name: "polynet_list",
-    ...POLYNET_SEMANTIC_LIST_TOOL,
+    ...POLYNET_LIST_TOOL,
   },
   polynet_read: {
     name: "polynet_read",
-    ...POLYNET_SEMANTIC_READ_TOOL,
+    ...POLYNET_READ_TOOL,
+  },
+  polynet_search: {
+    name: "polynet_search",
+    ...POLYNET_SEARCH_TOOL,
+  },
+  polynet_write: {
+    name: "polynet_write",
+    ...POLYNET_WRITE_TOOL,
+  },
+  polynet_call: {
+    name: "polynet_call",
+    ...POLYNET_CALL_TOOL,
   },
   member_conversations_list: {
     name: "member_conversations_list",
@@ -1970,6 +2002,123 @@ export function normalizeToolArguments(
         ? { offset: validated.offset }
         : {}),
       ...(validated.limit !== null ? { limit: validated.limit } : {}),
+    };
+  }
+  if (toolName === "polynet_search") {
+    const parsedPath = parsePolynetSemanticRepositoryPath(args.path);
+    if (!parsedPath.ok) throw new Error(parsedPath.message);
+    const query = normalizeString(args.query);
+    if (!query) throw new Error("polynet_search requires query.");
+    if (args.types !== undefined && !Array.isArray(args.types)) {
+      throw new Error("polynet_search types must be an array.");
+    }
+    const types = Array.isArray(args.types)
+      ? [
+          ...new Set(
+            args.types
+              .map((value) => normalizeString(value)?.toLowerCase() ?? "")
+              .filter(Boolean),
+          ),
+        ].slice(0, 8)
+      : [];
+    const limit = normalizeBoundedInteger(
+      args.limit,
+      "polynet_search limit",
+      1,
+      20,
+    );
+    return {
+      path: parsedPath.path,
+      query: query.slice(0, 500),
+      ...(types.length ? { types } : {}),
+      ...(limit ? { limit } : {}),
+    };
+  }
+  if (toolName === "polynet_write") {
+    const parsedPath = parsePolynetSemanticRepositoryPath(args.path);
+    if (!parsedPath.ok || parsedPath.kind !== "community") {
+      throw new Error(
+        parsedPath.ok
+          ? "polynet_write requires a community repository path."
+          : parsedPath.message,
+      );
+    }
+    const mode = normalizeString(args.mode)?.toLowerCase();
+    if (mode !== "create" && mode !== "append" && mode !== "update") {
+      throw new Error("polynet_write mode must be create, append, or update.");
+    }
+    if (
+      !args.content ||
+      typeof args.content !== "object" ||
+      Array.isArray(args.content)
+    ) {
+      throw new Error("polynet_write requires object content.");
+    }
+    const idempotencyKey = normalizeString(
+      args.idempotency_key ?? args.idempotencyKey,
+    );
+    if (!idempotencyKey) {
+      throw new Error("polynet_write requires idempotency_key.");
+    }
+    const expectedRevision = normalizeString(
+      args.expected_revision ?? args.expectedRevision,
+    );
+    return {
+      path: parsedPath.path,
+      mode,
+      content: args.content,
+      ...(expectedRevision
+        ? { expectedRevision: expectedRevision.slice(0, 256) }
+        : {}),
+      idempotencyKey: idempotencyKey.slice(0, 200),
+    };
+  }
+  if (toolName === "polynet_call") {
+    const operation = normalizeString(args.operation)?.toLowerCase();
+    if (!operation || !/^[a-z0-9][a-z0-9._-]*$/.test(operation)) {
+      throw new Error("polynet_call requires a canonical operation.");
+    }
+    const version = normalizeBoundedInteger(
+      args.version,
+      "polynet_call version",
+      1,
+      1,
+    );
+    if (version !== 1) throw new Error("polynet_call version must be 1.");
+    if (
+      !args.input ||
+      typeof args.input !== "object" ||
+      Array.isArray(args.input)
+    ) {
+      throw new Error("polynet_call requires object input.");
+    }
+    const idempotencyKey = normalizeString(
+      args.idempotency_key ?? args.idempotencyKey,
+    );
+    if (!idempotencyKey) {
+      throw new Error("polynet_call requires idempotency_key.");
+    }
+    const target = normalizeString(args.target);
+    const expectedRevision = normalizeString(
+      args.expected_revision ?? args.expectedRevision,
+    );
+    if (target) {
+      const parsedTarget = parsePolynetSemanticRepositoryPath(target);
+      if (!parsedTarget.ok) {
+        throw new Error(
+          "polynet_call target must be a canonical repository path.",
+        );
+      }
+    }
+    return {
+      operation: operation.slice(0, 160),
+      version,
+      ...(target ? { target: target.slice(0, 1024) } : {}),
+      input: args.input,
+      ...(expectedRevision
+        ? { expectedRevision: expectedRevision.slice(0, 256) }
+        : {}),
+      idempotencyKey: idempotencyKey.slice(0, 200),
     };
   }
   if (toolName === "member_profile_confirm_facts") {

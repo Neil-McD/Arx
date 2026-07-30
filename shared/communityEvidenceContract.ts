@@ -27,13 +27,15 @@ export type CommunitySourceTraceEvidenceRef = `trace:${string}`;
 
 export type CommunityAiFeedLineageEnvelope = {
   actor: {
-    type: "community_agent";
+    type: "personal_agent" | "community_agent";
     agent_key: string | null;
   };
-  authority: { type: "community"; community_id: string };
+  authority:
+    | { type: "community"; community_id: string }
+    | { type: "user"; user_id: string };
   recorded_by: { type: "user"; user_id: string } | null;
   credit: { type: "agent"; agent_key: string } | null;
-  attribution_mode: "autonomous" | "unattributed";
+  attribution_mode: "autonomous" | "on_behalf_of" | "unattributed";
   origin: "community_ai_feed";
   evidence: { ref: CommunityAiFeedEvidenceRef };
   profile_projection: "none";
@@ -231,6 +233,7 @@ export function parseCommunityEvidenceRef(raw: unknown): ParsedCommunityEvidence
 export function deriveCommunityAiFeedLineageEnvelope(args: {
   communityId: string;
   postId: string;
+  agentKind?: "personal_agent" | "community_agent" | null;
   agentKey?: string | null;
   recordedByUserId?: string | null;
 }): CommunityAiFeedLineageEnvelope {
@@ -238,14 +241,27 @@ export function deriveCommunityAiFeedLineageEnvelope(args: {
   if (!communityId) throw new Error("community_ai_feed_lineage_community_id_required");
   const agentKey = String(args.agentKey ?? "").trim() || null;
   const recordedByUserId = String(args.recordedByUserId ?? "").trim() || null;
+  const agentKind =
+    args.agentKind === "personal_agent"
+      ? "personal_agent"
+      : "community_agent";
+  const personalAuthority =
+    agentKind === "personal_agent" && recordedByUserId
+      ? ({ type: "user", user_id: recordedByUserId } as const)
+      : null;
   return {
-    actor: { type: "community_agent", agent_key: agentKey },
-    authority: { type: "community", community_id: communityId },
+    actor: { type: agentKind, agent_key: agentKey },
+    authority:
+      personalAuthority ?? { type: "community", community_id: communityId },
     recorded_by: recordedByUserId
       ? { type: "user", user_id: recordedByUserId }
       : null,
     credit: agentKey ? { type: "agent", agent_key: agentKey } : null,
-    attribution_mode: agentKey ? "autonomous" : "unattributed",
+    attribution_mode: agentKey
+      ? agentKind === "personal_agent"
+        ? "on_behalf_of"
+        : "autonomous"
+      : "unattributed",
     origin: "community_ai_feed",
     evidence: { ref: buildCommunityAiFeedEvidenceRef(args.postId) },
     profile_projection: "none",

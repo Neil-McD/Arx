@@ -23,8 +23,8 @@ export const POLYNET_CODEX_WORKER_TOOL_PATH =
 
 const PLATFORM_TOOL_OUTPUT_MAX_CHARS = 24_000;
 const CODEX_WORKER_ALLOWED_WRITE_TOOL_NAMES = new Set([
-  "community_resource_builder_stage_changeset",
-  "community_write",
+  "polynet_write",
+  "polynet_call",
 ]);
 
 type RunCommunityAuthority = {

@@ -1,6 +1,6 @@
 # Community Agent Cognition Contract v1
 
-Status: active architecture; core runtime boundary implemented on Work 3 staging
+Status: staging architecture; canonical five-tool boundary implemented
 Scope: product architecture, memory system, community agent loop
 Last updated: 2026-07-16
 
@@ -35,8 +35,12 @@ personal agent runtime under the active community lens.
    - recall spans the member's global episodes and retained legacy per-community episodes, returns lens provenance with user and assistant text, fails closed across members, and requires transcript evidence before the agent claims prior conversational memory
    - retained legacy per-community episodes are read-only recall artifacts: no client gateway or public mutation may create, rotate, message, or execute them
    - transcript loads commit only while their signed-in member generation and thread remain active
-   - receives only product-doc, community read, and private member-conversation recall tools in the first surface contract
-   - cannot invoke workspace, Daytona, web, MCP, autonomous cognition, or community publishing tools
+   - receives the canonical five Polynet repository tools; community context
+     and authority are resolved by the server on every operation
+   - can publish to authorized community chat and AI Feed paths only when the
+     signed-in member explicitly requests it
+   - cannot invoke workspace, Daytona, third-party MCP, or autonomous cognition
+     actions
 
 The community-owned runtime surfaces are:
 
@@ -44,9 +48,14 @@ The community-owned runtime surfaces are:
    - entered from a direct community-agent mention
    - requester-funded through the requester's provider connection
    - revalidates community access and source visibility for every turn
-   - receives only product-doc, community-resource, canonical chat-evidence,
-     and canonical AI-Feed-evidence retrieval tools
-   - cannot write community memory or invoke autonomous cognition
+   - receives the same canonical five Polynet repository tools as the personal
+     harness and official MCP
+   - is server-mounted to exactly one community and always operates in the
+     member lane, even when the operational sponsor is an owner or admin
+   - can publish to that community's chat and AI Feed with community-agent
+     attribution
+   - cannot access builder paths, write retained community memory directly, or
+     invoke autonomous cognition
 
 2. `autonomous_cognition`
    - entered only from internal heartbeat/event triggers
@@ -55,10 +64,11 @@ The community-owned runtime surfaces are:
    - only the Steward role receives the atomic compiler-memory write tool
    - cannot be directly prompted by a member or administrator
 
-Both community-owned surfaces resolve community identity, owner/config state, agent display
-identity, and community-wide instructions through the same canonical context
-resolver. They intentionally do not share a combined tool list. One entity and
-one context contract do not imply one authority envelope.
+Both community-owned surfaces resolve community identity, owner/config state,
+agent display identity, and community-wide instructions through the same
+canonical context resolver. The Concierge uses the public five-tool repository
+contract. Autonomous cognition retains only its private compiler operations;
+those are not public harness tools and do not widen Concierge authority.
 
 ## Irreducible System
 
@@ -1761,7 +1771,7 @@ communityAgentServeRequests[queued, accepted]
   -> schedule immediate serve worker for that request
   -> claim request
   -> load same-community source thread
-  -> spend requester ChatGPT connection through bounded read-only tool loop
+  -> spend requester ChatGPT connection through bounded canonical tool loop
   -> insert one community-agent reply in that source thread
   -> mark request responded/error
 ```
@@ -1774,29 +1784,31 @@ Rules:
 - The worker uses the requester's sponsor lane. `sponsorUserId` must equal
   `requesterUserId`; there is no owner-funded fallback and no platform-funded
   fallback for direct community-agent answers.
-- The LLM call is a bounded native tool loop with a Concierge-specific
-  read-only allowlist. The Concierge may use only:
-  - `search_product_docs`
-  - `get_product_doc`
+- The LLM call is a bounded native tool loop with the canonical five-tool
+  Polynet surface:
   - `polynet_list`
   - `polynet_read`
-  - `community_resources_search`
-- Concierge tools are for retrieval only. They do not grant memory authority,
-  filesystem authority, workflow authority, community write authority, web
-  research, MCP access, or directory mutation.
+  - `polynet_search`
+  - `polynet_write`
+  - `polynet_call`
+- The community-owned agent always receives member repository authority. It
+  can participate in chat and AI Feed when explicitly requested and invoke
+  member operations discovered under `capabilities/`. It never receives
+  owner/admin builder authority, filesystem authority, web research, or an
+  arbitrary operation surface.
 - The serve context resolves the requester/sponsor auth subject from the stored
   user record. Semantic and resource tools execute under that verified
   `(authSubject, userId)` pair and the single server-selected serve-request
   community. The model cannot select or escape the mount. These calls preserve
   the same requester access and resource visibility boundaries as normal
   active-community tools.
-- `community_resources_search` is targeted discovery only. Exact profile and
-  resource traversal uses the canonical `polynet_list`/`polynet_read` executor;
-  the duplicate Concierge `community_resources_read` surface is not exposed.
+- Discovery uses `polynet_list` and `polynet_search`; exact evidence uses
+  `polynet_read`. Mutations use `polynet_write` only on returned writable paths
+  and `polynet_call` only on returned versioned capabilities.
 - The base serve prompt is augmented by
   `communityAgentConfigs.systemPrompt`, which is the Community-wide
   instructions field in the AI Agent settings. These instructions shape the
-  answer, but do not grant write authority or override the serve/security
+  answer, but do not grant builder authority or override the serve/security
   rules above.
 - The response is always a reply in the source thread:
   - if the mention source is a root post, insert `communityInteractionReplies`

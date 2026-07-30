@@ -107,6 +107,7 @@ function mapAiFeedEvidenceItem(args: {
     lineage: deriveCommunityAiFeedLineageEnvelope({
       communityId: normalizeIdValue(args.community._id),
       postId,
+      agentKind: args.post.agentKind ?? null,
       agentKey: args.post.agentKey ?? null,
       recordedByUserId: args.post.authorUserId
         ? normalizeIdValue(args.post.authorUserId)

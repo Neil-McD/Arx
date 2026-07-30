@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { POLYNET_MCP_PROTOCOL_VERSION } from "../shared/polynetMcp.ts";
+import { POLYNET_CANONICAL_TOOL_NAMES } from "../shared/polynetCanonicalToolContract.ts";
 
 type CheckStatus = "pass" | "fail" | "warn";
 type LiveClassification =
@@ -35,25 +36,7 @@ type HttpProbe = {
 };
 
 const EXPECTED_PUBLIC_MCP_URL = "https://www.polynet.ai/runtime/mcp";
-const PROVIDER_TOOLS = [
-  "polynet_list_workspaces",
-  "polynet_open_workspace",
-  "polynet_get_workspace_context",
-  "polynet_product_docs_search",
-  "polynet_product_doc_read",
-  "polynet_workspace_memory_search",
-  "polynet_workspace_memory_read",
-  "polynet_workspace_record_outcome",
-  "polynet_workspace_ai_feed_search",
-  "polynet_workspace_ai_feed_read",
-  "polynet_workspace_resources_map",
-  "polynet_workspace_resources_list",
-  "polynet_workspace_resource_read",
-  "polynet_workspace_resources_search",
-  "polynet_workspace_builder_resources_map",
-  "polynet_workspace_builder_resources_list",
-  "polynet_workspace_builder_resource_read",
-] as const;
+const PROVIDER_TOOLS = [...POLYNET_CANONICAL_TOOL_NAMES];
 
 function argValue(name: string): string | null {
   const equalPrefix = `${name}=`;
@@ -215,8 +198,9 @@ function buildLocalChecks(): Check[] {
   ));
   checks.push(check(
     "mcp_provider_tools_present",
-    PROVIDER_TOOLS.every((tool) => httpMcp.includes(`toolName === "${tool}"`)),
-    "Provider workspace tools are implemented in the MCP route.",
+    httpMcp.includes("POLYNET_CANONICAL_TOOL_NAMES") &&
+      httpMcp.includes("executePolynetCanonicalTool"),
+    "The MCP route dispatches the canonical five through the shared executor.",
   ));
 
   return checks;
@@ -393,7 +377,7 @@ function classifyLive(args: {
     return "live_origin_unexpected";
   }
   const toolNames = args.toolsList ? extractToolNames(args.toolsList) : [];
-  if (!PROVIDER_TOOLS.every((tool) => toolNames.includes(tool))) {
+  if (JSON.stringify(toolNames) !== JSON.stringify(PROVIDER_TOOLS)) {
     return "web_proxy_ready_but_convex_stale";
   }
   return "ready_for_smoke";
@@ -434,7 +418,9 @@ async function buildLiveProbe(mcpUrl: string) {
         ? {
             ok: toolsList.ok,
             status: toolsList.status,
-            providerToolsPresent: PROVIDER_TOOLS.every((tool) => extractToolNames(toolsList).includes(tool)),
+            providerToolsPresent:
+              JSON.stringify(extractToolNames(toolsList)) ===
+              JSON.stringify(PROVIDER_TOOLS),
             toolNames: extractToolNames(toolsList),
           }
         : null,

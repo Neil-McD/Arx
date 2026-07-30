@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   deriveCommunityInteractionLineageEnvelope,
 } from "../shared/communityEvidenceContract.ts";
+import { getPolynetMcpToolDefinition } from "../shared/polynetMcp.ts";
 
 const root = process.cwd();
 
@@ -106,8 +107,15 @@ assert.equal(unattributedLegacy.attribution_mode, "unattributed");
 
 assert.match(evidence, /deriveCommunityInteractionLineageEnvelope/);
 assert.match(evidence, /lineage,/);
-assert.match(mcp, /polynet_community_chat_search:[\s\S]*?readOnlyHint: true/);
-assert.match(mcp, /polynet_community_chat_read:[\s\S]*?readOnlyHint: true/);
+assert.equal(
+  getPolynetMcpToolDefinition("polynet_search")?.annotations.readOnlyHint,
+  true,
+);
+assert.equal(
+  getPolynetMcpToolDefinition("polynet_read")?.annotations.readOnlyHint,
+  true,
+);
+assert.doesNotMatch(mcp, /polynet_community_chat_search|polynet_community_chat_read/);
 
 for (const forbidden of [
   "communityLineageEdges: defineTable",

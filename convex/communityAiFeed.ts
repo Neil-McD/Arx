@@ -40,6 +40,7 @@ type FeedPostRow = {
   authorType: "agent";
   authorUserId?: any;
   agentKey?: string;
+  agentKind?: "personal_agent" | "community_agent";
   authorLabel: string;
   type: "observation" | "recommendation" | "action";
   title?: string;
@@ -87,6 +88,7 @@ async function publishCommunityAiFeedAgentPostForUser(args: {
     ctx: args.ctx,
     communityId: args.communityId,
     authorUserId: args.userId,
+    agentKind: "community_agent",
     authorLabel: "Community agent",
     postType: args.postType,
     title: args.title ?? null,
@@ -235,6 +237,7 @@ async function mapFeedPostRow(args: {
     author_type: post.authorType,
     author_user_id: post.authorUserId ? normalizeIdValue(post.authorUserId) : null,
     agent_key: String(post.agentKey ?? "").trim() || null,
+    agent_kind: post.agentKind ?? "community_agent",
     author_label: String(post.authorLabel ?? "").trim() || "Agent",
     post_type: post.type,
     title: String(post.title ?? "").trim() || null,
@@ -288,6 +291,7 @@ async function insertFeedPost(args: {
   communityId: any;
   authorUserId?: any;
   agentKey?: string | null;
+  agentKind?: "personal_agent" | "community_agent";
   authorLabel: string;
   postType: "observation" | "recommendation" | "action";
   title?: string | null;
@@ -297,6 +301,13 @@ async function insertFeedPost(args: {
   nowMs: number;
 }) {
   const noveltyKey = normalizeNoveltyKey(args.noveltyKey);
+  const title = normalizeOptionalText(args.title, 180);
+  const body = normalizeOptionalText(args.body, 12_000);
+  if (!body) throw new Error("community_ai_feed_body_required");
+  const evidence = normalizeFeedEvidence(args.evidence);
+  const authorLabel = normalizeName(args.authorLabel);
+  const agentKey = normalizeNoveltyKey(args.agentKey);
+  const postType = normalizeFeedPostType(args.postType);
   if (noveltyKey) {
     const existingRows = (await args.ctx.db
       .query("communityAiFeedPosts" as any)
@@ -304,28 +315,49 @@ async function insertFeedPost(args: {
         q.eq("communityId", args.communityId).eq("noveltyKey", noveltyKey),
       )
       .take(MAX_NOVELTY_KEY_MATCHES)) as FeedPostRow[];
-    const existing = existingRows.find((row) => row.status === "live");
+    const existing = existingRows[0];
     if (existing) {
-      await upsertSourceTraceForAiFeedPost(args.ctx, existing, args.nowMs);
-      return await mapFeedPostRow({
-        post: existing,
-        viewerReaction: null,
-      });
+      if (
+        normalizeIdValue(existing.authorUserId) !==
+          normalizeIdValue(args.authorUserId) ||
+        (existing.agentKey ?? null) !== (agentKey ?? null) ||
+        (existing.agentKind ?? null) !== (args.agentKind ?? null) ||
+        existing.authorLabel !== authorLabel ||
+        existing.type !== postType ||
+        (existing.title ?? null) !== (title ?? null) ||
+        existing.body !== body ||
+        JSON.stringify(normalizeFeedEvidence(existing.evidence)) !==
+          JSON.stringify(evidence)
+      ) {
+        throw new Error("community_ai_feed_idempotency_key_conflict");
+      }
+      if (existing.status === "hidden") {
+        await upsertHiddenSourceTraceForAiFeedPost({
+          ctx: args.ctx,
+          post: existing,
+          nowMs: args.nowMs,
+        });
+      } else {
+        await upsertSourceTraceForAiFeedPost(args.ctx, existing, args.nowMs);
+      }
+      return {
+        ...(await mapFeedPostRow({
+          post: existing,
+          viewerReaction: null,
+        })),
+        deduped: true,
+      };
     }
   }
 
-  const title = normalizeOptionalText(args.title, 180);
-  const body = normalizeOptionalText(args.body, 12_000);
-  if (!body) throw new Error("community_ai_feed_body_required");
-  const evidence = normalizeFeedEvidence(args.evidence);
-  const authorLabel = normalizeName(args.authorLabel);
   const id = await args.ctx.db.insert("communityAiFeedPosts" as any, {
     communityId: args.communityId,
     authorType: "agent",
     authorUserId: args.authorUserId,
-    agentKey: normalizeNoveltyKey(args.agentKey),
+    agentKey,
+    ...(args.agentKind ? { agentKind: args.agentKind } : {}),
     authorLabel,
-    type: normalizeFeedPostType(args.postType),
+    type: postType,
     title,
     body,
     evidence,
@@ -350,10 +382,13 @@ async function insertFeedPost(args: {
     dedupeKey: `ai_feed_post_added:${normalizeIdValue(created._id)}`,
     nowMs: args.nowMs,
   });
-  return await mapFeedPostRow({
-    post: created,
-    viewerReaction: null,
-  });
+  return {
+    ...(await mapFeedPostRow({
+      post: created,
+      viewerReaction: null,
+    })),
+    deduped: false,
+  };
 }
 
 async function recomputeReactionState(args: {
@@ -824,6 +859,62 @@ export const publishCommunityAiFeedAgentPostInternal = internalMutation({
       title: args.title ?? null,
       body: args.body,
       evidence: args.evidence ?? null,
+    });
+  },
+});
+
+export const publishCanonicalPolynetAiFeedPostInternal = internalMutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.string(),
+    communityId: v.id("communities"),
+    principalKind: v.union(
+      v.literal("personal_agent"),
+      v.literal("external_mcp"),
+      v.literal("community_agent"),
+    ),
+    idempotencyKey: v.string(),
+    postType: v.union(
+      v.literal("observation"),
+      v.literal("recommendation"),
+      v.literal("action"),
+    ),
+    title: v.optional(v.union(v.string(), v.null())),
+    body: v.string(),
+    evidence: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    const actor = await resolveAuthenticatedActorByTrustedSubject({
+      ctx,
+      authSubject: args.authSubject,
+      userId: args.userId,
+    });
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: actor.dbUserId,
+    });
+    const communityOwned = args.principalKind === "community_agent";
+    const principalKey = communityOwned
+      ? normalizeIdValue(args.communityId)
+      : normalizeIdValue(actor.dbUserId);
+    return await insertFeedPost({
+      ctx,
+      communityId: args.communityId,
+      authorUserId: communityOwned ? undefined : actor.dbUserId,
+      agentKind: communityOwned ? "community_agent" : "personal_agent",
+      agentKey: communityOwned
+        ? `community_agent:${normalizeIdValue(args.communityId)}`
+        : `personal_agent:${normalizeIdValue(actor.dbUserId)}`,
+      authorLabel: communityOwned ? "Community agent" : "Member agent",
+      postType: args.postType,
+      title: args.title ?? null,
+      body: args.body,
+      evidence: args.evidence ?? [],
+      noveltyKey: `polynet:${args.principalKind}:${principalKey}:${normalizeNoveltyKey(
+        args.idempotencyKey,
+      )}`,
+      nowMs: Date.now(),
     });
   },
 });

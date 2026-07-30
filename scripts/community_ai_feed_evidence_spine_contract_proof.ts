@@ -135,22 +135,29 @@ function proveToolSurfaces() {
     normalizeToolArguments("community_ai_feed_read", { ref: "resource:post-live" }),
   );
   const conciergeTools = read("shared/communityAgentConciergeTools.ts");
-  assertIncludes(conciergeTools, '"community_ai_feed_search"', "Concierge AI Feed search");
-  assertIncludes(conciergeTools, '"community_ai_feed_read"', "Concierge AI Feed read");
+  assertIncludes(conciergeTools, '"polynet_search"', "Concierge canonical search");
+  assertIncludes(conciergeTools, '"polynet_read"', "Concierge canonical read");
+  assertIncludes(conciergeTools, '"polynet_write"', "Concierge canonical write");
   const memberTools = restrictToolNamesForInvocationSurface({
     invocationSurface: "member_agent_dock",
-    toolNames: ["community_ai_feed_search", "community_ai_feed_read", "community_write"],
+    toolNames: [
+      "polynet_search",
+      "polynet_read",
+      "polynet_write",
+      "community_ai_feed_search",
+    ],
   });
-  assert.deepEqual(memberTools, ["community_ai_feed_search", "community_ai_feed_read"]);
-  assert.equal(
-    getPolynetMcpToolDefinition("polynet_workspace_ai_feed_search")?.name,
-    "polynet_workspace_ai_feed_search",
-  );
-  assert.equal(
-    getPolynetMcpToolDefinition("polynet_workspace_ai_feed_read")?.name,
-    "polynet_workspace_ai_feed_read",
-  );
-  console.log("PASS: member agent, Concierge, and workspace MCP expose the same read-only evidence pair");
+  assert.deepEqual(memberTools, [
+    "polynet_search",
+    "polynet_read",
+    "polynet_write",
+  ]);
+  assert.equal(getPolynetMcpToolDefinition("polynet_workspace_ai_feed_search"), null);
+  assert.equal(getPolynetMcpToolDefinition("polynet_workspace_ai_feed_read"), null);
+  assert.equal(getPolynetMcpToolDefinition("polynet_search")?.name, "polynet_search");
+  assert.equal(getPolynetMcpToolDefinition("polynet_read")?.name, "polynet_read");
+  assert.equal(getPolynetMcpToolDefinition("polynet_write")?.name, "polynet_write");
+  console.log("PASS: native and MCP surfaces route AI Feed evidence through the canonical five");
 }
 
 function proveImplementationBoundaries() {
@@ -160,6 +167,7 @@ function proveImplementationBoundaries() {
   const schema = read("convex/schema.ts");
   const runtime = read("convex/runtimeAgentLoop.ts");
   const mcp = read("convex/httpMcp.ts");
+  const executor = read("convex/polynetCanonicalExecutor.ts");
   const directory = read("convex/communityIntelligenceDirectory.ts");
   const compilerDigest = read("convex/communityCompilerDigest.ts");
   const contract = read("docs/community-lineage-ontology-contract-v0.md");
@@ -182,16 +190,24 @@ function proveImplementationBoundaries() {
     !aiFeed.includes('post.agentKey ?? "community_agent"'),
     "AI Feed source trace must not fabricate community_agent",
   );
-  for (const toolName of ["community_ai_feed_search", "community_ai_feed_read"]) {
-    assertIncludes(runtime, `params.toolName === "${toolName}"`, `${toolName} native dispatch`);
-  }
-  for (const toolName of [
-    "polynet_workspace_ai_feed_search",
-    "polynet_workspace_ai_feed_read",
-  ]) {
-    assertIncludes(mcp, `toolName === "${toolName}"`, `${toolName} MCP dispatch`);
-  }
-  assertIncludes(mcp, '"raw_evidence_search"', "workspace MCP evidence authority gate");
+  assertIncludes(runtime, "executePolynetCanonicalTool", "native canonical dispatch");
+  assertIncludes(mcp, "executePolynetCanonicalTool", "MCP canonical dispatch");
+  assertIncludes(
+    executor,
+    "searchCommunityAiFeedEvidenceInternal",
+    "canonical AI Feed search domain owner",
+  );
+  assertIncludes(
+    executor,
+    "readCommunityAiFeedEvidenceForToolInternal",
+    "canonical AI Feed read domain owner",
+  );
+  assertIncludes(
+    executor,
+    "publishCanonicalPolynetAiFeedPostInternal",
+    "canonical AI Feed write domain owner",
+  );
+  assert.ok(!mcp.includes("polynet_workspace_ai_feed_"));
   assertIncludes(directory, "upsertCommunitySourceTrace", "canonical source trace ledger");
   assertIncludes(compilerDigest, "selectedSourceTraceRows", "digest consumes canonical source traces once");
   assertIncludes(contract, "at most once", "lineage compiler invariant");

@@ -56,6 +56,9 @@ const threadReadGateway = read("shared/cloudThreadsRead.ts");
 const component = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const styles = read("apps/web/src/components/WebMemberAgentDock.css");
 const app = read("apps/web/src/App.tsx");
+const memberAgentSurfaceController = read(
+  "apps/web/src/controllers/useWebMemberAgentSurfaceController.ts",
+);
 const attachmentPolicy = read("shared/memberAgentAttachments.ts");
 const voiceController = read("shared/useWebVoiceInputController.ts");
 const cloudThreadsGateway = read("shared/cloudThreadsGateway.ts");
@@ -184,6 +187,9 @@ assert.deepEqual(
       "search_product_docs",
       "polynet_list",
       "polynet_read",
+      "polynet_search",
+      "polynet_write",
+      "polynet_call",
       "member_conversations_list",
       "member_conversation_read",
       "polynet_list_communities",
@@ -200,18 +206,11 @@ assert.deepEqual(
     ],
   }),
   [
-    "search_product_docs",
     "polynet_list",
     "polynet_read",
-    "member_conversations_list",
-    "member_conversation_read",
-    "polynet_list_communities",
-    "polynet_get_community",
-    "community_resources_read",
-    "community_resources_search",
-    "community_search",
-    "community_memory_search",
-    "community_memory_read",
+    "polynet_search",
+    "polynet_write",
+    "polynet_call",
   ],
 );
 assert.match(
@@ -596,8 +595,8 @@ assert.match(
 );
 assert.match(
   resolution,
-  /invocationSurface === "member_agent_dock"[\s\S]*member_conversations_list[\s\S]*member_conversation_read[\s\S]*polynet_list_communities[\s\S]*polynet_get_community/,
-  "private recall and community directory tools must be added only after the server resolves the dock invocation surface",
+  /activeCapabilityFamilies\.includes\("community_tools"\)[\s\S]*"polynet_list"[\s\S]*"polynet_read"[\s\S]*"polynet_search"[\s\S]*"polynet_write"[\s\S]*"polynet_call"/,
+  "the server must resolve the exact canonical five from the community capability family",
 );
 assert.doesNotMatch(
   runtimeLoop,
@@ -616,13 +615,13 @@ assert.doesNotMatch(
 );
 assert.match(
   httpMcp,
-  /toolName === "polynet_list_communities"[\s\S]*operationId: "community\.list"[\s\S]*toolName === "polynet_get_community"[\s\S]*operationId: "community\.read"/,
-  "the MCP adapter must delegate list and get to canonical operations",
+  /POLYNET_CANONICAL_TOOL_NAMES[\s\S]*executePolynetCanonicalTool[\s\S]*principalKind: "external_mcp"/,
+  "the MCP adapter must delegate the canonical five to the shared executor",
 );
 assert.match(
   runtimeLoop,
-  /toolName === "polynet_list_communities"[\s\S]*operationId: "community\.list"[\s\S]*toolName === "polynet_get_community"[\s\S]*operationId: "community\.read"/,
-  "the native runtime adapter must delegate list and get to the same canonical operations",
+  /POLYNET_CANONICAL_TOOL_NAMES[\s\S]*executePolynetCanonicalTool[\s\S]*principalKind:[\s\S]*"personal_agent"/,
+  "the native runtime adapter must delegate the canonical five to the same shared executor",
 );
 assert.match(
   platformOperationExecutor,
@@ -904,9 +903,9 @@ assert.doesNotMatch(
   "the personal-agent dock must not enter the community-agent Concierge path",
 );
 assert.match(
-  app,
-  /memberAgentSurfaceContext[\s\S]*kind: "community"[\s\S]*section: communityTab[\s\S]*kind: "discover"[\s\S]*section: "communities"[\s\S]*kind: "platform"/,
-  "the shell must project community, Discover, and generic platform pages explicitly",
+  memberAgentSurfaceController,
+  /kind: "community"[\s\S]*section: params\.communityTab[\s\S]*kind: "discover"[\s\S]*section: "communities"[\s\S]*kind: "platform"/,
+  "the decomposed surface controller must project community, Discover, and generic platform pages explicitly",
 );
 assert.doesNotMatch(
   app,
@@ -914,13 +913,14 @@ assert.doesNotMatch(
   "non-community pages must not silently fall back to the Polynet community lens",
 );
 assert.match(
-  app,
-  /isMemberAgentDockVisible[\s\S]*Boolean\(session\)[\s\S]*publicRoute\.kind === "app"[\s\S]*activePage !== "landing"[\s\S]*activePage !== "onboarding"[\s\S]*hasResolvedCommunities[\s\S]*!isCommunityLaunchSetupModalOpen[\s\S]*!isDirectMessagesOpen[\s\S]*!isOnboardingModalOpen/,
+  memberAgentSurfaceController,
+  /const isVisible =[\s\S]*params\.isAuthenticated[\s\S]*params\.publicRouteKind === "app"[\s\S]*params\.activePage !== "landing"[\s\S]*params\.activePage !== "onboarding"[\s\S]*params\.hasResolvedCommunities[\s\S]*Boolean\(surfaceContext\)[\s\S]*!params\.isDirectMessagesOpen[\s\S]*!params\.isOnboardingModalOpen/,
   "the operating panel must span authenticated app pages but stay out of acquisition and blocking overlays",
 );
 assert.match(
   app,
-  /<WebMemberAgentDock[\s\S]*isVisible=\{isMemberAgentDockVisible\}[\s\S]*communityId=\{memberAgentDockCommunity\?\.id \?\? null\}[\s\S]*surfaceContext=\{memberAgentSurfaceContext\}/,
+  /<WebAppCompositionRoot[\s\S]*memberAgentDockProps=\{\{[\s\S]*isVisible: isMemberAgentDockVisible[\s\S]*communityId: memberAgentDockCommunity\?\.id \?\? null[\s\S]*surfaceContext: memberAgentSurfaceContext/,
+  "the app shell must pass the canonical surface context through the decomposed composition root",
 );
 assert.match(
   component,

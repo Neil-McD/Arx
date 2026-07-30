@@ -5,7 +5,7 @@ export const COMMUNITY_AGENT_RUNTIME_BOUNDARIES = {
     sponsor: "requester",
     audience: "member",
     contextScope: "source_visibility_bounded",
-    toolAuthority: "retrieval_only",
+    toolAuthority: "member_repository",
   },
   autonomous_cognition: {
     sponsor: "community_owner",
@@ -19,7 +19,7 @@ export const COMMUNITY_AGENT_RUNTIME_BOUNDARIES = {
     sponsor: "requester" | "community_owner";
     audience: "member" | "internal";
     contextScope: "source_visibility_bounded" | "community_compiler_and_directory";
-    toolAuthority: "retrieval_only" | "steward_memory_write_only";
+    toolAuthority: "member_repository" | "steward_memory_write_only";
   }
 >;
 

@@ -32,6 +32,7 @@ const [
   conciergeWorker,
   mcp,
   httpMcp,
+  canonicalExecutor,
   lineageContract,
   evidenceCore,
 ] = await Promise.all([
@@ -48,6 +49,7 @@ const [
   read("convex/communityAgentServeWorker.ts"),
   read("shared/polynetMcp.ts"),
   read("convex/httpMcp.ts"),
+  read("convex/polynetCanonicalExecutor.ts"),
   read("docs/community-lineage-ontology-contract-v0.md"),
   read("convex/communityInteractionEvidenceCore.ts"),
 ]);
@@ -118,32 +120,29 @@ assert.match(evidence, /"communityInteractionReplies" as any/);
 assert.doesNotMatch(communityChat, /communityArchiveDocuments|deleteArchiveDocumentBySource/);
 assert.match(interactions, /scheduleCommunityInteractionEvidenceSync/);
 
-for (const source of [retrievalTools, invocationSurface, conciergeTools, runtimeLoop]) {
-  assert.match(source, /community_chat_search/);
-  assert.match(source, /community_chat_read/);
+assert.match(retrievalTools, /community_chat_search/);
+assert.match(retrievalTools, /community_chat_read/);
+for (const source of [invocationSurface, conciergeTools]) {
+  assert.match(source, /polynet_search/);
+  assert.match(source, /polynet_read/);
+  assert.doesNotMatch(source, /community_chat_search|community_chat_read/);
 }
-assert.match(
-  runtimeLoop,
-  /communityInteractionEvidence\.searchCommunityInteractionEvidenceInternal/,
-);
-assert.match(
-  runtimeLoop,
-  /communityInteractionEvidence\.readCommunityInteractionEvidenceForToolInternal/,
-);
+assert.match(runtimeLoop, /executePolynetCanonicalTool/);
 assert.match(conciergeWorker, /executeConciergeTool/);
 assert.match(conciergeWorker, /executeRetrievalHarnessTool/);
 assert.match(conciergeWorker, /evidenceSurface: "community_concierge"/);
-assert.match(mcp, /polynet_community_chat_search/);
-assert.match(mcp, /polynet_community_chat_read/);
+assert.match(mcp, /getPolynetCanonicalToolDefinitions/);
+assert.doesNotMatch(mcp, /polynet_community_chat_search|polynet_community_chat_read/);
 assert.match(
-  httpMcp,
-  /communityInteractionEvidence\.searchCommunityInteractionEvidenceInternal/,
+  canonicalExecutor,
+  /communityInteractionEvidence[\s\S]*searchCommunityInteractionEvidenceInternal/,
 );
 assert.match(
-  httpMcp,
-  /communityInteractionEvidence\.readCommunityInteractionEvidenceForToolInternal/,
+  canonicalExecutor,
+  /communityInteractionEvidence[\s\S]*readCommunityInteractionEvidenceForToolInternal/,
 );
-assert.match(httpMcp, /surface: "external_mcp"/);
+assert.match(httpMcp, /executePolynetCanonicalTool/);
+assert.match(httpMcp, /evidenceSurface: "external_mcp"/);
 assert.match(lineageContract, /profile projection: `source_only`/);
 assert.match(lineageContract, /Searchability is not acceptance/);
 

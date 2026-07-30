@@ -266,8 +266,21 @@ function normalizeBeforeNumber(raw: unknown): number | null {
   return Math.max(0, Math.floor(parsed));
 }
 
-function composerIdempotencyKey(idempotencyKey: string, kind: "root" | "reply"): string {
-  return `community_composer:${kind}:${idempotencyKey}`.slice(0, MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS);
+function composerIdempotencyKey(
+  idempotencyKey: string,
+  kind: "root" | "reply",
+  actorType: "human" | "personal_agent" | "community_agent" = "human",
+): string {
+  const namespace =
+    actorType === "personal_agent"
+      ? "community_personal_agent"
+      : actorType === "community_agent"
+        ? "community_canonical_agent"
+        : "community_composer";
+  return `${namespace}:${kind}:${idempotencyKey}`.slice(
+    0,
+    MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS,
+  );
 }
 
 function communityAgentDockRootIdempotencyKey(userId: any): string {
@@ -1703,6 +1716,7 @@ export const createCommunityInteractionComposerMessage = mutation({
       ),
     ),
     attachments: v.optional(v.array(interactionAttachmentInputValidator)),
+    asPersonalAgent: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -1726,6 +1740,10 @@ export const createCommunityInteractionComposerMessage = mutation({
         ]
       : [];
     const summary = composerContentSummary(contentBlocks, attachments);
+    const actorType = args.asPersonalAgent ? "personal_agent" : "human";
+    const actorAgentKey = args.asPersonalAgent
+      ? `personal_agent:${normalizeIdValue(userId)}`
+      : null;
     const mentionedUserIds = await resolveMentionedUserIdsForInteractionWrite({
       ctx,
       communityId: args.communityId,
@@ -1737,14 +1755,29 @@ export const createCommunityInteractionComposerMessage = mutation({
     const nowMs = Date.now();
 
     if (!args.rootId) {
-      const idempotencyKey = composerIdempotencyKey(normalizeIdempotencyKey(args.idempotencyKey), "root");
+      const idempotencyKey = composerIdempotencyKey(
+        normalizeIdempotencyKey(args.idempotencyKey),
+        "root",
+        actorType,
+      );
       let root = await getExistingRootByIdempotencyKey(ctx, args.communityId, idempotencyKey);
       let deduped = true;
+      if (
+        root &&
+        (root.actorType !== actorType ||
+          normalizeIdValue(root.actorUserId) !== normalizeIdValue(userId) ||
+          normalizeIdValue(root.actorAgentKey) !==
+            normalizeIdValue(actorAgentKey) ||
+          root.contentSummary !== summary)
+      ) {
+        throw new Error("interaction_idempotency_key_conflict");
+      }
       if (!root) {
         const rootId = await ctx.db.insert("communityInteractionRoots" as any, {
           communityId: args.communityId,
-          actorType: "human",
+          actorType,
           actorUserId: userId,
+          ...(actorAgentKey ? { actorAgentKey } : {}),
           kind: "discussion",
           status: "live",
           visibilityScope: "community",
@@ -1829,10 +1862,22 @@ export const createCommunityInteractionComposerMessage = mutation({
       throw new Error("community_agent_dock_dedicated_endpoint_required");
     }
 
-    const idempotencyKey = composerIdempotencyKey(normalizeIdempotencyKey(args.idempotencyKey), "reply");
+    const idempotencyKey = composerIdempotencyKey(
+      normalizeIdempotencyKey(args.idempotencyKey),
+      "reply",
+      actorType,
+    );
     let reply = await getExistingReplyByIdempotencyKey(ctx, root.communityId, idempotencyKey);
     let deduped = true;
-    if (reply && normalizeIdValue(reply.rootId) !== normalizeIdValue(root._id)) {
+    if (
+      reply &&
+      (normalizeIdValue(reply.rootId) !== normalizeIdValue(root._id) ||
+        reply.actorType !== actorType ||
+        normalizeIdValue(reply.actorUserId) !== normalizeIdValue(userId) ||
+        normalizeIdValue(reply.actorAgentKey) !==
+          normalizeIdValue(actorAgentKey) ||
+        reply.contentSummary !== summary)
+    ) {
       throw new Error("interaction_idempotency_key_conflict");
     }
 
@@ -1849,8 +1894,9 @@ export const createCommunityInteractionComposerMessage = mutation({
         communityId: root.communityId,
         rootId: root._id,
         seq,
-        actorType: "human",
+        actorType,
         actorUserId: userId,
+        ...(actorAgentKey ? { actorAgentKey } : {}),
         ...(replyTarget.targetReplyId ? { targetReplyId: replyTarget.targetReplyId } : {}),
         status: "live",
         visibilityScope,
@@ -1914,6 +1960,262 @@ export const createCommunityInteractionComposerMessage = mutation({
       // A progress marker must never make a canonical community reply fail.
     }
 
+    return {
+      rows: [],
+      interaction: {
+        kind: "reply",
+        root_id: normalizeIdValue(root._id),
+        reply_id: normalizeIdValue(reply._id),
+        deduped,
+        idempotency_key: idempotencyKey,
+      },
+    };
+  },
+});
+
+export const createCommunityAgentCanonicalInteractionInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    authSubject: v.string(),
+    communityId: v.id("communities"),
+    idempotencyKey: v.string(),
+    text: v.string(),
+    rootId: v.optional(v.union(v.id("communityInteractionRoots"), v.null())),
+    replyToMessageId: v.optional(v.union(v.string(), v.null())),
+    mentions: v.optional(
+      v.array(
+        v.object({
+          userId: v.optional(v.string()),
+          agentKey: v.optional(v.string()),
+          roleKey: v.optional(v.string()),
+        }),
+      ),
+    ),
+    attachments: v.optional(v.array(interactionAttachmentInputValidator)),
+  },
+  handler: async (ctx, args) => {
+    const sponsorUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject,
+    });
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: sponsorUserId,
+    });
+
+    const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
+    const attachments = normalizeInteractionAttachmentInputs(
+      args.attachments ?? [],
+    );
+    if (!text && attachments.length === 0) {
+      throw new Error("interaction_content_required");
+    }
+    if (args.rootId && textContainsEverybodyMentionToken(text)) {
+      throw new Error("interaction_mention_everybody_reply_not_allowed");
+    }
+    const contentBlocks: NormalizedContentBlock[] = text
+      ? [
+          { blockType: "markdown_text", text },
+          ...extractLinkBlocksFromText(text),
+        ]
+      : [];
+    const summary = composerContentSummary(contentBlocks, attachments);
+    const mentionedUserIds =
+      await resolveMentionedUserIdsForInteractionWrite({
+        ctx,
+        communityId: args.communityId,
+        actorUserId: sponsorUserId,
+        targetKind: args.rootId ? "reply" : "root",
+        text,
+        mentions: args.mentions ?? [],
+      });
+    const nowMs = Date.now();
+    const idempotencyKey = composerIdempotencyKey(
+      normalizeIdempotencyKey(args.idempotencyKey),
+      args.rootId ? "reply" : "root",
+      "community_agent",
+    );
+
+    if (!args.rootId) {
+      let root = await getExistingRootByIdempotencyKey(
+        ctx,
+        args.communityId,
+        idempotencyKey,
+      );
+      let deduped = true;
+      if (
+        root &&
+        (root.actorType !== "community_agent" ||
+          Boolean(root.actorUserId) ||
+          root.actorAgentKey !== CANONICAL_COMMUNITY_AGENT_KEY ||
+          root.contentSummary !== summary)
+      ) {
+        throw new Error("interaction_idempotency_key_conflict");
+      }
+      if (!root) {
+        const rootId = await ctx.db.insert("communityInteractionRoots" as any, {
+          communityId: args.communityId,
+          actorType: "community_agent",
+          actorAgentKey: CANONICAL_COMMUNITY_AGENT_KEY,
+          kind: "discussion",
+          status: "live",
+          visibilityScope: "community",
+          contentSummary: summary,
+          replyCount: 0,
+          reactionSummary: [],
+          idempotencyKey,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+        const inserted = await insertContentBlocksForTarget({
+          ctx,
+          communityId: args.communityId,
+          rootId,
+          visibilityScope: "community",
+          blocks: contentBlocks,
+          nowMs,
+        });
+        await scheduleEmbedEnrichment(ctx, inserted.embedIds);
+        await insertCommunityInteractionMentionRows({
+          ctx,
+          communityId: args.communityId,
+          rootId,
+          mentionedUserIds,
+          actorUserId: sponsorUserId,
+          nowMs,
+        });
+        root = (await ctx.db.get(rootId)) as InteractionRootRow | null;
+        if (!root) throw new Error("interaction_root_create_failed");
+        await insertCanonicalInteractionAttachmentsForTarget({
+          ctx,
+          communityId: args.communityId,
+          rootId: root._id,
+          attachments,
+          actorUserId: sponsorUserId,
+          nowMs,
+          contentHashPrefix: `community-canonical-agent:${idempotencyKey}`,
+        });
+        deduped = false;
+      }
+      await scheduleCommunityInteractionEvidenceSync({
+        ctx,
+        communityId: args.communityId,
+        objectType: "root",
+        objectId: root._id,
+      });
+      return {
+        rows: [],
+        interaction: {
+          kind: "root",
+          root_id: normalizeIdValue(root._id),
+          reply_id: null,
+          deduped,
+          idempotency_key: idempotencyKey,
+        },
+      };
+    }
+
+    const root = (await ctx.db.get(args.rootId)) as InteractionRootRow | null;
+    if (
+      !root ||
+      normalizeIdValue(root.communityId) !==
+        normalizeIdValue(args.communityId)
+    ) {
+      throw new Error("interaction_root_not_found");
+    }
+    if (root.status !== "live" || root.lockedAt) {
+      throw new Error("interaction_root_closed");
+    }
+    const replyTarget = await resolveOptionalReplyTargetForCanonicalComposer({
+      ctx,
+      root,
+      replyToMessageId: args.replyToMessageId ?? null,
+    });
+    let reply = await getExistingReplyByIdempotencyKey(
+      ctx,
+      args.communityId,
+      idempotencyKey,
+    );
+    let deduped = true;
+    if (
+      reply &&
+      (normalizeIdValue(reply.rootId) !== normalizeIdValue(root._id) ||
+        reply.actorType !== "community_agent" ||
+        Boolean(reply.actorUserId) ||
+        reply.actorAgentKey !== CANONICAL_COMMUNITY_AGENT_KEY ||
+        reply.contentSummary !== summary)
+    ) {
+      throw new Error("interaction_idempotency_key_conflict");
+    }
+    if (!reply) {
+      const visibilityScope = resolveReplyVisibilityScope(
+        root.visibilityScope,
+        root.visibilityScope,
+      );
+      const seq = await nextReplySeq(ctx, root._id);
+      const replyId = await ctx.db.insert(
+        "communityInteractionReplies" as any,
+        {
+          communityId: args.communityId,
+          rootId: root._id,
+          seq,
+          actorType: "community_agent",
+          actorAgentKey: CANONICAL_COMMUNITY_AGENT_KEY,
+          ...(replyTarget.targetReplyId
+            ? { targetReplyId: replyTarget.targetReplyId }
+            : {}),
+          status: "live",
+          visibilityScope,
+          contentSummary: summary,
+          reactionSummary: [],
+          idempotencyKey,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        },
+      );
+      const inserted = await insertContentBlocksForTarget({
+        ctx,
+        communityId: args.communityId,
+        replyId,
+        visibilityScope,
+        blocks: contentBlocks,
+        nowMs,
+      });
+      await scheduleEmbedEnrichment(ctx, inserted.embedIds);
+      await insertCommunityInteractionMentionRows({
+        ctx,
+        communityId: args.communityId,
+        replyId,
+        mentionedUserIds,
+        actorUserId: sponsorUserId,
+        nowMs,
+      });
+      await ctx.db.patch(root._id, {
+        replyCount: Math.max(0, Math.floor(root.replyCount ?? 0)) + 1,
+        lastReplyAt: nowMs,
+        updatedAt: nowMs,
+      });
+      reply = (await ctx.db.get(replyId)) as InteractionReplyRow | null;
+      if (!reply) throw new Error("interaction_reply_create_failed");
+      await insertCanonicalInteractionAttachmentsForTarget({
+        ctx,
+        communityId: args.communityId,
+        replyId: reply._id,
+        attachments,
+        actorUserId: sponsorUserId,
+        nowMs,
+        contentHashPrefix: `community-canonical-agent:${idempotencyKey}`,
+      });
+      deduped = false;
+    }
+    await scheduleCommunityInteractionEvidenceSync({
+      ctx,
+      communityId: args.communityId,
+      objectType: "reply",
+      objectId: reply._id,
+    });
     return {
       rows: [],
       interaction: {

@@ -5281,6 +5281,7 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
   communityId: any;
   summary: string;
   operations: unknown[];
+  idempotencyKey?: string | null;
 }) {
   await requireCommunityManager({
     ctx: args.ctx,
@@ -5290,6 +5291,48 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
   const nowMs = Date.now();
   const summary = normalizeChangesetSummary(args.summary);
   const operations = normalizeCommunityResourceBuilderChangesetOperations(args.operations);
+  const idempotencyKey = normalizeOptionalText(args.idempotencyKey, 200);
+  if (idempotencyKey) {
+    const existing = (await args.ctx.db
+      .query("communityResourceBuilderChangesets" as any)
+      .withIndex("by_community_creator_idempotencyKey", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("createdByUserId", args.userId)
+          .eq("idempotencyKey", idempotencyKey),
+      )
+      .unique()) as CommunityResourceBuilderChangesetRow | null;
+    if (existing) {
+      const existingOperations =
+        normalizeCommunityResourceBuilderChangesetOperations(
+          existing.operations,
+        );
+      if (
+        existing.summary !== summary ||
+        JSON.stringify(existingOperations) !== JSON.stringify(operations)
+      ) {
+        throw new Error("community_resource_changeset_idempotency_conflict");
+      }
+      const existingPreview =
+        buildCommunityResourceBuilderChangesetPreview(existingOperations);
+      return {
+        ok: true,
+        kind: "community_resource_builder_changeset_staged",
+        changeset_id: normalizeIdValue(existing._id),
+        community_id: normalizeIdValue(args.communityId),
+        status: existing.status,
+        summary: existing.summary,
+        operation_count: existingOperations.length,
+        preview_items: existingPreview.preview_items,
+        preview_total_count: existingPreview.total_count,
+        preview_limit: existingPreview.preview_limit,
+        warning_count:
+          getCommunityResourceBuilderPreflightIssueCount(existing.preflight),
+        preflight: existing.preflight,
+        deduped: true,
+      };
+    }
+  }
   const preflight = await buildCommunityResourceBuilderChangesetPreflight({
     ctx: args.ctx,
     communityId: args.communityId,
@@ -5300,6 +5343,7 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
   const id = await args.ctx.db.insert("communityResourceBuilderChangesets" as any, {
     communityId: args.communityId,
     createdByUserId: args.userId,
+    ...(idempotencyKey ? { idempotencyKey } : {}),
     status: "staged",
     summary,
     operations,
@@ -5320,6 +5364,7 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
     preview_limit: preview.preview_limit,
     warning_count: getCommunityResourceBuilderPreflightIssueCount(preflight),
     preflight,
+    deduped: false,
   };
 }
 
@@ -5330,6 +5375,7 @@ export const stageCommunityResourceBuilderChangeset = mutation({
     communityId: v.id("communities"),
     summary: v.string(),
     operations: v.array(v.any()),
+    idempotencyKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -5343,6 +5389,7 @@ export const stageCommunityResourceBuilderChangeset = mutation({
       userId,
       summary: args.summary,
       operations: args.operations,
+      idempotencyKey: args.idempotencyKey ?? null,
     });
   },
 });
@@ -5353,6 +5400,7 @@ export const stageCommunityResourceBuilderChangesetInternal = internalMutation({
     communityId: v.id("communities"),
     summary: v.string(),
     operations: v.array(v.any()),
+    idempotencyKey: v.optional(v.string()),
   },
   handler: async (ctx, args) =>
     await stageCommunityResourceBuilderChangesetCore({
@@ -5361,6 +5409,7 @@ export const stageCommunityResourceBuilderChangesetInternal = internalMutation({
       communityId: args.communityId,
       summary: args.summary,
       operations: args.operations,
+      idempotencyKey: args.idempotencyKey ?? null,
     }),
 });
 
@@ -5433,6 +5482,33 @@ export const approveCommunityResourceBuilderChangeset = mutation({
     if (!changeset || String(changeset.communityId) !== String(args.communityId)) {
       throw new Error("community_resource_changeset_not_found");
     }
+    if (
+      (changeset.status === "approved" || changeset.status === "applied") &&
+      changeset.approvedByUserId &&
+      String(changeset.approvedByUserId) === String(userId)
+    ) {
+      const operations = normalizeCommunityResourceBuilderChangesetOperations(
+        changeset.operations,
+      );
+      const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+      return {
+        ok: true,
+        kind: "community_resource_builder_changeset_approved",
+        changeset_id: normalizeIdValue(args.changesetId),
+        community_id: normalizeIdValue(args.communityId),
+        status: changeset.status,
+        summary: changeset.summary,
+        operation_count: operations.length,
+        preview_items: preview.preview_items,
+        preview_total_count: preview.total_count,
+        preview_limit: preview.preview_limit,
+        warning_count: getCommunityResourceBuilderPreflightIssueCount(
+          changeset.preflight,
+        ),
+        preflight: changeset.preflight,
+        deduped: true,
+      };
+    }
     if (changeset.status !== "staged") {
       throw new Error("community_resource_changeset_not_staged");
     }
@@ -5474,6 +5550,7 @@ export const approveCommunityResourceBuilderChangeset = mutation({
       preview_limit: preview.preview_limit,
       warning_count: getCommunityResourceBuilderPreflightIssueCount(preflight),
       preflight,
+      deduped: false,
     };
   },
 });
@@ -5501,6 +5578,23 @@ export const rejectCommunityResourceBuilderChangeset = mutation({
     if (!changeset || String(changeset.communityId) !== String(args.communityId)) {
       throw new Error("community_resource_changeset_not_found");
     }
+    if (
+      changeset.status === "rejected" &&
+      changeset.rejectedByUserId &&
+      String(changeset.rejectedByUserId) === String(userId) &&
+      (changeset.error ?? null) ===
+        (normalizeOptionalText(args.reason, 1000) ?? null)
+    ) {
+      return {
+        ok: true,
+        kind: "community_resource_builder_changeset_rejected",
+        changeset_id: normalizeIdValue(args.changesetId),
+        community_id: normalizeIdValue(args.communityId),
+        status: "rejected",
+        summary: changeset.summary,
+        deduped: true,
+      };
+    }
     if (changeset.status !== "staged" && changeset.status !== "approved") {
       throw new Error("community_resource_changeset_not_rejectable");
     }
@@ -5519,6 +5613,7 @@ export const rejectCommunityResourceBuilderChangeset = mutation({
       community_id: normalizeIdValue(args.communityId),
       status: "rejected",
       summary: changeset.summary,
+      deduped: false,
     };
   },
 });
@@ -5544,6 +5639,30 @@ export const applyCommunityResourceBuilderChangeset = mutation({
     const changeset = (await ctx.db.get(args.changesetId as any)) as CommunityResourceBuilderChangesetRow | null;
     if (!changeset || String(changeset.communityId) !== String(args.communityId)) {
       throw new Error("community_resource_changeset_not_found");
+    }
+    if (
+      changeset.status === "applied" &&
+      changeset.appliedByUserId &&
+      String(changeset.appliedByUserId) === String(userId)
+    ) {
+      const operations = normalizeCommunityResourceBuilderChangesetOperations(
+        changeset.operations,
+      );
+      const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+      return {
+        ok: true,
+        kind: "community_resource_builder_changeset_applied",
+        changeset_id: normalizeIdValue(args.changesetId),
+        community_id: normalizeIdValue(args.communityId),
+        status: "applied",
+        summary: changeset.summary,
+        operation_count: operations.length,
+        preview_items: preview.preview_items,
+        preview_total_count: preview.total_count,
+        preview_limit: preview.preview_limit,
+        result: changeset.result ?? null,
+        deduped: true,
+      };
     }
     if (changeset.status !== "approved") {
       throw new Error("community_resource_changeset_approval_required");
@@ -5594,6 +5713,7 @@ export const applyCommunityResourceBuilderChangeset = mutation({
       preview_total_count: preview.total_count,
       preview_limit: preview.preview_limit,
       result,
+      deduped: false,
     };
   },
 });

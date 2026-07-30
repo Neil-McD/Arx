@@ -181,6 +181,12 @@ const PRODUCT_DOC_TOOL_NAMES = new Set<RetrievalToolName>([
 const COMMUNITY_CONTEXT_TOOL_NAMES = new Set<RetrievalToolName>([
   "polynet_list",
   "polynet_read",
+  "polynet_search",
+]);
+
+const COMMUNITY_CONTEXT_MUTATION_TOOL_NAMES = new Set<RetrievalToolName>([
+  "polynet_write",
+  "polynet_call",
 ]);
 
 const MEMBER_CONVERSATION_TOOL_NAMES = new Set<RetrievalToolName>([
@@ -336,6 +342,13 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
   }
   if (COMMUNITY_CONTEXT_TOOL_NAMES.has(toolName)) {
     return { family: "community_context", grantedBy: "validated_community_lens", effect: "read" };
+  }
+  if (COMMUNITY_CONTEXT_MUTATION_TOOL_NAMES.has(toolName)) {
+    return {
+      family: "community_context",
+      grantedBy: "server_derived_community_authority",
+      effect: "write",
+    };
   }
   if (MEMBER_CONVERSATION_TOOL_NAMES.has(toolName)) {
     return { family: "member_conversations", grantedBy: "authenticated_member_owner_scope", effect: "read" };

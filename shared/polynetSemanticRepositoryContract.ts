@@ -54,7 +54,13 @@ export type PolynetSemanticRepositoryEntry = {
     | "members"
     | "member"
     | "resources"
-    | "resource";
+    | "resource"
+    | "channels"
+    | "channel"
+    | "ai_feed"
+    | "memory"
+    | "capabilities"
+    | "builder";
   name?: string;
   ref?: string;
   role?: "owner" | "admin" | "moderator" | "member";
@@ -317,6 +323,12 @@ function inferMountedEntryType(path: string, kind: "directory" | "document") {
       ? ("resources" as const)
       : ("resource" as const);
   }
+  if (path.endsWith("/channels/")) return "channels" as const;
+  if (path.includes("/channels/")) return "channel" as const;
+  if (path.includes("/ai-feed/")) return "ai_feed" as const;
+  if (path.includes("/memory/")) return "memory" as const;
+  if (path.includes("/capabilities/")) return "capabilities" as const;
+  if (path.includes("/builder/")) return "builder" as const;
   if (path.endsWith("/community.md")) return "community_profile" as const;
   return kind === "directory"
     ? ("community" as const)

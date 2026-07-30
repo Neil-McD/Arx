@@ -1,136 +1,116 @@
-# Canonical platform operation contract v1
+# Canonical Polynet operation contract v1
 
-Status: local staging contract.
+Status: staging contract.
 
 ## Outcome
 
-Polynet has one operation contract for capabilities that are semantically identical
-across the native member agent, the official Polynet MCP, and the worker bridge.
-Each admitted operation owns:
+Polynet has one public agent operation surface:
 
-- one stable semantic id and executor;
-- one actor, community-access, and target boundary;
-- explicit domain, external, and receipt effects;
-- retry and idempotency semantics;
-- transport projections for native, MCP, and worker surfaces.
+```text
+polynet_list
+polynet_read
+polynet_search
+polynet_write
+polynet_call
+```
 
-Transport names and JSON schemas may differ. Their meaning, authority, effects, and
-executor may not.
+The native personal harness, community-owned Concierge, and official external
+MCP project these same definitions from
+[`shared/polynetCanonicalToolContract.ts`](../shared/polynetCanonicalToolContract.ts)
+and execute them through
+[`convex/polynetCanonicalExecutor.ts`](../convex/polynetCanonicalExecutor.ts).
 
-The contract is
-[`shared/platformOperationContract.ts`](../shared/platformOperationContract.ts).
-Runtime execution is
-[`convex/platformOperationExecutor.ts`](../convex/platformOperationExecutor.ts).
+This is the irreducible harness. Domain-specific capabilities are paths and
+discoverable operations, not new public verbs.
 
-## Admitted operations
+## Layers
 
-The v1 seam contains six operations:
+```text
+transport projection
+  -> shared five-tool schema
+  -> normalized input
+  -> server-derived principal + community authority
+  -> canonical executor
+  -> existing domain owner
+  -> canonical result + receipt
+```
 
-| Operation | Native | Official MCP | Worker |
-| --- | --- | --- | --- |
-| `community.list` | `polynet_list_communities` | `polynet_list_communities` | disabled |
-| `community.read` | `polynet_get_community` | `polynet_get_community` | disabled |
-| `community.semantic.list` | `polynet_list` | `polynet_list` | enabled |
-| `community.semantic.read` | `polynet_read` | `polynet_read` | enabled |
-| `product_docs.search` | `search_product_docs` | `polynet_product_docs_search` | enabled |
-| `product_docs.read` | `get_product_doc` | `polynet_product_doc_read` | enabled |
+Transport adapters may frame requests and responses. They may not redefine a
+schema, authority rule, effect, failure code, or executor.
 
-These were admitted because their semantics are proven across surfaces. Native,
-official MCP, and worker adapters call the same executor instead of implementing
-the operations independently. Tool registries and runtime policy project from the
-same contract.
+The lower-level contracts in
+[`shared/platformOperationContract.ts`](../shared/platformOperationContract.ts)
+and [`convex/platformOperationExecutor.ts`](../convex/platformOperationExecutor.ts)
+remain private semantic list/read domain machinery. They are not a second
+public tool catalog.
 
-`community.semantic.list` and `community.semantic.read` now project the
-authenticated member's platform-mounted semantic repository. The root contains
-`communities/` and `users/`; exact community paths traverse the community profile,
-member directory, and live resource directory. Community-owned runtimes can use
-the same executor under a server-bound community mount. The community Concierge
-resolves the requester's subject inside its trusted serve context and exposes
-these two operations instead of a duplicate batch resource-read tool. New
-official MCP calls use canonical platform paths. A legacy `community_slug` plus
-community-relative path is retained only as a thin compatibility mount, with
-access revalidated on every request.
+## Repository
 
-The directory contract is
-[`docs/polynet-semantic-repository-contract-v1.md`](./polynet-semantic-repository-contract-v1.md).
+The personal harness and external MCP can list `/`, which contains
+`communities/` and `users/`. An authorized community contains identity,
+members, resources, channels, AI Feed, accepted memory, and versioned
+capabilities. Owner/admin authority additionally reveals `builder/`.
 
-Resource-backed semantic reads append retrieval-audit evidence. The operation is
-therefore a domain read with a receipt write: it is not parallel-safe, and retry
-may duplicate an audit receipt until invocation-id deduplication exists.
-The MCP `readOnlyHint` describes the absence of user-visible domain or external
-mutation; the separate receipt effect still makes runtime scheduling
-write-aware, and the MCP operation is explicitly not idempotent.
+The community-owned agent receives a server-mounted community root. It cannot
+escape to `/`, select another community, or inherit builder authority from its
+operational sponsor.
 
-## Canonical owners and rolling compatibility
+Semantic Markdown is a permissioned projection over canonical domain data, not
+a second source of truth. Every canonical path, and every underlying evidence
+reference it resolves, is authorized again when used.
 
-The broad duplicate public façades were deleted. These modules remain absent:
+## Authority
 
-- `convex/communityExperience.ts`
-- `convex/billing.ts`
+The executor derives authority for every call:
 
-First-party callers now address the canonical domain owner directly. Generated
-Convex bindings must not expose the retired `communityExperience` or `billing`
-modules.
+- personal agent and external MCP: current authenticated human relation;
+- owner/admin with current resource-management permission: builder lane;
+- moderator/member: member lane;
+- community-owned agent: fixed member lane within its mounted community;
+- missing or revoked entitlement: no access.
 
-During the web/Convex rolling migration, `convex/community.ts` exists only as a
-two-address compatibility bridge for the production web build at `dbec82f`. It
-may re-export `saveCommunityLaunchProfile` from `communityLifecycle` and
-`getCommunityLaunchSetupStatus` from `communityLaunchSetup`; it must contain no
-business logic, data access, authorization, or additional exports. Current
-first-party code must not call either legacy address. Remove the bridge after
-the replacement production web is live and both legacy function metrics remain
-at zero for the agreed observation window.
+Member and builder lanes can participate in chat and AI Feed. Builder-only
+resource work is staged as a changeset, then reviewed through operations
+discovered under `capabilities/`.
 
-Rolling compatibility also preserves Published communities that predate current
-launch-profile requirements. Entering Published requires a complete profile,
-and an existing Published community may not introduce a new missing requirement.
-A grandfathered row may still save unrelated fields and repair missing profile
-fields incrementally.
+## Effects
 
-## Invariants
+- `polynet_list` is bounded discovery.
+- `polynet_read` reads exact evidence and may append a retrieval receipt.
+- `polynet_search` searches one bounded subtree and returns paths.
+- `polynet_write` delegates to the owning chat, AI Feed, or resource changeset
+  domain.
+- `polynet_call` invokes only a discoverable versioned transition.
 
-1. The official Polynet MCP remains a supported external surface.
-2. Domain modules remain the canonical owners of business logic and data.
-3. A transport adapter may normalize wire input and output, but may not redefine
-   authority, effects, or execution.
-   Actor and community-access requirements belong to the operation contract.
-   Worker authority is derived from that requirement rather than redeclared.
-   Canonical semantic arguments use the same shared validator in the tool
-   registry and executor:
-   root listing rejects pagination, directory listing uses bounded cursor pagination,
-   and offset/limit apply only to resource documents. Adapters must not clamp an
-   invalid semantic argument into a valid one.
-4. A read that persists a retrieval receipt is a domain read with a receipt write;
-   it is not scheduler-safe read-only work.
-5. An operation is added to this contract only after semantic parity is proven.
-   Similar names are not enough.
-6. No third-party MCP server or general-purpose workspace product is restored by
-   this contract.
+Mutating tools require an idempotency key. Canonical operation receipts reserve
+the key against the normalized request before effects, reject conflicting
+reuse, and persist the completed result. Domain owners remain independently
+idempotent for crash recovery.
 
-## Deliberate boundary
+## Public-surface deletion rule
 
-Context-bound memory, chat, AI Feed, batch resource reads, resource search, and
-builder resource tools remain outside v1's canonical operation seam. Their
-native forms use the active server-bound community lens, while the official MCP
-forms accept an explicit opaque community selector and perform different adapter
-work. They already converge on domain kernels in many paths, but they are not to
-be declared one operation until input, authority, receipt, and failure semantics
-are proven equivalent.
+The official MCP, personal harness, and community agent must each expose
+exactly the canonical five. Names such as `polynet_workspace_*`,
+`community_resources_*`, `community_memory_*`, and specialized builder
+tool names may remain only as private migration substrate while first-party
+callers are removed. They are not public tools and are deletion candidates
+once no private call path requires them.
 
-This is a guard against a new mega-registry. The next operation family should be
-admitted only when doing so deletes a real duplicate executor or policy source.
+Premium capabilities such as web research are orthogonal overlays. They do
+not expand or fork the base Polynet repository contract.
 
 ## Verification
 
-`npm run check:canonical-operation-surface-proof` enforces:
+`npm run check:canonical-operation-surface-proof` checks schema, registry,
+projection, policy, executor, and retired-name boundaries.
 
-- retired façade absence and caller migration;
-- unique operation and projection names;
-- native, MCP, worker, and policy parity with the contract;
-- shared executor use by native and MCP dispatchers;
-- official MCP preservation and an accurate tool-count label.
+`npm run check:community-semantic-repository-proof` checks paths and semantic
+projection.
 
-`npm run check:community-semantic-repository-proof` enforces the shared path,
-rendering, and argument contract. `npm run check:community-semantic-behavior`
-executes the authorization, profile, resource traversal, audit, collision, and
-revocation behavior against an isolated Convex test backend.
+`npx vitest run convex/polynetCanonicalExecutor.test.ts` checks member/builder
+authority, community-agent confinement and attribution, mutation
+idempotency/conflict behavior, and staged builder calls against an isolated
+Convex backend.
+
+The release gate and live staging MCP acceptance remain required before this
+contract can leave staging.

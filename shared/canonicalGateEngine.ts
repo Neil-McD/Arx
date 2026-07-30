@@ -136,10 +136,6 @@ function resolveEffectiveTier(input: { authState?: unknown; tier?: unknown }): E
   return canonicalTier;
 }
 
-function normalizeHasCommunityContext(rawValue: unknown): boolean {
-  return rawValue === true;
-}
-
 function normalizeHasProjectContext(rawValue: unknown): boolean {
   return rawValue === true;
 }
@@ -149,7 +145,6 @@ export function resolveActiveCapabilityFamiliesFromEntitlements(input: {
   hasCommunityContext?: boolean;
   hasProjectContext?: boolean;
 }): CapabilityFamily[] {
-  const hasCommunityContext = normalizeHasCommunityContext(input?.hasCommunityContext);
   const hasProjectContext = normalizeHasProjectContext(input?.hasProjectContext);
   const entitled = Array.isArray(input?.entitledCapabilityFamilies)
     ? input.entitledCapabilityFamilies
@@ -158,7 +153,7 @@ export function resolveActiveCapabilityFamiliesFromEntitlements(input: {
   if (entitled.includes("product_docs")) {
     active.push("product_docs");
   }
-  if (hasCommunityContext && entitled.includes("community_tools")) {
+  if (entitled.includes("community_tools")) {
     active.push("community_tools");
   }
   if (entitled.includes("web_research")) {

@@ -278,16 +278,9 @@ export function resolveAllowedToolNames(params: {
     toolNames.push(
       "polynet_list",
       "polynet_read",
-      "community_resources_read",
-      "community_resources_search",
-      "community_search",
-      "community_memory_search",
-      "community_memory_read",
-      "community_chat_search",
-      "community_chat_read",
-      "community_ai_feed_search",
-      "community_ai_feed_read",
-      "community_write",
+      "polynet_search",
+      "polynet_write",
+      "polynet_call",
     );
   }
   if (params.activeCapabilityFamilies.includes("web_research")) {
@@ -745,14 +738,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
         inferenceSource,
       }),
-      ...(invocationSurface === "member_agent_dock"
-        ? ([
-            "member_conversations_list",
-            "member_conversation_read",
-            "polynet_list_communities",
-            "polynet_get_community",
-          ] as const)
-        : []),
     ],
   });
   const runtimeExecutionMode: "agentic" | "chat" =

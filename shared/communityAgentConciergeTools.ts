@@ -1,21 +1,15 @@
-import type { RetrievalToolName } from "./retrievalTools";
+import type { RetrievalToolName } from "./retrievalTools.ts";
 import {
   buildResponsesApiFunctionTools,
   normalizeToolArguments,
-} from "./toolRegistry";
+} from "./toolRegistry.ts";
 
 export const COMMUNITY_AGENT_CONCIERGE_TOOL_NAMES = [
-  "search_product_docs",
-  "get_product_doc",
   "polynet_list",
   "polynet_read",
-  "community_resources_search",
-  "community_memory_search",
-  "community_memory_read",
-  "community_chat_search",
-  "community_chat_read",
-  "community_ai_feed_search",
-  "community_ai_feed_read",
+  "polynet_search",
+  "polynet_write",
+  "polynet_call",
 ] as const satisfies readonly RetrievalToolName[];
 
 export type CommunityAgentConciergeToolName =

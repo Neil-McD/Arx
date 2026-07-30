@@ -74,7 +74,7 @@ assert.match(
 );
 assert.match(context, /communityAgentConfigs[\s\S]*by_community_updatedAt[\s\S]*\.order\("desc"\)[\s\S]*\.first\(\)/);
 assert.doesNotMatch(worker, /query\("communityAgentConfigs"/);
-assert.match(boundary, /member_concierge[\s\S]*sponsor: "requester"[\s\S]*toolAuthority: "retrieval_only"/);
+assert.match(boundary, /member_concierge[\s\S]*sponsor: "requester"[\s\S]*toolAuthority: "member_repository"/);
 assert.match(
   worker,
   /buildCommunityAgentIdentityPrompt\(\{[\s\S]*surface: "member_concierge"/,
@@ -99,7 +99,7 @@ assert.match(
 assert.match(
   actionBlock,
   /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*requestId: args\.requestId[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*runChatgptNativeToolCompletion\(\{[\s\S]*userId: normalizeIdValue\(context\.request\.sponsorUserId\)[\s\S]*modelId: DEFAULT_ACTIVE_MODEL_ID[\s\S]*messages: kernelMessages[\s\S]*tools: buildCommunityAgentConciergeFunctionTools\(\)/,
-  "serve action should spend the requester sponsor lane through a bounded native read-only tool loop",
+  "serve action should spend the requester sponsor lane through one bounded native canonical tool loop",
 );
 assert.match(
   worker,
@@ -113,13 +113,13 @@ assert.match(
 );
 assert.match(
   conciergeTools,
-  /COMMUNITY_AGENT_CONCIERGE_TOOL_NAMES = \[[\s\S]*"search_product_docs"[\s\S]*"get_product_doc"[\s\S]*"polynet_list"[\s\S]*"polynet_read"[\s\S]*"community_resources_search"[\s\S]*"community_memory_search"[\s\S]*"community_memory_read"[\s\S]*"community_chat_search"[\s\S]*"community_chat_read"[\s\S]*"community_ai_feed_search"[\s\S]*"community_ai_feed_read"[\s\S]*\] as const satisfies readonly RetrievalToolName\[\]/,
-  "Concierge tool allowlist should use canonical semantic list/read plus targeted search, accepted memory, and exact evidence reads",
+  /COMMUNITY_AGENT_CONCIERGE_TOOL_NAMES = \[[\s\S]*"polynet_list"[\s\S]*"polynet_read"[\s\S]*"polynet_search"[\s\S]*"polynet_write"[\s\S]*"polynet_call"[\s\S]*\] as const satisfies readonly RetrievalToolName\[\]/,
+  "Concierge must expose exactly the canonical five Polynet tools",
 );
 assert.doesNotMatch(
   conciergeTools,
-  /community_write|"community_search"|community_resources_read|web_research|web_crawl|community_resources_map|community_resources_list|community_resource_read|community_resource_builder|write|edit|bash|terminal_|computer_|mcp/i,
-  "Concierge v0 allowlist must exclude duplicate batch resource reads, write, web, broad community search, builder, workspace, and MCP tools",
+  /community_memory_|community_chat_|community_ai_feed_|community_resources_|search_product_docs|get_product_doc|web_research|web_crawl|bash|terminal_|computer_/i,
+  "Concierge allowlist must exclude specialized duplicate, premium, filesystem, terminal, and computer tools",
 );
 assert.match(
   worker,
@@ -128,8 +128,8 @@ assert.match(
 );
 assert.match(
   worker,
-  /Use tools only when the answer depends on Polynet product docs, this community's Resources, accepted community memory, or exact canonical chat and AI Feed evidence[\s\S]*Use polynet_list to inspect this community's mounted directory and polynet_read for exact profiles or Resources[\s\S]*community_resources_search only for targeted discovery[\s\S]*search accepted memory first[\s\S]*cite its title and status[\s\S]*Accepted memory is distinct from raw community evidence[\s\S]*If the tools return nothing useful/,
-  "serve prompt should orient the Concierge to use read-only retrieval tools without treating tool output as authority",
+  /The five Polynet tools are your only platform operations[\s\S]*restricted to \$\{communityRoot\}[\s\S]*Use polynet_list to navigate, polynet_search on an exact returned subtree, and polynet_read on exact returned paths[\s\S]*Use polynet_write only when the member explicitly requests[\s\S]*Use polynet_call only for a versioned operation returned under capabilities\/[\s\S]*member authority, never builder authority/,
+  "serve prompt should orient the Concierge to the canonical five and fixed member authority",
 );
 assert.match(
   worker,
@@ -220,8 +220,8 @@ assert.match(
 );
 assert.match(
   docs,
-  /schedule immediate serve worker for that request[\s\S]*spend requester ChatGPT connection through bounded read-only tool loop[\s\S]*insert one community-agent reply in that source thread/,
-  "architecture docs should describe the event-driven read-only tool serve path",
+  /schedule immediate serve worker for that request[\s\S]*spend requester ChatGPT connection through bounded canonical tool loop[\s\S]*insert one community-agent reply in that source thread/,
+  "architecture docs should describe the event-driven canonical tool serve path",
 );
 assert.match(
   docs,
@@ -230,8 +230,8 @@ assert.match(
 );
 assert.match(
   docs,
-  /read-only allowlist[\s\S]*`search_product_docs`[\s\S]*`get_product_doc`[\s\S]*`polynet_list`[\s\S]*`polynet_read`[\s\S]*`community_resources_search`[\s\S]*do not grant memory authority/,
-  "architecture docs should describe the Concierge read-only tool allowlist",
+  /canonical five-tool[\s\S]*`polynet_list`[\s\S]*`polynet_read`[\s\S]*`polynet_search`[\s\S]*`polynet_write`[\s\S]*`polynet_call`[\s\S]*never receives[\s\S]*builder authority/,
+  "architecture docs should describe the Concierge canonical five and member-only authority",
 );
 assert.match(
   docs,

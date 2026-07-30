@@ -112,7 +112,11 @@ import {
   buildToolBatchTelemetryPayload,
 } from "./runtimeHarnessTelemetry";
 import { executePlatformOperation } from "./platformOperationExecutor.ts";
-import { selectRuntimePolynetSemanticMount } from "../shared/polynetSemanticRepositoryContract.ts";
+import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor.ts";
+import {
+  POLYNET_CANONICAL_TOOL_NAMES,
+  type PolynetCanonicalToolName,
+} from "../shared/polynetCanonicalToolContract.ts";
 import {
   formatJsonToolOutput,
   normalizeRuntimeSkillResolution,
@@ -324,25 +328,10 @@ export async function executeRetrievalHarnessTool(params: {
   }
 
   if (
-    params.toolName === "polynet_list" ||
-    params.toolName === "polynet_read"
+    (POLYNET_CANONICAL_TOOL_NAMES as readonly string[]).includes(
+      params.toolName,
+    )
   ) {
-    const requestedPath = String(normalizedArgs.path ?? "");
-    const semanticMount = selectRuntimePolynetSemanticMount({
-      path: requestedPath,
-      communityId: params.communityId,
-      evidenceSurface: params.evidenceSurface,
-    });
-    if (semanticMount.kind === "community" && !params.communityId) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_required",
-        errorMessage:
-          `${params.toolName} requires a verified community mount for the community concierge.`,
-      };
-    }
     const authSubject = String(params.authSubject ?? "").trim();
     if (!authSubject) {
       return {
@@ -353,16 +342,18 @@ export async function executeRetrievalHarnessTool(params: {
         errorMessage: `${params.toolName} requires an authenticated user.`,
       };
     }
-    const execution = await executePlatformOperation({
-      operationId:
-        params.toolName === "polynet_list"
-          ? "community.semantic.list"
-          : "community.semantic.read",
+    const communityOwned =
+      params.evidenceSurface === "community_concierge";
+    const execution = await executePolynetCanonicalTool({
       ctx: params.ctx,
       authSubject,
       userId: params.userId,
-      semanticMount,
+      principalKind: communityOwned ? "community_agent" : "personal_agent",
+      ...(communityOwned && params.communityId
+        ? { mountedCommunityId: params.communityId }
+        : {}),
       evidenceSurface: params.evidenceSurface ?? "member_agent_dock",
+      toolName: params.toolName as PolynetCanonicalToolName,
       input: normalizedArgs,
     });
     if (!execution.ok) {

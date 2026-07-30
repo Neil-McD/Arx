@@ -158,6 +158,8 @@ import type * as platformDiagnostics from "../platformDiagnostics.js";
 import type * as platformHomeCommunity from "../platformHomeCommunity.js";
 import type * as platformOperationExecutor from "../platformOperationExecutor.js";
 import type * as platformSkillRuntime from "../platformSkillRuntime.js";
+import type * as polynetCanonicalExecutor from "../polynetCanonicalExecutor.js";
+import type * as polynetCanonicalReceipts from "../polynetCanonicalReceipts.js";
 import type * as polynetCodexWorkerAdmission from "../polynetCodexWorkerAdmission.js";
 import type * as polynetCodexWorkerBridge from "../polynetCodexWorkerBridge.js";
 import type * as polynetCodexWorkerIngest from "../polynetCodexWorkerIngest.js";
@@ -374,6 +376,8 @@ declare const fullApi: ApiFromModules<{
   platformHomeCommunity: typeof platformHomeCommunity;
   platformOperationExecutor: typeof platformOperationExecutor;
   platformSkillRuntime: typeof platformSkillRuntime;
+  polynetCanonicalExecutor: typeof polynetCanonicalExecutor;
+  polynetCanonicalReceipts: typeof polynetCanonicalReceipts;
   polynetCodexWorkerAdmission: typeof polynetCodexWorkerAdmission;
   polynetCodexWorkerBridge: typeof polynetCodexWorkerBridge;
   polynetCodexWorkerIngest: typeof polynetCodexWorkerIngest;
