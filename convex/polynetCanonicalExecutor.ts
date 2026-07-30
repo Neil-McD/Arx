@@ -200,7 +200,18 @@ async function reserveMutatingOperation(args: {
   idempotencyKey: string;
   input: Record<string, unknown>;
 }): Promise<
-  | { ok: true; requestFingerprint: string; completedValue?: Record<string, unknown> }
+  | {
+      ok: true;
+      status: "reserved";
+      requestFingerprint: string;
+      attemptToken: string;
+    }
+  | {
+      ok: true;
+      status: "completed";
+      requestFingerprint: string;
+      completedValue: Record<string, unknown>;
+    }
   | { ok: false; result: PolynetCanonicalExecutionResult }
 > {
   const requestFingerprint = operationRequestFingerprint(args.input);
@@ -225,17 +236,36 @@ async function reserveMutatingOperation(args: {
           reservation.message ??
             "This idempotency key conflicts with an earlier request.",
         ),
+        typeof reservation.retryAfterMs === "number"
+          ? { retry_after_ms: reservation.retryAfterMs }
+          : undefined,
       ),
     };
   }
   if (reservation.status === "completed") {
     return {
       ok: true,
+      status: "completed",
       requestFingerprint,
       completedValue: replayedOperationValue(reservation.result),
     };
   }
-  return { ok: true, requestFingerprint };
+  const attemptToken = requiredString(reservation.attemptToken, 256);
+  if (!attemptToken) {
+    return {
+      ok: false,
+      result: canonicalError(
+        "operation_receipt_invalid",
+        "The operation receipt did not return an attempt token.",
+      ),
+    };
+  }
+  return {
+    ok: true,
+    status: "reserved",
+    requestFingerprint,
+    attemptToken,
+  };
 }
 
 async function completeMutatingOperation(args: {
@@ -246,6 +276,7 @@ async function completeMutatingOperation(args: {
   toolName: PolynetMutatingToolName;
   idempotencyKey: string;
   requestFingerprint: string;
+  attemptToken: string;
   value: Record<string, unknown>;
 }): Promise<Record<string, unknown>> {
   const completed = (await args.ctx.runMutation(
@@ -258,12 +289,47 @@ async function completeMutatingOperation(args: {
       toolName: args.toolName,
       idempotencyKey: args.idempotencyKey,
       requestFingerprint: args.requestFingerprint,
+      attemptToken: args.attemptToken,
       result: args.value,
     },
   )) as Record<string, unknown>;
   return completed.deduped === true
     ? replayedOperationValue(completed.result)
     : args.value;
+}
+
+async function failMutatingOperation(args: {
+  ctx: any;
+  userId: string;
+  principalKind: PolynetPrincipalKind;
+  target: ResolvedCommunityTarget;
+  toolName: PolynetMutatingToolName;
+  idempotencyKey: string;
+  requestFingerprint: string;
+  attemptToken: string;
+  errorCode: string;
+  errorMessage: string;
+}): Promise<void> {
+  try {
+    await args.ctx.runMutation(
+      (internal as any).polynetCanonicalReceipts
+        .failCanonicalOperationReceiptInternal,
+      {
+        communityId: args.target.communityId,
+        userId: args.userId,
+        principalKind: args.principalKind,
+        toolName: args.toolName,
+        idempotencyKey: args.idempotencyKey,
+        requestFingerprint: args.requestFingerprint,
+        attemptToken: args.attemptToken,
+        errorCode: args.errorCode,
+        errorMessage: args.errorMessage,
+      },
+    );
+  } catch {
+    // Preserve the original operation error. A crashed or superseded attempt is
+    // recoverable through the bounded receipt lease.
+  }
 }
 
 async function resolveCommunityTarget(args: {
@@ -1147,7 +1213,7 @@ async function executeCanonicalWrite(args: {
       idempotencyKey,
     });
     if (!reservation.ok) return reservation.result;
-    if (reservation.completedValue) {
+    if (reservation.status === "completed") {
       return { ok: true, value: reservation.completedValue };
     }
     try {
@@ -1214,13 +1280,26 @@ async function executeCanonicalWrite(args: {
           toolName: "polynet_write",
           idempotencyKey,
           requestFingerprint: reservation.requestFingerprint,
+          attemptToken: reservation.attemptToken,
           value: responseValue,
         }),
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Community chat write failed.";
+      await failMutatingOperation({
+        ...args,
+        target,
+        toolName: "polynet_write",
+        idempotencyKey,
+        requestFingerprint: reservation.requestFingerprint,
+        attemptToken: reservation.attemptToken,
+        errorCode: "community_chat_write_failed",
+        errorMessage,
+      });
       return canonicalError(
         "community_chat_write_failed",
-        error instanceof Error ? error.message : "Community chat write failed.",
+        errorMessage,
       );
     }
   }
@@ -1250,7 +1329,7 @@ async function executeCanonicalWrite(args: {
       idempotencyKey,
     });
     if (!reservation.ok) return reservation.result;
-    if (reservation.completedValue) {
+    if (reservation.status === "completed") {
       return { ok: true, value: reservation.completedValue };
     }
     try {
@@ -1303,15 +1382,28 @@ async function executeCanonicalWrite(args: {
           toolName: "polynet_write",
           idempotencyKey,
           requestFingerprint: reservation.requestFingerprint,
+          attemptToken: reservation.attemptToken,
           value: responseValue,
         }),
       };
     } catch (error) {
-      return canonicalError(
-        "community_ai_feed_write_failed",
+      const errorMessage =
         error instanceof Error
           ? error.message
-          : "Community AI Feed write failed.",
+          : "Community AI Feed write failed.";
+      await failMutatingOperation({
+        ...args,
+        target,
+        toolName: "polynet_write",
+        idempotencyKey,
+        requestFingerprint: reservation.requestFingerprint,
+        attemptToken: reservation.attemptToken,
+        errorCode: "community_ai_feed_write_failed",
+        errorMessage,
+      });
+      return canonicalError(
+        "community_ai_feed_write_failed",
+        errorMessage,
       );
     }
   }
@@ -1334,7 +1426,7 @@ async function executeCanonicalWrite(args: {
       idempotencyKey,
     });
     if (!reservation.ok) return reservation.result;
-    if (reservation.completedValue) {
+    if (reservation.status === "completed") {
       return { ok: true, value: reservation.completedValue };
     }
     try {
@@ -1370,13 +1462,26 @@ async function executeCanonicalWrite(args: {
           toolName: "polynet_write",
           idempotencyKey,
           requestFingerprint: reservation.requestFingerprint,
+          attemptToken: reservation.attemptToken,
           value: responseValue,
         }),
       };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Changeset staging failed.";
+      await failMutatingOperation({
+        ...args,
+        target,
+        toolName: "polynet_write",
+        idempotencyKey,
+        requestFingerprint: reservation.requestFingerprint,
+        attemptToken: reservation.attemptToken,
+        errorCode: "builder_changeset_stage_failed",
+        errorMessage,
+      });
       return canonicalError(
         "builder_changeset_stage_failed",
-        error instanceof Error ? error.message : "Changeset staging failed.",
+        errorMessage,
       );
     }
   }
@@ -1476,7 +1581,7 @@ async function executeCanonicalCall(args: {
     idempotencyKey,
   });
   if (!reservation.ok) return reservation.result;
-  if (reservation.completedValue) {
+  if (reservation.status === "completed") {
     return { ok: true, value: reservation.completedValue };
   }
   try {
@@ -1560,13 +1665,26 @@ async function executeCanonicalCall(args: {
         toolName: "polynet_call",
         idempotencyKey,
         requestFingerprint: reservation.requestFingerprint,
+        attemptToken: reservation.attemptToken,
         value: responseValue,
       }),
     };
   } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Polynet operation failed.";
+    await failMutatingOperation({
+      ...args,
+      target,
+      toolName: "polynet_call",
+      idempotencyKey,
+      requestFingerprint: reservation.requestFingerprint,
+      attemptToken: reservation.attemptToken,
+      errorCode: "polynet_call_failed",
+      errorMessage,
+    });
     return canonicalError(
       "polynet_call_failed",
-      error instanceof Error ? error.message : "Polynet operation failed.",
+      errorMessage,
     );
   }
 }

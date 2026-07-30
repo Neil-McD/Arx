@@ -15,6 +15,7 @@ const modules = import.meta.glob([
   "./communityAiFeed.ts",
   "./communityCapabilityContext.ts",
   "./communityEvidenceAudit.ts",
+  "./communityIntelligenceDirectory.ts",
   "./communityInteractionEvidence.ts",
   "./communityInteractions.ts",
   "./communityMentionLifecycle.ts",
@@ -114,6 +115,132 @@ function executionContext(
       identity.mutation(reference, args),
     runAction: (reference: any, args: any) => identity.action(reference, args),
   };
+}
+
+function crashAfterDomainWriteContext(
+  ctx: ReturnType<typeof executionContext>,
+) {
+  return {
+    ...ctx,
+    runMutation: async (reference: any, mutationArgs: any) => {
+      if (
+        mutationArgs &&
+        typeof mutationArgs === "object" &&
+        typeof mutationArgs.attemptToken === "string" &&
+        ("result" in mutationArgs || "errorCode" in mutationArgs)
+      ) {
+        throw new Error("simulated_crash_after_domain_write");
+      }
+      return await ctx.runMutation(reference, mutationArgs);
+    },
+  };
+}
+
+async function expireCanonicalReceipt(
+  t: ReturnType<typeof convexTest>,
+  args: {
+    toolName: "polynet_write" | "polynet_call";
+    idempotencyKey: string;
+  },
+) {
+  await t.run(async (ctx) => {
+    const receipts = await ctx.db
+      .query("polynetCanonicalOperationReceipts")
+      .collect();
+    const receipt = receipts.find(
+      (candidate) =>
+        candidate.toolName === args.toolName &&
+        candidate.idempotencyKey === args.idempotencyKey,
+    );
+    expect(receipt).toBeDefined();
+    await ctx.db.patch(receipt!._id, { leaseExpiresAt: 0 });
+  });
+}
+
+async function recoverCanonicalOperationAfterReceiptCompletionCrash(
+  t: ReturnType<typeof convexTest>,
+  args: {
+    healthyCtx: ReturnType<typeof executionContext>;
+    authSubject: string;
+    userId: any;
+    principalKind: "personal_agent" | "external_mcp" | "community_agent";
+    evidenceSurface:
+      | "member_agent_dock"
+      | "coding_harness"
+      | "external_mcp"
+      | "community_concierge";
+    toolName: "polynet_write" | "polynet_call";
+    input: Record<string, unknown>;
+    idempotencyKey: string;
+    expectedErrorCode: string;
+    mountedCommunityId?: any;
+    assertDomainEffect: () => Promise<void>;
+  },
+) {
+  const common = {
+    authSubject: args.authSubject,
+    userId: args.userId,
+    principalKind: args.principalKind,
+    evidenceSurface: args.evidenceSurface,
+    toolName: args.toolName,
+    input: args.input,
+    ...(args.mountedCommunityId
+      ? { mountedCommunityId: args.mountedCommunityId }
+      : {}),
+  };
+  await expect(
+    executePolynetCanonicalTool({
+      ctx: crashAfterDomainWriteContext(args.healthyCtx),
+      ...common,
+    }),
+  ).resolves.toMatchObject({
+    ok: false,
+    code: args.expectedErrorCode,
+    message: "simulated_crash_after_domain_write",
+  });
+  await t.run(async (ctx) => {
+    const receipt = (
+      await ctx.db.query("polynetCanonicalOperationReceipts").collect()
+    ).find(
+      (candidate) =>
+        candidate.toolName === args.toolName &&
+        candidate.idempotencyKey === args.idempotencyKey,
+    );
+    expect(receipt).toMatchObject({
+      status: "executing",
+      attemptCount: 1,
+    });
+  });
+  await args.assertDomainEffect();
+  await expireCanonicalReceipt(t, {
+    toolName: args.toolName,
+    idempotencyKey: args.idempotencyKey,
+  });
+  const recovered = await executePolynetCanonicalTool({
+    ctx: args.healthyCtx,
+    ...common,
+  });
+  expect(recovered).toMatchObject({
+    ok: true,
+    value: {
+      deduped: true,
+      receipt: { deduped: true },
+    },
+  });
+  await t.run(async (ctx) => {
+    const receipt = (
+      await ctx.db.query("polynetCanonicalOperationReceipts").collect()
+    ).find(
+      (candidate) =>
+        candidate.toolName === args.toolName &&
+        candidate.idempotencyKey === args.idempotencyKey,
+    );
+    expect(receipt).toMatchObject({
+      status: "completed",
+      attemptCount: 2,
+    });
+  });
+  return recovered;
 }
 
 test("canonical five-tool executor derives member, builder, and community-agent authority per request", async () => {
@@ -380,6 +507,78 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
   expect(rows.receipts).toHaveLength(2);
 });
 
+test("chat roots and replies survive receipt-completion crashes without duplication", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asMember = t.withIdentity({ subject: fixture.memberSubject });
+  const memberCtx = executionContext(asMember);
+  const input = {
+    path: "/communities/canonical-community/channels/general/",
+    mode: "create",
+    content: {
+      text: "A crash-safe member-agent field report.",
+    },
+    idempotency_key: "member-chat-crash-after-write-1",
+  };
+  await recoverCanonicalOperationAfterReceiptCompletionCrash(t, {
+    healthyCtx: memberCtx,
+    authSubject: fixture.memberSubject,
+    userId: fixture.memberId,
+    principalKind: "personal_agent",
+    evidenceSurface: "member_agent_dock",
+    toolName: "polynet_write",
+    input,
+    idempotencyKey: "member-chat-crash-after-write-1",
+    expectedErrorCode: "community_chat_write_failed",
+    assertDomainEffect: async () => {
+      await t.run(async (ctx) => {
+        expect(
+          await ctx.db.query("communityInteractionRoots").collect(),
+        ).toHaveLength(1);
+      });
+    },
+  });
+
+  const rootId = await t.run(async (ctx) => {
+    const roots = await ctx.db.query("communityInteractionRoots").collect();
+    expect(roots).toHaveLength(1);
+    return roots[0]!._id;
+  });
+
+  const replyInput = {
+    path: "/communities/canonical-community/channels/general/",
+    mode: "append",
+    content: {
+      root_id: String(rootId),
+      text: "A crash-safe reply.",
+    },
+    idempotency_key: "member-reply-crash-after-write-1",
+  };
+  await recoverCanonicalOperationAfterReceiptCompletionCrash(t, {
+    healthyCtx: memberCtx,
+    authSubject: fixture.memberSubject,
+    userId: fixture.memberId,
+    principalKind: "personal_agent",
+    evidenceSurface: "member_agent_dock",
+    toolName: "polynet_write",
+    input: replyInput,
+    idempotencyKey: "member-reply-crash-after-write-1",
+    expectedErrorCode: "community_chat_write_failed",
+    assertDomainEffect: async () => {
+      await t.run(async (ctx) => {
+        expect(
+          await ctx.db.query("communityInteractionReplies").collect(),
+        ).toHaveLength(1);
+      });
+    },
+  });
+  await t.run(async (ctx) => {
+    expect(
+      await ctx.db.query("communityInteractionReplies").collect(),
+    ).toHaveLength(1);
+  });
+});
+
 test("AI Feed domain recovery does not recreate a canonical post hidden after its first effect", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
@@ -546,5 +745,318 @@ test("builder resource changes use staged writes plus discoverable, idempotent c
       deduped: true,
       receipt: { deduped: true },
     },
+  });
+});
+
+test("builder resource effects survive receipt-completion crashes without duplication", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
+  const ownerCtx = executionContext(asOwner);
+  const executeOwner = (
+    ctx: ReturnType<typeof executionContext>,
+    toolName: "polynet_write" | "polynet_call",
+    input: Record<string, unknown>,
+  ) =>
+    executePolynetCanonicalTool({
+      ctx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "external_mcp",
+      evidenceSurface: "external_mcp",
+      toolName,
+      input,
+    });
+
+  const stageInput = {
+    path: "/communities/canonical-community/builder/resources/",
+    mode: "create",
+    content: {
+      summary: "Create one crash-safe resource module.",
+      operations: [
+        {
+          op: "create_module",
+          module_key: "crash-safe-module",
+          name: "Crash-safe module",
+          module_status: "draft",
+        },
+      ],
+    },
+    idempotency_key: "builder-stage-crash-1",
+  };
+  await recoverCanonicalOperationAfterReceiptCompletionCrash(t, {
+    healthyCtx: ownerCtx,
+    authSubject: fixture.ownerSubject,
+    userId: fixture.ownerId,
+    principalKind: "external_mcp",
+    evidenceSurface: "external_mcp",
+    toolName: "polynet_write",
+    input: stageInput,
+    idempotencyKey: "builder-stage-crash-1",
+    expectedErrorCode: "builder_changeset_stage_failed",
+    assertDomainEffect: async () => {
+      await t.run(async (ctx) => {
+        const changesets = await ctx.db
+          .query("communityResourceBuilderChangesets")
+          .collect();
+        expect(changesets).toHaveLength(1);
+        expect(changesets[0]).toMatchObject({ status: "staged" });
+      });
+    },
+  });
+  const stagedChangesetId = await t.run(async (ctx) => {
+    const changesets = await ctx.db
+      .query("communityResourceBuilderChangesets")
+      .collect();
+    expect(changesets).toHaveLength(1);
+    expect(changesets[0]).toMatchObject({ status: "staged" });
+    return changesets[0]!._id;
+  });
+
+  const approveInput = {
+    operation: "community.resources.changeset.approve",
+    version: 1,
+    target:
+      "/communities/canonical-community/capabilities/community.resources.changeset.approve.json",
+    input: { changeset_id: String(stagedChangesetId) },
+    idempotency_key: "builder-approve-crash-1",
+  };
+  const recoveredApprove =
+    await recoverCanonicalOperationAfterReceiptCompletionCrash(t, {
+      healthyCtx: ownerCtx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "external_mcp",
+      evidenceSurface: "external_mcp",
+      toolName: "polynet_call",
+      input: approveInput,
+      idempotencyKey: "builder-approve-crash-1",
+      expectedErrorCode: "polynet_call_failed",
+      assertDomainEffect: async () => {
+        await t.run(async (ctx) => {
+          expect(await ctx.db.get(stagedChangesetId)).toMatchObject({
+            status: "approved",
+          });
+        });
+      },
+    });
+  expect(recoveredApprove).toMatchObject({
+    ok: true,
+    value: {
+      result: { status: "approved", deduped: true },
+    },
+  });
+
+  const applyInput = {
+    operation: "community.resources.changeset.apply",
+    version: 1,
+    target:
+      "/communities/canonical-community/capabilities/community.resources.changeset.apply.json",
+    input: { changeset_id: String(stagedChangesetId) },
+    idempotency_key: "builder-apply-crash-1",
+  };
+  const recoveredApply =
+    await recoverCanonicalOperationAfterReceiptCompletionCrash(t, {
+      healthyCtx: ownerCtx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "external_mcp",
+      evidenceSurface: "external_mcp",
+      toolName: "polynet_call",
+      input: applyInput,
+      idempotencyKey: "builder-apply-crash-1",
+      expectedErrorCode: "polynet_call_failed",
+      assertDomainEffect: async () => {
+        await t.run(async (ctx) => {
+          expect(await ctx.db.get(stagedChangesetId)).toMatchObject({
+            status: "applied",
+          });
+          expect(
+            await ctx.db.query("communityResourceModules").collect(),
+          ).toHaveLength(1);
+        });
+      },
+    });
+  expect(recoveredApply).toMatchObject({
+    ok: true,
+    value: {
+      result: { status: "applied", deduped: true },
+    },
+  });
+  await t.run(async (ctx) => {
+    const modules = await ctx.db.query("communityResourceModules").collect();
+    expect(modules).toHaveLength(1);
+    expect(modules[0]).toMatchObject({ name: "Crash-safe module" });
+  });
+
+  const rejectedStage = await executeOwner(ownerCtx, "polynet_write", {
+    path: "/communities/canonical-community/builder/resources/",
+    mode: "create",
+    content: {
+      summary: "Stage one changeset for crash-safe rejection.",
+      operations: [
+        {
+          op: "create_module",
+          module_key: "rejected-module",
+          name: "Rejected module",
+          module_status: "draft",
+        },
+      ],
+    },
+    idempotency_key: "builder-stage-reject-1",
+  });
+  const rejectedChangesetId = String(
+    rejectedStage.ok ? rejectedStage.value.ref ?? "" : "",
+  );
+  expect(rejectedChangesetId).not.toBe("");
+  const rejectInput = {
+    operation: "community.resources.changeset.reject",
+    version: 1,
+    target:
+      "/communities/canonical-community/capabilities/community.resources.changeset.reject.json",
+    input: {
+      changeset_id: rejectedChangesetId,
+      reason: "Rejected during crash-recovery proof.",
+    },
+    idempotency_key: "builder-reject-crash-1",
+  };
+  const recoveredReject =
+    await recoverCanonicalOperationAfterReceiptCompletionCrash(t, {
+      healthyCtx: ownerCtx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "external_mcp",
+      evidenceSurface: "external_mcp",
+      toolName: "polynet_call",
+      input: rejectInput,
+      idempotencyKey: "builder-reject-crash-1",
+      expectedErrorCode: "polynet_call_failed",
+      assertDomainEffect: async () => {
+        await t.run(async (ctx) => {
+          expect(await ctx.db.get(rejectedChangesetId as any)).toMatchObject({
+            status: "rejected",
+          });
+        });
+      },
+    });
+  expect(recoveredReject).toMatchObject({
+    ok: true,
+    value: {
+      result: { status: "rejected", deduped: true },
+    },
+  });
+  await t.run(async (ctx) => {
+    const changesets = await ctx.db
+      .query("communityResourceBuilderChangesets")
+      .collect();
+    expect(changesets).toHaveLength(2);
+    expect(
+      changesets.filter((changeset) => changeset.status === "applied"),
+    ).toHaveLength(1);
+    expect(
+      changesets.filter((changeset) => changeset.status === "rejected"),
+    ).toHaveLength(1);
+  });
+});
+
+test("community-memory outcome effects survive receipt-completion crashes without duplication", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asMember = t.withIdentity({ subject: fixture.memberSubject });
+  const memberCtx = executionContext(asMember);
+  const nowMs = 1_760_000_000_000;
+  const memoryScope = await t.run(async (ctx) => {
+    const nodeId = await ctx.db.insert("communityIntelligenceNodes", {
+      communityId: fixture.communityId,
+      type: "insight",
+      title: "Crash-safe memory",
+      bodyMd: "A memory node used to verify retry-safe outcome recording.",
+      status: "promising",
+      visibilityScope: "community",
+      sourceVisibility: "community",
+      confidence: 0.7,
+      evidenceStrength: "observed",
+      workflowIds: [],
+      tags: ["receipt-test"],
+      sourceTraceIds: [],
+      outcomeObservationIds: [],
+      stalenessScore: 0,
+      retrievalUsefulnessScore: 0,
+      outcomeImpactScore: 0,
+      createdByActorType: "admin",
+      createdByUserId: fixture.ownerId,
+      lastUpdatedByActorType: "admin",
+      lastUpdatedByUserId: fixture.ownerId,
+      version: 1,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const retrievalLogId = await ctx.db.insert(
+      "communityIntelligenceRetrievalLogs",
+      {
+        communityId: fixture.communityId,
+        userId: fixture.memberId,
+        receiptVersion: "community_memory_retrieval_receipt:v1",
+        surface: "member_agent_dock",
+        retrievedNodeIds: [nodeId],
+        injectedNodeIds: [nodeId],
+        outcomeObservationIds: [],
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      },
+    );
+    return { nodeId, retrievalLogId };
+  });
+  const input = {
+    operation: "community.memory.record_outcome",
+    version: 1,
+    target:
+      "/communities/canonical-community/capabilities/community.memory.record_outcome.json",
+    input: {
+      retrieval_log_id: String(memoryScope.retrievalLogId),
+      node_id: String(memoryScope.nodeId),
+      result_status: "worked",
+      notes: "The retry-safe approach worked.",
+    },
+    idempotency_key: "memory-outcome-crash-1",
+  };
+
+  const recovered =
+    await recoverCanonicalOperationAfterReceiptCompletionCrash(t, {
+      healthyCtx: memberCtx,
+      authSubject: fixture.memberSubject,
+      userId: fixture.memberId,
+      principalKind: "personal_agent",
+      evidenceSurface: "member_agent_dock",
+      toolName: "polynet_call",
+      input,
+      idempotencyKey: "memory-outcome-crash-1",
+      expectedErrorCode: "polynet_call_failed",
+      assertDomainEffect: async () => {
+        await t.run(async (ctx) => {
+          expect(
+            await ctx.db.query("communityOutcomeObservations").collect(),
+          ).toHaveLength(1);
+          expect(
+            await ctx.db
+              .query("communityIntelligenceChangeRequests")
+              .collect(),
+          ).toHaveLength(1);
+        });
+      },
+    });
+  expect(recovered).toMatchObject({
+    ok: true,
+    value: {
+      result: { deduplicated: true },
+    },
+  });
+  await t.run(async (ctx) => {
+    expect(await ctx.db.query("communityOutcomeObservations").collect()).toHaveLength(
+      1,
+    );
+    expect(
+      await ctx.db.query("communityIntelligenceChangeRequests").collect(),
+    ).toHaveLength(1);
   });
 });
