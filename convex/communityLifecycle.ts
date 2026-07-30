@@ -32,6 +32,7 @@ import {
   requireProfileSetupCompleteForUser,
 } from "./accountSetupCore";
 import {
+  getCommunityPublishReadinessBlockingFields,
   getCommunityPublishReadinessMissingFields,
   type CommunityPublishReadinessInput,
 } from "../shared/communityPublishReadiness";
@@ -112,6 +113,18 @@ function requireCommunityPublishReady(input: CommunityPublishReadinessInput): vo
   const missing = getCommunityPublishReadinessMissingFields(input);
   if (missing.length > 0) {
     throw new Error(`community_publish_ready_required:${missing.join(",")}`);
+  }
+}
+
+function requireCommunityPublishReadinessTransition(input: {
+  currentVisibility?: string | null;
+  nextVisibility?: string | null;
+  current: CommunityPublishReadinessInput;
+  next: CommunityPublishReadinessInput;
+}): void {
+  const blocking = getCommunityPublishReadinessBlockingFields(input);
+  if (blocking.length > 0) {
+    throw new Error(`community_publish_ready_required:${blocking.join(",")}`);
   }
 }
 
@@ -318,16 +331,26 @@ async function requireCommunitySettingsPermissions(args: {
       userId: args.userId,
     });
   }
-  if (args.state.nextVisibility === "published") {
-    requireCommunityPublishReady({
+  requireCommunityPublishReadinessTransition({
+    currentVisibility: args.community.visibility,
+    nextVisibility: args.state.nextVisibility,
+    current: {
+      name: args.community.name,
+      oneLiner: args.community.oneLiner,
+      avatarUrl: args.community.avatarUrl,
+      avatarStorageId: args.community.avatarStorageId,
+      bannerUrl: args.community.bannerUrl,
+      bannerStorageId: args.community.bannerStorageId,
+    },
+    next: {
       name: args.state.nextName,
       oneLiner: args.state.nextOneLiner,
       avatarUrl: args.state.nextAvatarUrl,
       avatarStorageId: args.state.nextAvatarStorageId,
       bannerUrl: args.state.nextBannerUrl,
       bannerStorageId: args.state.nextBannerStorageId,
-    });
-  }
+    },
+  });
   if (args.state.monetizationChanged && (args.state.monthlyAmount !== null || args.state.annualAmount !== null)) {
     await requirePaidCommunityPricingReady({
       ctx: args.ctx,
@@ -863,16 +886,26 @@ export const saveCommunityLaunchProfile = mutation({
       throw new Error("community_slug_taken");
     }
 
-    if (nextVisibility === "published") {
-      requireCommunityPublishReady({
+    requireCommunityPublishReadinessTransition({
+      currentVisibility: community.visibility,
+      nextVisibility,
+      current: {
+        name: community.name,
+        oneLiner: community.oneLiner,
+        avatarUrl: community.avatarUrl,
+        avatarStorageId: community.avatarStorageId,
+        bannerUrl: community.bannerUrl,
+        bannerStorageId: community.bannerStorageId,
+      },
+      next: {
         name: nextName,
         oneLiner: nextOneLiner,
         avatarUrl: nextAvatarUrl,
         avatarStorageId: nextAvatarStorageId,
         bannerUrl: nextBannerUrl,
         bannerStorageId: nextBannerStorageId,
-      });
-    }
+      },
+    });
 
     const previousAvatarStorageId = community.avatarStorageId;
     const previousBannerStorageId = community.bannerStorageId;

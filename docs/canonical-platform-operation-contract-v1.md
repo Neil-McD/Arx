@@ -81,6 +81,12 @@ first-party code must not call either legacy address. Remove the bridge after
 the replacement production web is live and both legacy function metrics remain
 at zero for the agreed observation window.
 
+Rolling compatibility also preserves Published communities that predate current
+launch-profile requirements. Entering Published requires a complete profile,
+and an existing Published community may not introduce a new missing requirement.
+A grandfathered row may still save unrelated fields and repair missing profile
+fields incrementally.
+
 ## Invariants
 
 1. The official Polynet MCP remains a supported external surface.

@@ -1,3 +1,5 @@
+import { isPublishedCommunityVisibility } from "./communityVisibility";
+
 export type CommunityPublishReadinessMissing =
   | "community_name"
   | "community_one_liner"
@@ -34,4 +36,25 @@ export function getCommunityPublishReadinessMissingFields(
 
 export function isCommunityPublishReady(input: CommunityPublishReadinessInput): boolean {
   return getCommunityPublishReadinessMissingFields(input).length === 0;
+}
+
+export function getCommunityPublishReadinessBlockingFields(input: {
+  currentVisibility?: string | null;
+  nextVisibility?: string | null;
+  current: CommunityPublishReadinessInput;
+  next: CommunityPublishReadinessInput;
+}): CommunityPublishReadinessMissing[] {
+  if (!isPublishedCommunityVisibility(input.nextVisibility)) return [];
+
+  const nextMissing = getCommunityPublishReadinessMissingFields(input.next);
+  if (nextMissing.length === 0) return [];
+
+  if (!isPublishedCommunityVisibility(input.currentVisibility)) {
+    return nextMissing;
+  }
+
+  const currentMissing = new Set(
+    getCommunityPublishReadinessMissingFields(input.current),
+  );
+  return nextMissing.filter((field) => !currentMissing.has(field));
 }

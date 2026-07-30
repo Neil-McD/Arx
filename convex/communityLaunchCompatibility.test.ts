@@ -222,3 +222,137 @@ test("rolling compatibility RPCs remain fail-closed to non-managers", async () =
     about: "Initial about",
   });
 });
+
+test("legacy Published communities can save unrelated settings without weakening readiness", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.communityId, {
+      visibility: "published",
+    });
+  });
+
+  await expect(
+    asOwner.mutation(api.communityLifecycle.saveCommunitySettings, {
+      communityId: fixture.communityId,
+      name: "Rolling launch contract",
+      slug: "rolling-launch-contract",
+      oneLiner: "Compatibility without restoring the launcher.",
+      about: "Updated through the canonical settings mutation.",
+      avatarStorageId: null,
+      avatarUrl: null,
+      bannerStorageId: null,
+      bannerUrl: null,
+      visibility: "published",
+      monthlyAmountBaseUnits: null,
+      annualAmountBaseUnits: null,
+    }),
+  ).resolves.toMatchObject({
+    community_id: String(fixture.communityId),
+    about: "Updated through the canonical settings mutation.",
+    visibility: "published",
+  });
+
+  await expect(
+    asOwner.mutation(api.community.saveCommunityLaunchProfile, {
+      communityId: fixture.communityId,
+      about: "Updated through the rolling compatibility mutation.",
+    }),
+  ).resolves.toMatchObject({
+    id: String(fixture.communityId),
+    about: "Updated through the rolling compatibility mutation.",
+    visibility: "published",
+  });
+
+  await expect(
+    asOwner.mutation(api.communityLifecycle.saveCommunitySettings, {
+      communityId: fixture.communityId,
+      name: "Rolling launch contract",
+      slug: "rolling-launch-contract",
+      oneLiner: null,
+      about: "Must not persist.",
+      avatarStorageId: null,
+      avatarUrl: null,
+      bannerStorageId: null,
+      bannerUrl: null,
+      visibility: "published",
+      monthlyAmountBaseUnits: null,
+      annualAmountBaseUnits: null,
+    }),
+  ).rejects.toThrow(
+    "community_publish_ready_required:community_one_liner",
+  );
+
+  const community = await t.run(async (ctx) =>
+    ctx.db.get(fixture.communityId),
+  );
+  expect(community).toMatchObject({
+    oneLiner: "Compatibility without restoring the launcher.",
+    about: "Updated through the rolling compatibility mutation.",
+    visibility: "published",
+  });
+});
+
+test("publishing transitions and readiness regressions remain fail-closed", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+
+  await expect(
+    asOwner.mutation(api.communityLifecycle.saveCommunitySettings, {
+      communityId: fixture.communityId,
+      name: "Rolling launch contract",
+      slug: "rolling-launch-contract",
+      oneLiner: "Compatibility without restoring the launcher.",
+      about: "Still a draft.",
+      avatarStorageId: null,
+      avatarUrl: null,
+      bannerStorageId: null,
+      bannerUrl: null,
+      visibility: "published",
+      monthlyAmountBaseUnits: null,
+      annualAmountBaseUnits: null,
+    }),
+  ).rejects.toThrow(
+    "community_publish_ready_required:community_avatar,community_banner",
+  );
+
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.communityId, {
+      avatarUrl: "https://example.com/avatar.png",
+      bannerUrl: "https://example.com/banner.png",
+      visibility: "published",
+    });
+  });
+
+  await expect(
+    asOwner.mutation(api.communityLifecycle.saveCommunitySettings, {
+      communityId: fixture.communityId,
+      name: "Rolling launch contract",
+      slug: "rolling-launch-contract",
+      oneLiner: "Compatibility without restoring the launcher.",
+      about: "Must not persist.",
+      avatarStorageId: null,
+      avatarUrl: "https://example.com/avatar.png",
+      bannerStorageId: null,
+      bannerUrl: null,
+      visibility: "published",
+      monthlyAmountBaseUnits: null,
+      annualAmountBaseUnits: null,
+    }),
+  ).rejects.toThrow(
+    "community_publish_ready_required:community_banner",
+  );
+
+  const community = await t.run(async (ctx) =>
+    ctx.db.get(fixture.communityId),
+  );
+  expect(community).toMatchObject({
+    avatarUrl: "https://example.com/avatar.png",
+    bannerUrl: "https://example.com/banner.png",
+    about: "Initial about",
+    visibility: "published",
+  });
+});

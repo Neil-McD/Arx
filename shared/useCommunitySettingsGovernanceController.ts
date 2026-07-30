@@ -1,7 +1,7 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
-import { getCommunityPublishReadinessMissingFields } from "./communityPublishReadiness";
+import { getCommunityPublishReadinessBlockingFields } from "./communityPublishReadiness";
 
 import {
   leaveCloudCommunity,
@@ -43,6 +43,9 @@ type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> 
   communitySettingsBannerFocusX: number;
   communitySettingsBannerFocusY: number;
   communitySettingsBannerZoom: number;
+  activeCommunityName?: string | null;
+  activeCommunityOneLiner?: string | null;
+  activeCommunityVisibility?: string | null;
   activeCommunityAvatarStorageId?: string | null;
   activeCommunityBannerStorageId?: string | null;
   activeCommunityAvatarUrl?: string | null;
@@ -188,18 +191,30 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
       return;
     }
     const visibility = toCanonicalCommunityVisibility(rawVisibility || "unlisted", "unlisted");
-    if (visibility === "published") {
-      const missing = getCommunityPublishReadinessMissingFields({
+    const blockingPublishFields = getCommunityPublishReadinessBlockingFields({
+      currentVisibility: current.activeCommunityVisibility,
+      nextVisibility: visibility,
+      current: {
+        name: current.activeCommunityName,
+        oneLiner: current.activeCommunityOneLiner,
+        avatarUrl: current.activeCommunityAvatarUrl,
+        avatarStorageId: current.activeCommunityAvatarStorageId,
+        bannerUrl: current.activeCommunityBannerUrl,
+        bannerStorageId: current.activeCommunityBannerStorageId,
+      },
+      next: {
         name,
         oneLiner: current.communitySettingsOneLiner,
         avatarUrl: current.communitySettingsAvatarUrl,
         bannerUrl: current.communitySettingsBannerUrl,
-      });
-      if (missing.length > 0) {
-        current.setCommunitySettingsError("Published communities need a name, one-liner, avatar, and banner.");
-        current.setIsSavingCommunitySettings(false);
-        return;
-      }
+      },
+    });
+    if (blockingPublishFields.length > 0) {
+      current.setCommunitySettingsError(
+        "Published communities need a name, one-liner, avatar, and banner.",
+      );
+      current.setIsSavingCommunitySettings(false);
+      return;
     }
 
     try {

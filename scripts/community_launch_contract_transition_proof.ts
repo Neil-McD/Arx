@@ -36,6 +36,7 @@ const productionFacade = read("convex/community.ts");
 const lifecycle = read("convex/communityLifecycle.ts");
 const launchStatus = read("convex/communityLaunchSetup.ts");
 const launchStatusModel = read("shared/communityLaunchSetup.ts");
+const publishReadiness = read("shared/communityPublishReadiness.ts");
 const funnelGateway = read("shared/cloudCommunityFunnelGateway.ts");
 const schema = read("convex/schema.ts");
 const generatedApi = read("convex/_generated/api.d.ts");
@@ -78,8 +79,13 @@ assert.match(
 
 assert.match(
   lifecycle,
-  /Rolling-deployment compatibility[\s\S]*export const saveCommunityLaunchProfile = mutation\(\{[\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityManager[\s\S]*identityChanged[\s\S]*brandingChanged[\s\S]*visibilityChanged[\s\S]*requireCommunityOwner[\s\S]*by_slug[\s\S]*community_slug_taken[\s\S]*requireCommunityPublishReady[\s\S]*maybeDeleteStorageAsset[\s\S]*mapCommunityRecord/,
+  /Rolling-deployment compatibility[\s\S]*export const saveCommunityLaunchProfile = mutation\(\{[\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityManager[\s\S]*identityChanged[\s\S]*brandingChanged[\s\S]*visibilityChanged[\s\S]*requireCommunityOwner[\s\S]*by_slug[\s\S]*community_slug_taken[\s\S]*requireCommunityPublishReadinessTransition[\s\S]*maybeDeleteStorageAsset[\s\S]*mapCommunityRecord/,
   "the legacy profile mutation must preserve authentication, manager access, owner-only changes, uniqueness, publish readiness, and storage cleanup",
+);
+assert.match(
+  publishReadiness,
+  /getCommunityPublishReadinessBlockingFields[\s\S]*nextMissing[\s\S]*currentMissing[\s\S]*nextMissing\.filter/,
+  "publish readiness must block new regressions while allowing grandfathered rows to repair incrementally",
 );
 assert.match(
   launchStatus,

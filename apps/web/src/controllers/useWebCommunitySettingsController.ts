@@ -97,6 +97,9 @@ export function useWebCommunitySettingsController(params: {
   });
 
   const governance = useCommunitySettingsGovernanceController<AuthSession>({
+    activeCommunityName: params.activeCommunity?.name ?? null,
+    activeCommunityOneLiner: params.activeCommunity?.one_liner ?? null,
+    activeCommunityVisibility: params.activeCommunity?.visibility ?? null,
     activeCommunityAvatarStorageId:
       params.activeCommunity?.avatar_storage_id ?? null,
     activeCommunityBannerStorageId:
