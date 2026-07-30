@@ -101,6 +101,13 @@ const shellNavigation = read(
   "apps/web/src/controllers/useWebShellNavigationController.ts",
 );
 const skillsModel = read("apps/web/src/controllers/useWebSkillsModel.ts");
+const settingsPanels = read("apps/web/src/components/WebSettingsPanels.tsx");
+const providerConnections = read(
+  "apps/web/src/controllers/useWebProviderConnectionsController.ts",
+);
+const onboardingProfile = read(
+  "apps/web/src/controllers/useWebOnboardingProfileController.ts",
+);
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx");
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
@@ -132,9 +139,35 @@ assert.match(
   shellNavigation,
   /const openGlobalSettings = useCallback[\s\S]*current\.activePage === "settings" && current\.settingsPage === page[\s\S]*pushNavSnapshot\(\)[\s\S]*navigateTo\(buildSettingsPath\(page\)\)/,
 );
-assert.match(
+assert.doesNotMatch(
   skillsModel,
-  /activePage === "settings" && settingsPage === "account"/,
+  /settingsPage|userPlatformSkills|useWebUserPlatformSkillsController/,
+  "global settings must not initialize the retired personal-skills editor",
+);
+assert.match(
+  settingsPanels,
+  /case "account":[\s\S]*WebAccountSettingsSection[\s\S]*WebPolynetMcpAccountSection/,
+  "Account must compose identity, inference, and official Polynet MCP access",
+);
+assert.doesNotMatch(
+  settingsPanels,
+  /WebPersonalAccountSettingsSection|WebPersonalSkillsAccountSection|personalAccount|personalMemory|dataExport/,
+  "Account must not compose retired personal-agent, export, memory, or skills surfaces",
+);
+assert.match(
+  providerConnections,
+  /const refreshAccountSetupStatusRef = useRef\([\s\S]*refreshAccountSetupStatusRef\.current = params\.refreshAccountSetupStatus/,
+  "provider refresh must read the latest setup callback without depending on its render identity",
+);
+assert.match(
+  providerConnections,
+  /useEffect\(\(\) => \{[\s\S]*refreshAccountSetupStatusRef\.current\(usableSession\)[\s\S]*\}, \[\s*loadProviderConnections,\s*params\.session,\s*\]\);/,
+  "provider status loading must rerun only when the authenticated session changes",
+);
+assert.match(
+  onboardingProfile,
+  /const getSessionRef = useRef\(params\.getSession\);[\s\S]*getSessionRef\.current = params\.getSession;/,
+  "account setup callbacks must not churn when App supplies a render-local session getter",
 );
 assert.doesNotMatch(app, /setActiveView\("settings"\)/);
 assert.doesNotMatch(transitions, /ToggleWorkspaceSettings|deriveToggleWorkspaceSettingsTransition/);

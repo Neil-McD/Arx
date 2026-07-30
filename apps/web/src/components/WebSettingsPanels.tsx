@@ -3,7 +3,6 @@ import type { DragEvent } from "react";
 import type { SettingsGroup } from "../../../../shared/appShellNavigation";
 import type { SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import type { AppTheme } from "../../../../shared/theme";
-import type { useWebPersonalAccountSettingsController } from "../controllers/useWebPersonalAccountSettingsController";
 import type { useWebProfileSettingsUiController } from "../controllers/useWebProfileSettingsUiController";
 import type { AuthSession } from "../auth";
 import {
@@ -17,11 +16,6 @@ import {
 } from "./WebBillingSettingsSection";
 import { WebBuilderPartnerSettingsSection } from "./WebBuilderPartnerSettingsSection";
 import type { WebBuilderPartnerProgramPanelProps } from "./WebBuilderPartnerProgramPanel";
-import { WebPersonalAccountSettingsSection } from "./WebPersonalAccountSettingsSection";
-import {
-  WebPersonalSkillsAccountSection,
-  type WebPersonalSkillsAccountSectionProps,
-} from "./WebPersonalSkillsAccountSection";
 import { WebPolynetMcpAccountSection } from "./WebPolynetMcpAccountSection";
 import { WebProfileSettingsSection } from "./WebProfileSettingsSection";
 
@@ -41,13 +35,7 @@ export type WebSettingsPanelsProps = {
     }) => Promise<boolean | void> | boolean | void;
   };
   account: WebAccountSettingsSectionProps;
-  personalAccount: {
-    session: SessionLike;
-    formatRelativeTime: (value: string) => string;
-    controller: ReturnType<typeof useWebPersonalAccountSettingsController>;
-  };
   billing: WebBillingSettingsSectionProps;
-  skills: WebPersonalSkillsAccountSectionProps;
   partners: WebBuilderPartnerProgramPanelProps;
   appearance: {
     appTheme: AppTheme;
@@ -99,50 +87,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     saveProfileToCloud: props.profile.saveProfileToCloud,
   };
 
-  const personalAccountSectionProps = {
-    session: props.personalAccount.session,
-    exportError: props.personalAccount.controller.dataExport.error,
-    exportThreadsCsv:
-      props.personalAccount.controller.dataExport.exportThreadsCsv,
-    exportMessagesCsv:
-      props.personalAccount.controller.dataExport.exportMessagesCsv,
-    exportMemoryCsv:
-      props.personalAccount.controller.dataExport.exportMemoryCsv,
-    isExporting: props.personalAccount.controller.dataExport.isExporting,
-    userMemorySettings: props.personalAccount.controller.personalAgent.settings,
-    isLoadingUserMemorySettings:
-      props.personalAccount.controller.personalAgent.isLoading,
-    saveUserMemorySettings:
-      props.personalAccount.controller.personalAgent.saveSettings,
-    personalMemoryError: props.personalAccount.controller.personalMemory.error,
-    isLoadingPersonalMemory:
-      props.personalAccount.controller.personalMemory.isLoading,
-    personalMemoryItems: props.personalAccount.controller.personalMemory.items,
-    personalMemoryQuery: props.personalAccount.controller.personalMemory.query,
-    setPersonalMemoryQuery:
-      props.personalAccount.controller.personalMemory.setQuery,
-    loadPersonalMemoryItems:
-      props.personalAccount.controller.personalMemory.loadItems,
-    formatRelativeTime: props.personalAccount.formatRelativeTime,
-    handleTogglePersonalMemoryPinned:
-      props.personalAccount.controller.personalMemory.togglePinned,
-    handleDeletePersonalMemoryItem:
-      props.personalAccount.controller.personalMemory.deleteItem,
-    setMemoryImportError:
-      props.personalAccount.controller.personalMemoryUi.setMemoryImportError,
-    setIsMemoryImportModalOpen:
-      props.personalAccount.controller.personalMemoryUi
-        .setIsMemoryImportModalOpen,
-    newPersonalMemoryContent:
-      props.personalAccount.controller.personalMemory.newContent,
-    setNewPersonalMemoryContent:
-      props.personalAccount.controller.personalMemory.setNewContent,
-    setNewPersonalMemoryPinned:
-      props.personalAccount.controller.personalMemory.setNewPinned,
-    handleCreatePersonalMemoryItem:
-      props.personalAccount.controller.personalMemory.createItem,
-  };
-
   switch (props.settingsGroup) {
     case "profile":
       return <WebProfileSettingsSection {...profileSectionProps} />;
@@ -150,8 +94,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
       return (
         <>
           <WebAccountSettingsSection {...props.account} />
-          <WebPersonalAccountSettingsSection {...personalAccountSectionProps} />
-          <WebPersonalSkillsAccountSection {...props.skills} />
           <WebPolynetMcpAccountSection session={props.account.session} />
         </>
       );

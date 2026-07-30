@@ -51,7 +51,6 @@
     "check:member-entry-destination-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/member_entry_destination_contract_proof.ts",
     "check:global-settings-surface-contract": "tsx scripts/global_settings_surface_contract_proof.ts",
     "check:cris-theme-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/cris_theme_contract_proof.ts",
-    "check:personal-account-settings-orchestration-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/personal_account_settings_orchestration_proof.ts",
     "check:workspace-account-lifecycle-retirement-contract": "tsx scripts/workspace_account_lifecycle_retirement_contract_proof.ts",
     "check:workspace-surface-quarantine-contract": "tsx scripts/workspace_surface_quarantine_contract_proof.ts",
     "check:app-shell-decomposition-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/app_shell_decomposition_contract_proof.ts",

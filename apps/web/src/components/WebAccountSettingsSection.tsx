@@ -133,12 +133,12 @@ export function WebAccountSettingsSection(
           Inference provider
         </div>
         <div className="settings-section-desc">
-          Connect ChatGPT or an OpenAI API key for personal-agent inference. You
-          do not need both.
+          Connect ChatGPT or an OpenAI API key for Polynet inference. You do not
+          need both.
         </div>
         {!props.session ? (
           <div className="model-note">
-            Sign in to connect a personal provider.
+            Sign in to connect an inference provider.
           </div>
         ) : (
           <div className="account-provider-grid">

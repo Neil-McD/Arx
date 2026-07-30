@@ -28,8 +28,8 @@ function main() {
   const personalSkillOverlayRuntime = readText(
     "shared/personalSkillOverlayRuntime.ts",
   );
-  const settingsSection = readText(
-    "apps/web/src/components/WebPersonalSkillsAccountSection.tsx",
+  const settingsPanels = readText(
+    "apps/web/src/components/WebSettingsPanels.tsx",
   );
 
   for (const exportedName of [
@@ -109,20 +109,10 @@ function main() {
     "ambiguous_skill_mention_tokens",
     "cross-scope ambiguity evidence",
   );
-  assertIncludes(
-    settingsSection,
-    "Create personal skill package",
-    "settings personal skill create form",
-  );
-  assertIncludes(
-    settingsSection,
-    "Editing updates the canonical package",
-    "settings personal skill edit form",
-  );
-  assertIncludes(
-    settingsSection,
-    "Personal skills apply only when explicitly mentioned",
-    "settings explicit invocation guidance",
+  assert.ok(
+    !settingsPanels.includes("WebPersonalSkillsAccountSection") &&
+      !settingsPanels.includes("Personal skills"),
+    "global Account settings must not expose personal skill management",
   );
 
   console.log("personal_skill_runtime_contract_proof: ok");

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 function readText(path: string | URL): string {
   return readFileSync(path, "utf8");
@@ -9,24 +9,11 @@ function assertIncludes(haystack: string, needle: string, label: string) {
   assert.ok(haystack.includes(needle), `expected ${label} to include ${needle}`);
 }
 
-function assertNotIncludes(haystack: string, needle: string, label: string) {
-  assert.ok(!haystack.includes(needle), `expected ${label} not to include ${needle}`);
-}
-
 function main() {
   const personalMemory = readText(new URL("../convex/personalMemory.ts", import.meta.url));
   const settings = readText(new URL("../convex/settings.ts", import.meta.url));
-  const accountSettings = readText(
-    new URL("../apps/web/src/components/WebPersonalAccountSettingsSection.tsx", import.meta.url),
-  );
-  const memorySettingsData = readText(
-    new URL("../shared/useWebMemorySettingsDataController.ts", import.meta.url),
-  );
-  const memoryMutation = readText(
-    new URL("../shared/useWebMemoryMutationController.ts", import.meta.url),
-  );
-  const dataExport = readText(
-    new URL("../shared/useWebAccountDataExportController.ts", import.meta.url),
+  const settingsPanels = readText(
+    new URL("../apps/web/src/components/WebSettingsPanels.tsx", import.meta.url),
   );
 
   assertIncludes(
@@ -44,28 +31,18 @@ function main() {
     "resolveUserIdForAuthenticatedRequest({",
     "memory settings APIs resolve authenticated user",
   );
-  assertNotIncludes(
-    accountSettings,
-    "Personal memory is included with Builder.",
-    "personal memory UI is not Builder-only",
+  assert.ok(
+    !settingsPanels.includes("Personal memory") &&
+      !settingsPanels.includes("WebPersonalAccountSettingsSection"),
+    "global Account settings must not expose personal memory",
   );
-  assertIncludes(
-    memorySettingsData,
-    "memory_mode: normalizeMemoryMode(row?.memory_mode)",
-    "memory settings loader preserves stored mode",
-  );
-  assertIncludes(
-    memoryMutation,
-    "rememberIntentEnabled: Boolean(normalizedNext.remember_intent_enabled)",
-    "memory settings mutation preserves the authenticated user's remember-intent choice",
-  );
-  assertIncludes(
-    dataExport,
-    "listCloudPersonalMemoryRows({",
-    "account data export retains authenticated personal-memory export",
+  assert.equal(
+    existsSync("apps/web/src/components/WebPersonalAccountSettingsSection.tsx"),
+    false,
+    "retired personal Account presentation must be deleted",
   );
 
-  console.log("PASS: personal memory is authenticated-user scoped and not Builder-gated.");
+  console.log("PASS: personal memory backend remains authenticated-user scoped while its global Account UI is retired.");
 }
 
 main();

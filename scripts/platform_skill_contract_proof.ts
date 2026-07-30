@@ -147,8 +147,8 @@ function main() {
   const skillsEditor = readText(
     "apps/web/src/components/WebCommunityAiAgentSkillsEditor.tsx",
   );
-  const settingsSection = readText(
-    "apps/web/src/components/WebPersonalSkillsAccountSection.tsx",
+  const settingsPanels = readText(
+    "apps/web/src/components/WebSettingsPanels.tsx",
   );
   const skillsModel = readText(
     "apps/web/src/controllers/useWebSkillsModel.ts",
@@ -372,9 +372,9 @@ function main() {
     "community skills editor locked platform state",
   );
   assert.ok(
-    !settingsSection.includes("Platform default") &&
-      !settingsSection.includes("effectiveSkill"),
-    "global Account settings must contain personal skills only",
+    !settingsPanels.includes("WebPersonalSkillsAccountSection") &&
+      !settingsPanels.includes("effectiveSkill"),
+    "global Account settings must not expose skill management",
   );
   assert.ok(
     !app.includes("settingsEffectiveSkills"),

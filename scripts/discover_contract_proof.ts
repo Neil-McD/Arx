@@ -52,7 +52,7 @@ function main() {
   );
   const accountSettings = readText(
     new URL(
-      "../apps/web/src/components/WebPersonalSkillsAccountSection.tsx",
+      "../apps/web/src/components/WebSettingsPanels.tsx",
       import.meta.url,
     ),
   );

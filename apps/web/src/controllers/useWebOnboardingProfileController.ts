@@ -74,6 +74,8 @@ export function useWebOnboardingProfileController(params: {
     navigateTo: () => undefined,
     enterDefaultDestination: async () => false,
   });
+  const getSessionRef = useRef(params.getSession);
+  getSessionRef.current = params.getSession;
   const timezoneSyncKeyRef = useRef<string | null>(null);
   const onboardingRedirectUserIdRef = useRef<string | null>(null);
 
@@ -126,7 +128,8 @@ export function useWebOnboardingProfileController(params: {
 
   const refreshAccountSetupStatus = useCallback(
     async (
-      nextSession: AuthSession | null = params.getSession() ?? params.session,
+      nextSession: AuthSession | null =
+        getSessionRef.current() ?? params.session,
     ) => {
       if (!nextSession) {
         setAccountSetupStatus(null);
@@ -147,7 +150,7 @@ export function useWebOnboardingProfileController(params: {
         setIsLoadingAccountSetupStatus(false);
       }
     },
-    [params.ensureSession, params.getSession, params.session],
+    [params.ensureSession, params.session],
   );
 
   const loadProfileForOnboarding = useCallback(
@@ -358,7 +361,8 @@ export function useWebOnboardingProfileController(params: {
 
   const routeTryPolynetFree = useCallback(
     async (
-      nextSession: AuthSession | null = params.getSession() ?? params.session,
+      nextSession: AuthSession | null =
+        getSessionRef.current() ?? params.session,
     ): Promise<void> => {
       if (!nextSession) {
         params.requireSignIn({ reason: "try_polynet_free", payload: {} });
@@ -386,7 +390,6 @@ export function useWebOnboardingProfileController(params: {
     },
     [
       loadProfileForOnboarding,
-      params.getSession,
       params.requireSignIn,
       params.session,
     ],

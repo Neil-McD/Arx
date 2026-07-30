@@ -29,7 +29,6 @@ import {
   formatAccountTierLabel, isAccountTierFree, formatPlanPrice, formatSubscriptionPrice, } from "../../../shared/accountCommerce";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 import { useWebCommunityUiController } from "./controllers/useWebCommunityUiController";
-import { useWebPersonalAccountSettingsController } from "./controllers/useWebPersonalAccountSettingsController";
 import {
   COMMUNITY_INTERACTION_PROJECTION_ENABLED,
   useWebCommunityInteractionProjection,
@@ -72,7 +71,6 @@ import {
 } from "./controllers/useWebPendingAuthIntentController";
 import { useWebCommunityNavigationActions } from "./controllers/useWebCommunityNavigationActions";
 import { useWebJoinedCommunityEntryAction } from "./controllers/useWebJoinedCommunityEntryAction";
-import { useWebPersonalMemoryImportAction } from "./controllers/useWebPersonalMemoryImportAction";
 import { useWebDiscoverActivationController } from "./controllers/useWebDiscoverActivationController";
 import { useWebSkillsModel } from "./controllers/useWebSkillsModel";
 import { useWebAccountGraphLifecycle } from "./controllers/useWebAccountGraphLifecycle";
@@ -401,17 +399,6 @@ export default function App() {
     setManualClaimToken,
     redeemPendingPurchasesInFlightRef,
   } = billingUi;
-
-  const personalAccountSettings =
-    useWebPersonalAccountSettingsController<AuthSession>({
-      session,
-      isAccountSettingsActive:
-        activePage === "settings" && settingsGroup === "account",
-      getSession: () => sessionRef.current,
-      ensureSession: ensureUsableAuthSession,
-      requireSignIn,
-      onUserMemorySettingsSaved: refreshAccountSetupStatus,
-    });
   const {
     isLoadingCommunities,
     setIsLoadingCommunities,
@@ -872,17 +859,7 @@ export default function App() {
     communityTab,
     ensureSession: ensureUsableAuthSession,
     session,
-    settingsPage,
   });
-  const {
-    userPlatformSkills,
-    isLoadingUserPlatformSkills,
-    userPlatformSkillError,
-    isCreatingUserPlatformSkill,
-    userPlatformSkillMutationError,
-    updatingUserPlatformSkillInstallId,
-    removingUserPlatformSkillInstallId,
-  } = skillsModel.user;
   const {
     communitySkillAttachments,
     ownedSkillPackages,
@@ -1068,10 +1045,6 @@ export default function App() {
   } = communityAgentAndFunnel;
   const {
     createCommunitySkill: handleCreateCommunitySkill,
-    createUserPlatformSkill: handleCreateUserPlatformSkill,
-    updateUserPlatformSkill: handleUpdateUserPlatformSkill,
-    saveUserPlatformSkill: handleSaveUserPlatformSkill,
-    deleteUserPlatformSkill: handleDeleteUserPlatformSkill,
     attachSkillPackageToCommunity: handleAttachSkillPackageToCommunity,
     updateCommunitySkillAttachment: handleUpdateCommunitySkillAttachment,
     detachCommunitySkill: handleDetachCommunitySkill,
@@ -1175,13 +1148,6 @@ export default function App() {
     setIsSettingsAvatarDragOver,
     setDiscoverCommunities,
   });
-  const handleImportExternalMemory =
-    useWebPersonalMemoryImportAction({
-      importExternalMemory:
-        personalAccountSettings.importExternalMemory,
-      showToast: showAppToastMessage,
-    });
-
   const communityPolynetController = useWebCommunityPolynetController<AuthSession>({
     activePage,
     communityTab,
@@ -2534,11 +2500,6 @@ export default function App() {
         providerConnectionUi.handleDisconnectOpenAi,
       formatRelativeTime,
     },
-    personalAccount: {
-      session,
-      formatRelativeTime,
-      controller: personalAccountSettings,
-    },
     billing: {
       session,
       accountCommerceStatus,
@@ -2556,20 +2517,6 @@ export default function App() {
       refreshPendingPurchases: refreshPendingPurchasesForSettings,
       pendingPurchasesError,
       pendingPurchasesSuccess,
-    },
-    skills: {
-      session,
-      userPlatformSkills,
-      isLoadingUserPlatformSkills,
-      userPlatformSkillError,
-      userPlatformSkillMutationError,
-      isCreatingUserPlatformSkill,
-      updatingUserPlatformSkillInstallId,
-      removingUserPlatformSkillInstallId,
-      onCreateUserPlatformSkill: handleCreateUserPlatformSkill,
-      onSaveUserPlatformSkill: handleSaveUserPlatformSkill,
-      onUpdateUserPlatformSkill: handleUpdateUserPlatformSkill,
-      onDeleteUserPlatformSkill: handleDeleteUserPlatformSkill,
     },
     partners: builderPartnerProgramSharedProps,
     appearance: {
@@ -2626,8 +2573,6 @@ export default function App() {
     accountCommerceStatus,
     setAccountCommerceError,
     setIsFreeAccountInfoOpen,
-    personalMemoryUi: personalAccountSettings.personalMemoryUi,
-    handleImportExternalMemory,
     providerConnectionModalHostProps: providerConnectionUi.modalHostProps,
     onOpenPremiumBilling: openPremiumBilling,
     isFreeAccountInfoOpen,

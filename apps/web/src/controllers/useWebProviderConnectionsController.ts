@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { formatProviderConnectionErrorMessage } from "../../../../shared/appErrorMappings";
 import {
@@ -62,6 +62,28 @@ export function useWebProviderConnectionsController(
     useState<CloudOpenAiConnectionStatus>(DISCONNECTED_OPENAI);
   const [isLoadingProviderConnections, setIsLoadingProviderConnections] =
     useState(false);
+  const ensureSessionRef = useRef(params.ensureSession);
+  const refreshAccountSetupStatusRef = useRef(
+    params.refreshAccountSetupStatus,
+  );
+  const resetSignedOutAccountSetupRef = useRef(
+    params.resetSignedOutAccountSetup,
+  );
+  ensureSessionRef.current = params.ensureSession;
+  refreshAccountSetupStatusRef.current = params.refreshAccountSetupStatus;
+  resetSignedOutAccountSetupRef.current = params.resetSignedOutAccountSetup;
+
+  const handleConnectionsUpdated = useCallback(
+    (connections: {
+      openai: CloudOpenAiConnectionStatus;
+      chatgpt: CloudChatgptConnectionStatus;
+    }): void => {
+      setOpenAiConnection(connections.openai);
+      setChatgptConnection(connections.chatgpt);
+      void refreshAccountSetupStatusRef.current();
+    },
+    [],
+  );
 
   const providerConnectionUi =
     useWebProviderConnectionUiController<AuthSession>({
@@ -70,11 +92,7 @@ export function useWebProviderConnectionsController(
       ensureSession: params.ensureSession,
       requireSignIn: params.requireSignIn,
       chatgptConnection,
-      onConnectionsUpdated: (connections) => {
-        setOpenAiConnection(connections.openai);
-        setChatgptConnection(connections.chatgpt);
-        void params.refreshAccountSetupStatus();
-      },
+      onConnectionsUpdated: handleConnectionsUpdated,
       chatgptSecuritySettingsUrl: CHATGPT_SECURITY_SETTINGS_URL,
       getReturnToPath,
     });
@@ -82,7 +100,7 @@ export function useWebProviderConnectionsController(
   const { applyProviderConnectionLoadError } = providerConnectionUi;
   const loadProviderConnections = useCallback(
     async (session: AuthSession): Promise<void> => {
-      const usableSession = await params.ensureSession(session);
+      const usableSession = await ensureSessionRef.current(session);
       if (!usableSession) return;
       setIsLoadingProviderConnections(true);
       try {
@@ -103,31 +121,28 @@ export function useWebProviderConnectionsController(
         setIsLoadingProviderConnections(false);
       }
     },
-    [applyProviderConnectionLoadError, params.ensureSession],
+    [applyProviderConnectionLoadError],
   );
 
   useEffect(() => {
     if (!params.session) {
       setChatgptConnection(DISCONNECTED_CHATGPT);
       setOpenAiConnection(DISCONNECTED_OPENAI);
-      params.resetSignedOutAccountSetup();
+      resetSignedOutAccountSetupRef.current();
       setIsLoadingProviderConnections(false);
       return;
     }
 
     void (async () => {
-      const usableSession = await params.ensureSession(params.session);
+      const usableSession = await ensureSessionRef.current(params.session);
       if (!usableSession) return;
       await Promise.all([
         loadProviderConnections(usableSession),
-        params.refreshAccountSetupStatus(usableSession),
+        refreshAccountSetupStatusRef.current(usableSession),
       ]);
     })();
   }, [
     loadProviderConnections,
-    params.ensureSession,
-    params.refreshAccountSetupStatus,
-    params.resetSignedOutAccountSetup,
     params.session,
   ]);
 

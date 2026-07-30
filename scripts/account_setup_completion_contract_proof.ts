@@ -12,7 +12,6 @@ const authBootstrap = read("convex/auth.ts");
 const settings = read("convex/settings.ts");
 const profileGateway = read("shared/cloudProfilesGateway.ts");
 const convexAuthenticatedClient = read("shared/convexAuthenticatedClient.ts");
-const settingsGateway = read("shared/cloudUserSettingsGateway.ts");
 const communityTypes = read("shared/communityTypes.ts");
 const accountSetup = read("shared/accountSetup.ts");
 const profileHandle = read("shared/profileHandle.ts");
@@ -23,9 +22,6 @@ const onboardingProfileController = read(
 );
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const legalReaderModal = read("apps/web/src/components/WebPlatformLegalReaderModal.tsx");
-const personalAccountSettingsController = read(
-  "apps/web/src/controllers/useWebPersonalAccountSettingsController.ts",
-);
 
 assert.match(schema, /handle: v\.optional\(v\.string\(\)\)/, "users table must store a public profile handle");
 assert.match(schema, /normalizedHandle: v\.optional\(v\.string\(\)\)/, "users table must store normalized handle");
@@ -113,9 +109,6 @@ assert.match(profileGateway, /termsOfServiceVersion\?: string \| null/, "profile
 assert.match(profileGateway, /privacyPolicyVersion\?: string \| null/, "profile gateway must submit the exact Privacy version when accepting platform legal");
 assert.match(profileGateway, /prepareCloudProfileAvatarField/, "profile gateway must upload first-party avatar files");
 
-assert.match(settingsGateway, /agent_name\?: unknown/, "settings gateway must load agent_name");
-assert.match(settingsGateway, /agentName\?: string/, "settings gateway must save agentName");
-
 assert.match(communityTypes, /AccountSetupStatus/, "shared profile types must expose account setup status");
 assert.match(communityTypes, /account_setup\?: AccountSetupStatus \| null/, "profile details must carry setup status");
 
@@ -134,7 +127,7 @@ assert.match(onboardingPage, /Recommended/, "onboarding inference choice should 
 assert.match(onboardingPage, /Use a key from your OpenAI account/, "onboarding inference choice should clearly name the API key path");
 assert.match(onboardingPage, /onFinishOnboarding/, "onboarding inference step must finish setup directly");
 assert.doesNotMatch(onboardingPage, /Direction|onBuildCommunity|onDiscoverCommunity|polynet-onboarding-direction/, "onboarding must not expose a direction step");
-assert.doesNotMatch(onboardingPage, /onSaveAgent|agentNameDraft|agentSoulDraft|polynet-onboarding-agent/, "onboarding must not expose an agent step — naming lives in Settings");
+assert.doesNotMatch(onboardingPage, /onSaveAgent|agentNameDraft|agentSoulDraft|polynet-onboarding-agent/, "onboarding must not expose an agent step");
 assert.doesNotMatch(onboardingPage, /WebAgentPersonalityPicker/, "onboarding must not render the personality picker");
 assert.match(onboardingPage, /if \(step === "inference"\) \{\s*if \(!hasInferenceProvider\) return;\s*await props\.onFinishOnboarding\(\);/, "inference must be the final step and finish onboarding directly");
 assert.match(onboardingPage, /formatAccountSetupMissingGuidance\(props\.accountSetupStatus\)/, "onboarding must format guidance from the canonical setup status");
@@ -147,11 +140,6 @@ assert.match(
 assert.match(onboardingProfileController, /completeOnboarding: true/, "finish flow must mark onboarding complete explicitly");
 assert.match(onboardingProfileController, /formatAccountSetupMissingGuidance\(latestSetup\)/, "finish flow must use precise canonical missing-setup guidance");
 assert.doesNotMatch(onboardingProfileController, /Finish profile, inference, and agent setup to continue\./, "finish flow must not use stale generic missing-setup copy");
-assert.match(
-  personalAccountSettingsController,
-  /saveUserMemorySettingsAndRefreshSetup[\s\S]*await saveUserMemorySettings\(next\);[\s\S]*await params\.onUserMemorySettingsSaved\(\);/,
-  "agent save must refresh canonical account setup status",
-);
 assert.doesNotMatch(onboardingProfileController, /onboardingDirection: destination|completeOnboarding\("build_community"|completeOnboarding\("discover_community"/, "finish flow must not store a direction choice");
 assert.doesNotMatch(app, /WebAccountSetupCard|buildWebWorkspaceLandingProjection/);
 

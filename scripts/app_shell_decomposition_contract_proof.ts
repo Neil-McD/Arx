@@ -108,7 +108,6 @@ const boundedFeatureOwners = [
   "apps/web/src/controllers/useWebMissingCommunityRouteGuard.ts",
   "apps/web/src/controllers/useWebMobileChromeReadingModeLifecycle.ts",
   "apps/web/src/controllers/useWebPendingAuthIntentController.ts",
-  "apps/web/src/controllers/useWebPersonalMemoryImportAction.ts",
   "apps/web/src/controllers/useWebProviderConnectionsController.ts",
   "apps/web/src/controllers/useWebPublicFunnelEntryController.ts",
   "apps/web/src/controllers/useWebShellActionController.ts",

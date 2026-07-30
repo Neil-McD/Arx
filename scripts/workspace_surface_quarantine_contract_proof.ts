@@ -33,7 +33,6 @@ const shellState = read("apps/web/src/controllers/useWebShellState.ts");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const voiceController = read("shared/useWebVoiceInputController.ts");
-const exportController = read("shared/useWebAccountDataExportController.ts");
 const shellProjection = read("apps/web/src/controllers/buildWebShellProjection.ts");
 const authShellProjection = read(
   "apps/web/src/controllers/buildWebAuthShellProjection.ts",
@@ -164,11 +163,6 @@ assert.doesNotMatch(
   voiceController,
   /"workspace"|appendWorkspaceTranscript|focusWorkspaceInput|workspaceVoice/,
   "the shared voice controller must expose only mounted community, direct-message, and member-agent surfaces",
-);
-assert.match(
-  exportController,
-  /exportThreadsCsv[\s\S]*exportMessagesCsv[\s\S]*exportMemoryCsv/,
-  "Settings data exports must remain independently owned after Workspace orchestration deletion",
 );
 assert.doesNotMatch(
   shellProjection,
@@ -572,8 +566,8 @@ assert.match(
 assert.doesNotMatch(app, /WebWorkspaceSurfaceHost|WebWorkspaceShellPanelsHost/);
 assert.match(
   mcp,
-  /community_context: "workspace_context"/,
-  "MCP wire compatibility must remain unchanged during UI quarantine",
+  /executePolynetCanonicalTool[\s\S]*POLYNET_CANONICAL_TOOL_NAMES/,
+  "Workspace UI retirement must preserve the canonical Polynet MCP executor",
 );
 
 console.log("workspace_surface_quarantine_contract_proof: ok");
