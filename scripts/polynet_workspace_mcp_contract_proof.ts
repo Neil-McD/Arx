@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getPlatformOperationContract } from "../shared/platformOperationContract.ts";
+import {
+  buildPolynetMcpSetup,
+  buildPolynetMcpSetupForOrigin,
+} from "../shared/polynetMcpSetup.ts";
 
 const root = process.cwd();
 
@@ -48,7 +52,18 @@ const integrationsSettingsUi = read(
   "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
 );
 const mcpSetup = read("shared/polynetMcpSetup.ts");
-const integrationsSettings = `${integrationsSettingsUi}\n${mcpSetup}`;
+const productionMcpSetup =
+  buildPolynetMcpSetupForOrigin("https://www.polynet.ai");
+const stagingMcpSetup =
+  buildPolynetMcpSetupForOrigin("https://polynet-staging.vercel.app");
+const integrationsSettings = [
+  integrationsSettingsUi,
+  mcpSetup,
+  productionMcpSetup.setupBundle,
+  productionMcpSetup.genericHttpConfig,
+  stagingMcpSetup.setupBundle,
+  stagingMcpSetup.genericHttpConfig,
+].join("\n");
 
 assertIncludes(
   integrationsSettingsUi,
@@ -173,17 +188,22 @@ assertIncludes(
 );
 assertIncludes(
   contract,
-  "New harness setup should use `polynet` as the canonical local server alias.",
+  "New production harness setup should use `polynet` as the canonical local server",
   "workspace MCP contract should define canonical polynet alias",
 );
 assertIncludes(
   contract,
-  "Existing harnesses that already have `polymcp` configured should treat it as the same Polynet MCP server.",
+  "The staging web app generates its packet from",
+  "workspace MCP contract should isolate staging setup",
+);
+assertIncludes(
+  contract,
+  "Existing production harnesses that already have `polymcp` configured",
   "workspace MCP contract should preserve legacy polymcp alias",
 );
 assertIncludes(
   contract,
-  "must not tell users to install both aliases unless the user explicitly wants to migrate",
+  "not tell users to install both aliases unless the user explicitly wants to",
   "workspace MCP contract should prevent duplicate alias installs",
 );
 assertIncludes(
@@ -249,49 +269,133 @@ assertIncludes(
 );
 
 assertIncludes(
-  integrationsSettings,
-  "POLYNET_MCP_CLAUDE_CODE_ADD_COMMAND",
-  "Polynet Claude Code add command constant",
+  integrationsSettingsUi,
+  "buildPolynetMcpSetupForOrigin(window.location.origin)",
+  "Integrations Settings should derive setup from its current trusted origin",
 );
 assertIncludes(
-  integrationsSettings,
-  "POLYNET_MCP_CODEX_ADD_COMMAND",
-  "Polynet Codex primary add command",
+  integrationsSettingsUi,
+  "setup.setupBundle",
+  "Integrations Settings should copy the environment-scoped setup bundle",
+);
+assertNotIncludes(
+  integrationsSettingsUi,
+  "POLYNET_MCP_SETUP_BUNDLE",
+  "Integrations Settings should not copy a static production setup bundle",
+);
+assertNotIncludes(
+  integrationsSettingsUi,
+  "POLYNET_MCP_TOOL_COUNT_LABEL",
+  "Integrations Settings should not advertise the transitional tool count",
+);
+assert.deepEqual(
+  {
+    environment: productionMcpSetup.environment,
+    endpointUrl: productionMcpSetup.endpointUrl,
+    serverAlias: productionMcpSetup.serverAlias,
+  },
+  {
+    environment: "production",
+    endpointUrl: "https://www.polynet.ai/runtime/mcp",
+    serverAlias: "polynet",
+  },
+);
+assert.deepEqual(
+  {
+    environment: stagingMcpSetup.environment,
+    endpointUrl: stagingMcpSetup.endpointUrl,
+    serverAlias: stagingMcpSetup.serverAlias,
+  },
+  {
+    environment: "staging",
+    endpointUrl: "https://polynet-staging.vercel.app/runtime/mcp",
+    serverAlias: "polynet-staging",
+  },
+);
+assert.equal(
+  buildPolynetMcpSetupForOrigin("https://polynet.ai").endpointUrl,
+  "https://www.polynet.ai/runtime/mcp",
+  "the production apex must resolve to the canonical www MCP endpoint",
+);
+assert.deepEqual(
+  {
+    environment:
+      buildPolynetMcpSetupForOrigin("http://localhost:5173").environment,
+    endpointUrl:
+      buildPolynetMcpSetupForOrigin("http://localhost:5173").endpointUrl,
+    serverAlias:
+      buildPolynetMcpSetupForOrigin("http://localhost:5173").serverAlias,
+  },
+  {
+    environment: "development",
+    endpointUrl: "http://localhost:5173/runtime/mcp",
+    serverAlias: "polynet-local",
+  },
 );
 assertIncludes(
-  integrationsSettings,
-  "POLYNET_MCP_CODEX_LOGIN_FALLBACK_COMMAND",
-  "Polynet Codex login fallback command",
+  productionMcpSetup.claudeCodeAddCommand,
+  "claude mcp add --transport http polynet https://www.polynet.ai/runtime/mcp",
+  "production Claude Code setup",
 );
 assertIncludes(
-  integrationsSettings,
-  "POLYNET_MCP_OPENCLAW_ADD_COMMAND",
-  "Polynet OpenClaw add command constant",
+  stagingMcpSetup.claudeCodeAddCommand,
+  "claude mcp add --transport http polynet-staging https://polynet-staging.vercel.app/runtime/mcp",
+  "staging Claude Code setup",
 );
 assertIncludes(
-  integrationsSettings,
-  "POLYNET_MCP_OPENCLAW_LOGIN_COMMAND",
-  "Polynet OpenClaw login command constant",
+  productionMcpSetup.codexAddCommand,
+  "codex mcp add polynet --url https://www.polynet.ai/runtime/mcp",
+  "production Codex setup",
 );
 assertIncludes(
-  integrationsSettings,
-  "POLYNET_MCP_HERMES_CONFIG",
-  "Polynet Hermes config constant",
+  stagingMcpSetup.codexAddCommand,
+  "codex mcp add polynet-staging --url https://polynet-staging.vercel.app/runtime/mcp",
+  "staging Codex setup",
 );
-assertIncludes(
-  integrationsSettings,
-  "POLYNET_MCP_HERMES_LOGIN_COMMAND",
-  "Polynet Hermes login command constant",
+assertNotIncludes(
+  stagingMcpSetup.setupBundle,
+  "https://www.polynet.ai/runtime/mcp",
+  "staging setup must never target production",
 );
-assertIncludes(
-  mcpSetup,
-  "getPolynetMcpToolDefinitions().length",
-  "derived PolyMCP integration tool count",
+assertNotIncludes(
+  productionMcpSetup.setupBundle,
+  "polynet-staging",
+  "production setup must never reuse the staging alias",
 );
-assertIncludes(
-  integrationsSettings,
-  "claude mcp add --transport http polynet",
-  "Polynet Claude Code remote HTTP add command",
+assert.throws(
+  () => buildPolynetMcpSetupForOrigin("https://example.com/not-an-origin"),
+  /polynet_mcp_origin_must_be_bare/,
+);
+assert.throws(
+  () => buildPolynetMcpSetupForOrigin("http://example.com"),
+  /polynet_mcp_origin_must_use_https/,
+);
+assert.throws(
+  () =>
+    buildPolynetMcpSetup({
+      environment: "staging",
+      endpointUrl: "https://polynet-staging.vercel.app/runtime/mcp?unsafe=1",
+      serverAlias: "polynet-staging",
+    }),
+  /polynet_mcp_endpoint_must_be_exact_runtime_path/,
+);
+assert.throws(
+  () =>
+    buildPolynetMcpSetup({
+      environment: "staging",
+      endpointUrl: "https://polynet-staging.vercel.app/runtime/mcp",
+      serverAlias: "polynet-staging;unsafe",
+    }),
+  /polynet_mcp_server_alias_invalid/,
+);
+assert.throws(
+  () =>
+    buildPolynetMcpSetup({
+      environment: "preview" as never,
+      endpointUrl: "https://polynet-staging.vercel.app/runtime/mcp",
+      serverAlias: "polynet-staging",
+    }),
+  /polynet_mcp_environment_invalid/,
 );
 assertIncludes(
   integrationsSettings,
@@ -335,8 +439,8 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "POLYNET_MCP_GENERIC_HTTP_CONFIG",
-  "Polynet generic HTTP config payload",
+  "genericHttpConfig",
+  "Polynet generic HTTP config implementation",
 );
 assertIncludes(
   integrationsSettings,
@@ -345,7 +449,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "polynet: {",
+  '"polynet": {',
   "Polynet generic JSON config should use the canonical polynet key",
 );
 assertIncludes(
@@ -355,8 +459,8 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "POLYNET_MCP_SETUP_BUNDLE",
-  "Polynet canonical setup bundle",
+  "buildPolynetMcpSetupForOrigin",
+  "Polynet environment-aware setup builder",
 );
 assertIncludes(
   integrationsSettings,
@@ -400,7 +504,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Use `polynet` as the server alias for new setup.",
+  "Use `polynet` as the server alias for this production setup.",
   "Polynet setup packet should canonicalize new installs to polynet",
 );
 assertIncludes(
@@ -450,7 +554,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "Add Polynet with the matching setup path below, unless Polynet is already configured.",
+  "Add Polynet with the matching setup path below, unless this exact endpoint is already configured.",
   "Polynet setup packet should not duplicate existing MCP registration",
 );
 assertIncludes(
@@ -460,7 +564,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "verify the connection by listing the user's Polynet community contexts",
+  "verify the connection by listing the user's Polynet communities",
   "PolyMCP setup packet should require connection verification",
 );
 assertIncludes(
@@ -485,7 +589,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "If Polynet already appears as `Needs authentication`, do not re-add it.",
+  "If Polynet already appears as `Needs authentication` for this endpoint, do not re-add it.",
   "Polynet setup packet should route configured Claude Code servers directly to auth",
 );
 assertIncludes(
@@ -514,7 +618,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  "If Polynet is already configured, do not add it again.",
+  "If this exact endpoint is already configured, do not add it again.",
   "Polynet setup packet should avoid duplicate Codex registration",
 );
 assertIncludes(
@@ -549,7 +653,7 @@ assertIncludes(
 );
 assertIncludes(
   integrationsSettings,
-  '`    url: "${POLYNET_MCP_ENDPOINT_URL}"`',
+  '    url: "https://www.polynet.ai/runtime/mcp"',
   "PolyMCP setup packet should include the Hermes remote endpoint",
 );
 assertIncludes(

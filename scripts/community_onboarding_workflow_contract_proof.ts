@@ -307,8 +307,10 @@ assert.match(dock, /disabled=\{showOnboardingAgentFocus\}/);
 assert.doesNotMatch(dockCss, /member-agent-dock-header::after/);
 assert.doesNotMatch(dockCss, /member-agent-dock-transcript::after/);
 assert.match(dockCss, /member-agent-dock\.is-onboarding \.member-agent-dock-panel/);
-assert.match(mcpGuide, /POLYNET_MCP_SETUP_BUNDLE/);
-assert.match(mcpGuide, /POLYNET_MCP_TOOL_COUNT_LABEL/);
+assert.match(mcpGuide, /buildPolynetMcpSetupForOrigin\(window\.location\.origin\)/);
+assert.match(mcpGuide, /setup\.setupBundle/);
+assert.match(mcpGuide, /OAuth protected/);
+assert.doesNotMatch(mcpGuide, /Polynet tools/);
 assert.match(mcpGuide, /DiscoverCatalogLogo/);
 assert.match(mcpGuide, /WebCommunityOnboardingConciergeSurface/);
 assert.doesNotMatch(mcpGuide, /props\.narration|isPreparing/);
@@ -334,8 +336,12 @@ for (const asset of [
 }
 assert.doesNotMatch(mcpGuide, /POLYNET_MCP_ENDPOINT_URL/);
 assert.match(mcpGuide, /props\.onComplete/);
-assert.match(integrations, /POLYNET_MCP_SETUP_BUNDLE/);
-assert.match(mcpSetup, /https:\/\/www\.polynet\.ai\/runtime\/mcp/);
+assert.match(integrations, /buildPolynetMcpSetupForOrigin\(window\.location\.origin\)/);
+assert.match(integrations, /setup\.setupBundle/);
+assert.doesNotMatch(integrations, /Polynet tools/);
+assert.match(mcpSetup, /POLYNET_PRODUCTION_HOSTS = new Set\(\["polynet\.ai", "www\.polynet\.ai"\]\)/);
+assert.match(mcpSetup, /POLYNET_STAGING_HOST = "polynet-staging\.vercel\.app"/);
+assert.match(mcpSetup, /POLYNET_MCP_PATH = "\/runtime\/mcp"/);
 assert.doesNotMatch(mcpGuide, /access token|bearer token/i);
 assert.doesNotMatch(onboardingGateway, /communityOnboardingConcierge:/);
 assert.doesNotMatch(onboardingShared, /prompt_version|resolved_model_id|failure_code|requested_at/);

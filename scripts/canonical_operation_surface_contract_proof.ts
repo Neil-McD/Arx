@@ -11,7 +11,6 @@ import {
 import { POLYNET_PLATFORM_TOOL_SURFACE } from "../shared/polynetPlatformToolSurface.ts";
 import { getFixedRuntimeToolPolicy } from "../shared/runtimeToolPolicy.ts";
 import { getToolDefinition } from "../shared/toolRegistry.ts";
-import { POLYNET_MCP_TOOL_COUNT_LABEL } from "../shared/polynetMcpSetup.ts";
 
 const root = process.cwd();
 const read = (relativePath: string): string =>
@@ -187,11 +186,6 @@ for (const operation of PLATFORM_OPERATION_CONTRACTS) {
 
 const mcpDefinitions = getPolynetMcpToolDefinitions();
 assert.equal(mcpDefinitions.length, 26, "official Polynet MCP must expose all 26 tools");
-assert.equal(
-  POLYNET_MCP_TOOL_COUNT_LABEL,
-  `${mcpDefinitions.length} Polynet tools`,
-  "MCP setup copy must derive from the real tool count",
-);
 
 const mcpSource = read("shared/polynetMcp.ts");
 const registrySource = read("shared/toolRegistry.ts");

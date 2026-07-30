@@ -4,8 +4,7 @@ import { Copy } from "lucide-react";
 import { tryCopyTextToClipboard } from "../../../../shared/chatUi";
 import { buildCommunityOnboardingCopy } from "../../../../shared/communityOnboardingCopy";
 import {
-  POLYNET_MCP_SETUP_BUNDLE,
-  POLYNET_MCP_TOOL_COUNT_LABEL,
+  buildPolynetMcpSetupForOrigin,
 } from "../../../../shared/polynetMcpSetup";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { WebCommunityOnboardingConciergeSurface } from "./WebCommunityOnboardingConciergeSurface";
@@ -49,7 +48,8 @@ export function WebCommunityOnboardingMcpGuide(props: {
     setCopyState("copying");
     setCopyError(null);
     try {
-      const copied = await tryCopyTextToClipboard(POLYNET_MCP_SETUP_BUNDLE);
+      const setup = buildPolynetMcpSetupForOrigin(window.location.origin);
+      const copied = await tryCopyTextToClipboard(setup.setupBundle);
       if (!copied) {
         setCopyState("error");
         setCopyError("We couldn’t copy the setup packet. Try again.");
@@ -122,7 +122,7 @@ export function WebCommunityOnboardingMcpGuide(props: {
                 <span>
                   Access your authorized Polynet communities from compatible AI harnesses.
                 </span>
-                <small>{POLYNET_MCP_TOOL_COUNT_LABEL} · OAuth protected</small>
+                <small>OAuth protected</small>
               </div>
             </div>
             <button

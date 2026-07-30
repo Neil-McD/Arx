@@ -3,8 +3,7 @@ import { Copy } from "lucide-react";
 
 import { tryCopyTextToClipboard } from "../../../../shared/chatUi";
 import {
-  POLYNET_MCP_SETUP_BUNDLE,
-  POLYNET_MCP_TOOL_COUNT_LABEL,
+  buildPolynetMcpSetupForOrigin,
 } from "../../../../shared/polynetMcpSetup";
 import {
   WebSkillsSettingsSection,
@@ -30,7 +29,8 @@ export function WebIntegrationsSettingsSection(
 
   const handleCopySetup = async () => {
     try {
-      const copied = await tryCopyTextToClipboard(POLYNET_MCP_SETUP_BUNDLE);
+      const setup = buildPolynetMcpSetupForOrigin(window.location.origin);
+      const copied = await tryCopyTextToClipboard(setup.setupBundle);
       setCopyState(copied ? "copied" : "error");
     } catch {
       setCopyState("error");
@@ -61,9 +61,6 @@ export function WebIntegrationsSettingsSection(
                   <div className="integration-mounted-main">
                     <div className="integration-mounted-title-row">
                       <strong>Polynet</strong>
-                      <span className="integration-status-pill">
-                        {POLYNET_MCP_TOOL_COUNT_LABEL}
-                      </span>
                       <span className="integration-status-pill">
                         OAuth protected
                       </span>

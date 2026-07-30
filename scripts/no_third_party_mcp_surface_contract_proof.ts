@@ -89,7 +89,8 @@ assert.doesNotMatch(vercel, /"src": "\/runtime\/mcp", "status": 404/);
 const settings = read(
   "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
 );
-assert.match(settings, /POLYNET_MCP_SETUP_BUNDLE/);
+assert.match(settings, /buildPolynetMcpSetupForOrigin/);
+assert.doesNotMatch(settings, /POLYNET_MCP_TOOL_COUNT_LABEL/);
 assert.match(settings, /WebSkillsSettingsSection/);
 assert.doesNotMatch(
   settings,

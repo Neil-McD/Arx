@@ -228,7 +228,19 @@ The copied setup should be a self-contained setup packet for the receiving agent
 
 The packet must keep the receiving agent focused on the Polynet connection. It should not ask users for access tokens. It should not repair unrelated shell aliases, package managers, or local installs unless the user explicitly asks. If Polynet is already configured but needs authentication, the packet should skip setup debugging and move directly to the harness sign-in path.
 
-New harness setup should use `polynet` as the canonical local server alias. Existing harnesses that already have `polymcp` configured should treat it as the same Polynet MCP server. The copied setup must not tell users to install both aliases unless the user explicitly wants to migrate the local alias.
+New production harness setup should use `polynet` as the canonical local server
+alias. Existing production harnesses that already have `polymcp` configured
+should treat it as the same Polynet MCP server. The copied production setup must
+not tell users to install both aliases unless the user explicitly wants to
+migrate the local alias.
+
+Non-production setup is isolated. The staging web app generates its packet from
+its own trusted origin, targets
+`https://polynet-staging.vercel.app/runtime/mcp`, and uses
+`polynet-staging`. Production continues to target
+`https://www.polynet.ai/runtime/mcp` with `polynet`. A copied packet must never
+send a staging user to production or reuse one environment's alias for another
+environment.
 
 If the receiving harness gets a Polynet authorization URL, the packet should prefer automatic browser opening or a clean markdown link such as `[Sign in to Polynet](AUTHORIZATION_URL)`. It should not paste the raw full OAuth URL unless no cleaner link path is available. It should only ask the user to paste the localhost callback URL back if the browser callback fails or cannot be reached.
 
