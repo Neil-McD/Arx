@@ -1224,7 +1224,7 @@ async function executeCanonicalWrite(args: {
         authSubject: args.authSubject,
         communityId: target.communityId,
         idempotencyKey: canonicalIdempotencyKey,
-        text: String(content.text ?? ""),
+        text: String(content.text ?? content.body ?? ""),
         ...(rootId ? { rootId } : {}),
         ...(content.reply_to_message_id
           ? { replyToMessageId: String(content.reply_to_message_id) }
@@ -1344,7 +1344,7 @@ async function executeCanonicalWrite(args: {
           idempotencyKey,
           postType,
           title: requiredString(content.title, 180),
-          body: String(content.body ?? ""),
+          body: String(content.body ?? content.text ?? ""),
           evidence: Array.isArray(content.evidence)
             ? content.evidence.map((value) => String(value ?? ""))
             : [],

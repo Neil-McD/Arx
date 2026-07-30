@@ -361,14 +361,13 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
     path: "/communities/canonical-community/channels/general/",
     mode: "create",
     content: {
-      text: "A member-agent field report.",
+      body: "A member-agent field report.",
       root_id: null,
       reply_to_message_id: null,
       mentions: null,
       attachments: null,
       post_type: null,
       title: null,
-      body: null,
       evidence: null,
       summary: null,
       operations: null,
@@ -452,7 +451,7 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
       toolName: "polynet_write",
       input: {
         ...memberWrite,
-        content: { text: "Conflicting payload." },
+        content: { body: "Conflicting payload." },
       },
     }),
   ).resolves.toMatchObject({
