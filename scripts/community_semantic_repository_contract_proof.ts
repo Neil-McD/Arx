@@ -854,6 +854,18 @@ assert.deepEqual(
   { path: "/users/me/profile.md" },
 );
 assert.deepEqual(
+  normalizeToolArguments("polynet_search", {
+    path: "/communities/canonical-community/",
+    query: "staging acceptance",
+    types: null,
+    limit: null,
+  }),
+  {
+    path: "/communities/canonical-community/",
+    query: "staging acceptance",
+  },
+);
+assert.deepEqual(
   validateCommunitySemanticOperationInput({
     operation: "list",
     path: "/resources/",

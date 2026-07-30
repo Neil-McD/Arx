@@ -2009,7 +2009,11 @@ export function normalizeToolArguments(
     if (!parsedPath.ok) throw new Error(parsedPath.message);
     const query = normalizeString(args.query);
     if (!query) throw new Error("polynet_search requires query.");
-    if (args.types !== undefined && !Array.isArray(args.types)) {
+    if (
+      args.types !== undefined &&
+      args.types !== null &&
+      !Array.isArray(args.types)
+    ) {
       throw new Error("polynet_search types must be an array.");
     }
     const types = Array.isArray(args.types)
