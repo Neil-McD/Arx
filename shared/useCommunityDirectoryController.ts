@@ -57,9 +57,7 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
       });
       if (communityDirectoryLoadSeqRef.current !== seq) return;
       setCommunityDirectoryMembers(page.rows);
-      setCommunityDirectoryMemberCount(
-        typeof page.totalCount === "number" ? page.totalCount : page.rows.length,
-      );
+      setCommunityDirectoryMemberCount(page.totalCount);
       setCommunityDirectoryMembersNextCursor(page.continueCursor);
       setCommunityDirectoryMembersHasMore(Boolean(page.continueCursor && !page.isDone));
     } catch (error) {

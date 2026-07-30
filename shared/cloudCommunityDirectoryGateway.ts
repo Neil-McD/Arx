@@ -11,7 +11,6 @@ export type CloudCommunityDirectoryMemberRow = {
   premium_badge?: PremiumMemberBadgeSummary | null;
   role: string;
   created_at: string;
-  last_active_at?: string | null;
 };
 
 export type CloudCommunityDirectoryPage = {
@@ -67,20 +66,6 @@ export async function listCloudCommunityDirectoryPage<SessionT>(
         : null,
     isDone: payload?.isDone === true,
   };
-}
-
-export async function countCloudCommunityDirectoryMembers<SessionT>(
-  params: {
-    session: SessionT;
-    communityId: string;
-  },
-): Promise<number | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("communityDirectory:countCommunityDirectoryMembers" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  return parseGatewayNumberLike(payload);
 }
 
 export async function searchCloudCommunityMentionCandidates<SessionT>(

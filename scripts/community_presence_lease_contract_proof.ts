@@ -17,8 +17,10 @@ const schema = read("convex/schema.ts");
 const contract = read("shared/communityPresenceContract.ts");
 const core = read("convex/communityPresenceCore.ts");
 const communityPublic = read("convex/communityPublic.ts");
+const communityDirectory = read("convex/communityDirectory.ts");
 const directMessageEmails = read("convex/directMessageEmails.ts");
 const gateway = read("shared/cloudPublicFunnelGateway.ts");
+const directoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
 const controller = read(
   "apps/web/src/controllers/useWebActiveCommunityShellController.ts",
 );
@@ -68,6 +70,9 @@ const presenceEffect = sectionBetween(
   controller,
   "if (!params.session || !params.activeCommunityId) {\n      setActiveCommunityPresenceSummaryState(null);",
   "useEffect(() => {\n    setActiveCommunityPresenceSummaryState(null);",
+);
+const directoryPageQuery = communityDirectory.slice(
+  communityDirectory.indexOf("export const listCommunityDirectoryPage"),
 );
 
 assert.match(
@@ -179,6 +184,22 @@ assert.doesNotMatch(
   directMessageEmails,
   /lastSeenAt >= Number\(message\.createdAt/,
   "DM email suppression must not infer current presence from message-relative last-seen time",
+);
+
+assert.match(
+  directoryPageQuery,
+  /by_community_createdAt[\s\S]*\.order\("asc"\)[\s\S]*\.paginate\(\{[\s\S]*maximumRowsRead:[\s\S]*readCommunityActiveMemberCount\(community\)/,
+  "the member directory must page the durable roster through one bounded canonical cursor",
+);
+assert.doesNotMatch(
+  directoryPageQuery,
+  /communityPresence|by_community_lastSeenAt|last_active_at|\.collect\(\)|normalizeDirectoryCursor|orderedCandidates/,
+  "presence must remain an overlay and must never own directory ordering or pagination",
+);
+assert.doesNotMatch(
+  directoryGateway,
+  /last_active_at|countCommunityDirectoryMembers/,
+  "the directory gateway must not expose a duplicate activity history or recount surface",
 );
 
 assert.match(

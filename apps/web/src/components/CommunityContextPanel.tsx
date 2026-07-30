@@ -26,7 +26,6 @@ export type CommunityRailMember = {
   premium_badge?: PremiumMemberBadgeSummary | null;
   role: string;
   created_at?: string | null;
-  last_active_at?: string | null;
 };
 
 export type CommunityAdmissionEntryPolicy = "open" | "approval" | "paid_subscription";
@@ -369,7 +368,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     const isOnline = online.has(member.user_id);
     const latestObservedLastActiveAt = observedLastActiveAtByUserId[member.user_id];
     const activityLabel = formatMemberActivityLabel(
-      latestObservedLastActiveAt ?? member.last_active_at,
+      latestObservedLastActiveAt,
       isOnline,
     );
     const isOwnerMember = member.user_id === props.ownerId || member.role === "owner";
