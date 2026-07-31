@@ -82,6 +82,19 @@ assert.match(
   /\.community-member-chat \.community-interaction-drawer-composer \{[\s\S]*position: absolute;[\s\S]*bottom: 0;[\s\S]*background: transparent;/,
   "member thread composer should float over replies",
 );
+const desktopAgentThreadSafeAreaRule = baseCss.match(
+  /\.app-root:has\(\.member-agent-dock:not\(\.is-open\) \.member-agent-dock-launcher\)\s+\.community-member-chat\s+\.community-interaction-thread-drawer\s+\.community-interaction-drawer-composer \{[^}]*\}/,
+)?.[0] ?? "";
+assert.match(
+  desktopAgentThreadSafeAreaRule,
+  /padding-right: calc\(12px \+ var\(--member-agent-desktop-launcher-clearance\)\);/,
+  "a closed desktop agent launcher should reserve its exact safe area beside the thread composer",
+);
+assert.doesNotMatch(
+  desktopAgentThreadSafeAreaRule,
+  /community-interaction-main-composer/,
+  "the agent launcher safe area must not narrow the main community composer",
+);
 assert.match(
   baseCss,
   /\.community-member-chat \.community-interaction-feed-scroll \{[\s\S]*--mobile-community-composer-height/,
@@ -154,15 +167,10 @@ assert.match(
   /\.member-agent-dock-composer \{[\s\S]*background: var\(--composer-surface,[\s\S]*border-radius: var\(--composer-radius/,
   "member-agent composer should share the canonical material and shape",
 );
-assert.match(
-  memberAgentCss,
-  /\.member-agent-dock-composer:focus-within \{[^}]*background: color-mix\(/,
-  "member-agent composer may use a subtle surface shift to communicate focus",
-);
 assert.doesNotMatch(
   memberAgentCss,
-  /\.member-agent-dock-composer:focus-within \{[^}]*(?:outline|border(?:-color)?):/,
-  "member-agent composer focus must never introduce an outline or ring",
+  /\.member-agent-dock-composer:focus-within/,
+  "member-agent composer shell should remain visually stable while focused",
 );
 
 console.log("composer_unification_contract_proof: ok");

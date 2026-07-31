@@ -3536,6 +3536,16 @@
   background: transparent;
 }
 
+/* The closed desktop agent launcher and thread composer share the viewport's
+   bottom-right corner. Reserve the launcher's exact footprint only while both
+   controls exist; the mobile shell does not render the launcher. */
+.app-root:has(.member-agent-dock:not(.is-open) .member-agent-dock-launcher)
+  .community-member-chat
+  .community-interaction-thread-drawer
+  .community-interaction-drawer-composer {
+  padding-right: calc(12px + var(--member-agent-desktop-launcher-clearance));
+}
+
 /* Keep the scrolling layer cheap: a static layer behind each floating pill
    softens content at the viewport edge without masking or repainting the feed. */
 .community-member-chat .community-interaction-main-composer::before,
@@ -12900,4 +12910,3 @@ button.chat-reply-quote:hover {
     width: 56px;
   }
 }
-

@@ -1,3 +1,11 @@
+:root {
+  --member-agent-desktop-launcher-size: 60px;
+  --member-agent-desktop-launcher-edge: 20px;
+  --member-agent-desktop-launcher-clearance: calc(
+    var(--member-agent-desktop-launcher-size) + var(--member-agent-desktop-launcher-edge)
+  );
+}
+
 .member-agent-dock {
   --member-agent-accent: var(--accent-selection);
   --member-agent-accent-strong: color-mix(
@@ -39,8 +47,8 @@
     inset 0 1px 0 color-mix(in srgb, var(--member-agent-accent-strong) 10%, transparent);
   --member-agent-launcher-glyph-filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: var(--member-agent-desktop-launcher-edge);
+  bottom: var(--member-agent-desktop-launcher-edge);
   z-index: 70;
   pointer-events: none;
 }
@@ -72,8 +80,8 @@
   right: 0;
   bottom: 0;
   display: grid;
-  width: 60px;
-  height: 60px;
+  width: var(--member-agent-desktop-launcher-size);
+  height: var(--member-agent-desktop-launcher-size);
   place-items: center;
   overflow: visible;
   color: var(--member-agent-accent);

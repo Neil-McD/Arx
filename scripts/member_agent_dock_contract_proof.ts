@@ -795,7 +795,17 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.member-agent-dock-launcher \{[\s\S]*?width: 60px;[\s\S]*?height: 60px;[\s\S]*?color: var\(--member-agent-accent\);[\s\S]*?background: var\(--member-agent-launcher-background\);[\s\S]*?border: 1px solid var\(--member-agent-launcher-border\);[\s\S]*?border-radius: 16px;[\s\S]*?box-shadow: var\(--member-agent-launcher-shadow\);/,
+  /:root \{[\s\S]*--member-agent-desktop-launcher-size: 60px;[\s\S]*--member-agent-desktop-launcher-edge: 20px;[\s\S]*--member-agent-desktop-launcher-clearance: calc\([\s\S]*var\(--member-agent-desktop-launcher-size\) \+ var\(--member-agent-desktop-launcher-edge\)[\s\S]*\);/,
+  "the launcher should expose one shared desktop footprint contract",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock \{[\s\S]*?right: var\(--member-agent-desktop-launcher-edge\);[\s\S]*?bottom: var\(--member-agent-desktop-launcher-edge\);/,
+  "the desktop dock should consume its shared viewport-edge contract",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock-launcher \{[\s\S]*?width: var\(--member-agent-desktop-launcher-size\);[\s\S]*?height: var\(--member-agent-desktop-launcher-size\);[\s\S]*?color: var\(--member-agent-accent\);[\s\S]*?background: var\(--member-agent-launcher-background\);[\s\S]*?border: 1px solid var\(--member-agent-launcher-border\);[\s\S]*?border-radius: 16px;[\s\S]*?box-shadow: var\(--member-agent-launcher-shadow\);/,
   "the agent launcher must keep its theme-derived identity inside a compact, high-contrast control",
 );
 assert.match(
