@@ -372,7 +372,7 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /handleAddPageDraft[\s\S]*isCreatingPageDraft[\s\S]*handleCreateBlankPageDraft[\s\S]*beginInlineEditResource\(created\)[\s\S]*setActiveResourceEditField\("title"\)/,
+  /handleAddPageDraft[\s\S]*runPageDraftCreation[\s\S]*handleCreateBlankPageDraft[\s\S]*beginInlineEditResource\(created\)[\s\S]*setActiveResourceEditField\("title"\)/,
   "add-page clicks must create an inline-editable draft page instead of opening the modal",
 );
 assert.match(
@@ -730,13 +730,23 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /actions\.handleCreatePageDraftFromSource\(selectedResource\)/,
+  /const pageDraftCreationInFlightRef = useRef\(false\)/,
+  "page draft creation must own one immediate ref-backed single-flight boundary",
+);
+assert.match(
+  resourcesPanel,
+  /runPageDraftCreation[\s\S]*pageDraftCreationInFlightRef\.current[\s\S]*setIsCreatingPageDraft\(true\)[\s\S]*finally[\s\S]*pageDraftCreationInFlightRef\.current = false[\s\S]*setIsCreatingPageDraft\(false\)/,
+  "page draft creation must acquire immediately and release its UI boundary on every outcome",
+);
+assert.match(
+  resourcesPanel,
+  /handleCreatePageDraftFromSource[\s\S]*runPageDraftCreation[\s\S]*actions\.handleCreatePageDraftFromSource\(resource\)/,
   "resources panel must expose source-to-page draft creation from the reader",
 );
 assert.match(
   resourcesPanel,
-  />\s*Draft page\s*</,
-  "source reader draft action must be visible to community operators",
+  /onClick=\{\(\) => void handleCreatePageDraftFromSource\(selectedResource\)\}[\s\S]*disabled=\{isCreatingPageDraft\}[\s\S]*isCreatingPageDraft \? "Creating\.\.\." : "Draft page"/,
+  "source reader draft action must expose and enforce its single-flight state",
 );
 
 console.log("PASS: community resources knowledge contract is canonical.");

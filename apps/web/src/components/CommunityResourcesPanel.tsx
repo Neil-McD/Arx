@@ -659,6 +659,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     useState<WebCommunityResourceInlineEditorField | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isCreatingPageDraft, setIsCreatingPageDraft] = useState(false);
+  const pageDraftCreationInFlightRef = useRef(false);
   const pendingBodyHydrationRefreshIdsRef = useRef(new Set<string>());
   const canManageResources = capabilities.canOperateResources && !isPreviewMode;
   const previewSwitcherStyle = buildPlatformSwitcherStyle(2, isPreviewMode ? 1 : 0);
@@ -1157,19 +1158,38 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     setActiveResourceEditField(field);
   };
 
-  const handleAddPageDraft = async (moduleId: string | null) => {
-    if (isCreatingPageDraft) return;
+  const runPageDraftCreation = async (
+    createDraft: () => Promise<CommunityResource | null>,
+  ): Promise<CommunityResource | null> => {
+    if (pageDraftCreationInFlightRef.current) return null;
+    pageDraftCreationInFlightRef.current = true;
     setIsCreatingPageDraft(true);
     try {
-      const created = await actions.handleCreateBlankPageDraft(moduleId);
-      if (!created) return;
-      setPendingOpenResourceId(created.id);
-      actions.handleSelectModule(getResourceCategoryId(created));
-      actions.setOpenResourceEmbedId(created.id);
-      actions.resourceEditor.beginInlineEditResource(created);
-      setActiveResourceEditField("title");
+      return await createDraft();
     } finally {
+      pageDraftCreationInFlightRef.current = false;
       setIsCreatingPageDraft(false);
+    }
+  };
+
+  const handleAddPageDraft = async (moduleId: string | null) => {
+    const created = await runPageDraftCreation(
+      () => actions.handleCreateBlankPageDraft(moduleId),
+    );
+    if (!created) return;
+    setPendingOpenResourceId(created.id);
+    actions.handleSelectModule(getResourceCategoryId(created));
+    actions.setOpenResourceEmbedId(created.id);
+    actions.resourceEditor.beginInlineEditResource(created);
+    setActiveResourceEditField("title");
+  };
+
+  const handleCreatePageDraftFromSource = async (resource: CommunityResource) => {
+    const created = await runPageDraftCreation(
+      () => actions.handleCreatePageDraftFromSource(resource),
+    );
+    if (created) {
+      setPendingOpenResourceId(created.id);
     }
   };
 
@@ -1444,13 +1464,10 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                       <button
                         className="resources-add-choice"
                         type="button"
-                        onClick={() => {
-                          void actions.handleCreatePageDraftFromSource(selectedResource).then((created) => {
-                            if (created) setPendingOpenResourceId(created.id);
-                          });
-                        }}
+                        onClick={() => void handleCreatePageDraftFromSource(selectedResource)}
+                        disabled={isCreatingPageDraft}
                       >
-                        Draft page
+                        {isCreatingPageDraft ? "Creating..." : "Draft page"}
                       </button>
                     </div>
                   ) : null}
