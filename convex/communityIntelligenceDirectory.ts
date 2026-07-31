@@ -8,6 +8,7 @@ import {
   normalizeSlug,
   requireCommunityChatAccess,
   requireCommunityManager,
+  resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
   type CommunityResourceLike,
@@ -878,6 +879,22 @@ function mapNodeRow(row: IntelligenceNodeRow) {
   };
 }
 
+async function mapNodeRowForAuthorizedRead(
+  ctx: any,
+  row: IntelligenceNodeRow,
+  userIdCache: Map<string, string | null>,
+) {
+  return {
+    ...mapNodeRow(row),
+    created_by_user_id: row.createdByUserId
+      ? await resolvePublicUserId(ctx, row.createdByUserId, userIdCache)
+      : null,
+    last_updated_by_user_id: row.lastUpdatedByUserId
+      ? await resolvePublicUserId(ctx, row.lastUpdatedByUserId, userIdCache)
+      : null,
+  };
+}
+
 function mapEdgeRow(row: IntelligenceEdgeRow) {
   return {
     id: normalizeIdValue(row._id),
@@ -901,6 +918,19 @@ function mapEdgeRow(row: IntelligenceEdgeRow) {
     compiler_run_id: row.compilerRunId ?? null,
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+async function mapEdgeRowForAuthorizedRead(
+  ctx: any,
+  row: IntelligenceEdgeRow,
+  userIdCache: Map<string, string | null>,
+) {
+  return {
+    ...mapEdgeRow(row),
+    created_by_user_id: row.createdByUserId
+      ? await resolvePublicUserId(ctx, row.createdByUserId, userIdCache)
+      : null,
   };
 }
 
@@ -4095,6 +4125,7 @@ export const readCommunityMemoryInternal = internalMutation({
         edge: IntelligenceEdgeRow;
         direction: "incoming" | "outgoing";
       }> = [];
+      const publicUserIdCache = new Map<string, string | null>();
       const seenEdgeIds = new Set<string>();
       for (const candidate of edgeCandidates) {
         const edgeId = normalizeIdValue(candidate.edge._id);
@@ -4140,7 +4171,11 @@ export const readCommunityMemoryInternal = internalMutation({
         if (!neighbor) continue;
         edges.push({
           direction: candidate.direction,
-          edge: mapEdgeRow(candidate.edge),
+          edge: await mapEdgeRowForAuthorizedRead(
+            ctx,
+            candidate.edge,
+            publicUserIdCache,
+          ),
           neighbor,
         });
       }
@@ -4184,7 +4219,11 @@ export const readCommunityMemoryInternal = internalMutation({
         retrieval_log_id: normalizeIdValue(retrievalLog._id),
         retrieval_receipt: mapCommunityMemoryRetrievalReceipt(retrievalLog),
         node: {
-          ...mapNodeRow(node),
+          ...(await mapNodeRowForAuthorizedRead(
+            ctx,
+            node,
+            publicUserIdCache,
+          )),
           grade: communityMemoryGrade(node.status),
         },
         edges,

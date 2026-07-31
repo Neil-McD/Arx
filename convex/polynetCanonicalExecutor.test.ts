@@ -557,6 +557,7 @@ test("community-root search returns canonical paths that round-trip through read
         truncated: false,
       },
     });
+    expect(JSON.stringify(read)).not.toContain(String(fixture.ownerId));
   }
 
   const memberSearch = await executePolynetCanonicalTool({
