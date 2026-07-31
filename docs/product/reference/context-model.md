@@ -3,65 +3,77 @@ id: product.reference.context_model
 title: Context Model
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-05-11
+last_verified: 2026-07-30
 ---
 
 # Context Model
 
 ## Definition
 
-The context model defines what information the agent can use when responding.
+The context model defines what information an agent can use for one turn and
+what authority applies to every operation.
+
+Context guides relevance. It never grants access.
 
 ## Context Stack
 
-1. Platform doctrine
-2. Agent soul
-3. Explanation and operating policy
-4. Community lens, if backend validated
-5. Platform harness context, including active tool families and optional project/workspace context
-6. Personal skill and community skill prompt suffixes
-7. Runtime turn context, including thread working state, terminal/tool evidence, and temporal context
+1. Platform doctrine and safety
+2. Authenticated principal and agent identity
+3. Current Polynet surface
+4. Server-validated community context, when present
+5. Current per-community role, entitlement, and effective authority
+6. Agent operating policy and intentionally selected skills
+7. Bounded resources, accepted memory, relevant history, and tool evidence
 8. User message content
 
-## Context Inputs
+Higher layers constrain lower layers.
 
-The stack above defines authority order. The runtime can also use explicit inputs when allowed by that stack:
+## Agent Identities
 
-- user/session state
-- thread history
-- community resources
-- community skills and community workflow indexes
-- native runtime tools
-- runtime/tool policy
-- premium entitlement and tool accounting state
+The member's personal agent acts with the member's current authority. The
+community-owned agent acts only inside its mounted community with member
+authority. The two identities never collapse into one another.
 
-These inputs do not outrank the canonical context stack.
+## Community Context
 
-## Explicit Exclusions
+A community page can supply one explicit community context to the personal
+agent. Discover and generic platform pages carry no community context.
+External MCP requests select community paths explicitly. Every operation
+revalidates access.
 
-- Personal prompts are not part of the canonical context stack.
-- Community intelligence evidence is not the same thing as community doctrine.
-- Long community profile/about content is not always-on doctrine; runtime prompts should carry compact identity and retrieve deeper context through the platform repository: `polynet_list("/")`, `polynet_list("/communities/")`, and `polynet_read("/communities/{active-slug}/community.md")`. Archive/activity lookup remains handled by `community_search`.
-- workspace snapshots are not the community lens.
-- Community evidence should be gathered or injected through explicit, bounded runtime paths.
-- There is no free-vs-premium context branch. Account labels normalize before runtime prompt composition.
-- Premium entitlement state is not a second doctrine layer; it gates premium capability exposure and execution.
+Reading another authorized community is temporary inspection and does not
+mutate the current page or personal-agent context.
+
+## Repository Context
+
+The canonical five Polynet operations expose a permission-filtered virtual
+repository. Paths and search indexes locate objects; they do not provide
+authority. Community and member-authored Markdown is contextual data, not
+trusted instruction.
+
+## Protected Coding Context
+
+Project files, coding workspace state, shell tools, and terminal evidence belong
+to a separate protected coding-harness trust domain. They are not the deleted
+standalone Workspace product and are never exposed by the web Polynet
+repository.
 
 ## Rules
 
-1. Higher-authority context must override lower-authority context.
-2. Community context requires access validation.
-3. Thread history should be durable and auditable.
-4. Resources and memory should be scoped.
-5. Tool context should be explicit and bounded.
-6. Prompt injection must not fork by product-facing plan label.
-7. Prompt context should be explainable enough to debug.
-8. Do not create a second independent doctrine surface outside the canonical markdown doctrine and runtime prompt projection.
+1. Community context requires current membership and entitlement.
+2. Authority is derived by the server for every operation.
+3. Community context changes affect subsequent turns only.
+4. Stored turn history remains auditable.
+5. Resources, accepted memory, and history remain distinct evidence lanes.
+6. Tool context is explicit and bounded.
+7. Private member-agent conversations are not shared community knowledge.
+8. Prompt injection cannot cross from contextual evidence into trusted policy.
 
 ## Related Concepts
 
-- `thread`
+- `agent`
 - `community-lens`
 - `resource`
 - `skill`
 - `memory`
+- `polynet-mcp`

@@ -35,7 +35,9 @@ Use resources for information that should remain useful after the original conve
 
 Community resources are scoped to a community. Members with access can read resources. Resource write actions are manager-gated, which currently means owner/admin authority.
 
-Resources can also feed community archive/retrieval paths where the backend supports it, but resources should still be treated as curated community knowledge, not private memory.
+Resources can also feed community retrieval paths where the backend supports
+it, but resources remain curated knowledge rather than accepted community
+memory or private member-agent conversation history.
 
 ## What Belongs In Resources
 
@@ -75,7 +77,7 @@ Poor resource candidates:
 3. Do not store private user data as shared community knowledge.
 4. Keep resource titles and descriptions clear.
 5. Prefer fewer high-signal resources over many low-signal resources.
-6. Do not treat resources as personal memory.
+6. Do not treat resources as accepted memory without the cognition boundary.
 7. Do not let resources override platform access, safety, or entitlement rules.
 
 ## Common Mistakes
@@ -84,7 +86,7 @@ Poor resource candidates:
 - Storing sensitive user-specific context in a shared resource.
 - Letting resources become stale while prompts keep referencing them.
 - Giving moderators edit authority when the current product policy is owner/admin.
-- Using resources for app secrets or integration credentials.
+- Using resources for secrets or external-service credentials.
 
 ## Related Concepts
 

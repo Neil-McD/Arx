@@ -1,57 +1,69 @@
 ---
 id: product.memory
-title: Memory
+title: Community Memory
 audience: builder, member, llm, operator
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-07-30
 ---
 
-# Memory
+# Community Memory
 
 ## Definition
 
-Memory is explicit reusable context that can help agents maintain continuity.
+Community memory is accepted, community-owned intelligence derived from
+authorized community evidence.
+
+It is distinct from raw chat, private member-agent conversations, resources,
+and temporary retrieval results.
 
 ## Why It Exists
 
-Useful agents need continuity. Memory lets important context persist without requiring the user to repeat everything.
-
-## User Mental Model
-
-Memory should feel like the agent remembers useful facts and working context in a way the user can understand.
+A community should be able to retain durable learning without treating every
+message as truth or forcing members to repeat established knowledge.
 
 ## System Mental Model
 
-The current alpha memory surface is personal memory. Personal memory is owned by the authenticated user and is scoped as global or workspace memory in the backend. It requires sign-in, but it is not a Builder-only feature.
+Community activity produces evidence. The compiler can create bounded
+candidates. Community cognition evaluates candidates. Only accepted
+intelligence enters the community memory directory.
 
-Community archive/retrieval evidence is different from personal memory. It is community-scoped knowledge or activity retrieved through explicit community context paths, not a private user memory store.
+```text
+activity
+  -> evidence
+  -> candidate knowledge
+  -> community cognition
+  -> accepted community memory
+```
 
-Future community memory or system memory should be treated as planned until the backend and product flows make those scopes explicit.
+Memory remains a permission-filtered projection over canonical cloud records.
+It is not a second mutable Markdown database.
 
-Memory should be bounded, inspectable, scoped, and access-controlled. It should not be a hidden dump of everything a user has ever said.
+## Repository Behavior
 
-## Memory Terms
+Authorized agents may discover accepted memory through the community
+repository and use `polynet_search` or `polynet_read` for bounded evidence.
+Every returned path and underlying reference is authorized again.
 
-- Personal memory: authenticated user-owned context, currently global or workspace-scoped and available to signed-in users.
-- Community archive/retrieval evidence: scoped community knowledge or activity retrieved through explicit tools or backend paths.
-- Community memory: a future product concept unless a specific implementation and member-facing flow make it explicit.
-- System memory: a future product concept unless a specific implementation and operator-facing flow make it explicit.
+Private member-agent conversations are not silently transformed into shared
+community memory. Resources remain curated knowledge and do not become memory
+merely because they are searchable.
 
 ## Rules
 
-1. Memory should be explicit.
-2. Current personal memory scope is global or workspace.
-3. Memory should respect access and privacy boundaries.
-4. Private member usage should not be silently transformed into public collective intelligence.
-5. Memory used in a turn should be explainable and auditable where practical.
-6. Community archive/retrieval evidence should not be described as private personal memory.
-7. Community or system memory should not be described as alpha-current unless the implementation and product flow are explicit.
-8. Current personal memory should not be described as Builder-only.
+1. Memory must be explicit, bounded, and auditable.
+2. Searchability is not acceptance.
+3. Raw activity, resources, and accepted memory remain distinct.
+4. Private member-agent usage remains private unless an intentional product
+   flow explicitly shares it.
+5. Community content is contextual data, not trusted instruction.
+6. Permission filtering occurs before retrieval.
+7. Memory used by an agent should retain evidence lineage and visibility.
+8. Stale or superseded memory must not become authority.
 
 ## Related Concepts
 
-- `thread`
 - `community`
 - `agent`
-- `context-model`
+- `resource`
+- `community-lens`
 - `security-privacy`

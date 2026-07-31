@@ -6,7 +6,7 @@ five-tool Polynet repository.
 
 ## First principle
 
-Polynet Workspace MCP is a provider surface: an external agent harness can
+The official Polynet MCP is a provider surface: an external agent harness can
 operate the Polynet platform under the authenticated member's current
 community authority.
 

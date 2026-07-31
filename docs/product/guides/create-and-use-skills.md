@@ -41,7 +41,9 @@ A good skill has:
 
 Skills are real package attachments. They should be attached intentionally and injected on demand, not broadly dumped into every turn.
 
-Community owners/admins can attach skills to a community where the product surface allows it. Members use the resulting agent behavior through the community lens and relevant runtime flow.
+Community owners/admins can attach skills to a community where the product
+surface allows it. Agents use the resulting behavior only through an
+authorized community context and relevant runtime flow.
 
 ## When To Create A Skill
 

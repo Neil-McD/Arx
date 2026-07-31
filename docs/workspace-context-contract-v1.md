@@ -1,8 +1,15 @@
 # Workspace Context Contract V1
 
+Status: protected coding-harness context contract; superseded for member-agent,
+community-agent, and official-MCP behavior by
+`canonical-platform-operation-contract-v1.md`.
+
+This document does not define or restore a standalone Workspace product.
+
 ## Purpose
 
-This file locks the canonical context precedence for the web-native project-bound agent harness.
+This file locks context precedence for the protected project-bound coding
+harness.
 
 It exists to prevent drift between:
 

@@ -93,14 +93,14 @@ function proveDocsToolExposure() {
 function proveDocsToolExecution() {
   const search = executeSearchProductDocsTool({
     index: productDocsIndex,
-    query: "community lens server validated",
+    query: "community context for agent",
     limit: 5,
   });
   assert.equal(search.ok, true);
   assert.ok(search.result_count > 0, "expected docs search to return matches");
   assert.ok(
     search.results.some((result) => result.slug === "primitives/community-lens"),
-    "expected community lens query to find the community lens primitive",
+    "expected community-context query to find the community-context primitive",
   );
   assert.ok(
     search.results[0]?.matched_terms.includes("community"),
@@ -154,6 +154,33 @@ function proveDocsToolExecution() {
   assert.equal(doc.ok, true);
   assert.equal(doc.slug, "primitives/polynet");
   assert.match(doc.content, /collective intelligence platform/i);
+
+  const memory = executeSearchProductDocsTool({
+    index: productDocsIndex,
+    query: "how does community memory work",
+    limit: 5,
+  });
+  assert.equal(memory.ok, true);
+  assert.equal(
+    memory.results[0]?.slug,
+    "primitives/memory",
+    "expected community-memory query to rank the current memory primitive first",
+  );
+
+  const mcp = executeGetProductDocTool({
+    index: productDocsIndex,
+    slug: "primitives/polynet-mcp",
+  });
+  assert.equal(mcp.ok, true);
+  for (const toolName of [
+    "polynet_list",
+    "polynet_read",
+    "polynet_search",
+    "polynet_write",
+    "polynet_call",
+  ]) {
+    assert.match(mcp.content, new RegExp(`\\b${toolName}\\b`));
+  }
 
   const missing = executeGetProductDocTool({ index: productDocsIndex, slug: "missing/doc" });
   assert.equal(missing.ok, false);

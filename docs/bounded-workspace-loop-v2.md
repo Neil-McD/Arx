@@ -1,7 +1,12 @@
 # Bounded Workspace Loop (v2)
 
-Status: proposed  
-Scope: OODA-based workspace harness on top of the reduced workspace contract
+Status: protected coding-harness proposal; not current product-surface truth
+Scope: OODA-based coding/runtime harness on top of protected workspace substrate
+
+This document does not define or restore a standalone Workspace product. The
+member personal agent, community-owned agent, and official MCP use the
+canonical five-tool Polynet contract in
+`canonical-platform-operation-contract-v1.md`.
 
 ## 1. First Principles
 

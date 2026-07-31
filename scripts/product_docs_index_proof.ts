@@ -154,10 +154,10 @@ function validateSearch(index: ProductDocsIndex): void {
     );
   }
 
-  const lensResults = searchProductDocsIndex(index, "community lens server validated context", { limit: 5 });
+  const lensResults = searchProductDocsIndex(index, "community context for agent", { limit: 5 });
   assert(
     lensResults.some((result) => result.slug === "primitives/community-lens"),
-    "Search should find the community lens primitive.",
+    "Search should find the community-context primitive.",
   );
 
   const payoutResults = searchProductDocsIndex(index, "payouts builder cash community payments", { limit: 10 });
@@ -174,14 +174,14 @@ function validateSearch(index: ProductDocsIndex): void {
   assertTopSlugsInclude("cash path paid community checkout payouts", "guides/manage-access-billing-and-roles", 3);
   assertTopSlugsInclude("system prompts community owner instructions", "reference/prompt-context-model", 3);
   assertTopSlugsInclude("system prompts community owner instructions", "guides/configure-community-agent", 3);
-  assertTopSlugsInclude("community lens context switching", "primitives/community-lens", 2);
-  assertTopSlug("memory across threads", "primitives/memory");
+  assertTopSlugsInclude("community context for agent", "primitives/community-lens", 2);
+  assertTopSlug("how does community memory work", "primitives/memory");
   assertTopSlug("what is polynet value prop", "primitives/polynet");
 
   const goldenQueries: GoldenQuery[] = [
     {
-      query: "how does community lens work",
-      expectedTopSlugs: ["primitives/community-lens", "guides/community-lens"],
+      query: "how does community context work",
+      expectedTopSlugs: ["primitives/community-lens", "primitives/agent"],
     },
     {
       query: "builder payouts monetize community cash",
@@ -200,7 +200,7 @@ function validateSearch(index: ProductDocsIndex): void {
       expectedTopSlugs: ["guides/configure-community-agent", "reference/prompt-context-model"],
     },
     {
-      query: "how does memory work",
+      query: "how does community memory work",
       expectedFirstSlug: "primitives/memory",
     },
     {
@@ -227,13 +227,84 @@ function validateSearch(index: ProductDocsIndex): void {
 
   assertExplainableSearchResult("what can admins do", ["admins"], ["queries", "keywords"]);
   assertExplainableSearchResult("resources in a community", ["resources", "community"], ["queries", "title"]);
-  assertExplainableSearchResult("community lens server validated", ["community", "lens"], ["slug", "summary"]);
+  assertExplainableSearchResult("community context server validated", ["community", "context"], ["summary", "body"]);
+}
+
+function validateCurrentProductTruth(index: ProductDocsIndex): void {
+  const retiredSlugs = [
+    "primitives/workspace",
+    "primitives/thread",
+    "guides/workspace",
+    "guides/community-lens",
+  ];
+  const slugs = new Set(index.docs.map((doc) => doc.slug));
+  for (const slug of retiredSlugs) {
+    assert(!slugs.has(slug), `Retired product surface must not be indexed: ${slug}`);
+  }
+
+  const allContent = index.docs.map((doc) => doc.content).join("\n").toLowerCase();
+  const retiredClaims = [
+    "open the workspace",
+    "workspace thread",
+    "personal ai threads",
+    "personal memory as an explicit",
+    "current personal memory",
+    "switching a thread lens",
+    "thread-level community context switching",
+  ];
+  for (const claim of retiredClaims) {
+    assert(
+      !allContent.includes(claim),
+      `Product docs must not retain the deleted product claim: ${claim}`,
+    );
+  }
+
+  const polynet = getProductDocFromIndex(index, "primitives/polynet");
+  const agent = getProductDocFromIndex(index, "primitives/agent");
+  const memory = getProductDocFromIndex(index, "primitives/memory");
+  const mcp = getProductDocFromIndex(index, "primitives/polynet-mcp");
+  assert(polynet, "Missing canonical Polynet product primitive.");
+  assert(agent, "Missing canonical agent product primitive.");
+  assert(memory, "Missing canonical community-memory primitive.");
+  assert(mcp, "Missing canonical Polynet MCP primitive.");
+
+  assert(
+    /member's personal agent[\s\S]*community-owned agent/i.test(agent.content),
+    "Agent docs must keep member and community agent identities distinct.",
+  );
+  assert(
+    /accepted[\s\S]*community-owned intelligence/i.test(memory.content),
+    "Memory docs must describe accepted community-owned intelligence.",
+  );
+  assert(
+    /not a standalone general-purpose Workspace/i.test(polynet.content),
+    "Polynet docs must explicitly keep the standalone Workspace out of the MVP.",
+  );
+  for (const toolName of [
+    "polynet_list",
+    "polynet_read",
+    "polynet_search",
+    "polynet_write",
+    "polynet_call",
+  ]) {
+    assert(
+      mcp.content.includes(toolName),
+      `Polynet MCP docs must name canonical tool: ${toolName}`,
+    );
+  }
+  assert(
+    /does not consume, connect, mount, or proxy third-party MCP servers/i.test(
+      mcp.content,
+    ),
+    "Polynet MCP docs must reject third-party MCP consumption.",
+  );
 }
 
 const artifacts = buildProductDocsArtifacts();
 validateIndex(artifacts.index);
 validateLlmsFiles(artifacts.index, artifacts.llmsTxt, artifacts.llmsFullTxt);
 validateSearch(artifacts.index);
+validateCurrentProductTruth(artifacts.index);
 assertFileMatches("docs/product/generated/index.json", artifacts.indexJson);
 assertFileMatches("docs/product/llms.txt", artifacts.llmsTxt);
 assertFileMatches("docs/product/llms-full.txt", artifacts.llmsFullTxt);

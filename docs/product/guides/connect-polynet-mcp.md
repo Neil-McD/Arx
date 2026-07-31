@@ -21,7 +21,23 @@ copying credentials or weakening community access controls.
 4. Configure it in the external harness.
 5. Complete Polynet OAuth in the browser.
 6. Start a fresh harness session if the client does not reload MCP state.
-7. List communities and explicitly open the intended community context.
+7. Call `polynet_list` at `/`, follow the returned `communities/` path, and
+   explicitly open the intended authorized community.
+
+## Canonical Tools
+
+The official provider exposes exactly:
+
+```text
+polynet_list
+polynet_read
+polynet_search
+polynet_write
+polynet_call
+```
+
+Optional premium tools belong to the external harness or a separate Polynet
+overlay. They do not change the base Polynet MCP contract.
 
 ## Authority Boundary
 
@@ -37,6 +53,7 @@ membership, entitlements, and capabilities for every tool call.
 4. Do not configure third-party MCP servers inside Polynet.
 5. Treat a successful OAuth handoff and an authorized tool call as separate
    proofs.
+6. Discover paths and versioned capabilities before writing or calling.
 
 ## Related Concepts
 

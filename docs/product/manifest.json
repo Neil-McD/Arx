@@ -34,62 +34,49 @@
       "slug": "primitives/agent",
       "title": "Agent",
       "section": "Primitives",
-      "summary": "How the workspace agent uses platform, thread, and community context.",
-      "audience": ["builder", "llm"],
-      "status": "alpha-current",
-      "source": "docs/product/primitives/agent.md"
-    },
-    {
-      "id": "product.workspace",
-      "slug": "primitives/workspace",
-      "title": "Workspace",
-      "section": "Primitives",
-      "summary": "The member workspace, threads, and context switching model.",
+      "summary": "The separate member-owned and community-owned agent identities and their authority.",
       "audience": ["builder", "member", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/primitives/workspace.md"
+      "source": "docs/product/primitives/agent.md",
+      "search": {
+        "aliases": ["personal agent", "community agent", "member agent"],
+        "keywords": ["agent identity", "community context", "member authority", "builder authority"],
+        "queries": ["how does community context work", "personal agent versus community agent", "what can the member agent do"],
+        "relatedSlugs": ["primitives/community-lens", "primitives/polynet-mcp"],
+        "boost": 1.1
+      }
     },
     {
       "id": "product.community_lens",
       "slug": "primitives/community-lens",
-      "title": "Community Lens",
+      "title": "Community Context",
       "section": "Primitives",
-      "summary": "The server-validated community context applied to future thread turns.",
+      "summary": "The explicit server-validated community context applied to subsequent agent turns.",
       "audience": ["builder", "member", "llm"],
       "status": "alpha-current",
       "source": "docs/product/primitives/community-lens.md",
       "search": {
-        "aliases": ["community context", "thread lens", "context switching", "server validated lens"],
-        "keywords": ["lens switch", "validated context", "future turns", "thread context"],
-        "queries": ["community lens context switching", "switch community context", "server validated community lens"],
-        "relatedSlugs": ["guides/community-lens", "reference/context-model"],
+        "aliases": ["community lens", "active community context", "server validated community"],
+        "keywords": ["community context", "validated context", "subsequent turns", "member agent"],
+        "queries": ["community context for agent", "how does community context work", "server validated community context"],
+        "relatedSlugs": ["primitives/agent", "reference/context-model"],
         "boost": 1.2
       }
     },
     {
-      "id": "product.thread",
-      "slug": "primitives/thread",
-      "title": "Thread",
-      "section": "Primitives",
-      "summary": "The durable workspace conversation record and lens audit boundary.",
-      "audience": ["builder", "member", "llm"],
-      "status": "alpha-current",
-      "source": "docs/product/primitives/thread.md"
-    },
-    {
       "id": "product.memory",
       "slug": "primitives/memory",
-      "title": "Memory",
+      "title": "Community Memory",
       "section": "Primitives",
-      "summary": "The current personal memory scope and future memory boundaries.",
+      "summary": "Accepted community-owned intelligence and its evidence boundary.",
       "audience": ["builder", "member", "llm"],
       "status": "alpha-current",
       "source": "docs/product/primitives/memory.md",
       "search": {
-        "aliases": ["personal memory", "memory across threads", "agent memory"],
-        "keywords": ["remember", "recall", "workspace memory", "personal scope"],
-        "queries": ["memory across threads", "agent memory across sessions", "what does memory remember"],
-        "relatedSlugs": ["primitives/workspace", "reference/context-model"],
+        "aliases": ["accepted memory", "community intelligence", "community knowledge"],
+        "keywords": ["memory", "evidence", "compiler", "cognition", "accepted intelligence"],
+        "queries": ["how does community memory work", "what does the community remember", "accepted community intelligence"],
+        "relatedSlugs": ["primitives/community", "reference/context-model"],
         "boost": 1.15
       }
     },
@@ -296,33 +283,6 @@
       }
     },
     {
-      "id": "product.guide.workspace",
-      "slug": "guides/workspace",
-      "title": "Workspace",
-      "section": "Member Guides",
-      "summary": "How members use workspace threads and community lenses.",
-      "audience": ["member", "llm"],
-      "status": "alpha-current",
-      "source": "docs/product/guides/workspace.md"
-    },
-    {
-      "id": "product.guide.community_lens",
-      "slug": "guides/community-lens",
-      "title": "Community Lens",
-      "section": "Member Guides",
-      "summary": "How a member should understand thread-level community context switching.",
-      "audience": ["member", "builder", "llm"],
-      "status": "alpha-current",
-      "source": "docs/product/guides/community-lens.md",
-      "search": {
-        "aliases": ["use community lens", "community context switching", "thread community context"],
-        "keywords": ["community lens", "context switching", "thread lens", "active community", "future turns"],
-        "queries": ["how does community lens work", "use a community lens", "switch community context in a thread"],
-        "relatedSlugs": ["primitives/community-lens", "reference/context-model"],
-        "boost": 1.2
-      }
-    },
-    {
       "id": "product.guide.chat_and_resources",
       "slug": "guides/chat-and-resources",
       "title": "Chat And Resources",
@@ -343,7 +303,7 @@
       "source": "docs/product/reference/context-model.md",
       "search": {
         "aliases": ["context stack", "context precedence", "canonical context"],
-        "keywords": ["platform doctrine", "agent soul", "community lens", "workspace context", "prompt context"],
+        "keywords": ["platform doctrine", "agent identity", "community context", "authority", "prompt context"],
         "queries": ["context stack", "canonical context precedence", "what context does the agent use"],
         "relatedSlugs": ["reference/prompt-context-model", "primitives/community-lens"],
         "boost": 1.1

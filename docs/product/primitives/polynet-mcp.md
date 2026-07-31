@@ -25,10 +25,15 @@ Polynet does not consume, connect, mount, or proxy third-party MCP servers.
 
 - The canonical endpoint is `/runtime/mcp`.
 - The external harness authenticates the Polynet member through OAuth.
-- Community selection is explicit.
+- The provider exposes exactly `polynet_list`, `polynet_read`,
+  `polynet_search`, `polynet_write`, and `polynet_call`.
+- The harness begins at `/` and selects communities through canonical
+  repository paths.
 - Every request revalidates membership, entitlement, and capability.
 - Tool arguments are selectors, never authority.
 - The community context used by a call is auditable.
+- Owner/admin humans may receive builder authority; moderator/member humans
+  receive member authority.
 
 ## Rules
 
@@ -39,6 +44,8 @@ Polynet does not consume, connect, mount, or proxy third-party MCP servers.
 5. Do not add third-party MCP credentials, mounts, or passthrough tools.
 6. Preserve the stable external `workspace` wire vocabulary only where the v0
    compatibility contract requires it.
+7. Premium overlays such as web research do not expand or fork the five-tool
+   Polynet contract.
 
 ## Related Concepts
 

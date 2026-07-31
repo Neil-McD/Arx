@@ -98,5 +98,5 @@ A good configuration includes:
 - `agent`
 - `skill`
 - `resource`
-- `app-mcp`
+- `polynet-mcp`
 - `prompt-context-model`

@@ -3,7 +3,7 @@ id: product.docs_index
 title: Product Documentation Index
 audience: builder, member, llm, operator
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-07-30
 ---
 
 # Product Documentation Index
@@ -30,6 +30,7 @@ The product combines:
 - agents as product surfaces
 - communities as distribution, trust, retention, and feedback systems
 - collective intelligence as the compounding asset
+- one canonical five-operation Polynet repository contract
 
 ## Documentation Rules
 
@@ -58,21 +59,19 @@ LLMs should read product docs in this order:
 4. `primitives/community.md`
 5. `primitives/funnel.md`
 6. `primitives/agent.md`
-7. `primitives/workspace.md`
-8. `primitives/thread.md`
-9. `primitives/community-lens.md`
-10. `primitives/voice.md`
-11. `primitives/polynet-mcp.md`
-12. `primitives/skill.md`
-13. `primitives/resource.md`
-14. `primitives/entitlement.md`
-15. `primitives/role.md`
-16. `primitives/memory.md`
-17. `reference/access-model.md`
-18. `reference/context-model.md`
-19. `reference/prompt-context-model.md`
-20. `reference/security-privacy.md`
-21. `reference/glossary.md`
+7. `primitives/community-lens.md`
+8. `primitives/memory.md`
+9. `primitives/voice.md`
+10. `primitives/polynet-mcp.md`
+11. `primitives/skill.md`
+12. `primitives/resource.md`
+13. `primitives/entitlement.md`
+14. `primitives/role.md`
+15. `reference/access-model.md`
+16. `reference/context-model.md`
+17. `reference/prompt-context-model.md`
+18. `reference/security-privacy.md`
+19. `reference/glossary.md`
 
 ## Human Reading Paths
 
@@ -90,6 +89,6 @@ Member path:
 
 1. `guides/member-quickstart.md`
 2. `guides/joining-communities.md`
-3. `guides/workspace.md`
-4. `guides/community-lens.md`
-5. `guides/chat-and-resources.md`
+3. `guides/chat-and-resources.md`
+4. `primitives/agent.md`
+5. `primitives/community-lens.md`

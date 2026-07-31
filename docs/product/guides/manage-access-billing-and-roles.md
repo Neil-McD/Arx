@@ -83,7 +83,8 @@ Moderator:
 Member:
 
 - participates in the community
-- uses allowed chat, resources, voice, and workspace lens surfaces
+- uses allowed chat, AI Feed, resources, voice, and personal-agent community
+  context
 
 ## Launch Checklist
 

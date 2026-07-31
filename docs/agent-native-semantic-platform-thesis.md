@@ -187,20 +187,33 @@ An active community should feel to an agent like a checked-out code repository:
 one explicit community context, one deterministic directory, progressive
 inspection, and no path that can escape into another community.
 
-The current staging namespace is deliberately small:
+The current staging namespace is deliberately bounded. Personal-agent and
+official-MCP requests begin at the platform root:
+
+```text
+/
+|- communities/
+`- users/
+```
+
+Community-owned agents receive a server-selected community mount:
 
 ```text
 /
 |- community.md
-|- self.md
 |- members/
-`- resources/
-   `- <category>/<resource>.md
+|- resources/
+|- channels/
+|- ai-feed/
+|- memory/
+`- capabilities/
 ```
 
-This namespace is `IMPLEMENTED`. A mount exists only after its canonical data,
-semantic representation, authorization, bounds, and proof are real. Empty
-placeholder directories must not imply capabilities that do not exist.
+Owner/admin human authority may additionally reveal `builder/`. Community
+agents never receive that projection. This namespace is `IMPLEMENTED`. A mount
+exists only after its canonical data, semantic representation, authorization,
+bounds, and proof are real. Empty placeholder directories must not imply
+capabilities that do not exist.
 
 The self profile remains user-owned even when projected inside a community.
 Other-member projections under `/members/` are community-scoped and must not
@@ -215,7 +228,7 @@ operation. The model-visible envelope contains only actionable navigation,
 content bounds, and trust context; it is not a dump of execution metadata.
 
 The repository is virtual. Reads resolve current canonical records and render
-permissioned projections. Future writes route to typed domain operations.
+permissioned projections. Writes and calls route to typed domain operations.
 Polynet must never synchronize a second mutable folder tree with canonical
 product state.
 
@@ -241,9 +254,9 @@ Act
 ```
 
 Bounded `polynet_list` and `polynet_read` are `IMPLEMENTED` on the staging
-source path. They serve only real community, self, member-directory, and
-resource mounts. The later `/members/` addition followed explicit user
-direction and remains a bounded profile projection, not a generic row browser.
+source path. They serve only real platform, community, user, member, resource,
+channel, AI Feed, accepted-memory, capability, and builder mounts. Member
+projections remain bounded relationship views, not generic row browsers.
 
 `polynet_search` is `IMPLEMENTED` on the staging source path. Exact subtree
 searches reuse canonical domain owners. Community-root search composes the
@@ -252,20 +265,20 @@ limit and returns paths that round-trip through `polynet_read`. Search results
 and their underlying references are reauthorized; an index is a locator, not
 authority.
 
-`polynet_write` is `PROPOSED` only for naturally writable semantic documents.
-Each adapter owns schema validation, expected revisions, attribution,
-idempotency, effects, confirmation policy, and receipts. A successful write is
-read back from committed canonical state.
+`polynet_write` is `IMPLEMENTED` for naturally writable community chat, AI Feed,
+and builder resource-changeset targets. Schema validation, attribution,
+idempotency, effects, and receipts remain owned by typed domain adapters. A
+successful write is read back from committed canonical state.
 
-`polynet_call` is `PROPOSED` for non-document operations. It must never become a
-hidden mega-tool: every callable operation remains separately named,
-versioned, discoverable, schema-bound, authority-bound, and receipt-bearing.
+`polynet_call` is `IMPLEMENTED` for versioned operations discovered under
+`capabilities/`. It is not a hidden mega-tool: every callable operation remains
+separately named, versioned, discoverable, schema-bound, authority-bound, and
+receipt-bearing.
 
-Current domain-specific native and MCP tools may remain as compatibility
-adapters for identified consumers. They must delegate to canonical domain
-owners, must not define new architecture, and require a bounded retirement or
-support policy before deletion. Semantic parity matters; identical wire
-messages do not.
+Domain-specific community tools are not public native or MCP tools. They may
+remain only as private migration substrate for identified callers, must
+delegate to canonical domain owners, and require a bounded retirement or
+support policy. Semantic parity matters; identical wire messages do not.
 
 Real shell/filesystem access belongs to a separate private coding trust domain.
 The web runtime and virtual community repository must never expose canonical
@@ -358,33 +371,19 @@ The labels mean:
 | Canonical cloud authority for identity, access, money, and history | `IMPLEMENTED` | remaining domain migrations are tracked separately |
 | Stable resource references and permissioned resource reads | `IMPLEMENTED` | exact stable-reference reads hydrate the sole canonical resource-content owner |
 | Domain/runtime events and receipts | `IMPLEMENTED` | a generalized cross-surface receipt projection is not implemented |
-| One read-only semantic namespace for community/self/members/resources | `IMPLEMENTED` | hard-coded mounts reuse canonical owners; wider mounts remain separately gated |
+| One permission-filtered semantic namespace | `IMPLEMENTED` | platform and community mounts reuse canonical domain owners |
 | Deterministic `community.md` and `self.md` resources | `IMPLEMENTED` | current actor and community authority are revalidated on every read |
 | Bounded `polynet_list` and `polynet_read` | `IMPLEMENTED` | native and official MCP adapters share semantic owners and fail closed |
-| One generalized capability definition/projection seam | `NEXT` | first collapse duplicated native/MCP declarations |
+| One generalized capability definition/projection seam | `IMPLEMENTED` | private domain-specific tool callers remain cleanup debt |
 | Bounded `polynet_search` | `IMPLEMENTED` | staging composes canonical domain owners and returns exact follow-up paths |
-| Naturally scoped `polynet_write` | `PROPOSED` | typed domain mutations remain canonical |
-| Discoverable `polynet_call` | `PROPOSED` | no undiscoverable mega-tool behavior |
-| Memory, activity, capability, app, workflow, event, and UI mounts | `PROPOSED` | each requires a real semantic and authority contract |
+| Naturally scoped `polynet_write` | `IMPLEMENTED` | typed chat, AI Feed, and resource changeset owners remain canonical |
+| Discoverable `polynet_call` | `IMPLEMENTED` | versioned capabilities are listed before invocation |
+| Channel, AI Feed, accepted-memory, and capability mounts | `IMPLEMENTED` | each reuses its canonical domain owner and authority |
+| App, workflow, generalized event, and custom UI mounts | `PROPOSED` | each requires a real semantic and authority contract |
 | External apps integrating once through resources/capabilities/events/surfaces | `PROPOSED` | prove one real integration before generalizing |
 | Independently enrolled agent/service community members | `DEFERRED` | current membership remains user-based |
 | Arbitrary hosted community code or an unrestricted component platform | `DEFERRED` | not required for MVP |
 | Standalone general-purpose Workspace destination | `DEFERRED` | protected harness/thread substrate and bounded compatibility remain |
-
-### Implementation-lineage caveat
-
-At reconciliation baseline `3bcbbf63ee00943803fc1efb68a5ea6de9193144`,
-the staging branch did not contain the isolated community/self profile and
-runtime-orientation commits `3d5286a6`, `618c249f`, `9783f548`, `bb45ee9c`, or
-`424f9d4b`. Those commits were never merged blindly.
-
-The current C6 implementation instead landed as bounded staging slices from
-`b12736e7` through `12b23889`, followed by the locally proved native-tool
-convergence commit `90badc0b`. The implementation reuses canonical authority
-and read owners, adds no semantic Markdown store or generic mount registry, and
-keeps external workspace-MCP compatibility separate from the two-tool native
-surface. The combined staging release at `482d5d20` passed authenticated native
-and official-MCP list/read plus persisted retired-name absence proof.
 
 ## Cleanup-led implementation sequence
 
@@ -395,10 +394,11 @@ now. Execution follows `docs/polynet-reduction-execution-contract-v1.md`:
 2. complete resumable account/community deletion and privacy propagation;
 3. remove competing resource, interaction, and intelligence authorities;
 4. make scheduled/operational work eventually fair and bounded;
-5. collapse duplicated capability, transport, and public-function surfaces;
-6. maintain bounded list/read for only the four currently accepted mounts;
-7. expand search, writes, calls, mounts, and adapters only from demonstrated
-   need;
+5. collapse duplicated private capability, transport, and public-function
+   surfaces behind the canonical five operations;
+6. maintain bounded list/read/search/write/call only for proven mounts and
+   operations;
+7. add mounts and adapters only from demonstrated need;
 8. delete deferred Workspace/UI/docs/configuration surface before decomposing
    and optimizing what remains;
 9. prove backup, restore, and operational recovery;

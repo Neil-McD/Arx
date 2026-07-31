@@ -100,8 +100,8 @@ The cash path is simple: configure the community, define the paid access model, 
 5. Keep access and billing simple enough for members to understand.
 6. Do not use prompts as the only place where important product truth lives.
 7. Do not add integrations before the core community loop works.
-8. Do not invite members before testing join, access, chat, resources, and
-   the community lens.
+8. Do not invite members before testing join, access, chat, resources, and the
+   member personal agent under community context.
 
 ## Common Mistakes
 

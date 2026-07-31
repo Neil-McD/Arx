@@ -103,6 +103,18 @@ once no private call path requires them.
 Premium capabilities such as web research are orthogonal overlays. They do
 not expand or fork the base Polynet repository contract.
 
+## Product-surface boundary
+
+The standalone general-purpose Workspace product is deleted. The member's
+personal agent is the bottom-right dock, and a community page supplies one
+explicit server-validated community context for subsequent turns. Discover and
+generic platform pages do not silently inherit a prior community context.
+
+Threads and messages may remain internal persistence and audit primitives.
+They are not a second user-facing Workspace navigation model. Likewise, legacy
+external `workspace` wire vocabulary may remain only where the official MCP
+compatibility contract requires it; it does not restore the deleted product.
+
 ## Verification
 
 `npm run check:canonical-operation-surface-proof` checks schema, registry,

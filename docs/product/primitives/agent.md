@@ -3,112 +3,99 @@ id: product.agent
 title: Agent
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-07-13
+last_verified: 2026-07-30
 ---
 
 # Agent
 
 ## Definition
 
-An agent is the AI product surface that helps users reason, decide, create, and act inside Polynet.
+Polynet has two distinct native agent identities:
 
-The agent can be the product itself when it packages a builder's expertise, workflow, judgment, resources, and connected capability.
+- the member's personal agent
+- the community-owned agent
 
-## Why It Exists
+They may use the same canonical Polynet tools, but they never share identity or
+authority.
 
-The agent is how builder expertise, community context, resources, skills, and connected tools become useful capability.
+## Member Personal Agent
 
-Without the agent, the community is mostly conversation and content. With the agent, the community can become an active system that helps members do work.
+The bottom-right dock belongs to the signed-in member. It can operate across
+Polynet and uses the current community only when that context is explicit and
+server-authorized.
 
-## User Mental Model
+On a community page, subsequent turns use that community context. Discover and
+generic platform pages do not silently inherit the last visited community.
+Reading another authorized community through repository tools does not change
+the current page or active community context.
 
-The member's personal agent should remain one continuous intelligent surface across Polynet, not become a separate agent for every community.
+The member's current relationship determines authority:
 
-The bottom-right agent belongs to the signed-in member. It keeps that member's episodic history while orienting to the current Polynet surface. Community pages use that community as a server-validated lens for subsequent turns; Discover and generic platform pages carry no community lens.
+- owner/admin with resource-management permission receives builder authority
+- moderator/member receives member authority
+- missing or revoked access fails closed
 
-## System Mental Model
+## Community-Owned Agent
 
-Agent behavior is assembled from explicit authority and context layers. The canonical workspace precedence is defined in `reference/context-model.md` and the internal workspace context contract.
+Each community has a separate community-owned agent for direct mentions and
+community cognition.
 
-The high-level order is:
+It receives a server-mounted repository for exactly that community, always
+operates with member authority, and cannot:
 
-1. platform doctrine
-2. agent soul
+- escape to the platform root
+- select another community
+- inherit owner/admin authority from the human who triggered it
+- use builder-only resource operations
+
+## Canonical Tools
+
+The personal agent and community-owned agent use the same irreducible Polynet
+operation vocabulary:
+
+```text
+polynet_list
+polynet_read
+polynet_search
+polynet_write
+polynet_call
+```
+
+Premium tools such as web research are optional overlays. They do not fork or
+expand the base Polynet repository contract.
+
+## Context and Authority
+
+The runtime combines:
+
+1. platform doctrine and safety
+2. authenticated principal
 3. current Polynet surface
-4. community lens, if backend validated
-5. workspace context
-6. agent operating policy
-7. repo instruction docs, where relevant to the active runtime lane
-8. user message content
+4. server-validated community context, when present
+5. current per-community role and entitlement
+6. bounded resources, accepted memory, and relevant history
+7. permitted tools
+8. the user's current request
 
-Runtime inputs can include user/session state, thread history, community
-resources, skills, native tools, and runtime policy. Those inputs do not
-outrank the authority stack.
-
-## Alpha-Current Behavior
-
-The current product model supports:
-
-- personal AI threads
-- one member-owned personal agent channel across communities
-- on-demand episodic recall across that member's prior conversations
-- read-only recall compatibility for retained legacy per-community episodes
-- community lens switching inside threads
-- deterministic Discover, community-section, and generic platform-page orientation
-- native read-only directory access to joined and public Discover communities
-- community resources and skills as controlled context inputs
-- personal memory as an explicit user-owned context layer
-- voice input as an input method
-- backend-gated community context and tool access
+Community content, resources, and member-authored text are contextual data.
+They cannot grant authority or override platform rules.
 
 ## Rules
 
-1. Platform safety and access rules are higher authority than community instructions.
-2. Community owner instructions shape behavior but must not bypass entitlements.
-3. The agent should only use community context when access is validated.
-4. Tool access must be explicit and bounded.
-5. Prompts should reference docs; prompts should not become hidden product truth.
-6. Skills should be injected intentionally, not dumped into every turn.
-7. Tools should not be represented as available unless the runtime can
-   actually use and authorize them.
-8. The agent should preserve broader user intent when the request is not actually community-scoped.
-9. Community navigation may change the next-turn lens, but it must not replace the member's agent or conversation.
-10. Retained legacy per-community episodes are historical recall sources only; new messages and runtime turns use the active global episode.
-11. Page context guides relevance but cannot grant community access or tools.
-12. Discover must not silently inherit Polynet or the last visited community as its active lens.
-13. Reading another community through directory tools must not mutate the active lens, current page, or episode.
-
-## Examples
-
-- A member asks a general question in a workspace thread with no community lens active.
-- A member switches into a community lens and asks the agent to use the community's resources.
-- A member asks for help comparing communities from Discover with no active community lens.
-- A builder configures a community agent to follow a specific methodology.
-- A selected skill shapes the output format for a repeated workflow.
-
-## Non-Goals
-
-The agent is not a general-purpose replacement for every product surface. It should support the community and workspace loop.
-
-The agent is not allowed to grant access, invent billing state, expose private
-community data, or claim tool capability that is not actually available and
-permitted.
-
-## Common Mistakes
-
-- Treating prompts as policy authority.
-- Treating community instructions as higher priority than platform rules.
-- Treating external systems as automatically usable by every user.
-- Treating skills as generic prompt blobs.
-- Treating private member usage as community knowledge.
+1. Identity, context, and authority are separate.
+2. Every community operation is authorized again by the server.
+3. Tool selectors never grant access.
+4. Community changes affect subsequent turns only and do not rewrite stored history.
+5. Private member-agent conversations do not silently become community memory.
+6. Tool access must be explicit, bounded, and accurately represented.
+7. The standalone general-purpose Workspace is not an active product surface.
+8. Threads and messages may remain internal persistence and audit primitives.
 
 ## Related Concepts
 
-- `workspace`
-- `thread`
+- `community`
 - `community-lens`
-- `context-model`
-- `prompt-context-model`
+- `memory`
+- `resource`
 - `skill`
 - `polynet-mcp`
-- `resource`

@@ -3,14 +3,16 @@ id: product.voice
 title: Voice Input
 audience: member, builder, llm
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-07-30
 ---
 
 # Voice Input
 
 ## Definition
 
-Voice input lets an authenticated user dictate into workspace or community chat surfaces and turn speech into text for the agent or community message composer.
+Voice input lets an authenticated user dictate into the personal-agent dock or
+community chat surfaces and turn speech into text for the agent or community
+message composer.
 
 ## Why It Exists
 
@@ -34,8 +36,6 @@ Voice capture happens in the client. Transcription is handled through the runtim
 
 ## Related Concepts
 
-- `workspace`
+- `agent`
 - `community`
-- `thread`
 - `entitlement`
-

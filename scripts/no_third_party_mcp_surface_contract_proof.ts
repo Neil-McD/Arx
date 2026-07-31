@@ -126,7 +126,7 @@ assert.doesNotMatch(
 );
 
 const provider = read("docs/polynet-workspace-mcp-contract-v0.md");
-assert.match(provider, /Polynet Workspace MCP is a provider surface/);
+assert.match(provider, /official Polynet MCP is a provider surface/);
 assert.match(
   provider,
   /Polynet does not consume, connect, mount, proxy, or execute third-party MCP/,

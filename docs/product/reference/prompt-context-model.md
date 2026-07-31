@@ -3,74 +3,64 @@ id: product.reference.prompt_context_model
 title: Prompt Context Model
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-05-11
+last_verified: 2026-07-30
 ---
 
 # Prompt Context Model
 
 ## Definition
 
-The prompt context model defines how platform, community, user, runtime, and tool instructions are composed for agent turns.
+The prompt context model defines how platform, community, agent, runtime, and
+tool inputs are composed for one agent turn.
 
 ## Principle
 
-Documentation is the canonical product truth. Prompts reference and apply that truth. Prompts should not become the undocumented source of product behavior.
-
-There is one platform harness prompt stack. Free and Polynet Premium labels must not select different prompt stacks. Runtime context decides what parts of the one stack are populated.
+Documentation distills product truth. Deterministic backend code owns identity,
+access, authority, effects, and receipts. Prompts apply those contracts but
+never replace them.
 
 ## Authority Order
 
-Prompt composition must follow the canonical context stack in `reference/context-model.md`. The compact order is:
-
-1. Platform doctrine
-2. Agent soul
-3. Explanation and operating policy
-4. Community lens, if backend validated
-5. Platform harness context, including active tools and optional project/workspace context
-6. Personal skill and community skill prompt suffixes
-7. Runtime turn context, including thread working state, terminal/tool evidence, and temporal context
-8. User message content
-
-Within that stack, prompt inputs should be applied with these boundaries:
-
 1. Platform safety and product rules
-2. Access and entitlement rules
-3. Runtime/tool policy
-4. Community owner/admin instructions
-5. Skill instructions
-6. Resource-derived context
-7. User request
+2. Authenticated principal and agent identity
+3. Current surface and server-validated community context
+4. Current entitlement and per-community authority
+5. Runtime and tool policy
+6. Community owner/admin instructions
+7. Intentionally selected skill instructions
+8. Bounded resources, accepted memory, and relevant history
+9. User request
 
 ## Runtime Selection
 
-Prompt injection is contextual, not subscription-tiered:
-
-1. Anonymous chat receives only the public/demo path.
-2. Authenticated users use the same platform harness stack.
-3. A backend-validated community lens adds compact community identity,
-   community prompt, community skills, and community workflow context.
-4. A project-bound thread adds workspace/project context and workspace tools.
-5. Web research can be exposed when Premium entitlement allows it.
-6. Premium entitlement is enforced before premium tools are exposed or executed. Free users should receive a clear upgrade path instead of a tool call attempt.
+- Anonymous use receives only the public/demo path.
+- Authenticated users use one platform prompt stack.
+- A validated community context adds compact community identity, instructions,
+  skills, and bounded knowledge.
+- The member personal-agent dock exposes exactly the canonical five Polynet
+  operations for platform/community work.
+- The community-owned agent receives the same five operations under a
+  server-mounted community root and fixed member authority.
+- Protected coding-harness context and tools belong to a separate trust domain.
+- Premium tools such as web research are entitlement-gated overlays, not a
+  different Polynet repository contract.
 
 ## Rules
 
-1. Community prompts cannot bypass platform rules.
-2. Owner instructions cannot grant access.
+1. Community instructions cannot bypass platform rules.
+2. Prompts cannot grant membership, entitlement, role, or tool authority.
 3. Skills cannot grant tools by themselves.
-4. Resource context should be bounded and relevant.
-5. Community workflow context should prefer active-lens workflows when
-   relevant without hiding personal skills.
-6. Deeper active-community profile and resource context should come from `polynet_list` and `polynet_read`; archive, activity, and memory evidence should come from `community_search`.
-7. Prompt changes should be versioned or auditable where practical.
-8. Prompts should prefer references to docs and resources over copying huge blobs.
-9. Prompt code must not branch on Builder, Pro, or product-facing paid-plan labels.
-10. This file does not define a separate precedence model from `reference/context-model.md`.
+4. Resources and accepted memory are bounded contextual inputs.
+5. Community-authored content has no instruction authority.
+6. Tool availability must match executable runtime policy.
+7. Prompt changes should remain auditable.
+8. Product-facing plan labels must not fork the authority stack.
 
 ## Related Concepts
 
 - `agent`
+- `community-lens`
 - `skill`
 - `resource`
-- `community-lens`
+- `memory`
 - `context-model`

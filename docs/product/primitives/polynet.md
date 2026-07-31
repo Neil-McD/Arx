@@ -3,103 +3,108 @@ id: product.polynet
 title: Polynet
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-07-30
 ---
 
 # Polynet
 
 ## Definition
 
-Polynet is an AI-native collective intelligence platform where builders create custom AI agents, distribute them through communities, and monetize systems that become more valuable as the network learns and compounds.
+Polynet is an AI-native collective intelligence platform where builders create
+communities that can think, remember, and act with AI.
 
-It combines product, community, access control, shared knowledge, and agent capability into one system.
+It combines community, access control, shared knowledge, member participation,
+agent capability, and monetization in one understandable system.
 
 ## Why It Exists
 
-Polynet exists because software, services, consulting, and communities are converging into a new business model: services as software.
+Builders should be able to package expertise, workflows, judgment, resources,
+and agent capability into a community product instead of stitching together
+separate tools for AI, payments, community, and delivery.
 
-Builders should be able to package expertise, workflows, judgment, resources, and agent capability into a community product instead of stitching together separate tools for AI, payments, community, and delivery.
-
-The core problem is not "add AI to a community." The core problem is helping builders create businesses where the agent, community, and intelligence layer reinforce one another.
+The core problem is not "add AI to a community." The goal is to make the
+community, its members, and its intelligence layer reinforce one another.
 
 ## User Mental Model
 
 A builder launches a community intelligence system.
 
-A member joins communities and uses the agent, chat, resources, and workspace to get useful work done.
+A member joins communities, participates in chat and the AI Feed, uses shared
+resources, and asks their personal agent for help under the current community
+context.
 
-A community can become more useful as people participate, share resources, ask questions, and turn repeated patterns into reusable knowledge.
+Each community also has a separate community-owned agent for direct mentions
+and community cognition.
 
 ## System Mental Model
 
 Polynet combines:
 
-- agents as product surfaces
-- communities as distribution and trust systems
-- entitlements as access authority
-- resources, skills, and memory as reusable context
-- threads and community lenses as the workspace execution model
+- communities as product, distribution, and authority boundaries
+- entitlements as access truth
+- roles as per-community authority
+- resources and accepted memory as community-owned knowledge
+- a member-owned personal agent
+- a separate community-owned agent
+- one five-operation repository interface shared by native and external
+  harnesses
 
-The product should stay understandable: explicit memory, explicit access, explicit payment state, explicit thread context, and explicit community lens state.
+The product stays understandable through explicit access, payment, community
+context, memory, authority, and receipts.
 
 ## Alpha-Current Behavior
 
-The active MVP surface focuses on:
+The active MVP surface includes:
 
 - auth and session lifecycle
 - community creation and management
-- Published and Unlisted community visibility
-- gated community access
-- public community funnels
-- community chat, resources, members, settings, and voice input
+- Published and Unlisted visibility
+- gated access and public community funnels
+- community chat, AI Feed, resources, members, settings, and voice input
 - billing, provider connections, and builder payouts
-- personal AI threads with explicit community lens switching
-- the official Polynet MCP as a permissioned external-harness gateway
-- skills as controlled behavior packages
-- personal memory as an explicit user-owned context layer
+- the member's bottom-right personal-agent dock
+- separate community-owned agent mentions and cognition
+- accepted community memory
+- the official OAuth-protected Polynet MCP
+- the canonical `polynet_list`, `polynet_read`, `polynet_search`,
+  `polynet_write`, and `polynet_call` operations
 
 ## Rules
 
-1. The agent is part of the product, not an add-on.
-2. The community is a trust, distribution, retention, and feedback layer.
-3. Access must be explicit and entitlement-driven.
-4. Collective intelligence should come from shared activity, curated knowledge, resources, and intentional builder systems.
-5. Do not imply private member AI usage is silently mined.
-6. Distinguish current alpha behavior from future product intent.
-7. Do not describe Polynet as an IDE replacement or generic automation platform.
+1. The community is the primary product and authority boundary.
+2. Access is entitlement-driven and evaluated by the backend.
+3. A member's personal agent and a community-owned agent are different identities.
+4. Community context is explicit and server-validated.
+5. Collective intelligence comes from shared activity, curated resources, and
+   accepted community memory—not silent mining of private conversations.
+6. The official Polynet MCP exposes Polynet; Polynet does not consume
+   third-party MCP servers.
+7. Prompts and generated indexes never become authority.
 
 ## Examples
 
-- A founder creates a paid community around a specialized workflow and gives members an agent that understands the founder's method.
-- A technical community uses resources, chat, and skills to help members solve recurring problems faster.
-- A member opens a workspace thread, switches into a community lens, and asks the agent to use that community's context for the next task.
+- A founder launches a paid community around a specialized methodology.
+- Members participate, use shared resources, and ask their personal agent to
+  work within that community's authorized context.
+- The community-owned agent responds to mentions and contributes to community
+  cognition without inheriting builder authority.
+- A member connects Codex or another compatible harness to the official Polynet
+  MCP and operates through the same five Polynet tools.
 
 ## Non-Goals
 
-Polynet is not only:
+The active MVP is not a standalone general-purpose Workspace, public app
+catalog, third-party MCP marketplace, or generic automation platform.
 
-- a chat app
-- a social network
-- a course platform
-- a standalone assistant
-- an IDE replacement
-
-During MVP, Polynet should avoid expanding into broad referral or commission systems, advanced automations, duplicate surfaces, or speculative platform features that do not support creator setup and member participation. A narrow platform-level Builder Partner Program can exist only when it directly helps builders bring new communities to Polynet and stays separate from community-level partner-program complexity.
-
-## Common Mistakes
-
-- Treating the community as only a social layer.
-- Treating the agent as a chatbot bolted onto a community.
-- Treating collective intelligence as silent mining of private user conversations.
-- Treating published communities as ungated.
-- Treating prompts as the source of product truth instead of documentation and backend policy.
+Internal threads, coding-workspace infrastructure, and external compatibility
+fields may remain implementation substrate without becoming product
+navigation.
 
 ## Related Concepts
 
 - `community`
 - `agent`
-- `funnel`
-- `workspace`
 - `community-lens`
-- `entitlement`
 - `memory`
+- `polynet-mcp`
+- `entitlement`
