@@ -4,6 +4,7 @@ import { internalAction, internalQuery } from "./_generated/server";
 import {
   normalizeIdValue,
   requireCommunityChatAccess,
+  resolvePublicUserId,
   toIsoString,
 } from "./communityCore";
 import { truncateText } from "./communityText";
@@ -81,16 +82,25 @@ function aiFeedSnippet(row: CommunityAiFeedEvidenceRow, tokens: string[]): strin
   }`;
 }
 
-function mapAiFeedEvidenceItem(args: {
+async function mapAiFeedEvidenceItem(args: {
+  ctx: any;
   community: CommunityRow;
   post: CommunityAiFeedEvidenceRow;
   retrievalScore: number | null;
   retrievalSource: "recent" | "archive";
   tokens?: string[];
+  userIdCache?: Map<string, string | null>;
 }) {
   const postId = normalizeIdValue(args.post._id);
   const ref = buildCommunityAiFeedEvidenceRef(postId);
   const slug = String(args.community.slug ?? "").trim();
+  const recordedByUserId = args.post.authorUserId
+    ? await resolvePublicUserId(
+        args.ctx,
+        args.post.authorUserId,
+        args.userIdCache,
+      )
+    : null;
   const supportingNotes = Array.isArray(args.post.evidence)
     ? args.post.evidence.map((entry) => String(entry).trim()).filter(Boolean).slice(0, 4)
     : [];
@@ -109,9 +119,7 @@ function mapAiFeedEvidenceItem(args: {
       postId,
       agentKind: args.post.agentKind ?? null,
       agentKey: args.post.agentKey ?? null,
-      recordedByUserId: args.post.authorUserId
-        ? normalizeIdValue(args.post.authorUserId)
-        : null,
+      recordedByUserId,
     }),
     retrieval_score: args.retrievalScore,
     signal_score: Number(args.post.score ?? 0),
@@ -151,20 +159,25 @@ export const searchRecentCommunityAiFeedEvidenceInternal = internalQuery({
       .order("desc")
       .take(RECENT_AI_FEED_SCAN_LIMIT)) as CommunityAiFeedEvidenceRow[];
     const tokens = tokenizeAiFeedQuery(args.query);
-    const matches = posts
+    const rankedMatches = posts
       .map((post) => ({ post, score: scoreAiFeedPost(post, tokens) }))
       .filter((candidate) => candidate.score > 0)
-      .sort((a, b) => b.score - a.score || b.post.updatedAt - a.post.updatedAt)
-      .slice(0, normalizeCommunityEvidenceSearchLimit(args.limit))
-      .map((candidate) =>
+      .sort((a, b) => b.score - a.score || b.post.updatedAt - a.post.updatedAt);
+    const limit = normalizeCommunityEvidenceSearchLimit(args.limit);
+    const userIdCache = new Map<string, string | null>();
+    const matches = await Promise.all(
+      rankedMatches.slice(0, limit).map((candidate) =>
         mapAiFeedEvidenceItem({
+          ctx,
           community,
           post: candidate.post,
           retrievalScore: candidate.score,
           retrievalSource: "recent",
           tokens,
+          userIdCache,
         }),
-      );
+      ),
+    );
     return {
       community: {
         id: normalizeIdValue(community._id),
@@ -172,6 +185,7 @@ export const searchRecentCommunityAiFeedEvidenceInternal = internalQuery({
         name: String(community.name ?? "").trim() || "Community",
       },
       matches,
+      truncated: rankedMatches.length > limit,
     };
   },
 });
@@ -201,7 +215,8 @@ export const readCommunityAiFeedEvidenceItemsInternal = internalQuery({
       });
       if (!post) continue;
       items.push(
-        mapAiFeedEvidenceItem({
+        await mapAiFeedEvidenceItem({
+          ctx,
           community,
           post,
           retrievalScore: null,
@@ -236,12 +251,13 @@ export const readCommunityAiFeedEvidenceInternal = internalQuery({
     const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
     if (!community) throw new Error("community_not_found");
     return {
-      ...mapAiFeedEvidenceItem({
+      ...(await mapAiFeedEvidenceItem({
+        ctx,
         community,
         post,
         retrievalScore: null,
         retrievalSource: "recent",
-      }),
+      })),
       body: post.body,
     };
   },
@@ -268,7 +284,11 @@ export const searchCommunityAiFeedEvidenceInternal = internalAction({
     const recent = (await ctx.runQuery(
       (internal as any).communityAiFeedEvidence.searchRecentCommunityAiFeedEvidenceInternal,
       { userId, communityId: args.communityId, query, limit },
-    )) as { community: Record<string, unknown>; matches: Array<Record<string, unknown>> };
+    )) as {
+      community: Record<string, unknown>;
+      matches: Array<Record<string, unknown>>;
+      truncated: boolean;
+    };
     const matches = recent.matches;
     const resultRefs = matches.map((match) => String(match.ref ?? "")).filter(Boolean);
     const retrievalId: any = await ctx.runMutation(
@@ -287,6 +307,7 @@ export const searchCommunityAiFeedEvidenceInternal = internalAction({
       community: recent.community,
       query,
       matches,
+      truncated: recent.truncated,
       retrieval_id: normalizeIdValue(retrievalId),
       diagnostics: {
         version: 2,

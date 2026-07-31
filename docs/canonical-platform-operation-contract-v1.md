@@ -77,7 +77,11 @@ discovered under `capabilities/`.
 
 - `polynet_list` is bounded discovery.
 - `polynet_read` reads exact evidence and may append a retrieval receipt.
-- `polynet_search` searches one bounded subtree and returns paths.
+- `polynet_search` searches one bounded subtree and returns paths. A community
+  root search composes the canonical channel, AI Feed, resource, and accepted
+  memory projections under one global limit; it does not use the private
+  prompt-context aggregator. Every returned result path must round-trip through
+  `polynet_read`, and hidden domain failures fail the operation.
 - `polynet_write` delegates to the owning chat, AI Feed, or resource changeset
   domain.
 - `polynet_call` invokes only a discoverable versioned transition.
@@ -108,9 +112,10 @@ projection, policy, executor, and retired-name boundaries.
 projection.
 
 `npx vitest run convex/polynetCanonicalExecutor.test.ts` checks member/builder
-authority, community-agent confinement and attribution, mutation
-idempotency/conflict behavior, and staged builder calls against an isolated
-Convex backend.
+authority, community-agent confinement and attribution, community-root
+search/read round trips, global search bounds, member-visible memory projection,
+mutation idempotency/conflict behavior, and staged builder calls against an
+isolated Convex backend.
 
 The release gate and live staging MCP acceptance remain required before this
 contract can leave staging.

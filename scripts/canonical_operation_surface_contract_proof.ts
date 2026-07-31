@@ -83,6 +83,18 @@ for (const name of expected) {
   assert.equal(policy.parallelSafe, !writesRuntimeState);
 }
 
+const searchResultSchema = (
+  POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_search.outputSchema.properties
+    ?.results as {
+    items?: { required?: string[] };
+  }
+)?.items;
+assert.deepEqual(
+  searchResultSchema?.required,
+  ["path"],
+  "every successful canonical search result must carry a follow-up path",
+);
+
 for (const retiredPublicName of [
   "polynet_list_communities",
   "polynet_get_community",
@@ -104,6 +116,7 @@ for (const retiredPublicName of [
 
 const mcpContract = read("shared/polynetMcp.ts");
 const executor = read("convex/polynetCanonicalExecutor.ts");
+const repositorySearch = read("convex/communityRepositorySearch.ts");
 const nativeRuntime = read("convex/runtimeAgentLoop.ts");
 const mcpRuntime = read("convex/httpMcp.ts");
 const authority = read("shared/polynetAuthority.ts");
@@ -124,6 +137,17 @@ assert.match(executor, /derivePolynetHumanAuthority\(/);
 assert.match(executor, /derivePolynetCommunityAgentAuthority\(\)/);
 assert.match(executor, /createCommunityInteractionComposerMessage/);
 assert.match(executor, /publishCanonicalPolynetAiFeedPostInternal/);
+assert.match(executor, /searchCommunityRepositoryInternal/);
+assert.doesNotMatch(
+  executor,
+  /communityRecentContext/,
+  "canonical repository search must not use the prompt-context aggregator",
+);
+assert.match(repositorySearch, /searchRecentCommunityInteractionEvidenceInternal/);
+assert.match(repositorySearch, /searchRecentCommunityAiFeedEvidenceInternal/);
+assert.match(repositorySearch, /searchRecentCommunityResourceEvidenceInternal/);
+assert.match(repositorySearch, /searchCommunityMemoryInternal/);
+assert.match(repositorySearch, /community_repository_search/);
 assert.match(executor, /stageCommunityResourceBuilderChangesetInternal/);
 assert.match(executor, /approveCommunityResourceBuilderChangeset/);
 assert.match(executor, /applyCommunityResourceBuilderChangeset/);

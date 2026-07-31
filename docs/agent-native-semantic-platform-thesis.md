@@ -245,8 +245,11 @@ source path. They serve only real community, self, member-directory, and
 resource mounts. The later `/members/` addition followed explicit user
 direction and remains a bounded profile projection, not a generic row browser.
 
-`polynet_search` is `PROPOSED` after list/read. It returns bounded authorized
-references/snippets and revalidates canonical truth; an index is a locator, not
+`polynet_search` is `IMPLEMENTED` on the staging source path. Exact subtree
+searches reuse canonical domain owners. Community-root search composes the
+channel, AI Feed, resource, and accepted-memory projections under one global
+limit and returns paths that round-trip through `polynet_read`. Search results
+and their underlying references are reauthorized; an index is a locator, not
 authority.
 
 `polynet_write` is `PROPOSED` only for naturally writable semantic documents.
@@ -359,7 +362,7 @@ The labels mean:
 | Deterministic `community.md` and `self.md` resources | `IMPLEMENTED` | current actor and community authority are revalidated on every read |
 | Bounded `polynet_list` and `polynet_read` | `IMPLEMENTED` | native and official MCP adapters share semantic owners and fail closed |
 | One generalized capability definition/projection seam | `NEXT` | first collapse duplicated native/MCP declarations |
-| Bounded `polynet_search` | `PROPOSED` | only after list/read and canonical truth revalidation exist |
+| Bounded `polynet_search` | `IMPLEMENTED` | staging composes canonical domain owners and returns exact follow-up paths |
 | Naturally scoped `polynet_write` | `PROPOSED` | typed domain mutations remain canonical |
 | Discoverable `polynet_call` | `PROPOSED` | no undiscoverable mega-tool behavior |
 | Memory, activity, capability, app, workflow, event, and UI mounts | `PROPOSED` | each requires a real semantic and authority contract |

@@ -12,6 +12,7 @@ export const communityEvidenceSurfaceValidator = v.union(
 );
 
 export const communityEvidenceCapabilityValidator = v.union(
+  v.literal("community_repository_search"),
   v.literal("community_chat_search"),
   v.literal("community_chat_read"),
   v.literal("community_resources_search"),

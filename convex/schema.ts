@@ -2982,6 +2982,7 @@ export default defineSchema({
       v.literal("community_concierge"),
     ),
     capability: v.union(
+      v.literal("community_repository_search"),
       v.literal("community_chat_search"),
       v.literal("community_chat_read"),
       v.literal("community_resources_search"),

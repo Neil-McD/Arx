@@ -2441,7 +2441,7 @@ async function retrieveAcceptedCommunityMemoryNodes(args: {
   query?: string;
   types?: NodeType[];
   limit: number;
-}): Promise<IntelligenceNodeRow[]> {
+}): Promise<{ nodes: IntelligenceNodeRow[]; truncated: boolean }> {
   const typeSet = new Set((args.types ?? []).filter((type) => NODE_TYPES.has(type)));
   const statuses = ACCEPTED_MEMBER_MEMORY_STATUSES;
   const bucketCount = statuses.length * Math.max(1, typeSet.size || 1);
@@ -2496,7 +2496,7 @@ async function retrieveAcceptedCommunityMemoryNodes(args: {
     }))) continue;
     evidenceReadableRows.push(row);
   }
-  return evidenceReadableRows
+  const ranked = evidenceReadableRows
     .filter((row) => {
       if (!args.workflowId) return true;
       if ((row.workflowIds ?? []).length === 0) return true;
@@ -2504,9 +2504,11 @@ async function retrieveAcceptedCommunityMemoryNodes(args: {
     })
     .map((node) => ({ node, score: retrievalScore({ node, workflowId: args.workflowId, query: args.query }) }))
     .filter((entry) => entry.score > -0.5)
-    .sort((a, b) => b.score - a.score || b.node.updatedAt - a.node.updatedAt)
-    .slice(0, args.limit)
-    .map((entry) => entry.node);
+    .sort((a, b) => b.score - a.score || b.node.updatedAt - a.node.updatedAt);
+  return {
+    nodes: ranked.slice(0, args.limit).map((entry) => entry.node),
+    truncated: ranked.length > args.limit,
+  };
 }
 
 export const createCommunityIntelligenceNode = internalMutation({
@@ -3949,16 +3951,24 @@ export async function searchCommunityMemoryCore(args: {
   query?: string;
   types?: NodeType[];
   limit?: number;
+  forceMemberView?: boolean;
 }) {
   await requireCommunityChatAccess({
     ctx: args.ctx,
     communityId: args.communityId,
     userId: args.userId,
   });
-  const isManager = await viewerCanManageCommunity(args.ctx, args.communityId, args.userId);
+  const isManager =
+    args.forceMemberView === true
+      ? false
+      : await viewerCanManageCommunity(
+          args.ctx,
+          args.communityId,
+          args.userId,
+        );
   const limit = Math.max(1, Math.min(12, Math.floor(args.limit ?? 5)));
   const queryText = normalizeOptionalLongText(args.query, 512);
-  const nodes = await retrieveAcceptedCommunityMemoryNodes({
+  const { nodes, truncated } = await retrieveAcceptedCommunityMemoryNodes({
     ctx: args.ctx,
     communityId: args.communityId,
     isManager,
@@ -3982,6 +3992,7 @@ export async function searchCommunityMemoryCore(args: {
     retrieval_receipt: mapCommunityMemoryRetrievalReceipt(receipt),
     epistemic_note: "community_memory_search returns accepted community intelligence from the directory. Use community_search for raw recent community evidence.",
     nodes: nodes.map(mapCompactMemoryNode),
+    truncated,
   };
 }
 
@@ -4005,6 +4016,7 @@ export const searchCommunityMemoryInternal = internalMutation({
       ),
     ),
     limit: v.optional(v.number()),
+    forceMemberView: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     try {
@@ -4021,6 +4033,7 @@ export const searchCommunityMemoryInternal = internalMutation({
         query: args.query,
         types: args.types,
         limit: args.limit,
+        forceMemberView: args.forceMemberView,
       });
     } catch (error) {
       return memoryToolError(error, "community_memory_search_failed");
@@ -4036,6 +4049,7 @@ export const readCommunityMemoryInternal = internalMutation({
     surface: communityEvidenceSurfaceValidator,
     nodeId: v.id("communityIntelligenceNodes"),
     retrievalLogId: v.optional(v.id("communityIntelligenceRetrievalLogs")),
+    forceMemberView: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     try {
@@ -4045,7 +4059,10 @@ export const readCommunityMemoryInternal = internalMutation({
         authSubject: args.authSubject ?? null,
       });
       await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-      const isManager = await viewerCanManageCommunity(ctx, args.communityId, userId);
+      const isManager =
+        args.forceMemberView === true
+          ? false
+          : await viewerCanManageCommunity(ctx, args.communityId, userId);
       const node = await getIntelligenceNodeOrThrow(ctx, args.nodeId);
       if (normalizeIdValue(node.communityId) !== normalizeIdValue(args.communityId)) {
         throw new Error("community_intelligence_node_not_found");

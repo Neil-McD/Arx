@@ -6,6 +6,7 @@ import {
   communityResourceModuleIsLive,
   normalizeIdValue,
   requireCommunityChatAccess,
+  resolvePublicUserId,
   toIsoString,
   type CommunityResourceLike,
   type CommunityResourceModuleLike,
@@ -25,6 +26,7 @@ import {
   deriveCommunityResourceLineageEnvelope,
   parseCommunityResourceEvidenceRef,
 } from "../shared/communityEvidenceContract";
+import { buildCommunityResourceSemanticDocumentPath } from "../shared/communitySemanticRepository";
 
 type CommunityRow = {
   _id: any;
@@ -86,13 +88,15 @@ function resourceSnippet(row: CommunityResourceLike, tokens: string[]): string |
   }`;
 }
 
-function mapResourceEvidenceItem(args: {
+async function mapResourceEvidenceItem(args: {
+  ctx: any;
   community: CommunityRow;
   resource: CommunityResourceLike;
   module: CommunityResourceModuleLike;
   score: number | null;
   source: "recent" | "archive";
   tokens?: string[];
+  userIdCache?: Map<string, string | null>;
 }) {
   const resourceId = normalizeIdValue(args.resource._id);
   const ref = buildCommunityResourceEvidenceRef(resourceId);
@@ -105,13 +109,26 @@ function mapResourceEvidenceItem(args: {
     resourceRole: args.resource.role,
   });
   const slug = String(args.community.slug ?? "").trim();
+  const path = buildCommunityResourceSemanticDocumentPath({
+    title: args.resource.title,
+    ref,
+    directoryUri: directory.directory_uri,
+    directoryPath: directory.directory_path,
+  });
+  const recordedByUserId = args.resource.createdByUserId
+    ? await resolvePublicUserId(
+        args.ctx,
+        args.resource.createdByUserId,
+        args.userIdCache,
+      )
+    : null;
   return {
     ref,
     source_type: "resource" as const,
     source_id: resourceId,
     resource_id: resourceId,
     title: args.resource.title,
-    path: directory.directory_path,
+    path,
     directory_path: directory.directory_path,
     directory_uri: directory.directory_uri,
     url: args.resource.url ?? null,
@@ -119,9 +136,7 @@ function mapResourceEvidenceItem(args: {
     lineage: deriveCommunityResourceLineageEnvelope({
       communityId: normalizeIdValue(args.community._id),
       resourceId,
-      recordedByUserId: args.resource.createdByUserId
-        ? normalizeIdValue(args.resource.createdByUserId)
-        : null,
+      recordedByUserId,
     }),
     created_at: toIsoString(args.resource.createdAt),
     updated_at: toIsoString(args.resource.updatedAt),
@@ -164,7 +179,7 @@ export const searchRecentCommunityResourceEvidenceInternal = internalQuery({
       visible.map(async (row) => (await hydrateCommunityResourceBody(ctx, row)) ?? row),
     );
     const tokens = tokenizeResourceQuery(args.query);
-    const matches = hydrated
+    const rankedMatches = hydrated
       .map((resource) => ({
         resource,
         module: moduleById.get(normalizeIdValue(resource.moduleId)),
@@ -174,18 +189,23 @@ export const searchRecentCommunityResourceEvidenceInternal = internalQuery({
         (candidate): candidate is typeof candidate & { module: CommunityResourceModuleLike } =>
           Boolean(candidate.module && candidate.score > 0),
       )
-      .sort((a, b) => b.score - a.score || b.resource.updatedAt - a.resource.updatedAt)
-      .slice(0, normalizeResourceSearchLimit(args.limit))
-      .map((candidate) =>
+      .sort((a, b) => b.score - a.score || b.resource.updatedAt - a.resource.updatedAt);
+    const limit = normalizeResourceSearchLimit(args.limit);
+    const userIdCache = new Map<string, string | null>();
+    const matches = await Promise.all(
+      rankedMatches.slice(0, limit).map((candidate) =>
         mapResourceEvidenceItem({
+          ctx,
           community,
           resource: candidate.resource,
           module: candidate.module,
           score: candidate.score,
           source: "recent",
           tokens,
+          userIdCache,
         }),
-      );
+      ),
+    );
     return {
       community: {
         id: normalizeIdValue(community._id),
@@ -193,6 +213,7 @@ export const searchRecentCommunityResourceEvidenceInternal = internalQuery({
         name: String(community.name ?? "").trim() || "Community",
       },
       matches,
+      truncated: rankedMatches.length > limit,
     };
   },
 });
@@ -220,7 +241,8 @@ export const readCommunityResourceEvidenceItemsInternal = internalQuery({
       const resource =
         (await hydrateCommunityResourceBody(ctx, resolved.resource)) ?? resolved.resource;
       items.push(
-        mapResourceEvidenceItem({
+        await mapResourceEvidenceItem({
+          ctx,
           community,
           resource,
           module: resolved.module,
@@ -254,7 +276,11 @@ export const searchCommunityResourceEvidenceInternal = internalAction({
     const recent = (await ctx.runQuery(
       (internal as any).communityResourceEvidence.searchRecentCommunityResourceEvidenceInternal,
       { userId, communityId: args.communityId, query, limit },
-    )) as { community: Record<string, unknown>; matches: Array<Record<string, unknown>> };
+    )) as {
+      community: Record<string, unknown>;
+      matches: Array<Record<string, unknown>>;
+      truncated: boolean;
+    };
     const matches = recent.matches;
     const resultRefs = matches.map((match) => String(match.ref ?? "")).filter(Boolean);
     const retrievalId: any = await ctx.runMutation(
@@ -273,6 +299,7 @@ export const searchCommunityResourceEvidenceInternal = internalAction({
       community: recent.community,
       query,
       matches,
+      truncated: recent.truncated,
       retrieval_id: normalizeIdValue(retrievalId),
       diagnostics: {
         version: 2,

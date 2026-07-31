@@ -995,7 +995,7 @@ function buildCommunityResourceSemanticModulePath(args: {
   return `${POLYNET_RESOURCES_DIRECTORY_PATH}${label}~${moduleId}/`;
 }
 
-function buildCommunityResourceSemanticDocumentPath(args: {
+export function buildCommunityResourceSemanticDocumentPath(args: {
   title: unknown;
   ref: unknown;
   directoryUri: unknown;

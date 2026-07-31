@@ -135,6 +135,10 @@ const SEARCH_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
       items: {
         type: "object",
         additionalProperties: true,
+        required: ["path"],
+        properties: {
+          path: PATH_SCHEMA,
+        },
       },
     },
     truncated: { type: "boolean" },

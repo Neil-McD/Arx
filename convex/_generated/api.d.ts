@@ -93,6 +93,7 @@ import type * as communityPublic from "../communityPublic.js";
 import type * as communityReadKernel from "../communityReadKernel.js";
 import type * as communityRecentContext from "../communityRecentContext.js";
 import type * as communityRecipientCore from "../communityRecipientCore.js";
+import type * as communityRepositorySearch from "../communityRepositorySearch.js";
 import type * as communityResourceContent from "../communityResourceContent.js";
 import type * as communityResourceEvidence from "../communityResourceEvidence.js";
 import type * as communityResourceEvidenceCore from "../communityResourceEvidenceCore.js";
@@ -311,6 +312,7 @@ declare const fullApi: ApiFromModules<{
   communityReadKernel: typeof communityReadKernel;
   communityRecentContext: typeof communityRecentContext;
   communityRecipientCore: typeof communityRecipientCore;
+  communityRepositorySearch: typeof communityRepositorySearch;
   communityResourceContent: typeof communityResourceContent;
   communityResourceEvidence: typeof communityResourceEvidence;
   communityResourceEvidenceCore: typeof communityResourceEvidenceCore;

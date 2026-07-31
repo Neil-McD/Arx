@@ -261,7 +261,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
     }
   }
   const tokens = tokenizeQuery(args.query);
-  const candidates = [
+  const rankedCandidates = [
     ...Array.from(readableRoots.values()).map((row) => ({
       objectType: "root" as const,
       row,
@@ -279,8 +279,8 @@ async function searchRecentCommunityInteractionEvidence(args: {
       .filter((entry): entry is typeof entry & { root: InteractionRow } => Boolean(entry.root)),
   ]
     .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score || b.row.createdAt - a.row.createdAt)
-    .slice(0, args.limit);
+    .sort((a, b) => b.score - a.score || b.row.createdAt - a.row.createdAt);
+  const candidates = rankedCandidates.slice(0, args.limit);
   const userIdCache = new Map<string, string | null>();
   return {
     community: {
@@ -302,6 +302,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
         }),
       ),
     ),
+    truncated: rankedCandidates.length > args.limit,
   };
 }
 
@@ -495,7 +496,11 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
     const recent = (await ctx.runQuery(
       (internal as any).communityInteractionEvidence.searchRecentCommunityInteractionEvidenceInternal,
       { userId, communityId: args.communityId, query, limit },
-    )) as { community: Record<string, unknown>; results: Array<Record<string, unknown>> };
+    )) as {
+      community: Record<string, unknown>;
+      results: Array<Record<string, unknown>>;
+      truncated: boolean;
+    };
     const results = recent.results;
     const resultRefs = results.map((result) => String(result.ref ?? "")).filter(Boolean);
     const retrievalId: any = await ctx.runMutation(
@@ -513,6 +518,7 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
       community: recent.community,
       query,
       results,
+      truncated: recent.truncated,
       retrieval_id: normalizeIdValue(retrievalId),
       diagnostics: {
         version: 2,

@@ -13,6 +13,7 @@ const modules = import.meta.glob([
   "./authIdentity.ts",
   "./communityActivity.ts",
   "./communityAiFeed.ts",
+  "./communityAiFeedEvidence.ts",
   "./communityCapabilityContext.ts",
   "./communityEvidenceAudit.ts",
   "./communityIntelligenceDirectory.ts",
@@ -20,6 +21,9 @@ const modules = import.meta.glob([
   "./communityInteractions.ts",
   "./communityMentionLifecycle.ts",
   "./communityOnboarding.ts",
+  "./communityRecentContext.ts",
+  "./communityRepositorySearch.ts",
+  "./communityResourceEvidence.ts",
   "./communityResources.ts",
   "./polynetCanonicalReceipts.ts",
   "./_generated/**/*.*s",
@@ -102,6 +106,131 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       otherCommunityId,
       ownerSubject: "canonical-owner-subject",
       memberSubject: "canonical-member-subject",
+    };
+  });
+}
+
+async function createCanonicalSearchFixture(
+  t: ReturnType<typeof convexTest>,
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+) {
+  const nowMs = 1_760_000_000_000;
+  return await t.run(async (ctx) => {
+    const interactionId = await ctx.db.insert("communityInteractionRoots", {
+      communityId: fixture.communityId,
+      actorType: "human",
+      actorUserId: fixture.ownerId,
+      kind: "discussion",
+      status: "live",
+      visibilityScope: "community",
+      title: "Canonical repository search",
+      contentSummary:
+        "Canonical repository search proof from the community channel.",
+      replyCount: 0,
+      reactionSummary: [],
+      idempotencyKey: "canonical-root-search-interaction",
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const aiFeedPostId = await ctx.db.insert("communityAiFeedPosts", {
+      communityId: fixture.communityId,
+      authorType: "agent",
+      authorUserId: fixture.ownerId,
+      agentKey: "community_agent",
+      agentKind: "community_agent",
+      authorLabel: "Polynet Agent",
+      type: "observation",
+      title: "Canonical repository search",
+      body: "Canonical repository search proof from the AI Feed.",
+      status: "live",
+      score: 0.9,
+      goodCount: 0,
+      lowSignalCount: 0,
+      createdAt: nowMs + 1,
+      updatedAt: nowMs + 1,
+    });
+    const moduleId = await ctx.db.insert("communityResourceModules", {
+      communityId: fixture.communityId,
+      createdByUserId: fixture.ownerId,
+      status: "live",
+      name: "Canonical search",
+      sortOrder: 0,
+      createdAt: nowMs + 2,
+      updatedAt: nowMs + 2,
+    });
+    const resourceId = await ctx.db.insert("communityResources", {
+      communityId: fixture.communityId,
+      moduleId,
+      createdByUserId: fixture.ownerId,
+      type: "page",
+      role: "page",
+      status: "published",
+      title: "Canonical repository search",
+      bodyMd: "Canonical repository search proof from community resources.",
+      pinned: false,
+      createdAt: nowMs + 3,
+      updatedAt: nowMs + 3,
+    });
+    const memoryNodeId = await ctx.db.insert("communityIntelligenceNodes", {
+      communityId: fixture.communityId,
+      type: "insight",
+      title: "Canonical repository search",
+      bodyMd: "Canonical repository search proof from accepted memory.",
+      status: "promising",
+      visibilityScope: "community",
+      sourceVisibility: "community",
+      confidence: 0.7,
+      evidenceStrength: "observed",
+      workflowIds: [],
+      tags: ["canonical-search"],
+      sourceTraceIds: [],
+      outcomeObservationIds: [],
+      stalenessScore: 0,
+      retrievalUsefulnessScore: 0,
+      outcomeImpactScore: 0,
+      createdByActorType: "admin",
+      createdByUserId: fixture.ownerId,
+      lastUpdatedByActorType: "admin",
+      lastUpdatedByUserId: fixture.ownerId,
+      version: 1,
+      createdAt: nowMs + 4,
+      updatedAt: nowMs + 4,
+    });
+    const adminMemoryNodeId = await ctx.db.insert(
+      "communityIntelligenceNodes",
+      {
+        communityId: fixture.communityId,
+        type: "insight",
+        title: "Canonical repository search admin note",
+        bodyMd:
+          "Canonical repository search proof that must stay outside the member projection.",
+        status: "promising",
+        visibilityScope: "admin",
+        sourceVisibility: "admin",
+        confidence: 0.7,
+        evidenceStrength: "observed",
+        workflowIds: [],
+        tags: ["canonical-search", "admin-only"],
+        sourceTraceIds: [],
+        outcomeObservationIds: [],
+        stalenessScore: 0,
+        retrievalUsefulnessScore: 0,
+        outcomeImpactScore: 0,
+        createdByActorType: "admin",
+        createdByUserId: fixture.ownerId,
+        lastUpdatedByActorType: "admin",
+        lastUpdatedByUserId: fixture.ownerId,
+        version: 1,
+        createdAt: nowMs + 5,
+        updatedAt: nowMs + 5,
+      },
+    );
+    return {
+      interactionId,
+      aiFeedPostId,
+      resourceId,
+      memoryNodeId,
+      adminMemoryNodeId,
     };
   });
 }
@@ -348,6 +477,185 @@ test("canonical five-tool executor derives member, builder, and community-agent 
     ok: false,
     code: "community_context_mismatch",
   });
+});
+
+test("community-root search returns canonical paths that round-trip through read", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const searchFixture = await createCanonicalSearchFixture(t, fixture);
+  const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
+  const asMember = t.withIdentity({ subject: fixture.memberSubject });
+  const ownerCtx = executionContext(asOwner);
+  const memberCtx = executionContext(asMember);
+  const searchInput = {
+    path: "/communities/canonical-community/",
+    query: "canonical repository search",
+    limit: 10,
+  };
+
+  const searched = await executePolynetCanonicalTool({
+    ctx: ownerCtx,
+    authSubject: fixture.ownerSubject,
+    userId: fixture.ownerId,
+    principalKind: "external_mcp",
+    evidenceSurface: "external_mcp",
+    toolName: "polynet_search",
+    input: searchInput,
+  });
+  if (!searched.ok) {
+    throw new Error(`${searched.code}: ${searched.message}`);
+  }
+  expect(searched.value).toMatchObject({
+    path: "/communities/canonical-community/",
+    truncated: false,
+    retrieval_id: expect.any(String),
+  });
+  const results = Array.isArray(searched.value.results)
+    ? (searched.value.results as Array<Record<string, unknown>>)
+    : [];
+  expect(results).toHaveLength(4);
+  expect(results.map((result) => result.source_type).sort()).toEqual([
+    "ai_feed",
+    "interaction",
+    "memory",
+    "resource",
+  ]);
+  const paths = results.map((result) => String(result.path ?? ""));
+  expect(paths).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(
+        /^\/communities\/canonical-community\/channels\/general\/interaction:root:/,
+      ),
+      expect.stringMatching(
+        /^\/communities\/canonical-community\/ai-feed\/ai_feed:/,
+      ),
+      expect.stringMatching(
+        /^\/communities\/canonical-community\/resources\//,
+      ),
+      expect.stringMatching(
+        /^\/communities\/canonical-community\/memory\//,
+      ),
+    ]),
+  );
+  expect(JSON.stringify(results)).not.toContain(String(fixture.ownerId));
+
+  for (const path of paths) {
+    const read = await executePolynetCanonicalTool({
+      ctx: ownerCtx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "external_mcp",
+      evidenceSurface: "external_mcp",
+      toolName: "polynet_read",
+      input: { path, offset: 0, limit: 2_000 },
+    });
+    expect(read).toMatchObject({
+      ok: true,
+      value: {
+        path,
+        body: expect.stringContaining("Canonical repository search"),
+        truncated: false,
+      },
+    });
+  }
+
+  const memberSearch = await executePolynetCanonicalTool({
+    ctx: memberCtx,
+    authSubject: fixture.memberSubject,
+    userId: fixture.memberId,
+    principalKind: "personal_agent",
+    evidenceSurface: "member_agent_dock",
+    toolName: "polynet_search",
+    input: searchInput,
+  });
+  const communityAgentSearch = await executePolynetCanonicalTool({
+    ctx: ownerCtx,
+    authSubject: fixture.ownerSubject,
+    userId: fixture.ownerId,
+    principalKind: "community_agent",
+    mountedCommunityId: fixture.communityId,
+    evidenceSurface: "community_concierge",
+    toolName: "polynet_search",
+    input: searchInput,
+  });
+  expect(memberSearch).toMatchObject({ ok: true });
+  expect(communityAgentSearch).toMatchObject({ ok: true });
+  const memberPaths =
+    memberSearch.ok && Array.isArray(memberSearch.value.results)
+      ? memberSearch.value.results.map((result) =>
+          String((result as Record<string, unknown>).path ?? ""),
+        )
+      : [];
+  const communityAgentPaths =
+    communityAgentSearch.ok && Array.isArray(communityAgentSearch.value.results)
+      ? communityAgentSearch.value.results.map((result) =>
+          String((result as Record<string, unknown>).path ?? ""),
+        )
+      : [];
+  expect(memberPaths).toEqual(paths);
+  expect(communityAgentPaths).toEqual(paths);
+
+  await expect(
+    executePolynetCanonicalTool({
+      ctx: ownerCtx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "external_mcp",
+      evidenceSurface: "external_mcp",
+      toolName: "polynet_search",
+      input: { ...searchInput, limit: 2 },
+    }),
+  ).resolves.toMatchObject({
+    ok: true,
+    value: {
+      results: [expect.any(Object), expect.any(Object)],
+      truncated: true,
+    },
+  });
+
+  await expect(
+    executePolynetCanonicalTool({
+      ctx: ownerCtx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "external_mcp",
+      evidenceSurface: "external_mcp",
+      toolName: "polynet_read",
+      input: {
+        path: `/communities/canonical-community/memory/${String(
+          searchFixture.adminMemoryNodeId,
+        )}.md`,
+        offset: 0,
+        limit: 2_000,
+      },
+    }),
+  ).resolves.toMatchObject({
+    ok: false,
+    code: "semantic_not_found",
+  });
+
+  const receipts = await t.run(async (ctx) =>
+    ctx.db
+      .query("communityEvidenceRetrievalLogs")
+      .withIndex("by_community_createdAt", (q) =>
+        q.eq("communityId", fixture.communityId),
+      )
+      .collect(),
+  );
+  expect(receipts).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        capability: "community_repository_search",
+        surface: "external_mcp",
+        resultRefs: expect.arrayContaining([
+          expect.stringMatching(/^interaction:root:/),
+          expect.stringMatching(/^ai_feed:/),
+          expect.stringMatching(/^resource:/),
+          expect.stringMatching(/^\/memory\//),
+        ]),
+      }),
+    ]),
+  );
 });
 
 test("canonical writes are attributed, retry safe, and reject conflicting idempotency keys", async () => {

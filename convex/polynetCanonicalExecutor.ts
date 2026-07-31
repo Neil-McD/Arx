@@ -431,17 +431,27 @@ function mountSearchResults(args: {
   path: string;
   results: Array<Record<string, unknown>>;
   retrievalId?: unknown;
+  truncated?: unknown;
 }) {
   return {
     path: args.path,
     results: args.results.map((result) => {
       const ref = requiredString(result.ref, 512);
       const sourceType = requiredString(result.source_type, 40);
+      const localPath = requiredString(result.path, 1_024);
+      const canonicalLocalPath =
+        localPath &&
+        [
+          POLYNET_RESOURCES_DIRECTORY_PATH,
+          POLYNET_CHANNELS_DIRECTORY_PATH,
+          POLYNET_AI_FEED_DIRECTORY_PATH,
+          POLYNET_MEMORY_DIRECTORY_PATH,
+        ].some((prefix) => localPath.startsWith(prefix))
+          ? localPath
+          : null;
       const path =
-        sourceType === "resource" &&
-        typeof result.path === "string" &&
-        result.path.startsWith(POLYNET_RESOURCES_DIRECTORY_PATH)
-          ? mountedPath(args.communitySlug, result.path)
+        canonicalLocalPath
+          ? mountedPath(args.communitySlug, canonicalLocalPath)
           : ref && sourceType
           ? evidencePath({
               communitySlug: args.communitySlug,
@@ -454,7 +464,7 @@ function mountSearchResults(args: {
         ...(path ? { path } : {}),
       };
     }),
-    truncated: false,
+    truncated: args.truncated === true,
     ...(args.retrievalId
       ? { retrieval_id: String(args.retrievalId) }
       : {}),
@@ -897,6 +907,7 @@ async function executeCanonicalRead(args: {
           communityId: target.communityId,
           surface: args.evidenceSurface,
           nodeId: memoryMatch[1],
+          forceMemberView: true,
         },
       )) as Record<string, unknown>;
       if (value?.ok !== true) {
@@ -1042,6 +1053,7 @@ async function executeCanonicalSearch(args: {
             ? (value.matches as Array<Record<string, unknown>>)
             : [],
           retrievalId: value.retrieval_id,
+          truncated: value.truncated,
         }),
       };
     }
@@ -1060,6 +1072,7 @@ async function executeCanonicalSearch(args: {
             ? (value.results as Array<Record<string, unknown>>)
             : [],
           retrievalId: value.retrieval_id,
+          truncated: value.truncated,
         }),
       };
     }
@@ -1078,6 +1091,7 @@ async function executeCanonicalSearch(args: {
             ? (value.matches as Array<Record<string, unknown>>)
             : [],
           retrievalId: value.retrieval_id,
+          truncated: value.truncated,
         }),
       };
     }
@@ -1093,6 +1107,7 @@ async function executeCanonicalSearch(args: {
         {
           ...common,
           ...(requestedTypes.length ? { types: requestedTypes } : {}),
+          forceMemberView: true,
         },
       )) as Record<string, unknown>;
       if (value?.ok !== true) {
@@ -1126,7 +1141,7 @@ async function executeCanonicalSearch(args: {
                 : {}),
             };
           }),
-          truncated: false,
+          truncated: value.truncated === true,
           retrieval_id: value.retrieval_log_id ?? null,
         },
       };
@@ -1137,23 +1152,38 @@ async function executeCanonicalSearch(args: {
         "Search path not found or not searchable.",
       );
     }
-    const value = (await args.ctx.runQuery(
-      (internal as any).communityRecentContext
-        .readCommunityRecentContextInternal,
+    const value = (await args.ctx.runAction(
+      (internal as any).communityRepositorySearch
+        .searchCommunityRepositoryInternal,
       {
         userId: args.userId,
+        authSubject: args.authSubject,
         communityId: target.communityId,
         query,
+        limit,
+        surface: args.evidenceSurface,
+        ...(Array.isArray(args.input.types)
+          ? { types: args.input.types }
+          : {}),
       },
     )) as Record<string, unknown>;
+    if (value?.ok !== true) {
+      return canonicalError(
+        String(value?.reason_code ?? "community_repository_search_failed"),
+        String(value?.message ?? "Community repository search failed."),
+        value,
+      );
+    }
     return {
       ok: true,
       value: mountSearchResults({
         communitySlug: target.communitySlug,
         path: mountedPath(target.communitySlug, "/"),
-        results: Array.isArray(value.recent_context)
-          ? (value.recent_context as Array<Record<string, unknown>>)
+        results: Array.isArray(value.results)
+          ? (value.results as Array<Record<string, unknown>>)
           : [],
+        retrievalId: value.retrieval_id,
+        truncated: value.truncated,
       }),
     };
   } catch (error) {
