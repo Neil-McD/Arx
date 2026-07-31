@@ -885,7 +885,7 @@ assert.match(
 );
 assert.match(
   gateway,
-  /client\.mutation\("communityLifecycle:createCommunityInteractionComposerMessage" as any/,
+  /client\.mutation\([\s\S]*api\.communityInteractions\.createCommunityInteractionComposerMessage/,
   "gateway should expose the canonical composer bridge mutation",
 );
 assert.match(

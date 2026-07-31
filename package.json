@@ -31,6 +31,7 @@
     "check:no-direct-legacy-auth-imports-guard": "bash scripts/no_direct_legacy_auth_imports_guard.sh",
     "check:legacy-function-transport-surface-guard": "bash scripts/legacy_function_transport_surface_guard.sh",
     "check:convex-client-surface-guard": "bash scripts/convex_client_surface_guard.sh",
+    "check:convex-client-operation-integrity-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/convex_client_operation_integrity_proof.ts",
     "check:convex-verified-identity-guard": "bash scripts/convex_verified_identity_guard.sh",
     "check:auth-bootstrap-public-identity-guard": "bash scripts/auth_bootstrap_public_identity_guard.sh",
     "check:auth-billing-public-identity-guard": "bash scripts/auth_billing_public_identity_guard.sh",

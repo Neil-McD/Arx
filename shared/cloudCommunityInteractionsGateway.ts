@@ -268,16 +268,19 @@ export async function createCloudCommunityInteractionComposerMessageRows<Session
   },
 ): Promise<TRow[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("communityLifecycle:createCommunityInteractionComposerMessage" as any, {
-    authSubject,
-    communityId: params.communityId,
-    idempotencyKey: params.idempotencyKey,
-    text: params.text,
-    rootId: params.rootId ?? null,
-    replyToMessageId: params.replyToMessageId ?? null,
-    ...(params.mentions && params.mentions.length ? { mentions: params.mentions } : null),
-    ...(params.attachments && params.attachments.length ? { attachments: params.attachments } : null),
-  });
+  const payload = await client.mutation(
+    api.communityInteractions.createCommunityInteractionComposerMessage,
+    {
+      authSubject,
+      communityId: params.communityId,
+      idempotencyKey: params.idempotencyKey,
+      text: params.text,
+      rootId: params.rootId ?? null,
+      replyToMessageId: params.replyToMessageId ?? null,
+      ...(params.mentions && params.mentions.length ? { mentions: params.mentions } : null),
+      ...(params.attachments && params.attachments.length ? { attachments: params.attachments } : null),
+    } as any,
+  );
   return coerceObjectRows<TRow>(payload, "rows");
 }
 

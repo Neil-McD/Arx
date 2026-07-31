@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=41
+TOTAL_STEPS=42
 CURRENT_STEP=1
 
 run_step() {
@@ -31,6 +31,7 @@ run_step "Auth env contract guard" bash scripts/auth_env_contract_guard.sh
 run_step "No direct legacy-auth imports guard" bash scripts/no_direct_legacy_auth_imports_guard.sh
 run_step "Legacy function transport surface guard" bash scripts/legacy_function_transport_surface_guard.sh
 run_step "Convex client surface guard" bash scripts/convex_client_surface_guard.sh
+run_step "Convex client operation integrity proof" npm run check:convex-client-operation-integrity-proof
 run_step "Convex verified identity guard" bash scripts/convex_verified_identity_guard.sh
 run_step "Auth bootstrap public identity guard" bash scripts/auth_bootstrap_public_identity_guard.sh
 run_step "Auth and billing public identity guard" bash scripts/auth_billing_public_identity_guard.sh

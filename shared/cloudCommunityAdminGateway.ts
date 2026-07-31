@@ -1,3 +1,4 @@
+import { api } from "../convex/_generated/api";
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import { coerceGatewayRows, firstGatewayRow, parseGatewayNumberLike } from "./cloudGateway";
 import type { CommunityAnalyticsSnapshot } from "./communityTypes";
@@ -1509,10 +1510,13 @@ export async function createCloudCommunityResourcePageDraftFromSource<SessionT, 
   },
 ): Promise<TResource> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("communityLifecycle:createCommunityResourcePageDraftFromSource" as any, {
-    authSubject,
-    sourceResourceId: params.sourceResourceId,
-  });
+  const payload = await client.mutation(
+    api.communityResources.createCommunityResourcePageDraftFromSource,
+    {
+      authSubject,
+      sourceResourceId: params.sourceResourceId,
+    } as any,
+  );
   return payload as TResource;
 }
 

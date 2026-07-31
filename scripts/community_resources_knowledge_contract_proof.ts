@@ -337,7 +337,7 @@ assert.match(
 );
 assert.match(
   resourceGateway,
-  /communityLifecycle:createCommunityResourcePageDraftFromSource/,
+  /api\.communityResources\.createCommunityResourcePageDraftFromSource/,
   "web gateway must call the canonical source-to-page draft mutation",
 );
 assert.match(
@@ -420,8 +420,16 @@ assert.equal(existsSync("convex/communityArchive.ts"), false, "archive-named run
 assert.equal(existsSync("convex/communityArchiveRetrieval.ts"), false, "archive retrieval wrapper must stay deleted");
 assert.match(recentContext, /retrieval_version: "recent_context_v2"/);
 assert.match(runtimeAgentLoop, /communityRecentContext\.readCommunityRecentContextInternal/);
-assert.match(httpMcp, /communityRecentContext\.readCommunityRecentContextInternal/);
-assert.match(httpMcp, /archive_context: \[\]/, "MCP v0 must keep its empty compatibility field");
+assert.match(
+  httpMcp,
+  /executePolynetCanonicalTool/,
+  "official MCP resource access must execute through the canonical five-tool harness",
+);
+assert.doesNotMatch(
+  httpMcp,
+  /communityRecentContext|archive_context/,
+  "official MCP must not restore the private prompt-context or retired archive wire models",
+);
 assert.equal(
   existsSync("convex/communityArchiveEmbeddingPipeline.ts"),
   false,
