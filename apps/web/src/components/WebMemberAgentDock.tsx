@@ -74,9 +74,8 @@ type MemberAgentMessage = Omit<CloudMessageTransportRow, "role"> & {
   role: "user" | "assistant" | "system";
 };
 
-type AgentScope = {
+type AgentSessionScope = {
   userId: string | null;
-  surfaceKey: string;
   generation: number;
 };
 
@@ -211,30 +210,25 @@ function WebMemberAgentDock(props, ref) {
   const draftTextRef = useRef("");
   const submitInFlightRef = useRef(false);
   const retryRef = useRef<MemberAgentRetryState | null>(null);
-  const runUiScopeRef = useRef<AgentScope | null>(null);
+  const runUiSessionScopeRef = useRef<AgentSessionScope | null>(null);
   const activeThreadKeyRef = useRef<string | null>(null);
   const activeThreadContextRef = useRef<ActiveThreadContext | null>(null);
   const surfaceKey = JSON.stringify([
     props.surfaceContext,
     props.communityId,
   ]);
-  const agentScopeRef = useRef<AgentScope>({
+  const agentSessionScopeRef = useRef<AgentSessionScope>({
     userId: props.session?.user.id ?? null,
-    surfaceKey,
     generation: 0,
   });
   const scopeUserId = props.session?.user.id ?? null;
   const surfaceKind = props.surfaceContext?.kind ?? null;
   const onboardingSession = onboarding?.activeSession ?? null;
   const isConversationSurfaceActive = isOpenSurface;
-  if (
-    agentScopeRef.current.userId !== scopeUserId ||
-    agentScopeRef.current.surfaceKey !== surfaceKey
-  ) {
-    agentScopeRef.current = {
+  if (agentSessionScopeRef.current.userId !== scopeUserId) {
+    agentSessionScopeRef.current = {
       userId: scopeUserId,
-      surfaceKey,
-      generation: agentScopeRef.current.generation + 1,
+      generation: agentSessionScopeRef.current.generation + 1,
     };
   }
 
@@ -269,8 +263,8 @@ function WebMemberAgentDock(props, ref) {
     },
   }), []);
 
-  const isCurrentScope = useCallback((scope: AgentScope): boolean => {
-    const current = agentScopeRef.current;
+  const isCurrentSessionScope = useCallback((scope: AgentSessionScope): boolean => {
+    const current = agentSessionScopeRef.current;
     return current.userId === scope.userId && current.generation === scope.generation;
   }, []);
 
@@ -279,18 +273,18 @@ function WebMemberAgentDock(props, ref) {
       targetThreadKey: string,
       session: AuthSession,
     ): Promise<MemberAgentMessage[] | null> => {
-      const scope = agentScopeRef.current;
+      const scope = agentSessionScopeRef.current;
       const rows = await listConvexCloudNewestThreadMessagesByThreadKey({
         session,
         threadKey: targetThreadKey,
         limit: 200,
       });
-      if (!isCurrentScope(scope) || activeThreadKeyRef.current !== targetThreadKey) return null;
+      if (!isCurrentSessionScope(scope) || activeThreadKeyRef.current !== targetThreadKey) return null;
       const normalized = normalizeMessages(rows ?? []);
       setMessages(normalized);
       return normalized;
     },
-    [isCurrentScope],
+    [isCurrentSessionScope],
   );
 
   const setThreadError = useCallback(
@@ -317,9 +311,9 @@ function WebMemberAgentDock(props, ref) {
   }, []);
 
   const allowRunUiWrite = useCallback((): boolean => {
-    const runScope = runUiScopeRef.current;
-    return !runScope || isCurrentScope(runScope);
-  }, [isCurrentScope]);
+    const runScope = runUiSessionScopeRef.current;
+    return !runScope || isCurrentSessionScope(runScope);
+  }, [isCurrentSessionScope]);
 
   const setScopedSendingByThread = useCallback<Dispatch<SetStateAction<Record<string, boolean>>>>(
     (value) => {
@@ -418,8 +412,9 @@ function WebMemberAgentDock(props, ref) {
   useEffect(() => {
     if (previousSurfaceKeyRef.current === surfaceKey) return;
     previousSurfaceKeyRef.current = surfaceKey;
-    setSendingByThread({});
-    setStreamingByThread({});
+    // A surface change only resets unsubmitted, surface-local composer state.
+    // In-flight presentation is owned by the durable thread and must survive
+    // navigation so the submitted turn can remain visible through completion.
     setInferenceIssue(null);
     draftTextRef.current = "";
     setInput("");
@@ -452,7 +447,7 @@ function WebMemberAgentDock(props, ref) {
     ) return;
     let cancelled = false;
     if (activeThreadKeyRef.current) return;
-    const scope = agentScopeRef.current;
+    const scope = agentSessionScopeRef.current;
     setIsPreparing(true);
     setLocalError(null);
     void (async () => {
@@ -461,12 +456,12 @@ function WebMemberAgentDock(props, ref) {
           props.session,
           "member_agent_dock_open",
         );
-        if (!usableSession || cancelled || !isCurrentScope(scope)) return;
+        if (!usableSession || cancelled || !isCurrentSessionScope(scope)) return;
         const thread = await ensureCloudMemberAgentGlobalChannel({
           session: usableSession,
           initialCommunityId: props.communityId,
         });
-        if (cancelled || !isCurrentScope(scope)) return;
+        if (cancelled || !isCurrentSessionScope(scope)) return;
         activeThreadKeyRef.current = thread.thread_key;
         setThreadKey(thread.thread_key);
         setEpisodeId(thread.episode_id);
@@ -477,11 +472,11 @@ function WebMemberAgentDock(props, ref) {
         setThreadContext(activeThreadContextRef.current);
         await loadMessages(thread.thread_key, usableSession);
       } catch (error) {
-        if (cancelled || !isCurrentScope(scope)) return;
+        if (cancelled || !isCurrentSessionScope(scope)) return;
         console.warn("member_agent_dock_open_failed", error);
         setLocalError("Your agent could not open.");
       } finally {
-        if (!cancelled && isCurrentScope(scope)) setIsPreparing(false);
+        if (!cancelled && isCurrentSessionScope(scope)) setIsPreparing(false);
       }
     })();
     return () => {
@@ -495,7 +490,7 @@ function WebMemberAgentDock(props, ref) {
     props.isVisible,
     props.session,
     surfaceKind,
-    isCurrentScope,
+    isCurrentSessionScope,
   ]);
 
   const streamingState = threadKey ? streamingByThread[threadKey] ?? null : null;
@@ -682,7 +677,7 @@ function WebMemberAgentDock(props, ref) {
     ) {
       return;
     }
-    const scope = agentScopeRef.current;
+    const scope = agentSessionScopeRef.current;
     const expectedEpisodeId = episodeId;
     let usableSession: AuthSession | null = null;
     setIsStartingNewChat(true);
@@ -693,16 +688,16 @@ function WebMemberAgentDock(props, ref) {
         props.session,
         "member_agent_dock_new_chat",
       );
-      if (!usableSession || !isCurrentScope(scope)) return;
+      if (!usableSession || !isCurrentSessionScope(scope)) return;
       const thread = await startNewCloudMemberAgentGlobalEpisode({
         session: usableSession,
         initialCommunityId: props.communityId,
         expectedActiveEpisodeId: expectedEpisodeId,
       });
-      if (!isCurrentScope(scope)) return;
+      if (!isCurrentSessionScope(scope)) return;
       activateEmptyEpisode(thread);
     } catch (error) {
-      if (!isCurrentScope(scope)) return;
+      if (!isCurrentSessionScope(scope)) return;
       console.warn("member_agent_dock_new_chat_failed", error);
       if (usableSession) {
         try {
@@ -710,26 +705,26 @@ function WebMemberAgentDock(props, ref) {
             session: usableSession,
             initialCommunityId: props.communityId,
           });
-          if (!isCurrentScope(scope)) return;
+          if (!isCurrentSessionScope(scope)) return;
           if (current.episode_id !== expectedEpisodeId) {
             activateEmptyEpisode(current);
             try {
               await loadMessages(current.thread_key, usableSession);
             } catch (loadError) {
-              if (!isCurrentScope(scope)) return;
+              if (!isCurrentSessionScope(scope)) return;
               console.warn("member_agent_dock_new_chat_reconcile_load_failed", loadError);
               setLocalError("Your new chat is active, but its messages could not load.");
             }
             return;
           }
         } catch (reconcileError) {
-          if (!isCurrentScope(scope)) return;
+          if (!isCurrentSessionScope(scope)) return;
           console.warn("member_agent_dock_new_chat_reconcile_failed", reconcileError);
         }
       }
       setLocalError("Your agent could not start a new chat. Try again.");
     } finally {
-      if (isCurrentScope(scope)) setIsStartingNewChat(false);
+      if (isCurrentSessionScope(scope)) setIsStartingNewChat(false);
     }
   };
 
@@ -810,7 +805,7 @@ function WebMemberAgentDock(props, ref) {
     setIsSubmitting(true);
     setLocalError(null);
     setInferenceIssue(null);
-    const scope = agentScopeRef.current;
+    const scope = agentSessionScopeRef.current;
     let text = "";
     let workingDrafts: MemberAgentImageDraft[] = [];
     let signature = "";
@@ -820,7 +815,7 @@ function WebMemberAgentDock(props, ref) {
 
     try {
       const voiceTranscript = await props.finalizeVoiceInputForSubmit?.() ?? "";
-      if (!isCurrentScope(scope)) return;
+      if (!isCurrentSessionScope(scope)) return;
       text = mergeVoiceTranscript(draftTextRef.current, voiceTranscript).trim();
       workingDrafts = attachmentsRef.current.slice();
       if (!text && workingDrafts.length === 0) return;
@@ -844,14 +839,14 @@ function WebMemberAgentDock(props, ref) {
         "member_agent_dock_send",
       );
       if (!usableSession) throw new Error("auth_session_required");
-      if (!isCurrentScope(scope)) return;
+      if (!isCurrentSessionScope(scope)) return;
       let thread = await ensureCloudMemberAgentGlobalChannel({
         session: usableSession,
         initialCommunityId: desiredCommunityId,
       });
-      if (!isCurrentScope(scope)) return;
+      if (!isCurrentSessionScope(scope)) return;
       thread = await synchronizeDesiredLens(thread, usableSession, desiredCommunityId);
-      if (!isCurrentScope(scope)) return;
+      if (!isCurrentSessionScope(scope)) return;
       let activeMessages = messages;
       if (activeThreadKeyRef.current !== thread.thread_key) {
         activeThreadKeyRef.current = thread.thread_key;
@@ -859,7 +854,7 @@ function WebMemberAgentDock(props, ref) {
         setEpisodeId(thread.episode_id);
         setMessages([]);
         activeMessages = (await loadMessages(thread.thread_key, usableSession)) ?? [];
-        if (!isCurrentScope(scope)) return;
+        if (!isCurrentSessionScope(scope)) return;
       } else {
         setEpisodeId(thread.episode_id);
       }
@@ -873,7 +868,7 @@ function WebMemberAgentDock(props, ref) {
           messageId,
           file: draft.file,
         });
-        if (!isCurrentScope(scope)) return;
+        if (!isCurrentSessionScope(scope)) return;
         workingDrafts = workingDrafts.map((candidate) =>
           candidate.id === draft.id
             ? {
@@ -886,7 +881,7 @@ function WebMemberAgentDock(props, ref) {
             : candidate,
         );
       }
-      if (!isCurrentScope(scope)) return;
+      if (!isCurrentSessionScope(scope)) return;
       const storedAttachments = workingDrafts.map((attachment) => ({
         id: attachment.id,
         name: attachment.name,
@@ -927,16 +922,17 @@ function WebMemberAgentDock(props, ref) {
         run_id: null,
         created_at: new Date().toISOString(),
       };
-      if (isCurrentScope(scope)) {
+      if (isCurrentSessionScope(scope)) {
         const optimisticMessages = activeMessages.some((message) => message.id === messageId)
           ? activeMessages
           : [...activeMessages, optimisticMessage];
         setMessages(optimisticMessages);
       }
 
-      // The message is durable now. Finish its captured turn even if navigation
-      // changes; only the visible UI writes remain scoped to the current surface.
-      runUiScopeRef.current = scope;
+      // The submitted turn is owned by this user and durable thread, not by the
+      // page that was visible at submission. Keep presenting it through ordinary
+      // navigation while preserving the captured surface context for this turn.
+      runUiSessionScopeRef.current = scope;
       const result = await runAgentTurn(usableSession, thread.thread_key, {
         preferredModelId: thread.model_id || DEFAULT_ACTIVE_MODEL_ID,
         mode: "respond",
@@ -950,16 +946,16 @@ function WebMemberAgentDock(props, ref) {
         requestedAgenticTools: true,
         replyToId: messageId,
         messages: [optimisticMessage],
-        suppressStreamingUi: !isCurrentScope(scope),
+        suppressStreamingUi: !isCurrentSessionScope(scope),
       });
       if (result.error) throw new Error(result.error);
-      if (isCurrentScope(scope)) {
+      if (isCurrentSessionScope(scope)) {
         await loadMessages(thread.thread_key, usableSession);
         if (onboarding?.mode === "preview") onboarding.completeAgentTurnPreview();
       }
       revokeDraftPreviews(workingDrafts);
     } catch (error) {
-      if (!isCurrentScope(scope)) {
+      if (!isCurrentSessionScope(scope)) {
         if (committed) revokeDraftPreviews(workingDrafts);
         return;
       }
@@ -986,7 +982,7 @@ function WebMemberAgentDock(props, ref) {
       );
     } finally {
       submitInFlightRef.current = false;
-      runUiScopeRef.current = null;
+      runUiSessionScopeRef.current = null;
       setIsSubmitting(false);
       setIsUploadingAttachments(false);
       if (targetThreadKey) {

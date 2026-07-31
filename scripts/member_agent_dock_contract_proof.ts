@@ -750,7 +750,7 @@ assert.match(
 assert.match(component, /<span>Starting fresh<\/span>/);
 assert.match(component, /invocationSurface: "member_agent_dock"/);
 assert.match(component, /const surfaceContext = props\.surfaceContext[\s\S]*surfaceContext,/);
-assert.match(component, /agentScopeRef[\s\S]*isCurrentScope/);
+assert.match(component, /agentSessionScopeRef[\s\S]*isCurrentSessionScope/);
 assert.doesNotMatch(component, /\}, \[props\.communityId, props\.session\?\.user\.id, stopStreamingTurn\]\);/);
 assert.match(
   component,
@@ -994,11 +994,32 @@ assert.match(
 );
 assert.match(component, /Detach the submitted snapshot immediately/);
 assert.match(component, /committed = true;/);
-assert.match(component, /Finish its captured turn even if navigation/);
+const agentSessionScope = component.match(
+  /type AgentSessionScope = \{[\s\S]*?\n\};/,
+)?.[0] ?? "";
+assert.match(agentSessionScope, /userId: string \| null;[\s\S]*generation: number;/);
+assert.doesNotMatch(
+  agentSessionScope,
+  /surfaceKey|communityId|surfaceContext/,
+  "ordinary navigation must not change the owner of an in-flight member-agent turn",
+);
+const surfaceTransitionEffect = component.match(
+  /const previousSurfaceKeyRef = useRef\(surfaceKey\);[\s\S]*?\}, \[clearAttachmentDrafts, surfaceKey\]\);/,
+)?.[0] ?? "";
+assert.match(
+  surfaceTransitionEffect,
+  /surface change only resets unsubmitted, surface-local composer state/,
+);
+assert.doesNotMatch(
+  surfaceTransitionEffect,
+  /setSendingByThread|setStreamingByThread|stopStreamingTurn/,
+  "surface navigation must not erase or cancel durable thread presentation",
+);
+assert.match(component, /submitted turn is owned by this user and durable thread/);
 assert.match(
   component,
-  /runUiScopeRef[\s\S]*allowRunUiWrite[\s\S]*setScopedStreamingByThread[\s\S]*suppressStreamingUi: !isCurrentScope\(scope\)/,
-  "a committed turn may finish after navigation without writing stale streaming state into the new surface",
+  /runUiSessionScopeRef[\s\S]*allowRunUiWrite[\s\S]*setScopedStreamingByThread[\s\S]*surfaceContext,[\s\S]*suppressStreamingUi: !isCurrentSessionScope\(scope\)[\s\S]*if \(isCurrentSessionScope\(scope\)\) \{[\s\S]*await loadMessages\(thread\.thread_key, usableSession\)/,
+  "a submitted turn must keep its captured surface context while streaming and reconciling across navigation",
 );
 assert.match(
   voiceController,
