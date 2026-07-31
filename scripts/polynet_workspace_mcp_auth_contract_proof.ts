@@ -100,16 +100,8 @@ includes(
   "reserveMutatingOperation",
   "canonical idempotency reservation",
 );
-includes(
-  receipts,
-  "idempotency_key_conflict",
-  "conflicting retry rejection",
-);
-includes(
-  receipts,
-  'status: "completed"',
-  "completed operation receipt",
-);
+includes(receipts, "idempotency_key_conflict", "conflicting retry rejection");
+includes(receipts, 'status: "completed"', "completed operation receipt");
 
 includes(
   packageJson,
@@ -130,15 +122,58 @@ includes(
   "Stage acceptance: the official Polynet MCP used the canonical five-tool harness",
   "real participation use case",
 );
-includes(
-  externalSmoke,
-  "retry_deduped",
-  "live retry acceptance",
-);
+includes(externalSmoke, "retry_deduped", "live retry acceptance");
 includes(
   externalSmoke,
   "rejected_without_apply",
   "builder call acceptance without applying test data",
+);
+for (const acceptanceInput of [
+  "POLYNET_MCP_COMMUNITY_SLUG",
+  "POLYNET_MCP_DENIED_COMMUNITY_SLUG",
+  "POLYNET_MCP_EXPECT_AUTHORITY_LANE",
+  "POLYNET_MCP_ACCEPTANCE_RUN_ID",
+]) {
+  includes(
+    externalSmoke,
+    acceptanceInput,
+    `${acceptanceInput} fail-closed acceptance input`,
+  );
+}
+includes(
+  externalSmoke,
+  "refusing to substitute another community",
+  "requested community substitution denial",
+);
+includes(
+  externalSmoke,
+  'expectedErrorCode: "semantic_not_found"',
+  "non-enumerating path denial assertion",
+);
+includes(
+  externalSmoke,
+  'expectedErrorCode: "builder_authority_required"',
+  "member builder-write denial assertion",
+);
+includes(
+  externalSmoke,
+  'expectedErrorCode: "operation_not_found"',
+  "member builder-call denial assertion",
+);
+includes(
+  externalSmoke,
+  "AI Feed retry must reuse the canonical receipt.",
+  "AI Feed replay acceptance",
+);
+includes(
+  externalSmoke,
+  "AI Feed read-back must contain the acceptance observation.",
+  "AI Feed read-back acceptance",
+);
+excludes(
+  externalSmoke,
+  "Date.now().toString(36)",
+  "timestamp-generated acceptance identities",
 );
 excludes(
   externalSmoke,
@@ -175,21 +210,28 @@ includes(
   "The server revalidates community access on",
   "per-call authorization contract",
 );
-includes(
-  contract,
-  "owner or admin",
-  "builder authority contract",
-);
+includes(contract, "owner or admin", "builder authority contract");
 includes(
   contract,
   "community-owned agent",
   "community agent authority contract",
 );
 includes(
-  authSetup,
-  "ARX_MCP_AUTH_JWT_AUDIENCE",
-  "MCP JWT audience setup",
+  contract,
+  "separate control",
+  "real inaccessible-community control actor",
 );
+includes(
+  contract,
+  "identity successfully opened",
+  "real inaccessible-community control proof",
+);
+includes(
+  contract,
+  "exact candidate Git SHA",
+  "candidate-scoped acceptance identity",
+);
+includes(authSetup, "ARX_MCP_AUTH_JWT_AUDIENCE", "MCP JWT audience setup");
 
 const initializeIndex = httpMcp.indexOf('method === "initialize"');
 const toolsListIndex = httpMcp.indexOf('method === "tools/list"');
@@ -235,22 +277,14 @@ includes(
 excludes(httpMcp, "/oauth2/register", "inferred registration endpoint");
 
 includes(vercelConfig, '"src": "/runtime/mcp"', "public MCP route");
-includes(
-  vercelConfig,
-  '"dest": "/api/mcp/runtime"',
-  "public MCP proxy target",
-);
+includes(vercelConfig, '"dest": "/api/mcp/runtime"', "public MCP proxy target");
 includes(
   vercelConfig,
   '"/\\\\.well-known/oauth-protected-resource"',
   "protected-resource route",
 );
 includes(mcpProxy, "VITE_CONVEX_SITE_URL", "Convex site target");
-includes(
-  mcpProxy,
-  'headers.set("x-forwarded-host"',
-  "forwarded public host",
-);
+includes(mcpProxy, 'headers.set("x-forwarded-host"', "forwarded public host");
 excludes(mcpProxy, "ARX_AUTH_BRIDGE_SECRET", "browser auth bridge secret");
 
 console.log("polynet_workspace_mcp_auth_contract_proof: ok");

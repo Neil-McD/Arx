@@ -228,11 +228,30 @@ Live staging:
 ```bash
 POLYNET_MCP_URL=https://polynet-staging.vercel.app/runtime/mcp \
 POLYNET_MCP_BEARER_TOKEN=<staging-token> \
+POLYNET_MCP_COMMUNITY_SLUG=<accessible-community> \
+POLYNET_MCP_DENIED_COMMUNITY_SLUG=<real-inaccessible-community> \
+POLYNET_MCP_EXPECT_AUTHORITY_LANE=<member-or-builder> \
+POLYNET_MCP_ACCEPTANCE_RUN_ID=<exact-candidate-git-sha> \
 npm run smoke:polynet-workspace-mcp-acceptance
 ```
 
+Acceptance is deliberately fail closed:
+
+- the selected community is explicit and is never replaced with another
+  accessible community;
+- the expected authority lane must match the server-derived lane;
+- the denied slug must identify a real community that a separate control
+  identity successfully opened, while the actor under test cannot open it;
+- inaccessible-community and member builder-path/write/call attempts must
+  return their exact non-enumerating denial codes; and
+- the run id is the exact candidate Git SHA, producing stable idempotency keys
+  instead of timestamp-created staging residue.
+
 Acceptance proves OAuth discovery, exact five-tool discovery, repository
-navigation, current authority, search/read, inaccessible-community denial,
-real participation write/read, retry deduplication, and—when the actor has
+navigation, current authority, search/read, real chat and AI Feed
+write/read/replay, inaccessible-community denial, and—when the actor has
 builder authority—a staged changeset plus discovered reject call without
-applying the test change.
+applying the test change. Run it once with a builder identity and once with an
+ordinary member identity. Preserve a separate successful control read of the
+denied community so the certificate proves isolation from a real object rather
+than only missing-path behavior.

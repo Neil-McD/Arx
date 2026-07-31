@@ -5,6 +5,7 @@ import {
 } from "../shared/polynetMcp.ts";
 
 type SmokeMode = "metadata" | "authenticated" | "acceptance";
+type ExpectedAuthorityLane = "member" | "builder";
 type HttpJsonResponse = {
   status: number;
   headers: Headers;
@@ -36,6 +37,58 @@ function readBoolEnv(name: string): boolean {
   return ["1", "true", "yes", "on"].includes(
     String(readEnv(name) ?? "").toLowerCase(),
   );
+}
+
+function requiredEnv(name: string, message: string): string {
+  const value = readEnv(name);
+  if (!value) throw new Error(message);
+  return value;
+}
+
+function readExpectedAuthorityLane(
+  required: boolean,
+): ExpectedAuthorityLane | null {
+  const value = readEnv("POLYNET_MCP_EXPECT_AUTHORITY_LANE");
+  if (!value) {
+    if (required) {
+      throw new Error(
+        "Acceptance requires POLYNET_MCP_EXPECT_AUTHORITY_LANE=member or builder.",
+      );
+    }
+    return null;
+  }
+  if (value !== "member" && value !== "builder") {
+    throw new Error(
+      "POLYNET_MCP_EXPECT_AUTHORITY_LANE must be member or builder.",
+    );
+  }
+  return value;
+}
+
+function readAcceptanceRunId(required: boolean): string | null {
+  const value = readEnv("POLYNET_MCP_ACCEPTANCE_RUN_ID");
+  if (!value) {
+    if (required) {
+      throw new Error(
+        "Acceptance requires POLYNET_MCP_ACCEPTANCE_RUN_ID set to the exact candidate SHA.",
+      );
+    }
+    return null;
+  }
+  if (!/^[0-9a-f]{40}$/.test(value)) {
+    throw new Error(
+      "POLYNET_MCP_ACCEPTANCE_RUN_ID must be the exact 40-character lowercase candidate SHA.",
+    );
+  }
+  return value;
+}
+
+function acceptanceKey(args: {
+  runId: string;
+  lane: ExpectedAuthorityLane;
+  purpose: string;
+}): string {
+  return `stage-mcp-${args.runId}-${args.lane}-${args.purpose}`;
 }
 
 function readMode(): SmokeMode {
@@ -127,9 +180,7 @@ async function postJsonRpc(args: {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(args.token
-        ? { authorization: `Bearer ${args.token}` }
-        : {}),
+      ...(args.token ? { authorization: `Bearer ${args.token}` } : {}),
     },
     body: JSON.stringify({
       jsonrpc: "2.0",
@@ -163,7 +214,7 @@ async function callTool(args: {
   token: string;
   name: string;
   toolArgs?: Record<string, unknown>;
-  expectError?: boolean;
+  expectedErrorCode?: string;
 }): Promise<Record<string, unknown>> {
   const result = jsonRpcResult(
     await postJsonRpc({
@@ -179,10 +230,20 @@ async function callTool(args: {
   );
   assert.equal(
     result.isError === true,
-    args.expectError === true,
+    Boolean(args.expectedErrorCode),
     `${args.name} returned unexpected error state: ${JSON.stringify(result)}`,
   );
-  return asRecord(result.structuredContent);
+  const structuredContent = asRecord(result.structuredContent);
+  if (args.expectedErrorCode) {
+    const error = asString(structuredContent.error);
+    assert.ok(error, `${args.name} must return one structured error message.`);
+    assert.ok(
+      error === args.expectedErrorCode ||
+        error.startsWith(`${args.expectedErrorCode}:`),
+      `${args.name} expected ${args.expectedErrorCode}, received ${error}`,
+    );
+  }
+  return structuredContent;
 }
 
 function entries(value: Record<string, unknown>): Record<string, unknown>[] {
@@ -205,7 +266,11 @@ function firstPath(
 }
 
 function challengeMetadataUrl(response: HttpJsonResponse): string {
-  assert.equal(response.status, 401, "Unauthenticated MCP request must return 401.");
+  assert.equal(
+    response.status,
+    401,
+    "Unauthenticated MCP request must return 401.",
+  );
   const challenge = response.headers.get("www-authenticate") ?? "";
   assert.match(challenge, /^Bearer /, "OAuth Bearer challenge is required.");
   const match = /resource_metadata="([^"]+)"/.exec(challenge);
@@ -256,6 +321,24 @@ async function runAuthenticatedSmoke(args: {
   if (!token) {
     throw new Error("POLYNET_MCP_BEARER_TOKEN is required.");
   }
+  const requestedSlug = args.acceptance
+    ? requiredEnv(
+        "POLYNET_MCP_COMMUNITY_SLUG",
+        "Acceptance requires POLYNET_MCP_COMMUNITY_SLUG.",
+      )
+    : readEnv("POLYNET_MCP_COMMUNITY_SLUG");
+  const deniedSlug = args.acceptance
+    ? requiredEnv(
+        "POLYNET_MCP_DENIED_COMMUNITY_SLUG",
+        "Acceptance requires POLYNET_MCP_DENIED_COMMUNITY_SLUG for a control-proven real community.",
+      )
+    : readEnv("POLYNET_MCP_DENIED_COMMUNITY_SLUG");
+  const expectedAuthorityLane = readExpectedAuthorityLane(args.acceptance);
+  const mutationRequested =
+    args.acceptance ||
+    readBoolEnv("POLYNET_MCP_WRITE_CHAT") ||
+    readBoolEnv("POLYNET_MCP_EXERCISE_BUILDER");
+  const acceptanceRunId = readAcceptanceRunId(mutationRequested);
   const tools = jsonRpcResult(
     await postJsonRpc({
       mcpUrl: args.mcpUrl,
@@ -288,19 +371,23 @@ async function runAuthenticatedSmoke(args: {
     name: "polynet_list",
     toolArgs: { path: "/communities/" },
   });
-  const requestedSlug = readEnv("POLYNET_MCP_COMMUNITY_SLUG");
-  const requestedPath = requestedSlug
-    ? `/communities/${requestedSlug}/`
-    : null;
+  const requestedPath = requestedSlug ? `/communities/${requestedSlug}/` : null;
+  if (requestedPath) {
+    assert.ok(
+      entries(communities).some((row) => row.path === requestedPath),
+      `Requested community ${requestedPath} is not accessible; refusing to substitute another community.`,
+    );
+  }
   const communityPath =
-    (requestedPath &&
-    entries(communities).some((row) => row.path === requestedPath)
-      ? requestedPath
-      : firstPath(
-          communities,
-          (path, row) => row.type === "community" && path.endsWith("/"),
-        )) ?? null;
-  assert.ok(communityPath, "Authenticated actor needs one accessible community.");
+    requestedPath ??
+    firstPath(
+      communities,
+      (path, row) => row.type === "community" && path.endsWith("/"),
+    );
+  assert.ok(
+    communityPath,
+    "Authenticated actor needs one accessible community.",
+  );
   const slug = communityPath.split("/").filter(Boolean).at(-1)!;
 
   const community = await callTool({
@@ -311,7 +398,18 @@ async function runAuthenticatedSmoke(args: {
   });
   const authority = asRecord(community.authority);
   assert.ok(["member", "builder"].includes(String(authority.lane)));
-  assert.ok(["owner", "admin", "moderator", "member"].includes(String(authority.relation)));
+  assert.ok(
+    ["owner", "admin", "moderator", "member"].includes(
+      String(authority.relation),
+    ),
+  );
+  if (expectedAuthorityLane) {
+    assert.equal(
+      authority.lane,
+      expectedAuthorityLane,
+      `Expected ${expectedAuthorityLane} authority for ${communityPath}.`,
+    );
+  }
   for (const directory of [
     "resources/",
     "channels/",
@@ -327,9 +425,7 @@ async function runAuthenticatedSmoke(args: {
     );
   }
   assert.equal(
-    entries(community).some((row) =>
-      String(row.path).includes("/builder/"),
-    ),
+    entries(community).some((row) => String(row.path).includes("/builder/")),
     authority.lane === "builder",
     "Builder projection must match server-derived authority.",
   );
@@ -405,27 +501,96 @@ async function runAuthenticatedSmoke(args: {
     );
   }
 
-  const deniedSlug =
-    readEnv("POLYNET_MCP_DENIED_COMMUNITY_SLUG") ??
-    `inaccessible-${Date.now().toString(36)}`;
-  assert.notEqual(deniedSlug, slug);
-  await callTool({
-    mcpUrl: args.mcpUrl,
-    token,
-    name: "polynet_list",
-    toolArgs: { path: `/communities/${deniedSlug}/` },
-    expectError: true,
-  });
+  if (deniedSlug) {
+    assert.notEqual(deniedSlug, slug);
+    await callTool({
+      mcpUrl: args.mcpUrl,
+      token,
+      name: "polynet_list",
+      toolArgs: { path: `/communities/${deniedSlug}/` },
+      expectedErrorCode: "semantic_not_found",
+    });
+  }
+
+  let memberBuilderDenials: Record<string, unknown> | null = null;
+  if (args.acceptance && authority.lane === "member") {
+    assert.ok(acceptanceRunId);
+    const builderRoot = `${communityPath}builder/`;
+    const builderResources = `${builderRoot}resources/`;
+    const builderReject = `${communityPath}capabilities/community.resources.changeset.reject.json`;
+    await callTool({
+      mcpUrl: args.mcpUrl,
+      token,
+      name: "polynet_list",
+      toolArgs: { path: builderRoot },
+      expectedErrorCode: "semantic_not_found",
+    });
+    await callTool({
+      mcpUrl: args.mcpUrl,
+      token,
+      name: "polynet_write",
+      toolArgs: {
+        path: builderResources,
+        mode: "create",
+        content: {
+          summary: "This member-authority changeset must be denied.",
+          operations: [
+            {
+              op: "create_module",
+              module_key: `denied-${acceptanceRunId}`,
+              name: "Denied member acceptance module",
+              module_status: "draft",
+            },
+          ],
+        },
+        idempotency_key: acceptanceKey({
+          runId: acceptanceRunId,
+          lane: "member",
+          purpose: "builder-write-denied",
+        }),
+      },
+      expectedErrorCode: "builder_authority_required",
+    });
+    await callTool({
+      mcpUrl: args.mcpUrl,
+      token,
+      name: "polynet_call",
+      toolArgs: {
+        operation: "community.resources.changeset.reject",
+        version: 1,
+        target: builderReject,
+        input: { changeset_id: `denied-${acceptanceRunId}` },
+        idempotency_key: acceptanceKey({
+          runId: acceptanceRunId,
+          lane: "member",
+          purpose: "builder-call-denied",
+        }),
+      },
+      expectedErrorCode: "operation_not_found",
+    });
+    memberBuilderDenials = {
+      list: "semantic_not_found",
+      write: "builder_authority_required",
+      call: "operation_not_found",
+    };
+  }
 
   let participation: Record<string, unknown> | null = null;
   if (args.acceptance || readBoolEnv("POLYNET_MCP_WRITE_CHAT")) {
-    const idempotencyKey = `stage-acceptance-${Date.now().toString(36)}`;
+    assert.ok(acceptanceRunId);
+    const lane = authority.lane as ExpectedAuthorityLane;
+    const idempotencyKey = acceptanceKey({
+      runId: acceptanceRunId,
+      lane,
+      purpose: "chat",
+    });
+    const chatText =
+      "Stage acceptance: the official Polynet MCP used the canonical five-tool harness to inspect this community and publish this bounded verification post.";
     const writeInput = {
       path: `${communityPath}channels/general/`,
       mode: "create",
       content: {
-        text:
-          "Stage acceptance: the official Polynet MCP used the canonical five-tool harness to inspect this community and publish this bounded verification post.",
+        text: chatText,
       },
       idempotency_key: idempotencyKey,
     };
@@ -441,20 +606,86 @@ async function runAuthenticatedSmoke(args: {
       name: "polynet_write",
       toolArgs: writeInput,
     });
-    assert.equal(retried.deduped, true, "Retry must reuse the canonical receipt.");
+    assert.equal(
+      retried.deduped,
+      true,
+      "Retry must reuse the canonical receipt.",
+    );
     const writtenPath = asString(written.path);
     assert.ok(writtenPath, "Participation write must return a readable path.");
-    await callTool({
+    const readChat = await callTool({
       mcpUrl: args.mcpUrl,
       token,
       name: "polynet_read",
       toolArgs: { path: writtenPath },
     });
+    assert.ok(
+      String(readChat.body ?? "").includes(chatText),
+      "Chat read-back must contain the acceptance post.",
+    );
+
+    let aiFeedParticipation: Record<string, unknown> | null = null;
+    if (args.acceptance) {
+      const feedBody =
+        "Stage acceptance observation: the official Polynet MCP traversed authorized community evidence and verified canonical AI Feed participation.";
+      const feedInput = {
+        path: `${communityPath}ai-feed/`,
+        mode: "create",
+        content: {
+          post_type: "observation",
+          title: "Canonical MCP staging acceptance",
+          body: feedBody,
+        },
+        idempotency_key: acceptanceKey({
+          runId: acceptanceRunId,
+          lane,
+          purpose: "ai-feed",
+        }),
+      };
+      const feedWritten = await callTool({
+        mcpUrl: args.mcpUrl,
+        token,
+        name: "polynet_write",
+        toolArgs: feedInput,
+      });
+      const feedRetried = await callTool({
+        mcpUrl: args.mcpUrl,
+        token,
+        name: "polynet_write",
+        toolArgs: feedInput,
+      });
+      assert.equal(
+        feedRetried.deduped,
+        true,
+        "AI Feed retry must reuse the canonical receipt.",
+      );
+      const feedPath = asString(feedWritten.path);
+      assert.ok(feedPath, "AI Feed write must return a readable path.");
+      const readFeed = await callTool({
+        mcpUrl: args.mcpUrl,
+        token,
+        name: "polynet_read",
+        toolArgs: { path: feedPath },
+      });
+      assert.ok(
+        String(readFeed.body ?? "").includes(feedBody),
+        "AI Feed read-back must contain the acceptance observation.",
+      );
+      aiFeedParticipation = {
+        write: "ok",
+        retry_deduped: "ok",
+        read_after_write: "ok",
+        path: feedPath,
+      };
+    }
     participation = {
-      write: "ok",
-      retry_deduped: "ok",
-      read_after_write: "ok",
-      path: writtenPath,
+      chat: {
+        write: "ok",
+        retry_deduped: "ok",
+        read_after_write: "ok",
+        path: writtenPath,
+      },
+      ...(aiFeedParticipation ? { ai_feed: aiFeedParticipation } : {}),
     };
   }
 
@@ -463,7 +694,8 @@ async function runAuthenticatedSmoke(args: {
     authority.lane === "builder" &&
     (args.acceptance || readBoolEnv("POLYNET_MCP_EXERCISE_BUILDER"))
   ) {
-    const id = Date.now().toString(36);
+    assert.ok(acceptanceRunId);
+    const id = acceptanceRunId;
     const staged = await callTool({
       mcpUrl: args.mcpUrl,
       token,
@@ -482,7 +714,11 @@ async function runAuthenticatedSmoke(args: {
             },
           ],
         },
-        idempotency_key: `stage-builder-write-${id}`,
+        idempotency_key: acceptanceKey({
+          runId: id,
+          lane: "builder",
+          purpose: "builder-write",
+        }),
       },
     });
     const changesetId = asString(staged.ref);
@@ -507,9 +743,14 @@ async function runAuthenticatedSmoke(args: {
       target: rejectPath,
       input: {
         changeset_id: changesetId,
-        reason: "Stage acceptance completed without applying the test changeset.",
+        reason:
+          "Stage acceptance completed without applying the test changeset.",
       },
-      idempotency_key: `stage-builder-reject-${id}`,
+      idempotency_key: acceptanceKey({
+        runId: id,
+        lane: "builder",
+        purpose: "builder-reject",
+      }),
     };
     await callTool({
       mcpUrl: args.mcpUrl,
@@ -537,11 +778,20 @@ async function runAuthenticatedSmoke(args: {
     advertised_tool_count: names.length,
     repository_root: "ok",
     selected_community_slug: slug,
+    ...(acceptanceRunId ? { acceptance_run_id: acceptanceRunId } : {}),
     authority,
     resource_read: resourceDocumentPath ? "ok" : "skipped_no_resource",
     search_result_count: results(searched).length,
     search_read: searchedDocumentPath ? "ok" : "skipped_no_result_path",
-    inaccessible_community_fail_closed: "ok",
+    ...(deniedSlug
+      ? {
+          inaccessible_community_fail_closed: "semantic_not_found",
+          denied_community_slug: deniedSlug,
+        }
+      : {}),
+    ...(memberBuilderDenials
+      ? { member_builder_denials: memberBuilderDenials }
+      : {}),
     ...(participation ? { participation } : {}),
     ...(builder ? { builder } : {}),
   };
@@ -555,9 +805,13 @@ Required:
   --url or POLYNET_MCP_URL
   POLYNET_MCP_BEARER_TOKEN for authenticated/acceptance
 
-Optional:
+Required for acceptance:
   POLYNET_MCP_COMMUNITY_SLUG
-  POLYNET_MCP_DENIED_COMMUNITY_SLUG
+  POLYNET_MCP_DENIED_COMMUNITY_SLUG (a real community proven by a control actor)
+  POLYNET_MCP_EXPECT_AUTHORITY_LANE=member|builder
+  POLYNET_MCP_ACCEPTANCE_RUN_ID (exact 40-character lowercase candidate SHA)
+
+Optional:
   POLYNET_MCP_RECENT_QUERY
   POLYNET_MCP_REQUIRE_RECENT_ACTIVITY=1
   POLYNET_MCP_WRITE_CHAT=1
