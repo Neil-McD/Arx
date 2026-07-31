@@ -35,6 +35,7 @@ const LEGACY_RESOURCE_MODULE_ID = "__legacy_resources__";
 const MODULE_DRAG_MIME = "application/x-polynet-community-resource-module";
 const RESOURCE_DRAG_MIME = "application/x-polynet-community-resource";
 const RESOURCE_CATEGORY_DRAG_MIME = "application/x-polynet-community-resource-category";
+const PAGE_DRAFT_CREATION_GESTURE_LOCK_MS = 650;
 
 type ReorderDirection = "up" | "down" | "top" | "bottom";
 
@@ -1164,9 +1165,19 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     if (pageDraftCreationInFlightRef.current) return null;
     pageDraftCreationInFlightRef.current = true;
     setIsCreatingPageDraft(true);
+    const lockStartedAt = Date.now();
     try {
       return await createDraft();
     } finally {
+      const remainingGestureLockMs = Math.max(
+        0,
+        PAGE_DRAFT_CREATION_GESTURE_LOCK_MS - (Date.now() - lockStartedAt),
+      );
+      if (remainingGestureLockMs > 0) {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, remainingGestureLockMs);
+        });
+      }
       pageDraftCreationInFlightRef.current = false;
       setIsCreatingPageDraft(false);
     }

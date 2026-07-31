@@ -740,6 +740,11 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
+  /PAGE_DRAFT_CREATION_GESTURE_LOCK_MS = 650[\s\S]*remainingGestureLockMs = Math\.max\([\s\S]*PAGE_DRAFT_CREATION_GESTURE_LOCK_MS - \(Date\.now\(\) - lockStartedAt\)[\s\S]*setTimeout\(resolve, remainingGestureLockMs\)[\s\S]*pageDraftCreationInFlightRef\.current = false/,
+  "page draft creation must keep its lock through one full browser gesture even when the backend returns between clicks",
+);
+assert.match(
+  resourcesPanel,
   /handleCreatePageDraftFromSource[\s\S]*runPageDraftCreation[\s\S]*actions\.handleCreatePageDraftFromSource\(resource\)/,
   "resources panel must expose source-to-page draft creation from the reader",
 );
