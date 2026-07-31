@@ -49,21 +49,15 @@ assert.match(
 
 assert.match(
   productionFacade,
-  /saveCommunityLaunchProfile as saveCommunityLaunchProfileImpl[\s\S]*getCommunityLaunchSetupStatus as getCommunityLaunchSetupStatusImpl/,
+  /export const saveCommunityLaunchProfile =[\s\S]*communityLifecycle\.saveCommunityLaunchProfile[\s\S]*export const getCommunityLaunchSetupStatus =[\s\S]*communityLaunchSetup\.getCommunityLaunchSetupStatus/,
   "the production compatibility facade must delegate to canonical domain owners",
 );
-assert.deepEqual(
-  Array.from(
-    productionFacade.matchAll(/export const ([A-Za-z0-9_]+)/g),
-    (match) => match[1],
-  ).sort(),
-  ["getCommunityLaunchSetupStatus", "saveCommunityLaunchProfile"],
-  "the production compatibility facade may expose exactly two legacy aliases",
-);
 assert.doesNotMatch(
-  productionFacade,
+  productionFacade.split(
+    "// Cached clients may still invoke the retired third-party MCP names.",
+  )[0],
   /\b(?:query|mutation|action)\s*\(|\bctx\.|\bdb\./,
-  "the production compatibility facade must not own transport, authorization, or data logic",
+  "the community alias facade must not own transport, authorization, or data logic",
 );
 
 assert.match(

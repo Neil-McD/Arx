@@ -10,6 +10,7 @@ const workspaceCreditsSource = read("convex/workspaceCredits.ts");
 const gatewaySource = read("shared/workspaceCreditsGateway.ts");
 const accountCommerceSource = read("shared/accountCommerce.ts");
 const premiumBillingSource = read("convex/premiumBilling.ts");
+const billingCompatibilityFacade = read("convex/billing.ts");
 const cloudAccountCommerceGatewaySource = read("shared/cloudAccountCommerceGateway.ts");
 const billingSettingsSource = read("apps/web/src/components/WebBillingSettingsSection.tsx");
 const settingsPanelsSource = read("apps/web/src/components/WebSettingsPanels.tsx");
@@ -51,9 +52,22 @@ assert.doesNotMatch(
   "backend must not expose a public manual credit top-up checkout starter",
 );
 assert.equal(
-  existsSync(new URL("../convex/billing.ts", import.meta.url)),
-  false,
-  "the duplicate billing facade must stay deleted",
+  Array.from(
+    billingCompatibilityFacade.matchAll(/export const ([A-Za-z0-9_]+)/g),
+    (match) => match[1],
+  ).length,
+  9,
+  "billing may expose only the pinned cached-production aliases",
+);
+assert.doesNotMatch(
+  billingCompatibilityFacade,
+  /\b(?:query|mutation|action)\s*\(|\bctx\.|\bdb\./,
+  "the cached-production billing facade must not own billing behavior",
+);
+assert.doesNotMatch(
+  billingCompatibilityFacade,
+  /startWorkspaceCreditTopupCheckout|getWorkspaceBillingOverview/,
+  "the cached-production facade must not restore retired workspace billing APIs",
 );
 
 assert.match(

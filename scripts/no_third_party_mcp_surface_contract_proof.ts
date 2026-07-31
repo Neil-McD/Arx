@@ -9,18 +9,15 @@ const deletedPaths = [
   "convex/appConnections.ts",
   "convex/appCore.ts",
   "convex/appFetchPolicy.ts",
-  "convex/appOAuth.ts",
   "convex/appValidation.ts",
   "convex/communityAppMounts.ts",
   "convex/developerApps.ts",
   "convex/discoverMarketplace.ts",
-  "convex/harnessMounts.ts",
   "convex/httpAppOAuth.ts",
   "convex/mcpHttpClient.ts",
   "convex/mcpSnapshotCodec.ts",
   "convex/runtimeMcpManager.ts",
   "convex/runtimeMountedToolExposure.ts",
-  "convex/userPlatformAppMounts.ts",
   "shared/cloudCommunityAppMountGateway.ts",
   "shared/cloudDiscoverMarketplaceGateway.ts",
   "shared/cloudEffectiveMcpAppGateway.ts",
@@ -78,6 +75,37 @@ for (const path of activeSources) {
   );
 }
 
+const compatibilityTombstonePaths = [
+  "convex/appOAuth.ts",
+  "convex/harnessMounts.ts",
+  "convex/userPlatformAppMounts.ts",
+] as const;
+const forbiddenTombstoneBehavior =
+  /\bctx\.(?:db|runAction|runMutation|runQuery|scheduler|storage|auth)\b|\bfetch\s*\(|\binternal\.|\bapi\.|mcpHttpClient|runtimeMcpManager|runtimeMountedToolExposure|appConnections|appToolSnapshots/;
+
+for (const path of compatibilityTombstonePaths) {
+  assert.equal(existsSync(join(root, path)), true, `${path} must exist`);
+  const source = read(path);
+  assert.doesNotMatch(
+    source,
+    forbiddenTombstoneBehavior,
+    `${path} must remain an inert cached-client compatibility tombstone`,
+  );
+}
+
+const communityCompatibility = read("convex/community.ts").split(
+  "// Cached clients may still invoke the retired third-party MCP names.",
+)[1];
+assert.ok(
+  communityCompatibility,
+  "community retirement compatibility boundary must remain explicit",
+);
+assert.doesNotMatch(
+  communityCompatibility,
+  forbiddenTombstoneBehavior,
+  "community retirement tombstones must remain inert",
+);
+
 const http = read("convex/http.ts");
 assert.match(http, /registerRuntimeMcpRoutes/);
 assert.doesNotMatch(http, /registerAppOAuthRoutes/);
@@ -128,7 +156,7 @@ if (existsSync(retirementPath)) {
     /developerApps|appOAuthStates|userPlatformAppMounts|communityAppMounts/,
   );
   console.log(
-    "PASS: no active third-party MCP surface; retirement schema is isolated for bounded production cleanup",
+    "PASS: no active third-party MCP surface; cached-client tombstones are inert and retirement schema is isolated for bounded production cleanup",
   );
 } else {
   for (const table of retiredTables) {

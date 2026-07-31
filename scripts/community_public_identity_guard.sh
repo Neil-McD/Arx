@@ -24,14 +24,16 @@ community_compatibility_export_count="$(
   awk '/^export const / { count += 1 } END { print count + 0 }' \
     "$COMMUNITY_COMPATIBILITY_FACADE_FILE"
 )"
-if [[ "$community_compatibility_export_count" -ne 2 ]]; then
-  echo "FAIL: rolling compatibility facade must expose exactly two aliases"
+if [[ "$community_compatibility_export_count" -ne 114 ]]; then
+  echo "FAIL: cached-production community facade must expose exactly 114 pinned operations"
   exit 1
 fi
-guard_rg_assert_absent \
-  "rolling compatibility facade must not own behavior" \
-  '\b(query|mutation|action)[[:space:]]*\(|\bctx\.|\bdb\.' \
-  "$COMMUNITY_COMPATIBILITY_FACADE_FILE"
+if sed '/Cached clients may still invoke the retired third-party MCP names/,$d' \
+  "$COMMUNITY_COMPATIBILITY_FACADE_FILE" |
+  rg -n '\b(query|mutation|action)[[:space:]]*\(|\bctx\.|\bdb\.' >/dev/null; then
+  echo "FAIL: cached-production community aliases must not own behavior"
+  exit 1
+fi
 if [[ ! -f "$COMMUNITY_CHAT_FILE" ]]; then
   echo "FAIL: missing $COMMUNITY_CHAT_FILE"
   exit 1

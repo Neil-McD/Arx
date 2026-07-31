@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=38
+TOTAL_STEPS=39
 CURRENT_STEP=1
 
 run_step() {
@@ -52,6 +52,7 @@ run_step "Canonical operation surface proof" npm run check:canonical-operation-s
 run_step "Community semantic repository proof" npm run check:community-semantic-repository-proof
 run_step "Community interaction projection UI proof" npm run check:community-interaction-projection-ui-proof
 run_step "No third-party MCP surface proof" npm run check:no-third-party-mcp-surface-proof
+run_step "Cached production client compatibility proof" npm run check:cached-production-client-compatibility-proof
 run_step "Official Polynet MCP contract proof" npm run check:polynet-workspace-mcp-proof
 run_step "Official Polynet MCP authorization proof" npm run check:polynet-workspace-mcp-auth-proof
 run_step "App shell decomposition contract" npm run check:app-shell-decomposition-contract

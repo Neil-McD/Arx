@@ -83,20 +83,22 @@ assert.equal(
   true,
   "the server-only launch status compatibility model must remain during the rolling transition",
 );
-assert.deepEqual(
-  Array.from(
-    productionCompatibilityFacade.matchAll(
-      /export const ([A-Za-z0-9_]+)/g,
-    ),
-    (match) => match[1],
-  ).sort(),
-  ["getCommunityLaunchSetupStatus", "saveCommunityLaunchProfile"],
-  "the retired community facade may return only as the two-address production compatibility bridge",
+assert.match(
+  productionCompatibilityFacade,
+  /export const saveCommunityLaunchProfile =[\s\S]*communityLifecycle\.saveCommunityLaunchProfile/,
+  "the retired launch-profile address must delegate to its canonical owner",
+);
+assert.match(
+  productionCompatibilityFacade,
+  /export const getCommunityLaunchSetupStatus =[\s\S]*communityLaunchSetup\.getCommunityLaunchSetupStatus/,
+  "the retired launch-status address must delegate to its canonical owner",
 );
 assert.doesNotMatch(
-  productionCompatibilityFacade,
+  productionCompatibilityFacade.split(
+    "// Cached clients may still invoke the retired third-party MCP names.",
+  )[0],
   /\b(?:query|mutation|action)\s*\(|\bctx\.|\bdb\./,
-  "the production compatibility bridge must not restore facade-owned behavior",
+  "the community alias facade must not restore facade-owned behavior",
 );
 assert.doesNotMatch(
   [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n"),
