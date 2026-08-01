@@ -43,6 +43,8 @@ type UpdatedRow = {
 
 type UseWebCommunityAttentionControllerParams = {
   activeCommunityId: string | null;
+  activeChannelId: string | null;
+  activeChannelSlug: string;
   activePage: AppPage;
   canPostMessages: boolean;
   communityIds: string[];
@@ -86,6 +88,8 @@ export function useWebCommunityAttentionModel(
   params: UseWebCommunityAttentionControllerParams,
 ) {
   const {
+    activeChannelId,
+    activeChannelSlug,
     activeCommunityId,
     activePage,
     aiFeed,
@@ -110,6 +114,7 @@ export function useWebCommunityAttentionModel(
     session,
     ensureSession,
     activeCommunityId,
+    activeChannelId,
     canPostMessages,
   });
 
@@ -124,26 +129,45 @@ export function useWebCommunityAttentionModel(
   });
 
   const [chatDividerBoundary, setChatDividerBoundary] = useState<number | null>(null);
-  const capturedDividerCommunityIdRef = useRef<string | null>(null);
+  const capturedDividerBoundaryRef = useRef<string | null>(null);
   const seenMarkerBySurfaceRef = useRef<Record<string, string>>({});
 
+  const activeChannelAttention = useMemo(() => {
+    if (!activeCommunityId) return null;
+    const indicators = attentionByCommunityId[activeCommunityId];
+    if (!indicators) return null;
+    const channel = indicators.channels.find(
+      (candidate) => candidate.channel_slug === activeChannelSlug,
+    );
+    if (channel) return channel;
+    if (activeChannelSlug !== "general") return null;
+    return {
+      channel_id: null,
+      channel_slug: "general",
+      chat: indicators.chat,
+      mentions: indicators.mentions,
+      chat_last_seen_at: indicators.chat_last_seen_at ?? null,
+      latest_activity_at: null,
+    };
+  }, [activeChannelSlug, activeCommunityId, attentionByCommunityId]);
+
   useEffect(() => {
-    capturedDividerCommunityIdRef.current = null;
+    capturedDividerBoundaryRef.current = null;
     setChatDividerBoundary(null);
-  }, [activeCommunityId]);
+  }, [activeChannelId, activeCommunityId]);
 
   useEffect(() => {
     if (!isCommunityChatActive || !activeCommunityId) return;
-    if (capturedDividerCommunityIdRef.current === activeCommunityId) return;
-    const indicators = attentionByCommunityId[activeCommunityId];
-    if (!indicators) return;
-    capturedDividerCommunityIdRef.current = activeCommunityId;
+    const dividerBoundary = `${activeCommunityId}:${activeChannelId ?? "general"}`;
+    if (capturedDividerBoundaryRef.current === dividerBoundary) return;
+    if (!activeChannelAttention) return;
+    capturedDividerBoundaryRef.current = dividerBoundary;
     setChatDividerBoundary(
-      typeof indicators.chat_last_seen_at === "number"
-        ? indicators.chat_last_seen_at
+      typeof activeChannelAttention.chat_last_seen_at === "number"
+        ? activeChannelAttention.chat_last_seen_at
         : null,
     );
-  }, [activeCommunityId, attentionByCommunityId, isCommunityChatActive]);
+  }, [activeChannelAttention, activeChannelId, activeCommunityId, isCommunityChatActive]);
 
   const latestChatActivityAt = useMemo(() => {
     const timestamps: Array<{
@@ -195,7 +219,8 @@ export function useWebCommunityAttentionModel(
     }
     const communityId = activeCommunityId;
     const throughAtMs = latestChatActivityAt;
-    const requestKey = `${communityId}:chat`;
+    const channelId = activeChannelId;
+    const requestKey = `${communityId}:chat:${channelId ?? "general"}`;
     const marker = String(throughAtMs);
     if (seenMarkerBySurfaceRef.current[requestKey] === marker) return;
     seenMarkerBySurfaceRef.current[requestKey] = marker;
@@ -206,6 +231,7 @@ export function useWebCommunityAttentionModel(
         await acknowledgeCloudCommunityChatRead({
           session: usableSession,
           communityId,
+          channelId,
           throughAtMs,
         });
         await refreshCommunityAttention();
@@ -217,6 +243,7 @@ export function useWebCommunityAttentionModel(
     })();
   }, [
     activeCommunityId,
+    activeChannelId,
     chat.hasResolved,
     ensureSession,
     isCommunityChatActive,
@@ -322,6 +349,7 @@ export function useWebCommunityAttentionModel(
     signalTyping,
     clearTyping,
     attentionByCommunityId,
+    activeChannelAttention,
     chatDividerBoundary,
     handleChatCaughtUp,
   };

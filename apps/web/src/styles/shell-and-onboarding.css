@@ -499,7 +499,9 @@ body {
 .community-nav {
   display: flex;
   flex-direction: column;
-  overflow: visible;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--surface-nav, var(--surface-panel));
   box-shadow: var(--panel-shadow, inset 0 1px 3px rgba(0, 0, 0, 0.15));
   border-left: 1px solid var(--stroke-divider-accent);
@@ -594,6 +596,150 @@ body {
 
 .nav-item-label {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-channel-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.community-channel-item .community-channel-icon {
+  color: var(--text-faint);
+}
+
+.community-channel-add {
+  color: var(--text-faint);
+}
+
+.community-channel-add:hover:not(:disabled) {
+  color: var(--text-ink-primary);
+}
+
+.community-channel-add:disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
+.community-channel-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 700;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(4px);
+}
+
+.community-channel-modal {
+  width: min(420px, 100%);
+  padding: 20px;
+  border: 1px solid var(--stroke-divider-accent);
+  border-radius: 14px;
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
+}
+
+.community-channel-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.community-channel-modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.community-channel-modal-header p {
+  margin: 6px 0 0;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.community-channel-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.community-channel-modal-close:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--hover-overlay);
+}
+
+.community-channel-modal-field {
+  display: grid;
+  gap: 7px;
+  margin-top: 20px;
+  color: var(--text-ink-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.community-channel-modal-field input {
+  width: 100%;
+  border: 1px solid var(--stroke-divider-accent);
+  border-radius: 9px;
+  padding: 10px 11px;
+  background: var(--surface-input, var(--surface-nav));
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  outline: none;
+}
+
+.community-channel-modal-field input:focus {
+  border-color: var(--stroke-selected);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.community-channel-modal-error {
+  margin-top: 10px;
+  color: var(--accent-danger, #ef6a72);
+  font-size: 12px;
+}
+
+.community-channel-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.community-channel-modal-actions button {
+  border: 1px solid var(--stroke-divider-accent);
+  border-radius: 9px;
+  padding: 8px 13px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.community-channel-modal-actions button.is-primary {
+  border-color: var(--stroke-selected);
+  background: var(--surface-selected);
+  color: var(--text-selected);
+}
+
+.community-channel-modal-actions button:disabled {
+  cursor: default;
+  opacity: 0.52;
 }
 
 .nav-item-dot {

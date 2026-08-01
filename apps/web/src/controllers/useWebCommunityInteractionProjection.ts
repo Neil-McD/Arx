@@ -58,6 +58,7 @@ type OptimisticAttachment = {
 export type CommunityInteractionOptimisticInsert<AttachmentT> = {
   idempotencyKey: string;
   communityId: string;
+  channelId: string | null;
   kind: "root" | "reply";
   rootId: string | null;
   replyToMessageId: string | null;
@@ -75,6 +76,7 @@ type PendingCanonicalInteraction<AttachmentT> =
 
 type UseWebCommunityInteractionProjectionParams = {
   activeCommunityId: string | null;
+  activeChannelId: string | null;
   canonicalSessionUserId: string | null;
   ensureSession: EnsureAuthSession;
   isCommunityChatActive: boolean;
@@ -97,20 +99,28 @@ function formatProjectionError(error: unknown): string {
   return message.trim() || "Failed to load community threads.";
 }
 
-function readStoredSelectedRoot(communityId: string | null): string | null {
+function selectedRootStorageKey(communityId: string, channelId: string | null): string {
+  return `${INTERACTION_SELECTED_ROOT_STORAGE_PREFIX}${communityId}:${channelId ?? "general"}`;
+}
+
+function readStoredSelectedRoot(communityId: string | null, channelId: string | null): string | null {
   if (!communityId) return null;
   try {
-    const value = window.localStorage.getItem(`${INTERACTION_SELECTED_ROOT_STORAGE_PREFIX}${communityId}`);
+    const value = window.localStorage.getItem(selectedRootStorageKey(communityId, channelId));
     return value && value.trim() ? value : null;
   } catch {
     return null;
   }
 }
 
-function writeStoredSelectedRoot(communityId: string | null, rootId: string | null): void {
+function writeStoredSelectedRoot(
+  communityId: string | null,
+  channelId: string | null,
+  rootId: string | null,
+): void {
   if (!communityId) return;
   try {
-    const key = `${INTERACTION_SELECTED_ROOT_STORAGE_PREFIX}${communityId}`;
+    const key = selectedRootStorageKey(communityId, channelId);
     if (rootId) window.localStorage.setItem(key, rootId);
     else window.localStorage.removeItem(key);
   } catch {
@@ -157,7 +167,7 @@ function buildOptimisticRoot<AttachmentT extends OptimisticAttachment>(
     root: {
       id: `pending:${pending.idempotencyKey}`,
       community_id: pending.communityId,
-      channel_id: null,
+      channel_id: pending.channelId,
       actor_type: "human",
       actor_user_id: pending.senderId,
       actor_agent_key: null,
@@ -196,7 +206,7 @@ function buildOptimisticReply<AttachmentT extends OptimisticAttachment>(
     reply: {
       id: `pending:${pending.idempotencyKey}`,
       community_id: pending.communityId,
-      channel_id: null,
+      channel_id: pending.channelId,
       root_id: pending.rootId ?? "",
       seq: Number.MAX_SAFE_INTEGER,
       actor_type: "human",
@@ -223,6 +233,7 @@ function appendPendingRoots<AttachmentT extends OptimisticAttachment>(
   roots: CommunityInteractionRootBundle[],
   pending: PendingCanonicalInteraction<AttachmentT>[],
   communityId: string | null,
+  channelId: string | null,
 ): CommunityInteractionRootBundle[] {
   if (!communityId) return roots;
   const storedKeys = new Set(roots.map((bundle) => bundle.root.idempotency_key));
@@ -231,6 +242,7 @@ function appendPendingRoots<AttachmentT extends OptimisticAttachment>(
       (item) =>
         item.kind === "root"
         && item.communityId === communityId
+        && item.channelId === channelId
         && !storedKeys.has(storedIdempotencyKey(item.idempotencyKey, "root")),
     )
     .map(buildOptimisticRoot);
@@ -276,11 +288,23 @@ function mergeRootWindows(
   );
 }
 
+function rootMatchesChannel(
+  bundle: CommunityInteractionRootBundle,
+  communityId: string,
+  channelId: string | null,
+): boolean {
+  return (
+    bundle.root.community_id === communityId &&
+    (!channelId || bundle.root.channel_id === channelId)
+  );
+}
+
 export function useWebCommunityInteractionProjection<
   AttachmentT extends OptimisticAttachment,
 >(params: UseWebCommunityInteractionProjectionParams) {
   const {
     activeCommunityId,
+    activeChannelId,
     canonicalSessionUserId,
     ensureSession,
     isCommunityChatActive,
@@ -309,17 +333,19 @@ export function useWebCommunityInteractionProjection<
   const isLoadingOlderRootsRef = useRef(false);
   const pendingRef = useRef<PendingCanonicalInteraction<AttachmentT>[]>([]);
   const activeCommunityIdRef = useRef<string | null>(null);
+  const activeChannelIdRef = useRef<string | null>(null);
   const boundaryRef = useRef<string | null>(null);
   const rootsRequestIdRef = useRef(0);
   const repliesRequestIdRef = useRef<Record<string, number>>({});
   const dismissedServeIssueIdsRef = useRef<Set<string>>(new Set());
-  const restoredSelectionCommunityIdRef = useRef<string | null>(null);
+  const restoredSelectionBoundaryRef = useRef<string | null>(null);
 
   rootsRef.current = roots;
   nextBeforeCreatedAtRef.current = nextBeforeCreatedAt;
   isLoadingOlderRootsRef.current = isLoadingOlderRoots;
   pendingRef.current = pending;
   activeCommunityIdRef.current = activeCommunityId;
+  activeChannelIdRef.current = activeChannelId;
 
   useEffect(() => {
     setPending((current) => {
@@ -392,6 +418,7 @@ export function useWebCommunityInteractionProjection<
     activeSession: AuthSession | null = session,
   ) => {
     const communityId = String(rawCommunityId ?? "").trim();
+    const channelId = activeChannelId;
     if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !communityId) {
       reset();
       return;
@@ -406,11 +433,13 @@ export function useWebCommunityInteractionProjection<
       const page = await listCloudCommunityInteractionRootsPage<AuthSession>({
         session: usableSession,
         communityId,
+        channelId,
         limit: COMMUNITY_INTERACTION_ROOT_LIMIT,
       });
       if (
         rootsRequestIdRef.current !== requestId
         || activeCommunityIdRef.current !== communityId
+        || activeChannelIdRef.current !== channelId
       ) {
         return;
       }
@@ -424,6 +453,7 @@ export function useWebCommunityInteractionProjection<
       if (
         rootsRequestIdRef.current !== requestId
         || activeCommunityIdRef.current !== communityId
+        || activeChannelIdRef.current !== channelId
       ) {
         return;
       }
@@ -432,17 +462,19 @@ export function useWebCommunityInteractionProjection<
       if (
         rootsRequestIdRef.current === requestId
         && activeCommunityIdRef.current === communityId
+        && activeChannelIdRef.current === channelId
       ) {
         setIsLoadingRoots(false);
       }
     }
-  }, [activeCommunityId, ensureSession, reset, session]);
+  }, [activeChannelId, activeCommunityId, ensureSession, reset, session]);
 
   const loadOlderRoots = useCallback(async (
     rawCommunityId: string | null = activeCommunityId,
     activeSession: AuthSession | null = session,
   ) => {
     const communityId = String(rawCommunityId ?? "").trim();
+    const channelId = activeChannelId;
     const beforeCreatedAt = nextBeforeCreatedAtRef.current;
     if (
       !COMMUNITY_INTERACTION_PROJECTION_ENABLED
@@ -459,14 +491,18 @@ export function useWebCommunityInteractionProjection<
       const page = await listCloudCommunityInteractionRootsPage<AuthSession>({
         session: usableSession,
         communityId,
+        channelId,
         beforeCreatedAt,
         limit: COMMUNITY_INTERACTION_ROOT_LIMIT,
       });
-      if (activeCommunityIdRef.current !== communityId) return;
+      if (
+        activeCommunityIdRef.current !== communityId ||
+        activeChannelIdRef.current !== channelId
+      ) return;
       setRootChangeReason("older");
       setRoots((current) =>
         mergeRootWindows(
-          current.filter((bundle) => bundle.root.community_id === communityId),
+          current.filter((bundle) => rootMatchesChannel(bundle, communityId, channelId)),
           page.roots,
         ),
       );
@@ -474,11 +510,14 @@ export function useWebCommunityInteractionProjection<
     } catch {
       // Keep the loaded window usable; the next upward scroll retries.
     } finally {
-      if (activeCommunityIdRef.current === communityId) {
+      if (
+        activeCommunityIdRef.current === communityId &&
+        activeChannelIdRef.current === channelId
+      ) {
         setIsLoadingOlderRoots(false);
       }
     }
-  }, [activeCommunityId, ensureSession, session]);
+  }, [activeChannelId, activeCommunityId, ensureSession, session]);
 
   useEffect(() => {
     if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !session) return;
@@ -496,16 +535,21 @@ export function useWebCommunityInteractionProjection<
         unsubscribe = subscribeCloudCommunityInteractionRoots({
           liveClient,
           communityId: activeCommunityId,
+          channelId: activeChannelId,
           limit: COMMUNITY_INTERACTION_ROOT_LIMIT,
           onUpdate: (incomingRoots) => {
-            if (cancelled) return;
+            if (
+              cancelled ||
+              activeCommunityIdRef.current !== activeCommunityId ||
+              activeChannelIdRef.current !== activeChannelId
+            ) return;
             const hadLoadedRoots = rootsRef.current.some(
-              (bundle) => bundle.root.community_id === activeCommunityId,
+              (bundle) => rootMatchesChannel(bundle, activeCommunityId, activeChannelId),
             );
             setRootChangeReason(hadLoadedRoots ? "newer" : "initial");
             setRoots((current) =>
               mergeRootWindows(
-                current.filter((bundle) => bundle.root.community_id === activeCommunityId),
+                current.filter((bundle) => rootMatchesChannel(bundle, activeCommunityId, activeChannelId)),
                 incomingRoots,
               ),
             );
@@ -513,7 +557,11 @@ export function useWebCommunityInteractionProjection<
             setError(null);
           },
           onError: (subscriptionError) => {
-            if (cancelled) return;
+            if (
+              cancelled ||
+              activeCommunityIdRef.current !== activeCommunityId ||
+              activeChannelIdRef.current !== activeChannelId
+            ) return;
             setError(formatProjectionError(subscriptionError));
             setIsLoadingRoots(false);
           },
@@ -530,7 +578,7 @@ export function useWebCommunityInteractionProjection<
       unsubscribe?.();
       liveClient?.close();
     };
-  }, [activeCommunityId, ensureSession, session]);
+  }, [activeChannelId, activeCommunityId, ensureSession, session]);
 
   useEffect(() => {
     if (
@@ -658,6 +706,7 @@ export function useWebCommunityInteractionProjection<
         await createCloudCommunityInteractionComposerMessageRows<AuthSession>({
           session,
           communityId: interaction.communityId,
+          channelId: interaction.channelId,
           idempotencyKey: interaction.idempotencyKey,
           text: interaction.text,
           rootId: interaction.rootId,
@@ -683,32 +732,33 @@ export function useWebCommunityInteractionProjection<
     if (!rootId) return;
     setSelectedRootId((current) => {
       const next = current === rootId ? null : rootId;
-      writeStoredSelectedRoot(activeCommunityId, next);
+      writeStoredSelectedRoot(activeCommunityId, activeChannelId, next);
       if (next && !repliesByRootId[next]) {
         void loadReplies(next);
       }
       return next;
     });
-  }, [activeCommunityId, loadReplies, repliesByRootId]);
+  }, [activeChannelId, activeCommunityId, loadReplies, repliesByRootId]);
 
   const closeDrawer = useCallback(() => {
     setSelectedRootId(null);
-    writeStoredSelectedRoot(activeCommunityId, null);
-  }, [activeCommunityId]);
+    writeStoredSelectedRoot(activeCommunityId, activeChannelId, null);
+  }, [activeChannelId, activeCommunityId]);
 
   useEffect(() => {
     if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId) return;
     if (shellVariant === "mobile") return;
-    if (restoredSelectionCommunityIdRef.current === activeCommunityId) return;
+    const selectionBoundary = `${activeCommunityId}:${activeChannelId ?? "general"}`;
+    if (restoredSelectionBoundaryRef.current === selectionBoundary) return;
     const rootsLoadedForCommunity =
-      roots.length > 0 && roots[0]?.root.community_id === activeCommunityId;
+      roots.length > 0 && rootMatchesChannel(roots[0], activeCommunityId, activeChannelId);
     if (!rootsLoadedForCommunity) return;
-    restoredSelectionCommunityIdRef.current = activeCommunityId;
-    const storedRootId = readStoredSelectedRoot(activeCommunityId);
+    restoredSelectionBoundaryRef.current = selectionBoundary;
+    const storedRootId = readStoredSelectedRoot(activeCommunityId, activeChannelId);
     if (storedRootId && roots.some((bundle) => bundle.root.id === storedRootId)) {
       setSelectedRootId((current) => current ?? storedRootId);
     }
-  }, [activeCommunityId, roots, shellVariant]);
+  }, [activeChannelId, activeCommunityId, roots, shellVariant]);
 
   const toggleReaction = useCallback(async (
     targetType: "root" | "reply",
@@ -756,7 +806,7 @@ export function useWebCommunityInteractionProjection<
     if (!usableSession) return;
     if (targetType === "root" && selectedRootId === targetId) {
       setSelectedRootId(null);
-      writeStoredSelectedRoot(activeCommunityId, null);
+      writeStoredSelectedRoot(activeCommunityId, activeChannelId, null);
     }
     try {
       await deleteCloudCommunityInteractionMessage<AuthSession>({
@@ -767,7 +817,7 @@ export function useWebCommunityInteractionProjection<
     } catch {
       // The live projection remains authoritative.
     }
-  }, [activeCommunityId, ensureSession, selectedRootId, session]);
+  }, [activeChannelId, activeCommunityId, ensureSession, selectedRootId, session]);
 
   useEffect(() => {
     const userId = String(canonicalSessionUserId ?? "").trim();
@@ -776,13 +826,13 @@ export function useWebCommunityInteractionProjection<
       reset();
       return;
     }
-    const nextBoundary = `${userId}:${activeCommunityId}`;
+    const nextBoundary = `${userId}:${activeCommunityId}:${activeChannelId ?? "general"}`;
     if (boundaryRef.current !== nextBoundary) {
       boundaryRef.current = nextBoundary;
       reset();
     }
     void loadRoots(activeCommunityId, session);
-  }, [activeCommunityId, canonicalSessionUserId, loadRoots, reset, session]);
+  }, [activeChannelId, activeCommunityId, canonicalSessionUserId, loadRoots, reset, session]);
 
   const insertOptimistic = useCallback((
     interaction: CommunityInteractionOptimisticInsert<AttachmentT>,
@@ -812,8 +862,8 @@ export function useWebCommunityInteractionProjection<
   }, []);
 
   const visibleRoots = useMemo(
-    () => appendPendingRoots(roots, pending, activeCommunityId),
-    [activeCommunityId, pending, roots],
+    () => appendPendingRoots(roots, pending, activeCommunityId, activeChannelId),
+    [activeChannelId, activeCommunityId, pending, roots],
   );
   const selectedReplies = useMemo(
     () => appendPendingReplies(

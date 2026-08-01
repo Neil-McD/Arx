@@ -33,6 +33,7 @@ import {
   COMMUNITY_INTERACTION_PROJECTION_ENABLED,
   useWebCommunityInteractionProjection,
 } from "./controllers/useWebCommunityInteractionProjection";
+import { useWebCommunityChannelsController } from "./controllers/useWebCommunityChannelsController";
 import {
   useWebCommunityChatController,
   WEB_COMMUNITY_REACTION_EMOJIS,
@@ -313,6 +314,8 @@ export default function App() {
     setActiveOperatorTab,
     communityTab,
     setCommunityTab,
+    communityChannelSlug,
+    setCommunityChannelSlug,
     communityExperienceMode,
     setCommunityExperienceMode,
     communityResourceModuleId,
@@ -431,6 +434,7 @@ export default function App() {
     initialCommunitySlug,
     communities,
     setCommunityTab,
+    setCommunityChannelSlug,
   });
   const { loadCommunities, loadUserProfiles } = useWebCommunityAccessController<
     AuthSession,
@@ -471,6 +475,8 @@ export default function App() {
     setActiveOperatorTab,
     selectedActiveCommunitySlug,
     communityTab,
+    communityChannelSlug,
+    setCommunityChannelSlug,
     communityExperienceMode,
     setCommunityExperienceMode,
     communityResourceModuleId,
@@ -511,8 +517,52 @@ export default function App() {
     enterDefaultDestination: resolveAndEnterMemberDestination,
   };
 
-  const communityInteractionProjection = useWebCommunityInteractionProjection<MessageAttachment>({
+  const communityChannels = useWebCommunityChannelsController({
     activeCommunityId,
+    requestedChannelSlug: communityChannelSlug,
+    session,
+    ensureSession: ensureUsableAuthSession,
+    setRequestedChannelSlug: setCommunityChannelSlug,
+    onChannelCreated: (created) => {
+      const path = buildCommunityTabPath(
+        selectedActiveCommunitySlug,
+        "chat",
+        null,
+        null,
+        created.slug,
+      );
+      if (path) navigateTo(path);
+    },
+  });
+  const {
+    channels: activeCommunityChannels,
+    activeChannelId,
+    selectedChannelSlug: activeCommunityChannelSlug,
+    channelResolutionStatus: activeCommunityChannelResolutionStatus,
+    isChannelContextReady: isActiveCommunityChannelReady,
+    channelsError: activeCommunityChannelsError,
+    retryChannels: retryActiveCommunityChannels,
+    maxActiveChannels: maxActiveCommunityChannels,
+    isAtChannelLimit: isAtCommunityChannelLimit,
+    isCreatingChannel: isCreatingCommunityChannel,
+    createChannelError: communityChannelCreateError,
+    clearCreateChannelError: clearCommunityChannelCreateError,
+    createChannel: handleCreateCommunityChannel,
+  } = communityChannels;
+  const activeChannelCommunityId = isActiveCommunityChannelReady
+    ? activeCommunityId
+    : null;
+  const isActiveCommunityChannelLoading =
+    activeCommunityChannelResolutionStatus === "loading" ||
+    activeCommunityChannelResolutionStatus === "not_found";
+  const activeCommunityChannelResolutionError =
+    activeCommunityChannelResolutionStatus === "failed"
+      ? activeCommunityChannelsError
+      : null;
+
+  const communityInteractionProjection = useWebCommunityInteractionProjection<MessageAttachment>({
+    activeCommunityId: activeChannelCommunityId,
+    activeChannelId,
     canonicalSessionUserId,
     ensureSession: ensureUsableAuthSession,
     isCommunityChatActive: activePage === "community" && communityTab === "chat",
@@ -549,12 +599,16 @@ export default function App() {
   const memberAgentComposerApiRef = useRef<WebMemberAgentDockHandle | null>(null);
   const canMentionEverybodyRef = useRef(false);
   const communityChat = useWebCommunityChatController({
-    activeCommunityId,
+    activeCommunityId: activeChannelCommunityId,
+    activeChannelId,
     canonicalSessionUserId,
     ensureSession: ensureUsableAuthSession,
-    hasActiveCommunity: Boolean(activeCommunity),
+    hasActiveCommunity: Boolean(activeCommunity) && isActiveCommunityChannelReady,
     interaction: communityInteractionProjection,
-    isCommunityChatActive: activePage === "community" && communityTab === "chat",
+    isCommunityChatActive:
+      isActiveCommunityChannelReady &&
+      activePage === "community" &&
+      communityTab === "chat",
     isCommunityPageActive: activePage === "community",
     isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
     loadProfiles: (userIds, activeSession) => loadUserProfiles(userIds, activeSession),
@@ -748,6 +802,8 @@ export default function App() {
     reloadActiveCommunityAccess,
   } = communityAdministration.access;
   canMentionEverybodyRef.current = canManageMembersActiveCommunity;
+  const canPostMessagesActiveChannel =
+    isActiveCommunityChannelReady && canPostMessagesActiveCommunity;
 
   useWebCommunityTabAccessGuard({
     activePage,
@@ -1137,27 +1193,30 @@ export default function App() {
       authError,
       showToast: showAppToastMessage,
     });
-  resetWebSessionStateRef.current = () => resetWebSessionStateAfterSignOut({
-    beginBrowserSignedOutState,
-    setCommunities,
-    setIsLoadingCommunities,
-    setCommunityRoleById,
-    setActiveCommunityId,
-    setCommunityTab,
-    resetCommunityChatState,
-    resetCommunityContentState,
-    setCommunitySettingsName,
-    setCommunitySettingsSlug,
-    setCommunitySettingsOneLiner,
-    setCommunitySettingsVisibility,
-    setCommunitySettingsAvatarUrl,
-    setCommunitySettingsBannerUrl,
-    setCommunitySettingsError,
-    setIsSavingCommunitySettings,
-    setIsSettingsBannerDragOver,
-    setIsSettingsAvatarDragOver,
-    setDiscoverCommunities,
-  });
+  resetWebSessionStateRef.current = () => {
+    setCommunityChannelSlug(null);
+    return resetWebSessionStateAfterSignOut({
+      beginBrowserSignedOutState,
+      setCommunities,
+      setIsLoadingCommunities,
+      setCommunityRoleById,
+      setActiveCommunityId,
+      setCommunityTab,
+      resetCommunityChatState,
+      resetCommunityContentState,
+      setCommunitySettingsName,
+      setCommunitySettingsSlug,
+      setCommunitySettingsOneLiner,
+      setCommunitySettingsVisibility,
+      setCommunitySettingsAvatarUrl,
+      setCommunitySettingsBannerUrl,
+      setCommunitySettingsError,
+      setIsSavingCommunitySettings,
+      setIsSettingsBannerDragOver,
+      setIsSettingsAvatarDragOver,
+      setDiscoverCommunities,
+    });
+  };
   const communityPolynetController = useWebCommunityPolynetController<AuthSession>({
     activePage,
     communityTab,
@@ -1260,15 +1319,19 @@ export default function App() {
     chatDividerBoundary,
     handleChatCaughtUp,
   } = useWebCommunityAttentionModel({
-    activeCommunityId,
+    activeCommunityId: activeChannelCommunityId,
+    activeChannelId,
+    activeChannelSlug: activeCommunityChannelSlug,
     activePage,
-    canPostMessages: canPostMessagesActiveCommunity,
+    canPostMessages: canPostMessagesActiveChannel,
     communityIds: communityAttentionCommunityIds,
     communityTab,
     ensureSession: ensureUsableAuthSession,
     session,
     chat: {
-      hasResolved: hasResolvedCommunityChat,
+      hasResolved: communityInteractionProjection.enabled
+        ? isActiveCommunityChannelReady && !isLoadingCommunityInteractions
+        : hasResolvedCommunityChat,
     },
     interactions: {
       roots: communityInteractionRoots,
@@ -1289,6 +1352,26 @@ export default function App() {
       rows: communityEvents,
     },
   });
+  const communityChannelIndicators = useMemo(() => {
+    const indicators = activeCommunityId
+      ? attentionByCommunityId[activeCommunityId]
+      : null;
+    if (!indicators) return {};
+    const bySlug: Record<string, { chat: boolean; mentions: boolean }> = {};
+    for (const channel of indicators.channels) {
+      bySlug[channel.channel_slug] = {
+        chat: channel.chat,
+        mentions: channel.mentions,
+      };
+    }
+    if (!bySlug.general && indicators.channels.length === 0) {
+      bySlug.general = {
+        chat: indicators.chat,
+        mentions: indicators.mentions,
+      };
+    }
+    return bySlug;
+  }, [activeCommunityId, attentionByCommunityId]);
   useCommunityDirectoryLifecycle<AuthSession>({
     activePage,
     communityTab,
@@ -2243,7 +2326,7 @@ export default function App() {
       resourceModuleModalProps,
       resourceModuleDeleteModalProps,
       resourceModalProps,
-      canPostMessagesActiveCommunity,
+      canPostMessagesActiveCommunity: canPostMessagesActiveChannel,
       isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
       isLoadingChat,
       hasResolvedCommunityChat,
@@ -2342,13 +2425,26 @@ export default function App() {
         onMobileReadingModeChange: mobileChromeScrollTrackingEnabled
           ? setMobileChromeReadingMode
           : undefined,
-        roots: visibleCommunityInteractionRoots,
-        selectedRootId: selectedCommunityInteractionRootId,
-        replies: selectedCommunityInteractionReplies,
-        isLoadingRoots: isLoadingCommunityInteractions,
-        isLoadingReplies: isLoadingCommunityInteractionReplies,
-        error: communityInteractionError,
-        repliesError: communityInteractionRepliesError,
+        roots: isActiveCommunityChannelReady
+          ? visibleCommunityInteractionRoots
+          : [],
+        selectedRootId: isActiveCommunityChannelReady
+          ? selectedCommunityInteractionRootId
+          : null,
+        replies: isActiveCommunityChannelReady
+          ? selectedCommunityInteractionReplies
+          : [],
+        isLoadingRoots:
+          isActiveCommunityChannelLoading ||
+          (isActiveCommunityChannelReady && isLoadingCommunityInteractions),
+        isLoadingReplies:
+          isActiveCommunityChannelReady && isLoadingCommunityInteractionReplies,
+        error:
+          activeCommunityChannelResolutionError ??
+          (isActiveCommunityChannelReady ? communityInteractionError : null),
+        repliesError: isActiveCommunityChannelReady
+          ? communityInteractionRepliesError
+          : null,
         onSelectRoot: handleSelectCommunityInteractionRoot,
         onCloseDrawer: handleCloseCommunityInteractionDrawer,
         onToggleReaction: handleToggleCommunityInteractionReaction,
@@ -2360,20 +2456,26 @@ export default function App() {
         canLoadOlderRoots: canLoadOlderCommunityInteractionRoots,
         isLoadingOlderRoots: isLoadingOlderCommunityInteractionRoots,
         onLoadOlderRoots: () => {
-          if (!activeCommunityId) return;
-          void loadOlderCommunityInteractionRoots(activeCommunityId, session);
+          if (!activeChannelCommunityId) return;
+          void loadOlderCommunityInteractionRoots(activeChannelCommunityId, session);
         },
         onCaughtUp: handleChatCaughtUp,
         onRetryRoots: () => {
-          if (!activeCommunityId) return;
-          void loadCommunityInteractionRoots(activeCommunityId, session);
+          if (activeCommunityChannelResolutionStatus === "failed") {
+            retryActiveCommunityChannels();
+            return;
+          }
+          if (!activeChannelCommunityId) return;
+          void loadCommunityInteractionRoots(activeChannelCommunityId, session);
         },
         onRetryReplies: (rootId: string) => {
           void loadCommunityInteractionReplies(rootId, session);
         },
         onRetrySend: handleRetryPendingCanonicalInteraction,
         onDiscardPending: handleDiscardPendingCanonicalInteraction,
-        typingPresence: communityTypingUsers,
+        typingPresence: isActiveCommunityChannelReady
+          ? communityTypingUsers
+          : undefined,
         onlineUserIds: activeCommunityOnlineUserIds,
         presenceSummary: activeCommunityPresenceSummary,
         communityMemberCount: communityDirectoryMemberCount,
@@ -2895,6 +2997,35 @@ export default function App() {
     communityTabIndicators: isVisitorCommunitySurface
       ? { chat: false, ai_feed: false, resources: false, events: false, mentions: false }
       : communityTabIndicators,
+    communityChannels: isVisitorCommunitySurface
+      ? [{ id: "", slug: "general", name: "General", is_general: true }]
+      : activeCommunityChannels,
+    selectedCommunityChannelSlug: isVisitorCommunitySurface
+      ? "general"
+      : activeCommunityChannelSlug,
+    communityChannelIndicators: isVisitorCommunitySurface
+      ? {}
+      : communityChannelIndicators,
+    handleSelectCommunityChannel: isVisitorCommunitySurface
+      ? () => undefined
+      : (channel) => {
+          const path = buildCommunityTabPath(
+            selectedActiveCommunitySlug,
+            "chat",
+            null,
+            null,
+            channel.is_general ? null : channel.slug,
+          );
+          if (path) navigateTo(path);
+        },
+    handleCreateCommunityChannel: isVisitorCommunitySurface
+      ? () => Promise.resolve(null)
+      : handleCreateCommunityChannel,
+    isCreatingCommunityChannel,
+    communityChannelCreateError,
+    clearCommunityChannelCreateError,
+    isAtCommunityChannelLimit,
+    maxActiveCommunityChannels,
     canViewMembersActiveCommunity: !isVisitorCommunitySurface && canViewMembersActiveCommunity,
     canViewActiveCommunitySettings: !isVisitorCommunitySurface && canViewActiveCommunitySettings,
     canViewActiveCommunityPolynet: !isVisitorCommunitySurface && canViewActiveCommunityPolynet,

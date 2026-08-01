@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Brain, Check, UserPlus } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Brain, Check, Hash, Plus, UserPlus, X } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { getCommunityBannerImageStyle } from "./communityBannerUi";
 
@@ -32,6 +32,26 @@ type CommunityNavProps = {
   subtitle?: string | null;
   /** Guest mode (public funnel): tabs rendered with a lock glyph instead of an indicator dot. */
   lockedTabs?: Partial<Record<CommunityTab, boolean>>;
+  channels?: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    is_general: boolean;
+  }>;
+  selectedChannelSlug?: string | null;
+  channelIndicators?: Record<string, { chat: boolean; mentions: boolean }>;
+  onSelectChannel?: (channel: {
+    id: string;
+    slug: string;
+    name: string;
+    is_general: boolean;
+  }) => void;
+  onCreateChannel?: (name: string) => Promise<unknown>;
+  isCreatingChannel?: boolean;
+  createChannelError?: string | null;
+  clearCreateChannelError?: () => void;
+  isAtChannelLimit?: boolean;
+  maxActiveChannels?: number;
 };
 
 function NavLockGlyph() {
@@ -70,9 +90,22 @@ export function CommunityNav({
   showPolynetItem = false,
   subtitle = null,
   lockedTabs = {},
+  channels = [],
+  selectedChannelSlug = "general",
+  channelIndicators = {},
+  onSelectChannel,
+  onCreateChannel,
+  isCreatingChannel = false,
+  createChannelError = null,
+  clearCreateChannelError,
+  isAtChannelLimit = false,
+  maxActiveChannels = 10,
 }: CommunityNavProps) {
   const [didCopyJoinLink, setDidCopyJoinLink] = useState(false);
+  const [isAddChannelOpen, setIsAddChannelOpen] = useState(false);
+  const [channelName, setChannelName] = useState("");
   const copyResetTimeoutRef = useRef<number | null>(null);
+  const channelNameInputRef = useRef<HTMLInputElement | null>(null);
   const maybeTitle = (label: string): string | undefined => {
     return includeButtonTitles ? label : undefined;
   };
@@ -86,6 +119,21 @@ export function CommunityNav({
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
   const canCopyJoinLink = Boolean(canViewMembersActiveCommunity && joinUrl && onCopyCommunityJoinLink);
   const inviteTitle = didCopyJoinLink ? "Copied invite link" : "Copy invite link";
+  const displayedChannels = channels.length > 0
+    ? channels
+    : [{ id: "", slug: "general", name: "General", is_general: true }];
+
+  useEffect(() => {
+    if (!isAddChannelOpen) return;
+    const frame = window.requestAnimationFrame(() => channelNameInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [isAddChannelOpen]);
+
+  useEffect(() => {
+    setIsAddChannelOpen(false);
+    setChannelName("");
+    clearCreateChannelError?.();
+  }, [activeCommunity?.slug]);
 
   useEffect(() => {
     return () => {
@@ -120,6 +168,24 @@ export function CommunityNav({
     }
   };
 
+  const closeAddChannel = () => {
+    if (isCreatingChannel) return;
+    setIsAddChannelOpen(false);
+    setChannelName("");
+    clearCreateChannelError?.();
+  };
+
+  const handleCreateChannel = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalizedName = channelName.trim().replace(/\s+/g, " ");
+    if (!normalizedName || !onCreateChannel || isCreatingChannel) return;
+    clearCreateChannelError?.();
+    const created = await onCreateChannel(normalizedName);
+    if (!created) return;
+    setIsAddChannelOpen(false);
+    setChannelName("");
+  };
+
   return (
     <aside className="community-nav">
       <div className="community-nav-header">
@@ -142,22 +208,57 @@ export function CommunityNav({
         </div>
         {subtitle ? <div className="community-nav-subtitle">{subtitle}</div> : null}
       </div>
-      <button
-        className={communityTab === "chat" ? "nav-item active" : "nav-item"}
-        type={buttonType}
-        onClick={() => onSelectTab("chat")}
-        title={maybeTitle("Chat")}
-      >
-        <span className="nav-icon">
-          <svg viewBox="0 0 24 24">
-            <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
-          </svg>
-        </span>
-        <span className="nav-item-label">Chat</span>
-        {lockedTabs.chat ? <NavLockGlyph /> : communityTab !== "chat" && (tabIndicators.chat || tabIndicators.mentions) ? (
-          <span className={`nav-item-dot${tabIndicators.mentions ? " is-mention" : ""}`} aria-hidden="true" />
+      <div className="community-channel-list" aria-label="Channels">
+        {displayedChannels.map((channel) => {
+          const isSelected =
+            communityTab === "chat" &&
+            (selectedChannelSlug ?? "general") === channel.slug;
+          const indicator = channelIndicators[channel.slug];
+          return (
+            <button
+              key={channel.id || channel.slug}
+              className={isSelected ? "nav-item community-channel-item active" : "nav-item community-channel-item"}
+              type={buttonType}
+              onClick={() => {
+                if (onSelectChannel) onSelectChannel(channel);
+                else onSelectTab("chat");
+              }}
+              title={maybeTitle(channel.name)}
+            >
+              <span className="nav-icon community-channel-icon" aria-hidden="true">
+                <Hash size={17} strokeWidth={1.8} />
+              </span>
+              <span className="nav-item-label">{channel.name}</span>
+              {lockedTabs.chat ? <NavLockGlyph /> : !isSelected && (indicator?.chat || indicator?.mentions) ? (
+                <span className={`nav-item-dot${indicator.mentions ? " is-mention" : ""}`} aria-hidden="true" />
+              ) : null}
+            </button>
+          );
+        })}
+        {canManageMembersActiveCommunity && onCreateChannel ? (
+          <button
+            className="nav-item community-channel-add"
+            type={buttonType}
+            disabled={isAtChannelLimit}
+            onClick={() => {
+              clearCreateChannelError?.();
+              setIsAddChannelOpen(true);
+            }}
+            title={maybeTitle(
+              isAtChannelLimit
+                ? `Channel limit reached (${maxActiveChannels})`
+                : "Add Channel",
+            )}
+          >
+            <span className="nav-icon" aria-hidden="true">
+              <Plus size={17} strokeWidth={1.8} />
+            </span>
+            <span className="nav-item-label">
+              {isAtChannelLimit ? `${maxActiveChannels} channel limit` : "Add Channel"}
+            </span>
+          </button>
         ) : null}
-      </button>
+      </div>
       <button
         className={communityTab === "ai_feed" ? "nav-item active" : "nav-item"}
         type={buttonType}
@@ -333,6 +434,73 @@ export function CommunityNav({
             </span>
             <span className="nav-item-label">{didCopyJoinLink ? "Copied" : "Invite people"}</span>
           </button>
+        </div>
+      ) : null}
+      {isAddChannelOpen ? (
+        <div
+          className="community-channel-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeAddChannel();
+          }}
+        >
+          <form
+            className="community-channel-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="community-channel-modal-title"
+            onSubmit={(event) => void handleCreateChannel(event)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") closeAddChannel();
+            }}
+          >
+            <div className="community-channel-modal-header">
+              <div>
+                <h2 id="community-channel-modal-title">Add channel</h2>
+                <p>Channels are visible to every community member.</p>
+              </div>
+              <button
+                type="button"
+                className="community-channel-modal-close"
+                onClick={closeAddChannel}
+                aria-label="Close add channel dialog"
+                disabled={isCreatingChannel}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <label className="community-channel-modal-field">
+              <span>Channel name</span>
+              <input
+                ref={channelNameInputRef}
+                value={channelName}
+                maxLength={48}
+                placeholder="e.g. Product feedback"
+                onChange={(event) => {
+                  setChannelName(event.target.value);
+                  clearCreateChannelError?.();
+                }}
+                disabled={isCreatingChannel}
+              />
+            </label>
+            {createChannelError ? (
+              <div className="community-channel-modal-error" role="alert">
+                {createChannelError}
+              </div>
+            ) : null}
+            <div className="community-channel-modal-actions">
+              <button type="button" onClick={closeAddChannel} disabled={isCreatingChannel}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="is-primary"
+                disabled={isCreatingChannel || !channelName.trim()}
+              >
+                {isCreatingChannel ? "Adding…" : "Add channel"}
+              </button>
+            </div>
+          </form>
         </div>
       ) : null}
     </aside>

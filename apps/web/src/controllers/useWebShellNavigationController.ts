@@ -76,6 +76,8 @@ export function useWebShellNavigationController(params: {
   setActiveOperatorTab: Dispatch<SetStateAction<OperatorTab>>;
   selectedActiveCommunitySlug: string | null;
   communityTab: CommunityTab;
+  communityChannelSlug: string | null;
+  setCommunityChannelSlug: Dispatch<SetStateAction<string | null>>;
   communityExperienceMode: CommunityExperienceMode;
   setCommunityExperienceMode: Dispatch<
     SetStateAction<CommunityExperienceMode>
@@ -87,6 +89,7 @@ export function useWebShellNavigationController(params: {
   applyCommunityShellState: (options: {
     communitySlug?: string | null;
     communityTab?: CommunityTab;
+    communityChannelSlug?: string | null;
   }) => void;
   setStripeConnectReturn: Dispatch<SetStateAction<StripeConnectReturn | null>>;
 }) {
@@ -119,6 +122,10 @@ export function useWebShellNavigationController(params: {
       current.applyCommunityShellState({
         communitySlug,
         communityTab: nextAppRoute.communityTab,
+        communityChannelSlug:
+          nextAppRoute.communityTab === "chat"
+            ? nextAppRoute.communityChannelSlug ?? null
+            : null,
       });
       current.setCommunityResourceModuleId(
         nextAppRoute.communityTab === "resources"
@@ -133,6 +140,7 @@ export function useWebShellNavigationController(params: {
       return;
     }
     current.setCommunityExperienceMode("standard");
+    current.setCommunityChannelSlug(null);
     current.setCommunityResourceModuleId(null);
     current.setCommunitySettingsPane("community");
   }, []);
@@ -188,6 +196,10 @@ export function useWebShellNavigationController(params: {
           settingsPage: current.settingsPage,
           communitySlug: current.selectedActiveCommunitySlug,
           communityTab: current.communityTab,
+          communityChannelSlug:
+            current.activePage === "community" && current.communityTab === "chat"
+              ? current.communityChannelSlug
+              : null,
           communityResourceModuleId:
             current.activePage === "community" &&
             current.communityTab === "resources"
@@ -358,6 +370,7 @@ export function useWebShellNavigationController(params: {
     settingsPage: params.settingsPage,
     activeCommunitySlug: params.selectedActiveCommunitySlug,
     communityTab: params.communityTab,
+    communityChannelSlug: params.communityChannelSlug,
     communityExperienceMode: params.communityExperienceMode,
     communityResourceModuleId: params.communityResourceModuleId,
     communitySettingsPane: params.communitySettingsPane,

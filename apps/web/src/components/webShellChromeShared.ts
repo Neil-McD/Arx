@@ -66,6 +66,26 @@ export type WebCommunityShellProps = {
   activeCommunity: CommunityLike | null;
   communityTab: CommunityTab;
   communityTabIndicators: Partial<Record<CommunityTab, boolean>>;
+  communityChannels: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    is_general: boolean;
+  }>;
+  selectedCommunityChannelSlug: string;
+  communityChannelIndicators: Record<string, { chat: boolean; mentions: boolean }>;
+  onSelectCommunityChannel: (channel: {
+    id: string;
+    slug: string;
+    name: string;
+    is_general: boolean;
+  }) => void;
+  onCreateCommunityChannel: (name: string) => Promise<unknown>;
+  isCreatingCommunityChannel: boolean;
+  communityChannelCreateError: string | null;
+  clearCommunityChannelCreateError: () => void;
+  isAtCommunityChannelLimit: boolean;
+  maxActiveCommunityChannels: number;
   canViewMembersActiveCommunity: boolean;
   canViewActiveCommunitySettings: boolean;
   canViewActiveCommunityPolynet: boolean;

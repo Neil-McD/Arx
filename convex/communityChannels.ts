@@ -6,7 +6,7 @@ import {
   MAX_ACTIVE_COMMUNITY_CHANNELS,
   createActiveCommunityChannel,
   getGeneralChannel,
-  listActiveCommunityChannels,
+  listReadableCommunityChannels,
 } from "./communityChannelCore";
 import {
   normalizeIdValue,
@@ -44,9 +44,7 @@ export const listCommunityChannels = query({
       communityId: args.communityId,
       userId,
     });
-    const general = await getGeneralChannel(ctx, args.communityId);
-    if (!general) throw new Error("community_general_channel_missing");
-    const channels = await listActiveCommunityChannels({
+    const channels = await listReadableCommunityChannels({
       ctx,
       communityId: args.communityId,
     });

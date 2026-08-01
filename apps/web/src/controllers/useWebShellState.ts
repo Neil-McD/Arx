@@ -86,6 +86,11 @@ export function useWebShellState() {
   const [communityTab, setCommunityTab] = useState<CommunityTab>(
     initialAppRoute?.communityTab ?? "chat",
   );
+  const [communityChannelSlug, setCommunityChannelSlug] = useState<string | null>(
+    initialAppRoute?.page === "community" && initialAppRoute.communityTab === "chat"
+      ? initialAppRoute.communityChannelSlug ?? null
+      : null,
+  );
   const [communityExperienceMode, setCommunityExperienceMode] =
     useState<CommunityExperienceMode>(
       initialAppRoute?.page === "community"
@@ -158,6 +163,8 @@ export function useWebShellState() {
     setActiveOperatorTab,
     communityTab,
     setCommunityTab,
+    communityChannelSlug,
+    setCommunityChannelSlug,
     communityExperienceMode,
     setCommunityExperienceMode,
     communityResourceModuleId,

@@ -172,8 +172,8 @@ assert.match(
 );
 assert.match(
   nav,
-  /nav-item-dot\$\{tabIndicators\.mentions \? " is-mention" : ""\}/,
-  "an unseen mention upgrades the chat dot to the accent variant",
+  /nav-item-dot\$\{indicator\.mentions \? " is-mention" : ""\}/,
+  "an unseen mention upgrades its channel dot to the accent variant",
 );
 assert.match(
   app,

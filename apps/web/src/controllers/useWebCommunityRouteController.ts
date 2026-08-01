@@ -25,6 +25,7 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
     communityId?: string | null;
     communitySlug?: string | null;
     communityTab?: CommunityTab;
+    communityChannelSlug?: string | null;
   }) => void;
   setUnreadCount?: Dispatch<SetStateAction<number>>;
 }) {
@@ -66,6 +67,7 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
       current.applyCommunityShellState({
         communitySlug: resolvedSlug,
         communityId: opts.communityId ?? null,
+        communityChannelSlug: null,
       });
     },
     [resolveCommunitySlugById],

@@ -236,7 +236,7 @@ function DemoWindow() {
               <b>Your Community</b>
             </div>
             <div className="it on">
-              <span className="b" /> Chat
+              <span className="b" /> General
             </div>
             <div className="it">
               <span className="b" /> AI Feed

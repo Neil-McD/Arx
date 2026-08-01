@@ -41,6 +41,23 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
           activeCommunity={communityShell.activeCommunity}
           communityTab={communityShell.communityTab}
           tabIndicators={communityShell.communityTabIndicators}
+          channels={communityShell.communityChannels}
+          selectedChannelSlug={communityShell.selectedCommunityChannelSlug}
+          channelIndicators={communityShell.communityChannelIndicators}
+          onSelectChannel={(channel) => {
+            communityShell.setMobileOverlay(null);
+            communityShell.onSelectCommunityChannel(channel);
+          }}
+          onCreateChannel={async (name) => {
+            const created = await communityShell.onCreateCommunityChannel(name);
+            if (created) communityShell.setMobileOverlay(null);
+            return created;
+          }}
+          isCreatingChannel={communityShell.isCreatingCommunityChannel}
+          createChannelError={communityShell.communityChannelCreateError}
+          clearCreateChannelError={communityShell.clearCommunityChannelCreateError}
+          isAtChannelLimit={communityShell.isAtCommunityChannelLimit}
+          maxActiveChannels={communityShell.maxActiveCommunityChannels}
           canViewMembersActiveCommunity={communityShell.canViewMembersActiveCommunity}
           canViewActiveCommunitySettings={communityShell.canViewActiveCommunitySettings}
           canViewActiveCommunityPolynet={communityShell.canViewActiveCommunityPolynet}

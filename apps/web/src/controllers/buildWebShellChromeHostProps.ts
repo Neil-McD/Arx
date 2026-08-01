@@ -57,6 +57,16 @@ export function buildWebShellChromeHostProps(params: {
   handleTopbarBackToCommunity: () => void;
   communityTab: WebShellChromeHostProps["communityShell"]["communityTab"];
   communityTabIndicators: WebShellChromeHostProps["communityShell"]["communityTabIndicators"];
+  communityChannels: WebShellChromeHostProps["communityShell"]["communityChannels"];
+  selectedCommunityChannelSlug: string;
+  communityChannelIndicators: WebShellChromeHostProps["communityShell"]["communityChannelIndicators"];
+  handleSelectCommunityChannel: WebShellChromeHostProps["communityShell"]["onSelectCommunityChannel"];
+  handleCreateCommunityChannel: WebShellChromeHostProps["communityShell"]["onCreateCommunityChannel"];
+  isCreatingCommunityChannel: boolean;
+  communityChannelCreateError: string | null;
+  clearCommunityChannelCreateError: () => void;
+  isAtCommunityChannelLimit: boolean;
+  maxActiveCommunityChannels: number;
   canViewMembersActiveCommunity: boolean;
   canViewActiveCommunitySettings: boolean;
   canViewActiveCommunityPolynet: boolean;
@@ -171,6 +181,16 @@ export function buildWebShellChromeHostProps(params: {
         : null,
       communityTab: params.communityTab,
       communityTabIndicators: params.communityTabIndicators,
+      communityChannels: params.communityChannels,
+      selectedCommunityChannelSlug: params.selectedCommunityChannelSlug,
+      communityChannelIndicators: params.communityChannelIndicators,
+      onSelectCommunityChannel: params.handleSelectCommunityChannel,
+      onCreateCommunityChannel: params.handleCreateCommunityChannel,
+      isCreatingCommunityChannel: params.isCreatingCommunityChannel,
+      communityChannelCreateError: params.communityChannelCreateError,
+      clearCommunityChannelCreateError: params.clearCommunityChannelCreateError,
+      isAtCommunityChannelLimit: params.isAtCommunityChannelLimit,
+      maxActiveCommunityChannels: params.maxActiveCommunityChannels,
       canViewMembersActiveCommunity: params.canViewMembersActiveCommunity,
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       canViewActiveCommunityPolynet: params.canViewActiveCommunityPolynet,

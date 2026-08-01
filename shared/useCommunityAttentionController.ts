@@ -17,6 +17,7 @@ export type CommunityAttentionIndicators = {
   // Unseen mention-of-me: rides the chat surface visually as the accent dot.
   mentions: boolean;
   chat_last_seen_at?: number | null;
+  channels: NonNullable<CloudCommunityAttentionRow["channels"]>;
 };
 
 type UseCommunityAttentionControllerArgs<SessionT extends SessionLike> = {
@@ -45,6 +46,7 @@ function buildAttentionMap(
       events: false,
       mentions: false,
       chat_last_seen_at: null,
+      channels: [],
     };
   }
   for (const row of rows) {
@@ -57,6 +59,7 @@ function buildAttentionMap(
       events: Boolean(row.events),
       mentions: Boolean(row.mentions),
       chat_last_seen_at: typeof row.chat_last_seen_at === "number" ? row.chat_last_seen_at : null,
+      channels: Array.isArray(row.channels) ? row.channels : [],
     };
   }
   return next;

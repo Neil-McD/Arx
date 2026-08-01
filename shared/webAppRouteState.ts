@@ -28,6 +28,7 @@ export type AppRouteState = {
   communitySlug: string | null;
   communityTab: CommunityTab;
   communityExperienceMode?: CommunityExperienceMode;
+  communityChannelSlug?: string | null;
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
   docsSlug?: string | null;
@@ -41,6 +42,7 @@ export type AppRoutePathState = {
   communitySlug: string | null;
   communityTab: CommunityTab;
   communityExperienceMode?: CommunityExperienceMode;
+  communityChannelSlug?: string | null;
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
   docsSlug?: string | null;
@@ -163,6 +165,7 @@ export function buildCommunityTabPath(
   communityTab: CommunityTab,
   communityResourceModuleId?: string | null,
   communitySettingsPane?: CommunitySettingsPane | null,
+  communityChannelSlug?: string | null,
 ): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
@@ -173,6 +176,10 @@ export function buildCommunityTabPath(
         ? "ai-feed"
         : communityTab;
   const moduleId = String(communityResourceModuleId ?? "").trim();
+  const channelSlug = String(communityChannelSlug ?? "").trim().toLowerCase();
+  if (communityTab === "chat" && channelSlug && channelSlug !== "general") {
+    return `/c/${encodeURIComponent(slug)}/${tabSegment}/${encodeURIComponent(channelSlug)}`;
+  }
   if (communityTab === "resources" && moduleId) {
     return `/c/${encodeURIComponent(slug)}/${tabSegment}/${encodeURIComponent(moduleId)}`;
   }
@@ -292,7 +299,7 @@ function parseCommunityTabSegment(value: string | null | undefined): CommunityTa
   }
 }
 
-function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
+export function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
   const segments = splitPathSegments(pathname);
   if (segments.length === 0) {
     return {
@@ -418,6 +425,8 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     const communityTab = parseCommunityTabSegment(segments[2] ?? null);
     const communityResourceModuleId =
       communityTab === "resources" ? String(segments[3] ?? "").trim() || null : null;
+    const communityChannelSlug =
+      communityTab === "chat" ? String(segments[3] ?? "").trim().toLowerCase() || null : null;
     const communitySettingsPane =
       communityTab === "settings" ? parseCommunitySettingsPane(segments[3] ?? null) : null;
     return {
@@ -427,6 +436,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       communitySlug: slug,
       communityTab,
       communityExperienceMode: "standard",
+      communityChannelSlug,
       communityResourceModuleId,
       communitySettingsPane,
     };
@@ -473,6 +483,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       ...(fromPath.communityExperienceMode === "onboarding_preview"
         ? { communityExperienceMode: "onboarding_preview" as const }
         : {}),
+      communityChannelSlug: fromPath.communityChannelSlug ?? null,
       communityResourceModuleId: fromPath.communityResourceModuleId ?? null,
       communitySettingsPane: fromPath.communitySettingsPane ?? null,
       docsSlug: fromPath.docsSlug ?? null,
@@ -508,6 +519,7 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
       state.communityTab,
       state.communityResourceModuleId,
       state.communitySettingsPane,
+      state.communityChannelSlug,
     );
   }
 

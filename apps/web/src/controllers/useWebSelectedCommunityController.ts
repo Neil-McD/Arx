@@ -10,8 +10,9 @@ export function useWebSelectedCommunityController<TCommunity extends CommunityLi
   initialCommunitySlug?: string | null;
   communities: TCommunity[];
   setCommunityTab: Dispatch<SetStateAction<CommunityTab>>;
+  setCommunityChannelSlug: Dispatch<SetStateAction<string | null>>;
 }) {
-  const { communities, setCommunityTab } = params;
+  const { communities, setCommunityChannelSlug, setCommunityTab } = params;
   const [activeCommunitySlug, setActiveCommunitySlug] = useState<string | null>(
     () => String(params.initialCommunitySlug ?? "").trim() || null,
   );
@@ -93,6 +94,7 @@ export function useWebSelectedCommunityController<TCommunity extends CommunityLi
     communityId?: string | null;
     communitySlug?: string | null;
     communityTab?: CommunityTab;
+    communityChannelSlug?: string | null;
   }) => {
     const requestedCommunitySlug =
       opts.communitySlug !== undefined ? String(opts.communitySlug ?? "").trim() || null : undefined;
@@ -126,7 +128,17 @@ export function useWebSelectedCommunityController<TCommunity extends CommunityLi
     if (opts.communityTab !== undefined) {
       setCommunityTab(opts.communityTab);
     }
-  }, [resolveKnownCommunityIdBySlug, resolveKnownCommunitySlugById, setCommunityTab]);
+    if (opts.communityChannelSlug !== undefined) {
+      setCommunityChannelSlug(
+        String(opts.communityChannelSlug ?? "").trim().toLowerCase() || null,
+      );
+    }
+  }, [
+    resolveKnownCommunityIdBySlug,
+    resolveKnownCommunitySlugById,
+    setCommunityChannelSlug,
+    setCommunityTab,
+  ]);
 
   return {
     activeCommunity,

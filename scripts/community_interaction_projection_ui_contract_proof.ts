@@ -131,8 +131,8 @@ assert.match(
 );
 assert.match(
   app,
-  /useWebCommunityInteractionProjection<MessageAttachment>\([\s\S]*interactionProjection:\s*\{[\s\S]*enabled:\s*COMMUNITY_INTERACTION_PROJECTION_ENABLED[\s\S]*roots:\s*visibleCommunityInteractionRoots[\s\S]*selectedRootId:\s*selectedCommunityInteractionRootId/,
-  "App should pass the canonical projection with optimistic roots into the chat panel",
+  /useWebCommunityInteractionProjection<MessageAttachment>\([\s\S]*interactionProjection:\s*\{[\s\S]*enabled:\s*COMMUNITY_INTERACTION_PROJECTION_ENABLED[\s\S]*roots:\s*isActiveCommunityChannelReady\s*\?\s*visibleCommunityInteractionRoots\s*:\s*\[\][\s\S]*selectedRootId:\s*isActiveCommunityChannelReady\s*\?\s*selectedCommunityInteractionRootId\s*:\s*null/,
+  "App should pass canonical optimistic roots only after the requested channel resolves",
 );
 assert.match(
   interactionController,

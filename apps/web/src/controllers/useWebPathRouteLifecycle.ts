@@ -38,6 +38,7 @@ export function useWebPathRouteLifecycle(params: {
   settingsPage: SettingsPage;
   activeCommunitySlug: string | null;
   communityTab: CommunityTab;
+  communityChannelSlug: string | null;
   communityExperienceMode: CommunityExperienceMode;
   communityResourceModuleId: string | null;
   communitySettingsPane: CommunitySettingsPane;
@@ -52,6 +53,7 @@ export function useWebPathRouteLifecycle(params: {
     communitySlug: string | null;
     communityTab: CommunityTab;
     communityExperienceMode?: CommunityExperienceMode;
+    communityChannelSlug?: string | null;
     communityResourceModuleId?: string | null;
     communitySettingsPane?: CommunitySettingsPane | null;
     docsSlug: string | null;
@@ -90,6 +92,10 @@ export function useWebPathRouteLifecycle(params: {
       settingsPage: params.settingsPage,
       communitySlug: params.activeCommunitySlug,
       communityTab: params.communityTab,
+      communityChannelSlug:
+        params.activePage === "community" && params.communityTab === "chat"
+          ? params.communityChannelSlug
+          : null,
       communityExperienceMode:
         params.activePage === "community" ? params.communityExperienceMode : "standard",
       communityResourceModuleId:
@@ -115,6 +121,7 @@ export function useWebPathRouteLifecycle(params: {
     params.settingsPage,
     params.activeCommunitySlug,
     params.communityTab,
+    params.communityChannelSlug,
     params.communityExperienceMode,
     params.communityResourceModuleId,
     params.communitySettingsPane,

@@ -1566,7 +1566,8 @@
 /* Tighter windows: keep the nav from spilling its labels as it approaches the floor. */
 @media (max-width: 860px) {
   .community-nav {
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 }
 
@@ -1577,7 +1578,8 @@
 
   .community-nav {
     padding: 10px 8px;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .app-root.community-nav-topbar-space .community-nav {

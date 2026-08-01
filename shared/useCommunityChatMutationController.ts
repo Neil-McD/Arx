@@ -90,6 +90,7 @@ type UseCommunityChatMutationControllerArgs<
   },
 > = {
   activeCommunityId: string | null;
+  activeChannelId: string | null;
   canMentionEverybodyRef?: MutableRefObject<boolean>;
   session: SessionT | null;
   sessionUserId: string | null;
@@ -99,6 +100,7 @@ type UseCommunityChatMutationControllerArgs<
   createCommunityInteractionMessageRows?: (params: {
     session: SessionT;
     communityId: string;
+    channelId?: string | null;
     idempotencyKey: string;
     text: string;
     rootId?: string | null;
@@ -110,6 +112,7 @@ type UseCommunityChatMutationControllerArgs<
   onCanonicalOptimisticInsert?: (pending: {
     idempotencyKey: string;
     communityId: string;
+    channelId: string | null;
     kind: "root" | "reply";
     rootId: string | null;
     replyToMessageId: string | null;
@@ -227,11 +230,16 @@ function mapCommunityChatMutationErrorMessage(error: unknown): string {
   return message;
 }
 
-function createCommunityComposerIdempotencyKey(communityId: string, rootId: string | null): string {
+function createCommunityComposerIdempotencyKey(
+  communityId: string,
+  channelId: string | null,
+  rootId: string | null,
+): string {
   const scope = rootId ? `reply:${rootId}` : "root";
   return [
     "community-composer",
     communityId,
+    channelId ?? "general",
     scope,
     Date.now().toString(36),
     Math.random().toString(36).slice(2, 10),
@@ -253,6 +261,7 @@ function resolveCommunityChatSendRoute(args: {
   useCanonicalCommunityInteractions?: boolean;
   hasCanonicalWriter: boolean;
   activeCommunityId: string;
+  activeChannelId: string | null;
   hasReplyTarget: boolean;
   replyRootId: string | null;
 }): CommunityChatSendRoute {
@@ -268,7 +277,11 @@ function resolveCommunityChatSendRoute(args: {
   return {
     kind: "canonical",
     rootId: args.replyRootId,
-    idempotencyKey: createCommunityComposerIdempotencyKey(args.activeCommunityId, args.replyRootId),
+    idempotencyKey: createCommunityComposerIdempotencyKey(
+      args.activeCommunityId,
+      args.activeChannelId,
+      args.replyRootId,
+    ),
   };
 }
 
@@ -445,6 +458,7 @@ export function useCommunityChatMutationController<
     const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !current.activeCommunityId) return;
     const activeCommunityId = current.activeCommunityId;
+    const activeChannelId = current.activeChannelId;
     const sessionUserId = resolveRuntimeSessionUserId(session);
     if (!sessionUserId) return;
 
@@ -589,6 +603,7 @@ export function useCommunityChatMutationController<
         useCanonicalCommunityInteractions: current.useCanonicalCommunityInteractions,
         hasCanonicalWriter: Boolean(createCanonicalMessageRows),
         activeCommunityId,
+        activeChannelId,
         hasReplyTarget: Boolean(replySnapshot),
         replyRootId,
       });
@@ -598,6 +613,7 @@ export function useCommunityChatMutationController<
         current.onCanonicalOptimisticInsert({
           idempotencyKey: sendRoute.idempotencyKey,
           communityId: activeCommunityId,
+          channelId: activeChannelId,
           kind: sendRoute.rootId ? "reply" : "root",
           rootId: sendRoute.rootId,
           replyToMessageId: canonicalReplyToMessageId,
@@ -614,6 +630,7 @@ export function useCommunityChatMutationController<
         await createCanonicalMessageRows({
           session,
           communityId: activeCommunityId,
+          channelId: activeChannelId,
           idempotencyKey: sendRoute.idempotencyKey,
           text: bodyToSend,
           rootId: sendRoute.rootId,

@@ -114,6 +114,7 @@
     "check:community-interactions-legacy-chat-backfill-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interactions_legacy_chat_backfill_contract_proof.ts",
     "check:community-interaction-migration-residue-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interaction_migration_residue_proof.ts",
     "check:community-interaction-projection-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interaction_projection_ui_contract_proof.ts",
+    "check:community-channel-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_channel_ui_contract_proof.ts",
     "check:community-interaction-link-preview-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interaction_link_preview_behavior_proof.mjs",
     "check:chat-block-markdown-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/chat_block_markdown_proof.ts",
     "check:mobile-root-navigation-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/mobile_root_navigation_contract_proof.ts",

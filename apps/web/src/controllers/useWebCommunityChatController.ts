@@ -90,6 +90,7 @@ type CommunityInteractionComposerBoundary = {
   insertOptimistic: (pending: {
     idempotencyKey: string;
     communityId: string;
+    channelId: string | null;
     kind: "root" | "reply";
     rootId: string | null;
     replyToMessageId: string | null;
@@ -115,6 +116,7 @@ type CommunityInteractionComposerBoundary = {
 
 type UseWebCommunityChatControllerParams = {
   activeCommunityId: string | null;
+  activeChannelId: string | null;
   canonicalSessionUserId: string | null;
   ensureSession: EnsureAuthSession;
   hasActiveCommunity: boolean;
@@ -283,6 +285,7 @@ export function useWebCommunityChatController(
 ) {
   const {
     activeCommunityId,
+    activeChannelId,
     canonicalSessionUserId,
     ensureSession,
     hasActiveCommunity,
@@ -467,6 +470,7 @@ export function useWebCommunityChatController(
     handleSendCommunityMessage,
   } = useCommunityChatMutationController({
     activeCommunityId,
+    activeChannelId,
     canMentionEverybodyRef,
     session,
     sessionUserId: canonicalSessionUserId,
@@ -476,8 +480,6 @@ export function useWebCommunityChatController(
     useCanonicalCommunityInteractions: Boolean(
       interaction.enabled
       && hasActiveCommunity
-      && hasResolvedCommunityChat
-      && !isLoadingChat
     ),
     onCanonicalOptimisticInsert: interaction.insertOptimistic,
     onCanonicalOptimisticSettle: interaction.settleOptimistic,
@@ -488,6 +490,7 @@ export function useWebCommunityChatController(
       >({
         session: writeParams.session,
         communityId: writeParams.communityId,
+        channelId: writeParams.channelId,
         idempotencyKey: writeParams.idempotencyKey,
         text: writeParams.text,
         rootId: writeParams.rootId ?? null,
@@ -579,6 +582,23 @@ export function useWebCommunityChatController(
   useEffect(() => {
     resetChatState();
   }, [activeCommunityId, resetChatState]);
+
+  useEffect(() => {
+    setError(null);
+    setMessageInput("");
+    setMessageMentions([]);
+    setAttachments([]);
+    setUnreadCount(0);
+    setIsUserAtBottom(true);
+    isUserAtBottomRef.current = true;
+    setIsSendingMessage(false);
+    setReplyingToMessage(null);
+    setReactionPickerMessageId(null);
+    setEditingMessageId(null);
+    setEditingMessageText("");
+    setEditingMessagePrefix(null);
+    if (inputRef.current) inputRef.current.style.height = "auto";
+  }, [activeChannelId]);
 
   useEffect(() => {
     const setupGateMessage =

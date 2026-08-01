@@ -112,9 +112,11 @@ including exactly one system-identified General channel:
 display name is `General`, but presentation text is not database identity and
 may change without moving interactions or breaking evidence lineage.
 
-New communities receive General at creation. Existing communities acquire it
-through a bounded, manager-authorized migration. A colliding `general` slug or
-duplicate General system role fails closed.
+New communities receive General at creation. Existing communities remain
+readable through a synthetic General selection until either a canonical write
+creates the durable row or the bounded, manager-authorized migration applies
+it. Read-only compatibility never mutates storage. A colliding `general` slug
+or duplicate General system role fails closed.
 
 Owners and entitled admins may create additional channels. Creation accepts a
 display name only; the server normalizes the name, assigns a collision-safe
@@ -134,9 +136,9 @@ read as General; that fallback ends after the backfill reaches zero drift.
 The selected-channel checkpoint exposes list/create operations and makes the
 canonical feed, composer, typing, unread, attention, evidence, and recent
 community context channel-aware. An omitted channel from an older client
-continues to mean General during rolling deployment. Custom channels remain
-dark to member navigation until the frontend carries one explicit selected
-channel through those canonical adapters.
+continues to mean General during rolling deployment. The web frontend lists
+authorized channels, keeps General on the legacy-compatible `/chat` route, and
+uses `/chat/:channelSlug` for an explicitly selected custom channel.
 
 Public Channels V1 does not add an All aggregation, channel ACLs, private
 channels, pinning, reordering, archive/delete, or channel-specific settings.
@@ -429,6 +431,13 @@ Rules:
 - legacy timeline sends remain on the legacy chat writer only for non-projection compatibility call paths
 - successful sends may request a canonical projection reload, but canonical projection does not rely on legacy chat realtime
 - stale interaction reads must not overwrite the projection after a community switch or reset
+- General is the default navigation channel and continues to omit a channel id at the client boundary for rolling compatibility
+- custom-channel URLs carry an authorized slug while server reads and writes carry the resolved channel id
+- an unresolved or failed custom-channel slug never falls through to General; channel reads, writes, typing, and read acknowledgements remain disabled until resolution succeeds
+- roots, pagination, subscriptions, optimistic sends, retries, selected drawer state, typing, unread dividers, and read acknowledgements share one community-and-channel boundary
+- channel switching clears transient composer/reply state and cannot expose roots or pending sends from another channel
+- only community managers see Add Channel; the dialog accepts one display name and the server remains authoritative for normalization, authorization, and the ten-channel limit
+- an unavailable channel slug falls back to General after the authorized channel list resolves
 - post-style and Slack-style presentation remain UI decisions over the same root/reply data
 
 ## Current Canonical Composer Bridge Slice
