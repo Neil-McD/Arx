@@ -14,10 +14,10 @@ import {
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import {
-  ensureGeneralChannel,
-  getGeneralChannel,
-  interactionBelongsToGeneralChannel,
+  type CommunityChannelLike,
+  interactionBelongsToChannel,
   requireChannelForAddressableRoot,
+  resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
 
 export {
@@ -38,7 +38,7 @@ function normalizeTypingRootId(value: unknown): string | null {
 async function requireCommunityTypingRoot(args: {
   ctx: any;
   communityId: any;
-  channelId: any;
+  channel: CommunityChannelLike;
   rootId?: any | null;
 }): Promise<any | null> {
   const normalizedRootId = normalizeTypingRootId(args.rootId);
@@ -56,7 +56,9 @@ async function requireCommunityTypingRoot(args: {
     ctx: args.ctx,
     root,
   });
-  if (normalizeIdValue(rootChannel._id) !== normalizeIdValue(args.channelId)) {
+  if (
+    normalizeIdValue(rootChannel._id) !== normalizeIdValue(args.channel._id)
+  ) {
     throw new Error("community_typing_scope_invalid");
   }
   return root._id;
@@ -65,18 +67,21 @@ async function requireCommunityTypingRoot(args: {
 export async function renewCommunityTypingLease(args: {
   ctx: any;
   communityId: any;
+  channelId?: any | null;
   userId: any;
   rootId?: any | null;
   nowMs?: number;
 }): Promise<{ displayUntil: number; rootId: string | null; updatedAt: number }> {
-  const channel = await ensureGeneralChannel({
+  const channel = await resolveRequestedCommunityChannel({
     ctx: args.ctx,
     communityId: args.communityId,
+    channelId: args.channelId,
+    ensureGeneralForWrite: true,
     nowMs: args.nowMs,
   });
   const validatedRootId = await requireCommunityTypingRoot({
     ...args,
-    channelId: channel._id,
+    channel,
   });
   const issuedLease = issueTypingPresenceLease(args.nowMs ?? Date.now());
   const channelPresence = (await args.ctx.db
@@ -85,15 +90,18 @@ export async function renewCommunityTypingLease(args: {
       q.eq("channelId", channel._id).eq("userId", args.userId),
     )
     .first()) as CommunityTypingPresenceLike | null;
-  const existing = channelPresence ?? ((await args.ctx.db
-    .query("communityTypingPresence" as any)
-    .withIndex("by_community_channel_user", (q: any) =>
-      q
-        .eq("communityId", args.communityId)
-        .eq("channelId", undefined)
-        .eq("userId", args.userId),
-    )
-    .first()) as CommunityTypingPresenceLike | null);
+  const legacyPresence = channel.systemRole === "general"
+    ? ((await args.ctx.db
+        .query("communityTypingPresence" as any)
+        .withIndex("by_community_channel_user", (q: any) =>
+          q
+            .eq("communityId", args.communityId)
+            .eq("channelId", undefined)
+            .eq("userId", args.userId),
+        )
+        .first()) as CommunityTypingPresenceLike | null)
+    : null;
+  const existing = channelPresence ?? legacyPresence;
 
   if (existing) {
     const currentUpdatedAt =
@@ -131,13 +139,16 @@ export async function renewCommunityTypingLease(args: {
 export async function clearCommunityTypingLease(args: {
   ctx: any;
   communityId: any;
+  channelId?: any | null;
   userId: any;
   rootId?: any | null;
 }): Promise<{ cleared: boolean }> {
   const requestedRootId = normalizeTypingRootId(args.rootId);
-  const channel = await ensureGeneralChannel({
+  const channel = await resolveRequestedCommunityChannel({
     ctx: args.ctx,
     communityId: args.communityId,
+    channelId: args.channelId,
+    ensureGeneralForWrite: true,
   });
   const channelPresence = (await args.ctx.db
     .query("communityTypingPresence" as any)
@@ -145,15 +156,18 @@ export async function clearCommunityTypingLease(args: {
       q.eq("channelId", channel._id).eq("userId", args.userId),
     )
     .first()) as CommunityTypingPresenceLike | null;
-  const existing = channelPresence ?? ((await args.ctx.db
-    .query("communityTypingPresence" as any)
-    .withIndex("by_community_channel_user", (q: any) =>
-      q
-        .eq("communityId", args.communityId)
-        .eq("channelId", undefined)
-        .eq("userId", args.userId),
-    )
-    .first()) as CommunityTypingPresenceLike | null);
+  const legacyPresence = channel.systemRole === "general"
+    ? ((await args.ctx.db
+        .query("communityTypingPresence" as any)
+        .withIndex("by_community_channel_user", (q: any) =>
+          q
+            .eq("communityId", args.communityId)
+            .eq("channelId", undefined)
+            .eq("userId", args.userId),
+        )
+        .first()) as CommunityTypingPresenceLike | null)
+    : null;
+  const existing = channelPresence ?? legacyPresence;
   if (!existing) return { cleared: false };
   if (
     normalizeTypingRootId(existing.rootId)
@@ -181,7 +195,7 @@ async function communityTypingCandidateRemainsAuthorized(args: {
 async function communityTypingRootRemainsValid(args: {
   ctx: any;
   communityId: any;
-  channelId?: any;
+  channel: CommunityChannelLike;
   rootId?: any | null;
   cache: Map<string, boolean>;
 }): Promise<boolean> {
@@ -195,11 +209,7 @@ async function communityTypingRootRemainsValid(args: {
     && normalizeIdValue(root.communityId) === normalizeIdValue(args.communityId)
     && root.status === "live"
     && (root.visibilityScope === "community" || root.visibilityScope === "public")
-    && (
-      !args.channelId
-      || !root.channelId
-      || normalizeIdValue(root.channelId) === normalizeIdValue(args.channelId)
-    )
+    && interactionBelongsToChannel(root, args.channel)
   );
   args.cache.set(rootId, isValid);
   return isValid;
@@ -208,6 +218,7 @@ async function communityTypingRootRemainsValid(args: {
 export async function resolveCommunityTypingPresence(args: {
   ctx: any;
   community: CommunityLike;
+  channelId?: any | null;
   viewerUserId: any;
 }): Promise<{
   totalCount: number;
@@ -222,30 +233,36 @@ export async function resolveCommunityTypingPresence(args: {
   }>;
 }> {
   const nowMs = Date.now();
-  const generalChannel = await getGeneralChannel(args.ctx, args.community._id);
-  const channelRows = generalChannel
+  const channel = await resolveRequestedCommunityChannel({
+    ctx: args.ctx,
+    communityId: args.community._id,
+    channelId: args.channelId,
+  });
+  const channelRows = channel._id
     ? ((await args.ctx.db
         .query("communityTypingPresence" as any)
         .withIndex("by_channel_displayUntil", (q: any) =>
-          q.eq("channelId", generalChannel._id).gt("displayUntil", nowMs),
+          q.eq("channelId", channel._id).gt("displayUntil", nowMs),
         )
         .order("desc")
         .take(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT + 1)) as CommunityTypingPresenceLike[])
     : [];
-  const legacyRows = (await args.ctx.db
-    .query("communityTypingPresence" as any)
-    .withIndex("by_community_channel_displayUntil", (q: any) =>
-      q
-        .eq("communityId", args.community._id)
-        .eq("channelId", undefined)
-        .gt("displayUntil", nowMs),
-    )
-    .order("desc")
-    .take(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT + 1)) as CommunityTypingPresenceLike[];
+  const legacyRows = channel.systemRole === "general"
+    ? ((await args.ctx.db
+        .query("communityTypingPresence" as any)
+        .withIndex("by_community_channel_displayUntil", (q: any) =>
+          q
+            .eq("communityId", args.community._id)
+            .eq("channelId", undefined)
+            .gt("displayUntil", nowMs),
+        )
+        .order("desc")
+        .take(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT + 1)) as CommunityTypingPresenceLike[])
+    : [];
   const rows = Array.from(
     new Map(
       [...channelRows, ...legacyRows]
-        .filter((row) => interactionBelongsToGeneralChannel(row, generalChannel))
+        .filter((row) => interactionBelongsToChannel(row, channel))
         .map((row) => [normalizeIdValue(row._id), row]),
     ).values(),
   )
@@ -271,7 +288,7 @@ export async function resolveCommunityTypingPresence(args: {
           && await communityTypingRootRemainsValid({
             ctx: args.ctx,
             communityId: args.community._id,
-            channelId: generalChannel?._id,
+            channel,
             rootId: row.rootId,
             cache: rootValidityCache,
           }),

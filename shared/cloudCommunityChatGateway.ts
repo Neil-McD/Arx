@@ -158,6 +158,7 @@ export function subscribeCloudCommunityTyping<TResult = unknown>(
   params: {
     liveClient: CloudCommunityChatLiveClient;
     communityId: string;
+    channelId?: string | null;
     onUpdate: (result: TResult) => void;
     onError?: (error: unknown) => void;
   },
@@ -167,6 +168,7 @@ export function subscribeCloudCommunityTyping<TResult = unknown>(
     {
       authSubject: params.liveClient.authSubject,
       communityId: params.communityId as any,
+      ...(params.channelId ? { channelId: params.channelId as any } : null),
     } as any,
   );
   const publish = () => {
@@ -204,6 +206,7 @@ export function subscribeCloudCommunityActivityEvents<TRow = unknown>(
 export async function setCloudCommunityTyping<SessionT>(
   params: CloudCommunityChatGatewayParams<SessionT> & {
     communityId: string;
+    channelId?: string | null;
     rootId?: string | null;
   },
 ): Promise<void> {
@@ -211,6 +214,7 @@ export async function setCloudCommunityTyping<SessionT>(
   await client.mutation("communityChat:setCommunityTyping" as any, {
     authSubject,
     communityId: params.communityId,
+    ...(params.channelId ? { channelId: params.channelId } : null),
     rootId: params.rootId ?? undefined,
   });
 }
@@ -218,6 +222,7 @@ export async function setCloudCommunityTyping<SessionT>(
 export async function clearCloudCommunityTyping<SessionT>(
   params: CloudCommunityChatGatewayParams<SessionT> & {
     communityId: string;
+    channelId?: string | null;
     rootId?: string | null;
   },
 ): Promise<void> {
@@ -225,6 +230,7 @@ export async function clearCloudCommunityTyping<SessionT>(
   await client.mutation("communityChat:clearCommunityTyping" as any, {
     authSubject,
     communityId: params.communityId,
+    ...(params.channelId ? { channelId: params.channelId } : null),
     rootId: params.rootId ?? undefined,
   });
 }

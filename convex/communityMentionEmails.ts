@@ -133,11 +133,20 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
         continue;
       }
       if (Number(mention.createdAt ?? 0) > dueBefore) continue;
-      const readState = await readCommunityChatReadState(
-        ctx,
-        mention.communityId,
-        mention.mentionedUserId,
-      );
+      let readState;
+      try {
+        readState = await readCommunityChatReadState(
+          ctx,
+          mention.communityId,
+          mention.mentionedUserId,
+          mention.channelId,
+        );
+      } catch {
+        // One corrupt or cross-community channel reference must fail closed
+        // without starving every later mention in the bounded email batch.
+        suppressOnlyJob(mention);
+        continue;
+      }
       if (
         readState.mentionSeenThroughAt >=
         Math.floor(Number(mention.createdAt ?? 0))

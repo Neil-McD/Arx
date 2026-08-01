@@ -24,6 +24,7 @@ type UseCommunityTypingPresenceArgs<SessionT extends SessionLike> = {
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
   activeCommunityId: string | null;
+  activeChannelId?: string | null;
   canPostMessages: boolean;
 };
 
@@ -91,6 +92,7 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
     const capturedSession = args.session;
     const capturedEnsureSession = args.ensureSession;
     const capturedCommunityId = args.activeCommunityId;
+    const capturedChannelId = args.activeChannelId ?? null;
 
     const subscribe = async () => {
       try {
@@ -108,6 +110,7 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
         dispose = subscribeCloudCommunityTyping<CommunityTypingPresenceBundle>({
           liveClient,
           communityId: capturedCommunityId,
+          channelId: capturedChannelId,
           onUpdate: (nextPresence) => {
             if (cancelled) return;
             setPresence(normalizeTypingPresencePayload(nextPresence));
@@ -128,11 +131,12 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
       liveClientRef.current = null;
       setPresence(EMPTY_TYPING_PRESENCE);
     };
-  }, [args.activeCommunityId, args.ensureSession, args.isEnabled, args.session]);
+  }, [args.activeChannelId, args.activeCommunityId, args.ensureSession, args.isEnabled, args.session]);
 
   useEffect(() => {
     if (!args.isEnabled || !args.activeCommunityId) return;
     const capturedCommunityId = args.activeCommunityId;
+    const capturedChannelId = args.activeChannelId ?? null;
     return () => {
       const activeScope = activeScopeRef.current;
       activeScopeRef.current = undefined;
@@ -154,6 +158,7 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
             await clearCloudCommunityTyping({
               session: usableSession,
               communityId: capturedCommunityId,
+              channelId: capturedChannelId,
               rootId: activeScope,
             });
           } catch {
@@ -161,7 +166,7 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
           }
         });
     };
-  }, [args.activeCommunityId, args.isEnabled]);
+  }, [args.activeChannelId, args.activeCommunityId, args.isEnabled]);
 
   useEffect(() => {
     if (presence.users.length === 0) return;
@@ -194,6 +199,7 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
     activeScopeRef.current = scope;
     lastSentAtByScopeRef.current.set(scopeKey, now);
     const communityId = latestArgs.activeCommunityId;
+    const channelId = latestArgs.activeChannelId ?? null;
     const session = latestArgs.session;
     const ensureSession = latestArgs.ensureSession;
     writeQueueRef.current = writeQueueRef.current
@@ -206,6 +212,7 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
             !usableSession
             || !currentArgs.isEnabled
             || currentArgs.activeCommunityId !== communityId
+            || (currentArgs.activeChannelId ?? null) !== channelId
             || activeScopeRef.current !== scope
           ) {
             return;
@@ -213,6 +220,7 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
           await setCloudCommunityTyping({
             session: usableSession,
             communityId,
+            channelId,
             rootId: scope,
           });
         } catch {
@@ -229,6 +237,7 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
     const latestArgs = argsRef.current;
     if (!latestArgs.session || !latestArgs.activeCommunityId) return;
     const communityId = latestArgs.activeCommunityId;
+    const channelId = latestArgs.activeChannelId ?? null;
     const session = latestArgs.session;
     const ensureSession = latestArgs.ensureSession;
     writeQueueRef.current = writeQueueRef.current
@@ -240,6 +249,7 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
           await clearCloudCommunityTyping({
             session: usableSession,
             communityId,
+            channelId,
             rootId: scope,
           });
         } catch {

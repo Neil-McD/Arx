@@ -30,6 +30,7 @@ export type ChannelAddressableInteractionLike = {
 
 type GeneralChannelReadableRow = {
   _id: any;
+  communityId: any;
   channelId?: any;
   visibilityScope: "private" | "admin" | "community" | "public";
   status: "live" | "hidden" | "deleted";
@@ -211,6 +212,64 @@ export async function requireActiveCommunityChannel(args: {
   return channel;
 }
 
+function legacyGeneralChannelSelection(
+  communityId: any,
+): CommunityChannelLike {
+  return {
+    // A semantic General selection lets read-only queries preserve the
+    // rolling-deployment lane before a stored General row has been backfilled.
+    // Mutations must request ensureGeneralForWrite and receive a durable id.
+    _id: undefined,
+    communityId,
+    systemRole: GENERAL_CHANNEL_SYSTEM_ROLE,
+    slug: GENERAL_CHANNEL_SLUG,
+    name: GENERAL_CHANNEL_NAME,
+    accessMode: "all_members",
+    postingPolicy: "members",
+    status: "active",
+    position: 0,
+    createdAt: 0,
+    updatedAt: 0,
+  };
+}
+
+// Callers must authorize community access before resolving a requested
+// channel. That ordering prevents a cross-community channel id from becoming
+// an enumeration oracle. Omission is the only compatibility path to General.
+export async function resolveRequestedCommunityChannel(args: {
+  ctx: { db: any };
+  communityId: any;
+  channelId?: any | null;
+  ensureGeneralForWrite?: boolean;
+  nowMs?: number;
+}): Promise<CommunityChannelLike> {
+  if (normalizeIdValue(args.channelId)) {
+    try {
+      return await requireActiveCommunityChannel({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        channelId: args.channelId,
+      });
+    } catch {
+      // Public callers receive one unavailable outcome for absent, archived,
+      // malformed, and cross-community ids so channel resolution is not an
+      // enumeration oracle.
+      throw new Error("community_channel_unavailable");
+    }
+  }
+  if (args.ensureGeneralForWrite) {
+    return await ensureGeneralChannel({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      nowMs: args.nowMs,
+    });
+  }
+  return (
+    (await getGeneralChannel(args.ctx, args.communityId)) ??
+    legacyGeneralChannelSelection(args.communityId)
+  );
+}
+
 export async function listActiveCommunityChannels(args: {
   ctx: { db: any };
   communityId: any;
@@ -231,6 +290,50 @@ export async function listActiveCommunityChannels(args: {
     if (left.position !== right.position) return left.position - right.position;
     return normalizeIdValue(left._id).localeCompare(normalizeIdValue(right._id));
   });
+}
+
+export async function listReadableCommunityChannels(args: {
+  ctx: { db: any };
+  communityId: any;
+}): Promise<CommunityChannelLike[]> {
+  // getGeneralChannel detects duplicate system rows even if both happen to be
+  // otherwise canonical.
+  const generalChannel = await getGeneralChannel(args.ctx, args.communityId);
+  const activeChannels = await listActiveCommunityChannels(args);
+  if (generalChannel) return activeChannels;
+  if (activeChannels.length >= MAX_ACTIVE_COMMUNITY_CHANNELS) {
+    // A missing General row still consumes the required system-channel slot.
+    // Refuse to project an eleventh readable channel from drifted storage.
+    throw new Error("community_channel_limit_invalid");
+  }
+  return [legacyGeneralChannelSelection(args.communityId), ...activeChannels];
+}
+
+export function requireReadableChannelForAddressableRow(args: {
+  row: ChannelAddressableInteractionLike;
+  communityId: any;
+  channels: CommunityChannelLike[];
+}): CommunityChannelLike {
+  if (
+    !interactionIsChannelAddressable(args.row) ||
+    normalizeIdValue(args.row.communityId) !== normalizeIdValue(args.communityId)
+  ) {
+    throw new Error("interaction_channel_invalid");
+  }
+  const requestedChannelId = normalizeIdValue(args.row.channelId);
+  const channel = requestedChannelId
+    ? args.channels.find(
+        (candidate) => normalizeIdValue(candidate._id) === requestedChannelId,
+      )
+    : args.channels.find(
+        (candidate) => candidate.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE,
+      );
+  if (!channel) throw new Error("interaction_channel_invalid");
+  assertChannelForCommunity(channel, args.communityId);
+  if (channel.status !== "active") {
+    throw new Error("interaction_channel_inactive");
+  }
+  return channel;
 }
 
 async function resolveAvailableChannelSlug(args: {
@@ -586,11 +689,61 @@ export async function listChannelReadableRows<
   }
   return await listReadableRowsForChannelIds<T>({
     ...args,
-    channelIds: args.channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE
-      ? [args.channel._id, undefined]
-      : [args.channel._id],
+    channelIds: Array.from(
+      new Set(
+        args.channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE
+          ? [args.channel._id, undefined]
+          : [args.channel._id],
+      ),
+    ),
     belongsToChannel: (row) => interactionBelongsToChannel(row, args.channel),
   });
+}
+
+// Community-intelligence projections deliberately aggregate every active,
+// all-member channel. The ten-channel product cap bounds this fanout while the
+// selected-channel path above remains exact and independently pageable.
+export async function listAllActiveChannelReadableRows<
+  T extends GeneralChannelReadableRow,
+>(args: {
+  ctx: { db: any };
+  tableName: "communityInteractionRoots" | "communityInteractionReplies";
+  communityId: any;
+  limit: number;
+  beforeCreatedAt?: number | null;
+  kind?: string | null;
+}): Promise<T[]> {
+  const requestedLimit = Number(args.limit);
+  const limit =
+    Number.isFinite(requestedLimit) && requestedLimit > 0
+      ? Math.min(200, Math.floor(requestedLimit))
+      : 1;
+  const channels = await listReadableCommunityChannels({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+  const batches = await Promise.all(
+    channels.map((channel) =>
+      listChannelReadableRows<T>({
+        ctx: args.ctx,
+        tableName: args.tableName,
+        communityId: args.communityId,
+        channel,
+        limit,
+        beforeCreatedAt: args.beforeCreatedAt,
+        kind: args.kind,
+      }),
+    ),
+  );
+  return Array.from(
+    new Map(
+      batches
+        .flat()
+        .map((row) => [normalizeIdValue(row._id), row]),
+    ).values(),
+  )
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .slice(0, limit);
 }
 
 // Rolling-deployment adapter for existing General-only call paths. New

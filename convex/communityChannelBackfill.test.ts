@@ -104,9 +104,36 @@ test("the bounded migration is dry-run-first, idempotent, and preserves private 
       createdAt: 2_200,
       updatedAt: 2_200,
     });
+    const mentionId = await ctx.db.insert("communityInteractionMentions", {
+      communityId,
+      rootId,
+      mentionKind: "role",
+      mentionedRoleKey: "everybody",
+      notifyState: "pending",
+      createdAt: 2_000,
+      updatedAt: 2_000,
+    });
+    const broadcastId = await ctx.db.insert("communityMentionBroadcasts", {
+      communityId,
+      roleKey: "everybody",
+      actorUserId: ownerId,
+      sourceRootId: rootId,
+      sourceMentionId: mentionId,
+      sourceCreatedAt: 2_000,
+      emailMode: "in_app_only",
+      status: "queued",
+      processedCount: 0,
+      recipientCount: 0,
+      skippedCount: 0,
+      createdAt: 2_000,
+      updatedAt: 2_000,
+    });
+    await ctx.db.patch(mentionId, { sourceBroadcastId: broadcastId });
     return {
+      broadcastId,
       communityId,
       cursorId,
+      mentionId,
       privateReplyId,
       privateRootId,
       replyId,
@@ -151,6 +178,8 @@ test("the bounded migration is dry-run-first, idempotent, and preserves private 
   for (const phase of [
     "roots",
     "replies",
+    "mentions",
+    "mention_broadcasts",
     "read_cursors",
     "typing_presence",
   ] as const) {
@@ -172,6 +201,8 @@ test("the bounded migration is dry-run-first, idempotent, and preserves private 
     const channelId = channels[0]!._id;
     expect((await ctx.db.get(fixture.rootId))?.channelId).toBe(channelId);
     expect((await ctx.db.get(fixture.replyId))?.channelId).toBe(channelId);
+    expect((await ctx.db.get(fixture.mentionId))?.channelId).toBe(channelId);
+    expect((await ctx.db.get(fixture.broadcastId))?.channelId).toBe(channelId);
     expect((await ctx.db.get(fixture.cursorId))?.channelId).toBe(channelId);
     expect((await ctx.db.get(fixture.typingId))?.channelId).toBe(channelId);
     expect((await ctx.db.get(fixture.privateRootId))?.channelId).toBeUndefined();
@@ -181,6 +212,8 @@ test("the bounded migration is dry-run-first, idempotent, and preserves private 
   for (const phase of [
     "roots",
     "replies",
+    "mentions",
+    "mention_broadcasts",
     "read_cursors",
     "typing_presence",
   ] as const) {
@@ -352,6 +385,155 @@ test("duplicate legacy cursor and typing rows remain entirely unmodified", async
       expect(rows.every((row) => row.channelId === undefined)).toBe(true);
     });
   }
+});
+
+test("the General migration accepts canonical custom-channel projections", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await t.run(async (ctx) => {
+    const ownerId = await ctx.db.insert("users", {
+      authSubject: "channel-custom-migration-owner",
+      displayName: "Custom migration owner",
+      handle: "channel-custom-migration-owner",
+      normalizedHandle: "channel-custom-migration-owner",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    const communityId = await ctx.db.insert("communities", {
+      ownerId,
+      slug: "channel-custom-migration",
+      name: "Channel custom migration",
+      visibility: "unlisted",
+      entryPolicy: "open",
+      activeMemberCount: 1,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    await ctx.db.insert("communityChannels", {
+      communityId,
+      systemRole: "general",
+      slug: "general",
+      name: "General",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "active",
+      position: 0,
+      createdAt: 1_500,
+      updatedAt: 1_500,
+    });
+    const channelId = await ctx.db.insert("communityChannels", {
+      communityId,
+      slug: "custom",
+      name: "Custom",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "active",
+      position: 1,
+      createdByUserId: ownerId,
+      createdAt: 1_500,
+      updatedAt: 1_500,
+    });
+    const rootId = await ctx.db.insert("communityInteractionRoots", {
+      communityId,
+      channelId,
+      actorType: "human",
+      actorUserId: ownerId,
+      kind: "discussion",
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "Custom root",
+      replyCount: 1,
+      reactionSummary: [],
+      idempotencyKey: "custom-migration-root",
+      createdAt: 2_000,
+      updatedAt: 2_000,
+    });
+    const replyId = await ctx.db.insert("communityInteractionReplies", {
+      communityId,
+      channelId,
+      rootId,
+      seq: 1,
+      actorType: "human",
+      actorUserId: ownerId,
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "Custom reply",
+      reactionSummary: [],
+      idempotencyKey: "custom-migration-reply",
+      createdAt: 2_001,
+      updatedAt: 2_001,
+    });
+    const mentionId = await ctx.db.insert("communityInteractionMentions", {
+      communityId,
+      channelId,
+      rootId,
+      mentionKind: "role",
+      mentionedRoleKey: "everybody",
+      notifyState: "pending",
+      createdAt: 2_000,
+      updatedAt: 2_000,
+    });
+    const broadcastId = await ctx.db.insert("communityMentionBroadcasts", {
+      communityId,
+      channelId,
+      roleKey: "everybody",
+      actorUserId: ownerId,
+      sourceRootId: rootId,
+      sourceMentionId: mentionId,
+      sourceCreatedAt: 2_000,
+      emailMode: "in_app_only",
+      status: "queued",
+      processedCount: 0,
+      recipientCount: 0,
+      skippedCount: 0,
+      createdAt: 2_000,
+      updatedAt: 2_000,
+    });
+    await ctx.db.patch(mentionId, { sourceBroadcastId: broadcastId });
+    await ctx.db.insert("communityReadCursors", {
+      communityId,
+      channelId,
+      userId: ownerId,
+      streamKind: "chat",
+      seenThroughAt: 2_001,
+      createdAt: 2_100,
+      updatedAt: 2_100,
+    });
+    await ctx.db.insert("communityTypingPresence", {
+      communityId,
+      channelId,
+      userId: ownerId,
+      displayUntil: 9_999,
+      createdAt: 2_100,
+      updatedAt: 2_100,
+    });
+    return { communityId, channelId, replyId };
+  });
+
+  for (const phase of [
+    "roots",
+    "replies",
+    "mentions",
+    "mention_broadcasts",
+    "read_cursors",
+    "typing_presence",
+  ] as const) {
+    await t.run(async (ctx) => {
+      await expect(
+        backfillGeneralChannelBatchCore({
+          ctx,
+          communityId: fixture.communityId,
+          phase,
+          paginationOpts: { numItems: 100, cursor: null },
+          dryRun: false,
+        }),
+      ).resolves.toMatchObject({ invalid: 0, updated: 0 });
+    });
+  }
+  await t.run(async (ctx) => {
+    expect((await ctx.db.get(fixture.replyId))?.channelId).toBe(
+      fixture.channelId,
+    );
+  });
 });
 
 test("dry-run detects a General slug collision before any write", async () => {

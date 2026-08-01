@@ -1874,6 +1874,9 @@ export default defineSchema({
 
   communityInteractionMentions: defineTable({
     communityId: v.id("communities"),
+    // Target-derived from the root. Optional only for private dock and
+    // rolling-compatible pre-channel mention rows.
+    channelId: v.optional(v.id("communityChannels")),
     rootId: v.optional(v.id("communityInteractionRoots")),
     replyId: v.optional(v.id("communityInteractionReplies")),
     sourceBroadcastId: v.optional(v.id("communityMentionBroadcasts")),
@@ -1905,6 +1908,13 @@ export default defineSchema({
     .index("by_mentionedUser_createdAt", ["mentionedUserId", "createdAt"])
     .index("by_mentionedUser_community_createdAt", ["mentionedUserId", "communityId", "createdAt"])
     .index("by_mentionedUser_community_notifyState_createdAt", ["mentionedUserId", "communityId", "notifyState", "createdAt"])
+    .index("by_mentionedUser_community_channel_notifyState_createdAt", [
+      "mentionedUserId",
+      "communityId",
+      "channelId",
+      "notifyState",
+      "createdAt",
+    ])
     .index("by_notifyState_createdAt", ["notifyState", "createdAt"])
     .index("by_mentionKind_notifyState_createdAt", ["mentionKind", "notifyState", "createdAt"])
     .index("by_mentionedAgent_createdAt", ["mentionedAgentKey", "createdAt"])
@@ -1914,6 +1924,8 @@ export default defineSchema({
 
   communityMentionBroadcasts: defineTable({
     communityId: v.id("communities"),
+    // Derived from the source root; optional for pre-channel broadcasts.
+    channelId: v.optional(v.id("communityChannels")),
     roleKey: v.string(),
     actorUserId: v.id("users"),
     sourceRootId: v.optional(v.id("communityInteractionRoots")),
@@ -1949,6 +1961,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_status_updatedAt", ["status", "updatedAt"])
     .index("by_sourceMention", ["sourceMentionId"])
     .index("by_sourceRoot", ["sourceRootId"])

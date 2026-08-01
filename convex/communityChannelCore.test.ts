@@ -8,11 +8,15 @@ import {
   ensureGeneralChannel,
   ensureReplyChannelMatchesRoot,
   getGeneralChannel,
+  listAllActiveChannelReadableRows,
   listChannelProjectionRows,
   listChannelReadableRows,
   listGeneralChannelReadableRows,
+  listReadableCommunityChannels,
   requireActiveCommunityChannel,
   requireChannelForAddressableRoot,
+  requireReadableChannelForAddressableRow,
+  resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
 
 const modules = import.meta.glob(["./_generated/**/*.*s"]);
@@ -331,6 +335,122 @@ test("active channel resolution fails closed across communities and archived row
         channelId: archivedChannelId,
       }),
     ).rejects.toThrow("community_channel_inactive");
+  });
+});
+
+test("requested channels default only omission to General and resolve explicit active channels", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  await t.run(async (ctx) => {
+    const legacyGeneral = await resolveRequestedCommunityChannel({
+      ctx,
+      communityId: fixture.communityId,
+    });
+    expect(legacyGeneral).toMatchObject({
+      _id: undefined,
+      systemRole: "general",
+      slug: "general",
+      status: "active",
+    });
+    const storedGeneral = await resolveRequestedCommunityChannel({
+      ctx,
+      communityId: fixture.communityId,
+      ensureGeneralForWrite: true,
+      nowMs: 2_000,
+    });
+    expect(storedGeneral._id).toBeTruthy();
+
+    const customChannelId = await ctx.db.insert("communityChannels", {
+      communityId: fixture.communityId,
+      slug: "custom",
+      name: "Custom",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "active",
+      position: 1,
+      createdByUserId: fixture.ownerId,
+      createdAt: 2_100,
+      updatedAt: 2_100,
+    });
+    expect(
+      (
+        await resolveRequestedCommunityChannel({
+          ctx,
+          communityId: fixture.communityId,
+          channelId: customChannelId,
+        })
+      )._id,
+    ).toBe(customChannelId);
+  });
+});
+
+test("community aggregate reads merge active channels and preserve exact row ownership", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  await t.run(async (ctx) => {
+    const general = await ensureGeneralChannel({
+      ctx,
+      communityId: fixture.communityId,
+      nowMs: 2_000,
+    });
+    const customChannelId = await ctx.db.insert("communityChannels", {
+      communityId: fixture.communityId,
+      slug: "custom",
+      name: "Custom",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "active",
+      position: 1,
+      createdByUserId: fixture.ownerId,
+      createdAt: 2_000,
+      updatedAt: 2_000,
+    });
+    const insertRoot = async (key: string, createdAt: number, channelId?: any) =>
+      await ctx.db.insert("communityInteractionRoots", {
+        communityId: fixture.communityId,
+        ...(channelId ? { channelId } : {}),
+        actorType: "human",
+        actorUserId: fixture.ownerId,
+        kind: "discussion",
+        status: "live",
+        visibilityScope: "community",
+        contentSummary: key,
+        replyCount: 0,
+        reactionSummary: [],
+        idempotencyKey: key,
+        createdAt,
+        updatedAt: createdAt,
+      });
+    const legacyId = await insertRoot("legacy", 2_100);
+    const generalId = await insertRoot("general", 2_200, general._id);
+    const customId = await insertRoot("custom", 2_300, customChannelId);
+
+    const rows = await listAllActiveChannelReadableRows({
+      ctx,
+      tableName: "communityInteractionRoots",
+      communityId: fixture.communityId,
+      limit: 10,
+    });
+    expect(rows.map((row) => row._id)).toEqual([customId, generalId, legacyId]);
+
+    const channels = await listReadableCommunityChannels({
+      ctx,
+      communityId: fixture.communityId,
+    });
+    expect(
+      requireReadableChannelForAddressableRow({
+        row: rows[0]!,
+        communityId: fixture.communityId,
+        channels,
+      }).slug,
+    ).toBe("custom");
+    expect(
+      requireReadableChannelForAddressableRow({
+        row: rows[2]!,
+        communityId: fixture.communityId,
+        channels,
+      }).slug,
+    ).toBe("general");
   });
 });
 

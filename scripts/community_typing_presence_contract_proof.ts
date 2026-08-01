@@ -174,8 +174,8 @@ assert.doesNotMatch(
 );
 assert.match(
   typingScopeLifecycle,
-  /clearCloudCommunityTyping[\s\S]*\}, \[args\.activeCommunityId, args\.isEnabled\]\);/,
-  "only community or surface lifecycle changes may clear the active typing scope",
+  /clearCloudCommunityTyping[\s\S]*\}, \[args\.activeChannelId, args\.activeCommunityId, args\.isEnabled\]\);/,
+  "only channel, community, or surface lifecycle changes may clear the active typing scope",
 );
 assert.doesNotMatch(
   webAttention,

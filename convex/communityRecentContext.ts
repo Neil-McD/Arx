@@ -18,9 +18,10 @@ import {
   communityInteractionVisibilityIsEvidenceReadable,
 } from "../shared/communityEvidenceContract";
 import {
-  getGeneralChannel,
-  interactionBelongsToGeneralChannel,
-  listGeneralChannelReadableRows,
+  interactionBelongsToChannel,
+  listAllActiveChannelReadableRows,
+  listReadableCommunityChannels,
+  requireReadableChannelForAddressableRow,
 } from "./communityChannelCore";
 
 type FeedPostRow = {
@@ -126,45 +127,57 @@ async function listRecentInteractionItems(args: {
   communityId: any;
   tokens: string[];
 }): Promise<{ items: RecentContextItem[]; considered: number }> {
-  const generalChannel = await getGeneralChannel(args.ctx, args.communityId);
+  const channels = await listReadableCommunityChannels({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
   const [roots, replies] = await Promise.all([
-    listGeneralChannelReadableRows<InteractionContextRow>({
+    listAllActiveChannelReadableRows<InteractionContextRow>({
       ctx: args.ctx,
       tableName: "communityInteractionRoots",
       communityId: args.communityId,
-      generalChannel,
       limit: INTERACTION_ROOT_WINDOW_LIMIT,
     }),
-    listGeneralChannelReadableRows<InteractionContextRow>({
+    listAllActiveChannelReadableRows<InteractionContextRow>({
       ctx: args.ctx,
       tableName: "communityInteractionReplies",
       communityId: args.communityId,
-      generalChannel,
       limit: INTERACTION_REPLY_WINDOW_LIMIT,
     }),
   ]);
-  const readableRoots = new Map(
-    roots
-      .filter(
-        (root) =>
-          communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope) &&
-          interactionBelongsToGeneralChannel(root, generalChannel),
-      )
-      .map((root) => [String(root._id), root]),
-  );
+  const readableRoots = new Map<string, InteractionContextRow>();
+  const rootChannels = new Map<string, (typeof channels)[number]>();
+  const admitRoot = (root: InteractionContextRow) => {
+    if (!communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope)) {
+      return;
+    }
+    try {
+      const channel = requireReadableChannelForAddressableRow({
+        row: root,
+        communityId: args.communityId,
+        channels,
+      });
+      const rootId = normalizeIdValue(root._id);
+      readableRoots.set(rootId, root);
+      rootChannels.set(rootId, channel);
+    } catch {
+      // Invalid channel ownership fails closed.
+    }
+  };
+  roots.forEach(admitRoot);
   for (const rootId of new Set(replies.map((reply) => String(reply.rootId ?? "")).filter(Boolean))) {
     if (readableRoots.has(rootId)) continue;
     const root = (await args.ctx.db.get(rootId as any)) as InteractionContextRow | null;
     if (
       root?.status === "live" &&
       normalizeIdValue(root.communityId) === normalizeIdValue(args.communityId) &&
-      communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope) &&
-      interactionBelongsToGeneralChannel(root, generalChannel)
+      communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope)
     ) {
-      readableRoots.set(rootId, root);
+      admitRoot(root);
     }
   }
   const rootItems = Array.from(readableRoots.values()).map((root) => {
+    const channel = rootChannels.get(normalizeIdValue(root._id))!;
     const snippet = truncateText(root.contentSummary, 280);
     return {
       source_type: "interaction" as const,
@@ -173,20 +186,28 @@ async function listRecentInteractionItems(args: {
       snippet,
       created_at: toIsoString(root.createdAt),
       score: scoreText(`${root.title ?? ""} ${snippet}`, args.tokens),
-      channel_id: root.channelId ? normalizeIdValue(root.channelId) : null,
-      channel_slug: "general",
+      channel_id: normalizeIdValue(channel._id) || null,
+      channel_slug: channel.slug,
       author_label: interactionAuthorLabel(root),
     };
   });
   const replyItems = replies
     .filter(
-      (reply) =>
-        communityInteractionVisibilityIsEvidenceReadable(reply.visibilityScope) &&
-        interactionBelongsToGeneralChannel(reply, generalChannel) &&
-        readableRoots.has(String(reply.rootId ?? "")),
+      (reply) => {
+        const rootId = normalizeIdValue(reply.rootId);
+        const channel = rootChannels.get(rootId);
+        return Boolean(
+          communityInteractionVisibilityIsEvidenceReadable(reply.visibilityScope) &&
+          channel &&
+          interactionBelongsToChannel(reply, channel) &&
+          readableRoots.has(rootId),
+        );
+      },
     )
     .map((reply) => {
-      const root = readableRoots.get(String(reply.rootId))!;
+      const rootId = normalizeIdValue(reply.rootId);
+      const root = readableRoots.get(rootId)!;
+      const channel = rootChannels.get(rootId)!;
       const snippet = truncateText(reply.contentSummary, 280);
       return {
         source_type: "interaction" as const,
@@ -195,8 +216,8 @@ async function listRecentInteractionItems(args: {
         snippet,
         created_at: toIsoString(reply.createdAt),
         score: scoreText(snippet, args.tokens),
-        channel_id: root.channelId ? normalizeIdValue(root.channelId) : null,
-        channel_slug: "general",
+        channel_id: normalizeIdValue(channel._id) || null,
+        channel_slug: channel.slug,
         author_label: interactionAuthorLabel(reply),
       };
     });

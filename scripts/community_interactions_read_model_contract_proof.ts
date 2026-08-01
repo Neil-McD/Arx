@@ -229,7 +229,7 @@ assert.match(
 );
 assert.match(
   listRoots,
-  /const visibleRows = await listGeneralChannelReadableRows<InteractionRootRow>[\s\S]*loadViewerReactionMapForTargets\(ctx, userId, "root", visibleRows\.map\(\(row\) => row\._id\)\)/,
+  /resolveRequestedCommunityChannel\([\s\S]*channelId: args\.channelId[\s\S]*const visibleRows = await listChannelReadableRows<InteractionRootRow>[\s\S]*loadViewerReactionMapForTargets\(ctx, userId, "root", visibleRows\.map\(\(row\) => row\._id\)\)/,
   "root list should load viewer reactions only for visible roots",
 );
 assert.match(

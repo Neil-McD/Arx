@@ -30,6 +30,7 @@ type BroadcastCleanupState = "queued" | "complete";
 type BroadcastRow = {
   _id: any;
   communityId: any;
+  channelId?: any;
   roleKey: string;
   actorUserId: any;
   sourceRootId?: any;
@@ -54,6 +55,7 @@ type BroadcastRow = {
 type InteractionRootRow = {
   _id: any;
   communityId: any;
+  channelId?: any;
   actorUserId?: any;
   status: "live" | "hidden" | "deleted";
 };
@@ -130,11 +132,33 @@ async function readSourceText(ctx: any, broadcast: BroadcastRow): Promise<string
     .join("\n\n");
 }
 
+async function broadcastChannelMatchesRoot(
+  ctx: any,
+  broadcast: BroadcastRow,
+  root: InteractionRootRow,
+): Promise<boolean> {
+  if (broadcast.channelId) {
+    return (
+      normalizeIdValue(root.channelId) === normalizeIdValue(broadcast.channelId)
+    );
+  }
+  if (!root.channelId) return true;
+  const channel = await ctx.db.get(root.channelId);
+  return channel?.systemRole === "general";
+}
+
 async function sourceIsStillBroadcastable(ctx: any, broadcast: BroadcastRow): Promise<boolean> {
   const sourceMention = (await ctx.db.get(broadcast.sourceMentionId)) as Record<string, any> | null;
   if (!sourceMention || sourceMention.notifyState !== "pending") return false;
   if (sourceMention.mentionedRoleKey !== EVERYBODY_MENTION_ROLE_KEY) return false;
   if (sourceMention.mentionKind !== "role") return false;
+  if (
+    broadcast.channelId &&
+    normalizeIdValue(sourceMention.channelId) !==
+      normalizeIdValue(broadcast.channelId)
+  ) {
+    return false;
+  }
 
   if (broadcast.sourceReplyId) {
     const reply = (await ctx.db.get(broadcast.sourceReplyId)) as InteractionReplyRow | null;
@@ -142,10 +166,12 @@ async function sourceIsStillBroadcastable(ctx: any, broadcast: BroadcastRow): Pr
     if (normalizeIdValue(reply.communityId) !== normalizeIdValue(broadcast.communityId)) return false;
     const root = (await ctx.db.get(reply.rootId)) as InteractionRootRow | null;
     if (!root || root.status !== "live") return false;
+    if (!(await broadcastChannelMatchesRoot(ctx, broadcast, root))) return false;
   } else if (broadcast.sourceRootId) {
     const root = (await ctx.db.get(broadcast.sourceRootId)) as InteractionRootRow | null;
     if (!root || root.status !== "live") return false;
     if (normalizeIdValue(root.communityId) !== normalizeIdValue(broadcast.communityId)) return false;
+    if (!(await broadcastChannelMatchesRoot(ctx, broadcast, root))) return false;
   } else {
     return false;
   }
@@ -239,6 +265,7 @@ export async function readEverybodyMentionEmailAvailability(args: {
 export async function scheduleEverybodyMentionBroadcast(args: {
   ctx: any;
   communityId: any;
+  channelId: any;
   rootId: any;
   actorUserId: any;
   sourceMentionId: any;
@@ -247,6 +274,15 @@ export async function scheduleEverybodyMentionBroadcast(args: {
   if (!args.rootId) {
     throw new Error("interaction_mention_broadcast_source_required");
   }
+  const root = (await args.ctx.db.get(args.rootId)) as InteractionRootRow | null;
+  if (
+    !root ||
+    root.status !== "live" ||
+    normalizeIdValue(root.communityId) !== normalizeIdValue(args.communityId) ||
+    normalizeIdValue(root.channelId) !== normalizeIdValue(args.channelId)
+  ) {
+    throw new Error("interaction_mention_broadcast_channel_invalid");
+  }
   const availability = await readEverybodyMentionEmailAvailability({
     ctx: args.ctx,
     communityId: args.communityId,
@@ -254,6 +290,7 @@ export async function scheduleEverybodyMentionBroadcast(args: {
   });
   const broadcastId = await args.ctx.db.insert("communityMentionBroadcasts" as any, {
     communityId: args.communityId,
+    channelId: args.channelId,
     roleKey: EVERYBODY_MENTION_ROLE_KEY,
     actorUserId: args.actorUserId,
     sourceRootId: args.rootId,
@@ -326,6 +363,7 @@ async function getExistingMentionRowForBroadcastRecipient(args: {
 async function readRecipientInitialNotifyState(args: {
   ctx: any;
   communityId: any;
+  channelId?: any;
   userId: any;
   sourceCreatedAt: number;
   emailMode: BroadcastEmailMode;
@@ -335,6 +373,7 @@ async function readRecipientInitialNotifyState(args: {
     args.ctx,
     args.communityId,
     args.userId,
+    args.channelId,
   );
   return readState.mentionSeenThroughAt >= Math.floor(args.sourceCreatedAt)
     ? "read"
@@ -348,8 +387,23 @@ async function attachBroadcastToExistingMention(args: {
   nowMs: number;
 }): Promise<boolean> {
   if (args.mention.sourceBroadcastId) return false;
+  if (
+    args.broadcast.channelId &&
+    normalizeIdValue(args.mention.channelId) &&
+    normalizeIdValue(args.mention.channelId) !==
+      normalizeIdValue(args.broadcast.channelId)
+  ) {
+    return false;
+  }
+  if (!args.broadcast.channelId && args.mention.channelId) {
+    const mentionChannel = await args.ctx.db.get(args.mention.channelId);
+    if (mentionChannel?.systemRole !== "general") return false;
+  }
   await args.ctx.db.patch(args.mention._id, {
     sourceBroadcastId: args.broadcast._id,
+    ...(args.broadcast.channelId && !args.mention.channelId
+      ? { channelId: args.broadcast.channelId }
+      : {}),
     mentionedRoleKey: EVERYBODY_MENTION_ROLE_KEY,
     updatedAt: args.nowMs,
   });
@@ -390,12 +444,16 @@ async function processBroadcastRecipient(args: {
   const notifyState = await readRecipientInitialNotifyState({
     ctx: args.ctx,
     communityId: args.broadcast.communityId,
+    channelId: args.broadcast.channelId,
     userId: args.userId,
     sourceCreatedAt: args.broadcast.sourceCreatedAt,
     emailMode: args.broadcast.emailMode,
   });
   await args.ctx.db.insert("communityInteractionMentions" as any, {
     communityId: args.broadcast.communityId,
+    ...(args.broadcast.channelId
+      ? { channelId: args.broadcast.channelId }
+      : {}),
     ...(args.broadcast.sourceReplyId
       ? { replyId: args.broadcast.sourceReplyId }
       : { rootId: args.broadcast.sourceRootId }),

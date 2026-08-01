@@ -142,8 +142,8 @@ assert.doesNotMatch(
 // user acknowledgement mutation.
 assert.match(
   backend,
-  /for \(const notifyState of \["pending", "sent", "read"\] as const\)[\s\S]*by_mentionedUser_community_notifyState_createdAt/,
-  "mention attention must derive from indexed non-suppressed mention reads",
+  /for \(const notifyState of \["pending", "sent", "read"\] as const\)[\s\S]*by_mentionedUser_community_channel_notifyState_createdAt/,
+  "mention attention must derive from exact-channel indexed non-suppressed mention reads",
 );
 assert.doesNotMatch(
   backend,
@@ -152,8 +152,8 @@ assert.doesNotMatch(
 );
 assert.match(
   backend,
-  /readCommunityChatReadState[\s\S]*mentions:\s*[\s\S]*latestMentionCreatedAt > chatReadState\.mentionSeenThroughAt/,
-  "mention attention must compare against the canonical chat read state",
+  /channel\.systemRole === "general"[\s\S]*\[channel\._id, undefined\][\s\S]*latestMentionAt[\s\S]*latestMentionAt > readState\.mentionSeenThroughAt/,
+  "mention attention must compare each channel against its canonical chat read state",
 );
 assert.match(
   backend,
@@ -202,8 +202,8 @@ assert.match(
 );
 assert.match(
   mentionEmails,
-  /readCommunityChatReadState[\s\S]*readOnlyJob\(mention\)[\s\S]*notifyState: "read"/,
-  "the async mention worker must suppress email and settle rows already covered by the cursor",
+  /readCommunityChatReadState\([\s\S]*mention\.communityId[\s\S]*mention\.mentionedUserId[\s\S]*mention\.channelId[\s\S]*readOnlyJob\(mention\)[\s\S]*notifyState: "read"/,
+  "the async mention worker must use the exact mention channel and settle rows already covered by its cursor",
 );
 assert.match(
   emailModule,

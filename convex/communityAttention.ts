@@ -6,6 +6,7 @@ import {
   type CommunityResourceLike,
   communityResourceIsLiveModulePage,
   communityResourceModuleIsLive,
+  normalizeIdValue,
   requireCommunityChatAccess,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
@@ -14,8 +15,10 @@ import {
   readCommunityChatReadState,
 } from "./communityReadCursorCore";
 import {
-  getGeneralChannel,
-  listGeneralChannelReadableRows,
+  type CommunityChannelLike,
+  listChannelReadableRows,
+  listReadableCommunityChannels,
+  resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
 
 type CommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events" | "mentions";
@@ -38,6 +41,16 @@ type CommunityAttentionRow = {
   // distinguishable from ordinary chatter.
   mentions: boolean;
   chat_last_seen_at: number | null;
+  channels: CommunityChannelAttentionRow[];
+};
+
+type CommunityChannelAttentionRow = {
+  channel_id: string | null;
+  channel_slug: string;
+  chat: boolean;
+  mentions: boolean;
+  chat_last_seen_at: number | null;
+  latest_activity_at: number | null;
 };
 
 type CommunityInteractionRootLike = {
@@ -96,25 +109,25 @@ async function getCommunityMemberSettingsRow(
     .first()) as CommunityMemberSettingsLike | null;
 }
 
-async function getLatestCommunityChatActivityAt(
+async function getLatestCommunityChannelChatActivityAt(
   ctx: any,
   communityId: any,
+  channel: CommunityChannelLike,
 ): Promise<number | null> {
-  const generalChannel = await getGeneralChannel(ctx, communityId);
   const [roots, replies] =
     await Promise.all([
-      listGeneralChannelReadableRows<CommunityInteractionRootLike>({
+      listChannelReadableRows<CommunityInteractionRootLike>({
         ctx,
         tableName: "communityInteractionRoots",
         communityId,
-        generalChannel,
+        channel,
         limit: 1,
       }),
-      listGeneralChannelReadableRows<CommunityInteractionReplyLike>({
+      listChannelReadableRows<CommunityInteractionReplyLike>({
         ctx,
         tableName: "communityInteractionReplies",
         communityId,
-        generalChannel,
+        channel,
         limit: 1,
       }),
     ]);
@@ -126,6 +139,21 @@ async function getLatestCommunityChatActivityAt(
     normalizePositiveMarker(latestReply?.createdAt),
   ].filter((value): value is number => value !== null);
   return markers.length > 0 ? Math.max(...markers) : null;
+}
+
+async function getLatestCommunityChatActivityAt(
+  ctx: any,
+  communityId: any,
+): Promise<number | null> {
+  const generalChannel = await resolveRequestedCommunityChannel({
+    ctx,
+    communityId,
+  });
+  return await getLatestCommunityChannelChatActivityAt(
+    ctx,
+    communityId,
+    generalChannel,
+  );
 }
 
 async function getLatestCommunityAiFeedCreatedAt(
@@ -208,32 +236,127 @@ async function getLatestCommunityMentionOfUserCreatedAt(
   return latestCreatedAt;
 }
 
+function communityAttentionChannelKey(channel: CommunityChannelLike): string {
+  return normalizeIdValue(channel._id) || "general";
+}
+
+async function getLatestCommunityMentionsByChannel(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+  channels: CommunityChannelLike[];
+}): Promise<Map<string, number>> {
+  const latestByChannel = new Map<string, number>();
+  for (const channel of args.channels) {
+    const channelIds = Array.from(
+      new Set(
+        channel.systemRole === "general"
+          ? [channel._id, undefined]
+          : [channel._id],
+      ),
+    );
+    const batches = await Promise.all(
+      channelIds.flatMap((channelId) =>
+        (["pending", "sent", "read"] as const).map(
+          async (notifyState) =>
+            (await args.ctx.db
+              .query("communityInteractionMentions" as any)
+              .withIndex(
+                "by_mentionedUser_community_channel_notifyState_createdAt",
+                (q: any) =>
+                  q
+                    .eq("mentionedUserId", args.userId)
+                    .eq("communityId", args.communityId)
+                    .eq("channelId", channelId)
+                    .eq("notifyState", notifyState),
+              )
+              .order("desc")
+              .take(1)) as Array<{ createdAt: number }>,
+        ),
+      ),
+    );
+    const latestCreatedAt = Math.max(
+      0,
+      ...batches.flat().map((mention) => mention.createdAt),
+    );
+    if (latestCreatedAt > 0) {
+      latestByChannel.set(
+        communityAttentionChannelKey(channel),
+        latestCreatedAt,
+      );
+    }
+  }
+  return latestByChannel;
+}
+
 async function getCommunityAttentionRow(
   ctx: any,
   communityId: any,
   userId: any,
 ): Promise<CommunityAttentionRow> {
   const settingsRow = await getCommunityMemberSettingsRow(ctx, communityId, userId);
+  const channels = await listReadableCommunityChannels({ ctx, communityId });
   const [
-    chatReadState,
-    latestChatActivityAt,
+    channelAttentionInputs,
+    latestMentionsByChannel,
     latestAiFeedCreatedAt,
     latestResourcesCreatedAt,
     latestEventsUpdatedAt,
-    latestMentionCreatedAt,
   ] = await Promise.all([
-    readCommunityChatReadState(ctx, communityId, userId),
-    getLatestCommunityChatActivityAt(ctx, communityId),
+    Promise.all(
+      channels.map(async (channel) => ({
+        channel,
+        readState: await readCommunityChatReadState(
+          ctx,
+          communityId,
+          userId,
+          channel._id,
+        ),
+        latestActivityAt: await getLatestCommunityChannelChatActivityAt(
+          ctx,
+          communityId,
+          channel,
+        ),
+      })),
+    ),
+    getLatestCommunityMentionsByChannel({
+      ctx,
+      communityId,
+      userId,
+      channels,
+    }),
     getLatestCommunityAiFeedCreatedAt(ctx, communityId),
     getLatestCommunityResourcesCreatedAt(ctx, communityId),
     getLatestCommunityEventsUpdatedAt(ctx, communityId),
-    getLatestCommunityMentionOfUserCreatedAt(ctx, communityId, userId),
   ]);
+  const channelRows: CommunityChannelAttentionRow[] = channelAttentionInputs.map(
+    ({ channel, readState, latestActivityAt }) => {
+      const latestMentionAt = latestMentionsByChannel.get(
+        communityAttentionChannelKey(channel),
+      );
+      return {
+        channel_id: normalizeIdValue(channel._id) || null,
+        channel_slug: channel.slug,
+        chat:
+          typeof latestActivityAt === "number" &&
+          latestActivityAt > readState.chatSeenThroughAt,
+        mentions:
+          typeof latestMentionAt === "number" &&
+          latestMentionAt > readState.mentionSeenThroughAt,
+        chat_last_seen_at:
+          readState.chatSeenThroughAt > 0
+            ? readState.chatSeenThroughAt
+            : null,
+        latest_activity_at: latestActivityAt,
+      };
+    },
+  );
+  const generalRow = channelRows.find(
+    (row) => row.channel_slug === "general",
+  );
   return {
     community_id: String(communityId),
-    chat:
-      typeof latestChatActivityAt === "number" &&
-      latestChatActivityAt > chatReadState.chatSeenThroughAt,
+    chat: channelRows.some((row) => row.chat),
     ai_feed:
       typeof latestAiFeedCreatedAt === "number" &&
       latestAiFeedCreatedAt > Math.max(0, Math.floor(settingsRow?.aiFeedLastSeenAt ?? 0)),
@@ -243,11 +366,11 @@ async function getCommunityAttentionRow(
     events:
       typeof latestEventsUpdatedAt === "number" &&
       latestEventsUpdatedAt > Math.max(0, Math.floor(settingsRow?.eventsLastSeenAt ?? 0)),
-    mentions:
-      typeof latestMentionCreatedAt === "number" &&
-      latestMentionCreatedAt > chatReadState.mentionSeenThroughAt,
-    chat_last_seen_at:
-      chatReadState.chatSeenThroughAt > 0 ? chatReadState.chatSeenThroughAt : null,
+    mentions: channelRows.some((row) => row.mentions),
+    // Rolling clients still render one General divider. The channel array is
+    // the canonical projection for the forthcoming channel navigation.
+    chat_last_seen_at: generalRow?.chat_last_seen_at ?? null,
+    channels: channelRows,
   };
 }
 
@@ -371,16 +494,25 @@ async function upsertCommunitySurfaceSeen(args: {
 async function acknowledgeCommunityChatReadForUser(args: {
   ctx: any;
   communityId: any;
+  channelId?: any | null;
   userId: any;
   requestedThroughAt?: number | null;
 }): Promise<{ ok: true; advanced: boolean; seenThroughAt: number }> {
-  const latestReadableAt = await getLatestCommunityChatActivityAt(
+  const channel = await resolveRequestedCommunityChannel({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    channelId: args.channelId,
+    ensureGeneralForWrite: true,
+  });
+  const latestReadableAt = await getLatestCommunityChannelChatActivityAt(
     args.ctx,
     args.communityId,
+    channel,
   );
   const result = await advanceCommunityChatReadCursor({
     ctx: args.ctx,
     communityId: args.communityId,
+    channelId: channel._id,
     userId: args.userId,
     requestedThroughAt: args.requestedThroughAt ?? latestReadableAt,
     latestReadableAt,
@@ -466,6 +598,7 @@ export const acknowledgeCommunityChatRead = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    channelId: v.optional(v.id("communityChannels")),
     throughAtMs: v.number(),
   },
   handler: async (ctx, args) => {
@@ -482,6 +615,7 @@ export const acknowledgeCommunityChatRead = mutation({
     return await acknowledgeCommunityChatReadForUser({
       ctx,
       communityId: args.communityId,
+      channelId: args.channelId,
       userId,
       requestedThroughAt: args.throughAtMs,
     });

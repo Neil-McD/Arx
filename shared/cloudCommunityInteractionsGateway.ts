@@ -210,6 +210,7 @@ export type CommunityInteractionRootPage = {
 export async function listCloudCommunityInteractionRoots<SessionT>(
   params: CloudCommunityInteractionsGatewayParams<SessionT> & {
     communityId: string;
+    channelId?: string | null;
     beforeCreatedAt?: number | null;
     limit?: number;
     kind?: string | null;
@@ -222,6 +223,7 @@ export async function listCloudCommunityInteractionRoots<SessionT>(
 export async function listCloudCommunityInteractionRootsPage<SessionT>(
   params: CloudCommunityInteractionsGatewayParams<SessionT> & {
     communityId: string;
+    channelId?: string | null;
     beforeCreatedAt?: number | null;
     limit?: number;
     kind?: string | null;
@@ -231,6 +233,7 @@ export async function listCloudCommunityInteractionRootsPage<SessionT>(
   const payload = await client.query("communityInteractions:listCommunityInteractionRoots" as any, {
     authSubject,
     communityId: params.communityId,
+    ...(params.channelId ? { channelId: params.channelId } : null),
     beforeCreatedAt: params.beforeCreatedAt ?? null,
     limit: params.limit ?? 40,
     kind: params.kind ?? null,
@@ -261,6 +264,7 @@ export async function listCloudCommunityInteractionReplies<SessionT>(
 export async function createCloudCommunityInteractionComposerMessageRows<SessionT, TRow = unknown>(
   params: CloudCommunityInteractionsGatewayParams<SessionT> & {
     communityId: string;
+    channelId?: string | null;
     idempotencyKey: string;
     text: string;
     rootId?: string | null;
@@ -275,6 +279,7 @@ export async function createCloudCommunityInteractionComposerMessageRows<Session
     {
       authSubject,
       communityId: params.communityId,
+      ...(params.channelId ? { channelId: params.channelId } : null),
       idempotencyKey: params.idempotencyKey,
       text: params.text,
       rootId: params.rootId ?? null,
@@ -366,6 +371,7 @@ export async function deleteCloudCommunityInteractionMessage<SessionT>(
 export function subscribeCloudCommunityInteractionRoots(params: {
   liveClient: CloudCommunityChatLiveClient;
   communityId: string;
+  channelId?: string | null;
   limit?: number;
   kind?: string | null;
   onUpdate: (roots: CommunityInteractionRootBundle[]) => void;
@@ -376,6 +382,7 @@ export function subscribeCloudCommunityInteractionRoots(params: {
     {
       authSubject: params.liveClient.authSubject,
       communityId: params.communityId as any,
+      ...(params.channelId ? { channelId: params.channelId as any } : null),
       beforeCreatedAt: null,
       limit: params.limit ?? 40,
       kind: params.kind ?? null,

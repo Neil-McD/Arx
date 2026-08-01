@@ -9,7 +9,7 @@ import { resolvePublicCommunityInteractionActivityCounts } from "./communityPubl
 
 const modules = import.meta.glob(["./_generated/**/*.*s"]);
 
-test("public activity counts only rolling-compatible General-readable interactions", async () => {
+test("public activity counts every active member-readable channel and excludes private/admin rows", async () => {
   const t = convexTest(schema, modules);
   await t.run(async (ctx) => {
     const ownerId = await ctx.db.insert("users", {
@@ -141,7 +141,7 @@ test("public activity counts only rolling-compatible General-readable interactio
         cap: 20,
       }),
     ).resolves.toEqual({
-      messagesTodayCount: 4,
+      messagesTodayCount: 6,
       messagesTodayCapped: false,
     });
     await expect(

@@ -124,28 +124,29 @@ members may list every active channel. V1 has no per-channel ACL, invite,
 visibility, posting-policy, tier, or role configuration.
 
 Every community/public interaction root belongs to one channel and every reply
-inherits its root's channel. Private member-agent dock interactions are not
-channel activity and intentionally remain unchanneled. During rolling
+inherits its root's channel. Mention rows and `@everybody` broadcast ledgers
+derive that same source channel so attention and recipient fanout never infer
+channel identity by scanning interaction targets. Private member-agent dock
+interactions are not channel activity and intentionally remain unchanneled. During rolling
 migration only, a missing channel on a legacy community/public interaction is
 read as General; that fallback ends after the backfill reaches zero drift.
 
-The catalog checkpoint exposes list/create operations but intentionally keeps
-the deployed interaction adapters on General until the selected-channel
-read/write checkpoint and member UI land. An omitted channel from an older
-client continues to mean General during that rolling deployment. Custom
-channels must not be exposed in member navigation before feed, composer,
-typing, unread, mention navigation, and community-level intelligence behavior
-all satisfy the channel contract.
+The selected-channel checkpoint exposes list/create operations and makes the
+canonical feed, composer, typing, unread, attention, evidence, and recent
+community context channel-aware. An omitted channel from an older client
+continues to mean General during rolling deployment. Custom channels remain
+dark to member navigation until the frontend carries one explicit selected
+channel through those canonical adapters.
 
 Public Channels V1 does not add an All aggregation, channel ACLs, private
 channels, pinning, reordering, archive/delete, or channel-specific settings.
 
-The public community funnel's messages-today metadata is a General-readable
-projection during this slice. It includes only live `community`/`public` rows
-in canonical General plus the temporary unchanneled legacy lane. Private dock,
-admin-only, hidden/deleted, and non-General channel rows never contribute. An
-eventual All surface is a virtual authorized aggregation, not a stored channel
-and not duplicated interaction data.
+The public community funnel's messages-today metadata aggregates all active
+all-member channels. It includes only live `community`/`public` rows plus the
+temporary unchanneled General legacy lane. Private dock, admin-only,
+hidden/deleted, and inactive-channel rows never contribute. An eventual All
+surface is a virtual authorized aggregation, not a stored channel and not
+duplicated interaction data.
 
 ### `interactionRoots`
 
@@ -222,9 +223,8 @@ Reaction summaries may be denormalized onto roots/replies for feed speed, but th
 ### `interactionReadState`
 
 Unread projection is derived from one member-and-channel stream position in
-`communityReadCursors`. The catalog checkpoint still advances General only;
-the selected-channel checkpoint binds each cursor to the explicitly selected
-active channel. The position is a monotonic server-authorized
+`communityReadCursors`. Each cursor binds to the explicitly selected active
+channel. The position is a monotonic server-authorized
 `seenThroughAt` watermark: the client may submit only the newest server-issued
 interaction timestamp it actually rendered while caught up, and the server
 clamps that request to the current readable head. Legacy
@@ -236,8 +236,9 @@ General. There is no per-root follow, mute, or drawer-read state.
 
 Typing presence is an ephemeral server-issued lease, never durable message or
 read state. Community chat keeps one channel-user row whose optional root
-identifies the user's current typing scope. The catalog checkpoint still uses
-General; the selected-channel checkpoint requires the explicit active channel.
+identifies the user's current typing scope. The selected-channel checkpoint
+requires the explicit active channel while omission remains a General-only
+rolling-compatibility adapter.
 Channel and thread composers share one client renewal owner, one renewal
 interval, and one active scope. Pre-channel leases remain readable only during
 rolling migration and are upgraded in place when safely unique.
@@ -299,14 +300,17 @@ The entrypoints are
 `communityChannelAudit.listGeneralChannelAuditCommunitiesInternal` and
 `communityChannelAudit.auditGeneralChannelMigrationBatchInternal`.
 It reports General identity/slug collisions, missing or unexpected channel
-assignments, reply phase-order blockers, cursor/typing projection collisions,
-and the number of evidence-sync jobs an apply would schedule. Every inventory
+assignments, source phase-order blockers, cursor/typing projection collisions,
+and the number of evidence-sync jobs an apply would schedule. Existing active
+custom-channel assignments are canonical, not migration drift. Every inventory
 and migration batch is capped at 100 rows regardless of caller input.
 
 Only a clean inventory may advance to the manager-authorized, dry-run-first
-mutation. Each community is applied one phase at a time: roots, replies, read
-cursors, then typing presence. Community/public roots and their replies acquire
-General; private dock rows remain unchanneled. Cursor or typing collisions —
+mutation. Each community is applied one phase at a time: roots, replies,
+mentions, mention broadcasts, read cursors, then typing presence. Legacy
+community/public roots acquire General; replies and notification projections
+inherit their canonical source root channel. Private dock rows remain
+unchanneled. Cursor or typing collisions —
 including two legacy rows with the same semantic key — leave every collided
 legacy row untouched instead of selecting a winner. Any invalid, projection
 collision, or phase-order blocker stops that phase. Completion requires two
@@ -358,11 +362,11 @@ Rules:
 - member-visible writes are human-authored only
 - the composer creates canonical roots and replies directly; generic public root/reply mutations are not exposed
 - new composer roots are `discussion` roots with `community` visibility
-- new composer roots bind to canonical General
+- new composer roots bind to the authenticated caller's explicit active channel; omission binds General for rolling compatibility
 - composer replies inherit the root visibility and cannot broaden it
 - composer replies inherit the root channel and cannot cross it
 - every write requires `idempotencyKey`
-- duplicate root writes return the existing root bundle
+- duplicate root writes return the existing root bundle only when actor, content, and channel still match
 - duplicate reply writes return the existing reply bundle when the key belongs to the same root
 - reply writes create a flat one-level drawer under the root
 - `replyToMessageId` is quote/context only and must resolve inside the same root when present
@@ -371,7 +375,9 @@ Rules:
 - user mentions are capped, deduped, resolved to existing users, and must pass community chat access
 - community-agent mentions store the canonical `community_agent` key, but v0
   writes require the visible current-community-name token in the final text
-- mention rows create canonical `communityInteractionMentions`
+- mention rows create canonical `communityInteractionMentions` bound to the
+  source interaction channel; `@everybody` broadcast and recipient rows inherit
+  that exact channel
 - prepared attachments create canonical `communityInteractionAttachments`
 - write paths do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously
 

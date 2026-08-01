@@ -8,12 +8,15 @@ import {
   GENERAL_CHANNEL_SYSTEM_ROLE,
   interactionIsChannelAddressable,
   listGeneralChannelProjectionRows,
+  requireActiveCommunityChannel,
 } from "./communityChannelCore";
 import { normalizeIdValue } from "./communityCore";
 
 const channelAuditPhaseValidator = v.union(
   v.literal("roots"),
   v.literal("replies"),
+  v.literal("mentions"),
+  v.literal("mention_broadcasts"),
   v.literal("read_cursors"),
   v.literal("typing_presence"),
 );
@@ -21,6 +24,8 @@ const channelAuditPhaseValidator = v.union(
 export type CommunityChannelAuditPhase =
   | "roots"
   | "replies"
+  | "mentions"
+  | "mention_broadcasts"
   | "read_cursors"
   | "typing_presence";
 
@@ -148,6 +153,64 @@ function idsMatch(left: unknown, right: unknown): boolean {
   );
 }
 
+type SourceChannelResolution =
+  | { state: "channel"; channelId: any }
+  | { state: "intentionally_unchanneled" }
+  | { state: "phase_order_blocked" }
+  | { state: "invalid" };
+
+async function resolveSourceChannel(args: {
+  ctx: { db: any };
+  communityId: any;
+  row: { rootId?: any; replyId?: any };
+}): Promise<SourceChannelResolution> {
+  if (Boolean(args.row.rootId) === Boolean(args.row.replyId)) {
+    return { state: "invalid" };
+  }
+  let root: any;
+  if (args.row.replyId) {
+    const reply = await args.ctx.db.get(args.row.replyId);
+    if (
+      !reply ||
+      normalizeIdValue(reply.communityId) !== normalizeIdValue(args.communityId)
+    ) {
+      return { state: "invalid" };
+    }
+    root = await args.ctx.db.get(reply.rootId);
+    if (
+      !root ||
+      normalizeIdValue(root.communityId) !== normalizeIdValue(args.communityId) ||
+      (reply.channelId &&
+        root.channelId &&
+        !idsMatch(reply.channelId, root.channelId))
+    ) {
+      return { state: "invalid" };
+    }
+  } else {
+    root = await args.ctx.db.get(args.row.rootId);
+  }
+  if (
+    !root ||
+    normalizeIdValue(root.communityId) !== normalizeIdValue(args.communityId)
+  ) {
+    return { state: "invalid" };
+  }
+  if (!interactionIsChannelAddressable(root)) {
+    return { state: "intentionally_unchanneled" };
+  }
+  if (!root.channelId) return { state: "phase_order_blocked" };
+  try {
+    const channel = await requireActiveCommunityChannel({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      channelId: root.channelId,
+    });
+    return { state: "channel", channelId: channel._id };
+  } catch {
+    return { state: "invalid" };
+  }
+}
+
 function channelStateAllowsMigration(
   state: GeneralChannelAuditState["state"],
 ): boolean {
@@ -190,17 +253,29 @@ export async function auditGeneralChannelMigrationBatchCore(args: {
   const paginationOpts = boundedPaginationOpts(args.paginationOpts);
   const counts = emptyAuditCounts();
 
-  const batch = await (args.phase === "roots" || args.phase === "replies"
+  const batch = await (
+    args.phase === "roots" ||
+    args.phase === "replies" ||
+    args.phase === "mentions"
     ? args.ctx.db
         .query(
           args.phase === "roots"
             ? ("communityInteractionRoots" as any)
-            : ("communityInteractionReplies" as any),
+            : args.phase === "replies"
+              ? ("communityInteractionReplies" as any)
+              : ("communityInteractionMentions" as any),
         )
         .withIndex("by_community_createdAt", (q: any) =>
           q.eq("communityId", args.communityId),
         )
         .order("asc")
+    : args.phase === "mention_broadcasts"
+      ? args.ctx.db
+          .query("communityMentionBroadcasts" as any)
+          .withIndex("by_community_createdAt", (q: any) =>
+            q.eq("communityId", args.communityId),
+          )
+          .order("asc")
     : args.ctx.db
         .query(
           args.phase === "read_cursors"
@@ -233,11 +308,18 @@ export async function auditGeneralChannelMigrationBatchCore(args: {
         } else {
           counts.blockedByChannelState += 1;
         }
-      } else if (channelId && idsMatch(row.channelId, channelId)) {
-        counts.alreadyCanonical += 1;
       } else {
-        counts.unexpectedChannel += 1;
-        counts.invalid += 1;
+        try {
+          await requireActiveCommunityChannel({
+            ctx: args.ctx,
+            communityId: args.communityId,
+            channelId: row.channelId,
+          });
+          counts.alreadyCanonical += 1;
+        } catch {
+          counts.unexpectedChannel += 1;
+          counts.invalid += 1;
+        }
       }
       continue;
     }
@@ -260,27 +342,98 @@ export async function auditGeneralChannelMigrationBatchCore(args: {
         }
         continue;
       }
-      const rootHasExpectedChannel = Boolean(
-        channelId && idsMatch(root.channelId, channelId),
-      );
-      if (root.channelId && !rootHasExpectedChannel) {
-        counts.unexpectedChannel += 1;
-        counts.invalid += 1;
-        continue;
+      let rootHasExpectedChannel = false;
+      let expectedChannelId = root.channelId ?? channelId;
+      if (root.channelId) {
+        try {
+          await requireActiveCommunityChannel({
+            ctx: args.ctx,
+            communityId: args.communityId,
+            channelId: root.channelId,
+          });
+          rootHasExpectedChannel = true;
+        } catch {
+          counts.unexpectedChannel += 1;
+          counts.invalid += 1;
+          continue;
+        }
       }
       if (!row.channelId) {
         counts.missingChannel += 1;
-        if (migrationAllowed) {
+        if (migrationAllowed && expectedChannelId) {
           counts.wouldUpdate += 1;
           counts.evidenceSyncWouldSchedule += 1;
           if (!rootHasExpectedChannel) counts.phaseOrderBlocked += 1;
         } else {
           counts.blockedByChannelState += 1;
         }
-      } else if (channelId && idsMatch(row.channelId, channelId)) {
+      } else if (expectedChannelId && idsMatch(row.channelId, expectedChannelId)) {
         counts.alreadyCanonical += 1;
         if (!rootHasExpectedChannel) counts.phaseOrderBlocked += 1;
       } else {
+        counts.unexpectedChannel += 1;
+        counts.invalid += 1;
+      }
+      continue;
+    }
+
+    if (args.phase === "mentions" || args.phase === "mention_broadcasts") {
+      const source = await resolveSourceChannel({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        row: {
+          rootId:
+            args.phase === "mention_broadcasts" ? row.sourceRootId : row.rootId,
+          replyId:
+            args.phase === "mention_broadcasts" ? row.sourceReplyId : row.replyId,
+        },
+      });
+      if (source.state === "invalid") {
+        counts.invalid += 1;
+        continue;
+      }
+      if (source.state === "intentionally_unchanneled") {
+        if (row.channelId) {
+          counts.unexpectedChannel += 1;
+          counts.invalid += 1;
+        } else {
+          counts.intentionallyUnchanneled += 1;
+        }
+        continue;
+      }
+      if (source.state === "phase_order_blocked") {
+        counts.missingChannel += row.channelId ? 0 : 1;
+        counts.phaseOrderBlocked += 1;
+        continue;
+      }
+      if (!row.channelId) {
+        counts.missingChannel += 1;
+        if (args.phase === "mention_broadcasts") {
+          const sourceMention = await args.ctx.db.get(row.sourceMentionId);
+          if (!sourceMention || !idsMatch(sourceMention.channelId, source.channelId)) {
+            counts.phaseOrderBlocked += 1;
+            continue;
+          }
+        }
+        counts.wouldUpdate += 1;
+      } else if (idsMatch(row.channelId, source.channelId)) {
+        counts.alreadyCanonical += 1;
+      } else {
+        counts.unexpectedChannel += 1;
+        counts.invalid += 1;
+      }
+      continue;
+    }
+
+    if (row.channelId && (!channelId || !idsMatch(row.channelId, channelId))) {
+      try {
+        await requireActiveCommunityChannel({
+          ctx: args.ctx,
+          communityId: args.communityId,
+          channelId: row.channelId,
+        });
+        counts.alreadyCanonical += 1;
+      } catch {
         counts.unexpectedChannel += 1;
         counts.invalid += 1;
       }

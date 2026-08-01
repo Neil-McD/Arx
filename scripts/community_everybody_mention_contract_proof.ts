@@ -36,7 +36,7 @@ assert.doesNotMatch(
 
 assert.match(
   schema,
-  /communityMentionBroadcasts: defineTable\(\{[\s\S]*sourceMentionId: v\.id\("communityInteractionMentions"\)[\s\S]*emailMode: v\.union\([\s\S]*in_app_only[\s\S]*in_app_and_email[\s\S]*status: v\.union\([\s\S]*queued[\s\S]*draining[\s\S]*complete[\s\S]*canceled[\s\S]*membershipCursor[\s\S]*cleanupState/,
+  /communityMentionBroadcasts: defineTable\(\{[\s\S]*channelId: v\.optional\(v\.id\("communityChannels"\)\)[\s\S]*sourceMentionId: v\.id\("communityInteractionMentions"\)[\s\S]*emailMode: v\.union\([\s\S]*in_app_only[\s\S]*in_app_and_email[\s\S]*status: v\.union\([\s\S]*queued[\s\S]*draining[\s\S]*complete[\s\S]*canceled[\s\S]*membershipCursor[\s\S]*cleanupState/,
   "@everybody must have a durable broadcast ledger for batching, cooldown, and retry state",
 );
 assert.match(
@@ -98,7 +98,7 @@ assert.match(
 
 assert.match(
   interactions,
-  /scheduleEverybodyMentionBroadcast\(\{[\s\S]*actorUserId: args\.actorUserId[\s\S]*sourceMentionId: mentionId/,
+  /scheduleEverybodyMentionBroadcast\(\{[\s\S]*channelId: args\.channelId[\s\S]*actorUserId: args\.actorUserId[\s\S]*sourceMentionId: mentionId/,
   "the source role mention must create the durable broadcast request inside the chat write",
 );
 const scheduleEverybodyMentionBroadcastFn =
@@ -107,6 +107,11 @@ assert.match(
   scheduleEverybodyMentionBroadcastFn,
   /if \(!args\.rootId\)[\s\S]*interaction_mention_broadcast_source_required/,
   "the broadcast scheduler must require a root source for all new @everybody broadcasts",
+);
+assert.match(
+  scheduleEverybodyMentionBroadcastFn,
+  /normalizeIdValue\(root\.channelId\) !== normalizeIdValue\(args\.channelId\)[\s\S]*channelId: args\.channelId/,
+  "the broadcast ledger must validate and persist the source root channel",
 );
 assert.doesNotMatch(
   scheduleEverybodyMentionBroadcastFn,
@@ -162,7 +167,7 @@ assert.match(
 
 assert.match(
   mentionBroadcasts,
-  /mentionKind: "user"[\s\S]*mentionedRoleKey: EVERYBODY_MENTION_ROLE_KEY[\s\S]*emailEligible: args\.broadcast\.emailMode === "in_app_and_email"[\s\S]*notifyState/,
+  /channelId: args\.broadcast\.channelId[\s\S]*mentionKind: "user"[\s\S]*mentionedRoleKey: EVERYBODY_MENTION_ROLE_KEY[\s\S]*emailEligible: args\.broadcast\.emailMode === "in_app_and_email"[\s\S]*notifyState/,
   "@everybody-created recipient rows must stay user rows with role metadata and explicit email eligibility",
 );
 
@@ -207,7 +212,7 @@ assert.match(
 );
 assert.match(
   interactions,
-  /editCommunityInteractionMessage[\s\S]*textContainsEverybodyMentionToken\(text\)[\s\S]*args\.targetType === "reply"[\s\S]*interaction_mention_everybody_reply_not_allowed[\s\S]*previousText[\s\S]*interaction_mention_everybody_edit_create_not_allowed/,
+  /editCommunityInteractionTargetCore[\s\S]*textContainsEverybodyMentionToken\(args\.text\)[\s\S]*args\.targetType === "reply"[\s\S]*interaction_mention_everybody_reply_not_allowed[\s\S]*previousText[\s\S]*interaction_mention_everybody_edit_create_not_allowed/,
   "edits must not introduce @everybody and replies must not retain @everybody",
 );
 assert.match(

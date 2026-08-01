@@ -190,9 +190,9 @@ test("the bounded audit inventories migration state without changing any row", a
       scanned: 3,
       would_update: 1,
       intentionally_unchanneled: 1,
-      unexpected_channel: 1,
-      invalid: 1,
-      migration_blocked: true,
+      unexpected_channel: 0,
+      invalid: 0,
+      migration_blocked: false,
     });
   });
   await t.run(async (ctx) => {

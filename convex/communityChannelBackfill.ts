@@ -7,6 +7,7 @@ import {
   getGeneralChannel,
   interactionIsChannelAddressable,
   listGeneralChannelProjectionRows,
+  requireActiveCommunityChannel,
 } from "./communityChannelCore";
 import {
   normalizeIdValue,
@@ -18,11 +19,19 @@ import { scheduleCommunityInteractionEvidenceSync } from "./communityInteraction
 const backfillPhaseValidator = v.union(
   v.literal("roots"),
   v.literal("replies"),
+  v.literal("mentions"),
+  v.literal("mention_broadcasts"),
   v.literal("read_cursors"),
   v.literal("typing_presence"),
 );
 
-type BackfillPhase = "roots" | "replies" | "read_cursors" | "typing_presence";
+type BackfillPhase =
+  | "roots"
+  | "replies"
+  | "mentions"
+  | "mention_broadcasts"
+  | "read_cursors"
+  | "typing_presence";
 
 const MAX_GENERAL_CHANNEL_BACKFILL_BATCH_SIZE = 100;
 
@@ -51,6 +60,64 @@ function idsMatch(left: unknown, right: unknown): boolean {
     normalizeIdValue(left) &&
       normalizeIdValue(left) === normalizeIdValue(right),
   );
+}
+
+type SourceChannelResolution =
+  | { state: "channel"; channelId: any }
+  | { state: "intentionally_unchanneled" }
+  | { state: "phase_order_blocked" }
+  | { state: "invalid" };
+
+async function resolveSourceChannel(args: {
+  ctx: any;
+  communityId: any;
+  row: { rootId?: any; replyId?: any };
+}): Promise<SourceChannelResolution> {
+  if (Boolean(args.row.rootId) === Boolean(args.row.replyId)) {
+    return { state: "invalid" };
+  }
+  let root: any;
+  if (args.row.replyId) {
+    const reply = await args.ctx.db.get(args.row.replyId);
+    if (
+      !reply ||
+      normalizeIdValue(reply.communityId) !== normalizeIdValue(args.communityId)
+    ) {
+      return { state: "invalid" };
+    }
+    root = await args.ctx.db.get(reply.rootId);
+    if (
+      !root ||
+      normalizeIdValue(root.communityId) !== normalizeIdValue(args.communityId) ||
+      (reply.channelId &&
+        root.channelId &&
+        !idsMatch(reply.channelId, root.channelId))
+    ) {
+      return { state: "invalid" };
+    }
+  } else {
+    root = await args.ctx.db.get(args.row.rootId);
+  }
+  if (
+    !root ||
+    normalizeIdValue(root.communityId) !== normalizeIdValue(args.communityId)
+  ) {
+    return { state: "invalid" };
+  }
+  if (!interactionIsChannelAddressable(root)) {
+    return { state: "intentionally_unchanneled" };
+  }
+  if (!root.channelId) return { state: "phase_order_blocked" };
+  try {
+    const channel = await requireActiveCommunityChannel({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      channelId: root.channelId,
+    });
+    return { state: "channel", channelId: channel._id };
+  } catch {
+    return { state: "invalid" };
+  }
 }
 
 function boundedPaginationOpts(args: {
@@ -114,9 +181,14 @@ export async function backfillGeneralChannelBatchCore(args: {
         continue;
       }
       if (root.channelId) {
-        if (channelId && idsMatch(root.channelId, channelId)) {
+        try {
+          await requireActiveCommunityChannel({
+            ctx: args.ctx,
+            communityId: args.communityId,
+            channelId: root.channelId,
+          });
           counts.alreadyCanonical += 1;
-        } else {
+        } catch {
           counts.invalid += 1;
         }
         continue;
@@ -148,13 +220,24 @@ export async function backfillGeneralChannelBatchCore(args: {
     };
   }
 
-  const batch = await (args.phase === "replies"
+  const batch = await (args.phase === "replies" || args.phase === "mentions"
     ? args.ctx.db
-        .query("communityInteractionReplies" as any)
+        .query(
+          args.phase === "replies"
+            ? ("communityInteractionReplies" as any)
+            : ("communityInteractionMentions" as any),
+        )
         .withIndex("by_community_createdAt", (q: any) =>
           q.eq("communityId", args.communityId),
         )
         .order("asc")
+    : args.phase === "mention_broadcasts"
+      ? args.ctx.db
+          .query("communityMentionBroadcasts" as any)
+          .withIndex("by_community_createdAt", (q: any) =>
+            q.eq("communityId", args.communityId),
+          )
+          .order("asc")
     : args.ctx.db
         .query(
           args.phase === "read_cursors"
@@ -181,21 +264,29 @@ export async function backfillGeneralChannelBatchCore(args: {
         else counts.intentionallyUnchanneled += 1;
         continue;
       }
-      if (root.channelId && (!channelId || !idsMatch(root.channelId, channelId))) {
-        counts.invalid += 1;
-        continue;
-      }
-      const expectedChannelId = channelId;
-      if (!expectedChannelId) {
-        if (row.channelId) counts.invalid += 1;
-        else counts.wouldUpdate += 1;
-        continue;
-      }
-      if (!root.channelId && !args.dryRun) {
+      let expectedChannelId = root.channelId;
+      if (expectedChannelId) {
+        try {
+          await requireActiveCommunityChannel({
+            ctx: args.ctx,
+            communityId: args.communityId,
+            channelId: expectedChannelId,
+          });
+        } catch {
+          counts.invalid += 1;
+          continue;
+        }
+      } else if (!args.dryRun) {
         // Reply evidence derives its channel from the root. Enforce the
         // documented phase order rather than creating a transient mismatch.
         counts.invalid += 1;
         continue;
+      } else {
+        expectedChannelId = channelId;
+        if (!expectedChannelId) {
+          counts.wouldUpdate += 1;
+          continue;
+        }
       }
       if (row.channelId) {
         if (idsMatch(row.channelId, expectedChannelId)) {
@@ -220,6 +311,74 @@ export async function backfillGeneralChannelBatchCore(args: {
       continue;
     }
 
+    if (args.phase === "mentions" || args.phase === "mention_broadcasts") {
+      const source = await resolveSourceChannel({
+        ctx: args.ctx,
+        communityId: args.communityId,
+        row: {
+          rootId:
+            args.phase === "mention_broadcasts" ? row.sourceRootId : row.rootId,
+          replyId:
+            args.phase === "mention_broadcasts" ? row.sourceReplyId : row.replyId,
+        },
+      });
+      if (source.state === "invalid") {
+        counts.invalid += 1;
+        continue;
+      }
+      if (source.state === "intentionally_unchanneled") {
+        if (row.channelId) counts.invalid += 1;
+        else counts.intentionallyUnchanneled += 1;
+        continue;
+      }
+      if (source.state === "phase_order_blocked") {
+        // Roots and replies are the authority for notification projection.
+        // Never guess a channel while their migration phase is incomplete.
+        counts.invalid += 1;
+        continue;
+      }
+      if (row.channelId) {
+        if (idsMatch(row.channelId, source.channelId)) {
+          counts.alreadyCanonical += 1;
+        } else {
+          counts.invalid += 1;
+        }
+        continue;
+      }
+      if (args.phase === "mention_broadcasts") {
+        const sourceMention = await args.ctx.db.get(row.sourceMentionId);
+        if (
+          !sourceMention ||
+          normalizeIdValue(sourceMention.communityId) !==
+            normalizeIdValue(args.communityId) ||
+          !idsMatch(sourceMention.channelId, source.channelId)
+        ) {
+          counts.invalid += 1;
+          continue;
+        }
+      }
+      if (args.dryRun) {
+        counts.wouldUpdate += 1;
+        continue;
+      }
+      await args.ctx.db.patch(row._id, { channelId: source.channelId });
+      counts.updated += 1;
+      continue;
+    }
+
+    if (row.channelId && (!channelId || !idsMatch(row.channelId, channelId))) {
+      try {
+        await requireActiveCommunityChannel({
+          ctx: args.ctx,
+          communityId: args.communityId,
+          channelId: row.channelId,
+        });
+        counts.alreadyCanonical += 1;
+      } catch {
+        counts.invalid += 1;
+      }
+      continue;
+    }
     const projectionRows = await listGeneralChannelProjectionRows({
       ctx: args.ctx,
       tableName:

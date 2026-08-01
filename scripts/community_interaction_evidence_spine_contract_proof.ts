@@ -109,7 +109,12 @@ assert.doesNotMatch(evidence, /vectorSearch|embedGemini|archiveAvailable|archive
 
 assert.match(
   recent,
-  /listGeneralChannelReadableRows<InteractionContextRow>[\s\S]*tableName: "communityInteractionRoots"[\s\S]*tableName: "communityInteractionReplies"/,
+  /listAllActiveChannelReadableRows<InteractionContextRow>[\s\S]*tableName: "communityInteractionRoots"[\s\S]*tableName: "communityInteractionReplies"/,
+);
+assert.match(
+  recent,
+  /requireReadableChannelForAddressableRow[\s\S]*channel_slug: channel\.slug/,
+  "recent context should aggregate active channels and retain channel provenance",
 );
 assert.match(
   channelCore,

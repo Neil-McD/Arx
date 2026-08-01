@@ -15,6 +15,14 @@ export type CloudCommunityAttentionRow = {
   events: boolean;
   mentions: boolean;
   chat_last_seen_at?: number | null;
+  channels?: Array<{
+    channel_id: string | null;
+    channel_slug: string;
+    chat: boolean;
+    mentions: boolean;
+    chat_last_seen_at: number | null;
+    latest_activity_at: number | null;
+  }>;
 };
 
 export async function listCloudCommunityAttentionRows<SessionT>(
@@ -55,6 +63,7 @@ export async function markCloudCommunitySurfaceSeen<SessionT>(
 export async function acknowledgeCloudCommunityChatRead<SessionT>(
   params: CloudCommunityAttentionGatewayParams<SessionT> & {
     communityId: string;
+    channelId?: string | null;
     throughAtMs: number;
   },
 ): Promise<void> {
@@ -62,6 +71,7 @@ export async function acknowledgeCloudCommunityChatRead<SessionT>(
   await client.mutation("communityAttention:acknowledgeCommunityChatRead" as any, {
     authSubject,
     communityId: params.communityId,
+    ...(params.channelId ? { channelId: params.channelId } : null),
     throughAtMs: Math.floor(params.throughAtMs),
   });
 }

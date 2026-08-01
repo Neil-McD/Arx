@@ -55,10 +55,10 @@ import { scheduleCommunityInteractionEvidenceSync } from "./communityInteraction
 import {
   ensureGeneralChannel,
   ensureReplyChannelMatchesRoot,
-  getGeneralChannel,
-  interactionBelongsToGeneralChannel,
-  listGeneralChannelReadableRows,
+  interactionBelongsToChannel,
+  listChannelReadableRows,
   requireChannelForAddressableRoot,
+  resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
 import {
   INTERACTION_EMBED_REFRESH_LEASE_MS,
@@ -182,6 +182,7 @@ type EmbedRow = {
 type MentionRow = {
   _id: any;
   communityId: any;
+  channelId?: any;
   rootId?: any;
   replyId?: any;
   mentionKind: MentionKind;
@@ -935,6 +936,7 @@ async function mapReplyBundle(
 async function insertContentBlocksForTarget(args: {
   ctx: any;
   communityId: any;
+  channelId?: any;
   rootId?: any;
   replyId?: any;
   visibilityScope: InteractionVisibilityScope;
@@ -986,6 +988,7 @@ async function insertContentBlocksForTarget(args: {
     if (block.blockType === "mention") {
       const mentionId = await args.ctx.db.insert("communityInteractionMentions" as any, {
         communityId: args.communityId,
+        ...(args.channelId ? { channelId: args.channelId } : {}),
         ...(args.rootId ? { rootId: args.rootId } : {}),
         ...(args.replyId ? { replyId: args.replyId } : {}),
         mentionKind: block.mentionKind,
@@ -1213,6 +1216,7 @@ export async function materializeLegacyChatRootInteractionPlan(ctx: any, plan: L
   await insertContentBlocksForTarget({
     ctx,
     communityId: plan.communityId,
+    channelId: channel._id,
     rootId,
     visibilityScope: "community",
     blocks: plan.contentBlocks,
@@ -1424,6 +1428,7 @@ export async function materializeLegacyChatReplyInteractionPlan(ctx: any, plan: 
   await insertContentBlocksForTarget({
     ctx,
     communityId: plan.communityId,
+    channelId: channel._id,
     replyId,
     visibilityScope: plan.visibilityScope,
     blocks: plan.contentBlocks,
@@ -1665,6 +1670,7 @@ export async function resolveMentionedUserIdsForInteractionWrite(args: {
 async function insertCommunityInteractionMentionRows(args: {
   ctx: any;
   communityId: any;
+  channelId: any;
   rootId?: any;
   replyId?: any;
   mentionedUserIds: InteractionMentionSpec[];
@@ -1686,6 +1692,7 @@ async function insertCommunityInteractionMentionRows(args: {
   for (const spec of orderedMentionSpecs) {
     const mentionId = await args.ctx.db.insert("communityInteractionMentions" as any, {
       communityId: args.communityId,
+      channelId: args.channelId,
       ...(args.rootId ? { rootId: args.rootId } : {}),
       ...(args.replyId ? { replyId: args.replyId } : {}),
       mentionKind: spec.kind,
@@ -1701,6 +1708,7 @@ async function insertCommunityInteractionMentionRows(args: {
       await scheduleEverybodyMentionBroadcast({
         ctx: args.ctx,
         communityId: args.communityId,
+        channelId: args.channelId,
         rootId: args.rootId,
         actorUserId: args.actorUserId,
         sourceMentionId: mentionId,
@@ -1735,6 +1743,7 @@ export const createCommunityInteractionComposerMessage = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    channelId: v.optional(v.id("communityChannels")),
     idempotencyKey: v.string(),
     text: v.string(),
     rootId: v.optional(v.union(v.id("communityInteractionRoots"), v.null())),
@@ -1761,10 +1770,6 @@ export const createCommunityInteractionComposerMessage = mutation({
     });
     await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
     await requireProfileSetupCompleteForUser(ctx, userId);
-    const generalChannel = await ensureGeneralChannel({
-      ctx,
-      communityId: args.communityId,
-    });
 
     const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
     const attachments = normalizeInteractionAttachmentInputs(args.attachments ?? []);
@@ -1794,6 +1799,13 @@ export const createCommunityInteractionComposerMessage = mutation({
     const nowMs = Date.now();
 
     if (!args.rootId) {
+      const requestedChannel = await resolveRequestedCommunityChannel({
+        ctx,
+        communityId: args.communityId,
+        channelId: args.channelId,
+        ensureGeneralForWrite: true,
+        nowMs,
+      });
       const idempotencyKey = composerIdempotencyKey(
         normalizeIdempotencyKey(args.idempotencyKey),
         "root",
@@ -1811,10 +1823,23 @@ export const createCommunityInteractionComposerMessage = mutation({
       ) {
         throw new Error("interaction_idempotency_key_conflict");
       }
+      if (root) {
+        const existingChannel = await requireChannelForAddressableRoot({
+          ctx,
+          root,
+          nowMs,
+        });
+        if (
+          normalizeIdValue(existingChannel._id) !==
+          normalizeIdValue(requestedChannel._id)
+        ) {
+          throw new Error("interaction_idempotency_key_conflict");
+        }
+      }
       if (!root) {
         const rootId = await ctx.db.insert("communityInteractionRoots" as any, {
           communityId: args.communityId,
-          channelId: generalChannel._id,
+          channelId: requestedChannel._id,
           actorType,
           actorUserId: userId,
           ...(actorAgentKey ? { actorAgentKey } : {}),
@@ -1831,6 +1856,7 @@ export const createCommunityInteractionComposerMessage = mutation({
         const inserted = await insertContentBlocksForTarget({
           ctx,
           communityId: args.communityId,
+          channelId: requestedChannel._id,
           rootId,
           visibilityScope: "community",
           blocks: contentBlocks,
@@ -1840,6 +1866,7 @@ export const createCommunityInteractionComposerMessage = mutation({
         await insertCommunityInteractionMentionRows({
           ctx,
           communityId: args.communityId,
+          channelId: requestedChannel._id,
           rootId,
           mentionedUserIds,
           actorUserId: userId,
@@ -1860,7 +1887,10 @@ export const createCommunityInteractionComposerMessage = mutation({
       }
 
       const rootChannel = await requireChannelForAddressableRoot({ ctx, root });
-      if (normalizeIdValue(rootChannel._id) !== normalizeIdValue(generalChannel._id)) {
+      if (
+        normalizeIdValue(rootChannel._id) !==
+        normalizeIdValue(requestedChannel._id)
+      ) {
         throw new Error("interaction_channel_mismatch");
       }
 
@@ -1907,7 +1937,10 @@ export const createCommunityInteractionComposerMessage = mutation({
       throw new Error("community_agent_dock_dedicated_endpoint_required");
     }
     const rootChannel = await requireChannelForAddressableRoot({ ctx, root });
-    if (normalizeIdValue(rootChannel._id) !== normalizeIdValue(generalChannel._id)) {
+    if (
+      args.channelId &&
+      normalizeIdValue(rootChannel._id) !== normalizeIdValue(args.channelId)
+    ) {
       throw new Error("interaction_channel_mismatch");
     }
 
@@ -1959,6 +1992,7 @@ export const createCommunityInteractionComposerMessage = mutation({
       const insertedReply = await insertContentBlocksForTarget({
         ctx,
         communityId: root.communityId,
+        channelId: rootChannel._id,
         replyId,
         visibilityScope,
         blocks: contentBlocks,
@@ -1968,6 +2002,7 @@ export const createCommunityInteractionComposerMessage = mutation({
       await insertCommunityInteractionMentionRows({
         ctx,
         communityId: root.communityId,
+        channelId: rootChannel._id,
         replyId,
         mentionedUserIds,
         actorUserId: userId,
@@ -2130,6 +2165,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         const inserted = await insertContentBlocksForTarget({
           ctx,
           communityId: args.communityId,
+          channelId: generalChannel._id,
           rootId,
           visibilityScope: "community",
           blocks: contentBlocks,
@@ -2139,6 +2175,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         await insertCommunityInteractionMentionRows({
           ctx,
           communityId: args.communityId,
+          channelId: generalChannel._id,
           rootId,
           mentionedUserIds,
           actorUserId: sponsorUserId,
@@ -2243,6 +2280,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
       const inserted = await insertContentBlocksForTarget({
         ctx,
         communityId: args.communityId,
+        channelId: rootChannel._id,
         replyId,
         visibilityScope,
         blocks: contentBlocks,
@@ -2252,6 +2290,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
       await insertCommunityInteractionMentionRows({
         ctx,
         communityId: args.communityId,
+        channelId: rootChannel._id,
         replyId,
         mentionedUserIds,
         actorUserId: sponsorUserId,
@@ -2558,6 +2597,7 @@ export const listCommunityInteractionRoots = query({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    channelId: v.optional(v.id("communityChannels")),
     beforeCreatedAt: v.optional(v.union(v.number(), v.null())),
     limit: v.optional(v.number()),
     kind: v.optional(v.union(rootKindValidator, v.null())),
@@ -2569,16 +2609,20 @@ export const listCommunityInteractionRoots = query({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const generalChannel = await getGeneralChannel(ctx, args.communityId);
+    const channel = await resolveRequestedCommunityChannel({
+      ctx,
+      communityId: args.communityId,
+      channelId: args.channelId,
+    });
 
     const limit = normalizeReadLimit(args.limit, MAX_INTERACTION_ROOT_READ_LIMIT, 30);
     const beforeCreatedAt = normalizeBeforeNumber(args.beforeCreatedAt);
     const kind = args.kind ?? null;
-    const visibleRows = await listGeneralChannelReadableRows<InteractionRootRow>({
+    const visibleRows = await listChannelReadableRows<InteractionRootRow>({
       ctx,
       tableName: "communityInteractionRoots",
       communityId: args.communityId,
-      generalChannel,
+      channel,
       limit,
       beforeCreatedAt,
       kind,
@@ -2616,10 +2660,11 @@ export const listCommunityInteractionReplies = query({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityChatAccess({ ctx, communityId: root.communityId, userId });
-    const generalChannel = await getGeneralChannel(ctx, root.communityId);
-    if (!interactionBelongsToGeneralChannel(root, generalChannel)) {
-      throw new Error("interaction_root_channel_mismatch");
-    }
+    const rootChannel = await resolveRequestedCommunityChannel({
+      ctx,
+      communityId: root.communityId,
+      channelId: root.channelId,
+    });
 
     const limit = normalizeReadLimit(args.limit, MAX_INTERACTION_REPLY_READ_LIMIT, 50);
     const beforeSeq = normalizeBeforeNumber(args.beforeSeq);
@@ -2635,10 +2680,7 @@ export const listCommunityInteractionReplies = query({
       .filter((row) => {
         try {
           assertCommunityReadableReply(row);
-          if (
-            row.channelId &&
-            normalizeIdValue(row.channelId) !== normalizeIdValue(root.channelId)
-          ) {
+          if (!interactionBelongsToChannel(row, rootChannel)) {
             throw new Error("interaction_reply_channel_mismatch");
           }
           return true;
@@ -2809,6 +2851,7 @@ async function editCommunityInteractionTargetCore(args: {
   await insertContentBlocksForTarget({
     ctx: args.ctx,
     communityId: args.communityId,
+    channelId: args.target.channelId,
     ...(args.targetType === "root" ? { rootId: args.target._id } : { replyId: args.target._id }),
     visibilityScope: args.target.visibilityScope,
     blocks,

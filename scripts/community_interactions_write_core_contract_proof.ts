@@ -176,8 +176,13 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /const actorType = args\.asPersonalAgent \? "personal_agent" : "human"[\s\S]*communityInteractionRoots" as any[\s\S]*channelId: generalChannel\._id[\s\S]*actorType,[\s\S]*actorUserId: userId[\s\S]*kind: "discussion"[\s\S]*status: "live"[\s\S]*visibilityScope: "community"/,
-  "composer root writes should bind General and retain explicit human or personal-agent attribution",
+  /const actorType = args\.asPersonalAgent \? "personal_agent" : "human"[\s\S]*resolveRequestedCommunityChannel\(\{[\s\S]*channelId: args\.channelId[\s\S]*ensureGeneralForWrite: true[\s\S]*communityInteractionRoots" as any[\s\S]*channelId: requestedChannel\._id[\s\S]*actorType,[\s\S]*actorUserId: userId[\s\S]*kind: "discussion"[\s\S]*status: "live"[\s\S]*visibilityScope: "community"/,
+  "composer root writes should bind the authorized requested channel and retain explicit human or personal-agent attribution",
+);
+assert.match(
+  createComposerMessage,
+  /existingChannel[\s\S]*normalizeIdValue\(existingChannel\._id\)[\s\S]*normalizeIdValue\(requestedChannel\._id\)[\s\S]*interaction_idempotency_key_conflict/,
+  "composer root idempotency must bind the original channel",
 );
 assert.match(
   createComposerMessage,
@@ -201,8 +206,8 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /requireChannelForAddressableRoot\(\{ ctx, root \}\)[\s\S]*interaction_channel_mismatch[\s\S]*communityInteractionReplies" as any[\s\S]*channelId: rootChannel\._id/,
-  "composer replies should inherit the server-validated General channel from their root",
+  /requireChannelForAddressableRoot\(\{ ctx, root \}\)[\s\S]*args\.channelId[\s\S]*interaction_channel_mismatch[\s\S]*communityInteractionReplies" as any[\s\S]*channelId: rootChannel\._id/,
+  "composer replies should inherit the server-validated channel from their root and reject a caller mismatch",
 );
 assert.match(
   createComposerMessage,

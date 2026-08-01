@@ -347,6 +347,7 @@ export const setCommunityTyping = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    channelId: v.optional(v.id("communityChannels")),
     rootId: v.optional(v.id("communityInteractionRoots")),
   },
   handler: async (ctx, args) => {
@@ -365,6 +366,7 @@ export const setCommunityTyping = mutation({
     const lease = await renewCommunityTypingLease({
       ctx,
       communityId: args.communityId,
+      channelId: args.channelId,
       userId: args.userId,
       rootId: args.rootId,
     });
@@ -377,6 +379,7 @@ export const clearCommunityTyping = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    channelId: v.optional(v.id("communityChannels")),
     rootId: v.optional(v.id("communityInteractionRoots")),
   },
   handler: async (ctx, args) => {
@@ -393,6 +396,7 @@ export const clearCommunityTyping = mutation({
     const result = await clearCommunityTypingLease({
       ctx,
       communityId: args.communityId,
+      channelId: args.channelId,
       userId,
       rootId: args.rootId,
     });
@@ -405,6 +409,7 @@ export const listCommunityTyping = query({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    channelId: v.optional(v.id("communityChannels")),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -421,6 +426,7 @@ export const listCommunityTyping = query({
     const presence = await resolveCommunityTypingPresence({
       ctx,
       community,
+      channelId: args.channelId,
       viewerUserId: args.userId,
     });
     return {

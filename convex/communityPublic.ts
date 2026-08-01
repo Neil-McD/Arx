@@ -50,8 +50,7 @@ import {
   resolveMemberCommunityPresenceSummary,
 } from "./communityPresenceCore";
 import {
-  getGeneralChannel,
-  listGeneralChannelReadableRows,
+  listAllActiveChannelReadableRows,
 } from "./communityChannelCore";
 
 const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
@@ -89,6 +88,7 @@ const PUBLIC_MEMORY_NOTE_STATUSES = ["promising", "validated", "canonical", "con
 
 type PublicCommunityInteractionActivityRow = {
   _id: any;
+  communityId: any;
   channelId?: any;
   visibilityScope: "private" | "admin" | "community" | "public";
   status: "live" | "hidden" | "deleted";
@@ -108,20 +108,17 @@ export async function resolvePublicCommunityInteractionActivityCounts(
       : PUBLIC_ACTIVITY_COUNT_CAP,
   );
   const sinceMs = (options.nowMs ?? Date.now()) - PUBLIC_MESSAGES_TODAY_WINDOW_MS;
-  const generalChannel = await getGeneralChannel(ctx, communityId);
   const [readableRoots, readableReplies] = await Promise.all([
-    listGeneralChannelReadableRows<PublicCommunityInteractionActivityRow>({
+    listAllActiveChannelReadableRows<PublicCommunityInteractionActivityRow>({
       ctx,
       tableName: "communityInteractionRoots",
       communityId,
-      generalChannel,
       limit: cap,
     }),
-    listGeneralChannelReadableRows<PublicCommunityInteractionActivityRow>({
+    listAllActiveChannelReadableRows<PublicCommunityInteractionActivityRow>({
       ctx,
       tableName: "communityInteractionReplies",
       communityId,
-      generalChannel,
       limit: cap,
     }),
   ]);
