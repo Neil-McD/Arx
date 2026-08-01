@@ -284,33 +284,33 @@
   --status-executed: #202d3f;
 }
 
-/* CRIS theme - "Paper Intelligence" */
-:root[data-theme="cris"] {
+/* Light theme - "Paper Intelligence" */
+:root[data-theme="light"] {
   color-scheme: light;
 
   /*
-   * CRIS Signature Palette
-   * Philosophy: paper is the dominant work surface, lavender identifies
+   * Paper Intelligence Palette
+   * Philosophy: paper is the dominant work surface, neutral gray identifies
    * operating context, and intelligence blue marks live agency and selection.
    */
 
-  /* === FOUNDATION: Paper canvas + lavender context === */
+  /* === FOUNDATION: Paper canvas + neutral context === */
   --bg-app: #F8F8F4;
   --bg-header: rgba(248, 248, 244, 0.94);
-  --bg-panel: #EBE9FB;
+  --bg-panel: #F0F0EE;
   --bg-modal: #FFFFFF;
   --bg-workspace: #F8F8F4;
   --bg-card: #FFFFFF;
   --bg-card-solid: #FFFFFF;
   --bg-card-alt: #F8F8F4;
-  --bg-card-hover: color-mix(in srgb, #EBE9FB 58%, #F8F8F4 42%);
+  --bg-card-hover: #ECECEA;
   --bg-input: #FFFFFF;
   --bg-terminal: #171719;
   --surface-rail: #F8F8F4;
-  --surface-nav: #EBE9FB;
+  --surface-nav: #F0F0EE;
   --workspace-composer-bg: #FFFFFF;
   --workspace-landing-action-bg: #FFFFFF;
-  --workspace-landing-action-hover-bg: color-mix(in srgb, #EBE9FB 58%, #F8F8F4 42%);
+  --workspace-landing-action-hover-bg: #ECECEA;
 
   /* === CONTROLS: Ink on paper === */
   --bg-button: #171719;
@@ -364,8 +364,8 @@
   --active-overlay: rgba(23, 23, 25, 0.08);
   --panel-shadow: none;
 
-  /* === SELECTED STATE: Lavender field + blue structure === */
-  --surface-selected: #DCD8F7;
+  /* === SELECTED STATE: Dark-theme grammar translated onto paper === */
+  --surface-selected: color-mix(in srgb, var(--accent-gold) 16%, var(--surface-card) 84%);
   --stroke-selected: #2F55FF;
   --text-selected: #171719;
 
@@ -385,7 +385,7 @@
 
   /* === STATUS: Light semantic surfaces === */
   --status-default: #FFFFFF;
-  --status-proposed: #DCD8F7;
+  --status-proposed: #E9E9E6;
   --status-approved: color-mix(in srgb, #147A4B 12%, #FFFFFF 88%);
   --status-executed: rgba(47, 85, 255, 0.1);
 

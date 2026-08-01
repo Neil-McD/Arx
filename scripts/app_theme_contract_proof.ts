@@ -59,19 +59,19 @@ function blendHex(foreground: string, background: string, alpha: number): string
     .join("")}`;
 }
 
-const expectedThemeIds: AppTheme[] = ["dark", "polynet", "cris"];
+const expectedThemeIds: AppTheme[] = ["dark", "polynet", "light"];
 assert.deepEqual(
   APP_THEME_DEFINITIONS.map((definition) => definition.id),
   expectedThemeIds,
-  "the canonical theme registry should expose exactly the two existing themes plus CRIS",
+  "the canonical theme registry should expose exactly two dark themes and one light theme",
 );
 assert.equal(APP_THEME_OPTIONS, APP_THEME_DEFINITIONS);
 assert.deepEqual(
-  getAppThemeDefinition("cris"),
+  getAppThemeDefinition("light"),
   {
-    id: "cris",
-    label: "CRIS",
-    description: "Paper workspace + intelligence blue",
+    id: "light",
+    label: "Light",
+    description: "Paper light with intelligence blue",
     disabled: false,
     family: "light",
     browserColor: "#F8F8F4",
@@ -85,7 +85,19 @@ for (const theme of expectedThemeIds) {
   assert.equal(parseAppTheme(theme), theme);
   assert.equal(parseAppTheme(` ${theme} `), theme);
 }
-for (const invalidTheme of [null, undefined, "", "CRIS", "light", "system", "unknown"]) {
+assert.equal(parseAppTheme("cris"), "light");
+assert.equal(parseAppTheme(" cris "), "light");
+for (const invalidTheme of [
+  null,
+  undefined,
+  "",
+  "CRIS",
+  "Light",
+  "system",
+  "unknown",
+  "__proto__",
+  "constructor",
+]) {
   assert.equal(parseAppTheme(invalidTheme), null);
 }
 
@@ -154,8 +166,16 @@ for (const definition of APP_THEME_DEFINITIONS) {
   assert.deepEqual(result.storageReads, [APP_THEME_STORAGE_KEY]);
 }
 
+const primaryAliasBootstrap = runThemeBootstrap({ primary: "cris" });
+assert.equal(primaryAliasBootstrap.rootAttributes.get("data-theme"), "light");
+assert.equal(primaryAliasBootstrap.rootAttributes.get("data-theme-family"), "light");
+assert.equal(primaryAliasBootstrap.browserColor, "#F8F8F4");
+assert.deepEqual(primaryAliasBootstrap.storageReads, [APP_THEME_STORAGE_KEY]);
+
 const legacyBootstrap = runThemeBootstrap({ legacy: "cris" });
-assert.equal(legacyBootstrap.rootAttributes.get("data-theme"), "cris");
+assert.equal(legacyBootstrap.rootAttributes.get("data-theme"), "light");
+assert.equal(legacyBootstrap.rootAttributes.get("data-theme-family"), "light");
+assert.equal(legacyBootstrap.browserColor, "#F8F8F4");
 assert.deepEqual(legacyBootstrap.storageReads, [
   APP_THEME_STORAGE_KEY,
   LEGACY_APP_THEME_STORAGE_KEY,
@@ -192,8 +212,8 @@ const root = {
   },
 } as unknown as HTMLElement;
 
-applyAppThemeAttributes("cris", root);
-assert.equal(attributes.get("data-theme"), "cris");
+applyAppThemeAttributes("light", root);
+assert.equal(attributes.get("data-theme"), "light");
 assert.equal(attributes.get("data-theme-family"), "light");
 assert.equal(browserThemeColor, "#F8F8F4");
 
@@ -229,32 +249,36 @@ const voiceInputButton = read("shared/VoiceInputButton.tsx");
 const mvpGuards = read(".github/workflows/mvp-guards.yml");
 const releaseGate = read("scripts/release_gate.mjs");
 
-const crisThemeBlock = baseCss.match(
-  /:root\[data-theme="cris"\]\s*\{([\s\S]*?)\n\}/,
+const lightThemeBlock = baseCss.match(
+  /:root\[data-theme="light"\]\s*\{([\s\S]*?)\n\}/,
 )?.[1];
-assert.ok(crisThemeBlock, "base.css should define one canonical CRIS theme block");
+assert.ok(lightThemeBlock, "base.css should define one canonical Light theme block");
 assert.equal(
-  baseCss.match(/:root\[data-theme="cris"\]/g)?.length,
+  baseCss.match(/:root\[data-theme="light"\]/g)?.length,
   1,
-  "CRIS identity tokens should have exactly one theme-id-scoped owner",
+  "Light identity tokens should have exactly one theme-id-scoped owner",
 );
 
 [
   "--bg-app: #F8F8F4;",
   "--bg-workspace: #F8F8F4;",
-  "--bg-panel: #EBE9FB;",
+  "--bg-panel: #F0F0EE;",
   "--surface-rail: #F8F8F4;",
-  "--surface-nav: #EBE9FB;",
+  "--surface-nav: #F0F0EE;",
   "--bg-card: #FFFFFF;",
-  "--surface-selected: #DCD8F7;",
+  "--bg-card-hover: #ECECEA;",
+  "--surface-selected: color-mix(in srgb, var(--accent-gold) 16%, var(--surface-card) 84%);",
   "--text-primary: #171719;",
   "--text-muted: #6B6974;",
+  "--text-faint: #6B6974;",
   "--border-strong: rgba(23, 23, 25, 0.22);",
   "--border-default: rgba(23, 23, 25, 0.1);",
   "--divider-accent: rgba(23, 23, 25, 0.22);",
+  "--accent-brand: #2F55FF;",
   "--accent-selection: #2F55FF;",
   "--accent-agent: #2F55FF;",
   "--text-link: #2F55FF;",
+  "--stroke-selected: #2F55FF;",
   "--text-selected: #171719;",
   "--community-social-embed-surface: var(--surface-card);",
   "--community-social-embed-surface-hover: var(--surface-card-hover);",
@@ -262,9 +286,15 @@ assert.equal(
   "--community-social-embed-text: var(--text-ink-primary);",
   "--community-social-embed-muted: var(--text-ink-secondary);",
 ].forEach((token) => {
-  assert.ok(crisThemeBlock.includes(token), `CRIS should define ${token}`);
+  assert.ok(lightThemeBlock.includes(token), `Light should define ${token}`);
 });
-assert.match(crisThemeBlock, /color-scheme:\s*light;/);
+for (const removedLavender of ["#EBE9FB", "#DCD8F7"]) {
+  assert.ok(
+    !lightThemeBlock.includes(removedLavender),
+    `Light structural surfaces should not retain legacy lavender ${removedLavender}`,
+  );
+}
+assert.match(lightThemeBlock, /color-scheme:\s*light;/);
 assert.match(
   baseCss,
   /\.community-interaction-day::before,[\s\S]*?\.community-interaction-day::after\s*\{[\s\S]*?background:\s*var\(--stroke-divider-accent\);/,
@@ -279,8 +309,8 @@ assert.match(
 assert.match(baseCss, /:root\[data-theme-family="dark"\]\s*\.model-picker-nav-logo-img\.monochrome/);
 assert.doesNotMatch(
   baseCss,
-  /:root\[data-theme="cris"\][^{]*\{[^}]*filter:\s*invert\(1\)/,
-  "the light CRIS family must not inherit dark-only image inversion",
+  /:root\[data-theme="light"\][^{]*\{[^}]*filter:\s*invert\(1\)/,
+  "the Light theme must not inherit dark-only image inversion",
 );
 assert.match(
   baseCss,
@@ -331,7 +361,7 @@ assert.doesNotMatch(
 assert.match(appearance, /role="group" aria-label="Theme"/);
 assert.match(appearance, /aria-pressed=\{appTheme === theme\.id\}/);
 assert.match(baseCss, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(180px,\s*1fr\)\);/);
-assert.match(baseCss, /data-preview-theme="cris"/);
+assert.match(baseCss, /data-preview-theme="light"/);
 const genericSettingsButtonSelector =
   baseCss.match(/\.settings-panel button[^{]+\{/)?.[0] ?? "";
 assert.match(
@@ -387,7 +417,7 @@ assert.match(
 );
 assert.match(
   releaseGate,
-  /"cris_theme_contract"[\s\S]*?"npm run check:cris-theme-contract-proof"/,
+  /"app_theme_contract"[\s\S]*?"npm run check:app-theme-contract-proof"/,
   "the canonical release gate should retain the theme lifecycle contract",
 );
 
@@ -399,7 +429,7 @@ assert.match(
 assert.match(
   memberAgentCss,
   /:root\[data-theme-family="light"\]\s*\.member-agent-dock\s*\{[\s\S]*?--member-agent-launcher-background:\s*var\(--surface-selected\);[\s\S]*?--member-agent-launcher-border:\s*var\(--stroke-default\);[\s\S]*?--member-agent-launcher-shadow:\s*0 4px 12px rgba\(23, 23, 25, 0\.14\);[\s\S]*?--member-agent-launcher-glyph-filter:\s*none;/,
-  "the light family should use the raised lavender surface without dark-theme highlights or glyph shadow",
+  "the light family should use the selected surface without dark-theme highlights or glyph shadow",
 );
 assert.match(
   memberAgentCss,
@@ -455,8 +485,8 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   `${baseCss}\n${funnelCss}\n${memberAgentCss}`,
-  /:root\[data-theme="cris"\]\s+\./,
-  "component luminance adapters should use the canonical theme family, not CRIS identity",
+  /:root\[data-theme="light"\]\s+\./,
+  "component luminance adapters should use the canonical theme family, not Light identity",
 );
 
 [
@@ -475,10 +505,10 @@ assert.doesNotMatch(
   /:root\[data-theme-family="light"\]\s*\.status\.canceled,[\s\S]*?background:\s*color-mix\(in srgb,\s*var\(--accent-error\) 14%,\s*transparent\);[\s\S]*?color:\s*var\(--accent-error\);/,
   /:root\[data-theme-family="light"\]\s*\.action-error\s*\{[\s\S]*?color:\s*var\(--accent-error\);/,
   /:root\[data-theme-family="light"\]\s*\.settings-section\s*\{[\s\S]*?border-bottom-color:\s*var\(--border-default\);/,
-].forEach((crisAdapter) => {
+].forEach((lightAdapter) => {
   assert.match(
     baseCss,
-    crisAdapter,
+    lightAdapter,
     "light-theme component divergence must remain explicitly scoped to the light family",
   );
 });
@@ -562,17 +592,21 @@ assert.match(
 );
 
 const accessiblePairs = [
-  ["Ink on Paper", "#171719", "#F8F8F4"],
-  ["Muted ink on Paper", "#6B6974", "#F8F8F4"],
-  ["Intelligence blue on Paper", "#2F55FF", "#F8F8F4"],
-  ["Intelligence blue on Operating field", "#2F55FF", "#EBE9FB"],
-  ["White on Intelligence blue", "#FFFFFF", "#2F55FF"],
+  ["Primary ink on canvas", "#171719", "#F8F8F4"],
+  ["Secondary ink on canvas", "#6B6974", "#F8F8F4"],
+  ["Muted ink on canvas", "#6B6974", "#F8F8F4"],
+  ["Faint ink on canvas", "#6B6974", "#F8F8F4"],
+  ["Selection ink on card", "#171719", "#FFFFFF"],
+  ["White on control ink", "#FFFFFF", "#171719"],
+  ["Intelligence blue on card", "#2F55FF", "#FFFFFF"],
+  ["Intelligence blue on canvas", "#2F55FF", "#F8F8F4"],
   [
-    "Intelligence blue on premium pill surface",
+    "Intelligence blue on agent surface",
     "#2F55FF",
-    blendHex("#2F55FF", "#FFFFFF", 0.08),
+    blendHex("#2F55FF", "#FFFFFF", 0.1),
   ],
-  ["Functional error on Paper", "#B42318", "#F8F8F4"],
+  ["Functional success on card", "#147A4B", "#FFFFFF"],
+  ["Functional error on canvas", "#B42318", "#F8F8F4"],
   [
     "Functional error on recording surface",
     "#B42318",
@@ -581,7 +615,7 @@ const accessiblePairs = [
   [
     "Functional error on dock feedback surface",
     "#B42318",
-    blendHex("#B42318", "#EBE9FB", 0.1),
+    blendHex("#B42318", "#F0F0EE", 0.1),
   ],
 ] as const;
 for (const [label, foreground, background] of accessiblePairs) {
@@ -591,4 +625,4 @@ for (const [label, foreground, background] of accessiblePairs) {
   );
 }
 
-console.log("cris_theme_contract_proof: ok");
+console.log("app_theme_contract_proof: ok");

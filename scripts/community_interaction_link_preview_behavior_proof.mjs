@@ -18,7 +18,13 @@ import {
   interactionXStatusIdentity as sharedInteractionXStatusIdentity,
 } from "../shared/interactionEmbedPreviewContract.ts";
 
-const previewCss = readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8");
+const previewCss = [
+  readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8"),
+  readFileSync(
+    new URL("../apps/web/src/styles/community-and-content.css", import.meta.url),
+    "utf8",
+  ),
+].join("\n");
 const previewComponent = readFileSync(
   new URL("../apps/web/src/components/CommunityInteractionLinkPreview.tsx", import.meta.url),
   "utf8",
@@ -389,8 +395,8 @@ assert.match(
 );
 assert.match(
   previewCss,
-  /:root\s*\{[\s\S]*--community-social-embed-surface:\s*#000;[\s\S]*--community-social-embed-surface-hover:\s*#080808;[\s\S]*--community-social-embed-stroke:\s*#2f3336;[\s\S]*--community-social-embed-text:\s*#e7e9ea;[\s\S]*:root\[data-theme="cris"\]\s*\{[\s\S]*--community-social-embed-surface:\s*var\(--surface-card\);[\s\S]*--community-social-embed-surface-hover:\s*var\(--surface-card-hover\);[\s\S]*--community-social-embed-stroke:\s*var\(--stroke-default\);[\s\S]*--community-social-embed-text:\s*var\(--text-ink-primary\);/,
-  "dark themes should preserve the existing X shell while CRIS remaps it onto canonical light-theme tokens",
+  /:root\s*\{[\s\S]*--community-social-embed-surface:\s*#000;[\s\S]*--community-social-embed-surface-hover:\s*#080808;[\s\S]*--community-social-embed-stroke:\s*#2f3336;[\s\S]*--community-social-embed-text:\s*#e7e9ea;[\s\S]*:root\[data-theme="light"\]\s*\{[\s\S]*--community-social-embed-surface:\s*var\(--surface-card\);[\s\S]*--community-social-embed-surface-hover:\s*var\(--surface-card-hover\);[\s\S]*--community-social-embed-stroke:\s*var\(--stroke-default\);[\s\S]*--community-social-embed-text:\s*var\(--text-ink-primary\);/,
+  "dark themes should preserve the existing X shell while Light remaps it onto canonical light-theme tokens",
 );
 assert.match(
   socialPreviewComponent,

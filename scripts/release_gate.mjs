@@ -401,10 +401,10 @@ async function main() {
     );
 
     await runStep(
-      "cris_theme_contract",
-      "CRIS theme contract",
-      "npm run check:cris-theme-contract-proof",
-      () => runCommand("npm", ["run", "check:cris-theme-contract-proof"]),
+      "app_theme_contract",
+      "App theme contract",
+      "npm run check:app-theme-contract-proof",
+      () => runCommand("npm", ["run", "check:app-theme-contract-proof"]),
     );
 
     await runStep(

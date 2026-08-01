@@ -11,8 +11,9 @@
         const themes = {
           dark: { family: "dark", browserColor: "#1A1A1A" },
           polynet: { family: "dark", browserColor: "#121214" },
-          cris: { family: "light", browserColor: "#F8F8F4" },
+          light: { family: "light", browserColor: "#F8F8F4" },
         };
+        const legacyThemeAliases = { cris: "light" };
         const fallbackTheme = "polynet";
         let theme = fallbackTheme;
         try {
@@ -21,8 +22,14 @@
             localStorage.getItem("arx-theme") ??
             ""
           ).trim();
-          if (Object.prototype.hasOwnProperty.call(themes, storedTheme)) {
-            theme = storedTheme;
+          const canonicalStoredTheme = Object.prototype.hasOwnProperty.call(
+            legacyThemeAliases,
+            storedTheme,
+          )
+            ? legacyThemeAliases[storedTheme]
+            : storedTheme;
+          if (Object.prototype.hasOwnProperty.call(themes, canonicalStoredTheme)) {
+            theme = canonicalStoredTheme;
           }
         } catch {
           // Storage can be unavailable in hardened browser contexts.
