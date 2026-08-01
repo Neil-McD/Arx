@@ -21,6 +21,7 @@ const backend = read("convex/founderInference.ts");
 const fundingRuntime = read("convex/founderInferenceRuntime.ts");
 const migration = read("convex/founderInferenceMigration.ts");
 const lifecycle = read("convex/communityLifecycle.ts");
+const communityPublic = read("convex/communityPublic.ts");
 const intake = read("convex/communityAgentConciergeCore.ts");
 const worker = read("convex/communityAgentServeWorker.ts");
 const autonomousRuntime = read("convex/communityAgentRuntime.ts");
@@ -31,6 +32,10 @@ const settings = read("apps/web/src/components/WebAccountSettingsSection.tsx");
 const billingSettings = read("apps/web/src/components/WebBillingSettingsSection.tsx");
 const billingGateway = read("shared/cloudFounderBillingGateway.ts");
 const billingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
+const fundingPrompt = read("apps/web/src/components/WebFounderFundingPrompt.tsx");
+const createController = read("shared/useCommunityCreateController.ts");
+const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
+const webApp = read("apps/web/src/App.tsx");
 const legal = read("docs/legal/community-owner-inference-funding-v2.md");
 const cognitionContract = read("docs/community-agent-cognition-contract-v1.md");
 const billingContract = read("docs/product/reference/billing-entitlements.md");
@@ -76,13 +81,24 @@ assert.match(migration, /existing_founder_current_owner_count_mismatch/);
 assert.match(migration, /existing_founder_owner_set_mismatch/);
 assert.match(migration, /sourceProgram !== "builder_partner_v1"/);
 assert.match(migration, /await ctx\.db\.delete\(policy\._id\)/);
+assert.match(migration, /transitionExistingFounderToManagedInternal/);
+assert.match(migration, /founder_transition_community_set_mismatch/);
+assert.match(migration, /inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,[\s\S]*visibility: "unlisted"/);
+assert.match(migration, /await ctx\.db\.delete\(grant\._id\)/);
 assert.doesNotMatch(migration, /legacyProgramGrants|sourcePartnerRecordId/);
 
-assert.match(lifecycle, /requireExistingFounderCommunityCreationEligibility\(ctx, ownerId\)/);
+assert.doesNotMatch(lifecycle, /requireExistingFounderCommunityCreationEligibility/);
+assert.match(lifecycle, /requestedVisibility === "published"[\s\S]*community_founder_funding_required_to_publish/);
+assert.match(lifecycle, /requireCommunityFounderFundingForPublish/);
 assert.doesNotMatch(lifecycle, /attachFounderSubscriptionToCommunity\(\{/);
 assert.match(lifecycle, /inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED/);
-assert.match(core, /if \(!\(await existingFounderInferenceCohortIsInitialized\(ctx\)\)\) return/);
-assert.match(core, /throw new Error\("founder_plan_required"\)/);
+assert.match(core, /if \(!\(await existingFounderInferenceCohortIsInitialized\(ctx\)\)\) \{[\s\S]*legacy_requester_chatgpt/);
+assert.match(core, /communityFounderFundingAllowsPublicAccess/);
+assert.match(core, /requireCommunityFounderFundingForPublish/);
+assert.match(communityPublic, /resolvePublicFunnelBySlug[\s\S]*communityFounderFundingAllowsPublicAccess/);
+assert.match(communityPublic, /listPublicDiscoverCommunities[\s\S]*communityFounderFundingAllowsPublicAccess/);
+assert.match(communityPublic, /joinPublicCommunityInternal[\s\S]*community_not_available/);
+assert.match(core, /return \{ ok: false, code: "founder_plan_required" \}/);
 assert.match(core, /grant\.status === "approved"[\s\S]*mode: "legacy_requester_chatgpt"/);
 assert.match(core, /grant\.status === "suspended"[\s\S]*owner_funding_suspended/);
 assert.match(core, /mode: "owner_api_key"[\s\S]*payerUserId: community\.ownerId/);
@@ -119,9 +135,9 @@ assert.match(
   /event\.type === "customer\.subscription\.deleted"[\s\S]*forceStatus: "ended"/,
 );
 assert.match(envExample, /POLYNET_FOUNDER_STRIPE_PRICE_ID=/);
-assert.match(envExample, /POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS=/);
-assert.match(envExample, /POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS=/);
-assert.match(envExample, /POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS=/);
+assert.match(envExample, /POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS=200000/);
+assert.match(envExample, /POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS=1200000/);
+assert.match(envExample, /POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS=1000000/);
 assert.match(accountSetup, /founderSubscriptions[\s\S]*hasManagedInference/);
 assert.match(accountSetup, /founderSubscriptionStatusGrantsAccess/);
 
@@ -190,13 +206,21 @@ assert.match(billingGateway, /founderBilling:startFounderSubscriptionCheckout/);
 assert.match(billingGateway, /founderBilling:startFounderBillingPortal/);
 assert.match(billingController, /founder_community/);
 assert.match(billingController, /scrubCurrentRouteSearchParams/);
+assert.match(billingController, /fundingAttentionCommunities/);
+assert.match(fundingPrompt, /Payment unlocks community AI and public launch/);
+assert.match(fundingPrompt, /Continue setup for now/);
+assert.match(createController, /visibility: "unlisted"/);
+assert.doesNotMatch(createModal, /option value="published"/);
+assert.match(createModal, /Create and continue to payment/);
+assert.match(webApp, /await founderBilling\.refresh\(\);[\s\S]*await founderBilling\.startCheckout\(community\.id\)/);
 assert.match(legal, /does not transfer the founder's administrative permissions to a member/);
 assert.match(legal, /Receipts do not contain the API key, prompts, responses, or tool output/);
 assert.match(
   cognitionContract,
   /Direct Concierge chat, autonomous cognition, and AI-assisted setup generation are community-founder-funded/,
 );
-assert.match(billingContract, /\$79 USD monthly for one specific existing community/);
+assert.match(billingContract, /\$79 USD monthly for one specific community/);
+assert.match(billingContract, /new founder creates one unlisted managed draft and continues directly to community-targeted checkout/);
 assert.match(billingContract, /Each monthly cycle includes up to \$20 in raw model cost/);
 assert.match(billingContract, /founder plan is not publicly live/);
 assert.doesNotMatch(

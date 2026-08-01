@@ -42,6 +42,7 @@ import {
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { hashBusinessVisitorKey } from "./businessAnalyticsCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
+import { communityFounderFundingAllowsPublicAccess } from "./founderInferenceCore";
 import {
   COMMUNITY_PRESENCE_FACE_LIMIT,
   renewCommunityPresenceLease,
@@ -315,6 +316,9 @@ export const resolvePublicFunnelBySlug = query({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) return { ok: false };
+    if (!(await communityFounderFundingAllowsPublicAccess(ctx, community._id))) {
+      return { ok: false };
+    }
 
     const mappedPlans = await listCurrentCommunitySellablePlans(ctx, community._id);
     const activePlan = pickPreferredActivePlan(mappedPlans);
@@ -363,6 +367,9 @@ export const resolvePublicFunnelStatsBySlug = query({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) return { ok: false };
+    if (!(await communityFounderFundingAllowsPublicAccess(ctx, community._id))) {
+      return { ok: false };
+    }
 
     const activityCounts = await resolvePublicCommunityActivityCounts(ctx, community._id);
     return {
@@ -391,6 +398,9 @@ export const resolvePublicCommunityAccessBySlug = query({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) return { ok: false as const };
+    if (!(await communityFounderFundingAllowsPublicAccess(ctx, community._id))) {
+      return { ok: false as const };
+    }
 
     let userId: any = null;
     try {
@@ -440,6 +450,9 @@ export const recordPublicFunnelVisitBySlug = mutation({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) return { ok: false };
+    if (!(await communityFounderFundingAllowsPublicAccess(ctx, community._id))) {
+      return { ok: false };
+    }
 
     let userId: any = undefined;
     const authSubject = String(args.authSubject ?? "").trim();
@@ -549,8 +562,11 @@ export const listPublicDiscoverCommunities = query({
       .order("desc")
       .take(limit)) as CommunityLike[];
 
-    const communities = await Promise.all(
+    const communities = (await Promise.all(
       published.map(async (community) => {
+        if (!(await communityFounderFundingAllowsPublicAccess(ctx, community._id))) {
+          return null;
+        }
         const mappedPlans = await listCurrentCommunitySellablePlans(ctx, community._id);
         const branding = await resolveCommunityBrandingFields(ctx, community);
         const entryPolicy = resolveCommunityEntryPolicy(community);
@@ -574,7 +590,7 @@ export const listPublicDiscoverCommunities = query({
           active_plan: pickPreferredActivePlan(mappedPlans),
         };
       }),
-    );
+    )).filter((community) => community !== null);
 
     return {
       ok: true,
@@ -667,6 +683,9 @@ async function joinPublicCommunityInternal(args: {
   community_id: string;
   reapply_at?: string | null;
 }> {
+  if (!(await communityFounderFundingAllowsPublicAccess(args.ctx, args.community._id))) {
+    throw new Error("community_not_available");
+  }
   await requireCommunityUserNotBlocked({
     ctx: args.ctx,
     communityId: args.community._id,

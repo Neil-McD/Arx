@@ -36,6 +36,7 @@ export function useWebFounderBillingController(params: {
   const [isLoading, setIsLoading] = useState(false);
   const [actionCommunityId, setActionCommunityId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isFundingPromptDismissed, setIsFundingPromptDismissed] = useState(false);
   const ensureSessionRef = useRef(params.ensureSession);
   ensureSessionRef.current = params.ensureSession;
 
@@ -64,10 +65,12 @@ export function useWebFounderBillingController(params: {
       setIsLoading(false);
       setActionCommunityId(null);
       setError(null);
+      setIsFundingPromptDismissed(false);
       return;
     }
+    setIsFundingPromptDismissed(false);
     void refresh(params.session);
-  }, [params.session, refresh]);
+  }, [params.session?.user.id, refresh]);
 
   useEffect(() => {
     if (!params.session || typeof window === "undefined") return;
@@ -140,6 +143,19 @@ export function useWebFounderBillingController(params: {
     isLoading,
     actionCommunityId,
     error,
+    fundingAttentionCommunities: overview.communities.filter(
+      (community) =>
+        community.funding_mode === "managed" &&
+        [
+          "managed_required",
+          "managed_checkout_pending",
+          "past_due",
+          "canceled",
+          "ended",
+        ].includes(community.status),
+    ),
+    isFundingPromptDismissed,
+    dismissFundingPrompt: () => setIsFundingPromptDismissed(true),
     refresh,
     startCheckout,
     openPortal,

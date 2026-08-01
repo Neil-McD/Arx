@@ -29,15 +29,16 @@ If those answers are vague, more settings will not fix the product.
 
 ## Core Steps
 
-1. Create or configure a community.
-2. Define the community purpose and public profile.
-3. Configure the community agent.
-4. Add resources that represent durable community knowledge.
-5. Attach skills where repeatable agent behavior is needed.
-6. Configure access, billing, and roles.
-7. Verify the official Polynet MCP handoff for external harness users.
-8. Share the community funnel.
-9. Improve the system based on member participation and useful signal.
+1. Create the community as an unlisted draft.
+2. Fund that community through its $79 monthly founder plan.
+3. Define the community purpose and public profile.
+4. Configure the community agent.
+5. Add resources that represent durable community knowledge.
+6. Attach skills where repeatable agent behavior is needed.
+7. Configure member access, billing, and roles.
+8. Verify the official Polynet MCP handoff for external harness users.
+9. Publish and share the community funnel.
+10. Improve the system based on member participation and useful signal.
 
 ## Builder Mental Model
 
@@ -83,6 +84,8 @@ The cash path is simple: configure the community, define the paid access model, 
 - Builder payouts depend on payout provider readiness.
 - Existing approved founders can continue managing their owned communities.
 - Each managed community requires its own verified $79 monthly funding subscription.
+- A new community begins as an unlisted managed draft and continues directly to founder checkout.
+- An unpaid managed draft can be configured, but cannot publish, appear in Discover, accept public joins, or run community-funded AI.
 - Polynet Premium does not increase community count or alter community fees.
 - Premium unlocks paid tools such as hosted workspace tools, web research, and premium runtimes.
 - Owner/admin manage resources and most operational settings.

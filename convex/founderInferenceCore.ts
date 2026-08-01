@@ -85,15 +85,6 @@ export async function existingFounderInferenceCohortIsInitialized(ctx: any): Pro
   return Boolean(row);
 }
 
-export async function requireExistingFounderCommunityCreationEligibility(
-  ctx: any,
-  userId: any,
-): Promise<void> {
-  if (!(await existingFounderInferenceCohortIsInitialized(ctx))) return;
-  if (await getExistingFounderInferenceGrant(ctx, userId)) return;
-  throw new Error("founder_plan_required");
-}
-
 export function normalizeCommunityInferenceFundingPolicy(
   value: unknown,
 ): CommunityInferenceFundingPolicy | null {
@@ -159,17 +150,6 @@ export async function resolveCommunityInferenceFundingAdmission(
   } | null;
   if (!community?.ownerId) return { ok: false, code: "community_not_found" };
 
-  if (!(await existingFounderInferenceCohortIsInitialized(ctx))) {
-    return {
-      ok: true,
-      mode: "legacy_requester_chatgpt",
-      transitional: true,
-      payerUserId: null,
-      grantId: null,
-      modelId: null,
-    };
-  }
-
   let attachedSubscription;
   try {
     attachedSubscription = await getFounderSubscriptionByCommunity(
@@ -201,6 +181,23 @@ export async function resolveCommunityInferenceFundingAdmission(
       payerUserId: community.ownerId,
       subscriptionId: attachedSubscription._id,
       modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
+    };
+  }
+
+  const explicitFundingPolicy = normalizeCommunityInferenceFundingPolicy(
+    community.inferenceFundingPolicy,
+  );
+  if (explicitFundingPolicy === COMMUNITY_FUNDING_POLICY_MANAGED) {
+    return { ok: false, code: "founder_plan_required" };
+  }
+  if (!(await existingFounderInferenceCohortIsInitialized(ctx))) {
+    return {
+      ok: true,
+      mode: "legacy_requester_chatgpt",
+      transitional: true,
+      payerUserId: null,
+      grantId: null,
+      modelId: null,
     };
   }
 
@@ -238,6 +235,25 @@ export async function resolveCommunityInferenceFundingAdmission(
     grantId: grant._id,
     modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
   };
+}
+
+export async function communityFounderFundingAllowsPublicAccess(
+  ctx: any,
+  communityId: any,
+): Promise<boolean> {
+  return (await resolveCommunityInferenceFundingAdmission(ctx, communityId)).ok;
+}
+
+export async function requireCommunityFounderFundingForPublish(
+  ctx: any,
+  communityId: any,
+): Promise<void> {
+  const admission = await resolveCommunityInferenceFundingAdmission(ctx, communityId);
+  if (admission.ok) return;
+  if (admission.code === "owner_credential_missing") {
+    throw new Error("community_owner_credential_required_to_publish");
+  }
+  throw new Error("community_founder_funding_required_to_publish");
 }
 
 export async function settleAuthorizedFounderInferenceReceipt(args: {

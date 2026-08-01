@@ -18,8 +18,6 @@ type AccountCommerceStatusLike = {
   max_communities: number;
 };
 
-type Visibility = "published" | "unlisted";
-
 type UseWebCommunityUiControllerParams<
   SessionT extends SessionLike,
   CommunityT extends CommunityLike,
@@ -64,7 +62,6 @@ type CommunityCreateModalHostProps<
   createCommunityName: string;
   createCommunityOneLiner: string;
   createCommunitySlug: string;
-  createCommunityVisibility: Visibility;
   createCommunityError: string | null;
   isCreatingCommunity: boolean;
   communityInitials: (value: string) => string;
@@ -82,7 +79,6 @@ type CommunityCreateModalHostProps<
   onChangeOneLiner: (value: string) => void;
   onChangeSlug: (value: string) => void;
   onChangeSlugEdited: (value: boolean) => void;
-  onChangeVisibility: (value: Visibility) => void;
 };
 
 export type WebCommunityModalHostPropsShape<
@@ -112,7 +108,6 @@ export function useWebCommunityUiController<
   const [createCommunityName, setCreateCommunityName] = useState("");
   const [createCommunitySlug, setCreateCommunitySlug] = useState("");
   const [createCommunitySlugEdited, setCreateCommunitySlugEdited] = useState(false);
-  const [createCommunityVisibility, setCreateCommunityVisibility] = useState<Visibility>("unlisted");
   const [createCommunityAvatarUrl, setCreateCommunityAvatarUrl] = useState<string | null>(null);
   const [createCommunityOneLiner, setCreateCommunityOneLiner] = useState("");
   const [createCommunityBannerUrl, setCreateCommunityBannerUrl] = useState<string | null>(null);
@@ -147,14 +142,12 @@ export function useWebCommunityUiController<
     createCommunityName,
     createCommunitySlug,
     createCommunitySlugEdited,
-    createCommunityVisibility,
     createCommunityAvatarUrl,
     createCommunityOneLiner,
     createCommunityBannerUrl,
     setCreateCommunityName,
     setCreateCommunitySlug,
     setCreateCommunitySlugEdited,
-    setCreateCommunityVisibility,
     setCreateCommunityAvatarUrl,
     setCreateCommunityOneLiner,
     setCreateCommunityBannerUrl,
@@ -188,7 +181,6 @@ export function useWebCommunityUiController<
         createCommunityName,
         createCommunityOneLiner,
         createCommunitySlug,
-        createCommunityVisibility,
         createCommunityError,
         isCreatingCommunity,
         communityInitials: params.communityInitials,
@@ -206,7 +198,6 @@ export function useWebCommunityUiController<
         onChangeOneLiner: setCreateCommunityOneLiner,
         onChangeSlug: setCreateCommunitySlug,
         onChangeSlugEdited: setCreateCommunitySlugEdited,
-        onChangeVisibility: setCreateCommunityVisibility,
       },
     },
   };

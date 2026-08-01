@@ -33,14 +33,13 @@ import {
 } from "./accountSetupCore";
 import {
   getCommunityPublishReadinessBlockingFields,
-  getCommunityPublishReadinessMissingFields,
   type CommunityPublishReadinessInput,
 } from "../shared/communityPublishReadiness";
 import {
   canReceiveCommunityRevenue,
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
-import { requireExistingFounderCommunityCreationEligibility } from "./founderInferenceCore";
+import { requireCommunityFounderFundingForPublish } from "./founderInferenceCore";
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
 
 const COMMUNITY_DELETION_QUARANTINE_CODE =
@@ -109,13 +108,6 @@ async function saveCommunityOneLinerInternal(
   const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
   if (!updated) throw new Error("community_not_found");
   return updated;
-}
-
-function requireCommunityPublishReady(input: CommunityPublishReadinessInput): void {
-  const missing = getCommunityPublishReadinessMissingFields(input);
-  if (missing.length > 0) {
-    throw new Error(`community_publish_ready_required:${missing.join(",")}`);
-  }
 }
 
 function requireCommunityPublishReadinessTransition(input: {
@@ -353,6 +345,15 @@ async function requireCommunitySettingsPermissions(args: {
       bannerStorageId: args.state.nextBannerStorageId,
     },
   });
+  if (
+    args.community.visibility !== "published" &&
+    args.state.nextVisibility === "published"
+  ) {
+    await requireCommunityFounderFundingForPublish(
+      args.ctx,
+      args.communityId,
+    );
+  }
   if (args.state.monetizationChanged && (args.state.monthlyAmount !== null || args.state.annualAmount !== null)) {
     await requirePaidCommunityPricingReady({
       ctx: args.ctx,
@@ -499,7 +500,6 @@ export const createCommunity = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireAccountSetupCompleteForUser(ctx, ownerId);
-    await requireExistingFounderCommunityCreationEligibility(ctx, ownerId);
     const nowMs = Date.now();
     const billingStatus = await ctx.runQuery(api.auth.getAccountCommerceStatus, {
       authSubject: args.authSubject ?? undefined,
@@ -526,7 +526,13 @@ export const createCommunity = mutation({
       .first();
     if (existing) throw new Error("community_slug_taken");
 
-    const visibility = normalizeVisibility(args.visibility);
+    const requestedVisibility = args.visibility === undefined
+      ? "unlisted"
+      : normalizeVisibility(args.visibility);
+    if (requestedVisibility === "published") {
+      throw new Error("community_founder_funding_required_to_publish");
+    }
+    const visibility = "unlisted" as const;
     const entryPolicy = normalizeEntryPolicy(args.entryPolicy, "approval");
     const avatarStorageId = args.avatarStorageId ?? undefined;
     const bannerStorageId = args.bannerStorageId ?? undefined;
@@ -534,16 +540,6 @@ export const createCommunity = mutation({
     const oneLiner = normalizeOptionalText(args.oneLiner);
     const avatarUrl = avatarStorageId ? undefined : normalizeOptionalCommunityImageUrl(args.avatarUrl);
     const bannerUrl = bannerStorageId ? undefined : normalizeOptionalCommunityImageUrl(args.bannerUrl);
-    if (visibility === "published") {
-      requireCommunityPublishReady({
-        name,
-        oneLiner,
-        avatarUrl,
-        avatarStorageId,
-        bannerUrl,
-        bannerStorageId,
-      });
-    }
     const communityId = await ctx.db.insert("communities", {
       ownerId,
       slug,
@@ -910,6 +906,9 @@ export const saveCommunityLaunchProfile = mutation({
         bannerStorageId: nextBannerStorageId,
       },
     });
+    if (community.visibility !== "published" && nextVisibility === "published") {
+      await requireCommunityFounderFundingForPublish(ctx, args.communityId);
+    }
 
     const previousAvatarStorageId = community.avatarStorageId;
     const previousBannerStorageId = community.bannerStorageId;

@@ -832,15 +832,16 @@ If those answers are vague, more settings will not fix the product.
 
 ## Core Steps
 
-1. Create or configure a community.
-2. Define the community purpose and public profile.
-3. Configure the community agent.
-4. Add resources that represent durable community knowledge.
-5. Attach skills where repeatable agent behavior is needed.
-6. Configure access, billing, and roles.
-7. Verify the official Polynet MCP handoff for external harness users.
-8. Share the community funnel.
-9. Improve the system based on member participation and useful signal.
+1. Create the community as an unlisted draft.
+2. Fund that community through its $79 monthly founder plan.
+3. Define the community purpose and public profile.
+4. Configure the community agent.
+5. Add resources that represent durable community knowledge.
+6. Attach skills where repeatable agent behavior is needed.
+7. Configure member access, billing, and roles.
+8. Verify the official Polynet MCP handoff for external harness users.
+9. Publish and share the community funnel.
+10. Improve the system based on member participation and useful signal.
 
 ## Builder Mental Model
 
@@ -886,6 +887,8 @@ The cash path is simple: configure the community, define the paid access model, 
 - Builder payouts depend on payout provider readiness.
 - Existing approved founders can continue managing their owned communities.
 - Each managed community requires its own verified $79 monthly funding subscription.
+- A new community begins as an unlisted managed draft and continues directly to founder checkout.
+- An unpaid managed draft can be configured, but cannot publish, appear in Discover, accept public joins, or run community-funded AI.
 - Polynet Premium does not increase community count or alter community fees.
 - Premium unlocks paid tools such as hosted workspace tools, web research, and premium runtimes.
 - Owner/admin manage resources and most operational settings.
@@ -1932,11 +1935,11 @@ Existing approved founders can keep owner-funded API access for their legacy-eli
 
 ## Polynet Founder Plan
 
-The irreducible founder plan is $79 USD monthly for one specific existing community. Stripe webhook state is authoritative. Checkout is community-targeted from the start: the owner selects the community before leaving Polynet, the pending checkout records that community, and the verified webhook creates a subscription already bound to it. There is no unattached subscription inventory and no later attach step. An active managed subscription satisfies community inference funding without asking the founder or members for ChatGPT or an OpenAI API key. It funds supported community inference through Polynet's server-side OpenAI credential on fixed GPT 5.6 Luna and never changes the requesting member's access or tool authority.
+The irreducible founder plan is $79 USD monthly for one specific community. Stripe webhook state is authoritative. A new founder creates one unlisted managed draft and continues directly to community-targeted checkout. The pending checkout records that community, and the verified webhook creates a subscription already bound to it. There is no unattached subscription inventory and no later attach step. An active managed subscription satisfies community inference funding without asking the founder or members for ChatGPT or an OpenAI API key. It funds supported community inference through Polynet's server-side OpenAI credential on fixed GPT 5.6 Luna and never changes the requesting member's access or tool authority.
 
-Each monthly cycle includes up to $20 in raw model cost. Before each supported managed turn, Polynet atomically reserves a configured worst-case amount from the remaining allowance; after provider usage is known, the reservation settles to the calculated token cost. Missing pricing evidence, an absent or ambiguous cycle, expired payment state, or exhausted allowance fails closed. The pricing configuration is explicit integer USD micros and must be sourced from a verified provider contract rather than guessed.
+Each monthly cycle includes up to $20 in raw model cost. Before each supported managed turn, Polynet atomically reserves a configured worst-case amount from the remaining allowance; after provider usage is known, the reservation settles to the calculated token cost. The launch reservation is $1 of raw model cost per in-flight run, sized above the bounded multi-call community-agent paths while allowing up to twenty simultaneous reservations per community at a fresh allowance. Missing pricing evidence, an absent or ambiguous cycle, expired payment state, or exhausted allowance fails closed. The pricing configuration is explicit integer USD micros and must be sourced from a verified provider contract rather than guessed.
 
-The funding kernel covers the three community-owned inference surfaces: direct community-agent mentions, autonomous community cognition, and AI-assisted community setup generation. Every surface resolves the same owner funding authority before provider start, uses fixed GPT 5.6 Luna, and writes the same idempotent, privacy-bounded receipt contract. Founder Billing exposes one card per owned community, community-targeted checkout, webhook-backed status, and the Stripe customer portal. Usage-based overage charging, future-founder creation/onboarding, detailed usage UI, and broader billing prompts remain later launch slices. Until production configuration and an authenticated canary are proven, the founder plan is not publicly live.
+The funding kernel covers the three community-owned inference surfaces: direct community-agent mentions, autonomous community cognition, and AI-assisted community setup generation. Every surface resolves the same owner funding authority before provider start, uses fixed GPT 5.6 Luna, and writes the same idempotent, privacy-bounded receipt contract. The same admission controls publishing, public funnels, Discover, and new joins. Owners can configure an unpaid draft, but it cannot publicly launch or run community-funded AI. Founder Billing exposes one card per owned community, community-targeted checkout, webhook-backed status, the Stripe customer portal, and a resumable funding prompt for managed communities needing action. Usage-based overage charging and detailed usage UI remain later launch slices. Until production configuration and an authenticated canary are proven, the founder plan is not publicly live.
 
 ## Builder Revenue Path
 
@@ -1969,7 +1972,7 @@ Builder Partner v1 is retired. It has no member or operator product surface and 
 
 The completed Partner retirement preserves `future_partner_grandfather_v1` only as historical identity and accepted-terms evidence for four legacy participants. It is not an entitlement, payout promise, balance, commission, active partner account, or founder-inference grant. The eight partner-derived `communityInferencePolicies` rows are migration residue from the superseded mental model and must be deleted by the bounded existing-founder cohort migration after an operator-controlled production backup.
 
-The canonical grandfathering truth is the conjunction of a founder-level `founderInferenceGrant` and a community-level `legacy_byok_allowed` funding policy. The bounded R41NB0W retirement removed one never-activated founder and grant, leaving eight existing-founder grants. Partner status and retired Partner policy rows never authorize inference. During the bounded cutover, an unmarked pre-existing community owned by a grandfathered founder resolves as legacy for compatibility; every newly created community is explicitly `managed_required`. One active grandfathered founder grant and one encrypted OpenAI API key cover only that founder's legacy-eligible communities.
+The canonical grandfathering truth is the conjunction of a founder-level `founderInferenceGrant` and a community-level `legacy_byok_allowed` funding policy. The bounded R41NB0W retirement removed one never-activated founder and grant, leaving eight existing-founder grants before any founder-specific managed transition. Partner status and retired Partner policy rows never authorize inference. During the bounded cutover, an unmarked pre-existing community owned by a grandfathered founder resolves as legacy for compatibility; every newly created community is explicitly `managed_required`. One active grandfathered founder grant and one encrypted OpenAI API key cover only that founder's legacy-eligible communities. A founder can be moved to managed billing only through an exact, operator-controlled transition that verifies the account and full owned-community set, makes those communities unlisted managed drafts, and deletes the pristine legacy grant.
 
 Across direct community-agent mentions, autonomous community cognition, and setup generation, an active grandfathered founder uses the owner's encrypted OpenAI key and an active attached founder subscription uses Polynet's server-side OpenAI key. Both paths use fixed GPT 5.6 Luna and write one idempotent, privacy-bounded usage receipt. For member-triggered mentions, the member remains the permission and tool principal and the community agent remains the response identity; payer identity never widens authority. A paid subscription attached to a community is canonical for that community and never falls back to a grandfathered key when inactive. Approved existing founders retain the former requester-ChatGPT route only until they activate during the bounded cutover.
 
@@ -1999,6 +2002,8 @@ Payout readiness does not grant community access. It determines whether the buil
 14. Community creator revenue stays Stripe-native unless Polynet intentionally changes to a held-funds payout architecture.
 15. Full refunds and opened disputes revoke or suspend paid community access through backend subscription lifecycle state.
 16. Paid-tool reporting should distinguish exact provider cost, estimated provider cost, and mixed provider evidence.
+17. Explicitly managed communities must never inherit pre-cutover compatibility, even before the legacy cohort is initialized.
+18. Managed community publishing and public acquisition require current founder-funding admission on the backend.
 17. A founder subscription authorizes exactly one attached community and must not widen member permissions.
 18. Managed inference must reserve allowance before provider start and settle or retain that reservation deterministically.
 19. Founder checkout must identify its community before redirect and may create at most one access-granting subscription for that community.

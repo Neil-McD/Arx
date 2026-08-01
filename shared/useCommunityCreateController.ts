@@ -3,9 +3,7 @@ import { type CreateCommunityIntentDraft } from "./createCommunityIntent";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 import { createCloudCommunity, prepareCloudCommunityBrandingField } from "./cloudCommunityAdminGateway";
-import { getCommunityPublishReadinessMissingFields } from "./communityPublishReadiness";
 import { isValidCommunitySlug, slugifyCommunityName } from "./communitySlug";
-import { toCanonicalCommunityVisibility } from "./communityVisibility";
 import { readCommunityAvatarFileAsDataUrlWithinLimit } from "./imageTransforms";
 
 type SessionLike = {
@@ -22,8 +20,6 @@ type BillingStatusLike = {
   account_tier: string;
   max_communities: number;
 };
-
-type Visibility = "published" | "unlisted";
 
 type UseCommunityCreateControllerArgs<
   SessionT extends SessionLike,
@@ -48,14 +44,12 @@ type UseCommunityCreateControllerArgs<
   createCommunityName: string;
   createCommunitySlug: string;
   createCommunitySlugEdited: boolean;
-  createCommunityVisibility: Visibility;
   createCommunityAvatarUrl: string | null;
   createCommunityOneLiner: string;
   createCommunityBannerUrl: string | null;
   setCreateCommunityName: Dispatch<SetStateAction<string>>;
   setCreateCommunitySlug: Dispatch<SetStateAction<string>>;
   setCreateCommunitySlugEdited: Dispatch<SetStateAction<boolean>>;
-  setCreateCommunityVisibility: Dispatch<SetStateAction<Visibility>>;
   setCreateCommunityAvatarUrl: Dispatch<SetStateAction<string | null>>;
   setCreateCommunityOneLiner: Dispatch<SetStateAction<string>>;
   setCreateCommunityBannerUrl: Dispatch<SetStateAction<string | null>>;
@@ -89,9 +83,6 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
       : "Failed to create community.";
   if (message === "community_builder_required") {
     return "Your account cannot create a community yet.";
-  }
-  if (message === "founder_plan_required") {
-    return "New founder plans are not available yet.";
   }
   if (message.includes("account_setup_required")) {
     return "Finish account setup before creating a community.";
@@ -142,7 +133,6 @@ export function useCommunityCreateController<
     current.setCreateCommunityName(draft?.name ?? "");
     current.setCreateCommunitySlug(draft?.slug ?? "");
     current.setCreateCommunitySlugEdited(Boolean(draft?.slug_edited));
-    current.setCreateCommunityVisibility(toCanonicalCommunityVisibility(draft?.visibility, "unlisted"));
     current.setCreateCommunityAvatarUrl(null);
     current.setCreateCommunityOneLiner(draft?.one_liner ?? "");
     current.setCreateCommunityBannerUrl(null);
@@ -189,16 +179,11 @@ export function useCommunityCreateController<
       current.setCreateCommunityError("Slug must be 3–32 chars, lowercase, and may include dashes.");
       return null;
     }
-    if (!["published", "unlisted"].includes(current.createCommunityVisibility)) {
-      current.setCreateCommunityError("Visibility must be published or unlisted.");
-      return null;
-    }
-
     return {
       name,
       slug,
       slug_edited: current.createCommunitySlugEdited,
-      visibility: current.createCommunityVisibility,
+      visibility: "unlisted",
       one_liner: current.createCommunityOneLiner.trim() || null,
     };
   }, []);
@@ -236,23 +221,6 @@ export function useCommunityCreateController<
       return;
     }
 
-    if (!["published", "unlisted"].includes(current.createCommunityVisibility)) {
-      current.setCreateCommunityError("Visibility must be published or unlisted.");
-      return;
-    }
-    if (current.createCommunityVisibility === "published") {
-      const missing = getCommunityPublishReadinessMissingFields({
-        name,
-        oneLiner: current.createCommunityOneLiner,
-        avatarUrl: current.createCommunityAvatarUrl,
-        bannerUrl: current.createCommunityBannerUrl,
-      });
-      if (missing.length > 0) {
-        current.setCreateCommunityError("Published communities need a name, one-liner, avatar, and banner.");
-        return;
-      }
-    }
-
     current.setIsCreatingCommunity(true);
     try {
       const [avatarField, bannerField] = await Promise.all([
@@ -271,7 +239,7 @@ export function useCommunityCreateController<
         session,
         name,
         slug,
-        visibility: current.createCommunityVisibility,
+        visibility: "unlisted",
         avatarStorageId: avatarField.storageId ?? null,
         avatarUrl: avatarField.url ?? null,
         oneLiner: current.createCommunityOneLiner.trim() || null,

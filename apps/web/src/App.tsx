@@ -1472,6 +1472,10 @@ export default function App() {
         communityId: community.id,
         communitySlug: community.slug,
       });
+      void (async () => {
+        await founderBilling.refresh();
+        await founderBilling.startCheckout(community.id);
+      })();
     },
     readBannerFileAsWideDataUrlWithinLimit,
     isLikelyImageFile,
@@ -2566,6 +2570,19 @@ export default function App() {
     isFreeAccountInfoOpen,
     accountCommerceError,
     communityModalHostProps: communityUi.modalHostProps,
+    founderFundingPromptProps: {
+      isOpen:
+        Boolean(session) &&
+        !founderBilling.isLoading &&
+        !founderBilling.isFundingPromptDismissed &&
+        founderBilling.fundingAttentionCommunities.length > 0,
+      communities: founderBilling.fundingAttentionCommunities,
+      actionCommunityId: founderBilling.actionCommunityId,
+      error: founderBilling.error,
+      onCheckout: founderBilling.startCheckout,
+      onManage: founderBilling.openPortal,
+      onClose: founderBilling.dismissFundingPrompt,
+    },
     appToast,
   });
 

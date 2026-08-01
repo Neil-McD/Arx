@@ -5,8 +5,9 @@ import { expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import {
+  communityFounderFundingAllowsPublicAccess,
   getExistingFounderInferenceGrant,
-  requireExistingFounderCommunityCreationEligibility,
+  requireCommunityFounderFundingForPublish,
   resolveCommunityInferenceFundingAdmission,
   settleAuthorizedFounderInferenceReceipt,
   suspendActiveFounderInferenceGrantForCredentialChange,
@@ -128,14 +129,18 @@ test("funding cutover is founder-level and fails closed without changing member 
     const memberId = await insertUser(ctx, "member");
     const futureOwnerId = await insertUser(ctx, "future-owner");
     const communityId = await insertCommunity(ctx, ownerId, "community");
+    const futureCommunityId = await insertCommunity(ctx, futureOwnerId, "future-community");
+    await ctx.db.patch(futureCommunityId, {
+      inferenceFundingPolicy: "managed_required",
+    });
 
     await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toMatchObject({
       ok: true,
       mode: "legacy_requester_chatgpt",
     });
     await expect(
-      requireExistingFounderCommunityCreationEligibility(ctx, futureOwnerId),
-    ).resolves.toBeUndefined();
+      communityFounderFundingAllowsPublicAccess(ctx, futureCommunityId),
+    ).resolves.toBe(false);
 
     const grantId = await ctx.db.insert("founderInferenceGrants", {
       userId: ownerId,
@@ -146,11 +151,11 @@ test("funding cutover is founder-level and fails closed without changing member 
       updatedAt: 2_000,
     });
     await expect(
-      requireExistingFounderCommunityCreationEligibility(ctx, futureOwnerId),
-    ).rejects.toThrow("founder_plan_required");
+      communityFounderFundingAllowsPublicAccess(ctx, futureCommunityId),
+    ).resolves.toBe(false);
     await expect(
-      requireExistingFounderCommunityCreationEligibility(ctx, ownerId),
-    ).resolves.toBeUndefined();
+      requireCommunityFounderFundingForPublish(ctx, futureCommunityId),
+    ).rejects.toThrow("community_founder_funding_required_to_publish");
     await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toMatchObject({
       ok: true,
       mode: "legacy_requester_chatgpt",
@@ -235,6 +240,75 @@ test("funding cutover is founder-level and fails closed without changing member 
       code: "owner_funding_suspended",
     });
   });
+});
+
+test("an exact existing founder can be transitioned irreversibly to managed billing", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await t.run(async (ctx) => {
+    const ownerId = await insertUser(ctx, "managed-transition");
+    await ctx.db.patch(ownerId, {
+      handle: "managed-founder",
+      normalizedHandle: "managed-founder",
+    });
+    const firstCommunityId = await insertCommunity(ctx, ownerId, "managed-one");
+    const secondCommunityId = await insertCommunity(ctx, ownerId, "managed-two");
+    await ctx.db.patch(firstCommunityId, { visibility: "published" });
+    await ctx.db.patch(secondCommunityId, { visibility: "published" });
+    const grantId = await ctx.db.insert("founderInferenceGrants", {
+      userId: ownerId,
+      cohortKey: EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
+      status: "approved",
+      approvedAt: 2_000,
+      createdAt: 2_000,
+      updatedAt: 2_000,
+    });
+    return { ownerId, firstCommunityId, secondCommunityId, grantId };
+  });
+  const args = {
+    userId: fixture.ownerId,
+    expectedHandle: "managed-founder",
+    expectedCommunitySlugs: [
+      "founder-inference-managed-one",
+      "founder-inference-managed-two",
+    ],
+  };
+
+  await expect(
+    t.mutation(
+      internal.founderInferenceMigration.transitionExistingFounderToManagedInternal,
+      { ...args, dryRun: true, nowMs: 3_000 },
+    ),
+  ).resolves.toMatchObject({ dry_run: true, already_transitioned: false });
+  await expect(
+    t.mutation(
+      internal.founderInferenceMigration.transitionExistingFounderToManagedInternal,
+      { ...args, expectedCommunitySlugs: ["wrong-community"], dryRun: true },
+    ),
+  ).rejects.toThrow("founder_transition_community_set_mismatch");
+  await expect(
+    t.mutation(
+      internal.founderInferenceMigration.transitionExistingFounderToManagedInternal,
+      { ...args, dryRun: false, nowMs: 3_000 },
+    ),
+  ).resolves.toMatchObject({ dry_run: false, already_transitioned: false });
+
+  await t.run(async (ctx) => {
+    await expect(ctx.db.get(fixture.grantId)).resolves.toBeNull();
+    await expect(ctx.db.get(fixture.firstCommunityId)).resolves.toMatchObject({
+      inferenceFundingPolicy: "managed_required",
+      visibility: "unlisted",
+    });
+    await expect(ctx.db.get(fixture.secondCommunityId)).resolves.toMatchObject({
+      inferenceFundingPolicy: "managed_required",
+      visibility: "unlisted",
+    });
+  });
+  await expect(
+    t.mutation(
+      internal.founderInferenceMigration.transitionExistingFounderToManagedInternal,
+      { ...args, dryRun: false, nowMs: 4_000 },
+    ),
+  ).resolves.toMatchObject({ already_transitioned: true });
 });
 
 test("an active managed founder plan satisfies setup inference without BYOK", () => {

@@ -10,6 +10,7 @@ export function buildWebGlobalOverlayHostProps(params: {
   isFreeAccountInfoOpen: boolean;
   accountCommerceError: string | null;
   communityModalHostProps: WebGlobalOverlayHostProps["communityModalHostProps"];
+  founderFundingPromptProps: WebGlobalOverlayHostProps["founderFundingPromptProps"];
   appToast: string | null;
 }): WebGlobalOverlayHostProps {
   return {
@@ -21,6 +22,7 @@ export function buildWebGlobalOverlayHostProps(params: {
       onOpenBilling: params.onOpenPremiumBilling,
     },
     communityModalHostProps: params.communityModalHostProps,
+    founderFundingPromptProps: params.founderFundingPromptProps,
     appToast: params.appToast,
   };
 }

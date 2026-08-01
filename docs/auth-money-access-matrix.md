@@ -115,6 +115,9 @@ Prompt injection is not tiered. Authenticated Free and Polynet Premium accounts 
 15. Full refunds revoke paid community access. Partial refunds retain access unless the subscription lifecycle later says otherwise. Failed or canceled refunds restore from current Stripe subscription truth.
 16. Disputes and chargebacks suspend paid community access when opened, stay revoked when lost, and restore only from valid Stripe subscription truth when won or funds are reinstated.
 17. Each successful partial or full member refund reverses its cumulative proportional share of Polynet's 2.9% application fee through a provider-scoped idempotent ledger. Pending, failed, and canceled refunds reverse no fee.
+18. A newly created community is always an unlisted `managed_required` draft and continues to its own $79 monthly checkout.
+19. Managed publishing, public funnel resolution, Discover listing, and new public joins fail closed without current founder-funding admission.
+20. Existing approved founders retain owner-key funding only for legacy-eligible communities; an exact operator transition can remove that grant and move the full owned-community set to managed billing.
 
 ## 6) Premium Tool Accounting Rules
 
