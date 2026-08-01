@@ -57,6 +57,8 @@ For paid community transactions, Polynet may collect a platform fee. The current
 
 Payment processor fees are separate from the Polynet platform fee and are ordinarily charged to the community builder's connected payment account. Refunds, disputes, chargebacks, taxes, payout restrictions, currency conversion, and third-party provider requirements may also apply. Polynet may change platform fees prospectively with notice, updated terms, or a written agreement.
 
+When a paid community charge is successfully refunded through the supported provider flow, Polynet ordinarily reverses the proportional application fee associated with the refunded amount. Pending, failed, or canceled refund attempts do not create a fee reversal. Provider records and Polynet's payment records are authoritative.
+
 Community builders are responsible for the member-facing promises they make, including what members receive, pricing clarity, refund expectations, community operation, and any taxes or legal obligations that apply to their activity.
 
 Paid community access may be subscription-based. Subscriptions may renew until canceled through the supported product or payment-provider flow. Cancellation affects future billing and does not guarantee a refund for prior charges or the current billing period unless Polynet, the community builder, the payment provider, or applicable law requires otherwise. Backend subscription, entitlement, refund, dispute, and provider records are authoritative for access.

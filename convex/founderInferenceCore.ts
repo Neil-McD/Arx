@@ -5,6 +5,7 @@ import {
   EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
   type CommunityInferenceFundingAdmission,
   type CommunityInferenceFundingPolicy,
+  type CommunityInferenceSurface,
 } from "../shared/founderInference";
 import {
   POLYNET_FOUNDER_PLAN_PRICING_VERSION,
@@ -43,7 +44,7 @@ export type FounderInferenceReceiptRow = {
   founderGrantId?: any;
   founderSubscriptionId?: any;
   usageCycleId?: any;
-  surface: "community_agent_mention";
+  surface: CommunityInferenceSurface;
   provider: "openai";
   modelId: string;
   status: "authorized" | "settled" | "failed" | "indeterminate";

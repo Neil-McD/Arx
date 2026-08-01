@@ -8,7 +8,7 @@ effective_date: 2026-08-01
 
 These terms apply only to an approved existing Polynet community founder who activates community-owner-funded inference.
 
-By activating, the founder authorizes Polynet to use the founder's connected OpenAI API key to run bounded GPT 5.6 Luna inference for supported AI interactions in the legacy-eligible communities Polynet lists during activation. The authorization does not automatically extend to a new or managed-funded community. OpenAI bills the founder's OpenAI account directly under the founder's agreement with OpenAI.
+By activating, the founder authorizes Polynet to use the founder's connected OpenAI API key to run bounded GPT 5.6 Luna inference for supported AI interactions in the legacy-eligible communities Polynet lists during activation. Supported interactions include direct community-agent responses, autonomous community cognition, and AI-assisted community setup generation. The authorization does not automatically extend to a new or managed-funded community. OpenAI bills the founder's OpenAI account directly under the founder's agreement with OpenAI.
 
 Polynet stores the key encrypted and uses it only from server-side inference workers. Polynet does not reveal the key to community members. Community members remain the authority for their own requests and tool permissions; paying for inference does not transfer the founder's administrative permissions to a member.
 

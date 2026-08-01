@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { action, internalMutation, mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   COMMUNITY_FUNDING_POLICY_LEGACY_BYOK,
@@ -29,6 +29,11 @@ import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 const internalRefs = internal as any;
 const RECEIPT_LEASE_MS = 10 * 60_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
+const communityInferenceSurfaceValidator = v.union(
+  v.literal("community_agent_mention"),
+  v.literal("community_autonomous_cognition"),
+  v.literal("community_setup_generation"),
+);
 
 type OpenAiConnectionRow = {
   _id: any;
@@ -278,6 +283,14 @@ export const suspendFounderInference = mutation({
   },
 });
 
+export const resolveCommunityInferenceFundingAdmissionInternal = internalQuery({
+  args: {
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) =>
+    await resolveCommunityInferenceFundingAdmission(ctx, args.communityId),
+});
+
 export const claimCommunityInferenceReceiptInternal = internalMutation({
   args: {
     receiptKey: v.string(),
@@ -291,6 +304,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     ),
     expectedFounderGrantId: v.optional(v.id("founderInferenceGrants")),
     expectedFounderSubscriptionId: v.optional(v.id("founderSubscriptions")),
+    surface: communityInferenceSurfaceValidator,
     claimToken: v.string(),
     nowMs: v.number(),
   },
@@ -397,7 +411,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       founderGrantId: args.expectedFounderGrantId,
       founderSubscriptionId: args.expectedFounderSubscriptionId,
       usageCycleId,
-      surface: "community_agent_mention",
+      surface: args.surface,
       provider: "openai",
       modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
       status: "authorized",
@@ -411,6 +425,29 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     });
     return { ok: true, receiptId, reclaimed: false };
   },
+});
+
+export const settleCommunityInferenceReceiptInternal = internalMutation({
+  args: {
+    receiptKey: v.string(),
+    claimToken: v.string(),
+    promptTokens: v.number(),
+    completionTokens: v.number(),
+    usageComplete: v.boolean(),
+    outcomeCode: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) =>
+    await settleAuthorizedFounderInferenceReceipt({
+      ctx,
+      receiptKey: args.receiptKey,
+      claimToken: args.claimToken,
+      promptTokens: args.promptTokens,
+      completionTokens: args.completionTokens,
+      usageComplete: args.usageComplete,
+      outcomeCode: args.outcomeCode,
+      nowMs: args.nowMs,
+    }),
 });
 
 export const markCommunityInferenceProviderStartedInternal = internalMutation({

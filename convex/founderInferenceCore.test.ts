@@ -105,6 +105,7 @@ function claimArgs(
   receiptKey: string,
   claimToken: string,
   nowMs: number,
+  surface: "community_agent_mention" | "community_autonomous_cognition" | "community_setup_generation" = "community_agent_mention",
 ) {
   return {
     receiptKey,
@@ -114,6 +115,7 @@ function claimArgs(
     expectedPayerUserId: fixture.ownerId,
     expectedFundingMode: "owner_api_key" as const,
     expectedFounderGrantId: fixture.grantId,
+    surface,
     claimToken,
     nowMs,
   };
@@ -455,6 +457,40 @@ test("receipt claims preserve member actor and owner payer across safe and ambig
   });
 });
 
+test("receipt claims preserve the explicit community inference surface", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "receipt-surfaces", 150_000);
+  const surfaces = [
+    "community_agent_mention",
+    "community_autonomous_cognition",
+    "community_setup_generation",
+  ] as const;
+  for (const [index, surface] of surfaces.entries()) {
+    const receiptKey = `${surface}:receipt-surface-${index}`;
+    const claimed = await t.mutation(
+      (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+      claimArgs(fixture, receiptKey, `surface-claim-${index}`, 151_000 + index, surface),
+    );
+    expect(claimed).toMatchObject({ ok: true, reclaimed: false });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get(claimed.receiptId)).toMatchObject({ surface });
+    });
+    await t.mutation(
+      (internal as any).founderInference.finalizeCommunityInferenceFailureInternal,
+      {
+        receiptKey,
+        claimToken: `surface-claim-${index}`,
+        promptTokens: 0,
+        completionTokens: 0,
+        usageComplete: true,
+        failureCode: "surface_contract_test",
+        disposition: "failed",
+        nowMs: 151_100 + index,
+      },
+    );
+  }
+});
+
 test("receipt authorization rate limits both an actor and the whole community", async () => {
   const actorTest = convexTest(schema, modules);
   const actorFixture = await createActiveFundingFixture(actorTest, "actor-rate", 200_000);
@@ -751,6 +787,7 @@ test("a community-targeted founder subscription meters managed Luna usage", asyn
         expectedPayerUserId: fixture.ownerId,
         expectedFundingMode: "platform_subscription",
         expectedFounderSubscriptionId: fixture.founderSubscriptionId,
+        surface: "community_agent_mention",
         claimToken: "paid-founder-claim",
         nowMs: nowMs + 1_000,
       },
@@ -803,6 +840,7 @@ test("a community-targeted founder subscription meters managed Luna usage", asyn
           expectedPayerUserId: fixture.ownerId,
           expectedFundingMode: "platform_subscription",
           expectedFounderSubscriptionId: fixture.founderSubscriptionId,
+          surface: "community_agent_mention",
           claimToken: "paid-founder-exhausted-claim",
           nowMs: nowMs + 3_200,
         },

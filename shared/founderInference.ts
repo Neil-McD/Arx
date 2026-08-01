@@ -11,6 +11,14 @@ export const COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE = 60;
 export const COMMUNITY_FUNDING_POLICY_LEGACY_BYOK = "legacy_byok_allowed" as const;
 export const COMMUNITY_FUNDING_POLICY_MANAGED = "managed_required" as const;
 
+export const COMMUNITY_INFERENCE_SURFACES = [
+  "community_agent_mention",
+  "community_autonomous_cognition",
+  "community_setup_generation",
+] as const;
+
+export type CommunityInferenceSurface = (typeof COMMUNITY_INFERENCE_SURFACES)[number];
+
 export type CommunityInferenceFundingPolicy =
   | typeof COMMUNITY_FUNDING_POLICY_LEGACY_BYOK
   | typeof COMMUNITY_FUNDING_POLICY_MANAGED;

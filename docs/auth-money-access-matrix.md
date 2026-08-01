@@ -114,6 +114,7 @@ Prompt injection is not tiered. Authenticated Free and Polynet Premium accounts 
 14. Recurring invoice success/failure, subscription changes, full refunds, and disputes must converge through backend community subscription lifecycle state.
 15. Full refunds revoke paid community access. Partial refunds retain access unless the subscription lifecycle later says otherwise. Failed or canceled refunds restore from current Stripe subscription truth.
 16. Disputes and chargebacks suspend paid community access when opened, stay revoked when lost, and restore only from valid Stripe subscription truth when won or funds are reinstated.
+17. Each successful partial or full member refund reverses its cumulative proportional share of Polynet's 2.9% application fee through a provider-scoped idempotent ledger. Pending, failed, and canceled refunds reverse no fee.
 
 ## 6) Premium Tool Accounting Rules
 

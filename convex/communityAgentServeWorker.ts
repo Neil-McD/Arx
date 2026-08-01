@@ -982,6 +982,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
               context.funding.mode === "platform_subscription"
                 ? context.funding.subscriptionId
                 : undefined,
+            surface: "community_agent_mention",
             claimToken: receiptClaimToken,
             nowMs: Date.now(),
           },

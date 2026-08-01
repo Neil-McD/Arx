@@ -20,7 +20,7 @@ The irreducible founder plan is $79 USD monthly for one specific existing commun
 
 Each monthly cycle includes up to $20 in raw model cost. Before each supported managed turn, Polynet atomically reserves a configured worst-case amount from the remaining allowance; after provider usage is known, the reservation settles to the calculated token cost. Missing pricing evidence, an absent or ambiguous cycle, expired payment state, or exhausted allowance fails closed. The pricing configuration is explicit integer USD micros and must be sourced from a verified provider contract rather than guessed.
 
-The first kernel meters direct community-agent mentions. Autonomous cognition and setup-generation still use their existing paths and must not be represented as covered until they pass the same subscription, metering, retry, and receipt contract. Founder Billing now exposes one card per owned community, community-targeted checkout, webhook-backed status, and the Stripe customer portal. Usage-based overage charging, future-founder creation/onboarding, detailed usage UI, and broader billing prompts remain later launch slices. Until production configuration and an authenticated canary are proven, the founder plan is not publicly live.
+The funding kernel covers the three community-owned inference surfaces: direct community-agent mentions, autonomous community cognition, and AI-assisted community setup generation. Every surface resolves the same owner funding authority before provider start, uses fixed GPT 5.6 Luna, and writes the same idempotent, privacy-bounded receipt contract. Founder Billing exposes one card per owned community, community-targeted checkout, webhook-backed status, and the Stripe customer portal. Usage-based overage charging, future-founder creation/onboarding, detailed usage UI, and broader billing prompts remain later launch slices. Until production configuration and an authenticated canary are proven, the founder plan is not publicly live.
 
 ## Builder Revenue Path
 
@@ -39,6 +39,8 @@ This is the product value loop: the builder packages expertise into a community 
 
 Every paid community uses one 2.9% Polynet application fee, whether its inference is funded by the $79 managed plan or by an approved legacy owner API key. Stripe processing fees are separate, are debited from the builder's connected account, and are not included in Polynet's 2.9%. The separate $20 personal Premium plan changes neither fee.
 
+When a connected-account charge is successfully refunded, the proportional share of Polynet's application fee is reversed. Partial refunds use cumulative proportional allocation so rounding converges exactly when a charge becomes fully refunded. Pending, failed, or canceled refunds do not reverse the fee. Stripe state and a provider-scoped idempotent refund ledger are authoritative; retries cannot intentionally reverse the same fee share twice.
+
 Community creator revenue uses direct Stripe Connect subscriptions on the builder's connected account, not platform-owned destination charges and not a Polynet-managed creator payout ledger. The connected account owns the member customer, product, price, charge, processor fee, subscription, and payout; Polynet collects only its application fee. Every local checkout, price, customer, and subscription record preserves the connected-account ID, and webhook events must match it before access state can change. This creator-commerce path is independent of the retired Builder Partner program.
 
 Stripe account events and Connect events are separate webhook destinations with separate signing secrets. `STRIPE_WEBHOOK_SECRET` verifies Polynet-account events such as the $79 founder subscription. `STRIPE_CONNECT_WEBHOOK_SECRET` verifies events on connected accounts such as member checkout, renewals, refunds, and disputes. Member checkout fails before creating Stripe objects when the Connect secret is absent. A Connect event must contain the same top-level Stripe account ID stored on the local commerce record; a missing or different account fails closed. Event `livemode` must also match the configured Stripe credential so sandbox traffic cannot mutate live billing truth.
@@ -53,7 +55,7 @@ The completed Partner retirement preserves `future_partner_grandfather_v1` only 
 
 The canonical grandfathering truth is the conjunction of a founder-level `founderInferenceGrant` and a community-level `legacy_byok_allowed` funding policy. The bounded R41NB0W retirement removed one never-activated founder and grant, leaving eight existing-founder grants. Partner status and retired Partner policy rows never authorize inference. During the bounded cutover, an unmarked pre-existing community owned by a grandfathered founder resolves as legacy for compatibility; every newly created community is explicitly `managed_required`. One active grandfathered founder grant and one encrypted OpenAI API key cover only that founder's legacy-eligible communities.
 
-For direct community-agent mentions, the member remains the permission and tool principal and the community agent remains the response identity. An active grandfathered founder uses the owner's encrypted OpenAI key; an active attached founder subscription uses Polynet's server-side OpenAI key. Both paths use fixed GPT 5.6 Luna and write one idempotent, privacy-bounded usage receipt. A paid subscription attached to a community is canonical for that community and never falls back to a grandfathered key when inactive. Approved existing founders retain the former requester-ChatGPT route only until they activate during the bounded cutover.
+Across direct community-agent mentions, autonomous community cognition, and setup generation, an active grandfathered founder uses the owner's encrypted OpenAI key and an active attached founder subscription uses Polynet's server-side OpenAI key. Both paths use fixed GPT 5.6 Luna and write one idempotent, privacy-bounded usage receipt. For member-triggered mentions, the member remains the permission and tool principal and the community agent remains the response identity; payer identity never widens authority. A paid subscription attached to a community is canonical for that community and never falls back to a grandfathered key when inactive. Approved existing founders retain the former requester-ChatGPT route only until they activate during the bounded cutover.
 
 The terminal production inspection proved zero legacy source documents, zero financial rows, exact grant and policy evidence, no unexpected, mismatched, or duplicate records, and no truncation. The seven legacy Partner table schemas and the temporary migration code are deleted. The nine public retired tombstones remain only for cached-client compatibility and cannot read or write product or financial state.
 
@@ -85,6 +87,7 @@ Payout readiness does not grant community access. It determines whether the buil
 18. Managed inference must reserve allowance before provider start and settle or retain that reservation deterministically.
 19. Founder checkout must identify its community before redirect and may create at most one access-granting subscription for that community.
 20. Platform-account and connected-account Stripe events must be verified with their respective webhook secrets and may mutate only their own billing domain.
+21. Successful connected-account refunds must reverse the proportional Polynet application fee through an idempotent provider-scoped ledger; non-successful refunds must not.
 
 ## Common Mistakes
 
@@ -103,7 +106,8 @@ Payout readiness does not grant community access. It determines whether the buil
 - selling an unattached subscription slot and deciding its community later
 - silently falling back to a founder key when an attached paid subscription is inactive
 - letting the $20 personal Premium plan alter community funding, limits, or revenue fees
-- claiming that unmetered autonomous or setup inference is included in the first managed kernel
+- routing autonomous or setup inference around the canonical owner-funding receipt kernel
+- revoking member access for a refund but leaving Polynet's proportional application fee unreversed
 - recreating the deleted legacy Partner tables or temporary migration code
 - coupling retired Builder Partner concepts back into ordinary community creator revenue
 - treating estimated paid-tool provider cost as exact billing truth

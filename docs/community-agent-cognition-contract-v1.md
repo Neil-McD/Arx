@@ -48,8 +48,8 @@ The community-owned runtime surfaces are:
    - entered from a direct community-agent mention
    - funded by the current community owner's OpenAI key after an approved existing
      founder activates; approved-but-inactive founders retain the requester ChatGPT
-     route only during the bounded cutover, and future founders require the later
-     platform-funded founder plan
+     route only during the bounded cutover, while managed communities require an
+     active $79 founder subscription attached to that community
    - revalidates community access and source visibility for every turn
    - receives the same canonical five Polynet repository tools as the personal
      harness and official MCP
@@ -1775,7 +1775,7 @@ communityAgentServeRequests[queued, accepted]
   -> claim request
   -> load same-community source thread
   -> authorize one privacy-bounded funding receipt
-  -> run GPT 5.6 Luna on the current owner's OpenAI key
+  -> run GPT 5.6 Luna through the community's canonical owner funding authority
   -> insert one community-agent reply in that source thread
   -> mark request responded/error
 ```
@@ -1983,14 +1983,14 @@ Two payment lanes, split by what the spend produces:
   owner's connection. Defaults: on wherever the owner has a usable
   connection, capped at two cycles per day, with an owner off-switch
   (communityAgentConfigs.agentEnabled).
-- Direct Concierge chat is community-founder-funded. An approved existing founder
+- Direct Concierge chat, autonomous cognition, and AI-assisted setup generation are community-founder-funded. An approved existing founder
   supplies the OpenAI key after activation; a new founder supplies a verified $79
   monthly subscription attached to exactly one community, and Polynet supplies the
   server-side OpenAI key. Both use GPT 5.6 Luna while the requesting member remains
   the permission and tool principal. Approved-but-inactive existing founders retain
   the former requester ChatGPT route only during the bounded cutover. Payment
-  identity never widens retrieval or tool authority. The first paid kernel does not
-  yet move autonomous memory cycles onto subscription funding.
+  identity never widens retrieval or tool authority. All three surfaces resolve the
+  same funding admission and settle through the same privacy-bounded receipt kernel.
 
 ### Cadence (resolved 2026-07-01)
 

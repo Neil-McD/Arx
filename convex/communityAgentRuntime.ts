@@ -2,6 +2,7 @@ import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { runChatgptNativeToolCompletion } from "./httpChatgpt";
+import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import {
   buildCommunityAgentFunctionTools,
   CANONICAL_COMMUNITY_AGENT_KEY,
@@ -32,6 +33,15 @@ import { buildCommunityAgentIdentityPrompt } from "../shared/communityAgentRunti
 import { normalizeIdValue, toIsoString } from "./communityCore";
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
+import { COMMUNITY_OWNER_FUNDED_MODEL_ID } from "../shared/founderInference";
+import {
+  beginCommunityInferenceFundingSession,
+  failCommunityInferenceFundingSession,
+  providerFailureIsKnownPreSpend,
+  resolveCommunityInferenceFundingForAction,
+  settleCommunityInferenceFundingSession,
+  type CommunityInferenceFundingSession,
+} from "./founderInferenceRuntime";
 
 const COMMUNITY_AGENT_RUNTIME_MAX_TOOL_STEPS = 12;
 const COMMUNITY_AGENT_RUNTIME_MAX_OUTPUT_CHARS = 12_000;
@@ -743,10 +753,38 @@ export const runCommunityAgentLoopInternal = internalAction({
       ? getCommunityAgentRoleDefinition(args.role)
       : undefined;
     const triggerType = normalizeTriggerType(args.triggerType);
-    const modelId = normalizeModelId(args.modelId);
     const resolved = (await ctx.runQuery(internalRefs.communityAgentRuntime.resolveCommunityAgentRunContextInternal as any, {
       communityId: args.communityId,
     })) as CommunityAgentResolvedContext;
+    const funding = await resolveCommunityInferenceFundingForAction(ctx, args.communityId);
+    if (funding.ok === false) {
+      const skippedRun = await ctx.runMutation(
+        internalRefs.communityAgentRuntime.recordCommunityAgentSkippedRunInternal,
+        {
+          communityId: args.communityId,
+          triggerType,
+          heartbeatId: boundedText(args.heartbeatId, 200) || undefined,
+          modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
+          maxToolSteps: args.maxToolSteps,
+          compilerDigestId: args.compilerDigestId,
+          compilerDigestVersionKey: args.compilerDigestVersionKey,
+          wakeReason: funding.code,
+          wakeEvidence: args.wakeEvidence,
+        },
+      );
+      return {
+        ok: false,
+        skipped: true,
+        run: skippedRun,
+        stop_reason: funding.code,
+        tool_step_count: 0,
+        applied_change_request_ids: [],
+      };
+    }
+    const directOwnerFunded = funding.mode !== "legacy_requester_chatgpt";
+    const modelId = directOwnerFunded
+      ? COMMUNITY_OWNER_FUNDED_MODEL_ID
+      : normalizeModelId(args.modelId);
     const exactDigestId = boundedText(args.compilerDigestId, 128) || undefined;
     const exactDigestVersionKey = boundedText(args.compilerDigestVersionKey, 128) || undefined;
     if (Boolean(exactDigestId) !== Boolean(exactDigestVersionKey)) {
@@ -796,6 +834,49 @@ export const runCommunityAgentLoopInternal = internalAction({
       };
     }
     const runId = createdRun.run.id;
+    let fundingSession: CommunityInferenceFundingSession | null = null;
+    let aggregatePromptTokens = 0;
+    let aggregateCompletionTokens = 0;
+    let aggregateUsageComplete = true;
+    let fundingFinalized = false;
+    if (directOwnerFunded) {
+      try {
+        fundingSession = await beginCommunityInferenceFundingSession({
+          ctx,
+          communityId: args.communityId,
+          actorUserId: resolved.sponsorUserId,
+          surface: "community_autonomous_cognition",
+          receiptKey: `community_autonomous_cognition:${runId}`,
+          sourceRunId: `community-agent-runtime:${runId}`,
+          admission: funding,
+        });
+      } catch (error) {
+        const errorCode = boundedText(
+          error instanceof Error ? error.message : String(error),
+          120,
+        ) || "founder_inference_receipt_unavailable";
+        const finished: unknown = await ctx.runMutation(
+          internalRefs.communityAgentRuntime.finishCommunityAgentRunInternal,
+          {
+            runId,
+            status: "error",
+            stopReason: errorCode,
+            toolStepCount: 0,
+            appliedChangeRequestIds: [],
+            errorCode,
+            errorMessage: "Community inference funding could not be authorized.",
+          },
+        );
+        return {
+          ok: false,
+          skipped: false,
+          run: finished,
+          stop_reason: errorCode,
+          tool_step_count: 0,
+          applied_change_request_ids: [],
+        };
+      }
+    }
     const filesystemContext: CommunityAgentFilesystemContext = {
       communityId: args.communityId,
       agentKey,
@@ -887,26 +968,43 @@ export const runCommunityAgentLoopInternal = internalAction({
           maxRepeatedIdenticalCalls: 2,
         },
         runCompletion: async (kernelMessages) => {
-          const completion = await runChatgptNativeToolCompletion({
-            ctx,
-            userId: normalizeIdValue(resolved.sponsorUserId),
-            modelId,
-            messages: kernelMessages,
-            maxTokens: 1600,
-            // Authority by absence: only this role's tool schemas are sent.
-            tools: buildCommunityAgentFunctionTools(roleDefinition?.toolNames),
-            parallelToolCalls: false,
-            reasoningEffort: roleDefinition?.reasoningEffort,
-            // Background steward: patience is free. Transient provider failures
-            // retry with backoff instead of killing the whole cognition pass.
-            retryPolicy: { maxAttempts: 4, backoffBaseMs: 500 },
-            // Carry reasoning forward across tool steps so the model resumes its
-            // chain of thought instead of re-deriving it (coherence + tokens).
-            carryReasoningItems: true,
-            onReasoningSummaryTextDelta: ({ delta }) => {
-              reasoningBuffer += delta;
-            },
-          });
+          const completion = fundingSession
+            ? await runOpenAiNativeToolCompletion({
+                modelId: fundingSession.modelId,
+                messages: kernelMessages,
+                maxTokens: 1600,
+                tools: buildCommunityAgentFunctionTools(roleDefinition?.toolNames),
+                apiKeyOverride: fundingSession.apiKeyOverride,
+                parallelToolCalls: false,
+              })
+            : await runChatgptNativeToolCompletion({
+                ctx,
+                userId: normalizeIdValue(resolved.sponsorUserId),
+                modelId,
+                messages: kernelMessages,
+                maxTokens: 1600,
+                // Authority by absence: only this role's tool schemas are sent.
+                tools: buildCommunityAgentFunctionTools(roleDefinition?.toolNames),
+                parallelToolCalls: false,
+                reasoningEffort: roleDefinition?.reasoningEffort,
+                // Background steward: patience is free. Transient provider failures
+                // retry with backoff instead of killing the whole cognition pass.
+                retryPolicy: { maxAttempts: 4, backoffBaseMs: 500 },
+                // Carry reasoning forward across tool steps so the model resumes its
+                // chain of thought instead of re-deriving it (coherence + tokens).
+                carryReasoningItems: true,
+                onReasoningSummaryTextDelta: ({ delta }) => {
+                  reasoningBuffer += delta;
+                },
+              });
+          if (fundingSession && completion.ok !== false) {
+            if (completion.promptTokens === null || completion.completionTokens === null) {
+              aggregateUsageComplete = false;
+            } else {
+              aggregatePromptTokens += Math.max(0, Math.floor(Number(completion.promptTokens)));
+              aggregateCompletionTokens += Math.max(0, Math.floor(Number(completion.completionTokens)));
+            }
+          }
           if (reasoningBuffer.trim()) {
             await emitRunEvents([{ kind: "reasoning", content: reasoningBuffer.trim() }]);
             reasoningBuffer = "";
@@ -964,25 +1062,84 @@ export const runCommunityAgentLoopInternal = internalAction({
         ]);
       }
 
+      let fundingErrorCode: string | null = null;
+      if (fundingSession) {
+        try {
+          if (!aggregateUsageComplete) {
+            fundingErrorCode = "provider_token_usage_missing";
+            await failCommunityInferenceFundingSession({
+              ctx,
+              session: fundingSession,
+              promptTokens: aggregatePromptTokens,
+              completionTokens: aggregateCompletionTokens,
+              usageComplete: false,
+              failureCode: fundingErrorCode,
+              disposition: "indeterminate",
+            });
+          } else if (result.ok || aggregatePromptTokens > 0 || aggregateCompletionTokens > 0) {
+            await settleCommunityInferenceFundingSession({
+              ctx,
+              session: fundingSession,
+              promptTokens: aggregatePromptTokens,
+              completionTokens: aggregateCompletionTokens,
+              usageComplete: true,
+              outcomeCode: result.ok ? "provider_completed" : result.code,
+            });
+          } else {
+            const failureCode = result.code || "provider_error";
+            await failCommunityInferenceFundingSession({
+              ctx,
+              session: fundingSession,
+              promptTokens: 0,
+              completionTokens: 0,
+              usageComplete: true,
+              failureCode,
+              disposition: providerFailureIsKnownPreSpend(failureCode) ? "failed" : "indeterminate",
+            });
+          }
+          fundingFinalized = true;
+        } catch {
+          fundingErrorCode = "founder_inference_receipt_finalize_failed";
+        }
+      }
+
       const finished: unknown = await ctx.runMutation(internalRefs.communityAgentRuntime.finishCommunityAgentRunInternal as any, {
         runId,
-        status: result.ok ? "ok" : "error",
-        stopReason: result.stopReason,
+        status: result.ok && !fundingErrorCode ? "ok" : "error",
+        stopReason: fundingErrorCode ?? result.stopReason,
         toolStepCount: result.stepCount,
         appliedChangeRequestIds: [...appliedChangeRequestIds],
-        errorCode: result.ok ? undefined : result.code,
-        errorMessage: result.ok ? undefined : result.message,
+        errorCode: fundingErrorCode ?? (result.ok ? undefined : result.code),
+        errorMessage: fundingErrorCode
+          ? "Community inference usage could not be settled safely."
+          : result.ok ? undefined : result.message,
       });
       return {
-        ok: result.ok,
+        ok: result.ok && !fundingErrorCode,
         skipped: false,
         run: finished,
-        stop_reason: result.stopReason,
+        stop_reason: fundingErrorCode ?? result.stopReason,
         tool_step_count: result.stepCount,
         applied_change_request_ids: [...appliedChangeRequestIds],
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (fundingSession && !fundingFinalized) {
+        try {
+          await failCommunityInferenceFundingSession({
+            ctx,
+            session: fundingSession,
+            promptTokens: aggregatePromptTokens,
+            completionTokens: aggregateCompletionTokens,
+            usageComplete: false,
+            failureCode: "community_agent_runtime_exception",
+            disposition: "indeterminate",
+          });
+          fundingFinalized = true;
+        } catch {
+          // The original runtime error remains authoritative; the receipt stays fail-closed.
+        }
+      }
       await emitRunEvents([
         { kind: "error", status: "runtime_exception", errorCode: "community_agent_runtime_exception", content: message },
       ]);

@@ -13,6 +13,8 @@ const communityCommerce = read("convex/communityCommerce.ts");
 const founderBilling = read("convex/founderBilling.ts");
 const premiumBilling = read("convex/premiumBilling.ts");
 const httpBilling = read("convex/httpBilling.ts");
+const refundCore = read("convex/communityApplicationFeeRefundCore.ts");
+const refundLedger = read("convex/communityApplicationFeeRefunds.ts");
 const stripeCore = read("convex/stripeCore.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
 const billingDocs = read("docs/product/reference/billing-entitlements.md");
@@ -39,6 +41,16 @@ assert.match(
   schema,
   /communityStripeCustomers: defineTable\(\{[\s\S]*providerAccountId: v\.string\(\)[\s\S]*providerCustomerId: v\.string\(\)[\s\S]*\.index\("by_user_account", \["userId", "providerAccountId"\]\)[\s\S]*\.index\("by_account_customer", \["providerAccountId", "providerCustomerId"\]\)/,
   "Member customers must be keyed inside one connected account.",
+);
+assert.match(
+  schema,
+  /communityApplicationFeeRefunds: defineTable\(\{[\s\S]*providerAccountId: v\.string\(\)[\s\S]*providerApplicationFeeId: v\.string\(\)[\s\S]*providerRefundId: v\.string\(\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("succeeded"\)[\s\S]*v\.literal\("indeterminate"\)[\s\S]*\.index\("by_providerAccount_refund", \["providerAccountId", "providerRefundId"\]\)/,
+  "Application-fee reversal must keep an idempotent provider-scoped ledger.",
+);
+assert.match(
+  schema,
+  /communityApplicationFeeRefundLocks: defineTable\(\{[\s\S]*providerApplicationFeeId: v\.string\(\)[\s\S]*leaseExpiresAt: v\.number\(\)[\s\S]*\.index\("by_providerApplicationFee", \["providerApplicationFeeId"\]\)/,
+  "Application-fee reversal must serialize work per Stripe application fee.",
 );
 assert.match(
   schema,
@@ -127,8 +139,27 @@ assert.match(
 assert.doesNotMatch(founderBilling, /stripeAccount\s*:/);
 assert.doesNotMatch(premiumBilling, /stripeAccount\s*:/);
 
+assert.match(refundCore, /Math\.floor\(\(applicationFeeAmount \* refundedBefore\) \/ chargeAmount\)/);
+assert.match(refundCore, /Math\.floor\(\(applicationFeeAmount \* refundedAfter\) \/ chargeAmount\)/);
+assert.match(refundLedger, /community_application_fee_refund_identity_conflict/);
+assert.match(refundLedger, /community_application_fee_refund_in_progress/);
+assert.match(refundLedger, /community_application_fee_refund_lock_busy/);
+assert.match(httpBilling, /reverseCommunityApplicationFeesForRefund/);
+assert.match(httpBilling, /calculateApplicationFeeRefundAllocation/);
+assert.match(httpBilling, /applicationFees\.createRefund/);
+assert.match(
+  httpBilling,
+  /idempotencyKey:[\s\S]*`community-application-fee-refund:\$\{providerAccountId\}:\$\{refund\.id\}`/,
+);
+assert.match(
+  httpBilling,
+  /event\.type === "refund\.created"[\s\S]{0,100}event\.type === "refund\.updated"/,
+);
+assert.match(httpBilling, /event\.type === "charge\.refunded"/);
+
 assert.match(billingDocs, /Every paid community uses one 2\.9% Polynet application fee/);
 assert.match(billingDocs, /direct Stripe Connect subscriptions on the builder's connected account/);
 assert.match(billingDocs, /Stripe processing fees are separate/);
+assert.match(billingDocs, /proportional share of Polynet's application fee is reversed/);
 
 console.log("Community commerce economics contract proof passed.");

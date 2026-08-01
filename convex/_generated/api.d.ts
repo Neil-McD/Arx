@@ -50,6 +50,8 @@ import type * as communityAgentServeWorker from "../communityAgentServeWorker.js
 import type * as communityAiFeed from "../communityAiFeed.js";
 import type * as communityAiFeedEvidence from "../communityAiFeedEvidence.js";
 import type * as communityAiFeedEvidenceCore from "../communityAiFeedEvidenceCore.js";
+import type * as communityApplicationFeeRefundCore from "../communityApplicationFeeRefundCore.js";
+import type * as communityApplicationFeeRefunds from "../communityApplicationFeeRefunds.js";
 import type * as communityArchiveDocuments from "../communityArchiveDocuments.js";
 import type * as communityAttention from "../communityAttention.js";
 import type * as communityCapabilityContext from "../communityCapabilityContext.js";
@@ -132,6 +134,7 @@ import type * as founderBilling from "../founderBilling.js";
 import type * as founderInference from "../founderInference.js";
 import type * as founderInferenceCore from "../founderInferenceCore.js";
 import type * as founderInferenceMigration from "../founderInferenceMigration.js";
+import type * as founderInferenceRuntime from "../founderInferenceRuntime.js";
 import type * as founderPlanCore from "../founderPlanCore.js";
 import type * as founderPlanPricing from "../founderPlanPricing.js";
 import type * as gates from "../gates.js";
@@ -284,6 +287,8 @@ declare const fullApi: ApiFromModules<{
   communityAiFeed: typeof communityAiFeed;
   communityAiFeedEvidence: typeof communityAiFeedEvidence;
   communityAiFeedEvidenceCore: typeof communityAiFeedEvidenceCore;
+  communityApplicationFeeRefundCore: typeof communityApplicationFeeRefundCore;
+  communityApplicationFeeRefunds: typeof communityApplicationFeeRefunds;
   communityArchiveDocuments: typeof communityArchiveDocuments;
   communityAttention: typeof communityAttention;
   communityCapabilityContext: typeof communityCapabilityContext;
@@ -366,6 +371,7 @@ declare const fullApi: ApiFromModules<{
   founderInference: typeof founderInference;
   founderInferenceCore: typeof founderInferenceCore;
   founderInferenceMigration: typeof founderInferenceMigration;
+  founderInferenceRuntime: typeof founderInferenceRuntime;
   founderPlanCore: typeof founderPlanCore;
   founderPlanPricing: typeof founderPlanPricing;
   gates: typeof gates;

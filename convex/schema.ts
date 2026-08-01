@@ -236,7 +236,11 @@ export default defineSchema({
     founderGrantId: v.optional(v.id("founderInferenceGrants")),
     founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     usageCycleId: v.optional(v.id("founderUsageCycles")),
-    surface: v.literal("community_agent_mention"),
+    surface: v.union(
+      v.literal("community_agent_mention"),
+      v.literal("community_autonomous_cognition"),
+      v.literal("community_setup_generation"),
+    ),
     provider: v.literal("openai"),
     modelId: v.string(),
     status: v.union(
@@ -1454,6 +1458,43 @@ export default defineSchema({
     .index("by_providerAccount_subscription", ["providerAccountId", "providerSubscriptionId"])
     .index("by_status", ["status"])
     .index("by_community_status", ["communityId", "status"]),
+
+  communityApplicationFeeRefunds: defineTable({
+    providerAccountId: v.string(),
+    providerChargeId: v.string(),
+    providerApplicationFeeId: v.string(),
+    providerRefundId: v.string(),
+    providerApplicationFeeRefundId: v.optional(v.string()),
+    amountBaseUnits: v.number(),
+    requestedProviderRefundAmountBaseUnits: v.number(),
+    providerRefundedAmountBaseUnits: v.optional(v.number()),
+    currency: v.string(),
+    status: v.union(
+      v.literal("processing"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("indeterminate"),
+    ),
+    claimToken: v.string(),
+    leaseExpiresAt: v.number(),
+    failureCode: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_providerAccount_refund", ["providerAccountId", "providerRefundId"])
+    .index("by_providerApplicationFee", ["providerApplicationFeeId"])
+    .index("by_status", ["status"]),
+
+  communityApplicationFeeRefundLocks: defineTable({
+    providerAccountId: v.string(),
+    providerApplicationFeeId: v.string(),
+    claimToken: v.string(),
+    leaseExpiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_providerApplicationFee", ["providerApplicationFeeId"]),
 
   communityChatThreads: defineTable({
     communityId: v.id("communities"),

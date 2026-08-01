@@ -9,6 +9,7 @@ import { logStructuredError } from "./errorLogging";
 import { buildStripeConnectAccountSnapshot } from "./stripeConnectAccountCore";
 import { normalizeStripeCommunitySubscriptionStatus } from "./billingCore";
 import { requireCommunityProviderAccountMatch } from "./communityCommerceCore";
+import { calculateApplicationFeeRefundAllocation } from "./communityApplicationFeeRefundCore";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -387,6 +388,254 @@ async function retrieveStripeChargeForEvidence(
   } catch (error: any) {
     if (stripeResourceMissing(error)) return null;
     throw error;
+  }
+}
+
+async function listStripeRefundsForConnectedCharge(args: {
+  providerAccountId: string;
+  providerChargeId: string;
+}): Promise<Stripe.Refund[]> {
+  const stripe = getStripeClient();
+  const refunds: Stripe.Refund[] = [];
+  let startingAfter: string | undefined;
+  for (let pageIndex = 0; pageIndex < 10; pageIndex += 1) {
+    const page = await stripe.refunds.list(
+      {
+        charge: args.providerChargeId,
+        limit: 100,
+        ...(startingAfter ? { starting_after: startingAfter } : {}),
+      },
+      { stripeAccount: args.providerAccountId },
+    );
+    refunds.push(...page.data);
+    if (!page.has_more) return refunds;
+    startingAfter = page.data[page.data.length - 1]?.id;
+    if (!startingAfter) break;
+  }
+  throw new Error("stripe_charge_refund_scan_truncated");
+}
+
+function stripeRefundStatusIsSucceeded(refund: Stripe.Refund): boolean {
+  return String((refund as any)?.status ?? "").trim().toLowerCase() === "succeeded";
+}
+
+async function reverseCommunityApplicationFeesForRefund(args: {
+  ctx: any;
+  event: Stripe.Event;
+  refund: Stripe.Refund;
+  charge: Stripe.Charge | null;
+}): Promise<Record<string, unknown>> {
+  const providerAccountId = readStripeEventAccountId(args.event);
+  if (!providerAccountId) {
+    return { ok: true, ignored: true, reason: "application_fee_refund_platform_event" };
+  }
+  if (!args.charge || !stripeRefundStatusIsSucceeded(args.refund)) {
+    return { ok: true, ignored: true, reason: "application_fee_refund_not_succeeded" };
+  }
+  const providerChargeId = readStripeObjectId(args.charge.id);
+  const targetProviderRefundId = readStripeObjectId(args.refund.id);
+  const providerApplicationFeeId = readStripeObjectId((args.charge as any).application_fee);
+  if (!providerChargeId || !targetProviderRefundId || !providerApplicationFeeId) {
+    return { ok: true, ignored: true, reason: "application_fee_refund_identity_missing" };
+  }
+  const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(
+    args.charge,
+    providerAccountId,
+  );
+  if (!providerSubscriptionId) {
+    return { ok: true, ignored: true, reason: "application_fee_refund_subscription_missing" };
+  }
+  const communitySubscription = await args.ctx.runQuery(
+    internal.communityCommerce.getCommunitySubscriptionByProviderSubscriptionIdInternal as any,
+    { providerAccountId, providerSubscriptionId },
+  );
+  if (!communitySubscription?.communityId) {
+    return { ok: true, ignored: true, reason: "application_fee_refund_not_community_commerce" };
+  }
+
+  const lockClaimToken = crypto.randomUUID();
+  const lock = await args.ctx.runMutation(
+    (internal as any).communityApplicationFeeRefunds
+      .claimCommunityApplicationFeeRefundLockInternal,
+    {
+      providerAccountId,
+      providerApplicationFeeId,
+      claimToken: lockClaimToken,
+      nowMs: Date.now(),
+    },
+  );
+  if (!lock?.ok) {
+    throw new Error(lock?.errorCode ?? "community_application_fee_refund_lock_busy");
+  }
+
+  try {
+    const applicationFee = await getStripeClient().applicationFees.retrieve(
+      providerApplicationFeeId,
+    );
+    if (
+      readStripeObjectId((applicationFee as any).account) !== providerAccountId ||
+      readStripeObjectId((applicationFee as any).charge) !== providerChargeId ||
+      String(applicationFee.currency ?? "").trim().toLowerCase() !==
+        String(args.charge.currency ?? "").trim().toLowerCase()
+    ) {
+      throw new Error("community_application_fee_refund_provider_identity_mismatch");
+    }
+    const applicationFeeAmountBaseUnits = Math.max(
+      0,
+      Math.floor(Number(applicationFee.amount ?? 0)),
+    );
+    const refunds = (await listStripeRefundsForConnectedCharge({
+      providerAccountId,
+      providerChargeId,
+    }))
+      .filter(stripeRefundStatusIsSucceeded)
+      .sort((left, right) =>
+        Number(left.created ?? 0) - Number(right.created ?? 0) || left.id.localeCompare(right.id),
+      );
+    if (!refunds.some((refund) => refund.id === targetProviderRefundId)) {
+      return { ok: true, ignored: true, reason: "application_fee_target_refund_not_succeeded" };
+    }
+
+    const processed: Array<Record<string, unknown>> = [];
+    for (const refund of refunds) {
+      const allocationAmountBaseUnits = calculateApplicationFeeRefundAllocation({
+        chargeAmountBaseUnits: Number(args.charge.amount ?? 0),
+        applicationFeeAmountBaseUnits,
+        targetRefundId: refund.id,
+        refunds: refunds.map((row) => ({
+          id: row.id,
+          amount: Number(row.amount ?? 0),
+          created: Number(row.created ?? 0),
+          status: String((row as any)?.status ?? "") || null,
+        })),
+      });
+      if (allocationAmountBaseUnits <= 0) continue;
+
+      const existingRows = await args.ctx.runQuery(
+        (internal as any).communityApplicationFeeRefunds
+          .listCommunityApplicationFeeRefundsInternal,
+        { providerApplicationFeeId },
+      ) as Array<{
+        providerRefundId?: string;
+        amountBaseUnits?: number;
+        requestedProviderRefundAmountBaseUnits?: number;
+        status?: string;
+      }>;
+      const existing = existingRows.find((row) => row.providerRefundId === refund.id);
+      if (existing?.status === "succeeded") {
+        processed.push({ provider_refund_id: refund.id, duplicate: true });
+        continue;
+      }
+
+      let requestedProviderRefundAmountBaseUnits = Number(
+        existing?.requestedProviderRefundAmountBaseUnits,
+      );
+      if (!Number.isFinite(requestedProviderRefundAmountBaseUnits)) {
+        const applicationFee = await getStripeClient().applicationFees.retrieve(
+          providerApplicationFeeId,
+        );
+        const accountedRefundAmount = existingRows
+          .filter((row) => row.status === "succeeded")
+          .reduce((sum, row) => sum + Math.max(0, Math.floor(Number(row.amountBaseUnits ?? 0))), 0);
+        const externallyCoveredAmount = Math.max(
+          0,
+          Math.floor(Number(applicationFee.amount_refunded ?? 0)) - accountedRefundAmount,
+        );
+        requestedProviderRefundAmountBaseUnits = Math.max(
+          0,
+          allocationAmountBaseUnits - Math.min(allocationAmountBaseUnits, externallyCoveredAmount),
+        );
+      }
+      requestedProviderRefundAmountBaseUnits = Math.max(
+        0,
+        Math.floor(requestedProviderRefundAmountBaseUnits),
+      );
+
+      const claimToken = crypto.randomUUID();
+      const claim = await args.ctx.runMutation(
+        (internal as any).communityApplicationFeeRefunds
+          .claimCommunityApplicationFeeRefundInternal,
+        {
+          providerAccountId,
+          providerChargeId,
+          providerApplicationFeeId,
+          providerRefundId: refund.id,
+          amountBaseUnits: allocationAmountBaseUnits,
+          requestedProviderRefundAmountBaseUnits,
+          currency: String(args.charge.currency ?? "").trim().toLowerCase(),
+          claimToken,
+          nowMs: Date.now(),
+        },
+      );
+      if (!claim?.ok) throw new Error(claim?.errorCode ?? "community_application_fee_refund_claim_failed");
+      if (claim.completed) {
+        processed.push({ provider_refund_id: refund.id, duplicate: true });
+        continue;
+      }
+
+      let providerApplicationFeeRefundId: string | undefined;
+      try {
+        if (requestedProviderRefundAmountBaseUnits > 0) {
+          const feeRefund = await getStripeClient().applicationFees.createRefund(
+            providerApplicationFeeId,
+            { amount: requestedProviderRefundAmountBaseUnits },
+            {
+              idempotencyKey:
+                `community-application-fee-refund:${providerAccountId}:${refund.id}`,
+            },
+          );
+          providerApplicationFeeRefundId = feeRefund.id;
+        }
+        await args.ctx.runMutation(
+          (internal as any).communityApplicationFeeRefunds
+            .completeCommunityApplicationFeeRefundInternal,
+          {
+            providerAccountId,
+            providerRefundId: refund.id,
+            claimToken,
+            providerApplicationFeeRefundId,
+            providerRefundedAmountBaseUnits: requestedProviderRefundAmountBaseUnits,
+            nowMs: Date.now(),
+          },
+        );
+      } catch (error) {
+        await args.ctx.runMutation(
+          (internal as any).communityApplicationFeeRefunds
+            .failCommunityApplicationFeeRefundInternal,
+          {
+            providerAccountId,
+            providerRefundId: refund.id,
+            claimToken,
+            failureCode: error instanceof Error ? error.message : String(error),
+            disposition: "indeterminate",
+            nowMs: Date.now(),
+          },
+        );
+        throw error;
+      }
+      processed.push({
+        provider_refund_id: refund.id,
+        application_fee_refund_id: providerApplicationFeeRefundId ?? null,
+        allocation_amount_base_units: allocationAmountBaseUnits,
+        provider_refunded_amount_base_units: requestedProviderRefundAmountBaseUnits,
+      });
+    }
+    return {
+      ok: true,
+      provider_account_id: providerAccountId,
+      provider_application_fee_id: providerApplicationFeeId,
+      processed,
+    };
+  } finally {
+    await args.ctx.runMutation(
+      (internal as any).communityApplicationFeeRefunds
+        .releaseCommunityApplicationFeeRefundLockInternal,
+      {
+        providerApplicationFeeId,
+        claimToken: lockClaimToken,
+        nowMs: Date.now(),
+      },
+    );
   }
 }
 
@@ -1490,11 +1739,18 @@ export function registerRuntimeBillingRoutes(
             refund,
             charge,
           });
+          const applicationFeeRefundResult = await reverseCommunityApplicationFeesForRefund({
+            ctx,
+            event,
+            refund,
+            charge,
+          });
           return processedResponse({
             ok: true,
             received: true,
             event: event.type,
             communityAccessResult,
+            applicationFeeRefundResult,
           });
         }
 
@@ -1515,13 +1771,19 @@ export function registerRuntimeBillingRoutes(
           }
           const results = [];
           for (const refund of refunds) {
-            const refundEvidence = readStripeRefundEvidence(refund);
             const communityAccessResult = await syncCommunityAccessForRefund(ctx, event, {
+              refund,
+              charge,
+            });
+            const applicationFeeRefundResult = await reverseCommunityApplicationFeesForRefund({
+              ctx,
+              event,
               refund,
               charge,
             });
             results.push({
               communityAccessResult,
+              applicationFeeRefundResult,
             });
           }
           return processedResponse({

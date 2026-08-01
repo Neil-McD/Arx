@@ -39,6 +39,13 @@ import {
   hydrateCommunityResourceBody,
   writeCommunityResourceBodyContent,
 } from "./communityResourceContent";
+import {
+  beginCommunityInferenceFundingSession,
+  failCommunityInferenceFundingSession,
+  providerFailureIsKnownPreSpend,
+  resolveCommunityInferenceFundingForAction,
+  settleCommunityInferenceFundingSession,
+} from "./founderInferenceRuntime";
 
 const COMMUNITY_WIKI_ARCHITECT_MAX_CONTEXT_RESOURCES = 500;
 const COMMUNITY_WIKI_ARCHITECT_MAX_OUTPUT_TOKENS = 3600;
@@ -893,6 +900,8 @@ function parseResourceContentWriterBody(raw: string): string {
 
 async function runWikiArchitectModel(params: {
   input: Record<string, unknown>;
+  apiKeyOverride?: string | null;
+  modelIdOverride?: string | null;
 }): Promise<
   | {
       ok: true;
@@ -910,7 +919,9 @@ async function runWikiArchitectModel(params: {
       outputPreview?: string;
     }
 > {
-  const apiKey = readEnv("OPENAI_API_KEY") || readEnv("ARX_OPENAI_API_KEY");
+  const apiKey = String(params.apiKeyOverride ?? "").trim() ||
+    readEnv("OPENAI_API_KEY") ||
+    readEnv("ARX_OPENAI_API_KEY");
   if (!apiKey) {
     return {
       ok: false,
@@ -919,7 +930,10 @@ async function runWikiArchitectModel(params: {
       message: "OPENAI_API_KEY is not configured.",
     };
   }
-  const modelResolution = resolveWikiArchitectModelId();
+  const overrideModelId = normalizeOpenAiResponsesModelId(String(params.modelIdOverride ?? ""));
+  const modelResolution = overrideModelId
+    ? { ok: true as const, modelId: overrideModelId }
+    : resolveWikiArchitectModelId();
   if (!modelResolution.ok) {
     return {
       ok: false,
@@ -1014,6 +1028,8 @@ async function runWikiArchitectModel(params: {
 
 async function runResourceContentWriterModel(params: {
   input: Record<string, unknown>;
+  apiKeyOverride?: string | null;
+  modelIdOverride?: string | null;
 }): Promise<
   | {
       ok: true;
@@ -1031,7 +1047,9 @@ async function runResourceContentWriterModel(params: {
       outputPreview?: string;
     }
 > {
-  const apiKey = readEnv("OPENAI_API_KEY") || readEnv("ARX_OPENAI_API_KEY");
+  const apiKey = String(params.apiKeyOverride ?? "").trim() ||
+    readEnv("OPENAI_API_KEY") ||
+    readEnv("ARX_OPENAI_API_KEY");
   if (!apiKey) {
     return {
       ok: false,
@@ -1040,7 +1058,10 @@ async function runResourceContentWriterModel(params: {
       message: "OPENAI_API_KEY is not configured.",
     };
   }
-  const modelResolution = resolveResourceContentWriterModelId();
+  const overrideModelId = normalizeOpenAiResponsesModelId(String(params.modelIdOverride ?? ""));
+  const modelResolution = overrideModelId
+    ? { ok: true as const, modelId: overrideModelId }
+    : resolveResourceContentWriterModelId();
   if (!modelResolution.ok) {
     return {
       ok: false,
@@ -1222,6 +1243,7 @@ export const buildCommunityWikiArchitectRunContextInternal = internalQuery({
     return {
       ok: true,
       kind: "community_wiki_architect_run_context",
+      user_id: normalizeIdValue(userId),
       builder_intent: builderIntent,
       community: {
         id: normalizeIdValue(communityRow._id),
@@ -1282,6 +1304,7 @@ export const runCommunityWikiArchitectProposal: any = action({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     builderIntent: v.optional(v.union(v.string(), v.null())),
+    requestId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
     const context: any = await ctx.runQuery(
@@ -1303,10 +1326,35 @@ export const runCommunityWikiArchitectProposal: any = action({
       };
     }
 
+    const actorUserId = String(context?.user_id ?? "").trim();
+    if (!actorUserId) throw new Error("community_wiki_architect_actor_required");
+    const requestId = String(args.requestId ?? "").trim().slice(0, 160) || crypto.randomUUID();
+    const funding = await resolveCommunityInferenceFundingForAction(ctx, args.communityId);
+    const fundingSession = await beginCommunityInferenceFundingSession({
+      ctx,
+      communityId: args.communityId,
+      actorUserId,
+      surface: "community_setup_generation",
+      receiptKey: `community_setup_generation:wiki_architect:${requestId}`,
+      sourceRunId: `community-wiki-architect:${requestId}`,
+      admission: funding,
+    });
+
     const completion = await runWikiArchitectModel({
       input: context as Record<string, unknown>,
+      apiKeyOverride: fundingSession.apiKeyOverride,
+      modelIdOverride: fundingSession.modelId,
     });
     if (!completion.ok) {
+      await failCommunityInferenceFundingSession({
+        ctx,
+        session: fundingSession,
+        promptTokens: 0,
+        completionTokens: 0,
+        usageComplete: true,
+        failureCode: completion.code,
+        disposition: providerFailureIsKnownPreSpend(completion.code) ? "failed" : "indeterminate",
+      });
       return {
         ok: false,
         kind: "community_wiki_architect_proposal",
@@ -1315,6 +1363,32 @@ export const runCommunityWikiArchitectProposal: any = action({
         output_preview: completion.outputPreview ?? null,
       };
     }
+    const usageComplete = completion.promptTokens !== null && completion.completionTokens !== null;
+    if (!usageComplete) {
+      await failCommunityInferenceFundingSession({
+        ctx,
+        session: fundingSession,
+        promptTokens: completion.promptTokens ?? 0,
+        completionTokens: completion.completionTokens ?? 0,
+        usageComplete: false,
+        failureCode: "provider_token_usage_missing",
+        disposition: "indeterminate",
+      });
+      return {
+        ok: false,
+        kind: "community_wiki_architect_proposal",
+        code: "provider_token_usage_missing",
+        message: "Wiki Architect usage could not be settled safely.",
+      };
+    }
+    await settleCommunityInferenceFundingSession({
+      ctx,
+      session: fundingSession,
+      promptTokens: completion.promptTokens ?? 0,
+      completionTokens: completion.completionTokens ?? 0,
+      usageComplete: true,
+      outcomeCode: "provider_completed",
+    });
 
     let parsedProposal: unknown;
     try {
@@ -1874,6 +1948,7 @@ export const draftCommunityResourceContentFromSources: any = action({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     limit: v.optional(v.number()),
+    requestId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
     const context: any = await ctx.runQuery(
@@ -1887,12 +1962,41 @@ export const draftCommunityResourceContentFromSources: any = action({
     );
     const candidates = Array.isArray(context?.candidates) ? context.candidates : [];
     const userId = context?.user_id;
+    if (candidates.length <= 0) {
+      return {
+        ok: true,
+        kind: "community_resource_content_writer",
+        candidates: 0,
+        drafted: 0,
+        failed: 0,
+        pages: [],
+        failures: [],
+        usage: { prompt_tokens: null, completion_tokens: null },
+        code: null,
+        message: "No source-linked draft pages needed content.",
+      };
+    }
+    if (!userId) throw new Error("community_resource_content_writer_actor_required");
+    const requestId = String(args.requestId ?? "").trim().slice(0, 160) || crypto.randomUUID();
+    const funding = await resolveCommunityInferenceFundingForAction(ctx, args.communityId);
+    const fundingSession = await beginCommunityInferenceFundingSession({
+      ctx,
+      communityId: args.communityId,
+      actorUserId: userId,
+      surface: "community_setup_generation",
+      receiptKey: `community_setup_generation:resource_writer:${requestId}`,
+      sourceRunId: `community-resource-content-writer:${requestId}`,
+      admission: funding,
+    });
     let drafted = 0;
     let failed = 0;
     const pages: Array<{ id: string; title: string; status: string; source_resource_id: string | null }> = [];
     const failures: Array<{ resource_id: string; title: string; message: string }> = [];
     let promptTokens = 0;
     let completionTokens = 0;
+    let providerSucceeded = false;
+    let providerFailureCode = "provider_error";
+    let usageComplete = true;
 
     for (const candidate of candidates) {
       const pageId = String(candidate.page_id ?? "").trim();
@@ -1917,12 +2021,19 @@ export const draftCommunityResourceContentFromSources: any = action({
               body_md: candidate.source_body_md,
             },
           },
+          apiKeyOverride: fundingSession.apiKeyOverride,
+          modelIdOverride: fundingSession.modelId,
         });
         if (!completion.ok) {
+          providerFailureCode = completion.code;
+          if (!providerFailureIsKnownPreSpend(completion.code)) usageComplete = false;
           throw new Error(completion.message);
         }
+        providerSucceeded = true;
         if (typeof completion.promptTokens === "number") promptTokens += completion.promptTokens;
+        else usageComplete = false;
         if (typeof completion.completionTokens === "number") completionTokens += completion.completionTokens;
+        else usageComplete = false;
         const generatedBody = parseResourceContentWriterBody(completion.outputText);
         const bodyMd = buildReviewReadyResourceBody({
           pageTitle: title,
@@ -1961,7 +2072,40 @@ export const draftCommunityResourceContentFromSources: any = action({
       }
     }
 
-    const ok = failed === 0;
+    let fundingSettlementError: string | null = null;
+    if (!usageComplete) {
+      await failCommunityInferenceFundingSession({
+        ctx,
+        session: fundingSession,
+        promptTokens,
+        completionTokens,
+        usageComplete: false,
+        failureCode: "provider_token_usage_missing",
+        disposition: "indeterminate",
+      });
+      fundingSettlementError = "provider_token_usage_missing";
+    } else if (providerSucceeded) {
+      await settleCommunityInferenceFundingSession({
+        ctx,
+        session: fundingSession,
+        promptTokens,
+        completionTokens,
+        usageComplete: true,
+        outcomeCode: failed === 0 ? "provider_completed" : "resource_content_writer_partial_failure",
+      });
+    } else {
+      await failCommunityInferenceFundingSession({
+        ctx,
+        session: fundingSession,
+        promptTokens: 0,
+        completionTokens: 0,
+        usageComplete: true,
+        failureCode: providerFailureCode,
+        disposition: providerFailureIsKnownPreSpend(providerFailureCode) ? "failed" : "indeterminate",
+      });
+    }
+
+    const ok = failed === 0 && !fundingSettlementError;
     return {
       ok,
       kind: "community_resource_content_writer",
@@ -1974,12 +2118,14 @@ export const draftCommunityResourceContentFromSources: any = action({
         prompt_tokens: promptTokens || null,
         completion_tokens: completionTokens || null,
       },
-      code: ok ? null : "resource_content_writer_failed",
+      code: fundingSettlementError ?? (ok ? null : "resource_content_writer_failed"),
       message: ok
         ? drafted > 0
           ? "Resource drafts are ready for review."
           : "No source-linked draft pages needed content."
-        : failures[0]?.message || "Could not draft resource content.",
+        : fundingSettlementError === "provider_token_usage_missing"
+          ? "Resource generation usage could not be settled safely."
+          : failures[0]?.message || "Could not draft resource content.",
     };
   },
 });
