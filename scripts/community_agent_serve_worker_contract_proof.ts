@@ -98,8 +98,8 @@ assert.match(
 
 assert.match(
   actionBlock,
-  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID[\s\S]*apiKeyOverride: ownerApiKey[\s\S]*runChatgptNativeToolCompletion\(\{[\s\S]*userId: normalizeIdValue\(context\.request\.sponsorUserId\)/,
-  "serve action should use owner Luna funding while retaining the bounded requester transition",
+  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*context\.funding\.mode === "owner_api_key"[\s\S]*context\.funding\.mode === "platform_subscription"[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID[\s\S]*context\.funding\.mode === "owner_api_key" \? ownerApiKey : undefined[\s\S]*runChatgptNativeToolCompletion\(\{[\s\S]*userId: normalizeIdValue\(context\.request\.sponsorUserId\)/,
+  "serve action should use fixed Luna for owner-key or paid managed funding while retaining the bounded requester transition",
 );
 assert.match(
   worker,

@@ -1749,7 +1749,7 @@ Rules:
 
 - This slice is intake only: No LLM, no reply, no memory write.
 - A queued serve request must have `sponsorUserId == requesterUserId`; this is the member tool-authority principal, not the payer.
-- An active existing-founder grant resolves the current community owner as payer and requires that owner's OpenAI API key. Approved-but-not-yet-activated founders retain the requester ChatGPT path only during the bounded cutover. There is no platform-funded fallback.
+- An active existing-founder grant resolves the current community owner as payer and requires that owner's OpenAI API key. An active founder subscription permanently attached to the community resolves that owner as payer and the subscription as the server-side Luna funding authority. Approved-but-not-yet-activated founders retain the requester ChatGPT path only during the bounded cutover. An attached inactive subscription fails closed and never falls back to a founder key.
 - `communityInteractionMentions.notifyState` is only the narrow drain marker for agent mentions:
   - `pending` = intake has not processed this mention
   - `sent` = intake accepted it into `communityAgentServeRequests`
@@ -1788,19 +1788,24 @@ Rules:
 - The worker keeps three identities separate: requester/sponsor for access and tools,
   canonical community agent for the response identity, and current community owner
   for payment and credential. `sponsorUserId` must equal `requesterUserId`; the owner
-  must never become the tool principal. There is no member or platform fallback after
-  owner funding is active.
-- Existing-founder owner-funded turns use the fixed `gpt-5.6-luna` model through the
-  owner's encrypted OpenAI API key. The global model default remains independent.
-- Each owner-funded request claims one idempotent `communityInferenceReceipts` row.
-  The receipt records actor, payer, grant, community, model, bounded token usage, and
-  outcome but never the key, prompt, response, or tool output.
+  must never become the tool principal. There is no member fallback after canonical
+  community funding is active.
+- Existing-founder owner-funded turns use fixed `gpt-5.6-luna` through the owner's
+  encrypted OpenAI API key. Paid-founder turns use the same fixed model through
+  Polynet's server-side OpenAI credential only after an attached subscription and
+  open usage cycle are verified. The global model default remains independent.
+- Each funded request claims one idempotent `communityInferenceReceipts` row. The
+  receipt records actor, payer, funding mode, grant or subscription, community,
+  model, bounded token usage, and outcome but never the key, prompt, response, or
+  tool output. Paid receipts also bind the pricing version, usage cycle, reservation,
+  and settled raw cost.
 - Provider-start is recorded before the first Luna request. A stale worker may reclaim
   only a receipt that never reached provider-start; ambiguous post-provider retries
   become `indeterminate` and cannot double-spend automatically.
-- Owner-funded usage is limited to six turns per actor/community per minute and sixty
-  turns per community per minute. Missing, suspended, transferred, invalid, exhausted,
-  or rate-limited funding fails closed.
+- Funded usage is limited to six turns per actor/community per minute and sixty turns
+  per community per minute. Paid usage additionally reserves monthly included cost
+  before provider start. Missing, suspended, transferred, invalid, expired, exhausted,
+  ambiguous, or rate-limited funding fails closed.
 - The LLM call is a bounded native tool loop with the canonical five-tool
   Polynet surface:
   - `polynet_list`
@@ -1978,13 +1983,14 @@ Two payment lanes, split by what the spend produces:
   owner's connection. Defaults: on wherever the owner has a usable
   connection, capped at two cycles per day, with an owner off-switch
   (communityAgentConfigs.agentEnabled).
-- Direct Concierge chat is community-founder-funded for the approved existing
-  founder cohort after activation. The current owner supplies the OpenAI key and
-  pays for GPT 5.6 Luna, while the requesting member remains the permission and
-  tool principal. Approved-but-inactive founders retain the former requester
-  ChatGPT route only during the bounded cutover. Future founders use the later
-  platform-funded founder plan; there is no platform fallback in this cohort
-  slice. Payment identity never widens retrieval or tool authority.
+- Direct Concierge chat is community-founder-funded. An approved existing founder
+  supplies the OpenAI key after activation; a new founder supplies a verified $79
+  monthly subscription attached to exactly one community, and Polynet supplies the
+  server-side OpenAI key. Both use GPT 5.6 Luna while the requesting member remains
+  the permission and tool principal. Approved-but-inactive existing founders retain
+  the former requester ChatGPT route only during the bounded cutover. Payment
+  identity never widens retrieval or tool authority. The first paid kernel does not
+  yet move autonomous memory cycles onto subscription funding.
 
 ### Cadence (resolved 2026-07-01)
 

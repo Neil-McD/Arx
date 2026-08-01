@@ -6,16 +6,24 @@ import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import {
   getExistingFounderInferenceGrant,
+  requireFounderCommunityCreationEligibility,
   requireExistingFounderCommunityCreationEligibility,
   resolveCommunityInferenceFundingAdmission,
   settleAuthorizedFounderInferenceReceipt,
   suspendActiveFounderInferenceGrantForCredentialChange,
 } from "./founderInferenceCore";
+import {
+  attachFounderSubscriptionToCommunity,
+  syncFounderUsageCycle,
+} from "./founderPlanCore";
 import { EXISTING_FOUNDER_INFERENCE_COHORT_KEY } from "../shared/founderInference";
+import { POLYNET_FOUNDER_PLAN_PRICING_VERSION } from "../shared/founderPlan";
+import { buildAccountSetupStatusForRows } from "./accountSetupCore";
 
 const modules = import.meta.glob([
   "./founderInference.ts",
   "./founderInferenceMigration.ts",
+  "./founderBilling.ts",
   "./providerConnections.ts",
   "./_generated/**/*.*s",
 ]);
@@ -105,6 +113,7 @@ function claimArgs(
     communityId: fixture.communityId,
     actorUserId: fixture.memberId,
     expectedPayerUserId: fixture.ownerId,
+    expectedFundingMode: "owner_api_key" as const,
     expectedFounderGrantId: fixture.grantId,
     claimToken,
     nowMs,
@@ -180,6 +189,7 @@ test("funding cutover is founder-level and fails closed without changing member 
       communityId,
       actorUserId: memberId,
       payerUserId: ownerId,
+      fundingMode: "owner_api_key",
       founderGrantId: grantId,
       surface: "community_agent_mention",
       provider: "openai",
@@ -224,6 +234,23 @@ test("funding cutover is founder-level and fails closed without changing member 
       code: "owner_funding_suspended",
     });
   });
+});
+
+test("an active managed founder plan satisfies setup inference without BYOK", () => {
+  const status = buildAccountSetupStatusForRows({
+    user: {
+      _id: "managed-founder",
+      authSubject: "managed-founder",
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    detail: null,
+    providerConnections: [],
+    legalAcceptances: [],
+    hasManagedInference: true,
+  });
+  expect(status.missing).not.toContain("inference_provider");
+  expect(status.steps.find((step) => step.step === "inference")?.completed).toBe(true);
 });
 
 test("cohort migration requires exactly nine real owners and deletes only eight bounded legacy policies", async () => {
@@ -468,6 +495,7 @@ test("receipt authorization rate limits both an actor and the whole community", 
         communityId: communityFixture.communityId,
         actorUserId,
         payerUserId: communityFixture.ownerId,
+        fundingMode: "owner_api_key",
         founderGrantId: communityFixture.grantId,
         surface: "community_agent_mention",
         provider: "openai",
@@ -640,4 +668,340 @@ test("replacing or deleting the owner's OpenAI key suspends active funding", asy
         .first(),
     ).toBeNull();
   });
+});
+
+test("a paid founder subscription attaches to one community and meters managed Luna usage", async () => {
+  const priorEnv = {
+    input: process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS,
+    output: process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS,
+    reservation: process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS,
+  };
+  process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = "1000000";
+  process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS = "2000000";
+  process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS = "1000000";
+  try {
+    const t = convexTest(schema, modules);
+    const nowMs = Date.now();
+    const fixture = await t.run(async (ctx) => {
+      const cohortFounderId = await insertUser(ctx, "paid-cohort-anchor", nowMs);
+      await ctx.db.insert("founderInferenceGrants", {
+        userId: cohortFounderId,
+        cohortKey: EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
+        status: "approved",
+        approvedAt: nowMs,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      const ownerId = await insertUser(ctx, "paid-owner", nowMs);
+      const memberId = await insertUser(ctx, "paid-member", nowMs);
+      const communityId = await insertCommunity(ctx, ownerId, "paid-community", nowMs);
+      const founderSubscriptionId = await ctx.db.insert("founderSubscriptions", {
+        ownerUserId: ownerId,
+        provider: "stripe",
+        providerCustomerId: "cus_founder_paid",
+        providerSubscriptionId: "sub_founder_paid",
+        providerPriceId: "price_founder_paid",
+        status: "active",
+        currentPeriodStartAt: nowMs - 60_000,
+        currentPeriodEndAt: nowMs + 2_592_000_000,
+        cancelAtPeriodEnd: false,
+        lastProviderEventCreatedAt: nowMs,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      const subscription = await ctx.db.get(founderSubscriptionId);
+      if (!subscription) throw new Error("test_subscription_missing");
+      await syncFounderUsageCycle({
+        ctx,
+        subscription: subscription as any,
+        cycleStartAt: nowMs - 60_000,
+        cycleEndAt: nowMs + 2_592_000_000,
+        pricing: {
+          pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+          includedCostMicros: 20_000_000,
+          inputCostMicrosPerMillionTokens: 1_000_000,
+          outputCostMicrosPerMillionTokens: 2_000_000,
+          maxRunReservationCostMicros: 1_000_000,
+        },
+        nowMs,
+      });
+      const eligibility = await requireFounderCommunityCreationEligibility({
+        ctx,
+        userId: ownerId,
+        nowMs,
+      });
+      expect(eligibility).toEqual({
+        mode: "platform_subscription",
+        founderSubscriptionId,
+      });
+      await attachFounderSubscriptionToCommunity({
+        ctx,
+        founderSubscriptionId,
+        ownerUserId: ownerId,
+        communityId,
+        nowMs,
+      });
+      return { communityId, founderSubscriptionId, memberId, ownerId };
+    });
+
+    await expect(
+      t.run(async (ctx) =>
+        await resolveCommunityInferenceFundingAdmission(ctx, fixture.communityId),
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      mode: "platform_subscription",
+      payerUserId: fixture.ownerId,
+      subscriptionId: fixture.founderSubscriptionId,
+      modelId: "gpt-5.6-luna",
+    });
+
+    const receiptKey = "community_agent_mention:paid-founder";
+    const claimed = await t.mutation(
+      (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+      {
+        receiptKey,
+        sourceRunId: "community-agent-serve:paid-founder",
+        communityId: fixture.communityId,
+        actorUserId: fixture.memberId,
+        expectedPayerUserId: fixture.ownerId,
+        expectedFundingMode: "platform_subscription",
+        expectedFounderSubscriptionId: fixture.founderSubscriptionId,
+        claimToken: "paid-founder-claim",
+        nowMs: nowMs + 1_000,
+      },
+    );
+    expect(claimed).toMatchObject({ ok: true, reclaimed: false });
+    await t.run(async (ctx) => {
+      const receipt = (await ctx.db.get(claimed.receiptId)) as any;
+      expect(receipt).toMatchObject({
+        fundingMode: "platform_subscription",
+        founderSubscriptionId: fixture.founderSubscriptionId,
+        pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+        reservedCostMicros: 1_000_000,
+      });
+      const cycle = await ctx.db.get(receipt?.usageCycleId as any);
+      expect(cycle).toMatchObject({ reservedCostMicros: 1_000_000, settledCostMicros: 0 });
+    });
+    await expect(
+      t.mutation(
+        (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+        { receiptKey, claimToken: "paid-founder-claim", nowMs: nowMs + 2_000 },
+      ),
+    ).resolves.toEqual({ ok: true });
+    await t.run(async (ctx) => {
+      await settleAuthorizedFounderInferenceReceipt({
+        ctx,
+        receiptKey,
+        claimToken: "paid-founder-claim",
+        promptTokens: 1_000,
+        completionTokens: 500,
+        outcomeCode: "completed",
+        nowMs: nowMs + 3_000,
+      });
+      const receipt = (await ctx.db.get(claimed.receiptId)) as any;
+      expect(receipt).toMatchObject({ status: "settled", settledCostMicros: 2_000 });
+      const cycle = await ctx.db.get(receipt?.usageCycleId as any);
+      expect(cycle).toMatchObject({ reservedCostMicros: 0, settledCostMicros: 2_000 });
+      await ctx.db.patch(receipt.usageCycleId, {
+        settledCostMicros: 19_500_001,
+        updatedAt: nowMs + 3_100,
+      });
+    });
+    await expect(
+      t.mutation(
+        (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+        {
+          receiptKey: "community_agent_mention:paid-founder-exhausted",
+          sourceRunId: "community-agent-serve:paid-founder-exhausted",
+          communityId: fixture.communityId,
+          actorUserId: fixture.memberId,
+          expectedPayerUserId: fixture.ownerId,
+          expectedFundingMode: "platform_subscription",
+          expectedFounderSubscriptionId: fixture.founderSubscriptionId,
+          claimToken: "paid-founder-exhausted-claim",
+          nowMs: nowMs + 3_200,
+        },
+      ),
+    ).resolves.toMatchObject({ ok: false, errorCode: "founder_usage_exhausted" });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(fixture.founderSubscriptionId, {
+        status: "past_due",
+        updatedAt: nowMs + 4_000,
+      });
+      const activeGrantId = await ctx.db.insert("founderInferenceGrants", {
+        userId: fixture.ownerId,
+        cohortKey: EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
+        status: "active",
+        approvedAt: nowMs,
+        activatedAt: nowMs,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      await insertOpenAiConnection(ctx, fixture.ownerId, "paid-fallback-key", nowMs);
+      expect(activeGrantId).toBeTruthy();
+      await expect(
+        resolveCommunityInferenceFundingAdmission(ctx, fixture.communityId),
+      ).resolves.toEqual({ ok: false, code: "founder_subscription_inactive" });
+    });
+  } finally {
+    if (priorEnv.input === undefined) delete process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS;
+    else process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = priorEnv.input;
+    if (priorEnv.output === undefined) delete process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS;
+    else process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS = priorEnv.output;
+    if (priorEnv.reservation === undefined) delete process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS;
+    else process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS = priorEnv.reservation;
+  }
+});
+
+test("Stripe founder subscription sync is idempotent and ignores stale lifecycle events", async () => {
+  const priorEnv = {
+    priceId: process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID,
+    input: process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS,
+    output: process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS,
+    reservation: process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS,
+  };
+  process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID = "price_founder_79";
+  process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = "1000000";
+  process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS = "2000000";
+  process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS = "1000000";
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await t.run(async (ctx) => ({
+      ownerId: await insertUser(ctx, "stripe-sync-owner", 700_000),
+    }));
+    await t.mutation(
+      (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
+      {
+        sessionId: "founder-checkout-sync",
+        ownerUserId: fixture.ownerId,
+        expiresAt: 9_000_000,
+        nowMs: 700_000,
+      },
+    );
+    const syncArgs = {
+      localSessionId: "founder-checkout-sync",
+      providerCheckoutSessionId: "cs_founder_sync",
+      providerCustomerId: "cus_founder_sync",
+      providerSubscriptionId: "sub_founder_sync",
+      providerPriceId: "price_founder_79",
+      subscriptionStatus: "active",
+      currentPeriodStartAt: 700_000,
+      currentPeriodEndAt: 3_292_000_000,
+      cancelAtPeriodEnd: false,
+      providerEventCreatedAt: 710_000,
+    };
+    const first = await t.mutation(
+      (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
+      syncArgs,
+    );
+    expect(first).toMatchObject({ ok: true, ignored: false, subscriptionStatus: "active" });
+    const replay = await t.mutation(
+      (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
+      syncArgs,
+    );
+    expect(replay).toMatchObject({
+      ok: true,
+      ignored: false,
+      founderSubscriptionId: first.founderSubscriptionId,
+      usageCycleId: first.usageCycleId,
+    });
+    await expect(
+      t.mutation(
+        (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
+        {
+          ...syncArgs,
+          localSessionId: null,
+          subscriptionStatus: "past_due",
+          providerEventCreatedAt: 709_999,
+        },
+      ),
+    ).resolves.toMatchObject({ ok: true, ignored: true, reason: "founder_subscription_event_stale" });
+    await expect(
+      t.mutation(
+        (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
+        {
+          ...syncArgs,
+          localSessionId: null,
+          providerCustomerId: "cus_wrong_owner",
+          providerEventCreatedAt: 711_000,
+        },
+      ),
+    ).rejects.toThrow("founder_subscription_customer_mismatch");
+    await expect(
+      t.mutation(
+        (internal as any).founderBilling.syncFounderSubscriptionRiskStatusInternal,
+        {
+          providerSubscriptionId: "sub_founder_sync",
+          status: "ended",
+          revokedReason: "subscription_refunded",
+          providerEventCreatedAt: 720_000,
+        },
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      ignored: false,
+      subscriptionStatus: "ended",
+      revokedReason: "subscription_refunded",
+    });
+    const restored = await t.mutation(
+      (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
+      {
+        ...syncArgs,
+        localSessionId: null,
+        providerEventCreatedAt: 730_000,
+      },
+    );
+    expect(restored).toMatchObject({ ok: true, ignored: false, subscriptionStatus: "active" });
+    await expect(
+      t.mutation(
+        (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
+        {
+          ...syncArgs,
+          localSessionId: null,
+          providerPriceId: "price_unmanaged_replacement",
+          providerEventCreatedAt: 740_000,
+        },
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      ignored: false,
+      subscriptionStatus: "ended",
+      revokedReason: "founder_subscription_price_changed",
+    });
+    await t.mutation(
+      (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
+      {
+        ...syncArgs,
+        localSessionId: null,
+        providerEventCreatedAt: 750_000,
+      },
+    );
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("founderSubscriptions").collect()).toHaveLength(1);
+      expect(await ctx.db.query("founderUsageCycles").collect()).toHaveLength(1);
+      const subscription = await ctx.db.get(first.founderSubscriptionId);
+      expect(subscription).toMatchObject({ status: "active" });
+      expect(subscription).not.toHaveProperty("endedAt");
+      expect(subscription).not.toHaveProperty("revokedReason");
+      const checkout = await ctx.db
+        .query("checkoutSessions")
+        .withIndex("by_sessionId", (q: any) => q.eq("sessionId", "founder-checkout-sync"))
+        .first();
+      expect(checkout).toMatchObject({
+        status: "complete",
+        founderSubscriptionId: first.founderSubscriptionId,
+        providerSubscriptionId: "sub_founder_sync",
+      });
+    });
+  } finally {
+    if (priorEnv.priceId === undefined) delete process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID;
+    else process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID = priorEnv.priceId;
+    if (priorEnv.input === undefined) delete process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS;
+    else process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = priorEnv.input;
+    if (priorEnv.output === undefined) delete process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS;
+    else process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS = priorEnv.output;
+    if (priorEnv.reservation === undefined) delete process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS;
+    else process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS = priorEnv.reservation;
+  }
 });

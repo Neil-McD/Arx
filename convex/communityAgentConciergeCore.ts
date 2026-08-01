@@ -21,7 +21,10 @@ export type ServeRequestIntakeReason =
   | "requester_connection_missing"
   | "owner_credential_missing"
   | "owner_funding_suspended"
-  | "founder_plan_required";
+  | "founder_plan_required"
+  | "founder_subscription_inactive"
+  | "founder_subscription_ambiguous"
+  | "founder_subscription_owner_mismatch";
 
 export type ConciergeMentionRow = {
   _id: any;
@@ -395,6 +398,8 @@ export async function intakeCommunityAgentMention(args: {
         ? "The community owner must connect an OpenAI API key."
         : funding.code === "owner_funding_suspended"
           ? "Community inference funding is suspended."
+          : funding.code === "founder_subscription_inactive"
+            ? "The community founder subscription is inactive."
           : funding.code === "founder_plan_required"
             ? "The community requires an active founder plan."
             : "Community inference funding could not be resolved.",

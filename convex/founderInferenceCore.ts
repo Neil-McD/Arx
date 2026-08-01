@@ -3,6 +3,20 @@ import {
   EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
   type CommunityInferenceFundingAdmission,
 } from "../shared/founderInference";
+import {
+  POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+  founderSubscriptionStatusGrantsAccess,
+} from "../shared/founderPlan";
+import {
+  getAvailableFounderSubscriptionForOwner,
+  getFounderSubscriptionByCommunity,
+  requireAvailableFounderSubscription,
+  settleFounderUsageReservation,
+  type FounderUsageCycleRow,
+} from "./founderPlanCore";
+import {
+  calculateFounderInferenceCostMicros,
+} from "./founderPlanPricing";
 
 export type FounderInferenceGrantRow = {
   _id: any;
@@ -24,7 +38,10 @@ export type FounderInferenceReceiptRow = {
   communityId: any;
   actorUserId: any;
   payerUserId: any;
-  founderGrantId: any;
+  fundingMode: "owner_api_key" | "platform_subscription";
+  founderGrantId?: any;
+  founderSubscriptionId?: any;
+  usageCycleId?: any;
   surface: "community_agent_mention";
   provider: "openai";
   modelId: string;
@@ -34,6 +51,9 @@ export type FounderInferenceReceiptRow = {
   providerStartedAt?: number;
   promptTokens?: number;
   completionTokens?: number;
+  pricingVersion?: string;
+  reservedCostMicros?: number;
+  settledCostMicros?: number;
   outcomeCode?: string;
   failureCode?: string;
   authorizedAt: number;
@@ -69,6 +89,43 @@ export async function requireExistingFounderCommunityCreationEligibility(
 ): Promise<void> {
   if (!(await existingFounderInferenceCohortIsInitialized(ctx))) return;
   if (await getExistingFounderInferenceGrant(ctx, userId)) return;
+  throw new Error("founder_plan_required");
+}
+
+export type FounderCommunityCreationEligibility =
+  | { mode: "grandfathered"; founderSubscriptionId: null }
+  | { mode: "platform_subscription"; founderSubscriptionId: any }
+  | { mode: "pre_cohort"; founderSubscriptionId: null };
+
+export async function requireFounderCommunityCreationEligibility(args: {
+  ctx: any;
+  userId: any;
+  founderSubscriptionId?: any;
+  nowMs: number;
+}): Promise<FounderCommunityCreationEligibility> {
+  if (!(await existingFounderInferenceCohortIsInitialized(args.ctx))) {
+    return { mode: "pre_cohort", founderSubscriptionId: null };
+  }
+  if (args.founderSubscriptionId) {
+    const subscription = await requireAvailableFounderSubscription({
+      ctx: args.ctx,
+      ownerUserId: args.userId,
+      founderSubscriptionId: args.founderSubscriptionId,
+      nowMs: args.nowMs,
+    });
+    return { mode: "platform_subscription", founderSubscriptionId: subscription._id };
+  }
+  if (await getExistingFounderInferenceGrant(args.ctx, args.userId)) {
+    return { mode: "grandfathered", founderSubscriptionId: null };
+  }
+  const subscription = await getAvailableFounderSubscriptionForOwner({
+    ctx: args.ctx,
+    ownerUserId: args.userId,
+    nowMs: args.nowMs,
+  });
+  if (subscription) {
+    return { mode: "platform_subscription", founderSubscriptionId: subscription._id };
+  }
   throw new Error("founder_plan_required");
 }
 
@@ -112,6 +169,36 @@ export async function resolveCommunityInferenceFundingAdmission(
       payerUserId: null,
       grantId: null,
       modelId: null,
+    };
+  }
+
+  let attachedSubscription;
+  try {
+    attachedSubscription = await getFounderSubscriptionByCommunity(ctx, communityId);
+  } catch (error) {
+    if (error instanceof Error && error.message === "founder_subscription_ambiguous") {
+      return { ok: false, code: "founder_subscription_ambiguous" };
+    }
+    throw error;
+  }
+  if (attachedSubscription) {
+    if (!founderSubscriptionStatusGrantsAccess({
+      status: attachedSubscription.status,
+      currentPeriodEndAt: attachedSubscription.currentPeriodEndAt,
+      nowMs: Date.now(),
+    })) {
+      return { ok: false, code: "founder_subscription_inactive" };
+    }
+    if (String(attachedSubscription.ownerUserId) !== String(community.ownerId)) {
+      return { ok: false, code: "founder_subscription_owner_mismatch" };
+    }
+    return {
+      ok: true,
+      mode: "platform_subscription",
+      transitional: false,
+      payerUserId: community.ownerId,
+      subscriptionId: attachedSubscription._id,
+      modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
     };
   }
 
@@ -178,10 +265,47 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
   }
   const promptTokens = Math.max(0, Math.floor(args.promptTokens));
   const completionTokens = Math.max(0, Math.floor(args.completionTokens));
+  let settledCostMicros: number | undefined;
+  if (receipt.fundingMode === "platform_subscription") {
+    if (!receipt.usageCycleId || !receipt.founderSubscriptionId) {
+      throw new Error("founder_usage_receipt_authority_missing");
+    }
+    const cycle = (await args.ctx.db.get(
+      receipt.usageCycleId as any,
+    )) as FounderUsageCycleRow | null;
+    if (!cycle || String(cycle.founderSubscriptionId) !== String(receipt.founderSubscriptionId)) {
+      throw new Error("founder_usage_cycle_authority_mismatch");
+    }
+    if (
+      receipt.pricingVersion !== cycle.pricingVersion ||
+      cycle.pricingVersion !== POLYNET_FOUNDER_PLAN_PRICING_VERSION
+    ) {
+      throw new Error("founder_inference_pricing_version_mismatch");
+    }
+    settledCostMicros = calculateFounderInferenceCostMicros({
+      promptTokens,
+      completionTokens,
+      pricing: {
+        pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+        includedCostMicros: cycle.includedCostMicros,
+        inputCostMicrosPerMillionTokens: cycle.inputCostMicrosPerMillionTokens,
+        outputCostMicrosPerMillionTokens: cycle.outputCostMicrosPerMillionTokens,
+        maxRunReservationCostMicros: cycle.maxRunReservationCostMicros,
+      },
+    });
+    await settleFounderUsageReservation({
+      ctx: args.ctx,
+      usageCycleId: receipt.usageCycleId,
+      reservedCostMicros: Number(receipt.reservedCostMicros ?? 0),
+      settledCostMicros,
+      nowMs: args.nowMs,
+    });
+  }
   await args.ctx.db.patch(receipt._id as any, {
     status: "settled",
     promptTokens,
     completionTokens,
+    settledCostMicros,
     outcomeCode: String(args.outcomeCode ?? "completed").trim().slice(0, 120) || "completed",
     failureCode: undefined,
     settledAt: args.nowMs,
@@ -192,6 +316,7 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
     status: "settled",
     promptTokens,
     completionTokens,
+    settledCostMicros,
     outcomeCode: args.outcomeCode,
     settledAt: args.nowMs,
     updatedAt: args.nowMs,

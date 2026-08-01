@@ -28,10 +28,21 @@ export type CommunityInferenceFundingAdmission =
       modelId: typeof COMMUNITY_OWNER_FUNDED_MODEL_ID;
     }
   | {
+      ok: true;
+      mode: "platform_subscription";
+      transitional: false;
+      payerUserId: unknown;
+      subscriptionId: unknown;
+      modelId: typeof COMMUNITY_OWNER_FUNDED_MODEL_ID;
+    }
+  | {
       ok: false;
       code:
         | "community_not_found"
         | "founder_plan_required"
         | "owner_funding_suspended"
-        | "owner_credential_missing";
+        | "owner_credential_missing"
+        | "founder_subscription_inactive"
+        | "founder_subscription_ambiguous"
+        | "founder_subscription_owner_mismatch";
     };

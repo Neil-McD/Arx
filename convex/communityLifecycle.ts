@@ -40,7 +40,8 @@ import {
   canReceiveCommunityRevenue,
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
-import { requireExistingFounderCommunityCreationEligibility } from "./founderInferenceCore";
+import { requireFounderCommunityCreationEligibility } from "./founderInferenceCore";
+import { attachFounderSubscriptionToCommunity } from "./founderPlanCore";
 
 const COMMUNITY_DELETION_QUARANTINE_CODE =
   "community_delete_lifecycle_migration_blocked" as const;
@@ -475,6 +476,7 @@ export const createCommunity = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
+    founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     name: v.string(),
     slug: v.string(),
     visibility: v.optional(v.string()),
@@ -498,8 +500,13 @@ export const createCommunity = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireAccountSetupCompleteForUser(ctx, ownerId);
-    await requireExistingFounderCommunityCreationEligibility(ctx, ownerId);
     const nowMs = Date.now();
+    const founderEligibility = await requireFounderCommunityCreationEligibility({
+      ctx,
+      userId: ownerId,
+      founderSubscriptionId: args.founderSubscriptionId,
+      nowMs,
+    });
     const billingStatus = await ctx.runQuery(api.auth.getAccountCommerceStatus, {
       authSubject: args.authSubject ?? undefined,
       nowMs,
@@ -564,6 +571,18 @@ export const createCommunity = mutation({
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    if (
+      founderEligibility.mode === "platform_subscription" &&
+      founderEligibility.founderSubscriptionId
+    ) {
+      await attachFounderSubscriptionToCommunity({
+        ctx,
+        founderSubscriptionId: founderEligibility.founderSubscriptionId,
+        ownerUserId: ownerId,
+        communityId,
+        nowMs,
+      });
+    }
     const created = (await ctx.db.get(communityId)) as CommunityLike | null;
     if (!created) throw new Error("community_create_failed");
     return await mapCommunityRecord(ctx, created);

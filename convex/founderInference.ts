@@ -16,6 +16,10 @@ import {
   settleAuthorizedFounderInferenceReceipt,
   type FounderInferenceReceiptRow,
 } from "./founderInferenceCore";
+import {
+  releaseFounderUsageReservation,
+  reserveFounderUsage,
+} from "./founderPlanCore";
 import { decryptStoredSecret } from "./providerConnections";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 
@@ -265,7 +269,12 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     communityId: v.id("communities"),
     actorUserId: v.id("users"),
     expectedPayerUserId: v.id("users"),
-    expectedFounderGrantId: v.id("founderInferenceGrants"),
+    expectedFundingMode: v.union(
+      v.literal("owner_api_key"),
+      v.literal("platform_subscription"),
+    ),
+    expectedFounderGrantId: v.optional(v.id("founderInferenceGrants")),
+    expectedFounderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     claimToken: v.string(),
     nowMs: v.number(),
   },
@@ -275,12 +284,13 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     if (!receiptKey || !claimToken) throw new Error("founder_inference_receipt_claim_required");
 
     const admission = await resolveCommunityInferenceFundingAdmission(ctx, args.communityId);
-    if (
-      admission.ok === false ||
-      admission.mode !== "owner_api_key" ||
-      normalizedId(admission.payerUserId) !== normalizedId(args.expectedPayerUserId) ||
-      normalizedId(admission.grantId) !== normalizedId(args.expectedFounderGrantId)
-    ) {
+    const authorityMatches = admission.ok === true &&
+      admission.mode === args.expectedFundingMode &&
+      normalizedId(admission.payerUserId) === normalizedId(args.expectedPayerUserId) &&
+      (admission.mode === "owner_api_key"
+        ? normalizedId(admission.grantId) === normalizedId(args.expectedFounderGrantId)
+        : normalizedId(admission.subscriptionId) === normalizedId(args.expectedFounderSubscriptionId));
+    if (!authorityMatches) {
       return { ok: false, errorCode: admission.ok === false ? admission.code : "funding_authority_changed" };
     }
 
@@ -342,19 +352,43 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       return { ok: false, errorCode: "founder_inference_community_rate_limited" };
     }
 
+    let usageCycleId: any | undefined;
+    let reservedCostMicros: number | undefined;
+    let pricingVersion: string | undefined;
+    if (args.expectedFundingMode === "platform_subscription") {
+      if (!args.expectedFounderSubscriptionId) {
+        return { ok: false, errorCode: "funding_authority_changed" };
+      }
+      const reservation = await reserveFounderUsage({
+        ctx,
+        founderSubscriptionId: args.expectedFounderSubscriptionId,
+        communityId: args.communityId,
+        nowMs: args.nowMs,
+      });
+      if (!reservation.ok) return { ok: false, errorCode: reservation.code };
+      usageCycleId = reservation.cycle._id;
+      reservedCostMicros = reservation.reservationCostMicros;
+      pricingVersion = reservation.cycle.pricingVersion;
+    }
+
     const receiptId = await ctx.db.insert("communityInferenceReceipts" as any, {
       receiptKey,
       sourceRunId: String(args.sourceRunId ?? "").trim(),
       communityId: args.communityId,
       actorUserId: args.actorUserId,
       payerUserId: args.expectedPayerUserId,
+      fundingMode: args.expectedFundingMode,
       founderGrantId: args.expectedFounderGrantId,
+      founderSubscriptionId: args.expectedFounderSubscriptionId,
+      usageCycleId,
       surface: "community_agent_mention",
       provider: "openai",
       modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
       status: "authorized",
       claimToken,
       leaseExpiresAt: args.nowMs + RECEIPT_LEASE_MS,
+      pricingVersion,
+      reservedCostMicros,
       authorizedAt: args.nowMs,
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
@@ -378,12 +412,25 @@ export const markCommunityInferenceProviderStartedInternal = internalMutation({
       return { ok: false, errorCode: "founder_inference_receipt_claim_invalid" };
     }
     const admission = await resolveCommunityInferenceFundingAdmission(ctx, receipt.communityId);
-    if (
-      admission.ok === false ||
-      admission.mode !== "owner_api_key" ||
-      normalizedId(admission.payerUserId) !== normalizedId(receipt.payerUserId) ||
-      normalizedId(admission.grantId) !== normalizedId(receipt.founderGrantId)
-    ) {
+    const authorityMatches = admission.ok === true &&
+      admission.mode === receipt.fundingMode &&
+      normalizedId(admission.payerUserId) === normalizedId(receipt.payerUserId) &&
+      (admission.mode === "owner_api_key"
+        ? normalizedId(admission.grantId) === normalizedId(receipt.founderGrantId)
+        : normalizedId(admission.subscriptionId) === normalizedId(receipt.founderSubscriptionId));
+    if (!authorityMatches) {
+      if (
+        receipt.fundingMode === "platform_subscription" &&
+        receipt.usageCycleId &&
+        Number(receipt.reservedCostMicros ?? 0) > 0
+      ) {
+        await releaseFounderUsageReservation({
+          ctx,
+          usageCycleId: receipt.usageCycleId,
+          reservedCostMicros: Number(receipt.reservedCostMicros),
+          nowMs: args.nowMs,
+        });
+      }
       await ctx.db.patch(receipt._id as any, {
         status: "failed",
         failureCode: "funding_authority_changed",
@@ -443,6 +490,19 @@ export const finalizeCommunityInferenceFailureInternal = internalMutation({
         nowMs: args.nowMs,
       });
       return { ok: true, status: "settled" };
+    }
+    if (
+      receipt.fundingMode === "platform_subscription" &&
+      args.disposition === "failed" &&
+      receipt.usageCycleId &&
+      Number(receipt.reservedCostMicros ?? 0) > 0
+    ) {
+      await releaseFounderUsageReservation({
+        ctx,
+        usageCycleId: receipt.usageCycleId,
+        reservedCostMicros: Number(receipt.reservedCostMicros),
+        nowMs: args.nowMs,
+      });
     }
     await ctx.db.patch(receipt._id as any, {
       status: args.disposition,

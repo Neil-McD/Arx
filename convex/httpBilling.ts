@@ -528,6 +528,64 @@ async function syncCommunitySubscriptionFromStripeSubscription(
   };
 }
 
+async function syncFounderSubscriptionFromStripeSubscription(
+  ctx: any,
+  event: Stripe.Event,
+  subscription: Stripe.Subscription | null,
+  options?: { forceStatus?: "past_due" | "ended" },
+): Promise<Record<string, any>> {
+  const providerSubscriptionId = String(subscription?.id ?? "").trim();
+  if (!subscription || !providerSubscriptionId) {
+    return { ok: true, ignored: true, reason: "stripe_subscription_missing" };
+  }
+  const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
+  const { cycleStartedAt, cycleEndsAt } = readStripeSubscriptionCycle(subscription);
+  return await ctx.runMutation(
+    (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
+    {
+      localSessionId:
+        readStripeMetadataString(subscription.metadata, "local_session_id") ?? null,
+      providerCustomerId:
+        typeof subscription.customer === "string" ? subscription.customer : null,
+      providerSubscriptionId,
+      providerPriceId,
+      subscriptionStatus:
+        options?.forceStatus ?? normalizeStripeCommunitySubscriptionStatus({
+          subscriptionStatus: subscription.status,
+          cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
+        }),
+      currentPeriodStartAt: cycleStartedAt,
+      currentPeriodEndAt: cycleEndsAt,
+      cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+      providerEventCreatedAt: readStripeEventCreatedAtMs(event),
+    },
+  );
+}
+
+async function syncFounderSubscriptionRiskStatus(
+  ctx: any,
+  event: Stripe.Event,
+  args: {
+    providerSubscriptionId: string | null;
+    status: "past_due" | "ended";
+    revokedReason: string;
+  },
+): Promise<Record<string, any>> {
+  const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
+  if (!providerSubscriptionId) {
+    return { ok: true, ignored: true, reason: "founder_subscription_id_missing" };
+  }
+  return await ctx.runMutation(
+    (internal as any).founderBilling.syncFounderSubscriptionRiskStatusInternal,
+    {
+      providerSubscriptionId,
+      status: args.status,
+      revokedReason: args.revokedReason,
+      providerEventCreatedAt: readStripeEventCreatedAtMs(event),
+    },
+  );
+}
+
 async function syncCommunitySubscriptionRiskStatus(
   ctx: any,
   event: Stripe.Event,
@@ -590,6 +648,12 @@ async function syncCommunityAccessForRefund(
       provider_subscription_id: providerSubscriptionId,
     };
   }
+  const founderSubscriptionResult = await syncFounderSubscriptionRiskStatus(ctx, event, {
+    providerSubscriptionId,
+    status: "ended",
+    revokedReason: "subscription_refunded",
+  });
+  if (!founderSubscriptionResult?.ignored) return founderSubscriptionResult;
   return await syncCommunitySubscriptionRiskStatus(ctx, event, {
     providerSubscriptionId,
     status: "ended",
@@ -610,6 +674,12 @@ async function syncCommunityAccessForDispute(
     return { ok: true, ignored: true, reason: "dispute_subscription_missing" };
   }
   if (args.outcome === "opened") {
+    const founderSubscriptionResult = await syncFounderSubscriptionRiskStatus(ctx, event, {
+      providerSubscriptionId,
+      status: "ended",
+      revokedReason: "subscription_dispute_opened",
+    });
+    if (!founderSubscriptionResult?.ignored) return founderSubscriptionResult;
     return await syncCommunitySubscriptionRiskStatus(ctx, event, {
       providerSubscriptionId,
       status: "ended",
@@ -617,6 +687,12 @@ async function syncCommunityAccessForDispute(
     });
   }
   if (args.outcome === "lost") {
+    const founderSubscriptionResult = await syncFounderSubscriptionRiskStatus(ctx, event, {
+      providerSubscriptionId,
+      status: "ended",
+      revokedReason: "subscription_dispute_lost",
+    });
+    if (!founderSubscriptionResult?.ignored) return founderSubscriptionResult;
     return await syncCommunitySubscriptionRiskStatus(ctx, event, {
       providerSubscriptionId,
       status: "ended",
@@ -625,6 +701,12 @@ async function syncCommunityAccessForDispute(
   }
   if (args.outcome === "won" || args.outcome === "funds_reinstated") {
     const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+    const founderSubscriptionResult = await syncFounderSubscriptionFromStripeSubscription(
+      ctx,
+      event,
+      subscription,
+    );
+    if (!founderSubscriptionResult?.ignored) return founderSubscriptionResult;
     return await syncCommunitySubscriptionFromStripeSubscription(ctx, event, subscription);
   }
   return {
@@ -845,6 +927,63 @@ export function registerRuntimeBillingRoutes(
                       : null,
                   providerPriceId: topupCheckoutSession.providerPriceId ?? null,
                   nowMs: eventCreatedAt,
+                },
+              );
+              return processedResponse({
+                ok: true,
+                received: true,
+                event: event.type,
+                result,
+              });
+            }
+            const founderCheckoutSession = await (ctx as any).runQuery(
+              (internal as any).founderBilling
+                .getFounderSubscriptionCheckoutSessionInternal,
+              { sessionId: localSessionId },
+            );
+            if (founderCheckoutSession) {
+              if (!readStripePaymentReady(session.payment_status)) {
+                return processedResponse({
+                  ok: true,
+                  ignored: true,
+                  event: event.type,
+                  reason: "founder_subscription_payment_pending",
+                }, "ignored");
+              }
+              const subscriptionId =
+                typeof session.subscription === "string" ? session.subscription : null;
+              if (!subscriptionId) {
+                return processedResponse({
+                  ok: true,
+                  ignored: true,
+                  event: event.type,
+                  reason: "founder_subscription_missing",
+                }, "ignored");
+              }
+              const subscription = await getStripeClient().subscriptions.retrieve(subscriptionId);
+              const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
+              const { cycleStartedAt, cycleEndsAt } = readStripeSubscriptionCycle(subscription);
+              const result = await (ctx as any).runMutation(
+                (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
+                {
+                  localSessionId,
+                  providerCheckoutSessionId: session.id,
+                  providerCustomerId:
+                    typeof subscription.customer === "string"
+                      ? subscription.customer
+                      : typeof session.customer === "string"
+                        ? session.customer
+                        : null,
+                  providerSubscriptionId: subscription.id,
+                  providerPriceId,
+                  subscriptionStatus: normalizeStripeCommunitySubscriptionStatus({
+                    subscriptionStatus: subscription.status,
+                    cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
+                  }),
+                  currentPeriodStartAt: cycleStartedAt,
+                  currentPeriodEndAt: cycleEndsAt,
+                  cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+                  providerEventCreatedAt: eventCreatedAt,
                 },
               );
               return processedResponse({
@@ -1106,6 +1245,19 @@ export function registerRuntimeBillingRoutes(
             }, "ignored");
           }
           const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+          const founderSubscriptionResult = await syncFounderSubscriptionFromStripeSubscription(
+            ctx,
+            event,
+            subscription,
+          );
+          if (!founderSubscriptionResult?.ignored) {
+            return processedResponse({
+              ok: true,
+              received: true,
+              event: event.type,
+              founderSubscriptionResult,
+            });
+          }
           const communityLifecycleResult = await syncCommunitySubscriptionFromStripeSubscription(
             ctx,
             event,
@@ -1131,6 +1283,33 @@ export function registerRuntimeBillingRoutes(
             }, "ignored");
           }
           const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+          const founderSubscriptionResult = await syncFounderSubscriptionFromStripeSubscription(
+            ctx,
+            event,
+            subscription,
+            { forceStatus: "past_due" },
+          );
+          if (!founderSubscriptionResult?.ignored) {
+            return processedResponse({
+              ok: true,
+              received: true,
+              event: event.type,
+              founderSubscriptionResult,
+            });
+          }
+          const founderRiskResult = await syncFounderSubscriptionRiskStatus(ctx, event, {
+            providerSubscriptionId,
+            status: "past_due",
+            revokedReason: "subscription_payment_failed",
+          });
+          if (!founderRiskResult?.ignored) {
+            return processedResponse({
+              ok: true,
+              received: true,
+              event: event.type,
+              founderSubscriptionResult: founderRiskResult,
+            });
+          }
           const communityLifecycleResult = subscription
             ? await syncCommunitySubscriptionFromStripeSubscription(ctx, event, subscription, {
               preserveRiskRevocation: true,
@@ -1168,6 +1347,20 @@ export function registerRuntimeBillingRoutes(
             );
             const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(charge);
             const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+            const founderSubscriptionResult = await syncFounderSubscriptionFromStripeSubscription(
+              ctx,
+              event,
+              subscription,
+            );
+            if (!founderSubscriptionResult?.ignored) {
+              return processedResponse({
+                ok: true,
+                received: true,
+                event: event.type,
+                reason: "refund_failed_no_reversal",
+                founderSubscriptionResult,
+              });
+            }
             const communityAccessResult = await syncCommunitySubscriptionFromStripeSubscription(
               ctx,
               event,
@@ -1309,6 +1502,20 @@ export function registerRuntimeBillingRoutes(
               subscriptionStatus: subscription.status,
               cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
             });
+          const founderSubscriptionResult = await syncFounderSubscriptionFromStripeSubscription(
+            ctx,
+            event,
+            subscription,
+            event.type === "customer.subscription.deleted" ? { forceStatus: "ended" } : undefined,
+          );
+          if (!founderSubscriptionResult?.ignored) {
+            return processedResponse({
+              ok: true,
+              received: true,
+              event: event.type,
+              founderSubscriptionResult,
+            });
+          }
           const premiumSubscriptionResult = await (ctx as any).runMutation(
             (internal as any).premiumBilling
               .syncPremiumSubscriptionFromStripeInternal,
