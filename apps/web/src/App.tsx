@@ -1472,10 +1472,7 @@ export default function App() {
         communityId: community.id,
         communitySlug: community.slug,
       });
-      void (async () => {
-        await founderBilling.refresh();
-        await founderBilling.startCheckout(community.id);
-      })();
+      void founderBilling.startCheckoutAfterCommunityCreated(community.id);
     },
     readBannerFileAsWideDataUrlWithinLimit,
     isLikelyImageFile,

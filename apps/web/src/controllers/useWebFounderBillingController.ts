@@ -138,6 +138,13 @@ export function useWebFounderBillingController(params: {
     }
   }, [params.session]);
 
+  const startCheckoutAfterCommunityCreated = useCallback(async (
+    communityId: string,
+  ): Promise<void> => {
+    await refresh();
+    await startCheckout(communityId);
+  }, [refresh, startCheckout]);
+
   return {
     overview,
     isLoading,
@@ -158,6 +165,7 @@ export function useWebFounderBillingController(params: {
     dismissFundingPrompt: () => setIsFundingPromptDismissed(true),
     refresh,
     startCheckout,
+    startCheckoutAfterCommunityCreated,
     openPortal,
   };
 }

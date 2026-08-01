@@ -207,12 +207,13 @@ assert.match(billingGateway, /founderBilling:startFounderBillingPortal/);
 assert.match(billingController, /founder_community/);
 assert.match(billingController, /scrubCurrentRouteSearchParams/);
 assert.match(billingController, /fundingAttentionCommunities/);
+assert.match(billingController, /startCheckoutAfterCommunityCreated[\s\S]*await refresh\(\);[\s\S]*await startCheckout\(communityId\)/);
 assert.match(fundingPrompt, /Payment unlocks community AI and public launch/);
 assert.match(fundingPrompt, /Continue setup for now/);
 assert.match(createController, /visibility: "unlisted"/);
 assert.doesNotMatch(createModal, /option value="published"/);
 assert.match(createModal, /Create and continue to payment/);
-assert.match(webApp, /await founderBilling\.refresh\(\);[\s\S]*await founderBilling\.startCheckout\(community\.id\)/);
+assert.match(webApp, /founderBilling\.startCheckoutAfterCommunityCreated\(community\.id\)/);
 assert.match(legal, /does not transfer the founder's administrative permissions to a member/);
 assert.match(legal, /Receipts do not contain the API key, prompts, responses, or tool output/);
 assert.match(
