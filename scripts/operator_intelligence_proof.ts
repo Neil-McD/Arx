@@ -392,8 +392,8 @@ assert.match(
 );
 assert.match(
   monetizationQuery,
-  /communityPlatformRevShareInRange[\s\S]*applyBpsToMoneyMetric\(moneyFromCheckout\(row\), platformFeeBps\)/,
-  "operator community rev-share should be estimated from completed community checkout rows",
+  /communityPlatformRevShareInRange[\s\S]*applyBpsToMoneyMetric\([\s\S]*moneyFromCheckout\(row\),[\s\S]*POLYNET_COMMUNITY_PLATFORM_FEE_BPS/,
+  "operator community rev-share should use the universal 2.9% fee for completed community checkout rows",
 );
 assert.match(
   operatorIntelligence,

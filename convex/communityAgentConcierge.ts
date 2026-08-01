@@ -85,7 +85,15 @@ export const getMyLatestCommunityAgentServeIssue = query({
         issueCode !== "owner_credential_missing" &&
         issueCode !== "owner_credential_unreadable" &&
         issueCode !== "owner_funding_suspended" &&
-        issueCode !== "founder_plan_required"
+        issueCode !== "founder_plan_required" &&
+        issueCode !== "founder_subscription_inactive" &&
+        issueCode !== "founder_subscription_ambiguous" &&
+        issueCode !== "founder_subscription_owner_mismatch" &&
+        issueCode !== "founder_usage_exhausted" &&
+        issueCode !== "founder_usage_cycle_missing" &&
+        issueCode !== "founder_usage_cycle_ambiguous" &&
+        issueCode !== "founder_usage_cycle_community_mismatch" &&
+        issueCode !== "founder_inference_pricing_misconfigured"
       ) return false;
       if (normalizeIdValue(row.communityId) !== normalizeIdValue(args.communityId)) return false;
       if (normalizeIdValue(row.requesterUserId) !== normalizeIdValue(userId)) return false;
@@ -108,7 +116,17 @@ export const getMyLatestCommunityAgentServeIssue = query({
       };
     }
     const funding = await resolveCommunityInferenceFundingAdmission(ctx, args.communityId);
-    if (funding.ok && funding.mode === "owner_api_key") return null;
+    const usageIssue =
+      issueCode === "founder_usage_exhausted" ||
+      issueCode === "founder_usage_cycle_missing" ||
+      issueCode === "founder_usage_cycle_ambiguous" ||
+      issueCode === "founder_usage_cycle_community_mismatch" ||
+      issueCode === "founder_inference_pricing_misconfigured";
+    if (
+      !usageIssue &&
+      funding.ok &&
+      (funding.mode === "owner_api_key" || funding.mode === "platform_subscription")
+    ) return null;
     const createdAt = coerceTimestampMs(issue.createdAt, nowMs);
     return {
       id: normalizeIdValue(issue._id),

@@ -356,3 +356,65 @@ test("publishing transitions and readiness regressions remain fail-closed", asyn
     visibility: "published",
   });
 });
+
+test("managed communities require an active founder subscription before publishing", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const nowMs = Date.now();
+
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.communityId, {
+      inferenceFundingPolicy: "managed_required",
+      avatarUrl: "https://example.com/avatar.png",
+      bannerUrl: "https://example.com/banner.png",
+    });
+    await ctx.db.insert("founderInferenceGrants", {
+      userId: fixture.adminId,
+      cohortKey: "existing_founder_cutover_v1",
+      status: "approved",
+      approvedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  });
+
+  const publish = () => asOwner.mutation(api.communityLifecycle.saveCommunitySettings, {
+    communityId: fixture.communityId,
+    name: "Rolling launch contract",
+    slug: "rolling-launch-contract",
+    oneLiner: "Compatibility without restoring the launcher.",
+    about: "Ready to launch.",
+    avatarStorageId: null,
+    avatarUrl: "https://example.com/avatar.png",
+    bannerStorageId: null,
+    bannerUrl: "https://example.com/banner.png",
+    visibility: "published",
+    monthlyAmountBaseUnits: null,
+    annualAmountBaseUnits: null,
+  });
+
+  await expect(publish()).rejects.toThrow(
+    "community_founder_funding_required_to_publish",
+  );
+
+  await t.run(async (ctx) => {
+    await ctx.db.insert("founderSubscriptions", {
+      ownerUserId: fixture.ownerId,
+      communityId: fixture.communityId,
+      provider: "stripe",
+      providerCustomerId: "cus_publish_gate",
+      providerSubscriptionId: "sub_publish_gate",
+      providerPriceId: "price_publish_gate",
+      status: "active",
+      currentPeriodStartAt: nowMs - 1_000,
+      currentPeriodEndAt: nowMs + 30 * 24 * 60 * 60 * 1_000,
+      cancelAtPeriodEnd: false,
+      lastProviderEventCreatedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  });
+
+  await expect(publish()).resolves.toMatchObject({ visibility: "published" });
+});

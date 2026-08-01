@@ -118,8 +118,8 @@ assert.match(
 );
 assert.match(
   createController,
-  /resolveUsableSession[\s\S]*isAccountSetupComplete[\s\S]*max_communities[\s\S]*getCommunityPublishReadinessMissingFields[\s\S]*prepareCloudCommunityBrandingField[\s\S]*createCloudCommunity<[\s\S]*onCommunityCreated\(community\)/,
-  "canonical creation must preserve session, account, quota, readiness, branding, mutation, and completion boundaries",
+  /resolveUsableSession[\s\S]*isAccountSetupComplete[\s\S]*max_communities[\s\S]*prepareCloudCommunityBrandingField[\s\S]*createCloudCommunity<[\s\S]*visibility: "unlisted"[\s\S]*onCommunityCreated\(community\)/,
+  "canonical creation must preserve session, account, quota, managed-draft, branding, mutation, and completion boundaries",
 );
 assert.match(
   app,

@@ -15,12 +15,12 @@ Scope: canonical web runtime, community monetization, provider-funded inference,
    - can own one community
    - can join and use communities when membership/entitlement exists
    - can connect Stripe and monetize paid community access
-   - pays the default 10% Polynet platform fee on paid community revenue
+   - community revenue fees derive from that community's funding mode
    - uses the included Polynet runtime
 3. `architect`
    - internal account-tier value for Polynet Premium
-   - can own two communities
    - unlocks Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage
+   - does not authorize communities or change community revenue fees
 
 The product-facing model is Free plus Polynet Premium. The internal account-tier enum remains `free | architect`; `architect` is the Premium entitlement label.
 
@@ -94,9 +94,9 @@ Prompt injection is not tiered. Authenticated Free and Polynet Premium accounts 
 
 ## 5) Community Money Rules
 
-1. Free authenticated users can create one community.
-2. Polynet Premium users can create two communities.
-3. Existing owned communities are preserved when limits change; `max_communities` only gates creating another community.
+1. Existing approved founders can keep managing existing owned communities.
+2. Polynet Premium does not grant another community.
+3. Community funding is evaluated per community, independently from personal account tier.
 4. Community creation is limited by `max_communities`, which is projected from backend entitlement state.
 5. Paid community checkout requires:
    - paid community entry policy
@@ -108,12 +108,16 @@ Prompt injection is not tiered. Authenticated Free and Polynet Premium accounts 
 8. Paid access becomes real only after backend entitlement, membership, claim, and subscription state agree.
 9. Payout readiness is separate from member entitlement.
 10. Community role is separate from paid access.
-11. The default platform fee for free-account community revenue is 10%.
+11. Every paid community uses the same 2.9% Polynet platform fee; managed funding, legacy owner-API-key funding, and personal Premium do not change it.
 12. Legacy paid creator billing does not create or renew Polynet Premium access.
-13. Community creator revenue uses the Stripe Connect subscription path: Stripe routes creator revenue to the connected account and Polynet keeps the configured application fee. Polynet does not run a separate creator payout ledger or gestation period for community revenue.
+13. Community creator revenue uses direct subscriptions on the builder's Stripe Connect account. The connected account owns the member charge and pays Stripe processing fees; Polynet keeps only the 2.9% application fee. Polynet does not run a separate creator payout ledger or gestation period for community revenue.
 14. Recurring invoice success/failure, subscription changes, full refunds, and disputes must converge through backend community subscription lifecycle state.
 15. Full refunds revoke paid community access. Partial refunds retain access unless the subscription lifecycle later says otherwise. Failed or canceled refunds restore from current Stripe subscription truth.
 16. Disputes and chargebacks suspend paid community access when opened, stay revoked when lost, and restore only from valid Stripe subscription truth when won or funds are reinstated.
+17. Each successful partial or full member refund reverses its cumulative proportional share of Polynet's 2.9% application fee through a provider-scoped idempotent ledger. Pending, failed, and canceled refunds reverse no fee.
+18. A newly created community is always an unlisted `managed_required` draft and continues to its own $79 monthly checkout.
+19. Managed publishing, public funnel resolution, Discover listing, and new public joins fail closed without current founder-funding admission.
+20. Existing approved founders retain owner-key funding only for legacy-eligible communities; an exact operator transition can remove that grant and move the full owned-community set to managed billing.
 
 ## 6) Premium Tool Accounting Rules
 

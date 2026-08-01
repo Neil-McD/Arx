@@ -1636,6 +1636,7 @@ export async function runCloudCommunityWikiArchitectProposal<SessionT, TResult =
   const payload = await client.action("communityWikiArchitect:runCommunityWikiArchitectProposal" as any, {
     authSubject,
     communityId: params.communityId,
+    requestId: crypto.randomUUID(),
     builderIntent:
       typeof params.builderIntent === "string" && params.builderIntent.trim()
         ? params.builderIntent.trim()
@@ -1669,6 +1670,7 @@ export async function draftCloudCommunityResourceContentFromSources<SessionT, TR
   const payload = await client.action("communityWikiArchitect:draftCommunityResourceContentFromSources" as any, {
     authSubject,
     communityId: params.communityId,
+    requestId: crypto.randomUUID(),
     limit:
       typeof params.limit === "number" && Number.isFinite(params.limit)
         ? Math.max(1, Math.floor(params.limit))

@@ -1,7 +1,8 @@
 import { internal } from "./_generated/api";
-import { action, internalMutation, mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  COMMUNITY_FUNDING_POLICY_LEGACY_BYOK,
   COMMUNITY_OWNER_FUNDED_MODEL_ID,
   COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE,
   COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE,
@@ -13,15 +14,26 @@ import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 import {
   getExistingFounderInferenceGrant,
   resolveCommunityInferenceFundingAdmission,
+  resolveCommunityInferenceFundingPolicy,
   settleAuthorizedFounderInferenceReceipt,
   type FounderInferenceReceiptRow,
 } from "./founderInferenceCore";
+import {
+  getFounderSubscriptionByCommunity,
+  releaseFounderUsageReservation,
+  reserveFounderUsage,
+} from "./founderPlanCore";
 import { decryptStoredSecret } from "./providerConnections";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 
 const internalRefs = internal as any;
 const RECEIPT_LEASE_MS = 10 * 60_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
+const communityInferenceSurfaceValidator = v.union(
+  v.literal("community_agent_mention"),
+  v.literal("community_autonomous_cognition"),
+  v.literal("community_setup_generation"),
+);
 
 type OpenAiConnectionRow = {
   _id: any;
@@ -81,8 +93,21 @@ export const getCurrentFounderInferenceStatus = query({
         .withIndex("by_owner", (q: any) => q.eq("ownerId", userId))
         .collect(),
     ]);
+    const legacyCommunities = (
+      await Promise.all(
+        communities.map(async (community) => {
+          const [subscription, policy] = await Promise.all([
+            getFounderSubscriptionByCommunity(ctx, community._id, Date.now()),
+            resolveCommunityInferenceFundingPolicy({ ctx, community }),
+          ]);
+          return !subscription && policy === COMMUNITY_FUNDING_POLICY_LEGACY_BYOK
+            ? community
+            : null;
+        }),
+      )
+    ).filter(Boolean) as Array<Record<string, unknown>>;
     return {
-      eligible: true,
+      eligible: legacyCommunities.length > 0,
       cohort_key: grant.cohortKey,
       status: grant.status,
       model_id: COMMUNITY_OWNER_FUNDED_MODEL_ID,
@@ -90,7 +115,7 @@ export const getCurrentFounderInferenceStatus = query({
       key_last_four: String(connection?.keyLastFour ?? "").trim() || null,
       activated_at: grant.activatedAt ? new Date(grant.activatedAt).toISOString() : null,
       suspended_at: grant.suspendedAt ? new Date(grant.suspendedAt).toISOString() : null,
-      communities: (communities as Array<Record<string, unknown>>)
+      communities: legacyCommunities
         .slice()
         .sort((a, b) => Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0))
         .map((community) => ({
@@ -258,6 +283,14 @@ export const suspendFounderInference = mutation({
   },
 });
 
+export const resolveCommunityInferenceFundingAdmissionInternal = internalQuery({
+  args: {
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) =>
+    await resolveCommunityInferenceFundingAdmission(ctx, args.communityId),
+});
+
 export const claimCommunityInferenceReceiptInternal = internalMutation({
   args: {
     receiptKey: v.string(),
@@ -265,7 +298,13 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     communityId: v.id("communities"),
     actorUserId: v.id("users"),
     expectedPayerUserId: v.id("users"),
-    expectedFounderGrantId: v.id("founderInferenceGrants"),
+    expectedFundingMode: v.union(
+      v.literal("owner_api_key"),
+      v.literal("platform_subscription"),
+    ),
+    expectedFounderGrantId: v.optional(v.id("founderInferenceGrants")),
+    expectedFounderSubscriptionId: v.optional(v.id("founderSubscriptions")),
+    surface: communityInferenceSurfaceValidator,
     claimToken: v.string(),
     nowMs: v.number(),
   },
@@ -275,12 +314,13 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     if (!receiptKey || !claimToken) throw new Error("founder_inference_receipt_claim_required");
 
     const admission = await resolveCommunityInferenceFundingAdmission(ctx, args.communityId);
-    if (
-      admission.ok === false ||
-      admission.mode !== "owner_api_key" ||
-      normalizedId(admission.payerUserId) !== normalizedId(args.expectedPayerUserId) ||
-      normalizedId(admission.grantId) !== normalizedId(args.expectedFounderGrantId)
-    ) {
+    const authorityMatches = admission.ok === true &&
+      admission.mode === args.expectedFundingMode &&
+      normalizedId(admission.payerUserId) === normalizedId(args.expectedPayerUserId) &&
+      (admission.mode === "owner_api_key"
+        ? normalizedId(admission.grantId) === normalizedId(args.expectedFounderGrantId)
+        : normalizedId(admission.subscriptionId) === normalizedId(args.expectedFounderSubscriptionId));
+    if (!authorityMatches) {
       return { ok: false, errorCode: admission.ok === false ? admission.code : "funding_authority_changed" };
     }
 
@@ -342,25 +382,72 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       return { ok: false, errorCode: "founder_inference_community_rate_limited" };
     }
 
+    let usageCycleId: any | undefined;
+    let reservedCostMicros: number | undefined;
+    let pricingVersion: string | undefined;
+    if (args.expectedFundingMode === "platform_subscription") {
+      if (!args.expectedFounderSubscriptionId) {
+        return { ok: false, errorCode: "funding_authority_changed" };
+      }
+      const reservation = await reserveFounderUsage({
+        ctx,
+        founderSubscriptionId: args.expectedFounderSubscriptionId,
+        communityId: args.communityId,
+        nowMs: args.nowMs,
+      });
+      if (!reservation.ok) return { ok: false, errorCode: reservation.code };
+      usageCycleId = reservation.cycle._id;
+      reservedCostMicros = reservation.reservationCostMicros;
+      pricingVersion = reservation.cycle.pricingVersion;
+    }
+
     const receiptId = await ctx.db.insert("communityInferenceReceipts" as any, {
       receiptKey,
       sourceRunId: String(args.sourceRunId ?? "").trim(),
       communityId: args.communityId,
       actorUserId: args.actorUserId,
       payerUserId: args.expectedPayerUserId,
+      fundingMode: args.expectedFundingMode,
       founderGrantId: args.expectedFounderGrantId,
-      surface: "community_agent_mention",
+      founderSubscriptionId: args.expectedFounderSubscriptionId,
+      usageCycleId,
+      surface: args.surface,
       provider: "openai",
       modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
       status: "authorized",
       claimToken,
       leaseExpiresAt: args.nowMs + RECEIPT_LEASE_MS,
+      pricingVersion,
+      reservedCostMicros,
       authorizedAt: args.nowMs,
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
     });
     return { ok: true, receiptId, reclaimed: false };
   },
+});
+
+export const settleCommunityInferenceReceiptInternal = internalMutation({
+  args: {
+    receiptKey: v.string(),
+    claimToken: v.string(),
+    promptTokens: v.number(),
+    completionTokens: v.number(),
+    usageComplete: v.boolean(),
+    outcomeCode: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) =>
+    await settleAuthorizedFounderInferenceReceipt({
+      ctx,
+      receiptKey: args.receiptKey,
+      claimToken: args.claimToken,
+      promptTokens: args.promptTokens,
+      completionTokens: args.completionTokens,
+      usageComplete: args.usageComplete,
+      outcomeCode: args.outcomeCode,
+      nowMs: args.nowMs,
+    }),
 });
 
 export const markCommunityInferenceProviderStartedInternal = internalMutation({
@@ -378,12 +465,25 @@ export const markCommunityInferenceProviderStartedInternal = internalMutation({
       return { ok: false, errorCode: "founder_inference_receipt_claim_invalid" };
     }
     const admission = await resolveCommunityInferenceFundingAdmission(ctx, receipt.communityId);
-    if (
-      admission.ok === false ||
-      admission.mode !== "owner_api_key" ||
-      normalizedId(admission.payerUserId) !== normalizedId(receipt.payerUserId) ||
-      normalizedId(admission.grantId) !== normalizedId(receipt.founderGrantId)
-    ) {
+    const authorityMatches = admission.ok === true &&
+      admission.mode === receipt.fundingMode &&
+      normalizedId(admission.payerUserId) === normalizedId(receipt.payerUserId) &&
+      (admission.mode === "owner_api_key"
+        ? normalizedId(admission.grantId) === normalizedId(receipt.founderGrantId)
+        : normalizedId(admission.subscriptionId) === normalizedId(receipt.founderSubscriptionId));
+    if (!authorityMatches) {
+      if (
+        receipt.fundingMode === "platform_subscription" &&
+        receipt.usageCycleId &&
+        Number(receipt.reservedCostMicros ?? 0) > 0
+      ) {
+        await releaseFounderUsageReservation({
+          ctx,
+          usageCycleId: receipt.usageCycleId,
+          reservedCostMicros: Number(receipt.reservedCostMicros),
+          nowMs: args.nowMs,
+        });
+      }
       await ctx.db.patch(receipt._id as any, {
         status: "failed",
         failureCode: "funding_authority_changed",
@@ -443,6 +543,19 @@ export const finalizeCommunityInferenceFailureInternal = internalMutation({
         nowMs: args.nowMs,
       });
       return { ok: true, status: "settled" };
+    }
+    if (
+      receipt.fundingMode === "platform_subscription" &&
+      args.disposition === "failed" &&
+      receipt.usageCycleId &&
+      Number(receipt.reservedCostMicros ?? 0) > 0
+    ) {
+      await releaseFounderUsageReservation({
+        ctx,
+        usageCycleId: receipt.usageCycleId,
+        reservedCostMicros: Number(receipt.reservedCostMicros),
+        nowMs: args.nowMs,
+      });
     }
     await ctx.db.patch(receipt._id as any, {
       status: args.disposition,

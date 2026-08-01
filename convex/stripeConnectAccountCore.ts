@@ -70,7 +70,7 @@ export function canReceiveCommunityRevenue(
     getStripeConnectDestinationAccountId(account) !== null &&
     connectStatus === "ready" &&
     account?.payoutsEnabled === true &&
-    (account?.chargesEnabled === true || account?.transfersEnabled === true)
+    account?.chargesEnabled === true
   );
 }
 

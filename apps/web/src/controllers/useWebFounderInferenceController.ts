@@ -87,7 +87,7 @@ export function useWebFounderInferenceController(params: {
     try {
       await activateCloudFounderInference({ session: usableSession, acceptedTerms });
       await refresh(usableSession);
-      setSuccess("GPT 5.6 Luna is active for every community you own.");
+      setSuccess("GPT 5.6 Luna is active for your eligible legacy communities.");
     } catch (activationError) {
       setError(messageForError(activationError));
     } finally {

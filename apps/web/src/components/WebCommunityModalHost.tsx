@@ -24,7 +24,6 @@ export function WebCommunityModalHost(props: WebCommunityModalHostProps) {
           createCommunityName={createModal.createCommunityName}
           createCommunityOneLiner={createModal.createCommunityOneLiner}
           createCommunitySlug={createModal.createCommunitySlug}
-          createCommunityVisibility={createModal.createCommunityVisibility}
           createCommunityError={createModal.createCommunityError}
           accountCommerceError={createModal.accountCommerceError}
           isCreatingCommunity={createModal.isCreatingCommunity}
@@ -43,7 +42,6 @@ export function WebCommunityModalHost(props: WebCommunityModalHostProps) {
           onChangeOneLiner={createModal.onChangeOneLiner}
           onChangeSlug={createModal.onChangeSlug}
           onChangeSlugEdited={createModal.onChangeSlugEdited}
-          onChangeVisibility={createModal.onChangeVisibility}
         />
       ) : null}
     </>

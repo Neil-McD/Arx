@@ -134,6 +134,7 @@ export type CommunityPricePointLike = {
   currencyDecimals: number;
   isCurrent: boolean;
   archivedAt?: number;
+  providerAccountId?: string;
   providerPriceId?: string;
   createdAt: number;
   updatedAt: number;
@@ -148,6 +149,7 @@ export type CommunitySubscriptionLike = {
   source?: "stripe" | "external_sync";
   status: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
   providerSubscriptionId?: string;
+  providerAccountId?: string;
   providerCustomerId?: string;
   currentPeriodStartAt?: number;
   currentPeriodEndAt?: number;

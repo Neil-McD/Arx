@@ -47,10 +47,26 @@ export function projectCommunityAgentDockPublicIssue(input: {
     reason === "owner_credential_missing" ||
     reason === "owner_funding_suspended" ||
     reason === "founder_plan_required" ||
+    reason === "founder_subscription_inactive" ||
+    reason === "founder_subscription_ambiguous" ||
+    reason === "founder_subscription_owner_mismatch" ||
+    reason === "founder_usage_exhausted" ||
+    reason === "founder_usage_cycle_missing" ||
+    reason === "founder_usage_cycle_ambiguous" ||
+    reason === "founder_usage_cycle_community_mismatch" ||
+    reason === "founder_inference_pricing_misconfigured" ||
     errorCode === "owner_credential_missing" ||
     errorCode === "owner_credential_unreadable" ||
     errorCode === "owner_funding_suspended" ||
-    errorCode === "founder_plan_required"
+    errorCode === "founder_plan_required" ||
+    errorCode === "founder_subscription_inactive" ||
+    errorCode === "founder_subscription_ambiguous" ||
+    errorCode === "founder_subscription_owner_mismatch" ||
+    errorCode === "founder_usage_exhausted" ||
+    errorCode === "founder_usage_cycle_missing" ||
+    errorCode === "founder_usage_cycle_ambiguous" ||
+    errorCode === "founder_usage_cycle_community_mismatch" ||
+    errorCode === "founder_inference_pricing_misconfigured"
   ) {
     return {
       code: "agent_unavailable",

@@ -22,7 +22,6 @@ type WebCreateCommunityModalProps = {
   createCommunityName: string;
   createCommunityOneLiner: string;
   createCommunitySlug: string;
-  createCommunityVisibility: "published" | "unlisted";
   createCommunityError: string | null;
   accountCommerceError: string | null;
   isCreatingCommunity: boolean;
@@ -41,7 +40,6 @@ type WebCreateCommunityModalProps = {
   onChangeOneLiner: (value: string) => void;
   onChangeSlug: (value: string) => void;
   onChangeSlugEdited: (value: boolean) => void;
-  onChangeVisibility: (value: "published" | "unlisted") => void;
 };
 
 export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
@@ -58,7 +56,6 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
     createCommunityName,
     createCommunityOneLiner,
     createCommunitySlug,
-    createCommunityVisibility,
     createCommunityError,
     accountCommerceError,
     isCreatingCommunity,
@@ -77,7 +74,6 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
     onChangeOneLiner,
     onChangeSlug,
     onChangeSlugEdited,
-    onChangeVisibility,
   } = props;
 
   if (!isOpen) return null;
@@ -198,32 +194,21 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                     onChange={(event) => onChangeOneLiner(event.target.value)}
                   />
                 </label>
-                <div className="create-community-detail-grid">
-                  <label className="create-community-field">
-                    <span>Slug</span>
-                    <input
-                      type="text"
-                      placeholder="your-community"
-                      value={createCommunitySlug}
-                      onChange={(event) => {
-                        onChangeSlug(event.target.value);
-                        onChangeSlugEdited(true);
-                      }}
-                    />
-                    <span className="create-community-hint">Lowercase letters, numbers, and dashes.</span>
-                  </label>
-                  <label className="create-community-field">
-                    <span>Visibility</span>
-                    <select
-                      className="select-styled"
-                      value={createCommunityVisibility}
-                      onChange={(event) => onChangeVisibility(event.target.value as "published" | "unlisted")}
-                    >
-                      <option value="published">Published</option>
-                      <option value="unlisted">Unlisted</option>
-                    </select>
-                  </label>
-                </div>
+                <label className="create-community-field">
+                  <span>Slug</span>
+                  <input
+                    type="text"
+                    placeholder="your-community"
+                    value={createCommunitySlug}
+                    onChange={(event) => {
+                      onChangeSlug(event.target.value);
+                      onChangeSlugEdited(true);
+                    }}
+                  />
+                  <span className="create-community-hint">
+                    Lowercase letters, numbers, and dashes. Your community starts as a private draft.
+                  </span>
+                </label>
               </div>
             </div>
             {createCommunityError && <div className="auth-error">{createCommunityError}</div>}
@@ -249,7 +234,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                     ? "Unavailable"
                     : limitReached
                       ? "Community limit reached"
-                      : "Create community"}
+                      : "Create and continue to payment"}
               </button>
             )}
             <button className="create-community-secondary" onClick={onClose}>

@@ -58,6 +58,8 @@
     "check:app-shell-decomposition-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/app_shell_decomposition_contract_proof.ts",
     "check:critical-audit-events-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/critical_audit_events_proof.ts",
     "check:stripe-connect-onboarding-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/stripe_connect_onboarding_diagnostics_proof.ts",
+    "check:community-commerce-economics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_commerce_economics_contract_proof.ts",
+    "check:community-commerce-economics-behavior": "vitest run convex/communityCommerceCore.test.ts convex/communityApplicationFeeRefundCore.test.ts convex/communityApplicationFeeRefunds.test.ts",
     "check:stripe-customer-checkout-identity-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/stripe_customer_checkout_identity_proof.ts",
     "check:stripe-customer-idempotency-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/stripe_customer_idempotency_proof.ts",
     "check:security-audit-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/security_audit_diagnostics_proof.ts",

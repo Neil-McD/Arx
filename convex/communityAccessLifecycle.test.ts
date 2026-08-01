@@ -170,6 +170,72 @@ test("open public join is authenticated, immediately authorized, and idempotent"
   });
 });
 
+test("unfunded managed communities are absent from public acquisition surfaces", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+  const nowMs = Date.now();
+
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.openCommunityId, {
+      inferenceFundingPolicy: "managed_required",
+    });
+    await ctx.db.insert("founderInferenceGrants", {
+      userId: fixture.memberId,
+      cohortKey: "existing_founder_cutover_v1",
+      status: "approved",
+      approvedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  });
+
+  await expect(
+    t.query(api.communityPublic.resolvePublicFunnelBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).resolves.toEqual({ ok: false });
+  await expect(
+    asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).rejects.toThrow("community_not_available");
+  const discoverBefore = await t.query(
+    api.communityPublic.listPublicDiscoverCommunities,
+    {},
+  );
+  expect(discoverBefore.communities).not.toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ slug: "access-lifecycle-open" }),
+    ]),
+  );
+
+  await t.run(async (ctx) => {
+    await ctx.db.insert("founderSubscriptions", {
+      ownerUserId: fixture.ownerId,
+      communityId: fixture.openCommunityId,
+      provider: "stripe",
+      providerCustomerId: "cus_public_gate",
+      providerSubscriptionId: "sub_public_gate",
+      providerPriceId: "price_public_gate",
+      status: "active",
+      currentPeriodStartAt: nowMs - 1_000,
+      currentPeriodEndAt: nowMs + 30 * 24 * 60 * 60 * 1_000,
+      cancelAtPeriodEnd: false,
+      lastProviderEventCreatedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  });
+
+  await expect(
+    t.query(api.communityPublic.resolvePublicFunnelBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).resolves.toMatchObject({ ok: true });
+});
+
 test("approval join fails closed until manager approval and closes again after revocation", async () => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
   const t = convexTest(schema, modules);

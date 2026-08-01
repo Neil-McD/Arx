@@ -267,8 +267,8 @@ assert.match(
 );
 assert.match(
   stripeConnectAccountCore,
-  /account\?\.chargesEnabled === true \|\| account\?\.transfersEnabled === true/,
-  "Community revenue readiness must accept either direct charge capability or transfer capability.",
+  /account\?\.chargesEnabled === true/,
+  "Direct community commerce requires connected-account card charge capability.",
 );
 assert.match(
   communityCommerce,
@@ -283,17 +283,17 @@ assert.match(
 assert.doesNotMatch(
   communityLifecycle,
   /chargesEnabled === true[\s\S]{0,120}payoutsEnabled === true/,
-  "Paid community settings must not require card charge capability and block recipient-transfer countries.",
-);
-assert.match(
-  communityCommerce,
-  /subscription_data:[\s\S]*application_fee_percent:[\s\S]*transfer_data:[\s\S]*destination:/,
-  "Community checkout must remain platform-owned marketplace checkout with transfer_data.destination.",
+  "Paid community settings must use the centralized direct-charge readiness predicate.",
 );
 assert.doesNotMatch(
   communityCommerce,
-  /Stripe-Account|stripeAccount:/,
-  "Community checkout must not create direct charges on connected accounts.",
+  /transfer_data:[\s\S]*destination:/,
+  "Community checkout must not create platform-owned destination charges.",
+);
+assert.match(
+  communityCommerce,
+  /checkout\.sessions\.create\([\s\S]*application_fee_percent:[\s\S]*stripeAccount: checkoutConfig\.providerAccountId/,
+  "Community checkout must create direct connected-account subscriptions with an application fee.",
 );
 assert.match(
   creatorCommerce,

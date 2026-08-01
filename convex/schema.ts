@@ -173,14 +173,74 @@ export default defineSchema({
     .index("by_cohort", ["cohortKey"])
     .index("by_cohort_status", ["cohortKey", "status"]),
 
+  founderSubscriptions: defineTable({
+    ownerUserId: v.id("users"),
+    communityId: v.optional(v.id("communities")),
+    provider: v.literal("stripe"),
+    providerCustomerId: v.string(),
+    providerSubscriptionId: v.string(),
+    providerPriceId: v.string(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("past_due"),
+      v.literal("cancel_at_period_end"),
+      v.literal("canceled"),
+      v.literal("ended"),
+    ),
+    currentPeriodStartAt: v.number(),
+    currentPeriodEndAt: v.number(),
+    cancelAtPeriodEnd: v.boolean(),
+    endedAt: v.optional(v.number()),
+    revokedReason: v.optional(v.string()),
+    lastProviderEventCreatedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner", ["ownerUserId"])
+    .index("by_owner_status", ["ownerUserId", "status"])
+    .index("by_community", ["communityId"])
+    .index("by_provider_subscription", ["providerSubscriptionId"]),
+
+  founderUsageCycles: defineTable({
+    founderSubscriptionId: v.id("founderSubscriptions"),
+    communityId: v.optional(v.id("communities")),
+    cycleKey: v.string(),
+    cycleStartAt: v.number(),
+    cycleEndAt: v.number(),
+    includedCostMicros: v.number(),
+    reservedCostMicros: v.number(),
+    settledCostMicros: v.number(),
+    pricingVersion: v.string(),
+    inputCostMicrosPerMillionTokens: v.number(),
+    outputCostMicrosPerMillionTokens: v.number(),
+    maxRunReservationCostMicros: v.number(),
+    status: v.union(v.literal("open"), v.literal("closed")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_subscription", ["founderSubscriptionId"])
+    .index("by_subscription_status", ["founderSubscriptionId", "status"])
+    .index("by_cycle_key", ["cycleKey"])
+    .index("by_community_status", ["communityId", "status"]),
+
   communityInferenceReceipts: defineTable({
     receiptKey: v.string(),
     sourceRunId: v.string(),
     communityId: v.id("communities"),
     actorUserId: v.id("users"),
     payerUserId: v.id("users"),
-    founderGrantId: v.id("founderInferenceGrants"),
-    surface: v.literal("community_agent_mention"),
+    fundingMode: v.union(
+      v.literal("owner_api_key"),
+      v.literal("platform_subscription"),
+    ),
+    founderGrantId: v.optional(v.id("founderInferenceGrants")),
+    founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
+    usageCycleId: v.optional(v.id("founderUsageCycles")),
+    surface: v.union(
+      v.literal("community_agent_mention"),
+      v.literal("community_autonomous_cognition"),
+      v.literal("community_setup_generation"),
+    ),
     provider: v.literal("openai"),
     modelId: v.string(),
     status: v.union(
@@ -194,6 +254,9 @@ export default defineSchema({
     providerStartedAt: v.optional(v.number()),
     promptTokens: v.optional(v.number()),
     completionTokens: v.optional(v.number()),
+    pricingVersion: v.optional(v.string()),
+    reservedCostMicros: v.optional(v.number()),
+    settledCostMicros: v.optional(v.number()),
     outcomeCode: v.optional(v.string()),
     failureCode: v.optional(v.string()),
     authorizedAt: v.number(),
@@ -558,11 +621,13 @@ export default defineSchema({
     sessionId: v.string(),
     mode: v.union(
       v.literal("community_join"),
+      v.literal("founder_subscription"),
       v.literal("premium_subscription"),
       v.literal("workspace_credit_topup"),
     ),
     provider: v.optional(v.literal("stripe")),
     providerCheckoutSessionId: v.optional(v.string()),
+    providerAccountId: v.optional(v.string()),
     providerCustomerId: v.optional(v.string()),
     providerSubscriptionId: v.optional(v.string()),
     providerPriceId: v.optional(v.string()),
@@ -588,6 +653,7 @@ export default defineSchema({
     workspaceCreditsGrantedAt: v.optional(v.number()),
     workspaceCreditsUncollectedPaid: v.optional(v.number()),
     ownerUserId: v.optional(v.id("users")),
+    founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     claimToken: v.optional(v.string()),
     status: v.union(v.literal("pending"), v.literal("complete"), v.literal("expired")),
     expiresAt: v.number(),
@@ -623,6 +689,18 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_providerCustomerId", ["providerCustomerId"])
     .index("by_providerDefaultPaymentMethodId", ["providerDefaultPaymentMethodId"]),
+
+  communityStripeCustomers: defineTable({
+    userId: v.id("users"),
+    provider: v.literal("stripe"),
+    providerAccountId: v.string(),
+    providerCustomerId: v.string(),
+    email: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_account", ["userId", "providerAccountId"])
+    .index("by_account_customer", ["providerAccountId", "providerCustomerId"]),
 
   purchaseClaims: defineTable({
     claimToken: v.string(),
@@ -1160,6 +1238,12 @@ export default defineSchema({
       }),
     ),
     visibility: v.union(v.literal("published"), v.literal("unlisted")),
+    inferenceFundingPolicy: v.optional(
+      v.union(
+        v.literal("legacy_byok_allowed"),
+        v.literal("managed_required"),
+      ),
+    ),
     entryPolicy: v.union(
       v.literal("open"),
       v.literal("approval"),
@@ -1334,6 +1418,7 @@ export default defineSchema({
     currencyDecimals: v.number(),
     isCurrent: v.boolean(),
     archivedAt: v.optional(v.number()),
+    providerAccountId: v.optional(v.string()),
     providerPriceId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1356,6 +1441,7 @@ export default defineSchema({
       v.literal("ended"),
     ),
     providerSubscriptionId: v.optional(v.string()),
+    providerAccountId: v.optional(v.string()),
     providerCustomerId: v.optional(v.string()),
     currentPeriodStartAt: v.optional(v.number()),
     currentPeriodEndAt: v.optional(v.number()),
@@ -1369,8 +1455,46 @@ export default defineSchema({
     .index("by_pricePoint", ["pricePointId"])
     .index("by_community_user", ["communityId", "userId"])
     .index("by_providerSubscriptionId", ["providerSubscriptionId"])
+    .index("by_providerAccount_subscription", ["providerAccountId", "providerSubscriptionId"])
     .index("by_status", ["status"])
     .index("by_community_status", ["communityId", "status"]),
+
+  communityApplicationFeeRefunds: defineTable({
+    providerAccountId: v.string(),
+    providerChargeId: v.string(),
+    providerApplicationFeeId: v.string(),
+    providerRefundId: v.string(),
+    providerApplicationFeeRefundId: v.optional(v.string()),
+    amountBaseUnits: v.number(),
+    requestedProviderRefundAmountBaseUnits: v.number(),
+    providerRefundedAmountBaseUnits: v.optional(v.number()),
+    currency: v.string(),
+    status: v.union(
+      v.literal("processing"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("indeterminate"),
+    ),
+    claimToken: v.string(),
+    leaseExpiresAt: v.number(),
+    failureCode: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_providerAccount_refund", ["providerAccountId", "providerRefundId"])
+    .index("by_providerApplicationFee", ["providerApplicationFeeId"])
+    .index("by_status", ["status"]),
+
+  communityApplicationFeeRefundLocks: defineTable({
+    providerAccountId: v.string(),
+    providerApplicationFeeId: v.string(),
+    claimToken: v.string(),
+    leaseExpiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_providerApplicationFee", ["providerApplicationFeeId"]),
 
   communityChatThreads: defineTable({
     communityId: v.id("communities"),
