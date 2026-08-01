@@ -61,6 +61,7 @@ export type WebCommunityInteractionProjectionProps = {
   isLoadingRoots: boolean;
   isLoadingReplies: boolean;
   error: string | null;
+  errorActionLabel?: string;
   repliesError: string | null;
   onSelectRoot: (rootId: string) => void;
   onCloseDrawer: () => void;

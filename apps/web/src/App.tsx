@@ -553,12 +553,13 @@ export default function App() {
     ? activeCommunityId
     : null;
   const isActiveCommunityChannelLoading =
-    activeCommunityChannelResolutionStatus === "loading" ||
-    activeCommunityChannelResolutionStatus === "not_found";
+    activeCommunityChannelResolutionStatus === "loading";
   const activeCommunityChannelResolutionError =
-    activeCommunityChannelResolutionStatus === "failed"
-      ? activeCommunityChannelsError
-      : null;
+    activeCommunityChannelResolutionStatus === "not_found"
+      ? "This channel does not exist or is no longer available."
+      : activeCommunityChannelResolutionStatus === "failed"
+        ? activeCommunityChannelsError
+        : null;
 
   const communityInteractionProjection = useWebCommunityInteractionProjection<MessageAttachment>({
     activeCommunityId: activeChannelCommunityId,
@@ -2442,6 +2443,10 @@ export default function App() {
         error:
           activeCommunityChannelResolutionError ??
           (isActiveCommunityChannelReady ? communityInteractionError : null),
+        errorActionLabel:
+          activeCommunityChannelResolutionStatus === "not_found"
+            ? "Return to General"
+            : undefined,
         repliesError: isActiveCommunityChannelReady
           ? communityInteractionRepliesError
           : null,
@@ -2461,6 +2466,10 @@ export default function App() {
         },
         onCaughtUp: handleChatCaughtUp,
         onRetryRoots: () => {
+          if (activeCommunityChannelResolutionStatus === "not_found") {
+            setCommunityChannelSlug(null);
+            return;
+          }
           if (activeCommunityChannelResolutionStatus === "failed") {
             retryActiveCommunityChannels();
             return;

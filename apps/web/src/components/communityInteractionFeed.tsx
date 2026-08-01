@@ -849,7 +849,9 @@ export function CommunityInteractionFeedList(
           props.error ? (
             <div className="community-interaction-state" role="alert">
               <div>{props.error}</div>
-              <button type="button" onClick={props.onRetryRoots}>Retry</button>
+              <button type="button" onClick={props.onRetryRoots}>
+                {props.errorActionLabel ?? "Retry"}
+              </button>
             </div>
           ) : props.isLoadingRoots && props.roots.length === 0 ? (
             <div className="community-interaction-state" aria-live="polite">

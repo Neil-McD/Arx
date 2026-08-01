@@ -217,18 +217,6 @@ export function useWebCommunityChannelsController(params: {
     channelsError,
   });
 
-  useEffect(() => {
-    if (
-      selection.status !== "not_found"
-    ) {
-      return;
-    }
-    params.setRequestedChannelSlug(null);
-  }, [
-    params.setRequestedChannelSlug,
-    selection.status,
-  ]);
-
   const createChannel = useCallback(async (nameRaw: string): Promise<CloudCommunityChannel | null> => {
     const current = paramsRef.current;
     const communityId = String(current.activeCommunityId ?? "").trim();

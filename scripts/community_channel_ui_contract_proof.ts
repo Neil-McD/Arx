@@ -19,6 +19,12 @@ function assertMatches(path: string, source: string, required: RegExp): void {
   }
 }
 
+function assertNotMatches(path: string, source: string, forbidden: RegExp): void {
+  if (forbidden.test(source)) {
+    throw new Error(`${path} contains forbidden channel UI behavior: ${forbidden}`);
+  }
+}
+
 const navPath = "shared/CommunityNav.tsx";
 const nav = read(navPath);
 [
@@ -46,6 +52,11 @@ const channelController = read(channelControllerPath);
   "retryChannels",
   "A channel with that name already exists.",
 ].forEach((required) => assertIncludes(channelControllerPath, channelController, required));
+assertNotMatches(
+  channelControllerPath,
+  channelController,
+  /selection\.status\s*!==\s*"not_found"[\s\S]*?setRequestedChannelSlug\(null\)/,
+);
 
 const channelApiPath = "convex/communityChannels.ts";
 assertIncludes(channelApiPath, read(channelApiPath), "listReadableCommunityChannels");
@@ -56,6 +67,8 @@ const app = read(appPath);
   "activeChannelCommunityId",
   "isActiveCommunityChannelReady && canPostMessagesActiveCommunity",
   'activeCommunityChannelResolutionStatus === "failed"',
+  'activeCommunityChannelResolutionStatus === "not_found"',
+  '"Return to General"',
   "retryActiveCommunityChannels",
 ].forEach((required) => assertIncludes(appPath, app, required));
 
