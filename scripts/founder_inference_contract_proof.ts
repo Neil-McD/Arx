@@ -223,7 +223,7 @@ assert.match(
 assert.match(billingContract, /\$79 USD monthly for one specific community/);
 assert.match(billingContract, /new founder creates one unlisted managed draft and continues directly to community-targeted checkout/);
 assert.match(billingContract, /Each monthly cycle includes up to \$20 in raw model cost/);
-assert.match(billingContract, /founder plan is not publicly live/);
+assert.match(billingContract, /Production activation requires verified Stripe configuration/);
 assert.doesNotMatch(
   cognitionContract,
   /member_concierge`[\s\S]{0,300}requester-funded through the requester's provider connection/,
