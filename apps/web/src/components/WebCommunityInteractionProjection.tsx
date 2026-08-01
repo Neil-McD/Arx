@@ -177,6 +177,7 @@ import {
   sortedBlocks,
   stripSharedAttachmentSummary,
 } from "./communityInteractionFeed";
+import { interactionMentionsViewer } from "../../../../shared/communityMentionAttention";
 
 export function CommunityInteractionContextPanelSurface(
   props: WebCommunityInteractionProjectionProps & {
@@ -865,7 +866,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   const isEditingReply = editing?.type === "reply" && editing.id === reply.id;
                   const isNewReply = repliesLoadedOnce.current && !seenReplyIds.current.has(reply.id);
                   return (
-                    <div key={reply.id} className={`community-interaction-reply${isNewReply ? " is-new" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}>
+                    <div key={reply.id} className={`community-interaction-reply${isNewReply ? " is-new" : ""}${interactionMentionsViewer({ mentions: bundle.mentions, currentUserId: props.currentUserId, actorUserId: reply.actor_user_id }) ? " is-self-mentioned" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}>
                       {bundle.pending ? null : (
                         <MessageActions
                           onReact={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}

@@ -32,6 +32,7 @@ import { partitionCommunityAttachments } from "../../../../shared/communityAttac
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
+import { interactionMentionsViewer } from "../../../../shared/communityMentionAttention";
 import type { CommunityTypingPresenceUser, UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 
@@ -575,14 +576,6 @@ export type InteractionMentionContext = {
   communityAgentDisplayName?: string;
 };
 
-export function interactionMentionsSelf(
-  mentions: CommunityInteractionMention[] | undefined,
-  currentUserId: string | null | undefined,
-): boolean {
-  if (!currentUserId || !Array.isArray(mentions)) return false;
-  return mentions.some((mention) => mention.mentioned_user_id === currentUserId);
-}
-
 function resolveMentionsForRendering(
   context: InteractionMentionContext,
 ): ResolvedMentionForRendering[] {
@@ -900,7 +893,7 @@ export function CommunityInteractionFeedList(
                 return (
                   <Fragment key={segment.key}>
                     {dividerBefore}
-                    <div className={`community-interaction-group${badge ? " is-agent" : ""}`}>
+                    <div className="community-interaction-group">
                     <div className="community-interaction-group-gutter">
                       <ProfileHoverCard
                         userId={first.root.actor_user_id}
@@ -963,7 +956,7 @@ export function CommunityInteractionFeedList(
                         return (
                           <div
                             key={root.id}
-                            className={`community-interaction-message${selected ? " selected" : ""}${isNewRoot ? " is-new" : ""}${interactionMentionsSelf(bundle.mentions, props.currentUserId) ? " is-self-mentioned" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}
+                            className={`community-interaction-message${selected ? " selected" : ""}${isNewRoot ? " is-new" : ""}${interactionMentionsViewer({ mentions: bundle.mentions, currentUserId: props.currentUserId, actorUserId: root.actor_user_id }) ? " is-self-mentioned" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}
                           >
                             {bundle.pending ? null : (
                               <MessageActions

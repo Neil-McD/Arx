@@ -4,6 +4,7 @@ import {
   textContainsMentionToken,
   type ResolvedMentionForRendering,
 } from "../shared/communityMentionRendering.ts";
+import { interactionMentionsViewer } from "../shared/communityMentionAttention.ts";
 
 function mention(overrides: Partial<ResolvedMentionForRendering> & { label: string }): ResolvedMentionForRendering {
   return {
@@ -191,7 +192,24 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
 // belongs to the message-level edge and wash, not a filled inline name chip.
 {
   const { readFileSync } = await import("node:fs");
-  const styles = readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8");
+  const styles = [
+    readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8"),
+    readFileSync(
+      new URL(
+        "../apps/web/src/styles/community-and-content.css",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ].join("\n");
+  const feedSource = readFileSync(
+    new URL("../apps/web/src/components/communityInteractionFeed.tsx", import.meta.url),
+    "utf8",
+  );
+  const projectionSource = readFileSync(
+    new URL("../apps/web/src/components/WebCommunityInteractionProjection.tsx", import.meta.url),
+    "utf8",
+  );
   assert.doesNotMatch(
     styles,
     /\.community-mention-chip\.is-self\s*\{/,
@@ -199,8 +217,79 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     styles,
-    /\.community-interaction-message\.is-self-mentioned\s*\{[\s\S]*?border-left:\s*2px solid var\(--accent\);/,
-    "self-mention attention should remain on the message container",
+    /\.community-interaction-message\.is-self-mentioned,\s*\.community-interaction-reply\.is-self-mentioned\s*\{[\s\S]*?border-left:\s*2px solid var\(--accent\);/,
+    "viewer-mention attention should cover both root posts and thread replies",
+  );
+  assert.doesNotMatch(
+    feedSource,
+    /community-interaction-group\$\{badge \? " is-agent"/,
+    "personal-agent and MCP authorship must not tint the whole interaction group",
+  );
+  assert.doesNotMatch(
+    styles,
+    /\.community-interaction-group\.is-agent\s*\{/,
+    "agent authorship must keep its badge without a group background tint",
+  );
+  assert.match(
+    feedSource,
+    /\{badge \? <span className="community-interaction-badge">\{badge\}<\/span> : null\}/,
+    "the purple agent badge must remain after author tint removal",
+  );
+  assert.match(
+    feedSource,
+    /interactionMentionsViewer\(\{ mentions: bundle\.mentions, currentUserId: props\.currentUserId, actorUserId: root\.actor_user_id \}\)/,
+    "root attention tint must be derived from the current viewer and root author",
+  );
+  assert.match(
+    projectionSource,
+    /interactionMentionsViewer\(\{ mentions: bundle\.mentions, currentUserId: props\.currentUserId, actorUserId: reply\.actor_user_id \}\)/,
+    "reply attention tint must use the same viewer-specific rule as roots",
+  );
+}
+
+// Viewer attention is independent of authorship. Direct tags target one user;
+// @everybody targets every eligible viewer except the author, without relying
+// on the bounded list of per-recipient broadcast projection rows.
+{
+  const directMention = {
+    mentioned_user_id: "member-1",
+    mentioned_role_key: null,
+  };
+  const everybodyMention = {
+    mentioned_user_id: null,
+    mentioned_role_key: "everybody",
+  };
+  assert.equal(
+    interactionMentionsViewer({
+      mentions: [directMention],
+      currentUserId: "member-1",
+      actorUserId: "author-1",
+    }),
+    true,
+  );
+  assert.equal(
+    interactionMentionsViewer({
+      mentions: [directMention],
+      currentUserId: "member-2",
+      actorUserId: "author-1",
+    }),
+    false,
+  );
+  assert.equal(
+    interactionMentionsViewer({
+      mentions: [everybodyMention],
+      currentUserId: "member-92",
+      actorUserId: "author-1",
+    }),
+    true,
+  );
+  assert.equal(
+    interactionMentionsViewer({
+      mentions: [everybodyMention],
+      currentUserId: "author-1",
+      actorUserId: "author-1",
+    }),
+    false,
   );
 }
 
@@ -222,6 +311,10 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   const projectionSource = readFileSync(
     new URL("../apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts", import.meta.url),
+    "utf8",
+  );
+  const chatControllerSource = readFileSync(
+    new URL("../apps/web/src/controllers/useWebCommunityChatController.ts", import.meta.url),
     "utf8",
   );
   const feedSource = readFileSync(
@@ -284,13 +377,13 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     "member mention candidates must not be generated from the global cached profile map",
   );
   assert.match(
-    appSource,
+    chatControllerSource,
     /useState<CommittedMention\[\]>\(\[\]\)/,
-    "the App-level composer mention state must use the canonical committed mention type",
+    "the chat-controller composer mention state must use the canonical committed mention type",
   );
   assert.match(
-    appSource,
-    /useEffect\(\(\) => \{[\s\S]*setCommunityChatError\(null\);[\s\S]*setCommunityMessageMentions\(\[\]\);[\s\S]*\}, \[activeCommunityId,/,
+    chatControllerSource,
+    /const resetChatState = useCallback\(\(\) => \{[\s\S]*setError\(null\);[\s\S]*setMessageMentions\(\[\]\);[\s\S]*useEffect\(\(\) => \{[\s\S]*resetChatState\(\);[\s\S]*\}, \[activeCommunityId, resetChatState\]\);/,
     "switching active communities must drop committed mention payloads so stale cross-community tokens become plain text",
   );
   assert.match(
@@ -320,8 +413,13 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     appSource,
-    /const canMentionEverybodyRef = useRef\(false\)[\s\S]*useCommunityChatMutationController\(\{[\s\S]*canMentionEverybodyRef[\s\S]*canMentionEverybodyRef\.current = canManageMembersActiveCommunity/,
+    /const canMentionEverybodyRef = useRef\(false\)[\s\S]*useWebCommunityChatController\(\{[\s\S]*canMentionEverybodyRef[\s\S]*canMentionEverybodyRef\.current = canManageMembersActiveCommunity/,
     "manual @everybody detection must be gated by the same owner-admin capability as the UI candidate without stale closures",
+  );
+  assert.match(
+    chatControllerSource,
+    /useCommunityChatMutationController\(\{[\s\S]*canMentionEverybodyRef,/,
+    "the chat controller must pass the live @everybody capability ref to the shared sender",
   );
   assert.match(
     senderSource,
@@ -334,7 +432,7 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     "owners/admins who literally type @everybody or @everyone must send the canonical roleKey payload",
   );
   assert.match(
-    appSource,
+    chatControllerSource,
     /confirmEverybodyMentionSend[\s\S]*Unread members may also get an email after 15 minutes[\s\S]*once every 72 hours/,
     "@everybody sends must show the mass-email warning before the message is committed",
   );
@@ -359,7 +457,16 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     new URL("../apps/web/src/components/WebCommunityChatPanel.tsx", import.meta.url),
     "utf8",
   );
-  const baseCss = readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8");
+  const baseCss = [
+    readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8"),
+    readFileSync(
+      new URL(
+        "../apps/web/src/styles/community-and-content.css",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ].join("\n");
   assert.match(
     menuSource,
     /export function MentionComposerHighlight/,

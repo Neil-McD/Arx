@@ -3754,8 +3754,10 @@
   color: var(--accent-gold, var(--accent));
 }
 
-/* A message that tags you catches the eye at scroll speed: accent edge + wash. */
-.community-interaction-message.is-self-mentioned {
+/* A post or reply that tags this viewer catches the eye at scroll speed.
+   @everybody uses the same viewer-attention treatment for every recipient. */
+.community-interaction-message.is-self-mentioned,
+.community-interaction-reply.is-self-mentioned {
   background: color-mix(in srgb, var(--accent) 6%, transparent);
   border-left: 2px solid var(--accent);
   border-radius: 0 8px 8px 0;
@@ -4239,10 +4241,6 @@
   gap: 12px;
   padding: 8px 12px 4px;
   border-radius: 10px;
-}
-
-.community-interaction-group.is-agent {
-  background: color-mix(in srgb, var(--bg-card) 88%, var(--accent) 12%);
 }
 
 .community-interaction-group-gutter {
