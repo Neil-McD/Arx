@@ -109,6 +109,19 @@ the repository under operator control. Its SHA-256 is
 Do not recreate the retired tables or migration functions. Any future partner
 program must begin from a new explicit product and financial contract.
 
+### R41NB0W one-off operator retirement
+
+The exact pre-retirement production backup is retained at
+`/Users/neilmcdevitt/code/arx-local-backups/20260801-founder-inference-pre-migration/polynet-wry-hawk-715-pre-founder-inference.zip`.
+Its SHA-256 is
+`7c3238c4f01f98459d55b7740b77f7051324dffda0449fadc2aac003e6975674`.
+
+R41NB0W retirement is governed by `docs/r41nb0w-operator-retirement-v1.md`.
+It is an exact-ID, internal-only operator migration that preserves the user's
+identity and historical financial/audit records. It must be dry-run in
+production before execution, and the bounded cognition drain plus retained-state
+inspection must complete before the temporary operator module is removed.
+
 ## Web Production Rule
 
 - Web production deploys must come from GitHub `origin/main` through Vercel project `polynet`.

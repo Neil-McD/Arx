@@ -233,6 +233,8 @@
     "check:community-agent-serve-worker-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_serve_worker_contract_proof.ts",
     "check:founder-inference-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/founder_inference_contract_proof.ts",
     "check:founder-inference-behavior": "vitest run convex/founderInferenceCore.test.ts",
+    "check:r41nb0w-retirement-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/r41nb0w_retirement_contract_proof.ts",
+    "check:r41nb0w-retirement-behavior": "vitest run convex/r41nb0wRetirementCore.test.ts",
     "check:member-agent-dock-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/member_agent_dock_contract_proof.ts",
     "check:community-agent-heartbeat-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_heartbeat_contract_proof.ts",
     "check:community-agent-runtime-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_runtime_contract_proof.ts",
