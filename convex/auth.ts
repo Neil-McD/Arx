@@ -19,6 +19,10 @@ import {
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 import { canReceiveCommunityRevenue } from "./stripeConnectAccountCore";
+import {
+  hasPlatformOwnerComplimentaryAccess,
+  PLATFORM_OWNER_COMPLIMENTARY_MAX_COMMUNITIES,
+} from "./operatorEntitlementsCore";
 
 type CanonicalTier = "free" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "architect";
@@ -394,6 +398,7 @@ export const getAccountCommerceStatus = query({
   ): Promise<{
     user_id: string;
     account_tier: CanonicalTier;
+    operator_complimentary_access: boolean;
     max_communities: number;
     platform_fee_bps: number;
     stripe_connect: {
@@ -419,8 +424,14 @@ export const getAccountCommerceStatus = query({
       authSubject: args.authSubject ?? null,
     });
     if (!actor) return null;
-    const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
-    const meta = accountTierMeta(canonicalTier);
+    const [canonicalTier, operatorComplimentaryAccess] = await Promise.all([
+      getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs),
+      hasPlatformOwnerComplimentaryAccess(ctx, actor.dbUserId),
+    ]);
+    const baseMeta = accountTierMeta(canonicalTier);
+    const meta = operatorComplimentaryAccess
+      ? { ...baseMeta, maxCommunities: PLATFORM_OWNER_COMPLIMENTARY_MAX_COMMUNITIES }
+      : baseMeta;
     const hasPayoutAccess = meta.hasPayouts;
     const stripeConnect = hasPayoutAccess
       ? ((await ctx.runQuery(
@@ -454,6 +465,7 @@ export const getAccountCommerceStatus = query({
     return {
       user_id: actor.authSubject,
       account_tier: canonicalTier,
+      operator_complimentary_access: operatorComplimentaryAccess,
       max_communities: meta.maxCommunities,
       platform_fee_bps: meta.platformFeeBps,
       stripe_connect: {
@@ -508,11 +520,18 @@ export const getAccountCommerceAccessForUserInternal = internalQuery({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const accountTier = await getCanonicalTierByUserIdInternal(ctx as never, args.userId, nowMs);
-    const meta = accountTierMeta(accountTier);
+    const [accountTier, operatorComplimentaryAccess] = await Promise.all([
+      getCanonicalTierByUserIdInternal(ctx as never, args.userId, nowMs),
+      hasPlatformOwnerComplimentaryAccess(ctx, args.userId),
+    ]);
+    const baseMeta = accountTierMeta(accountTier);
+    const meta = operatorComplimentaryAccess
+      ? { ...baseMeta, maxCommunities: PLATFORM_OWNER_COMPLIMENTARY_MAX_COMMUNITIES }
+      : baseMeta;
     return {
       user_id: String(args.userId),
       account_tier: accountTier,
+      operator_complimentary_access: operatorComplimentaryAccess,
       max_communities: meta.maxCommunities,
       platform_fee_bps: meta.platformFeeBps,
       has_payouts: meta.hasPayouts,

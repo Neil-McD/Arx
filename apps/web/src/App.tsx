@@ -1005,6 +1005,8 @@ export default function App() {
   const founderBilling = useWebFounderBillingController({
     session,
     ensureSession: ensureUsableAuthSession,
+    operatorComplimentaryAccess:
+      accountCommerceStatus?.operator_complimentary_access === true,
   });
   const enterJoinedCommunity = useWebJoinedCommunityEntryAction({
     session,

@@ -4,6 +4,7 @@ import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAu
 export type AccountCommerceStatus = {
   user_id: string;
   account_tier: "free" | "architect";
+  operator_complimentary_access: boolean;
   max_communities: number;
   platform_fee_bps: number;
   stripe_connect: {
@@ -43,6 +44,7 @@ async function loadAccountCommerceStatusViaConvex(session: AuthSessionLike): Pro
   return {
     ...row,
     account_tier: normalizeAccountTier(row.account_tier),
+    operator_complimentary_access: row.operator_complimentary_access === true,
     max_communities: Number(row.max_communities ?? 0),
     platform_fee_bps: Number(row.platform_fee_bps ?? 0),
     stripe_connect: {

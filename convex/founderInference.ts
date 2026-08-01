@@ -9,6 +9,7 @@ import {
   COMMUNITY_OWNER_INFERENCE_TERMS_KEY,
   COMMUNITY_OWNER_INFERENCE_TERMS_VERSION,
   EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
+  type CommunityInferenceFundingAdmission,
 } from "../shared/founderInference";
 import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 import {
@@ -25,6 +26,8 @@ import {
 } from "./founderPlanCore";
 import { decryptStoredSecret } from "./providerConnections";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
+import { requireFounderInferencePricingFromEnv } from "./founderPlanPricing";
+import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 
 const internalRefs = internal as any;
 const RECEIPT_LEASE_MS = 10 * 60_000;
@@ -56,6 +59,32 @@ function boundedCode(value: unknown, fallback: string): string {
   return String(value ?? "").trim().slice(0, 120) || fallback;
 }
 
+function fundingAuthorityMatches(args: {
+  admission: CommunityInferenceFundingAdmission;
+  expectedFundingMode: FounderInferenceReceiptRow["fundingMode"];
+  expectedPayerUserId: unknown;
+  expectedFounderGrantId?: unknown;
+  expectedFounderSubscriptionId?: unknown;
+}): boolean {
+  const { admission } = args;
+  if (
+    admission.ok === false ||
+    admission.mode === "legacy_requester_chatgpt" ||
+    admission.mode !== args.expectedFundingMode ||
+    normalizedId(admission.payerUserId) !== normalizedId(args.expectedPayerUserId)
+  ) {
+    return false;
+  }
+  if (admission.mode === "owner_api_key") {
+    return normalizedId(admission.grantId) === normalizedId(args.expectedFounderGrantId);
+  }
+  if (admission.mode === "platform_subscription") {
+    return normalizedId(admission.subscriptionId) ===
+      normalizedId(args.expectedFounderSubscriptionId);
+  }
+  return !args.expectedFounderGrantId && !args.expectedFounderSubscriptionId;
+}
+
 async function getOpenAiConnection(ctx: any, userId: any): Promise<OpenAiConnectionRow | null> {
   return (await ctx.db
     .query("userProviderConnections" as any)
@@ -74,6 +103,19 @@ export const getCurrentFounderInferenceStatus = query({
       ctx,
       authSubject: args.authSubject ?? null,
     });
+    if (await hasPlatformOwnerComplimentaryAccess(ctx, userId)) {
+      return {
+        eligible: false,
+        cohort_key: null,
+        status: null,
+        model_id: COMMUNITY_OWNER_FUNDED_MODEL_ID,
+        key_connected: false,
+        key_last_four: null,
+        activated_at: null,
+        suspended_at: null,
+        communities: [],
+      };
+    }
     const grant = await getExistingFounderInferenceGrant(ctx, userId);
     if (!grant) {
       return {
@@ -301,6 +343,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     expectedFundingMode: v.union(
       v.literal("owner_api_key"),
       v.literal("platform_subscription"),
+      v.literal("platform_operator_grant"),
     ),
     expectedFounderGrantId: v.optional(v.id("founderInferenceGrants")),
     expectedFounderSubscriptionId: v.optional(v.id("founderSubscriptions")),
@@ -314,12 +357,13 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     if (!receiptKey || !claimToken) throw new Error("founder_inference_receipt_claim_required");
 
     const admission = await resolveCommunityInferenceFundingAdmission(ctx, args.communityId);
-    const authorityMatches = admission.ok === true &&
-      admission.mode === args.expectedFundingMode &&
-      normalizedId(admission.payerUserId) === normalizedId(args.expectedPayerUserId) &&
-      (admission.mode === "owner_api_key"
-        ? normalizedId(admission.grantId) === normalizedId(args.expectedFounderGrantId)
-        : normalizedId(admission.subscriptionId) === normalizedId(args.expectedFounderSubscriptionId));
+    const authorityMatches = fundingAuthorityMatches({
+      admission,
+      expectedFundingMode: args.expectedFundingMode,
+      expectedPayerUserId: args.expectedPayerUserId,
+      expectedFounderGrantId: args.expectedFounderGrantId,
+      expectedFounderSubscriptionId: args.expectedFounderSubscriptionId,
+    });
     if (!authorityMatches) {
       return { ok: false, errorCode: admission.ok === false ? admission.code : "funding_authority_changed" };
     }
@@ -399,6 +443,8 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       usageCycleId = reservation.cycle._id;
       reservedCostMicros = reservation.reservationCostMicros;
       pricingVersion = reservation.cycle.pricingVersion;
+    } else if (args.expectedFundingMode === "platform_operator_grant") {
+      pricingVersion = requireFounderInferencePricingFromEnv().pricingVersion;
     }
 
     const receiptId = await ctx.db.insert("communityInferenceReceipts" as any, {
@@ -465,12 +511,13 @@ export const markCommunityInferenceProviderStartedInternal = internalMutation({
       return { ok: false, errorCode: "founder_inference_receipt_claim_invalid" };
     }
     const admission = await resolveCommunityInferenceFundingAdmission(ctx, receipt.communityId);
-    const authorityMatches = admission.ok === true &&
-      admission.mode === receipt.fundingMode &&
-      normalizedId(admission.payerUserId) === normalizedId(receipt.payerUserId) &&
-      (admission.mode === "owner_api_key"
-        ? normalizedId(admission.grantId) === normalizedId(receipt.founderGrantId)
-        : normalizedId(admission.subscriptionId) === normalizedId(receipt.founderSubscriptionId));
+    const authorityMatches = fundingAuthorityMatches({
+      admission,
+      expectedFundingMode: receipt.fundingMode,
+      expectedPayerUserId: receipt.payerUserId,
+      expectedFounderGrantId: receipt.founderGrantId,
+      expectedFounderSubscriptionId: receipt.founderSubscriptionId,
+    });
     if (!authorityMatches) {
       if (
         receipt.fundingMode === "platform_subscription" &&

@@ -18,7 +18,9 @@ import {
 } from "./founderPlanCore";
 import {
   calculateFounderInferenceCostMicros,
+  requireFounderInferencePricingFromEnv,
 } from "./founderPlanPricing";
+import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 
 export type FounderInferenceGrantRow = {
   _id: any;
@@ -40,7 +42,7 @@ export type FounderInferenceReceiptRow = {
   communityId: any;
   actorUserId: any;
   payerUserId: any;
-  fundingMode: "owner_api_key" | "platform_subscription";
+  fundingMode: "owner_api_key" | "platform_subscription" | "platform_operator_grant";
   founderGrantId?: any;
   founderSubscriptionId?: any;
   usageCycleId?: any;
@@ -149,6 +151,16 @@ export async function resolveCommunityInferenceFundingAdmission(
     inferenceFundingPolicy?: unknown;
   } | null;
   if (!community?.ownerId) return { ok: false, code: "community_not_found" };
+
+  if (await hasPlatformOwnerComplimentaryAccess(ctx, community.ownerId)) {
+    return {
+      ok: true,
+      mode: "platform_operator_grant",
+      transitional: false,
+      payerUserId: community.ownerId,
+      modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
+    };
+  }
 
   let attachedSubscription;
   try {
@@ -325,6 +337,16 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
       reservedCostMicros: Number(receipt.reservedCostMicros ?? 0),
       settledCostMicros,
       nowMs: args.nowMs,
+    });
+  } else if (receipt.fundingMode === "platform_operator_grant") {
+    const pricing = requireFounderInferencePricingFromEnv();
+    if (receipt.pricingVersion !== pricing.pricingVersion) {
+      throw new Error("founder_inference_pricing_version_mismatch");
+    }
+    settledCostMicros = calculateFounderInferenceCostMicros({
+      promptTokens,
+      completionTokens,
+      pricing,
     });
   }
   await args.ctx.db.patch(receipt._id as any, {

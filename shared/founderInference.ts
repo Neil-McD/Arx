@@ -51,6 +51,13 @@ export type CommunityInferenceFundingAdmission =
       modelId: typeof COMMUNITY_OWNER_FUNDED_MODEL_ID;
     }
   | {
+      ok: true;
+      mode: "platform_operator_grant";
+      transitional: false;
+      payerUserId: unknown;
+      modelId: typeof COMMUNITY_OWNER_FUNDED_MODEL_ID;
+    }
+  | {
       ok: false;
       code:
         | "community_not_found"

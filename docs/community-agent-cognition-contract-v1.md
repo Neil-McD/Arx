@@ -49,7 +49,8 @@ The community-owned runtime surfaces are:
    - funded by the current community owner's OpenAI key after an approved existing
      founder activates; approved-but-inactive founders retain the requester ChatGPT
      route only during the bounded cutover, while managed communities require an
-     active $79 founder subscription attached to that community
+     active $79 founder subscription attached to that community; the active platform
+     owner role receives the same platform-funded path without a subscription
    - revalidates community access and source visibility for every turn
    - receives the same canonical five Polynet repository tools as the personal
      harness and official MCP
@@ -1985,12 +1986,15 @@ Two payment lanes, split by what the spend produces:
   (communityAgentConfigs.agentEnabled).
 - Direct Concierge chat, autonomous cognition, and AI-assisted setup generation are community-founder-funded. An approved existing founder
   supplies the OpenAI key after activation; a new founder supplies a verified $79
-  monthly subscription attached to exactly one community, and Polynet supplies the
-  server-side OpenAI key. Both use GPT 5.6 Luna while the requesting member remains
+  monthly subscription attached to exactly one community; the active platform owner
+  role is complimentary. Polynet supplies the server-side OpenAI key for paid and
+  operator-funded communities. All paths use GPT 5.6 Luna while the requesting member remains
   the permission and tool principal. Approved-but-inactive existing founders retain
   the former requester ChatGPT route only during the bounded cutover. Payment
   identity never widens retrieval or tool authority. All three surfaces resolve the
   same funding admission and settle through the same privacy-bounded receipt kernel.
+  Operator-funded receipts preserve rate limits and calculated raw provider cost but
+  do not reserve a paid founder allowance.
 
 ### Cadence (resolved 2026-07-01)
 

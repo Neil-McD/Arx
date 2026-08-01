@@ -55,6 +55,8 @@ function formatUsdBaseUnits(value: number): string {
 
 function founderBillingStatusLabel(community: CloudFounderBillingCommunity): string {
   switch (community.status) {
+    case "operator_comped":
+      return "Operator access included";
     case "legacy_active":
       return "Legacy API key active";
     case "legacy_ready":
@@ -118,16 +120,21 @@ export function WebBillingSettingsSection(
   const [premiumCheckoutError, setPremiumCheckoutError] = useState<
     string | null
   >(null);
+  const isOperatorComped =
+    props.accountCommerceStatus?.operator_complimentary_access === true;
   const isPremium =
+    isOperatorComped ||
     props.accountCommerceStatus?.account_tier === POLYNET_PREMIUM_ACCOUNT_TIER;
   const isSignedIn = Boolean(props.session);
   const actionLabel = !isSignedIn
     ? "Sign in to upgrade"
-    : isPremium
-      ? "Premium active"
-      : isStartingPremiumCheckout
-        ? "Opening checkout..."
-        : "Upgrade to Premium";
+    : isOperatorComped
+      ? "Operator access included"
+      : isPremium
+        ? "Premium active"
+        : isStartingPremiumCheckout
+          ? "Opening checkout..."
+          : "Upgrade to Premium";
   const canStartPremiumCheckout =
     isSignedIn && !isPremium && !isStartingPremiumCheckout;
 
@@ -174,6 +181,7 @@ export function WebBillingSettingsSection(
               {props.founderBillingOverview.communities.map((community) => {
                 const isActing =
                   props.founderBillingActionCommunityId === community.community_id;
+                const isOperatorComped = community.funding_mode === "operator_comp";
                 const canManage =
                   Boolean(community.subscription_id) &&
                   community.status !== "canceled" &&
@@ -185,7 +193,9 @@ export function WebBillingSettingsSection(
                       <span>{community.community_name}</span>
                       <strong>{founderBillingStatusLabel(community)}</strong>
                       <small>
-                        {community.funding_mode === "managed"
+                        {isOperatorComped
+                          ? `Included · GPT 5.6 Luna usage is metered internally · ${community.platform_fee_bps / 100}% fee`
+                          : community.funding_mode === "managed"
                           ? `${formatUsdBaseUnits(community.monthly_price_base_units)}/month · $20 included usage · ${community.platform_fee_bps / 100}% fee`
                           : `Owner API key · ${community.platform_fee_bps / 100}% fee`}
                       </small>
@@ -200,7 +210,7 @@ export function WebBillingSettingsSection(
                         >
                           {isActing ? "Opening…" : "Manage in Stripe"}
                         </button>
-                      ) : (
+                      ) : isOperatorComped ? null : (
                         <button
                           type="button"
                           disabled={isActing}
@@ -239,7 +249,7 @@ export function WebBillingSettingsSection(
         <div className="settings-section billing-page">
           <div className="settings-section-title">Personal tools</div>
           <p className="billing-page-sub">
-            You're on the <strong>{isPremium ? "Premium" : "Free"}</strong> plan
+            You're on <strong>{isOperatorComped ? "Operator access" : isPremium ? "Premium" : "Free"}</strong>
             — this controls personal tools, not community funding or fees.
           </p>
 
@@ -308,7 +318,9 @@ export function WebBillingSettingsSection(
                     </button>
                     <div className="billing-tier-trust">
                       <Lock size={11} strokeWidth={2} aria-hidden="true" />
-                      Cancel anytime · secured by Stripe
+                      {isOperatorComped
+                        ? "Included with the platform owner role"
+                        : "Cancel anytime · secured by Stripe"}
                     </div>
                   </div>
                 </div>

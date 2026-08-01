@@ -220,7 +220,7 @@ assert.match(
 );
 assert.match(
   docs,
-  /schedule immediate serve worker for that request[\s\S]*authorize one privacy-bounded funding receipt[\s\S]*run GPT 5\.6 Luna on the current owner's OpenAI key[\s\S]*insert one community-agent reply in that source thread/,
+  /schedule immediate serve worker for that request[\s\S]*authorize one privacy-bounded funding receipt[\s\S]*run GPT 5\.6 Luna through the community's canonical owner funding authority[\s\S]*insert one community-agent reply in that source thread/,
   "architecture docs should describe the event-driven canonical tool serve path",
 );
 assert.match(

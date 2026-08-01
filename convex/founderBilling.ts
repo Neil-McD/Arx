@@ -32,6 +32,7 @@ import {
 import {
   requireFounderInferencePricingFromEnv,
 } from "./founderPlanPricing";
+import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 import { getStripeClient } from "./stripeCore";
 import {
   attachStripeCustomerToUser,
@@ -528,7 +529,7 @@ export const getFounderBillingOverview = query({
       authSubject: args.authSubject ?? null,
     });
     const nowMs = Date.now();
-    const [communities, grant, openAiConnection] = await Promise.all([
+    const [communities, grant, openAiConnection, operatorComped] = await Promise.all([
       ctx.db
         .query("communities")
         .withIndex("by_owner", (q) => q.eq("ownerId", ownerUserId))
@@ -540,6 +541,7 @@ export const getFounderBillingOverview = query({
           q.eq("userId", ownerUserId).eq("provider", "openai"),
         )
         .first(),
+      hasPlatformOwnerComplimentaryAccess(ctx, ownerUserId),
     ]);
     const rows = await Promise.all(
       communities
@@ -580,13 +582,16 @@ export const getFounderBillingOverview = query({
             : null;
 
           let status:
+            | "operator_comped"
             | "legacy_ready"
             | "legacy_active"
             | "legacy_suspended"
             | "managed_required"
             | "managed_checkout_pending"
             | FounderSubscriptionStatus;
-          if (
+          if (operatorComped) {
+            status = "operator_comped";
+          } else if (
             subscription &&
             founderSubscriptionStatusGrantsAccess({
               status: subscription.status,
@@ -615,7 +620,11 @@ export const getFounderBillingOverview = query({
             community_name: community.name,
             community_slug: community.slug,
             funding_policy: fundingPolicy,
-            funding_mode: managed ? "managed" : "legacy_byok",
+            funding_mode: operatorComped
+              ? "operator_comp"
+              : managed
+                ? "managed"
+                : "legacy_byok",
             status,
             model_id: COMMUNITY_OWNER_FUNDED_MODEL_ID,
             monthly_price_base_units: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
@@ -682,6 +691,13 @@ export const getFounderBillingPortalTargetInternal = internalQuery({
   },
 });
 
+export const getFounderBillingExemptionInternal = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => ({
+    operatorComped: await hasPlatformOwnerComplimentaryAccess(ctx, args.userId),
+  }),
+});
+
 export const startFounderBillingPortal = action({
   args: {
     authSubject: v.optional(v.string()),
@@ -720,6 +736,16 @@ export const startFounderSubscriptionCheckout = action({
     cancelUrl: v.string(),
   },
   handler: async (ctx, args) => {
+    const actor = (await ctx.runQuery(
+      (internal as any).authActor.resolveAuthenticatedActorInternal,
+      { authSubject: args.authSubject ?? null },
+    )) as { dbUserId?: any; email?: string | null };
+    if (!actor?.dbUserId) throw new Error("user_not_found");
+    const exemption = (await ctx.runQuery(
+      (internal as any).founderBilling.getFounderBillingExemptionInternal,
+      { userId: actor.dbUserId },
+    )) as { operatorComped?: boolean } | null;
+    if (exemption?.operatorComped) throw new Error("operator_billing_exempt");
     requireFounderInferencePricingFromEnv();
     const successUrl = requireCanonicalCheckoutReturnUrl(
       args.successUrl,
@@ -729,11 +755,6 @@ export const startFounderSubscriptionCheckout = action({
       args.cancelUrl,
       "founder_subscription_cancel_url_invalid",
     );
-    const actor = (await ctx.runQuery(
-      (internal as any).authActor.resolveAuthenticatedActorInternal,
-      { authSubject: args.authSubject ?? null },
-    )) as { dbUserId?: any; email?: string | null };
-    if (!actor?.dbUserId) throw new Error("user_not_found");
     const setupStatus = (await ctx.runQuery(
       api.profiles.getMyAccountSetupStatus,
       { authSubject: args.authSubject ?? undefined },

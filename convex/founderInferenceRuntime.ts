@@ -11,7 +11,7 @@ const internalRefs = internal as any;
 export type CommunityInferenceFundingSession = {
   receiptKey: string;
   claimToken: string;
-  fundingMode: "owner_api_key" | "platform_subscription";
+  fundingMode: "owner_api_key" | "platform_subscription" | "platform_operator_grant";
   modelId: typeof COMMUNITY_OWNER_FUNDED_MODEL_ID;
   apiKeyOverride: string | null;
 };

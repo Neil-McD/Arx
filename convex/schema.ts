@@ -232,6 +232,7 @@ export default defineSchema({
     fundingMode: v.union(
       v.literal("owner_api_key"),
       v.literal("platform_subscription"),
+      v.literal("platform_operator_grant"),
     ),
     founderGrantId: v.optional(v.id("founderInferenceGrants")),
     founderSubscriptionId: v.optional(v.id("founderSubscriptions")),

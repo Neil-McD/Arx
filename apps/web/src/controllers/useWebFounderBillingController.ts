@@ -17,6 +17,9 @@ function messageForError(error: unknown): string {
   if (message.includes("founder_subscription_community_already_managed")) {
     return "This community already has a managed subscription.";
   }
+  if (message.includes("operator_billing_exempt")) {
+    return "Operator access is already included for this community.";
+  }
   if (message.includes("profile_setup_required")) {
     return "Finish your profile before starting community billing.";
   }
@@ -29,6 +32,7 @@ function messageForError(error: unknown): string {
 export function useWebFounderBillingController(params: {
   session: AuthSession | null;
   ensureSession: (session?: AuthSession | null) => Promise<AuthSession | null>;
+  operatorComplimentaryAccess: boolean;
 }) {
   const [overview, setOverview] = useState<CloudFounderBillingOverview>(
     EMPTY_FOUNDER_BILLING_OVERVIEW,
@@ -102,6 +106,10 @@ export function useWebFounderBillingController(params: {
   const startCheckout = useCallback(async (communityId: string): Promise<void> => {
     const usableSession = await ensureSessionRef.current(params.session);
     if (!usableSession) return;
+    if (params.operatorComplimentaryAccess) {
+      await refresh(usableSession);
+      return;
+    }
     setActionCommunityId(communityId);
     setError(null);
     try {
@@ -117,7 +125,7 @@ export function useWebFounderBillingController(params: {
       setError(messageForError(checkoutError));
       setActionCommunityId(null);
     }
-  }, [params.session]);
+  }, [params.operatorComplimentaryAccess, params.session, refresh]);
 
   const openPortal = useCallback(async (communityId: string): Promise<void> => {
     const usableSession = await ensureSessionRef.current(params.session);
@@ -141,9 +149,20 @@ export function useWebFounderBillingController(params: {
   const startCheckoutAfterCommunityCreated = useCallback(async (
     communityId: string,
   ): Promise<void> => {
-    await refresh();
+    if (params.operatorComplimentaryAccess) {
+      await refresh();
+      return;
+    }
+    const next = await refresh();
+    if (
+      next?.communities.some(
+        (community) =>
+          community.community_id === communityId &&
+          community.funding_mode === "operator_comp",
+      )
+    ) return;
     await startCheckout(communityId);
-  }, [refresh, startCheckout]);
+  }, [params.operatorComplimentaryAccess, refresh, startCheckout]);
 
   return {
     overview,

@@ -242,6 +242,204 @@ test("funding cutover is founder-level and fails closed without changing member 
   });
 });
 
+test("one active platform owner receives metered operator-funded Luna without a subscription or API key", async () => {
+  const priorEnv = {
+    input: process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS,
+    output: process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS,
+    reservation: process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS,
+  };
+  process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = "1000000";
+  process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS = "2000000";
+  process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS = "1000000";
+  try {
+    const t = convexTest(schema, modules);
+    const nowMs = 50_000;
+    const fixture = await t.run(async (ctx) => {
+      const ownerId = await insertUser(ctx, "operator-owner", nowMs);
+      const memberId = await insertUser(ctx, "operator-member", nowMs);
+      const communityId = await insertCommunity(ctx, ownerId, "operator-community", nowMs);
+      await ctx.db.patch(communityId, {
+        inferenceFundingPolicy: "managed_required",
+        updatedAt: nowMs,
+      });
+      const operatorRoleId = await ctx.db.insert("operatorRoles", {
+        userId: ownerId,
+        role: "owner",
+        active: true,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      return { communityId, memberId, operatorRoleId, ownerId };
+    });
+
+    await expect(
+      t.run(async (ctx) =>
+        await resolveCommunityInferenceFundingAdmission(ctx, fixture.communityId),
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      mode: "platform_operator_grant",
+      transitional: false,
+      payerUserId: fixture.ownerId,
+      modelId: "gpt-5.6-luna",
+    });
+    await expect(
+      t.run(async (ctx) =>
+        await communityFounderFundingAllowsPublicAccess(ctx, fixture.communityId),
+      ),
+    ).resolves.toBe(true);
+    const asOperatorOwner = t.withIdentity({
+      subject: "founder-inference-operator-owner",
+    });
+    await expect(
+      asOperatorOwner.query((api as any).founderBilling.getFounderBillingOverview, {}),
+    ).resolves.toMatchObject({
+      communities: [
+        {
+          community_id: String(fixture.communityId),
+          funding_mode: "operator_comp",
+          status: "operator_comped",
+          subscription_id: null,
+        },
+      ],
+      managed_monthly_total_base_units: 0,
+    });
+    await expect(
+      asOperatorOwner.query((api as any).founderInference.getCurrentFounderInferenceStatus, {}),
+    ).resolves.toMatchObject({
+      eligible: false,
+      key_connected: false,
+      communities: [],
+    });
+
+    const receiptKey = "community_agent_mention:operator-funded";
+    const claimed = await t.mutation(
+      (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+      {
+        receiptKey,
+        sourceRunId: "community-agent-serve:operator-funded",
+        communityId: fixture.communityId,
+        actorUserId: fixture.memberId,
+        expectedPayerUserId: fixture.ownerId,
+        expectedFundingMode: "platform_operator_grant",
+        surface: "community_agent_mention",
+        claimToken: "operator-funded-claim",
+        nowMs: nowMs + 1_000,
+      },
+    );
+    expect(claimed).toMatchObject({ ok: true, reclaimed: false });
+    await t.run(async (ctx) => {
+      const receipt = await ctx.db.get(claimed.receiptId);
+      expect(receipt).toMatchObject({
+        fundingMode: "platform_operator_grant",
+        payerUserId: fixture.ownerId,
+        pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+      });
+      expect(receipt).not.toHaveProperty("founderGrantId");
+      expect(receipt).not.toHaveProperty("founderSubscriptionId");
+      expect(receipt).not.toHaveProperty("usageCycleId");
+    });
+    await expect(
+      t.mutation(
+        (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+        { receiptKey, claimToken: "operator-funded-claim", nowMs: nowMs + 2_000 },
+      ),
+    ).resolves.toEqual({ ok: true });
+    await t.run(async (ctx) => {
+      await settleAuthorizedFounderInferenceReceipt({
+        ctx,
+        receiptKey,
+        claimToken: "operator-funded-claim",
+        promptTokens: 1_000,
+        completionTokens: 500,
+        outcomeCode: "completed",
+        nowMs: nowMs + 3_000,
+      });
+      expect(await ctx.db.get(claimed.receiptId)).toMatchObject({
+        status: "settled",
+        promptTokens: 1_000,
+        completionTokens: 500,
+        settledCostMicros: 2_000,
+      });
+    });
+
+    const revokedReceiptKey = "community_agent_mention:operator-revoked";
+    await expect(
+      t.mutation(
+        (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+        {
+          receiptKey: revokedReceiptKey,
+          sourceRunId: "community-agent-serve:operator-revoked",
+          communityId: fixture.communityId,
+          actorUserId: fixture.memberId,
+          expectedPayerUserId: fixture.ownerId,
+          expectedFundingMode: "platform_operator_grant",
+          surface: "community_agent_mention",
+          claimToken: "operator-revoked-claim",
+          nowMs: nowMs + 4_000,
+        },
+      ),
+    ).resolves.toMatchObject({ ok: true });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(fixture.operatorRoleId, { active: false, updatedAt: nowMs + 5_000 });
+    });
+    await expect(
+      t.mutation(
+        (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+        {
+          receiptKey: revokedReceiptKey,
+          claimToken: "operator-revoked-claim",
+          nowMs: nowMs + 6_000,
+        },
+      ),
+    ).resolves.toEqual({ ok: false, errorCode: "funding_authority_changed" });
+  } finally {
+    if (priorEnv.input === undefined) delete process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS;
+    else process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = priorEnv.input;
+    if (priorEnv.output === undefined) delete process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS;
+    else process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS = priorEnv.output;
+    if (priorEnv.reservation === undefined) delete process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS;
+    else process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS = priorEnv.reservation;
+  }
+});
+
+test("operator complimentary access fails closed for non-owner, inactive, or ambiguous roles", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    const ownerId = await insertUser(ctx, "operator-ambiguous-owner", 70_000);
+    const communityId = await insertCommunity(ctx, ownerId, "operator-ambiguous", 70_000);
+    await ctx.db.patch(communityId, { inferenceFundingPolicy: "managed_required" });
+    const roleId = await ctx.db.insert("operatorRoles", {
+      userId: ownerId,
+      role: "operator",
+      active: true,
+      createdAt: 70_000,
+      updatedAt: 70_000,
+    });
+    await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toEqual({
+      ok: false,
+      code: "founder_plan_required",
+    });
+    await ctx.db.patch(roleId, { role: "owner", active: false, updatedAt: 71_000 });
+    await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toEqual({
+      ok: false,
+      code: "founder_plan_required",
+    });
+    await ctx.db.patch(roleId, { active: true, updatedAt: 72_000 });
+    await ctx.db.insert("operatorRoles", {
+      userId: ownerId,
+      role: "owner",
+      active: true,
+      createdAt: 72_000,
+      updatedAt: 72_000,
+    });
+    await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toEqual({
+      ok: false,
+      code: "founder_plan_required",
+    });
+  });
+});
+
 test("an exact existing founder can be transitioned irreversibly to managed billing", async () => {
   const t = convexTest(schema, modules);
   const fixture = await t.run(async (ctx) => {

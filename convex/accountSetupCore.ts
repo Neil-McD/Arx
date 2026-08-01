@@ -10,6 +10,7 @@ import {
 } from "./legalAcceptances";
 import { getUniqueUserProfileDetailByUserId } from "./profileCore";
 import { founderSubscriptionStatusGrantsAccess } from "../shared/founderPlan";
+import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 
 export type AccountSetupUserRow = {
   _id: any;
@@ -120,13 +121,14 @@ export async function loadAccountSetupStatusForUser(
   user: AccountSetupUserRow,
   detail: AccountSetupProfileDetailRow | null,
 ): Promise<AccountSetupStatus> {
-  const [providerConnections, legalAcceptances, founderSubscriptions] = await Promise.all([
+  const [providerConnections, legalAcceptances, founderSubscriptions, operatorComped] = await Promise.all([
     ctx.db.query("userProviderConnections").withIndex("by_user", (q: any) => q.eq("userId", user._id)).collect(),
     listPlatformLegalAcceptancesForUser(ctx, user._id),
     ctx.db
       .query("founderSubscriptions")
       .withIndex("by_owner", (q: any) => q.eq("ownerUserId", user._id))
       .collect(),
+    hasPlatformOwnerComplimentaryAccess(ctx, user._id),
   ]);
   const nowMs = Date.now();
   return buildAccountSetupStatusForRows({
@@ -134,12 +136,14 @@ export async function loadAccountSetupStatusForUser(
     detail,
     providerConnections,
     legalAcceptances,
-    hasManagedInference: founderSubscriptions.some((row: any) =>
-      founderSubscriptionStatusGrantsAccess({
-        status: row.status,
-        currentPeriodEndAt: row.currentPeriodEndAt,
-        nowMs,
-      }),
-    ),
+    hasManagedInference:
+      operatorComped ||
+      founderSubscriptions.some((row: any) =>
+        founderSubscriptionStatusGrantsAccess({
+          status: row.status,
+          currentPeriodEndAt: row.currentPeriodEndAt,
+          nowMs,
+        }),
+      ),
   });
 }

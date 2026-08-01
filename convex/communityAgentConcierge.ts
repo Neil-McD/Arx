@@ -125,7 +125,9 @@ export const getMyLatestCommunityAgentServeIssue = query({
     if (
       !usageIssue &&
       funding.ok &&
-      (funding.mode === "owner_api_key" || funding.mode === "platform_subscription")
+      (funding.mode === "owner_api_key" ||
+        funding.mode === "platform_subscription" ||
+        funding.mode === "platform_operator_grant")
     ) return null;
     const createdAt = coerceTimestampMs(issue.createdAt, nowMs);
     return {

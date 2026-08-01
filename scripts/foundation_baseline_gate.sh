@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=47
+TOTAL_STEPS=48
 CURRENT_STEP=1
 
 run_step() {
@@ -62,6 +62,7 @@ run_step "Official Polynet MCP authorization proof" npm run check:polynet-worksp
 run_step "App shell decomposition contract" npm run check:app-shell-decomposition-contract
 run_step "Founder inference contract proof" npm run check:founder-inference-proof
 run_step "Founder inference behavior" npm run check:founder-inference-behavior
+run_step "Operator complimentary access contract" npm run check:operator-complimentary-access-proof
 run_step "Community commerce economics contract" npm run check:community-commerce-economics-proof
 run_step "Community commerce economics behavior" npm run check:community-commerce-economics-behavior
 run_step "Repository behavior tests" npm test

@@ -1,6 +1,7 @@
 import { bootstrapGatewayAuthContext } from "./cloudGateway";
 
 export type CloudFounderBillingCommunityStatus =
+  | "operator_comped"
   | "legacy_ready"
   | "legacy_active"
   | "legacy_suspended"
@@ -17,7 +18,7 @@ export type CloudFounderBillingCommunity = {
   community_name: string;
   community_slug: string;
   funding_policy: "legacy_byok_allowed" | "managed_required";
-  funding_mode: "managed" | "legacy_byok";
+  funding_mode: "managed" | "legacy_byok" | "operator_comp";
   status: CloudFounderBillingCommunityStatus;
   model_id: string;
   monthly_price_base_units: number;
@@ -68,6 +69,7 @@ function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
   if (!communityId) return null;
   const rawStatus = nullableString(row.status);
   const allowedStatuses: CloudFounderBillingCommunityStatus[] = [
+    "operator_comped",
     "legacy_ready",
     "legacy_active",
     "legacy_suspended",
@@ -92,7 +94,12 @@ function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
     funding_policy: row.funding_policy === "legacy_byok_allowed"
       ? "legacy_byok_allowed"
       : "managed_required",
-    funding_mode: row.funding_mode === "legacy_byok" ? "legacy_byok" : "managed",
+    funding_mode:
+      row.funding_mode === "operator_comp"
+        ? "operator_comp"
+        : row.funding_mode === "legacy_byok"
+          ? "legacy_byok"
+          : "managed",
     status,
     model_id: nullableString(row.model_id) ?? "gpt-5.6-luna",
     monthly_price_base_units: finiteNumber(row.monthly_price_base_units, 7_900),

@@ -340,6 +340,13 @@ export const startPremiumSubscriptionCheckout = action({
     })) as { dbUserId?: any; email?: string | null };
     const userId = actor?.dbUserId;
     if (!userId) throw new Error("user_not_found");
+    const access = (await ctx.runQuery(
+      (internal as any).auth.getAccountCommerceAccessForUserInternal,
+      { userId, nowMs },
+    )) as { operator_complimentary_access?: boolean } | null;
+    if (access?.operator_complimentary_access) {
+      throw new Error("operator_billing_exempt");
+    }
     const providerCustomerId = await ensureStripeCustomerForUser({
       ctx,
       userId,

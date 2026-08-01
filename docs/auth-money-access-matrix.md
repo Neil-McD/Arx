@@ -1,7 +1,7 @@
 # Auth + Money + Access Matrix (Canonical Contract)
 
 Status: active
-Last verified: 2026-05-07
+Last verified: 2026-08-01
 Scope: canonical web runtime, community monetization, provider-funded inference, and premium-tool accounting
 
 ## 0) Current Account Ladder
@@ -21,6 +21,12 @@ Scope: canonical web runtime, community monetization, provider-funded inference,
    - internal account-tier value for Polynet Premium
    - unlocks Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage
    - does not authorize communities or change community revenue fees
+4. `platform owner overlay`
+   - requires exactly one active canonical `operatorRoles.owner` row
+   - receives complimentary product access without a Polynet checkout
+   - uses the existing Premium entitlement for personal tools
+   - can own a bounded operator maximum of communities and funds their GPT 5.6 Luna usage through Polynet
+   - remains subject to membership/permission checks, rate limits, usage receipts, provider-cost metering, Stripe processing, and the 2.9% community revenue fee
 
 The product-facing model is Free plus Polynet Premium. The internal account-tier enum remains `free | architect`; `architect` is the Premium entitlement label.
 
@@ -62,6 +68,7 @@ And these outputs:
    - no provider -> denied with `provider_connection_required`
 6. Authenticated free users should not receive Polynet-funded inference by default.
 7. ChatGPT auth or an OpenAI key does not grant community access, payout readiness, or workspace-tool entitlement.
+8. The active platform owner is the narrow exception for community-owned inference: the owner role, not account email or client state, admits `platform_operator_grant` through the canonical receipt kernel.
 
 ## 3) Capability Rules
 
@@ -118,6 +125,8 @@ Prompt injection is not tiered. Authenticated Free and Polynet Premium accounts 
 18. A newly created community is always an unlisted `managed_required` draft and continues to its own $79 monthly checkout.
 19. Managed publishing, public funnel resolution, Discover listing, and new public joins fail closed without current founder-funding admission.
 20. Existing approved founders retain owner-key funding only for legacy-eligible communities; an exact operator transition can remove that grant and move the full owned-community set to managed billing.
+21. One active platform-owner role replaces the ordinary one-community limit with a bounded operator maximum and makes all communities owned by that account platform-funded without founder checkout.
+22. Operator complimentary access is not a membership, management, or tool-authority bypass and does not remove rate limits, usage receipts, raw provider-cost accounting, Stripe processing fees, or Polynet's 2.9% application fee on member revenue.
 
 ## 6) Premium Tool Accounting Rules
 

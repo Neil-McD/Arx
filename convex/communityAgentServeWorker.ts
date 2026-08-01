@@ -979,7 +979,8 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
 
       const directOpenAiFunded =
         context.funding.mode === "owner_api_key" ||
-        context.funding.mode === "platform_subscription";
+        context.funding.mode === "platform_subscription" ||
+        context.funding.mode === "platform_operator_grant";
       const receiptKey = directOpenAiFunded ? communityAgentMentionReceiptKey(requestId) : null;
       const receiptClaimToken = directOpenAiFunded ? crypto.randomUUID() : null;
       let ownerApiKey: string | null = null;
