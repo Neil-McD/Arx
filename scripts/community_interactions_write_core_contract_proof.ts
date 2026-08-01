@@ -176,13 +176,13 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /communityInteractionRoots" as any[\s\S]*actorType: "human"[\s\S]*actorUserId: userId[\s\S]*kind: "discussion"[\s\S]*status: "live"[\s\S]*visibilityScope: "community"/,
-  "composer root writes should create only human-authored community discussion roots",
+  /const actorType = args\.asPersonalAgent \? "personal_agent" : "human"[\s\S]*communityInteractionRoots" as any[\s\S]*channelId: generalChannel\._id[\s\S]*actorType,[\s\S]*actorUserId: userId[\s\S]*kind: "discussion"[\s\S]*status: "live"[\s\S]*visibilityScope: "community"/,
+  "composer root writes should bind General and retain explicit human or personal-agent attribution",
 );
 assert.match(
   createComposerMessage,
-  /const idempotencyKey = composerIdempotencyKey\(normalizeIdempotencyKey\(args\.idempotencyKey\), "root"\)[\s\S]*getExistingRootByIdempotencyKey/,
-  "composer root writes should be idempotent in the composer root namespace",
+  /const idempotencyKey = composerIdempotencyKey\([\s\S]*normalizeIdempotencyKey\(args\.idempotencyKey\),[\s\S]*"root",[\s\S]*actorType,[\s\S]*\)[\s\S]*getExistingRootByIdempotencyKey/,
+  "composer root writes should be idempotent in the actor-specific root namespace",
 );
 assert.match(
   createComposerMessage,
@@ -201,6 +201,11 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
+  /requireChannelForAddressableRoot\(\{ ctx, root \}\)[\s\S]*interaction_channel_mismatch[\s\S]*communityInteractionReplies" as any[\s\S]*channelId: rootChannel\._id/,
+  "composer replies should inherit the server-validated General channel from their root",
+);
+assert.match(
+  createComposerMessage,
   /const seq = await nextReplySeq\(ctx, root\._id\)/,
   "composer reply writes should use the indexed one-level drawer sequence helper",
 );
@@ -211,7 +216,7 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /if \(reply && normalizeIdValue\(reply\.rootId\) !== normalizeIdValue\(root\._id\)\)[\s\S]*interaction_idempotency_key_conflict/,
+  /if \([\s\S]*reply &&[\s\S]*normalizeIdValue\(reply\.rootId\) !== normalizeIdValue\(root\._id\)[\s\S]*interaction_idempotency_key_conflict/,
   "composer reply writes should be idempotent only within the same root",
 );
 assert.match(

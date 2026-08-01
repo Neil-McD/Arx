@@ -15,6 +15,7 @@ const modules = import.meta.glob([
   "./communityAiFeed.ts",
   "./communityAiFeedEvidence.ts",
   "./communityCapabilityContext.ts",
+  "./communityChannels.ts",
   "./communityEvidenceAudit.ts",
   "./communityIntelligenceDirectory.ts",
   "./communityInteractionEvidence.ts",
@@ -88,6 +89,30 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    const generalChannelId = await ctx.db.insert("communityChannels", {
+      communityId,
+      systemRole: "general",
+      slug: "general",
+      name: "General",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "active",
+      position: 0,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    await ctx.db.insert("communityChannels", {
+      communityId: otherCommunityId,
+      systemRole: "general",
+      slug: "general",
+      name: "General",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "active",
+      position: 0,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
     await ctx.db.insert("communityMemberships", {
       communityId,
       userId: memberId,
@@ -103,6 +128,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       ownerId,
       memberId,
       communityId,
+      generalChannelId,
       otherCommunityId,
       ownerSubject: "canonical-owner-subject",
       memberSubject: "canonical-member-subject",
@@ -118,6 +144,7 @@ async function createCanonicalSearchFixture(
   return await t.run(async (ctx) => {
     const interactionId = await ctx.db.insert("communityInteractionRoots", {
       communityId: fixture.communityId,
+      channelId: fixture.generalChannelId,
       actorType: "human",
       actorUserId: fixture.ownerId,
       kind: "discussion",
@@ -800,6 +827,7 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
       .collect(),
   }));
   expect(rows.roots).toHaveLength(2);
+  expect(rows.roots.every((root) => root.channelId === fixture.generalChannelId)).toBe(true);
   expect(rows.roots).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
@@ -881,9 +909,9 @@ test("chat roots and replies survive receipt-completion crashes without duplicat
     },
   });
   await t.run(async (ctx) => {
-    expect(
-      await ctx.db.query("communityInteractionReplies").collect(),
-    ).toHaveLength(1);
+    const replies = await ctx.db.query("communityInteractionReplies").collect();
+    expect(replies).toHaveLength(1);
+    expect(replies[0]?.channelId).toBe(fixture.generalChannelId);
   });
 });
 

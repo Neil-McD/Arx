@@ -1,5 +1,8 @@
+import { ensureGeneralChannel, getGeneralChannel } from "./communityChannelCore";
+
 type CommunityReadCursorLike = {
   _id: any;
+  channelId?: any;
   seenThroughAt: number;
 };
 
@@ -44,12 +47,27 @@ async function getCommunityReadCursor(
   ctx: any,
   communityId: any,
   userId: any,
+  channelId?: any,
 ): Promise<CommunityReadCursorLike | null> {
+  if (channelId) {
+    const channelCursor = (await ctx.db
+      .query("communityReadCursors" as any)
+      .withIndex("by_community_channel_user_stream", (q: any) =>
+        q
+          .eq("communityId", communityId)
+          .eq("channelId", channelId)
+          .eq("userId", userId)
+          .eq("streamKind", "chat"),
+      )
+      .first()) as CommunityReadCursorLike | null;
+    if (channelCursor) return channelCursor;
+  }
   return (await ctx.db
     .query("communityReadCursors" as any)
-    .withIndex("by_community_user_stream", (q: any) =>
+    .withIndex("by_community_channel_user_stream", (q: any) =>
       q
         .eq("communityId", communityId)
+        .eq("channelId", undefined)
         .eq("userId", userId)
         .eq("streamKind", "chat"),
     )
@@ -74,7 +92,13 @@ export async function readCommunityChatReadState(
   communityId: any,
   userId: any,
 ): Promise<CommunityChatReadState> {
-  const cursor = await getCommunityReadCursor(ctx, communityId, userId);
+  const channel = await getGeneralChannel(ctx, communityId);
+  const cursor = await getCommunityReadCursor(
+    ctx,
+    communityId,
+    userId,
+    channel?._id,
+  );
   if (cursor) {
     const seenThroughAt = normalizeCommunityReadPosition(cursor.seenThroughAt);
     return {
@@ -111,9 +135,23 @@ export async function advanceCommunityChatReadCursor(args: {
     userId,
   } = args;
   const latestReadableAt = normalizeCommunityReadPosition(args.latestReadableAt);
-  const existing = await getCommunityReadCursor(ctx, communityId, userId);
+  const channel = await ensureGeneralChannel({
+    ctx,
+    communityId,
+    nowMs: args.nowMs,
+  });
+  const existing = await getCommunityReadCursor(
+    ctx,
+    communityId,
+    userId,
+    channel._id,
+  );
 
   if (existing) {
+    if (!existing.channelId) {
+      await ctx.db.patch(existing._id, { channelId: channel._id });
+      existing.channelId = channel._id;
+    }
     const current = normalizeCommunityReadPosition(existing.seenThroughAt);
     const next = nextCommunityReadPosition(
       current,
@@ -151,6 +189,7 @@ export async function advanceCommunityChatReadCursor(args: {
   const nowMs = args.nowMs ?? Date.now();
   await ctx.db.insert("communityReadCursors" as any, {
     communityId,
+    channelId: channel._id,
     userId,
     streamKind: "chat",
     seenThroughAt: next,

@@ -55,6 +55,10 @@ import type * as communityApplicationFeeRefunds from "../communityApplicationFee
 import type * as communityArchiveDocuments from "../communityArchiveDocuments.js";
 import type * as communityAttention from "../communityAttention.js";
 import type * as communityCapabilityContext from "../communityCapabilityContext.js";
+import type * as communityChannelAudit from "../communityChannelAudit.js";
+import type * as communityChannelBackfill from "../communityChannelBackfill.js";
+import type * as communityChannelCore from "../communityChannelCore.js";
+import type * as communityChannels from "../communityChannels.js";
 import type * as communityChat from "../communityChat.js";
 import type * as communityCognitionCleanup from "../communityCognitionCleanup.js";
 import type * as communityCognitionCleanupCore from "../communityCognitionCleanupCore.js";
@@ -292,6 +296,10 @@ declare const fullApi: ApiFromModules<{
   communityArchiveDocuments: typeof communityArchiveDocuments;
   communityAttention: typeof communityAttention;
   communityCapabilityContext: typeof communityCapabilityContext;
+  communityChannelAudit: typeof communityChannelAudit;
+  communityChannelBackfill: typeof communityChannelBackfill;
+  communityChannelCore: typeof communityChannelCore;
+  communityChannels: typeof communityChannels;
   communityChat: typeof communityChat;
   communityCognitionCleanup: typeof communityCognitionCleanup;
   communityCognitionCleanupCore: typeof communityCognitionCleanupCore;

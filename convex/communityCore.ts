@@ -84,6 +84,7 @@ export type CommunityMessageReactionLike = {
 export type CommunityTypingPresenceLike = {
   _id: any;
   communityId: any;
+  channelId?: any;
   userId: any;
   rootId?: any;
   displayUntil: number;

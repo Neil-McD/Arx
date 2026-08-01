@@ -72,6 +72,7 @@ function visitorRoot(args: {
     root: {
       id: args.id,
       community_id: "visitor",
+      channel_id: null,
       actor_type: "human",
       actor_user_id: args.actorUserId,
       actor_agent_key: null,

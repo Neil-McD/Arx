@@ -49,6 +49,10 @@ import {
   resolveAuthorizedCommunityPresenceWindow,
   resolveMemberCommunityPresenceSummary,
 } from "./communityPresenceCore";
+import {
+  getGeneralChannel,
+  listGeneralChannelReadableRows,
+} from "./communityChannelCore";
 
 const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
@@ -83,6 +87,53 @@ const PUBLIC_JOINED_RECENTLY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
    the visitor number must only count notes a member could actually read. */
 const PUBLIC_MEMORY_NOTE_STATUSES = ["promising", "validated", "canonical", "contested", "stale"];
 
+type PublicCommunityInteractionActivityRow = {
+  _id: any;
+  channelId?: any;
+  visibilityScope: "private" | "admin" | "community" | "public";
+  status: "live" | "hidden" | "deleted";
+  createdAt: number;
+};
+
+export async function resolvePublicCommunityInteractionActivityCounts(
+  ctx: any,
+  communityId: any,
+  options: { nowMs?: number; cap?: number } = {},
+): Promise<{ messagesTodayCount: number; messagesTodayCapped: boolean }> {
+  const requestedCap = Number(options.cap ?? PUBLIC_ACTIVITY_COUNT_CAP);
+  const cap = Math.min(
+    PUBLIC_ACTIVITY_COUNT_CAP,
+    Number.isFinite(requestedCap) && requestedCap > 0
+      ? Math.floor(requestedCap)
+      : PUBLIC_ACTIVITY_COUNT_CAP,
+  );
+  const sinceMs = (options.nowMs ?? Date.now()) - PUBLIC_MESSAGES_TODAY_WINDOW_MS;
+  const generalChannel = await getGeneralChannel(ctx, communityId);
+  const [readableRoots, readableReplies] = await Promise.all([
+    listGeneralChannelReadableRows<PublicCommunityInteractionActivityRow>({
+      ctx,
+      tableName: "communityInteractionRoots",
+      communityId,
+      generalChannel,
+      limit: cap,
+    }),
+    listGeneralChannelReadableRows<PublicCommunityInteractionActivityRow>({
+      ctx,
+      tableName: "communityInteractionReplies",
+      communityId,
+      generalChannel,
+      limit: cap,
+    }),
+  ]);
+  const rawMessagesToday =
+    readableRoots.filter((row) => row.createdAt >= sinceMs).length +
+    readableReplies.filter((row) => row.createdAt >= sinceMs).length;
+  return {
+    messagesTodayCount: Math.min(rawMessagesToday, cap),
+    messagesTodayCapped: rawMessagesToday >= cap,
+  };
+}
+
 /* True-metadata counts for the visitor surface (locked tabs + gate receipt).
    Serves unauthenticated traffic: capped index-range reads only, and every
    number is one a member could verify from inside — live messages,
@@ -96,20 +147,11 @@ async function resolvePublicCommunityActivityCounts(ctx: any, communityId: any):
   memoryNoteCountCapped: boolean;
 }> {
   const cap = PUBLIC_ACTIVITY_COUNT_CAP;
-  const sinceMs = Date.now() - PUBLIC_MESSAGES_TODAY_WINDOW_MS;
-  const liveRootsToday = await ctx.db
-    .query("communityInteractionRoots" as any)
-    .withIndex("by_community_status_createdAt", (q: any) =>
-      q.eq("communityId", communityId).eq("status", "live").gte("createdAt", sinceMs),
-    )
-    .take(cap);
-  const liveRepliesToday = await ctx.db
-    .query("communityInteractionReplies" as any)
-    .withIndex("by_community_status_createdAt", (q: any) =>
-      q.eq("communityId", communityId).eq("status", "live").gte("createdAt", sinceMs),
-    )
-    .take(cap);
-  const rawMessagesToday = liveRootsToday.length + liveRepliesToday.length;
+  const interactionActivity = await resolvePublicCommunityInteractionActivityCounts(
+    ctx,
+    communityId,
+    { cap },
+  );
 
   const resourceRows = await ctx.db
     .query("communityResources" as any)
@@ -142,8 +184,7 @@ async function resolvePublicCommunityActivityCounts(ctx: any, communityId: any):
   }
 
   return {
-    messagesTodayCount: Math.min(rawMessagesToday, cap),
-    messagesTodayCapped: rawMessagesToday >= cap,
+    ...interactionActivity,
     resourceCount: memberVisibleResources.length,
     resourceCountCapped: resourceRows.length >= cap,
     memoryNoteCount,

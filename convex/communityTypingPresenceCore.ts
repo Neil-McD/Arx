@@ -13,6 +13,12 @@ import {
   toIsoString,
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
+import {
+  ensureGeneralChannel,
+  getGeneralChannel,
+  interactionBelongsToGeneralChannel,
+  requireChannelForAddressableRoot,
+} from "./communityChannelCore";
 
 export {
   COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT,
@@ -32,6 +38,7 @@ function normalizeTypingRootId(value: unknown): string | null {
 async function requireCommunityTypingRoot(args: {
   ctx: any;
   communityId: any;
+  channelId: any;
   rootId?: any | null;
 }): Promise<any | null> {
   const normalizedRootId = normalizeTypingRootId(args.rootId);
@@ -45,6 +52,13 @@ async function requireCommunityTypingRoot(args: {
   ) {
     throw new Error("community_typing_scope_invalid");
   }
+  const rootChannel = await requireChannelForAddressableRoot({
+    ctx: args.ctx,
+    root,
+  });
+  if (normalizeIdValue(rootChannel._id) !== normalizeIdValue(args.channelId)) {
+    throw new Error("community_typing_scope_invalid");
+  }
   return root._id;
 }
 
@@ -55,14 +69,31 @@ export async function renewCommunityTypingLease(args: {
   rootId?: any | null;
   nowMs?: number;
 }): Promise<{ displayUntil: number; rootId: string | null; updatedAt: number }> {
-  const validatedRootId = await requireCommunityTypingRoot(args);
+  const channel = await ensureGeneralChannel({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    nowMs: args.nowMs,
+  });
+  const validatedRootId = await requireCommunityTypingRoot({
+    ...args,
+    channelId: channel._id,
+  });
   const issuedLease = issueTypingPresenceLease(args.nowMs ?? Date.now());
-  const existing = (await args.ctx.db
+  const channelPresence = (await args.ctx.db
     .query("communityTypingPresence" as any)
-    .withIndex("by_community_user", (q: any) =>
-      q.eq("communityId", args.communityId).eq("userId", args.userId),
+    .withIndex("by_channel_user", (q: any) =>
+      q.eq("channelId", channel._id).eq("userId", args.userId),
     )
     .first()) as CommunityTypingPresenceLike | null;
+  const existing = channelPresence ?? ((await args.ctx.db
+    .query("communityTypingPresence" as any)
+    .withIndex("by_community_channel_user", (q: any) =>
+      q
+        .eq("communityId", args.communityId)
+        .eq("channelId", undefined)
+        .eq("userId", args.userId),
+    )
+    .first()) as CommunityTypingPresenceLike | null);
 
   if (existing) {
     const currentUpdatedAt =
@@ -71,6 +102,7 @@ export async function renewCommunityTypingLease(args: {
       Math.max(currentUpdatedAt, issuedLease.updatedAt),
     );
     await args.ctx.db.patch(existing._id as any, {
+      channelId: channel._id,
       displayUntil: lease.displayUntil,
       rootId: validatedRootId ?? undefined,
       updatedAt: lease.updatedAt,
@@ -83,6 +115,7 @@ export async function renewCommunityTypingLease(args: {
 
   await args.ctx.db.insert("communityTypingPresence" as any, {
     communityId: args.communityId,
+    channelId: channel._id,
     userId: args.userId,
     rootId: validatedRootId ?? undefined,
     displayUntil: issuedLease.displayUntil,
@@ -102,12 +135,25 @@ export async function clearCommunityTypingLease(args: {
   rootId?: any | null;
 }): Promise<{ cleared: boolean }> {
   const requestedRootId = normalizeTypingRootId(args.rootId);
-  const existing = (await args.ctx.db
+  const channel = await ensureGeneralChannel({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+  const channelPresence = (await args.ctx.db
     .query("communityTypingPresence" as any)
-    .withIndex("by_community_user", (q: any) =>
-      q.eq("communityId", args.communityId).eq("userId", args.userId),
+    .withIndex("by_channel_user", (q: any) =>
+      q.eq("channelId", channel._id).eq("userId", args.userId),
     )
     .first()) as CommunityTypingPresenceLike | null;
+  const existing = channelPresence ?? ((await args.ctx.db
+    .query("communityTypingPresence" as any)
+    .withIndex("by_community_channel_user", (q: any) =>
+      q
+        .eq("communityId", args.communityId)
+        .eq("channelId", undefined)
+        .eq("userId", args.userId),
+    )
+    .first()) as CommunityTypingPresenceLike | null);
   if (!existing) return { cleared: false };
   if (
     normalizeTypingRootId(existing.rootId)
@@ -135,6 +181,7 @@ async function communityTypingCandidateRemainsAuthorized(args: {
 async function communityTypingRootRemainsValid(args: {
   ctx: any;
   communityId: any;
+  channelId?: any;
   rootId?: any | null;
   cache: Map<string, boolean>;
 }): Promise<boolean> {
@@ -147,7 +194,12 @@ async function communityTypingRootRemainsValid(args: {
     root
     && normalizeIdValue(root.communityId) === normalizeIdValue(args.communityId)
     && root.status === "live"
-    && (root.visibilityScope === "community" || root.visibilityScope === "public"),
+    && (root.visibilityScope === "community" || root.visibilityScope === "public")
+    && (
+      !args.channelId
+      || !root.channelId
+      || normalizeIdValue(root.channelId) === normalizeIdValue(args.channelId)
+    )
   );
   args.cache.set(rootId, isValid);
   return isValid;
@@ -170,13 +222,35 @@ export async function resolveCommunityTypingPresence(args: {
   }>;
 }> {
   const nowMs = Date.now();
-  const rows = (await args.ctx.db
+  const generalChannel = await getGeneralChannel(args.ctx, args.community._id);
+  const channelRows = generalChannel
+    ? ((await args.ctx.db
+        .query("communityTypingPresence" as any)
+        .withIndex("by_channel_displayUntil", (q: any) =>
+          q.eq("channelId", generalChannel._id).gt("displayUntil", nowMs),
+        )
+        .order("desc")
+        .take(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT + 1)) as CommunityTypingPresenceLike[])
+    : [];
+  const legacyRows = (await args.ctx.db
     .query("communityTypingPresence" as any)
-    .withIndex("by_community_displayUntil", (q: any) =>
-      q.eq("communityId", args.community._id).gt("displayUntil", nowMs),
+    .withIndex("by_community_channel_displayUntil", (q: any) =>
+      q
+        .eq("communityId", args.community._id)
+        .eq("channelId", undefined)
+        .gt("displayUntil", nowMs),
     )
     .order("desc")
     .take(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT + 1)) as CommunityTypingPresenceLike[];
+  const rows = Array.from(
+    new Map(
+      [...channelRows, ...legacyRows]
+        .filter((row) => interactionBelongsToGeneralChannel(row, generalChannel))
+        .map((row) => [normalizeIdValue(row._id), row]),
+    ).values(),
+  )
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .slice(0, COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT + 1);
   const scanWasTruncated = rows.length > COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT;
   const rootValidityCache = new Map<string, boolean>();
   const authorizationResults = await Promise.all(
@@ -197,6 +271,7 @@ export async function resolveCommunityTypingPresence(args: {
           && await communityTypingRootRemainsValid({
             ctx: args.ctx,
             communityId: args.community._id,
+            channelId: generalChannel?._id,
             rootId: row.rootId,
             cache: rootValidityCache,
           }),

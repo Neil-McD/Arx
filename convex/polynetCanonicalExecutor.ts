@@ -574,6 +574,10 @@ async function executeCanonicalList(args: {
   const absolutePath = mountedPath(target.communitySlug, target.localPath);
 
   if (target.localPath === POLYNET_CHANNELS_DIRECTORY_PATH) {
+    const generalChannel = (await args.ctx.runQuery(
+      (internal as any).communityChannels.getGeneralChannelInternal,
+      { communityId: target.communityId },
+    )) as Record<string, unknown> | null;
     return {
       ok: true,
       value: virtualDirectory({
@@ -586,7 +590,10 @@ async function executeCanonicalList(args: {
             ),
             kind: "directory",
             type: "channel",
-            name: "General",
+            name: String(generalChannel?.name ?? "General"),
+            channel_id: generalChannel?.id ?? null,
+            system_role: "general",
+            access_mode: "all_members",
           },
         ],
         searchable: true,

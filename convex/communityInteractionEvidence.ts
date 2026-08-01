@@ -29,6 +29,11 @@ import {
   type CommunityEvidenceSurface,
   type CommunityInteractionEvidenceObjectType,
 } from "../shared/communityEvidenceContract";
+import {
+  getGeneralChannel,
+  interactionBelongsToGeneralChannel,
+  listGeneralChannelReadableRows,
+} from "./communityChannelCore";
 
 type InteractionRow = CommunityInteractionEvidenceRow;
 
@@ -139,6 +144,10 @@ async function loadReadableInteraction(args: {
   if (!communityInteractionEvidenceSourceIsReadable(source)) {
     throw new Error("community_interaction_evidence_not_readable");
   }
+  const generalChannel = await getGeneralChannel(args.ctx, args.communityId);
+  if (!interactionBelongsToGeneralChannel(source.root, generalChannel)) {
+    throw new Error("community_interaction_evidence_channel_not_readable");
+  }
   return { row: source.row, root: source.root };
 }
 
@@ -167,6 +176,10 @@ async function mapEvidenceSearchItem(args: {
     actorUserId,
     actorAgentKey: args.row.actorAgentKey ?? null,
     communityId: normalizeIdValue(args.community._id),
+    channelId: args.root.channelId
+      ? normalizeIdValue(args.root.channelId)
+      : null,
+    channelSlug: "general",
     objectType: args.objectType,
     objectId: normalizeIdValue(args.row._id),
     rootId: normalizeIdValue(args.root._id),
@@ -182,6 +195,10 @@ async function mapEvidenceSearchItem(args: {
     object_type: args.objectType,
     object_id: normalizeIdValue(args.row._id),
     root_id: normalizeIdValue(args.root._id),
+    channel_id: args.root.channelId
+      ? normalizeIdValue(args.root.channelId)
+      : null,
+    channel_slug: "general",
     version: Math.max(1, Math.floor(Number(args.row.updatedAt) || 1)),
     visibility_scope: args.row.visibilityScope,
     title: normalizeOptionalText(args.root.title, 180),
@@ -216,25 +233,30 @@ async function searchRecentCommunityInteractionEvidence(args: {
   });
   const community = (await args.ctx.db.get(args.communityId)) as CommunityRow | null;
   if (!community) throw new Error("community_not_found");
-  const [roots, replies] = (await Promise.all([
-    args.ctx.db
-      .query("communityInteractionRoots" as any)
-      .withIndex("by_community_status_createdAt", (q: any) =>
-        q.eq("communityId", args.communityId).eq("status", "live"),
-      )
-      .order("desc")
-      .take(RECENT_ROOT_SCAN_LIMIT),
-    args.ctx.db
-      .query("communityInteractionReplies" as any)
-      .withIndex("by_community_status_createdAt", (q: any) =>
-        q.eq("communityId", args.communityId).eq("status", "live"),
-      )
-      .order("desc")
-      .take(RECENT_REPLY_SCAN_LIMIT),
-  ])) as [InteractionRow[], InteractionRow[]];
+  const generalChannel = await getGeneralChannel(args.ctx, args.communityId);
+  const [roots, replies] = await Promise.all([
+    listGeneralChannelReadableRows<InteractionRow>({
+      ctx: args.ctx,
+      tableName: "communityInteractionRoots",
+      communityId: args.communityId,
+      generalChannel,
+      limit: RECENT_ROOT_SCAN_LIMIT,
+    }),
+    listGeneralChannelReadableRows<InteractionRow>({
+      ctx: args.ctx,
+      tableName: "communityInteractionReplies",
+      communityId: args.communityId,
+      generalChannel,
+      limit: RECENT_REPLY_SCAN_LIMIT,
+    }),
+  ]);
   const readableRoots = new Map(
     roots
-      .filter((row) => communityInteractionVisibilityIsEvidenceReadable(row.visibilityScope))
+      .filter(
+        (row) =>
+          communityInteractionVisibilityIsEvidenceReadable(row.visibilityScope) &&
+          interactionBelongsToGeneralChannel(row, generalChannel),
+      )
       .map((row) => [normalizeIdValue(row._id), row]),
   );
   const missingRootIds = Array.from(
@@ -255,7 +277,8 @@ async function searchRecentCommunityInteractionEvidence(args: {
     if (
       root?.status === "live" &&
       normalizeIdValue(root.communityId) === normalizeIdValue(args.communityId) &&
-      communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope)
+      communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope) &&
+      interactionBelongsToGeneralChannel(root, generalChannel)
     ) {
       readableRoots.set(rootId, root);
     }
@@ -269,7 +292,11 @@ async function searchRecentCommunityInteractionEvidence(args: {
       score: scoreEvidenceText(`${row.title ?? ""} ${row.contentSummary}`, tokens),
     })),
     ...replies
-      .filter((row) => communityInteractionVisibilityIsEvidenceReadable(row.visibilityScope))
+      .filter(
+        (row) =>
+          communityInteractionVisibilityIsEvidenceReadable(row.visibilityScope) &&
+          interactionBelongsToGeneralChannel(row, generalChannel),
+      )
       .map((row) => ({
         objectType: "reply" as const,
         row,
@@ -633,6 +660,7 @@ async function upsertInteractionSourceTrace(args: {
   const trace = await recordTrustedCommunitySourceTraceCore({
     ctx: args.ctx,
     communityId: args.communityId,
+    channelId: root.channelId,
     sourceType: "interaction",
     sourceId: ref,
     title: objectType === "root" ? row.title : root.title,

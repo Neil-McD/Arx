@@ -96,6 +96,57 @@ Post mode changes the feed projection, density, ranking, and root card rendering
 
 ## Irreducible Model
 
+### `communityChannels`
+
+A channel is an addressable community interaction stream, not a second message
+model. Public Channels V1 permits at most ten active channels per community,
+including exactly one system-identified General channel:
+
+- system role: `general`
+- slug: `general`
+- access: all current community members
+- posting: current community members
+- status: active
+
+`systemRole=general` and `slug=general` are the canonical identity. The initial
+display name is `General`, but presentation text is not database identity and
+may change without moving interactions or breaking evidence lineage.
+
+New communities receive General at creation. Existing communities acquire it
+through a bounded, manager-authorized migration. A colliding `general` slug or
+duplicate General system role fails closed.
+
+Owners and entitled admins may create additional channels. Creation accepts a
+display name only; the server normalizes the name, assigns a collision-safe
+slug and stable position, enforces the ten-active-channel limit in the same
+transaction, and stores the fixed `all_members`/`members` policy. Entitled
+members may list every active channel. V1 has no per-channel ACL, invite,
+visibility, posting-policy, tier, or role configuration.
+
+Every community/public interaction root belongs to one channel and every reply
+inherits its root's channel. Private member-agent dock interactions are not
+channel activity and intentionally remain unchanneled. During rolling
+migration only, a missing channel on a legacy community/public interaction is
+read as General; that fallback ends after the backfill reaches zero drift.
+
+The catalog checkpoint exposes list/create operations but intentionally keeps
+the deployed interaction adapters on General until the selected-channel
+read/write checkpoint and member UI land. An omitted channel from an older
+client continues to mean General during that rolling deployment. Custom
+channels must not be exposed in member navigation before feed, composer,
+typing, unread, mention navigation, and community-level intelligence behavior
+all satisfy the channel contract.
+
+Public Channels V1 does not add an All aggregation, channel ACLs, private
+channels, pinning, reordering, archive/delete, or channel-specific settings.
+
+The public community funnel's messages-today metadata is a General-readable
+projection during this slice. It includes only live `community`/`public` rows
+in canonical General plus the temporary unchanneled legacy lane. Private dock,
+admin-only, hidden/deleted, and non-General channel rows never contribute. An
+eventual All surface is a virtual authorized aggregation, not a stored channel
+and not duplicated interaction data.
+
 ### `interactionRoots`
 
 Top-level community interaction.
@@ -103,6 +154,7 @@ Top-level community interaction.
 Required properties:
 
 - community id
+- channel id for community/public roots
 - actor type and actor id
 - interaction kind: `discussion`, `announcement`, `question`, `resource_share`, or `agent_signal`
 - status: `live`, `hidden`, `deleted`
@@ -120,6 +172,7 @@ One-level drawer replies under a root.
 Required properties:
 
 - root id
+- channel id derived from the root
 - actor type and actor id
 - optional target reply id for quote/context only
 - typed content summary
@@ -168,21 +221,26 @@ Reaction summaries may be denormalized onto roots/replies for feed speed, but th
 
 ### `interactionReadState`
 
-Unread projection is derived from one community-chat stream position in
-`communityReadCursors`. The position is a monotonic server-authorized
+Unread projection is derived from one member-and-channel stream position in
+`communityReadCursors`. The catalog checkpoint still advances General only;
+the selected-channel checkpoint binds each cursor to the explicitly selected
+active channel. The position is a monotonic server-authorized
 `seenThroughAt` watermark: the client may submit only the newest server-issued
 interaction timestamp it actually rendered while caught up, and the server
 clamps that request to the current readable head. Legacy
 `communityMemberSettings.chatLastSeenAt` and `mentionsLastSeenAt` fields are
-lazy-migration fallbacks only. There is no per-root follow, mute, or drawer-read
-state.
+lazy-migration fallbacks only. Pre-channel cursor rows are upgraded in place to
+General. There is no per-root follow, mute, or drawer-read state.
 
 ### Typing presence
 
 Typing presence is an ephemeral server-issued lease, never durable message or
-read state. Community chat keeps one community-user row whose optional root
-identifies the user's current typing scope. Channel and thread composers share
-one client renewal owner, one renewal interval, and one active scope.
+read state. Community chat keeps one channel-user row whose optional root
+identifies the user's current typing scope. The catalog checkpoint still uses
+General; the selected-channel checkpoint requires the explicit active channel.
+Channel and thread composers share one client renewal owner, one renewal
+interval, and one active scope. Pre-channel leases remain readable only during
+rolling migration and are upgraded in place when safely unique.
 
 Every renewal is authenticated, reauthorized, server-timed, and bounded by the
 canonical lease duration. Thread roots must be live, member-visible roots owned
@@ -213,7 +271,7 @@ Rules:
   `communitySourceTraces` row keyed by its canonical evidence reference.
 - Archive synchronization and source-trace projection are separate idempotent
   derived records. Neither one directly creates retained memory.
-- Source traces must preserve actor, visibility, evidence, and provenance.
+- Source traces must preserve actor, channel, visibility, evidence, and provenance.
 - Directory truth is still created only through compiler and policy gates.
 
 ## Migration Rule
@@ -233,6 +291,29 @@ Migration order:
 
 No big-bang rewrite. No duplicated product truth.
 
+The General-channel migration is independently bounded and inventory-first.
+The additive schema, compatibility functions, and read-only internal audit are
+deployed before any data mutation. The audit enumerates community ids and then
+inspects one community and phase per call without returning message content.
+The entrypoints are
+`communityChannelAudit.listGeneralChannelAuditCommunitiesInternal` and
+`communityChannelAudit.auditGeneralChannelMigrationBatchInternal`.
+It reports General identity/slug collisions, missing or unexpected channel
+assignments, reply phase-order blockers, cursor/typing projection collisions,
+and the number of evidence-sync jobs an apply would schedule. Every inventory
+and migration batch is capped at 100 rows regardless of caller input.
+
+Only a clean inventory may advance to the manager-authorized, dry-run-first
+mutation. Each community is applied one phase at a time: roots, replies, read
+cursors, then typing presence. Community/public roots and their replies acquire
+General; private dock rows remain unchanneled. Cursor or typing collisions —
+including two legacy rows with the same semantic key — leave every collided
+legacy row untouched instead of selecting a winner. Any invalid, projection
+collision, or phase-order blocker stops that phase. Completion requires two
+consecutive dry audits with `wouldUpdate=0` and `invalid=0` for every phase.
+The preceding read-only inventory must also report `migration_blocked=false`
+and `projection_collision_rows=0` before the corresponding mutation phase.
+
 The active migration residue inventory lives in `docs/community-interaction-migration-residue-map.md`.
 Anything touching legacy chat tables during the interaction migration must be classified there as
 `KEEP TEMPORARILY`, `BLOCKED BY PARITY`, or `DELETE CANDIDATE`.
@@ -241,6 +322,7 @@ Anything touching legacy chat tables during the interaction migration must be cl
 
 The first backend slice adds canonical tables beside legacy chat:
 
+- `communityChannels`
 - `communityInteractionRoots`
 - `communityInteractionReplies`
 - `communityInteractionContentBlocks`
@@ -251,6 +333,10 @@ The first backend slice adds canonical tables beside legacy chat:
 - `communityInteractionModerationEvents`
 - `communityInteractionLegacyChatLinks`
 - `communityReadCursors`
+
+Channel identity is carried by interaction roots, replies, read cursors,
+typing leases, and interaction source traces. It also participates in evidence
+lineage hashes so moving evidence across channels cannot be silent.
 
 Unread state has one canonical community-chat cursor rather than duplicate
 screen-open events or per-root read rows. Interaction source traces use
@@ -272,7 +358,9 @@ Rules:
 - member-visible writes are human-authored only
 - the composer creates canonical roots and replies directly; generic public root/reply mutations are not exposed
 - new composer roots are `discussion` roots with `community` visibility
+- new composer roots bind to canonical General
 - composer replies inherit the root visibility and cannot broaden it
+- composer replies inherit the root channel and cannot cross it
 - every write requires `idempotencyKey`
 - duplicate root writes return the existing root bundle
 - duplicate reply writes return the existing reply bundle when the key belongs to the same root
@@ -456,7 +544,7 @@ Rules:
 - running the batch repeatedly must not duplicate roots or replies
 - backfill write/materialization failures are not caught after writes begin
 - backfill does not migrate reactions, edits, deletes, or moderation state
-- backfill does not write source traces, archive truth, or compiler state synchronously; materialized interactions schedule idempotent derived-evidence sync and do not change UI behavior
+- backfill does not promote source traces, write archive truth, or call the compiler synchronously; materialized interactions schedule idempotent derived-evidence sync and do not change UI behavior
 
 ## Canonical Interaction Evidence Spine
 

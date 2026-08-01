@@ -77,6 +77,7 @@ export type CommunityInteractionMention = {
 export type CommunityInteractionRootRecord = {
   id: string;
   community_id: string;
+  channel_id: string | null;
   actor_type: "human" | "personal_agent" | "community_agent" | "system" | string;
   actor_user_id: string | null;
   actor_agent_key: string | null;
@@ -103,6 +104,7 @@ export type CommunityInteractionRootRecord = {
 export type CommunityInteractionReplyRecord = {
   id: string;
   community_id: string;
+  channel_id: string | null;
   root_id: string;
   seq: number;
   actor_type: "human" | "personal_agent" | "community_agent" | "system" | string;

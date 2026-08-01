@@ -34,6 +34,11 @@ import { buildCommunityAgentIdentityPrompt } from "../shared/communityAgentRunti
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 import {
+  ensureReplyChannelMatchesRoot,
+  interactionIsChannelAddressable,
+  requireChannelForAddressableRoot,
+} from "./communityChannelCore";
+import {
   resolveCommunityInferenceFundingAdmission,
   settleAuthorizedFounderInferenceReceipt,
 } from "./founderInferenceCore";
@@ -88,6 +93,7 @@ type ServeRequestRow = {
 type InteractionRootRow = {
   _id: any;
   communityId: any;
+  channelId?: any;
   actorType: string;
   actorUserId?: any;
   idempotencyKey: string;
@@ -100,6 +106,7 @@ type InteractionRootRow = {
 type InteractionReplyRow = {
   _id: any;
   communityId: any;
+  channelId?: any;
   rootId: any;
   actorType: string;
   actorUserId?: any;
@@ -761,6 +768,9 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
       await failServeRequest(ctx, request, "source_not_live", "The source root is not live.", nowMs);
       return { ok: false, errorCode: "source_not_live" };
     }
+    const rootChannel = interactionIsChannelAddressable(root)
+      ? await requireChannelForAddressableRoot({ ctx, root, nowMs })
+      : null;
     let sourceVisibilityScope = root.visibilityScope;
     let sourceActorUserId = root.actorUserId;
     if (request.sourceReplyId) {
@@ -810,6 +820,16 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
       )
       .first()) as InteractionReplyRow | null;
     if (existingReply) {
+      if (rootChannel) {
+        await ensureReplyChannelMatchesRoot({
+          ctx,
+          root,
+          reply: existingReply,
+          nowMs,
+        });
+      } else if (existingReply.channelId) {
+        throw new Error("private_interaction_channel_forbidden");
+      }
       await ctx.db.patch(request._id as any, {
         status: "responded",
         responseRootId: root._id,
@@ -824,6 +844,7 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
     const visibilityScope = narrowVisibility(request.responseVisibilityScope, sourceVisibilityScope);
     const replyId = await ctx.db.insert("communityInteractionReplies" as any, {
       communityId: request.communityId,
+      ...(rootChannel ? { channelId: rootChannel._id } : {}),
       rootId: root._id,
       seq,
       actorType: "community_agent",

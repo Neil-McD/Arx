@@ -93,6 +93,7 @@ type SourceTraceType =
 type SourceTraceRow = {
   _id: any;
   communityId: any;
+  channelId?: any;
   sourceType: SourceTraceType;
   sourceId?: string;
   title?: string;
@@ -415,6 +416,7 @@ function idArraysEqual(left: readonly any[] = [], right: readonly any[] = []): b
 }
 
 function sourceTraceMaterialChanged(existing: SourceTraceRow, next: {
+  channelId?: any;
   title?: string;
   summary: string;
   contentHash?: string;
@@ -430,6 +432,7 @@ function sourceTraceMaterialChanged(existing: SourceTraceRow, next: {
   compilerGroupKey?: string;
 }): boolean {
   return (
+    normalizeIdValue(existing.channelId) !== normalizeIdValue(next.channelId) ||
     (existing.title ?? undefined) !== (next.title ?? undefined) ||
     existing.summary !== next.summary ||
     (next.contentHash !== undefined && existing.contentHash !== next.contentHash) ||
@@ -804,6 +807,7 @@ function mapTraceRow(row: SourceTraceRow) {
   return {
     id: normalizeIdValue(row._id),
     community_id: normalizeIdValue(row.communityId),
+    channel_id: row.channelId ? normalizeIdValue(row.channelId) : null,
     source_type: row.sourceType,
     source_id: row.sourceId ?? null,
     title: row.title ?? null,
@@ -1979,6 +1983,7 @@ async function insertMutationLog(args: {
 export async function upsertCommunitySourceTrace(args: {
   ctx: any;
   communityId: any;
+  channelId?: any;
   sourceType: SourceTraceType;
   sourceId?: string;
   title?: string | null;
@@ -1998,6 +2003,18 @@ export async function upsertCommunitySourceTrace(args: {
   nowMs: number;
 }): Promise<ReturnType<typeof mapTraceRow>> {
   await requireLiveCommunityForCognitionWrite(args.ctx, args.communityId);
+  if (args.channelId) {
+    if (args.sourceType !== "interaction") {
+      throw new Error("community_source_trace_channel_source_type_invalid");
+    }
+    const channel = await args.ctx.db.get(args.channelId);
+    if (
+      !channel ||
+      normalizeIdValue(channel.communityId) !== normalizeIdValue(args.communityId)
+    ) {
+      throw new Error("community_source_trace_channel_invalid");
+    }
+  }
   const sourceId = normalizeOptionalLongText(args.sourceId, 512);
   const title = normalizeOptionalLongText(args.title, 240);
   const summary = normalizeBoundedText(
@@ -2031,6 +2048,7 @@ export async function upsertCommunitySourceTrace(args: {
       throw new Error("community_source_trace_source_conflict");
     }
     const materialChanged = sourceTraceMaterialChanged(existing, {
+      channelId: args.channelId,
       title,
       summary,
       contentHash,
@@ -2054,6 +2072,7 @@ export async function upsertCommunitySourceTrace(args: {
       nowMs: args.nowMs,
     });
     await args.ctx.db.patch(existing._id as any, {
+      ...(args.channelId ? { channelId: args.channelId } : { channelId: undefined }),
       title,
       summary,
       ...(contentHash !== undefined ? { contentHash } : {}),
@@ -2086,6 +2105,7 @@ export async function upsertCommunitySourceTrace(args: {
   });
   const id = await args.ctx.db.insert("communitySourceTraces" as any, {
     communityId: args.communityId,
+    ...(args.channelId ? { channelId: args.channelId } : {}),
     sourceType: args.sourceType,
     ...(sourceId ? { sourceId } : {}),
     title,
@@ -2113,6 +2133,7 @@ export async function upsertCommunitySourceTrace(args: {
 export async function recordTrustedCommunitySourceTraceCore(args: {
   ctx: any;
   communityId: any;
+  channelId?: any;
   sourceType: SourceTraceType;
   sourceId: string;
   title?: string | null;
@@ -2153,6 +2174,7 @@ export async function recordTrustedCommunitySourceTraceCore(args: {
   return await upsertCommunitySourceTrace({
     ctx: args.ctx,
     communityId: args.communityId,
+    channelId: args.channelId,
     sourceType: args.sourceType,
     sourceId,
     title: args.title,

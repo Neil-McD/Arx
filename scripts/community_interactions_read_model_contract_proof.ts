@@ -4,6 +4,8 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
+const channelCore = readFileSync(join(root, "convex/communityChannelCore.ts"), "utf8");
+const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const attachmentBridge = readFileSync(join(root, "convex/communityInteractionAttachmentBridge.ts"), "utf8");
 const legacyAttachments = readFileSync(join(root, "convex/communityInteractionLegacyAttachments.ts"), "utf8");
 const gateway = readFileSync(join(root, "shared/cloudCommunityInteractionsGateway.ts"), "utf8");
@@ -227,18 +229,23 @@ assert.match(
 );
 assert.match(
   listRoots,
-  /const visibleRows = rows\.filter\(\(row\) => interactionVisibilityIsCommunityReadable\(row\.visibilityScope\)\)[\s\S]*loadViewerReactionMapForTargets\(ctx, userId, "root", visibleRows\.map\(\(row\) => row\._id\)\)/,
+  /const visibleRows = await listGeneralChannelReadableRows<InteractionRootRow>[\s\S]*loadViewerReactionMapForTargets\(ctx, userId, "root", visibleRows\.map\(\(row\) => row\._id\)\)/,
   "root list should load viewer reactions only for visible roots",
 );
 assert.match(
-  listRoots,
-  /withIndex\("by_community_status_createdAt"[\s\S]*\.eq\("status", "live"\)[\s\S]*\.order\("desc"\)[\s\S]*\.take\(limit\)/,
-  "root list should read live roots through the community/status/createdAt index",
+  channelCore,
+  /listReadableRowsForChannelIds[\s\S]*args\.channelIds\.flatMap[\s\S]*visibilities\.map[\s\S]*by_community_channel_visibility_status_createdAt[\s\S]*\.eq\("visibilityScope", visibilityScope\)[\s\S]*\.eq\("status", "live"\)[\s\S]*\.take\(limit\)/,
+  "channel reads should merge their exact visibility lanes through bounded indexes",
 );
 assert.match(
-  listRoots,
-  /withIndex\("by_community_kind_status_createdAt"[\s\S]*\.eq\("kind", kind\)[\s\S]*\.eq\("status", "live"\)[\s\S]*\.take\(limit\)/,
-  "root list should support bounded kind-filtered reads through the compound index",
+  schema,
+  /by_community_channel_kind_visibility_status_createdAt[\s\S]*"communityId"[\s\S]*"channelId"[\s\S]*"kind"[\s\S]*"visibilityScope"[\s\S]*"status"[\s\S]*"createdAt"/,
+  "root reads should support bounded kind-filtered General and legacy lanes through the compound index",
+);
+assert.doesNotMatch(
+  channelCore,
+  /listGeneralChannelReadableRows[\s\S]*\.collect\(\)/,
+  "General read compatibility must remain bounded",
 );
 assert.doesNotMatch(
   listRoots,

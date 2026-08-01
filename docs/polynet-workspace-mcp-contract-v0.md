@@ -82,6 +82,16 @@ Paths are selectors, never authority. A client begins at a directory and
 follows returned paths. It does not invent internal ids or pass trusted user,
 community, role, entitlement, or permission decisions.
 
+`channels/general/` resolves the community's canonical `communityChannels`
+row with system role `general`; it is not a hard-coded alias for an unscoped
+chat feed. Directory and search results include that row's channel id, and all
+reads and writes revalidate that the selected interaction belongs to it. A
+duplicate or malformed General identity fails closed. During the bounded
+rolling migration only, a missing row preserves the legacy General path with a
+null channel id; writes lazily create General and release completion still
+requires the backfill to reach zero drift. Private member-agent dock history is
+outside the channel repository.
+
 ## Authority
 
 Auth proves user identity only. The server revalidates community access on
@@ -134,6 +144,10 @@ effect, rejects reuse with a different request, and persists the completed
 result. A same-request retry returns the original result with
 `deduped: true`. Domain mutations are independently retry safe so a process
 failure between the domain effect and receipt completion can be recovered.
+
+The current MCP contract intentionally exposes only General. An All
+aggregation and custom channel paths are not implied by this tree and require
+their own authority and aggregation contract before exposure.
 
 ## Remote MCP Auth Model
 

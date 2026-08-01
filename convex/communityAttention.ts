@@ -13,6 +13,10 @@ import {
   advanceCommunityChatReadCursor,
   readCommunityChatReadState,
 } from "./communityReadCursorCore";
+import {
+  getGeneralChannel,
+  listGeneralChannelReadableRows,
+} from "./communityChannelCore";
 
 type CommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events" | "mentions";
 
@@ -39,7 +43,9 @@ type CommunityAttentionRow = {
 type CommunityInteractionRootLike = {
   _id: any;
   communityId: any;
+  channelId?: any;
   status: "live" | "hidden" | "deleted";
+  visibilityScope: "private" | "admin" | "community" | "public";
   lastReplyAt?: number;
   createdAt: number;
 };
@@ -47,7 +53,9 @@ type CommunityInteractionRootLike = {
 type CommunityInteractionReplyLike = {
   _id: any;
   communityId: any;
+  channelId?: any;
   status: "live" | "hidden" | "deleted";
+  visibilityScope: "private" | "admin" | "community" | "public";
   createdAt: number;
 };
 
@@ -92,20 +100,26 @@ async function getLatestCommunityChatActivityAt(
   ctx: any,
   communityId: any,
 ): Promise<number | null> {
-  const latestRoot = (await ctx.db
-    .query("communityInteractionRoots" as any)
-    .withIndex("by_community_status_createdAt", (q: any) =>
-      q.eq("communityId", communityId).eq("status", "live"),
-    )
-    .order("desc")
-    .first()) as CommunityInteractionRootLike | null;
-  const latestReply = (await ctx.db
-    .query("communityInteractionReplies" as any)
-    .withIndex("by_community_status_createdAt", (q: any) =>
-      q.eq("communityId", communityId).eq("status", "live"),
-    )
-    .order("desc")
-    .first()) as CommunityInteractionReplyLike | null;
+  const generalChannel = await getGeneralChannel(ctx, communityId);
+  const [roots, replies] =
+    await Promise.all([
+      listGeneralChannelReadableRows<CommunityInteractionRootLike>({
+        ctx,
+        tableName: "communityInteractionRoots",
+        communityId,
+        generalChannel,
+        limit: 1,
+      }),
+      listGeneralChannelReadableRows<CommunityInteractionReplyLike>({
+        ctx,
+        tableName: "communityInteractionReplies",
+        communityId,
+        generalChannel,
+        limit: 1,
+      }),
+    ]);
+  const latestRoot = roots[0] ?? null;
+  const latestReply = replies[0] ?? null;
   const markers = [
     normalizePositiveMarker(latestRoot?.createdAt),
     normalizePositiveMarker(latestRoot?.lastReplyAt),

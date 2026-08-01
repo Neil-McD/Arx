@@ -10,6 +10,7 @@ function normalizeIdValue(raw: unknown): string {
 export type CommunityInteractionEvidenceRow = {
   _id: any;
   communityId: any;
+  channelId?: any;
   rootId?: any;
   actorType: "human" | "personal_agent" | "community_agent" | "system";
   actorUserId?: any;
@@ -75,7 +76,12 @@ export async function resolveCommunityInteractionEvidenceSource(args: {
   if (
     !root ||
     normalizeIdValue(root.communityId) !== normalizeIdValue(args.communityId) ||
-    normalizeIdValue(root.communityId) !== normalizeIdValue(row.communityId)
+    normalizeIdValue(root.communityId) !== normalizeIdValue(row.communityId) ||
+    (
+      row.channelId &&
+      root.channelId &&
+      normalizeIdValue(root.channelId) !== normalizeIdValue(row.channelId)
+    )
   ) {
     return null;
   }

@@ -157,6 +157,7 @@ function buildOptimisticRoot<AttachmentT extends OptimisticAttachment>(
     root: {
       id: `pending:${pending.idempotencyKey}`,
       community_id: pending.communityId,
+      channel_id: null,
       actor_type: "human",
       actor_user_id: pending.senderId,
       actor_agent_key: null,
@@ -195,6 +196,7 @@ function buildOptimisticReply<AttachmentT extends OptimisticAttachment>(
     reply: {
       id: `pending:${pending.idempotencyKey}`,
       community_id: pending.communityId,
+      channel_id: null,
       root_id: pending.rootId ?? "",
       seq: Number.MAX_SAFE_INTEGER,
       actor_type: "human",

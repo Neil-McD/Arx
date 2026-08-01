@@ -17,6 +17,11 @@ import {
   buildCommunityInteractionEvidenceRef,
   communityInteractionVisibilityIsEvidenceReadable,
 } from "../shared/communityEvidenceContract";
+import {
+  getGeneralChannel,
+  interactionBelongsToGeneralChannel,
+  listGeneralChannelReadableRows,
+} from "./communityChannelCore";
 
 type FeedPostRow = {
   _id: any;
@@ -40,6 +45,8 @@ type RecentContextItem = {
   snippet: string;
   created_at: string;
   score: number | null;
+  channel_id?: string | null;
+  channel_slug?: string | null;
   author_label?: string | null;
   url?: string | null;
   post_type?: "observation" | "recommendation" | "action" | null;
@@ -95,6 +102,7 @@ function scoreText(snippet: string, tokens: string[]): number {
 type InteractionContextRow = {
   _id: any;
   communityId: any;
+  channelId?: any;
   rootId?: any;
   actorType: "human" | "personal_agent" | "community_agent" | "system";
   actorUserId?: any;
@@ -118,25 +126,30 @@ async function listRecentInteractionItems(args: {
   communityId: any;
   tokens: string[];
 }): Promise<{ items: RecentContextItem[]; considered: number }> {
-  const [roots, replies] = (await Promise.all([
-    args.ctx.db
-      .query("communityInteractionRoots" as any)
-      .withIndex("by_community_status_createdAt", (q: any) =>
-        q.eq("communityId", args.communityId).eq("status", "live"),
-      )
-      .order("desc")
-      .take(INTERACTION_ROOT_WINDOW_LIMIT),
-    args.ctx.db
-      .query("communityInteractionReplies" as any)
-      .withIndex("by_community_status_createdAt", (q: any) =>
-        q.eq("communityId", args.communityId).eq("status", "live"),
-      )
-      .order("desc")
-      .take(INTERACTION_REPLY_WINDOW_LIMIT),
-  ])) as [InteractionContextRow[], InteractionContextRow[]];
+  const generalChannel = await getGeneralChannel(args.ctx, args.communityId);
+  const [roots, replies] = await Promise.all([
+    listGeneralChannelReadableRows<InteractionContextRow>({
+      ctx: args.ctx,
+      tableName: "communityInteractionRoots",
+      communityId: args.communityId,
+      generalChannel,
+      limit: INTERACTION_ROOT_WINDOW_LIMIT,
+    }),
+    listGeneralChannelReadableRows<InteractionContextRow>({
+      ctx: args.ctx,
+      tableName: "communityInteractionReplies",
+      communityId: args.communityId,
+      generalChannel,
+      limit: INTERACTION_REPLY_WINDOW_LIMIT,
+    }),
+  ]);
   const readableRoots = new Map(
     roots
-      .filter((root) => communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope))
+      .filter(
+        (root) =>
+          communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope) &&
+          interactionBelongsToGeneralChannel(root, generalChannel),
+      )
       .map((root) => [String(root._id), root]),
   );
   for (const rootId of new Set(replies.map((reply) => String(reply.rootId ?? "")).filter(Boolean))) {
@@ -145,7 +158,8 @@ async function listRecentInteractionItems(args: {
     if (
       root?.status === "live" &&
       normalizeIdValue(root.communityId) === normalizeIdValue(args.communityId) &&
-      communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope)
+      communityInteractionVisibilityIsEvidenceReadable(root.visibilityScope) &&
+      interactionBelongsToGeneralChannel(root, generalChannel)
     ) {
       readableRoots.set(rootId, root);
     }
@@ -159,6 +173,8 @@ async function listRecentInteractionItems(args: {
       snippet,
       created_at: toIsoString(root.createdAt),
       score: scoreText(`${root.title ?? ""} ${snippet}`, args.tokens),
+      channel_id: root.channelId ? normalizeIdValue(root.channelId) : null,
+      channel_slug: "general",
       author_label: interactionAuthorLabel(root),
     };
   });
@@ -166,6 +182,7 @@ async function listRecentInteractionItems(args: {
     .filter(
       (reply) =>
         communityInteractionVisibilityIsEvidenceReadable(reply.visibilityScope) &&
+        interactionBelongsToGeneralChannel(reply, generalChannel) &&
         readableRoots.has(String(reply.rootId ?? "")),
     )
     .map((reply) => {
@@ -178,6 +195,8 @@ async function listRecentInteractionItems(args: {
         snippet,
         created_at: toIsoString(reply.createdAt),
         score: scoreText(snippet, args.tokens),
+        channel_id: root.channelId ? normalizeIdValue(root.channelId) : null,
+        channel_slug: "general",
         author_label: interactionAuthorLabel(reply),
       };
     });

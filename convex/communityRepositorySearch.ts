@@ -37,11 +37,16 @@ function canonicalInteractionItem(item: SearchItem): SearchItem {
   if (!ref || !parseCommunityInteractionEvidenceRef(ref)) {
     throw new Error("community_repository_search_interaction_ref_invalid");
   }
+  const channelSlug = requiredString(item.channel_slug, 80) ?? "general";
+  if (channelSlug !== "general") {
+    throw new Error("community_repository_search_interaction_channel_invalid");
+  }
   return {
     ...item,
     ref,
     source_type: "interaction",
     source_id: ref,
+    channel_slug: channelSlug,
     path: `/channels/general/${ref}.md`,
   };
 }

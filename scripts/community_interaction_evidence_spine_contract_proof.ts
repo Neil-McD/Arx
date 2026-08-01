@@ -35,6 +35,7 @@ const [
   canonicalExecutor,
   lineageContract,
   evidenceCore,
+  channelCore,
 ] = await Promise.all([
   read("convex/schema.ts"),
   read("convex/communityInteractionEvidence.ts"),
@@ -52,6 +53,7 @@ const [
   read("convex/polynetCanonicalExecutor.ts"),
   read("docs/community-lineage-ontology-contract-v0.md"),
   read("convex/communityInteractionEvidenceCore.ts"),
+  read("convex/communityChannelCore.ts"),
 ]);
 
 assert.match(schema, /communityEvidenceRetrievalLogs: defineTable/);
@@ -105,8 +107,14 @@ assert.match(evidence, /const results = recent\.results/);
 assert.match(evidence, /strategy: "bounded_lexical"/);
 assert.doesNotMatch(evidence, /vectorSearch|embedGemini|archiveAvailable|archiveError|archive_error/);
 
-assert.match(recent, /query\("communityInteractionRoots"/);
-assert.match(recent, /query\("communityInteractionReplies"/);
+assert.match(
+  recent,
+  /listGeneralChannelReadableRows<InteractionContextRow>[\s\S]*tableName: "communityInteractionRoots"[\s\S]*tableName: "communityInteractionReplies"/,
+);
+assert.match(
+  channelCore,
+  /listReadableRowsForChannelIds[\s\S]*by_community_channel_visibility_status_createdAt/,
+);
 assert.match(
   recent,
   /normalizeIdValue\(root\.communityId\) === normalizeIdValue\(args\.communityId\)/,

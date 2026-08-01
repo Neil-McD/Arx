@@ -1258,6 +1258,25 @@ export default defineSchema({
     .index("by_slug", ["slug"])
     .index("by_visibility_updatedAt", ["visibility", "updatedAt"]),
 
+  // Canonical public conversation containers. Every active channel has the
+  // same all-member read/post policy in the first multi-channel slice.
+  communityChannels: defineTable({
+    communityId: v.id("communities"),
+    systemRole: v.optional(v.literal("general")),
+    slug: v.string(),
+    name: v.string(),
+    accessMode: v.literal("all_members"),
+    postingPolicy: v.literal("members"),
+    status: v.union(v.literal("active"), v.literal("archived")),
+    position: v.number(),
+    createdByUserId: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_slug", ["communityId", "slug"])
+    .index("by_community_systemRole", ["communityId", "systemRole"])
+    .index("by_community_status_position", ["communityId", "status", "position"]),
+
   communityMemberships: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
@@ -1568,6 +1587,8 @@ export default defineSchema({
 
   communityTypingPresence: defineTable({
     communityId: v.id("communities"),
+    // Optional only for rolling compatibility with pre-channel leases.
+    channelId: v.optional(v.id("communityChannels")),
     userId: v.id("users"),
     // Thread scope: present when typing inside a thread, absent for channel-level typing.
     rootId: v.optional(v.id("communityInteractionRoots")),
@@ -1578,10 +1599,17 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_user", ["userId"])
     .index("by_community_user", ["communityId", "userId"])
-    .index("by_community_displayUntil", ["communityId", "displayUntil"]),
+    .index("by_community_displayUntil", ["communityId", "displayUntil"])
+    .index("by_community_channel_user", ["communityId", "channelId", "userId"])
+    .index("by_community_channel_displayUntil", ["communityId", "channelId", "displayUntil"])
+    .index("by_channel_user", ["channelId", "userId"])
+    .index("by_channel_displayUntil", ["channelId", "displayUntil"]),
 
   communityInteractionRoots: defineTable({
     communityId: v.id("communities"),
+    // Private member-agent dock roots legitimately remain unchanneled. Every
+    // community/public interaction root is channel-addressable.
+    channelId: v.optional(v.id("communityChannels")),
     actorType: v.union(
       v.literal("human"),
       v.literal("personal_agent"),
@@ -1625,12 +1653,30 @@ export default defineSchema({
     .index("by_community_updatedAt", ["communityId", "updatedAt"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_kind_status_createdAt", ["communityId", "kind", "status", "createdAt"])
+    .index("by_community_channel_visibility_status_createdAt", [
+      "communityId",
+      "channelId",
+      "visibilityScope",
+      "status",
+      "createdAt",
+    ])
+    .index("by_community_channel_kind_visibility_status_createdAt", [
+      "communityId",
+      "channelId",
+      "kind",
+      "visibilityScope",
+      "status",
+      "createdAt",
+    ])
     .index("by_community_idempotencyKey", ["communityId", "idempotencyKey"])
     .index("by_actorUser", ["actorUserId"])
     .index("by_actorAgent", ["actorAgentKey"]),
 
   communityInteractionReplies: defineTable({
     communityId: v.id("communities"),
+    // Derived from root.channelId for indexed activity. Replies never choose
+    // placement independently from their root.
+    channelId: v.optional(v.id("communityChannels")),
     rootId: v.id("communityInteractionRoots"),
     seq: v.number(),
     actorType: v.union(
@@ -1666,6 +1712,13 @@ export default defineSchema({
     .index("by_root_status_createdAt", ["rootId", "status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_community_channel_visibility_status_createdAt", [
+      "communityId",
+      "channelId",
+      "visibilityScope",
+      "status",
+      "createdAt",
+    ])
     .index("by_community_idempotencyKey", ["communityId", "idempotencyKey"])
     .index("by_targetReply", ["targetReplyId"])
     .index("by_actorUser", ["actorUserId"])
@@ -2501,6 +2554,9 @@ export default defineSchema({
   // server-visible chat head before this projection advances.
   communityReadCursors: defineTable({
     communityId: v.id("communities"),
+    // Optional only while legacy community-wide chat cursors are upgraded in
+    // place. New cursor writes always bind a channel.
+    channelId: v.optional(v.id("communityChannels")),
     userId: v.id("users"),
     streamKind: v.literal("chat"),
     seenThroughAt: v.number(),
@@ -2510,7 +2566,8 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_community", ["communityId"])
     .index("by_community_user", ["communityId", "userId"])
-    .index("by_community_user_stream", ["communityId", "userId", "streamKind"]),
+    .index("by_community_user_stream", ["communityId", "userId", "streamKind"])
+    .index("by_community_channel_user_stream", ["communityId", "channelId", "userId", "streamKind"]),
 
   communityResources: defineTable({
     communityId: v.id("communities"),
@@ -2845,6 +2902,9 @@ export default defineSchema({
 
   communitySourceTraces: defineTable({
     communityId: v.id("communities"),
+    // Interaction traces retain source-channel provenance. Other source types
+    // remain legitimately unchanneled.
+    channelId: v.optional(v.id("communityChannels")),
     sourceType: v.union(
       v.literal("chat"),
       v.literal("interaction"),

@@ -41,6 +41,7 @@ import {
 } from "./stripeConnectAccountCore";
 import { requireCommunityFounderFundingForPublish } from "./founderInferenceCore";
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
+import { ensureGeneralChannel } from "./communityChannelCore";
 
 const COMMUNITY_DELETION_QUARANTINE_CODE =
   "community_delete_lifecycle_migration_blocked" as const;
@@ -562,6 +563,7 @@ export const createCommunity = mutation({
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    await ensureGeneralChannel({ ctx, communityId, nowMs });
     const created = (await ctx.db.get(communityId)) as CommunityLike | null;
     if (!created) throw new Error("community_create_failed");
     return await mapCommunityRecord(ctx, created);

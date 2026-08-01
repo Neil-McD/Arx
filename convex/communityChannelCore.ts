@@ -1,0 +1,630 @@
+import { normalizeIdValue } from "./communityCore";
+
+export const GENERAL_CHANNEL_SYSTEM_ROLE = "general" as const;
+export const GENERAL_CHANNEL_SLUG = "general" as const;
+export const GENERAL_CHANNEL_NAME = "General" as const;
+export const MAX_ACTIVE_COMMUNITY_CHANNELS = 10;
+export const MAX_COMMUNITY_CHANNEL_NAME_CHARS = 48;
+
+export type CommunityChannelLike = {
+  _id: any;
+  communityId: any;
+  systemRole?: "general";
+  slug: string;
+  name: string;
+  accessMode: "all_members";
+  postingPolicy: "members";
+  status: "active" | "archived";
+  position: number;
+  createdByUserId?: any;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ChannelAddressableInteractionLike = {
+  _id: any;
+  communityId: any;
+  channelId?: any;
+  visibilityScope: "private" | "admin" | "community" | "public";
+};
+
+type GeneralChannelReadableRow = {
+  _id: any;
+  channelId?: any;
+  visibilityScope: "private" | "admin" | "community" | "public";
+  status: "live" | "hidden" | "deleted";
+  kind?: string;
+  createdAt: number;
+};
+
+export function normalizeCommunityChannelName(raw: unknown): string {
+  const name = String(raw ?? "").trim().replace(/\s+/g, " ");
+  if (!name) throw new Error("community_channel_name_required");
+  if (name.length > MAX_COMMUNITY_CHANNEL_NAME_CHARS) {
+    throw new Error("community_channel_name_too_long");
+  }
+  return name;
+}
+
+function channelSlugBase(name: string): string {
+  const slug = name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, MAX_COMMUNITY_CHANNEL_NAME_CHARS)
+    .replace(/-+$/g, "");
+  return slug || "channel";
+}
+
+function channelHasFixedMemberPolicy(channel: CommunityChannelLike): boolean {
+  return (
+    channel.accessMode === "all_members" &&
+    channel.postingPolicy === "members"
+  );
+}
+
+function channelHasCanonicalCustomContract(
+  channel: CommunityChannelLike,
+): boolean {
+  let normalizedName: string;
+  try {
+    normalizedName = normalizeCommunityChannelName(channel.name);
+  } catch {
+    return false;
+  }
+  return (
+    channel.systemRole === undefined &&
+    channel.slug !== GENERAL_CHANNEL_SLUG &&
+    /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(channel.slug) &&
+    normalizedName === channel.name &&
+    Number.isInteger(channel.position) &&
+    channel.position > 0
+  );
+}
+
+function assertChannelForCommunity(
+  channel: CommunityChannelLike,
+  communityId: any,
+): void {
+  if (
+    normalizeIdValue(channel.communityId) !== normalizeIdValue(communityId) ||
+    !channelHasFixedMemberPolicy(channel)
+  ) {
+    throw new Error("community_channel_invalid");
+  }
+  if (channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE) {
+    assertGeneralChannelForCommunity(channel, communityId);
+  } else if (!channelHasCanonicalCustomContract(channel)) {
+    throw new Error("community_channel_invalid");
+  }
+}
+
+export function interactionIsChannelAddressable(
+  row: Pick<ChannelAddressableInteractionLike, "visibilityScope">,
+): boolean {
+  return row.visibilityScope === "community" || row.visibilityScope === "public";
+}
+
+export function channelHasCanonicalGeneralSystemContract(
+  channel: CommunityChannelLike,
+  communityId: any,
+): boolean {
+  return (
+    normalizeIdValue(channel.communityId) === normalizeIdValue(communityId) &&
+    channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE &&
+    channel.slug === GENERAL_CHANNEL_SLUG &&
+    channel.accessMode === "all_members" &&
+    channel.postingPolicy === "members" &&
+    channel.status === "active" &&
+    channel.position === 0
+  );
+}
+
+export async function getGeneralChannel(
+  ctx: { db: any },
+  communityId: any,
+): Promise<CommunityChannelLike | null> {
+  const channels = (await ctx.db
+    .query("communityChannels" as any)
+    .withIndex("by_community_systemRole", (q: any) =>
+      q
+        .eq("communityId", communityId)
+        .eq("systemRole", GENERAL_CHANNEL_SYSTEM_ROLE),
+    )
+    .take(2)) as CommunityChannelLike[];
+  if (channels.length > 1) {
+    throw new Error("community_general_channel_duplicate");
+  }
+  const channel = channels[0] ?? null;
+  if (channel) assertGeneralChannelForCommunity(channel, communityId);
+  return channel;
+}
+
+function assertGeneralChannelForCommunity(
+  channel: CommunityChannelLike,
+  communityId: any,
+): void {
+  if (!channelHasCanonicalGeneralSystemContract(channel, communityId)) {
+    throw new Error("community_general_channel_invalid");
+  }
+}
+
+export async function ensureGeneralChannel(args: {
+  ctx: { db: any };
+  communityId: any;
+  nowMs?: number;
+}): Promise<CommunityChannelLike> {
+  const community = await args.ctx.db.get(args.communityId);
+  if (!community) throw new Error("community_not_found");
+
+  const existing = await getGeneralChannel(args.ctx, args.communityId);
+  if (existing) {
+    return existing;
+  }
+
+  const slugCollision = (await args.ctx.db
+    .query("communityChannels" as any)
+    .withIndex("by_community_slug", (q: any) =>
+      q
+        .eq("communityId", args.communityId)
+        .eq("slug", GENERAL_CHANNEL_SLUG),
+    )
+    .first()) as CommunityChannelLike | null;
+  if (slugCollision) {
+    throw new Error("community_general_channel_slug_conflict");
+  }
+
+  const nowMs = args.nowMs ?? Date.now();
+  const channelId = await args.ctx.db.insert("communityChannels" as any, {
+    communityId: args.communityId,
+    systemRole: GENERAL_CHANNEL_SYSTEM_ROLE,
+    slug: GENERAL_CHANNEL_SLUG,
+    name: GENERAL_CHANNEL_NAME,
+    accessMode: "all_members",
+    postingPolicy: "members",
+    status: "active",
+    position: 0,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  const created = (await args.ctx.db.get(channelId)) as CommunityChannelLike | null;
+  if (!created) throw new Error("community_general_channel_create_failed");
+  assertGeneralChannelForCommunity(created, args.communityId);
+  return created;
+}
+
+export async function requireActiveCommunityChannel(args: {
+  ctx: { db: any };
+  communityId: any;
+  channelId: any;
+}): Promise<CommunityChannelLike> {
+  const channel = (await args.ctx.db.get(
+    args.channelId,
+  )) as CommunityChannelLike | null;
+  if (!channel) throw new Error("community_channel_not_found");
+  assertChannelForCommunity(channel, args.communityId);
+  if (channel.status !== "active") {
+    throw new Error("community_channel_inactive");
+  }
+  return channel;
+}
+
+export async function listActiveCommunityChannels(args: {
+  ctx: { db: any };
+  communityId: any;
+}): Promise<CommunityChannelLike[]> {
+  const channels = (await args.ctx.db
+    .query("communityChannels" as any)
+    .withIndex("by_community_status_position", (q: any) =>
+      q.eq("communityId", args.communityId).eq("status", "active"),
+    )
+    .take(MAX_ACTIVE_COMMUNITY_CHANNELS + 1)) as CommunityChannelLike[];
+  if (channels.length > MAX_ACTIVE_COMMUNITY_CHANNELS) {
+    throw new Error("community_channel_limit_invalid");
+  }
+  for (const channel of channels) {
+    assertChannelForCommunity(channel, args.communityId);
+  }
+  return channels.sort((left, right) => {
+    if (left.position !== right.position) return left.position - right.position;
+    return normalizeIdValue(left._id).localeCompare(normalizeIdValue(right._id));
+  });
+}
+
+async function resolveAvailableChannelSlug(args: {
+  ctx: { db: any };
+  communityId: any;
+  name: string;
+}): Promise<string> {
+  const base = channelSlugBase(args.name);
+  for (let suffix = 1; suffix <= MAX_ACTIVE_COMMUNITY_CHANNELS + 1; suffix += 1) {
+    const suffixText = suffix === 1 ? "" : `-${suffix}`;
+    const candidate = `${base.slice(0, 64 - suffixText.length).replace(/-+$/g, "")}${suffixText}`;
+    const collision = await args.ctx.db
+      .query("communityChannels" as any)
+      .withIndex("by_community_slug", (q: any) =>
+        q.eq("communityId", args.communityId).eq("slug", candidate),
+      )
+      .first();
+    if (!collision) return candidate;
+  }
+  throw new Error("community_channel_slug_unavailable");
+}
+
+export async function createActiveCommunityChannel(args: {
+  ctx: { db: any };
+  communityId: any;
+  createdByUserId: any;
+  name: unknown;
+  nowMs?: number;
+}): Promise<CommunityChannelLike> {
+  const name = normalizeCommunityChannelName(args.name);
+  await ensureGeneralChannel({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    nowMs: args.nowMs,
+  });
+  const activeChannels = await listActiveCommunityChannels({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+  if (activeChannels.length >= MAX_ACTIVE_COMMUNITY_CHANNELS) {
+    throw new Error("community_channel_limit_reached");
+  }
+  const normalizedName = name.toLocaleLowerCase("en-US");
+  if (
+    activeChannels.some(
+      (channel) =>
+        normalizeCommunityChannelName(channel.name).toLocaleLowerCase("en-US") ===
+        normalizedName,
+    )
+  ) {
+    throw new Error("community_channel_name_taken");
+  }
+  const slug = await resolveAvailableChannelSlug({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    name,
+  });
+  const nowMs = args.nowMs ?? Date.now();
+  const position = activeChannels.reduce(
+    (maximum, channel) => Math.max(maximum, channel.position),
+    -1,
+  ) + 1;
+  const channelId = await args.ctx.db.insert("communityChannels" as any, {
+    communityId: args.communityId,
+    slug,
+    name,
+    accessMode: "all_members",
+    postingPolicy: "members",
+    status: "active",
+    position,
+    createdByUserId: args.createdByUserId,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  return await requireActiveCommunityChannel({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    channelId,
+  });
+}
+
+export async function requireChannelForAddressableRoot(args: {
+  ctx: { db: any };
+  root: ChannelAddressableInteractionLike;
+  nowMs?: number;
+}): Promise<CommunityChannelLike> {
+  if (!interactionIsChannelAddressable(args.root)) {
+    throw new Error("interaction_not_channel_addressable");
+  }
+
+  if (args.root.channelId) {
+    const channel = (await args.ctx.db.get(
+      args.root.channelId,
+    )) as CommunityChannelLike | null;
+    if (
+      !channel ||
+      normalizeIdValue(channel.communityId) !==
+        normalizeIdValue(args.root.communityId) ||
+      channel.status !== "active" ||
+      channel.accessMode !== "all_members" ||
+      channel.postingPolicy !== "members"
+    ) {
+      throw new Error("interaction_channel_invalid");
+    }
+    if (channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE) {
+      assertGeneralChannelForCommunity(channel, args.root.communityId);
+    }
+    return channel;
+  }
+
+  const channel = await ensureGeneralChannel({
+    ctx: args.ctx,
+    communityId: args.root.communityId,
+    nowMs: args.nowMs,
+  });
+  await args.ctx.db.patch(args.root._id, { channelId: channel._id });
+  args.root.channelId = channel._id;
+  return channel;
+}
+
+export async function ensureReplyChannelMatchesRoot(args: {
+  ctx: { db: any };
+  root: ChannelAddressableInteractionLike;
+  reply: { _id: any; communityId: any; rootId: any; channelId?: any };
+  nowMs?: number;
+}): Promise<CommunityChannelLike> {
+  if (
+    normalizeIdValue(args.reply.communityId) !==
+      normalizeIdValue(args.root.communityId) ||
+    normalizeIdValue(args.reply.rootId) !== normalizeIdValue(args.root._id)
+  ) {
+    throw new Error("interaction_reply_root_mismatch");
+  }
+  const channel = await requireChannelForAddressableRoot({
+    ctx: args.ctx,
+    root: args.root,
+    nowMs: args.nowMs,
+  });
+  if (
+    args.reply.channelId &&
+    normalizeIdValue(args.reply.channelId) !== normalizeIdValue(channel._id)
+  ) {
+    throw new Error("interaction_reply_channel_mismatch");
+  }
+  if (!args.reply.channelId) {
+    await args.ctx.db.patch(args.reply._id, { channelId: channel._id });
+    args.reply.channelId = channel._id;
+  }
+  return channel;
+}
+
+// Rolling-compatibility predicate. A missing channel is interpreted as
+// General only until the bounded backfill reaches zero drift.
+export function interactionBelongsToGeneralChannel(
+  row: { channelId?: any },
+  generalChannel: CommunityChannelLike | null,
+): boolean {
+  const rowChannelId = normalizeIdValue(row.channelId);
+  if (!rowChannelId) return true;
+  return Boolean(
+    generalChannel &&
+      rowChannelId === normalizeIdValue(generalChannel._id),
+  );
+}
+
+export function interactionBelongsToChannel(
+  row: { channelId?: any },
+  channel: CommunityChannelLike,
+): boolean {
+  const rowChannelId = normalizeIdValue(row.channelId);
+  if (!rowChannelId) {
+    return channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE;
+  }
+  return rowChannelId === normalizeIdValue(channel._id);
+}
+
+export async function listChannelProjectionRows(args: {
+  ctx: { db: any };
+  tableName: "communityReadCursors" | "communityTypingPresence";
+  communityId: any;
+  channel: CommunityChannelLike;
+  userId: any;
+  streamKind?: "chat";
+}): Promise<any[]> {
+  assertChannelForCommunity(args.channel, args.communityId);
+  if (args.channel.status !== "active") {
+    throw new Error("community_channel_inactive");
+  }
+  if (args.tableName === "communityReadCursors" && args.streamKind !== "chat") {
+    throw new Error("community_channel_projection_stream_required");
+  }
+  const channelIds = args.channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE
+    ? [undefined, args.channel._id]
+    : [args.channel._id];
+  const batches = await Promise.all(
+    channelIds.map(async (channelId) => {
+      if (args.tableName === "communityReadCursors") {
+        return await args.ctx.db
+          .query("communityReadCursors" as any)
+          .withIndex("by_community_channel_user_stream", (q: any) =>
+            q
+              .eq("communityId", args.communityId)
+              .eq("channelId", channelId)
+              .eq("userId", args.userId)
+              .eq("streamKind", args.streamKind),
+          )
+          .take(2);
+      }
+      return await args.ctx.db
+        .query("communityTypingPresence" as any)
+        .withIndex("by_community_channel_user", (q: any) =>
+          q
+            .eq("communityId", args.communityId)
+            .eq("channelId", channelId)
+            .eq("userId", args.userId),
+        )
+        .take(2);
+    }),
+  );
+  return Array.from(
+    new Map(
+      batches
+        .flat()
+        .map((row: any) => [normalizeIdValue(row._id), row]),
+    ).values(),
+  );
+}
+
+// A cursor or typing lease is one semantic projection per user and General
+// lane. Inspect both the rolling legacy lane and the canonical lane before any
+// mutation so duplicate legacy rows cannot be upgraded by choosing a winner.
+export async function listGeneralChannelProjectionRows(args: {
+  ctx: { db: any };
+  tableName: "communityReadCursors" | "communityTypingPresence";
+  communityId: any;
+  generalChannelId: any | null;
+  userId: any;
+  streamKind?: "chat";
+}): Promise<any[]> {
+  if (args.tableName === "communityReadCursors" && args.streamKind !== "chat") {
+    throw new Error("community_channel_projection_stream_required");
+  }
+  const channelIds = args.generalChannelId
+    ? [undefined, args.generalChannelId]
+    : [undefined];
+  const batches = await Promise.all(
+    channelIds.map(async (channelId) => {
+      if (args.tableName === "communityReadCursors") {
+        return await args.ctx.db
+          .query("communityReadCursors" as any)
+          .withIndex("by_community_channel_user_stream", (q: any) =>
+            q
+              .eq("communityId", args.communityId)
+              .eq("channelId", channelId)
+              .eq("userId", args.userId)
+              .eq("streamKind", args.streamKind),
+          )
+          .take(2);
+      }
+      return await args.ctx.db
+        .query("communityTypingPresence" as any)
+        .withIndex("by_community_channel_user", (q: any) =>
+          q
+            .eq("communityId", args.communityId)
+            .eq("channelId", channelId)
+            .eq("userId", args.userId),
+        )
+        .take(2);
+    }),
+  );
+  return Array.from(
+    new Map(
+      batches
+        .flat()
+        .map((row: any) => [normalizeIdValue(row._id), row]),
+    ).values(),
+  );
+}
+
+async function listReadableRowsForChannelIds<T extends GeneralChannelReadableRow>(args: {
+  ctx: { db: any };
+  tableName: "communityInteractionRoots" | "communityInteractionReplies";
+  communityId: any;
+  channelIds: any[];
+  belongsToChannel: (row: T) => boolean;
+  limit: number;
+  beforeCreatedAt?: number | null;
+  kind?: string | null;
+}): Promise<T[]> {
+  if (args.kind && args.tableName !== "communityInteractionRoots") {
+    throw new Error("interaction_channel_kind_table_invalid");
+  }
+  const requestedLimit = Number(args.limit);
+  const limit =
+    Number.isFinite(requestedLimit) && requestedLimit > 0
+      ? Math.min(200, Math.floor(requestedLimit))
+      : 1;
+  const visibilities = ["community", "public"] as const;
+  const batches = await Promise.all(
+    args.channelIds.flatMap((channelId) =>
+      visibilities.map(async (visibilityScope) => {
+        const indexName = args.kind
+          ? "by_community_channel_kind_visibility_status_createdAt"
+          : "by_community_channel_visibility_status_createdAt";
+        return (await args.ctx.db
+          .query(args.tableName as any)
+          .withIndex(indexName, (q: any) => {
+            let cursor = q
+              .eq("communityId", args.communityId)
+              .eq("channelId", channelId);
+            if (args.kind) cursor = cursor.eq("kind", args.kind);
+            cursor = cursor
+              .eq("visibilityScope", visibilityScope)
+              .eq("status", "live");
+            return args.beforeCreatedAt == null
+              ? cursor
+              : cursor.lt("createdAt", args.beforeCreatedAt);
+          })
+          .order("desc")
+          .take(limit)) as T[];
+      }),
+    ),
+  );
+  return Array.from(
+    new Map(
+      batches
+        .flat()
+        .filter(args.belongsToChannel)
+        .map((row) => [normalizeIdValue(row._id), row]),
+    ).values(),
+  )
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .slice(0, limit);
+}
+
+// Exact indexed visibility lanes prevent unrelated channels or private dock
+// activity from starving the selected public/member-visible channel window.
+// Only General admits the temporary unchanneled compatibility lane.
+export async function listChannelReadableRows<
+  T extends GeneralChannelReadableRow,
+>(args: {
+  ctx: { db: any };
+  tableName: "communityInteractionRoots" | "communityInteractionReplies";
+  communityId: any;
+  channel: CommunityChannelLike;
+  limit: number;
+  beforeCreatedAt?: number | null;
+  kind?: string | null;
+}): Promise<T[]> {
+  assertChannelForCommunity(args.channel, args.communityId);
+  if (args.channel.status !== "active") {
+    throw new Error("community_channel_inactive");
+  }
+  return await listReadableRowsForChannelIds<T>({
+    ...args,
+    channelIds: args.channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE
+      ? [args.channel._id, undefined]
+      : [args.channel._id],
+    belongsToChannel: (row) => interactionBelongsToChannel(row, args.channel),
+  });
+}
+
+// Rolling-deployment adapter for existing General-only call paths. New
+// selected-channel reads should use listChannelReadableRows.
+export async function listGeneralChannelReadableRows<
+  T extends GeneralChannelReadableRow,
+>(args: {
+  ctx: { db: any };
+  tableName: "communityInteractionRoots" | "communityInteractionReplies";
+  communityId: any;
+  generalChannel: CommunityChannelLike | null;
+  limit: number;
+  beforeCreatedAt?: number | null;
+  kind?: string | null;
+}): Promise<T[]> {
+  if (args.generalChannel) {
+    return await listChannelReadableRows<T>({
+      ctx: args.ctx,
+      tableName: args.tableName,
+      communityId: args.communityId,
+      channel: args.generalChannel,
+      limit: args.limit,
+      beforeCreatedAt: args.beforeCreatedAt,
+      kind: args.kind,
+    });
+  }
+  return await listReadableRowsForChannelIds<T>({
+    ctx: args.ctx,
+    tableName: args.tableName,
+    communityId: args.communityId,
+    channelIds: [undefined],
+    belongsToChannel: (row) => interactionBelongsToGeneralChannel(row, null),
+    limit: args.limit,
+    beforeCreatedAt: args.beforeCreatedAt,
+    kind: args.kind,
+  });
+}

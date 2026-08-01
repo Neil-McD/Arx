@@ -110,6 +110,10 @@ export type CommunityInteractionLineageEnvelope = {
     | "unattributed"
     | "system";
   origin: "community_chat";
+  channel: {
+    id: string | null;
+    slug: string;
+  };
   evidence: {
     ref: CommunityInteractionEvidenceRef;
   };
@@ -311,6 +315,8 @@ export function deriveCommunityInteractionLineageEnvelope(args: {
   actorUserId?: string | null;
   actorAgentKey?: string | null;
   communityId: string;
+  channelId?: string | null;
+  channelSlug?: string | null;
   objectType: CommunityInteractionEvidenceObjectType;
   objectId: string;
   rootId: string;
@@ -320,6 +326,8 @@ export function deriveCommunityInteractionLineageEnvelope(args: {
   const actorAgentKey = String(args.actorAgentKey ?? "").trim() || null;
   const communityId = String(args.communityId ?? "").trim();
   if (!communityId) throw new Error("community_lineage_community_id_required");
+  const channelId = String(args.channelId ?? "").trim() || null;
+  const channelSlug = String(args.channelSlug ?? "").trim() || "general";
 
   const actor = {
     type: args.actorType,
@@ -387,6 +395,10 @@ export function deriveCommunityInteractionLineageEnvelope(args: {
     credit,
     attribution_mode: attributionMode,
     origin: "community_chat",
+    channel: {
+      id: channelId,
+      slug: channelSlug,
+    },
     evidence: {
       ref: evidenceRef,
     },

@@ -244,6 +244,9 @@ async function resolveInteractionEvidence(args: {
   };
   const provenancePayload = {
     community_id: normalizeIdValue(args.communityId),
+    channel_id: source.root.channelId
+      ? normalizeIdValue(source.root.channelId)
+      : null,
     object_type: args.objectType,
     object_id: normalizeIdValue(source.row._id),
     root_id: normalizeIdValue(source.root._id),

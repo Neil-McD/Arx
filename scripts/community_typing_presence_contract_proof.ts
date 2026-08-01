@@ -77,18 +77,18 @@ assert.match(
 assert.doesNotMatch(
   typingSchema,
   /(tabId|sessionId|clientId|deviceId):/,
-  "community typing ownership must remain one community-user row",
+  "community typing ownership must remain one channel-user row",
 );
 assert.match(
   typingSchema,
-  /\.index\("by_community_user", \["communityId", "userId"\]\)[\s\S]*\.index\("by_community_displayUntil", \["communityId", "displayUntil"\]\)/,
-  "community typing must retain identity and active-window indexes",
+  /\.index\("by_community_channel_user", \["communityId", "channelId", "userId"\]\)[\s\S]*\.index\("by_community_channel_displayUntil", \["communityId", "channelId", "displayUntil"\]\)/,
+  "community typing must retain channel identity and bounded active-window indexes",
 );
 
 assert.match(
   core,
-  /renewCommunityTypingLease[\s\S]*withIndex\("by_community_user"[\s\S]*ctx\.db\.patch[\s\S]*ctx\.db\.insert/,
-  "typing renewals must coalesce through community-user identity",
+  /renewCommunityTypingLease[\s\S]*withIndex\("by_channel_user"[\s\S]*withIndex\("by_community_channel_user"[\s\S]*ctx\.db\.patch[\s\S]*ctx\.db\.insert/,
+  "typing renewals must coalesce through General channel-user identity with legacy fallback",
 );
 assert.match(
   core,
@@ -102,8 +102,8 @@ assert.match(
 );
 assert.match(
   core,
-  /withIndex\("by_community_displayUntil"[\s\S]*\.take\(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT \+ 1\)/,
-  "typing reads must use the active-window index and bounded overfetch",
+  /withIndex\("by_channel_displayUntil"[\s\S]*withIndex\("by_community_channel_displayUntil"[\s\S]*\.take\(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT \+ 1\)/,
+  "typing reads must merge exact General and legacy active-window indexes with bounded overfetch",
 );
 assert.match(
   core,
@@ -117,8 +117,8 @@ assert.match(
 );
 assert.doesNotMatch(
   core,
-  /\.collect\(\)|\.sort\(/,
-  "the typing hot path must not collect or sort whole tables",
+  /\.collect\(\)/,
+  "the typing hot path must not collect whole tables",
 );
 
 assert.match(
@@ -215,7 +215,7 @@ assert.match(
 
 assert.match(
   docs,
-  /Typing presence is an ephemeral server-issued lease[\s\S]*one community-user row[\s\S]*scope-aware clear/,
+  /Typing presence is an ephemeral server-issued lease[\s\S]*one channel-user row[\s\S]*Pre-channel leases remain readable only[\s\S]*scope-aware clear/,
   "the substrate contract must document canonical typing ownership and failure semantics",
 );
 assert.match(
