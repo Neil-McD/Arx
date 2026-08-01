@@ -76,7 +76,7 @@ function provePermanentEvidenceSchema(schemaSource: string): void {
   const fundingPolicySchema = sourceBetween(
     schemaSource,
     "communityInferencePolicies: defineTable",
-    "workspaceCreditBalances: defineTable",
+    "founderInferenceGrants: defineTable",
   );
   for (const forbidden of [
     /sponsorUserId/,
@@ -144,7 +144,11 @@ function proveLegacySchemaAndMigrationCodeAreDeleted(schemaSource: string, backe
 }
 
 function proveCommunityInferencePoliciesAreInert(): void {
-  const allowedReferences = new Set(["convex/schema.ts"]);
+  const allowedReferences = new Set([
+    "convex/schema.ts",
+    "convex/founderInferenceMigration.ts",
+    "convex/founderInferenceCore.test.ts",
+  ]);
   const unexpectedReferences = ["convex", "shared", "apps/web/src"]
     .flatMap(listSourceFiles)
     .filter((path) => !allowedReferences.has(path))
@@ -152,8 +156,16 @@ function proveCommunityInferencePoliciesAreInert(): void {
   assert.deepEqual(
     unexpectedReferences,
     [],
-    "community inference policies must remain absent from runtime, onboarding, checkout, billing, entitlement, and provider paths",
+    "community inference policies must remain absent from runtime, onboarding, checkout, billing, entitlement, and provider paths outside the bounded cleanup migration",
   );
+  const migration = readText("convex/founderInferenceMigration.ts");
+  assert.match(migration, /initializeExistingFounderInferenceCohortInternal = internalMutation/);
+  assert.match(migration, /EXPECTED_EXISTING_FOUNDER_COUNT = 9/);
+  assert.match(migration, /EXPECTED_LEGACY_POLICY_COUNT = 8/);
+  assert.match(migration, /sourceProgram !== "builder_partner_v1"/);
+  assert.match(migration, /fundingMode !== "owner_api_key"/);
+  assert.match(migration, /status !== "pending_credential"/);
+  assert.doesNotMatch(migration, /export const .* = (query|mutation|action)\(/);
 }
 
 function proveBackendIsTombstonesOnly(backendSource: string): void {
@@ -288,10 +300,9 @@ function proveLegalAndDocs(): void {
     "Builder Partner v1 is retired",
     "future_partner_grandfather_v1",
     "communityInferencePolicies",
-    "owner_api_key",
-    "pending_credential",
-    "community owner as payer",
-    "contains no credential",
+    "migration residue",
+    "founderInferenceGrants",
+    "exactly nine verified existing community owners",
     "seven legacy Partner table schemas and the temporary migration code are deleted",
   ]) {
     assertIncludes(billingDocs, marker, "billing documentation");

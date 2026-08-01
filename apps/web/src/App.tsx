@@ -50,6 +50,7 @@ import {
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
 import { useWebProviderConnectionsController } from "./controllers/useWebProviderConnectionsController";
+import { useWebFounderInferenceController } from "./controllers/useWebFounderInferenceController";
 import { useWebAccountPlanController } from "./controllers/useWebAccountPlanController";
 import { useWebCommunityVoiceController } from "./controllers/useWebCommunityVoiceController";
 import { useWebCommunityProfileHydrationController } from "./controllers/useWebCommunityProfileHydrationController";
@@ -937,6 +938,11 @@ export default function App() {
     requireSignIn,
     refreshAccountSetupStatus,
     resetSignedOutAccountSetup: resetOnboardingProfileState,
+  });
+  const founderInference = useWebFounderInferenceController({
+    session,
+    ensureSession: ensureUsableAuthSession,
+    providerConnectionUpdatedAt: openAiConnection.updated_at,
   });
   const enterJoinedCommunity = useWebJoinedCommunityEntryAction({
     session,
@@ -2458,6 +2464,13 @@ export default function App() {
       handleConnectOpenAi: providerConnectionUi.handleConnectOpenAi,
       handleDisconnectOpenAi:
         providerConnectionUi.handleDisconnectOpenAi,
+      founderInferenceStatus: founderInference.status,
+      isLoadingFounderInference: founderInference.isLoading,
+      isSavingFounderInference: founderInference.isSaving,
+      founderInferenceError: founderInference.error,
+      founderInferenceSuccess: founderInference.success,
+      handleActivateFounderInference: founderInference.activate,
+      handleSuspendFounderInference: founderInference.suspend,
       formatRelativeTime,
     },
     billing: {

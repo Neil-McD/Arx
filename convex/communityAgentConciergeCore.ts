@@ -2,6 +2,7 @@ import { internal } from "./_generated/api";
 import { normalizeIdValue, requireCommunityChatAccess } from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
+import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 
 const internalRefs = internal as any;
 
@@ -17,7 +18,10 @@ export type ServeRequestIntakeReason =
   | "requester_missing"
   | "requester_access_missing"
   | "agent_disabled"
-  | "requester_connection_missing";
+  | "requester_connection_missing"
+  | "owner_credential_missing"
+  | "owner_funding_suspended"
+  | "founder_plan_required";
 
 export type ConciergeMentionRow = {
   _id: any;
@@ -370,7 +374,38 @@ export async function intakeCommunityAgentMention(args: {
     });
     return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
   }
-  if (!(await requesterHasChatgptConnection(args.ctx, source.requesterUserId))) {
+  const funding = await resolveCommunityInferenceFundingAdmission(
+    args.ctx,
+    args.mention.communityId,
+  );
+  if (funding.ok === false) {
+    const intakeReason = funding.code === "community_not_found"
+      ? "source_missing"
+      : funding.code;
+    const skipped = await skipMention({
+      ctx: args.ctx,
+      mention: args.mention,
+      intakeReason,
+      sourceRootId: source.sourceRootId,
+      sourceReplyId: source.sourceReplyId,
+      requesterUserId: source.requesterUserId,
+      sourceVisibilityScope: source.visibilityScope,
+      responseVisibilityScope: source.visibilityScope,
+      skipReason: funding.code === "owner_credential_missing"
+        ? "The community owner must connect an OpenAI API key."
+        : funding.code === "owner_funding_suspended"
+          ? "Community inference funding is suspended."
+          : funding.code === "founder_plan_required"
+            ? "The community requires an active founder plan."
+            : "Community inference funding could not be resolved.",
+      nowMs: args.nowMs,
+    });
+    return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
+  }
+  if (
+    funding.mode === "legacy_requester_chatgpt" &&
+    !(await requesterHasChatgptConnection(args.ctx, source.requesterUserId))
+  ) {
     const skipped = await skipMention({
       ctx: args.ctx,
       mention: args.mention,

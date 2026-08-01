@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
+import type { CloudFounderInferenceStatus } from "../../../../shared/cloudFounderInferenceGateway";
 
 type SessionLike = {
   user: {
@@ -42,6 +43,13 @@ export type WebAccountSettingsSectionProps = {
   openAiConnectionSuccess: string | null;
   handleConnectOpenAi: () => Promise<void> | void;
   handleDisconnectOpenAi: () => Promise<void> | void;
+  founderInferenceStatus: CloudFounderInferenceStatus;
+  isLoadingFounderInference: boolean;
+  isSavingFounderInference: boolean;
+  founderInferenceError: string | null;
+  founderInferenceSuccess: string | null;
+  handleActivateFounderInference: (acceptedTerms: boolean) => Promise<void> | void;
+  handleSuspendFounderInference: () => Promise<void> | void;
   formatRelativeTime: (value: string) => string;
 };
 
@@ -50,12 +58,19 @@ export function WebAccountSettingsSection(
 ) {
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [isSubmittingSignOut, setIsSubmittingSignOut] = useState(false);
+  const [hasAcceptedFounderInferenceTerms, setHasAcceptedFounderInferenceTerms] = useState(false);
 
   useEffect(() => {
     if (props.session) return;
     setIsSignOutConfirmOpen(false);
     setIsSubmittingSignOut(false);
   }, [props.session]);
+
+  useEffect(() => {
+    if (props.founderInferenceStatus.status === "active") {
+      setHasAcceptedFounderInferenceTerms(false);
+    }
+  }, [props.founderInferenceStatus.status]);
 
   const handleConfirmSignOut = async (): Promise<void> => {
     if (isSubmittingSignOut) return;
@@ -122,6 +137,102 @@ export function WebAccountSettingsSection(
         }}
         onConfirm={handleConfirmSignOut}
       />
+
+      {props.session && props.founderInferenceStatus.eligible ? (
+        <div className="settings-section">
+          <div className="settings-section-title">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 12h16" />
+              <path d="M12 4v16" />
+              <circle cx="12" cy="12" r="9" />
+            </svg>
+            Community inference funding
+          </div>
+          <div className="settings-section-desc">
+            Your grandfathered founder access lets one OpenAI API key fund GPT 5.6 Luna for members of every community you own.
+          </div>
+          <div className={`account-provider-card${
+            props.founderInferenceStatus.status === "active" && props.founderInferenceStatus.key_connected
+              ? " connected"
+              : ""
+          }`}>
+            <div className="account-provider-card-kicker">
+              <span>Existing founder access</span>
+              <span className={`account-provider-status${
+                props.founderInferenceStatus.status === "active" && props.founderInferenceStatus.key_connected
+                  ? " connected"
+                  : ""
+              }`}>
+                {props.isLoadingFounderInference
+                  ? "Checking"
+                  : props.founderInferenceStatus.status === "active" && props.founderInferenceStatus.key_connected
+                    ? "Active"
+                    : props.founderInferenceStatus.status === "suspended"
+                      ? "Suspended"
+                      : props.founderInferenceStatus.status === "active"
+                        ? "Action required"
+                        : "Ready to activate"}
+              </span>
+            </div>
+            <div className="account-provider-card-title">GPT 5.6 Luna for your communities</div>
+            <div className="account-provider-card-desc">
+              Members keep their own permissions. Your key pays only for supported community inference and is never shared with members.
+            </div>
+            <div className="account-provider-card-body">
+              <div className="auth-status">
+                {props.founderInferenceStatus.communities.length > 0
+                  ? `Covers ${props.founderInferenceStatus.communities.map((community) => community.name).join(", ")}.`
+                  : "Covers every community you own now or create later."}
+              </div>
+              {props.founderInferenceStatus.status !== "active" ? (
+                <label className="auth-status">
+                  <input
+                    type="checkbox"
+                    checked={hasAcceptedFounderInferenceTerms}
+                    onChange={(event) => setHasAcceptedFounderInferenceTerms(event.target.checked)}
+                    disabled={props.isSavingFounderInference}
+                  />{" "}
+                  I authorize Polynet to use my connected OpenAI API key for bounded inference across every community I own. OpenAI bills my account directly, and I can suspend access at any time.
+                </label>
+              ) : null}
+              {!props.founderInferenceStatus.key_connected ? (
+                <div className="auth-error">Connect an OpenAI API key below before activation.</div>
+              ) : null}
+              {props.founderInferenceError ? (
+                <div className="auth-error">{props.founderInferenceError}</div>
+              ) : null}
+              {props.founderInferenceSuccess ? (
+                <div className="auth-success">{props.founderInferenceSuccess}</div>
+              ) : null}
+            </div>
+            <div className="account-provider-card-actions">
+              {props.founderInferenceStatus.status === "active" ? (
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => void props.handleSuspendFounderInference()}
+                  disabled={props.isSavingFounderInference}
+                >
+                  {props.isSavingFounderInference ? "Suspending…" : "Suspend community inference"}
+                </button>
+              ) : (
+                <button
+                  className="platform-save-button platform-save-button--compact provider-connection-submit-button"
+                  type="button"
+                  onClick={() => void props.handleActivateFounderInference(hasAcceptedFounderInferenceTerms)}
+                  disabled={
+                    props.isSavingFounderInference ||
+                    !props.founderInferenceStatus.key_connected ||
+                    !hasAcceptedFounderInferenceTerms
+                  }
+                >
+                  {props.isSavingFounderInference ? "Testing Luna…" : "Activate for all communities"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="settings-section">
         <div className="settings-section-title">

@@ -90,6 +90,9 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
   if (message === "community_builder_required") {
     return "Your account cannot create a community yet.";
   }
+  if (message === "founder_plan_required") {
+    return "New founder plans are not available yet.";
+  }
   if (message.includes("account_setup_required")) {
     return "Finish account setup before creating a community.";
   }

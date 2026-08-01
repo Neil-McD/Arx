@@ -59,8 +59,8 @@ assert.match(
 );
 assert.match(
   readBlock,
-  /requesterHasChatgptConnection[\s\S]*request\.requesterUserId/,
-  "serve context should require the requester's own ChatGPT connection before spending tokens",
+  /resolveCommunityInferenceFundingAdmission[\s\S]*funding\.mode === "legacy_requester_chatgpt"[\s\S]*requesterHasChatgptConnection/,
+  "serve context should require requester ChatGPT only for the bounded transition",
 );
 assert.match(
   readBlock,
@@ -98,8 +98,8 @@ assert.match(
 
 assert.match(
   actionBlock,
-  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*requestId: args\.requestId[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*runChatgptNativeToolCompletion\(\{[\s\S]*userId: normalizeIdValue\(context\.request\.sponsorUserId\)[\s\S]*modelId: DEFAULT_ACTIVE_MODEL_ID[\s\S]*messages: kernelMessages[\s\S]*tools: buildCommunityAgentConciergeFunctionTools\(\)/,
-  "serve action should spend the requester sponsor lane through one bounded native canonical tool loop",
+  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID[\s\S]*apiKeyOverride: ownerApiKey[\s\S]*runChatgptNativeToolCompletion\(\{[\s\S]*userId: normalizeIdValue\(context\.request\.sponsorUserId\)/,
+  "serve action should use owner Luna funding while retaining the bounded requester transition",
 );
 assert.match(
   worker,
@@ -220,7 +220,7 @@ assert.match(
 );
 assert.match(
   docs,
-  /schedule immediate serve worker for that request[\s\S]*spend requester ChatGPT connection through bounded canonical tool loop[\s\S]*insert one community-agent reply in that source thread/,
+  /schedule immediate serve worker for that request[\s\S]*authorize one privacy-bounded funding receipt[\s\S]*run GPT 5\.6 Luna on the current owner's OpenAI key[\s\S]*insert one community-agent reply in that source thread/,
   "architecture docs should describe the event-driven canonical tool serve path",
 );
 assert.match(

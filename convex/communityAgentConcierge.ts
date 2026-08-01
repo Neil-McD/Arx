@@ -12,6 +12,7 @@ import {
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
+import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 
 const CONCIERGE_REPAIR_DEFAULT_LIMIT = 25;
 const CONCIERGE_REPAIR_MAX_LIMIT = 50;
@@ -30,6 +31,7 @@ type CommunityAgentServeRequestIssueRow = {
   requesterUserId?: any;
   status: string;
   intakeReason: string;
+  errorCode?: string;
   createdAt: number;
 };
 
@@ -65,10 +67,6 @@ export const getMyLatestCommunityAgentServeIssue = query({
       communityId: args.communityId,
       userId,
     });
-    if (await userHasChatgptConnection(ctx, userId)) {
-      return null;
-    }
-
     const nowMs = Date.now();
     const rows = (await ctx.db
       .query("communityAgentServeRequests" as any)
@@ -80,8 +78,15 @@ export const getMyLatestCommunityAgentServeIssue = query({
 
     const issue = rows.find((row) => {
       if (row.agentKey !== CANONICAL_COMMUNITY_AGENT_KEY) return false;
-      if (row.status !== "skipped") return false;
-      if (row.intakeReason !== "requester_connection_missing") return false;
+      if (row.status !== "skipped" && row.status !== "error") return false;
+      const issueCode = row.status === "skipped" ? row.intakeReason : row.errorCode;
+      if (
+        issueCode !== "requester_connection_missing" &&
+        issueCode !== "owner_credential_missing" &&
+        issueCode !== "owner_credential_unreadable" &&
+        issueCode !== "owner_funding_suspended" &&
+        issueCode !== "founder_plan_required"
+      ) return false;
       if (normalizeIdValue(row.communityId) !== normalizeIdValue(args.communityId)) return false;
       if (normalizeIdValue(row.requesterUserId) !== normalizeIdValue(userId)) return false;
       const createdAt = coerceTimestampMs(row.createdAt, 0);
@@ -89,13 +94,28 @@ export const getMyLatestCommunityAgentServeIssue = query({
     });
 
     if (!issue) return null;
+    const issueCode = issue.status === "skipped" ? issue.intakeReason : issue.errorCode;
+    if (issueCode === "requester_connection_missing") {
+      if (await userHasChatgptConnection(ctx, userId)) return null;
+      const createdAt = coerceTimestampMs(issue.createdAt, nowMs);
+      return {
+        id: normalizeIdValue(issue._id),
+        community_id: normalizeIdValue(args.communityId),
+        reason: "provider_connection_required",
+        cta: "connect_chatgpt",
+        message: "Connect ChatGPT to use the community agent.",
+        created_at: new Date(createdAt).toISOString(),
+      };
+    }
+    const funding = await resolveCommunityInferenceFundingAdmission(ctx, args.communityId);
+    if (funding.ok && funding.mode === "owner_api_key") return null;
     const createdAt = coerceTimestampMs(issue.createdAt, nowMs);
     return {
       id: normalizeIdValue(issue._id),
       community_id: normalizeIdValue(args.communityId),
-      reason: "provider_connection_required",
-      cta: "connect_chatgpt",
-      message: "Connect ChatGPT to use the community agent.",
+      reason: "community_owner_action_required",
+      cta: null,
+      message: "Community AI is temporarily unavailable. The community owner needs to update inference settings.",
       created_at: new Date(createdAt).toISOString(),
     };
   },

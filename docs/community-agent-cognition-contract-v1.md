@@ -2,7 +2,7 @@
 
 Status: staging architecture; canonical five-tool boundary implemented
 Scope: product architecture, memory system, community agent loop
-Last updated: 2026-07-16
+Last updated: 2026-08-01
 
 ## Purpose
 
@@ -46,7 +46,10 @@ The community-owned runtime surfaces are:
 
 1. `member_concierge`
    - entered from a direct community-agent mention
-   - requester-funded through the requester's provider connection
+   - funded by the current community owner's OpenAI key after an approved existing
+     founder activates; approved-but-inactive founders retain the requester ChatGPT
+     route only during the bounded cutover, and future founders require the later
+     platform-funded founder plan
    - revalidates community access and source visibility for every turn
    - receives the same canonical five Polynet repository tools as the personal
      harness and official MCP
@@ -1730,7 +1733,7 @@ human mentions the community agent in community chat
   -> interaction root/reply is created
   -> communityInteractionMentions[pending, community_agent] is created
   -> validate source and requester
-  -> require requester access and requester inference connection
+  -> require requester access and resolve community funding
   -> insert communityAgentServeRequests
   -> settle mention as sent or suppressed
 ```
@@ -1745,8 +1748,8 @@ leftover communityInteractionMentions[pending, community_agent]
 Rules:
 
 - This slice is intake only: No LLM, no reply, no memory write.
-- Owner funds sleep; asker funds serve. A queued serve request must have `sponsorUserId == requesterUserId`.
-- There is no owner-funded fallback and no platform-funded fallback for member-triggered tags.
+- A queued serve request must have `sponsorUserId == requesterUserId`; this is the member tool-authority principal, not the payer.
+- An active existing-founder grant resolves the current community owner as payer and requires that owner's OpenAI API key. Approved-but-not-yet-activated founders retain the requester ChatGPT path only during the bounded cutover. There is no platform-funded fallback.
 - `communityInteractionMentions.notifyState` is only the narrow drain marker for agent mentions:
   - `pending` = intake has not processed this mention
   - `sent` = intake accepted it into `communityAgentServeRequests`
@@ -1756,7 +1759,7 @@ Rules:
 - Fresh `community_agent` mentions are born into intake immediately after the mention row is inserted.
 - The bounded cron consumes only leftover pending canonical `community_agent` mentions as a repair drain, not as the primary product path.
 - `sourceMentionId` is the idempotency key; retries must lookup before insert.
-- Accepted requests require a live human-authored source interaction, current requester chat access, enabled community agent config, and the requester's own usable ChatGPT connection.
+- Accepted requests require a live human-authored source interaction, current requester chat access, enabled community agent config, and either active owner funding or the temporary approved-founder requester connection.
 - Source and response visibility scopes are captured at intake so the future response path cannot guess or widen the boundary.
 - Skipped requests are recorded with machine-readable `intakeReason`; no tokens are spent for skipped intake.
 - Unexpected birth-time intake errors must not fail the chat write; the mention remains pending for the repair drain.
@@ -1771,7 +1774,8 @@ communityAgentServeRequests[queued, accepted]
   -> schedule immediate serve worker for that request
   -> claim request
   -> load same-community source thread
-  -> spend requester ChatGPT connection through bounded canonical tool loop
+  -> authorize one privacy-bounded funding receipt
+  -> run GPT 5.6 Luna on the current owner's OpenAI key
   -> insert one community-agent reply in that source thread
   -> mark request responded/error
 ```
@@ -1781,9 +1785,22 @@ Rules:
 - This slice is serve only: it does not write source traces, compiler digests,
   directory nodes, directory edges, change requests, mutations, retrieval logs,
   outcomes, or community-agent runs.
-- The worker uses the requester's sponsor lane. `sponsorUserId` must equal
-  `requesterUserId`; there is no owner-funded fallback and no platform-funded
-  fallback for direct community-agent answers.
+- The worker keeps three identities separate: requester/sponsor for access and tools,
+  canonical community agent for the response identity, and current community owner
+  for payment and credential. `sponsorUserId` must equal `requesterUserId`; the owner
+  must never become the tool principal. There is no member or platform fallback after
+  owner funding is active.
+- Existing-founder owner-funded turns use the fixed `gpt-5.6-luna` model through the
+  owner's encrypted OpenAI API key. The global model default remains independent.
+- Each owner-funded request claims one idempotent `communityInferenceReceipts` row.
+  The receipt records actor, payer, grant, community, model, bounded token usage, and
+  outcome but never the key, prompt, response, or tool output.
+- Provider-start is recorded before the first Luna request. A stale worker may reclaim
+  only a receipt that never reached provider-start; ambiguous post-provider retries
+  become `indeterminate` and cannot double-spend automatically.
+- Owner-funded usage is limited to six turns per actor/community per minute and sixty
+  turns per community per minute. Missing, suspended, transferred, invalid, exhausted,
+  or rate-limited funding fails closed.
 - The LLM call is a bounded native tool loop with the canonical five-tool
   Polynet surface:
   - `polynet_list`
@@ -1952,7 +1969,7 @@ expertise routing for open questions — built on the person provenance edges th
 Steward writes at apply time. Recognition surfaces on profiles and provenance,
 never as node size in the communal graph.
 
-### Economics (resolved 2026-07-01)
+### Economics (superseded and resolved 2026-08-01)
 
 Two payment lanes, split by what the spend produces:
 
@@ -1961,11 +1978,13 @@ Two payment lanes, split by what the spend produces:
   owner's connection. Defaults: on wherever the owner has a usable
   connection, capped at two cycles per day, with an owner off-switch
   (communityAgentConfigs.agentEnabled).
-- Chat is asker-funded. A member who tags the agent pays for the answer from
-  their own connection; the wallet is the rate limit. The Concierge speaks as
-  the agent's identity but bills the asker — and therefore retrieves only
-  what the asker is permitted to see (requester-pays and requester-scoped
-  visibility are the same boundary).
+- Direct Concierge chat is community-founder-funded for the approved existing
+  founder cohort after activation. The current owner supplies the OpenAI key and
+  pays for GPT 5.6 Luna, while the requesting member remains the permission and
+  tool principal. Approved-but-inactive founders retain the former requester
+  ChatGPT route only during the bounded cutover. Future founders use the later
+  platform-funded founder plan; there is no platform fallback in this cohort
+  slice. Payment identity never widens retrieval or tool authority.
 
 ### Cadence (resolved 2026-07-01)
 

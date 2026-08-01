@@ -94,13 +94,14 @@ in the terminal cleanup release. The nine public retired tombstones remain only 
 cached production client compatibility. They are deterministic, read no product or
 financial state, and cannot enroll, attribute, accrue, approve, or transfer money.
 
-The four grandfather grants and eight community inference policies are permanent,
-separate evidence records. A grandfather grant is not access, money, a balance, a
-commission, or a payout promise. A pending community funding policy is not a usable
-credential, membership, entitlement, usage allowance, provider selection, model
-promise, or authorization to run inference. No runtime, onboarding, checkout,
-billing, entitlement, or provider-connection path may read these policies until a
-future explicitly designed funding system owns that boundary.
+The four partner grandfather records remain permanent historical evidence only. The
+eight partner-derived community inference policies are not permanent funding truth;
+they are bounded cleanup inputs for `initializeExistingFounderInferenceCohortInternal`.
+Before deleting them, export and verify a production backup, run the migration in
+dry-run mode with the explicit nine verified owner user IDs, and require exact counts:
+nine unique owners who each own at least one community and eight policies that are
+all `builder_partner_v1`, `owner_api_key`, and `pending_credential`. The same atomic
+mutation then creates any missing founder grants and deletes only those eight rows.
 
 The production backup was completed before source deletion and is retained outside
 the repository under operator control. Its SHA-256 is

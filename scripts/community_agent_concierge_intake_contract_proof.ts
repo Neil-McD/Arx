@@ -99,13 +99,13 @@ assert.match(
 );
 assert.match(
   conciergeCore,
-  /requesterHasChatgptConnection[\s\S]*query\("userProviderConnections"[\s\S]*withIndex\("by_user_provider"[\s\S]*q\.eq\("userId", requesterUserId\)\.eq\("provider", "chatgpt"\)[\s\S]*row\?\.encryptedSecretHex/,
-  "Concierge intake should require the requester's own ChatGPT connection",
+  /resolveCommunityInferenceFundingAdmission[\s\S]*funding\.mode === "legacy_requester_chatgpt"[\s\S]*requesterHasChatgptConnection/,
+  "Concierge intake should require requester ChatGPT only during the approved-founder transition",
 );
 assert.doesNotMatch(
   concierge + conciergeCore,
-  /community\.ownerId|getChatgptConnectionForUserInternal|runChatgptNativeToolCompletion|runNativeRuntimeKernel|createCommunityAgentRunInternal|runCommunityAgentCycleInternal/,
-  "Concierge intake must not use owner funding, call an LLM, or create runtime runs",
+  /runChatgptNativeToolCompletion|runOpenAiNativeToolCompletion|runNativeRuntimeKernel|createCommunityAgentRunInternal|runCommunityAgentCycleInternal/,
+  "Concierge intake must not call an LLM or create runtime runs",
 );
 assert.doesNotMatch(
   concierge + conciergeCore,
@@ -139,7 +139,7 @@ assert.match(
 );
 assert.match(
   docs,
-  /birth-time intake[\s\S]*repair drain[\s\S]*No LLM, no reply, no memory write[\s\S]*Owner funds sleep[\s\S]*asker funds serve[\s\S]*communityAgentServeRequests/,
+  /birth-time intake[\s\S]*repair drain[\s\S]*No LLM, no reply, no memory write[\s\S]*sponsorUserId == requesterUserId[\s\S]*active existing-founder grant[\s\S]*communityAgentServeRequests/,
   "architecture docs should describe birth-time Concierge intake plus repair drain",
 );
 

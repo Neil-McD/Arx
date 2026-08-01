@@ -40,6 +40,7 @@ import {
   canReceiveCommunityRevenue,
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
+import { requireExistingFounderCommunityCreationEligibility } from "./founderInferenceCore";
 
 const COMMUNITY_DELETION_QUARANTINE_CODE =
   "community_delete_lifecycle_migration_blocked" as const;
@@ -497,6 +498,7 @@ export const createCommunity = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireAccountSetupCompleteForUser(ctx, ownerId);
+    await requireExistingFounderCommunityCreationEligibility(ctx, ownerId);
     const nowMs = Date.now();
     const billingStatus = await ctx.runQuery(api.auth.getAccountCommerceStatus, {
       authSubject: args.authSubject ?? undefined,

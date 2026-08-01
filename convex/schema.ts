@@ -154,6 +154,60 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_payer_status", ["payerUserId", "status"]),
 
+  founderInferenceGrants: defineTable({
+    userId: v.id("users"),
+    cohortKey: v.string(),
+    status: v.union(
+      v.literal("approved"),
+      v.literal("active"),
+      v.literal("suspended"),
+    ),
+    activationAcceptanceId: v.optional(v.id("legalAcceptances")),
+    approvedAt: v.number(),
+    activatedAt: v.optional(v.number()),
+    suspendedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_cohort", ["userId", "cohortKey"])
+    .index("by_cohort", ["cohortKey"])
+    .index("by_cohort_status", ["cohortKey", "status"]),
+
+  communityInferenceReceipts: defineTable({
+    receiptKey: v.string(),
+    sourceRunId: v.string(),
+    communityId: v.id("communities"),
+    actorUserId: v.id("users"),
+    payerUserId: v.id("users"),
+    founderGrantId: v.id("founderInferenceGrants"),
+    surface: v.literal("community_agent_mention"),
+    provider: v.literal("openai"),
+    modelId: v.string(),
+    status: v.union(
+      v.literal("authorized"),
+      v.literal("settled"),
+      v.literal("failed"),
+      v.literal("indeterminate"),
+    ),
+    claimToken: v.string(),
+    leaseExpiresAt: v.number(),
+    providerStartedAt: v.optional(v.number()),
+    promptTokens: v.optional(v.number()),
+    completionTokens: v.optional(v.number()),
+    outcomeCode: v.optional(v.string()),
+    failureCode: v.optional(v.string()),
+    authorizedAt: v.number(),
+    settledAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_receipt_key", ["receiptKey"])
+    .index("by_source_run", ["sourceRunId"])
+    .index("by_actor_community_createdAt", ["actorUserId", "communityId", "createdAt"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_payer_createdAt", ["payerUserId", "createdAt"]),
+
   workspaceCreditBalances: defineTable({
     userId: v.id("users"),
     includedCreditsBalance: v.number(),
@@ -1751,6 +1805,9 @@ export default defineSchema({
       v.literal("requester_access_missing"),
       v.literal("agent_disabled"),
       v.literal("requester_connection_missing"),
+      v.literal("owner_credential_missing"),
+      v.literal("owner_funding_suspended"),
+      v.literal("founder_plan_required"),
     ),
     sourceVisibilityScope: v.optional(
       v.union(

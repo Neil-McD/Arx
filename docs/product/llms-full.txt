@@ -1928,7 +1928,7 @@ Summary: The authority model for paid access, checkout, and subscriptions.
 
 Billing is the payment system. Entitlements are the access truth derived from verified payment, grants, membership, or plan state.
 
-Free authenticated users can build one owned community. Polynet Premium is the self-serve account subscription: it unlocks a second community, Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage. Existing owned communities remain active if limits change; the cap only gates creating another community. LLM inference outside Premium tooling may still be supplied through the user's connected ChatGPT account or OpenAI API key.
+Existing approved founders can keep building within their current community-count limits without a Polynet founder subscription. After the existing-founder cohort is initialized, accounts outside that cohort cannot create a community until the future founder plan exists. Polynet Premium remains a separate self-serve account subscription for Codex, premium runtimes, web research, hosted workspace tools, premium tool usage, and a second community; it is not the future founder plan.
 
 ## Builder Revenue Path
 
@@ -1955,9 +1955,11 @@ Premium tool usage is entitled through Polynet Premium. Internally, paid tools s
 
 Builder Partner v1 is retired. It has no member or operator product surface and creates no new attribution, commission, adjustment, payout batch, payout item, payout transfer, or Stripe transfer. Its accepted terms remain an archived legal artifact.
 
-The completed retirement preserves two deliberately separate facts. `future_partner_grandfather_v1` holds the identity and accepted-terms evidence for each of the four legacy participants; it preserves possible future program consideration and is not an entitlement, payout promise, balance, commission, or active partner account. `communityInferencePolicies` records who is responsible for funding inference for each community. Production contains four retained grandfather grants and eight retained community policies with the sorted ownership distribution `1/2/2/3`. Every policy is `owner_api_key` and `pending_credential`, names the community owner as payer, and retains provenance back to the founder's former source record and grant.
+The completed Partner retirement preserves `future_partner_grandfather_v1` only as historical identity and accepted-terms evidence for four legacy participants. It is not an entitlement, payout promise, balance, commission, active partner account, or founder-inference grant. The eight partner-derived `communityInferencePolicies` rows are migration residue from the superseded mental model and must be deleted by the bounded existing-founder cohort migration after an operator-controlled production backup.
 
-These rows are intentionally inert: no member, runtime, onboarding, checkout, billing, entitlement, or provider-connection path reads them, and `pending_credential` must never authorize inference. They establish only who will fund community inference and whether that funding path is ready. Each policy contains no credential, entitlement, membership, usage allowance, price, provider, or model promise.
+The canonical grandfathering truth is founder-level `founderInferenceGrants`, seeded from an explicit list of exactly nine verified existing community owners. Partner status and per-community policy rows never authorize inference. One active founder grant and one encrypted OpenAI API key cover every community currently or subsequently owned by that founder.
+
+For direct community-agent mentions, the member remains the permission and tool principal, the community agent remains the response identity, and the current community owner is only the payer and credential owner. Active owner-funded turns use fixed GPT 5.6 Luna and write one idempotent, privacy-bounded usage receipt. Missing or suspended funding fails closed without member or platform fallback. Approved founders retain the former requester-ChatGPT route only until they activate during the bounded cutover.
 
 The terminal production inspection proved zero legacy source documents, zero financial rows, exact grant and policy evidence, no unexpected, mismatched, or duplicate records, and no truncation. The seven legacy Partner table schemas and the temporary migration code are deleted. The nine public retired tombstones remain only for cached-client compatibility and cannot read or write product or financial state.
 
@@ -1980,8 +1982,8 @@ Payout readiness does not grant community access. It determines whether the buil
 9. Polynet Premium entitlement is the source of truth for premium tool access.
 10. Builder Partner v1 must not enroll, attribute, accrue, adjust, mature, approve, or transfer money.
 11. A legacy grandfather grant is preserved evidence only and must not authorize product access or payment.
-12. A `pending_credential` community inference policy is configuration evidence only and must fail closed; it is not an entitlement, usable credential, usage allowance, or permission to run inference.
-13. The completed legacy retirement must remain terminal: four grandfather grants, eight inert community policies with the `1/2/2/3` ownership distribution, no legacy source or financial tables, and tombstones only at cached-client API boundaries.
+12. Partner evidence and `communityInferencePolicies` must never authorize community inference.
+13. Existing-founder inference eligibility comes only from the explicit nine-owner founder grant cohort; a grant is account-wide, not per-community.
 14. Community creator revenue stays Stripe-native unless Polynet intentionally changes to a held-funds payout architecture.
 15. Full refunds and opened disputes revoke or suspend paid community access through backend subscription lifecycle state.
 16. Paid-tool reporting should distinguish exact provider cost, estimated provider cost, and mixed provider evidence.
@@ -1995,7 +1997,9 @@ Payout readiness does not grant community access. It determines whether the buil
 - treating payout setup as proof that a member has access
 - letting a paid community launch with unclear payout readiness
 - treating a grandfather record as an active entitlement, balance, or payout promise
-- treating a pending community funding policy as an active credential or inference authorization
+- deriving founder inference eligibility from partner evidence or per-community policy rows
+- conflating the community owner payer with the member permission principal
+- falling back to a member or platform credential after owner funding is active
 - storing founder API-key material inside `communityInferencePolicies`
 - recreating the deleted legacy Partner tables or temporary migration code
 - coupling retired Builder Partner concepts back into ordinary community creator revenue

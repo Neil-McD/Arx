@@ -86,8 +86,8 @@ assert.match(
 );
 assert.match(
   issueQuery,
-  /if \(await userHasChatgptConnection\(ctx, userId\)\) \{[\s\S]*return null/,
-  "serve issue lookup should hide historical missing-connection issues after the requester connects ChatGPT",
+  /issueCode === "requester_connection_missing"[\s\S]*await userHasChatgptConnection\(ctx, userId\)[\s\S]*return null/,
+  "serve issue lookup should hide only historical requester-connection issues after the requester connects ChatGPT",
 );
 assert.match(
   issueQuery,
@@ -96,8 +96,8 @@ assert.match(
 );
 assert.match(
   issueQuery,
-  /row\.agentKey !== CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*row\.status !== "skipped"[\s\S]*row\.intakeReason !== "requester_connection_missing"/,
-  "serve issue lookup should only surface skipped canonical community-agent missing-connection requests",
+  /row\.agentKey !== CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*row\.status !== "skipped" && row\.status !== "error"[\s\S]*requester_connection_missing[\s\S]*owner_credential_missing/,
+  "serve issue lookup should surface only canonical requester or owner funding issues",
 );
 assert.match(
   concierge,
@@ -122,8 +122,8 @@ assert.doesNotMatch(
 
 assert.match(
   gateway,
-  /export type CloudCommunityAgentServeIssue[\s\S]*reason: "provider_connection_required"[\s\S]*cta: "connect_chatgpt"/,
-  "gateway should expose the narrow serve issue type",
+  /export type CloudCommunityAgentServeIssue[\s\S]*"provider_connection_required" \| "community_owner_action_required"[\s\S]*"connect_chatgpt" \| null/,
+  "gateway should expose member-connect and owner-action issue types",
 );
 assert.match(
   gateway,
@@ -179,8 +179,8 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /community-agent-serve-notice[\s\S]*Connect ChatGPT to use the community agent[\s\S]*onConnectCommunityAgentServeProvider[\s\S]*onDismissCommunityAgentServeIssue/,
-  "chat panel should render a local ChatGPT connection notice with connect and dismiss actions",
+  /community-agent-serve-notice[\s\S]*Community AI is temporarily unavailable[\s\S]*needsMemberConnection[\s\S]*onConnectCommunityAgentServeProvider[\s\S]*onDismissCommunityAgentServeIssue/,
+  "chat panel should render member-connect or owner-action notices without leaking owner details",
 );
 const noticeBlock = localConstBlock(chatPanel, "renderCommunityAgentServeNotice");
 assert.doesNotMatch(

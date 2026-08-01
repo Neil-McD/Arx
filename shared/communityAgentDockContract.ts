@@ -44,6 +44,20 @@ export function projectCommunityAgentDockPublicIssue(input: {
     return { code: "agent_unavailable", message: "This community agent is currently unavailable." };
   }
   if (
+    reason === "owner_credential_missing" ||
+    reason === "owner_funding_suspended" ||
+    reason === "founder_plan_required" ||
+    errorCode === "owner_credential_missing" ||
+    errorCode === "owner_credential_unreadable" ||
+    errorCode === "owner_funding_suspended" ||
+    errorCode === "founder_plan_required"
+  ) {
+    return {
+      code: "agent_unavailable",
+      message: "Community AI is temporarily unavailable. The owner needs to update inference settings.",
+    };
+  }
+  if (
     reason === "requester_access_missing" ||
     errorCode === "requester_access_missing" ||
     errorCode === "source_not_readable"

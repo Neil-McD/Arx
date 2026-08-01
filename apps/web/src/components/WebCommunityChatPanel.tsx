@@ -1453,20 +1453,27 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   const renderCommunityAgentServeNotice = () => {
     if (!communityAgentServeIssue) return null;
+    const needsMemberConnection = communityAgentServeIssue.cta === "connect_chatgpt";
     return (
       <div className="community-agent-serve-notice" role="status" aria-live="polite">
         <div className="community-agent-serve-notice-copy">
-          <strong>Connect ChatGPT to use the community agent</strong>
+          <strong>
+            {needsMemberConnection
+              ? "Connect ChatGPT to use the community agent"
+              : "Community AI is temporarily unavailable"}
+          </strong>
           <span>{communityAgentServeIssue.message}</span>
         </div>
         <div className="community-agent-serve-notice-actions">
-          <button
-            className="community-agent-serve-notice-primary"
-            type="button"
-            onClick={onConnectCommunityAgentServeProvider}
-          >
-            Connect ChatGPT
-          </button>
+          {needsMemberConnection ? (
+            <button
+              className="community-agent-serve-notice-primary"
+              type="button"
+              onClick={onConnectCommunityAgentServeProvider}
+            >
+              Connect ChatGPT
+            </button>
+          ) : null}
           <button
             className="community-agent-serve-notice-dismiss"
             type="button"
