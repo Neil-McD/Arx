@@ -23,10 +23,10 @@ export const APP_THEME_DEFINITIONS = [
   {
     id: "light",
     label: "Light",
-    description: "Neutral light theme",
+    description: "Paper light with intelligence blue",
     disabled: false,
     family: "light",
-    browserColor: "#F4F4F2",
+    browserColor: "#F8F8F4",
   },
 ] as const satisfies readonly {
   id: string;

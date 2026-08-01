@@ -71,10 +71,10 @@ assert.deepEqual(
   {
     id: "light",
     label: "Light",
-    description: "Neutral light theme",
+    description: "Paper light with intelligence blue",
     disabled: false,
     family: "light",
-    browserColor: "#F4F4F2",
+    browserColor: "#F8F8F4",
   },
 );
 assert.equal(DEFAULT_APP_THEME, "polynet");
@@ -169,13 +169,13 @@ for (const definition of APP_THEME_DEFINITIONS) {
 const primaryAliasBootstrap = runThemeBootstrap({ primary: "cris" });
 assert.equal(primaryAliasBootstrap.rootAttributes.get("data-theme"), "light");
 assert.equal(primaryAliasBootstrap.rootAttributes.get("data-theme-family"), "light");
-assert.equal(primaryAliasBootstrap.browserColor, "#F4F4F2");
+assert.equal(primaryAliasBootstrap.browserColor, "#F8F8F4");
 assert.deepEqual(primaryAliasBootstrap.storageReads, [APP_THEME_STORAGE_KEY]);
 
 const legacyBootstrap = runThemeBootstrap({ legacy: "cris" });
 assert.equal(legacyBootstrap.rootAttributes.get("data-theme"), "light");
 assert.equal(legacyBootstrap.rootAttributes.get("data-theme-family"), "light");
-assert.equal(legacyBootstrap.browserColor, "#F4F4F2");
+assert.equal(legacyBootstrap.browserColor, "#F8F8F4");
 assert.deepEqual(legacyBootstrap.storageReads, [
   APP_THEME_STORAGE_KEY,
   LEGACY_APP_THEME_STORAGE_KEY,
@@ -215,7 +215,7 @@ const root = {
 applyAppThemeAttributes("light", root);
 assert.equal(attributes.get("data-theme"), "light");
 assert.equal(attributes.get("data-theme-family"), "light");
-assert.equal(browserThemeColor, "#F4F4F2");
+assert.equal(browserThemeColor, "#F8F8F4");
 
 applyAppThemeAttributes("polynet", root);
 assert.equal(attributes.get("data-theme"), "polynet");
@@ -260,24 +260,26 @@ assert.equal(
 );
 
 [
-  "--bg-app: #F4F4F2;",
-  "--bg-workspace: #FAFAF8;",
+  "--bg-app: #F8F8F4;",
+  "--bg-workspace: #F8F8F4;",
   "--bg-panel: #F0F0EE;",
-  "--surface-rail: #F4F4F2;",
+  "--surface-rail: #F8F8F4;",
   "--surface-nav: #F0F0EE;",
   "--bg-card: #FFFFFF;",
+  "--bg-card-hover: #ECECEA;",
   "--surface-selected: #E9E9E6;",
-  "--text-primary: #18181B;",
-  "--text-muted: #5F5F5A;",
-  "--text-faint: #6E6E69;",
-  "--border-strong: #C8C8C2;",
-  "--border-default: #DEDEDA;",
-  "--divider-accent: #C8C8C2;",
-  "--accent-brand: #AD4665;",
-  "--accent-selection: #242424;",
-  "--accent-agent: #6D4BD1;",
-  "--text-link: #1D4ED8;",
-  "--text-selected: #18181B;",
+  "--text-primary: #171719;",
+  "--text-muted: #6B6974;",
+  "--text-faint: #6B6974;",
+  "--border-strong: rgba(23, 23, 25, 0.22);",
+  "--border-default: rgba(23, 23, 25, 0.1);",
+  "--divider-accent: rgba(23, 23, 25, 0.22);",
+  "--accent-brand: #2F55FF;",
+  "--accent-selection: #2F55FF;",
+  "--accent-agent: #2F55FF;",
+  "--text-link: #2F55FF;",
+  "--stroke-selected: #2F55FF;",
+  "--text-selected: #171719;",
   "--community-social-embed-surface: var(--surface-card);",
   "--community-social-embed-surface-hover: var(--surface-card-hover);",
   "--community-social-embed-stroke: var(--stroke-default);",
@@ -286,6 +288,12 @@ assert.equal(
 ].forEach((token) => {
   assert.ok(lightThemeBlock.includes(token), `Light should define ${token}`);
 });
+for (const removedLavender of ["#EBE9FB", "#DCD8F7"]) {
+  assert.ok(
+    !lightThemeBlock.includes(removedLavender),
+    `Light structural surfaces should not retain legacy lavender ${removedLavender}`,
+  );
+}
 assert.match(lightThemeBlock, /color-scheme:\s*light;/);
 assert.match(
   baseCss,
@@ -584,18 +592,21 @@ assert.match(
 );
 
 const accessiblePairs = [
-  ["Primary ink on canvas", "#18181B", "#F4F4F2"],
-  ["Secondary ink on canvas", "#3F3F3C", "#F4F4F2"],
-  ["Muted ink on canvas", "#5F5F5A", "#F4F4F2"],
-  ["Faint ink on canvas", "#6E6E69", "#F4F4F2"],
-  ["Selection ink on card", "#242424", "#FFFFFF"],
-  ["White on selection ink", "#FFFFFF", "#242424"],
-  ["Brand rose on card", "#AD4665", "#FFFFFF"],
-  ["Agent violet on card", "#6D4BD1", "#FFFFFF"],
-  ["Agent violet on agent surface", "#6D4BD1", "#F0ECFB"],
-  ["Navigation link on card", "#1D4ED8", "#FFFFFF"],
-  ["Functional success on card", "#157347", "#FFFFFF"],
-  ["Functional error on canvas", "#B42318", "#F4F4F2"],
+  ["Primary ink on canvas", "#171719", "#F8F8F4"],
+  ["Secondary ink on canvas", "#6B6974", "#F8F8F4"],
+  ["Muted ink on canvas", "#6B6974", "#F8F8F4"],
+  ["Faint ink on canvas", "#6B6974", "#F8F8F4"],
+  ["Selection ink on card", "#171719", "#FFFFFF"],
+  ["White on control ink", "#FFFFFF", "#171719"],
+  ["Intelligence blue on card", "#2F55FF", "#FFFFFF"],
+  ["Intelligence blue on canvas", "#2F55FF", "#F8F8F4"],
+  [
+    "Intelligence blue on agent surface",
+    "#2F55FF",
+    blendHex("#2F55FF", "#FFFFFF", 0.1),
+  ],
+  ["Functional success on card", "#147A4B", "#FFFFFF"],
+  ["Functional error on canvas", "#B42318", "#F8F8F4"],
   [
     "Functional error on recording surface",
     "#B42318",

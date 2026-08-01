@@ -284,95 +284,95 @@
   --status-executed: #202d3f;
 }
 
-/* Light theme - "Neutral Canvas" */
+/* Light theme - "Paper Intelligence" */
 :root[data-theme="light"] {
   color-scheme: light;
 
   /*
-   * Neutral Light Palette
-   * Philosophy: structural surfaces stay neutral across community identities.
-   * Color appears only when a semantic role requires it.
+   * Paper Intelligence Palette
+   * Philosophy: paper is the dominant work surface, neutral gray identifies
+   * operating context, and intelligence blue marks live agency and selection.
    */
 
-  /* === FOUNDATION: Neutral canvas + quiet context === */
-  --bg-app: #F4F4F2;
-  --bg-header: rgba(250, 250, 248, 0.94);
+  /* === FOUNDATION: Paper canvas + neutral context === */
+  --bg-app: #F8F8F4;
+  --bg-header: rgba(248, 248, 244, 0.94);
   --bg-panel: #F0F0EE;
   --bg-modal: #FFFFFF;
-  --bg-workspace: #FAFAF8;
+  --bg-workspace: #F8F8F4;
   --bg-card: #FFFFFF;
   --bg-card-solid: #FFFFFF;
-  --bg-card-alt: #F6F6F4;
+  --bg-card-alt: #F8F8F4;
   --bg-card-hover: #ECECEA;
   --bg-input: #FFFFFF;
   --bg-terminal: #171719;
-  --surface-rail: #F4F4F2;
+  --surface-rail: #F8F8F4;
   --surface-nav: #F0F0EE;
   --workspace-composer-bg: #FFFFFF;
   --workspace-landing-action-bg: #FFFFFF;
   --workspace-landing-action-hover-bg: #ECECEA;
 
   /* === CONTROLS: Ink on paper === */
-  --bg-button: #242424;
-  --bg-button-hover: #18181B;
+  --bg-button: #171719;
+  --bg-button-hover: color-mix(in srgb, #171719 88%, #FFFFFF 12%);
   --bg-button-text: #FFFFFF;
 
-  /* === SEMANTIC COLOR: Separate selection, brand, agent, and navigation === */
-  --accent-gold: #242424;
-  --accent-gold-subtle: #3F3F3C;
-  --accent-gold-glow: rgba(36, 36, 36, 0.14);
-  --accent-brand: #AD4665;
-  --accent-selection: #242424;
-  --accent-agent: #6D4BD1;
-  --accent-agent-strong: #5B3DB8;
-  --accent-agent-foreground: #6D4BD1;
-  --accent-agent-surface: #F0ECFB;
-  --accent-attention: #AD4665;
-  --focus-ring: #2563EB;
-  --text-link: #1D4ED8;
-  --text-link-hover: #1E40AF;
-  --accent-cyan: #1D4ED8;
-  --accent-cyan-subtle: #1E40AF;
-  --accent-cyan-glow: rgba(29, 78, 216, 0.16);
-  --chat-link: #1D4ED8;
-  --chat-link-hover: #1E40AF;
+  /* === INTELLIGENCE: One active blue === */
+  --accent-gold: #2F55FF;
+  --accent-gold-subtle: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+  --accent-gold-glow: rgba(47, 85, 255, 0.18);
+  --accent-brand: #2F55FF;
+  --accent-selection: #2F55FF;
+  --accent-agent: #2F55FF;
+  --accent-agent-strong: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+  --accent-agent-foreground: #2F55FF;
+  --accent-agent-surface: rgba(47, 85, 255, 0.1);
+  --accent-attention: #2F55FF;
+  --focus-ring: rgba(47, 85, 255, 0.52);
+  --text-link: #2F55FF;
+  --text-link-hover: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+  --accent-cyan: #2F55FF;
+  --accent-cyan-subtle: color-mix(in srgb, #2F55FF 84%, #171719 16%);
+  --accent-cyan-glow: rgba(47, 85, 255, 0.16);
+  --chat-link: #2F55FF;
+  --chat-link-hover: color-mix(in srgb, #2F55FF 84%, #171719 16%);
 
   /* Functional feedback stays semantically distinct from the brand palette. */
-  --accent-success: #157347;
+  --accent-success: #147A4B;
   --accent-error: #B42318;
 
   /* === TYPOGRAPHY: Accessible ink === */
-  --text-primary: #18181B;
-  --text-secondary: #3F3F3C;
-  --text-muted: #5F5F5A;
-  --text-faint: #6E6E69;
+  --text-primary: #171719;
+  --text-secondary: #6B6974;
+  --text-muted: #6B6974;
+  --text-faint: #6B6974;
   --text-terminal: #FFFFFF;
 
   /* === STRUCTURE: Ink-derived lines === */
-  --border-default: #DEDEDA;
-  --border-strong: #C8C8C2;
-  --border-muted: #EAEAE7;
-  --border-active: #242424;
-  --divider-accent: #C8C8C2;
+  --border-default: rgba(23, 23, 25, 0.1);
+  --border-strong: rgba(23, 23, 25, 0.22);
+  --border-muted: rgba(23, 23, 25, 0.1);
+  --border-active: #2F55FF;
+  --divider-accent: rgba(23, 23, 25, 0.22);
   --header-border: none;
 
   /* === ICONS + INTERACTION === */
-  --icon-default: #5F5F5A;
-  --icon-hover: #18181B;
-  --icon-active: #242424;
-  --hover-overlay: rgba(24, 24, 27, 0.04);
-  --active-overlay: rgba(24, 24, 27, 0.08);
+  --icon-default: #6B6974;
+  --icon-hover: #171719;
+  --icon-active: #2F55FF;
+  --hover-overlay: rgba(23, 23, 25, 0.04);
+  --active-overlay: rgba(23, 23, 25, 0.08);
   --panel-shadow: none;
 
-  /* === SELECTED STATE: Neutral field + ink structure === */
+  /* === SELECTED STATE: Neutral field + blue structure === */
   --surface-selected: #E9E9E6;
-  --stroke-selected: #242424;
-  --text-selected: #18181B;
+  --stroke-selected: #2F55FF;
+  --text-selected: #171719;
 
   /* === COMPOSER: Raised white work surface === */
   --composer-surface: #FFFFFF;
-  --composer-border: #DEDEDA;
-  --composer-focus-ring: rgba(37, 99, 235, 0.4);
+  --composer-border: rgba(23, 23, 25, 0.1);
+  --composer-focus-ring: rgba(47, 85, 255, 0.42);
 
   /* === SOCIAL EMBEDS: Theme the Polynet-owned shell, not provider media === */
   --community-social-embed-surface: var(--surface-card);
@@ -385,13 +385,13 @@
 
   /* === STATUS: Light semantic surfaces === */
   --status-default: #FFFFFF;
-  --status-proposed: #F4F4F2;
-  --status-approved: color-mix(in srgb, #157347 12%, #FFFFFF 88%);
-  --status-executed: color-mix(in srgb, #1D4ED8 10%, #FFFFFF 90%);
+  --status-proposed: #E9E9E6;
+  --status-approved: color-mix(in srgb, #147A4B 12%, #FFFFFF 88%);
+  --status-executed: rgba(47, 85, 255, 0.1);
 
-  --community-rail-button-border: 1px solid #DEDEDA;
-  --scrollbar-thumb: #C8C8C2;
-  --scrollbar-thumb-hover: #6E6E69;
+  --community-rail-button-border: 1px solid rgba(23, 23, 25, 0.1);
+  --scrollbar-thumb: rgba(23, 23, 25, 0.22);
+  --scrollbar-thumb-hover: #6B6974;
 }
 
 * {
