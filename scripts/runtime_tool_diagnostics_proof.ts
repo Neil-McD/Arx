@@ -56,7 +56,7 @@ const runtimePanelBlock = sliceBetween(
 const toolBalancePanelBlock = sliceBetween(
   operatorPanel,
   "<h2>Tool balance revenue</h2>",
-  "<h2>Partner payout cycles</h2>",
+  "<h2>Checkout funnel</h2>",
 );
 
 assert.match(

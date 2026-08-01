@@ -2,7 +2,6 @@ export type SettingsPage =
   | "profile"
   | "account"
   | "billing"
-  | "partners"
   | "appearance";
 
 export type SettingsGroup = SettingsPage;
@@ -167,8 +166,6 @@ export function settingsGroupLabel(group: SettingsGroup): string {
       return "Account";
     case "billing":
       return "Billing";
-    case "partners":
-      return "Partners";
     case "appearance":
       return "Appearance";
   }

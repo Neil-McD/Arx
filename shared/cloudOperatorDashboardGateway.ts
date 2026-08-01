@@ -10,8 +10,6 @@ import type {
   OperatorFrontendErrorDiagnosticsSnapshot,
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,
-  OperatorPartnerPerformanceSnapshot,
-  OperatorPartnerPayoutCyclesSnapshot,
   OperatorRange,
   OperatorRiskItem,
   OperatorRuntimeToolDiagnosticsSnapshot,
@@ -438,78 +436,6 @@ export async function loadOperatorMonetizationCanonical(params: {
     authSubject,
     range: params.range ?? "30d",
   })) as OperatorMonetizationSnapshot;
-}
-
-export async function loadOperatorPartnerPayoutCyclesCanonical(params: {
-  session: AuthSessionLike;
-  limit?: number;
-}): Promise<OperatorPartnerPayoutCyclesSnapshot> {
-  const { client, authSubject } = await withOperatorAuth(params.session);
-  return (await client.query("builderPartners:listPartnerPayoutCyclesForOperator" as any, {
-    authSubject,
-    limit: params.limit ?? 12,
-  })) as OperatorPartnerPayoutCyclesSnapshot;
-}
-
-export async function loadOperatorPartnerPerformanceCanonical(params: {
-  session: AuthSessionLike;
-  range?: OperatorRange;
-  limit?: number;
-}): Promise<OperatorPartnerPerformanceSnapshot> {
-  const { client, authSubject } = await withOperatorAuth(params.session);
-  return (await client.query("builderPartners:listPartnerPerformanceForOperator" as any, {
-    authSubject,
-    range: params.range ?? "30d",
-    limit: params.limit ?? 12,
-  })) as OperatorPartnerPerformanceSnapshot;
-}
-
-export async function approveOperatorPartnerPayoutCycleCanonical(params: {
-  session: AuthSessionLike;
-  cycleId: string;
-}): Promise<void> {
-  const { client, authSubject } = await withOperatorAuth(params.session);
-  await client.mutation("builderPartners:approvePartnerPayoutCycle" as any, {
-    authSubject,
-    batchId: params.cycleId,
-  });
-}
-
-export async function retryOperatorPartnerPayoutCycleCanonical(params: {
-  session: AuthSessionLike;
-  cycleId: string;
-}): Promise<void> {
-  const { client, authSubject } = await withOperatorAuth(params.session);
-  await client.mutation("builderPartners:retryPartnerPayoutCycle" as any, {
-    authSubject,
-    batchId: params.cycleId,
-  });
-}
-
-export async function holdOperatorPartnerPayoutCycleCanonical(params: {
-  session: AuthSessionLike;
-  cycleId: string;
-  reason?: string;
-}): Promise<void> {
-  const { client, authSubject } = await withOperatorAuth(params.session);
-  await client.mutation("builderPartners:holdPartnerPayoutCycle" as any, {
-    authSubject,
-    batchId: params.cycleId,
-    reason: params.reason ?? "operator_hold",
-  });
-}
-
-export async function rejectOperatorPartnerPayoutCycleCanonical(params: {
-  session: AuthSessionLike;
-  cycleId: string;
-  reason?: string;
-}): Promise<void> {
-  const { client, authSubject } = await withOperatorAuth(params.session);
-  await client.mutation("builderPartners:rejectPartnerPayoutCycle" as any, {
-    authSubject,
-    batchId: params.cycleId,
-    reason: params.reason ?? "operator_rejected",
-  });
 }
 
 export async function loadOperatorWebDeployDiagnosticsCanonical(params: {

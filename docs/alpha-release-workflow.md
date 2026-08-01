@@ -73,6 +73,81 @@ npm run check:third-party-mcp-retirement-complete-proof
 Never delete the production rows before the first release proves ordinary
 product traffic can no longer create or refresh them.
 
+### Builder Partner v1 retirement
+
+Builder Partner v1 retirement is a two-release evidence and ownership-policy
+migration, not a financial or runtime migration:
+
+1. First release the evidence-only grant registry, the inert community inference
+   funding-policy registry, bounded capture/inspection functions, cached-client
+   tombstones, and the deletion of every member, operator, commission, adjustment,
+   cron, and Stripe-transfer call path. Keep the seven legacy Partner tables
+   temporarily as source evidence.
+2. Deploy Convex from the exact validated release commit before the web so cached
+   clients encounter deterministic retired tombstones.
+3. Run the read-only production inspection:
+
+```bash
+npx convex run builderPartners:inspectLegacyBuilderPartnerRetirementInternal '{}' --prod
+```
+
+4. Stop unless the inspection is untruncated, reports exactly four active source
+   partners, exactly eight communities owned with the sorted distribution
+   `1/2/2/3`, zero non-active partners, and zero financial rows. If production no
+   longer matches that audited shape, investigate rather than widening the migration.
+5. Create and download a production backup before any retirement mutation. Stop
+   unless the backup is complete and recoverable through the normal Convex backup
+   workflow.
+6. Atomically capture the four grandfather records and eight community policies once:
+
+```bash
+npx convex run builderPartners:captureLegacyBuilderPartnerFoundationInternal '{}' --prod
+```
+
+7. Repeat the capture command to prove idempotency: it must report `created: 0`,
+   `alreadyCaptured: 4`, `communityPoliciesCreated: 0`, and
+   `communityPoliciesAlreadyCaptured: 8`. Then repeat the inspection.
+8. Stop unless `captureComplete`, `migrationComplete`, and
+   `readyForSourceDeletion` are all `true`, `retirementPhase` is
+   `ready_for_source_deletion`, `grandfatherGrants.total` is `4`, every grant,
+   source, duplication, and legal-acceptance mismatch count is zero,
+   `ownedCommunities.total` is `8`, `ownedCommunities.distributionMatches` is
+   `true`, `communityInferencePolicies.total` is `8`, every community-policy
+   missing, unexpected, mismatch, and duplication count is zero, every finance count
+   is zero, and `isTruncated` is `false`.
+9. Delete the four legacy source documents through the guarded mutation:
+
+```bash
+npx convex run builderPartners:deleteLegacyBuilderPartnerSourceInternal '{}' --prod
+```
+
+10. Repeat the delete command to prove idempotency. It must report
+    `alreadyDeleted: true` and `deletedSourcePartners: 0`.
+11. Repeat the read-only inspection. Stop unless `sourceDeletionComplete` and
+    `migrationComplete` are `true`, `retirementPhase` is `source_deleted`,
+    `partners.total` is `0`, `grandfatherGrants.total` is `4`, every finance
+    count is zero, `ownedCommunities.total` is `8`,
+    `ownedCommunities.distributionMatches` is `true`,
+    `communityInferencePolicies.total` is `8`, every community-policy mismatch
+    count is zero, and `isTruncated` is `false`.
+12. Only in a later cleanup release remove the seven now-empty legacy Partner
+    schema tables, the three migration functions, and the temporary retirement
+    policy/test. Retain the tiny public tombstones until the cached-production-client
+    compatibility window explicitly expires.
+
+The grandfather grant is evidence for a possible future program only. It must not
+be interpreted as access, money, a commission balance, or a payout promise. The
+eight `communityInferencePolicies` rows are a separate ownership boundary. In this
+release they must all remain `owner_api_key` and `pending_credential`, with each
+community owner recorded as payer; no member, runtime, onboarding, checkout,
+billing, entitlement, or provider-connection path may read them yet. The policy
+contains no credential, membership, entitlement, usage allowance, price, provider,
+or model promise.
+`pending_credential` means the founder has not supplied the required API key, so it
+must never authorize inference. Never run capture or source deletion before the
+first retirement release has severed all writers, and never delete source evidence
+without the completed production backup.
+
 ## Web Production Rule
 
 - Web production deploys must come from GitHub `origin/main` through Vercel project `polynet`.

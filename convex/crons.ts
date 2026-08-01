@@ -119,31 +119,6 @@ crons.interval(
   },
 );
 
-crons.daily(
-  "advance builder partner commissions to payable",
-  {
-    hourUTC: 6,
-    minuteUTC: 0,
-  },
-  (internal as any).builderPartners.advancePartnerCommissionsToPayableInternal,
-  {
-    limit: 250,
-  },
-);
-
-crons.monthly(
-  "create builder partner payout cycle",
-  {
-    day: 1,
-    hourUTC: 7,
-    minuteUTC: 0,
-  },
-  (internal as any).builderPartners.createPartnerPayoutCycleInternal,
-  {
-    limit: 250,
-  },
-);
-
 crons.monthly(
   "prune low-signal community ai feed posts",
   {

@@ -14,8 +14,6 @@ import {
   WebBillingSettingsSection,
   type WebBillingSettingsSectionProps,
 } from "./WebBillingSettingsSection";
-import { WebBuilderPartnerSettingsSection } from "./WebBuilderPartnerSettingsSection";
-import type { WebBuilderPartnerProgramPanelProps } from "./WebBuilderPartnerProgramPanel";
 import { WebPolynetMcpAccountSection } from "./WebPolynetMcpAccountSection";
 import { WebProfileSettingsSection } from "./WebProfileSettingsSection";
 
@@ -36,7 +34,6 @@ export type WebSettingsPanelsProps = {
   };
   account: WebAccountSettingsSectionProps;
   billing: WebBillingSettingsSectionProps;
-  partners: WebBuilderPartnerProgramPanelProps;
   appearance: {
     appTheme: AppTheme;
     setAppTheme: (value: AppTheme) => void;
@@ -106,7 +103,5 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
           setAppTheme={props.appearance.setAppTheme}
         />
       );
-    case "partners":
-      return <WebBuilderPartnerSettingsSection {...props.partners} />;
   }
 }

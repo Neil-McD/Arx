@@ -116,8 +116,10 @@ const globalOverlays = read("apps/web/src/controllers/buildWebGlobalOverlayHostP
 assert.match(navigation, /\| "settings"/);
 assert.match(
   navigation,
-  /export type SettingsPage =[\s\S]*"profile"[\s\S]*"account"[\s\S]*"billing"[\s\S]*"partners"[\s\S]*"appearance"/,
+  /export type SettingsPage =[\s\S]*"profile"[\s\S]*"account"[\s\S]*"billing"[\s\S]*"appearance"/,
 );
+assert.doesNotMatch(navigation, /\| "partners"/);
+assert.doesNotMatch(settingsNav, /Builder Partner|Partner payouts/);
 assert.doesNotMatch(navigation, /\| "agent"|\| "integrations"/);
 assert.doesNotMatch(navigation, /AppView = "home" \| "settings"/);
 assert.doesNotMatch(navSnapshot, /snapshot\.view === "settings"/);

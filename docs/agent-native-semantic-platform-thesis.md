@@ -402,7 +402,7 @@ now. Execution follows `docs/polynet-reduction-execution-contract-v1.md`:
 8. delete deferred Workspace/UI/docs/configuration surface before decomposing
    and optimizing what remains;
 9. prove backup, restore, and operational recovery;
-10. reconcile historical Builder Partner obligations last.
+10. preserve the four audited legacy Builder Partner identities as inert grandfather evidence, then delete the retired source substrate.
 
 Each slice receives its own authority, non-goals, proof, and approval. Cleanup
 and substrate work may interleave only when the cleanup establishes the single

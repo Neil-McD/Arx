@@ -269,7 +269,7 @@ function parseSettingsPage(value: string | null | undefined): SettingsPage {
       return "billing";
     case "partner":
     case "partners":
-      return "partners";
+      return "billing";
     case "agent":
     case "integrations":
     case "skills":

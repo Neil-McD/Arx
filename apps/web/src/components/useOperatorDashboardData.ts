@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import {
-  approveOperatorPartnerPayoutCycleCanonical,
-  holdOperatorPartnerPayoutCycleCanonical,
   loadOperatorAccountSetupSnapshotCanonical,
   loadOperatorAuthAccessDiagnosticsCanonical,
   loadOperatorCommunitiesCanonical,
@@ -11,16 +9,12 @@ import {
   loadOperatorFrontendErrorDiagnosticsCanonical,
   loadOperatorMonetizationCanonical,
   loadOperatorOverviewCanonical,
-  loadOperatorPartnerPerformanceCanonical,
-  loadOperatorPartnerPayoutCyclesCanonical,
   loadOperatorRisksCanonical,
   loadOperatorRuntimeToolDiagnosticsCanonical,
   loadOperatorSecurityAuditDiagnosticsCanonical,
   loadOperatorToolEconomicsCanonical,
   loadOperatorWebDeployDiagnosticsCanonical,
   recordOperatorDashboardAccessCanonical,
-  rejectOperatorPartnerPayoutCycleCanonical,
-  retryOperatorPartnerPayoutCycleCanonical,
 } from "../../../../shared/cloudOperatorDashboardGateway";
 import type {
   OperatorAccountSetupSnapshot,
@@ -31,15 +25,12 @@ import type {
   OperatorFrontendErrorDiagnosticsSnapshot,
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,
-  OperatorPartnerPerformanceSnapshot,
-  OperatorPartnerPayoutCyclesSnapshot,
   OperatorRiskItem,
   OperatorRuntimeToolDiagnosticsSnapshot,
   OperatorSecurityAuditDiagnosticsSnapshot,
   OperatorToolEconomicsSnapshot,
   OperatorWebDeployDiagnosticsSnapshot,
 } from "../../../../shared/operatorTypes";
-import type { PartnerPayoutCycleActionName, PartnerPayoutCycleActions } from "./workspaceRightPanelOperatorShared";
 
 export type OperatorDashboardState = {
   overview: OperatorOverviewSnapshot | null;
@@ -52,8 +43,6 @@ export type OperatorDashboardState = {
   emailAuth: OperatorEmailAuthDiagnosticSnapshot | null;
   frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null;
   accountSetup: OperatorAccountSetupSnapshot | null;
-  partnerPerformance: OperatorPartnerPerformanceSnapshot | null;
-  partnerPayoutCycles: OperatorPartnerPayoutCyclesSnapshot | null;
   communityRows: OperatorCommunityRecord[];
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
@@ -71,8 +60,6 @@ export function createEmptyOperatorDashboardState(): OperatorDashboardState {
     emailAuth: null,
     frontendErrors: null,
     accountSetup: null,
-    partnerPerformance: null,
-    partnerPayoutCycles: null,
     communityRows: [],
     risks: [],
     events: [],
@@ -103,62 +90,6 @@ export function useOperatorDashboardData(params: {
   const [state, setState] = useState<OperatorDashboardState>(() => createEmptyOperatorDashboardState());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [cycleActionState, setCycleActionState] = useState<{
-    inFlightCycleId: string | null;
-    inFlightAction: PartnerPayoutCycleActionName | null;
-    error: string | null;
-  }>({ inFlightCycleId: null, inFlightAction: null, error: null });
-
-  const refreshPartnerPayoutCycles = useCallback(async (session: AuthSessionLike) => {
-    const [partnerPayoutCycles, partnerPerformance] = await Promise.all([
-      loadOperatorPartnerPayoutCyclesCanonical({ session, limit: 12 }),
-      loadOperatorPartnerPerformanceCanonical({ session, range: "30d", limit: 12 }),
-    ]);
-    setState((prev) => ({ ...prev, partnerPayoutCycles, partnerPerformance }));
-  }, []);
-
-  const runPartnerPayoutCycleAction = useCallback(
-    async (action: PartnerPayoutCycleActionName, cycleId: string) => {
-      const session = params.session;
-      if (!session) {
-        setCycleActionState({ inFlightCycleId: null, inFlightAction: null, error: "Operator session required." });
-        return;
-      }
-      setCycleActionState({ inFlightCycleId: cycleId, inFlightAction: action, error: null });
-      try {
-        if (action === "approve") {
-          await approveOperatorPartnerPayoutCycleCanonical({ session, cycleId });
-        } else if (action === "retry") {
-          await retryOperatorPartnerPayoutCycleCanonical({ session, cycleId });
-        } else if (action === "hold") {
-          await holdOperatorPartnerPayoutCycleCanonical({ session, cycleId, reason: "operator_hold" });
-        } else {
-          await rejectOperatorPartnerPayoutCycleCanonical({ session, cycleId, reason: "operator_rejected" });
-        }
-        await refreshPartnerPayoutCycles(session);
-        setCycleActionState({ inFlightCycleId: null, inFlightAction: null, error: null });
-      } catch (nextError) {
-        setCycleActionState({
-          inFlightCycleId: null,
-          inFlightAction: null,
-          error: nextError instanceof Error ? nextError.message : "Partner payout cycle action failed.",
-        });
-      }
-    },
-    [params.session, refreshPartnerPayoutCycles],
-  );
-
-  const partnerPayoutCycleActions = useMemo<PartnerPayoutCycleActions>(
-    () => ({
-      ...cycleActionState,
-      approve: (cycleId: string) => runPartnerPayoutCycleAction("approve", cycleId),
-      retry: (cycleId: string) => runPartnerPayoutCycleAction("retry", cycleId),
-      hold: (cycleId: string) => runPartnerPayoutCycleAction("hold", cycleId),
-      reject: (cycleId: string) => runPartnerPayoutCycleAction("reject", cycleId),
-    }),
-    [cycleActionState, runPartnerPayoutCycleAction],
-  );
-
   useEffect(() => {
     let isAlive = true;
     if (!params.enabled) {
@@ -187,8 +118,6 @@ export function useOperatorDashboardData(params: {
           loadOperatorEmailAuthDiagnosticCanonical({ session, includeWorkosUserLookup: true }),
           loadOperatorFrontendErrorDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorAccountSetupSnapshotCanonical({ session, completed: false, limit: 24 }),
-          loadOperatorPartnerPerformanceCanonical({ session, range: "30d", limit: 12 }),
-          loadOperatorPartnerPayoutCyclesCanonical({ session, limit: 12 }),
           loadOperatorCommunitiesCanonical({ session, limit: 12 }),
           loadOperatorRisksCanonical({ session, limit: 12 }),
           loadOperatorEventsCanonical({ session, limit: 12 }),
@@ -204,8 +133,6 @@ export function useOperatorDashboardData(params: {
           emailAuth,
           frontendErrors,
           accountSetup,
-          partnerPerformance,
-          partnerPayoutCycles,
           communityRows,
           risks,
           events,
@@ -221,8 +148,6 @@ export function useOperatorDashboardData(params: {
           ["email_auth", emailAuth],
           ["frontend_errors", frontendErrors],
           ["account_setup", accountSetup],
-          ["partner_performance", partnerPerformance],
-          ["partner_payout_cycles", partnerPayoutCycles],
           ["communities", communityRows],
           ["risks", risks],
           ["events", events],
@@ -238,8 +163,6 @@ export function useOperatorDashboardData(params: {
           emailAuth: fulfilledValue(emailAuth),
           frontendErrors: fulfilledValue(frontendErrors),
           accountSetup: fulfilledValue(accountSetup),
-          partnerPerformance: fulfilledValue(partnerPerformance),
-          partnerPayoutCycles: fulfilledValue(partnerPayoutCycles),
           communityRows: fulfilledList(communityRows),
           risks: fulfilledList(risks),
           events: fulfilledList(events),
@@ -259,8 +182,6 @@ export function useOperatorDashboardData(params: {
             emailAuth: nextState.emailAuth ?? prev.emailAuth,
             frontendErrors: nextState.frontendErrors ?? prev.frontendErrors,
             accountSetup: nextState.accountSetup ?? prev.accountSetup,
-            partnerPerformance: nextState.partnerPerformance ?? prev.partnerPerformance,
-            partnerPayoutCycles: nextState.partnerPayoutCycles ?? prev.partnerPayoutCycles,
             communityRows: nextState.communityRows ?? prev.communityRows,
             risks: nextState.risks ?? prev.risks,
             events: nextState.events ?? prev.events,
@@ -292,5 +213,5 @@ export function useOperatorDashboardData(params: {
     [state.communityRows],
   );
 
-  return { state, topCommunities, partnerPayoutCycleActions, isLoading, error };
+  return { state, topCommunities, isLoading, error };
 }

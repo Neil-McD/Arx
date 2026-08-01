@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Handshake } from "lucide-react";
 import {
   settingsGroupLabel,
   type SettingsGroup,
@@ -58,15 +57,6 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
         <svg viewBox="0 0 24 24">
           <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" />
         </svg>
-      </span>
-    ),
-  },
-  {
-    id: "partners",
-    page: "partners",
-    icon: (
-      <span className="nav-icon nav-icon-emphasis">
-        <Handshake />
       </span>
     ),
   },

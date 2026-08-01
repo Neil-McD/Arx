@@ -222,30 +222,6 @@ export function useWebCommunityNavigationActions(params: {
       params.setCommunityOnboardingFirstPostFocusRequest,
     ]);
 
-  const openOwnedPartnerCommunitySettings = useCallback(
-    (communityId: string) => {
-      if (!confirmCommunityChange(communityId)) return;
-      const slug =
-        params.resolveKnownCommunitySlugById(communityId) ??
-        (String(
-          params.communities.find(
-            (community) => community.id === communityId,
-          )?.slug ?? "",
-        ).trim() || null);
-      if (slug) {
-        params.openCommunityTab(slug, "settings", {
-          pushSnapshot: false,
-        });
-      }
-    },
-    [
-      confirmCommunityChange,
-      params.communities,
-      params.openCommunityTab,
-      params.resolveKnownCommunitySlugById,
-    ],
-  );
-
   return {
     handlePreviewCommunityFunnel,
     handleSelectActiveCommunity,
@@ -255,6 +231,5 @@ export function useWebCommunityNavigationActions(params: {
     handleSelectCommunityTab,
     handleSelectCommunityTabFromMobile,
     handleCommunityOnboardingOrientationCompleted,
-    openOwnedPartnerCommunitySettings,
   };
 }

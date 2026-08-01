@@ -79,9 +79,6 @@ export function WebOperatorDashboardHost(props: WebOperatorDashboardHostProps) {
             monetization={operator.state.monetization}
             accountSetup={operator.state.accountSetup}
             toolEconomics={operator.state.toolEconomics}
-            partnerPerformance={operator.state.partnerPerformance}
-            partnerPayoutCycles={operator.state.partnerPayoutCycles}
-            partnerPayoutCycleActions={operator.partnerPayoutCycleActions}
             risks={operator.state.risks}
             events={operator.state.events}
           />
