@@ -7,7 +7,7 @@ export const APP_THEME_DEFINITIONS = [
   {
     id: "dark",
     label: "Dark",
-    description: "Default dark theme",
+    description: "Neutral dark theme",
     disabled: false,
     family: "dark",
     browserColor: "#1A1A1A",
@@ -15,18 +15,18 @@ export const APP_THEME_DEFINITIONS = [
   {
     id: "polynet",
     label: "Polynet Dark",
-    description: "Monolithic surface + violet",
+    description: "Graphite with Polynet accents",
     disabled: false,
     family: "dark",
     browserColor: "#121214",
   },
   {
-    id: "cris",
-    label: "CRIS",
-    description: "Paper workspace + intelligence blue",
+    id: "light",
+    label: "Light",
+    description: "Neutral light theme",
     disabled: false,
     family: "light",
-    browserColor: "#F8F8F4",
+    browserColor: "#F4F4F2",
   },
 ] as const satisfies readonly {
   id: string;
@@ -39,6 +39,10 @@ export const APP_THEME_DEFINITIONS = [
 
 export type AppTheme = (typeof APP_THEME_DEFINITIONS)[number]["id"];
 export type AppThemeDefinition = (typeof APP_THEME_DEFINITIONS)[number];
+
+const LEGACY_APP_THEME_ID_ALIASES: Readonly<Record<string, AppTheme>> = {
+  cris: "light",
+};
 
 export const DEFAULT_APP_THEME: AppTheme = "polynet";
 
@@ -58,7 +62,13 @@ const APP_THEME_ID_SET = new Set<string>(
 export function parseAppTheme(input: string | null | undefined): AppTheme | null {
   const raw = typeof input === "string" ? input.trim() : "";
   if (!raw) return null;
-  return APP_THEME_ID_SET.has(raw) ? (raw as AppTheme) : null;
+  const canonicalTheme = Object.prototype.hasOwnProperty.call(
+    LEGACY_APP_THEME_ID_ALIASES,
+    raw,
+  )
+    ? LEGACY_APP_THEME_ID_ALIASES[raw]
+    : raw;
+  return APP_THEME_ID_SET.has(canonicalTheme) ? (canonicalTheme as AppTheme) : null;
 }
 
 export function getAppThemeDefinition(theme: AppTheme): AppThemeDefinition {
