@@ -28,7 +28,6 @@ import {
   attachStripeCustomerToUser,
 } from "./stripeCustomers";
 import { requireOperatorRole } from "./operatorAccess";
-import { recordPaidToolUsagePartnerCommission } from "./builderPartners";
 import { loadBlaxelWorkspaceConfig } from "./blaxelWorkspaceClient";
 import type {
   ProviderCostBillingDisposition,
@@ -2425,29 +2424,6 @@ function splitSettledCredits(args: {
   };
 }
 
-async function recordSettledPaidToolPartnerCommission(ctx: any, args: {
-  creditKey: string | undefined;
-  userId: any;
-  purchasedCreditsSettled: number;
-  totalCreditsSettled: number;
-  rawVendorCostUsd: number | undefined;
-  nowMs: number;
-}) {
-  const creditKey = String(args.creditKey ?? "").trim();
-  const purchasedCreditsSettled = roundCredits(args.purchasedCreditsSettled);
-  const totalCreditsSettled = roundCredits(args.totalCreditsSettled);
-  if (!creditKey || !(purchasedCreditsSettled > 0) || !(totalCreditsSettled > 0)) return;
-  if (typeof args.rawVendorCostUsd !== "number" || !Number.isFinite(args.rawVendorCostUsd)) return;
-  const paidUsageRatio = Math.min(1, Math.max(0, purchasedCreditsSettled / totalCreditsSettled));
-  await recordPaidToolUsagePartnerCommission(ctx, {
-    referredUserId: args.userId,
-    creditKey,
-    polynetPriceUsd: creditsToUsd(purchasedCreditsSettled),
-    rawVendorCostUsd: roundCurrency(args.rawVendorCostUsd * paidUsageRatio),
-    nowMs: args.nowMs,
-  });
-}
-
 function applySpendableCreditRefund(args: {
   split: ReturnType<typeof splitSettledCredits>;
 }): {
@@ -4427,14 +4403,6 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
           settledAt: nowMs,
           updatedAt: nowMs,
         });
-        await recordSettledPaidToolPartnerCommission(ctx, {
-          creditKey: creditReservationKey,
-          userId: reservation.userId,
-          purchasedCreditsSettled: debitPurchased,
-          totalCreditsSettled,
-          rawVendorCostUsd: roundCurrency(computeCostUsd * chargedRatio),
-          nowMs,
-        });
       } else if (reservation?.status === "succeeded") {
         const settledCredits = roundCredits(
           typeof reservation.creditsSettled === "number"
@@ -4449,14 +4417,6 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
           Number(reservation.purchasedCreditsDebited ?? 0),
           Math.max(0, settledCredits - debitIncluded),
         );
-        await recordSettledPaidToolPartnerCommission(ctx, {
-          creditKey: creditReservationKey,
-          userId: reservation.userId,
-          purchasedCreditsSettled: debitPurchased,
-          totalCreditsSettled: settledCredits,
-          rawVendorCostUsd: reservation.rawVendorCostUsd,
-          nowMs,
-        });
       }
     } else {
       const directDebit = await debitAvailableWorkspaceCredits({
@@ -4803,14 +4763,6 @@ export const settleCreditsInternal = internalMutation({
       if (providerCostEntry) {
         await recordProviderCostEntryBestEffort(ctx, providerCostEntry);
       }
-      await recordSettledPaidToolPartnerCommission(ctx, {
-        creditKey,
-        userId: entry.userId,
-        purchasedCreditsSettled,
-        totalCreditsSettled: creditsSettled,
-        rawVendorCostUsd: settledRawVendorCostUsd,
-        nowMs,
-      });
       await scheduleWorkspaceAutoRechargeAfterSettlementBestEffort(ctx, entry.userId, nowMs);
     }
     return await ctx.db.get(entry._id);

@@ -33,7 +33,6 @@ import {
 } from "./communityCore";
 import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
-import { recordCommunityRevenuePartnerCommission } from "./builderPartners";
 import {
   attachStripeCustomerToUser,
   ensureStripeCustomerForUser,
@@ -607,28 +606,6 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
       },
       createdAt: nowMs,
     });
-    if (
-      args.markComplete &&
-      row.communityId &&
-      communitySubscriptionStatusGrantsAccess(communitySubscriptionStatus)
-    ) {
-      await recordCommunityRevenuePartnerCommission(ctx, {
-        communityId: row.communityId,
-        sourceCheckoutSessionId: row.sessionId,
-        sourceProviderSubscriptionId:
-          String(args.providerSubscriptionId ?? row.providerSubscriptionId ?? "").trim() || undefined,
-        sourceProviderInvoiceId:
-          String(args.sourceProviderInvoiceId ?? row.sourceProviderInvoiceId ?? "").trim() || undefined,
-        sourceProviderPaymentIntentId:
-          String(args.sourceProviderPaymentIntentId ?? row.sourceProviderPaymentIntentId ?? "").trim() || undefined,
-        sourceProviderChargeId:
-          String(args.sourceProviderChargeId ?? row.sourceProviderChargeId ?? "").trim() || undefined,
-        amountBaseUnits: row.amountBaseUnits,
-        currency: row.currency,
-        currencyDecimals: row.currencyDecimals,
-        nowMs,
-      });
-    }
   },
 });
 

@@ -320,8 +320,13 @@ assert.match(
 );
 assert.match(
   workspaceCreditsSource,
-  /if \(args\.status === "succeeded"\)[\s\S]*recordSettledPaidToolPartnerCommission[\s\S]*scheduleWorkspaceAutoRechargeAfterSettlementBestEffort\(ctx, entry\.userId, nowMs\)/,
+  /if \(args\.status === "succeeded"\)[\s\S]*resolveCreditLedgerProviderCostEntry[\s\S]*recordProviderCostEntryBestEffort[\s\S]*scheduleWorkspaceAutoRechargeAfterSettlementBestEffort\(ctx, entry\.userId, nowMs\)/,
   "settlement must schedule auto recharge only after terminal succeeded settlement work",
+);
+assert.doesNotMatch(
+  workspaceCreditsSource,
+  /recordSettledPaidToolPartnerCommission|recordPaidToolUsagePartnerCommission/,
+  "settlement must not retain retired Partner commission work",
 );
 assert.match(
   cronsSource,

@@ -27,7 +27,6 @@ Current canonical/pathname routes include:
 - `/settings/account`
 - `/settings/billing`
 - `/settings/appearance`
-- `/settings/partners`
 - `/c/:slug`
 - `/c/:slug/chat`
 - `/c/:slug/ai-feed`
@@ -57,7 +56,9 @@ These are top-level application destinations:
 - `/settings/account`
 - `/settings/billing`
 - `/settings/appearance`
-- `/settings/partners`
+
+The retired `/settings/partner` and `/settings/partners` paths are compatibility
+aliases that resolve to `/settings/billing`; they are not page identities.
 
 These should represent actual page identity.
 

@@ -134,6 +134,44 @@ export default defineSchema({
     .index("by_user_document_version", ["userId", "documentKey", "documentVersion"])
     .index("by_document_version_acceptedAt", ["documentKey", "documentVersion", "acceptedAt"]),
 
+  legacyProgramGrants: defineTable({
+    userId: v.id("users"),
+    grantKey: v.string(),
+    sourceProgram: v.string(),
+    sourceRecordId: v.string(),
+    sourceStatus: v.string(),
+    acceptedTermsVersion: v.string(),
+    acceptedTermsAt: v.number(),
+    capturedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_grantKey", ["userId", "grantKey"])
+    .index("by_grantKey_capturedAt", ["grantKey", "capturedAt"]),
+
+  communityInferencePolicies: defineTable({
+    communityId: v.id("communities"),
+    payerUserId: v.id("users"),
+    fundingMode: v.union(
+      v.literal("owner_api_key"),
+      v.literal("platform_subscription"),
+    ),
+    status: v.union(
+      v.literal("pending_credential"),
+      v.literal("pending_subscription"),
+      v.literal("active"),
+      v.literal("suspended"),
+    ),
+    contractVersion: v.string(),
+    sourceGrantKey: v.optional(v.string()),
+    sourceProgram: v.optional(v.string()),
+    sourcePartnerRecordId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_payer_status", ["payerUserId", "status"]),
+
   partnerAttributions: defineTable({
     attributionKey: v.string(),
     partnerId: v.id("builderPartners"),

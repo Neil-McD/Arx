@@ -50,7 +50,6 @@ import {
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
 import { useWebProviderConnectionsController } from "./controllers/useWebProviderConnectionsController";
-import { useWebBuilderPartnerProgramController } from "./controllers/useWebBuilderPartnerProgramController";
 import { useWebAccountPlanController } from "./controllers/useWebAccountPlanController";
 import { useWebCommunityVoiceController } from "./controllers/useWebCommunityVoiceController";
 import { useWebCommunityProfileHydrationController } from "./controllers/useWebCommunityProfileHydrationController";
@@ -1415,23 +1414,6 @@ export default function App() {
     redeemPendingPurchasesInFlightRef,
   });
   const {
-    program: builderPartnerProgram,
-    isLoading: isLoadingBuilderPartnerProgram,
-    error: builderPartnerProgramError,
-    isAcceptingTerms: isAcceptingBuilderPartnerTerms,
-    load: loadBuilderPartnerProgram,
-    acceptTerms: acceptBuilderPartnerTerms,
-  } = useWebBuilderPartnerProgramController({
-    session,
-    canonicalSessionUserId,
-    activePage,
-    settingsGroup,
-    communitiesCount: communities.length,
-    ensureSession: ensureUsableAuthSession,
-    requireSignIn,
-  });
-
-  const {
     isFreeAccountInfoOpen,
     setIsFreeAccountInfoOpen,
     openFreeAccountInfo,
@@ -1914,7 +1896,6 @@ export default function App() {
     handleSelectCommunityTab,
     handleSelectCommunityTabFromMobile,
     handleCommunityOnboardingOrientationCompleted,
-    openOwnedPartnerCommunitySettings,
   } = useWebCommunityNavigationActions({
     activeCommunity,
     selectedActiveCommunityId,
@@ -2436,26 +2417,6 @@ export default function App() {
       enterJoinedCommunity,
       openPublicCommunityFunnel,
     });
-  const builderPartnerProgramSharedProps = {
-    session: session,
-    requireSignIn,
-    accountCommerceStatus,
-    accountCommerceError,
-    builderPartnerProgram,
-    isLoadingBuilderPartnerProgram,
-    builderPartnerProgramError,
-    isAcceptingBuilderPartnerTerms,
-    renderMarkdown,
-    loadBuilderPartnerProgram,
-    acceptBuilderPartnerTerms,
-    openAccountSetup: openProfileSetup,
-    openCreateCommunityModal: () => openCreateCommunityModal(),
-    communities,
-    communityRoleById,
-    openOwnedCommunitySettings: openOwnedPartnerCommunitySettings,
-    startStripeConnectOnboarding,
-    isStartingStripeConnectOnboarding,
-  };
   const settingsPanelsProps: WebSettingsPanelsProps = {
     settingsGroup: settingsGroup as SettingsGroup,
     profile: {
@@ -2517,7 +2478,6 @@ export default function App() {
       pendingPurchasesError,
       pendingPurchasesSuccess,
     },
-    partners: builderPartnerProgramSharedProps,
     appearance: {
       appTheme,
       setAppTheme,

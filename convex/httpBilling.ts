@@ -1105,37 +1105,17 @@ export function registerRuntimeBillingRoutes(
               reason: "invoice_paid_amount_missing",
             }, "ignored");
           }
-          const invoiceEvidence = readStripeInvoiceEvidence(invoice);
           const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
           const communityLifecycleResult = await syncCommunitySubscriptionFromStripeSubscription(
             ctx,
             event,
             subscription,
           );
-          const partnerCommissionResult = await (ctx as any).runMutation(
-            internal.builderPartners
-              .recordCommunitySubscriptionInvoicePartnerCommissionInternal as any,
-            {
-              providerSubscriptionId,
-              sourceProviderInvoiceId: invoice.id,
-              sourceProviderPaymentIntentId:
-                invoiceEvidence.sourceProviderPaymentIntentId ?? undefined,
-              sourceProviderChargeId:
-                invoiceEvidence.sourceProviderChargeId ?? undefined,
-              amountBaseUnits,
-              currency,
-              nowMs:
-                Number(event.created ?? 0) > 0
-                  ? Number(event.created) * 1000
-                  : Date.now(),
-            },
-          );
           return processedResponse({
             ok: true,
             received: true,
             event: event.type,
             communityLifecycleResult,
-            partnerCommissionResult,
           });
         }
 
@@ -1214,35 +1194,6 @@ export function registerRuntimeBillingRoutes(
           const charge = await retrieveStripeChargeForEvidence(
             refundEvidence.sourceProviderChargeId,
           );
-          const chargeEvidence = charge ? readStripeChargeEvidence(charge) : null;
-          const partnerAdjustmentResult = await (ctx as any).runMutation(
-            internal.builderPartners
-              .recordPartnerCommissionRefundAdjustmentInternal as any,
-            {
-              sourceProviderRefundId: refundEvidence.sourceProviderRefundId,
-              sourceProviderChargeId:
-                refundEvidence.sourceProviderChargeId ??
-                chargeEvidence?.sourceProviderChargeId ??
-                undefined,
-              sourceProviderPaymentIntentId:
-                refundEvidence.sourceProviderPaymentIntentId ??
-                chargeEvidence?.sourceProviderPaymentIntentId ??
-                undefined,
-              sourceProviderInvoiceId:
-                chargeEvidence?.sourceProviderInvoiceId ?? undefined,
-              refundAmountBaseUnits:
-                typeof refund.amount === "number" ? refund.amount : undefined,
-              chargeAmountBaseUnits:
-                typeof charge?.amount === "number" ? charge.amount : undefined,
-              currency: String(refund.currency ?? charge?.currency ?? "")
-                .trim()
-                .toLowerCase() || undefined,
-              nowMs:
-                Number(event.created ?? 0) > 0
-                  ? Number(event.created) * 1000
-                : Date.now(),
-            },
-          );
           const communityAccessResult = await syncCommunityAccessForRefund(ctx, event, {
             refund,
             charge,
@@ -1251,7 +1202,6 @@ export function registerRuntimeBillingRoutes(
             ok: true,
             received: true,
             event: event.type,
-            partnerAdjustmentResult,
             communityAccessResult,
           });
         }
@@ -1274,41 +1224,11 @@ export function registerRuntimeBillingRoutes(
           const results = [];
           for (const refund of refunds) {
             const refundEvidence = readStripeRefundEvidence(refund);
-            const partnerAdjustmentResult = await (ctx as any).runMutation(
-              internal.builderPartners
-                .recordPartnerCommissionRefundAdjustmentInternal as any,
-              {
-                sourceProviderRefundId:
-                  refundEvidence.sourceProviderRefundId ?? String(refund.id ?? ""),
-                sourceProviderChargeId:
-                  refundEvidence.sourceProviderChargeId ??
-                  chargeEvidence.sourceProviderChargeId ??
-                  undefined,
-                sourceProviderPaymentIntentId:
-                  refundEvidence.sourceProviderPaymentIntentId ??
-                  chargeEvidence.sourceProviderPaymentIntentId ??
-                  undefined,
-                sourceProviderInvoiceId:
-                  chargeEvidence.sourceProviderInvoiceId ?? undefined,
-                refundAmountBaseUnits:
-                  typeof refund.amount === "number" ? refund.amount : undefined,
-                chargeAmountBaseUnits:
-                  typeof charge.amount === "number" ? charge.amount : undefined,
-                currency: String(refund.currency ?? charge.currency ?? "")
-                  .trim()
-                  .toLowerCase() || undefined,
-                nowMs:
-                  Number(event.created ?? 0) > 0
-                    ? Number(event.created) * 1000
-                  : Date.now(),
-              },
-            );
             const communityAccessResult = await syncCommunityAccessForRefund(ctx, event, {
               refund,
               charge,
             });
             results.push({
-              partnerAdjustmentResult,
               communityAccessResult,
             });
           }
@@ -1340,34 +1260,6 @@ export function registerRuntimeBillingRoutes(
           );
           const chargeEvidence = charge ? readStripeChargeEvidence(charge) : null;
           if (event.type === "charge.dispute.created") {
-            const partnerAdjustmentResult = await (ctx as any).runMutation(
-              internal.builderPartners
-                .recordPartnerCommissionDisputeOpenedInternal as any,
-              {
-                sourceProviderDisputeId: disputeEvidence.sourceProviderDisputeId,
-                sourceProviderChargeId:
-                  disputeEvidence.sourceProviderChargeId ??
-                  chargeEvidence?.sourceProviderChargeId ??
-                  undefined,
-                sourceProviderPaymentIntentId:
-                  disputeEvidence.sourceProviderPaymentIntentId ??
-                  chargeEvidence?.sourceProviderPaymentIntentId ??
-                  undefined,
-                sourceProviderInvoiceId:
-                  chargeEvidence?.sourceProviderInvoiceId ?? undefined,
-                disputeAmountBaseUnits:
-                  typeof dispute.amount === "number" ? dispute.amount : undefined,
-                chargeAmountBaseUnits:
-                  typeof charge?.amount === "number" ? charge.amount : undefined,
-                currency: String(dispute.currency ?? charge?.currency ?? "")
-                  .trim()
-                  .toLowerCase() || undefined,
-                nowMs:
-                  Number(event.created ?? 0) > 0
-                    ? Number(event.created) * 1000
-                  : Date.now(),
-              },
-            );
             const communityAccessResult = await syncCommunityAccessForDispute(ctx, event, {
               charge,
               outcome: "opened",
@@ -1376,7 +1268,6 @@ export function registerRuntimeBillingRoutes(
               ok: true,
               received: true,
               event: event.type,
-              partnerAdjustmentResult,
               communityAccessResult,
             });
           }
@@ -1389,35 +1280,6 @@ export function registerRuntimeBillingRoutes(
                 : disputeStatus === "lost"
                   ? "lost"
                   : "unknown";
-          const partnerAdjustmentResult = await (ctx as any).runMutation(
-            internal.builderPartners
-              .recordPartnerCommissionDisputeClosedInternal as any,
-            {
-              sourceProviderDisputeId: disputeEvidence.sourceProviderDisputeId,
-              outcome,
-              sourceProviderChargeId:
-                disputeEvidence.sourceProviderChargeId ??
-                chargeEvidence?.sourceProviderChargeId ??
-                undefined,
-              sourceProviderPaymentIntentId:
-                disputeEvidence.sourceProviderPaymentIntentId ??
-                chargeEvidence?.sourceProviderPaymentIntentId ??
-                undefined,
-              sourceProviderInvoiceId:
-                chargeEvidence?.sourceProviderInvoiceId ?? undefined,
-              disputeAmountBaseUnits:
-                typeof dispute.amount === "number" ? dispute.amount : undefined,
-              chargeAmountBaseUnits:
-                typeof charge?.amount === "number" ? charge.amount : undefined,
-              currency: String(dispute.currency ?? charge?.currency ?? "")
-                .trim()
-                .toLowerCase() || undefined,
-              nowMs:
-                Number(event.created ?? 0) > 0
-                  ? Number(event.created) * 1000
-                : Date.now(),
-            },
-          );
           const communityAccessResult = await syncCommunityAccessForDispute(ctx, event, {
             charge,
             outcome,
@@ -1426,7 +1288,6 @@ export function registerRuntimeBillingRoutes(
             ok: true,
             received: true,
             event: event.type,
-            partnerAdjustmentResult,
             communityAccessResult,
           });
         }

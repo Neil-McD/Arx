@@ -53,8 +53,13 @@ assert.match(
 );
 assert.match(
   operatorBusinessPanelView,
-  /export function OperatorBusinessPanelView[\s\S]*Acquisition funnel[\s\S]*<OperatorAccountSetupInsights snapshot=\{props\.accountSetup\} \/>[\s\S]*Partner payout cycles/,
-  "business operator view must own business readiness and payout presentation",
+  /export function OperatorBusinessPanelView[\s\S]*Acquisition funnel[\s\S]*<OperatorAccountSetupInsights snapshot=\{props\.accountSetup\} \/>[\s\S]*Friction &amp; risks/,
+  "business operator view must own business readiness and risk presentation",
+);
+assert.doesNotMatch(
+  operatorBusinessPanelView,
+  /Partner payout|Top partners|partnerPerformance|partnerPayout/,
+  "business operator view must not retain the retired Partner surface",
 );
 assert.match(
   operatorBusinessPanelView,

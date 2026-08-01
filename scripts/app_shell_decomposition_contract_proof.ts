@@ -93,7 +93,6 @@ const boundedFeatureOwners = [
   "apps/web/src/controllers/buildWebAuthShellProjection.ts",
   "apps/web/src/controllers/useWebAccountPlanController.ts",
   "apps/web/src/controllers/useWebAuthErrorToastLifecycle.ts",
-  "apps/web/src/controllers/useWebBuilderPartnerProgramController.ts",
   "apps/web/src/controllers/useWebCommunityDirectoryState.ts",
   "apps/web/src/controllers/useWebCommunityFunnelAboutController.ts",
   "apps/web/src/controllers/useWebCommunityNavigationActions.ts",
@@ -151,10 +150,6 @@ for (const [ownerPath, requiredMarkers] of [
   [
     "apps/web/src/controllers/useWebAccountPlanController.ts",
     ["startCloudPremiumSubscriptionCheckout", "setDevAccountTierCanonical"],
-  ],
-  [
-    "apps/web/src/controllers/useWebBuilderPartnerProgramController.ts",
-    ["captureBuilderPartnerAttributionFromCurrentUrl", "settingsGroup"],
   ],
   [
     "apps/web/src/controllers/useWebCommunityVoiceController.ts",

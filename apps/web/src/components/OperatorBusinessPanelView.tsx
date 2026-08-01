@@ -1,13 +1,9 @@
-import { useState } from "react";
 import type {
   OperatorAccountSetupSnapshot,
   OperatorAccountSetupUserRecord,
   OperatorEventRecord,
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,
-  OperatorPartnerPerformanceSnapshot,
-  OperatorPartnerPayoutCycle,
-  OperatorPartnerPayoutCyclesSnapshot,
   OperatorRiskItem,
   OperatorToolEconomicsSnapshot,
 } from "../../../../shared/operatorTypes";
@@ -18,12 +14,9 @@ import {
   formatEventTime,
   formatMoney,
   formatOptionalCount,
-  formatPartnerPayoutCycleStatus,
   formatPercent,
   formatRiskFlag,
   formatUsdAmount,
-  type PartnerPayoutCycleActionName,
-  type PartnerPayoutCycleActions,
 } from "./workspaceRightPanelOperatorShared";
 
 const OPERATOR_ACCOUNT_SETUP_STEP_ORDER = ["identity", "inference", "complete"] as const;
@@ -35,35 +28,15 @@ const OPERATOR_ACCOUNT_SETUP_MISSING_ORDER = [
   "inference_provider",
 ] as const;
 
-function formatPartnerHandle(handle: string | null): string | null {
-  const normalized = String(handle ?? "").trim();
-  if (!normalized) return null;
-  return normalized.startsWith("@") ? normalized : `@${normalized}`;
-}
-
-function readPartnerPerformanceName(
-  partner: OperatorPartnerPerformanceSnapshot["topPartners"][number],
-): string {
-  return partner.displayName || formatPartnerHandle(partner.handle) || partner.code || partner.partnerId.slice(0, 8);
-}
-
-function formatKnownOperatorCount(value: number | null | undefined): string {
-  return typeof value === "number" && Number.isFinite(value) ? String(value) : "--";
-}
-
 export function OperatorBusinessPanelView(props: {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
   accountSetup: OperatorAccountSetupSnapshot | null;
   toolEconomics: OperatorToolEconomicsSnapshot | null;
-  partnerPerformance: OperatorPartnerPerformanceSnapshot | null;
-  partnerPayoutCycles: OperatorPartnerPayoutCyclesSnapshot | null;
-  partnerPayoutCycleActions: PartnerPayoutCycleActions;
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
 }) {
   const businessKpis = props.monetization?.businessKpis ?? null;
-  const partnerPerformance = props.partnerPerformance;
   const accountSetupOverview = props.accountSetup?.overview ?? null;
   const accountSetupCompletionRate =
     accountSetupOverview && accountSetupOverview.totals.users > 0
@@ -127,22 +100,6 @@ export function OperatorBusinessPanelView(props: {
           <span>Platform revenue</span>
           <strong>{formatMoney(platformRevenueMetric)}</strong>
           <span className="operator-dashboard__metric-note">{platformRevenueNote}</span>
-        </div>
-        <div>
-          <span>Partners</span>
-          <strong>{formatKnownOperatorCount(partnerPerformance?.summary.totalPartners)}</strong>
-          <span className="operator-dashboard__metric-note">
-            {partnerPerformance
-              ? `${partnerPerformance.summary.activePartners} active · ${partnerPerformance.summary.pausedPartners} paused · ${partnerPerformance.summary.disabledPartners} disabled${partnerPerformance.evidence.isTruncated ? " · sampled" : ""}`
-              : "Partner ledger unavailable."}
-          </span>
-        </div>
-        <div>
-          <span>Partner paid out</span>
-          <strong>{partnerPerformance ? formatUsdAmount(partnerPerformance.summary.partnerPaidOutUsd) : "--"}</strong>
-          <span className="operator-dashboard__metric-note">
-            {partnerPerformance ? "Succeeded partner transfers in the selected window." : "Partner ledger unavailable."}
-          </span>
         </div>
       </section>
 
@@ -456,53 +413,6 @@ export function OperatorBusinessPanelView(props: {
         </div>
       </section>
 
-      <section className="operator-dashboard__panel operator-dashboard__panel--full">
-        <h2>Top partners</h2>
-        <div className="operator-dashboard__table">
-          {partnerPerformance?.topPartners.length ? (
-            partnerPerformance.topPartners.map((partner) => (
-              <div className="operator-dashboard__row operator-dashboard__community-row" key={partner.partnerId}>
-                <div className="operator-dashboard__community-main">
-                  <strong>{readPartnerPerformanceName(partner)}</strong>
-                  <span>
-                    {[
-                      partner.code,
-                      partner.status,
-                      `${partner.boundReferrals} bound referral${partner.boundReferrals === 1 ? "" : "s"}`,
-                      partner.latestCommissionAt ? formatEventTime(partner.latestCommissionAt) : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                </div>
-                <span>
-                  {[
-                    `${formatUsdAmount(partner.commissionGeneratedUsd)} generated`,
-                    `${formatUsdAmount(partner.readyUsd)} ready`,
-                    `${formatUsdAmount(partner.paidOutUsd)} paid`,
-                  ].join(" · ")}
-                </span>
-              </div>
-            ))
-          ) : partnerPerformance ? (
-            <div className="operator-dashboard__empty">No partner commission ledger activity returned.</div>
-          ) : (
-            <div className="operator-dashboard__empty">Partner performance unavailable.</div>
-          )}
-          {partnerPerformance ? (
-            <div className="operator-dashboard__empty">Ranking uses generated partner commission in the selected window.</div>
-          ) : null}
-          {partnerPerformance?.evidence.isTruncated ? (
-            <div className="operator-dashboard__empty">Partner performance is sampled from the bounded operator ledger scan.</div>
-          ) : null}
-        </div>
-      </section>
-
-      <OperatorPartnerPayoutCycles
-        snapshot={props.partnerPayoutCycles}
-        actions={props.partnerPayoutCycleActions}
-      />
-
       <section className="operator-dashboard__panel">
         <h2>Friction &amp; risks</h2>
         <div className="operator-dashboard__table">
@@ -541,146 +451,6 @@ export function OperatorBusinessPanelView(props: {
         </div>
       </section>
     </div>
-  );
-}
-
-function OperatorPartnerPayoutCycles(props: {
-  snapshot: OperatorPartnerPayoutCyclesSnapshot | null;
-  actions: PartnerPayoutCycleActions;
-}) {
-  const cycles = props.snapshot?.cycles ?? [];
-  const [approvalConfirmCycleId, setApprovalConfirmCycleId] = useState<string | null>(null);
-  const isActing = (cycle: OperatorPartnerPayoutCycle, action?: PartnerPayoutCycleActionName) =>
-    props.actions.inFlightCycleId === cycle.id &&
-    (!action || props.actions.inFlightAction === action);
-
-  return (
-    <section className="operator-dashboard__panel operator-dashboard__panel--full">
-      <h2>Partner payout cycles</h2>
-      <div className="operator-dashboard__table">
-        {props.actions.error ? (
-          <div className="operator-dashboard__empty">Payout cycle action failed: {props.actions.error}</div>
-        ) : null}
-        {cycles.length === 0 ? (
-          <div className="operator-dashboard__empty">No generated partner payout cycles returned.</div>
-        ) : (
-          cycles.map((cycle) => (
-            <div className="operator-dashboard__row operator-dashboard__cycle-row" key={cycle.id}>
-              <div className="operator-dashboard__community-main">
-                <strong>{cycle.cycleKey || cycle.id.slice(0, 10)}</strong>
-                <span>
-                  {[
-                    formatPartnerPayoutCycleStatus(cycle.status),
-                    formatUsdAmount(cycle.totalAmountUsd),
-                    `${cycle.partnerCount} partner${cycle.partnerCount === 1 ? "" : "s"}`,
-                    `${cycle.itemCount} commission${cycle.itemCount === 1 ? "" : "s"}`,
-                    cycle.createdAt ? formatEventTime(cycle.createdAt) : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-                <div className="operator-dashboard__chips" aria-label={`${cycle.cycleKey || cycle.id} risk flags`}>
-                  {cycle.riskFlags.length > 0 ? (
-                    cycle.riskFlags.slice(0, 4).map((flag) => (
-                      <span className="operator-dashboard__chip operator-dashboard__chip--warning" key={flag}>
-                        {formatRiskFlag(flag)}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="operator-dashboard__chip">No risk flags</span>
-                  )}
-                  {cycle.holdReason ? (
-                    <span className="operator-dashboard__chip operator-dashboard__chip--warning">
-                      {cycle.holdReason}
-                    </span>
-                  ) : null}
-                  {cycle.failureReason ? (
-                    <span className="operator-dashboard__chip operator-dashboard__chip--warning">
-                      {cycle.failureReason}
-                    </span>
-                  ) : null}
-                </div>
-                {approvalConfirmCycleId === cycle.id ? (
-                  <div
-                    className="operator-dashboard__cycle-confirmation"
-                    role="group"
-                    aria-label={`${cycle.cycleKey || cycle.id} payout approval confirmation`}
-                  >
-                    <span>
-                      {formatUsdAmount(cycle.totalAmountUsd)} to {cycle.partnerCount} partner{cycle.partnerCount === 1 ? "" : "s"}.
-                    </span>
-                    <div className="operator-dashboard__cycle-confirmation-actions">
-                      <button
-                        type="button"
-                        className="operator-dashboard__action"
-                        disabled={!cycle.actions.canApprove || Boolean(props.actions.inFlightCycleId)}
-                        onClick={() => {
-                          setApprovalConfirmCycleId(null);
-                          void props.actions.approve(cycle.id);
-                        }}
-                      >
-                        Approve and execute
-                      </button>
-                      <button
-                        type="button"
-                        className="operator-dashboard__action operator-dashboard__action--secondary"
-                        disabled={Boolean(props.actions.inFlightCycleId)}
-                        onClick={() => setApprovalConfirmCycleId(null)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-              <div className="operator-dashboard__cycle-actions">
-                <button
-                  type="button"
-                  className="operator-dashboard__action"
-                  disabled={!cycle.actions.canApprove || Boolean(props.actions.inFlightCycleId)}
-                  onClick={() => setApprovalConfirmCycleId(cycle.id)}
-                >
-                  {isActing(cycle, "approve") ? "Approving" : "Approve"}
-                </button>
-                <button
-                  type="button"
-                  className="operator-dashboard__action"
-                  disabled={!cycle.actions.canRetry || Boolean(props.actions.inFlightCycleId)}
-                  onClick={() => {
-                    setApprovalConfirmCycleId(null);
-                    void props.actions.retry(cycle.id);
-                  }}
-                >
-                  {isActing(cycle, "retry") ? "Retrying" : "Retry"}
-                </button>
-                <button
-                  type="button"
-                  className="operator-dashboard__action operator-dashboard__action--secondary"
-                  disabled={!cycle.actions.canHold || Boolean(props.actions.inFlightCycleId)}
-                  onClick={() => {
-                    setApprovalConfirmCycleId(null);
-                    void props.actions.hold(cycle.id);
-                  }}
-                >
-                  {isActing(cycle, "hold") ? "Holding" : "Hold"}
-                </button>
-                <button
-                  type="button"
-                  className="operator-dashboard__action operator-dashboard__action--danger"
-                  disabled={!cycle.actions.canReject || Boolean(props.actions.inFlightCycleId)}
-                  onClick={() => {
-                    setApprovalConfirmCycleId(null);
-                    void props.actions.reject(cycle.id);
-                  }}
-                >
-                  {isActing(cycle, "reject") ? "Rejecting" : "Reject"}
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </section>
   );
 }
 

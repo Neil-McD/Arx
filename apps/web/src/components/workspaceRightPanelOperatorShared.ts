@@ -3,23 +3,10 @@ import type {
   OperatorAuthAccessDiagnosticsSnapshot,
   OperatorCommunityRecord,
   OperatorFrontendErrorDiagnosticsSnapshot,
-  OperatorPartnerPayoutCycleStatus,
   OperatorRuntimeToolDiagnosticsSnapshot,
   OperatorSecurityAuditDiagnosticsSnapshot,
   OperatorWebDeployDiagnosticsSnapshot,
 } from "../../../../shared/operatorTypes";
-
-export type PartnerPayoutCycleActionName = "approve" | "retry" | "hold" | "reject";
-
-export type PartnerPayoutCycleActions = {
-  inFlightCycleId: string | null;
-  inFlightAction: PartnerPayoutCycleActionName | null;
-  error: string | null;
-  approve: (cycleId: string) => Promise<void>;
-  retry: (cycleId: string) => Promise<void>;
-  hold: (cycleId: string) => Promise<void>;
-  reject: (cycleId: string) => Promise<void>;
-};
 
 export function formatMoney(metric: { currency: string; amountBaseUnits: number; currencyDecimals: number } | null): string {
   if (!metric) return "$0";
@@ -112,26 +99,6 @@ export function formatPayoutStatus(value: OperatorCommunityRecord["creator"]["pa
     case "not_connected":
     default:
       return "No payout";
-  }
-}
-
-export function formatPartnerPayoutCycleStatus(value: OperatorPartnerPayoutCycleStatus): string {
-  switch (value) {
-    case "pending_approval":
-      return "Needs approval";
-    case "approved":
-      return "Approved";
-    case "processing":
-      return "Processing";
-    case "paid":
-      return "Paid";
-    case "held":
-      return "Held";
-    case "rejected":
-      return "Rejected";
-    case "failed":
-    default:
-      return "Failed";
   }
 }
 
