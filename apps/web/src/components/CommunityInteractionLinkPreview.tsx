@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { ExternalLink, Play } from "lucide-react";
+import { ExternalLink, Globe2, Play } from "lucide-react";
 import type { CommunityInteractionEmbed } from "../../../../shared/cloudCommunityInteractionsGateway";
+import { communityInteractionFaviconCandidates } from "../../../../shared/communityInteractionFavicon";
 import {
   interactionEmbedPreviewIsStale,
   interactionXStatusIdentity,
@@ -267,20 +268,74 @@ function SocialPostLinkPreview(props: {
   );
 }
 
+function GenericLinkFavicon(props: { href: string }) {
+  const candidates = communityInteractionFaviconCandidates(props.href);
+  const [candidateIndex, setCandidateIndex] = useState(0);
+  const faviconUrl = candidates[candidateIndex] ?? null;
+  return (
+    <span className="community-interaction-embed-favicon" aria-hidden="true">
+      {faviconUrl ? (
+        <img
+          src={faviconUrl}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          referrerPolicy="no-referrer"
+          onError={() => setCandidateIndex((current) => Math.min(current + 1, candidates.length))}
+        />
+      ) : (
+        <Globe2 size={15} strokeWidth={1.8} />
+      )}
+    </span>
+  );
+}
+
 function GenericLinkPreview(props: {
   embed: CommunityInteractionEmbed;
   href: string;
   mediaUrl: string | null;
 }) {
   const provider = providerLabel(props.embed);
+  const title = props.embed.title || provider || "Open link";
+  if (!props.mediaUrl) {
+    const description = props.embed.description?.trim() || null;
+    const showProviderInMeta = Boolean(provider && provider !== title);
+    return (
+      <a
+        className="community-interaction-embed is-link is-compact-link"
+        data-preview-kind="link"
+        data-preview-density="compact"
+        href={props.href}
+        target="_blank"
+        rel="noreferrer noopener"
+        aria-label={`${title} (opens in a new tab)`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <GenericLinkFavicon key={props.href} href={props.href} />
+        <span className="community-interaction-embed-compact-copy">
+          <span className="community-interaction-embed-title">{title}</span>
+          {showProviderInMeta || description ? (
+            <span className="community-interaction-embed-compact-meta">
+              {showProviderInMeta ? (
+                <span className="community-interaction-embed-provider">{provider}</span>
+              ) : null}
+              {showProviderInMeta && description ? <span aria-hidden="true">·</span> : null}
+              {description ? <span className="community-interaction-embed-desc">{description}</span> : null}
+            </span>
+          ) : null}
+        </span>
+      </a>
+    );
+  }
   return (
     <a
-      className={`community-interaction-embed is-link${props.mediaUrl ? " has-media" : ""}`}
+      className="community-interaction-embed is-link has-media"
       data-preview-kind="link"
       href={props.href}
       target="_blank"
       rel="noreferrer noopener"
-      aria-label={`${props.embed.title || provider || "Open link"} (opens in a new tab)`}
+      aria-label={`${title} (opens in a new tab)`}
       onClick={(event) => event.stopPropagation()}
     >
       <div className="community-interaction-embed-text">
@@ -290,15 +345,13 @@ function GenericLinkPreview(props: {
           <span className="community-interaction-embed-desc">{props.embed.description}</span>
         ) : null}
       </div>
-      {props.mediaUrl ? (
-        <img
-          className="community-interaction-embed-media"
-          src={props.mediaUrl}
-          alt={props.embed.image_alt || ""}
-          loading="lazy"
-          referrerPolicy="no-referrer"
-        />
-      ) : null}
+      <img
+        className="community-interaction-embed-media"
+        src={props.mediaUrl}
+        alt={props.embed.image_alt || ""}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+      />
     </a>
   );
 }

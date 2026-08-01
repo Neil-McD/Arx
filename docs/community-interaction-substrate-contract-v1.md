@@ -402,6 +402,7 @@ Rules:
 - exact consecutive standalone duplicates collapse at presentation time without mutating stored message text
 - tracking-only URL differences are ignored for exact standalone replacement, while content-bearing parameters such as video start time remain significant
 - approved video players are click-to-activate, sandboxed, and retain a direct provider link; the browser revalidates stored source, media, and player URLs before rendering; preview images send no referrer; social previews render normalized identity, provenance, and text without loading attached media or third-party widget JavaScript
+- generic link previews without media render as compact website rows; their decorative favicon may try only the validated source origin and one bounded parent-domain fallback, sends no referrer, and degrades to a neutral first-party icon without changing the visible hostname or link target
 - preview refresh batches clamp operator input to at most 100 rows, query the provider/status/next-refresh index, lease rows before scheduling, and run only internal work
 - default dark and Polynet dark share one semantic chat-link treatment while their surface tokens continue to theme embed cards
 
