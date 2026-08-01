@@ -149,7 +149,7 @@ export function WebAccountSettingsSection(
             Community inference funding
           </div>
           <div className="settings-section-desc">
-            Your grandfathered founder access lets one OpenAI API key fund GPT 5.6 Luna for members of every community you own.
+            Your grandfathered founder access lets one OpenAI API key fund GPT 5.6 Luna for the eligible legacy communities listed here.
           </div>
           <div className={`account-provider-card${
             props.founderInferenceStatus.status === "active" && props.founderInferenceStatus.key_connected
@@ -182,7 +182,7 @@ export function WebAccountSettingsSection(
               <div className="auth-status">
                 {props.founderInferenceStatus.communities.length > 0
                   ? `Covers ${props.founderInferenceStatus.communities.map((community) => community.name).join(", ")}.`
-                  : "Covers every community you own now or create later."}
+                  : "No legacy-eligible communities."}
               </div>
               {props.founderInferenceStatus.status !== "active" ? (
                 <label className="auth-status">
@@ -192,7 +192,7 @@ export function WebAccountSettingsSection(
                     onChange={(event) => setHasAcceptedFounderInferenceTerms(event.target.checked)}
                     disabled={props.isSavingFounderInference}
                   />{" "}
-                  I authorize Polynet to use my connected OpenAI API key for bounded inference across every community I own. OpenAI bills my account directly, and I can suspend access at any time.
+                  I authorize Polynet to use my connected OpenAI API key for bounded inference across the eligible legacy communities listed here. OpenAI bills my account directly, and I can suspend access at any time.
                 </label>
               ) : null}
               {!props.founderInferenceStatus.key_connected ? (
@@ -226,7 +226,7 @@ export function WebAccountSettingsSection(
                     !hasAcceptedFounderInferenceTerms
                   }
                 >
-                  {props.isSavingFounderInference ? "Testing Luna…" : "Activate for all communities"}
+                  {props.isSavingFounderInference ? "Testing Luna…" : "Activate for eligible communities"}
                 </button>
               )}
             </div>

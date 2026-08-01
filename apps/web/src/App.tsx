@@ -51,6 +51,7 @@ import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCom
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
 import { useWebProviderConnectionsController } from "./controllers/useWebProviderConnectionsController";
 import { useWebFounderInferenceController } from "./controllers/useWebFounderInferenceController";
+import { useWebFounderBillingController } from "./controllers/useWebFounderBillingController";
 import { useWebAccountPlanController } from "./controllers/useWebAccountPlanController";
 import { useWebCommunityVoiceController } from "./controllers/useWebCommunityVoiceController";
 import { useWebCommunityProfileHydrationController } from "./controllers/useWebCommunityProfileHydrationController";
@@ -943,6 +944,10 @@ export default function App() {
     session,
     ensureSession: ensureUsableAuthSession,
     providerConnectionUpdatedAt: openAiConnection.updated_at,
+  });
+  const founderBilling = useWebFounderBillingController({
+    session,
+    ensureSession: ensureUsableAuthSession,
   });
   const enterJoinedCommunity = useWebJoinedCommunityEntryAction({
     session,
@@ -2000,6 +2005,10 @@ export default function App() {
       canManageCommunitySettings,
       requireSignIn,
       accountCommerceStatus,
+      communityPlatformFeeBps:
+        founderBilling.overview.communities.find(
+          (community) => community.community_id === activeCommunity?.id,
+        )?.platform_fee_bps ?? null,
       accountCommerceError,
       startStripeConnectOnboarding,
       isStartingStripeConnectOnboarding,
@@ -2479,6 +2488,13 @@ export default function App() {
       isLoadingAccountCommerce,
       accountCommerceError,
       startPremiumSubscriptionCheckout,
+      founderBillingOverview: founderBilling.overview,
+      isLoadingFounderBilling: founderBilling.isLoading,
+      founderBillingActionCommunityId: founderBilling.actionCommunityId,
+      founderBillingError: founderBilling.error,
+      startFounderSubscriptionCheckout: founderBilling.startCheckout,
+      openFounderBillingPortal: founderBilling.openPortal,
+      refreshFounderBilling: founderBilling.refresh,
       canUseDevTierOverride,
       isSettingDevAccountTier,
       setDevAccountTier,

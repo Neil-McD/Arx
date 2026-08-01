@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Check, Lock, Minus } from "lucide-react";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
+import type {
+  CloudFounderBillingCommunity,
+  CloudFounderBillingOverview,
+} from "../../../../shared/cloudFounderBillingGateway";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
 import {
   isAccountTierFree,
-  POLYNET_FREE_MAX_COMMUNITIES,
   POLYNET_PREMIUM_ACCOUNT_TIER,
-  POLYNET_PREMIUM_MAX_COMMUNITIES,
   POLYNET_PREMIUM_MONTHLY_PRICE_LABEL,
   POLYNET_PREMIUM_PLAN_NAME,
 } from "../../../../shared/accountCommerce";
@@ -20,11 +22,6 @@ const BILLING_PLAN_FEATURES: {
   free: boolean | string;
   premium: boolean | string;
 }[] = [
-  {
-    label: "Communities",
-    free: `${POLYNET_FREE_MAX_COMMUNITIES} community`,
-    premium: `${POLYNET_PREMIUM_MAX_COMMUNITIES} communities`,
-  },
   { label: "Polynet runtime", free: true, premium: true },
   { label: "Codex + future premium runtimes", free: false, premium: true },
   { label: "Premium tool usage", free: false, premium: "Included" },
@@ -52,6 +49,34 @@ function BillingPlanCellValue({ value }: { value: boolean | string }) {
   return <span className="billing-plan-value-note">{value}</span>;
 }
 
+function formatUsdBaseUnits(value: number): string {
+  return `$${(Math.max(0, value) / 100).toFixed(0)}`;
+}
+
+function founderBillingStatusLabel(community: CloudFounderBillingCommunity): string {
+  switch (community.status) {
+    case "legacy_active":
+      return "Legacy API key active";
+    case "legacy_ready":
+      return "Legacy API key available";
+    case "legacy_suspended":
+      return "Legacy API key suspended";
+    case "managed_checkout_pending":
+      return "Payment processing";
+    case "managed_required":
+      return "Managed plan required";
+    case "cancel_at_period_end":
+      return "Active · cancels at period end";
+    case "past_due":
+      return "Payment past due";
+    case "canceled":
+    case "ended":
+      return "Subscription ended";
+    case "active":
+      return "Managed plan active";
+  }
+}
+
 type SessionLike = {
   user: {
     id: string;
@@ -65,6 +90,13 @@ export type WebBillingSettingsSectionProps = {
   isLoadingAccountCommerce: boolean;
   accountCommerceError: string | null;
   startPremiumSubscriptionCheckout: () => Promise<void> | void;
+  founderBillingOverview: CloudFounderBillingOverview;
+  isLoadingFounderBilling: boolean;
+  founderBillingActionCommunityId: string | null;
+  founderBillingError: string | null;
+  startFounderSubscriptionCheckout: (communityId: string) => Promise<void> | void;
+  openFounderBillingPortal: (communityId: string) => Promise<void> | void;
+  refreshFounderBilling: () => Promise<unknown> | void;
   canUseDevTierOverride: boolean;
   isSettingDevAccountTier: boolean;
   setDevAccountTier: (tier: "free" | "architect") => Promise<void> | void;
@@ -123,10 +155,92 @@ export function WebBillingSettingsSection(
     <>
       <div className="panel-title">Billing</div>
       <div className="memory-panel">
+        <div className="settings-section">
+          <div className="settings-section-title">Community funding</div>
+          <div className="settings-section-desc">
+            Each managed community is {formatUsdBaseUnits(props.founderBillingOverview.monthly_price_base_units)}/month,
+            includes $20 of GPT 5.6 Luna usage, and uses a 2.9% Polynet platform fee.
+            Legacy communities may keep owner-funded API access with the same 2.9% fee.
+          </div>
+          {props.isLoadingFounderBilling && props.founderBillingOverview.communities.length === 0 ? (
+            <div className="chat-loading">
+              <div className="loading-spinner" />
+              <span>Loading community billing…</span>
+            </div>
+          ) : props.founderBillingOverview.communities.length === 0 ? (
+            <div className="auth-status">No communities owned by this account.</div>
+          ) : (
+            <div className="model-list">
+              {props.founderBillingOverview.communities.map((community) => {
+                const isActing =
+                  props.founderBillingActionCommunityId === community.community_id;
+                const canManage =
+                  Boolean(community.subscription_id) &&
+                  community.status !== "canceled" &&
+                  community.status !== "ended";
+                const isPending = community.status === "managed_checkout_pending";
+                return (
+                  <div className="account-row" key={community.community_id}>
+                    <div className="account-identity">
+                      <span>{community.community_name}</span>
+                      <strong>{founderBillingStatusLabel(community)}</strong>
+                      <small>
+                        {community.funding_mode === "managed"
+                          ? `${formatUsdBaseUnits(community.monthly_price_base_units)}/month · $20 included usage · ${community.platform_fee_bps / 100}% fee`
+                          : `Owner API key · ${community.platform_fee_bps / 100}% fee`}
+                      </small>
+                    </div>
+                    <div className="auth-actions">
+                      {canManage ? (
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={isActing}
+                          onClick={() => void props.openFounderBillingPortal(community.community_id)}
+                        >
+                          {isActing ? "Opening…" : "Manage in Stripe"}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isActing}
+                          onClick={() => void props.startFounderSubscriptionCheckout(community.community_id)}
+                        >
+                          {isPending
+                            ? "Resume checkout"
+                            : isActing
+                              ? "Opening…"
+                              : community.funding_mode === "legacy_byok"
+                                ? "Switch to managed · $79/month"
+                                : "Fund community · $79/month"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="auth-actions">
+            <button
+              type="button"
+              className="secondary"
+              disabled={props.isLoadingFounderBilling}
+              onClick={() => void props.refreshFounderBilling()}
+            >
+              {props.isLoadingFounderBilling ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
+          {props.founderBillingError ? (
+            <div className="billing-settings-error">{props.founderBillingError}</div>
+          ) : null}
+        </div>
+
         <div className="settings-section billing-page">
+          <div className="settings-section-title">Personal tools</div>
           <p className="billing-page-sub">
             You're on the <strong>{isPremium ? "Premium" : "Free"}</strong> plan
-            — manage your subscription and recover completed purchases.
+            — this controls personal tools, not community funding or fees.
           </p>
 
           <div className="billing-plan-scroll">
@@ -138,8 +252,8 @@ export function WebBillingSettingsSection(
                 <div className="billing-plan-head billing-plan-head--intro">
                   <div className="billing-plan-intro-title">Compare plans</div>
                   <div className="billing-plan-intro-sub">
-                    Free runs on the Polynet runtime. Premium unlocks everything
-                    else.
+                    Free runs on the Polynet runtime. Premium unlocks personal
+                    agent and workspace tools.
                   </div>
                 </div>
                 {BILLING_PLAN_FEATURES.map((feature) => (

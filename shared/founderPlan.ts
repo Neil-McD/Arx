@@ -7,6 +7,7 @@ export const POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS = 20_000_000;
 export const POLYNET_FOUNDER_PLAN_INCLUDED_COMMUNITIES = 1;
 export const POLYNET_FOUNDER_PLAN_MODEL_ID = COMMUNITY_OWNER_FUNDED_MODEL_ID;
 export const POLYNET_FOUNDER_PLAN_PRICING_VERSION = "founder_plan_luna_v1";
+export const POLYNET_COMMUNITY_PLATFORM_FEE_BPS = 290;
 
 export type FounderSubscriptionStatus =
   | "active"

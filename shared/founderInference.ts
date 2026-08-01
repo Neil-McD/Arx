@@ -3,10 +3,17 @@ export const COMMUNITY_OWNER_FUNDED_MODEL_ID = "gpt-5.6-luna";
 export const COMMUNITY_OWNER_FUNDED_MODEL_LABEL = "GPT 5.6 Luna";
 
 export const COMMUNITY_OWNER_INFERENCE_TERMS_KEY = "community_owner_inference_funding";
-export const COMMUNITY_OWNER_INFERENCE_TERMS_VERSION = "community_owner_inference_funding_v1";
+export const COMMUNITY_OWNER_INFERENCE_TERMS_VERSION = "community_owner_inference_funding_v2";
 
 export const COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE = 6;
 export const COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE = 60;
+
+export const COMMUNITY_FUNDING_POLICY_LEGACY_BYOK = "legacy_byok_allowed" as const;
+export const COMMUNITY_FUNDING_POLICY_MANAGED = "managed_required" as const;
+
+export type CommunityInferenceFundingPolicy =
+  | typeof COMMUNITY_FUNDING_POLICY_LEGACY_BYOK
+  | typeof COMMUNITY_FUNDING_POLICY_MANAGED;
 
 export type FounderInferenceGrantStatus = "approved" | "active" | "suspended";
 

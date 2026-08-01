@@ -79,91 +79,22 @@ export async function getFounderSubscriptionByProviderSubscriptionId(
 export async function getFounderSubscriptionByCommunity(
   ctx: any,
   communityId: any,
+  nowMs: number = Date.now(),
 ): Promise<FounderSubscriptionRow | null> {
   const rows = (await ctx.db
     .query("founderSubscriptions" as any)
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .take(2)) as FounderSubscriptionRow[];
-  if (rows.length > 1) throw new Error("founder_subscription_ambiguous");
-  return rows[0] ?? null;
-}
-
-export async function getAvailableFounderSubscriptionForOwner(args: {
-  ctx: any;
-  ownerUserId: any;
-  nowMs: number;
-}): Promise<FounderSubscriptionRow | null> {
-  const rows = (await args.ctx.db
-    .query("founderSubscriptions" as any)
-    .withIndex("by_owner", (q: any) => q.eq("ownerUserId", args.ownerUserId))
     .collect()) as FounderSubscriptionRow[];
-  return rows
-    .filter(
-      (row) =>
-        !row.communityId &&
-        founderSubscriptionStatusGrantsAccess({
-          status: row.status,
-          currentPeriodEndAt: row.currentPeriodEndAt,
-          nowMs: args.nowMs,
-        }),
-    )
-    .sort((a, b) => a.createdAt - b.createdAt)[0] ?? null;
-}
-
-export async function requireAvailableFounderSubscription(args: {
-  ctx: any;
-  ownerUserId: any;
-  founderSubscriptionId?: any;
-  nowMs: number;
-}): Promise<FounderSubscriptionRow> {
-  const row = args.founderSubscriptionId
-    ? ((await args.ctx.db.get(args.founderSubscriptionId as any)) as FounderSubscriptionRow | null)
-    : await getAvailableFounderSubscriptionForOwner(args);
-  if (!row || normalizedId(row.ownerUserId) !== normalizedId(args.ownerUserId)) {
-    throw new Error("founder_subscription_required");
-  }
-  if (row.communityId) throw new Error("founder_subscription_already_attached");
-  if (!founderSubscriptionStatusGrantsAccess({
-    status: row.status,
-    currentPeriodEndAt: row.currentPeriodEndAt,
-    nowMs: args.nowMs,
-  })) {
-    throw new Error("founder_subscription_inactive");
-  }
-  return row;
-}
-
-export async function attachFounderSubscriptionToCommunity(args: {
-  ctx: any;
-  founderSubscriptionId: any;
-  ownerUserId: any;
-  communityId: any;
-  nowMs: number;
-}): Promise<void> {
-  const row = await requireAvailableFounderSubscription({
-    ctx: args.ctx,
-    ownerUserId: args.ownerUserId,
-    founderSubscriptionId: args.founderSubscriptionId,
-    nowMs: args.nowMs,
-  });
-  const existing = await getFounderSubscriptionByCommunity(args.ctx, args.communityId);
-  if (existing) throw new Error("founder_subscription_community_already_attached");
-  await args.ctx.db.patch(row._id as any, {
-    communityId: args.communityId,
-    updatedAt: args.nowMs,
-  });
-  const openCycles = (await args.ctx.db
-    .query("founderUsageCycles" as any)
-    .withIndex("by_subscription_status", (q: any) =>
-      q.eq("founderSubscriptionId", row._id).eq("status", "open"),
-    )
-    .collect()) as FounderUsageCycleRow[];
-  for (const cycle of openCycles) {
-    await args.ctx.db.patch(cycle._id as any, {
-      communityId: args.communityId,
-      updatedAt: args.nowMs,
-    });
-  }
+  const grantingRows = rows.filter((row) =>
+    founderSubscriptionStatusGrantsAccess({
+      status: row.status,
+      currentPeriodEndAt: row.currentPeriodEndAt,
+      nowMs,
+    }),
+  );
+  if (grantingRows.length > 1) throw new Error("founder_subscription_ambiguous");
+  if (grantingRows.length === 1) return grantingRows[0]!;
+  return rows.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
 }
 
 export async function syncFounderUsageCycle(args: {

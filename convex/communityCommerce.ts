@@ -3,6 +3,7 @@ import { action, internalMutation, internalQuery, mutation, query } from "./_gen
 import { v } from "convex/values";
 import {
   getStripeClient,
+  requireStripeConnectWebhookConfiguration,
 } from "./stripeCore";
 import {
   buildCheckoutSuccessUrl,
@@ -34,14 +35,13 @@ import {
 import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import {
-  attachStripeCustomerToUser,
-  ensureStripeCustomerForUser,
-} from "./stripeCustomers";
-import {
   canReceiveCommunityRevenue,
   getStripeConnectDestinationAccountId,
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
+import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
+import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
+import { requireCommunityProviderAccountMatch } from "./communityCommerceCore";
 
 type CommunityCheckoutSessionRow = {
   _id: any;
@@ -58,6 +58,7 @@ type CommunityCheckoutSessionRow = {
   status: "pending" | "complete" | "expired";
   expiresAt: number;
   providerCheckoutSessionId?: string;
+  providerAccountId?: string;
   providerCustomerId?: string;
   providerSubscriptionId?: string;
   sourceProviderInvoiceId?: string;
@@ -72,6 +73,153 @@ type CommunityCheckoutSessionRow = {
   updatedAt: number;
 };
 
+function normalizeStripeObjectId(raw: unknown, code: string): string {
+  const value = String(raw ?? "").trim();
+  if (!value) throw new Error(code);
+  return value;
+}
+
+export const getCommunityStripeCustomerInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    providerAccountId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const providerAccountId = normalizeStripeObjectId(
+      args.providerAccountId,
+      "provider_account_id_required",
+    );
+    return await ctx.db
+      .query("communityStripeCustomers" as any)
+      .withIndex("by_user_account", (q: any) =>
+        q.eq("userId", args.userId).eq("providerAccountId", providerAccountId),
+      )
+      .first();
+  },
+});
+
+export const attachCommunityStripeCustomerInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    providerAccountId: v.string(),
+    providerCustomerId: v.string(),
+    replacesProviderCustomerId: v.optional(v.union(v.string(), v.null())),
+    email: v.optional(v.union(v.string(), v.null())),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const providerAccountId = normalizeStripeObjectId(
+      args.providerAccountId,
+      "provider_account_id_required",
+    );
+    const providerCustomerId = normalizeStripeObjectId(
+      args.providerCustomerId,
+      "provider_customer_id_required",
+    );
+    const replacesProviderCustomerId = String(
+      args.replacesProviderCustomerId ?? "",
+    ).trim();
+    const email = String(args.email ?? "").trim().toLowerCase() || undefined;
+    const customerOwner = await ctx.db
+      .query("communityStripeCustomers" as any)
+      .withIndex("by_account_customer", (q: any) =>
+        q.eq("providerAccountId", providerAccountId).eq("providerCustomerId", providerCustomerId),
+      )
+      .first();
+    if (customerOwner && String(customerOwner.userId) !== String(args.userId)) {
+      throw new Error("community_stripe_customer_owner_conflict");
+    }
+    const existing = await ctx.db
+      .query("communityStripeCustomers" as any)
+      .withIndex("by_user_account", (q: any) =>
+        q.eq("userId", args.userId).eq("providerAccountId", providerAccountId),
+      )
+      .first();
+    if (existing) {
+      if (String(existing.providerCustomerId) !== providerCustomerId) {
+        if (String(existing.providerCustomerId) !== replacesProviderCustomerId) {
+          throw new Error("community_stripe_customer_identity_conflict");
+        }
+        await ctx.db.patch(existing._id, {
+          providerCustomerId,
+          email,
+          updatedAt: nowMs,
+        });
+        return { providerCustomerId, attached: true, replaced: true };
+      }
+      await ctx.db.patch(existing._id, { email, updatedAt: nowMs });
+      return { providerCustomerId, attached: false };
+    }
+    await ctx.db.insert("communityStripeCustomers" as any, {
+      userId: args.userId,
+      provider: "stripe",
+      providerAccountId,
+      providerCustomerId,
+      email,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { providerCustomerId, attached: true };
+  },
+});
+
+async function ensureCommunityStripeCustomerForUser(args: {
+  ctx: any;
+  userId: any;
+  email?: string | null;
+  providerAccountId: string;
+  nowMs: number;
+}): Promise<string> {
+  const providerAccountId = normalizeStripeObjectId(
+    args.providerAccountId,
+    "provider_account_id_required",
+  );
+  const existing = await args.ctx.runQuery(
+    internal.communityCommerce.getCommunityStripeCustomerInternal as any,
+    { userId: args.userId, providerAccountId },
+  );
+  const existingCustomerId = String(existing?.providerCustomerId ?? "").trim();
+  const stripe = getStripeClient();
+  if (existingCustomerId) {
+    try {
+      const customer = await stripe.customers.retrieve(
+        existingCustomerId,
+        {},
+        { stripeAccount: providerAccountId },
+      );
+      if (!Boolean((customer as { deleted?: boolean }).deleted)) return existingCustomerId;
+    } catch (error: any) {
+      if (error?.statusCode !== 404 && error?.code !== "resource_missing") throw error;
+    }
+  }
+  const customer = await stripe.customers.create(
+    {
+      email: String(args.email ?? "").trim().toLowerCase() || undefined,
+      metadata: { polynet_user_id: String(args.userId) },
+    },
+    {
+      stripeAccount: providerAccountId,
+      idempotencyKey: `community-customer:${providerAccountId}:${String(args.userId)}:${existingCustomerId || "initial"}`,
+    },
+  );
+  const attached = await args.ctx.runMutation(
+    internal.communityCommerce.attachCommunityStripeCustomerInternal as any,
+    {
+      userId: args.userId,
+      providerAccountId,
+      providerCustomerId: customer.id,
+      replacesProviderCustomerId: existingCustomerId || null,
+      email: args.email ?? null,
+      nowMs: args.nowMs,
+    },
+  );
+  return normalizeStripeObjectId(
+    attached?.providerCustomerId,
+    "provider_customer_id_required",
+  );
+}
+
 export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
@@ -79,6 +227,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     source: v.union(v.literal("stripe"), v.literal("external_sync")),
     status: v.string(),
     pricePointId: v.optional(v.id("communityPricePoints")),
+    providerAccountId: v.optional(v.union(v.string(), v.null())),
     providerPriceId: v.optional(v.union(v.string(), v.null())),
     providerSubscriptionId: v.optional(v.union(v.string(), v.null())),
     providerCustomerId: v.optional(v.union(v.string(), v.null())),
@@ -92,6 +241,10 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
     const source = args.source;
+    const providerAccountId = String(args.providerAccountId ?? "").trim();
+    if (source === "stripe" && !providerAccountId) {
+      throw new Error("community_subscription_provider_account_required");
+    }
     const status = normalizeCommunitySubscriptionStatus(args.status);
     if (!status) throw new Error("community_subscription_status_invalid");
     const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
@@ -111,6 +264,10 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       .collect()) as Array<Record<string, any>>;
     const current =
       currentRows
+        .filter((row) =>
+          source !== "stripe" ||
+          String(row.providerAccountId ?? "").trim() === providerAccountId
+        )
         .slice()
         .sort((a, b) => {
           const aMatch =
@@ -122,12 +279,6 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
           if (aMatch !== bMatch) return aMatch ? -1 : 1;
           return Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0);
         })[0] ?? null;
-    await attachStripeCustomerToUser({
-      ctx,
-      userId: args.userId,
-      providerCustomerId: args.providerCustomerId,
-      nowMs,
-    });
     const currentSource = String(current?.source ?? "")
       .trim()
       .toLowerCase();
@@ -150,6 +301,14 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         subscription_status: String(current?.status ?? status),
       };
     }
+    const currentProviderAccountId = String(current?.providerAccountId ?? "").trim();
+    if (
+      source === "stripe" &&
+      currentProviderAccountId &&
+      currentProviderAccountId !== providerAccountId
+    ) {
+      throw new Error("community_subscription_provider_account_mismatch");
+    }
     const previousStatus = String(current?.status ?? "")
       .trim()
       .toLowerCase();
@@ -161,8 +320,13 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         .query("communityPricePoints" as any)
         .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
         .collect()) as CommunityPricePointLike[];
-      const matched =
-        pricePoints.find((row) => String(row.providerPriceId ?? "").trim() === providerPriceId) ?? null;
+      const matched = pricePoints.find((row) =>
+        String(row.providerPriceId ?? "").trim() === providerPriceId &&
+        (
+          source !== "stripe" ||
+          String(row.providerAccountId ?? "").trim() === providerAccountId
+        )
+      ) ?? null;
       pricePointId = matched?._id;
     }
     if (!pricePointId) throw new Error("community_subscription_price_point_required");
@@ -190,6 +354,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       source: currentSource === "stripe" || currentSource === "external_sync" ? current?.source : source,
       pricePointId,
       status,
+      providerAccountId: providerAccountId || current?.providerAccountId,
       providerSubscriptionId: nextProviderSubscriptionId,
       providerCustomerId: nextProviderCustomerId,
       currentPeriodStartAt:
@@ -308,15 +473,12 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
       nowMs,
     });
     if (!pricePoint) throw new Error("paid_plan_required");
-    const ownerBilling = (await ctx.runQuery(
-      internal.auth.getAccountCommerceAccessForUserInternal as any,
-      {
-        userId: community.ownerId,
-        nowMs,
-      },
-    )) as { account_tier?: unknown; platform_fee_bps?: unknown; has_payouts?: unknown } | null;
-    if (ownerBilling?.has_payouts !== true) {
-      throw new Error("community_checkout_unavailable");
+    const funding = await resolveCommunityInferenceFundingAdmission(
+      ctx,
+      community._id,
+    );
+    if (!funding.ok) {
+      throw new Error(`community_founder_funding_required:${funding.code}`);
     }
     const connectAccount = (await ctx.runQuery(
       internal.creatorCommerce.getUserStripeConnectAccountInternal as any,
@@ -324,8 +486,8 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
         userId: community.ownerId,
       },
     )) as StripeConnectRevenueDestinationLike | null;
-    const destinationAccountId = getStripeConnectDestinationAccountId(connectAccount);
-    if (!canReceiveCommunityRevenue(connectAccount) || destinationAccountId === null) {
+    const providerAccountId = getStripeConnectDestinationAccountId(connectAccount);
+    if (!canReceiveCommunityRevenue(connectAccount) || providerAccountId === null) {
       throw new Error("community_checkout_unavailable");
     }
     return {
@@ -337,9 +499,12 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
       amountBaseUnits: pricePoint.amountBaseUnits,
       currency: pricePoint.currency,
       currencyDecimals: pricePoint.currencyDecimals,
-      providerPriceId: String(pricePoint.providerPriceId ?? "").trim() || null,
-      destinationAccountId,
-      platformFeeBps: Math.max(0, Math.floor(Number(ownerBilling?.platform_fee_bps ?? 0))),
+      providerPriceId:
+        String(pricePoint.providerAccountId ?? "").trim() === providerAccountId
+          ? String(pricePoint.providerPriceId ?? "").trim() || null
+          : null,
+      providerAccountId,
+      platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
       oneLiner: typeof community.oneLiner === "string" ? community.oneLiner : null,
     };
   },
@@ -348,6 +513,7 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
 export const attachCommunityPricePointProviderPriceInternal = internalMutation({
   args: {
     pricePointId: v.id("communityPricePoints"),
+    providerAccountId: v.string(),
     providerPriceId: v.string(),
     nowMs: v.optional(v.number()),
   },
@@ -355,21 +521,29 @@ export const attachCommunityPricePointProviderPriceInternal = internalMutation({
     const nowMs = args.nowMs ?? Date.now();
     const providerPriceId = String(args.providerPriceId).trim();
     if (!providerPriceId) throw new Error("provider_price_id_required");
+    const providerAccountId = normalizeStripeObjectId(
+      args.providerAccountId,
+      "provider_account_id_required",
+    );
     const pricePoint = (await ctx.db.get(args.pricePointId)) as CommunityPricePointLike | null;
     if (!pricePoint) throw new Error("community_price_point_not_found");
     const existingProviderPriceId = String(pricePoint.providerPriceId ?? "").trim();
-    if (existingProviderPriceId) {
+    const existingProviderAccountId = String(pricePoint.providerAccountId ?? "").trim();
+    if (existingProviderPriceId && existingProviderAccountId === providerAccountId) {
       return {
         providerPriceId: existingProviderPriceId,
+        providerAccountId,
         attached: false,
       };
     }
     await ctx.db.patch(args.pricePointId, {
+      providerAccountId,
       providerPriceId,
       updatedAt: nowMs,
     });
     return {
       providerPriceId,
+      providerAccountId,
       attached: true,
     };
   },
@@ -378,12 +552,22 @@ export const attachCommunityPricePointProviderPriceInternal = internalMutation({
 export const getCommunityPricePointProviderPriceInternal = internalQuery({
   args: {
     pricePointId: v.id("communityPricePoints"),
+    providerAccountId: v.string(),
   },
   handler: async (ctx, args) => {
     const pricePoint = (await ctx.db.get(args.pricePointId)) as CommunityPricePointLike | null;
     if (!pricePoint) throw new Error("community_price_point_not_found");
+    const providerAccountId = normalizeStripeObjectId(
+      args.providerAccountId,
+      "provider_account_id_required",
+    );
+    const storedProviderAccountId = String(pricePoint.providerAccountId ?? "").trim();
     return {
-      providerPriceId: String(pricePoint.providerPriceId ?? "").trim() || null,
+      providerPriceId:
+        storedProviderAccountId === providerAccountId
+          ? String(pricePoint.providerPriceId ?? "").trim() || null
+          : null,
+      providerAccountId: storedProviderAccountId || null,
     };
   },
 });
@@ -397,6 +581,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     amountBaseUnits: v.number(),
     currency: v.string(),
     currencyDecimals: v.number(),
+    providerAccountId: v.string(),
     providerPriceId: v.string(),
     ownerUserId: v.optional(v.id("users")),
     claimToken: v.string(),
@@ -414,6 +599,10 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
       amountBaseUnits: args.amountBaseUnits,
       currency: args.currency,
       currencyDecimals: args.currencyDecimals,
+      providerAccountId: normalizeStripeObjectId(
+        args.providerAccountId,
+        "provider_account_id_required",
+      ),
       providerPriceId: args.providerPriceId,
       ownerUserId: args.ownerUserId ?? undefined,
       claimToken: args.claimToken,
@@ -438,6 +627,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
         amountBaseUnits: args.amountBaseUnits,
         currency: args.currency,
         currencyDecimals: args.currencyDecimals,
+        providerAccountId: args.providerAccountId,
         expiresAt: args.expiresAt,
       },
       createdAt: nowMs,
@@ -481,6 +671,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
 export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
   args: {
     sessionId: v.string(),
+    providerAccountId: v.string(),
     providerCheckoutSessionId: v.string(),
     providerCustomerId: v.optional(v.union(v.string(), v.null())),
     providerSubscriptionId: v.optional(v.union(v.string(), v.null())),
@@ -495,14 +686,19 @@ export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
       .first()) as CommunityCheckoutSessionRow | null;
     if (!row) throw new Error("community_checkout_session_not_found");
     if (row.mode !== "community_join") throw new Error("community_checkout_session_invalid");
-    await attachStripeCustomerToUser({
-      ctx,
-      userId: row.ownerUserId,
-      providerCustomerId: args.providerCustomerId,
-      nowMs,
+    const providerAccountId = normalizeStripeObjectId(
+      args.providerAccountId,
+      "provider_account_id_required",
+    );
+    requireCommunityProviderAccountMatch({
+      expectedProviderAccountId: row.providerAccountId,
+      actualProviderAccountId: providerAccountId,
+      missingCode: "provider_account_id_required",
+      mismatchCode: "community_checkout_provider_account_mismatch",
     });
     await ctx.db.patch(row._id, {
       provider: "stripe",
+      providerAccountId,
       providerCheckoutSessionId: String(args.providerCheckoutSessionId ?? "").trim() || undefined,
       providerCustomerId: String(args.providerCustomerId ?? "").trim() || row.providerCustomerId,
       providerSubscriptionId:
@@ -522,6 +718,7 @@ export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
       providerObjectId: args.providerCheckoutSessionId,
       metadata: {
         providerCustomerId: args.providerCustomerId ?? null,
+        providerAccountId,
         providerSubscriptionId: args.providerSubscriptionId ?? null,
         providerPriceId: args.providerPriceId ?? row.providerPriceId ?? null,
       },
@@ -533,6 +730,7 @@ export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
 export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation({
   args: {
     sessionId: v.string(),
+    providerAccountId: v.string(),
     providerCheckoutSessionId: v.optional(v.union(v.string(), v.null())),
     providerCustomerId: v.optional(v.union(v.string(), v.null())),
     providerSubscriptionId: v.optional(v.union(v.string(), v.null())),
@@ -555,11 +753,15 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
       .first()) as CommunityCheckoutSessionRow | null;
     if (!row) throw new Error("community_checkout_session_not_found");
     if (row.mode !== "community_join") throw new Error("community_checkout_session_invalid");
-    await attachStripeCustomerToUser({
-      ctx,
-      userId: row.ownerUserId,
-      providerCustomerId: args.providerCustomerId,
-      nowMs,
+    const providerAccountId = normalizeStripeObjectId(
+      args.providerAccountId,
+      "provider_account_id_required",
+    );
+    requireCommunityProviderAccountMatch({
+      expectedProviderAccountId: row.providerAccountId,
+      actualProviderAccountId: providerAccountId,
+      missingCode: "provider_account_id_required",
+      mismatchCode: "community_checkout_provider_account_mismatch",
     });
     const communitySubscriptionStatus = normalizeStripeCommunitySubscriptionStatus({
       subscriptionStatus: args.subscriptionStatus,
@@ -567,6 +769,7 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
     });
     await ctx.db.patch(row._id, {
       provider: "stripe",
+      providerAccountId,
       providerCheckoutSessionId:
         String(args.providerCheckoutSessionId ?? "").trim() || row.providerCheckoutSessionId,
       providerCustomerId: String(args.providerCustomerId ?? "").trim() || row.providerCustomerId,
@@ -600,6 +803,7 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
         communitySubscriptionStatus,
         cancelAtPeriodEnd: Boolean(args.cancelAtPeriodEnd ?? communitySubscriptionStatus === "cancel_at_period_end"),
         markComplete: Boolean(args.markComplete),
+        providerAccountId,
         providerPriceId: args.providerPriceId ?? row.providerPriceId ?? null,
         currentPeriodStartAt: args.currentPeriodStartAt ?? row.currentPeriodStartAt ?? null,
         currentPeriodEndAt: args.currentPeriodEndAt ?? row.currentPeriodEndAt ?? null,
@@ -645,6 +849,7 @@ export const getCommunityJoinCheckoutSessionInternal = internalQuery({
       pricePointId: row.pricePointId ?? null,
       claimToken: row.claimToken ?? null,
       providerCheckoutSessionId: row.providerCheckoutSessionId ?? null,
+      providerAccountId: row.providerAccountId ?? null,
       providerCustomerId: row.providerCustomerId ?? null,
       providerSubscriptionId: row.providerSubscriptionId ?? null,
       providerPriceId: row.providerPriceId ?? null,
@@ -660,15 +865,17 @@ export const getCommunityJoinCheckoutSessionInternal = internalQuery({
 
 export const getCommunitySubscriptionByProviderSubscriptionIdInternal = internalQuery({
   args: {
+    providerAccountId: v.string(),
     providerSubscriptionId: v.string(),
   },
   handler: async (ctx, args) => {
     const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
-    if (!providerSubscriptionId) return null;
+    const providerAccountId = String(args.providerAccountId ?? "").trim();
+    if (!providerSubscriptionId || !providerAccountId) return null;
     const row = await ctx.db
       .query("communitySubscriptions" as any)
-      .withIndex("by_providerSubscriptionId", (q: any) =>
-        q.eq("providerSubscriptionId", providerSubscriptionId),
+      .withIndex("by_providerAccount_subscription", (q: any) =>
+        q.eq("providerAccountId", providerAccountId).eq("providerSubscriptionId", providerSubscriptionId),
       )
       .first();
     if (!row) return null;
@@ -676,6 +883,7 @@ export const getCommunitySubscriptionByProviderSubscriptionIdInternal = internal
       communityId: row.communityId,
       userId: row.userId,
       pricePointId: row.pricePointId ?? null,
+      providerAccountId: row.providerAccountId ?? null,
     };
   },
 });
@@ -716,10 +924,11 @@ export const startPublicCommunityCheckout = action({
       currency: string;
       currencyDecimals: number;
       providerPriceId: string | null;
-      destinationAccountId: string;
+      providerAccountId: string;
       platformFeeBps: number;
       oneLiner: string | null;
     };
+    requireStripeConnectWebhookConfiguration();
     const sessionId = newOpaqueToken("chk");
     const claimToken = newOpaqueToken("claim");
     const expiresAt = nowMs + 14 * 24 * 60 * 60 * 1000;
@@ -732,15 +941,16 @@ export const startPublicCommunityCheckout = action({
     const ownerUserId: unknown = actor?.dbUserId;
     const ownerEmail: string | null = actor?.email ?? null;
     if (!ownerUserId) throw new Error("auth_subject_required");
-    const stripeCustomerId = await ensureStripeCustomerForUser({
-      ctx,
-      userId: ownerUserId,
-      email: ownerEmail,
-      nowMs,
-    });
     await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
       communityId: checkoutConfig.communityId,
       userId: ownerUserId,
+    });
+    const stripeCustomerId = await ensureCommunityStripeCustomerForUser({
+      ctx,
+      userId: ownerUserId,
+      email: ownerEmail,
+      providerAccountId: checkoutConfig.providerAccountId,
+      nowMs,
     });
     let providerPriceId = String(checkoutConfig.providerPriceId ?? "").trim() || null;
     if (!providerPriceId) {
@@ -748,15 +958,16 @@ export const startPublicCommunityCheckout = action({
         internal.communityCommerce.getCommunityPricePointProviderPriceInternal as any,
         {
           pricePointId: checkoutConfig.pricePointId,
+          providerAccountId: checkoutConfig.providerAccountId,
         },
-      )) as { providerPriceId?: string | null } | null;
+      )) as { providerPriceId?: string | null; providerAccountId?: string | null } | null;
       providerPriceId = String(existingProviderPrice?.providerPriceId ?? "").trim() || null;
     }
     if (!providerPriceId) {
       const stripe = getStripeClient();
       const pricePointId = String(checkoutConfig.pricePointId);
-      const productIdempotencyKey = `community-price-product:${pricePointId}`;
-      const priceIdempotencyKey = `community-price:${pricePointId}`;
+      const productIdempotencyKey = `community-price-product:${checkoutConfig.providerAccountId}:${pricePointId}`;
+      const priceIdempotencyKey = `community-price:${checkoutConfig.providerAccountId}:${pricePointId}`;
       const product = await stripe.products.create({
         name: `${checkoutConfig.communityName} (${checkoutConfig.billingPeriod})`,
         description: checkoutConfig.oneLiner ?? undefined,
@@ -767,6 +978,7 @@ export const startPublicCommunityCheckout = action({
           billing_period: checkoutConfig.billingPeriod,
         },
       }, {
+        stripeAccount: checkoutConfig.providerAccountId,
         idempotencyKey: productIdempotencyKey,
       });
       const price = await stripe.prices.create({
@@ -783,16 +995,18 @@ export const startPublicCommunityCheckout = action({
           billing_period: checkoutConfig.billingPeriod,
         },
       }, {
+        stripeAccount: checkoutConfig.providerAccountId,
         idempotencyKey: priceIdempotencyKey,
       });
       const attachResult = (await ctx.runMutation(
         internal.communityCommerce.attachCommunityPricePointProviderPriceInternal as any,
         {
           pricePointId: checkoutConfig.pricePointId,
+          providerAccountId: checkoutConfig.providerAccountId,
           providerPriceId: price.id,
           nowMs,
         },
-      )) as { providerPriceId?: string | null } | null;
+      )) as { providerPriceId?: string | null; providerAccountId?: string | null } | null;
       providerPriceId = String(attachResult?.providerPriceId ?? price.id).trim();
       if (!providerPriceId) throw new Error("provider_price_id_required");
     }
@@ -806,6 +1020,7 @@ export const startPublicCommunityCheckout = action({
         amountBaseUnits: checkoutConfig.amountBaseUnits,
         currency: checkoutConfig.currency,
         currencyDecimals: checkoutConfig.currencyDecimals,
+        providerAccountId: checkoutConfig.providerAccountId,
         providerPriceId,
         ownerUserId: ownerUserId ?? undefined,
         claimToken,
@@ -838,9 +1053,6 @@ export const startPublicCommunityCheckout = action({
         },
         subscription_data: {
           application_fee_percent: checkoutConfig.platformFeeBps / 100,
-          transfer_data: {
-            destination: checkoutConfig.destinationAccountId,
-          },
           metadata: {
             local_session_id: sessionId,
             claim_token: claimToken,
@@ -850,6 +1062,9 @@ export const startPublicCommunityCheckout = action({
             billing_period: billingPeriod,
           },
         },
+      }, {
+        stripeAccount: checkoutConfig.providerAccountId,
+        idempotencyKey: `community-checkout:${checkoutConfig.providerAccountId}:${sessionId}`,
       });
       const checkoutUrl: string = String(checkoutSession.url ?? "").trim();
       if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
@@ -857,6 +1072,7 @@ export const startPublicCommunityCheckout = action({
         internal.communityCommerce.attachCommunityStripeCheckoutSessionInternal as any,
         {
           sessionId,
+          providerAccountId: checkoutConfig.providerAccountId,
           providerCheckoutSessionId: checkoutSession.id,
           providerCustomerId:
             typeof checkoutSession.customer === "string" ? checkoutSession.customer : null,

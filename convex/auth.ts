@@ -15,8 +15,8 @@ import {
 import { canUseCreatorDevTierOverride } from "../shared/devTierOverride";
 import {
   POLYNET_FREE_MAX_COMMUNITIES,
-  POLYNET_PREMIUM_MAX_COMMUNITIES,
 } from "../shared/accountCommerce";
+import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 import { canReceiveCommunityRevenue } from "./stripeConnectAccountCore";
 
@@ -33,14 +33,14 @@ type AccountTierMeta = {
 function accountTierMeta(tier: CanonicalTier): AccountTierMeta {
   if (tier === "architect") {
     return {
-      maxCommunities: POLYNET_PREMIUM_MAX_COMMUNITIES,
-      platformFeeBps: 300,
+      maxCommunities: POLYNET_FREE_MAX_COMMUNITIES,
+      platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
       hasPayouts: true,
     };
   }
   return {
     maxCommunities: POLYNET_FREE_MAX_COMMUNITIES,
-    platformFeeBps: 1000,
+    platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
     hasPayouts: true,
   };
 }

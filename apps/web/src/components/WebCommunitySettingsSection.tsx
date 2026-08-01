@@ -44,6 +44,7 @@ type WebCommunitySettingsSectionProps = {
   canManageCommunitySettings: boolean;
   requireSignIn: () => void;
   accountCommerceStatus: AccountCommerceStatus | null;
+  communityPlatformFeeBps: number | null;
   accountCommerceError: string | null;
   startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
@@ -378,6 +379,7 @@ function CommunityProfileSettingsSection({ state, actions }: SharedSettingsProps
 function CommunityMonetizationConfigSection({
   activeCommunity,
   accountCommerceStatus,
+  communityPlatformFeeBps,
   accountCommerceError,
   startStripeConnectOnboarding,
   isStartingStripeConnectOnboarding,
@@ -388,6 +390,7 @@ function CommunityMonetizationConfigSection({
 }: SharedSettingsProps & {
   activeCommunity: ActiveCommunity;
   accountCommerceStatus: AccountCommerceStatus | null;
+  communityPlatformFeeBps: number | null;
   accountCommerceError: string | null;
   startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
@@ -410,9 +413,12 @@ function CommunityMonetizationConfigSection({
   const stripeConnectPresentation = buildStripeConnectPresentation({
     accountCommerceStatus,
     surface: "community",
+    platformFeeBpsOverride: communityPlatformFeeBps,
   });
   const canReceiveCommunityRevenue = stripeConnectPresentation.isReady;
-  const canMonetizeCommunities = Number(accountCommerceStatus?.platform_fee_bps ?? 0) > 0;
+  const canMonetizeCommunities = Number(
+    communityPlatformFeeBps ?? accountCommerceStatus?.platform_fee_bps ?? 0,
+  ) > 0;
   const needsStripeConnect = !canMonetizeCommunities || !canReceiveCommunityRevenue;
   const storedStripeConnectCountry = accountCommerceStatus?.stripe_connect.country ?? null;
   const [stripeConnectCountry, setStripeConnectCountry] = useState("");
@@ -643,6 +649,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     canManageCommunitySettings,
     requireSignIn,
     accountCommerceStatus,
+    communityPlatformFeeBps,
     accountCommerceError,
     startStripeConnectOnboarding,
     isStartingStripeConnectOnboarding,
@@ -745,6 +752,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 <CommunityMonetizationConfigSection
                   activeCommunity={resolvedActiveCommunity}
                   accountCommerceStatus={accountCommerceStatus}
+                  communityPlatformFeeBps={communityPlatformFeeBps}
                   accountCommerceError={accountCommerceError}
                   startStripeConnectOnboarding={startStripeConnectOnboarding}
                   isStartingStripeConnectOnboarding={isStartingStripeConnectOnboarding}

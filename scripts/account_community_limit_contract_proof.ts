@@ -14,13 +14,13 @@ const builderQuickstart = read("docs/product/guides/builder-quickstart.md");
 
 assert.match(
   auth,
-  /POLYNET_PREMIUM_MAX_COMMUNITIES[\s\S]*if \(tier === "architect"\) \{[\s\S]*?maxCommunities: POLYNET_PREMIUM_MAX_COMMUNITIES,/,
-  "Premium tier should use the shared two-community limit",
+  /if \(tier === "architect"\) \{[\s\S]*?maxCommunities: POLYNET_FREE_MAX_COMMUNITIES,[\s\S]*?platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,/,
+  "Personal Premium must not increase community count or change community fees",
 );
 assert.match(
   auth,
-  /POLYNET_FREE_MAX_COMMUNITIES[\s\S]*return \{[\s\S]*?maxCommunities: POLYNET_FREE_MAX_COMMUNITIES,[\s\S]*?platformFeeBps: 1000,/,
-  "free account tier should allow one community with the default 10% platform fee",
+  /POLYNET_FREE_MAX_COMMUNITIES[\s\S]*return \{[\s\S]*?maxCommunities: POLYNET_FREE_MAX_COMMUNITIES,[\s\S]*?platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,/,
+  "free account tier should allow one community with the universal community platform fee",
 );
 assert.match(
   auth,
@@ -56,7 +56,6 @@ for (const [label, contents] of [
   assert.doesNotMatch(contents, /free (authenticated )?(user|account)s? (can|may).*(own|create|build) two communit/i, `${label} should not describe a two-community free limit`);
 }
 
-assert.match(accountModal, /Free accounts can create one community/i, "free account modal must describe one free community");
-assert.match(accountModal, /Premium unlocks a second community/i, "free account modal must describe Premium second-community unlock");
+assert.match(accountModal, /Community funding is managed separately/i, "free account modal must separate community funding from Premium");
 assert.match(accountMatrix, /can own one community/i, "auth money access matrix must describe one free community");
-assert.match(builderQuickstart, /build one community/i, "builder quickstart must describe one free community");
+assert.match(builderQuickstart, /Community creation and funding are separate from Polynet Premium/i, "builder quickstart must separate community funding from Premium");

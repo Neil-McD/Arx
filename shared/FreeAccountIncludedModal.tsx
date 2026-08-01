@@ -1,6 +1,5 @@
 import {
   POLYNET_FREE_MAX_COMMUNITIES,
-  POLYNET_PREMIUM_MAX_COMMUNITIES,
   POLYNET_PREMIUM_MONTHLY_PRICE_LABEL,
   POLYNET_PREMIUM_PLAN_NAME,
 } from "./accountCommerce";
@@ -21,7 +20,7 @@ export function FreeAccountIncludedModal({
   if (!isOpen) return null;
 
   const accountInfoLead =
-    "Free accounts can create one community. Premium unlocks a second community, hosted tools, web research, and premium runtimes.";
+    "Personal Premium unlocks hosted tools, web research, and premium runtimes. Community funding is managed separately in Billing.";
 
   const handleOpenBilling = () => {
     onClose();
@@ -67,7 +66,7 @@ export function FreeAccountIncludedModal({
                 <span className="plan-price-amount">{POLYNET_PREMIUM_MONTHLY_PRICE_LABEL}</span>
               </div>
               <ul className="plan-points">
-                <li>Create {POLYNET_PREMIUM_MAX_COMMUNITIES} communities.</li>
+                <li>Community funding stays separate.</li>
                 <li>Use premium hosted tools.</li>
                 <li>Run web research.</li>
                 <li>Use Codex and future premium runtimes.</li>

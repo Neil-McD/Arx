@@ -623,6 +623,7 @@ export default defineSchema({
     ),
     provider: v.optional(v.literal("stripe")),
     providerCheckoutSessionId: v.optional(v.string()),
+    providerAccountId: v.optional(v.string()),
     providerCustomerId: v.optional(v.string()),
     providerSubscriptionId: v.optional(v.string()),
     providerPriceId: v.optional(v.string()),
@@ -684,6 +685,18 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_providerCustomerId", ["providerCustomerId"])
     .index("by_providerDefaultPaymentMethodId", ["providerDefaultPaymentMethodId"]),
+
+  communityStripeCustomers: defineTable({
+    userId: v.id("users"),
+    provider: v.literal("stripe"),
+    providerAccountId: v.string(),
+    providerCustomerId: v.string(),
+    email: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_account", ["userId", "providerAccountId"])
+    .index("by_account_customer", ["providerAccountId", "providerCustomerId"]),
 
   purchaseClaims: defineTable({
     claimToken: v.string(),
@@ -1221,6 +1234,12 @@ export default defineSchema({
       }),
     ),
     visibility: v.union(v.literal("published"), v.literal("unlisted")),
+    inferenceFundingPolicy: v.optional(
+      v.union(
+        v.literal("legacy_byok_allowed"),
+        v.literal("managed_required"),
+      ),
+    ),
     entryPolicy: v.union(
       v.literal("open"),
       v.literal("approval"),
@@ -1395,6 +1414,7 @@ export default defineSchema({
     currencyDecimals: v.number(),
     isCurrent: v.boolean(),
     archivedAt: v.optional(v.number()),
+    providerAccountId: v.optional(v.string()),
     providerPriceId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1417,6 +1437,7 @@ export default defineSchema({
       v.literal("ended"),
     ),
     providerSubscriptionId: v.optional(v.string()),
+    providerAccountId: v.optional(v.string()),
     providerCustomerId: v.optional(v.string()),
     currentPeriodStartAt: v.optional(v.number()),
     currentPeriodEndAt: v.optional(v.number()),
@@ -1430,6 +1451,7 @@ export default defineSchema({
     .index("by_pricePoint", ["pricePointId"])
     .index("by_community_user", ["communityId", "userId"])
     .index("by_providerSubscriptionId", ["providerSubscriptionId"])
+    .index("by_providerAccount_subscription", ["providerAccountId", "providerSubscriptionId"])
     .index("by_status", ["status"])
     .index("by_community_status", ["communityId", "status"]),
 

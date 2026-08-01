@@ -72,12 +72,12 @@ assert.doesNotMatch(
 
 assert.match(
   accountCommerceSource,
-  /POLYNET_PREMIUM_PLAN_NAME = "Polynet Premium"[\s\S]*POLYNET_FREE_MAX_COMMUNITIES = 1[\s\S]*POLYNET_PREMIUM_MAX_COMMUNITIES = 2[\s\S]*POLYNET_PREMIUM_MONTHLY_PRICE_LABEL = "\$20\/mo"/,
-  "shared account commerce must expose one canonical Polynet Premium product and community-cap truth",
+  /POLYNET_PREMIUM_PLAN_NAME = "Polynet Premium"[\s\S]*POLYNET_FREE_MAX_COMMUNITIES = 1[\s\S]*POLYNET_PREMIUM_MONTHLY_PRICE_LABEL = "\$20\/mo"/,
+  "shared account commerce must expose one canonical personal Premium product without community expansion",
 );
 assert.match(
   accountCommerceSource,
-  /POLYNET_PREMIUM_DESCRIPTION =[\s\S]*Grants access to Codex and future premium runtimes, web research, hosted workspace tools, premium tool usage, and a second community\./,
+  /POLYNET_PREMIUM_DESCRIPTION =[\s\S]*Grants access to Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage\./,
   "shared account commerce must describe Premium as access, not as an included-dollar usage allowance",
 );
 assert.doesNotMatch(
@@ -144,8 +144,6 @@ assert.doesNotMatch(
 );
 
 for (const requiredBillingLabel of [
-  "POLYNET_FREE_MAX_COMMUNITIES",
-  "POLYNET_PREMIUM_MAX_COMMUNITIES",
   "POLYNET_PREMIUM_PLAN_NAME",
   "POLYNET_PREMIUM_MONTHLY_PRICE_LABEL",
   "Upgrade to Premium",

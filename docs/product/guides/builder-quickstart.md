@@ -14,7 +14,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Every authenticated free user can build one community. Polynet Premium unlocks a second community, Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage.
+Community creation and funding are separate from Polynet Premium. Premium unlocks Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage; it does not authorize or fund a community.
 
 ## Before You Start
 
@@ -81,9 +81,9 @@ The cash path is simple: configure the community, define the paid access model, 
 - Membership and entitlement are backend authority.
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
-- Free accounts can own one community.
-- Polynet Premium accounts can own two communities.
-- Existing owned communities remain active if limits change; the limit only gates creating another community.
+- Existing approved founders can continue managing their owned communities.
+- Each managed community requires its own verified $79 monthly funding subscription.
+- Polynet Premium does not increase community count or alter community fees.
 - Premium unlocks paid tools such as hosted workspace tools, web research, and premium runtimes.
 - Owner/admin manage resources and most operational settings.
 - Moderators help with moderation and join request review, not paid access.

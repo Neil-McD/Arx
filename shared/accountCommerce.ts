@@ -5,13 +5,12 @@ export type AccountTierUi = "free" | "architect";
 export const POLYNET_PREMIUM_PLAN_NAME = "Polynet Premium";
 export const POLYNET_PREMIUM_ACCOUNT_TIER = "architect" as const;
 export const POLYNET_FREE_MAX_COMMUNITIES = 1;
-export const POLYNET_PREMIUM_MAX_COMMUNITIES = 2;
 export const POLYNET_PREMIUM_MONTHLY_PRICE_USD = 20;
 export const POLYNET_PREMIUM_MONTHLY_PRICE_BASE_UNITS = 2000;
 export const POLYNET_PREMIUM_MONTHLY_PRICE_LABEL = "$20/mo";
 export const POLYNET_PREMIUM_INCLUDED_USAGE_LABEL = "Premium tool usage included";
 export const POLYNET_PREMIUM_DESCRIPTION =
-  "Grants access to Codex and future premium runtimes, web research, hosted workspace tools, premium tool usage, and a second community.";
+  "Grants access to Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage.";
 
 export type StripeConnectReturnAction = "refresh" | "return";
 export type StripeConnectContext = "account" | "community";

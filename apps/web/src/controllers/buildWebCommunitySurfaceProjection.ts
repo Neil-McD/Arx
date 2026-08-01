@@ -43,6 +43,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   canManageCommunitySettings: WebCommunitySecondaryPanelsProps["settings"]["canManageCommunitySettings"];
   requireSignIn: WebCommunitySecondaryPanelsProps["settings"]["requireSignIn"];
   accountCommerceStatus: WebCommunitySecondaryPanelsProps["settings"]["accountCommerceStatus"];
+  communityPlatformFeeBps: WebCommunitySecondaryPanelsProps["settings"]["communityPlatformFeeBps"];
   accountCommerceError: WebCommunitySecondaryPanelsProps["settings"]["accountCommerceError"];
   startStripeConnectOnboarding:
     WebCommunitySecondaryPanelsProps["settings"]["startStripeConnectOnboarding"];
@@ -196,6 +197,7 @@ export function buildWebCommunitySurfaceProjection(
       canManageCommunitySettings: params.canManageCommunitySettings,
       requireSignIn: params.requireSignIn,
       accountCommerceStatus: params.accountCommerceStatus,
+      communityPlatformFeeBps: params.communityPlatformFeeBps,
       accountCommerceError: params.accountCommerceError,
       startStripeConnectOnboarding: params.startStripeConnectOnboarding,
       isStartingStripeConnectOnboarding: params.isStartingStripeConnectOnboarding,

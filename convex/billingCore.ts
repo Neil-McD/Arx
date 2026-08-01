@@ -9,7 +9,6 @@ import {
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
-import { attachStripeCustomerToUser } from "./stripeCustomers";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 
 export type CommunityLike = {
@@ -32,6 +31,7 @@ export type CommunityPricePointLike = {
   currencyDecimals: number;
   isCurrent: boolean;
   archivedAt?: number;
+  providerAccountId?: string;
   providerPriceId?: string;
   createdAt: number;
   updatedAt: number;
@@ -204,6 +204,7 @@ export async function createCommunitySubscriptionForMembership(args: {
   userId: any;
   pricePointId: any;
   source?: "stripe" | "external_sync";
+  providerAccountId?: string | null;
   providerSubscriptionId?: string | null;
   providerCustomerId?: string | null;
   currentPeriodStartAt?: number | null;
@@ -216,21 +217,25 @@ export async function createCommunitySubscriptionForMembership(args: {
   const status = args.status ?? "active";
   const cancelAtPeriodEnd = Boolean(args.cancelAtPeriodEnd ?? status === "cancel_at_period_end");
   const endedAt = status === "canceled" || status === "ended" ? args.nowMs : undefined;
-  await attachStripeCustomerToUser({
-    ctx: args.ctx,
-    userId: args.userId,
-    providerCustomerId: args.providerCustomerId,
-    nowMs: args.nowMs,
-  });
-  const existing = await args.ctx.db
+  const providerAccountId = String(args.providerAccountId ?? "").trim();
+  if (source === "stripe" && !providerAccountId) {
+    throw new Error("community_subscription_provider_account_required");
+  }
+  const existingRows = await args.ctx.db
     .query("communitySubscriptions" as any)
     .withIndex("by_membership", (q: any) => q.eq("membershipId", args.membershipId))
-    .first();
+    .collect();
+  const existing = source === "stripe"
+    ? existingRows.find(
+        (row: any) => String(row.providerAccountId ?? "").trim() === providerAccountId,
+      ) ?? null
+    : existingRows[0] ?? null;
   if (existing) {
     await args.ctx.db.patch(existing._id, {
       source,
       pricePointId: args.pricePointId,
       status,
+      providerAccountId: providerAccountId || existing.providerAccountId,
       providerSubscriptionId:
         String(args.providerSubscriptionId ?? "").trim() || existing.providerSubscriptionId,
       providerCustomerId:
@@ -257,6 +262,7 @@ export async function createCommunitySubscriptionForMembership(args: {
         pricePointId: String(args.pricePointId),
         subscriptionStatus: status,
         source,
+        providerAccountId: providerAccountId || null,
         cancelAtPeriodEnd,
       },
       createdAt: args.nowMs,
@@ -270,6 +276,7 @@ export async function createCommunitySubscriptionForMembership(args: {
     pricePointId: args.pricePointId,
     source,
     status,
+    providerAccountId: providerAccountId || undefined,
     providerSubscriptionId: String(args.providerSubscriptionId ?? "").trim() || undefined,
     providerCustomerId: String(args.providerCustomerId ?? "").trim() || undefined,
     currentPeriodStartAt:
@@ -295,6 +302,7 @@ export async function createCommunitySubscriptionForMembership(args: {
       pricePointId: String(args.pricePointId),
       subscriptionStatus: status,
       source,
+      providerAccountId: providerAccountId || null,
       cancelAtPeriodEnd,
     },
     createdAt: args.nowMs,
@@ -362,6 +370,7 @@ export async function redeemClaimRow(args: {
         claimToken?: string;
         status?: string;
         expiresAt?: number;
+        providerAccountId?: string;
         providerSubscriptionId?: string;
         providerCustomerId?: string;
         currentPeriodStartAt?: number;
@@ -451,6 +460,7 @@ export async function redeemClaimRow(args: {
       userId: args.userId,
       pricePointId: args.claim.pricePointId,
       source: "stripe",
+      providerAccountId: checkoutSession?.providerAccountId ?? null,
       providerSubscriptionId: checkoutSession?.providerSubscriptionId ?? null,
       providerCustomerId: checkoutSession?.providerCustomerId ?? null,
       currentPeriodStartAt: checkoutSession?.currentPeriodStartAt ?? null,

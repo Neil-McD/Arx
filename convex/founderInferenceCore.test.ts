@@ -6,14 +6,13 @@ import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import {
   getExistingFounderInferenceGrant,
-  requireFounderCommunityCreationEligibility,
   requireExistingFounderCommunityCreationEligibility,
   resolveCommunityInferenceFundingAdmission,
   settleAuthorizedFounderInferenceReceipt,
   suspendActiveFounderInferenceGrantForCredentialChange,
 } from "./founderInferenceCore";
 import {
-  attachFounderSubscriptionToCommunity,
+  getFounderSubscriptionByCommunity,
   syncFounderUsageCycle,
 } from "./founderPlanCore";
 import { EXISTING_FOUNDER_INFERENCE_COHORT_KEY } from "../shared/founderInference";
@@ -309,7 +308,7 @@ test("activation requires current terms and binds completion to the accepted key
   await expect(
     t.action((api as any).founderInference.activateFounderInference, {
       acceptedTerms: false,
-      acceptedTermsVersion: "community_owner_inference_funding_v1",
+      acceptedTermsVersion: "community_owner_inference_funding_v2",
     }),
   ).rejects.toThrow("founder_inference_terms_acceptance_required");
   await expect(
@@ -670,7 +669,7 @@ test("replacing or deleting the owner's OpenAI key suspends active funding", asy
   });
 });
 
-test("a paid founder subscription attaches to one community and meters managed Luna usage", async () => {
+test("a community-targeted founder subscription meters managed Luna usage", async () => {
   const priorEnv = {
     input: process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS,
     output: process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS,
@@ -697,6 +696,7 @@ test("a paid founder subscription attaches to one community and meters managed L
       const communityId = await insertCommunity(ctx, ownerId, "paid-community", nowMs);
       const founderSubscriptionId = await ctx.db.insert("founderSubscriptions", {
         ownerUserId: ownerId,
+        communityId,
         provider: "stripe",
         providerCustomerId: "cus_founder_paid",
         providerSubscriptionId: "sub_founder_paid",
@@ -723,22 +723,6 @@ test("a paid founder subscription attaches to one community and meters managed L
           outputCostMicrosPerMillionTokens: 2_000_000,
           maxRunReservationCostMicros: 1_000_000,
         },
-        nowMs,
-      });
-      const eligibility = await requireFounderCommunityCreationEligibility({
-        ctx,
-        userId: ownerId,
-        nowMs,
-      });
-      expect(eligibility).toEqual({
-        mode: "platform_subscription",
-        founderSubscriptionId,
-      });
-      await attachFounderSubscriptionToCommunity({
-        ctx,
-        founderSubscriptionId,
-        ownerUserId: ownerId,
-        communityId,
         nowMs,
       });
       return { communityId, founderSubscriptionId, memberId, ownerId };
@@ -854,6 +838,165 @@ test("a paid founder subscription attaches to one community and meters managed L
   }
 });
 
+test("managed policy fails closed and founder checkouts remain independent per community", async () => {
+  const t = convexTest(schema, modules);
+  const nowMs = 650_000;
+  const fixture = await t.run(async (ctx) => {
+    const cohortAnchorId = await insertUser(ctx, "policy-anchor", nowMs);
+    await ctx.db.insert("founderInferenceGrants", {
+      userId: cohortAnchorId,
+      cohortKey: EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
+      status: "approved",
+      approvedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const ownerId = await insertUser(ctx, "checkout-owner", nowMs);
+    const otherOwnerId = await insertUser(ctx, "checkout-other-owner", nowMs);
+    const firstCommunityId = await insertCommunity(ctx, ownerId, "checkout-first", nowMs);
+    const secondCommunityId = await insertCommunity(ctx, ownerId, "checkout-second", nowMs);
+    const otherCommunityId = await insertCommunity(
+      ctx,
+      otherOwnerId,
+      "checkout-other",
+      nowMs,
+    );
+    await ctx.db.patch(firstCommunityId, {
+      inferenceFundingPolicy: "managed_required",
+      updatedAt: nowMs,
+    });
+    return {
+      ownerId,
+      firstCommunityId,
+      secondCommunityId,
+      otherCommunityId,
+    };
+  });
+
+  await expect(
+    t.run(async (ctx) =>
+      await resolveCommunityInferenceFundingAdmission(
+        ctx,
+        fixture.firstCommunityId,
+      ),
+    ),
+  ).resolves.toEqual({ ok: false, code: "founder_plan_required" });
+
+  await t.mutation(
+    (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
+    {
+      sessionId: "founder-checkout-first",
+      ownerUserId: fixture.ownerId,
+      communityId: fixture.firstCommunityId,
+      expiresAt: nowMs + 60_000,
+      nowMs,
+    },
+  );
+  await expect(
+    t.mutation(
+      (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
+      {
+        sessionId: "founder-checkout-second",
+        ownerUserId: fixture.ownerId,
+        communityId: fixture.secondCommunityId,
+        expiresAt: nowMs + 60_000,
+        nowMs,
+      },
+    ),
+  ).resolves.toMatchObject({
+    sessionId: "founder-checkout-second",
+    reused: false,
+  });
+  await expect(
+    t.mutation(
+      (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
+      {
+        sessionId: "founder-checkout-duplicate",
+        ownerUserId: fixture.ownerId,
+        communityId: fixture.firstCommunityId,
+        expiresAt: nowMs + 60_000,
+        nowMs,
+      },
+    ),
+  ).resolves.toMatchObject({
+    sessionId: "founder-checkout-first",
+    reused: true,
+  });
+  await expect(
+    t.mutation(
+      (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
+      {
+        sessionId: "founder-checkout-forbidden",
+        ownerUserId: fixture.ownerId,
+        communityId: fixture.otherCommunityId,
+        expiresAt: nowMs + 60_000,
+        nowMs,
+      },
+    ),
+  ).rejects.toThrow("founder_subscription_community_forbidden");
+});
+
+test("community subscription history selects one granting row and rejects two", async () => {
+  const t = convexTest(schema, modules);
+  const nowMs = 675_000;
+  await t.run(async (ctx) => {
+    const ownerId = await insertUser(ctx, "history-owner", nowMs);
+    const communityId = await insertCommunity(ctx, ownerId, "history-community", nowMs);
+    await ctx.db.insert("founderSubscriptions", {
+      ownerUserId: ownerId,
+      communityId,
+      provider: "stripe",
+      providerCustomerId: "cus_history",
+      providerSubscriptionId: "sub_history_ended",
+      providerPriceId: "price_history",
+      status: "ended",
+      currentPeriodStartAt: nowMs - 100_000,
+      currentPeriodEndAt: nowMs - 50_000,
+      cancelAtPeriodEnd: false,
+      endedAt: nowMs - 50_000,
+      lastProviderEventCreatedAt: nowMs - 50_000,
+      createdAt: nowMs - 100_000,
+      updatedAt: nowMs - 50_000,
+    });
+    const activeId = await ctx.db.insert("founderSubscriptions", {
+      ownerUserId: ownerId,
+      communityId,
+      provider: "stripe",
+      providerCustomerId: "cus_history",
+      providerSubscriptionId: "sub_history_active",
+      providerPriceId: "price_history",
+      status: "active",
+      currentPeriodStartAt: nowMs - 10_000,
+      currentPeriodEndAt: nowMs + 100_000,
+      cancelAtPeriodEnd: false,
+      lastProviderEventCreatedAt: nowMs,
+      createdAt: nowMs - 10_000,
+      updatedAt: nowMs,
+    });
+    await expect(
+      getFounderSubscriptionByCommunity(ctx, communityId, nowMs),
+    ).resolves.toMatchObject({ _id: activeId });
+    await ctx.db.insert("founderSubscriptions", {
+      ownerUserId: ownerId,
+      communityId,
+      provider: "stripe",
+      providerCustomerId: "cus_history",
+      providerSubscriptionId: "sub_history_ambiguous",
+      providerPriceId: "price_history",
+      status: "cancel_at_period_end",
+      currentPeriodStartAt: nowMs - 5_000,
+      currentPeriodEndAt: nowMs + 100_000,
+      cancelAtPeriodEnd: true,
+      lastProviderEventCreatedAt: nowMs,
+      createdAt: nowMs - 5_000,
+      updatedAt: nowMs,
+    });
+    await expect(
+      getFounderSubscriptionByCommunity(ctx, communityId, nowMs),
+    ).rejects.toThrow("founder_subscription_ambiguous");
+  });
+});
+
 test("Stripe founder subscription sync is idempotent and ignores stale lifecycle events", async () => {
   const priorEnv = {
     priceId: process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID,
@@ -867,14 +1010,22 @@ test("Stripe founder subscription sync is idempotent and ignores stale lifecycle
   process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS = "1000000";
   try {
     const t = convexTest(schema, modules);
-    const fixture = await t.run(async (ctx) => ({
-      ownerId: await insertUser(ctx, "stripe-sync-owner", 700_000),
-    }));
+    const fixture = await t.run(async (ctx) => {
+      const ownerId = await insertUser(ctx, "stripe-sync-owner", 700_000);
+      const communityId = await insertCommunity(
+        ctx,
+        ownerId,
+        "stripe-sync-community",
+        700_000,
+      );
+      return { ownerId, communityId };
+    });
     await t.mutation(
       (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
       {
         sessionId: "founder-checkout-sync",
         ownerUserId: fixture.ownerId,
+        communityId: fixture.communityId,
         expiresAt: 9_000_000,
         nowMs: 700_000,
       },
@@ -896,6 +1047,7 @@ test("Stripe founder subscription sync is idempotent and ignores stale lifecycle
       syncArgs,
     );
     expect(first).toMatchObject({ ok: true, ignored: false, subscriptionStatus: "active" });
+    expect(first).toMatchObject({ communityId: fixture.communityId });
     const replay = await t.mutation(
       (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
       syncArgs,
@@ -982,6 +1134,9 @@ test("Stripe founder subscription sync is idempotent and ignores stale lifecycle
       expect(await ctx.db.query("founderUsageCycles").collect()).toHaveLength(1);
       const subscription = await ctx.db.get(first.founderSubscriptionId);
       expect(subscription).toMatchObject({ status: "active" });
+      expect(subscription).toMatchObject({ communityId: fixture.communityId });
+      const community = await ctx.db.get(fixture.communityId);
+      expect(community).toMatchObject({ inferenceFundingPolicy: "managed_required" });
       expect(subscription).not.toHaveProperty("endedAt");
       expect(subscription).not.toHaveProperty("revokedReason");
       const checkout = await ctx.db
@@ -990,6 +1145,7 @@ test("Stripe founder subscription sync is idempotent and ignores stale lifecycle
         .first();
       expect(checkout).toMatchObject({
         status: "complete",
+        communityId: fixture.communityId,
         founderSubscriptionId: first.founderSubscriptionId,
         providerSubscriptionId: "sub_founder_sync",
       });

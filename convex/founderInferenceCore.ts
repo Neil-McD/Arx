@@ -1,16 +1,17 @@
 import {
+  COMMUNITY_FUNDING_POLICY_LEGACY_BYOK,
+  COMMUNITY_FUNDING_POLICY_MANAGED,
   COMMUNITY_OWNER_FUNDED_MODEL_ID,
   EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
   type CommunityInferenceFundingAdmission,
+  type CommunityInferenceFundingPolicy,
 } from "../shared/founderInference";
 import {
   POLYNET_FOUNDER_PLAN_PRICING_VERSION,
   founderSubscriptionStatusGrantsAccess,
 } from "../shared/founderPlan";
 import {
-  getAvailableFounderSubscriptionForOwner,
   getFounderSubscriptionByCommunity,
-  requireAvailableFounderSubscription,
   settleFounderUsageReservation,
   type FounderUsageCycleRow,
 } from "./founderPlanCore";
@@ -92,41 +93,34 @@ export async function requireExistingFounderCommunityCreationEligibility(
   throw new Error("founder_plan_required");
 }
 
-export type FounderCommunityCreationEligibility =
-  | { mode: "grandfathered"; founderSubscriptionId: null }
-  | { mode: "platform_subscription"; founderSubscriptionId: any }
-  | { mode: "pre_cohort"; founderSubscriptionId: null };
+export function normalizeCommunityInferenceFundingPolicy(
+  value: unknown,
+): CommunityInferenceFundingPolicy | null {
+  const normalized = String(value ?? "").trim();
+  if (normalized === COMMUNITY_FUNDING_POLICY_LEGACY_BYOK) {
+    return COMMUNITY_FUNDING_POLICY_LEGACY_BYOK;
+  }
+  if (normalized === COMMUNITY_FUNDING_POLICY_MANAGED) {
+    return COMMUNITY_FUNDING_POLICY_MANAGED;
+  }
+  return null;
+}
 
-export async function requireFounderCommunityCreationEligibility(args: {
+export async function resolveCommunityInferenceFundingPolicy(args: {
   ctx: any;
-  userId: any;
-  founderSubscriptionId?: any;
-  nowMs: number;
-}): Promise<FounderCommunityCreationEligibility> {
-  if (!(await existingFounderInferenceCohortIsInitialized(args.ctx))) {
-    return { mode: "pre_cohort", founderSubscriptionId: null };
+  community: { ownerId?: any; inferenceFundingPolicy?: unknown };
+}): Promise<CommunityInferenceFundingPolicy> {
+  const explicit = normalizeCommunityInferenceFundingPolicy(
+    args.community.inferenceFundingPolicy,
+  );
+  if (explicit) return explicit;
+  if (
+    args.community.ownerId &&
+    (await getExistingFounderInferenceGrant(args.ctx, args.community.ownerId))
+  ) {
+    return COMMUNITY_FUNDING_POLICY_LEGACY_BYOK;
   }
-  if (args.founderSubscriptionId) {
-    const subscription = await requireAvailableFounderSubscription({
-      ctx: args.ctx,
-      ownerUserId: args.userId,
-      founderSubscriptionId: args.founderSubscriptionId,
-      nowMs: args.nowMs,
-    });
-    return { mode: "platform_subscription", founderSubscriptionId: subscription._id };
-  }
-  if (await getExistingFounderInferenceGrant(args.ctx, args.userId)) {
-    return { mode: "grandfathered", founderSubscriptionId: null };
-  }
-  const subscription = await getAvailableFounderSubscriptionForOwner({
-    ctx: args.ctx,
-    ownerUserId: args.userId,
-    nowMs: args.nowMs,
-  });
-  if (subscription) {
-    return { mode: "platform_subscription", founderSubscriptionId: subscription._id };
-  }
-  throw new Error("founder_plan_required");
+  return COMMUNITY_FUNDING_POLICY_MANAGED;
 }
 
 export async function suspendActiveFounderInferenceGrantForCredentialChange(args: {
@@ -158,7 +152,10 @@ export async function resolveCommunityInferenceFundingAdmission(
   ctx: any,
   communityId: any,
 ): Promise<CommunityInferenceFundingAdmission> {
-  const community = (await ctx.db.get(communityId as any)) as { ownerId?: any } | null;
+  const community = (await ctx.db.get(communityId as any)) as {
+    ownerId?: any;
+    inferenceFundingPolicy?: unknown;
+  } | null;
   if (!community?.ownerId) return { ok: false, code: "community_not_found" };
 
   if (!(await existingFounderInferenceCohortIsInitialized(ctx))) {
@@ -174,7 +171,11 @@ export async function resolveCommunityInferenceFundingAdmission(
 
   let attachedSubscription;
   try {
-    attachedSubscription = await getFounderSubscriptionByCommunity(ctx, communityId);
+    attachedSubscription = await getFounderSubscriptionByCommunity(
+      ctx,
+      communityId,
+      Date.now(),
+    );
   } catch (error) {
     if (error instanceof Error && error.message === "founder_subscription_ambiguous") {
       return { ok: false, code: "founder_subscription_ambiguous" };
@@ -200,6 +201,14 @@ export async function resolveCommunityInferenceFundingAdmission(
       subscriptionId: attachedSubscription._id,
       modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
     };
+  }
+
+  const fundingPolicy = await resolveCommunityInferenceFundingPolicy({
+    ctx,
+    community,
+  });
+  if (fundingPolicy === COMMUNITY_FUNDING_POLICY_MANAGED) {
+    return { ok: false, code: "founder_plan_required" };
   }
 
   const grant = await getExistingFounderInferenceGrant(ctx, community.ownerId);

@@ -53,9 +53,9 @@ You are responsible for content you submit and for ensuring you have the rights 
 
 Paid community transactions may be processed through Stripe, Stripe Connect, or another supported payment provider. Payment providers may require their own terms, verification, tax, payout, dispute, and compliance processes.
 
-For paid community transactions, Polynet may collect a platform fee. The current default Polynet platform fee for eligible paid community revenue is 10%, unless another written rate applies.
+For paid community transactions, Polynet may collect a platform fee. The current default Polynet platform fee for eligible paid community revenue is 2.9%, unless another written rate applies.
 
-Payment processor fees, refunds, disputes, chargebacks, taxes, payout restrictions, currency conversion, and third-party provider requirements may also apply. Polynet may change platform fees prospectively with notice, updated terms, or a written agreement.
+Payment processor fees are separate from the Polynet platform fee and are ordinarily charged to the community builder's connected payment account. Refunds, disputes, chargebacks, taxes, payout restrictions, currency conversion, and third-party provider requirements may also apply. Polynet may change platform fees prospectively with notice, updated terms, or a written agreement.
 
 Community builders are responsible for the member-facing promises they make, including what members receive, pricing clarity, refund expectations, community operation, and any taxes or legal obligations that apply to their activity.
 

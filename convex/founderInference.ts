@@ -2,6 +2,7 @@ import { internal } from "./_generated/api";
 import { action, internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  COMMUNITY_FUNDING_POLICY_LEGACY_BYOK,
   COMMUNITY_OWNER_FUNDED_MODEL_ID,
   COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE,
   COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE,
@@ -13,10 +14,12 @@ import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 import {
   getExistingFounderInferenceGrant,
   resolveCommunityInferenceFundingAdmission,
+  resolveCommunityInferenceFundingPolicy,
   settleAuthorizedFounderInferenceReceipt,
   type FounderInferenceReceiptRow,
 } from "./founderInferenceCore";
 import {
+  getFounderSubscriptionByCommunity,
   releaseFounderUsageReservation,
   reserveFounderUsage,
 } from "./founderPlanCore";
@@ -85,8 +88,21 @@ export const getCurrentFounderInferenceStatus = query({
         .withIndex("by_owner", (q: any) => q.eq("ownerId", userId))
         .collect(),
     ]);
+    const legacyCommunities = (
+      await Promise.all(
+        communities.map(async (community) => {
+          const [subscription, policy] = await Promise.all([
+            getFounderSubscriptionByCommunity(ctx, community._id, Date.now()),
+            resolveCommunityInferenceFundingPolicy({ ctx, community }),
+          ]);
+          return !subscription && policy === COMMUNITY_FUNDING_POLICY_LEGACY_BYOK
+            ? community
+            : null;
+        }),
+      )
+    ).filter(Boolean) as Array<Record<string, unknown>>;
     return {
-      eligible: true,
+      eligible: legacyCommunities.length > 0,
       cohort_key: grant.cohortKey,
       status: grant.status,
       model_id: COMMUNITY_OWNER_FUNDED_MODEL_ID,
@@ -94,7 +110,7 @@ export const getCurrentFounderInferenceStatus = query({
       key_last_four: String(connection?.keyLastFour ?? "").trim() || null,
       activated_at: grant.activatedAt ? new Date(grant.activatedAt).toISOString() : null,
       suspended_at: grant.suspendedAt ? new Date(grant.suspendedAt).toISOString() : null,
-      communities: (communities as Array<Record<string, unknown>>)
+      communities: legacyCommunities
         .slice()
         .sort((a, b) => Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0))
         .map((community) => ({

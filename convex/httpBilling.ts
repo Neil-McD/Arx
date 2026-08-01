@@ -8,6 +8,7 @@ import type { PublicHttpAction } from "convex/server";
 import { logStructuredError } from "./errorLogging";
 import { buildStripeConnectAccountSnapshot } from "./stripeConnectAccountCore";
 import { normalizeStripeCommunitySubscriptionStatus } from "./billingCore";
+import { requireCommunityProviderAccountMatch } from "./communityCommerceCore";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -372,20 +373,34 @@ function stripeResourceMissing(error: any): boolean {
   return error?.statusCode === 404 || error?.code === "resource_missing";
 }
 
-async function retrieveStripeChargeForEvidence(chargeId: string | null): Promise<Stripe.Charge | null> {
+async function retrieveStripeChargeForEvidence(
+  chargeId: string | null,
+  providerAccountId?: string | null,
+): Promise<Stripe.Charge | null> {
   if (!chargeId) return null;
   try {
-    return await getStripeClient().charges.retrieve(chargeId);
+    return await getStripeClient().charges.retrieve(
+      chargeId,
+      {},
+      providerAccountId ? { stripeAccount: providerAccountId } : undefined,
+    );
   } catch (error: any) {
     if (stripeResourceMissing(error)) return null;
     throw error;
   }
 }
 
-async function retrieveStripeInvoiceForEvidence(invoiceId: string | null): Promise<Stripe.Invoice | null> {
+async function retrieveStripeInvoiceForEvidence(
+  invoiceId: string | null,
+  providerAccountId?: string | null,
+): Promise<Stripe.Invoice | null> {
   if (!invoiceId) return null;
   try {
-    return await getStripeClient().invoices.retrieve(invoiceId);
+    return await getStripeClient().invoices.retrieve(
+      invoiceId,
+      {},
+      providerAccountId ? { stripeAccount: providerAccountId } : undefined,
+    );
   } catch (error: any) {
     if (stripeResourceMissing(error)) return null;
     throw error;
@@ -437,6 +452,11 @@ function readStripeEventCreatedAtMs(event: Stripe.Event): number {
   return Number(event.created ?? 0) > 0 ? Number(event.created) * 1000 : Date.now();
 }
 
+function readStripeEventAccountId(event: Stripe.Event): string | null {
+  const providerAccountId = String(event.account ?? "").trim();
+  return providerAccountId || null;
+}
+
 function toIsoStringOrUndefined(ms: number | null): string | undefined {
   return typeof ms === "number" && Number.isFinite(ms)
     ? new Date(ms).toISOString()
@@ -454,11 +474,16 @@ function stripeRefundFullyRefundsCharge(refund: Stripe.Refund, charge: Stripe.Ch
 
 async function retrieveStripeSubscriptionForEvidence(
   subscriptionId: string | null,
+  providerAccountId?: string | null,
 ): Promise<Stripe.Subscription | null> {
   const normalized = String(subscriptionId ?? "").trim();
   if (!normalized) return null;
   try {
-    return await getStripeClient().subscriptions.retrieve(normalized);
+    return await getStripeClient().subscriptions.retrieve(
+      normalized,
+      {},
+      providerAccountId ? { stripeAccount: providerAccountId } : undefined,
+    );
   } catch (error: any) {
     if (stripeResourceMissing(error)) return null;
     throw error;
@@ -467,10 +492,11 @@ async function retrieveStripeSubscriptionForEvidence(
 
 async function resolveStripeSubscriptionIdFromCharge(
   charge: Stripe.Charge | null,
+  providerAccountId?: string | null,
 ): Promise<string | null> {
   const invoiceId = readStripeObjectId((charge as any)?.invoice);
   if (!invoiceId) return null;
-  const invoice = await retrieveStripeInvoiceForEvidence(invoiceId);
+  const invoice = await retrieveStripeInvoiceForEvidence(invoiceId, providerAccountId);
   return invoice ? readStripeInvoiceSubscriptionId(invoice) : null;
 }
 
@@ -486,10 +512,15 @@ async function syncCommunitySubscriptionFromStripeSubscription(
   if (!subscription || !providerSubscriptionId) {
     return { ok: true, ignored: true, reason: "stripe_subscription_missing" };
   }
+  const providerAccountId = readStripeEventAccountId(event);
+  if (!providerAccountId) {
+    return { ok: true, ignored: true, reason: "community_subscription_provider_account_required" };
+  }
   const existingCommunitySubscription = await ctx.runQuery(
     internal.communityCommerce
       .getCommunitySubscriptionByProviderSubscriptionIdInternal as any,
     {
+      providerAccountId,
       providerSubscriptionId,
     },
   );
@@ -509,6 +540,7 @@ async function syncCommunitySubscriptionFromStripeSubscription(
       userId: existingCommunitySubscription.userId,
       source: "stripe",
       pricePointId: existingCommunitySubscription.pricePointId ?? undefined,
+      providerAccountId,
       providerPriceId,
       providerSubscriptionId,
       providerCustomerId:
@@ -525,6 +557,7 @@ async function syncCommunitySubscriptionFromStripeSubscription(
     ok: true,
     subscription_status: normalizedCommunityStatus,
     provider_subscription_id: providerSubscriptionId,
+    provider_account_id: providerAccountId,
   };
 }
 
@@ -534,6 +567,9 @@ async function syncFounderSubscriptionFromStripeSubscription(
   subscription: Stripe.Subscription | null,
   options?: { forceStatus?: "past_due" | "ended" },
 ): Promise<Record<string, any>> {
+  if (readStripeEventAccountId(event)) {
+    return { ok: true, ignored: true, reason: "founder_subscription_connected_event" };
+  }
   const providerSubscriptionId = String(subscription?.id ?? "").trim();
   if (!subscription || !providerSubscriptionId) {
     return { ok: true, ignored: true, reason: "stripe_subscription_missing" };
@@ -571,6 +607,9 @@ async function syncFounderSubscriptionRiskStatus(
     revokedReason: string;
   },
 ): Promise<Record<string, any>> {
+  if (readStripeEventAccountId(event)) {
+    return { ok: true, ignored: true, reason: "founder_subscription_connected_event" };
+  }
   const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
   if (!providerSubscriptionId) {
     return { ok: true, ignored: true, reason: "founder_subscription_id_missing" };
@@ -599,10 +638,15 @@ async function syncCommunitySubscriptionRiskStatus(
   if (!providerSubscriptionId) {
     return { ok: true, ignored: true, reason: "community_subscription_id_missing" };
   }
+  const providerAccountId = readStripeEventAccountId(event);
+  if (!providerAccountId) {
+    return { ok: true, ignored: true, reason: "community_subscription_provider_account_required" };
+  }
   const existingCommunitySubscription = await ctx.runQuery(
     internal.communityCommerce
       .getCommunitySubscriptionByProviderSubscriptionIdInternal as any,
     {
+      providerAccountId,
       providerSubscriptionId,
     },
   );
@@ -616,6 +660,7 @@ async function syncCommunitySubscriptionRiskStatus(
       userId: existingCommunitySubscription.userId,
       source: "stripe",
       pricePointId: existingCommunitySubscription.pricePointId ?? undefined,
+      providerAccountId,
       providerSubscriptionId,
       status: args.status,
       revokedReason: args.revokedReason,
@@ -625,6 +670,7 @@ async function syncCommunitySubscriptionRiskStatus(
   return {
     ok: true,
     provider_subscription_id: providerSubscriptionId,
+    provider_account_id: providerAccountId,
     subscription_status: args.status,
     revoked_reason: args.revokedReason,
   };
@@ -639,7 +685,11 @@ async function syncCommunityAccessForRefund(
   },
 ): Promise<Record<string, unknown>> {
   if (!args.charge) return { ok: true, ignored: true, reason: "refund_charge_missing" };
-  const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(args.charge);
+  const providerAccountId = readStripeEventAccountId(event);
+  const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(
+    args.charge,
+    providerAccountId,
+  );
   if (!stripeRefundFullyRefundsCharge(args.refund, args.charge)) {
     return {
       ok: true,
@@ -669,7 +719,11 @@ async function syncCommunityAccessForDispute(
     outcome: "opened" | "won" | "lost" | "funds_reinstated" | "unknown";
   },
 ): Promise<Record<string, unknown>> {
-  const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(args.charge);
+  const providerAccountId = readStripeEventAccountId(event);
+  const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(
+    args.charge,
+    providerAccountId,
+  );
   if (!providerSubscriptionId) {
     return { ok: true, ignored: true, reason: "dispute_subscription_missing" };
   }
@@ -700,7 +754,10 @@ async function syncCommunityAccessForDispute(
     });
   }
   if (args.outcome === "won" || args.outcome === "funds_reinstated") {
-    const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+    const subscription = await retrieveStripeSubscriptionForEvidence(
+      providerSubscriptionId,
+      providerAccountId,
+    );
     const founderSubscriptionResult = await syncFounderSubscriptionFromStripeSubscription(
       ctx,
       event,
@@ -739,10 +796,13 @@ export function registerRuntimeBillingRoutes(
 
       const payload = await req.text();
       let event: Stripe.Event;
+      let webhookScope: "account" | "connect" | null = null;
       let stripeEventType: string | null = null;
       let stripeEventId: string | null = null;
       try {
-        event = await verifyStripeWebhookSignature({ payload, signature });
+        const verifiedWebhook = await verifyStripeWebhookSignature({ payload, signature });
+        event = verifiedWebhook.event;
+        webhookScope = verifiedWebhook.scope;
         stripeEventType = event.type;
         stripeEventId = event.id;
         await recordStripeWebhookAudit(ctx, {
@@ -751,6 +811,10 @@ export function registerRuntimeBillingRoutes(
           status: "started",
           stripeEventType,
           stripeEventId,
+          metadata: {
+            stripeAccountId: readStripeEventAccountId(event),
+            webhookScope,
+          },
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -779,6 +843,8 @@ export function registerRuntimeBillingRoutes(
             stripeEventType,
             stripeEventId,
             metadata: {
+              stripeAccountId: readStripeEventAccountId(event),
+              webhookScope,
               response: responsePayload,
             },
           });
@@ -789,8 +855,9 @@ export function registerRuntimeBillingRoutes(
           Number(event.created ?? 0) > 0
             ? Number(event.created) * 1000
             : Date.now();
+        const providerAccountId = readStripeEventAccountId(event);
 
-        if (event.type === "setup_intent.succeeded") {
+        if (!providerAccountId && event.type === "setup_intent.succeeded") {
           const setupIntent = event.data.object as Stripe.SetupIntent;
           if (readStripeMetadataString(setupIntent.metadata, "checkout_mode") === "workspace_card_setup") {
             const providerCustomerId = readStripeCustomerId(setupIntent.customer);
@@ -825,7 +892,7 @@ export function registerRuntimeBillingRoutes(
           }
         }
 
-        if (event.type === "payment_method.detached") {
+        if (!providerAccountId && event.type === "payment_method.detached") {
           const paymentMethod = event.data.object as Stripe.PaymentMethod;
           const paymentMethodId = readStripePaymentMethodId(paymentMethod);
           const localCustomerByPaymentMethod = paymentMethodId
@@ -863,7 +930,7 @@ export function registerRuntimeBillingRoutes(
           });
         }
 
-        if (event.type === "customer.updated") {
+        if (!providerAccountId && event.type === "customer.updated") {
           const customer = event.data.object as Stripe.Customer;
           const providerCustomerId = readStripeCustomerId(customer);
           if (!providerCustomerId) {
@@ -896,13 +963,15 @@ export function registerRuntimeBillingRoutes(
           const localSessionId =
             readStripeLocalSessionIdFromCheckoutSession(session);
           if (localSessionId) {
-            const topupCheckoutSession = await (ctx as any).runQuery(
-              internal.workspaceCredits
-                .getWorkspaceCreditTopupCheckoutSessionInternal as any,
-              {
-                sessionId: localSessionId,
-              },
-            );
+            const topupCheckoutSession = providerAccountId
+              ? null
+              : await (ctx as any).runQuery(
+                  internal.workspaceCredits
+                    .getWorkspaceCreditTopupCheckoutSessionInternal as any,
+                  {
+                    sessionId: localSessionId,
+                  },
+                );
             if (topupCheckoutSession) {
               const paymentStatus = String(session.payment_status ?? "")
                 .trim()
@@ -936,11 +1005,13 @@ export function registerRuntimeBillingRoutes(
                 result,
               });
             }
-            const founderCheckoutSession = await (ctx as any).runQuery(
-              (internal as any).founderBilling
-                .getFounderSubscriptionCheckoutSessionInternal,
-              { sessionId: localSessionId },
-            );
+            const founderCheckoutSession = providerAccountId
+              ? null
+              : await (ctx as any).runQuery(
+                  (internal as any).founderBilling
+                    .getFounderSubscriptionCheckoutSessionInternal,
+                  { sessionId: localSessionId },
+                );
             if (founderCheckoutSession) {
               if (!readStripePaymentReady(session.payment_status)) {
                 return processedResponse({
@@ -993,13 +1064,15 @@ export function registerRuntimeBillingRoutes(
                 result,
               });
             }
-            const premiumCheckoutSession = await (ctx as any).runQuery(
-              (internal as any).premiumBilling
-                .getPremiumSubscriptionCheckoutSessionInternal,
-              {
-                sessionId: localSessionId,
-              },
-            );
+            const premiumCheckoutSession = providerAccountId
+              ? null
+              : await (ctx as any).runQuery(
+                  (internal as any).premiumBilling
+                    .getPremiumSubscriptionCheckoutSessionInternal,
+                  {
+                    sessionId: localSessionId,
+                  },
+                );
             if (premiumCheckoutSession) {
               if (!readStripePaymentReady(session.payment_status)) {
                 return processedResponse({
@@ -1128,6 +1201,12 @@ export function registerRuntimeBillingRoutes(
             },
           );
           if (communityCheckoutSession) {
+            const communityProviderAccountId = requireCommunityProviderAccountMatch({
+              expectedProviderAccountId: communityCheckoutSession.providerAccountId,
+              actualProviderAccountId: providerAccountId,
+              missingCode: "community_checkout_provider_account_required",
+              mismatchCode: "community_checkout_provider_account_mismatch",
+            });
             if (!readStripePaymentReady(session.payment_status)) {
               return processedResponse({
                 ok: true,
@@ -1150,7 +1229,11 @@ export function registerRuntimeBillingRoutes(
             }
             const stripe = getStripeClient();
             const subscription =
-              await stripe.subscriptions.retrieve(subscriptionId);
+              await stripe.subscriptions.retrieve(
+                subscriptionId,
+                {},
+                { stripeAccount: communityProviderAccountId },
+              );
             const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
             const { cycleStartedAt, cycleEndsAt } =
               readStripeSubscriptionCycle(subscription);
@@ -1158,6 +1241,7 @@ export function registerRuntimeBillingRoutes(
               readStripeSubscriptionLatestInvoice(subscription) ??
               await retrieveStripeInvoiceForEvidence(
                 readStripeObjectId((subscription as any)?.latest_invoice),
+                communityProviderAccountId,
               );
             const initialInvoiceEvidence = readStripeInvoiceEvidence(
               latestInvoice,
@@ -1167,6 +1251,7 @@ export function registerRuntimeBillingRoutes(
                 .syncPendingCommunityCheckoutSubscriptionInternal as any,
               {
                 sessionId: localSessionId,
+                providerAccountId: communityProviderAccountId,
                 providerCheckoutSessionId: session.id,
                 providerCustomerId:
                   typeof subscription.customer === "string"
@@ -1244,7 +1329,10 @@ export function registerRuntimeBillingRoutes(
               reason: "invoice_paid_amount_missing",
             }, "ignored");
           }
-          const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+          const subscription = await retrieveStripeSubscriptionForEvidence(
+            providerSubscriptionId,
+            providerAccountId,
+          );
           const founderSubscriptionResult = await syncFounderSubscriptionFromStripeSubscription(
             ctx,
             event,
@@ -1282,7 +1370,10 @@ export function registerRuntimeBillingRoutes(
               reason: "invoice_subscription_missing",
             }, "ignored");
           }
-          const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+          const subscription = await retrieveStripeSubscriptionForEvidence(
+            providerSubscriptionId,
+            providerAccountId,
+          );
           const founderSubscriptionResult = await syncFounderSubscriptionFromStripeSubscription(
             ctx,
             event,
@@ -1344,9 +1435,16 @@ export function registerRuntimeBillingRoutes(
             const refundEvidence = readStripeRefundEvidence(refund);
             const charge = await retrieveStripeChargeForEvidence(
               refundEvidence.sourceProviderChargeId,
+              providerAccountId,
             );
-            const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(charge);
-            const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+            const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(
+              charge,
+              providerAccountId,
+            );
+            const subscription = await retrieveStripeSubscriptionForEvidence(
+              providerSubscriptionId,
+              providerAccountId,
+            );
             const founderSubscriptionResult = await syncFounderSubscriptionFromStripeSubscription(
               ctx,
               event,
@@ -1386,6 +1484,7 @@ export function registerRuntimeBillingRoutes(
           }
           const charge = await retrieveStripeChargeForEvidence(
             refundEvidence.sourceProviderChargeId,
+            providerAccountId,
           );
           const communityAccessResult = await syncCommunityAccessForRefund(ctx, event, {
             refund,
@@ -1450,6 +1549,7 @@ export function registerRuntimeBillingRoutes(
           }
           const charge = await retrieveStripeChargeForEvidence(
             disputeEvidence.sourceProviderChargeId,
+            providerAccountId,
           );
           const chargeEvidence = charge ? readStripeChargeEvidence(charge) : null;
           if (event.type === "charge.dispute.created") {
@@ -1516,27 +1616,29 @@ export function registerRuntimeBillingRoutes(
               founderSubscriptionResult,
             });
           }
-          const premiumSubscriptionResult = await (ctx as any).runMutation(
-            (internal as any).premiumBilling
-              .syncPremiumSubscriptionFromStripeInternal,
-            {
-              localSessionId,
-              providerCustomerId:
-                typeof subscription.customer === "string"
-                  ? subscription.customer
-                  : null,
-              providerSubscriptionId: subscription.id,
-              providerPriceId,
-              subscriptionStatus: normalizedCommunityStatus,
-              currentPeriodStartAt: cycleStartedAt,
-              currentPeriodEndAt: cycleEndsAt,
-              cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
-              nowMs:
-                Number(event.created ?? 0) > 0
-                  ? Number(event.created) * 1000
-                  : Date.now(),
-            },
-          );
+          const premiumSubscriptionResult = providerAccountId
+            ? { ok: true, ignored: true, reason: "premium_subscription_connected_event" }
+            : await (ctx as any).runMutation(
+                (internal as any).premiumBilling
+                  .syncPremiumSubscriptionFromStripeInternal,
+                {
+                  localSessionId,
+                  providerCustomerId:
+                    typeof subscription.customer === "string"
+                      ? subscription.customer
+                      : null,
+                  providerSubscriptionId: subscription.id,
+                  providerPriceId,
+                  subscriptionStatus: normalizedCommunityStatus,
+                  currentPeriodStartAt: cycleStartedAt,
+                  currentPeriodEndAt: cycleEndsAt,
+                  cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+                  nowMs:
+                    Number(event.created ?? 0) > 0
+                      ? Number(event.created) * 1000
+                      : Date.now(),
+                },
+              );
           if (!premiumSubscriptionResult?.ignored) {
             return processedResponse({
               ok: true,
@@ -1553,11 +1655,18 @@ export function registerRuntimeBillingRoutes(
               },
             );
             if (communityCheckoutSession) {
+              const communityProviderAccountId = requireCommunityProviderAccountMatch({
+                expectedProviderAccountId: communityCheckoutSession.providerAccountId,
+                actualProviderAccountId: providerAccountId,
+                missingCode: "community_subscription_provider_account_required",
+                mismatchCode: "community_subscription_provider_account_mismatch",
+              });
               await (ctx as any).runMutation(
                 internal.communityCommerce
                   .syncPendingCommunityCheckoutSubscriptionInternal as any,
                 {
                   sessionId: localSessionId,
+                  providerAccountId: communityProviderAccountId,
                   providerCustomerId:
                     typeof subscription.customer === "string"
                       ? subscription.customer
@@ -1668,6 +1777,8 @@ export function registerRuntimeBillingRoutes(
           stripeEventType,
           stripeEventId,
           metadata: {
+            stripeAccountId: readStripeEventAccountId(event),
+            webhookScope,
             requestPath,
             errorMessage: message || "Stripe webhook failed.",
           },

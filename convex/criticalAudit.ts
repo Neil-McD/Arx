@@ -81,9 +81,10 @@ const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
     "amountBaseUnits",
     "currency",
     "currencyDecimals",
+    "providerAccountId",
     "expiresAt",
   ],
-  community_checkout_attached_to_stripe: ["providerCustomerId", "providerSubscriptionId", "providerPriceId"],
+  community_checkout_attached_to_stripe: ["providerAccountId", "providerCustomerId", "providerSubscriptionId", "providerPriceId"],
   community_purchase_claim_created: ["billingPeriod", "pricePointId", "amountBaseUnits", "currency"],
   community_purchase_claim_redeemed: ["accessGranted", "grantMarker", "pricePointId"],
   community_operator_retirement_completed: [
@@ -103,6 +104,7 @@ const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
     "source",
     "cancelAtPeriodEnd",
     "markComplete",
+    "providerAccountId",
     "providerPriceId",
     "currentPeriodStartAt",
     "currentPeriodEndAt",
@@ -131,9 +133,9 @@ const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
     "payoutsEnabled",
     "detailsSubmitted",
   ],
-  stripe_webhook_failed: ["stripeEventType", "stripeEventId", "requestPath", "errorMessage"],
-  stripe_webhook_processed: ["stripeEventType", "stripeEventId"],
-  stripe_webhook_received: ["stripeEventType", "stripeEventId"],
+  stripe_webhook_failed: ["stripeEventType", "stripeEventId", "stripeAccountId", "webhookScope", "requestPath", "errorMessage"],
+  stripe_webhook_processed: ["stripeEventType", "stripeEventId", "stripeAccountId", "webhookScope"],
+  stripe_webhook_received: ["stripeEventType", "stripeEventId", "stripeAccountId", "webhookScope"],
 };
 
 function cleanString(value: unknown): string | undefined {

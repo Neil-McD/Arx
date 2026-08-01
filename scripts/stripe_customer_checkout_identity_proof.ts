@@ -64,8 +64,7 @@ assert.match(
 );
 
 for (const [label, source] of [
-  ["workspace credit top-up", workspaceCredits],
-  ["community checkout", communityCommerce],
+  ["workspace credit top-up", stripeCustomers],
 ] as const) {
   assert.match(
     source,
@@ -74,7 +73,7 @@ for (const [label, source] of [
   );
   assert.match(
     source,
-    /checkout\.sessions\.create\(\{[\s\S]*customer: stripeCustomerId/,
+    /checkout\.sessions\.create\(\{[\s\S]*customer: providerCustomerId/,
     `${label} Checkout must pass the Stripe customer id.`,
   );
   assert.doesNotMatch(
@@ -85,19 +84,35 @@ for (const [label, source] of [
 }
 
 assert.match(
+  communityCommerce,
+  /ensureCommunityStripeCustomerForUser\(/,
+  "Community checkout must ensure a reusable customer within the founder connected account.",
+);
+assert.match(
+  communityCommerce,
+  /checkout\.sessions\.create\(\{[\s\S]*customer: stripeCustomerId[\s\S]*stripeAccount: checkoutConfig\.providerAccountId/,
+  "Community Checkout must bind customer identity and request scope to the same connected account.",
+);
+assert.match(
+  schema,
+  /communityStripeCustomers: defineTable\(\{[\s\S]*providerAccountId: v\.string\(\)[\s\S]*providerCustomerId: v\.string\(\)/,
+  "Connected-account community customers must not share the platform customer namespace.",
+);
+
+assert.match(
   workspaceCredits,
   /attachStripeCustomerToUser\({[\s\S]*providerCustomerId: args\.providerCustomerId/,
   "Workspace top-up completion must backfill Stripe customer identity.",
 );
-assert.match(
+assert.doesNotMatch(
   communityCommerce,
-  /attachStripeCustomerToUser\({[\s\S]*providerCustomerId: args\.providerCustomerId/,
-  "Community checkout/subscription sync must backfill Stripe customer identity.",
+  /attachStripeCustomerToUser|ensureStripeCustomerForUser/,
+  "Community commerce must not write connected-account customer ids into the platform customer table.",
 );
-assert.match(
+assert.doesNotMatch(
   billingCore,
-  /attachStripeCustomerToUser\({[\s\S]*providerCustomerId: args\.providerCustomerId/,
-  "Claim redemption subscription creation must preserve Stripe customer identity.",
+  /attachStripeCustomerToUser/,
+  "Claim redemption must preserve connected-account customer isolation.",
 );
 
 console.log("stripe_customer_checkout_identity_proof: ok");
