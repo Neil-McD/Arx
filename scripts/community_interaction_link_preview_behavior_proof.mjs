@@ -11,6 +11,7 @@ import {
   normalizeInteractionOEmbedPreview,
 } from "../api/source-url-preview.mjs";
 import { approvedXAvatarSourceUrl } from "../api/x-avatar.js";
+import { communityInteractionFaviconCandidates } from "../shared/communityInteractionFavicon.ts";
 import { interactionPresentationForEmbeds } from "../shared/communityInteractionLinkPresentation.ts";
 import {
   INTERACTION_EMBED_REFRESH_SUCCESS_MS,
@@ -40,6 +41,24 @@ const socialPreviewComponent = previewComponent.slice(
 );
 
 const loomSourceUrl = "https://www.loom.com/share/29f6556e6f6849609b0225fbbc6224ff";
+assert.deepEqual(
+  communityInteractionFaviconCandidates("https://www.polynet.ai/c/polynet/chat"),
+  ["https://www.polynet.ai/favicon.ico", "https://polynet.ai/favicon.ico"],
+  "website icons should try the exact source origin before one bounded parent-domain fallback",
+);
+assert.deepEqual(
+  communityInteractionFaviconCandidates("https://surface.powershift.io/proof"),
+  ["https://surface.powershift.io/favicon.ico", "https://powershift.io/favicon.ico"],
+  "app subdomains should be able to fall back to the parent brand favicon",
+);
+assert.deepEqual(
+  communityInteractionFaviconCandidates("https://tenant.co.uk/proof"),
+  ["https://tenant.co.uk/favicon.ico"],
+  "common country-code second-level domains should not be mistaken for a parent brand host",
+);
+assert.deepEqual(communityInteractionFaviconCandidates("http://polynet.ai"), []);
+assert.deepEqual(communityInteractionFaviconCandidates("https://localhost/proof"), []);
+assert.deepEqual(communityInteractionFaviconCandidates("https://127.0.0.1/proof"), []);
 const loomDiscovery = extractInteractionOEmbedDiscoveryUrl(
   `<html><head>
     <link rel="alternate" type="application/json+oembed"
@@ -385,8 +404,13 @@ assert.deepEqual(
 
 assert.match(
   previewCss,
-  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*420px;[\s\S]*--community-interaction-embed-row-height:\s*104px;[\s\S]*--community-interaction-embed-media-width:\s*140px;[\s\S]*--community-interaction-social-max-width:\s*460px;[\s\S]*\.community-interaction-embed-summary,[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) var\(--community-interaction-embed-media-width\);/,
-  "video and generic link previews should retain their compact metadata-left and media-right row",
+  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*420px;[\s\S]*--community-interaction-embed-row-height:\s*104px;[\s\S]*--community-interaction-embed-compact-height:\s*64px;[\s\S]*--community-interaction-embed-media-width:\s*140px;[\s\S]*\.community-interaction-embed-summary,[\s\S]*\.community-interaction-embed\.is-link\.has-media[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) var\(--community-interaction-embed-media-width\);[\s\S]*\.community-interaction-embed\.is-compact-link\s*\{[\s\S]*min-height:\s*var\(--community-interaction-embed-compact-height\);[\s\S]*grid-template-columns:\s*24px minmax\(0,\s*1fr\);/,
+  "video and media previews should retain their rich row while no-media website cards use a compact favicon row",
+);
+assert.match(
+  previewComponent,
+  /function GenericLinkFavicon[\s\S]*communityInteractionFaviconCandidates\(props\.href\)[\s\S]*community-interaction-embed-favicon[\s\S]*referrerPolicy="no-referrer"[\s\S]*onError=[\s\S]*<Globe2[\s\S]*function GenericLinkPreview[\s\S]*is-link is-compact-link[\s\S]*data-preview-density="compact"[\s\S]*community-interaction-embed-compact-meta/,
+  "compact website cards should use bounded favicon candidates, a non-broken fallback, and two-line metadata",
 );
 assert.match(
   previewCss,
