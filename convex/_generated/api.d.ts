@@ -188,8 +188,6 @@ import type * as projects from "../projects.js";
 import type * as providerConnectionProbes from "../providerConnectionProbes.js";
 import type * as providerConnections from "../providerConnections.js";
 import type * as publicAppUrl from "../publicAppUrl.js";
-import type * as r41nb0wRetirement from "../r41nb0wRetirement.js";
-import type * as r41nb0wRetirementCore from "../r41nb0wRetirementCore.js";
 import type * as runtimeAgentLoop from "../runtimeAgentLoop.js";
 import type * as runtimeCancellation from "../runtimeCancellation.js";
 import type * as runtimeContextIntegrity from "../runtimeContextIntegrity.js";
@@ -421,8 +419,6 @@ declare const fullApi: ApiFromModules<{
   providerConnectionProbes: typeof providerConnectionProbes;
   providerConnections: typeof providerConnections;
   publicAppUrl: typeof publicAppUrl;
-  r41nb0wRetirement: typeof r41nb0wRetirement;
-  r41nb0wRetirementCore: typeof r41nb0wRetirementCore;
   runtimeAgentLoop: typeof runtimeAgentLoop;
   runtimeCancellation: typeof runtimeCancellation;
   runtimeContextIntegrity: typeof runtimeContextIntegrity;

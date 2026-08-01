@@ -1,63 +1,63 @@
 # R41NB0W Operator Retirement v1
 
-## Decision
+## Completed decision
 
-R41NB0W is a single, explicitly authorized operator retirement. It does not
+R41NB0W was a single, explicitly authorized operator retirement. It does not
 re-enable public community deletion and it is not a reusable account-deletion
 surface.
 
-The operation deletes only:
+The production operation completed on 2026-08-01 from validated commit
+`858949787942591e757182ebe8a566c108259f64`. It deleted only:
 
 - the canonical R41NB0W community and community-owned product state;
 - its community-owned stored media;
 - the owner's `approved`, never-activated existing-founder grant; and
 - the owner's stored OpenAI API-key connection selected by the exact row ID.
 
-The operation must preserve the owner user identity, authentication history,
+It preserved the owner user identity, authentication history,
 entitlements, memberships in other communities, direct-message history,
 developer apps, Stripe Connect account, price points, checkout sessions,
 purchase claims, provider-cost/credit records, runtime history, business visit
 history, and critical audit records. Pending checkout artifacts remain as
 historical evidence; no completed checkout, redeemed claim, subscription,
 community membership, join request, inference policy, inference receipt, or
-canonical operation receipt may exist when the retirement runs.
+canonical operation receipt existed at execution time.
 
-Member-agent channels are retained as history but detached from the deleted
-community. Derived community cognition is drained by the existing bounded
-post-deletion cleanup worker.
+There were no member-agent channels to detach. The existing bounded cleanup
+worker drained all derived community cognition.
 
 ## Safety contract
 
-The temporary operator function is internal-only and requires all four exact
-production IDs plus the exact confirmation phrase. A dry run and the committed
-operation execute the same precondition inspection. Any identity mismatch,
-unexpected owner community, activated founder grant, access row, successful
-billing row, shared storage object, or per-table bound overflow fails closed.
+The temporary operator function was internal-only and required four exact
+production IDs plus an exact confirmation phrase. Its production dry run
+returned `ready` with zero violations. The committed operation deleted 148
+community product rows, three canonical/control rows, six community-owned media
+objects, and 77 derived cognition rows. The temporary function and its helper,
+tests, and proof script were removed after the post-deletion inspection reached
+`retired` with zero remaining product or cognition rows.
 
 The production database backup taken before the founder-inference migration is
 the recovery source if historical restoration is ever required. Its operator
 path and checksum are recorded in `docs/alpha-release-workflow.md`.
 
-## Operator sequence
+## Preserved production evidence
 
-After the exact code commit is on `main` and deployed to Convex production:
+The post-deletion inspection proved the following retained counts:
 
-```bash
-npx convex run r41nb0wRetirement:retireR41nb0wInternal \
-  '{"ownerUserId":"nx723pf5z892gxwzt0r37zpf3h86qzev","communityId":"jh70hzn8g3rm1zpmr0732hs56d86wvst","founderGrantId":"m97s3ywjsawsjf3fm70m4r6q358bnn70","openAiConnectionId":"nn7cy5x1n48px68hvqkj0myqhh86xb63","confirmation":"retire-r41nb0w-preserve-user-financial-history-v1","dryRun":true}' \
-  --prod
-```
+- one owner user;
+- 76 indexed authentication-session records;
+- one membership in an unrelated community;
+- one Stripe Connect account;
+- four historical price points;
+- four pending checkout sessions;
+- four pending purchase claims;
+- five developer apps;
+- one direct-message participation; and
+- one successful durable retirement audit event, in addition to the prior audit
+  history.
 
-Stop unless the result is `state: "ready"` with no violations. Then run the
-same command with `"dryRun":false` exactly once. Poll the read-only inspection
-until it reports `state: "retired"` and cognition is empty:
-
-```bash
-npx convex run r41nb0wRetirement:inspectR41nb0wRetirementInternal \
-  '{"ownerUserId":"nx723pf5z892gxwzt0r37zpf3h86qzev","communityId":"jh70hzn8g3rm1zpmr0732hs56d86wvst","founderGrantId":"m97s3ywjsawsjf3fm70m4r6q358bnn70","openAiConnectionId":"nn7cy5x1n48px68hvqkj0myqhh86xb63"}' \
-  --prod
-```
-
-After the retained-state proof is captured, remove the temporary R41NB0W
-operator module in a cleanup release. Keep this decision record and the durable
-critical audit event.
+The canonical community row, founder grant, selected OpenAI connection, and all
+target community memberships are absent. Historical price, checkout, claim,
+Stripe, runtime, business-visit, user, DM, app, and audit evidence remains
+intentionally non-canonical for access and cannot make the deleted community
+resolvable.

@@ -116,11 +116,10 @@ The exact pre-retirement production backup is retained at
 Its SHA-256 is
 `7c3238c4f01f98459d55b7740b77f7051324dffda0449fadc2aac003e6975674`.
 
-R41NB0W retirement is governed by `docs/r41nb0w-operator-retirement-v1.md`.
-It is an exact-ID, internal-only operator migration that preserves the user's
-identity and historical financial/audit records. It must be dry-run in
-production before execution, and the bounded cognition drain plus retained-state
-inspection must complete before the temporary operator module is removed.
+R41NB0W retirement completed on 2026-08-01 and is recorded in
+`docs/r41nb0w-operator-retirement-v1.md`. The exact-ID migration preserved the
+user's identity and historical financial/audit records, its post-deletion
+inspection reached `retired`, and the temporary operator module was removed.
 
 ## Web Production Rule
 
