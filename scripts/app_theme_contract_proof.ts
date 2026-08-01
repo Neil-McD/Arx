@@ -267,7 +267,7 @@ assert.equal(
   "--surface-nav: #F0F0EE;",
   "--bg-card: #FFFFFF;",
   "--bg-card-hover: #ECECEA;",
-  "--surface-selected: #E9E9E6;",
+  "--surface-selected: color-mix(in srgb, var(--accent-gold) 16%, var(--surface-card) 84%);",
   "--text-primary: #171719;",
   "--text-muted: #6B6974;",
   "--text-faint: #6B6974;",

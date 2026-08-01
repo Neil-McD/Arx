@@ -364,8 +364,8 @@
   --active-overlay: rgba(23, 23, 25, 0.08);
   --panel-shadow: none;
 
-  /* === SELECTED STATE: Neutral field + blue structure === */
-  --surface-selected: #E9E9E6;
+  /* === SELECTED STATE: Dark-theme grammar translated onto paper === */
+  --surface-selected: color-mix(in srgb, var(--accent-gold) 16%, var(--surface-card) 84%);
   --stroke-selected: #2F55FF;
   --text-selected: #171719;
 
