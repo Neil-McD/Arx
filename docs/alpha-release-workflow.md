@@ -73,80 +73,40 @@ npm run check:third-party-mcp-retirement-complete-proof
 Never delete the production rows before the first release proves ordinary
 product traffic can no longer create or refresh them.
 
-### Builder Partner v1 retirement
+### Builder Partner v1 terminal state
 
-Builder Partner v1 retirement is a two-release evidence and ownership-policy
-migration, not a financial or runtime migration:
+Builder Partner v1 is retired and its evidence migration is complete. Before the
+terminal cleanup release, production was backed up and the final bounded inspection
+proved all of the following without truncation:
 
-1. First release the evidence-only grant registry, the inert community inference
-   funding-policy registry, bounded capture/inspection functions, cached-client
-   tombstones, and the deletion of every member, operator, commission, adjustment,
-   cron, and Stripe-transfer call path. Keep the seven legacy Partner tables
-   temporarily as source evidence.
-2. Deploy Convex from the exact validated release commit before the web so cached
-   clients encounter deterministic retired tombstones.
-3. Run the read-only production inspection:
+- zero legacy Builder Partner source documents;
+- four retained grandfather grants with no identity, terms, source, or duplication
+  mismatch;
+- eight retained community inference policies with the community owner as payer,
+  all in `owner_api_key` and `pending_credential` state;
+- a sorted ownership distribution `1/2/2/3` across the eight communities;
+- zero attribution, commission, adjustment, payout batch, payout transfer, and
+  payout item rows; and
+- the terminal migration phase `source_deleted`.
 
-```bash
-npx convex run builderPartners:inspectLegacyBuilderPartnerRetirementInternal '{}' --prod
-```
+The seven legacy Partner table schemas and the temporary migration code are deleted
+in the terminal cleanup release. The nine public retired tombstones remain only for
+cached production client compatibility. They are deterministic, read no product or
+financial state, and cannot enroll, attribute, accrue, approve, or transfer money.
 
-4. Stop unless the inspection is untruncated, reports exactly four active source
-   partners, exactly eight communities owned with the sorted distribution
-   `1/2/2/3`, zero non-active partners, and zero financial rows. If production no
-   longer matches that audited shape, investigate rather than widening the migration.
-5. Create and download a production backup before any retirement mutation. Stop
-   unless the backup is complete and recoverable through the normal Convex backup
-   workflow.
-6. Atomically capture the four grandfather records and eight community policies once:
+The four grandfather grants and eight community inference policies are permanent,
+separate evidence records. A grandfather grant is not access, money, a balance, a
+commission, or a payout promise. A pending community funding policy is not a usable
+credential, membership, entitlement, usage allowance, provider selection, model
+promise, or authorization to run inference. No runtime, onboarding, checkout,
+billing, entitlement, or provider-connection path may read these policies until a
+future explicitly designed funding system owns that boundary.
 
-```bash
-npx convex run builderPartners:captureLegacyBuilderPartnerFoundationInternal '{}' --prod
-```
-
-7. Repeat the capture command to prove idempotency: it must report `created: 0`,
-   `alreadyCaptured: 4`, `communityPoliciesCreated: 0`, and
-   `communityPoliciesAlreadyCaptured: 8`. Then repeat the inspection.
-8. Stop unless `captureComplete`, `migrationComplete`, and
-   `readyForSourceDeletion` are all `true`, `retirementPhase` is
-   `ready_for_source_deletion`, `grandfatherGrants.total` is `4`, every grant,
-   source, duplication, and legal-acceptance mismatch count is zero,
-   `ownedCommunities.total` is `8`, `ownedCommunities.distributionMatches` is
-   `true`, `communityInferencePolicies.total` is `8`, every community-policy
-   missing, unexpected, mismatch, and duplication count is zero, every finance count
-   is zero, and `isTruncated` is `false`.
-9. Delete the four legacy source documents through the guarded mutation:
-
-```bash
-npx convex run builderPartners:deleteLegacyBuilderPartnerSourceInternal '{}' --prod
-```
-
-10. Repeat the delete command to prove idempotency. It must report
-    `alreadyDeleted: true` and `deletedSourcePartners: 0`.
-11. Repeat the read-only inspection. Stop unless `sourceDeletionComplete` and
-    `migrationComplete` are `true`, `retirementPhase` is `source_deleted`,
-    `partners.total` is `0`, `grandfatherGrants.total` is `4`, every finance
-    count is zero, `ownedCommunities.total` is `8`,
-    `ownedCommunities.distributionMatches` is `true`,
-    `communityInferencePolicies.total` is `8`, every community-policy mismatch
-    count is zero, and `isTruncated` is `false`.
-12. Only in a later cleanup release remove the seven now-empty legacy Partner
-    schema tables, the three migration functions, and the temporary retirement
-    policy/test. Retain the tiny public tombstones until the cached-production-client
-    compatibility window explicitly expires.
-
-The grandfather grant is evidence for a possible future program only. It must not
-be interpreted as access, money, a commission balance, or a payout promise. The
-eight `communityInferencePolicies` rows are a separate ownership boundary. In this
-release they must all remain `owner_api_key` and `pending_credential`, with each
-community owner recorded as payer; no member, runtime, onboarding, checkout,
-billing, entitlement, or provider-connection path may read them yet. The policy
-contains no credential, membership, entitlement, usage allowance, price, provider,
-or model promise.
-`pending_credential` means the founder has not supplied the required API key, so it
-must never authorize inference. Never run capture or source deletion before the
-first retirement release has severed all writers, and never delete source evidence
-without the completed production backup.
+The production backup was completed before source deletion and is retained outside
+the repository under operator control. Its SHA-256 is
+`96be1c4d09b4164a6abe6a6807843805c656c4c7ec6dfa994b3b333de7cc42b6`.
+Do not recreate the retired tables or migration functions. Any future partner
+program must begin from a new explicit product and financial contract.
 
 ## Web Production Rule
 
