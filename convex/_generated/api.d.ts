@@ -64,6 +64,7 @@ import type * as communityCognitionCleanup from "../communityCognitionCleanup.js
 import type * as communityCognitionCleanupCore from "../communityCognitionCleanupCore.js";
 import type * as communityCognitionLifecycle from "../communityCognitionLifecycle.js";
 import type * as communityCommerce from "../communityCommerce.js";
+import type * as communityCommerceCore from "../communityCommerceCore.js";
 import type * as communityCompilerCandidates from "../communityCompilerCandidates.js";
 import type * as communityCompilerDigest from "../communityCompilerDigest.js";
 import type * as communityCompilerEvidence from "../communityCompilerEvidence.js";
@@ -171,6 +172,7 @@ import type * as openAiWebSearchTransport from "../openAiWebSearchTransport.js";
 import type * as openRouterNativeTransport from "../openRouterNativeTransport.js";
 import type * as operatorAccess from "../operatorAccess.js";
 import type * as operatorDashboard from "../operatorDashboard.js";
+import type * as operatorEntitlementsCore from "../operatorEntitlementsCore.js";
 import type * as operatorIntelligence from "../operatorIntelligence.js";
 import type * as operatorSentryDiagnostics from "../operatorSentryDiagnostics.js";
 import type * as paidToolCreditReservation from "../paidToolCreditReservation.js";
@@ -305,6 +307,7 @@ declare const fullApi: ApiFromModules<{
   communityCognitionCleanupCore: typeof communityCognitionCleanupCore;
   communityCognitionLifecycle: typeof communityCognitionLifecycle;
   communityCommerce: typeof communityCommerce;
+  communityCommerceCore: typeof communityCommerceCore;
   communityCompilerCandidates: typeof communityCompilerCandidates;
   communityCompilerDigest: typeof communityCompilerDigest;
   communityCompilerEvidence: typeof communityCompilerEvidence;
@@ -412,6 +415,7 @@ declare const fullApi: ApiFromModules<{
   openRouterNativeTransport: typeof openRouterNativeTransport;
   operatorAccess: typeof operatorAccess;
   operatorDashboard: typeof operatorDashboard;
+  operatorEntitlementsCore: typeof operatorEntitlementsCore;
   operatorIntelligence: typeof operatorIntelligence;
   operatorSentryDiagnostics: typeof operatorSentryDiagnostics;
   paidToolCreditReservation: typeof paidToolCreditReservation;
