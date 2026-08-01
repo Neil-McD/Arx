@@ -39,11 +39,11 @@ Premium tool usage is entitled through Polynet Premium. Internally, paid tools s
 
 Builder Partner v1 is retired. It has no member or operator product surface and creates no new attribution, commission, adjustment, payout batch, payout item, payout transfer, or Stripe transfer. Its accepted terms remain an archived legal artifact.
 
-The retirement release preserves two deliberately separate facts. `future_partner_grandfather_v1` copies the identity and accepted-terms evidence for each active legacy participant; it preserves possible future program consideration and is not an entitlement, payout promise, balance, commission, or active partner account. `communityInferencePolicies` records who is responsible for funding inference for each community. The pre-change production audit found four active source identities, four matching terms acceptances, exactly eight communities owned with the sorted distribution `1/2/2/3`, and zero rows across every legacy attribution, commission, adjustment, batch, item, and transfer table.
+The completed retirement preserves two deliberately separate facts. `future_partner_grandfather_v1` holds the identity and accepted-terms evidence for each of the four legacy participants; it preserves possible future program consideration and is not an entitlement, payout promise, balance, commission, or active partner account. `communityInferencePolicies` records who is responsible for funding inference for each community. Production contains four retained grandfather grants and eight retained community policies with the sorted ownership distribution `1/2/2/3`. Every policy is `owner_api_key` and `pending_credential`, names the community owner as payer, and retains provenance back to the founder's former source record and grant.
 
-The bounded, idempotent capture writes exactly four evidence grants and eight community funding policies atomically. Every captured policy is `owner_api_key` and `pending_credential`, names the community owner as payer, and retains provenance back to the founder's source record and grant. These rows are intentionally inert in this release: no member, runtime, onboarding, checkout, billing, entitlement, or provider-connection path reads them, and `pending_credential` must never authorize inference. They establish only who will fund community inference and whether that funding path is ready. They contain no credential, entitlement, membership, usage allowance, price, provider, or model promise.
+These rows are intentionally inert: no member, runtime, onboarding, checkout, billing, entitlement, or provider-connection path reads them, and `pending_credential` must never authorize inference. They establish only who will fund community inference and whether that funding path is ready. Each policy contains no credential, entitlement, membership, usage allowance, price, provider, or model promise.
 
-The seven legacy Partner tables remain only as temporary migration substrate for the first retirement release. After a production backup, a read-only inspection must prove an exact four-person source-to-grant identity and terms-evidence match, the exact eight-community ownership boundary and distribution, the exact eight pending policy rows, no unexpected, mismatched, or duplicate records, no truncation, and zero financial rows. Only then may the guarded, idempotent mutation delete the four legacy source documents. A final inspection must prove four retained grandfather records, eight retained community policies, zero legacy source documents, and zero financial rows before a later cleanup release removes the now-empty table schemas and temporary migration code.
+The terminal production inspection proved zero legacy source documents, zero financial rows, exact grant and policy evidence, no unexpected, mismatched, or duplicate records, and no truncation. The seven legacy Partner table schemas and the temporary migration code are deleted. The nine public retired tombstones remain only for cached-client compatibility and cannot read or write product or financial state.
 
 ## Payout Readiness
 
@@ -65,7 +65,7 @@ Payout readiness does not grant community access. It determines whether the buil
 10. Builder Partner v1 must not enroll, attribute, accrue, adjust, mature, approve, or transfer money.
 11. A legacy grandfather grant is preserved evidence only and must not authorize product access or payment.
 12. A `pending_credential` community inference policy is configuration evidence only and must fail closed; it is not an entitlement, usable credential, usage allowance, or permission to run inference.
-13. Legacy Partner source documents may be deleted only after a production backup and bounded inspection prove exact four-person grant capture, exact eight-community policy capture with the `1/2/2/3` ownership distribution, zero financial rows, and no truncation; schema removal requires a second inspection proving the terminal source-deleted state.
+13. The completed legacy retirement must remain terminal: four grandfather grants, eight inert community policies with the `1/2/2/3` ownership distribution, no legacy source or financial tables, and tombstones only at cached-client API boundaries.
 14. Community creator revenue stays Stripe-native unless Polynet intentionally changes to a held-funds payout architecture.
 15. Full refunds and opened disputes revoke or suspend paid community access through backend subscription lifecycle state.
 16. Paid-tool reporting should distinguish exact provider cost, estimated provider cost, and mixed provider evidence.
@@ -81,7 +81,7 @@ Payout readiness does not grant community access. It determines whether the buil
 - treating a grandfather record as an active entitlement, balance, or payout promise
 - treating a pending community funding policy as an active credential or inference authorization
 - storing founder API-key material inside `communityInferencePolicies`
-- removing the legacy source tables before production proves exact grant and community-policy capture and zero financial rows
+- recreating the deleted legacy Partner tables or temporary migration code
 - coupling retired Builder Partner concepts back into ordinary community creator revenue
 - treating estimated paid-tool provider cost as exact billing truth
 

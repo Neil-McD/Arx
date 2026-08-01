@@ -42,12 +42,7 @@ function sourceBetween(source: string, start: string, end: string): string {
   return source.slice(startIndex, endIndex);
 }
 
-function proveLegacyFoundationMigration(
-  schemaSource: string,
-  backendSource: string,
-  policySource: string,
-  policyTestSource: string,
-): void {
+function provePermanentEvidenceSchema(schemaSource: string): void {
   for (const marker of [
     "legacyProgramGrants: defineTable",
     'grantKey: v.string()',
@@ -58,10 +53,12 @@ function proveLegacyFoundationMigration(
     '.index("by_user_grantKey", ["userId", "grantKey"])',
     '.index("by_grantKey_capturedAt", ["grantKey", "capturedAt"])',
   ]) {
-    assertIncludes(schemaSource, marker, "grandfather grant schema");
+    assertIncludes(schemaSource, marker, "grandfather evidence schema");
   }
+
   for (const marker of [
     "communityInferencePolicies: defineTable",
+    'communityId: v.id("communities")',
     'payerUserId: v.id("users")',
     'v.literal("owner_api_key")',
     'v.literal("platform_subscription")',
@@ -75,10 +72,11 @@ function proveLegacyFoundationMigration(
   ]) {
     assertIncludes(schemaSource, marker, "community inference funding policy schema");
   }
+
   const fundingPolicySchema = sourceBetween(
     schemaSource,
     "communityInferencePolicies: defineTable",
-    "partnerAttributions: defineTable",
+    "workspaceCreditBalances: defineTable",
   );
   for (const forbidden of [
     /sponsorUserId/,
@@ -87,132 +85,66 @@ function proveLegacyFoundationMigration(
     /pending_plan/,
     /modelId/,
     /policyVersion/,
-    /capturedAt/,
-    /by_fundingMode_status/,
-    /by_policyVersion_capturedAt/,
+    /credentialValue/,
+    /apiKey/,
+    /usageAllowance/,
+    /price/,
+    /provider/,
+    /entitlement/,
   ]) {
     assertExcludes(fundingPolicySchema, forbidden, "irreducible community funding policy schema");
   }
+}
 
-  const captureSource = sourceBetween(
-    backendSource,
-    "export const captureLegacyBuilderPartnerFoundationInternal",
-    "export const deleteLegacyBuilderPartnerSourceInternal",
-  );
-  for (const marker of [
-    'throw new Error("legacy_builder_partner_migration_inspection_truncated")',
-    'throw new Error("legacy_builder_partner_source_count_mismatch")',
-    'throw new Error("legacy_builder_partner_source_evidence_mismatch")',
-    'throw new Error("legacy_builder_partner_financial_rows_present")',
-    'throw new Error("legacy_builder_partner_owned_community_boundary_mismatch")',
-    'throw new Error("legacy_builder_partner_legal_acceptance_missing")',
-    'throw new Error("legacy_builder_partner_grant_conflict")',
-    'throw new Error("legacy_builder_partner_community_inference_policy_conflict")',
-    'ctx.db.insert("legacyProgramGrants"',
-    'ctx.db.insert("communityInferencePolicies"',
+function proveLegacySchemaAndMigrationCodeAreDeleted(schemaSource: string, backendSource: string): void {
+  for (const table of [
+    "builderPartners",
+    "partnerAttributions",
+    "partnerCommissionLedger",
+    "partnerCommissionAdjustments",
+    "partnerPayoutBatches",
+    "partnerPayoutTransfers",
+    "partnerPayoutItems",
   ]) {
-    assertIncludes(captureSource, marker, "bounded legacy foundation capture");
-  }
-  assert.equal(
-    (captureSource.match(/ctx\.db\.insert\("legacyProgramGrants"/g) ?? []).length,
-    1,
-    "grandfather capture must have one canonical insert boundary",
-  );
-  assert.equal(
-    (captureSource.match(/ctx\.db\.insert\("communityInferencePolicies"/g) ?? []).length,
-    1,
-    "community inference policy capture must have one canonical insert boundary",
-  );
-
-  const inspectionSource = sourceBetween(
-    backendSource,
-    "export const inspectLegacyBuilderPartnerRetirementInternal",
-    "export const captureLegacyBuilderPartnerFoundationInternal",
-  );
-  assertIncludes(inspectionSource, "...state.evaluation", "read-only retirement inspection");
-
-  for (const marker of [
-    "LEGACY_PARTNER_EXPECTED_COUNT = 4",
-    "LEGACY_PARTNER_EXPECTED_COMMUNITY_COUNT = 8",
-    "LEGACY_PARTNER_EXPECTED_COMMUNITY_DISTRIBUTION = [1, 2, 2, 3]",
-    'LEGACY_COMMUNITY_INFERENCE_FUNDING_MODE = "owner_api_key"',
-    'LEGACY_COMMUNITY_INFERENCE_STATUS = "pending_credential"',
-    'LEGACY_COMMUNITY_INFERENCE_CONTRACT_VERSION = "community_inference_funding_v1"',
-    "missingGrantUserCount",
-    "unexpectedGrantUserCount",
-    "mismatchedGrantCount",
-    "duplicateGrantUserCount",
-    "duplicateSourceRecordIdCount",
-    "missingLegalAcceptanceCount",
-    "ownedCommunityDistributionMatches",
-    "missingPolicyCommunityCount",
-    "unexpectedPolicyCommunityCount",
-    "mismatchedCommunityPolicyCount",
-    "duplicateCommunityPolicyCount",
-    "financialRows",
-    "captureComplete",
-    "migrationComplete",
-    "readyForSourceDeletion",
-    "sourceDeletionComplete",
-    '"source_deleted"',
-    '"invalid_terminal_state"',
-    "isTruncated",
-  ]) {
-    assertIncludes(policySource, marker, "phase-aware retirement policy");
+    assertExcludes(schemaSource, new RegExp(`${table}:\\s*defineTable`), "retired legacy schema");
   }
 
-  const deletionSource = sourceBetween(
-    backendSource,
-    "export const deleteLegacyBuilderPartnerSourceInternal",
-    "// Cached-client compatibility only",
-  );
-  for (const marker of [
-    "state.evaluation.sourceDeletionComplete",
-    "alreadyDeleted: true",
-    "state.evaluation.readyForSourceDeletion",
-    'throw new Error("legacy_builder_partner_source_deletion_not_ready")',
-    "await ctx.db.delete(partner._id)",
-    "retainedGrandfatherGrants",
-    "retainedCommunityInferencePolicies",
+  for (const path of [
+    "convex/builderPartnerRetirementPolicy.ts",
+    "convex/builderPartnerRetirementPolicy.test.ts",
   ]) {
-    assertIncludes(deletionSource, marker, "guarded source deletion");
+    assert.equal(existsSync(join(REPO_ROOT, path)), false, `${path} must be deleted`);
   }
-  assert.equal(
-    (deletionSource.match(/ctx\.db\.delete\(/g) ?? []).length,
-    1,
-    "source deletion must have one canonical document deletion boundary",
-  );
-  assertIncludes(
-    deletionSource,
-    "await ctx.db.delete(partner._id)",
-    "source deletion must target only verified source partners",
-  );
 
-  for (const marker of [
-    'requires capture while only the four source identities exist',
-    'permits source deletion only after exact four-person and eight-community capture',
-    'blocks deletion until all eight community policies are captured',
-    'rejects community ownership distribution drift',
-    'rejects mismatched community funding policy',
-    'rejects a payer that is not the community owner',
-    'rejects duplicated community funding policy',
-    'rejects policy rows outside the eight-community boundary',
-    'blocks deletion if any financial row appears',
-    'blocks deletion on mismatched or duplicated grant evidence',
-    'proves the terminal state after source rows are deleted',
-    'rejects an incomplete terminal state',
+  for (const forbidden of [
+    /inspectLegacyBuilderPartnerRetirementInternal/,
+    /captureLegacyBuilderPartnerFoundationInternal/,
+    /deleteLegacyBuilderPartnerSourceInternal/,
+    /internalMutation/,
+    /internalQuery/,
+    /ctx\.db/,
+    /legacyProgramGrants/,
+    /communityInferencePolicies/,
+    /partnerAttributions/,
+    /partnerCommissionLedger/,
+    /partnerCommissionAdjustments/,
+    /partnerPayoutBatches/,
+    /partnerPayoutTransfers/,
+    /partnerPayoutItems/,
   ]) {
-    assertIncludes(policyTestSource, marker, "retirement policy behavioral tests");
+    assertExcludes(backendSource, forbidden, "tombstone-only Builder Partner backend");
   }
+
+  const retiredMigrationNames =
+    /inspectLegacyBuilderPartnerRetirementInternal|captureLegacyBuilderPartnerFoundationInternal|deleteLegacyBuilderPartnerSourceInternal|builderPartnerRetirementPolicy/;
+  const unexpectedReferences = ["convex", "shared", "apps/web/src"]
+    .flatMap(listSourceFiles)
+    .filter((path) => readText(path).match(retiredMigrationNames));
+  assert.deepEqual(unexpectedReferences, [], "retired migration code must have no active source reference");
 }
 
 function proveCommunityInferencePoliciesAreInert(): void {
-  const allowedReferences = new Set([
-    "convex/schema.ts",
-    "convex/builderPartners.ts",
-    "convex/builderPartnerRetirementPolicy.ts",
-    "convex/builderPartnerRetirementPolicy.test.ts",
-  ]);
+  const allowedReferences = new Set(["convex/schema.ts"]);
   const unexpectedReferences = ["convex", "shared", "apps/web/src"]
     .flatMap(listSourceFiles)
     .filter((path) => !allowedReferences.has(path))
@@ -224,48 +156,44 @@ function proveCommunityInferencePoliciesAreInert(): void {
   );
 }
 
-function proveLegacySchemaIsTemporary(schemaSource: string): void {
-  for (const table of [
-    "builderPartners",
-    "partnerAttributions",
-    "partnerCommissionLedger",
-    "partnerCommissionAdjustments",
-    "partnerPayoutBatches",
-    "partnerPayoutTransfers",
-    "partnerPayoutItems",
-  ]) {
-    assertIncludes(schemaSource, `${table}: defineTable`, "temporary legacy schema substrate");
-  }
-}
-
 function proveBackendIsTombstonesOnly(backendSource: string): void {
-  const acceptanceTombstone = sourceBetween(
-    backendSource,
-    "export const acceptBuilderPartnerTermsAndEnsure",
-    "export const recordBuilderPartnerAttribution",
-  );
-  assertIncludes(acceptanceTombstone, 'throw new Error("builder_partner_program_retired")', "acceptance tombstone");
-  assertExcludes(acceptanceTombstone, /ctx\.db|\.insert\(|\.patch\(/, "acceptance tombstone must not touch state");
-
-  const attributionTombstone = sourceBetween(
-    backendSource,
-    "export const recordBuilderPartnerAttribution",
-    "export const listPartnerPerformanceForOperator",
-  );
-  assertIncludes(attributionTombstone, 'reason: "builder_partner_program_retired"', "attribution tombstone");
-  assertExcludes(attributionTombstone, /ctx\.db|\.insert\(|\.patch\(/, "attribution tombstone must not touch state");
-
-  for (const forbidden of [
-    /recordCommunityRevenuePartnerCommission/,
-    /recordPaidToolUsagePartnerCommission/,
-    /advancePartnerCommissionsToPayableInternal/,
-    /createPartnerPayoutCycleInternal/,
-    /executePartnerPayoutBatchInternal/,
-    /ctx\.db\.insert\("partnerCommission/,
-    /stripe\.transfers\.create/,
-  ]) {
-    assertExcludes(backendSource, forbidden, "retired backend must not retain financial execution");
+  const publicTombstones = [
+    "getMyBuilderPartnerProgram",
+    "acceptBuilderPartnerTermsAndEnsure",
+    "recordBuilderPartnerAttribution",
+    "listPartnerPerformanceForOperator",
+    "listPartnerPayoutCyclesForOperator",
+    "approvePartnerPayoutCycle",
+    "retryPartnerPayoutCycle",
+    "holdPartnerPayoutCycle",
+    "rejectPartnerPayoutCycle",
+  ];
+  for (const rpc of publicTombstones) {
+    assertIncludes(backendSource, `export const ${rpc}`, "cached-client tombstone");
   }
+  assert.equal(
+    (backendSource.match(/export const /g) ?? []).length,
+    publicTombstones.length,
+    "Builder Partner backend must export exactly the cached-client tombstones",
+  );
+
+  for (const marker of [
+    'programStatus: "retired"',
+    'state: "retired"',
+    "isUnlocked: false",
+    "eligible: false",
+    'throw new Error("builder_partner_program_retired")',
+    'reason: "builder_partner_program_retired"',
+    "sourceTables: []",
+    "retired: true",
+  ]) {
+    assertIncludes(backendSource, marker, "deterministic Builder Partner tombstone");
+  }
+  assertExcludes(
+    backendSource,
+    /ctx\.|\.insert\(|\.patch\(|\.delete\(|stripe\.|recordCommunityRevenuePartnerCommission|recordPaidToolUsagePartnerCommission/,
+    "retired backend must not read, write, or transfer state",
+  );
 }
 
 function proveMoneyCallPathsAreSevered(): void {
@@ -297,7 +225,7 @@ function proveProductSurfacesAreDeleted(): void {
     "apps/web/src/components/WebBuilderPartnerProgramPanel.css",
     "apps/web/src/components/WebBuilderPartnerSettingsSection.tsx",
   ]) {
-    assert.equal(existsSync(new URL(`../${path}`, import.meta.url)), false, `${path} must be deleted`);
+    assert.equal(existsSync(join(REPO_ROOT, path)), false, `${path} must be deleted`);
   }
 
   for (const path of [
@@ -311,7 +239,11 @@ function proveProductSurfacesAreDeleted(): void {
     "shared/cloudOperatorDashboardGateway.ts",
     "shared/operatorTypes.ts",
   ]) {
-    assertExcludes(readText(path), /BuilderPartner|builderPartner|partnerPayout|partnerPerformance|Top partners/, `${path} legacy partner surface`);
+    assertExcludes(
+      readText(path),
+      /BuilderPartner|builderPartner|partnerPayout|partnerPerformance|Top partners/,
+      `${path} legacy partner surface`,
+    );
   }
 
   assertExcludes(readText("shared/appShellNavigation.ts"), /\| "partners"/, "settings type");
@@ -346,7 +278,12 @@ function proveLegalAndDocs(): void {
   assertIncludes(legalTerms, "version: builder_partner_terms_v2", "immutable historical partner terms");
   assertIncludes(legalTerms, "Termination does not remove Polynet's right", "immutable historical partner terms");
   assertExcludes(readText("shared/legalDocuments.ts"), /builder_partner|Builder Partner/, "active legal registry");
-  assertExcludes(readText("apps/web/src/docs/legalDocumentsContent.ts"), /builderPartner|Builder Partner/, "active legal content");
+  assertExcludes(
+    readText("apps/web/src/docs/legalDocumentsContent.ts"),
+    /builderPartner|Builder Partner/,
+    "active legal content",
+  );
+
   for (const marker of [
     "Builder Partner v1 is retired",
     "future_partner_grandfather_v1",
@@ -354,24 +291,28 @@ function proveLegalAndDocs(): void {
     "owner_api_key",
     "pending_credential",
     "community owner as payer",
-    "model promise",
-    "creates no new attribution, commission, adjustment, payout batch, payout item, payout transfer, or Stripe transfer",
+    "contains no credential",
+    "seven legacy Partner table schemas and the temporary migration code are deleted",
   ]) {
     assertIncludes(billingDocs, marker, "billing documentation");
   }
   for (const marker of [
-    "Builder Partner v1 retirement",
-    "inspectLegacyBuilderPartnerRetirementInternal",
-    "captureLegacyBuilderPartnerFoundationInternal",
-    "deleteLegacyBuilderPartnerSourceInternal",
-    "readyForSourceDeletion",
-    "sourceDeletionComplete",
-    "communityInferencePolicies.total",
-    "ownedCommunities.distributionMatches",
+    "Builder Partner v1 terminal state",
+    "four retained grandfather grants",
+    "eight retained community inference policies",
+    "sorted ownership distribution `1/2/2/3`",
+    "seven legacy Partner table schemas",
+    "temporary migration code",
     "production backup",
+    "source_deleted",
   ]) {
-    assertIncludes(releaseDocs, marker, "two-release retirement runbook");
+    assertIncludes(releaseDocs, marker, "terminal retirement runbook");
   }
+
+  const retiredMigrationNames =
+    /inspectLegacyBuilderPartnerRetirementInternal|captureLegacyBuilderPartnerFoundationInternal|deleteLegacyBuilderPartnerSourceInternal|builderPartnerRetirementPolicy/;
+  assertExcludes(releaseDocs, retiredMigrationNames, "release docs must not advertise deleted migration functions");
+  assertExcludes(billingDocs, retiredMigrationNames, "billing docs must not advertise deleted migration functions");
 }
 
 function proveRuntimeSmokeIsReadOnly(runtimeSmokeSource: string): void {
@@ -387,14 +328,9 @@ function proveRuntimeSmokeIsReadOnly(runtimeSmokeSource: string): void {
 function main(): void {
   const schemaSource = readText("convex/schema.ts");
   const backendSource = readText("convex/builderPartners.ts");
-  proveLegacyFoundationMigration(
-    schemaSource,
-    backendSource,
-    readText("convex/builderPartnerRetirementPolicy.ts"),
-    readText("convex/builderPartnerRetirementPolicy.test.ts"),
-  );
+  provePermanentEvidenceSchema(schemaSource);
+  proveLegacySchemaAndMigrationCodeAreDeleted(schemaSource, backendSource);
   proveCommunityInferencePoliciesAreInert();
-  proveLegacySchemaIsTemporary(schemaSource);
   proveBackendIsTombstonesOnly(backendSource);
   proveMoneyCallPathsAreSevered();
   proveProductSurfacesAreDeleted();
@@ -404,7 +340,7 @@ function main(): void {
   );
   proveLegalAndDocs();
   proveRuntimeSmokeIsReadOnly(readText("scripts/builder_partner_program_runtime_smoke.ts"));
-  console.log("PASS: Builder Partner v1 four-founder/eight-community capture, source deletion, and tombstone contract proved");
+  console.log("PASS: Builder Partner v1 terminal cleanup and tombstone contract proved");
 }
 
 main();

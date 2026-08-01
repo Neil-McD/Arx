@@ -197,11 +197,6 @@ assert.doesNotMatch(
   "runtime/tool diagnostics must not use raw tool failures for execution-only top failing tools",
 );
 assert.doesNotMatch(
-  schema,
-  /partnerCommissionLedger:[\s\S]*\.index\("by_basis_createdAt", \["basisType", "createdAt"\]\)|partnerCommissionLedger:[\s\S]*\.index\("by_credit_ledger_entry", \["sourceCreditLedgerEntryId"\]\)/,
-  "partner commission ledger must not retain paid-tool-only read indexes",
-);
-assert.doesNotMatch(
   operatorIntelligence,
   /readPartnerCommissionLedgerRowsByBasisType|buildToolGrossMarginPartnerCommissionByEntryId|partnerGrossMarginShareBps|sourceCreditLedgerEntryId[\s\S]*buildPaidToolEconomics/,
   "operator tool economics must not read deferred paid-tool partner commission rows",
