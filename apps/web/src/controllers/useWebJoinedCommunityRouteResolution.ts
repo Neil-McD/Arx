@@ -29,7 +29,11 @@ export function useWebJoinedCommunityRouteResolution<
   isAuthBootstrapComplete: boolean;
   ensureSession: (session?: SessionT | null) => Promise<SessionT | null>;
   loadCommunities: (session: SessionT) => Promise<void>;
-  syncCommunitySelection: (opts: { communityId?: string | null; communitySlug?: string | null }) => void;
+  syncCommunitySelection: (opts: {
+    communityId?: string | null;
+    communitySlug?: string | null;
+    preserveChannel?: boolean;
+  }) => void;
   navigateTo: NavigateFn;
 }) {
   useEffect(() => {
@@ -66,6 +70,7 @@ export function useWebJoinedCommunityRouteResolution<
           params.syncCommunitySelection({
             communityId: access.community_id,
             communitySlug: slug,
+            preserveChannel: true,
           });
           return;
         }

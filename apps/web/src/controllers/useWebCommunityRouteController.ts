@@ -58,6 +58,7 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
     (opts: {
       communityId?: string | null;
       communitySlug?: string | null;
+      preserveChannel?: boolean;
     }) => {
       const current = paramsRef.current;
       const requestedSlug =
@@ -67,7 +68,7 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
       current.applyCommunityShellState({
         communitySlug: resolvedSlug,
         communityId: opts.communityId ?? null,
-        communityChannelSlug: null,
+        ...(opts.preserveChannel ? {} : { communityChannelSlug: null }),
       });
     },
     [resolveCommunitySlugById],

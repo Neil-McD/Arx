@@ -87,6 +87,24 @@ const route = read(routePath);
   'communityTab === "chat" ? String(segments[3]',
 ].forEach((required) => assertIncludes(routePath, route, required));
 
+const communityRouteControllerPath =
+  "apps/web/src/controllers/useWebCommunityRouteController.ts";
+const communityRouteController = read(communityRouteControllerPath);
+[
+  "preserveChannel?: boolean",
+  '...(opts.preserveChannel ? {} : { communityChannelSlug: null })',
+].forEach((required) =>
+  assertIncludes(communityRouteControllerPath, communityRouteController, required),
+);
+
+const joinedRouteResolutionPath =
+  "apps/web/src/controllers/useWebJoinedCommunityRouteResolution.ts";
+assertIncludes(
+  joinedRouteResolutionPath,
+  read(joinedRouteResolutionPath),
+  "preserveChannel: true",
+);
+
 const projectionPath = "apps/web/src/controllers/useWebCommunityInteractionProjection.ts";
 const projection = read(projectionPath);
 [
