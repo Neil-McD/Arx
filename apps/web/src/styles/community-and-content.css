@@ -2600,6 +2600,7 @@
 }
 
 .community-context-face {
+  position: relative;
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -3167,12 +3168,14 @@
 }
 
 .community-context-member-avatar-media {
+  position: relative;
   width: 100%;
   height: 100%;
   border-radius: inherit;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .community-context-member-avatar img {
