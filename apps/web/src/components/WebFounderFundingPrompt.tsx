@@ -27,8 +27,7 @@ export function WebFounderFundingPrompt(props: WebFounderFundingPromptProps) {
           <div>
             <div className="modal-title">Fund your community</div>
             <div className="create-community-subtitle">
-              Each community is $79/month and includes $20 of GPT 5.6 Luna usage.
-              Payment unlocks community AI and public launch.
+              Each community is $79/month.
             </div>
           </div>
           <button className="modal-close" onClick={props.onClose} title="Close">
