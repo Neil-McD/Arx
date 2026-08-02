@@ -73,6 +73,16 @@ const communityAdmin = read("convex/communityAdmin.ts");
 const sendController = read("shared/useCommunityChatMutationController.ts");
 const interactions = read("convex/communityInteractions.ts");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
+const contextFaceCss = sectionBetween(
+  baseCss,
+  ".community-context-face {",
+  ".community-context-face + .community-context-face",
+);
+const contextMemberAvatarMediaCss = sectionBetween(
+  baseCss,
+  ".community-context-member-avatar-media {",
+  ".community-context-member-avatar img",
+);
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
 const chatBlockMarkdownUi = read("shared/chatBlockMarkdownUi.tsx");
 const readyFirstLinkEmbed = {
@@ -257,6 +267,26 @@ assert.match(
   baseCss,
   /\.community-interaction-chat-markdown \.chat-md-code-block:focus-visible\s*\{[\s\S]*outline:\s*2px solid var\(--chat-link\)/,
   "focused community code blocks should expose a visible theme-aware outline",
+);
+assert.match(
+  contextFaceCss,
+  /position:\s*relative;/,
+  "presence face frames must contain canonical absolute avatar crops",
+);
+assert.match(
+  contextFaceCss,
+  /overflow:\s*hidden;/,
+  "presence face frames must clip avatar crops to their circular boundary",
+);
+assert.match(
+  contextMemberAvatarMediaCss,
+  /position:\s*relative;/,
+  "member avatar media must contain canonical absolute avatar crops",
+);
+assert.match(
+  contextMemberAvatarMediaCss,
+  /overflow:\s*hidden;/,
+  "member avatar media must clip crops without clipping the sibling presence dot",
 );
 assert.match(
   feed,
