@@ -42,7 +42,6 @@ assert.match(
 );
 
 for (const table of [
-  "workspaceAutoRechargeAttempts",
   "workspaceUsageCollections",
   "creditLedgerEntries",
   "providerCostEntries",
@@ -50,6 +49,11 @@ for (const table of [
 ]) {
   assert.match(schemaSource, new RegExp(`${table}: defineTable\\(`), `schema missing ${table}`);
 }
+assert.doesNotMatch(
+  schemaSource,
+  /workspaceAutoRecharge(?:Settings|Attempts): defineTable/,
+  "retired auto-recharge tables must remain deleted",
+);
 
 for (const requiredIndex of [
   '.index("by_status_updatedAt", ["status", "updatedAt"])',
@@ -66,11 +70,6 @@ assert.match(
   workspaceCreditsSource,
   /WORKSPACE_ACCOUNTING_RECONCILIATION_DEFAULT_LIMIT = 25[\s\S]*WORKSPACE_ACCOUNTING_RECONCILIATION_MAX_LIMIT = 100[\s\S]*WORKSPACE_ACCOUNTING_RECONCILIATION_LOOKBACK_MS = 31 \* 24 \* 60 \* 60 \* 1000/,
   "accounting reconciliation diagnostics must be bounded by explicit limits",
-);
-assert.match(
-  workspaceCreditsSource,
-  /WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_STALE_MS =[\s\S]*5 \* 60 \* 1000[\s\S]*WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_EXPIRED_MS =[\s\S]*12 \* 60 \* 60 \* 1000/,
-  "diagnostics must classify auto-recharge no-payment-id states on the same stale/expired horizon as execution policy",
 );
 assert.match(
   workspaceCreditsSource,
@@ -115,20 +114,10 @@ assert.doesNotMatch(
   "accounting reconciliation diagnostics must remain read-only and must not call Stripe",
 );
 
-assert.match(
-  diagnosticsSource,
-  /workspaceAutoRechargeAttempts[\s\S]*withIndex\("by_status_updatedAt"[\s\S]*eq\("status", "prepared"[\s\S]*workspaceAutoRechargeAttempts[\s\S]*eq\("status", "processing"[\s\S]*workspaceAutoRechargeAttempts[\s\S]*eq\("status", "failed"/,
-  "diagnostics must scan prepared, processing, and failed auto-recharge attempts by status",
-);
-assert.match(
-  diagnosticsSource,
-  /autoRechargeProcessingWithoutProviderId[\s\S]*normalizeStripePaymentIntentId\(attempt\.providerPaymentId\)[\s\S]*severity: expired \? "manual_review" : stale \? "retryable" : "fresh"[\s\S]*processingWithoutProviderPaymentId/,
-  "diagnostics must classify auto-recharge processing attempts without provider payment ids",
-);
-assert.match(
-  diagnosticsSource,
-  /duplicateActiveAutoRechargeAttempts[\s\S]*activeAttemptsByUser[\s\S]*inspect_user_auto_recharge_attempts_before_next_charge/,
-  "diagnostics must surface duplicate active auto-recharge attempts",
+assert.doesNotMatch(
+  workspaceCreditsSource,
+  /workspaceAutoRechargeSettings|workspaceAutoRechargeAttempts|WORKSPACE_ACCOUNTING_AUTO_RECHARGE/,
+  "retired auto-recharge reconciliation code must remain deleted",
 );
 
 assert.match(

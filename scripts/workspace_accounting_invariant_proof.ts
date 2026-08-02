@@ -13,14 +13,6 @@ function sourceFromExport(source: string, exportName: string, nextMarker: string
   return source.slice(start, end);
 }
 
-function assertBefore(source: string, first: string, second: string, message: string) {
-  const firstIndex = source.indexOf(first);
-  const secondIndex = source.indexOf(second);
-  assert.notEqual(firstIndex, -1, `${first} missing`);
-  assert.notEqual(secondIndex, -1, `${second} missing`);
-  assert.ok(firstIndex < secondIndex, message);
-}
-
 const packageJson = read("package.json");
 const workspaceCreditsSource = read("convex/workspaceCredits.ts");
 const invariantDiagnosticSource = sourceFromExport(
@@ -28,30 +20,6 @@ const invariantDiagnosticSource = sourceFromExport(
   "getWorkspaceAccountingInvariantDiagnosticsForOperator",
   "export const listBlaxelStorageAccountingProjectIdsInternal",
 );
-const listActiveCollectionsSource = sourceFromExport(
-  workspaceCreditsSource,
-  "listActiveWorkspaceUsageCardCollectionsForUserInternal",
-  "export const prepareWorkspaceUsageCardCollectionInternal",
-);
-const prepareCollectionSource = sourceFromExport(
-  workspaceCreditsSource,
-  "prepareWorkspaceUsageCardCollectionInternal",
-  "export const markWorkspaceUsageCardCollectionProcessingInternal",
-);
-const collectByCardSource = sourceFromExport(
-  workspaceCreditsSource,
-  "collectWorkspaceUsageByCardInternal",
-  "export const getWorkspaceCreditBalanceInternal",
-);
-const stalePreparedBlock = collectByCardSource.slice(
-  collectByCardSource.indexOf("const stalePrepared"),
-  collectByCardSource.indexOf("const candidateResult"),
-);
-const candidateBlock = collectByCardSource.slice(
-  collectByCardSource.indexOf("const candidateResult"),
-  collectByCardSource.indexOf("return {"),
-);
-
 assert.match(
   packageJson,
   /"check:workspace-accounting-invariant-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/workspace_accounting_invariant_proof\.ts"/,
@@ -89,100 +57,20 @@ assert.match(
   /readRecentWorkspaceCreditBalanceRows[\s\S]*buildWorkspaceCreditBalanceDiagnostics[\s\S]*duplicate_rows_are_repairable_negative_rows_block_closed/,
   "invariant diagnostic must classify duplicate and negative balance rows",
 );
-assert.match(
-  invariantDiagnosticSource,
-  /workspaceAutoRechargeSettings[\s\S]*by_status_updatedAt[\s\S]*duplicateAutoRechargeSettings[\s\S]*block_auto_recharge_until_settings_are_canonical/,
-  "duplicate auto-recharge settings must be surfaced as blocked-closed charging state",
-);
-assert.match(
-  invariantDiagnosticSource,
-  /workspaceAutoRechargeAttempts[\s\S]*eq\("status", "prepared"\)[\s\S]*eq\("status", "processing"\)[\s\S]*duplicateActiveAutoRechargeAttempts[\s\S]*block_new_auto_recharge_charge_until_attempts_are_reconciled/,
-  "duplicate active auto-recharge attempts must block new auto-recharge charges",
+assert.doesNotMatch(
+  workspaceCreditsSource,
+  /workspaceAutoRechargeSettings|workspaceAutoRechargeAttempts|WORKSPACE_ACCOUNTING_AUTO_RECHARGE/,
+  "retired auto-recharge diagnostics must remain deleted",
 );
 assert.match(
   invariantDiagnosticSource,
   /workspaceUsageCollections[\s\S]*eq\("status", "prepared"\)[\s\S]*eq\("status", "processing"\)[\s\S]*duplicateActiveUsageCollections[\s\S]*block_new_usage_collection_charge_until_collections_are_reconciled/,
-  "duplicate active usage collections must block new usage collection charges",
+  "historical active usage collections must remain visible for reconciliation",
 );
-
-assert.match(
+assert.doesNotMatch(
   workspaceCreditsSource,
-  /async function readActiveWorkspaceUsageCardCollectionsForUser[\s\S]*by_user_status[\s\S]*eq\("status", "prepared"\)[\s\S]*by_user_status[\s\S]*eq\("status", "processing"\)/,
-  "active usage collection helper must read prepared and processing rows by user/status",
-);
-assert.match(
-  listActiveCollectionsSource,
-  /internalQuery\([\s\S]*readActiveWorkspaceUsageCardCollectionsForUser/,
-  "active usage collection helper must be exposed to internal actions",
-);
-assert.doesNotMatch(
-  listActiveCollectionsSource,
-  /ctx\.db\.(insert|patch|delete|replace)|getStripeClient|paymentIntents|checkout\.sessions/,
-  "active usage collection read must remain read-only and provider-free",
-);
-
-assert.match(
-  prepareCollectionSource,
-  /readActiveWorkspaceUsageCardCollectionsForUser[\s\S]*duplicate_active_workspace_usage_collections[\s\S]*active_workspace_usage_collection_exists/,
-  "usage collection prepare must fail closed when active collection state already exists",
-);
-assertBefore(
-  prepareCollectionSource,
-  "readActiveWorkspaceUsageCardCollectionsForUser",
-  "readCanonicalWorkspaceCreditBalance",
-  "usage collection prepare must check active collection invariants before touching balances",
-);
-assert.doesNotMatch(
-  prepareCollectionSource,
-  /getStripeClient|paymentIntents|checkout\.sessions/,
-  "usage collection prepare must not call Stripe",
-);
-
-assert.match(
-  stalePreparedBlock,
-  /listActiveWorkspaceUsageCardCollectionsForUserInternal[\s\S]*activeCollections\.length > 1[\s\S]*duplicate_active_workspace_usage_collections/,
-  "stale prepared usage collection retries must fail closed on duplicate active collections",
-);
-assertBefore(
-  stalePreparedBlock,
-  "listActiveWorkspaceUsageCardCollectionsForUserInternal",
-  "attemptWorkspaceUsageStripeCollection",
-  "stale prepared retry must inspect active collection invariants before Stripe collection attempt",
-);
-
-assert.match(
-  candidateBlock,
-  /activeBeforePrepare[\s\S]*listActiveWorkspaceUsageCardCollectionsForUserInternal[\s\S]*activeBeforePrepare\.length > 0/,
-  "new usage collection candidates must be skipped when active collection state already exists",
-);
-assert.match(
-  candidateBlock,
-  /activeAfterPrepare[\s\S]*listActiveWorkspaceUsageCardCollectionsForUserInternal[\s\S]*activeAfterPrepare\.length > 1[\s\S]*duplicate_active_workspace_usage_collections/,
-  "new usage collection candidates must be rechecked after prepare before Stripe collection",
-);
-assertBefore(
-  candidateBlock,
-  "activeBeforePrepare",
-  "prepareWorkspaceUsageCardCollectionInternal",
-  "candidate collection must check active state before preparing a new collection",
-);
-assertBefore(
-  candidateBlock,
-  "prepareWorkspaceUsageCardCollectionInternal",
-  "readStripeForCollection(collectionKey)",
-  "candidate collection must prepare DB state before reading Stripe",
-);
-assertBefore(
-  candidateBlock,
-  "activeAfterPrepare",
-  "readStripeForCollection(collectionKey)",
-  "candidate collection must recheck active state before reading Stripe",
-);
-assertBefore(
-  candidateBlock,
-  "readStripeForCollection(collectionKey)",
-  "attemptWorkspaceUsageStripeCollection",
-  "candidate collection must only attempt Stripe after invariant checks and provider setup",
+  /listActiveWorkspaceUsageCardCollectionsForUserInternal|prepareWorkspaceUsageCardCollectionInternal|collectWorkspaceUsageByCardInternal|attemptWorkspaceUsageStripeCollection/,
+  "retired card-collection execution paths must remain deleted",
 );
 
 console.log("workspace_accounting_invariant_proof: ok");

@@ -128,7 +128,6 @@ const providerCostEntries = readProdTable("providerCostEntries");
 const workspaceComputeCharges = readProdTable("workspaceComputeCharges");
 const checkoutSessions = readProdTable("checkoutSessions");
 const workspaceUsageCollections = readProdTable("workspaceUsageCollections");
-const workspaceAutoRechargeAttempts = readProdTable("workspaceAutoRechargeAttempts");
 
 const balanceRowsByUser = new Map<string, number>();
 let negativeBalanceRows = 0;
@@ -309,17 +308,6 @@ const failedUsageCollections = workspaceUsageCollections.filter((row) =>
   normalizeString(row.status) === "failed",
 ).length;
 
-const activeAutoRechargeAttempts = workspaceAutoRechargeAttempts.filter((row) =>
-  ["prepared", "processing"].includes(normalizeString(row.status)),
-).length;
-const staleAutoRechargeAttempts = workspaceAutoRechargeAttempts.filter((row) =>
-  ["prepared", "processing"].includes(normalizeString(row.status)) &&
-  nowMs - timestampValue(row, ["updatedAt", "createdAt", "_creationTime"]) > 30 * 60 * 1000,
-).length;
-const failedAutoRechargeAttempts = workspaceAutoRechargeAttempts.filter((row) =>
-  normalizeString(row.status) === "failed",
-).length;
-
 const critical = {
   duplicateBalanceUsers,
   negativeBalanceRows,
@@ -344,7 +332,6 @@ const summary = {
     workspaceComputeCharges: workspaceComputeCharges.length,
     checkoutSessions: checkoutSessions.length,
     workspaceUsageCollections: workspaceUsageCollections.length,
-    workspaceAutoRechargeAttempts: workspaceAutoRechargeAttempts.length,
   },
   critical,
   currentRuntime: {
@@ -383,9 +370,6 @@ const summary = {
     activeUsageCollections,
     stalePreparedUsageCollections,
     failedUsageCollections,
-    activeAutoRechargeAttempts,
-    staleAutoRechargeAttempts,
-    failedAutoRechargeAttempts,
     succeededPaidLedgerRows,
   },
   health: criticalTotal === 0 ? "pass" : "fail",

@@ -80,10 +80,6 @@ const PROVIDER_COST_RECONCILIATION_MAX_SAMPLE_LIMIT = 50;
 const WORKSPACE_ACCOUNTING_RECONCILIATION_DEFAULT_LIMIT = 25;
 const WORKSPACE_ACCOUNTING_RECONCILIATION_MAX_LIMIT = 100;
 const WORKSPACE_ACCOUNTING_RECONCILIATION_LOOKBACK_MS = 31 * 24 * 60 * 60 * 1000;
-const WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_STALE_MS =
-  5 * 60 * 1000;
-const WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_EXPIRED_MS =
-  12 * 60 * 60 * 1000;
 const WORKSPACE_ACCOUNTING_PAYMENT_INTENT_PROCESSING_STALE_MS = 30 * 60 * 1000;
 const WORKSPACE_ACCOUNTING_INVARIANT_DEFAULT_LIMIT = 25;
 const WORKSPACE_ACCOUNTING_INVARIANT_MAX_LIMIT = 100;
@@ -1002,96 +998,6 @@ export const getWorkspaceAccountingReconciliationDiagnosticsForOperator = query(
       nowMs - WORKSPACE_ACCOUNTING_RECONCILIATION_LOOKBACK_MS,
     );
 
-    const activeAutoRechargeAttempts: any[] = [];
-    const preparedAutoRechargeAttempts = await ctx.db
-      .query("workspaceAutoRechargeAttempts")
-      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "prepared"))
-      .order("asc")
-      .take(limit);
-    const processingAutoRechargeAttempts = await ctx.db
-      .query("workspaceAutoRechargeAttempts")
-      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "processing"))
-      .order("asc")
-      .take(limit);
-    activeAutoRechargeAttempts.push(
-      ...preparedAutoRechargeAttempts,
-      ...processingAutoRechargeAttempts,
-    );
-    const autoRechargeFailedRows = await ctx.db
-      .query("workspaceAutoRechargeAttempts")
-      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "failed"))
-      .order("desc")
-      .take(limit);
-
-    const autoRechargeProcessingWithoutProviderId = processingAutoRechargeAttempts
-      .filter((attempt: any) => !normalizeStripePaymentIntentId(attempt.providerPaymentId))
-      .map((attempt: any) => {
-        const createdAgeMs = diagnosticAgeMs(nowMs, attempt.createdAt);
-        const updatedAgeMs = diagnosticAgeMs(nowMs, attempt.updatedAt);
-        const expired =
-          createdAgeMs === null ||
-          createdAgeMs >=
-            WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_EXPIRED_MS;
-        const stale =
-          updatedAgeMs !== null &&
-          updatedAgeMs >=
-            WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_STALE_MS;
-        return {
-          attemptKey: attempt.attemptKey,
-          userId: String(attempt.userId),
-          status: attempt.status,
-          createdAt: diagnosticTimestamp(attempt.createdAt),
-          updatedAt: diagnosticTimestamp(attempt.updatedAt),
-          createdAgeMs,
-          updatedAgeMs,
-          providerIdempotencyKey: normalizeOptionalString(attempt.providerIdempotencyKey) ?? null,
-          providerCustomerId: normalizeOptionalString(attempt.providerCustomerId) ?? null,
-          providerPaymentMethodId: normalizeOptionalString(attempt.providerPaymentMethodId) ?? null,
-          failureReason: normalizeOptionalString(attempt.failureReason) ?? null,
-          severity: expired ? "manual_review" : stale ? "retryable" : "fresh",
-          recommendedAction: expired
-            ? "review_stripe_by_idempotency_key_then_fail_or_finalize"
-            : stale
-              ? "retry_provider_create_with_frozen_attempt_params"
-              : "wait_for_executor_or_sweep",
-        };
-      });
-
-    const autoRechargeProcessingWithProviderIdStale = processingAutoRechargeAttempts
-      .filter((attempt: any) => normalizeStripePaymentIntentId(attempt.providerPaymentId))
-      .filter((attempt: any) => {
-        const updatedAgeMs = diagnosticAgeMs(nowMs, attempt.updatedAt);
-        return (
-          updatedAgeMs !== null &&
-          updatedAgeMs >= WORKSPACE_ACCOUNTING_PAYMENT_INTENT_PROCESSING_STALE_MS
-        );
-      })
-      .map((attempt: any) => ({
-        attemptKey: attempt.attemptKey,
-        userId: String(attempt.userId),
-        providerPaymentId: normalizeStripePaymentIntentId(attempt.providerPaymentId) ?? null,
-        providerIdempotencyKey: normalizeOptionalString(attempt.providerIdempotencyKey) ?? null,
-        updatedAt: diagnosticTimestamp(attempt.updatedAt),
-        updatedAgeMs: diagnosticAgeMs(nowMs, attempt.updatedAt),
-        recommendedAction: "retrieve_payment_intent_and_finalize_attempt",
-      }));
-
-    const activeAttemptsByUser = new Map<string, any[]>();
-    for (const attempt of activeAutoRechargeAttempts) {
-      const key = String(attempt.userId);
-      activeAttemptsByUser.set(key, [...(activeAttemptsByUser.get(key) ?? []), attempt]);
-    }
-    const duplicateActiveAutoRechargeAttempts = Array.from(activeAttemptsByUser.entries())
-      .filter(([, rows]) => rows.length > 1)
-      .slice(0, limit)
-      .map(([userId, rows]) => ({
-        userId,
-        activeAttempts: rows.length,
-        attemptKeys: rows.slice(0, 5).map((row) => row.attemptKey),
-        statuses: rows.slice(0, 5).map((row) => row.status),
-        recommendedAction: "inspect_user_auto_recharge_attempts_before_next_charge",
-      }));
-
     const usageCollectionsProcessing = await ctx.db
       .query("workspaceUsageCollections")
       .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "processing"))
@@ -1250,46 +1156,9 @@ export const getWorkspaceAccountingReconciliationDiagnosticsForOperator = query(
         limit,
         lookbackStart,
         lookbackMs: WORKSPACE_ACCOUNTING_RECONCILIATION_LOOKBACK_MS,
-        autoRechargeProcessingWithoutPaymentIdStaleMs:
-          WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_STALE_MS,
-        autoRechargeProcessingWithoutPaymentIdExpiredMs:
-          WORKSPACE_ACCOUNTING_AUTO_RECHARGE_PROCESSING_WITHOUT_PAYMENT_ID_EXPIRED_MS,
         paymentIntentProcessingStaleMs:
           WORKSPACE_ACCOUNTING_PAYMENT_INTENT_PROCESSING_STALE_MS,
         usageCollectionStalePreparedMs: WORKSPACE_CARD_COLLECTION_STALE_PREPARED_MS,
-      },
-      autoRecharge: {
-        activePreparedRowsScanned: preparedAutoRechargeAttempts.length,
-        activeProcessingRowsScanned: processingAutoRechargeAttempts.length,
-        processingWithoutProviderPaymentId: {
-          rows: autoRechargeProcessingWithoutProviderId.length,
-          staleRows: autoRechargeProcessingWithoutProviderId.filter(
-            (row) => row.severity === "retryable",
-          ).length,
-          expiredRows: autoRechargeProcessingWithoutProviderId.filter(
-            (row) => row.severity === "manual_review",
-          ).length,
-          samples: autoRechargeProcessingWithoutProviderId.slice(0, limit),
-        },
-        processingWithProviderPaymentIdStale: {
-          rows: autoRechargeProcessingWithProviderIdStale.length,
-          samples: autoRechargeProcessingWithProviderIdStale.slice(0, limit),
-        },
-        duplicateActiveAttempts: {
-          users: duplicateActiveAutoRechargeAttempts.length,
-          samples: duplicateActiveAutoRechargeAttempts,
-        },
-        recentFailed: {
-          rows: autoRechargeFailedRows.length,
-          samples: autoRechargeFailedRows.slice(0, limit).map((attempt: any) => ({
-            attemptKey: attempt.attemptKey,
-            userId: String(attempt.userId),
-            providerPaymentId: normalizeStripePaymentIntentId(attempt.providerPaymentId) ?? null,
-            failureReason: normalizeOptionalString(attempt.failureReason) ?? null,
-            updatedAt: diagnosticTimestamp(attempt.updatedAt),
-            recommendedAction: "inspect_failure_reason_before_reenable",
-          })),
-        },
       },
       usageCollections: {
         processingRowsScanned: usageCollectionsProcessing.length,
@@ -1404,68 +1273,6 @@ export const getWorkspaceAccountingInvariantDiagnosticsForOperator = query({
       limit,
     );
 
-    const autoRechargeSettingsRows: any[] = [];
-    for (const status of ["active", "paused_payment_failed", "disabled"] as const) {
-      const rows = await ctx.db
-        .query("workspaceAutoRechargeSettings")
-        .withIndex("by_status_updatedAt", (q: any) => q.eq("status", status))
-        .order("desc")
-        .take(limit);
-      autoRechargeSettingsRows.push(...rows);
-    }
-    const autoRechargeSettingsByUser = new Map<string, any[]>();
-    for (const row of autoRechargeSettingsRows) {
-      const key = String(row.userId);
-      autoRechargeSettingsByUser.set(key, [
-        ...(autoRechargeSettingsByUser.get(key) ?? []),
-        row,
-      ]);
-    }
-    const duplicateAutoRechargeSettings = Array.from(autoRechargeSettingsByUser.entries())
-      .filter(([, rows]) => rows.length > 1)
-      .slice(0, limit)
-      .map(([userId, rows]) => ({
-        userId,
-        rows: rows.length,
-        statuses: rows.slice(0, 5).map((row) => row.status),
-        enabledValues: rows.slice(0, 5).map((row) => row.enabled === true),
-        recommendedAction: "block_auto_recharge_until_settings_are_canonical",
-      }));
-
-    const preparedAutoRechargeAttempts = await ctx.db
-      .query("workspaceAutoRechargeAttempts")
-      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "prepared"))
-      .order("asc")
-      .take(limit);
-    const processingAutoRechargeAttempts = await ctx.db
-      .query("workspaceAutoRechargeAttempts")
-      .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "processing"))
-      .order("asc")
-      .take(limit);
-    const activeAutoRechargeAttemptsByUser = new Map<string, any[]>();
-    for (const row of [...preparedAutoRechargeAttempts, ...processingAutoRechargeAttempts]) {
-      const key = String(row.userId);
-      activeAutoRechargeAttemptsByUser.set(key, [
-        ...(activeAutoRechargeAttemptsByUser.get(key) ?? []),
-        row,
-      ]);
-    }
-    const duplicateActiveAutoRechargeAttempts = Array.from(
-      activeAutoRechargeAttemptsByUser.entries(),
-    )
-      .filter(([, rows]) => rows.length > 1)
-      .slice(0, limit)
-      .map(([userId, rows]) => ({
-        userId,
-        rows: rows.length,
-        attemptKeys: rows.slice(0, 5).map((row) => row.attemptKey),
-        statuses: rows.slice(0, 5).map((row) => row.status),
-        providerPaymentIds: rows
-          .slice(0, 5)
-          .map((row) => normalizeStripePaymentIntentId(row.providerPaymentId) ?? null),
-        recommendedAction: "block_new_auto_recharge_charge_until_attempts_are_reconciled",
-      }));
-
     const preparedUsageCollections = await ctx.db
       .query("workspaceUsageCollections")
       .withIndex("by_status_updatedAt", (q: any) => q.eq("status", "prepared"))
@@ -1501,8 +1308,6 @@ export const getWorkspaceAccountingInvariantDiagnosticsForOperator = query({
     const repairableIssueCount = balanceDiagnostics.duplicateUsers;
     const blockedClosedIssueCount =
       balanceDiagnostics.negativeBalanceRows +
-      duplicateAutoRechargeSettings.length +
-      duplicateActiveAutoRechargeAttempts.length +
       duplicateActiveUsageCollections.length;
     const disposition =
       blockedClosedIssueCount > 0
@@ -1522,9 +1327,6 @@ export const getWorkspaceAccountingInvariantDiagnosticsForOperator = query({
       limits: {
         limit,
         balanceRowsScanned: recentBalanceRows.length,
-        autoRechargeSettingsRowsScanned: autoRechargeSettingsRows.length,
-        activeAutoRechargeAttemptsScanned:
-          preparedAutoRechargeAttempts.length + processingAutoRechargeAttempts.length,
         activeUsageCollectionsScanned:
           preparedUsageCollections.length + processingUsageCollections.length,
       },
@@ -1535,17 +1337,6 @@ export const getWorkspaceAccountingInvariantDiagnosticsForOperator = query({
         negativeBalanceRows: balanceDiagnostics.negativeBalanceRows,
         duplicateSamples: balanceDiagnostics.duplicateSamples,
         negativeBalanceSamples: balanceDiagnostics.negativeBalanceSamples,
-      },
-      autoRechargeSettings: {
-        policy: "duplicate_settings_block_auto_recharge",
-        duplicateUsers: duplicateAutoRechargeSettings.length,
-        samples: duplicateAutoRechargeSettings,
-      },
-      autoRechargeAttempts: {
-        policy: "duplicate_active_attempts_block_new_auto_recharge_charges",
-        activeUsers: activeAutoRechargeAttemptsByUser.size,
-        duplicateActiveUsers: duplicateActiveAutoRechargeAttempts.length,
-        samples: duplicateActiveAutoRechargeAttempts,
       },
       usageCollections: {
         policy: "active_collection_blocks_new_collection_duplicate_active_blocks_charging",
