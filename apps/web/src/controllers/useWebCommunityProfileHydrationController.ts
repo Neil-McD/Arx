@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 
 import type {
   UserProfile,
@@ -46,8 +46,6 @@ type UseWebCommunityProfileHydrationControllerParams = {
 export function useWebCommunityProfileHydrationController(
   params: UseWebCommunityProfileHydrationControllerParams,
 ) {
-  const sessionRef = useRef(params.session);
-  sessionRef.current = params.session;
   const visibleProfileIds = useMemo(() => {
     if (params.activePage !== "community") return [] as string[];
     const ids = new Set<string>();
@@ -173,20 +171,17 @@ export function useWebCommunityProfileHydrationController(
   );
 
   useEffect(() => {
-    if (!params.canonicalSessionUserId || !sessionRef.current || visibleProfileIds.length === 0) return;
+    if (!params.session || visibleProfileIds.length === 0) return;
+    const session = params.session;
     const hydrate = () => {
-      const currentSession = sessionRef.current;
-      if (!currentSession) return;
-      void params.loadUserProfiles(visibleProfileIds, currentSession);
-      void params.loadSelfProfile(currentSession);
+      void params.loadUserProfiles(visibleProfileIds, session);
+      void params.loadSelfProfile(session);
     };
     const refresh = () => {
-      const currentSession = sessionRef.current;
-      if (!currentSession) return;
-      void params.loadUserProfiles(visibleProfileIds, currentSession, {
+      void params.loadUserProfiles(visibleProfileIds, session, {
         force: true,
       });
-      void params.loadSelfProfile(currentSession);
+      void params.loadSelfProfile(session);
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") refresh();
@@ -204,7 +199,7 @@ export function useWebCommunityProfileHydrationController(
   }, [
     params.loadSelfProfile,
     params.loadUserProfiles,
-    params.canonicalSessionUserId,
+    params.session,
     visibleProfileIds,
   ]);
 

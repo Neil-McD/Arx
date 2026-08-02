@@ -1,6 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import type { AppPage, CommunityTab } from "./appShellNavigation";
-import { resolveAuthPresentationIdentity, type AuthSessionLike } from "./authSession";
 
 function needsCommunityDirectory(activePage: AppPage, communityTab: CommunityTab): boolean {
   return activePage === "community" && communityTab === "chat";
@@ -13,33 +12,15 @@ export function useCommunityDirectoryLifecycle<SessionT>(params: {
   activeCommunityId: string | null;
   loadCommunityDirectoryMembers: (communityId: string, session: SessionT) => Promise<void>;
 }) {
-  const sessionRef = useRef(params.session);
-  sessionRef.current = params.session;
-  const sessionIdentity = resolveAuthPresentationIdentity(
-    params.session as AuthSessionLike,
-  );
+  const session = params.session;
 
   useEffect(() => {
-    if (!sessionIdentity || !params.activeCommunityId) return;
+    if (!session || !params.activeCommunityId) return;
     if (!needsCommunityDirectory(params.activePage, params.communityTab)) return;
     const communityId = params.activeCommunityId;
-    const refresh = () => {
-      const currentSession = sessionRef.current;
-      if (!currentSession) return;
-      void params.loadCommunityDirectoryMembers(communityId, currentSession);
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    refresh();
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
+    void params.loadCommunityDirectoryMembers(communityId, session);
   }, [
-    sessionIdentity,
+    session,
     params.activeCommunityId,
     params.activePage,
     params.communityTab,

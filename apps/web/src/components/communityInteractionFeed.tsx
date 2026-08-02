@@ -846,7 +846,7 @@ export function CommunityInteractionFeedList(
     : null;
   const unreadDivider = <div className="community-interaction-unread-divider"><span>New</span></div>;
   return (
-          props.error && props.roots.length === 0 ? (
+          props.error ? (
             <div className="community-interaction-state" role="alert">
               <div>{props.error}</div>
               <button type="button" onClick={props.onRetryRoots}>
@@ -866,14 +866,6 @@ export function CommunityInteractionFeedList(
             </div>
           ) : (
             <div className="community-interaction-feed">
-              {props.error ? (
-                <div className="community-interaction-refresh-warning" role="status">
-                  <span>{props.error}</span>
-                  <button type="button" onClick={props.onRetryRoots}>
-                    {props.errorActionLabel ?? "Retry"}
-                  </button>
-                </div>
-              ) : null}
               {segments.map((segment) => {
                 const dividerBefore = segment.key === firstUnreadSegmentKey ? unreadDivider : null;
                 if (segment.type === "day") {
@@ -910,7 +902,7 @@ export function CommunityInteractionFeedList(
                 return (
                   <Fragment key={segment.key}>
                     {dividerBefore}
-                    <div className="community-interaction-group">
+                    <div className={`community-interaction-group${badge ? " is-agent" : ""}`}>
                     <div className="community-interaction-group-gutter">
                       <ProfileHoverCard
                         userId={first.root.actor_user_id}

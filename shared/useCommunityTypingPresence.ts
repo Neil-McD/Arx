@@ -78,10 +78,9 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
   const writeQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [presence, setPresence] = useState<CommunityTypingPresenceBundle>(EMPTY_TYPING_PRESENCE);
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const sessionIdentity = String(args.session?.user?.id ?? "").trim() || null;
 
   useEffect(() => {
-    if (!args.isEnabled || !sessionIdentity || !args.activeCommunityId) {
+    if (!args.isEnabled || !args.session || !args.activeCommunityId) {
       liveClientRef.current?.close();
       liveClientRef.current = null;
       setPresence(EMPTY_TYPING_PRESENCE);
@@ -90,7 +89,7 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
 
     let cancelled = false;
     let dispose: (() => void) | null = null;
-    const capturedSession = argsRef.current.session;
+    const capturedSession = args.session;
     const capturedEnsureSession = args.ensureSession;
     const capturedCommunityId = args.activeCommunityId;
     const capturedChannelId = args.activeChannelId ?? null;
@@ -132,7 +131,7 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
       liveClientRef.current = null;
       setPresence(EMPTY_TYPING_PRESENCE);
     };
-  }, [args.activeChannelId, args.activeCommunityId, args.ensureSession, args.isEnabled, sessionIdentity]);
+  }, [args.activeChannelId, args.activeCommunityId, args.ensureSession, args.isEnabled, args.session]);
 
   useEffect(() => {
     if (!args.isEnabled || !args.activeCommunityId) return;

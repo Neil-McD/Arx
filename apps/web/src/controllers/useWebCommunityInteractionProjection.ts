@@ -339,9 +339,7 @@ export function useWebCommunityInteractionProjection<
   const repliesRequestIdRef = useRef<Record<string, number>>({});
   const dismissedServeIssueIdsRef = useRef<Set<string>>(new Set());
   const restoredSelectionBoundaryRef = useRef<string | null>(null);
-  const sessionRef = useRef<AuthSession | null>(session);
 
-  sessionRef.current = session;
   rootsRef.current = roots;
   nextBeforeCreatedAtRef.current = nextBeforeCreatedAt;
   isLoadingOlderRootsRef.current = isLoadingOlderRoots;
@@ -384,7 +382,7 @@ export function useWebCommunityInteractionProjection<
 
   const loadReplies = useCallback(async (
     rawRootId: string,
-    activeSession: AuthSession | null = sessionRef.current,
+    activeSession: AuthSession | null = session,
   ) => {
     const rootId = String(rawRootId ?? "").trim();
     if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !rootId) return;
@@ -413,11 +411,11 @@ export function useWebCommunityInteractionProjection<
         setLoadingRepliesRootId((current) => (current === rootId ? null : current));
       }
     }
-  }, [ensureSession]);
+  }, [ensureSession, session]);
 
   const loadRoots = useCallback(async (
     rawCommunityId: string | null = activeCommunityId,
-    activeSession: AuthSession | null = sessionRef.current,
+    activeSession: AuthSession | null = session,
   ) => {
     const communityId = String(rawCommunityId ?? "").trim();
     const channelId = activeChannelId;
@@ -469,11 +467,11 @@ export function useWebCommunityInteractionProjection<
         setIsLoadingRoots(false);
       }
     }
-  }, [activeChannelId, activeCommunityId, ensureSession, reset]);
+  }, [activeChannelId, activeCommunityId, ensureSession, reset, session]);
 
   const loadOlderRoots = useCallback(async (
     rawCommunityId: string | null = activeCommunityId,
-    activeSession: AuthSession | null = sessionRef.current,
+    activeSession: AuthSession | null = session,
   ) => {
     const communityId = String(rawCommunityId ?? "").trim();
     const channelId = activeChannelId;
@@ -519,15 +517,15 @@ export function useWebCommunityInteractionProjection<
         setIsLoadingOlderRoots(false);
       }
     }
-  }, [activeChannelId, activeCommunityId, ensureSession]);
+  }, [activeChannelId, activeCommunityId, ensureSession, session]);
 
   useEffect(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !canonicalSessionUserId) return;
+    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !session) return;
     let cancelled = false;
     let liveClient: CloudCommunityChatLiveClient | null = null;
     let unsubscribe: (() => void) | null = null;
     void (async () => {
-      const usableSession = await ensureSession(sessionRef.current);
+      const usableSession = await ensureSession(session);
       if (!usableSession || cancelled) return;
       try {
         liveClient = createCloudCommunityChatLiveClient({
@@ -580,14 +578,14 @@ export function useWebCommunityInteractionProjection<
       unsubscribe?.();
       liveClient?.close();
     };
-  }, [activeChannelId, activeCommunityId, canonicalSessionUserId, ensureSession]);
+  }, [activeChannelId, activeCommunityId, ensureSession, session]);
 
   useEffect(() => {
     if (
       !COMMUNITY_INTERACTION_PROJECTION_ENABLED
       || !isCommunityChatActive
       || !activeCommunityId
-      || !canonicalSessionUserId
+      || !session
     ) {
       setServeIssue(null);
       return;
@@ -596,7 +594,7 @@ export function useWebCommunityInteractionProjection<
     let liveClient: CloudCommunityChatLiveClient | null = null;
     let unsubscribe: (() => void) | null = null;
     void (async () => {
-      const usableSession = await ensureSession(sessionRef.current);
+      const usableSession = await ensureSession(session);
       if (!usableSession || cancelled) return;
       try {
         liveClient = createCloudCommunityChatLiveClient({
@@ -633,16 +631,16 @@ export function useWebCommunityInteractionProjection<
       unsubscribe?.();
       liveClient?.close();
     };
-  }, [activeCommunityId, canonicalSessionUserId, ensureSession, isCommunityChatActive]);
+  }, [activeCommunityId, ensureSession, isCommunityChatActive, session]);
 
   useEffect(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !selectedRootId || !canonicalSessionUserId) return;
+    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !selectedRootId || !session) return;
     const rootId = selectedRootId;
     let cancelled = false;
     let liveClient: CloudCommunityChatLiveClient | null = null;
     let unsubscribe: (() => void) | null = null;
     void (async () => {
-      const usableSession = await ensureSession(sessionRef.current);
+      const usableSession = await ensureSession(session);
       if (!usableSession || cancelled) return;
       try {
         liveClient = createCloudCommunityChatLiveClient({
@@ -683,7 +681,7 @@ export function useWebCommunityInteractionProjection<
       unsubscribe?.();
       liveClient?.close();
     };
-  }, [canonicalSessionUserId, ensureSession, selectedRootId]);
+  }, [ensureSession, selectedRootId, session]);
 
   const retryPending = useCallback((idempotencyKey: string) => {
     const interaction = pendingRef.current.find((item) => item.idempotencyKey === idempotencyKey);
@@ -700,14 +698,13 @@ export function useWebCommunityInteractionProjection<
         ),
       );
     void (async () => {
-      const activeSession = sessionRef.current;
-      if (!activeSession) {
+      if (!session) {
         markFailed();
         return;
       }
       try {
         await createCloudCommunityInteractionComposerMessageRows<AuthSession>({
-          session: activeSession,
+          session,
           communityId: interaction.communityId,
           channelId: interaction.channelId,
           idempotencyKey: interaction.idempotencyKey,
@@ -716,15 +713,15 @@ export function useWebCommunityInteractionProjection<
           replyToMessageId: interaction.replyToMessageId,
           attachments: interaction.serializedAttachments,
         });
-        void loadRoots(interaction.communityId, activeSession);
+        void loadRoots(interaction.communityId, session);
         if (interaction.kind === "reply" && interaction.rootId) {
-          void loadReplies(interaction.rootId, activeSession);
+          void loadReplies(interaction.rootId, session);
         }
       } catch {
         markFailed();
       }
     })();
-  }, [loadReplies, loadRoots]);
+  }, [loadReplies, loadRoots, session]);
 
   const discardPending = useCallback((idempotencyKey: string) => {
     setPending((current) => current.filter((item) => item.idempotencyKey !== idempotencyKey));
@@ -768,7 +765,7 @@ export function useWebCommunityInteractionProjection<
     targetId: string,
     emoji: string,
   ) => {
-    const usableSession = await ensureSession(sessionRef.current);
+    const usableSession = await ensureSession(session);
     if (!usableSession) return;
     try {
       await toggleCloudCommunityInteractionReaction<AuthSession>({
@@ -780,14 +777,14 @@ export function useWebCommunityInteractionProjection<
     } catch {
       // The live projection remains authoritative.
     }
-  }, [ensureSession]);
+  }, [ensureSession, session]);
 
   const editMessage = useCallback(async (
     targetType: "root" | "reply",
     targetId: string,
     text: string,
   ) => {
-    const usableSession = await ensureSession(sessionRef.current);
+    const usableSession = await ensureSession(session);
     if (!usableSession) return;
     try {
       await editCloudCommunityInteractionMessage<AuthSession>({
@@ -799,13 +796,13 @@ export function useWebCommunityInteractionProjection<
     } catch {
       // The live projection remains authoritative.
     }
-  }, [ensureSession]);
+  }, [ensureSession, session]);
 
   const deleteMessage = useCallback(async (
     targetType: "root" | "reply",
     targetId: string,
   ) => {
-    const usableSession = await ensureSession(sessionRef.current);
+    const usableSession = await ensureSession(session);
     if (!usableSession) return;
     if (targetType === "root" && selectedRootId === targetId) {
       setSelectedRootId(null);
@@ -820,29 +817,22 @@ export function useWebCommunityInteractionProjection<
     } catch {
       // The live projection remains authoritative.
     }
-  }, [activeChannelId, activeCommunityId, ensureSession, selectedRootId]);
-
-  const normalizedSessionUserId = String(canonicalSessionUserId ?? "").trim();
-  const requestedBoundary =
-    COMMUNITY_INTERACTION_PROJECTION_ENABLED &&
-    session &&
-    normalizedSessionUserId &&
-    activeCommunityId
-      ? `${normalizedSessionUserId}:${activeCommunityId}:${activeChannelId ?? "general"}`
-      : null;
+  }, [activeChannelId, activeCommunityId, ensureSession, selectedRootId, session]);
 
   useEffect(() => {
-    if (!requestedBoundary || !activeCommunityId) {
+    const userId = String(canonicalSessionUserId ?? "").trim();
+    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !session || !userId) {
       boundaryRef.current = null;
       reset();
       return;
     }
-    if (boundaryRef.current !== requestedBoundary) {
-      boundaryRef.current = requestedBoundary;
+    const nextBoundary = `${userId}:${activeCommunityId}:${activeChannelId ?? "general"}`;
+    if (boundaryRef.current !== nextBoundary) {
+      boundaryRef.current = nextBoundary;
       reset();
     }
-    void loadRoots(activeCommunityId, sessionRef.current);
-  }, [activeCommunityId, loadRoots, requestedBoundary, reset]);
+    void loadRoots(activeCommunityId, session);
+  }, [activeChannelId, activeCommunityId, canonicalSessionUserId, loadRoots, reset, session]);
 
   const insertOptimistic = useCallback((
     interaction: CommunityInteractionOptimisticInsert<AttachmentT>,
@@ -871,50 +861,36 @@ export function useWebCommunityInteractionProjection<
     setServeIssue((current) => (current?.id === issueId ? null : current));
   }, []);
 
-  const isPresentationScopedToBoundary = Boolean(
-    requestedBoundary && boundaryRef.current === requestedBoundary,
-  );
-  const presentedRoots = isPresentationScopedToBoundary ? roots : [];
-  const presentedRepliesByRootId = isPresentationScopedToBoundary ? repliesByRootId : {};
-  const presentedSelectedRootId = isPresentationScopedToBoundary ? selectedRootId : null;
   const visibleRoots = useMemo(
-    () => appendPendingRoots(
-      isPresentationScopedToBoundary ? roots : [],
-      pending,
-      activeCommunityId,
-      activeChannelId,
-    ),
-    [activeChannelId, activeCommunityId, isPresentationScopedToBoundary, pending, roots],
+    () => appendPendingRoots(roots, pending, activeCommunityId, activeChannelId),
+    [activeChannelId, activeCommunityId, pending, roots],
   );
   const selectedReplies = useMemo(
     () => appendPendingReplies(
-      presentedSelectedRootId
-        ? presentedRepliesByRootId[presentedSelectedRootId] ?? []
-        : [],
+      selectedRootId ? repliesByRootId[selectedRootId] ?? [] : [],
       pending,
-      presentedSelectedRootId,
+      selectedRootId,
     ),
-    [pending, presentedRepliesByRootId, presentedSelectedRootId],
+    [pending, repliesByRootId, selectedRootId],
   );
 
   return {
     enabled: COMMUNITY_INTERACTION_PROJECTION_ENABLED,
-    roots: presentedRoots,
-    repliesByRootId: presentedRepliesByRootId,
+    roots,
+    repliesByRootId,
     visibleRoots,
     selectedReplies,
-    selectedRootId: presentedSelectedRootId,
-    isLoadingRoots: Boolean(requestedBoundary) &&
-      (!isPresentationScopedToBoundary || isLoadingRoots),
+    selectedRootId,
+    isLoadingRoots,
     isLoadingSelectedReplies:
-      presentedSelectedRootId !== null && loadingRepliesRootId === presentedSelectedRootId,
-    error: isPresentationScopedToBoundary ? error : null,
+      selectedRootId !== null && loadingRepliesRootId === selectedRootId,
+    error,
     selectedRepliesError:
-      presentedSelectedRootId ? repliesErrorByRootId[presentedSelectedRootId] ?? null : null,
+      selectedRootId ? repliesErrorByRootId[selectedRootId] ?? null : null,
     rootChangeReason,
-    canLoadOlderRoots: isPresentationScopedToBoundary && nextBeforeCreatedAt !== null,
-    isLoadingOlderRoots: isPresentationScopedToBoundary && isLoadingOlderRoots,
-    serveIssue: isPresentationScopedToBoundary ? serveIssue : null,
+    canLoadOlderRoots: nextBeforeCreatedAt !== null,
+    isLoadingOlderRoots,
+    serveIssue,
     loadRoots,
     loadReplies,
     loadOlderRoots,

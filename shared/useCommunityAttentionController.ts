@@ -6,7 +6,6 @@ import {
   type CloudCommunityAttentionSurface,
 } from "./cloudCommunityAttentionGateway";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
-import { resolveAuthPresentationIdentity, type AuthSessionLike } from "./authSession";
 
 type SessionLike = unknown;
 
@@ -79,7 +78,6 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
   const [communityAttentionError, setCommunityAttentionError] = useState<string | null>(null);
   const loadGenerationRef = useRef(0);
   const inFlightMarkKeysRef = useRef<Set<string>>(new Set());
-  const sessionIdentity = resolveAuthPresentationIdentity(args.session as AuthSessionLike);
 
   const normalizedCommunityIds = useMemo(
     () =>
@@ -186,10 +184,10 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
 
   useEffect(() => {
     void refreshCommunityAttention();
-  }, [normalizedCommunityIds, refreshCommunityAttention, sessionIdentity]);
+  }, [normalizedCommunityIds, args.session, refreshCommunityAttention]);
 
   useEffect(() => {
-    if (!sessionIdentity || normalizedCommunityIds.length === 0) return;
+    if (!args.session || normalizedCommunityIds.length === 0) return;
     const handleWindowFocus = () => {
       void refreshCommunityAttention();
     };
@@ -204,17 +202,17 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
       window.removeEventListener("focus", handleWindowFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [sessionIdentity, normalizedCommunityIds, refreshCommunityAttention]);
+  }, [args.session, normalizedCommunityIds, refreshCommunityAttention]);
 
   useEffect(() => {
-    if (!sessionIdentity || normalizedCommunityIds.length === 0) return;
+    if (!args.session || normalizedCommunityIds.length === 0) return;
     const pollIntervalMs = Math.max(15_000, Math.floor(args.pollIntervalMs ?? 30_000));
     const intervalId = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void refreshCommunityAttention();
     }, pollIntervalMs);
     return () => window.clearInterval(intervalId);
-  }, [args.pollIntervalMs, sessionIdentity, normalizedCommunityIds, refreshCommunityAttention]);
+  }, [args.pollIntervalMs, args.session, normalizedCommunityIds, refreshCommunityAttention]);
 
   return {
     attentionByCommunityId,
