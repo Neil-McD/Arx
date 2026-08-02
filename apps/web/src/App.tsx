@@ -249,7 +249,6 @@ export default function App() {
       return Promise.resolve();
     });
   const accountGraphLifecycle = useWebAccountGraphLifecycle();
-  const accountGraphHydrationPhase = accountGraphLifecycle.phase;
   const {
     session,
     setAuthError,
@@ -405,8 +404,6 @@ export default function App() {
     setHasResolvedCommunities,
     communities,
     setCommunities,
-    communityRoleById,
-    setCommunityRoleById,
     profilesByUserId,
     setProfilesByUserId,
     railCommunities,
@@ -442,7 +439,6 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
     setIsLoadingCommunities,
     setHasResolvedCommunities,
-    setCommunityRoleById,
     setCommunities,
     applyCommunityShellState,
     setProfilesByUserId,
@@ -1188,7 +1184,6 @@ export default function App() {
       beginBrowserSignedOutState,
       setCommunities,
       setIsLoadingCommunities,
-      setCommunityRoleById,
       setActiveCommunityId,
       setCommunityTab,
       resetCommunityChatState,
@@ -1509,7 +1504,6 @@ export default function App() {
     onAccountSetupRequired: openProfileSetup,
     onCommunityCreated: (community) => {
       setCommunities((prev) => [community, ...prev]);
-      setCommunityRoleById((prev) => ({ ...prev, [community.id]: "owner" }));
       void enterJoinedCommunity({
         communityId: community.id,
         communitySlug: community.slug,
@@ -1864,12 +1858,10 @@ export default function App() {
     hasAuthenticatedAppShellPresentation,
     isAuthRecoveringSignedInAppShell,
     shouldHoldLandingForAuth,
-    isAccountGraphHydratingCriticalAppShell,
   } = buildWebAuthShellProjection({
     publicRouteKind: shellPublicRoute.kind,
     activePage,
     authPresentationState,
-    accountGraphHydrationPhase,
     pathname: shellNavigation.readCurrentPathname(),
   });
 

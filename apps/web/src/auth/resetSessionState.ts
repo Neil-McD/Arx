@@ -2,7 +2,6 @@ type WebSessionResetDeps = {
   beginBrowserSignedOutState: () => void | Promise<void>;
   setCommunities: (value: any[]) => void;
   setIsLoadingCommunities: (value: boolean) => void;
-  setCommunityRoleById: (value: Record<string, string>) => void;
   setActiveCommunityId: (value: null) => void;
   setCommunityTab: (value: "chat") => void;
   resetCommunityChatState: () => void;
@@ -24,7 +23,6 @@ export async function resetWebSessionStateAfterSignOut(deps: WebSessionResetDeps
   await deps.beginBrowserSignedOutState();
   deps.setCommunities([]);
   deps.setIsLoadingCommunities(false);
-  deps.setCommunityRoleById({});
   deps.setActiveCommunityId(null);
   deps.setCommunityTab("chat");
   deps.resetCommunityChatState();

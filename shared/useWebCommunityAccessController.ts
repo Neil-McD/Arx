@@ -17,7 +17,6 @@ type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfile
   loadingResetKey?: string | null;
   setIsLoadingCommunities: Dispatch<SetStateAction<boolean>>;
   setHasResolvedCommunities: Dispatch<SetStateAction<boolean>>;
-  setCommunityRoleById: Dispatch<SetStateAction<Record<string, string>>>;
   setCommunities: Dispatch<SetStateAction<CommunityRecordT[]>>;
   applyCommunityShellState: (opts: { communitySlug?: string | null }) => void;
 
@@ -61,15 +60,8 @@ export function useWebCommunityAccessController<
       });
       if (loadCommunitiesSeqRef.current !== seq) return;
       const typedRows = rows as Array<{
-        community_id: string;
-        role: string;
         communities: CommunityRecordT;
       }>;
-      const roleMap: Record<string, string> = {};
-      for (const row of typedRows) {
-        if (row.community_id) roleMap[row.community_id] = row.role;
-      }
-
       const list = typedRows
         .map((row) => row.communities)
         .filter(Boolean)
@@ -82,7 +74,6 @@ export function useWebCommunityAccessController<
         { maxUrls: 12, timeoutMs: 1500 },
       );
       if (loadCommunitiesSeqRef.current !== seq) return;
-      current.setCommunityRoleById(roleMap);
       current.setCommunities(list);
       if (!current.activeCommunitySlug) {
         const nextCommunitySlug = String(list[0]?.slug ?? "").trim() || null;

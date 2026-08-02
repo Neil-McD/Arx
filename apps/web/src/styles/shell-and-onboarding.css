@@ -208,10 +208,6 @@ body {
   gap: 0;
 }
 
-.app-shell.no-left {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 240px);
-}
-
 .app-shell.no-right {
   grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
 }
@@ -221,14 +217,6 @@ body {
 }
 
 /* Discord-style community rail (leftmost) */
-.app-shell.with-community-rail {
-  grid-template-columns: 72px minmax(0, 240px) minmax(0, 1fr) minmax(0, 240px);
-}
-
-.app-shell.with-community-rail.no-left {
-  grid-template-columns: 72px minmax(0, 1fr) minmax(0, 240px);
-}
-
 .app-shell.with-community-rail.no-right {
   grid-template-columns: 72px minmax(0, 240px) minmax(0, 1fr);
 }
@@ -237,37 +225,12 @@ body {
   grid-template-columns: 72px minmax(0, 1fr);
 }
 
-/* Compact sessions panel - narrower width */
-.app-shell.sessions-compact {
-  grid-template-columns: minmax(0, 160px) minmax(0, 1fr) minmax(0, 240px);
-}
-
 .app-shell.sessions-compact.no-right {
   grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
 }
 
-/* Compact sessions + community rail */
-.app-shell.with-community-rail.sessions-compact {
-  grid-template-columns: 72px minmax(0, 160px) minmax(0, 1fr) minmax(0, 240px);
-}
-
 .app-shell.with-community-rail.sessions-compact.no-right {
   grid-template-columns: 72px minmax(0, 160px) minmax(0, 1fr);
-}
-
-.app-shell.with-community-rail.sessions-compact.no-left {
-  grid-template-columns: 72px minmax(0, 1fr) minmax(0, 240px);
-}
-
-.app-shell.with-community-rail.sessions-compact.no-left.no-right {
-  grid-template-columns: 72px minmax(0, 1fr);
-}
-
-/* Compact mode: hide meta visually but keep space to preserve row height */
-.app-shell.sessions-compact .session-meta {
-  visibility: hidden;
-  width: 0;
-  overflow: hidden;
 }
 
 .rail {

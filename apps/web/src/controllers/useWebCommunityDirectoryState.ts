@@ -15,8 +15,6 @@ export function useWebCommunityDirectoryState(params: {
   const [hasResolvedCommunities, setHasResolvedCommunities] =
     useState(false);
   const [communities, setCommunities] = useState<WebCommunityRecord[]>([]);
-  const [communityRoleById, setCommunityRoleById] =
-    useState<Record<string, string>>({});
   const [profilesByUserId, setProfilesByUserId] =
     useState<Record<string, UserProfile>>({});
   const railOrderStorageKey = useMemo(
@@ -45,8 +43,6 @@ export function useWebCommunityDirectoryState(params: {
     setHasResolvedCommunities,
     communities,
     setCommunities,
-    communityRoleById,
-    setCommunityRoleById,
     profilesByUserId,
     setProfilesByUserId,
     railCommunities,
