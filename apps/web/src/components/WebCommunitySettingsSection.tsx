@@ -3,8 +3,8 @@ import type { DragEvent } from "react";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
 import { deriveCommunitySettingsAccessPresentation } from "../../../../shared/communityAccessResolution";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import { CommunityBanner } from "../../../../shared/CommunityBanner";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
-import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import { formatStripeConnectCountry } from "../../../../shared/stripeConnectCountries";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { CommunitySettingsPane } from "../../../../shared/appShellNavigation";
@@ -187,22 +187,15 @@ function CommunityBrandingSettingsSection({
         onDragLeave={() => actions.setIsSettingsBannerDragOver(false)}
         onDrop={actions.handleSettingsBannerDrop}
       >
-        <div className="create-community-banner-media">
-          {state.communitySettingsBannerUrl ? (
-            <img
-              src={state.communitySettingsBannerUrl}
-              alt="Community banner preview"
-              draggable={false}
-              style={getCommunityBannerImageStyle({
-                focusX: state.communitySettingsBannerFocusX,
-                focusY: state.communitySettingsBannerFocusY,
-                zoom: state.communitySettingsBannerZoom,
-              })}
-            />
-          ) : (
-            <div className="create-community-banner-placeholder">Banner preview</div>
-          )}
-        </div>
+        <CommunityBanner
+          className="create-community-banner-media"
+          imageUrl={state.communitySettingsBannerUrl}
+          focusX={state.communitySettingsBannerFocusX}
+          focusY={state.communitySettingsBannerFocusY}
+          zoom={state.communitySettingsBannerZoom}
+          alt="Community banner preview"
+          fallback={<div className="create-community-banner-placeholder">Banner preview</div>}
+        />
         <label
           className={`create-banner-btn${state.isProcessingCommunitySettingsBanner ? " disabled" : ""}`}
         >

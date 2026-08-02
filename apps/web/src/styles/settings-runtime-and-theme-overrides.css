@@ -5638,24 +5638,20 @@ button.message-citation-chip:hover {
   width: 100%;
   height: 188px;
   border-radius: 18px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-card-alt);
   overflow: hidden;
 }
 
-.create-community-banner.drag-over .create-community-banner-media img,
-.create-community-banner.drag-over .create-community-banner-placeholder {
+.create-community-banner.drag-over .create-community-banner-media {
   border-style: dashed;
   border-color: var(--accent-gold);
   background: color-mix(in srgb, var(--accent-gold) 12%, transparent);
 }
 
-.create-community-banner-media img,
 .create-community-banner-placeholder {
   width: 100%;
-  height: 188px;
-  border-radius: 18px;
-  border: 1px solid var(--border-default);
-  background: var(--bg-card-alt);
-  object-fit: cover;
+  height: 100%;
 }
 
 .create-community-banner-placeholder {

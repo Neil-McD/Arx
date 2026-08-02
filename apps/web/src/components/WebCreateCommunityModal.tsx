@@ -1,4 +1,6 @@
 import type { DragEvent } from "react";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import { CommunityBanner } from "../../../../shared/CommunityBanner";
 
 type CommunityRecordForModal = {
   id: string;
@@ -113,13 +115,15 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                   onDragLeave={() => onSetBannerDragOver(false)}
                   onDrop={onBannerDrop}
                 >
-                  <div className="create-community-banner-media">
-                    {createCommunityBannerUrl ? (
-                      <img src={createCommunityBannerUrl} alt="Community banner preview" draggable={false} />
-                    ) : (
-                      <div className="create-community-banner-placeholder">Banner preview</div>
-                    )}
-                  </div>
+                  <CommunityBanner
+                    className="create-community-banner-media"
+                    imageUrl={createCommunityBannerUrl}
+                    focusX={0.5}
+                    focusY={0.5}
+                    zoom={1}
+                    alt="Community banner preview"
+                    fallback={<div className="create-community-banner-placeholder">Banner preview</div>}
+                  />
                 </div>
                 <div className="create-community-branding-actions">
                   <label className="create-banner-btn">
@@ -142,21 +146,22 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                 </div>
 
                 <div className="create-community-avatar-shell">
-                  <div
+                  <CommunityAvatar
                     className={`create-community-avatar${isCreateAvatarDragOver ? " drag-over" : ""}`}
+                    imageUrl={createCommunityAvatarUrl}
+                    focusX={0.5}
+                    focusY={0.5}
+                    zoom={1}
+                    name={createCommunityName || "Community"}
+                    alt="Community avatar preview"
+                    fallback={communityInitials(createCommunityName || "Community")}
                     onDragOver={(event) => {
                       event.preventDefault();
                       onSetAvatarDragOver(true);
                     }}
                     onDragLeave={() => onSetAvatarDragOver(false)}
                     onDrop={onAvatarDrop}
-                  >
-                    {createCommunityAvatarUrl ? (
-                      <img src={createCommunityAvatarUrl} alt="Community avatar preview" draggable={false} />
-                    ) : (
-                      <span>{communityInitials(createCommunityName || "Community")}</span>
-                    )}
-                  </div>
+                  />
                   <div className="create-community-avatar-actions">
                     <label className="create-avatar-btn">
                       Upload avatar

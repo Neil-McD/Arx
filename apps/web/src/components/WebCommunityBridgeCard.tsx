@@ -154,7 +154,7 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
         </div>
         <div className="cvs-bridge-idgrid">
           <div className="cvs-bridge-avblock">
-            {/* The one canonical avatar system (UserAvatar/StableAvatar with
+            {/* The one canonical avatar system (UserAvatar/StableFramedMedia with
                framing + ready/fallback states) — same as chat and the modal. */}
             <UserAvatar
               className={`polynet-onboarding-avatar cvs-bridge-avatar${lit("photo") ? " cvs-bridge-miss" : ""}`}

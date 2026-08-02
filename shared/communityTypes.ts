@@ -217,6 +217,9 @@ export type CommunityTypingPresenceUser = {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   root_id?: string | null;
   display_until_ms: number;
   updated_at?: string | null;

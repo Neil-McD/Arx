@@ -1,17 +1,3 @@
-import type { CSSProperties } from "react";
-
-import { getCommunityBannerImageStyle } from "./communityBannerUi";
-import type { CommunityFunnelConfig } from "./communityTypes";
-
-export type CommunityFunnelUiCommunityLike = {
-  slug?: string | null;
-  name: string;
-  banner_url?: string | null;
-  banner_focus_x?: number | null;
-  banner_focus_y?: number | null;
-  banner_zoom?: number | null;
-};
-
 export type CommunityFunnelUiFaceLike = {
   user_id: string;
   display_name: string | null;
@@ -48,30 +34,6 @@ export function formatCompactStat(value: number): string {
 
 export function formatCommunityLink(slug: string): string {
   return `polynet.com/c/${slug}`;
-}
-
-export function buildCommunityFunnelActionCardArt(args: {
-  community: CommunityFunnelUiCommunityLike | null | undefined;
-  funnel: Pick<CommunityFunnelConfig, "hero_media_kind" | "hero_media_url"> | null | undefined;
-  heroMediaUrlOverride?: string | null;
-}): { imageUrl: string | null; imageStyle?: CSSProperties } {
-  const heroMediaUrl = args.heroMediaUrlOverride ?? args.funnel?.hero_media_url ?? null;
-  if (args.funnel?.hero_media_kind === "image" && heroMediaUrl) {
-    return {
-      imageUrl: heroMediaUrl,
-      imageStyle: {
-        objectPosition: "center center",
-      },
-    };
-  }
-  return {
-    imageUrl: args.community?.banner_url ?? null,
-    imageStyle: getCommunityBannerImageStyle({
-      focusX: args.community?.banner_focus_x,
-      focusY: args.community?.banner_focus_y,
-      zoom: args.community?.banner_zoom,
-    }),
-  };
 }
 
 export function buildCommunityFunnelCopy(mode: CommunityFunnelUiMode): {

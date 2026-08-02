@@ -1,5 +1,5 @@
 import type { CSSProperties, DragEventHandler, MouseEventHandler, ReactNode } from "react";
-import { StableAvatar } from "./StableAvatar";
+import { StableFramedMedia } from "./StableFramedMedia";
 
 type UserAvatarProps = {
   name: string;
@@ -38,13 +38,13 @@ function userInitials(name: string): string {
 
 export function UserAvatar(props: UserAvatarProps) {
   return (
-    <StableAvatar
+    <StableFramedMedia
       className={props.className}
       readyClassName={props.readyClassName}
       fallbackClassName={props.fallbackClassName}
       imageClassName={props.imageClassName ?? "user-avatar-image"}
       imageUrl={props.imageUrl}
-      imageFrame={{
+      frame={{
         focusX: props.focusX,
         focusY: props.focusY,
         zoom: props.zoom,

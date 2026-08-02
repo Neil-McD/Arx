@@ -8,9 +8,13 @@ export type CloudCommunityDirectoryMemberRow = {
   user_id: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   premium_badge?: PremiumMemberBadgeSummary | null;
   role: string;
   created_at: string;
+  last_active_at?: string | null;
 };
 
 export type CloudCommunityDirectoryPage = {
@@ -27,6 +31,9 @@ export type CloudCommunityMentionCandidateRow = {
   display_name?: string | null;
   handle?: string | null;
   avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   premium_badge?: PremiumMemberBadgeSummary | null;
   role?: string | null;
   agent_key?: string | null;

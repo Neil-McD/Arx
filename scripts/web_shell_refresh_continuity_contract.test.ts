@@ -98,10 +98,10 @@ describe("web shell refresh continuity contract", () => {
 
   it("falls back instead of admitting cached broken avatar images", () => {
     const imageReady = read("shared/useImageUrlReady.ts");
-    const stableAvatar = read("shared/StableAvatar.tsx");
+    const stableFramedMedia = read("shared/StableFramedMedia.tsx");
 
     expect(imageReady).toContain("finish(image.naturalWidth > 0)");
-    expect(stableAvatar).toContain("failedImageUrl");
-    expect(stableAvatar).toContain("onError={() => setFailedImageUrl(normalizedImageUrl)}");
+    expect(stableFramedMedia).toContain("failedImageUrl");
+    expect(stableFramedMedia).toContain("onError={() => setFailedImageUrl(normalizedImageUrl)}");
   });
 });
