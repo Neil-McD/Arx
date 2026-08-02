@@ -871,8 +871,8 @@ assert.match(
 );
 assert.match(
   directoryController,
-  /message\.includes\("community_directory_cursor_invalid"\)[\s\S]*cursor: null[\s\S]*setCommunityDirectoryMembers\(dedupeCommunityDirectoryRows\(page\.rows\)\)/,
-  "directory controller should recover stale rolling-release cursors from a fresh first page",
+  /message\.includes\("community_directory_cursor_invalid"\)[\s\S]*listCloudCommunityDirectoryWindow[\s\S]*targetRowCount: Math\.max\([\s\S]*COMMUNITY_DIRECTORY_DEFAULT_PAGE_SIZE[\s\S]*communityDirectoryMembersRef\.current\.length[\s\S]*setCommunityDirectoryMembers\(nextMembers\)/,
+  "directory controller should recover stale rolling-release cursors without collapsing the loaded member window",
 );
 assert.match(
   communityDirectory,
