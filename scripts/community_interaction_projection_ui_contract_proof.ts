@@ -38,6 +38,9 @@ const memberManagementController = read(
   "apps/web/src/controllers/useWebCommunityMemberManagementController.ts",
 );
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+const chatPresentationMode = read(
+  "apps/web/src/controllers/resolveWebCommunityChatPresentationMode.ts",
+);
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
@@ -177,8 +180,23 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /showInteractionProjection[\s\S]*interactionProjection\?\.enabled[\s\S]*hasResolvedCommunityChat[\s\S]*!isLoadingChat/,
-  "chat panel should only switch projections once the authenticated chat surface is resolved",
+  /resolveWebCommunityChatPresentationMode\(\{[\s\S]*canonicalProjectionEnabled:[\s\S]*hasActiveCommunity:[\s\S]*hasAuthenticatedPresentation/,
+  "chat panel should delegate structural ownership to the canonical presentation resolver",
+);
+assert.match(
+  chatPanel,
+  /const showInteractionProjection = communityChatPresentationMode === "canonical";[\s\S]*const showCanonicalCommunityBootstrap =[\s\S]*communityChatPresentationMode === "canonical_bootstrap"/,
+  "canonical chat should own either the live projection or its geometry-compatible bootstrap",
+);
+assert.match(
+  chatPresentationMode,
+  /if \(input\.canonicalProjectionEnabled\) \{[\s\S]*return "canonical";[\s\S]*return "canonical_bootstrap";[\s\S]*return "legacy";[\s\S]*return "legacy_bootstrap";/,
+  "canonical mode must resolve before and independently of the legacy bootstrap",
+);
+assert.match(
+  chatPanel,
+  /const showCommunityChatBootstrap =\s*communityChatPresentationMode === "legacy_bootstrap"/,
+  "the legacy chat bootstrap must be confined to the legacy fallback",
 );
 assert.match(
   chatPanel,
@@ -468,6 +486,11 @@ assert.match(
   "the canonical directory controller must expose initial and paginated reads",
 );
 assert.match(
+  directoryController,
+  /requestedPresentationScope[\s\S]*isPresentationScoped[\s\S]*communityDirectoryMembers: isPresentationScoped/,
+  "the directory must synchronously scope member presentation to identity and community",
+);
+assert.match(
   app,
   /communityAdministration\.directory/,
   "App should compose the canonical directory owner",
@@ -689,8 +712,8 @@ assert.match(
 );
 assert.match(
   app,
-  /communityContextJoinRequests = useMemo\([\s\S]*\.filter\(\(request\) => String\(request\.status \?\? ""\)\.trim\(\)\.toLowerCase\(\) === "pending"\)[\s\S]*createdAtLabel: formatRelativeTime\(request\.created_at\)/,
-  "App should pass only pending request rows into the context rail request dropdown",
+  /communityContextJoinRequests = useMemo\([\s\S]*\.filter\(\(request\) =>[\s\S]*request\.community_id === activeCommunityId &&[\s\S]*String\(request\.status \?\? ""\)\.trim\(\)\.toLowerCase\(\) === "pending"[\s\S]*createdAtLabel: formatRelativeTime\(request\.created_at\)/,
+  "App should pass only active-community pending request rows into the context rail request dropdown",
 );
 assert.match(
   app,

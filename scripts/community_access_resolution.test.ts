@@ -62,6 +62,90 @@ test("a stale response cannot overwrite a newer community access request", () =>
   expect(scopeCommunityAccessResolution(afterStaleA, "community-b").status).toBe("pending");
 });
 
+test("same-community refresh preserves presentation access while authority is pending", () => {
+  const loading = reduceCommunityAccessResolution(
+    createCommunityAccessResolutionState<TestAccess>(),
+    { type: "begin", communityId: "community-a", requestId: 1 },
+  );
+  const resolved = reduceCommunityAccessResolution(loading, {
+    type: "resolve",
+    communityId: "community-a",
+    requestId: 1,
+    access: { community_id: "community-a", can_view: true },
+  });
+  const refreshing = reduceCommunityAccessResolution(resolved, {
+    type: "begin",
+    communityId: "community-a",
+    requestId: 2,
+  });
+
+  expect(scopeCommunityAccessResolution(refreshing, "community-a")).toEqual({
+    status: "refreshing",
+    access: { community_id: "community-a", can_view: true },
+    error: null,
+  });
+});
+
+test("refresh failure retains presentation access without restoring authority", () => {
+  const loading = reduceCommunityAccessResolution(
+    createCommunityAccessResolutionState<TestAccess>(),
+    { type: "begin", communityId: "community-a", requestId: 1 },
+  );
+  const resolved = reduceCommunityAccessResolution(loading, {
+    type: "resolve",
+    communityId: "community-a",
+    requestId: 1,
+    access: { community_id: "community-a", can_view: true },
+  });
+  const refreshing = reduceCommunityAccessResolution(resolved, {
+    type: "begin",
+    communityId: "community-a",
+    requestId: 2,
+  });
+  const failed = reduceCommunityAccessResolution(refreshing, {
+    type: "fail",
+    communityId: "community-a",
+    requestId: 2,
+    error: "Access lookup failed.",
+  });
+
+  expect(scopeCommunityAccessResolution(failed, "community-a")).toEqual({
+    status: "failed",
+    access: { community_id: "community-a", can_view: true },
+    error: "Access lookup failed.",
+  });
+});
+
+test("definitive revocation removes preserved presentation access", () => {
+  const loading = reduceCommunityAccessResolution(
+    createCommunityAccessResolutionState<TestAccess>(),
+    { type: "begin", communityId: "community-a", requestId: 1 },
+  );
+  const resolved = reduceCommunityAccessResolution(loading, {
+    type: "resolve",
+    communityId: "community-a",
+    requestId: 1,
+    access: { community_id: "community-a", can_view: true },
+  });
+  const refreshing = reduceCommunityAccessResolution(resolved, {
+    type: "begin",
+    communityId: "community-a",
+    requestId: 2,
+  });
+  const revoked = reduceCommunityAccessResolution(refreshing, {
+    type: "resolve",
+    communityId: "community-a",
+    requestId: 2,
+    access: null,
+  });
+
+  expect(scopeCommunityAccessResolution(revoked, "community-a")).toEqual({
+    status: "resolved",
+    access: null,
+    error: null,
+  });
+});
+
 test("only a completed null response represents definitive no access", () => {
   const loading = reduceCommunityAccessResolution(
     createCommunityAccessResolutionState<TestAccess>(),

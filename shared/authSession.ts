@@ -54,6 +54,15 @@ export function resolveAuthSubject(session: AuthSessionLike): string | null {
   return decodeJwtSub(resolveAuthIdentityToken(session) ?? "");
 }
 
+/**
+ * Stable presentation identity for UI lifecycles. Runtime credentials rotate;
+ * the signed-in actor is the lifecycle boundary.
+ */
+export function resolveAuthPresentationIdentity(session: AuthSessionLike): string | null {
+  if (!session) return null;
+  return resolveAuthSubject(session) ?? "authenticated";
+}
+
 export function resolveAuthSessionEmail(session: AuthSessionLike): string | undefined {
   const email = String(session?.user?.email ?? "").trim();
   if (email) return email;

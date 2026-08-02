@@ -391,7 +391,15 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             className="community-context-member-avatar"
             style={!member.avatar_url ? { color: props.getAvatarColor(member.user_id) } : undefined}
           >
-            {member.avatar_url ? <img src={member.avatar_url} alt="" /> : <span>{props.getInitials(name)}</span>}
+            <UserAvatar
+              className="community-context-member-avatar-media"
+              readyClassName="has-image"
+              name={name}
+              imageUrl={member.avatar_url}
+              alt=""
+              aria-hidden={true}
+              fallback={<span>{props.getInitials(name)}</span>}
+            />
             {isOnline ? <span className="community-context-member-dot" aria-hidden="true" /> : null}
           </span>
           <span className="community-context-member-copy">
@@ -655,11 +663,18 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
                     className="community-context-member-avatar"
                     style={!face.avatar_url && face.avatar_color ? { color: face.avatar_color } : undefined}
                   >
-                    {face.avatar_url ? (
-                      <img src={face.avatar_url} alt="" />
-                    ) : (
-                      <span>{face.initials ?? props.getInitials(name)}</span>
-                    )}
+                    <UserAvatar
+                      className="community-context-member-avatar-media"
+                      readyClassName="has-image"
+                      name={name}
+                      imageUrl={face.avatar_url}
+                      focusX={face.avatar_focus_x}
+                      focusY={face.avatar_focus_y}
+                      zoom={face.avatar_zoom}
+                      fallback={<span>{face.initials ?? props.getInitials(name)}</span>}
+                      alt=""
+                      aria-hidden={true}
+                    />
                   </span>
                   <span className="community-context-member-name">{name}</span>
                 </span>

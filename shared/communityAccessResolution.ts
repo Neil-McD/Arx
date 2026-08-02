@@ -1,7 +1,7 @@
 export type CommunityAccessResolutionState<TAccess> = {
   communityId: string | null;
   requestId: number;
-  status: "idle" | "loading" | "resolved" | "failed";
+  status: "idle" | "loading" | "refreshing" | "resolved" | "failed";
   access: TAccess | null;
   error: string | null;
 };
@@ -36,13 +36,18 @@ export type ScopedCommunityAccessResolution<TAccess> =
       error: null;
     }
   | {
+      status: "refreshing";
+      access: TAccess;
+      error: null;
+    }
+  | {
       status: "resolved";
       access: TAccess | null;
       error: null;
     }
   | {
       status: "failed";
-      access: null;
+      access: TAccess | null;
       error: string;
     };
 
@@ -75,16 +80,22 @@ export function reduceCommunityAccessResolution<TAccess>(
     };
   }
   if (action.type === "begin") {
+    const canRefreshResolvedAccess =
+      state.communityId === action.communityId &&
+      state.access !== null &&
+      (state.status === "resolved" ||
+        state.status === "refreshing" ||
+        state.status === "failed");
     return {
       communityId: action.communityId,
       requestId: action.requestId,
-      status: "loading",
-      access: null,
+      status: canRefreshResolvedAccess ? "refreshing" : "loading",
+      access: canRefreshResolvedAccess ? state.access : null,
       error: null,
     };
   }
   if (
-    state.status !== "loading" ||
+    (state.status !== "loading" && state.status !== "refreshing") ||
     state.communityId !== action.communityId ||
     state.requestId !== action.requestId
   ) {
@@ -103,7 +114,7 @@ export function reduceCommunityAccessResolution<TAccess>(
     communityId: action.communityId,
     requestId: action.requestId,
     status: "failed",
-    access: null,
+    access: state.status === "refreshing" ? state.access : null,
     error: action.error,
   };
 }
@@ -127,10 +138,23 @@ export function scopeCommunityAccessResolution<TAccess>(
       error: null,
     };
   }
+  if (state.status === "refreshing") {
+    return state.access === null
+      ? {
+          status: "pending",
+          access: null,
+          error: null,
+        }
+      : {
+          status: "refreshing",
+          access: state.access,
+          error: null,
+        };
+  }
   if (state.status === "failed") {
     return {
       status: "failed",
-      access: null,
+      access: state.access,
       error: state.error ?? "Unable to verify community access.",
     };
   }
