@@ -28,11 +28,16 @@ function assertNotMatches(path: string, source: string, forbidden: RegExp): void
 const navPath = "shared/CommunityNav.tsx";
 const nav = read(navPath);
 [
-  'name: "General"',
   '"Add Channel"',
   "canManageMembersActiveCommunity && onCreateChannel",
   "Channels are visible to every community member.",
+  "community-channel-loading-row web-skeleton-row",
 ].forEach((required) => assertIncludes(navPath, nav, required));
+assertNotMatches(
+  navPath,
+  nav,
+  /channels\.length\s*>\s*0[\s\S]*name:\s*"General"/,
+);
 
 const gatewayPath = "shared/cloudCommunityChannelsGateway.ts";
 const gateway = read(gatewayPath);
@@ -45,6 +50,8 @@ const gateway = read(gatewayPath);
 const channelControllerPath = "apps/web/src/controllers/useWebCommunityChannelsController.ts";
 const channelController = read(channelControllerPath);
 [
+  "GENERAL_FALLBACK_CHANNEL",
+  'name: "General"',
   'status: "loading"',
   'status: "failed"',
   'status: "not_found"',
@@ -110,7 +117,7 @@ const projection = read(projectionPath);
 [
   "activeChannelId: string | null",
   "channel_id: pending.channelId",
-  'channelId ?? "general"',
+  'activeChannelId ?? "general"',
   "channelId: interaction.channelId",
 ].forEach((required) => assertIncludes(projectionPath, projection, required));
 assertMatches(
