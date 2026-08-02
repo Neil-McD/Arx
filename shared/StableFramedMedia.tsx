@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -70,6 +71,7 @@ export function StableFramedMedia(props: StableFramedMediaProps) {
     onDrop,
   } = props;
   const viewportRef = useRef<HTMLSpanElement | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const isReady = useImageUrlReady(imageUrl);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const normalizedImageUrl = String(imageUrl ?? "").trim() || null;
@@ -102,6 +104,26 @@ export function StableFramedMedia(props: StableFramedMediaProps) {
     setNaturalSize({ url: null, width: 0, height: 0 });
     setFailedImageUrl(null);
   }, [normalizedImageUrl]);
+
+  const syncNaturalSizeFromImage = useCallback((image: HTMLImageElement) => {
+    const width = image.naturalWidth || image.width || 0;
+    const height = image.naturalHeight || image.height || 0;
+    if (!normalizedImageUrl || width <= 0 || height <= 0) return;
+    setNaturalSize((current) =>
+      current.url === normalizedImageUrl &&
+      current.width === width &&
+      current.height === height
+        ? current
+        : { url: normalizedImageUrl, width, height },
+    );
+  }, [normalizedImageUrl]);
+
+  useEffect(() => {
+    if (!canLoadImage || !hasFrame) return;
+    const image = imageRef.current;
+    if (!image?.complete) return;
+    syncNaturalSizeFromImage(image);
+  }, [canLoadImage, hasFrame, syncNaturalSizeFromImage]);
 
   const layout = useMemo(() => {
     if (!canLoadImage || !frame || naturalSize.url !== normalizedImageUrl) return null;
@@ -168,6 +190,7 @@ export function StableFramedMedia(props: StableFramedMediaProps) {
         <span ref={viewportRef} style={viewportStyle}>
           {showImage ? null : fallback}
           <img
+            ref={imageRef}
             className={imageClassName}
             src={normalizedImageUrl ?? undefined}
             alt={alt}
@@ -175,12 +198,7 @@ export function StableFramedMedia(props: StableFramedMediaProps) {
             draggable={false}
             style={resolvedImageStyle}
             onLoad={(event) => {
-              const target = event.currentTarget;
-              setNaturalSize({
-                url: normalizedImageUrl,
-                width: target.naturalWidth || target.width || 0,
-                height: target.naturalHeight || target.height || 0,
-              });
+              syncNaturalSizeFromImage(event.currentTarget);
             }}
             onError={() => setFailedImageUrl(normalizedImageUrl)}
           />

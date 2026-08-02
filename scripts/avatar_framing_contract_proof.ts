@@ -46,6 +46,7 @@ assert.doesNotMatch(communityAvatarUi, /objectPosition|transform:/);
 assert.doesNotMatch(communityBannerUi, /objectPosition|backgroundPosition|transform:/);
 
 assert.match(stableFramedMedia, /viewportRef = useRef<HTMLSpanElement/);
+assert.match(stableFramedMedia, /imageRef = useRef<HTMLImageElement/);
 assert.match(stableFramedMedia, /observer\.observe\(viewport\)/);
 assert.match(stableFramedMedia, /position: "absolute"/);
 assert.match(stableFramedMedia, /inset: 0/);
@@ -56,6 +57,10 @@ assert.match(stableFramedMedia, /viewport\.clientHeight/);
 assert.match(stableFramedMedia, /position: presentationStyle\?\.position \?\? "relative"/);
 assert.match(stableFramedMedia, /overflow: presentationStyle\?\.overflow \?\? "hidden"/);
 assert.match(stableFramedMedia, /visibility: "hidden"/);
+assert.match(stableFramedMedia, /if \(!image\?\.complete\) return/);
+assert.match(stableFramedMedia, /syncNaturalSizeFromImage\(image\)/);
+assert.match(stableFramedMedia, /ref=\{imageRef\}/);
+assert.match(stableFramedMedia, /syncNaturalSizeFromImage\(event\.currentTarget\)/);
 assert.doesNotMatch(stableFramedMedia, /root\.getBoundingClientRect/);
 assert.match(framedMediaUi, /border: 0/);
 assert.match(framedMediaUi, /objectFit: "fill"/);
