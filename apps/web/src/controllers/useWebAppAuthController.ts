@@ -214,7 +214,7 @@ export function useWebAppAuthController(
   }, [refreshAuthSessionLockedResult]);
 
   const ensureUsableAuthSession = useCallback(async (
-    currentSession: AuthSession | null | undefined = sessionRef.current ?? session,
+    currentSession: AuthSession | null | undefined = sessionRef.current,
     sourceInput?: string,
     options?: { forceRefresh?: boolean },
   ): Promise<AuthSession | null> => {
@@ -392,7 +392,7 @@ export function useWebAppAuthController(
         ensuredSessionInFlightRef.current = null;
       }
     }
-  }, [adoptAuthSession, expireAuthSessionLocally, refreshAuthSessionLockedResult, session]);
+  }, [adoptAuthSession, expireAuthSessionLocally, refreshAuthSessionLockedResult]);
 
   const beginSignInFlow = useCallback(async (): Promise<boolean> => {
     setAuthError(null);

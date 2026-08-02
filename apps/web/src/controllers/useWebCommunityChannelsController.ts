@@ -119,6 +119,15 @@ function normalizeChannels(
     : [{ ...GENERAL_FALLBACK_CHANNEL, community_id: communityId }, ...normalized];
 }
 
+export function shouldResetWebCommunityChannelPresentation(args: {
+  scopedCommunityId: string | null;
+  nextCommunityId: string | null;
+  hasSession: boolean;
+}): boolean {
+  if (!args.hasSession) return true;
+  return args.scopedCommunityId !== args.nextCommunityId;
+}
+
 export function useWebCommunityChannelsController(params: {
   activeCommunityId: string | null;
   requestedChannelSlug: string | null;
@@ -140,18 +149,28 @@ export function useWebCommunityChannelsController(params: {
   const [createChannelError, setCreateChannelError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const createInFlightCommunityIdRef = useRef<string | null>(null);
+  const channelScopeCommunityIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const communityId = String(params.activeCommunityId ?? "").trim();
-    setChannels([
-      { ...GENERAL_FALLBACK_CHANNEL, community_id: communityId },
-    ]);
-    setMaxActiveChannels(10);
-    setHasResolvedChannels(false);
+    const nextCommunityId = communityId || null;
+    const shouldResetPresentation = shouldResetWebCommunityChannelPresentation({
+      scopedCommunityId: channelScopeCommunityIdRef.current,
+      nextCommunityId,
+      hasSession: Boolean(params.session),
+    });
+    if (shouldResetPresentation) {
+      setChannels([
+        { ...GENERAL_FALLBACK_CHANNEL, community_id: communityId },
+      ]);
+      setMaxActiveChannels(10);
+      setHasResolvedChannels(false);
+      createInFlightCommunityIdRef.current = null;
+      setIsCreatingChannel(false);
+      setCreateChannelError(null);
+    }
+    channelScopeCommunityIdRef.current = params.session ? nextCommunityId : null;
     setChannelsError(null);
-    createInFlightCommunityIdRef.current = null;
-    setIsCreatingChannel(false);
-    setCreateChannelError(null);
     if (!communityId || !params.session) {
       setIsLoadingChannels(false);
       return;
@@ -188,14 +207,12 @@ export function useWebCommunityChannelsController(params: {
           },
           onError: (error) => {
             if (cancelled || paramsRef.current.activeCommunityId !== communityId) return;
-            setHasResolvedChannels(false);
             setIsLoadingChannels(false);
             setChannelsError(formatChannelError(error));
           },
         });
       } catch (error) {
         if (cancelled || paramsRef.current.activeCommunityId !== communityId) return;
-        setHasResolvedChannels(false);
         setIsLoadingChannels(false);
         setChannelsError(formatChannelError(error));
       }
@@ -210,8 +227,19 @@ export function useWebCommunityChannelsController(params: {
   const normalizedRequestedSlug = String(params.requestedChannelSlug ?? "")
     .trim()
     .toLowerCase();
+  const requestedPresentationCommunityId =
+    String(params.activeCommunityId ?? "").trim() || null;
+  const isPresentationScopedToActiveCommunity =
+    Boolean(params.session) &&
+    channelScopeCommunityIdRef.current === requestedPresentationCommunityId;
+  const presentedChannels = isPresentationScopedToActiveCommunity
+    ? channels
+    : [{
+        ...GENERAL_FALLBACK_CHANNEL,
+        community_id: requestedPresentationCommunityId ?? "",
+      }];
   const selection = resolveWebCommunityChannelSelection({
-    channels,
+    channels: presentedChannels,
     requestedChannelSlug: normalizedRequestedSlug,
     hasResolvedChannels,
     channelsError,
@@ -259,15 +287,15 @@ export function useWebCommunityChannelsController(params: {
   const activeChannelId = selection.selectedChannel?.is_general
     ? null
     : String(selection.selectedChannel?.id ?? "").trim() || null;
-  const isAtChannelLimit = channels.filter((channel) => Boolean(channel.id)).length >= maxActiveChannels;
+  const isAtChannelLimit =
+    presentedChannels.filter((channel) => Boolean(channel.id)).length >= maxActiveChannels;
   const retryChannels = useCallback(() => {
     setChannelsError(null);
-    setHasResolvedChannels(false);
     setLoadAttempt((attempt) => attempt + 1);
   }, []);
 
   return useMemo(() => ({
-    channels,
+    channels: presentedChannels,
     selectedChannel: selection.selectedChannel,
     activeChannelId,
     selectedChannelSlug: selection.selectedChannelSlug,
@@ -285,7 +313,6 @@ export function useWebCommunityChannelsController(params: {
     createChannel,
   }), [
     activeChannelId,
-    channels,
     channelsError,
     createChannel,
     createChannelError,
@@ -294,6 +321,7 @@ export function useWebCommunityChannelsController(params: {
     isCreatingChannel,
     isLoadingChannels,
     maxActiveChannels,
+    presentedChannels,
     retryChannels,
     selection.selectedChannel,
     selection.selectedChannelSlug,

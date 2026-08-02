@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { CloudCommunityChannel } from "../shared/cloudCommunityChannelsGateway";
-import { resolveWebCommunityChannelSelection } from "../apps/web/src/controllers/useWebCommunityChannelsController";
+import {
+  resolveWebCommunityChannelSelection,
+  shouldResetWebCommunityChannelPresentation,
+} from "../apps/web/src/controllers/useWebCommunityChannelsController";
 
 const general: CloudCommunityChannel = {
   id: "general-id",
@@ -87,5 +90,31 @@ describe("community channel selection", () => {
       selectedChannel: product,
       selectedChannelSlug: "product-feedback",
     });
+  });
+});
+
+describe("community channel presentation continuity", () => {
+  it("preserves resolved channels when credentials rotate for the same community", () => {
+    expect(shouldResetWebCommunityChannelPresentation({
+      scopedCommunityId: "community-id",
+      nextCommunityId: "community-id",
+      hasSession: true,
+    })).toBe(false);
+  });
+
+  it("resets channels across a real community boundary", () => {
+    expect(shouldResetWebCommunityChannelPresentation({
+      scopedCommunityId: "community-a",
+      nextCommunityId: "community-b",
+      hasSession: true,
+    })).toBe(true);
+  });
+
+  it("resets channels after confirmed sign-out", () => {
+    expect(shouldResetWebCommunityChannelPresentation({
+      scopedCommunityId: "community-id",
+      nextCommunityId: "community-id",
+      hasSession: false,
+    })).toBe(true);
   });
 });

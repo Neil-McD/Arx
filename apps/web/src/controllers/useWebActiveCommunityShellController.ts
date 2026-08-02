@@ -164,12 +164,20 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     ),
     [communityAccessResolution, params.activeCommunityId],
   );
+  const presentationActiveCommunityAccess =
+    scopedCommunityAccessResolution.status === "resolved" ||
+    scopedCommunityAccessResolution.status === "refreshing" ||
+    scopedCommunityAccessResolution.status === "failed"
+      ? scopedCommunityAccessResolution.access
+      : null;
   const currentActiveCommunityAccess =
     scopedCommunityAccessResolution.status === "resolved"
       ? scopedCommunityAccessResolution.access
       : null;
   const isLoadingCommunityAccess =
-    Boolean(params.session) && scopedCommunityAccessResolution.status === "pending";
+    Boolean(params.session) &&
+    (scopedCommunityAccessResolution.status === "pending" ||
+      scopedCommunityAccessResolution.status === "refreshing");
   const communityAccessLoadError =
     scopedCommunityAccessResolution.status === "failed"
       ? scopedCommunityAccessResolution.error
@@ -191,6 +199,10 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   }, [activeCommunityPresenceSummaryState, params.activeCommunityId]);
 
   const communityAccessCapabilities = useMemo(
+    () => deriveCommunityAccessCapabilities(presentationActiveCommunityAccess),
+    [presentationActiveCommunityAccess],
+  );
+  const authoritativeCommunityAccessCapabilities = useMemo(
     () => deriveCommunityAccessCapabilities(currentActiveCommunityAccess),
     [currentActiveCommunityAccess],
   );
@@ -199,11 +211,15 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     [communityAccessCapabilities],
   );
   const communityActionGuards = useMemo(
-    () => deriveCommunityActionGuards(communityAccessCapabilities),
-    [communityAccessCapabilities],
+    () => deriveCommunityActionGuards(authoritativeCommunityAccessCapabilities),
+    [authoritativeCommunityAccessCapabilities],
+  );
+  const authoritativeCommunityNavVisibility = useMemo(
+    () => deriveCommunityNavVisibility(authoritativeCommunityAccessCapabilities),
+    [authoritativeCommunityAccessCapabilities],
   );
 
-  const isActiveCommunityOwner = communityAccessCapabilities.isOwner;
+  const isActiveCommunityOwner = authoritativeCommunityAccessCapabilities.isOwner;
   const isActiveCommunityAdmin =
     String(currentActiveCommunityAccess?.effective_role ?? "").trim().toLowerCase() === "admin";
   const communitySettingsLayer = deriveCommunitySettingsLayer(currentActiveCommunityAccess);
@@ -216,7 +232,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   const canPostMessagesActiveCommunity = communityActionGuards.canPostMessages;
   const canManageResourcesActiveCommunity = communityActionGuards.canManageResources;
   const canModerateContentActiveCommunity = communityActionGuards.canModerateContent;
-  const canManageMembersActiveCommunity = communityNavVisibility.canManageMembers;
+  const canManageMembersActiveCommunity = authoritativeCommunityNavVisibility.canManageMembers;
   const canReviewJoinRequestsActiveCommunity = communityActionGuards.canReviewJoinRequests;
   const canManagePricingActiveCommunity = communityActionGuards.canManagePricing;
   const canManageBrandingActiveCommunity = communityActionGuards.canManageBranding;
