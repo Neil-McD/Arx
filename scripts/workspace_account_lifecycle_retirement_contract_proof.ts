@@ -15,18 +15,18 @@ const mcp = read("convex/httpMcp.ts");
 
 const sessionReadyBlock =
   accountGraphLifecycle.match(/const onSessionReady = useCallback[\s\S]*?\n  \}, \[runInstrumentedLoad\]\);/)?.[0] ?? "";
-const sessionFocusBlock =
-  accountGraphLifecycle.match(/const onSessionFocusReady = useCallback[\s\S]*?\n  \}, \[runInstrumentedLoad\]\);/)?.[0] ?? "";
+const sessionResumeBlock =
+  accountGraphLifecycle.match(/const onSessionResumeReady = useCallback[\s\S]*?\n  \}, \[runInstrumentedLoad\]\);/)?.[0] ?? "";
 const signedOutResetBlock =
   accountGraphLifecycle.match(/const onSignedOut = useCallback[\s\S]*?\n  \}, \[\]\);/)?.[0] ?? "";
 
 assert.ok(sessionReadyBlock, "session-ready account hydration block must remain discoverable");
-assert.ok(sessionFocusBlock, "session-focus account refresh block must remain discoverable");
+assert.ok(sessionResumeBlock, "session-resume account refresh block must remain discoverable");
 assert.ok(signedOutResetBlock, "signed-out reset block must remain discoverable");
 
 for (const [label, source] of [
   ["session ready", sessionReadyBlock],
-  ["session focus", sessionFocusBlock],
+  ["session resume", sessionResumeBlock],
 ] as const) {
   assert.doesNotMatch(
     source,
@@ -46,14 +46,14 @@ assert.match(
   "billing and self profile must remain in secondary account hydration",
 );
 assert.match(
-  sessionFocusBlock,
-  /"session_focus_ready_secondary"[\s\S]*actions\.loadBilling[\s\S]*"session_focus_ready_secondary"[\s\S]*actions\.loadCommunities/,
-  "focus refresh must retain billing and community freshness",
+  sessionResumeBlock,
+  /"session_resume_ready_secondary"[\s\S]*actions\.loadBilling[\s\S]*"session_resume_ready_secondary"[\s\S]*actions\.loadCommunities/,
+  "resume refresh must retain billing and community freshness",
 );
 assert.doesNotMatch(
-  sessionFocusBlock,
+  sessionResumeBlock,
   /workspace_ready|workspaceResults|workspaceFailureCount/,
-  "focus refresh telemetry must not preserve a fake Workspace-ready phase",
+  "resume refresh telemetry must not preserve a fake Workspace-ready phase",
 );
 
 assert.match(
@@ -62,7 +62,7 @@ assert.match(
   "session loss must still use the canonical browser and account reset owner",
 );
 assert.equal(
-  app.match(/resetWebSessionStateRef\.current = \(\) => resetWebSessionStateAfterSignOut\(\{/g)?.length,
+  app.match(/return resetWebSessionStateAfterSignOut\(\{/g)?.length,
   1,
   "all session-loss paths must share one canonical account reset binding",
 );

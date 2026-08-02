@@ -1,10 +1,11 @@
 import { useEffect, useRef, type MutableRefObject } from "react";
 import {
-  bindFocusRefresh,
   clearRefreshTimer,
+  refreshSessionIfNearExpiry,
   scheduleRefreshTimeout,
   scheduleRefreshTimer,
 } from "./authSessionRefreshTimer";
+import { useResumeEpochEffect } from "./useResumeEpochEffect";
 
 type SessionRef<TSession> = MutableRefObject<TSession | null>;
 type TimeoutRef = MutableRefObject<number | null>;
@@ -89,42 +90,44 @@ function useSessionAutoRefresh<TSession extends ExpiringSessionLike>(params: {
   ]);
 }
 
-function useSessionFocusRefresh<TSession extends ExpiringSessionLike>(params: {
+function useSessionResumeRefresh<TSession extends ExpiringSessionLike>(params: {
+  resumeEpoch: number;
   sessionRef: SessionRef<TSession>;
   refreshLocked: () => Promise<unknown>;
-  onFocusWithSession: (session: TSession) => void;
+  onResumeWithSession: (session: TSession) => void;
   thresholdSec?: number;
 }) {
   const refreshLockedRef = useLatestRef(params.refreshLocked);
-  const onFocusWithSessionRef = useLatestRef(params.onFocusWithSession);
+  const onResumeWithSessionRef = useLatestRef(params.onResumeWithSession);
 
-  useEffect(() => {
-    return bindFocusRefresh({
-      sessionRef: params.sessionRef,
+  useResumeEpochEffect(params.resumeEpoch, () => {
+    const current = params.sessionRef.current;
+    if (!current) return;
+    void refreshSessionIfNearExpiry({
+      session: current,
       refreshLocked: () => refreshLockedRef.current(),
       thresholdSec: params.thresholdSec ?? 60,
-      onFocusWithSession: (session) => {
-        onFocusWithSessionRef.current(session);
-      },
     });
-  }, [params.sessionRef, params.thresholdSec]);
+    onResumeWithSessionRef.current(current);
+  });
 }
 
 export function useAuthSessionLifecycle<TSession extends ExpiringSessionLike>(params: {
+  resumeEpoch: number;
   session: TSession | null;
   sessionRef: SessionRef<TSession>;
   refreshTimeoutRef: TimeoutRef;
   refreshLocked: () => Promise<unknown>;
   onMount: () => void | Promise<void>;
   onSessionAvailable: (session: TSession) => void;
-  onFocusWithSession: (session: TSession) => void;
+  onResumeWithSession: (session: TSession) => void;
   onSessionMissing?: () => void;
   onSessionCleared?: () => void;
   didJustSignInRef?: MutableRefObject<boolean>;
   onDidJustSignIn?: () => void;
   autoRefreshRetryDelayMs?: number;
   autoRefreshRetryIfNotExpired?: boolean;
-  focusThresholdSec?: number;
+  resumeThresholdSec?: number;
 }) {
   const onMountRef = useLatestRef(params.onMount);
   const onSessionAvailableRef = useLatestRef(params.onSessionAvailable);
@@ -150,11 +153,12 @@ export function useAuthSessionLifecycle<TSession extends ExpiringSessionLike>(pa
     retryIfNotExpired: params.autoRefreshRetryIfNotExpired,
   });
 
-  useSessionFocusRefresh({
+  useSessionResumeRefresh({
+    resumeEpoch: params.resumeEpoch,
     sessionRef: params.sessionRef,
     refreshLocked: params.refreshLocked,
-    onFocusWithSession: params.onFocusWithSession,
-    thresholdSec: params.focusThresholdSec ?? 60,
+    onResumeWithSession: params.onResumeWithSession,
+    thresholdSec: params.resumeThresholdSec ?? 60,
   });
 
   useEffect(() => {

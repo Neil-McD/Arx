@@ -7,6 +7,7 @@ import {
 } from "./cloudCommunityAttentionGateway";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { resolveAuthPresentationIdentity, type AuthSessionLike } from "./authSession";
+import { useResumeEpochEffect } from "./useResumeEpochEffect";
 
 type SessionLike = unknown;
 
@@ -25,6 +26,7 @@ type UseCommunityAttentionControllerArgs<SessionT extends SessionLike> = {
   session: SessionT | null;
   communityIds: string[];
   ensureSession?: EnsureSessionFn<SessionT>;
+  resumeEpoch: number;
   pollIntervalMs?: number;
 };
 
@@ -188,23 +190,10 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
     void refreshCommunityAttention();
   }, [normalizedCommunityIds, refreshCommunityAttention, sessionIdentity]);
 
-  useEffect(() => {
+  useResumeEpochEffect(args.resumeEpoch, () => {
     if (!sessionIdentity || normalizedCommunityIds.length === 0) return;
-    const handleWindowFocus = () => {
-      void refreshCommunityAttention();
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void refreshCommunityAttention();
-      }
-    };
-    window.addEventListener("focus", handleWindowFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.removeEventListener("focus", handleWindowFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [sessionIdentity, normalizedCommunityIds, refreshCommunityAttention]);
+    void refreshCommunityAttention();
+  });
 
   useEffect(() => {
     if (!sessionIdentity || normalizedCommunityIds.length === 0) return;
