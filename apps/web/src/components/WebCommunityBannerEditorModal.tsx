@@ -7,9 +7,12 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
-  clampCommunityBannerFocus,
   clampCommunityBannerZoom,
+  computeCommunityBannerLayout,
+  focusFromCommunityBannerLayoutPosition,
+  getCommunityBannerLayoutImageStyle,
 } from "../../../../shared/communityBannerUi";
+import type { FramedMediaLayout } from "../../../../shared/framedMediaUi";
 
 type WebCommunityBannerEditorModalProps = {
   isOpen: boolean;
@@ -24,67 +27,12 @@ type WebCommunityBannerEditorModalProps = {
   onClose: () => void;
 };
 
-type BannerLayout = {
-  viewportWidth: number;
-  viewportHeight: number;
-  renderWidth: number;
-  renderHeight: number;
-  left: number;
-  top: number;
-  minLeft: number;
-  minTop: number;
-};
-
 type DragState = {
   pointerId: number;
   startX: number;
   startY: number;
-  startLayout: BannerLayout;
+  startLayout: FramedMediaLayout;
 };
-
-function computeBannerLayout(args: {
-  viewportWidth: number;
-  viewportHeight: number;
-  naturalWidth: number;
-  naturalHeight: number;
-  focusX: number;
-  focusY: number;
-  zoom: number;
-}): BannerLayout | null {
-  const viewportWidth = Math.max(0, args.viewportWidth);
-  const viewportHeight = Math.max(0, args.viewportHeight);
-  const naturalWidth = Math.max(0, args.naturalWidth);
-  const naturalHeight = Math.max(0, args.naturalHeight);
-  if (!viewportWidth || !viewportHeight || !naturalWidth || !naturalHeight) {
-    return null;
-  }
-  const baseScale = Math.max(viewportWidth / naturalWidth, viewportHeight / naturalHeight);
-  const renderWidth = naturalWidth * baseScale * clampCommunityBannerZoom(args.zoom);
-  const renderHeight = naturalHeight * baseScale * clampCommunityBannerZoom(args.zoom);
-  const unclampedLeft = viewportWidth / 2 - clampCommunityBannerFocus(args.focusX) * renderWidth;
-  const unclampedTop = viewportHeight / 2 - clampCommunityBannerFocus(args.focusY) * renderHeight;
-  const minLeft = Math.min(0, viewportWidth - renderWidth);
-  const minTop = Math.min(0, viewportHeight - renderHeight);
-  const left = Math.max(minLeft, Math.min(0, unclampedLeft));
-  const top = Math.max(minTop, Math.min(0, unclampedTop));
-  return {
-    viewportWidth,
-    viewportHeight,
-    renderWidth,
-    renderHeight,
-    left,
-    top,
-    minLeft,
-    minTop,
-  };
-}
-
-function focusFromLeftTop(layout: BannerLayout, left: number, top: number) {
-  return {
-    focusX: clampCommunityBannerFocus((layout.viewportWidth / 2 - left) / layout.renderWidth),
-    focusY: clampCommunityBannerFocus((layout.viewportHeight / 2 - top) / layout.renderHeight),
-  };
-}
 
 export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorModalProps) {
   const {
@@ -110,10 +58,9 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
     const viewport = viewportRef.current;
     if (!viewport) return;
     const syncViewport = () => {
-      const rect = viewport.getBoundingClientRect();
       setViewportSize({
-        width: Math.max(0, Math.round(rect.width)),
-        height: Math.max(0, Math.round(rect.height)),
+        width: Math.max(0, viewport.clientWidth),
+        height: Math.max(0, viewport.clientHeight),
       });
     };
     syncViewport();
@@ -135,7 +82,7 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
 
   const layout = useMemo(
     () =>
-      computeBannerLayout({
+      computeCommunityBannerLayout({
         viewportWidth: viewportSize.width,
         viewportHeight: viewportSize.height,
         naturalWidth: naturalSize.width,
@@ -148,10 +95,14 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
   );
 
   const commitDraggedPosition = useCallback(
-    (dragLayout: BannerLayout, nextLeft: number, nextTop: number) => {
+    (dragLayout: FramedMediaLayout, nextLeft: number, nextTop: number) => {
       const clampedLeft = Math.max(dragLayout.minLeft, Math.min(0, nextLeft));
       const clampedTop = Math.max(dragLayout.minTop, Math.min(0, nextTop));
-      const nextFocus = focusFromLeftTop(dragLayout, clampedLeft, clampedTop);
+      const nextFocus = focusFromCommunityBannerLayoutPosition(
+        dragLayout,
+        clampedLeft,
+        clampedTop,
+      );
       onChangeFocusX(nextFocus.focusX);
       onChangeFocusY(nextFocus.focusY);
       onDirty();
@@ -232,16 +183,7 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
                     height: target.naturalHeight || target.height || 0,
                   });
                 }}
-                style={
-                  layout
-                    ? {
-                        width: `${layout.renderWidth}px`,
-                        height: `${layout.renderHeight}px`,
-                        left: `${layout.left}px`,
-                        top: `${layout.top}px`,
-                      }
-                    : undefined
-                }
+                style={layout ? getCommunityBannerLayoutImageStyle(layout) : undefined}
               />
             </div>
             <div className="create-community-hint banner-editor-hint">

@@ -30,6 +30,44 @@ describe("web shell refresh continuity contract", () => {
     expect(controller).toMatch(
       /deriveCommunityNavVisibility\(communityAccessCapabilities\)/,
     );
+    expect(controller).toContain(
+      "canPresentManageMembersActiveCommunity = communityNavVisibility.canManageMembers",
+    );
+    expect(controller).toContain(
+      "canManageMembersActiveCommunity = authoritativeCommunityNavVisibility.canManageMembers",
+    );
+  });
+
+  it("uses skeletons only for unresolved scoped shell data", () => {
+    const rail = read("apps/web/src/components/WebDesktopCommunityRail.tsx");
+    const nav = read("shared/CommunityNav.tsx");
+    const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
+    const directory = read("shared/useCommunityDirectoryController.ts");
+    const presentation = read("shared/shellLoadingPresentation.ts");
+
+    expect(presentation).toMatch(
+      /args\.isLoading[\s\S]*!args\.hasResolved[\s\S]*args\.contentCount[\s\S]*!args\.hasError/,
+    );
+    expect(rail).toContain("shouldShowFirstResolutionSkeleton");
+    expect(nav).toContain("shouldShowFirstResolutionSkeleton");
+    expect(contextPanel).toContain("shouldShowFirstResolutionSkeleton");
+    expect(directory).toContain(
+      "hasResolvedCommunityDirectoryMembers: isPresentationScoped",
+    );
+  });
+
+  it("retains scoped presence truth while distinguishing first resolution from refresh", () => {
+    const controller = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
+
+    expect(controller).toContain(
+      'status: "pending" | "resolved" | "refreshing" | "failed"',
+    );
+    expect(controller).toContain(
+      'status: previous.status === "pending" ? "pending" : "refreshing"',
+    );
+    expect(controller).toMatch(
+      /return activeCommunityPresenceSummaryState\.status/,
+    );
   });
 
   it("hydrates the account graph once per signed-in identity, not once per token", () => {
@@ -98,10 +136,13 @@ describe("web shell refresh continuity contract", () => {
 
   it("falls back instead of admitting cached broken avatar images", () => {
     const imageReady = read("shared/useImageUrlReady.ts");
-    const stableAvatar = read("shared/StableAvatar.tsx");
+    const stableFramedMedia = read("shared/StableFramedMedia.tsx");
 
     expect(imageReady).toContain("finish(image.naturalWidth > 0)");
-    expect(stableAvatar).toContain("failedImageUrl");
-    expect(stableAvatar).toContain("onError={() => setFailedImageUrl(normalizedImageUrl)}");
+    expect(stableFramedMedia).toContain("failedImageUrl");
+    expect(stableFramedMedia).toContain("onError={() => setFailedImageUrl(normalizedImageUrl)}");
+    expect(stableFramedMedia).toContain("imageRef.current");
+    expect(stableFramedMedia).toContain("image?.complete");
+    expect(stableFramedMedia).toContain("syncNaturalSizeFromImage(event.currentTarget)");
   });
 });

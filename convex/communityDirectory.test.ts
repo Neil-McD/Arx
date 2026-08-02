@@ -30,7 +30,7 @@ async function createUser(
   );
 }
 
-test("member directory uses stable opaque membership pagination and ignores presence ordering", async () => {
+test("member directory pages recent activity before never-active members without materializing the roster", async () => {
   const t = convexTest(schema, modules);
   const ownerId = await createUser(t, OWNER_SUBJECT, 100);
   const fixture = await t.run(async (ctx) => {
@@ -74,14 +74,16 @@ test("member directory uses stable opaque membership pagination and ignores pres
         createdAt: 1_000 + index,
         updatedAt: 1_000 + index,
       });
-      await ctx.db.insert("communityPresence", {
-        communityId,
-        userId,
-        lastSeenAt: 100_000 - index,
-        activeUntil: 200_000 - index,
-        createdAt: 100_000 - index,
-        updatedAt: 100_000 - index,
-      });
+      if (index < 27) {
+        await ctx.db.insert("communityPresence", {
+          communityId,
+          userId,
+          lastSeenAt: 100_000 + index,
+          activeUntil: 200_000 + index,
+          createdAt: 100_000 + index,
+          updatedAt: 100_000 + index,
+        });
+      }
       activeMembershipIds.push(String(membershipId));
       activeUserIds.push(userId);
     }
@@ -104,6 +106,14 @@ test("member directory uses stable opaque membership pagination and ignores pres
       createdAt: 1_015.5,
       updatedAt: 2_000,
     });
+    await ctx.db.insert("communityPresence", {
+      communityId,
+      userId: revokedUserId,
+      lastSeenAt: 950_000,
+      activeUntil: 1_000_000,
+      createdAt: 950_000,
+      updatedAt: 950_000,
+    });
 
     return {
       communityId,
@@ -122,30 +132,13 @@ test("member directory uses stable opaque membership pagination and ignores pres
       pageSize: 10,
     },
   );
-  expect(firstPage.page[0]?.id).toBe(`owner:${String(fixture.communityId)}`);
+  expect(firstPage.page.map((row) => row.id)).toEqual(
+    fixture.activeMembershipIds.slice(18, 27).reverse(),
+  );
+  expect(firstPage.page[0]?.last_active_at).toBe(new Date(100_026).toISOString());
   expect(firstPage.totalCount).toBe(31);
   expect(firstPage.continueCursor).toEqual(expect.any(String));
   expect(Number.isFinite(Number(firstPage.continueCursor))).toBe(false);
-
-  await t.run(async (ctx) => {
-    await ctx.db.patch(
-      (
-        await ctx.db
-          .query("communityPresence")
-          .withIndex("by_community_user", (q) =>
-            q
-              .eq("communityId", fixture.communityId)
-              .eq("userId", fixture.activeUserIds[29]),
-          )
-          .unique()
-      )!._id,
-      {
-        lastSeenAt: 900_000,
-        activeUntil: 1_000_000,
-        updatedAt: 900_000,
-      },
-    );
-  });
 
   const rows = [...firstPage.page];
   let cursor = firstPage.continueCursor;
@@ -166,12 +159,43 @@ test("member directory uses stable opaque membership pagination and ignores pres
   }
 
   expect(rows.map((row) => row.id)).toEqual([
+    ...fixture.activeMembershipIds.slice(0, 27).reverse(),
     `owner:${String(fixture.communityId)}`,
-    ...fixture.activeMembershipIds,
+    ...fixture.activeMembershipIds.slice(27),
   ]);
   expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
   expect(rows.some((row) => row.id === fixture.revokedMembershipId)).toBe(false);
-  expect(rows.every((row) => !("last_active_at" in row))).toBe(true);
+  expect(rows.slice(0, 27).every((row) => Boolean(row.last_active_at))).toBe(true);
+  expect(rows.slice(27).every((row) => row.last_active_at === null)).toBe(true);
+
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityPresence", {
+      communityId: fixture.communityId,
+      userId: fixture.activeUserIds[29],
+      lastSeenAt: 900_000,
+      activeUntil: 1_000_000,
+      createdAt: 900_000,
+      updatedAt: 900_000,
+    });
+  });
+  const refreshedFirstPage = await asOwner.query(
+    api.communityDirectory.listCommunityDirectoryPage,
+    {
+      communityId: fixture.communityId,
+      cursor: null,
+      pageSize: 10,
+    },
+  );
+  expect(refreshedFirstPage.page[0]?.id).toBe(fixture.activeMembershipIds[29]);
+  expect(refreshedFirstPage.page[0]?.last_active_at).toBe(new Date(900_000).toISOString());
+
+  await expect(
+    asOwner.query(api.communityDirectory.listCommunityDirectoryPage, {
+      communityId: fixture.communityId,
+      cursor: "10",
+      pageSize: 10,
+    }),
+  ).rejects.toThrow("community_directory_cursor_invalid");
 });
 
 test("member directory fails closed and never scans to invent a missing durable count", async () => {

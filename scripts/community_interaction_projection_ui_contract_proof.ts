@@ -527,7 +527,7 @@ assert.match(
 );
 assert.match(
   app,
-  /interactionProjection:\s*\{[\s\S]*communityMemberCount: communityDirectoryMemberCount,[\s\S]*communityMembers: communityDirectoryMembers,[\s\S]*communityMembersHasMore: communityDirectoryMembersHasMore,[\s\S]*isLoadingCommunityMembers: isLoadingCommunityDirectoryMembers,[\s\S]*isLoadingMoreCommunityMembers: isLoadingMoreCommunityDirectoryMembers,[\s\S]*communityMembersLoadError: communityDirectoryMembersLoadError,[\s\S]*loadMoreCommunityDirectoryMembers/,
+  /interactionProjection:\s*\{[\s\S]*communityMemberCount: communityDirectoryMemberCount,[\s\S]*communityMembers: communityDirectoryMembers,[\s\S]*hasResolvedCommunityMembers: hasResolvedCommunityDirectoryMembers,[\s\S]*communityMembersHasMore: communityDirectoryMembersHasMore,[\s\S]*isLoadingCommunityMembers: isLoadingCommunityDirectoryMembers,[\s\S]*isLoadingMoreCommunityMembers: isLoadingMoreCommunityDirectoryMembers,[\s\S]*communityMembersLoadError: communityDirectoryMembersLoadError,[\s\S]*loadMoreCommunityDirectoryMembers/,
   "App should pass directory count/loading/pagination state into the chat right rail",
 );
 assert.doesNotMatch(
@@ -537,18 +537,28 @@ assert.doesNotMatch(
 );
 assert.match(
   projection,
-  /communityMemberCount\?: number \| null;[\s\S]*communityMembers\?: CommunityRailMember\[\] \| null;[\s\S]*communityMembersHasMore\?: boolean;[\s\S]*isLoadingCommunityMembers\?: boolean;[\s\S]*isLoadingMoreCommunityMembers\?: boolean;[\s\S]*communityMembersLoadError\?: string \| null;[\s\S]*onLoadMoreCommunityMembers\?: \(\) => void;/,
+  /communityMemberCount\?: number \| null;[\s\S]*communityMembers\?: CommunityRailMember\[\] \| null;[\s\S]*hasResolvedCommunityMembers\?: boolean;[\s\S]*communityMembersHasMore\?: boolean;[\s\S]*isLoadingCommunityMembers\?: boolean;[\s\S]*isLoadingMoreCommunityMembers\?: boolean;[\s\S]*communityMembersLoadError\?: string \| null;[\s\S]*onLoadMoreCommunityMembers\?: \(\) => void;/,
   "interaction projection should model roster count/loading/pagination state for the right rail",
 );
 assert.match(
   projection,
-  /memberCount=\{props\.communityMemberCount \?\? props\.presenceSummary\?\.member_count \?\? null\}[\s\S]*membersHasMore=\{props\.communityMembersHasMore\}[\s\S]*isLoadingMembers=\{props\.isLoadingCommunityMembers\}[\s\S]*isLoadingMoreMembers=\{props\.isLoadingMoreCommunityMembers\}[\s\S]*membersLoadError=\{props\.communityMembersLoadError\}[\s\S]*onLoadMoreMembers=\{props\.onLoadMoreCommunityMembers\}/,
+  /memberCount=\{props\.communityMemberCount \?\? props\.presenceSummary\?\.member_count \?\? null\}[\s\S]*hasResolvedMembers=\{props\.hasResolvedCommunityMembers\}[\s\S]*membersHasMore=\{props\.communityMembersHasMore\}[\s\S]*isLoadingMembers=\{props\.isLoadingCommunityMembers\}[\s\S]*isLoadingMoreMembers=\{props\.isLoadingMoreCommunityMembers\}[\s\S]*membersLoadError=\{props\.communityMembersLoadError\}[\s\S]*onLoadMoreMembers=\{props\.onLoadMoreCommunityMembers\}/,
   "interaction projection should pass roster state through to the context panel",
 );
 assert.match(
   contextPanel,
-  /Members — \{memberCountLabel\}/,
+  /showInitialMembersSkeleton[\s\S]*<> — \{memberCountLabel\}<\/\>/,
   "context panel should label the member population from a total-count label",
+);
+assert.match(
+  contextPanel,
+  /isLoadingPresence[\s\S]*community-context-facepile-skeleton[\s\S]*community-context-memory-skeleton[\s\S]*community-context-members-skeleton/,
+  "context panel should expose independent geometry-matched first-resolution skeletons",
+);
+assert.doesNotMatch(
+  contextPanel,
+  /Loading members\.\.\.|Loading memory\.\.\./,
+  "right-rail first resolution should not collapse to loading text",
 );
 assert.match(
   contextPanel,
@@ -602,13 +612,13 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /canManageMembers\?: boolean;[\s\S]*onOpenMemberSettings\?: \(member: CommunityRailMember\) => void;/,
+  /canManageMembers\?: boolean;[\s\S]*canPresentManageMembers\?: boolean;[\s\S]*onOpenMemberSettings\?: \(member: CommunityRailMember\) => void;/,
   "context panel should model an optional manager-only member settings affordance",
 );
 assert.match(
   contextPanel,
-  /const canOpenSettings = Boolean\([\s\S]*props\.canManageMembers[\s\S]*props\.onOpenMemberSettings[\s\S]*!isOwnerMember[\s\S]*!String\(member\.id \?\? ""\)\.startsWith\("owner:"\)/,
-  "context panel should hide member settings for normal viewers and owner rows",
+  /const canShowSettings = Boolean\([\s\S]*props\.canPresentManageMembers[\s\S]*props\.onOpenMemberSettings[\s\S]*!isOwnerMember[\s\S]*!String\(member\.id \?\? ""\)\.startsWith\("owner:"\)[\s\S]*const canOpenSettings = Boolean\(canShowSettings && props\.canManageMembers\)/,
+  "context panel should retain manager presentation while requiring current authority to open settings",
 );
 assert.match(
   contextPanel,
@@ -677,13 +687,13 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /const isFreeAdmissionMode = entryPolicy === "open" \|\| entryPolicy === "approval";[\s\S]*const canShowFreeAccessSwitch = Boolean\([\s\S]*isFreeAdmissionMode[\s\S]*props\.canSetFreeAccessMode[\s\S]*props\.onSetFreeAccessMode/,
-  "context panel should hide the Auto-join switch for paid communities and unauthorized viewers",
+  /const isFreeAdmissionMode = entryPolicy === "open" \|\| entryPolicy === "approval";[\s\S]*const canShowFreeAccessSwitch = Boolean\([\s\S]*isFreeAdmissionMode[\s\S]*props\.canPresentManageMembers[\s\S]*props\.onSetFreeAccessMode/,
+  "context panel should retain the Auto-join presentation for managers while access refreshes",
 );
 assert.match(
   contextPanel,
-  /role="switch"[\s\S]*aria-checked=\{autoJoinEnabled\}[\s\S]*onClick=\{handleToggleFreeAccessMode\}[\s\S]*Auto-join/,
-  "context panel should render the free-access mode as an accessible Auto-join switch",
+  /role="switch"[\s\S]*aria-checked=\{autoJoinEnabled\}[\s\S]*disabled=\{!props\.canSetFreeAccessMode \|\| props\.isSettingFreeAccessMode\}[\s\S]*onClick=\{handleToggleFreeAccessMode\}[\s\S]*Auto-join/,
+  "context panel should render the free-access mode as an accessible switch gated by current authority",
 );
 assert.match(
   contextPanel,
@@ -692,8 +702,13 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /const canShowJoinRequests = Boolean\([\s\S]*props\.canReviewJoinRequests[\s\S]*props\.joinReviewMode === "free_approval"[\s\S]*pendingJoinRequests\.length > 0/,
-  "context panel should only pop the request affordance for free approval queues the viewer can review",
+  /const canShowJoinRequests = Boolean\([\s\S]*props\.canPresentManageMembers[\s\S]*props\.joinReviewMode === "free_approval"[\s\S]*pendingJoinRequests\.length > 0/,
+  "context panel should retain the free-approval request affordance for presented managers",
+);
+assert.match(
+  contextPanel,
+  /disabled=\{!props\.canReviewJoinRequests \|\| isDeciding\}/,
+  "join-request mutations should remain gated by current review authority",
 );
 assert.match(
   contextPanel,
@@ -829,10 +844,15 @@ assert.match(
   /client\.query\("communityDirectory:listCommunityDirectoryPage" as any/,
   "directory gateway should read chat rail members through the member-facing directory query",
 );
+assert.match(
+  directoryGateway,
+  /last_active_at\?: string \| null/,
+  "directory pages should carry durable member-gated activity timestamps",
+);
 assert.doesNotMatch(
   directoryGateway,
-  /last_active_at|countCommunityDirectoryMembers/,
-  "directory pages must not duplicate live presence or expose a separate recount query",
+  /countCommunityDirectoryMembers/,
+  "directory pages should not restore a separate recount query",
 );
 assert.doesNotMatch(
   directoryGateway,
@@ -845,29 +865,44 @@ assert.match(
   "directory controller should drive count and pagination state from directory pages",
 );
 assert.match(
+  directoryController,
+  /dedupeCommunityDirectoryRows[\s\S]*dedupeCommunityDirectoryRows\(\[\.\.\.previous, \.\.\.nextRows\]\)/,
+  "directory controller should defensively deduplicate mutable activity pages",
+);
+assert.match(
+  directoryController,
+  /message\.includes\("community_directory_cursor_invalid"\)[\s\S]*cursor: null[\s\S]*setCommunityDirectoryMembers\(dedupeCommunityDirectoryRows\(page\.rows\)\)/,
+  "directory controller should recover stale rolling-release cursors from a fresh first page",
+);
+assert.match(
   communityDirectory,
   /resolveCommunityDirectoryContext[\s\S]*requireCommunityChatAccess[\s\S]*export const listCommunityDirectoryPage = query/,
   "directory backend should be gated by community chat access",
 );
 assert.match(
-  communityDirectoryPageQuery,
-  /by_community_createdAt[\s\S]*\.order\("asc"\)[\s\S]*\.paginate\(\{[\s\S]*cursor: args\.cursor \?\? null[\s\S]*maximumRowsRead:/,
-  "directory pages should use the durable membership index and an opaque bounded cursor",
+  communityDirectory,
+  /COMMUNITY_DIRECTORY_CURSOR_PREFIX[\s\S]*decodeCommunityDirectoryCursor[\s\S]*community_directory_cursor_invalid/,
+  "directory pages should use a versioned validated opaque cursor",
 );
 assert.match(
   communityDirectoryPageQuery,
-  /const ownerRows = isFirstPage[\s\S]*communityMembershipRowIsActive[\s\S]*String\(row\.userId\) !== String\(community\.ownerId\)[\s\S]*page: \[\.\.\.ownerRows, \.\.\.memberRows\]/,
-  "directory pages should pin the owner once and filter inactive or duplicate owner membership rows",
+  /by_community_lastSeenAt[\s\S]*\.order\("desc"\)[\s\S]*\.paginate\(\{[\s\S]*cursor: cursor\.cursor[\s\S]*maximumRowsRead:/,
+  "directory activity pages should use the indexed recent-presence order with bounded reads",
+);
+assert.match(
+  communityDirectory,
+  /listCommunityDirectoryInactivePage[\s\S]*by_community_createdAt[\s\S]*\.order\("asc"\)[\s\S]*lastSeenAt !== null\) return null/,
+  "directory pagination should append only never-active canonical memberships after activity rows",
 );
 assert.match(
   communityDirectoryPageQuery,
-  /totalCount: readCommunityActiveMemberCount\(community\)[\s\S]*continueCursor: rawPage\.isDone \? null : rawPage\.continueCursor/,
-  "directory pages should consume the durable member count and preserve Convex cursor semantics",
+  /totalCount: readCommunityActiveMemberCount\(community\)[\s\S]*phase: "activity"[\s\S]*phase: "inactive"/,
+  "directory pages should preserve the durable count while transitioning cursor phases",
 );
 assert.doesNotMatch(
   communityDirectoryPageQuery,
-  /communityPresence|last_active_at|\.collect\(\)|normalizeDirectoryCursor|orderedCandidates|listCanonicalCommunityMemberMembershipRows|countCanonicalCommunityMembersFromRows/,
-  "directory pagination must not materialize presence, memberships, or an offset-sorted shadow roster",
+  /\.collect\(\)|normalizeDirectoryCursor|orderedCandidates|listCanonicalCommunityMemberMembershipRows|countCanonicalCommunityMembersFromRows/,
+  "directory pagination must not materialize the roster or restore numeric offset sorting",
 );
 assert.match(
   memberPresenceSummaryQuery,
@@ -889,10 +924,10 @@ assert.doesNotMatch(
   /last_active_at|online_last_active_at_by_user_id|onlineLastActiveAtByUserId/,
   "public community funnel payloads must not expose per-member last active timestamps",
 );
-assert.doesNotMatch(
+assert.match(
   contextPanel,
-  /last_active_at/,
-  "context panel member rows must not carry a second offline activity source",
+  /last_active_at\?: string \| null[\s\S]*compareMembersByActivity/,
+  "context panel member rows should carry and rank by durable activity",
 );
 assert.match(
   contextPanel,
@@ -901,8 +936,8 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /observedActivity\.scopeKey === activityScopeKey[\s\S]*setObservedActivity\(\{ scopeKey: activityScopeKey, byUserId: \{\} \}\)[\s\S]*props\.onlineLastActiveAtByUserId[\s\S]*formatMemberActivityLabel\([\s\S]*latestObservedLastActiveAt,[\s\S]*community-context-member-activity/,
-  "context panel should render activity only from the scoped live-presence projection",
+  /observedActivity\.scopeKey === activityScopeKey[\s\S]*setObservedActivity\(\{ scopeKey: activityScopeKey, byUserId: \{\} \}\)[\s\S]*props\.onlineLastActiveAtByUserId[\s\S]*formatMemberActivityLabel\([\s\S]*latestObservedLastActiveAt \?\? member\.last_active_at[\s\S]*community-context-member-activity/,
+  "context panel should merge scoped live presence over the durable activity baseline",
 );
 assert.match(
   projection,

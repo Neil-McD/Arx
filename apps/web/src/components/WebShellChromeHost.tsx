@@ -60,6 +60,9 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
           communityTab={props.communityShell.communityTab}
           tabIndicators={props.communityShell.communityTabIndicators}
           channels={props.communityShell.communityChannels}
+          hasResolvedChannels={props.communityShell.hasResolvedCommunityChannels}
+          isLoadingChannels={props.communityShell.isLoadingCommunityChannels}
+          isResolvingInitialAccess={props.communityShell.isResolvingInitialCommunityAccess}
           selectedChannelSlug={props.communityShell.selectedCommunityChannelSlug}
           channelIndicators={props.communityShell.communityChannelIndicators}
           onSelectChannel={props.communityShell.onSelectCommunityChannel}
@@ -73,6 +76,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
           canViewActiveCommunitySettings={props.communityShell.canViewActiveCommunitySettings}
           canViewActiveCommunityPolynet={props.communityShell.canViewActiveCommunityPolynet}
           canManageMembersActiveCommunity={props.communityShell.canManageMembersActiveCommunity}
+          canPresentManageMembersActiveCommunity={props.communityShell.canPresentManageMembersActiveCommunity}
           canViewActiveCommunityAnalytics={props.communityShell.canViewActiveCommunityAnalytics}
           lockedTabs={props.communityShell.lockedCommunityNavTabs ?? undefined}
           buttonType="button"

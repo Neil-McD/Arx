@@ -69,7 +69,7 @@ const publicStatsMapper = sectionBetween(
 const presenceEffect = sectionBetween(
   controller,
   "if (!sessionIdentity || !params.activeCommunityId) {\n      setActiveCommunityPresenceSummaryState(null);",
-  "useEffect(() => {\n    setActiveCommunityPresenceSummaryState(null);",
+  "const scopedCommunityAccessResolution = useMemo(",
 );
 const directoryPageQuery = communityDirectory.slice(
   communityDirectory.indexOf("export const listCommunityDirectoryPage"),
@@ -179,6 +179,11 @@ assert.equal(
   1,
   "community presence must have exactly one interval owner",
 );
+assert.match(
+  presenceEffect,
+  /status: "pending"[\s\S]*status: previous\.status === "pending" \? "pending" : "refreshing"[\s\S]*status: "resolved"[\s\S]*status: "failed"/,
+  "presence presentation must distinguish first resolution, retained refresh, success, and failure",
+);
 
 assert.match(
   directMessageEmails,
@@ -193,18 +198,23 @@ assert.doesNotMatch(
 
 assert.match(
   directoryPageQuery,
-  /by_community_createdAt[\s\S]*\.order\("asc"\)[\s\S]*\.paginate\(\{[\s\S]*maximumRowsRead:[\s\S]*readCommunityActiveMemberCount\(community\)/,
-  "the member directory must page the durable roster through one bounded canonical cursor",
+  /by_community_lastSeenAt[\s\S]*\.order\("desc"\)[\s\S]*\.paginate\(\{[\s\S]*maximumRowsRead:[\s\S]*readCommunityActiveMemberCount\(community\)/,
+  "the member directory must page the durable activity index through a bounded cursor",
 );
 assert.doesNotMatch(
   directoryPageQuery,
-  /communityPresence|by_community_lastSeenAt|last_active_at|\.collect\(\)|normalizeDirectoryCursor|orderedCandidates/,
-  "presence must remain an overlay and must never own directory ordering or pagination",
+  /\.collect\(\)|normalizeDirectoryCursor|orderedCandidates/,
+  "activity-ranked directory pagination must not collect or restore numeric offsets",
+);
+assert.match(
+  directoryGateway,
+  /last_active_at\?: string \| null/,
+  "the member-gated directory gateway should expose durable last-active evidence",
 );
 assert.doesNotMatch(
   directoryGateway,
-  /last_active_at|countCommunityDirectoryMembers/,
-  "the directory gateway must not expose a duplicate activity history or recount surface",
+  /countCommunityDirectoryMembers/,
+  "the directory gateway must not expose a duplicate recount surface",
 );
 
 assert.match(
