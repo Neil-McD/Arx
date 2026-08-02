@@ -49,8 +49,13 @@ export function useWebFounderInferenceController(params: {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isActivationPromptDismissed, setIsActivationPromptDismissed] = useState(false);
   const ensureSessionRef = useRef(params.ensureSession);
   ensureSessionRef.current = params.ensureSession;
+
+  useEffect(() => {
+    setIsActivationPromptDismissed(false);
+  }, [params.session?.user.id]);
 
   const refresh = useCallback(async (session?: AuthSession | null): Promise<void> => {
     const usableSession = await ensureSessionRef.current(session ?? undefined);
@@ -112,5 +117,16 @@ export function useWebFounderInferenceController(params: {
     }
   }, [params.session, refresh]);
 
-  return { status, isLoading, isSaving, error, success, activate, suspend, refresh };
+  return {
+    status,
+    isLoading,
+    isSaving,
+    error,
+    success,
+    isActivationPromptDismissed,
+    dismissActivationPrompt: () => setIsActivationPromptDismissed(true),
+    activate,
+    suspend,
+    refresh,
+  };
 }

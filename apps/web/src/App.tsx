@@ -195,7 +195,7 @@ import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import { WebAppCompositionRoot } from "./components/WebAppCompositionRoot";
 import { useWebDirectMessagesController } from "./controllers/useWebDirectMessagesController";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
-import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
+import { buildWebGlobalOverlayHostProps, shouldOpenFounderInferencePrompt } from "./controllers/buildWebGlobalOverlayHostProps";
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
 import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeHostProps";
 import type { WebMemberAgentDockHandle } from "./components/WebMemberAgentDock";
@@ -2692,6 +2692,13 @@ export default function App() {
       onCheckout: founderBilling.startCheckout,
       onManage: founderBilling.openPortal,
       onClose: founderBilling.dismissFundingPrompt,
+    },
+    founderInferencePromptProps: {
+      isOpen: shouldOpenFounderInferencePrompt({ session, founderInference, founderBilling }),
+      communities: founderInference.status.communities,
+      keyConnected: founderInference.status.key_connected,
+      onContinue: () => { founderInference.dismissActivationPrompt(); openGlobalSettings("account"); },
+      onClose: founderInference.dismissActivationPrompt,
     },
     appToast,
   });

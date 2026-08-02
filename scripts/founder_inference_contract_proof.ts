@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { shouldOpenFounderInferencePrompt } from "../apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts";
 
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -33,6 +34,10 @@ const billingSettings = read("apps/web/src/components/WebBillingSettingsSection.
 const billingGateway = read("shared/cloudFounderBillingGateway.ts");
 const billingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
 const fundingPrompt = read("apps/web/src/components/WebFounderFundingPrompt.tsx");
+const inferenceController = read("apps/web/src/controllers/useWebFounderInferenceController.ts");
+const inferencePrompt = read("apps/web/src/components/WebFounderInferencePrompt.tsx");
+const globalOverlayHost = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
+const globalOverlayPropsBuilder = read("apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts");
 const createController = read("shared/useCommunityCreateController.ts");
 const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
 const webApp = read("apps/web/src/App.tsx");
@@ -211,7 +216,56 @@ assert.match(billingController, /startCheckoutAfterCommunityCreated[\s\S]*await 
 assert.match(fundingPrompt, /Each community is \$79\/month\./);
 assert.doesNotMatch(fundingPrompt, /includes \$20 of GPT 5\.6 Luna usage/);
 assert.doesNotMatch(fundingPrompt, /Payment unlocks community AI and public launch/);
-assert.match(fundingPrompt, /Continue setup for now/);
+assert.match(fundingPrompt, /Not now/);
+assert.doesNotMatch(fundingPrompt, /Continue setup for now/);
+assert.match(inferencePrompt, /Connect your OpenAI API key/);
+assert.match(inferencePrompt, /Your key powers AI for your existing communities/);
+assert.match(inferencePrompt, /Activate community AI/);
+assert.match(inferencePrompt, /Connect API key/);
+assert.match(inferencePrompt, /Not now/);
+assert.doesNotMatch(inferencePrompt, /\$79/);
+assert.match(inferenceController, /isActivationPromptDismissed/);
+assert.match(inferenceController, /dismissActivationPrompt/);
+assert.match(globalOverlayHost, /WebFounderInferencePrompt/);
+assert.match(
+  globalOverlayPropsBuilder,
+  /fundingAttentionCommunities\.length === 0[\s\S]*status\.status === "approved"/,
+);
+assert.match(webApp, /shouldOpenFounderInferencePrompt\(\{ session, founderInference, founderBilling \}\)/);
+assert.match(webApp, /founderInference\.dismissActivationPrompt\(\);[\s\S]*openGlobalSettings\("account"\)/);
+const activationPromptReady = {
+  session: { user: { id: "founder" } },
+  founderInference: {
+    isLoading: false,
+    isActivationPromptDismissed: false,
+    status: { eligible: true, status: "approved", communities: [{ id: "legacy" }] },
+  },
+  founderBilling: {
+    isLoading: false,
+    overview: { communities: [{ id: "legacy" }] },
+    fundingAttentionCommunities: [],
+  },
+};
+assert.equal(shouldOpenFounderInferencePrompt(activationPromptReady), true);
+assert.equal(shouldOpenFounderInferencePrompt({
+  ...activationPromptReady,
+  founderBilling: { ...activationPromptReady.founderBilling, fundingAttentionCommunities: [{}] },
+}), false);
+assert.equal(shouldOpenFounderInferencePrompt({
+  ...activationPromptReady,
+  founderInference: {
+    ...activationPromptReady.founderInference,
+    status: { ...activationPromptReady.founderInference.status, status: "active" },
+  },
+}), false);
+assert.equal(shouldOpenFounderInferencePrompt({
+  ...activationPromptReady,
+  founderInference: { ...activationPromptReady.founderInference, isActivationPromptDismissed: true },
+}), false);
+assert.equal(shouldOpenFounderInferencePrompt({
+  ...activationPromptReady,
+  founderBilling: { ...activationPromptReady.founderBilling, overview: { communities: [] } },
+}), false);
 assert.match(createController, /visibility: "unlisted"/);
 assert.doesNotMatch(createModal, /option value="published"/);
 assert.match(createModal, /Create and continue to payment/);
