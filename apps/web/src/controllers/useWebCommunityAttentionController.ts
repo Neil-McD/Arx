@@ -50,6 +50,7 @@ type UseWebCommunityAttentionControllerParams = {
   communityIds: string[];
   communityTab: CommunityTab;
   ensureSession: EnsureAuthSession;
+  resumeEpoch: number;
   session: AuthSession | null;
   chat: {
     hasResolved: boolean;
@@ -101,6 +102,7 @@ export function useWebCommunityAttentionModel(
     events,
     interactions,
     resources,
+    resumeEpoch,
     session,
   } = params;
   const isCommunityChatActive =
@@ -126,6 +128,7 @@ export function useWebCommunityAttentionModel(
     session,
     ensureSession,
     communityIds,
+    resumeEpoch,
   });
 
   const [chatDividerBoundary, setChatDividerBoundary] = useState<number | null>(null);

@@ -6,6 +6,7 @@ import type {
 } from "../../../../shared/communityTypes";
 import { mergeUserProfileEntry } from "../../../../shared/userProfileMerge";
 import { shortId } from "../../../../shared/chatUi";
+import { useResumeEpochEffect } from "../../../../shared/useResumeEpochEffect";
 import type { AuthSession } from "../auth";
 
 type ActorRoot = {
@@ -24,6 +25,7 @@ type ActorReply = {
 type UseWebCommunityProfileHydrationControllerParams = {
   activePage: string;
   canonicalSessionUserId: string | null;
+  resumeEpoch: number;
   session: AuthSession | null;
   cloudProfile: UserProfileDetail | null;
   profilesByUserId: Record<string, UserProfile>;
@@ -166,39 +168,25 @@ export function useWebCommunityProfileHydrationController(
 
   useEffect(() => {
     if (!params.canonicalSessionUserId || !sessionRef.current || visibleProfileIds.length === 0) return;
-    const hydrate = () => {
-      const currentSession = sessionRef.current;
-      if (!currentSession) return;
-      void params.loadUserProfiles(visibleProfileIds, currentSession);
-      void params.loadSelfProfile(currentSession);
-    };
-    const refresh = () => {
-      const currentSession = sessionRef.current;
-      if (!currentSession) return;
-      void params.loadUserProfiles(visibleProfileIds, currentSession, {
-        force: true,
-      });
-      void params.loadSelfProfile(currentSession);
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    hydrate();
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibilityChange,
-      );
-    };
+    const currentSession = sessionRef.current;
+    if (!currentSession) return;
+    void params.loadUserProfiles(visibleProfileIds, currentSession);
+    void params.loadSelfProfile(currentSession);
   }, [
     params.loadSelfProfile,
     params.loadUserProfiles,
     params.canonicalSessionUserId,
     visibleProfileIds,
   ]);
+
+  useResumeEpochEffect(params.resumeEpoch, () => {
+    const currentSession = sessionRef.current;
+    if (!params.canonicalSessionUserId || !currentSession || visibleProfileIds.length === 0) return;
+    void params.loadUserProfiles(visibleProfileIds, currentSession, {
+      force: true,
+    });
+    void params.loadSelfProfile(currentSession);
+  });
 
   return { profilesByUserId, displayName };
 }

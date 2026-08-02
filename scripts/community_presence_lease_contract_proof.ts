@@ -68,7 +68,7 @@ const publicStatsMapper = sectionBetween(
 );
 const presenceEffect = sectionBetween(
   controller,
-  "if (!sessionIdentity || !params.activeCommunityId) {\n      setActiveCommunityPresenceSummaryState(null);",
+  "let inFlight = false;",
   "useEffect(() => {\n    setActiveCommunityPresenceSummaryState(null);",
 );
 const directoryPageQuery = communityDirectory.slice(
@@ -166,8 +166,8 @@ assert.doesNotMatch(
 );
 assert.match(
   presenceEffect,
-  /let inFlight = false[\s\S]*refreshCloudCommunityPresence[\s\S]*finally \{[\s\S]*inFlight = false[\s\S]*COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS[\s\S]*visibilitychange/,
-  "the visible-tab scheduler must prevent overlapping refreshes and resume immediately",
+  /let inFlight = false[\s\S]*refreshCloudCommunityPresence[\s\S]*finally \{[\s\S]*inFlight = false[\s\S]*COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS[\s\S]*useResumeEpochEffect\(params\.resumeEpoch[\s\S]*refreshPresenceRef\.current/,
+  "the visible-tab scheduler must prevent overlapping refreshes and consume the canonical resume epoch",
 );
 assert.doesNotMatch(
   presenceEffect,
