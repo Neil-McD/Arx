@@ -40,7 +40,6 @@ export function useWebFounderBillingController(params: {
   const [isLoading, setIsLoading] = useState(false);
   const [actionCommunityId, setActionCommunityId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isFundingPromptDismissed, setIsFundingPromptDismissed] = useState(false);
   const ensureSessionRef = useRef(params.ensureSession);
   ensureSessionRef.current = params.ensureSession;
 
@@ -69,10 +68,8 @@ export function useWebFounderBillingController(params: {
       setIsLoading(false);
       setActionCommunityId(null);
       setError(null);
-      setIsFundingPromptDismissed(false);
       return;
     }
-    setIsFundingPromptDismissed(false);
     void refresh(params.session);
   }, [params.session?.user.id, refresh]);
 
@@ -180,8 +177,6 @@ export function useWebFounderBillingController(params: {
           "ended",
         ].includes(community.status),
     ),
-    isFundingPromptDismissed,
-    dismissFundingPrompt: () => setIsFundingPromptDismissed(true),
     refresh,
     startCheckout,
     startCheckoutAfterCommunityCreated,

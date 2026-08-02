@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { shouldOpenFounderInferencePrompt } from "../apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts";
 
@@ -33,7 +33,6 @@ const settings = read("apps/web/src/components/WebAccountSettingsSection.tsx");
 const billingSettings = read("apps/web/src/components/WebBillingSettingsSection.tsx");
 const billingGateway = read("shared/cloudFounderBillingGateway.ts");
 const billingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
-const fundingPrompt = read("apps/web/src/components/WebFounderFundingPrompt.tsx");
 const inferenceController = read("apps/web/src/controllers/useWebFounderInferenceController.ts");
 const inferencePrompt = read("apps/web/src/components/WebFounderInferencePrompt.tsx");
 const globalOverlayHost = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
@@ -254,11 +253,8 @@ assert.match(billingController, /founder_community/);
 assert.match(billingController, /scrubCurrentRouteSearchParams/);
 assert.match(billingController, /fundingAttentionCommunities/);
 assert.match(billingController, /startCheckoutAfterCommunityCreated[\s\S]*await refresh\(\);[\s\S]*await startCheckout\(communityId\)/);
-assert.match(fundingPrompt, /Each community is \$79\/month\./);
-assert.doesNotMatch(fundingPrompt, /includes \$20 of GPT 5\.6 Luna usage/);
-assert.doesNotMatch(fundingPrompt, /Payment unlocks community AI and public launch/);
-assert.match(fundingPrompt, /Not now/);
-assert.doesNotMatch(fundingPrompt, /Continue setup for now/);
+assert.equal(existsSync(join(root, "apps/web/src/components/WebFounderFundingPrompt.tsx")), false);
+assert.doesNotMatch(billingController, /isFundingPromptDismissed|dismissFundingPrompt/);
 assert.match(inferencePrompt, /Connect your OpenAI API key/);
 assert.match(inferencePrompt, /Your key powers AI for your existing communities/);
 assert.match(inferencePrompt, /Activate community AI/);
@@ -269,6 +265,7 @@ assert.match(inferenceController, /isActivationPromptDismissed/);
 assert.match(inferenceController, /dismissActivationPrompt/);
 assert.doesNotMatch(inferenceController, /GPT 5\.6|\bLuna\b|model_id/i);
 assert.match(globalOverlayHost, /WebFounderInferencePrompt/);
+assert.doesNotMatch(globalOverlayHost, /WebFounderFundingPrompt|founderFundingPromptProps/);
 assert.match(
   globalOverlayPropsBuilder,
   /fundingAttentionCommunities\.length === 0[\s\S]*status\.status === "approved"/,

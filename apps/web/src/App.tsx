@@ -2611,22 +2611,8 @@ export default function App() {
   }
 
   const globalOverlayHostProps = buildWebGlobalOverlayHostProps({
-    session: session,
     providerConnectionModalHostProps: providerConnectionUi.modalHostProps,
     communityModalHostProps: communityUi.modalHostProps,
-    founderFundingPromptProps: {
-      isOpen:
-        Boolean(session) &&
-        !founderBilling.isLoading &&
-        !founderBilling.isFundingPromptDismissed &&
-        founderBilling.fundingAttentionCommunities.length > 0,
-      communities: founderBilling.fundingAttentionCommunities,
-      actionCommunityId: founderBilling.actionCommunityId,
-      error: founderBilling.error,
-      onCheckout: founderBilling.startCheckout,
-      onManage: founderBilling.openPortal,
-      onClose: founderBilling.dismissFundingPrompt,
-    },
     founderInferencePromptProps: {
       isOpen: shouldOpenFounderInferencePrompt({ session, founderInference, founderBilling }),
       communities: founderInference.status.communities,

@@ -1,7 +1,6 @@
 import type { ComponentProps } from "react";
 import { WebCommunityModalHost } from "./WebCommunityModalHost";
 import { WebProviderConnectionModalHost } from "./WebProviderConnectionModalHost";
-import { WebFounderFundingPrompt } from "./WebFounderFundingPrompt";
 import { WebFounderInferencePrompt } from "./WebFounderInferencePrompt";
 
 export type WebGlobalOverlayHostProps = {
@@ -9,7 +8,6 @@ export type WebGlobalOverlayHostProps = {
     typeof WebProviderConnectionModalHost
   >["modalHostProps"];
   communityModalHostProps: ComponentProps<typeof WebCommunityModalHost>["modalHostProps"];
-  founderFundingPromptProps: ComponentProps<typeof WebFounderFundingPrompt>;
   founderInferencePromptProps: ComponentProps<typeof WebFounderInferencePrompt>;
   appToast: string | null;
 };
@@ -22,8 +20,6 @@ export function WebGlobalOverlayHost(props: WebGlobalOverlayHostProps) {
       />
 
       <WebCommunityModalHost modalHostProps={props.communityModalHostProps} />
-
-      <WebFounderFundingPrompt {...props.founderFundingPromptProps} />
 
       <WebFounderInferencePrompt {...props.founderInferencePromptProps} />
 
