@@ -119,6 +119,16 @@ R41NB0W retirement completed on 2026-08-01 and is recorded in
 user's identity and historical financial/audit records, its post-deletion
 inspection reached `retired`, and the temporary operator module was removed.
 
+### Auto-recharge terminal state
+
+The retired workspace auto-recharge creation and execution paths had already
+been removed. Production was reverified with zero `workspaceAutoRechargeSettings`
+and zero `workspaceAutoRechargeAttempts` rows before their empty schemas and
+reconciliation-only diagnostics were deleted. Historical top-up checkout rows,
+credit balances, provider-cost evidence, usage collections, and operator
+financial reconciliation remain intact. Do not recreate auto-recharge as an
+account or entitlement surface.
+
 ## Web Production Rule
 
 - Web production deploys must come from GitHub `origin/main` through Vercel project `polynet`.
