@@ -27,6 +27,7 @@ async function createScope(t: ReturnType<typeof convexTest>) {
       slug: "receipt-community",
       name: "Receipt community",
       visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",
       activeMemberCount: 1,
       createdAt: nowMs,

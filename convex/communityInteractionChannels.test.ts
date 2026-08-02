@@ -62,6 +62,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
         slug,
         name: slug,
         visibility: "unlisted",
+        inferenceFundingPolicy: "managed_required",
         entryPolicy: "open",
         activeMemberCount: 1,
         createdAt: nowMs,

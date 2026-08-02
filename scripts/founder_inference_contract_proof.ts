@@ -71,7 +71,20 @@ assert.match(
   schema,
   /founderInferenceGrants: defineTable\(\{[\s\S]*userId: v\.id\("users"\)[\s\S]*cohortKey: v\.string\(\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("active"\)[\s\S]*v\.literal\("suspended"\)[\s\S]*\.index\("by_user_cohort", \["userId", "cohortKey"\]\)/,
 );
-assert.match(schema, /inferenceFundingPolicy: v\.optional\([\s\S]*legacy_byok_allowed[\s\S]*managed_required/);
+assert.match(
+  schema,
+  /inferenceFundingPolicy: v\.union\([\s\S]*legacy_byok_allowed[\s\S]*managed_required/,
+);
+assert.doesNotMatch(schema, /inferenceFundingPolicy: v\.optional/);
+assert.doesNotMatch(
+  core,
+  /normalizeCommunityInferenceFundingPolicy|resolveCommunityInferenceFundingPolicy/,
+);
+assert.match(
+  core,
+  /community\.inferenceFundingPolicy !== COMMUNITY_FUNDING_POLICY_LEGACY_BYOK[\s\S]*founder_plan_required/,
+);
+assert.doesNotMatch(founderBilling, /setCommunityFundingPolicyInternal/);
 assert.match(
   schema,
   /communityInferenceReceipts: defineTable\(\{[\s\S]*receiptKey: v\.string\(\)[\s\S]*actorUserId: v\.id\("users"\)[\s\S]*payerUserId: v\.id\("users"\)[\s\S]*fundingMode: v\.union[\s\S]*founderGrantId: v\.optional\(v\.id\("founderInferenceGrants"\)\)[\s\S]*founderSubscriptionId: v\.optional\(v\.id\("founderSubscriptions"\)\)[\s\S]*v\.literal\("authorized"\)[\s\S]*v\.literal\("settled"\)[\s\S]*v\.literal\("indeterminate"\)[\s\S]*\.index\("by_receipt_key", \["receiptKey"\]\)/,

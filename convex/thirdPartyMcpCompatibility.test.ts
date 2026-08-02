@@ -47,6 +47,7 @@ async function createLegacyRows(t: ReturnType<typeof convexTest>) {
       slug: "cached-client-community",
       name: "Cached client community",
       visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",
       createdAt: nowMs,
       updatedAt: nowMs,

@@ -52,6 +52,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
         slug,
         name: `Community ${slug}`,
         visibility: "published",
+        inferenceFundingPolicy: "managed_required",
         entryPolicy,
         activeMemberCount: 1,
         createdAt: nowMs + offset,

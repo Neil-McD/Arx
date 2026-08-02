@@ -15,7 +15,6 @@ import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 import {
   getExistingFounderInferenceGrant,
   resolveCommunityInferenceFundingAdmission,
-  resolveCommunityInferenceFundingPolicy,
   settleAuthorizedFounderInferenceReceipt,
   type FounderInferenceReceiptRow,
 } from "./founderInferenceCore";
@@ -135,11 +134,13 @@ export const getCurrentFounderInferenceStatus = query({
     const legacyCommunities = (
       await Promise.all(
         communities.map(async (community) => {
-          const [subscription, policy] = await Promise.all([
-            getFounderSubscriptionByCommunity(ctx, community._id, Date.now()),
-            resolveCommunityInferenceFundingPolicy({ ctx, community }),
-          ]);
-          return !subscription && policy === COMMUNITY_FUNDING_POLICY_LEGACY_BYOK
+          const subscription = await getFounderSubscriptionByCommunity(
+            ctx,
+            community._id,
+            Date.now(),
+          );
+          return !subscription &&
+            community.inferenceFundingPolicy === COMMUNITY_FUNDING_POLICY_LEGACY_BYOK
             ? community
             : null;
         }),

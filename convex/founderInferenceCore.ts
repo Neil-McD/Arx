@@ -1,10 +1,8 @@
 import {
   COMMUNITY_FUNDING_POLICY_LEGACY_BYOK,
-  COMMUNITY_FUNDING_POLICY_MANAGED,
   COMMUNITY_OWNER_FUNDED_MODEL_ID,
   EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
   type CommunityInferenceFundingAdmission,
-  type CommunityInferenceFundingPolicy,
   type CommunityInferenceSurface,
 } from "../shared/founderInference";
 import {
@@ -84,36 +82,6 @@ export async function getExistingFounderInferenceGrant(
     .first()) as FounderInferenceGrantRow | null;
 }
 
-export function normalizeCommunityInferenceFundingPolicy(
-  value: unknown,
-): CommunityInferenceFundingPolicy | null {
-  const normalized = String(value ?? "").trim();
-  if (normalized === COMMUNITY_FUNDING_POLICY_LEGACY_BYOK) {
-    return COMMUNITY_FUNDING_POLICY_LEGACY_BYOK;
-  }
-  if (normalized === COMMUNITY_FUNDING_POLICY_MANAGED) {
-    return COMMUNITY_FUNDING_POLICY_MANAGED;
-  }
-  return null;
-}
-
-export async function resolveCommunityInferenceFundingPolicy(args: {
-  ctx: any;
-  community: { ownerId?: any; inferenceFundingPolicy?: unknown };
-}): Promise<CommunityInferenceFundingPolicy> {
-  const explicit = normalizeCommunityInferenceFundingPolicy(
-    args.community.inferenceFundingPolicy,
-  );
-  if (explicit) return explicit;
-  if (
-    args.community.ownerId &&
-    (await getExistingFounderInferenceGrant(args.ctx, args.community.ownerId))
-  ) {
-    return COMMUNITY_FUNDING_POLICY_LEGACY_BYOK;
-  }
-  return COMMUNITY_FUNDING_POLICY_MANAGED;
-}
-
 export async function suspendActiveFounderInferenceGrantForCredentialChange(args: {
   ctx: any;
   userId: any;
@@ -145,7 +113,7 @@ export async function resolveCommunityInferenceFundingAdmission(
 ): Promise<CommunityInferenceFundingAdmission> {
   const community = (await ctx.db.get(communityId as any)) as {
     ownerId?: any;
-    inferenceFundingPolicy?: unknown;
+    inferenceFundingPolicy: "legacy_byok_allowed" | "managed_required";
   } | null;
   if (!community?.ownerId) return { ok: false, code: "community_not_found" };
 
@@ -193,17 +161,7 @@ export async function resolveCommunityInferenceFundingAdmission(
     };
   }
 
-  const explicitFundingPolicy = normalizeCommunityInferenceFundingPolicy(
-    community.inferenceFundingPolicy,
-  );
-  if (explicitFundingPolicy === COMMUNITY_FUNDING_POLICY_MANAGED) {
-    return { ok: false, code: "founder_plan_required" };
-  }
-  const fundingPolicy = await resolveCommunityInferenceFundingPolicy({
-    ctx,
-    community,
-  });
-  if (fundingPolicy === COMMUNITY_FUNDING_POLICY_MANAGED) {
+  if (community.inferenceFundingPolicy !== COMMUNITY_FUNDING_POLICY_LEGACY_BYOK) {
     return { ok: false, code: "founder_plan_required" };
   }
 

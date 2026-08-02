@@ -37,6 +37,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       slug: "channel-catalog",
       name: "Channel catalog",
       visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",
       activeMemberCount: 3,
       createdAt: nowMs,
