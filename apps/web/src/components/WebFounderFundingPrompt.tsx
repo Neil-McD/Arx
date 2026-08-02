@@ -64,7 +64,7 @@ export function WebFounderFundingPrompt(props: WebFounderFundingPromptProps) {
         </div>
         <div className="modal-footer">
           <button className="create-community-secondary" type="button" onClick={props.onClose}>
-            Continue setup for now
+            Not now
           </button>
         </div>
       </div>
