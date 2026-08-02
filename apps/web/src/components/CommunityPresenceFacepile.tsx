@@ -1,3 +1,5 @@
+import { UserAvatar } from "../../../../shared/UserAvatar";
+
 export type CommunityPresenceFace = {
   user_id: string;
   display_name?: string | null;
@@ -31,14 +33,21 @@ export function CommunityPresenceFacepile(props: {
       aria-hidden={props.decorative || undefined}
     >
       {visibleFaces.map((face) => (
-        <span
+        <UserAvatar
           key={face.user_id}
           className="community-context-face"
-          style={!face.avatar_url && face.avatar_color ? { color: face.avatar_color } : undefined}
+          readyClassName="has-image"
+          name={(face.display_name ?? "").trim() || "Member"}
+          imageUrl={face.avatar_url}
+          focusX={face.avatar_focus_x}
+          focusY={face.avatar_focus_y}
+          zoom={face.avatar_zoom}
+          fallback={face.initials ?? "?"}
+          fallbackStyle={face.avatar_color ? { color: face.avatar_color } : undefined}
           title={props.decorative ? undefined : face.display_name ?? undefined}
-        >
-          {face.avatar_url ? <img src={face.avatar_url} alt="" /> : <span>{face.initials ?? "?"}</span>}
-        </span>
+          alt=""
+          aria-hidden={props.decorative || undefined}
+        />
       ))}
       {extraFaces > 0 ? (
         <span

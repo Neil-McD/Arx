@@ -7,6 +7,7 @@ import {
   type CloudCommunityChannel,
 } from "../../../../shared/cloudCommunityChannelsGateway";
 import { createCloudCommunityChatLiveClient } from "../../../../shared/cloudCommunityChatGateway";
+import { resolveAuthPresentationIdentity } from "../../../../shared/authSession";
 
 type EnsureAuthSession = (
   session?: AuthSession | null,
@@ -150,6 +151,8 @@ export function useWebCommunityChannelsController(params: {
   const [loadAttempt, setLoadAttempt] = useState(0);
   const createInFlightCommunityIdRef = useRef<string | null>(null);
   const channelScopeCommunityIdRef = useRef<string | null>(null);
+  const channelScopeSessionIdentityRef = useRef<string | null>(null);
+  const sessionIdentity = resolveAuthPresentationIdentity(params.session);
 
   useEffect(() => {
     const communityId = String(params.activeCommunityId ?? "").trim();
@@ -157,8 +160,8 @@ export function useWebCommunityChannelsController(params: {
     const shouldResetPresentation = shouldResetWebCommunityChannelPresentation({
       scopedCommunityId: channelScopeCommunityIdRef.current,
       nextCommunityId,
-      hasSession: Boolean(params.session),
-    });
+      hasSession: Boolean(sessionIdentity),
+    }) || channelScopeSessionIdentityRef.current !== sessionIdentity;
     if (shouldResetPresentation) {
       setChannels([
         { ...GENERAL_FALLBACK_CHANNEL, community_id: communityId },
@@ -169,9 +172,10 @@ export function useWebCommunityChannelsController(params: {
       setIsCreatingChannel(false);
       setCreateChannelError(null);
     }
-    channelScopeCommunityIdRef.current = params.session ? nextCommunityId : null;
+    channelScopeCommunityIdRef.current = sessionIdentity ? nextCommunityId : null;
+    channelScopeSessionIdentityRef.current = sessionIdentity;
     setChannelsError(null);
-    if (!communityId || !params.session) {
+    if (!communityId || !sessionIdentity) {
       setIsLoadingChannels(false);
       return;
     }
@@ -181,7 +185,7 @@ export function useWebCommunityChannelsController(params: {
     let liveClient: ReturnType<typeof createCloudCommunityChatLiveClient> | null = null;
     setIsLoadingChannels(true);
     void (async () => {
-      const usableSession = await params.ensureSession(params.session ?? undefined);
+      const usableSession = await params.ensureSession(paramsRef.current.session ?? undefined);
       if (!usableSession || cancelled) {
         if (!cancelled) {
           setIsLoadingChannels(false);
@@ -222,7 +226,7 @@ export function useWebCommunityChannelsController(params: {
       unsubscribe?.();
       liveClient?.close();
     };
-  }, [loadAttempt, params.activeCommunityId, params.ensureSession, params.session]);
+  }, [loadAttempt, params.activeCommunityId, params.ensureSession, sessionIdentity]);
 
   const normalizedRequestedSlug = String(params.requestedChannelSlug ?? "")
     .trim()
@@ -230,19 +234,25 @@ export function useWebCommunityChannelsController(params: {
   const requestedPresentationCommunityId =
     String(params.activeCommunityId ?? "").trim() || null;
   const isPresentationScopedToActiveCommunity =
-    Boolean(params.session) &&
-    channelScopeCommunityIdRef.current === requestedPresentationCommunityId;
+    Boolean(sessionIdentity) &&
+    channelScopeCommunityIdRef.current === requestedPresentationCommunityId &&
+    channelScopeSessionIdentityRef.current === sessionIdentity;
   const presentedChannels = isPresentationScopedToActiveCommunity
     ? channels
     : [{
         ...GENERAL_FALLBACK_CHANNEL,
         community_id: requestedPresentationCommunityId ?? "",
       }];
+  const presentedHasResolvedChannels =
+    isPresentationScopedToActiveCommunity && hasResolvedChannels;
+  const presentedChannelsError = isPresentationScopedToActiveCommunity
+    ? channelsError
+    : null;
   const selection = resolveWebCommunityChannelSelection({
     channels: presentedChannels,
     requestedChannelSlug: normalizedRequestedSlug,
-    hasResolvedChannels,
-    channelsError,
+    hasResolvedChannels: presentedHasResolvedChannels,
+    channelsError: presentedChannelsError,
   });
 
   const createChannel = useCallback(async (nameRaw: string): Promise<CloudCommunityChannel | null> => {
@@ -303,9 +313,11 @@ export function useWebCommunityChannelsController(params: {
     isChannelContextReady: selection.status === "resolved",
     maxActiveChannels,
     isAtChannelLimit,
-    hasResolvedChannels,
-    isLoadingChannels,
-    channelsError,
+    hasResolvedChannels: presentedHasResolvedChannels,
+    isLoadingChannels:
+      Boolean(sessionIdentity && requestedPresentationCommunityId) &&
+      (!isPresentationScopedToActiveCommunity || isLoadingChannels),
+    channelsError: presentedChannelsError,
     isCreatingChannel,
     createChannelError,
     clearCreateChannelError: () => setCreateChannelError(null),
@@ -322,6 +334,10 @@ export function useWebCommunityChannelsController(params: {
     isLoadingChannels,
     maxActiveChannels,
     presentedChannels,
+    presentedChannelsError,
+    presentedHasResolvedChannels,
+    requestedPresentationCommunityId,
+    sessionIdentity,
     retryChannels,
     selection.selectedChannel,
     selection.selectedChannelSlug,

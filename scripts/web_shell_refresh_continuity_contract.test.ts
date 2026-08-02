@@ -32,6 +32,33 @@ describe("web shell refresh continuity contract", () => {
     );
   });
 
+  it("hydrates the account graph once per signed-in identity, not once per token", () => {
+    const controller = read("apps/web/src/controllers/useWebAppAuthController.ts");
+
+    expect(controller).toContain("sessionReadyIdentityRef");
+    expect(controller).toMatch(
+      /sessionReadyIdentityRef\.current === sessionIdentity\) return/,
+    );
+    expect(controller).toMatch(
+      /sessionReadyIdentityRef\.current = null;[\s\S]*setAuthSession\(null\)/,
+    );
+  });
+
+  it("keeps canonical chat mounted independently of the legacy chat loader", () => {
+    const panel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+    const start = panel.indexOf("const showInteractionProjection = Boolean");
+    const end = panel.indexOf("const communityComposerFocusTargetKey", start);
+    const ownerGate = panel.slice(start, end);
+
+    expect(ownerGate).toContain("interactionProjection?.enabled");
+    expect(ownerGate).toContain("hasAuthenticatedPresentation");
+    expect(ownerGate).not.toContain("hasResolvedCommunityChat");
+    expect(ownerGate).not.toContain("isLoadingChat");
+    expect(panel).toMatch(
+      /const showCommunityChatBootstrap =[\s\S]*!interactionProjection\?\.enabled &&/,
+    );
+  });
+
   it("never projects one community's channel catalog into another community", () => {
     const controller = read("apps/web/src/controllers/useWebCommunityChannelsController.ts");
 
@@ -42,5 +69,27 @@ describe("web shell refresh continuity contract", () => {
     expect(controller).toMatch(
       /resolveWebCommunityChannelSelection\(\{[\s\S]*channels: presentedChannels/,
     );
+    expect(controller).toContain("channelScopeSessionIdentityRef");
+  });
+
+  it("scopes feed, members, and memory synchronously across community boundaries", () => {
+    const interaction = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");
+    const directory = read("shared/useCommunityDirectoryController.ts");
+    const polynet = read("apps/web/src/controllers/useWebCommunityPolynetController.ts");
+
+    expect(interaction).toContain("isPresentationScopedToBoundary");
+    expect(interaction).toContain("roots: presentedRoots");
+    expect(directory).toContain("requestedPresentationScope");
+    expect(directory).toContain("communityDirectoryMembers: isPresentationScoped");
+    expect(polynet).toContain("overview: presentedOverview");
+  });
+
+  it("falls back instead of admitting cached broken avatar images", () => {
+    const imageReady = read("shared/useImageUrlReady.ts");
+    const stableAvatar = read("shared/StableAvatar.tsx");
+
+    expect(imageReady).toContain("finish(image.naturalWidth > 0)");
+    expect(stableAvatar).toContain("failedImageUrl");
+    expect(stableAvatar).toContain("onError={() => setFailedImageUrl(normalizedImageUrl)}");
   });
 });
