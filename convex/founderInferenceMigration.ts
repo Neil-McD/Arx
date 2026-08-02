@@ -2,9 +2,23 @@ import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { EXISTING_FOUNDER_INFERENCE_COHORT_KEY } from "../shared/founderInference";
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
+import { recordCriticalAuditEvent } from "./criticalAudit";
 
 const EXPECTED_EXISTING_FOUNDER_COUNT = 9;
 const EXPECTED_LEGACY_POLICY_COUNT = 8;
+
+const THOMAS_VISIBILITY_REPAIR_HANDLE = "thomasthomison";
+const THOMAS_VISIBILITY_REPAIR_COMMUNITIES = [
+  {
+    slug: "orchestrator-practice",
+    entryPolicy: "approval",
+  },
+  {
+    slug: "orchestrators-minds-impact",
+    entryPolicy: "paid_subscription",
+  },
+] as const;
+const THOMAS_VISIBILITY_REPAIR_EVENT_TYPE = "community_visibility_repair_completed";
 
 function normalizedId(value: unknown): string {
   return String(value ?? "").trim();
@@ -231,6 +245,119 @@ export const transitionExistingFounderToManagedInternal = internalMutation({
         previous_visibility: String(community.visibility),
         next_visibility: String(community.visibility),
         next_funding_policy: COMMUNITY_FUNDING_POLICY_MANAGED,
+      })),
+    };
+  },
+});
+
+export const restoreThomasPublishedVisibilityInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    expectedCommunityIds: v.array(v.id("communities")),
+    dryRun: v.optional(v.boolean()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("thomas_visibility_repair_user_missing");
+    const handle = String(user.normalizedHandle ?? user.handle ?? "")
+      .trim()
+      .toLowerCase();
+    if (handle !== THOMAS_VISIBILITY_REPAIR_HANDLE) {
+      throw new Error("thomas_visibility_repair_handle_mismatch");
+    }
+
+    const communities = await ctx.db
+      .query("communities" as any)
+      .withIndex("by_owner", (q: any) => q.eq("ownerId", args.userId))
+      .collect();
+    const expectedIds = args.expectedCommunityIds.map(normalizedId).sort();
+    const actualIds = communities.map((community: any) => normalizedId(community._id)).sort();
+    if (
+      expectedIds.length !== THOMAS_VISIBILITY_REPAIR_COMMUNITIES.length ||
+      new Set(expectedIds).size !== expectedIds.length ||
+      expectedIds.some((id, index) => id !== actualIds[index])
+    ) {
+      throw new Error("thomas_visibility_repair_community_id_set_mismatch");
+    }
+
+    const orderedCommunities = [...communities].sort((left: any, right: any) =>
+      String(left.slug).localeCompare(String(right.slug)),
+    );
+    for (let index = 0; index < THOMAS_VISIBILITY_REPAIR_COMMUNITIES.length; index += 1) {
+      const community: any = orderedCommunities[index];
+      const expected = THOMAS_VISIBILITY_REPAIR_COMMUNITIES[index];
+      if (String(community?.slug ?? "").trim().toLowerCase() !== expected.slug) {
+        throw new Error("thomas_visibility_repair_community_slug_set_mismatch");
+      }
+      if (community.entryPolicy !== expected.entryPolicy) {
+        throw new Error("thomas_visibility_repair_entry_policy_mismatch");
+      }
+      if (community.inferenceFundingPolicy !== COMMUNITY_FUNDING_POLICY_MANAGED) {
+        throw new Error("thomas_visibility_repair_funding_policy_mismatch");
+      }
+    }
+
+    const allPublished = orderedCommunities.every(
+      (community: any) => community.visibility === "published",
+    );
+    const allUnlisted = orderedCommunities.every(
+      (community: any) => community.visibility === "unlisted",
+    );
+    if (!allPublished && !allUnlisted) {
+      throw new Error("thomas_visibility_repair_visibility_state_mismatch");
+    }
+
+    const nowMs = args.nowMs ?? Date.now();
+    const auditEventIds: string[] = [];
+    if (!allPublished && args.dryRun !== true) {
+      for (const community of orderedCommunities as Array<Record<string, any>>) {
+        await ctx.db.patch(community._id, {
+          visibility: "published",
+          updatedAt: nowMs,
+        });
+        const auditEventId = await recordCriticalAuditEvent(ctx, {
+          eventKey: `founder_ai_visibility_repair_v1:${normalizedId(community._id)}`,
+          eventType: THOMAS_VISIBILITY_REPAIR_EVENT_TYPE,
+          severity: "info",
+          status: "succeeded",
+          subjectUserId: args.userId,
+          communityId: community._id,
+          provider: "convex",
+          providerObjectId: "founder_ai_visibility_repair_v1",
+          createdAt: nowMs,
+        });
+        if (!auditEventId) throw new Error("thomas_visibility_repair_audit_event_missing");
+        auditEventIds.push(normalizedId(auditEventId));
+      }
+    }
+
+    if (allPublished) {
+      for (const community of orderedCommunities as Array<Record<string, any>>) {
+        const auditEvent = await ctx.db
+          .query("criticalAuditEvents" as any)
+          .withIndex("by_eventKey", (q: any) =>
+            q.eq("eventKey", `founder_ai_visibility_repair_v1:${normalizedId(community._id)}`),
+          )
+          .first();
+        if (auditEvent) auditEventIds.push(normalizedId(auditEvent._id));
+      }
+    }
+
+    return {
+      ok: true,
+      dry_run: args.dryRun === true,
+      already_repaired: allPublished,
+      user_id: normalizedId(args.userId),
+      handle,
+      audit_event_ids: auditEventIds,
+      communities: orderedCommunities.map((community: any) => ({
+        community_id: normalizedId(community._id),
+        slug: String(community.slug),
+        entry_policy: String(community.entryPolicy),
+        funding_policy: String(community.inferenceFundingPolicy),
+        previous_visibility: String(community.visibility),
+        next_visibility: "published",
       })),
     };
   },
