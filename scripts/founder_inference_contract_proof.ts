@@ -98,14 +98,9 @@ assert.match(
 );
 assert.doesNotMatch(receiptSchema, /apiKey|encryptedSecret|prompt:|response:|toolOutput|costDollars/);
 
-assert.match(migration, /EXPECTED_EXISTING_FOUNDER_COUNT = 9/);
-assert.match(migration, /EXPECTED_LEGACY_POLICY_COUNT = 8/);
-assert.match(migration, /ownerUserIds: v\.array\(v\.id\("users"\)\)/);
-assert.match(migration, /existing_founder_must_own_community/);
-assert.match(migration, /existing_founder_current_owner_count_mismatch/);
-assert.match(migration, /existing_founder_owner_set_mismatch/);
-assert.match(migration, /sourceProgram !== "builder_partner_v1"/);
-assert.match(migration, /await ctx\.db\.delete\(policy\._id\)/);
+assert.doesNotMatch(migration, /initializeExistingFounderInferenceCohortInternal/);
+assert.doesNotMatch(migration, /communityInferencePolicies/);
+assert.doesNotMatch(migration, /EXPECTED_EXISTING_FOUNDER_COUNT|EXPECTED_LEGACY_POLICY_COUNT/);
 assert.match(migration, /transitionExistingFounderToManagedInternal/);
 assert.match(migration, /founder_transition_community_set_mismatch/);
 assert.match(migration, /inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED/);

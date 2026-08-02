@@ -34,14 +34,6 @@ function assertExcludes(source: string, pattern: RegExp, label: string): void {
   assert.doesNotMatch(source, pattern, label);
 }
 
-function sourceBetween(source: string, start: string, end: string): string {
-  const startIndex = source.indexOf(start);
-  const endIndex = source.indexOf(end, startIndex + start.length);
-  assert.ok(startIndex >= 0, `missing source boundary ${start}`);
-  assert.ok(endIndex > startIndex, `missing source boundary ${end}`);
-  return source.slice(startIndex, endIndex);
-}
-
 function provePermanentEvidenceSchema(schemaSource: string): void {
   for (const marker of [
     "legacyProgramGrants: defineTable",
@@ -54,45 +46,6 @@ function provePermanentEvidenceSchema(schemaSource: string): void {
     '.index("by_grantKey_capturedAt", ["grantKey", "capturedAt"])',
   ]) {
     assertIncludes(schemaSource, marker, "grandfather evidence schema");
-  }
-
-  for (const marker of [
-    "communityInferencePolicies: defineTable",
-    'communityId: v.id("communities")',
-    'payerUserId: v.id("users")',
-    'v.literal("owner_api_key")',
-    'v.literal("platform_subscription")',
-    'v.literal("pending_credential")',
-    'v.literal("pending_subscription")',
-    'contractVersion: v.string()',
-    'sourceGrantKey: v.optional(v.string())',
-    'sourcePartnerRecordId: v.optional(v.string())',
-    '.index("by_community", ["communityId"])',
-    '.index("by_payer_status", ["payerUserId", "status"])',
-  ]) {
-    assertIncludes(schemaSource, marker, "community inference funding policy schema");
-  }
-
-  const fundingPolicySchema = sourceBetween(
-    schemaSource,
-    "communityInferencePolicies: defineTable",
-    "founderInferenceGrants: defineTable",
-  );
-  for (const forbidden of [
-    /sponsorUserId/,
-    /legacy_owner_key/,
-    /platform_plan/,
-    /pending_plan/,
-    /modelId/,
-    /policyVersion/,
-    /credentialValue/,
-    /apiKey/,
-    /usageAllowance/,
-    /price/,
-    /provider/,
-    /entitlement/,
-  ]) {
-    assertExcludes(fundingPolicySchema, forbidden, "irreducible community funding policy schema");
   }
 }
 
@@ -143,28 +96,27 @@ function proveLegacySchemaAndMigrationCodeAreDeleted(schemaSource: string, backe
   assert.deepEqual(unexpectedReferences, [], "retired migration code must have no active source reference");
 }
 
-function proveCommunityInferencePoliciesAreInert(): void {
-  const allowedReferences = new Set([
-    "convex/schema.ts",
-    "convex/founderInferenceMigration.ts",
-    "convex/founderInferenceCore.test.ts",
-  ]);
-  const unexpectedReferences = ["convex", "shared", "apps/web/src"]
+function proveCompletedCohortInitializerIsDeleted(schemaSource: string): void {
+  assertExcludes(
+    schemaSource,
+    /communityInferencePolicies:\s*defineTable/,
+    "completed cohort policy schema",
+  );
+  const activeReferences = ["convex", "shared", "apps/web/src"]
     .flatMap(listSourceFiles)
-    .filter((path) => !allowedReferences.has(path))
     .filter((path) => readText(path).includes("communityInferencePolicies"));
   assert.deepEqual(
-    unexpectedReferences,
+    activeReferences,
     [],
-    "community inference policies must remain absent from runtime, onboarding, checkout, billing, entitlement, and provider paths outside the bounded cleanup migration",
+    "completed community inference policy schema must have no active source reference",
   );
   const migration = readText("convex/founderInferenceMigration.ts");
-  assert.match(migration, /initializeExistingFounderInferenceCohortInternal = internalMutation/);
-  assert.match(migration, /EXPECTED_EXISTING_FOUNDER_COUNT = 9/);
-  assert.match(migration, /EXPECTED_LEGACY_POLICY_COUNT = 8/);
-  assert.match(migration, /sourceProgram !== "builder_partner_v1"/);
-  assert.match(migration, /fundingMode !== "owner_api_key"/);
-  assert.match(migration, /status !== "pending_credential"/);
+  assertExcludes(
+    migration,
+    /initializeExistingFounderInferenceCohortInternal|EXPECTED_EXISTING_FOUNDER_COUNT|EXPECTED_LEGACY_POLICY_COUNT|communityInferencePolicies/,
+    "completed founder cohort initializer",
+  );
+  assert.match(migration, /transitionExistingFounderToManagedInternal = internalMutation/);
   assert.doesNotMatch(migration, /export const .* = (query|mutation|action)\(/);
 }
 
@@ -335,7 +287,7 @@ function main(): void {
   const backendSource = readText("convex/builderPartners.ts");
   provePermanentEvidenceSchema(schemaSource);
   proveLegacySchemaAndMigrationCodeAreDeleted(schemaSource, backendSource);
-  proveCommunityInferencePoliciesAreInert();
+  proveCompletedCohortInitializerIsDeleted(schemaSource);
   proveBackendIsTombstonesOnly(backendSource);
   proveMoneyCallPathsAreSevered();
   proveProductSurfacesAreDeleted();
