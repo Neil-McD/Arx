@@ -28,7 +28,6 @@ import {
   prepareCloudProfileAvatarField,
   upsertCloudProfileDetail,
 } from "./cloudProfilesGateway";
-import { preloadImageUrls } from "./preloadImageUrls";
 
 type SaveProfileToCloudOptions = {
   socialLinks?: SocialProfileLinks;
@@ -102,6 +101,7 @@ export function useCommunityAdminController<
   const argsRef = useRef(args);
   argsRef.current = args;
   const communityAnalyticsLoadSeqRef = useRef(0);
+  const selfProfileLoadSeqRef = useRef(0);
 
   const loadSelfProfile = useCallback(async (session: SessionT) => {
     const current = argsRef.current;
@@ -109,15 +109,22 @@ export function useCommunityAdminController<
     if (!usableSession) return;
     const profileUserId = resolveCanonicalProfileUserId(usableSession);
     if (!profileUserId) return;
+    const seq = (selfProfileLoadSeqRef.current += 1);
     try {
       const row = await fetchCloudProfileDetailByUserId<SessionT, UserProfileDetailT>({
         session: usableSession,
         userId: profileUserId,
       });
-      if (!row) return;
-      await preloadImageUrls([row.avatar_url ?? null], { maxUrls: 1, timeoutMs: 1200 });
-      current.setCloudProfile(row);
-      current.setProfilesByUserId((prev) => ({
+      if (
+        !row ||
+        selfProfileLoadSeqRef.current !== seq ||
+        resolveCanonicalProfileUserId(argsRef.current.session) !== profileUserId
+      ) {
+        return;
+      }
+      const latest = argsRef.current;
+      latest.setCloudProfile(row);
+      latest.setProfilesByUserId((prev) => ({
         ...prev,
         [row.user_id]: mergeUserProfileEntry(prev[row.user_id], {
           user_id: row.user_id,
@@ -131,13 +138,14 @@ export function useCommunityAdminController<
           avatar_zoom: row.avatar_zoom ?? 1,
         } as UserProfileT),
       }));
-      current.applyLoadedProfileToLocal?.(row);
+      latest.applyLoadedProfileToLocal?.(row);
     } catch {
       // ignore
     }
   }, [resolveCanonicalProfileUserId]);
 
   const saveProfileToCloud = useCallback(async (options: SaveProfileToCloudOptions = {}): Promise<boolean> => {
+    selfProfileLoadSeqRef.current += 1;
     const current = argsRef.current;
     const session = await resolveUsableSession(current.getProfileSaveSession(), current.ensureSession);
     if (!session) {
@@ -190,6 +198,7 @@ export function useCommunityAdminController<
         current.setProfileSaveError(current.profileSaveFailureMessage);
         return false;
       }
+      selfProfileLoadSeqRef.current += 1;
       current.setCloudProfile(saved);
       current.setProfilesByUserId((prev) => ({
         ...prev,

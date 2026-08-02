@@ -46,8 +46,8 @@ assert.match(
 );
 assert.match(
   accessController,
-  /const seq = \(loadCommunitiesSeqRef\.current \+= 1\)[\s\S]*if \(loadCommunitiesSeqRef\.current !== seq\) return;[\s\S]*current\.setCommunities\(list\)/,
-  "community access loads should guard stale results before setting communities",
+  /const seq = \(loadCommunitiesSeqRef\.current \+= 1\)[\s\S]*const isCurrentRequest = \(\)[\s\S]*loadingResetKey[\s\S]*if \(!isCurrentRequest\(\)\) return;[\s\S]*latest\.setCommunities\(list\)/,
+  "community access loads should guard stale results and identity changes before setting communities",
 );
 assert.equal(
   existsSync(join(root, "shared/communityFetchAbortScope.ts")),
