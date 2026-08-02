@@ -2604,7 +2604,6 @@
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  border: 2px solid var(--bg-workspace);
   background: var(--border-strong);
   color: var(--text-secondary);
   display: flex;
@@ -2614,6 +2613,15 @@
   font-weight: 500;
   overflow: hidden;
   flex-shrink: 0;
+}
+
+.community-context-face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px var(--bg-workspace);
+  pointer-events: none;
 }
 
 .community-context-face + .community-context-face {

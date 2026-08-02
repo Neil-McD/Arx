@@ -8,6 +8,17 @@ function normalizeImageUrl(value: string | null | undefined): string | null {
   return trimmed || null;
 }
 
+export function resolveCurrentReadyImageUrl(
+  currentUrl: string | null | undefined,
+  readyUrl: string | null | undefined,
+): string | null {
+  const normalizedCurrentUrl = normalizeImageUrl(currentUrl);
+  const normalizedReadyUrl = normalizeImageUrl(readyUrl);
+  return normalizedCurrentUrl && normalizedCurrentUrl === normalizedReadyUrl
+    ? normalizedCurrentUrl
+    : null;
+}
+
 export function isImageUrlReady(url: string | null | undefined): boolean {
   const normalized = normalizeImageUrl(url);
   if (!normalized) return false;
@@ -60,27 +71,30 @@ export function ensureImageUrlReady(
 
 export function useImageUrlReady(url: string | null | undefined): boolean {
   const normalized = normalizeImageUrl(url);
-  const [isReady, setIsReady] = useState(() => isImageUrlReady(normalized));
+  const [readyImageUrl, setReadyImageUrl] = useState<string | null>(() =>
+    isImageUrlReady(normalized) ? normalized : null,
+  );
 
   useEffect(() => {
     if (!normalized) {
-      setIsReady(false);
+      setReadyImageUrl(null);
       return;
     }
     if (isImageUrlReady(normalized)) {
-      setIsReady(true);
+      setReadyImageUrl(normalized);
       return;
     }
     let cancelled = false;
-    setIsReady(false);
+    setReadyImageUrl(null);
     void ensureImageUrlReady(normalized).then((ready) => {
       if (cancelled) return;
-      setIsReady(ready);
+      setReadyImageUrl(ready ? normalized : null);
     });
     return () => {
       cancelled = true;
     };
   }, [normalized]);
 
-  return isReady;
+  return isImageUrlReady(normalized) ||
+    resolveCurrentReadyImageUrl(normalized, readyImageUrl) !== null;
 }

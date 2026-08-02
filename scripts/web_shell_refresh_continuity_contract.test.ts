@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { resolveCurrentReadyImageUrl } from "../shared/useImageUrlReady";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -115,5 +116,14 @@ describe("web shell refresh continuity contract", () => {
     expect(imageReady).toContain("finish(image.naturalWidth > 0)");
     expect(stableAvatar).toContain("failedImageUrl");
     expect(stableAvatar).toContain("onError={() => setFailedImageUrl(normalizedImageUrl)}");
+  });
+
+  it("never reuses readiness from a previous avatar URL", () => {
+    expect(resolveCurrentReadyImageUrl("https://example.com/a.png", "https://example.com/a.png"))
+      .toBe("https://example.com/a.png");
+    expect(resolveCurrentReadyImageUrl("https://example.com/b.png", "https://example.com/a.png"))
+      .toBeNull();
+    expect(resolveCurrentReadyImageUrl(null, "https://example.com/a.png"))
+      .toBeNull();
   });
 });
