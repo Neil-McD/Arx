@@ -123,8 +123,8 @@ assert.match(
 );
 assert.match(
   app,
-  /const communityUi = useWebCommunityUiController<[\s\S]*onCommunityCreated: \(community\) => \{[\s\S]*setCommunities[\s\S]*setCommunityRoleById[\s\S]*enterJoinedCommunity/,
-  "App should project a created community into owner state and enter the canonical destination",
+  /const communityUi = useWebCommunityUiController<[\s\S]*onCommunityCreated: \(community\) => \{[\s\S]*setCommunities[\s\S]*enterJoinedCommunity/,
+  "App should project a created community into the directory and enter the canonical destination",
 );
 assert.match(
   pendingAuthIntent,

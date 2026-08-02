@@ -77,8 +77,6 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
   const [attentionByCommunityId, setAttentionByCommunityId] = useState<
     Record<string, CommunityAttentionIndicators>
   >({});
-  const [isLoadingCommunityAttention, setIsLoadingCommunityAttention] = useState(false);
-  const [communityAttentionError, setCommunityAttentionError] = useState<string | null>(null);
   const loadGenerationRef = useRef(0);
   const inFlightMarkKeysRef = useRef<Set<string>>(new Set());
   const sessionIdentity = resolveAuthPresentationIdentity(args.session as AuthSessionLike);
@@ -99,13 +97,9 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
 
     if (!usableSession || communityIds.length === 0) {
       setAttentionByCommunityId({});
-      setCommunityAttentionError(null);
-      setIsLoadingCommunityAttention(false);
       return;
     }
 
-    setIsLoadingCommunityAttention(true);
-    setCommunityAttentionError(null);
     try {
       const rows = await listCloudCommunityAttentionRows({
         session: usableSession,
@@ -126,13 +120,8 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
         };
       }
       setAttentionByCommunityId(nextAttentionMap);
-    } catch (error) {
+    } catch {
       if (loadGenerationRef.current !== generation) return;
-      setCommunityAttentionError(error instanceof Error ? error.message : "Failed to load community attention.");
-    } finally {
-      if (loadGenerationRef.current === generation) {
-        setIsLoadingCommunityAttention(false);
-      }
     }
   }, []);
 
@@ -207,8 +196,6 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
 
   return {
     attentionByCommunityId,
-    isLoadingCommunityAttention,
-    communityAttentionError,
     refreshCommunityAttention,
     markCommunitySurfaceSeen,
   };

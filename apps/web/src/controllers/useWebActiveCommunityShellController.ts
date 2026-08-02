@@ -269,10 +269,6 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   const canModerateContentActiveCommunity = communityActionGuards.canModerateContent;
   const canManageMembersActiveCommunity = authoritativeCommunityNavVisibility.canManageMembers;
   const canReviewJoinRequestsActiveCommunity = communityActionGuards.canReviewJoinRequests;
-  const canManagePricingActiveCommunity = communityActionGuards.canManagePricing;
-  const canManageBrandingActiveCommunity = communityActionGuards.canManageBranding;
-  const canManagePublishingActiveCommunity = communityActionGuards.canManagePublishing;
-  const canManagePayoutsActiveCommunity = communityActionGuards.canManagePayouts;
   const canViewActiveCommunityAnalytics = communityNavVisibility.canViewAnalytics;
 
   const communitySocialSummary = useMemo(() => {
@@ -333,10 +329,6 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     canModerateContentActiveCommunity,
     canManageMembersActiveCommunity,
     canReviewJoinRequestsActiveCommunity,
-    canManagePricingActiveCommunity,
-    canManageBrandingActiveCommunity,
-    canManagePublishingActiveCommunity,
-    canManagePayoutsActiveCommunity,
     canViewActiveCommunityAnalytics,
     funnelPreviewAdminCount,
     funnelPreviewOnlineCount,
