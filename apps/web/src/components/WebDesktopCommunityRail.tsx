@@ -1,4 +1,5 @@
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import { shouldShowFirstResolutionSkeleton } from "../../../../shared/shellLoadingPresentation";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 
 type WebDesktopCommunityRailProps = {
@@ -7,6 +8,11 @@ type WebDesktopCommunityRailProps = {
 
 export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
   const { communityShell } = props;
+  const showCommunitySkeleton = shouldShowFirstResolutionSkeleton({
+    isLoading: communityShell.isLoadingCommunities,
+    hasResolved: communityShell.hasResolvedCommunities,
+    contentCount: communityShell.railCommunities.length,
+  });
 
   if (!communityShell.showDesktopCommunityRail) return null;
 
@@ -40,13 +46,22 @@ export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
             <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
           </svg>
         </button>
-        {communityShell.hasCommunityRailMiddleContent ? (
+        {communityShell.hasCommunityRailMiddleContent || showCommunitySkeleton ? (
           <div className="community-rail-divider" />
         ) : null}
         <div
           className="community-rail-list"
           ref={communityShell.setCommunityRailListElement}
         >
+          {showCommunitySkeleton
+            ? Array.from({ length: 3 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="community-rail-button community-rail-community community-rail-skeleton web-skeleton-block"
+                  aria-hidden="true"
+                />
+              ))
+            : null}
           {communityShell.railCommunities.map((community) => {
             const bindings = communityShell.getCommunityRailItemBindings(
               community.id,

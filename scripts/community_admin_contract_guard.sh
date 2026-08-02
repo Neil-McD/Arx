@@ -288,8 +288,8 @@ require_no_match "$WEB_JOIN_REQUESTS_CONTROLLER_FILE" \
   'communityMembers|filteredCommunityMembers|communityMembersRoleFilter|communityMembersPlanFilter|isJoinRequestsModalOpen' \
   "join-request controller does not keep member roster or deleted modal state"
 require_multiline_match "$WEB_CONTEXT_PANEL_FILE" \
-  'const canOpenSettings = Boolean\([\s\S]*props\.canManageMembers[\s\S]*props\.onOpenMemberSettings[\s\S]*!isOwnerMember[\s\S]*!String\(member\.id \?\? ""\)\.startsWith\("owner:"\)' \
-  "right-panel member settings action is manager-gated and hidden for owner rows"
+  'const canShowSettings = Boolean\([\s\S]*props\.canPresentManageMembers[\s\S]*props\.onOpenMemberSettings[\s\S]*!isOwnerMember[\s\S]*!String\(member\.id \?\? ""\)\.startsWith\("owner:"\)[\s\S]*const canOpenSettings = Boolean\(canShowSettings && props\.canManageMembers\)' \
+  "right-panel member settings presentation is stable while current manager authority gates the action"
 require_multiline_match "$WEB_INTERACTION_PROJECTION_FILE" \
   'const canManageCommunityMembers = Boolean\([\s\S]*props\.canManageCommunityMembers[\s\S]*props\.communityId[\s\S]*props\.onSetCommunityMemberRole[\s\S]*props\.onRemoveCommunityMember[\s\S]*props\.onBanCommunityMember' \
   "right-panel member settings fail closed unless manager callbacks are wired"

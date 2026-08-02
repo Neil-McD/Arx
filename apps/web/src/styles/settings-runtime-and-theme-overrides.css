@@ -6816,38 +6816,6 @@ button.message-citation-chip:hover {
   right: auto;
 }
 
-.web-skeleton-block,
-.web-skeleton-pill,
-.web-skeleton-row {
-  background: color-mix(in srgb, var(--bg-card) 34%, transparent);
-  position: relative;
-  overflow: hidden;
-}
-
-.web-skeleton-block::after,
-.web-skeleton-pill::after,
-.web-skeleton-row::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-120%);
-  background: linear-gradient(90deg,
-      transparent 0%,
-      color-mix(in srgb, var(--text-primary) 8%, transparent) 50%,
-      transparent 100%);
-  animation: webShimmer 1.2s ease-in-out infinite;
-}
-
-@keyframes webShimmer {
-  0% {
-    transform: translateX(-120%);
-  }
-
-  100% {
-    transform: translateX(120%);
-  }
-}
-
 @media (max-width: 720px) {
   .guest-signup-rail {
     grid-template-columns: minmax(0, 1fr);

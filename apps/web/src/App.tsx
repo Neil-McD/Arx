@@ -540,6 +540,8 @@ export default function App() {
     selectedChannelSlug: activeCommunityChannelSlug,
     channelResolutionStatus: activeCommunityChannelResolutionStatus,
     isChannelContextReady: isActiveCommunityChannelReady,
+    hasResolvedChannels: hasResolvedActiveCommunityChannels,
+    isLoadingChannels: isLoadingActiveCommunityChannels,
     channelsError: activeCommunityChannelsError,
     retryChannels: retryActiveCommunityChannels,
     maxActiveChannels: maxActiveCommunityChannels,
@@ -549,9 +551,7 @@ export default function App() {
     clearCreateChannelError: clearCommunityChannelCreateError,
     createChannel: handleCreateCommunityChannel,
   } = communityChannels;
-  const activeChannelCommunityId = isActiveCommunityChannelReady
-    ? activeCommunityId
-    : null;
+  const activeChannelCommunityId = isActiveCommunityChannelReady ? activeCommunityId : null;
   const isActiveCommunityChannelLoading =
     activeCommunityChannelResolutionStatus === "loading";
   const activeCommunityChannelResolutionError =
@@ -765,6 +765,7 @@ export default function App() {
   const {
     communityDirectoryMembers,
     communityDirectoryMemberCount,
+    hasResolvedCommunityDirectoryMembers,
     isLoadingCommunityDirectoryMembers,
     isLoadingMoreCommunityDirectoryMembers,
     communityDirectoryMembersHasMore,
@@ -775,6 +776,7 @@ export default function App() {
   const {
     activeCommunityAccess,
     isLoadingCommunityAccess,
+    isResolvingInitialCommunityAccess,
     communityAccessLoadError,
     retryActiveCommunityAccess,
     communityAccessCapabilities,
@@ -800,11 +802,12 @@ export default function App() {
     funnelPreviewOnlineFaces,
     activeCommunityOnlineUserIds,
     activeCommunityPresenceSummary,
+    activeCommunityPresenceStatus,
+    canPresentManageMembersActiveCommunity,
     reloadActiveCommunityAccess,
   } = communityAdministration.access;
   canMentionEverybodyRef.current = canManageMembersActiveCommunity;
-  const canPostMessagesActiveChannel =
-    isActiveCommunityChannelReady && canPostMessagesActiveCommunity;
+  const canPostMessagesActiveChannel = isActiveCommunityChannelReady && canPostMessagesActiveCommunity;
 
   useWebCommunityTabAccessGuard({
     activePage,
@@ -2491,8 +2494,10 @@ export default function App() {
           : undefined,
         onlineUserIds: activeCommunityOnlineUserIds,
         presenceSummary: activeCommunityPresenceSummary,
+        isLoadingCommunityPresence: activeCommunityPresenceStatus === "pending",
         communityMemberCount: communityDirectoryMemberCount,
         communityMembers: communityDirectoryMembers,
+        hasResolvedCommunityMembers: hasResolvedCommunityDirectoryMembers,
         communityMembersHasMore: communityDirectoryMembersHasMore,
         isLoadingCommunityMembers: isLoadingCommunityDirectoryMembers,
         isLoadingMoreCommunityMembers: isLoadingMoreCommunityDirectoryMembers,
@@ -2504,6 +2509,7 @@ export default function App() {
         communityId: activeCommunityId,
         communityOwnerId: activeCommunity?.owner_id ?? null,
         canManageCommunityMembers: canManageMembersActiveCommunity,
+        canPresentManageCommunityMembers: canPresentManageMembersActiveCommunity,
         communityEntryPolicy: activeCommunity?.entry_policy ?? null,
         canSetCommunityFreeAccessMode:
           canManageMembersActiveCommunity &&
@@ -3014,18 +3020,13 @@ export default function App() {
     handleTopbarBackFromSettings,
     handleTopbarBackToCommunity,
     communityTab: isVisitorCommunitySurface ? "chat" : communityTab,
-    communityTabIndicators: isVisitorCommunitySurface
-      ? { chat: false, ai_feed: false, resources: false, events: false, mentions: false }
-      : communityTabIndicators,
-    communityChannels: isVisitorCommunitySurface
-      ? [{ id: "", slug: "general", name: "General", is_general: true }]
-      : activeCommunityChannels,
-    selectedCommunityChannelSlug: isVisitorCommunitySurface
-      ? "general"
-      : activeCommunityChannelSlug,
-    communityChannelIndicators: isVisitorCommunitySurface
-      ? {}
-      : communityChannelIndicators,
+    communityTabIndicators: isVisitorCommunitySurface ? { chat: false, ai_feed: false, resources: false, events: false, mentions: false } : communityTabIndicators,
+    communityChannels: isVisitorCommunitySurface ? [{ id: "", slug: "general", name: "General", is_general: true }] : activeCommunityChannels,
+    hasResolvedCommunityChannels: isVisitorCommunitySurface || hasResolvedActiveCommunityChannels,
+    isLoadingCommunityChannels: !isVisitorCommunitySurface && isLoadingActiveCommunityChannels,
+    isResolvingInitialCommunityAccess: !isVisitorCommunitySurface && isResolvingInitialCommunityAccess,
+    selectedCommunityChannelSlug: isVisitorCommunitySurface ? "general" : activeCommunityChannelSlug,
+    communityChannelIndicators: isVisitorCommunitySurface ? {} : communityChannelIndicators,
     handleSelectCommunityChannel: isVisitorCommunitySurface
       ? () => undefined
       : (channel) => {
@@ -3038,9 +3039,7 @@ export default function App() {
           );
           if (path) navigateTo(path);
         },
-    handleCreateCommunityChannel: isVisitorCommunitySurface
-      ? () => Promise.resolve(null)
-      : handleCreateCommunityChannel,
+    handleCreateCommunityChannel: isVisitorCommunitySurface ? () => Promise.resolve(null) : handleCreateCommunityChannel,
     isCreatingCommunityChannel,
     communityChannelCreateError,
     clearCommunityChannelCreateError,
@@ -3050,10 +3049,9 @@ export default function App() {
     canViewActiveCommunitySettings: !isVisitorCommunitySurface && canViewActiveCommunitySettings,
     canViewActiveCommunityPolynet: !isVisitorCommunitySurface && canViewActiveCommunityPolynet,
     canManageMembersActiveCommunity: !isVisitorCommunitySurface && canManageMembersActiveCommunity,
+    canPresentManageMembersActiveCommunity: !isVisitorCommunitySurface && canPresentManageMembersActiveCommunity,
     canViewActiveCommunityAnalytics: !isVisitorCommunitySurface && canViewActiveCommunityAnalytics,
-    lockedCommunityNavTabs: isVisitorCommunitySurface
-      ? { ai_feed: true, resources: true, events: true }
-      : null,
+    lockedCommunityNavTabs: isVisitorCommunitySurface ? { ai_feed: true, resources: true, events: true } : null,
     handleSelectCommunityTab: isVisitorCommunitySurface
       ? (tab) => {
           if (tab !== "chat") {
@@ -3085,6 +3083,7 @@ export default function App() {
     railCommunities,
     communityRailAttentionById,
     isLoadingCommunities,
+    hasResolvedCommunities,
     selectedActiveCommunitySlug,
     handleSelectActiveCommunity: isVisitorCommunitySurface
       ? (community) => {

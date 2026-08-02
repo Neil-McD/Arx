@@ -60,6 +60,7 @@ for (const tab of ["ai_agent", "funnel", "analytics"] as const) {
 const app = read("apps/web/src/App.tsx");
 const navigation = read("shared/appShellNavigation.ts");
 const activeCommunityShellController = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
+const tabAccessGuard = read("apps/web/src/controllers/useWebCommunityTabAccessGuard.ts");
 const membersReviewController = read("shared/useCommunityMembersReviewController.ts");
 
 assert.match(
@@ -78,14 +79,14 @@ assert.match(
   "AI Agent and Funnel tabs must remain builder-only",
 );
 assert.match(
-  app,
-  /if \(isLoadingCommunityAccess\) return;[\s\S]*if \(activeCommunityAccess\?\.community_id !== activeCommunityId\) return;/,
+  tabAccessGuard,
+  /params\.isLoadingCommunityAccess \|\|[\s\S]*params\.activeCommunityAccessId !== params\.activeCommunityId/,
   "tab normalization must wait for the current community access row",
 );
 assert.match(
   activeCommunityShellController,
-  /const currentActiveCommunityAccess = useMemo\(\(\) => \{[\s\S]*if \(activeCommunityAccess\?\.community_id !== communityId\) return null;[\s\S]*return activeCommunityAccess;/,
-  "active community shell must fail closed when the loaded access row belongs to another community",
+  /const currentActiveCommunityAccess =[\s\S]*scopedCommunityAccessResolution\.status === "resolved"[\s\S]*\? scopedCommunityAccessResolution\.access[\s\S]*: null/,
+  "active community shell must expose mutation authority only from resolved scoped access",
 );
 assert.match(
   activeCommunityShellController,
@@ -98,13 +99,13 @@ assert.match(
   "downstream surfaces must receive current-community access only",
 );
 assert.match(
-  app,
-  /const normalizedTab = normalizeCommunityTabForAccess\(communityTab, \{[\s\S]*canViewSettings: canViewActiveCommunitySettings,[\s\S]*canViewPolynet: canViewActiveCommunityPolynet,[\s\S]*canManageMembers: canManageMembersActiveCommunity,[\s\S]*canViewAnalytics: canViewActiveCommunityAnalytics,[\s\S]*\}\);/,
-  "App must normalize the active tab from the same capability booleans used by CommunityNav",
+  tabAccessGuard,
+  /normalizeCommunityTabForAccess\([\s\S]*params\.communityTab,[\s\S]*canViewSettings: params\.canViewSettings,[\s\S]*canViewPolynet: params\.canViewPolynet,[\s\S]*canManageMembers: params\.canManageMembers,[\s\S]*canViewAnalytics: params\.canViewAnalytics/,
+  "the tab guard must normalize from current authoritative capability booleans",
 );
 assert.match(
-  app,
-  /if \(normalizedTab === communityTab\) return;[\s\S]*setCommunityResourceModuleId\(null\);[\s\S]*applyCommunityShellState\(\{ communityTab: normalizedTab \}\);/,
+  tabAccessGuard,
+  /if \(normalizedTab === params\.communityTab\) return;[\s\S]*params\.setCommunityResourceModuleId\(null\);[\s\S]*params\.applyCommunityShellState\(\{ communityTab: normalizedTab \}\);/,
   "invalid active community tabs must collapse to a valid tab and clear stale resource selection",
 );
 assert.match(

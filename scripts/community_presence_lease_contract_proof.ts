@@ -69,7 +69,7 @@ const publicStatsMapper = sectionBetween(
 const presenceEffect = sectionBetween(
   controller,
   "if (!sessionIdentity || !params.activeCommunityId) {\n      setActiveCommunityPresenceSummaryState(null);",
-  "useEffect(() => {\n    setActiveCommunityPresenceSummaryState(null);",
+  "const scopedCommunityAccessResolution = useMemo(",
 );
 const directoryPageQuery = communityDirectory.slice(
   communityDirectory.indexOf("export const listCommunityDirectoryPage"),
@@ -178,6 +178,11 @@ assert.equal(
   (presenceEffect.match(/window\.setInterval/g) ?? []).length,
   1,
   "community presence must have exactly one interval owner",
+);
+assert.match(
+  presenceEffect,
+  /status: "pending"[\s\S]*status: previous\.status === "pending" \? "pending" : "refreshing"[\s\S]*status: "resolved"[\s\S]*status: "failed"/,
+  "presence presentation must distinguish first resolution, retained refresh, success, and failure",
 );
 
 assert.match(

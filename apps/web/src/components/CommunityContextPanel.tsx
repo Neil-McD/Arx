@@ -3,6 +3,7 @@ import { Check, ChevronDown, Lock, MessageCircle, MoreHorizontal, X } from "luci
 import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
+import { shouldShowFirstResolutionSkeleton } from "../../../../shared/shellLoadingPresentation";
 import type { PremiumMemberBadgeSummary } from "../../../../shared/communityTypes";
 import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
 import {
@@ -51,8 +52,10 @@ type CommunityContextPanelProps = {
   onlineFaces?: CommunityPresenceFace[] | null;
   onlineCount?: number | null;
   onlineCountCapped?: boolean;
+  isLoadingPresence?: boolean;
   memberCount?: number | null;
   members?: CommunityRailMember[] | null;
+  hasResolvedMembers?: boolean;
   membersHasMore?: boolean;
   isLoadingMembers?: boolean;
   isLoadingMoreMembers?: boolean;
@@ -63,6 +66,7 @@ type CommunityContextPanelProps = {
   activityScopeKey?: string | null;
   ownerId?: string | null;
   canManageMembers?: boolean;
+  canPresentManageMembers?: boolean;
   entryPolicy?: CommunityAdmissionEntryPolicy | null;
   canSetFreeAccessMode?: boolean;
   isSettingFreeAccessMode?: boolean;
@@ -182,6 +186,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const onlineCountLabel = `${onlineTotal}${props.onlineCountCapped ? "+" : ""}`;
   const knownMemberCount = typeof props.memberCount === "number" ? props.memberCount : null;
   const loadedMemberCount = members.length;
+  const hasResolvedMembers = props.hasResolvedMembers ?? !props.isLoadingMembers;
   const memberCountLabel = knownMemberCount !== null
     ? String(knownMemberCount)
     : `${loadedMemberCount}${props.membersHasMore ? "+" : ""}`;
@@ -189,6 +194,12 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const hasRetainedMemory = (memoryOverview?.graph.nodes ?? []).some(isCommunityMemoryNode);
   const lockedMembers = Boolean(props.lockedSections?.members);
   const lockedMemory = Boolean(props.lockedSections?.memory);
+  const showInitialMembersSkeleton = !lockedMembers && shouldShowFirstResolutionSkeleton({
+    isLoading: Boolean(props.isLoadingMembers),
+    hasResolved: hasResolvedMembers,
+    contentCount: loadedMemberCount,
+    hasError: Boolean(props.membersLoadError),
+  });
   /* Visitor lens: an empty memory is young, not locked — plain header, the
      member view's own "builds as the room shares knowledge" state. */
   const showLockedEmptyMemory = lockedMemory && Boolean(memoryOverview) && !hasRetainedMemory;
@@ -232,12 +243,12 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const autoJoinEnabled = entryPolicy === "open";
   const canShowFreeAccessSwitch = Boolean(
     isFreeAdmissionMode &&
-      props.canSetFreeAccessMode &&
+      props.canPresentManageMembers &&
       props.onSetFreeAccessMode,
   );
   const pendingJoinRequestCount = visiblePendingJoinRequests.length;
   const canShowJoinRequests = Boolean(
-    props.canReviewJoinRequests &&
+    props.canPresentManageMembers &&
       props.joinReviewMode === "free_approval" &&
       (pendingJoinRequests.length > 0 || props.isLoadingJoinRequests || props.joinRequestsError),
   );
@@ -380,12 +391,13 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   ]);
 
   const handleToggleFreeAccessMode = useCallback(() => {
-    if (!canShowFreeAccessSwitch || props.isSettingFreeAccessMode) return;
+    if (!canShowFreeAccessSwitch || !props.canSetFreeAccessMode || props.isSettingFreeAccessMode) return;
     const nextMode = autoJoinEnabled ? "approval" : "open";
     void props.onSetFreeAccessMode?.(nextMode);
   }, [
     autoJoinEnabled,
     canShowFreeAccessSwitch,
+    props.canSetFreeAccessMode,
     props.isSettingFreeAccessMode,
     props.onSetFreeAccessMode,
   ]);
@@ -399,12 +411,13 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
       isOnline,
     );
     const isOwnerMember = member.user_id === props.ownerId || member.role === "owner";
-    const canOpenSettings = Boolean(
-      props.canManageMembers &&
+    const canShowSettings = Boolean(
+      props.canPresentManageMembers &&
         props.onOpenMemberSettings &&
         !isOwnerMember &&
         !String(member.id ?? "").startsWith("owner:"),
     );
+    const canOpenSettings = Boolean(canShowSettings && props.canManageMembers);
     const canMessage = Boolean(props.onMessageMember) && member.user_id !== props.currentUserId;
     return (
       <div key={member.id} className={`community-context-member${isOnline ? "" : " is-offline"}`}>
@@ -458,10 +471,11 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             <MessageCircle size={16} strokeWidth={1.9} aria-hidden="true" />
           </button>
         ) : null}
-        {canOpenSettings ? (
+        {canShowSettings ? (
           <button
             className="community-context-member-action"
             type="button"
+            disabled={!canOpenSettings}
             aria-label={`Open settings for ${name}`}
             title="Member settings"
             onClick={(event) => {
@@ -506,7 +520,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           <button
             className="community-context-request-action"
             type="button"
-            disabled={isDeciding}
+            disabled={!props.canReviewJoinRequests || isDeciding}
             aria-label={`Approve ${name}`}
             title="Approve"
             onClick={() => void props.onApproveJoinRequest?.(request.id)}
@@ -516,7 +530,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           <button
             className="community-context-request-action is-danger"
             type="button"
-            disabled={isDeciding}
+            disabled={!props.canReviewJoinRequests || isDeciding}
             aria-label={`Deny ${name}`}
             title="Deny"
             onClick={() => void props.onDenyJoinRequest?.(request.id)}
@@ -534,11 +548,21 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         <span className="community-context-rail-name">{props.communityName}</span>
       </div>
 
-      <CommunityPresenceFacepile
-        faces={props.onlineFaces}
-        onlineCount={props.onlineCount}
-        onlineCountCapped={props.onlineCountCapped}
-      />
+      {props.isLoadingPresence && (props.onlineFaces?.length ?? 0) === 0 ? (
+        <div
+          className="community-context-facepile community-context-facepile-skeleton"
+          aria-hidden="true"
+        >
+          <span className="community-context-face web-skeleton-block" />
+          <span className="community-context-face web-skeleton-block" />
+        </div>
+      ) : (
+        <CommunityPresenceFacepile
+          faces={props.onlineFaces}
+          onlineCount={props.onlineCount}
+          onlineCountCapped={props.onlineCountCapped}
+        />
+      )}
 
       {sectionMode === "all" ? <div className="community-context-memory">
         <div className="community-context-memory-head">
@@ -572,8 +596,9 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
              the graph will replace a beat later — absent beats flicker. */
           null
         ) : props.isLoadingMemory && !memoryOverview ? (
-          <div className="community-context-memory-empty">
-            <span>Loading memory...</span>
+          <div className="community-context-memory-summary" aria-hidden="true">
+            <div className="community-context-memory-preview community-context-memory-skeleton web-skeleton-block" />
+            <div className="community-context-memory-skeleton-status web-skeleton-row" />
           </div>
         ) : props.memoryLoadError ? (
           <div className="community-context-memory-error">
@@ -636,7 +661,14 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         onScroll={handleMembersScroll}
       >
         <div className="community-context-section community-context-members-total">
-          <span>Members — {memberCountLabel}</span>
+          <span>
+            Members
+            {showInitialMembersSkeleton ? (
+              <span className="community-context-members-count-skeleton web-skeleton-row" aria-hidden="true" />
+            ) : (
+              <> — {memberCountLabel}</>
+            )}
+          </span>
           <div className="community-context-members-controls">
             {canShowFreeAccessSwitch ? (
               <button
@@ -645,7 +677,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
                 role="switch"
                 aria-checked={autoJoinEnabled}
                 aria-label={`Auto-join is ${autoJoinEnabled ? "on" : "off"}`}
-                disabled={props.isSettingFreeAccessMode}
+                disabled={!props.canSetFreeAccessMode || props.isSettingFreeAccessMode}
                 onClick={handleToggleFreeAccessMode}
                 title={autoJoinEnabled ? "Auto-join on" : "Auto-join off"}
               >
@@ -741,6 +773,16 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             <span>See who&apos;s here when you&apos;re in.</span>
           </button>
         ) : null}
+        {showInitialMembersSkeleton ? (
+          <div className="community-context-members-skeleton" aria-hidden="true">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="community-context-member">
+                <span className="community-context-member-avatar web-skeleton-block" />
+                <span className="community-context-member-skeleton-name web-skeleton-row" />
+              </div>
+            ))}
+          </div>
+        ) : null}
         {!lockedMembers && onlineTotal > 0 ? (
           <>
             <div className="community-context-section">Online — {onlineCountLabel}</div>
@@ -755,8 +797,11 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             {offlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
           </>
         ) : null}
-        {!lockedMembers && loadedMemberCount === 0 && props.isLoadingMembers ? (
-          <div className="community-context-members-status">Loading members...</div>
+        {!lockedMembers && props.isLoadingMoreMembers ? (
+          <div className="community-context-member community-context-member-loading-more" aria-hidden="true">
+            <span className="community-context-member-avatar web-skeleton-block" />
+            <span className="community-context-member-skeleton-name web-skeleton-row" />
+          </div>
         ) : null}
         {!lockedMembers && shouldShowMembersFooter ? (
           <div

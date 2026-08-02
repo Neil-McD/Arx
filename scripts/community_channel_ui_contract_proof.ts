@@ -30,7 +30,9 @@ const nav = read(navPath);
 [
   'name: "General"',
   '"Add Channel"',
-  "canManageMembersActiveCommunity && onCreateChannel",
+  "showManageCommunityItems && onCreateChannel",
+  "disabled={!canManageMembersActiveCommunity || isAtChannelLimit}",
+  "showChannelSkeleton = shouldShowFirstResolutionSkeleton",
   "Channels are visible to every community member.",
 ].forEach((required) => assertIncludes(navPath, nav, required));
 

@@ -2689,6 +2689,16 @@
   font-weight: 600;
 }
 
+.mobile-community-selector-skeleton {
+  pointer-events: none;
+}
+
+.mobile-community-selector-skeleton-name {
+  width: min(62%, 180px);
+  height: 12px;
+  border-radius: 999px;
+}
+
 .mobile-community-selector-check svg {
   width: 18px;
   height: 18px;

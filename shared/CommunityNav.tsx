@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Brain, Check, Hash, Plus, UserPlus, X } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { CommunityBanner } from "./CommunityBanner";
+import { shouldShowFirstResolutionSkeleton } from "./shellLoadingPresentation";
 
 type CommunityNavCommunityLike = {
   slug?: string | null;
@@ -20,7 +21,11 @@ type CommunityNavProps = {
   canViewActiveCommunitySettings: boolean;
   canViewActiveCommunityPolynet: boolean;
   canManageMembersActiveCommunity: boolean;
+  canPresentManageMembersActiveCommunity?: boolean;
   canViewActiveCommunityAnalytics: boolean;
+  hasResolvedChannels?: boolean;
+  isLoadingChannels?: boolean;
+  isResolvingInitialAccess?: boolean;
   onSelectTab: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink?: (joinUrl: string) => Promise<void> | void;
   buttonType?: "button" | "submit" | "reset";
@@ -81,7 +86,11 @@ export function CommunityNav({
   canViewActiveCommunitySettings,
   canViewActiveCommunityPolynet,
   canManageMembersActiveCommunity,
+  canPresentManageMembersActiveCommunity = canManageMembersActiveCommunity,
   canViewActiveCommunityAnalytics,
+  hasResolvedChannels = true,
+  isLoadingChannels = false,
+  isResolvingInitialAccess = false,
   onSelectTab,
   onCopyCommunityJoinLink,
   buttonType,
@@ -111,17 +120,26 @@ export function CommunityNav({
   };
   const showSettingsButton = canViewActiveCommunitySettings && showSettingsItem;
   const showPolynetButton = canViewActiveCommunityPolynet && showPolynetItem;
+  const showManageCommunityItems = canPresentManageMembersActiveCommunity;
   const showManagementSection =
     showSettingsButton ||
     showPolynetButton ||
-    canManageMembersActiveCommunity ||
+    showManageCommunityItems ||
     canViewActiveCommunityAnalytics;
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
   const canCopyJoinLink = Boolean(canViewMembersActiveCommunity && joinUrl && onCopyCommunityJoinLink);
   const inviteTitle = didCopyJoinLink ? "Copied invite link" : "Copy invite link";
-  const displayedChannels = channels.length > 0
+  const showChannelSkeleton = shouldShowFirstResolutionSkeleton({
+    isLoading: isLoadingChannels,
+    hasResolved: hasResolvedChannels,
+    contentCount: hasResolvedChannels ? channels.length : 0,
+  });
+  const showAccessSkeleton = isResolvingInitialAccess && !showManagementSection;
+  const displayedChannels = !showChannelSkeleton && channels.length > 0
     ? channels
-    : [{ id: "", slug: "general", name: "General", is_general: true }];
+    : !showChannelSkeleton
+      ? [{ id: "", slug: "general", name: "General", is_general: true }]
+      : [];
 
   useEffect(() => {
     if (!isAddChannelOpen) return;
@@ -187,7 +205,10 @@ export function CommunityNav({
   };
 
   return (
-    <aside className="community-nav">
+    <aside
+      className="community-nav"
+      aria-busy={showChannelSkeleton || showAccessSkeleton || undefined}
+    >
       <div className="community-nav-header">
         <CommunityBanner
           className="community-nav-banner"
@@ -203,6 +224,11 @@ export function CommunityNav({
         {subtitle ? <div className="community-nav-subtitle">{subtitle}</div> : null}
       </div>
       <div className="community-channel-list" aria-label="Channels">
+        {showChannelSkeleton ? (
+          <div className="community-nav-skeleton-rows" aria-hidden="true">
+            <div className="community-nav-skeleton-row web-skeleton-block" />
+          </div>
+        ) : null}
         {displayedChannels.map((channel) => {
           const isSelected =
             communityTab === "chat" &&
@@ -229,11 +255,11 @@ export function CommunityNav({
             </button>
           );
         })}
-        {canManageMembersActiveCommunity && onCreateChannel ? (
+        {showManageCommunityItems && onCreateChannel ? (
           <button
             className="nav-item community-channel-add"
             type={buttonType}
-            disabled={isAtChannelLimit}
+            disabled={!canManageMembersActiveCommunity || isAtChannelLimit}
             onClick={() => {
               clearCreateChannelError?.();
               setIsAddChannelOpen(true);
@@ -349,7 +375,7 @@ export function CommunityNav({
               Polynet
             </button>
           )}
-          {canManageMembersActiveCommunity && (
+          {showManageCommunityItems && (
             <button
               className={communityTab === "ai_agent" ? "nav-item active" : "nav-item"}
               type={buttonType}
@@ -372,7 +398,7 @@ export function CommunityNav({
               AI Agent
             </button>
           )}
-          {canManageMembersActiveCommunity && (
+          {showManageCommunityItems && (
             <button
               className={communityTab === "funnel" ? "nav-item active" : "nav-item"}
               type={buttonType}
@@ -410,6 +436,16 @@ export function CommunityNav({
           )}
         </>
       )}
+      {showAccessSkeleton ? (
+        <div className="community-nav-skeleton-management" aria-hidden="true">
+          <div className="community-nav-divider" />
+          <div className="community-nav-skeleton-rows">
+            <div className="community-nav-skeleton-row web-skeleton-block" />
+            <div className="community-nav-skeleton-row web-skeleton-block" />
+            <div className="community-nav-skeleton-row web-skeleton-block" />
+          </div>
+        </div>
+      ) : null}
       {canCopyJoinLink ? (
         <div className="community-nav-footer">
           <button
