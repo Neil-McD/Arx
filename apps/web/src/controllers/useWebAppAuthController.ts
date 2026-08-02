@@ -137,6 +137,7 @@ export function useWebAppAuthController(
   const didJustSignInRef = useRef(false);
   const authSessionEpochRef = useRef(0);
   const authBootstrapCompleteRef = useRef(false);
+  const sessionReadyIdentityRef = useRef<string | null>(null);
   const ensuredSessionCacheRef = useRef<{
     key: string;
     session: AuthSession;
@@ -170,6 +171,7 @@ export function useWebAppAuthController(
 
   const clearSessionLocally = useCallback(async (): Promise<void> => {
     sessionRef.current = null;
+    sessionReadyIdentityRef.current = null;
     ensuredSessionCacheRef.current = null;
     ensuredSessionInFlightRef.current = null;
     setAuthSession(null);
@@ -214,7 +216,7 @@ export function useWebAppAuthController(
   }, [refreshAuthSessionLockedResult]);
 
   const ensureUsableAuthSession = useCallback(async (
-    currentSession: AuthSession | null | undefined = sessionRef.current ?? session,
+    currentSession: AuthSession | null | undefined = sessionRef.current,
     sourceInput?: string,
     options?: { forceRefresh?: boolean },
   ): Promise<AuthSession | null> => {
@@ -392,7 +394,7 @@ export function useWebAppAuthController(
         ensuredSessionInFlightRef.current = null;
       }
     }
-  }, [adoptAuthSession, expireAuthSessionLocally, refreshAuthSessionLockedResult, session]);
+  }, [adoptAuthSession, expireAuthSessionLocally, refreshAuthSessionLockedResult]);
 
   const beginSignInFlow = useCallback(async (): Promise<boolean> => {
     setAuthError(null);
@@ -482,10 +484,25 @@ export function useWebAppAuthController(
     },
     onSessionAvailable: (currentSession) => {
       markAuthBootstrapComplete();
+      const sessionIdentity = String(currentSession.user?.id ?? "").trim();
+      if (!sessionIdentity || sessionReadyIdentityRef.current === sessionIdentity) return;
+      sessionReadyIdentityRef.current = sessionIdentity;
       void (async () => {
-        const usableSession = await ensureUsableAuthSession(currentSession, "session_available");
-        if (!usableSession) return;
-        await onSessionReadyRef.current(usableSession);
+        try {
+          const usableSession = await ensureUsableAuthSession(currentSession, "session_available");
+          if (!usableSession) {
+            if (sessionReadyIdentityRef.current === sessionIdentity) {
+              sessionReadyIdentityRef.current = null;
+            }
+            return;
+          }
+          await onSessionReadyRef.current(usableSession);
+        } catch (error) {
+          if (sessionReadyIdentityRef.current === sessionIdentity) {
+            sessionReadyIdentityRef.current = null;
+          }
+          console.warn("auth_session_ready_failed", error);
+        }
       })();
     },
     onSessionMissing: () => {
@@ -501,6 +518,7 @@ export function useWebAppAuthController(
           },
         });
         sessionRef.current = null;
+        sessionReadyIdentityRef.current = null;
         setAuthSession(null);
         await onSessionMissingAfterBootstrapRef.current();
         emitWorkspaceEvent({
