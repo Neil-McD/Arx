@@ -606,6 +606,22 @@ body {
   flex-direction: column;
 }
 
+.community-channel-loading {
+  display: grid;
+  gap: 12px;
+  padding: 10px 13px 11px;
+}
+
+.community-channel-loading-row {
+  width: 78%;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.community-channel-loading-row.is-short {
+  width: 58%;
+}
+
 .community-channel-item .community-channel-icon {
   color: var(--text-faint);
 }

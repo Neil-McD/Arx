@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { resolveCurrentReadyImageUrl } from "../shared/useImageUrlReady";
 
@@ -7,6 +7,46 @@ function read(path: string): string {
 }
 
 describe("web shell refresh continuity contract", () => {
+  it("never redirects an unresolved valid community route to Discover", () => {
+    const app = read("apps/web/src/App.tsx");
+
+    expect(existsSync("apps/web/src/controllers/useWebMissingCommunityRouteGuard.ts"))
+      .toBe(false);
+    expect(app).not.toContain("useWebMissingCommunityRouteGuard");
+  });
+
+  it("keeps thread selection explicit and ephemeral", () => {
+    const projection = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");
+
+    expect(projection).not.toContain("interaction:selectedRoot");
+    expect(projection).not.toContain("readStoredSelectedRoot");
+    expect(projection).not.toContain("writeStoredSelectedRoot");
+    expect(projection).not.toContain("localStorage");
+  });
+
+  it("uses live subscriptions as the normal interaction acquisition owner", () => {
+    const projection = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");
+    const composer = read("apps/web/src/controllers/useWebCommunityChatController.ts");
+
+    expect(projection).toContain("subscribeCloudCommunityInteractionRoots");
+    expect(projection).toContain("subscribeCloudCommunityInteractionReplies");
+    expect(projection).not.toContain("void loadRoots(activeCommunityId, sessionRef.current)");
+    expect(projection).not.toContain("void loadReplies(next)");
+    expect(composer).not.toContain("interaction.loadRoots");
+    expect(composer).not.toContain("interaction.loadReplies");
+  });
+
+  it("uses shape-stable loading states for unresolved shell resources", () => {
+    const nav = read("shared/CommunityNav.tsx");
+    const context = read("apps/web/src/components/CommunityContextPanel.tsx");
+
+    expect(nav).toContain("community-channel-loading-row web-skeleton-row");
+    expect(context).toContain("community-context-memory-preview web-skeleton-block");
+    expect(context).toContain("community-context-member-skeleton");
+    expect(context).not.toContain("Loading members...");
+    expect(context).not.toContain("Loading memory...");
+  });
+
   it("keeps the session ensure callback stable across transport-session rotation", () => {
     const controller = read("apps/web/src/controllers/useWebAppAuthController.ts");
     const start = controller.indexOf("const ensureUsableAuthSession = useCallback");

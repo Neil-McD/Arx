@@ -58,6 +58,7 @@ export function buildWebShellChromeHostProps(params: {
   communityTab: WebShellChromeHostProps["communityShell"]["communityTab"];
   communityTabIndicators: WebShellChromeHostProps["communityShell"]["communityTabIndicators"];
   communityChannels: WebShellChromeHostProps["communityShell"]["communityChannels"];
+  isLoadingCommunityChannels: boolean;
   selectedCommunityChannelSlug: string;
   communityChannelIndicators: WebShellChromeHostProps["communityShell"]["communityChannelIndicators"];
   handleSelectCommunityChannel: WebShellChromeHostProps["communityShell"]["onSelectCommunityChannel"];
@@ -180,6 +181,7 @@ export function buildWebShellChromeHostProps(params: {
       communityTab: params.communityTab,
       communityTabIndicators: params.communityTabIndicators,
       communityChannels: params.communityChannels,
+      isLoadingCommunityChannels: params.isLoadingCommunityChannels,
       selectedCommunityChannelSlug: params.selectedCommunityChannelSlug,
       communityChannelIndicators: params.communityChannelIndicators,
       onSelectCommunityChannel: params.handleSelectCommunityChannel,

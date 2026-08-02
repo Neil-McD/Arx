@@ -100,14 +100,6 @@ type CommunityInteractionComposerBoundary = {
     idempotencyKey: string;
     status: "failed";
   }) => void;
-  loadRoots: (
-    communityId?: string | null,
-    session?: AuthSession | null,
-  ) => Promise<void>;
-  loadReplies: (
-    rootId: string,
-    session?: AuthSession | null,
-  ) => Promise<void>;
 };
 
 type UseWebCommunityChatControllerParams = {
@@ -447,10 +439,6 @@ export function useWebCommunityChatController(
     },
     onCommunityMessageSent: ({ communityId, hasAttachments, hasReply }) => {
       onMessageSent({ communityId, hasAttachments, hasReply });
-      void interaction.loadRoots(communityId, session);
-      if (hasReply && interaction.selectedRootId) {
-        void interaction.loadReplies(interaction.selectedRootId, session);
-      }
     },
     chatInputRef: inputRef,
     communityAttachmentsRef: attachmentsRef,

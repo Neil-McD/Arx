@@ -63,7 +63,6 @@ import { useWebMemberAgentSurfaceController } from "./controllers/useWebMemberAg
 import { useWebDirectMessagesChromeController } from "./controllers/useWebDirectMessagesChromeController";
 import { useWebCommunityTabAccessGuard } from "./controllers/useWebCommunityTabAccessGuard";
 import { useWebMobileChromeReadingModeLifecycle } from "./controllers/useWebMobileChromeReadingModeLifecycle";
-import { useWebMissingCommunityRouteGuard } from "./controllers/useWebMissingCommunityRouteGuard";
 import { useWebPublicFunnelEntryController } from "./controllers/useWebPublicFunnelEntryController";
 import { useWebShellActionController } from "./controllers/useWebShellActionController";
 import { useWebCommunityFunnelAboutController } from "./controllers/useWebCommunityFunnelAboutController";
@@ -533,6 +532,7 @@ export default function App() {
   });
   const {
     channels: activeCommunityChannels,
+    isLoadingChannels: isLoadingActiveCommunityChannels,
     activeChannelId,
     selectedChannelSlug: activeCommunityChannelSlug,
     channelResolutionStatus: activeCommunityChannelResolutionStatus,
@@ -565,7 +565,6 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
     isCommunityChatActive: activePage === "community" && communityTab === "chat",
     session,
-    shellVariant,
   });
   const {
     roots: communityInteractionRoots,
@@ -1929,12 +1928,6 @@ export default function App() {
       closeThreadPage: handleCloseCommunityInteractionDrawer,
       openCommunityCreateFlow: openCreateCommunityModal,
     });
-    useWebMissingCommunityRouteGuard({
-      publicRouteKind: shellPublicRoute.kind,
-      activePage,
-      hasSelectedCommunity,
-      navigateTo,
-    });
   const isCommunityOnboardingPreviewMode =
     publicRoute.kind === "app" &&
     activePage === "community" &&
@@ -2945,6 +2938,8 @@ export default function App() {
     communityChannels: isVisitorCommunitySurface
       ? [{ id: "", slug: "general", name: "General", is_general: true }]
       : activeCommunityChannels,
+    isLoadingCommunityChannels:
+      !isVisitorCommunitySurface && isLoadingActiveCommunityChannels,
     selectedCommunityChannelSlug: isVisitorCommunitySurface
       ? "general"
       : activeCommunityChannelSlug,

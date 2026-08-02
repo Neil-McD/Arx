@@ -42,6 +42,7 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
           communityTab={communityShell.communityTab}
           tabIndicators={communityShell.communityTabIndicators}
           channels={communityShell.communityChannels}
+          isLoadingChannels={communityShell.isLoadingCommunityChannels}
           selectedChannelSlug={communityShell.selectedCommunityChannelSlug}
           channelIndicators={communityShell.communityChannelIndicators}
           onSelectChannel={(channel) => {
