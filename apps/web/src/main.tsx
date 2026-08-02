@@ -360,6 +360,8 @@ const rootView = isLoginTrampoline
   ? <LoginTrampolineRoute />
   : <App />;
 
+document.documentElement.setAttribute("data-polynet-build-id", APP_BUILD_ID);
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
