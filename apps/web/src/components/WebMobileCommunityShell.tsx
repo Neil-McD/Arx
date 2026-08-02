@@ -12,7 +12,7 @@ type WebMobileCommunityShellProps = {
 export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
   const { communityShell } = props;
   const showCommunitySelectorSkeleton = shouldShowFirstResolutionSkeleton({
-    isLoading: communityShell.isLoadingCommunities,
+    isPresentationExpected: communityShell.showMobileShell,
     hasResolved: communityShell.hasResolvedCommunities,
     contentCount: communityShell.railCommunities.length,
   });
@@ -49,7 +49,6 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
           tabIndicators={communityShell.communityTabIndicators}
           channels={communityShell.communityChannels}
           hasResolvedChannels={communityShell.hasResolvedCommunityChannels}
-          isLoadingChannels={communityShell.isLoadingCommunityChannels}
           isResolvingInitialAccess={communityShell.isResolvingInitialCommunityAccess}
           selectedChannelSlug={communityShell.selectedCommunityChannelSlug}
           channelIndicators={communityShell.communityChannelIndicators}

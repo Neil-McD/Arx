@@ -24,7 +24,6 @@ type CommunityNavProps = {
   canPresentManageMembersActiveCommunity?: boolean;
   canViewActiveCommunityAnalytics: boolean;
   hasResolvedChannels?: boolean;
-  isLoadingChannels?: boolean;
   isResolvingInitialAccess?: boolean;
   onSelectTab: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink?: (joinUrl: string) => Promise<void> | void;
@@ -89,7 +88,6 @@ export function CommunityNav({
   canPresentManageMembersActiveCommunity = canManageMembersActiveCommunity,
   canViewActiveCommunityAnalytics,
   hasResolvedChannels = true,
-  isLoadingChannels = false,
   isResolvingInitialAccess = false,
   onSelectTab,
   onCopyCommunityJoinLink,
@@ -130,7 +128,7 @@ export function CommunityNav({
   const canCopyJoinLink = Boolean(canViewMembersActiveCommunity && joinUrl && onCopyCommunityJoinLink);
   const inviteTitle = didCopyJoinLink ? "Copied invite link" : "Copy invite link";
   const showChannelSkeleton = shouldShowFirstResolutionSkeleton({
-    isLoading: isLoadingChannels,
+    isPresentationExpected: true,
     hasResolved: hasResolvedChannels,
     contentCount: hasResolvedChannels ? channels.length : 0,
   });

@@ -192,7 +192,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const lockedMembers = Boolean(props.lockedSections?.members);
   const lockedMemory = Boolean(props.lockedSections?.memory);
   const showInitialMembersSkeleton = !lockedMembers && shouldShowFirstResolutionSkeleton({
-    isLoading: Boolean(props.isLoadingMembers),
+    isPresentationExpected: true,
     hasResolved: hasResolvedMembers,
     contentCount: loadedMemberCount,
     hasError: Boolean(props.membersLoadError),

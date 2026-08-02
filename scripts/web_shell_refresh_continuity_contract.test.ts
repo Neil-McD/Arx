@@ -46,7 +46,7 @@ describe("web shell refresh continuity contract", () => {
     const presentation = read("shared/shellLoadingPresentation.ts");
 
     expect(presentation).toMatch(
-      /args\.isLoading[\s\S]*!args\.hasResolved[\s\S]*args\.contentCount[\s\S]*!args\.hasError/,
+      /args\.isPresentationExpected[\s\S]*!args\.hasResolved[\s\S]*args\.contentCount[\s\S]*!args\.hasError/,
     );
     expect(rail).toContain("shouldShowFirstResolutionSkeleton");
     expect(nav).toContain("shouldShowFirstResolutionSkeleton");

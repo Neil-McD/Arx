@@ -9,7 +9,7 @@ type WebDesktopCommunityRailProps = {
 export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
   const { communityShell } = props;
   const showCommunitySkeleton = shouldShowFirstResolutionSkeleton({
-    isLoading: communityShell.isLoadingCommunities,
+    isPresentationExpected: communityShell.showDesktopCommunityRail,
     hasResolved: communityShell.hasResolvedCommunities,
     contentCount: communityShell.railCommunities.length,
   });
