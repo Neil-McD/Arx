@@ -5,9 +5,7 @@ import { expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import {
-  communityFounderFundingAllowsPublicAccess,
   getExistingFounderInferenceGrant,
-  requireCommunityFounderFundingForPublish,
   resolveAdditionalManagedCommunityAdmission,
   resolveCommunityInferenceFundingAdmission,
   settleAuthorizedFounderInferenceReceipt,
@@ -129,20 +127,12 @@ test("funding cutover is founder-level and fails closed without changing member 
   await t.run(async (ctx) => {
     const ownerId = await insertUser(ctx, "owner");
     const memberId = await insertUser(ctx, "member");
-    const futureOwnerId = await insertUser(ctx, "future-owner");
     const communityId = await insertCommunity(ctx, ownerId, "community");
-    const futureCommunityId = await insertCommunity(ctx, futureOwnerId, "future-community");
-    await ctx.db.patch(futureCommunityId, {
-      inferenceFundingPolicy: "managed_required",
-    });
 
     await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toMatchObject({
       ok: false,
       code: "founder_plan_required",
     });
-    await expect(
-      communityFounderFundingAllowsPublicAccess(ctx, futureCommunityId),
-    ).resolves.toBe(false);
 
     const grantId = await ctx.db.insert("founderInferenceGrants", {
       userId: ownerId,
@@ -152,12 +142,6 @@ test("funding cutover is founder-level and fails closed without changing member 
       createdAt: 2_000,
       updatedAt: 2_000,
     });
-    await expect(
-      communityFounderFundingAllowsPublicAccess(ctx, futureCommunityId),
-    ).resolves.toBe(false);
-    await expect(
-      requireCommunityFounderFundingForPublish(ctx, futureCommunityId),
-    ).rejects.toThrow("community_founder_funding_required_to_publish");
     await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toMatchObject({
       ok: false,
       code: "owner_funding_choice_required",
@@ -358,11 +342,6 @@ test("one active platform owner receives metered operator-funded Luna without a 
       payerUserId: fixture.ownerId,
       modelId: "gpt-5.6-luna",
     });
-    await expect(
-      t.run(async (ctx) =>
-        await communityFounderFundingAllowsPublicAccess(ctx, fixture.communityId),
-      ),
-    ).resolves.toBe(true);
     const asOperatorOwner = t.withIdentity({
       subject: "founder-inference-operator-owner",
     });
@@ -579,11 +558,11 @@ test("an exact existing founder can be transitioned irreversibly to managed bill
     await expect(ctx.db.get(fixture.grantId)).resolves.toBeNull();
     await expect(ctx.db.get(fixture.firstCommunityId)).resolves.toMatchObject({
       inferenceFundingPolicy: "managed_required",
-      visibility: "unlisted",
+      visibility: "published",
     });
     await expect(ctx.db.get(fixture.secondCommunityId)).resolves.toMatchObject({
       inferenceFundingPolicy: "managed_required",
-      visibility: "unlisted",
+      visibility: "published",
     });
   });
   await expect(

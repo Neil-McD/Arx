@@ -39,7 +39,6 @@ import {
   getStripeConnectDestinationAccountId,
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
-import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
 import { requireCommunityProviderAccountMatch } from "./communityCommerceCore";
 
@@ -473,13 +472,6 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
       nowMs,
     });
     if (!pricePoint) throw new Error("paid_plan_required");
-    const funding = await resolveCommunityInferenceFundingAdmission(
-      ctx,
-      community._id,
-    );
-    if (!funding.ok) {
-      throw new Error(`community_founder_funding_required:${funding.code}`);
-    }
     const connectAccount = (await ctx.runQuery(
       internal.creatorCommerce.getUserStripeConnectAccountInternal as any,
       {

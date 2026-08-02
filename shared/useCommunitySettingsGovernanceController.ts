@@ -94,12 +94,6 @@ function formatCommunitySettingsErrorMessage(error: unknown): string {
   if (message.includes("community_publish_ready_required")) {
     return "Published communities need a name, one-liner, avatar, and banner.";
   }
-  if (message === "community_founder_funding_required_to_publish") {
-    return "Fund this community for $79/month before publishing it.";
-  }
-  if (message === "community_owner_credential_required_to_publish") {
-    return "Activate the approved owner API key before publishing this legacy community.";
-  }
   return message;
 }
 

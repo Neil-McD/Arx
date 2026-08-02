@@ -170,8 +170,7 @@ export const transitionExistingFounderToManagedInternal = internalMutation({
       !grant &&
       communities.every(
         (community: any) =>
-          community.inferenceFundingPolicy === COMMUNITY_FUNDING_POLICY_MANAGED &&
-          community.visibility === "unlisted",
+          community.inferenceFundingPolicy === COMMUNITY_FUNDING_POLICY_MANAGED,
       );
     if (alreadyTransitioned) {
       return {
@@ -214,7 +213,6 @@ export const transitionExistingFounderToManagedInternal = internalMutation({
       for (const community of communities as Array<Record<string, any>>) {
         await ctx.db.patch(community._id, {
           inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,
-          visibility: "unlisted",
           updatedAt: nowMs,
         });
       }
@@ -231,7 +229,7 @@ export const transitionExistingFounderToManagedInternal = internalMutation({
       communities: communities.map((community: any) => ({
         slug: String(community.slug),
         previous_visibility: String(community.visibility),
-        next_visibility: "unlisted",
+        next_visibility: String(community.visibility),
         next_funding_policy: COMMUNITY_FUNDING_POLICY_MANAGED,
       })),
     };

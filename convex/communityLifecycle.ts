@@ -39,10 +39,7 @@ import {
   canReceiveCommunityRevenue,
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
-import {
-  requireCommunityFounderFundingForPublish,
-  resolveAdditionalManagedCommunityAdmission,
-} from "./founderInferenceCore";
+import { resolveAdditionalManagedCommunityAdmission } from "./founderInferenceCore";
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
 import { ensureGeneralChannel } from "./communityChannelCore";
 
@@ -349,15 +346,6 @@ async function requireCommunitySettingsPermissions(args: {
       bannerStorageId: args.state.nextBannerStorageId,
     },
   });
-  if (
-    args.community.visibility !== "published" &&
-    args.state.nextVisibility === "published"
-  ) {
-    await requireCommunityFounderFundingForPublish(
-      args.ctx,
-      args.communityId,
-    );
-  }
   if (args.state.monetizationChanged && (args.state.monthlyAmount !== null || args.state.annualAmount !== null)) {
     await requirePaidCommunityPricingReady({
       ctx: args.ctx,
@@ -522,10 +510,6 @@ export const createCommunity = mutation({
     const requestedVisibility = args.visibility === undefined
       ? "unlisted"
       : normalizeVisibility(args.visibility);
-    if (requestedVisibility === "published") {
-      throw new Error("community_founder_funding_required_to_publish");
-    }
-    const visibility = "unlisted" as const;
     const entryPolicy = normalizeEntryPolicy(args.entryPolicy, "approval");
     const avatarStorageId = args.avatarStorageId ?? undefined;
     const bannerStorageId = args.bannerStorageId ?? undefined;
@@ -533,6 +517,19 @@ export const createCommunity = mutation({
     const oneLiner = normalizeOptionalText(args.oneLiner);
     const avatarUrl = avatarStorageId ? undefined : normalizeOptionalCommunityImageUrl(args.avatarUrl);
     const bannerUrl = bannerStorageId ? undefined : normalizeOptionalCommunityImageUrl(args.bannerUrl);
+    requireCommunityPublishReadinessTransition({
+      currentVisibility: "unlisted",
+      nextVisibility: requestedVisibility,
+      current: {},
+      next: {
+        name,
+        oneLiner,
+        avatarUrl,
+        avatarStorageId,
+        bannerUrl,
+        bannerStorageId,
+      },
+    });
     const communityId = await ctx.db.insert("communities", {
       ownerId,
       slug,
@@ -548,7 +545,7 @@ export const createCommunity = mutation({
       bannerFocusX: normalizeBannerFocus(args.bannerFocusX),
       bannerFocusY: normalizeBannerFocus(args.bannerFocusY),
       bannerZoom: normalizeBannerZoom(args.bannerZoom),
-      visibility,
+      visibility: requestedVisibility,
       inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,
       entryPolicy,
       activeMemberCount: 1,
@@ -900,10 +897,6 @@ export const saveCommunityLaunchProfile = mutation({
         bannerStorageId: nextBannerStorageId,
       },
     });
-    if (community.visibility !== "published" && nextVisibility === "published") {
-      await requireCommunityFounderFundingForPublish(ctx, args.communityId);
-    }
-
     const previousAvatarStorageId = community.avatarStorageId;
     const previousBannerStorageId = community.bannerStorageId;
     await ctx.db.patch(community._id as any, {

@@ -5,6 +5,7 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { api } from "./_generated/api";
 import { executePlatformOperation } from "./platformOperationExecutor";
+import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import schema from "./schema";
 
 const modules = import.meta.glob([
@@ -191,7 +192,7 @@ test("open public join is authenticated, immediately authorized, and idempotent"
   });
 });
 
-test("unfunded managed communities are absent from public acquisition surfaces", async () => {
+test("unfunded managed communities remain public while AI funding fails closed", async () => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
@@ -214,56 +215,43 @@ test("unfunded managed communities are absent from public acquisition surfaces",
       revokedReason: "test_unfunded_state",
       updatedAt: nowMs,
     });
-    await ctx.db.insert("founderInferenceGrants", {
-      userId: fixture.memberId,
-      cohortKey: "existing_founder_cutover_v1",
-      status: "approved",
-      approvedAt: nowMs,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
+    await expect(
+      resolveCommunityInferenceFundingAdmission(ctx, fixture.openCommunityId),
+    ).resolves.toEqual({ ok: false, code: "founder_subscription_inactive" });
   });
 
   await expect(
     t.query(api.communityPublic.resolvePublicFunnelBySlug, {
       communitySlug: "access-lifecycle-open",
     }),
-  ).resolves.toEqual({ ok: false });
+  ).resolves.toMatchObject({ ok: true });
   await expect(
-    asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+    t.query(api.communityPublic.resolvePublicFunnelStatsBySlug, {
       communitySlug: "access-lifecycle-open",
     }),
-  ).rejects.toThrow("community_not_available");
-  const discoverBefore = await t.query(
+  ).resolves.toMatchObject({ ok: true });
+  await expect(
+    t.mutation(api.communityPublic.recordPublicFunnelVisitBySlug, {
+      communitySlug: "access-lifecycle-open",
+      visitorKey: "unfunded-managed-visitor",
+    }),
+  ).resolves.toEqual({ ok: true });
+  const discover = await t.query(
     api.communityPublic.listPublicDiscoverCommunities,
     {},
   );
-  expect(discoverBefore.communities).not.toEqual(
+  expect(discover.communities).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ slug: "access-lifecycle-open" }),
     ]),
   );
-
-  await t.run(async (ctx) => {
-    await ctx.db.insert("founderSubscriptions", {
-      ownerUserId: fixture.ownerId,
-      communityId: fixture.openCommunityId,
-      provider: "stripe",
-      providerCustomerId: "cus_public_gate",
-      providerSubscriptionId: "sub_public_gate",
-      providerPriceId: "price_public_gate",
-      status: "active",
-      currentPeriodStartAt: nowMs - 1_000,
-      currentPeriodEndAt: nowMs + 30 * 24 * 60 * 60 * 1_000,
-      cancelAtPeriodEnd: false,
-      lastProviderEventCreatedAt: nowMs,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-  });
-
   await expect(
-    t.query(api.communityPublic.resolvePublicFunnelBySlug, {
+    asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).resolves.toMatchObject({ outcome: "joined" });
+  await expect(
+    asMember.query(api.communityPublic.resolvePublicCommunityAccessBySlug, {
       communitySlug: "access-lifecycle-open",
     }),
   ).resolves.toMatchObject({ ok: true });

@@ -817,7 +817,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Each managed community has one funding choice: its own $79 monthly founder plan. Exact grandfathered communities may instead activate owner BYOK. There is no personal Premium plan or paid tool tier.
+Each managed community uses its own $79 monthly founder plan to run Polynet-hosted AI. Exact grandfathered communities may instead activate owner BYOK. There is no personal Premium plan or paid tool tier.
 
 ## Before You Start
 
@@ -886,12 +886,12 @@ The cash path is simple: configure the community, define the paid access model, 
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
 - Existing approved founders can continue managing their owned communities.
-- Each managed community requires its own verified $79 monthly funding subscription.
+- Each managed community requires its own verified $79 monthly funding subscription to run Polynet-hosted AI.
 - A paying founder may own an unlimited number of communities. There is no
   account-level numeric cap, but every existing community must have current
   funding before the next unlisted checkout draft can be created.
-- A new community begins as an unlisted managed draft and continues directly to founder checkout.
-- An unpaid managed draft can be configured, but cannot publish, appear in Discover, accept public joins, or run community-funded AI.
+- The canonical create flow begins as an unlisted managed draft and continues directly to founder checkout, but AI funding does not control visibility.
+- An unpaid managed community can be configured, published, listed in Discover, accept public joins, and collect paid-member revenue. Only its community-funded AI remains disabled.
 - Authenticated tool access is not sold as a separate plan. Polynet absorbs supported provider cost while enforcing rate limits, provider quotas, and cost receipts.
 - Paid-member community revenue always carries Polynet's 2.9% application fee, independent of founder funding mode.
 - Owner/admin manage resources and most operational settings.
@@ -1941,7 +1941,7 @@ There is no personal Premium plan, commercial Free-versus-Premium tier, tool-cre
 
 ## Founder Funding
 
-One active founder subscription authorizes exactly one attached managed community. A new community is an unlisted `managed_required` draft and continues to community-targeted checkout. Stripe webhook state, not the redirect, is authoritative.
+One active founder subscription authorizes Polynet-hosted inference for exactly one attached managed community. Community visibility, public access, and member commerce remain independent from founder AI funding. Stripe webhook state, not the redirect, is authoritative.
 
 A founder may own an unlimited number of communities. There is no account-level
 numeric limit and no account-wide bundle: each managed community needs its own
@@ -1953,7 +1953,7 @@ communities; an unfunded draft blocks another draft.
 
 Each $79 monthly cycle includes up to $20 in raw GPT 5.6 Luna model cost for that community. Before supported managed inference begins, Polynet reserves a bounded worst-case amount from the community's current allowance and settles it to calculated token cost after provider usage is known. Missing pricing evidence, ambiguous cycle state, inactive payment state, or exhausted allowance fails closed.
 
-The same funding kernel covers direct community-agent mentions, autonomous community cognition, and AI-assisted community setup. It also gates managed-community publishing, Discover visibility, public funnels, and new public joins. The payer never receives extra member permissions or tool authority.
+The same funding kernel covers direct community-agent mentions, autonomous community cognition, and AI-assisted community setup. If funding is missing or inactive, only AI execution fails closed. Publishing, Discover visibility, public funnels, public joins, and paid-member checkout continue under their own visibility, access, and commerce rules. The payer never receives extra member permissions or tool authority.
 
 There are only two exceptions:
 
@@ -1971,7 +1971,7 @@ Paid-member commerce remains independent from founder funding:
 4. Provider/webhook verification creates the purchase claim, subscription lifecycle, membership, and access truth.
 5. The connected account owns the member customer, product, price, charge, processor fee, subscription, and payout. Polynet keeps only its 2.9% application fee.
 
-Stripe processing fees are separate from Polynet's 2.9%. The fee is the same whether community inference is funded by $79 managed funding, grandfathered BYOK, or the operator grant.
+Stripe processing fees are separate from Polynet's 2.9%. The fee is the same whether community inference is funded by $79 managed funding, grandfathered BYOK, the operator grant, or is currently unfunded.
 
 Full refunds revoke paid access; partial refunds retain access unless subscription state says otherwise. Opened disputes suspend access. Each successful partial or full refund reverses the cumulative proportional share of Polynet's application fee through an idempotent provider-scoped ledger. Pending, failed, and canceled refunds reverse no fee.
 
@@ -1987,8 +1987,8 @@ Historical tool-credit balances, top-up checkout rows, reservations, collections
 
 1. Redirects are UX only; verified provider/webhook state is authoritative.
 2. Checkout finalization is idempotent.
-3. Founder funding, member access, management authority, and payout readiness are separate truths.
-4. One $79 subscription attaches to one managed community and carries one $20 Luna allowance.
+3. Founder funding, visibility, member access, management authority, and payout readiness are separate truths.
+4. One $79 subscription attaches to one managed community and authorizes its hosted AI allowance.
 5. Community ownership has no numeric cap, but every existing community must be currently funded before another checkout draft can be created.
 6. Paid-member revenue always uses the 2.9% application fee.
 7. Connect payouts and proportional application-fee refunds remain active.
@@ -2003,6 +2003,7 @@ Historical tool-credit balances, top-up checkout rows, reservations, collections
 - selling an unattached founder subscription
 - treating $79 as an account-wide community bundle
 - restoring an account-level community cap or allowing stacked unpaid drafts
+- letting founder AI funding hide, unpublish, or disable ordinary community commerce
 - letting founder funding widen member permissions
 - changing the 2.9% fee based on community inference funding
 - configuring only the platform webhook and expecting Connect commerce to converge

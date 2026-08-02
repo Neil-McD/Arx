@@ -244,7 +244,7 @@ export type AdditionalManagedCommunityAdmission =
  * managed community only after every existing community has current funding.
  * This permits unlimited paid communities while preventing stacked unpaid
  * drafts. Operator and legacy BYOK communities pass through the same canonical
- * funding admission used by publish and inference.
+ * funding admission used by inference.
  */
 export async function resolveAdditionalManagedCommunityAdmission(
   ctx: any,
@@ -267,25 +267,6 @@ export async function resolveAdditionalManagedCommunityAdmission(
     }
   }
   return { ok: true, fundedCommunityCount: communities.length };
-}
-
-export async function communityFounderFundingAllowsPublicAccess(
-  ctx: any,
-  communityId: any,
-): Promise<boolean> {
-  return (await resolveCommunityInferenceFundingAdmission(ctx, communityId)).ok;
-}
-
-export async function requireCommunityFounderFundingForPublish(
-  ctx: any,
-  communityId: any,
-): Promise<void> {
-  const admission = await resolveCommunityInferenceFundingAdmission(ctx, communityId);
-  if (admission.ok) return;
-  if (admission.code === "owner_credential_missing") {
-    throw new Error("community_owner_credential_required_to_publish");
-  }
-  throw new Error("community_founder_funding_required_to_publish");
 }
 
 export async function settleAuthorizedFounderInferenceReceipt(args: {

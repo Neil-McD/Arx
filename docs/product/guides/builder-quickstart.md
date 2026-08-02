@@ -3,7 +3,7 @@ id: product.guide.builder_quickstart
 title: Builder Quickstart
 audience: builder, llm
 status: alpha-current
-last_verified: 2026-05-07
+last_verified: 2026-08-02
 ---
 
 # Builder Quickstart
@@ -14,7 +14,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Each managed community has one funding choice: its own $79 monthly founder plan. Exact grandfathered communities may instead activate owner BYOK. There is no personal Premium plan or paid tool tier.
+Each managed community uses its own $79 monthly founder plan to run Polynet-hosted AI. Exact grandfathered communities may instead activate owner BYOK. There is no personal Premium plan or paid tool tier.
 
 ## Before You Start
 
@@ -83,12 +83,12 @@ The cash path is simple: configure the community, define the paid access model, 
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
 - Existing approved founders can continue managing their owned communities.
-- Each managed community requires its own verified $79 monthly funding subscription.
+- Each managed community requires its own verified $79 monthly funding subscription to run Polynet-hosted AI.
 - A paying founder may own an unlimited number of communities. There is no
   account-level numeric cap, but every existing community must have current
   funding before the next unlisted checkout draft can be created.
-- A new community begins as an unlisted managed draft and continues directly to founder checkout.
-- An unpaid managed draft can be configured, but cannot publish, appear in Discover, accept public joins, or run community-funded AI.
+- The canonical create flow begins as an unlisted managed draft and continues directly to founder checkout, but AI funding does not control visibility.
+- An unpaid managed community can be configured, published, listed in Discover, accept public joins, and collect paid-member revenue. Only its community-funded AI remains disabled.
 - Authenticated tool access is not sold as a separate plan. Polynet absorbs supported provider cost while enforcing rate limits, provider quotas, and cost receipts.
 - Paid-member community revenue always carries Polynet's 2.9% application fee, independent of founder funding mode.
 - Owner/admin manage resources and most operational settings.

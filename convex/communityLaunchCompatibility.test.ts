@@ -4,7 +4,9 @@ import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
 import { api } from "./_generated/api";
+import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import schema from "./schema";
+import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 
 const modules = import.meta.glob([
   "./community.ts",
@@ -357,11 +359,10 @@ test("publishing transitions and readiness regressions remain fail-closed", asyn
   });
 });
 
-test("managed communities require an active founder subscription before publishing", async () => {
+test("managed communities can publish while AI funding remains fail closed", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const nowMs = Date.now();
 
   await t.run(async (ctx) => {
     await ctx.db.patch(fixture.communityId, {
@@ -369,14 +370,9 @@ test("managed communities require an active founder subscription before publishi
       avatarUrl: "https://example.com/avatar.png",
       bannerUrl: "https://example.com/banner.png",
     });
-    await ctx.db.insert("founderInferenceGrants", {
-      userId: fixture.adminId,
-      cohortKey: "existing_founder_cutover_v1",
-      status: "approved",
-      approvedAt: nowMs,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
+    await expect(
+      resolveCommunityInferenceFundingAdmission(ctx, fixture.communityId),
+    ).resolves.toEqual({ ok: false, code: "founder_plan_required" });
   });
 
   const publish = () => asOwner.mutation(api.communityLifecycle.saveCommunitySettings, {
@@ -394,27 +390,76 @@ test("managed communities require an active founder subscription before publishi
     annualAmountBaseUnits: null,
   });
 
-  await expect(publish()).rejects.toThrow(
-    "community_founder_funding_required_to_publish",
-  );
+  await expect(publish()).resolves.toMatchObject({ visibility: "published" });
+});
 
+test("a publish-ready first community may be created as published before managed AI is funded", async () => {
+  const t = convexTest(schema, modules);
+  const nowMs = 1_750_000_100_000;
   await t.run(async (ctx) => {
-    await ctx.db.insert("founderSubscriptions", {
-      ownerUserId: fixture.ownerId,
-      communityId: fixture.communityId,
-      provider: "stripe",
-      providerCustomerId: "cus_publish_gate",
-      providerSubscriptionId: "sub_publish_gate",
-      providerPriceId: "price_publish_gate",
-      status: "active",
-      currentPeriodStartAt: nowMs - 1_000,
-      currentPeriodEndAt: nowMs + 30 * 24 * 60 * 60 * 1_000,
-      cancelAtPeriodEnd: false,
-      lastProviderEventCreatedAt: nowMs,
+    const userId = await ctx.db.insert("users", {
+      authSubject: "community-launch-first-owner",
+      displayName: "First community owner",
+      handle: "first-community-owner",
+      normalizedHandle: "first-community-owner",
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    await ctx.db.insert("userProfileDetails", {
+      userId,
+      displayName: "First community owner",
+      avatarUrl: "https://example.com/owner-avatar.png",
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    for (const document of PLATFORM_LEGAL_DOCUMENTS) {
+      await ctx.db.insert("legalAcceptances", {
+        userId,
+        documentKey: document.key,
+        documentVersion: document.version,
+        acceptedAt: nowMs,
+        source: "test",
+        createdAt: nowMs,
+      });
+    }
+    await ctx.db.insert("userProviderConnections", {
+      userId,
+      provider: "openai",
+      authKind: "api_key",
+      encryptedSecretHex: "encrypted-first-community-key",
+      secretIvHex: "first-community-iv",
+      secretVersion: 1,
+      validatedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return userId;
+  });
+  const asOwner = t.withIdentity({ subject: "community-launch-first-owner" });
+
+  const created = await asOwner.mutation(api.communityLifecycle.createCommunity, {
+    name: "Published before AI funding",
+    slug: "published-before-ai-funding",
+    oneLiner: "Community operation is independent from AI funding.",
+    avatarUrl: "https://example.com/community-avatar.png",
+    bannerUrl: "https://example.com/community-banner.png",
+    visibility: "published",
+    entryPolicy: "approval",
+  });
+  expect(created).toMatchObject({
+    owner_id: "community-launch-first-owner",
+    slug: "published-before-ai-funding",
+    visibility: "published",
   });
 
-  await expect(publish()).resolves.toMatchObject({ visibility: "published" });
+  await expect(
+    t.run(async (ctx) => {
+      const community = await ctx.db
+        .query("communities")
+        .withIndex("by_slug", (q) => q.eq("slug", "published-before-ai-funding"))
+        .first();
+      if (!community) throw new Error("created_community_missing");
+      return await resolveCommunityInferenceFundingAdmission(ctx, community._id);
+    }),
+  ).resolves.toEqual({ ok: false, code: "founder_plan_required" });
 });

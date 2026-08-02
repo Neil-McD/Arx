@@ -1,7 +1,7 @@
 # Auth + Money + Access Matrix (Canonical Contract)
 
 Status: active
-Last verified: 2026-08-01
+Last verified: 2026-08-02
 Scope: canonical web runtime, founder funding, paid-member commerce, and provider-cost evidence
 
 ## 0) First Principles
@@ -23,7 +23,8 @@ means no account-level numeric cap, not free bundled communities.
 | May this user enter a community? | membership, entry policy, purchase claim, subscription lifecycle | founder funding, role alone, redirect |
 | May this user manage a community? | community owner/admin role | paid-member entitlement |
 | May this founder create another community? | every existing owned community has current canonical funding | account tier, numeric community cap |
-| May this managed community launch and run AI? | active attached $79 subscription and current allowance | unattached checkout, requester ChatGPT |
+| May this community publish and accept members? | publish readiness, visibility, entry policy, and membership or purchase state | founder AI funding |
+| May this managed community run Polynet-hosted AI? | active attached $79 subscription and current allowance | visibility, unattached checkout, requester ChatGPT |
 | May this legacy community run AI? | exact founder grant + `legacy_byok_allowed` + active owner API key | Partner evidence, unactivated founder status |
 | Is the platform operator complimentary? | one active canonical `operatorRoles.owner` row | email allowlist, fake Stripe state |
 | May a builder collect member revenue? | ready Stripe Connect account + active price/entry policy | platform founder subscription |
@@ -32,14 +33,14 @@ means no account-level numeric cap, not free bundled communities.
 
 ## 2) Founder Funding
 
-- A new community is an unlisted `managed_required` draft.
+- A new community carries `managed_required` AI funding policy; the canonical create flow starts unlisted, but funding never controls visibility.
 - Checkout is community-targeted; one verified subscription attaches to one community.
 - The first community may be created without prior funding. Each next community
   may be created only after every existing owned community is funded by its own
   active subscription, exact eligible active BYOK, or the operator grant. This
   prevents stacked unpaid drafts without imposing an ownership cap.
 - Each active cycle has a $20 raw Luna-cost allowance with atomic reservation and settlement.
-- Managed publishing, public funnel resolution, Discover listing, new public joins, and managed inference fail closed without current founder-funding admission.
+- Without current founder-funding admission, only managed AI execution fails closed. Publishing, public funnels, Discover, public joins, and paid-member checkout use independent community and commerce authority.
 - The operator grant enters the same funding kernel without Stripe state or allowance debit, but still records calculated raw cost.
 - An eligible legacy founder must activate BYOK or select $79 managed funding. There is no requester-ChatGPT compatibility lane.
 
